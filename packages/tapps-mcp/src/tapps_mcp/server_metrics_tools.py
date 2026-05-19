@@ -118,19 +118,30 @@ async def tapps_dashboard(
     time_range: str = "7d",
     sections: list[str] | None = None,
 ) -> dict[str, Any]:
-    """Generate a comprehensive metrics dashboard.
-
-    Call this to review how well TappsMCP is performing - scoring accuracy,
-    gate pass rates, expert effectiveness, cache performance, quality trends,
+    """Renders a multi-section TappsMCP metrics dashboard: tool usage, gate
+    pass rates, expert effectiveness, cache hit rates, quality trends,
     and alerts.
 
+    Call this for a periodic health review of the TAPPS pipeline ("how
+    is the project trending?", "which tools are slow?") — typically once
+    per week or before a release. For at-a-glance per-tool counts use
+    ``tapps_stats``; for a triage of one specific failure mode use
+    ``tapps_doctor``. The ``"otel"`` output format emits an OpenTelemetry
+    trace bundle of the last 100 executions for shipping to a tracing
+    backend.
+
     Args:
-        output_format: Output format - "json" (default), "markdown", "html", or "otel".
-        time_range: Time range - "1d", "7d", "30d", "90d".
-        sections: Specific sections to include (default: all).
-            Options: summary, tool_metrics, scoring_trends, expert_metrics,
-            cache_metrics, quality_distribution, alerts, business_metrics,
-            recommendations.
+        output_format: ``"json"`` (default, machine-readable),
+            ``"markdown"`` (human review), ``"html"`` (standalone web
+            view with charts), or ``"otel"`` (OpenTelemetry trace
+            export of the last 100 executions).
+        time_range: Aggregation window: ``"1d"``, ``"7d"`` (default),
+            ``"30d"``, or ``"90d"``.
+        sections: Sections to include. Default ``None`` returns all
+            sections. Options: ``"summary"``, ``"tool_metrics"``,
+            ``"scoring_trends"``, ``"expert_metrics"``,
+            ``"cache_metrics"``, ``"quality_distribution"``,
+            ``"alerts"``, ``"business_metrics"``, ``"recommendations"``.
     """
     from tapps_mcp.server import _get_metrics_hub, _record_call, _record_execution, _with_nudges
 
@@ -200,14 +211,22 @@ def tapps_stats(
     tool_name: str | None = None,
     period: str = "session",
 ) -> dict[str, Any]:
-    """Return usage statistics for TappsMCP tools.
+    """Returns per-tool usage statistics: call counts, success rates,
+    p50/p95 durations, cache hit rates, and gate pass rates, optionally
+    filtered to one tool.
 
-    Shows call counts, success rates, average durations, cache hit rates,
-    and gate pass rates.
+    Call this when investigating "what did I run this session?" or
+    triaging a slow workflow ("which tool ate the wall-clock?"). For a
+    full dashboard with trends and recommendations use
+    ``tapps_dashboard``; for a one-shot config / connectivity check use
+    ``tapps_doctor``.
 
     Args:
-        tool_name: Filter stats to a specific tool (optional).
-        period: Stats period - "session", "1d", "7d", "30d", "all".
+        tool_name: Restrict stats to one tool name (e.g.
+            ``"tapps_quick_check"``). Default ``None`` returns the
+            full per-tool breakdown.
+        period: Aggregation window: ``"session"`` (current MCP process),
+            ``"1d"``, ``"7d"``, ``"30d"``, or ``"all"``.
     """
     from tapps_mcp.server import _get_metrics_hub, _record_call, _record_execution, _with_nudges
 
@@ -332,21 +351,31 @@ def tapps_feedback(
     context: str | None = None,
     domain: str | None = None,
 ) -> dict[str, Any]:
-    """Report whether a tool's output was helpful.
+    """Records a thumbs-up/thumbs-down signal for the last response from a
+    named tool; the signal nudges TappsMCP's adaptive scoring weights
+    and (for expert tools) the per-domain weight store.
 
-    This feedback improves TappsMCP's adaptive scoring weights over time.
-    For expert tools (currently ``tapps_lookup_docs``), providing ``domain``
-    additionally nudges DomainWeightStore via ``_adjust_domain_weights``
-    (TAP-1798). The response ``domain_weight_adjusted`` flag reflects
-    whether that nudge actually occurred.
+    Call this immediately after observing an unhelpful tool response
+    that you want the system to learn from — false positives from
+    ``tapps_security_scan``, an irrelevant ``tapps_lookup_docs`` doc
+    excerpt, a noisy ``tapps_dead_code`` finding. Provide ``context``
+    so future triage understands the failure mode. For expert tools
+    (currently ``tapps_lookup_docs``), pass ``domain`` to additionally
+    adjust the DomainWeightStore.
 
     Args:
-        tool_name: Which tool to provide feedback on.
-        helpful: Was the output helpful?
-        context: Additional context about why it was or wasn't helpful.
-        domain: Domain for expert feedback (e.g., "security", "acme-billing").
-            When provided alongside an expert tool name, updates the
-            DomainWeightStore entry for that domain.
+        tool_name: Tool to provide feedback on. Must be one of the
+            registered tool names (``tapps_*``).
+        helpful: ``True`` for thumbs-up, ``False`` for thumbs-down.
+        context: One-sentence rationale (e.g., ``"flagged a test
+            fixture as a real secret"``). Optional but strongly
+            recommended — feedback without context cannot be acted on.
+        domain: Domain identifier for expert-tool feedback (e.g.,
+            ``"security"``, ``"acme-billing"``). When set alongside
+            an expert tool name, updates that domain's weight via
+            ``_adjust_domain_weights`` (TAP-1798); the response
+            ``domain_weight_adjusted`` field reflects whether the
+            nudge took effect.
     """
     from tapps_mcp.server import _get_metrics_hub, _record_call, _record_execution, _with_nudges
 

@@ -179,16 +179,26 @@ async def tapps_decompose(
     task: str,
     context_files: list[str] | None = None,
 ) -> dict[str, Any]:
-    """Break a task into independently-verifiable ~15-minute work units with
-    model tier recommendations.
+    """Splits a free-text task description into ordered, independently
+    verifiable ~15-minute work units, each tagged with a model-tier
+    recommendation (haiku / sonnet / opus).
 
-    Decomposition is deterministic (keyword-based, no LLM calls).  Units are
-    ordered risk-first (highest-risk first) so failures surface early.
+    Call this when the user gives a vague task ("ship X feature",
+    "refactor Y") and you want a deterministic breakdown before
+    starting — units come back risk-first so the riskiest piece gets
+    eval-ed early. Skip for atomic tasks ("fix this one typo") and
+    when the user has already named the steps. Decomposition is
+    keyword-based, no LLM calls, so the output is reproducible.
 
     Args:
-        task: Free-text description of the work to decompose.
-        context_files: Optional list of file paths that provide context.
-            File names and sizes are used to inform decomposition (no content read).
+        task: Free-text description of the work. Good: ``"add OAuth
+            login to the API server, with tests and docs"``. Bad:
+            ``"do the thing"`` (too vague, returns one shallow unit).
+        context_files: Optional list of file paths whose names and
+            sizes inform the decomposition. File contents are not read,
+            so paths to large binaries are safe. Pass paths the task
+            will touch (e.g., ``["src/auth.py", "tests/test_auth.py"]``)
+            to get unit boundaries that respect the existing layout.
     """
     from tapps_mcp.server import _record_call, _record_execution, _with_nudges
 

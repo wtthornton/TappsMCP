@@ -179,13 +179,18 @@ async def tapps_linear_snapshot_get(
     label: str = "",
     limit: int = 50,
 ) -> dict[str, Any]:
-    """Cache-only read of a Linear issue snapshot.
+    """Reads a Linear issue snapshot from the local cache, returning
+    ``cached=True`` + the stored issues on hit or ``cached=False`` + a
+    fetch hint on miss.
 
-    Returns the cached list of issues for the ``(team, project, state,
-    label, limit)`` slice if a fresh entry exists. Otherwise signals a
-    miss so the agent can fetch via
-    ``mcp__plugin_linear_linear__list_issues`` and then call
-    :func:`tapps_linear_snapshot_put` to populate the cache.
+    Call this FIRST for every multi-issue Linear read — "list open
+    issues in TAP", "what's assigned to me", "backlog review" — never
+    call ``mcp__plugin_linear_linear__list_issues`` directly without a
+    prior snapshot_get on the same ``(team, project, state, label,
+    limit)`` slice (the cache-gate hook will reject the call). For
+    single-issue lookups by id, skip this and use
+    ``mcp__plugin_linear_linear__get_issue(id=...)`` directly. The
+    ``linear-read`` skill orchestrates this dance automatically.
 
     Args:
         team: Linear team name (required).
@@ -261,13 +266,18 @@ async def tapps_linear_snapshot_put(
     label: str = "",
     limit: int = 50,
 ) -> dict[str, Any]:
-    """Cache-set for a Linear issue snapshot.
+    """Writes a Linear issue list into the local snapshot cache so the
+    next ``tapps_linear_snapshot_get`` for the same slice returns
+    ``cached=True``.
 
-    Call after fetching via ``mcp__plugin_linear_linear__list_issues``.
-    The ``(team, project, state, label, limit)`` tuple must match the
-    earlier :func:`tapps_linear_snapshot_get` call so the cache key
-    aligns. TTL is chosen from the ``state`` bucket (see
-    ``linear_cache_ttl_open_seconds`` / ``linear_cache_ttl_closed_seconds``).
+    Call this IMMEDIATELY after a successful
+    ``mcp__plugin_linear_linear__list_issues`` fetch following a
+    snapshot_get cache miss. The ``(team, project, state, label,
+    limit)`` tuple MUST match the earlier snapshot_get call exactly —
+    mismatched keys produce duplicate caches and break the cache-gate
+    invariant. TTL is auto-selected from the ``state`` bucket
+    (``linear_cache_ttl_open_seconds`` for backlog/unstarted/started,
+    ``linear_cache_ttl_closed_seconds`` for completed/canceled).
 
     Args:
         team: Linear team name (required).
@@ -365,12 +375,16 @@ async def tapps_linear_snapshot_invalidate(
     team: str = "",
     project: str = "",
 ) -> dict[str, Any]:
-    """Invalidate cached Linear snapshots for a team/project slice.
+    """Evicts cached Linear snapshots matching a team/project prefix so
+    the next read picks up server-side writes.
 
-    Call this after a Linear write (``save_issue``, ``save_comment``)
-    so the next :func:`tapps_linear_snapshot_get` reflects the write.
-    When both *team* and *project* are empty, invalidates the entire
-    Linear snapshot cache.
+    Call this after any Linear write — ``save_issue``, ``save_comment``,
+    ``save_document``, or anything that mutates issues — otherwise the
+    next ``tapps_linear_snapshot_get`` returns stale data and the agent
+    will act on out-of-date state. The ``linear-issue`` and
+    ``linear-release-update`` skills both call this automatically;
+    invoke directly only for ad-hoc invalidations after raw plugin
+    writes or wholesale cache reset (both args empty).
 
     Args:
         team: Linear team name prefix. Empty matches all teams.
@@ -417,22 +431,22 @@ async def tapps_linear_count(
     project: str,
     max_age_seconds: int = 3600,
 ) -> dict[str, Any]:
-    """Return open/done issue counts from the tapps-mcp Linear snapshot cache.
+    """Returns open + done issue counts from cached Linear snapshots
+    without making any Linear API calls — credential-free monitoring.
 
-    Reads existing snapshots populated by the ``linear-read`` skill and
-    counts issues without making any Linear API calls. This is the
-    WS3.3 credential-free alternative to WS3.1/WS3.2 — Ralph calls
-    this tool when ``LINEAR_API_KEY`` is not set.
+    Call this from automation that needs project pulse ("how many open
+    issues?") without burning a Linear API call or requiring
+    ``LINEAR_API_KEY`` — e.g., Ralph's WS3.3 credential-free loop. For
+    full issue listing use ``tapps_linear_snapshot_get`` (also
+    cache-only) or the ``linear-read`` skill. Snapshots populated by
+    the ``linear-read`` skill are reused; if none exists for
+    ``(team, project)`` the response carries ``available=False`` so the
+    caller can degrade gracefully.
 
-    Snapshots are considered fresh when their ``cached_at`` timestamp is
-    within *max_age_seconds* of now (default 3600 s = 1 h). If no such
-    snapshot exists for the given ``(team, project)`` pair the response
-    signals ``available=False`` so callers can degrade gracefully.
-
-    Issues are deduplicated across multiple state-slice snapshots using
-    their Linear ``id`` field. Classification uses the issue's own
-    ``statusType`` value: ``{"backlog","unstarted","started","triage"}``
-    counts as open; ``{"completed","canceled"}`` counts as done.
+    Issues are deduplicated across multiple state-slice snapshots by
+    Linear id. Classification uses the issue's own ``statusType``:
+    ``{"backlog","unstarted","started","triage"}`` count as open;
+    ``{"completed","canceled"}`` count as done.
 
     Args:
         team: Linear team name (required).

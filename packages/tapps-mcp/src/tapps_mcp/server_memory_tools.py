@@ -497,17 +497,27 @@ async def tapps_memory(
     rating: str = "",
     details_json: str = "",
 ) -> dict[str, Any]:
-    """Persist and retrieve project memories across sessions.
+    """Cross-session memory store: saves, recalls, searches, and maintains
+    durable project knowledge through the tapps-brain service.
 
-    Side effects: save/delete/reinforce/gc/consolidate hit the tapps-brain
-    service (Postgres, default HTTP at localhost:8080) via BrainBridge.
-    get/list/search are read-only. In legacy in-process mode, writes go
-    to a local SQLite store under .tapps-mcp/memory/ instead.
+    Call this with ``action="search"`` at the start of a non-trivial task
+    to surface prior learnings, and with ``action="save"`` at the end to
+    persist architectural decisions or non-obvious patterns. Use the
+    sibling tools instead for: short-lived per-session scratch space
+    (``tapps_session_notes``), one-off documentation lookups
+    (``tapps_lookup_docs``), and ephemeral conversation context (the LLM's
+    own context window). The umbrella ``action`` parameter selects one of
+    ~42 sub-actions across CRUD, maintenance, profiles, federation, Hive,
+    knowledge graph, batch ops, and feedback flywheel; pick the narrowest
+    action for the task — ``save`` not ``save_bulk`` for a single entry,
+    ``recall_many`` not loop-calling ``get``.
 
-    Memories are typed by tier (architectural, pattern, context), carry
-    confidence scores and metadata, and persist across sessions. See the
-    tapps-brain repo (https://github.com/wtthornton/tapps-brain) for
-    storage, retrieval, decay, and consolidation internals.
+    Side effects: ``save`` / ``save_bulk`` / ``delete`` / ``reinforce`` /
+    ``gc`` / ``consolidate`` write through to the tapps-brain Postgres
+    service (default HTTP at ``localhost:8080``). ``get`` / ``list`` /
+    ``search`` are read-only. Memories are typed by tier (architectural,
+    pattern, context, procedural) with confidence scoring, decay, and
+    consolidation — see the tapps-brain repo for internals.
 
     Args:
         action: One of:

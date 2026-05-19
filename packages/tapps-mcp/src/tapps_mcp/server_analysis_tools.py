@@ -196,12 +196,26 @@ async def _promote_note_to_memory(note: SessionNote, tier: str = "context") -> d
 
 
 async def tapps_session_notes(action: str, key: str = "", value: str = "") -> dict[str, Any]:
-    """Persist notes across the session to avoid losing context.
+    """Stores short-lived per-session notes in a local KV store, with the
+    option to promote a note into cross-session brain memory.
+
+    Call this when you want to remember intermediate findings during a
+    task ("library X has bug Y", "the failing test is in Z") without
+    polluting brain memory — notes are session-scoped and discarded when
+    the MCP server restarts. Promote (``action="promote"``) only when
+    the note is durable architectural knowledge worth carrying forward;
+    for direct durable storage use ``tapps_memory(action="save")``.
 
     Args:
-        action: "save" | "get" | "list" | "clear" | "promote".
-        key: Note key (required for save/get/promote).
-        value: Note value (required for save). For promote, optional tier name.
+        action: ``"save"`` (store key→value), ``"get"`` (read by key),
+            ``"list"`` (enumerate all keys), ``"clear"`` (wipe the
+            session store), or ``"promote"`` (move a saved note into
+            brain memory at the named tier).
+        key: Note key. Required for ``save``, ``get``, and ``promote``.
+            Use short slugs (``"failing-test"``, ``"lib-issue"``).
+        value: Note value (required for ``save``). For ``promote``,
+            optional brain tier override: ``"architectural"``,
+            ``"pattern"``, ``"procedural"``, or ``"context"`` (default).
     """
     start = time.perf_counter_ns()
     _record_call("tapps_session_notes")
@@ -261,13 +275,26 @@ async def tapps_session_notes(action: str, key: str = "", value: str = "") -> di
 async def tapps_impact_analysis(
     file_path: str, change_type: str = "modified", project_root: str = ""
 ) -> dict[str, Any]:
-    """REQUIRED before refactoring or deleting files. Maps the blast radius.
+    """Maps the blast radius of a file change: direct importers, transitive
+    dependents, and overlapping test coverage, with a severity verdict
+    (low/medium/high) based on fan-in.
+
+    Call this before refactoring or deleting any file — especially
+    public modules, framework adapters, and anything in ``__init__.py``.
+    The verdict drives whether a quick check is enough or whether the
+    full suite must run. Skip for new files (``change_type="added"``
+    returns trivial), pure test files, and one-off scripts.
 
     Args:
-        file_path: Path to the file being changed.
-        change_type: "added" | "modified" | "removed".
-        project_root: Project root path (default: server's configured root).
-            Use when analyzing files in an external project.
+        file_path: Path to the file being changed. Must be inside the
+            project root. Returns ``error.code=path_denied`` for
+            traversal segments.
+        change_type: ``"added"`` (new file — trivial blast radius),
+            ``"modified"`` (default — analyzes current importers), or
+            ``"removed"`` (analyzes who breaks when the file is gone).
+        project_root: Override the project root. Default is empty (use
+            server-configured root). Set this when analyzing a sibling
+            repo from a long-lived server.
     """
     start = time.perf_counter_ns()
     _record_call("tapps_impact_analysis")
@@ -422,12 +449,29 @@ async def tapps_report(
     max_files: int = 20,
     ctx: Context[Any, Any, Any] | None = None,
 ) -> dict[str, Any]:
-    """Generate a quality report combining scoring and gate results.
+    """Generates a quality report (single-file or project-wide), combining
+    scoring + gate verdict + per-category breakdown into JSON, Markdown,
+    or HTML output.
+
+    Call this when you need a portable artifact — to attach to a PR,
+    paste into a Linear comment, or render for a non-LLM reader. For
+    in-flight per-edit checks use ``tapps_quick_check`` instead; for the
+    batch validation use ``tapps_validate_changed``. Project-wide
+    reports score up to ``max_files`` files; raise the cap only when
+    you actually need exhaustive coverage.
 
     Args:
-        file_path: Path to a Python file (optional - project-wide if omitted).
-        report_format: "json" | "markdown" | "html".
-        max_files: Maximum files to score for project-wide report (default 20).
+        file_path: Single source-file path. Empty (default) generates a
+            project-wide report ranking the top ``max_files`` files by
+            score.
+        report_format: ``"json"`` (default, machine-readable),
+            ``"markdown"`` (PR-comment friendly), or ``"html"``
+            (standalone web view with charts).
+        max_files: Maximum files to include in a project-wide report
+            (default ``20``). Capped at 100 to prevent runaway scans
+            on monorepos.
+        ctx: MCP context handle for progress notifications during
+            long project-wide scans. Injected by the host.
     """
     start = time.perf_counter_ns()
     _record_call("tapps_report")
@@ -531,13 +575,28 @@ async def tapps_dead_code(
     scope: str = "file",
     ctx: Context[Any, Any, Any] | None = None,
 ) -> dict[str, Any]:
-    """Scan a Python file for dead code (unused functions, classes, imports, variables).
+    """Reports unused Python code (functions, classes, imports, variables)
+    via vulture, with per-finding confidence and line numbers.
+
+    Call this during cleanup passes (after a refactor, before a release)
+    or as part of an audit campaign. Skip for routine per-edit checks
+    (use ``tapps_quick_check``) — vulture is slower and produces false
+    positives on dynamic dispatch, plugin entry points, and CLI entry
+    functions, so the output needs review. Use the ``min_confidence``
+    knob to filter the noise floor.
 
     Args:
-        file_path: Path to the Python file to scan (required when scope="file").
-        min_confidence: Minimum confidence threshold (0-100, default 80).
-        scope: Scan scope - "file" (single file), "project" (all .py files),
-            or "changed" (git-changed .py files only).
+        file_path: Path to a single Python file. Required when
+            ``scope="file"``; ignored otherwise.
+        min_confidence: Vulture confidence threshold (0–100). Default
+            ``80`` filters most false positives; drop to ``60`` for
+            deeper sweeps, raise to ``95`` for high-precision results.
+        scope: ``"file"`` (single file specified by ``file_path``),
+            ``"project"`` (all ``.py`` files under the project root),
+            or ``"changed"`` (git-changed ``.py`` files only — fastest
+            way to spot dead code introduced by the current task).
+        ctx: MCP context handle for progress notifications during
+            project-wide scans. Injected by the host.
     """
     from tapps_mcp.tools.vulture import (
         clamp_confidence,
@@ -680,10 +739,22 @@ async def tapps_dependency_scan(
     project_root: str = "",
     ctx: Context[Any, Any, Any] | None = None,
 ) -> dict[str, Any]:
-    """Scan project dependencies for known vulnerabilities using pip-audit.
+    """Scans project dependencies for known CVEs via pip-audit and returns
+    findings sorted by severity (critical/high/medium/low) with fixed-in
+    versions where available.
+
+    Call this before any release, after upgrading any dependency, and
+    on a routine cadence during long-running maintenance windows.
+    pip-audit hits the PyPI advisory database, so this needs network
+    access. For dependency *structure* (circular imports, coupling) use
+    ``tapps_dependency_graph`` instead — different concern.
 
     Args:
-        project_root: Project root path (default: server's configured root).
+        project_root: Override the project root. Default empty (use
+            server-configured root). Set when scanning a sibling repo.
+        ctx: MCP context handle for progress notifications during long
+            scans (large dep trees can take 30+ seconds). Injected by
+            the host.
     """
     start = time.perf_counter_ns()
     _record_call("tapps_dependency_scan")
@@ -808,12 +879,28 @@ async def tapps_dependency_graph(
     include_coupling: bool = True,
     ctx: Context[Any, Any, Any] | None = None,
 ) -> dict[str, Any]:
-    """Analyze import dependencies: detect circular imports and measure coupling.
+    """Builds an import graph for the project and reports circular
+    imports plus per-module coupling metrics (afferent / efferent /
+    instability per Martin's metrics).
+
+    Call this when triaging an ``ImportError`` at startup, when planning
+    a large refactor that splits a package, or when adding a new layer
+    to verify the dependency direction is one-way. Skip for routine
+    per-edit checks. For CVE scanning use ``tapps_dependency_scan``
+    instead — that's about package vulnerabilities, this is about
+    internal import structure.
 
     Args:
-        project_root: Project root path (default: server's configured root).
-        detect_cycles: Whether to detect circular dependency cycles.
-        include_coupling: Whether to calculate coupling metrics.
+        project_root: Override the project root. Default empty (use
+            server-configured root).
+        detect_cycles: Run circular-import detection. Default ``True``.
+            Disable for pure coupling-metric reports on known-acyclic
+            codebases.
+        include_coupling: Calculate per-module fan-in / fan-out and
+            instability. Default ``True``. Disable for the fast
+            cycle-only check.
+        ctx: MCP context handle for progress notifications. Injected
+            by the host.
     """
     start = time.perf_counter_ns()
     _record_call("tapps_dependency_graph")
@@ -957,34 +1044,44 @@ async def tapps_audit_campaign(
     epic_ref: str = "",
     ctx: Context[Any, Any, Any] | None = None,
 ) -> dict[str, Any]:
-    """Plan or finalize an audit campaign for a project scope.
+    """Plans or finalizes a multi-session audit campaign: clusters files
+    into ~chunk_size session-sized work units, renders parent-epic +
+    per-session bodies, and persists the spec to brain memory.
 
-    ``mode="plan"`` clusters files in ``scope`` into session-sized chunks,
-    renders the parent epic + N session bodies (with an ``<campaign-epic>``
-    placeholder), persists the spec to brain memory, and returns it. No
-    Linear writes happen — the caller is expected to file the epic +
-    sessions via the ``linear-issue`` skill.
-
-    ``mode="dispatch"`` loads a previously-planned campaign from brain by
-    ``campaign_id``, substitutes the real ``epic_ref`` into every session
-    body, persists the finalized spec back, and returns it ready for
-    per-session ``save_issue`` calls with ``parent_id=epic_ref``.
+    Call ``mode="plan"`` when scoping a "review every file in directory
+    X" effort — the response is a campaign spec ready for the
+    ``linear-issue`` skill to file as an epic + N session stories. Call
+    ``mode="dispatch"`` after the epic is filed to substitute the real
+    Linear epic id into every session body before filing the children.
+    Use ``categories`` to focus the audit; ``"quality,security,
+    dead_code"`` is the default well-balanced bundle.
 
     Args:
-        scope: Directory to audit (plan-mode default: project root).
-        categories: Comma-separated subset of
+        scope: Directory to audit. Plan-mode default is the project
+            root. Use ``packages/tapps-mcp/src`` to scope to one
+            package in a monorepo.
+        categories: Comma-separated audit categories. Subset of
             ``{"quality", "security", "dead_code", "docs"}``.
-        chunk_size: Soft target files per session (default 6).
-        graph_root: Directory used to build the import graph. Empty =
-            project_root. Set to a package source root for monorepos
-            (e.g. ``packages/tapps-mcp/src``) so module names resolve and
-            edges are recorded — workaround for TAP-2035.
-        project_root: Project root path (default: server's configured root).
-        campaign_id: Explicit campaign id. Required for ``mode="dispatch"``;
-            empty in plan-mode auto-generates from scope + date + SHA.
+            Default ``"quality,security,dead_code"``.
+        chunk_size: Soft target for files per session story. Default
+            ``6``. Raise to ``10–12`` for shallow audits, drop to
+            ``3–4`` for deep ones.
+        graph_root: Source root used to build the import graph for
+            cohesive chunking. Empty (default) = ``project_root``.
+            **Set this for monorepos** (e.g.
+            ``"packages/tapps-mcp/src"``) so module names resolve and
+            inter-file edges land in chunks — workaround for TAP-2035.
+        project_root: Override the project root. Empty (default) uses
+            the server-configured root.
+        campaign_id: Explicit campaign id. **Required for**
+            ``mode="dispatch"``. Empty in plan mode auto-generates an
+            id from scope + date + SHA.
         mode: ``"plan"`` (default) or ``"dispatch"``.
-        epic_ref: Linear identifier of the saved campaign epic
-            (e.g. ``"TAP-2050"``). Required for ``mode="dispatch"``.
+        epic_ref: Linear identifier of the filed campaign epic (e.g.
+            ``"TAP-2050"``). **Required for** ``mode="dispatch"``;
+            ignored in plan mode.
+        ctx: MCP context handle for progress notifications. Injected
+            by the host.
     """
     start = time.perf_counter_ns()
     _record_call("tapps_audit_campaign")

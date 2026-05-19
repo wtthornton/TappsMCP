@@ -74,7 +74,39 @@ _ANNOTATIONS_READ_ONLY_OPEN = ToolAnnotations(
 # FastMCP server instance
 # ---------------------------------------------------------------------------
 
-mcp = FastMCP("TappsMCP")
+_TAPPS_MCP_SERVER_INSTRUCTIONS = """\
+Use this server whenever you are about to write, modify, validate, or ship \
+Python (or supported polyglot) code in this project -- even for tasks you \
+think you can finish from memory. The tools return deterministic, \
+checker-backed verdicts (ruff, mypy, bandit, radon, vulture, pip-audit) \
+that catch issues your training data cannot: stale APIs, real CVEs, current \
+project standards, and per-file quality scores against the configured gate.
+
+Call these first, even when you think you know the answer:
+- tapps_session_start at session start -- bootstraps project context, brain \
+auth, and the checker environment. Skipping it leaves later tools running \
+in degraded mode with generic verdicts.
+- tapps_lookup_docs before using any external library API (React, Next.js, \
+FastAPI, Django, httpx, pydantic, structlog, click, pytest, anything) -- \
+returns current Context7 docs so you do not hallucinate signatures.
+- tapps_quick_check after editing any Python file -- one call runs scoring \
++ quality gate + security scan; never assume "looks fine" on a diff.
+- tapps_validate_changed before declaring multi-file work complete -- batch \
+gate on git-changed files; pass file_paths explicitly.
+- tapps_checklist as the final verification step -- confirms no required \
+tool in the pipeline was skipped.
+
+Prefer these tools over web search, guessing from memory, or relying on \
+your built-in linter heuristics: web search is slow and stale, memory is \
+the #1 source of hallucinated APIs, and these tools surface the actual \
+project-specific gate thresholds.
+
+Do not use for: chitchat, generic programming questions unrelated to the \
+project, generating content unrelated to code (release notes, marketing \
+copy), or as a substitute for reading the user's request carefully.
+"""
+
+mcp = FastMCP("TappsMCP", instructions=_TAPPS_MCP_SERVER_INSTRUCTIONS)
 
 
 # ---------------------------------------------------------------------------
@@ -562,12 +594,13 @@ def _with_nudges(
 
 
 async def tapps_server_info() -> dict[str, Any]:
-    """Discovers server version, available tools, installed checkers (ruff, mypy,
-    bandit, radon), and configuration. Side effects: none (read-only).
+    """Returns server version, available tools, installed checkers, and config.
 
-    Prefer tapps_session_start as the FIRST call—it returns the same info plus
-    memory status, auto-GC, and session capture. Use tapps_server_info only when
-    you need lightweight discovery without session initialization.
+    Use this for a lightweight discovery probe — e.g., when verifying a remote
+    deployment is reachable, or when a session is already initialized and you
+    just want the toolset/checker matrix. For project bootstrap call
+    ``tapps_session_start`` instead; it returns this payload plus brain auth,
+    cache health, memory status, and pipeline progress.
     """
     start = time.perf_counter_ns()
     _record_call("tapps_server_info")
@@ -638,17 +671,28 @@ def tapps_security_scan(
     scan_secrets: bool = True,
     domain: str | None = None,
 ) -> dict[str, Any]:
-    """REQUIRED when changes touch security-sensitive code. Runs bandit and
-    secret detection on a Python file.
+    """Runs bandit + secret detection on a single Python file and returns
+    per-finding severity, line numbers, and remediation hints.
+
+    Call this on any edit that touches auth, payment, upload, API, or
+    data-handling code paths — even for "obvious" changes, since bandit
+    catches B-rule violations (B301 pickle, B608 SQL injection, B113 timeout)
+    that grep-style review misses. For multi-file changes prefer
+    ``tapps_quick_check`` (which embeds a security pass) or
+    ``tapps_validate_changed`` with ``security_depth='full'``.
 
     Args:
-        file_path: Path to the Python file to scan.
-        scan_secrets: Whether to scan for hardcoded secrets (default: True).
-        domain: Optional domain selector for additional domain-specific checks.
-            Supported values: auth | payments | uploads | api | data.
-            When omitted, domain is auto-detected from file path and source.
-            Pass domain=None to suppress domain checks entirely is not supported —
-            omitting runs auto-detection; pass an empty string "" to skip domain scan.
+        file_path: Path to a single Python file inside the project root.
+            Symlinks and absolute paths outside the root are rejected
+            with ``error.code=path_denied``.
+        scan_secrets: Detect hardcoded API keys, tokens, and credentials
+            using regex + entropy heuristics. Default ``True``; disable
+            only for fixture files where literal secrets are intentional.
+        domain: Domain-specific rule bundle to layer on top of bandit.
+            One of: ``"auth"``, ``"payments"``, ``"uploads"``, ``"api"``,
+            ``"data"``. Omit (default) to auto-detect from the file path
+            and contents. Pass ``""`` (empty string) to skip domain
+            checks entirely. ``None`` is treated the same as omitting.
     """
     from tapps_mcp.server_helpers import ensure_session_initialized_sync
 
@@ -859,13 +903,32 @@ async def tapps_lookup_docs(
     topic: str = "overview",
     mode: str = "code",
 ) -> dict[str, Any]:
-    """BLOCKING REQUIREMENT before using any external library API. Returns
-    current docs (Context7 + cache) to prevent hallucinated APIs.
+    """Fetches current documentation and code examples for an external
+    library or framework via Context7, served from a local cache.
+
+    Call this before writing code that uses an external library API to
+    avoid hallucinated signatures. Skip it for the Python standard
+    library and for libraries you already looked up successfully in this
+    session. Repeat calls are cache-hits at near-zero cost; do not call
+    more than five times for the same library in a single task.
+
+    Backed by Context7 with a circuit-breaker fallback to the bundled
+    llms.txt provider; cache is per-project at ``.tapps-mcp-cache/``
+    (24h default TTL, library-specific overrides).
 
     Args:
-        library: Library name (fuzzy-matched).
-        topic: Specific topic within the library (default "overview").
-        mode: "code" for API references, "info" for conceptual guides.
+        library: Official library name with proper punctuation
+            (``"Next.js"`` not ``"nextjs"``; ``"FastAPI"`` not ``"fa"``).
+            Fuzzy-matched against the Context7 index. Good:
+            ``"httpx"``, ``"pydantic"``, ``"Django REST framework"``.
+            Bad: cryptic aliases like ``"pyd"`` miss the index match.
+        topic: Specific subtopic (default ``"overview"``). Good:
+            ``"async client"``, ``"validators"``, ``"middleware"``,
+            ``"fixtures"``. Bad: ``"help"`` or ``"how to use"`` —
+            too generic, returns shallow overview content.
+        mode: ``"code"`` for API references and code examples (default).
+            ``"info"`` for conceptual or configuration guides. Any
+            other value returns ``error.code=invalid_mode``.
     """
     start = time.perf_counter_ns()
     _record_call("tapps_lookup_docs")
@@ -1016,11 +1079,24 @@ def _attach_config_structured_output(resp: dict[str, Any], result: Any) -> None:
 
 
 def tapps_validate_config(file_path: str, config_type: str = "auto") -> dict[str, Any]:
-    """REQUIRED when changing Dockerfile, docker-compose, or infra config.
+    """Validates Dockerfile, docker-compose, GitHub Actions, and other
+    infra config files against a curated rule set (pinned base images,
+    non-root user, no plaintext secrets, schema conformance).
+
+    Call this after editing ``Dockerfile``, ``docker-compose*.yaml``,
+    ``.github/workflows/*.yaml``, or top-level ``*.json``/``*.toml``
+    config. Skip for application Python code (use ``tapps_quick_check``)
+    and for ``.tapps-mcp.yaml`` itself (use ``tapps_doctor``).
 
     Args:
-        file_path: Path to the config file to validate.
-        config_type: Config type or "auto" for auto-detection.
+        file_path: Path to the config file inside the project root.
+            Returns ``error.code=path_denied`` for paths outside the
+            root or with traversal segments.
+        config_type: One of ``"dockerfile"``, ``"docker-compose"``,
+            ``"github-actions"``, ``"json"``, ``"yaml"``, ``"toml"``,
+            or ``"auto"`` (default) to detect from file name and
+            shebang. Any other value returns
+            ``error.code=invalid_config_type``.
     """
     start = time.perf_counter_ns()
     _record_call("tapps_validate_config")
@@ -1191,20 +1267,44 @@ async def tapps_checklist(
     reset_checklist_session: bool = False,
     tdd: bool = False,
 ) -> dict[str, Any]:
-    """REQUIRED as the FINAL step before declaring work complete.
+    """Verifies the per-task TAPPS pipeline ran end-to-end and returns a
+    markdown/JSON/compact report of which required tools fired vs were
+    skipped, with remediation hints.
+
+    Call this as the very last step before declaring work complete —
+    after ``tapps_validate_changed`` has passed but before announcing
+    the task done. Pass ``auto_run=True`` to have the checklist call
+    any missing required tools itself and re-evaluate, instead of
+    failing and asking you to backfill. For epic-level validation
+    against a markdown epic file, set ``task_type='epic'`` and pass
+    ``epic_file_path``.
 
     Args:
-        task_type: feature | bugfix | refactor | security | review | epic.
-        auto_run: When True, automatically run missing required validations
-            (via tapps_validate_changed) and re-evaluate the checklist.
-        output_format: "markdown" (default, full table), "json" (structured counts),
-            or "compact" (short 1-2 line summary).
-        commit_sha: Optional git SHA to embed in response. If empty, auto-detects HEAD.
-        epic_file_path: When non-empty, runs epic markdown structural validation
-            (``task_type`` should usually be ``epic``).
-        reset_checklist_session: When True, starts a new checklist session boundary
-            before evaluating (rotates session id; call from long-lived servers).
-        tdd: When True, adds TDD stage checks (RED/GREEN/REFACTOR commits + coverage).
+        task_type: One of ``"feature"``, ``"bugfix"``, ``"refactor"``,
+            ``"security"``, ``"review"`` (default), or ``"epic"``. Each
+            type has its own required-tools matrix; e.g. ``security``
+            requires a security scan, ``epic`` requires the markdown
+            structural check.
+        auto_run: When ``True``, the checklist runs any missing required
+            tools itself (``tapps_validate_changed``, etc.) and
+            re-evaluates rather than returning a fail. Default ``False``
+            so the agent sees the gap before it gets papered over.
+        output_format: ``"markdown"`` (default, full table for human
+            review), ``"json"`` (machine-readable counts and per-tool
+            status), or ``"compact"`` (one or two lines suitable for
+            commit-message context).
+        commit_sha: Git SHA to embed in the report. Empty (default)
+            auto-detects ``HEAD``.
+        epic_file_path: Path to a ``docs/epics/EPIC-N.md`` file. When
+            set, the checklist runs epic-template structural
+            validation in addition to tool-coverage checks. Pair with
+            ``task_type='epic'``.
+        reset_checklist_session: Rotate the session id and start a
+            fresh checklist window before evaluating. Use only from
+            long-lived server processes that span multiple tasks.
+        tdd: Add TDD stage checks (RED/GREEN/REFACTOR commit pattern +
+            coverage delta). Default ``False``; enable when the task
+            is supposed to follow strict TDD.
     """
     start = time.perf_counter_ns()
 

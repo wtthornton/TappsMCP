@@ -45,21 +45,32 @@ async def tapps_release_update(
     project: str = "",
     dry_run: bool = False,
 ) -> dict[str, Any]:
-    """Generate and validate a release update document body.
+    """Generates and validates the body of a Linear release-update
+    document from ``CHANGELOG.md`` (preferred) or ``git log``, ready for
+    the ``linear-release-update`` skill to post via ``save_document``.
 
-    Sources content from CHANGELOG.md (preferred) or git log, builds the
-    document via docs-mcp generators, validates it, and returns the body
-    ready for the linear-release-update skill to post via save_document.
-
-    With ``dry_run=True``, returns the body without requiring agent_ready.
+    Call this when announcing a release ("post the v1.5.0 update",
+    "ship release notes for X") — never write release docs by hand
+    directly through ``save_document``, the validation step here
+    catches missing sections and unsupported title formats. Always
+    drive this through the ``linear-release-update`` skill rather than
+    invoking directly, so the surrounding ``save_document`` and
+    cache-invalidation steps fire in order.
 
     Args:
-        version: New release version, e.g. "1.5.0".
-        prev_version: Previous version, e.g. "1.4.2".
-        bump_type: "patch", "minor", or "major". Inferred from semver if blank.
-        team: Linear team name/ID (from .tapps-mcp.yaml or passed by agent).
-        project: Linear project name/slug (from .tapps-mcp.yaml or agent).
-        dry_run: When True, return body regardless of validation result.
+        version: New release version (semver), e.g. ``"1.5.0"``.
+        prev_version: Previous version, e.g. ``"1.4.2"``. Used to
+            derive the diff window for CHANGELOG / git-log sourcing.
+        bump_type: ``"patch"``, ``"minor"``, or ``"major"``. Empty
+            (default) infers from semver delta between ``prev_version``
+            and ``version``.
+        team: Linear team name or ID. Empty (default) reads from
+            ``.tapps-mcp.yaml`` (``linear_team``).
+        project: Linear project name or slug. Empty (default) reads
+            from ``.tapps-mcp.yaml`` (``linear_project``).
+        dry_run: When ``True``, return the rendered body without
+            gating on ``agent_ready`` from the validator. Use for
+            preview/iteration; the real release call always validates.
     """
     _record_call("tapps_release_update")
     start = time.perf_counter_ns()

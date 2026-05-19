@@ -534,16 +534,30 @@ async def tapps_session_start(
     quick: bool = False,
     force: bool = False,
 ) -> dict[str, Any]:
-    """REQUIRED as the FIRST call in every session. Returns server info
-    (version, checkers, configuration, and project context).
+    """Bootstraps project context: server info, installed checkers, brain
+    auth, memory status, cache health, install-drift, and pipeline
+    progress for the current task.
+
+    Call this as the first MCP tool in every session — agent reasoning,
+    library lookups, and quality gates run in degraded mode until this
+    completes. The full payload caches per server process (TAP-1379), so
+    repeat calls return instantly with ``cached: true`` and do not churn
+    the checklist session id. Use ``force=True`` only when project
+    state changed under the running server (config edit, brain restart,
+    checker install).
 
     Args:
-        project_root: Unused; reserved for future use. Server uses configured root.
-        quick: When True, return minimal response using cached tool versions
-            (no subprocess calls, no diagnostics, no memory GC). Target: < 1s.
-        force: When True, bypass the per-process memoization cache and re-run
-            the full session bootstrap. Default False — repeat calls within the
-            same MCP server process return the cached response (TAP-1379).
+        project_root: Currently unused; reserved for future remote-host
+            workflows. The server resolves the project root from its
+            launch CWD and ``TAPPS_MCP_PROJECT_ROOT`` env var.
+        quick: Return a minimal payload from cached checker versions
+            without subprocess probes, diagnostics, or memory GC.
+            Target latency < 1s. Use for fast liveness probes; the full
+            response is still needed at least once per session.
+        force: Bypass the per-process memoization cache and re-run the
+            full bootstrap. Default ``False``. Use after restarting the
+            brain, editing ``.tapps-mcp.yaml``, or installing a new
+            checker — otherwise the cached response is what you want.
     """
     from tapps_mcp.server import (
         _record_call,
@@ -807,11 +821,22 @@ async def tapps_init(
     output_mode: str = "auto",
     ctx: Context[Any, Any, Any] | None = None,
 ) -> dict[str, Any]:
-    """Bootstrap TAPPS pipeline in the current project.
+    """Bootstraps the TAPPS pipeline into a fresh project: writes
+    ``AGENTS.md``, ``TECH_STACK.md``, ``.tapps-mcp.yaml``, platform rules
+    (``.claude/`` or ``.cursor/``), git hooks, agents, and skills.
 
-    Side effects: Writes files (AGENTS.md, TECH_STACK.md, platform rules, hooks,
-    agents, skills). May create or merge ``.tapps-mcp.yaml`` on first run.
-    See package docs for full argument reference.
+    Call this when adding tapps-mcp to a new repo, or to add a previously
+    disabled component (e.g., switching ``agent_teams`` on). For an
+    existing install upgrading to a new tapps-mcp version use
+    ``tapps_upgrade`` instead — it preserves user customizations that
+    ``tapps_init`` may overwrite. Side effects: writes many files;
+    creates or merges ``.tapps-mcp.yaml`` on first run.
+
+    Set ``dry_run=True`` to preview the file set without writing, or
+    ``verify_only=True`` to check whether the install is already
+    complete without modifying anything. See package docs for the full
+    flag matrix (``linear_sdlc``, ``scaffold_experts``,
+    ``include_karpathy``, profile-specific bundles, etc.).
     """
     from tapps_mcp.pipeline.init import bootstrap_pipeline
     from tapps_mcp.server import _record_call, _record_execution, _with_nudges
@@ -930,30 +955,48 @@ async def tapps_upgrade(
     mcp_only: bool = False,
     ctx: Context[Any, Any, Any] | None = None,
 ) -> dict[str, Any]:
-    """Upgrade TappsMCP-generated files after a version update.
+    """Refreshes TappsMCP-managed scaffolding (agents, skills, hooks,
+    ``AGENTS.md``, platform rules, ``.mcp.json``) after a tapps-mcp
+    version bump, preserving consumer customizations.
 
-    Writes are scoped to tapps-managed files: the four ``tapps-*`` subagents,
-    the ``tapps-*`` + ``linear-issue`` skills, and ``tapps-*`` hook scripts.
-    Consumer-authored agents/skills/hooks with other names are preserved.
-    ``AGENTS.md`` uses section-aware merge; ``.claude/settings.json`` hooks
-    are merged by matcher (no entries removed). Creates a timestamped
-    backup first under ``.tapps-mcp/backups/``.
+    Call this after upgrading the tapps-mcp package (``uv tool install
+    --reinstall``) — the new package may ship updated templates that
+    existing scaffolding does not pick up automatically. For a brand-new
+    install use ``tapps_init`` instead; this tool assumes the project
+    was already initialized. Always preview with ``dry_run=True`` first
+    when the project has heavy customizations; the response's
+    ``dry_run_summary.verdict`` flags whether any user-editable files
+    (``CLAUDE.md``, hook merges) would be touched.
 
-    With ``dry_run=True``, returns a per-component breakdown plus a
-    top-level ``dry_run_summary`` with:
+    Writes are scoped to tapps-managed names (the four ``tapps-*``
+    subagents, the ``tapps-*`` + ``linear-issue`` skills, ``tapps-*``
+    hook scripts). Consumer-authored agents/skills/hooks with other
+    names are preserved. ``AGENTS.md`` uses section-aware merge;
+    ``.claude/settings.json`` hooks are merged by matcher (no entries
+    removed). A timestamped backup is created at
+    ``.tapps-mcp/backups/`` before any write.
 
-    - ``verdict``: ``"safe-to-run"`` (only tapps-managed writes) or
-      ``"review-recommended"`` (touches user-editable files like
-      ``CLAUDE.md`` or ``.claude/settings.json`` merge)
-    - ``managed_file_count`` / ``preserved_file_count``
-    - ``preserved_files``: exact custom files the upgrade would leave alone
-    - ``review_recommended_for``: components requiring diff review
-    - ``skipped_components``: artifacts opted out via ``upgrade_skip_files``
-
-    Per-component entries for ``agents``/``skills``/``hooks`` are dicts with
-    ``action``, ``managed_files``/``managed_skills``, and
-    ``preserved_files``/``preserved_skills`` so consumers can audit exactly
-    which paths would change.
+    Args:
+        platform: Restrict the upgrade to one platform bundle:
+            ``"claude-code"``, ``"cursor"``, or ``"vscode"``. Empty
+            (default) upgrades all detected platforms.
+        force: Overwrite consumer files even when the section-aware
+            merge would normally preserve them. Default ``False``;
+            enable only after reviewing the ``dry_run`` diff.
+        dry_run: Return the upgrade plan with a per-component breakdown
+            and a top-level ``dry_run_summary`` (``verdict``,
+            ``managed_file_count``, ``preserved_files``,
+            ``review_recommended_for``, ``skipped_components``) without
+            writing anything. Use this before any real upgrade on a
+            customized project.
+        output_mode: ``"auto"`` (default), ``"writes"``, or
+            ``"content"`` — controls whether the response embeds file
+            contents (for sandboxed servers that cannot write directly)
+            or just file-system writes (the default for local servers).
+        mcp_only: When ``True``, refresh only ``.mcp.json`` (and the
+            sibling Cursor/VS Code mirrors); skip agents, skills, hooks,
+            and prompt templates. Use after an ``.mcp.json``-only change
+            like the Context7 default-env wiring.
     """
     from tapps_mcp.pipeline.upgrade import upgrade_pipeline
     from tapps_mcp.server import _record_call, _record_execution, _with_nudges
@@ -999,10 +1042,21 @@ async def tapps_upgrade(
 
 
 def tapps_set_engagement_level(level: str) -> dict[str, Any]:
-    """Set the LLM engagement level (high / medium / low) for the project.
+    """Persists the project's LLM engagement level to ``.tapps-mcp.yaml``,
+    which controls how aggressively tapps-mcp enforces the quality pipeline.
 
-    Side effects: Writes ``llm_engagement_level`` to ``.tapps-mcp.yaml``. Run
-    ``tapps_init(overwrite_agents_md=True)`` afterward to regenerate AGENTS.md.
+    Call this once when adopting tapps-mcp, or to dial the friction up or
+    down: ``high`` (full RFC-2119 obligations in AGENTS.md, blocking
+    gates), ``medium`` (default; recommended trigger phrasing), ``low``
+    (advisory hints only). After setting, re-run
+    ``tapps_init(overwrite_agents_md=True)`` to regenerate ``AGENTS.md``
+    and platform rules with the new level — the YAML alone does not
+    propagate into the agent-visible prompts.
+
+    Args:
+        level: One of ``"high"``, ``"medium"`` (recommended default),
+            or ``"low"``. Any other value returns
+            ``error.code=invalid_level``.
     """
     import yaml
 
@@ -1076,7 +1130,25 @@ def tapps_doctor(
     project_root: str = "",
     quick: bool = False,
 ) -> dict[str, Any]:
-    """Diagnose TappsMCP configuration and connectivity."""
+    """Diagnoses TappsMCP configuration, checker installation, brain
+    connectivity, cache health, install-drift, and Linear-write
+    sentinel state; returns pass/fail per check with remediation hints.
+
+    Call this when something feels wrong (lookups returning ``degraded``,
+    brain probes failing, ``ENOENT`` from a checker) — it's the
+    structured equivalent of ``tapps-mcp doctor`` on the CLI. For
+    routine session startup use ``tapps_session_start`` (which embeds a
+    subset of these checks); use ``tapps_doctor`` only when triaging.
+
+    Args:
+        project_root: Override the project root (default: server-configured
+            root). Useful when running the doctor against a sibling repo
+            from a long-lived server process.
+        quick: Skip the slow subprocess probes (``ruff --version``,
+            ``pip-audit --version``, etc.) and return cached versions.
+            Default ``False``; the full diagnostic is what you usually
+            want for triage.
+    """
     from tapps_mcp.distribution.doctor import run_doctor_structured
     from tapps_mcp.server import _record_call, _record_execution, _with_nudges
 
@@ -1134,7 +1206,32 @@ async def tapps_pipeline(
     preset: str = "standard",
     skip_session_start: bool = False,
 ) -> dict[str, Any]:
-    """One-call orchestrator for the full TappsMCP quality pipeline (STORY-101.2)."""
+    """Runs the full TAPPS quality pipeline in one shot: session_start →
+    score → quality_gate → security_scan → checklist, and returns an
+    aggregated pass/fail report.
+
+    Call this at the end of a coding task instead of invoking each
+    pipeline stage individually — it short-circuits on the first failing
+    gate and surfaces the per-stage timing so you can see where the
+    pipeline spent its budget. Prefer the individual tools when you
+    need partial output (e.g., scoring without security scan) or when
+    iterating tightly on one file.
+
+    Args:
+        file_paths: Comma-separated paths to validate. Empty (default)
+            auto-detects via ``git diff``. Always pass explicit paths
+            for large repos — auto-detect can be very slow.
+        task_type: Drives the checklist matrix at the end of the
+            pipeline. One of ``"feature"`` (default), ``"bugfix"``,
+            ``"refactor"``, ``"security"``, ``"review"``, ``"epic"``.
+        preset: Quality gate threshold preset: ``"standard"`` (default,
+            ≥70/100 overall), ``"strict"`` (≥85), or ``"framework"``
+            (relaxed for library/framework projects).
+        skip_session_start: Skip the leading ``tapps_session_start``
+            call. Default ``False``. Enable only when you already ran
+            ``session_start`` in the same MCP process and want to save
+            its <1s cost.
+    """
     from tapps_mcp.server import _record_call
     from tapps_mcp.tools import pipeline_orchestrator as _po
 

@@ -132,29 +132,38 @@ async def tapps_score_file(
     fix: bool = False,
     mode: str = "auto",
 ) -> dict[str, Any]:
-    """REQUIRED after editing any source file. Scores quality across 7
-    categories (complexity, security, maintainability, test coverage,
-    performance, structure, devex). Skipping means quality issues go
-    undetected and the quality gate will likely fail.
+    """Returns a 7-category quality score (complexity, security,
+    maintainability, test coverage, performance, structure, devex) for a
+    single source file, with per-category breakdowns and suggestions.
 
-    Performance scoring uses three data sources: AST heuristics (always),
-    radon Halstead metrics (when radon available), and perflint anti-patterns
-    (when pylint+perflint installed). Install ``tapps-mcp[perf]`` for full
-    performance analysis.
+    Call this when you need the *detail* — which category dropped, which
+    line range, which checker flagged it — without a pass/fail verdict.
+    For routine post-edit "did I regress?" checks prefer
+    ``tapps_quick_check`` (same scoring + a gate + basic security in one
+    call). For the binding pass/fail decision use ``tapps_quality_gate``.
+    Use ``quick=True`` (< 500 ms, ruff-only) during tight edit-lint-fix
+    loops and the default ``quick=False`` before declaring work complete.
 
-    Supports Python (.py), TypeScript/JavaScript (.ts, .tsx, .js, .jsx),
-    Go (.go), and Rust (.rs) files.
-
-    Use quick=True during edit-lint-fix loops; use full (quick=False) before
-    declaring work complete.
+    Supports Python (``.py``), TypeScript/JavaScript (``.ts``, ``.tsx``,
+    ``.js``, ``.jsx``), Go (``.go``), and Rust (``.rs``). Performance
+    scoring layers AST heuristics (always) over radon Halstead (when
+    installed) and perflint anti-patterns (when ``tapps-mcp[perf]`` is
+    installed).
 
     Args:
-        file_path: Path to the source file to score.
-        quick: If True, run quick-mode scoring (< 500 ms).
-        fix: If True (requires quick=True, Python only), apply ruff auto-fixes first.
-        mode: Execution mode - "subprocess", "direct", or "auto" (default).
-            "direct" uses radon as a library and sync subprocess in thread
-            pool, avoiding async subprocess reliability issues.
+        file_path: Path to a single source file inside the project
+            root. Symlinks and traversal segments return
+            ``error.code=path_denied``.
+        quick: When ``True``, ruff-only scoring (< 500 ms). When
+            ``False`` (default), the full checker matrix. Use ``True``
+            in hot loops; ``False`` before declaring done.
+        fix: Apply ruff auto-fixes before scoring (Python only, requires
+            ``quick=True``). Default ``False``. Use only when you want
+            the scorer to also rewrite the file in place.
+        mode: ``"auto"`` (default), ``"subprocess"``, or ``"direct"``.
+            ``"direct"`` uses radon as a library and runs subprocess
+            checkers in a thread pool — avoids async-subprocess
+            reliability issues on Windows.
     """
     from tapps_mcp.server import _record_call, _record_execution, _validate_file_path, _with_nudges
 
@@ -308,20 +317,29 @@ async def tapps_quality_gate(
     preset: str = "",
     ctx: Context[Any, Any, Any] | None = None,
 ) -> dict[str, Any]:
-    """BLOCKING REQUIREMENT before declaring work complete. Runs full scoring
-    then evaluates pass/fail against the quality preset. Work is NOT done
-    until this passes (or the user explicitly accepts the risk).
+    """Runs full 7-category scoring on a single file and returns a binding
+    pass/fail verdict against the chosen preset, with the failing
+    categories surfaced in ``gate_failures``.
 
-    Supports Python (.py), TypeScript/JavaScript (.ts, .tsx, .js, .jsx),
-    Go (.go), and Rust (.rs) files.
-
-    If this tool is unavailable or rejected, use tapps_quick_check as a
-    lighter alternative that includes a basic quality gate.
+    Call this when you need the formal quality verdict for one file —
+    typically as the last per-file step before committing. For
+    multi-file changes use ``tapps_validate_changed`` (same gate logic,
+    batched). For the fast version that also embeds a basic security
+    pass use ``tapps_quick_check``. Skipping the gate altogether is
+    almost never correct; if you must, get explicit user sign-off.
 
     Args:
-        file_path: Path to the source file to evaluate.
-        preset: Quality preset - "standard" (70+), "strict" (80+), or "framework" (75+).
-            When empty, prompts the user to select via elicitation (if supported).
+        file_path: Path to a single source file (Python, TS/JS, Go, or
+            Rust) inside the project root. Returns
+            ``error.code=path_denied`` for paths outside the root.
+        preset: Quality threshold preset. ``"standard"`` (overall ≥70,
+            security floor ≥50), ``"strict"`` (overall ≥85), or
+            ``"framework"`` (overall ≥75, relaxed test coverage for
+            library code). Empty string triggers an MCP elicitation
+            prompt to the user when the host supports it; otherwise
+            defaults to the project's configured preset.
+        ctx: MCP context handle, injected by the host. Do not pass
+            manually.
     """
     from tapps_mcp.server import _record_call, _record_execution, _validate_file_path, _with_nudges
 
@@ -677,24 +695,34 @@ async def tapps_quick_check(
     fix: bool = False,
     file_paths: str = "",
 ) -> dict[str, Any]:
-    """REQUIRED at minimum after editing any source file. Runs quick
-    score + quality gate + basic security check in one fast call.
-    For Python files, supplements with an AST complexity heuristic.
-    For thorough validation, use tapps_validate_changed or individual tools.
-    Skipping means quality regressions go unnoticed.
+    """Bundles scoring + quality gate + basic security check into one fast
+    call (typically < 1s) — the default per-file post-edit verifier.
 
-    Supports Python (.py), TypeScript/JavaScript (.ts, .tsx, .js, .jsx),
-    Go (.go), and Rust (.rs) files.
+    Call this after editing any single source file, or pass multiple
+    paths via ``file_paths`` for a bounded-concurrency batch. For larger
+    multi-file changes (>5 files or full project) prefer
+    ``tapps_validate_changed`` which adds blast-radius impact analysis
+    and judge support. When you need the per-category score detail
+    without a verdict use ``tapps_score_file``; when you need the formal
+    gate without a security pass use ``tapps_quality_gate``.
 
-    Supports batch mode: pass multiple comma-separated paths via ``file_paths``
-    to check many files in one call with bounded concurrency.
+    Supports Python (``.py``), TypeScript/JavaScript (``.ts``, ``.tsx``,
+    ``.js``, ``.jsx``), Go (``.go``), and Rust (``.rs``). Python results
+    are supplemented with an AST complexity heuristic.
 
     Args:
-        file_path: Path to the source file to check (single-file mode).
-        preset: Quality gate preset - "standard", "strict", or "framework".
-        fix: If True (Python only), apply ruff auto-fixes before scoring.
-        file_paths: Comma-separated file paths for batch mode. When non-empty,
-            takes precedence over ``file_path``.
+        file_path: Single source-file path inside the project root.
+            Ignored when ``file_paths`` is non-empty.
+        preset: Quality gate threshold. ``"standard"`` (default,
+            ≥70/100), ``"strict"`` (≥85), or ``"framework"`` (≥75,
+            relaxed for library code).
+        fix: Apply ruff auto-fixes before scoring (Python only).
+            Default ``False``. Enables in-place rewrites by ruff; the
+            scorer then evaluates the post-fix file.
+        file_paths: Comma-separated file paths for batch mode. When
+            non-empty, takes precedence over ``file_path`` and the
+            response is a list of per-file results. Use this for
+            "I just edited 3 files, check them all" workflows.
     """
     from tapps_mcp.server import _record_call, _record_execution, _validate_file_path, _with_nudges
 

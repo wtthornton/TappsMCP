@@ -516,42 +516,59 @@ async def tapps_validate_changed(
     judges: list[dict[str, Any]] | None = None,
     ctx: Context[Any, Any, Any] | None = None,
 ) -> dict[str, Any]:
-    """REQUIRED before declaring multi-file work complete.
-    Detects changed scorable files (via git diff) or accepts an explicit
-    comma-separated list. Runs score + quality gate on each file; security
-    scan only for Python files when quick=False or security_depth='full'
-    (default quick=True does not run security). Skipping means quality
-    issues in changed files go undetected.
+    """Runs the per-file quality gate across multiple changed files in one
+    call: score + gate + (optional) security scan + (optional) blast-radius
+    impact, with a pass/fail verdict for each file.
 
-    Supports multi-language scoring:
-    - Python (.py, .pyi)
-    - TypeScript/JavaScript (.ts, .tsx, .js, .jsx, .mjs, .cjs)
-    - Go (.go)
-    - Rust (.rs)
+    Call this once before declaring multi-file work complete — it batches
+    what would otherwise be N separate ``tapps_quick_check`` invocations.
+    Always pass ``file_paths`` explicitly for repos > 50 files; auto-detect
+    via ``git diff`` works but is slow. For a single file use
+    ``tapps_quick_check`` (same per-file pipeline, lighter wrapper);
+    when you need the formal pipeline closure use ``tapps_checklist``
+    after this returns green.
 
-    If this tool is unavailable or rejected, use tapps_quick_check on
-    individual changed files as a fallback.
-
-    Default is quick=True (ruff-only, typically under 10s). Pass quick=False
-    for full validation (ruff, mypy, bandit, radon, vulture per file, 1-5+ min).
-    To include security scan in default quick mode, pass security_depth='full'.
+    Supports Python (``.py``, ``.pyi``), TypeScript/JavaScript (``.ts``,
+    ``.tsx``, ``.js``, ``.jsx``, ``.mjs``, ``.cjs``), Go (``.go``), and
+    Rust (``.rs``). Default ``quick=True`` runs ruff-only scoring
+    (typically < 10s); ``quick=False`` runs the full checker matrix
+    (ruff, mypy, bandit, radon, vulture) and can take 1–5+ minutes.
 
     Args:
-        file_paths: Comma-separated file paths (empty = auto-detect via git diff).
-        base_ref: Git ref to diff against (default: HEAD for unstaged changes).
-        preset: Quality gate preset - "standard", "strict", or "framework".
-        include_security: Whether to run security scan on each file (ignored if quick=True).
-        quick: If True (default), ruff-only scoring for speed. If False, full validation.
-        security_depth: Security scan depth - "basic" (default) or "full". When "full",
-            security scan runs even in quick mode.
-        include_impact: Whether to run impact analysis on changed files (default: True).
-        correlation_id: Optional caller-provided ID echoed in the response for traceability.
-            Empty string (default) means no correlation ID is included in the response.
-        judges: Optional list of judge dicts. Each judge has: type (pytest|grep|exists),
-            target (str), expect (str, regex for grep), description (str), blocking (bool).
-            Judges run after the quality gate and results appear under judge_results.
-            blocking=False (default) means failures are advisory only.
-        ctx: Optional MCP context (injected by host); used for progress notifications.
+        file_paths: Comma-separated paths inside the project root.
+            Empty (default) auto-detects via ``git diff`` against
+            ``base_ref``. **Pass explicit paths for any repo with more
+            than ~50 tracked files** — auto-detect is the #1 cause of
+            slow validate-changed calls.
+        base_ref: Git ref to diff against when auto-detecting. Default
+            ``"HEAD"`` (unstaged + staged). Use ``"main"`` /
+            ``"master"`` for "everything on this branch".
+        preset: Quality gate threshold. ``"standard"`` (default,
+            ≥70/100 overall, security floor 50), ``"strict"`` (≥85),
+            ``"framework"`` (relaxed for library projects).
+        include_security: Run a security scan on each Python file.
+            Ignored when ``quick=True`` and ``security_depth='basic'``.
+        quick: When ``True`` (default), ruff-only scoring for speed.
+            When ``False``, full validation (typically 1–5+ minutes).
+            Reserve ``False`` for pre-release / security audits.
+        security_depth: ``"basic"`` (default, ruff-rule subset in
+            quick mode) or ``"full"`` (runs bandit even in quick mode).
+            Use ``"full"`` when ``quick=True`` but you still want
+            real security signal.
+        include_impact: Run blast-radius impact analysis on each file
+            (direct + transitive dependents, test coverage). Default
+            ``True``. Disable for hot-loop iteration.
+        correlation_id: Caller-provided ID echoed in the response for
+            log correlation. Empty (default) omits the field.
+        judges: Optional list of post-gate judges. Each dict has
+            ``type`` (``"pytest"``, ``"grep"``, ``"exists"``),
+            ``target`` (path or selector), ``expect`` (regex for
+            ``grep``), ``description``, and ``blocking`` (default
+            ``False``, advisory only). Use to layer task-specific
+            assertions on top of the standard gate.
+        ctx: MCP context handle, injected by the host for progress
+            notifications during long-running batch validation. Do
+            not pass manually.
     """
     # Late imports through the host module so tests can patch these names.
     from tapps_mcp import server_pipeline_tools as _host
