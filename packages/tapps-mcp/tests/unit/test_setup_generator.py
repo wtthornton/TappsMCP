@@ -917,6 +917,60 @@ class TestEnvInConfig:
         token = data["mcpServers"]["tapps-mcp"]["env"]["TAPPS_MCP_MEMORY_BRAIN_AUTH_TOKEN"]
         assert token.startswith("${") and token.endswith("}")
 
+    def test_default_env_includes_context7_substitution(self, tmp_path):
+        """Default env block must include TAPPS_MCP_CONTEXT7_API_KEY via ${...}.
+
+        Without this, consumers fall back to llms.txt for tapps_lookup_docs even
+        when they have a Context7 key exported in their shell — the MCP server
+        process never sees the env var because .mcp.json doesn't propagate it.
+        """
+        project = tmp_path / "project"
+        project.mkdir()
+        _generate_config("cursor", project)
+        data = json.loads((project / ".cursor" / "mcp.json").read_text(encoding="utf-8"))
+        env = data["mcpServers"]["tapps-mcp"]["env"]
+        assert env["TAPPS_MCP_CONTEXT7_API_KEY"] == "${TAPPS_MCP_CONTEXT7_API_KEY}"
+
+    def test_context7_key_value_is_substitution_not_literal(self, tmp_path):
+        """The Context7 API key must never be written as a literal value."""
+        project = tmp_path / "demo"
+        project.mkdir()
+        _generate_config("vscode", project)
+        data = json.loads((project / ".vscode" / "mcp.json").read_text(encoding="utf-8"))
+        ctx7 = data["servers"]["tapps-mcp"]["env"]["TAPPS_MCP_CONTEXT7_API_KEY"]
+        assert ctx7.startswith("${") and ctx7.endswith("}")
+
+    def test_upgrade_adds_context7_key_to_existing_consumer_config(self, tmp_path):
+        """tapps_upgrade must inject TAPPS_MCP_CONTEXT7_API_KEY into existing configs.
+
+        Simulates a consumer who installed tapps-mcp before Context7 was wired
+        into the default template. On upgrade, _merge_config merges old env
+        (no Context7) with the new default env (has Context7), and the new
+        key gets added without disturbing other custom env keys.
+        """
+        existing = {
+            "mcpServers": {
+                "tapps-mcp": {
+                    "type": "stdio",
+                    "command": "tapps-mcp",
+                    "args": ["serve"],
+                    "env": {
+                        "TAPPS_MCP_PROJECT_ROOT": "${workspaceFolder}",
+                        "TAPPS_MCP_MEMORY_BRAIN_HTTP_URL": "http://localhost:8080",
+                        "TAPPS_MCP_MEMORY_BRAIN_AUTH_TOKEN": "${TAPPS_BRAIN_AUTH_TOKEN}",
+                        "CUSTOM_USER_KEY": "preserved-value",
+                    },
+                },
+            },
+        }
+        merged = _merge_config(existing, "cursor", upgrade_mode=True)
+        env = merged["mcpServers"]["tapps-mcp"]["env"]
+        assert env["TAPPS_MCP_CONTEXT7_API_KEY"] == "${TAPPS_MCP_CONTEXT7_API_KEY}"
+        # Custom user keys survive the upgrade-merge.
+        assert env["CUSTOM_USER_KEY"] == "preserved-value"
+        # Existing brain env is unchanged.
+        assert env["TAPPS_MCP_MEMORY_BRAIN_AUTH_TOKEN"] == "${TAPPS_BRAIN_AUTH_TOKEN}"
+
     def test_merge_preserves_other_servers_with_env(self, tmp_path):
         """Merging preserves existing servers while adding env to tapps-mcp."""
         project = tmp_path / "project"
@@ -1116,6 +1170,12 @@ class TestEpic80ConsumerInit:
         assert is_tapps_mcp_package_layout(tmp_path / "other") is False
 
     def test_merge_preserves_extra_env_keys(self, tmp_path):
+        """User-managed env keys (not in the default set) survive merge.
+
+        Note: keys that ARE in the default set (e.g. TAPPS_MCP_CONTEXT7_API_KEY)
+        get normalized to ${VAR} interpolation on upgrade for commit safety —
+        see ``test_upgrade_normalizes_literal_context7_key_to_substitution`` below.
+        """
         project = tmp_path / "project"
         cursor_dir = project / ".cursor"
         cursor_dir.mkdir(parents=True)
@@ -1126,7 +1186,7 @@ class TestEpic80ConsumerInit:
                     "args": ["serve"],
                     "env": {
                         "TAPPS_MCP_PROJECT_ROOT": ".",
-                        "TAPPS_MCP_CONTEXT7_API_KEY": "secret",
+                        "OPENAI_API_KEY": "user-managed-secret",
                     },
                 },
             },
@@ -1138,7 +1198,39 @@ class TestEpic80ConsumerInit:
             _generate_config("cursor", project, force=True)
         data = json.loads((cursor_dir / "mcp.json").read_text(encoding="utf-8"))
         env = data["mcpServers"]["tapps-mcp"]["env"]
-        assert env.get("TAPPS_MCP_CONTEXT7_API_KEY") == "secret"
+        assert env.get("OPENAI_API_KEY") == "user-managed-secret"
+
+    def test_upgrade_normalizes_literal_context7_key_to_substitution(self, tmp_path):
+        """A pre-existing plaintext TAPPS_MCP_CONTEXT7_API_KEY gets replaced
+        with ${TAPPS_MCP_CONTEXT7_API_KEY} on upgrade — commit safety.
+
+        Consumers who had hardcoded their key in .mcp.json (a security smell)
+        get auto-migrated to env-var interpolation. The actual key value must
+        come from the shell env going forward.
+        """
+        project = tmp_path / "project"
+        cursor_dir = project / ".cursor"
+        cursor_dir.mkdir(parents=True)
+        existing = {
+            "mcpServers": {
+                "tapps-mcp": {
+                    "command": "tapps-mcp",
+                    "args": ["serve"],
+                    "env": {
+                        "TAPPS_MCP_PROJECT_ROOT": ".",
+                        "TAPPS_MCP_CONTEXT7_API_KEY": "ctx7sk-literal-secret-leaked",
+                    },
+                },
+            },
+        }
+        (cursor_dir / "mcp.json").write_text(json.dumps(existing), encoding="utf-8")
+        with patch(
+            "tapps_mcp.distribution.setup_generator.shutil.which", return_value="/bin/tapps-mcp"
+        ):
+            _generate_config("cursor", project, force=True, upgrade_mode=True)
+        data = json.loads((cursor_dir / "mcp.json").read_text(encoding="utf-8"))
+        ctx7 = data["mcpServers"]["tapps-mcp"]["env"]["TAPPS_MCP_CONTEXT7_API_KEY"]
+        assert ctx7 == "${TAPPS_MCP_CONTEXT7_API_KEY}"
 
     def test_noninteractive_skips_overwrite_without_hang(self, tmp_path):
         project = tmp_path / "project"

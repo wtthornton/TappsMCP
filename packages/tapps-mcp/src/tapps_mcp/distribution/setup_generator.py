@@ -260,12 +260,15 @@ def _build_server_entry(
     """Build the tapps-mcp server config entry for the given host.
 
     Claude Code gets an extra ``instructions`` field for Tool Search discovery.
-    All platforms get the ``env`` block with ``TAPPS_MCP_PROJECT_ROOT`` and
+    All platforms get the ``env`` block with ``TAPPS_MCP_PROJECT_ROOT``,
     the tapps-brain memory connection (TAP-1336): ``HTTP_URL``, ``AUTH_TOKEN``
     via ``${TAPPS_BRAIN_AUTH_TOKEN}`` substitution, and ``PROJECT_ID`` derived
-    from the project directory name. Without this, brand-new ``tapps_init``
-    installs hit the brain server with no auth/identity and
-    ``tapps_session_start`` hard-fails with ``brain_auth_token_missing``.
+    from the project directory name, plus ``TAPPS_MCP_CONTEXT7_API_KEY`` via
+    ``${TAPPS_MCP_CONTEXT7_API_KEY}`` substitution so ``tapps_lookup_docs``
+    routes through Context7 whenever the consumer has the env var exported.
+    Without these defaults, brand-new ``tapps_init`` installs hit the brain
+    server with no auth/identity (``brain_auth_token_missing``) and silently
+    fall back to the llms.txt provider for docs lookup.
 
     The auth token uses env-var substitution rather than a literal value so
     consuming projects can safely commit ``.mcp.json``. The merge logic in
@@ -289,6 +292,7 @@ def _build_server_entry(
         "TAPPS_MCP_PROJECT_ROOT": project_root_value,
         "TAPPS_MCP_MEMORY_BRAIN_HTTP_URL": "http://localhost:8080",
         "TAPPS_MCP_MEMORY_BRAIN_AUTH_TOKEN": "${TAPPS_BRAIN_AUTH_TOKEN}",
+        "TAPPS_MCP_CONTEXT7_API_KEY": "${TAPPS_MCP_CONTEXT7_API_KEY}",
     }
     project_id = _derive_brain_project_id(project_root)
     if project_id:
