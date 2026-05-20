@@ -179,16 +179,20 @@ async def tapps_decompose(
     task: str,
     context_files: list[str] | None = None,
 ) -> dict[str, Any]:
-    """Splits a free-text task description into ordered, independently
+    """Breaks a vague task description into ordered, independently
     verifiable ~15-minute work units, each tagged with a model-tier
-    recommendation (haiku / sonnet / opus).
+    recommendation (haiku / sonnet / opus). Deterministic task
+    decomposition — keyword-based, no LLM calls, reproducible output.
 
-    Call this when the user gives a vague task ("ship X feature",
-    "refactor Y") and you want a deterministic breakdown before
-    starting — units come back risk-first so the riskiest piece gets
-    eval-ed early. Skip for atomic tasks ("fix this one typo") and
-    when the user has already named the steps. Decomposition is
-    keyword-based, no LLM calls, so the output is reproducible.
+    Call this when the user gives a vague, multi-step task ("add
+    OAuth login with tests and docs", "ship X feature", "refactor Y
+    module") and you want a deterministic breakdown into sized work
+    units before starting. Units come back risk-first so the
+    riskiest piece gets eval-ed early. Skip for atomic tasks
+    ("fix this one typo") and when the user has already enumerated
+    the steps. Prefer this over an internal ``TodoWrite`` plan
+    whenever the breakdown should be reproducible across sessions
+    and surfaced with risk + model-tier annotations.
 
     Args:
         task: Free-text description of the work. Good: ``"add OAuth

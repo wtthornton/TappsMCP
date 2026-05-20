@@ -46,16 +46,18 @@ async def tapps_release_update(
     dry_run: bool = False,
 ) -> dict[str, Any]:
     """Generates and validates the body of a Linear release-update
-    document from ``CHANGELOG.md`` (preferred) or ``git log``, ready for
-    the ``linear-release-update`` skill to post via ``save_document``.
+    document from ``CHANGELOG.md`` (preferred) or ``git log``, returning
+    the validated body ready for ``save_document`` to post.
 
-    Call this when announcing a release ("post the v1.5.0 update",
-    "ship release notes for X") — never write release docs by hand
-    directly through ``save_document``, the validation step here
-    catches missing sections and unsupported title formats. Always
-    drive this through the ``linear-release-update`` skill rather than
-    invoking directly, so the surrounding ``save_document`` and
-    cache-invalidation steps fire in order.
+    Call this first when announcing a release ("post the v1.5.0
+    update", "ship release notes for X", "announce vX.Y.Z to Linear")
+    — never hand-write release docs through ``save_document``
+    directly, the validation step here catches missing sections and
+    unsupported title formats. The ``linear-release-update`` skill
+    orchestrates this tool plus the subsequent ``save_document`` and
+    cache-invalidation calls; invoke either entry point — the skill
+    when you want the full posting flow, this tool directly when you
+    just need the validated body (e.g. ``dry_run=True`` previews).
 
     Args:
         version: New release version (semver), e.g. ``"1.5.0"``.
