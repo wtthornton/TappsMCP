@@ -22,6 +22,7 @@ from tapps_mcp.common.output_schemas import (
     SessionStartOutput,
     StructuredOutput,
     TappsSessionStartResponse,
+    TappsValidateChangedResponse,
     ToolError,
     ValidateChangedOutput,
     ValidateConfigOutput,
@@ -959,3 +960,42 @@ class TestTappsSessionStartResponse:
         dumped = err.model_dump()
         assert dumped["http_status"] == 401
         assert dumped["token_state"] == "present"
+
+
+class TestTappsValidateChangedResponse:
+    """B3 — outputSchema for ``tapps_validate_changed``."""
+
+    def test_input_and_output_schema_both_nonempty(self) -> None:
+        from mcp.server.fastmcp.tools.base import Tool
+
+        from tapps_mcp.tools.validate_changed import tapps_validate_changed
+
+        tool = Tool.from_function(tapps_validate_changed)
+        assert tool.parameters, "inputSchema must be non-empty"
+        assert tool.parameters.get("properties"), "inputSchema must declare properties"
+        assert tool.output_schema is not None
+        props = tool.output_schema.get("properties", {})
+        assert "success" in props
+        assert "data" in props
+        assert "error" in props
+        assert tool.output_schema.get("additionalProperties") is True
+
+    def test_validates_typical_envelope(self) -> None:
+        envelope = {
+            "tool": "tapps_validate_changed",
+            "success": True,
+            "elapsed_ms": 1230,
+            "data": {
+                "all_passed": False,
+                "total_files": 3,
+                "passed_count": 2,
+                "failed_count": 1,
+                "security_issues": 0,
+                "files": [{"file_path": "a.py", "gate_passed": True}],
+                "next_steps": ["Fix score regression in b.py"],
+            },
+        }
+        model = TappsValidateChangedResponse.model_validate(envelope)
+        dumped = model.model_dump(mode="json")
+        assert dumped["data"]["all_passed"] is False
+        assert dumped["data"]["next_steps"] == ["Fix score regression in b.py"]

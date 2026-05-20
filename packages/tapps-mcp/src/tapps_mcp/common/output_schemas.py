@@ -317,6 +317,29 @@ class TappsSessionStartResponse(_ToolEnvelope):
     data: SessionStartData | None = None
 
 
+class ValidateChangedData(BaseModel):
+    """Fields agents typically branch on from ``tapps_validate_changed.data``."""
+
+    model_config = ConfigDict(extra="allow")
+
+    all_passed: bool | None = None
+    total_files: int | None = None
+    passed_count: int | None = None
+    failed_count: int | None = None
+    security_issues: int | None = None
+    files: list[dict[str, Any]] | None = None
+    results: list[dict[str, Any]] | None = None
+    timed_out: bool | None = None
+    files_remaining: int | None = None
+
+
+class TappsValidateChangedResponse(_ToolEnvelope):
+    """Output schema for ``tapps_validate_changed`` (B3)."""
+
+    tool: str = "tapps_validate_changed"
+    data: ValidateChangedData | None = None
+
+
 # Registry for looking up output schema by tool name.
 #
 # DISABLED (v0.4.1): The MCP SDK validates the full return dict against the

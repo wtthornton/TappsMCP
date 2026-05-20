@@ -18,11 +18,12 @@ import contextlib
 import dataclasses
 import time
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, cast
 
 import structlog
 from mcp.server.fastmcp import Context
 
+from tapps_mcp.common.output_schemas import TappsValidateChangedResponse
 from tapps_mcp.server_helpers import emit_ctx_info, success_response
 from tapps_mcp.tools.validate_changed_output import (
     _SEVERITY_RANK,
@@ -515,7 +516,7 @@ async def tapps_validate_changed(
     correlation_id: str = "",
     judges: list[dict[str, Any]] | None = None,
     ctx: Context[Any, Any, Any] | None = None,
-) -> dict[str, Any]:
+) -> TappsValidateChangedResponse:
     """Runs the per-file quality gate across multiple changed files in one
     call: score + gate + (optional) security scan + (optional) blast-radius
     impact, with a pass/fail verdict for each file.
@@ -583,14 +584,17 @@ async def tapps_validate_changed(
     paths = _host._discover_changed_files(file_paths, base_ref, settings.project_root)
 
     if not paths:
-        return _handle_no_changed_files(
-            start,
-            settings,
-            _record_execution,
-            _with_nudges,
-            explicit_paths=bool(file_paths.strip()),
-            base_ref=base_ref,
-            correlation_id=correlation_id,
+        return cast(
+            TappsValidateChangedResponse,
+            _handle_no_changed_files(
+                start,
+                settings,
+                _record_execution,
+                _with_nudges,
+                explicit_paths=bool(file_paths.strip()),
+                base_ref=base_ref,
+                correlation_id=correlation_id,
+            ),
         )
 
     capped = len(paths) > MAX_BATCH_FILES
@@ -682,4 +686,4 @@ async def tapps_validate_changed(
     resp = _with_nudges("tapps_validate_changed", resp)
     if timeout_info.timed_out:
         _append_timeout_hint(resp, timeout_info.files_remaining)
-    return resp
+    return cast(TappsValidateChangedResponse, resp)
