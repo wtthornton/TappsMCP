@@ -1,0 +1,573 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<title>TappsMCP — Interactive Architecture Diagrams</title>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>* { margin: 0; padding: 0; box-sizing: border-box; }
+body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    background: #f8f9fa; color: #1a1a2e;
+}
+.header {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    color: white; padding: 2rem; text-align: center;
+}
+.header h1 { font-size: 1.8rem; margin-bottom: 0.5rem; }
+.header p { opacity: 0.9; font-size: 1rem; }
+.controls {
+    display: flex; gap: 1rem; padding: 1rem 2rem;
+    background: white; border-bottom: 1px solid #e0e0e0;
+    flex-wrap: wrap; align-items: center;
+}
+.controls button {
+    padding: 0.5rem 1rem; border: 1px solid #ddd; border-radius: 6px;
+    background: white; cursor: pointer; font-size: 0.9rem;
+    transition: all 0.2s;
+}
+.controls button:hover { background: #f0f0f0; border-color: #999; }
+.controls button.active { background: #667eea; color: white; border-color: #667eea; }
+.toc {
+    padding: 1rem 2rem; background: white; border-bottom: 1px solid #e0e0e0;
+}
+.toc h3 { font-size: 1rem; margin-bottom: 0.5rem; }
+.toc a {
+    display: inline-block; margin: 0.25rem 0.5rem; color: #667eea;
+    text-decoration: none; font-size: 0.9rem;
+}
+.toc a:hover { text-decoration: underline; }
+.diagram-section {
+    margin: 2rem; background: white; border-radius: 12px;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.08); overflow: hidden;
+}
+.diagram-section h2 {
+    padding: 1rem 1.5rem; background: #f8f9fa;
+    border-bottom: 1px solid #e0e0e0; font-size: 1.2rem;
+}
+.diagram-wrapper {
+    padding: 2rem; overflow: auto; min-height: 200px;
+    cursor: grab; position: relative;
+}
+.diagram-wrapper:active { cursor: grabbing; }
+.diagram-wrapper .mermaid { display: flex; justify-content: center; }
+@media print {
+    .controls, .toc { display: none; }
+    .diagram-section { break-inside: avoid; box-shadow: none; }
+    .edgePath path, .flowchart-link {
+        animation: none !important;
+        stroke-dasharray: none !important;
+    }
+}
+@media (prefers-reduced-motion: no-preference) {
+    .edgePath path, .flowchart-link {
+        stroke-dasharray: 4 8;
+        animation: tapps-marching-ants 1.2s linear infinite;
+    }
+}
+@keyframes tapps-marching-ants {
+    to { stroke-dashoffset: -12; }
+}
+</style>
+</head>
+<body>
+<div class="header">
+<h1>TappsMCP — Interactive Architecture Diagrams</h1>
+<p>Generated from tapps-mcp</p>
+</div>
+<div class="controls">
+<button id="zoom-in">Zoom In (+)</button>
+<button id="zoom-out">Zoom Out (-)</button>
+<button id="zoom-reset">Reset</button>
+<span style="margin-left: 1rem; color: #666;">Toggle:</span>
+<button class="toggle-btn active" data-target="diagram-0">Dependency Graph</button>
+<button class="toggle-btn active" data-target="diagram-1">Module Map</button>
+<button class="toggle-btn active" data-target="diagram-2">C4 Component</button>
+<button class="toggle-btn active" data-target="diagram-3">C4 Container</button>
+<button class="toggle-btn active" data-target="diagram-4">C4 System Context</button>
+<button class="toggle-btn active" data-target="diagram-5">ER Diagram</button>
+</div>
+<div class="toc">
+<h3>Diagrams</h3>
+<a href="#diagram-0">Dependency Graph</a>
+<a href="#diagram-1">Module Map</a>
+<a href="#diagram-2">C4 Component</a>
+<a href="#diagram-3">C4 Container</a>
+<a href="#diagram-4">C4 System Context</a>
+<a href="#diagram-5">ER Diagram</a>
+</div>
+<div class="diagram-section" id="diagram-0">
+<h2>Dependency Graph</h2>
+<div class="diagram-wrapper">
+<pre class="mermaid">
+flowchart TD
+    header[&quot;MICROSERVICE (confidence 0.70)&lt;br/&gt;3 pyproject.toml files found: packages/tapps-core, packages/tapps-mcp, packages/docs-mcp&quot;]
+    p0_basic_quality_check[&quot;basic_quality_check&quot;]:::infra
+    p1_build_epic_stories[&quot;build_epic_stories&quot;]:::presentation
+    p2_bump_versions[&quot;bump-versions&quot;]:::infra
+    p3_combined_server[&quot;combined_server&quot;]:::presentation
+    p4_compare[&quot;compare&quot;]:::infra
+    p5_docs_mcp[&quot;docs_mcp&quot;]:::infra
+    p6_generate_tools_json[&quot;generate-tools-json&quot;]:::business
+    p7_integration[&quot;integration&quot;]:::infra
+    header --&gt; p1_build_epic_stories
+    p1_build_epic_stories --&gt; p6_generate_tools_json
+    p6_generate_tools_json --&gt; p0_basic_quality_check
+    subgraph legend[&quot;Legend&quot;]
+        L_presentation[&quot;Presentation&quot;]:::presentation
+        L_business[&quot;Business&quot;]:::business
+        L_data[&quot;Data&quot;]:::data
+        L_infra[&quot;Infra&quot;]:::infra
+    end
+    classDef presentation fill:#F5A9D0,stroke:#333,color:#000
+    classDef business fill:#14B8A6,stroke:#333,color:#fff
+    classDef data fill:#9333EA,stroke:#333,color:#fff
+    classDef infra fill:#6B7280,stroke:#333,color:#fff
+
+</pre>
+</div>
+</div>
+<div class="diagram-section" id="diagram-1">
+<h2>Module Map</h2>
+<div class="diagram-wrapper">
+<pre class="mermaid">
+graph TD
+    subgraph tapps_mcp[&quot;tapps-mcp&quot;]
+        scripts_build_epic_stories_py[&quot;build_epic_stories (1F)&quot;]:::presentation
+        scripts_bump_versions_py[&quot;bump-versions (15F)&quot;]:::infra
+        examples_combined_server_py[&quot;combined_server (1F)&quot;]:::presentation
+        scripts_eval_descriptions_compare_py[&quot;compare (9F)&quot;]:::infra
+        scripts_generate_tools_json_py[&quot;generate-tools-json (2F)&quot;]:::business
+        subgraph tests_integration[&quot;integration/&quot;]
+            tests_integration_test_combined_server_py[&quot;test_combined_server (6F, 8C)&quot;]:::infra
+        end
+        examples_platform_cli_py[&quot;platform_cli&quot;]:::presentation
+        scripts_eval_descriptions_report_py[&quot;report (3F)&quot;]:::infra
+        scripts_eval_descriptions_run_py[&quot;run (5F, 1C)&quot;]:::infra
+        scripts_run_docsmcp_py[&quot;run_docsmcp&quot;]:::infra
+        scripts_run_tapps_mcp_py[&quot;run_tapps_mcp&quot;]:::infra
+        scripts_tapps_mcp_console_py[&quot;tapps_mcp_console&quot;]:::infra
+        subgraph packages_docs_mcp_tests[&quot;tests/&quot;]
+        end
+        subgraph packages_tapps_core_tests[&quot;tests/&quot;]
+        end
+        subgraph packages_tapps_mcp_tests[&quot;tests/&quot;]
+        end
+        scripts_validate_epic15_py[&quot;validate_epic15 (1F)&quot;]:::infra
+        scripts_verify_http_server_py[&quot;verify_http_server (1F)&quot;]:::presentation
+    end
+    classDef presentation fill:#F5A9D0,stroke:#333,color:#000
+    classDef business fill:#14B8A6,stroke:#333,color:#fff
+    classDef data fill:#9333EA,stroke:#333,color:#fff
+    classDef infra fill:#6B7280,stroke:#333,color:#fff
+
+</pre>
+</div>
+</div>
+<div class="diagram-section" id="diagram-2">
+<h2>C4 Component</h2>
+<div class="diagram-wrapper">
+<pre class="mermaid">
+C4Component
+    title Component diagram for tapps-mcp
+
+    Container_Boundary(tapps_mcp, &quot;tapps-mcp&quot;) {
+        Component(basic_quality_check, &quot;basic_quality_check&quot;, &quot;Python&quot;, &quot;1 functions, 0 classes&quot;)
+        Component(basic_quality_check, &quot;basic_quality_check&quot;, &quot;Python&quot;, &quot;1 functions, 0 classes&quot;)
+        Component(build_epic_stories, &quot;build_epic_stories&quot;, &quot;Python&quot;, &quot;1 functions, 0 classes&quot;)
+        Component(bump_versions, &quot;bump-versions&quot;, &quot;Python&quot;, &quot;15 functions, 0 classes&quot;)
+        Component(combined_server, &quot;combined_server&quot;, &quot;Python&quot;, &quot;1 functions, 0 classes&quot;)
+        Component(compare, &quot;compare&quot;, &quot;Python&quot;, &quot;9 functions, 0 classes&quot;)
+        Component(docs_mcp, &quot;docs_mcp&quot;, &quot;Python&quot;, &quot;0 functions, 0 classes&quot;)
+        Component(generate_tools_json, &quot;generate-tools-json&quot;, &quot;Python&quot;, &quot;2 functions, 0 classes&quot;)
+        Component(integration, &quot;integration&quot;, &quot;Python&quot;, &quot;0 functions, 0 classes&quot;)
+        Component(platform_cli, &quot;platform_cli&quot;, &quot;Python&quot;, &quot;0 functions, 0 classes&quot;)
+        Component(quality_gate_pipeline, &quot;quality_gate_pipeline&quot;, &quot;Python&quot;, &quot;1 functions, 0 classes&quot;)
+        Component(report, &quot;report&quot;, &quot;Python&quot;, &quot;3 functions, 0 classes&quot;)
+        Component(run, &quot;run&quot;, &quot;Python&quot;, &quot;5 functions, 1 classes&quot;)
+        Component(run_docsmcp, &quot;run_docsmcp&quot;, &quot;Python&quot;, &quot;0 functions, 0 classes&quot;)
+        Component(run_tapps_mcp, &quot;run_tapps_mcp&quot;, &quot;Python&quot;, &quot;0 functions, 0 classes&quot;)
+        Component(subagent_example, &quot;subagent_example&quot;, &quot;Python&quot;, &quot;1 functions, 0 classes&quot;)
+        Component(subagent_pipeline, &quot;subagent_pipeline&quot;, &quot;Python&quot;, &quot;1 functions, 0 classes&quot;)
+        Component(tapps_core, &quot;tapps_core&quot;, &quot;Python&quot;, &quot;0 functions, 0 classes&quot;)
+        Component(tapps_mcp, &quot;tapps_mcp&quot;, &quot;Python&quot;, &quot;0 functions, 0 classes&quot;)
+        Component(tapps_mcp_console, &quot;tapps_mcp_console&quot;, &quot;Python&quot;, &quot;0 functions, 0 classes&quot;)
+        Component(tests, &quot;tests&quot;, &quot;Python&quot;, &quot;0 functions, 0 classes&quot;)
+        Component(tests, &quot;tests&quot;, &quot;Python&quot;, &quot;0 functions, 0 classes&quot;)
+        Component(tests, &quot;tests&quot;, &quot;Python&quot;, &quot;0 functions, 0 classes&quot;)
+        Component(validate_epic15, &quot;validate_epic15&quot;, &quot;Python&quot;, &quot;1 functions, 0 classes&quot;)
+        Component(verify_http_server, &quot;verify_http_server&quot;, &quot;Python&quot;, &quot;1 functions, 0 classes&quot;)
+    }
+
+    UpdateElementStyle(basic_quality_check, $bgColor=&quot;#6B7280&quot;, $fontColor=&quot;#fff&quot;, $borderColor=&quot;#333&quot;)
+    UpdateElementStyle(basic_quality_check, $bgColor=&quot;#6B7280&quot;, $fontColor=&quot;#fff&quot;, $borderColor=&quot;#333&quot;)
+    UpdateElementStyle(build_epic_stories, $bgColor=&quot;#F5A9D0&quot;, $fontColor=&quot;#000&quot;, $borderColor=&quot;#333&quot;)
+    UpdateElementStyle(bump_versions, $bgColor=&quot;#6B7280&quot;, $fontColor=&quot;#fff&quot;, $borderColor=&quot;#333&quot;)
+    UpdateElementStyle(combined_server, $bgColor=&quot;#F5A9D0&quot;, $fontColor=&quot;#000&quot;, $borderColor=&quot;#333&quot;)
+    UpdateElementStyle(compare, $bgColor=&quot;#6B7280&quot;, $fontColor=&quot;#fff&quot;, $borderColor=&quot;#333&quot;)
+    UpdateElementStyle(docs_mcp, $bgColor=&quot;#6B7280&quot;, $fontColor=&quot;#fff&quot;, $borderColor=&quot;#333&quot;)
+    UpdateElementStyle(generate_tools_json, $bgColor=&quot;#14B8A6&quot;, $fontColor=&quot;#fff&quot;, $borderColor=&quot;#333&quot;)
+    UpdateElementStyle(integration, $bgColor=&quot;#6B7280&quot;, $fontColor=&quot;#fff&quot;, $borderColor=&quot;#333&quot;)
+    UpdateElementStyle(platform_cli, $bgColor=&quot;#F5A9D0&quot;, $fontColor=&quot;#000&quot;, $borderColor=&quot;#333&quot;)
+    UpdateElementStyle(quality_gate_pipeline, $bgColor=&quot;#14B8A6&quot;, $fontColor=&quot;#fff&quot;, $borderColor=&quot;#333&quot;)
+    UpdateElementStyle(report, $bgColor=&quot;#6B7280&quot;, $fontColor=&quot;#fff&quot;, $borderColor=&quot;#333&quot;)
+    UpdateElementStyle(run, $bgColor=&quot;#6B7280&quot;, $fontColor=&quot;#fff&quot;, $borderColor=&quot;#333&quot;)
+    UpdateElementStyle(run_docsmcp, $bgColor=&quot;#6B7280&quot;, $fontColor=&quot;#fff&quot;, $borderColor=&quot;#333&quot;)
+    UpdateElementStyle(run_tapps_mcp, $bgColor=&quot;#6B7280&quot;, $fontColor=&quot;#fff&quot;, $borderColor=&quot;#333&quot;)
+    UpdateElementStyle(subagent_example, $bgColor=&quot;#6B7280&quot;, $fontColor=&quot;#fff&quot;, $borderColor=&quot;#333&quot;)
+    UpdateElementStyle(subagent_pipeline, $bgColor=&quot;#14B8A6&quot;, $fontColor=&quot;#fff&quot;, $borderColor=&quot;#333&quot;)
+    UpdateElementStyle(tapps_core, $bgColor=&quot;#14B8A6&quot;, $fontColor=&quot;#fff&quot;, $borderColor=&quot;#333&quot;)
+    UpdateElementStyle(tapps_mcp, $bgColor=&quot;#6B7280&quot;, $fontColor=&quot;#fff&quot;, $borderColor=&quot;#333&quot;)
+    UpdateElementStyle(tapps_mcp_console, $bgColor=&quot;#6B7280&quot;, $fontColor=&quot;#fff&quot;, $borderColor=&quot;#333&quot;)
+    UpdateElementStyle(tests, $bgColor=&quot;#6B7280&quot;, $fontColor=&quot;#fff&quot;, $borderColor=&quot;#333&quot;)
+    UpdateElementStyle(tests, $bgColor=&quot;#6B7280&quot;, $fontColor=&quot;#fff&quot;, $borderColor=&quot;#333&quot;)
+    UpdateElementStyle(tests, $bgColor=&quot;#6B7280&quot;, $fontColor=&quot;#fff&quot;, $borderColor=&quot;#333&quot;)
+    UpdateElementStyle(validate_epic15, $bgColor=&quot;#6B7280&quot;, $fontColor=&quot;#fff&quot;, $borderColor=&quot;#333&quot;)
+    UpdateElementStyle(verify_http_server, $bgColor=&quot;#F5A9D0&quot;, $fontColor=&quot;#000&quot;, $borderColor=&quot;#333&quot;)
+
+
+</pre>
+</div>
+</div>
+<div class="diagram-section" id="diagram-3">
+<h2>C4 Container</h2>
+<div class="diagram-wrapper">
+<pre class="mermaid">
+C4Container
+    title Container diagram for tapps-mcp
+
+    System_Boundary(tapps_mcp, &quot;tapps-mcp&quot;) {
+        Container(docs_mcp, &quot;docs-mcp&quot;, &quot;Python&quot;, &quot;MCP server for automated documentation generation, validation, and maintenance&quot;)
+        Container(tapps_core, &quot;tapps-core&quot;, &quot;Python&quot;, &quot;Shared infrastructure library for Tapps platform (config, security, logging, knowledge, memory, metrics)&quot;)
+        Container(tapps_mcp, &quot;tapps-mcp&quot;, &quot;Python&quot;, &quot;MCP server providing deterministic code quality tools for AI coding assistants&quot;)
+        Container(Docker, &quot;Docker&quot;, &quot;Docker&quot;, &quot;Container runtime&quot;)
+        Container(DockerCompose, &quot;DockerCompose&quot;, &quot;Docker Compose&quot;, &quot;Service orchestration&quot;)
+    }
+
+    Rel(docs_mcp, tapps_core, &quot;Uses&quot;)
+    Rel(docs_mcp, tapps_mcp, &quot;Uses&quot;)
+    Rel(docs_mcp, Docker, &quot;Uses&quot;)
+    Rel(docs_mcp, DockerCompose, &quot;Uses&quot;)
+
+    UpdateElementStyle(docs_mcp, $bgColor=&quot;#6B7280&quot;, $fontColor=&quot;#fff&quot;, $borderColor=&quot;#333&quot;)
+    UpdateElementStyle(tapps_core, $bgColor=&quot;#14B8A6&quot;, $fontColor=&quot;#fff&quot;, $borderColor=&quot;#333&quot;)
+    UpdateElementStyle(tapps_mcp, $bgColor=&quot;#6B7280&quot;, $fontColor=&quot;#fff&quot;, $borderColor=&quot;#333&quot;)
+    UpdateElementStyle(Docker, $bgColor=&quot;#6B7280&quot;, $fontColor=&quot;#fff&quot;, $borderColor=&quot;#333&quot;)
+    UpdateElementStyle(DockerCompose, $bgColor=&quot;#6B7280&quot;, $fontColor=&quot;#fff&quot;, $borderColor=&quot;#333&quot;)
+
+
+</pre>
+</div>
+</div>
+<div class="diagram-section" id="diagram-4">
+<h2>C4 System Context</h2>
+<div class="diagram-wrapper">
+<pre class="mermaid">
+C4Context
+    title System Context diagram for tapps-mcp
+
+    System(tapps_mcp, &quot;tapps-mcp&quot;, &quot;Software system&quot;)
+
+    Person(User, &quot;User&quot;, &quot;Primary system user&quot;)
+
+    Rel(User, tapps_mcp, &quot;Uses&quot;)
+
+    UpdateElementStyle(tapps_mcp, $bgColor=&quot;#14B8A6&quot;, $fontColor=&quot;#fff&quot;, $borderColor=&quot;#333&quot;)
+    UpdateElementStyle(User, $bgColor=&quot;#F5A9D0&quot;, $fontColor=&quot;#000&quot;, $borderColor=&quot;#333&quot;)
+
+
+</pre>
+</div>
+</div>
+<div class="diagram-section" id="diagram-5">
+<h2>ER Diagram</h2>
+<div class="diagram-wrapper">
+<pre class="mermaid">
+erDiagram
+    DedupResult {
+        boolean is_duplicate
+        string overlapping_agents
+        float threshold
+    }
+    DedupMatch {
+        string agent
+        float similarity
+    }
+    OverlapPair {
+        string agent_a
+        string agent_b
+        float similarity
+        string recommendation
+    }
+    CatalogHealthReport {
+        int total_agents
+        int active_agents
+        int deprecated_agents
+        string overlap_pairs
+        float overlap_threshold
+    }
+    DeprecationResult {
+        string agent_name
+        boolean success
+        string message
+    }
+    CleanupResult {
+        int agents_checked
+        int agents_removed
+        string removed_names
+        int retention_days
+    }
+    MatchResult {
+        string agent
+        float score
+        float keyword_score
+        float embedding_score
+    }
+    HybridMatcher {
+        string agents
+        string backend
+        float keyword_weight
+        float embedding_weight
+        string cache_dir
+        string _agent_tokens
+        float _agent_embeddings
+        string _cache
+        boolean _degraded
+    }
+    MergeSuggestion {
+        string target_agent
+        float similarity
+        string new_keywords
+        string new_capabilities
+        string description_addition
+        string rationale
+    }
+    MergeReport {
+        string proposal_name
+        boolean is_duplicate
+        string suggestions
+    }
+    AgentConfig {
+        string FRONTMATTER_FIELDS
+        string name
+        string description
+        string keywords
+        string capabilities
+        string system_prompt_path
+        string memory_profile
+        boolean deprecated
+        string source_path
+    }
+    OverlapContext {
+        string proposal_text
+        string similar_agents
+        string warning
+    }
+    APIFunction {
+        string name
+        string signature
+        int line
+        boolean docstring_present
+        string docstring_summary
+        boolean is_async
+        string decorators
+        string parameters
+        string return_type
+    }
+    APIClass {
+        string name
+        int line
+        string bases
+        boolean docstring_present
+        string docstring_summary
+        int method_count
+        string public_methods
+        string decorators
+    }
+    APIConstant {
+        string name
+        int line
+        string type
+        string value
+    }
+    APISurface {
+        string source_path
+        string functions
+        string classes
+        string constants
+        string type_aliases
+        string re_exports
+        string all_exports
+        float coverage
+        string missing_docs
+        int total_public
+    }
+    ParsedCommit {
+        string type
+        string scope
+        string description
+        string body
+        boolean breaking
+        string raw
+        boolean is_conventional
+    }
+    ImportEdge {
+        string source
+        string target
+        string import_type
+        int line
+        string names
+    }
+    ImportGraph {
+        string edges
+        string modules
+        string external_imports
+        string entry_points
+        string most_imported
+        int total_internal_imports
+        int total_external_imports
+    }
+    DiataxisResult {
+        string file_path
+        string primary_quadrant
+        float confidence
+        string secondary_quadrant
+        string indicators
+        boolean is_mixed
+    }
+    DiataxisCoverage {
+        float tutorial_pct
+        float howto_pct
+        float reference_pct
+        float explanation_pct
+        float balance_score
+        float adjusted_balance_score
+        float classification_coverage
+        int total_files
+        int total_scanned
+        int classified_files
+        int classified_count
+        int unclassified_count
+        string unclassified_files
+        string per_file
+        string recommendations
+        string scoring_note
+        int excluded_paths_count
+    }
+    CommitInfo {
+        string hash
+        string short_hash
+        string author
+        string author_email
+        string date
+        string message
+        int files_changed
+        int insertions
+        int deletions
+    }
+    TagInfo {
+        string name
+        string commit_hash
+        string date
+        boolean is_semver
+        string version
+    }
+    ModuleNode {
+        string name
+        string path
+        boolean is_package
+        string submodules
+        int public_api_count
+        string module_docstring
+        boolean has_main
+        string all_exports
+        int size_bytes
+        int function_count
+        int class_count
+    }
+    ModuleMap {
+        string project_root
+        string project_name
+        string module_tree
+        string entry_points
+        int total_modules
+        int total_packages
+        int public_api_count
+    }
+    ArchetypeResult {
+        string archetype
+        float confidence
+        string evidence
+        float alternatives
+    }
+    VersionBoundary {
+        string version
+        string tag
+        string date
+        int commit_count
+        string commits
+    }
+    DedupResult ||--o{ DedupMatch : &quot;has&quot;
+    DedupMatch ||--o{ AgentConfig : &quot;has&quot;
+    CatalogHealthReport ||--o{ OverlapPair : &quot;has&quot;
+    MatchResult ||--o{ AgentConfig : &quot;has&quot;
+    HybridMatcher ||--o{ AgentConfig : &quot;has&quot;
+    MergeReport ||--o{ MergeSuggestion : &quot;has&quot;
+    OverlapContext ||--o{ MatchResult : &quot;has&quot;
+    APISurface ||--o{ APIFunction : &quot;has&quot;
+    APISurface ||--o{ APIClass : &quot;has&quot;
+    APISurface ||--o{ APIConstant : &quot;has&quot;
+    ImportGraph ||--o{ ImportEdge : &quot;has&quot;
+    DiataxisCoverage ||--o{ DiataxisResult : &quot;has&quot;
+    ModuleMap ||--o{ ModuleNode : &quot;has&quot;
+    VersionBoundary ||--o{ CommitInfo : &quot;has&quot;
+
+</pre>
+</div>
+</div>
+<script type="module">// Initialize Mermaid
+import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs';
+mermaid.initialize({
+    startOnLoad: true,
+    theme: 'default',
+    securityLevel: 'loose',
+    flowchart: { useMaxWidth: true },
+});
+
+// Toggle diagram visibility
+document.querySelectorAll('.toggle-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+        const targetId = btn.dataset.target;
+        const section = document.getElementById(targetId);
+        if (section) {
+            const isHidden = section.style.display === 'none';
+            section.style.display = isHidden ? 'block' : 'none';
+            btn.classList.toggle('active', isHidden);
+        }
+    });
+});
+
+// Zoom controls
+let scale = 1;
+document.getElementById('zoom-in')?.addEventListener('click', () => {
+    scale = Math.min(scale * 1.2, 5);
+    document.querySelectorAll('.diagram-wrapper .mermaid svg').forEach(svg => {
+        svg.style.transform = `scale(${scale})`;
+        svg.style.transformOrigin = 'center top';
+    });
+});
+document.getElementById('zoom-out')?.addEventListener('click', () => {
+    scale = Math.max(scale / 1.2, 0.2);
+    document.querySelectorAll('.diagram-wrapper .mermaid svg').forEach(svg => {
+        svg.style.transform = `scale(${scale})`;
+        svg.style.transformOrigin = 'center top';
+    });
+});
+document.getElementById('zoom-reset')?.addEventListener('click', () => {
+    scale = 1;
+    document.querySelectorAll('.diagram-wrapper .mermaid svg').forEach(svg => {
+        svg.style.transform = 'scale(1)';
+    });
+});
+</script>
+</body>
+</html>

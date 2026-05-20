@@ -75,6 +75,36 @@ Nested under `adaptive`.
 | Field | Type | Default | Description |
 |---|---|---|---|
 | `tool_timeout` | int | `30` | Timeout for individual external tool invocations (seconds). Min: 5. |
+| `quick_check_budget_ms` | int | `2000` | Soft budget for `tapps_quick_check`. Source: [`server_scoring_tools.py:QUICK_CHECK_BUDGET_MS`](../packages/tapps-mcp/src/tapps_mcp/server_scoring_tools.py). |
+
+### Tool Presets (TAP-485 / Epic 79)
+
+The MCP server binary is registered three times in `.mcp.json` under different names; each name maps to a `TAPPS_MCP_TOOL_PRESET` env var that filters which tools FastMCP exposes. The CLI sets this from `--mode`. Calling identical tool names across servers always routes to the same handler — the preset only changes the client-visible tool list.
+
+| Server name | CLI mode | Preset constant | Tool count | Purpose |
+|---|---|---|---|---|
+| `tapps-mcp` | `--mode all` (default) | _none — all tools_ | 32 | Full surface |
+| `tapps-quality` | `--mode quality` | `TAPPS_TOOL_PRESET_QUALITY` | 15 | Coding-session subset (scoring, gate, quick_check, security, memory, lookup_docs, dead_code, impact_analysis, validate_config, dependency_scan, dependency_graph, audit_campaign) |
+| `tapps-admin` | `--mode admin` | `TAPPS_TOOL_PRESET_ADMIN` | 12 | Setup / troubleshooting (init, upgrade, doctor, server_info, set_engagement_level, dashboard, stats, feedback, report, pipeline, decompose, session_notes) |
+
+Role-scoped presets (selected via `TAPPS_MCP_TOOL_PRESET=<name>` env var, Epic 79.5):
+
+| Preset | Members | Use case |
+|---|---|---|
+| `TOOL_PRESET_CORE` | `tapps_session_start`, `tapps_quick_check`, `tapps_validate_changed`, `tapps_quality_gate`, `tapps_checklist`, `tapps_lookup_docs`, `tapps_security_scan`, `tapps_pipeline` | Minimal coding loop |
+| `TOOL_PRESET_PIPELINE` | `TOOL_PRESET_CORE` + `tapps_score_file`, `tapps_memory`, `tapps_impact_analysis`, `tapps_validate_config` | Standard quality pipeline |
+| `TOOL_PRESET_REVIEWER` | `tapps_session_start`, `tapps_quick_check`, `tapps_validate_changed`, `tapps_quality_gate`, `tapps_checklist`, `tapps_security_scan`, `tapps_score_file`, `tapps_dead_code`, `tapps_dependency_scan` | Code review agent |
+| `TOOL_PRESET_PLANNER` | `tapps_session_start`, `tapps_checklist`, `tapps_validate_changed`, `tapps_quality_gate`, `tapps_score_file`, `tapps_memory` | Planning / architecture agent |
+| `TOOL_PRESET_FRONTEND` | `tapps_session_start`, `tapps_quick_check`, `tapps_score_file`, `tapps_lookup_docs`, `tapps_quality_gate` | Frontend-focused agent |
+| `TOOL_PRESET_DEVELOPER` | `tapps_session_start`, `tapps_quick_check`, `tapps_validate_changed`, `tapps_quality_gate`, `tapps_checklist`, `tapps_score_file`, `tapps_security_scan`, `tapps_lookup_docs`, `tapps_memory`, `tapps_impact_analysis` | General developer agent |
+
+DocsMCP also exposes a core preset:
+
+| Preset | Members | Use case |
+|---|---|---|
+| `DOCS_TOOL_PRESET_CORE` | Selected via `DOCS_MCP_TOOL_PRESET=core` — see [`docs_mcp/server.py:DOCS_TOOL_PRESET_CORE`](../packages/docs-mcp/src/docs_mcp/server.py) for current members | Minimal docs-mcp surface (validation + index, no heavy generation) |
+
+Source of truth: [`packages/tapps-mcp/src/tapps_mcp/server.py`](../packages/tapps-mcp/src/tapps_mcp/server.py) (lines 233-340) and [`packages/docs-mcp/src/docs_mcp/server.py`](../packages/docs-mcp/src/docs_mcp/server.py).
 
 ### Dead Code Detection
 

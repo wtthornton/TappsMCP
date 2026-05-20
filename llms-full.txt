@@ -69,3 +69,45 @@
 - `docs/adr/0003-no-pypi-or-npm-publish-global-install-from-local-checkout.md`
 - `docs/adr/0004-deterministic-tools-only-contract.md`
 - ... and 269 more
+
+## API Summary
+
+- Packages: 53
+- Modules: 799
+- Public API symbols: 3605
+
+## Project Structure
+
+```
+.coverage
+.dockerignore
+.git-blame-ignore-revs
+.gitignore
+.hadolint.yaml
+.mcp.json
+.pre-commit-config.yaml
+.ralphrc
+.tapps-mcp.yaml
+AGENTS.md
+CHANGELOG.md
+CLAUDE.md
+CODE_OF_CONDUCT.md
+CONTRIBUTING.md
+Dockerfile
+Dockerfile.platform
+LICENSE
+MagicMock/
+README.md
+SECURITY.md
+TECH_STACK.md
+docker-compose.yml
+docker-mcp/
+docs/
+docsmcp.spec
+examples/
+llms.txt
+npm/
+npm-docs-mcp/
+packages/
+... and 8 more
+```

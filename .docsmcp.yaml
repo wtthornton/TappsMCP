@@ -1,0 +1,36 @@
+# DocsMCP project config — controls the deterministic doc validators.
+#
+# Edit and `docs_session_start(force=True)` to pick up changes.
+# Authoritative schema: packages/docs-mcp/src/docs_mcp/config/settings.py
+
+# Skip generated / vendored / archive paths from doc scans so the
+# completeness / freshness / cross-ref / drift scores reflect the
+# user-facing documentation surface, not backups and caches.
+completeness_exclude:
+  - ".ralph/**"
+  - ".tapps-mcp/backups/**"
+  - ".tapps-mcp-cache/**"
+  - ".claude/agent-memory/**"
+  - "docs/archive/**"
+
+freshness_exclude:
+  - ".ralph/**"
+  - ".tapps-mcp/backups/**"
+  - ".tapps-mcp-cache/**"
+  - ".claude/agent-memory/**"
+  - "docs/archive/**"
+
+# Cross-reference checker exclusions.
+# The prompts/ subtree contains agents_template*.md files that are
+# *deployed templates* — their docs/MEMORY_REFERENCE.md links resolve
+# correctly from the consumer's project root, not from the template's
+# own location in this repo.
+cross_ref_exclude:
+  - "packages/*/src/**/prompts/**"
+  - "docs/archive/**"
+  - ".ralph/**"
+  - ".tapps-mcp/backups/**"
+
+# Drift checker — suppress noisy module-level constants and migration
+# internals that don't belong in user-facing prose.
+drift_ignore_patterns: "defaults"

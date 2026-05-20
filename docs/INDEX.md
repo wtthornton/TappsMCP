@@ -1,34 +1,412 @@
-# TappsMCP Documentation Index
+# tapps-mcp — Documentation Index
 
+**376 documents** across **9 categories**
+
+## Overview
+
+| Category | Count |
+|---|---|
+| API Reference | 36 |
+| Architecture | 36 |
+| Configuration | 19 |
+| Getting Started | 32 |
+| Guides | 12 |
+| Operations | 35 |
+| Other | 12 |
+| Planning | 187 |
+| Release | 7 |
+
+## API Reference
+
+- [TappsMCP - instructions for AI assistants](../AGENTS.md) — <!-- tapps-agents-version: 3.10.16 --> *(updated 2026-05-19)*
+- [Configuration Reference](CONFIG_REFERENCE.md) — TappsMCP is configured via `.tapps-mcp.yaml` in the project root. Settings can also be overridden with environment va... *(updated 2026-05-02)*
+- [Field Report: TappsMCP + DocsMCP Full-Session Usage](FEEDBACK_2026-04-06_agentforge-cleanup-session.md) — **Date:** 2026-04-06 *(updated 2026-04-06)*
+- [tapps-mcp — Documentation Index](INDEX.md) — **365 documents** across **9 categories** *(updated 2026-05-19)*
+- [TappsMCP Memory Reference](MEMORY_REFERENCE.md) — Complete reference for the `tapps_memory` tool’s **42 actions** (single MCP tool, action dispatch via `action=`). Inc... *(updated 2026-05-16)*
+- [TAP-967: 2-Week `list_issues` Call-Count Measurement Report](TAP-967-measurement.md) — **Measurement date:** 2026-05-07 *(updated 2026-05-11)*
+- [`packages.docs-mcp.src.docs_mcp`](api/docs-mcp.md) — Docs MCP: Documentation MCP server for the Tapps platform. *(updated 2026-05-19)*
+- [`packages.tapps-core.src.tapps_core`](api/tapps-core.md) — Tapps Core: Shared infrastructure library for the Tapps platform. *(updated 2026-05-19)*
+- [`packages.tapps-mcp.src.tapps_mcp`](api/tapps-mcp.md) — TappsMCP: MCP server providing code quality tools. *(updated 2026-05-19)*
+- [`packages.docs-mcp.src.docs_mcp`](archive/api/docs-mcp-api.md) — Docs MCP: Documentation MCP server for the Tapps platform. *(updated 2026-04-05)*
+- [`packages.tapps-core.src.tapps_core`](archive/api/tapps-core-api.md) — Tapps Core: Shared infrastructure library for the Tapps platform. *(updated 2026-04-05)*
+- [`packages.tapps-mcp.src.tapps_mcp.server_analysis_tools`](archive/api/tapps-mcp-analysis_tools.md) — Analysis and inspection tool handlers for TappsMCP. *(updated 2026-04-05)*
+- [`packages.tapps-mcp.src.tapps_mcp.server`](archive/api/tapps-mcp-core-tools.md) — TappsMCP MCP server entry point. *(updated 2026-04-05)*
+- [`packages.tapps-mcp.src.tapps_mcp.server_expert_tools`](archive/api/tapps-mcp-expert_tools.md) — Business expert management tool handlers for TappsMCP. *(updated 2026-04-05)*
+- [`packages.tapps-mcp.src.tapps_mcp.server_memory_tools`](archive/api/tapps-mcp-memory_tools.md) — Memory tool handlers for TappsMCP. *(updated 2026-04-05)*
+- [`packages.tapps-mcp.src.tapps_mcp.server_metrics_tools`](archive/api/tapps-mcp-metrics_tools.md) — Metrics, dashboard, feedback, and research tool handlers for TappsMCP. *(updated 2026-04-05)*
+- [`packages.tapps-mcp.src.tapps_mcp.server_pipeline_tools`](archive/api/tapps-mcp-pipeline_tools.md) — Pipeline orchestration and validation tool handlers for TappsMCP. *(updated 2026-04-05)*
+- [`packages.tapps-mcp.src.tapps_mcp.server_scoring_tools`](archive/api/tapps-mcp-scoring_tools.md) — Scoring and quality-gate tool handlers for TappsMCP. *(updated 2026-04-05)*
+- [Epic 15: API Reference Enhancement](archive/planning/epics/EPIC-15-API-REFERENCE-ENHANCEMENT.md) — **Status:** Complete *(updated 2026-04-05)*
+- [2026 Claude Control Files Audit & Grading Report](archive/reference/2026-CLAUDE-CONTROL-FILES-AUDIT.md) — **Project:** TappsMCP *(updated 2026-04-05)*
+- [TappsPlatform Composition Guide](archive/reference/COMPOSITION_GUIDE.md) — TappsMCP (29 code quality tools) and DocsMCP (19 documentation tools) can be served as a single combined MCP server —... *(updated 2026-04-05)*
+- [MCP Context (`ctx`) Pattern Reference](archive/reference/CTX_PATTERN_REFERENCE.md) — This document defines TappsMCP's standard patterns for using the MCP `Context` object *(updated 2026-04-05)*
+- [MCP Client Timeouts and Long-Running Tools](archive/reference/MCP_CLIENT_TIMEOUTS.md) — TappsMCP exposes several tools that can take 10–35+ seconds to complete. Some MCP clients (e.g. Cursor, Claude Code) ... *(updated 2026-04-05)*
+- [MCP Composition and Rule Hierarchy](archive/reference/MCP_COMPOSITION.md) — TappMCP works as one MCP server in a larger AI-assistant setup. This doc explains how to compose it with other MCPs a... *(updated 2026-04-05)*
+- [Migration from tapps-agents to TappsMCP](archive/reference/MIGRATION_FROM_TAPPS_AGENTS.md) — If you were using **tapps-agents** (e.g. `.tapps-agents/`, experts config, knowledge files) and are moving to **Tapps... *(updated 2026-04-05)*
+- [Module Map](archive/reference/MODULE_MAP.md) — **Total modules:** 316 *(updated 2026-04-05)*
+- [TappsMCP Consumer Requirements](archive/reference/TAPPS_MCP_REQUIREMENTS.md) — This is the canonical checklist of what a consuming project needs for TappsMCP tools to work. Use it to verify your s... *(updated 2026-04-05)*
+- [tapps_validate_changed: Loop and Timing Review](archive/reference/TAPPS_VALIDATE_CHANGED_LOOP_AND_TIMING.md) — The text **"Before ending: please run tapps_validate_changed to confirm all changed files pass quality gates."** is p... *(updated 2026-04-05)*
+- [Addenda — Best Practices for Using TappsMCP](archive/reference/addenda.md) — This document supplements the main [README.md](README.md) and [AGENTS.md](AGENTS.md) with best practices, tips, and g... *(updated 2026-04-05)*
+- [CI Integration Guide](archive/reference/ci-integration.md) — TappsMCP can run quality checks in CI pipelines without an interactive session. *(updated 2026-04-05)*
+- [Stage 3 of 5: Develop](../packages/tapps-core/src/tapps_core/prompts/develop.md) — Write or modify code with rapid quality feedback. Use quick scoring to catch lint issues and maintain code quality du... *(updated 2026-04-05)*
+- [Stage 2 of 5: Research](../packages/tapps-core/src/tapps_core/prompts/research.md) — Gather domain knowledge and library documentation before writing code. This prevents hallucinated APIs and ensures be... *(updated 2026-04-08)*
+- [TappsMCP - instructions for AI assistants (optional guidance)](../packages/tapps-mcp/src/tapps_mcp/prompts/agents_template_low.md) — When the **TappsMCP** MCP server is configured, you can use its tools for code quality, doc lookup, and domain expert... *(updated 2026-05-18)*
+- [TappsMCP - instructions for AI assistants](../packages/tapps-mcp/src/tapps_mcp/prompts/agents_template_medium.md) — When the **TappsMCP** MCP server is configured, you have access to tools for **code quality, doc lookup, and domain e... *(updated 2026-05-18)*
+- [Stage 3 of 5: Develop](../packages/tapps-mcp/src/tapps_mcp/prompts/develop.md) — Write or modify code with rapid quality feedback. Use quick scoring to catch lint issues and maintain code quality du... *(updated 2026-04-05)*
+- [Stage 2 of 5: Research](../packages/tapps-mcp/src/tapps_mcp/prompts/research.md) — Gather domain knowledge and library documentation before writing code. This prevents hallucinated APIs and ensures be... *(updated 2026-04-08)*
+## Architecture
+
+- [TappsMCP Architecture Reference](ARCHITECTURE.md) — Detailed internal architecture for developers working on TappsMCP itself. *(updated 2026-05-19)*
+- [1. In-process AgentBrain via BrainBridge](adr/0001-in-process-agentbrain-via-brainbridge.md) — Date: 2026-05-02 *(updated 2026-05-12)*
+- [2. Pin tapps-brain version floor at 3.7.2 (range: >=3.7.2, <4)](adr/0002-pin-tapps-brain-version-floor-at-372.md) — Date: 2026-05-02 *(updated 2026-05-15)*
+- [4. Deterministic-tools-only contract](adr/0004-deterministic-tools-only-contract.md) — Date: 2026-05-02 *(updated 2026-05-12)*
+- [5. MCP server zombie-cleanup hook on session start](adr/0005-mcp-server-zombie-cleanup-hook-on-session-start.md) — Date: 2026-05-02 *(updated 2026-05-12)*
+- [6. tapps_validate_changed requires explicit file_paths](adr/0006-tapps-validate-changed-requires-explicit-file-paths.md) — Date: 2026-05-02 *(updated 2026-05-12)*
+- [7. Linear writes default assignee to the agent, never the OAuth human](adr/0007-linear-writes-default-assignee-to-the-agent-never-the-oauth-human.md) — Date: 2026-05-02 *(updated 2026-05-12)*
+- [8. Delete SQLite MemoryPersistence edge-case tests](adr/0008-delete-sqlite-persistence-edge-case-tests.md) — Status: Accepted *(updated 2026-05-12)*
+- [9. Pin tapps-brain version floor at 3.17.0 (range: >=3.17.0, <4)](adr/0009-pin-tapps-brain-version-floor-at-3170.md) — Date: 2026-05-15 *(updated 2026-05-16)*
+- [10. Pin tapps-brain version floor at 3.18.0 (range: >=3.18.0, <4)](adr/0010-pin-tapps-brain-version-floor-at-3180.md) — Date: 2026-05-16 *(updated 2026-05-18)*
+- [11. Pin tapps-brain by release tag instead of commit SHA](adr/0011-pin-tapps-brain-by-tag.md) — Date: 2026-05-18 *(updated 2026-05-18)*
+- [PRD: Zeek Network Intelligence Service](architecture/zeek-network-intelligence-prd.md) — <!-- docsmcp:start:executive-summary --> *(updated 2026-04-05)*
+- [Class Hierarchy](archive/diagrams/class-hierarchy.md) *(updated 2026-04-05)*
+- [docs-mcp Dependency](archive/diagrams/docs-mcp-dependency.md) *(updated 2026-04-05)*
+- [docs-mcp Module Map](archive/diagrams/docs-mcp-module_map.md) *(updated 2026-04-05)*
+- [tapps-core Dependency](archive/diagrams/tapps-core-dependency.md) *(updated 2026-04-05)*
+- [tapps-core Module Map](archive/diagrams/tapps-core-module_map.md) *(updated 2026-04-05)*
+- [tapps-mcp Dependency](archive/diagrams/tapps-mcp-dependency.md) *(updated 2026-04-05)*
+- [tapps-mcp Module Map](archive/diagrams/tapps-mcp-module_map.md) *(updated 2026-04-05)*
+- [Epic 14: Diagram Generation Quality](archive/planning/epics/EPIC-14-DIAGRAM-GENERATION-QUALITY.md) — **Status:** Complete *(updated 2026-04-05)*
+- [Epic 42: Memory Subsystem Design Review Runbook](archive/planning/epics/EPIC-42-MEMORY-DESIGN-REVIEW.md) — **Purpose:** Repeatable design-review workflow for the tapps_memory stack. Run this when changing core memory behavio... *(updated 2026-04-05)*
+- [Architecture: Context7 Cache and Expert RAG](archive/reference/ARCHITECTURE_CACHE_AND_RAG.md) — This document describes how the **Context7 documentation cache** and **Expert RAG indices** work, when they are creat... *(updated 2026-04-05)*
+- [Architecture Document Enhancement Plan](archive/reference/ARCHITECTURE_DOCUMENT_PLAN.md) — **Reference:** [TappMCP Style Guide](STYLE_GUIDE.md) | [HomeIQ Style Guide](../HomeIQ/docs/STYLE_GUIDE.md) *(updated 2026-04-05)*
+- [Architecture Report (docs_generate_architecture) — Evaluation & Recommendations](archive/reference/ARCHITECTURE_REPORT_RECOMMENDATIONS.md) — **Evaluated:** `docs/ARCHITECTURE.html` generated for TappMCP *(updated 2026-04-05)*
+- [AI OS (aios) - Comprehensive Review & Architectural Analysis](archive/reviews/AIOS_REVIEW.md) *(updated 2026-04-05)*
+- [TappMCP Experts vs Agency-Agents Personas — What to Leverage (Summary)](archive/reviews/TAPPS-EXPERTS-VS-AGENCY-PERSONAS-SUMMARY.md) — **Context:** Agency-agents are ~80 full “personas” (identity, mission, critical rules, deliverables, workflow, succes... *(updated 2026-04-05)*
+- [C4 — System Context](diagrams/01-c4-context.md) — Auto-generated by `docs_generate_diagram(diagram_type="c4_context", scope="project", format="mermaid", direction="LR")`. *(updated 2026-05-19)*
+- [C4 — Container](diagrams/02-c4-container.md) — Auto-generated by `docs_generate_diagram(diagram_type="c4_container", scope="project", format="mermaid", direction="T... *(updated 2026-05-19)*
+- [Module Map](diagrams/03-module-map.md) — Top-level project module map. Auto-generated by `docs_generate_diagram(diagram_type="module_map", scope="project", fo... *(updated 2026-05-19)*
+- [Architectural Archetype — Pattern Card](diagrams/04-pattern-card.md) — Auto-classified by `docs-mcp`'s deterministic pattern classifier. tapps-mcp is detected as **microservice** with conf... *(updated 2026-05-19)*
+- [C4 — Component (tapps-mcp)](diagrams/05-c4-component-tapps-mcp.md) — Internal components of the `tapps_mcp` package. Auto-generated by `docs_generate_diagram(diagram_type="c4_component",... *(updated 2026-05-19)*
+- [C4 — Component (docs-mcp)](diagrams/06-c4-component-docs-mcp.md) — Internal components of the `docs_mcp` package. Auto-generated by `docs_generate_diagram(diagram_type="c4_component", ... *(updated 2026-05-19)*
+- [ER — Structured Output Schemas](diagrams/07-er-output-schemas.md) — Pydantic models that define `structuredContent` for tapps-mcp tool responses. Source: [packages/tapps-mcp/src/tapps_m... *(updated 2026-05-19)*
+- [Sequence — TAPPS Quality Pipeline](diagrams/08-sequence-quality-pipeline.md) — The recommended tool call order for a coding session. Auto-generated by `docs_generate_diagram(diagram_type="sequence... *(updated 2026-05-19)*
+- [TappsMCP - instructions for AI assistants](../packages/tapps-mcp/src/tapps_mcp/prompts/agents_template.md) — When the **TappsMCP** MCP server is configured in your host (Claude Code, Cursor, VS Code Copilot, Claude Desktop, et... *(updated 2026-05-18)*
+- [How the TappsMCP Memory Brain Works](../stories/tapps-memory-brain-architecture.md) *(updated 2026-05-19)*
+## Configuration
+
+- [CLAUDE.md](../CLAUDE.md) — This file provides guidance to Claude Code when working with code in this repository. *(updated 2026-05-18)*
+- [Code of Conduct](../CODE_OF_CONDUCT.md) — We as members, contributors, and maintainers of the TappsMCP project pledge to make participation a harassment-free e... *(updated 2026-04-23)*
+- [MCP Configuration Gaps — Reference](archive/planning/epics/EPIC-12-PLATFORM-INTEGRATION/research/mcp-config-gaps.md) — **Source:** Deep research conducted 2026-02-21 *(updated 2026-04-05)*
+- [Epic 22: GitHub Governance & Security Configuration](archive/planning/epics/EPIC-22-GITHUB-GOVERNANCE-SECURITY-CONFIG.md) — **Status:** Complete (Stories 22.1–22.6) *(updated 2026-04-05)*
+- [Epic 51: Configuration UX & TECH_STACK Preservation](archive/planning/epics/EPIC-51-CONFIG-UX-TECH-STACK-PRESERVATION.md) — **Status:** Complete *(updated 2026-04-05)*
+- [Epic 65.3: Configurable Capture Prompt & Write Rules (2026 Best Practices)](archive/planning/epics/EPIC-65.3-CONFIGURABLE-CAPTURE-PROMPT.md) — **Status:** Complete *(updated 2026-04-05)*
+- [Story 69.1 -- Add persona field to ExpertConfig and business config](archive/planning/epics/EPIC-69/story-69.1-add-persona-field-to-expertconfig-and-bu.md) — <!-- docsmcp:start:user-story --> *(updated 2026-04-05)*
+- [Story 74.5: MCP config file validation](archive/planning/epics/EPIC-74/story-74.5-mcp-config-validation.md) — **Epic:** [EPIC-74-CONSUMER-FEEDBACK-AUTOMATION-PIPELINE-UX](archive/planning/epics/EPIC-74-CONSUMER-FEEDBACK-AUTOMATION-PIPELINE-UX.md) *(updated 2026-04-05)*
+- [Story 75.1: PromptConfig model and prompt schema](archive/planning/epics/EPIC-75/story-75.1-prompt-config-and-schema.md)
+- [Story 79.1: TappsMCP server-side enabled_tools / disabled_tools](archive/planning/epics/EPIC-79/story-79.1-tappsmcp-enabled-tools-config.md) — **Epic:** [EPIC-79-MCP-TOOL-COUNT-CURATION](archive/planning/epics/EPIC-79-MCP-TOOL-COUNT-CURATION.md) *(updated 2026-04-05)*
+- [Story 79.2: DocsMCP server-side enabled_tools config (optional)](archive/planning/epics/EPIC-79/story-79.2-docsmcp-enabled-tools-config.md) — **Epic:** [EPIC-79-MCP-TOOL-COUNT-CURATION](archive/planning/epics/EPIC-79-MCP-TOOL-COUNT-CURATION.md) *(updated 2026-04-05)*
+- [Story 79.5: Role presets (tool_preset by role slug) in server config](archive/planning/epics/EPIC-79/story-79.5-role-presets-server-config.md) — **Epic:** [EPIC-79-MCP-TOOL-COUNT-CURATION](archive/planning/epics/EPIC-79-MCP-TOOL-COUNT-CURATION.md) *(updated 2026-04-05)*
+- [Story 80.5 -- MCP config: PATH detection and uv-run fallback](archive/planning/epics/EPIC-80/story-80.5-mcp-config-path-and-uv-fallback.md) — **Status:** Complete *(updated 2026-04-05)*
+- [Discussion: Persona / Environment → Auto On/Off Tools](archive/planning/research/DISCUSSION-PERSONA-ENVIRONMENT-AUTO-TOOLS.md) — **Date:** 2026-03-11 *(updated 2026-04-05)*
+- [Tool-Description Eval: tool-selection accuracy A/B](benchmarks/2026-05-19-description-eval.md) — **Baseline:** `cc1d340^` (`b7f0ba4`) — **HEAD:** `HEAD` (`7e31f2c`) *(updated 2026-05-19)*
+- [DocsMCP - instructions for AI assistants](../packages/docs-mcp/AGENTS.md) — When the **DocsMCP** MCP server is configured in your host (Claude Code, Cursor, VS Code Copilot, etc.), you have acc... *(updated 2026-05-12)*
+- [docs-mcp — Documentation Index](../packages/docs-mcp/docs/INDEX.md) — **18 documents** across **6 categories** *(updated 2026-05-02)*
+- [TappsMCP - instructions for AI assistants (HIGH enforcement)](../packages/tapps-mcp/src/tapps_mcp/prompts/agents_template_high.md) — When the **TappsMCP** MCP server is configured, you **MUST** use its tools for code quality, doc lookup, and domain e... *(updated 2026-05-18)*
+- [Stage 1 of 5: Discover](../packages/tapps-mcp/src/tapps_mcp/prompts/discover.md) — Understand the TappsMCP server capabilities and the project's tech stack before writing any code. This stage ensures ... *(updated 2026-04-08)*
 ## Getting Started
 
-| Document | Description |
-|---|---|
-| [README](../README.md) | Project overview, installation, tools reference |
-| [Onboarding Guide](ONBOARDING.md) | Setup for consumers and developers |
-| [Tutorials](tutorials/) | Copy-paste runnable walkthroughs (add an MCP tool, run the quality pipeline, wire tapps-brain) |
-| [Contributing Guide](../CONTRIBUTING.md) | Code standards, testing, contribution workflow |
+- [Tapps Platform](../README.md) — <div align="center"> *(updated 2026-05-19)*
+- [Tech Stack](../TECH_STACK.md) — - **Python 3.12+** with `from __future__ import annotations` *(updated 2026-05-18)*
+- [Docker MCP Distribution](../docker-mcp/README.md) — Docker images for TappsMCP and DocsMCP, used for external distribution, CI/CD, *(updated 2026-05-12)*
+- [DocsMCP](../docker-mcp/docs-mcp/readme.md) — Documentation generation and maintenance MCP server providing 38 tools for AI coding assistants. *(updated 2026-05-12)*
+- [TappsMCP](../docker-mcp/tapps-mcp/readme.md) — Deterministic code quality MCP server providing 32 tools for AI coding assistants. *(updated 2026-05-18)*
+- [TappsMCP checklist (`tapps_checklist`)](CHECKLIST.md) — The checklist tracks **which MCP tools were invoked** in the current **checklist session** and compares that to **tas... *(updated 2026-04-05)*
+- [GitHub Setup Guide](GITHUB_SETUP_GUIDE.md) — <!-- tapps-generated: v3.10.10 --> *(updated 2026-05-12)*
+- [3. No PyPI or npm publish — global install from local checkout](adr/0003-no-pypi-or-npm-publish-global-install-from-local-checkout.md) — Date: 2026-05-02 *(updated 2026-05-12)*
+- [Architecture Decision Records](adr/README.md) — Architectural decisions for tapps-mcp / tapps-core / docs-mcp / tapps-brain. Each ADR follows the [MADR](https://adr.... *(updated 2026-05-18)*
+- [Archived Documentation](archive/README.md) — This directory contains documentation that was archived on 2026-03-12 to reduce noise for LLMs and developers. These ... *(updated 2026-04-05)*
+- [Epic 12: Platform Integration & Feature Gaps](archive/planning/epics/EPIC-12-PLATFORM-INTEGRATION/README.md) — **Created:** 2026-02-21 *(updated 2026-04-05)*
+- [Story 72.4 — Document when-to-use and knowledge enrichment patterns in README](archive/planning/epics/EPIC-72/story-72.4-document-enrichment-patterns-readme.md) — <!-- docsmcp:start:user-story --> *(updated 2026-04-05)*
+- [Story 80.6 -- Documentation: canonical install and Windows examples](archive/planning/epics/EPIC-80/story-80.6-docs-canonical-install-windows.md) — **Status:** Complete *(updated 2026-04-05)*
+- [TappsMCP Epics](archive/planning/epics/README.md) — **Source:** Broken out from [TAPPS_MCP_PLAN.md](../TAPPS_MCP_PLAN.md) on 2026-02-07 *(updated 2026-04-05)*
+- [Claude Code: Full Access Setup (No Permission Prompts)](archive/reference/CLAUDE_FULL_ACCESS_SETUP.md) — This guide explains how to grant Claude Code **100% full access** so it never asks for permission when using tools (B... *(updated 2026-04-05)*
+- [YouTube MCP Setup](archive/reference/MCP_YOUTUBE_SETUP.md) — The [YouTube MCP server](https://github.com/bendelpino/youtube-mcp) is configured for this workspace. It provides: *(updated 2026-04-05)*
+- [TappsMCP: Setup and Use Summary](archive/reference/TAPPS_MCP_SETUP_AND_USE.md) — TappsMCP is an **MCP (Model Context Protocol) server** that exposes **code quality tools** to LLMs (Claude, Cursor, e... *(updated 2026-04-05)*
+- [TappsMCP Diagrams](diagrams/README.md) — Auto-generated from source by `docs-mcp`. All diagrams render natively on GitHub. *(updated 2026-05-19)*
+- [tapps-brain: Local and Multi-Project Setup](operations/TAPPS-BRAIN-LOCAL-SETUP.md) — This guide explains how to connect tapps-mcp to tapps-brain for persistent memory. *(updated 2026-05-12)*
+- [TappsMCP Epics](planning/epics/README.md) — Epics are tracked in Linear under the **TappsMCP Platform** project (team `TappsCodingAgents`, prefix `TAP-`). Per th... *(updated 2026-05-02)*
+- [Tutorials](tutorials/README.md) — Three short, copy-paste runnable walkthroughs for the most-asked starter tasks. Each ends with explicit verification ... *(updated 2026-05-02)*
+- [TappsMCP + Agent SDK Examples](../examples/agent-sdk/README.md) — These examples show how to use TappsMCP as an MCP server within Claude Agent SDK *(updated 2026-05-12)*
+- [docs-mcp (npm wrapper)](../npm-docs-mcp/README.md) — npm wrapper for the [DocsMCP](https://github.com/wtthornton/TappsMCP/tree/master/packages/docs-mcp) Python MCP server... *(updated 2026-05-12)*
+- [tapps-mcp (npm wrapper)](../npm/README.md) — npm wrapper for the [TappsMCP](https://github.com/wtthornton/TappsMCP) Python MCP server — a quality toolset for AI c... *(updated 2026-05-12)*
+- [CLAUDE.md](../packages/docs-mcp/CLAUDE.md) — This file provides guidance to Claude Code (claude.ai/code) when working with code in the docs-mcp package. *(updated 2026-05-12)*
+- [DocsMCP Installation Guide](../packages/docs-mcp/docs/INSTALLATION.md) — DocsMCP is an MCP server for automated documentation generation, validation, and maintenance. It is **not published t... *(updated 2026-05-12)*
+- [docs-mcp](../packages/docs-mcp/docs/README.md) — ![Python](https://img.shields.io/badge/python-%3E%3D3.12-blue)  ![License](https://img.shields.io/badge/license-MIT-g... *(updated 2026-05-12)*
+- [tapps-core](../packages/tapps-core/README.md) — Shared infrastructure library for the [TappsMCP Platform](https://github.com/wtthornton/TappsMCP). Provides config, s... *(updated 2026-05-12)*
+- [Stage 1 of 5: Discover](../packages/tapps-core/src/tapps_core/prompts/discover.md) — Understand the TappsMCP server capabilities and the project's tech stack before writing any code. This stage ensures ... *(updated 2026-04-08)*
+- [tapps-mcp](../packages/tapps-mcp/README.md) — <!-- mcp-name: io.github.wtthornton/tapps-mcp --> *(updated 2026-05-12)*
+- [TappsMCP Quality Tools for Cursor](../plugin/cursor/README.md) — Code quality scoring, security scanning, and quality gates for Python projects. *(updated 2026-05-12)*
+- [Tool-description eval harness](../scripts/eval-descriptions/README.md) — Measures whether changes to tapps-mcp tool descriptions actually move *(updated 2026-05-19)*
+## Guides
 
-## Reference
-
-| Document | Description |
-|---|---|
-| [Architecture](ARCHITECTURE.md) | Module map and internal architecture |
-| [Architecture Decision Records](adr/) | MADR-format ADRs for load-bearing architectural decisions |
-| [Config Reference](CONFIG_REFERENCE.md) | Configuration options and settings |
-| [Memory Reference](MEMORY_REFERENCE.md) | Memory subsystem reference |
-| [Style Guide](STYLE_GUIDE.md) | Code style conventions |
-
+- [Contributing to TappsMCP](../CONTRIBUTING.md) — Thank you for your interest in contributing to TappsMCP! This guide covers everything you need to get started. *(updated 2026-05-18)*
+- [Getting Started with TappsMCP](ONBOARDING.md) — This guide walks you through setting up TappsMCP for development or as a consumer in your own project. *(updated 2026-05-18)*
+- [TappsMCP Design System Style Guide](STYLE_GUIDE.md) — **Derived from:** the HomeIQ Design System Style Guide (sibling repo, see workspace). *(updated 2026-05-12)*
+- [OpenClaw Mission Control — Design System Style Guide](archive/planning/OPENCLAW_MC_STYLE_GUIDE.md) *(updated 2026-04-05)*
+- [Epic 37: Pipeline Onboarding & Distribution](archive/planning/epics/EPIC-37-PIPELINE-ONBOARDING-DISTRIBUTION.md) — **Status:** Complete *(updated 2026-04-05)*
+- [Story 70.2 — Document persona guidelines for maintainers and business experts](archive/planning/epics/EPIC-70/story-70.2-document-persona-guidelines.md) — <!-- docsmcp:start:user-story --> *(updated 2026-04-05)*
+- [Tutorial: Add a new MCP tool to tapps-mcp](tutorials/01-add-an-mcp-tool.md) — **Time:** ~15 minutes. **Outcome:** A working `tapps_hello` MCP tool callable from Claude Code, registered in the che... *(updated 2026-05-18)*
+- [Tutorial: Run the quality pipeline against a fresh Python project](tutorials/02-quality-pipeline-walkthrough.md) — **Time:** ~10 minutes. **Outcome:** A new Python project bootstrapped with TappsMCP scaffolding, a deliberate quality... *(updated 2026-05-02)*
+- [Tutorial: Wire tapps-brain into a Claude Code session](tutorials/03-wire-tapps-brain.md) — **Time:** ~20 minutes (10 of it is the brain HTTP service warming up the first time). **Outcome:** A Claude Code sess... *(updated 2026-05-15)*
+- [Contributing to docs-mcp](../packages/docs-mcp/docs/CONTRIBUTING.md) — docs-mcp lives inside the TappsMCP monorepo and follows the same conventions as the parent project. See the [top-leve... *(updated 2026-05-12)*
+- [Getting Started with docs-mcp](../packages/docs-mcp/docs/ONBOARDING.md) — - Python >=3.12 *(updated 2026-05-12)*
+- [Karpathy Guidelines](../packages/tapps-mcp/src/tapps_mcp/prompts/karpathy_guidelines.md) — <!-- *(updated 2026-04-17)*
 ## Operations
 
-| Document | Description |
-|---|---|
-| [Docker Deployment](DOCKER_DEPLOYMENT.md) | Docker container deployment |
-| [Docker Distribution](DOCKER_MCP_TOOLKIT.md) | Docker image distribution and registry submission |
-| [Upgrade for Consumers](UPGRADE_FOR_CONSUMERS.md) | Upgrading TappsMCP in consuming projects |
-| [Init & Upgrade Features](INIT_AND_UPGRADE_FEATURE_LIST.md) | Complete feature list for init/upgrade |
-| [Troubleshooting](TROUBLESHOOTING.md) | Common issues and solutions |
+- [TappsMCP: Docker Deployment](DOCKER_DEPLOYMENT.md) — Run TappsMCP as a **local Docker MCP server** using Streamable HTTP. The server listens on port **8000** and exposes ... *(updated 2026-05-12)*
+- [Docker Image Distribution](DOCKER_MCP_TOOLKIT.md) — TappsMCP and DocsMCP are distributed as Docker images for external distribution, *(updated 2026-05-12)*
+- [Recommended Tool Subsets and Docker Tool Filtering (Epic 79.4)](archive/planning/TOOL-SUBSETS-AND-DOCKER-FILTERING.md) — **Purpose:** Document how to keep active MCP tool count in the optimal range (&lt;30 tools) for TappsMCP and DocsMCP,... *(updated 2026-04-05)*
+- [Epic 17: Circular Dependency Detection](archive/planning/epics/EPIC-17-CIRCULAR-DEPENDENCY-DETECTION.md) — **Status:** Complete - 3 source files (import_graph.py, cycle_detector.py, coupling_metrics.py), 57 tests, tapps_depe... *(updated 2026-04-05)*
+- [Epic 20: GitHub Actions CI Enhancement](archive/planning/epics/EPIC-20-GITHUB-ACTIONS-CI-ENHANCEMENT.md) — **Status:** Complete (Stories 20.1–20.7) *(updated 2026-04-05)*
+- [Epic 46: Docker MCP Toolkit Distribution](archive/planning/epics/EPIC-46-DOCKER-MCP-DISTRIBUTION.md) — - **Status:** Complete *(updated 2026-04-05)*
+- [Epic 74: Consumer Feedback — Automation & Pipeline UX](archive/planning/epics/EPIC-74-CONSUMER-FEEDBACK-AUTOMATION-PIPELINE-UX.md) — <!-- docsmcp:start:metadata --> *(updated 2026-04-05)*
+- [Epic 75: Docker Pipeline Reliability & Tool Output UX](archive/planning/epics/EPIC-75-DOCKER-PIPELINE-RELIABILITY.md) — <!-- docsmcp:start:metadata --> *(updated 2026-04-05)*
+- [Story 75.1: Docker Path Mismatch Resolution](archive/planning/epics/EPIC-75/story-75.1-docker-path-mismatch.md) — **Epic:** [EPIC-75-DOCKER-PIPELINE-RELIABILITY](archive/planning/epics/EPIC-75-DOCKER-PIPELINE-RELIABILITY.md) *(updated 2026-04-05)*
+- [Story 79.3: Docker MCP — core-tools profile and example tools.yaml](archive/planning/epics/EPIC-79/story-79.3-docker-mcp-core-tools-profile.md) — **Epic:** [EPIC-79-MCP-TOOL-COUNT-CURATION](archive/planning/epics/EPIC-79-MCP-TOOL-COUNT-CURATION.md) *(updated 2026-04-05)*
+- [Story 79.6: Docker MCP role-named profiles (Phase 1: reviewer, planner, frontend, developer)](archive/planning/epics/EPIC-79/story-79.6-docker-mcp-role-named-profiles.md) — **Epic:** [EPIC-79-MCP-TOOL-COUNT-CURATION](archive/planning/epics/EPIC-79-MCP-TOOL-COUNT-CURATION.md) *(updated 2026-04-05)*
+- [Epic 8: Pipeline Orchestration & Workflow Prompts](archive/planning/epics/EPIC-8-PIPELINE-ORCHESTRATION.md) — **Status:** Complete - 7 stories, 17 source files, 66 new tests (952 total), 7 skipped *(updated 2026-04-05)*
+- [TappsMCP Improvements - Informed by AI OS Concepts & 2026 Claude Code Platform](archive/reviews/TAPPMCP_IMPROVEMENTS.md) — This document was produced by: *(updated 2026-04-05)*
+- [Agent-facing Linear issues — conventions](linear/AGENT_ISSUES.md) — Durable policy for how Linear issues are written, labeled, and nested in the *(updated 2026-05-02)*
+- [Story 101.2 -- tapps_pipeline one-call orchestrator](stories/STORY-101.2-pipeline-orchestrator.md) — <!-- docsmcp:start:user-story --> *(updated 2026-04-14)*
+- [tapps-mcp](../llms-full.txt) — - Python *(updated 2026-05-19)*
+- [tapps-mcp](../llms.txt) — - Python *(updated 2026-05-19)*
+- [Story 9.2 -- Harden CI Pipeline](../packages/docs-mcp/docs/issues/story-009.2-harden-ci.md) — <!-- docsmcp:start:user-story --> *(updated 2026-04-08)*
+- [Story 9.4 -- Claude CLI Token Budget Monitoring](../packages/docs-mcp/docs/issues/story-009.4-token-budget-monitoring.md) — <!-- docsmcp:start:user-story --> *(updated 2026-04-08)*
+- [TAPPS Handoff](../packages/tapps-core/src/tapps_core/prompts/handoff_template.md) — **Objective:** <!-- Describe the task --> *(updated 2026-04-08)*
+- [TAPPS Quality Pipeline - Overview](../packages/tapps-core/src/tapps_core/prompts/overview.md) *(updated 2026-04-08)*
+- [TAPPS Run Log](../packages/tapps-core/src/tapps_core/prompts/runlog_template.md) — <!-- Example entries: *(updated 2026-04-08)*
+- [TAPPS Handoff](../packages/tapps-mcp/src/tapps_mcp/prompts/handoff_template.md) — **Objective:** <!-- Describe the task --> *(updated 2026-04-08)*
+- [TAPPS Quality Pipeline - Overview](../packages/tapps-mcp/src/tapps_mcp/prompts/overview.md) *(updated 2026-04-08)*
+- [TAPPS Quality Pipeline - MANDATORY](../packages/tapps-mcp/src/tapps_mcp/prompts/platform_claude.md) — This project uses the TAPPS MCP server for automated code quality enforcement. *(updated 2026-04-08)*
+- [TAPPS Quality Pipeline - MANDATORY](../packages/tapps-mcp/src/tapps_mcp/prompts/platform_claude_high.md) — This project uses the TAPPS MCP server for automated code quality enforcement. *(updated 2026-05-15)*
+- [TAPPS Quality Pipeline (optional)](../packages/tapps-mcp/src/tapps_mcp/prompts/platform_claude_low.md) — This project can use the TAPPS MCP server for code quality. Tool responses include `next_steps` - consider them when ... *(updated 2026-05-15)*
+- [TAPPS Quality Pipeline](../packages/tapps-mcp/src/tapps_mcp/prompts/platform_claude_medium.md) — This project uses the TAPPS MCP server for code quality enforcement. *(updated 2026-05-15)*
+- [TAPPS Quality Pipeline - MANDATORY](../packages/tapps-mcp/src/tapps_mcp/prompts/platform_cursor.md) — This project uses the TAPPS MCP server for automated code quality enforcement. *(updated 2026-04-08)*
+- [TAPPS Quality Pipeline - MANDATORY](../packages/tapps-mcp/src/tapps_mcp/prompts/platform_cursor_high.md) — This project uses the TAPPS MCP server for automated code quality enforcement. *(updated 2026-05-15)*
+- [TAPPS Quality Pipeline (optional)](../packages/tapps-mcp/src/tapps_mcp/prompts/platform_cursor_low.md) — This project can use the TAPPS MCP server for code quality. Tool responses include `next_steps` - consider them when ... *(updated 2026-05-15)*
+- [TAPPS Quality Pipeline](../packages/tapps-mcp/src/tapps_mcp/prompts/platform_cursor_medium.md) — This project uses the TAPPS MCP server for code quality enforcement. *(updated 2026-05-15)*
+- [TAPPS Run Log](../packages/tapps-mcp/src/tapps_mcp/prompts/runlog_template.md) — <!-- Example entries: *(updated 2026-04-08)*
+- [Stage 5 of 5: Verify](../packages/tapps-mcp/src/tapps_mcp/prompts/verify.md) — Final verification that all required quality steps were completed. The checklist reviews which tools were called duri... *(updated 2026-04-05)*
+- [Skill](../plugin/cursor/skills/tapps-score/SKILL.md) — Score the specified Python file using TappsMCP: *(updated 2026-04-05)*
+## Other
 
-## Archive
+- [Security Policy](../SECURITY.md) — | Version | Supported          | *(updated 2026-05-12)*
+- [Troubleshooting](TROUBLESHOOTING.md) — **Problem:** When the MCP host (Claude Code, Cursor, VS Code) restarts or reloads, the MCP server connection is lost.... *(updated 2026-05-12)*
+- [Deep Dive: msitarzewski/agency-agents](archive/reviews/AGENCY-AGENTS-REPO-DEEP-DIVE.md) — **Repo:** https://github.com/msitarzewski/agency-agents *(updated 2026-04-05)*
+- [AI OS - Prioritized Recommendations for Score Improvement](archive/reviews/AIOS_RECOMMENDATIONS.md) *(updated 2026-04-05)*
+- [Stage 4 of 5: Validate](../packages/tapps-core/src/tapps_core/prompts/validate.md) — Run comprehensive quality checks on all changed files. Full scoring includes type checking, security analysis, and co... *(updated 2026-04-05)*
+- [Stage 5 of 5: Verify](../packages/tapps-core/src/tapps_core/prompts/verify.md) — Final verification that all required quality steps were completed. The checklist reviews which tools were called duri... *(updated 2026-04-05)*
+- [Stage 4 of 5: Validate](../packages/tapps-mcp/src/tapps_mcp/prompts/validate.md) — Run comprehensive quality checks on all changed files. Full scoring includes type checking, security analysis, and co... *(updated 2026-04-05)*
+- [Tapps Researcher](../plugin/cursor/agents/tapps-researcher.md) — You are a TappsMCP research assistant. When invoked: *(updated 2026-04-05)*
+- [Tapps Reviewer](../plugin/cursor/agents/tapps-reviewer.md) — You are a TappsMCP quality reviewer. When invoked: *(updated 2026-04-05)*
+- [Tapps Validator](../plugin/cursor/agents/tapps-validator.md) — You are a TappsMCP validation agent. When invoked: *(updated 2026-04-05)*
+- [Skill](../plugin/cursor/skills/tapps-gate/SKILL.md) — Run a quality gate check using TappsMCP: *(updated 2026-04-05)*
+- [Skill](../plugin/cursor/skills/tapps-validate/SKILL.md) — Validate all changed files using TappsMCP: *(updated 2026-04-05)*
+## Planning
 
-Historical documentation (planning epics, API references, diagrams, reviews, and earlier reference docs) has been moved to [`docs/archive/`](archive/). These remain available for reference but may not reflect the current state of the project.
+- [TappsMCP Platform — Backlog Plan (Obsolete — see Linear)](TAPPS_BACKLOG_PLAN.md) — This file is no longer maintained. The 49-issue plan generated on 2026-04-21 *(updated 2026-05-05)*
+- [TappsMCP feedback — Ralph PLANOPT epic review session](archive/feedback/FEEDBACK_2026-03-24_ralph-planopt-review.md) — **Date:** 2026-03-24 *(updated 2026-04-05)*
+- [Research: Are All Open DocsMCP Epics Really Needed?](archive/planning/DOCSMCP_OPEN_EPICS_RESEARCH.md) — **Date:** 2026-03-02 *(updated 2026-04-05)*
+- [DocsMCP - Product Requirements Document](archive/planning/DOCSMCP_PRD.md) — **Version:** 1.0.0 *(updated 2026-04-05)*
+- [Epic 65: Memory 2026 Best Practices Implementation Plan](archive/planning/EPIC-65-MEMORY-2026-BEST-PRACTICES.md) — **Status:** Proposed *(updated 2026-04-05)*
+- [Epic 1: Tier 1 Extraction Plan](archive/planning/EPIC1_EXTRACTION_PLAN.md) — Based on extractor research. All source at `packages/tapps-mcp/src/tapps_mcp/`. *(updated 2026-04-05)*
+- [Epic Prioritization & Story Ranking](archive/planning/EPIC_PRIORITIZATION.md) — **Date:** 2026-03-12 (updated) *(updated 2026-04-05)*
+- [Tapps Platform Kickoff Prompt](archive/planning/KICKOFF_PROMPT.md) — Copy the prompt below into Claude Code to begin Phase 1. *(updated 2026-04-05)*
+- [LLM Artifact Common Schema](archive/planning/LLM-ARTIFACT-COMMON-SCHEMA.md) — **Status:** Active (Epic 75.3) *(updated 2026-04-05)*
+- [LLM Artifact Structure: Common, Epic, Story, Prompt](archive/planning/LLM-ARTIFACT-STRUCTURE-COMMON-EPIC-STORY-PROMPT.md) — **Status:** Proposed *(updated 2026-04-05)*
+- [Memory roadmap — agent execution chunks](archive/planning/MEMORY_ROADMAP_AGENT_HANDOFF.md) — **Purpose:** Split [TAPPS_MCP_MEMORY_ROADMAP.md](TAPPS_MCP_MEMORY_ROADMAP.md) Tier C (and remaining gaps) into **inde... *(updated 2026-04-05)*
+- [TappsMCP Shared Memory System — Agent Team Execution Prompt](archive/planning/MEMORY_SYSTEM_AGENT_PROMPT.md) — Use this prompt to launch a new Claude Code session that builds the entire Shared Memory system (Epics 23, 24, 25) us... *(updated 2026-04-05)*
+- [OpenClaw Mission Control — Product Requirements Document](archive/planning/OPENCLAW_MISSION_CONTROL_PRD.md) *(updated 2026-04-05)*
+- [P0, P1, P2 Tool Tier Promotion — Implementation Plan](archive/planning/P0_P1_P2_IMPLEMENTATION_PLAN.md) — **Status:** COMPLETE — All P0, P1, P2 items implemented and verified 2026-02-27. *(updated 2026-04-05)*
+- [TappsMCP Roadmap](archive/planning/ROADMAP.md) — **Date:** 2026-03-09 *(updated 2026-04-05)*
+- [TappMCP Init/Upgrade vs Claude Code Best Practices](archive/planning/TAPPSMCP_VIDEO_BEST_PRACTICES_UPDATE.md) — **Source:** [Claude Code – 5 Features, 1 Decision Matrix](https://youtu.be/xuZ2meWfcKg) *(updated 2026-04-05)*
+- [tapps-brain Integration Recommendations for TappsMCP](archive/planning/TAPPS_BRAIN_INTEGRATION_RECOMMENDATIONS.md) — tapps-brain is a production-grade, deterministic memory engine with 33 modules, 28 MCP tools, 6 configurable profiles... *(updated 2026-04-05)*
+- [TappsMCP Expert + Context7 + Retrieval Optimization — Implementation Plan](archive/planning/TAPPS_MCP_IMPROVEMENT_IMPLEMENTATION_PLAN.md) — **Source:** [TAPPS_MCP_IMPROVEMENT_RECOMMENDATIONS.md](../../../HomeIQ/implementation/TAPPS_MCP_IMPROVEMENT_RECOMMEND... *(updated 2026-04-05)*
+- [TappsMCP Memory Roadmap](archive/planning/TAPPS_MCP_MEMORY_ROADMAP.md) *(updated 2026-04-05)*
+- [TappsMCP: Standalone MCP Server for LLM Code Quality](archive/planning/TAPPS_MCP_PLAN.md) — **Status:** All Epics 0–64 + Platform Epics 12–13 complete. See [ROADMAP.md](ROADMAP.md) and [epics/README.md](epics/... *(updated 2026-04-05)*
+- [TappsMCP Tool UX Review (Agent Session)](archive/planning/TAPPS_MCP_TOOL_UX_REVIEW.md) — **Review date:** 2026-03-09 *(updated 2026-04-05)*
+- [Tapps Platform PRD — Monorepo + Shared Core + DocsMCP](archive/planning/TAPPS_PLATFORM_PRD.md) — **Version:** 1.0.0 *(updated 2026-04-05)*
+- [tapps_validate_changed progress notifications – local plan](archive/planning/TAPPS_VALIDATE_CHANGED_PROGRESS_PLAN.md) — **Source:** [HomeIQ TAPPS_VALIDATE_CHANGED_HANG_ANALYSIS.md](C:\cursor\HomeIQ\implementation\TAPPS_VALIDATE_CHANGED_H... *(updated 2026-04-05)*
+- [TappsMCP & DocsMCP Tool Tier Ranking](archive/planning/TOOL-TIER-RANKING.md) — A tiered ranking of all **TappsMCP** (29 tools) and **DocsMCP** (22 tools) by **importance** and **impact**—what actu... *(updated 2026-04-05)*
+- [TappsMCP Tool Tier Promotion Roadmap](archive/planning/TOOL_TIER_PROMOTION_ROADMAP.md) *(updated 2026-04-05)*
+- [DocsMCP Epic 18 — Never Emit Empty Content](archive/planning/epics/DOCSMCP-EPIC-18-NEVER-EMIT-EMPTY-CONTENT.md) *(updated 2026-04-05)*
+- [DocsMCP Epic 19 — Epic Template Completeness](archive/planning/epics/DOCSMCP-EPIC-19-EPIC-TEMPLATE-COMPLETENESS.md) *(updated 2026-04-05)*
+- [DocsMCP Epic 20 — Template Deduplication & Cross-References](archive/planning/epics/DOCSMCP-EPIC-20-TEMPLATE-DEDUPLICATION.md) *(updated 2026-04-05)*
+- [DocsMCP Epic 21: Tool Quality & Usability Improvements](archive/planning/epics/DOCSMCP-EPIC-21-TOOL-QUALITY-USABILITY.md) — <!-- docsmcp:start:metadata --> *(updated 2026-04-05)*
+- [Epic 0: Foundation & Security Hardening](archive/planning/epics/EPIC-0-FOUNDATION.md) — **Status:** Complete *(updated 2026-04-05)*
+- [Epic 1: Core Quality MVP](archive/planning/epics/EPIC-1-CORE-QUALITY-MVP.md) — **Status:** Complete *(updated 2026-04-05)*
+- [Claude Code Hooks — Complete Reference](archive/planning/epics/EPIC-12-PLATFORM-INTEGRATION/research/claude-code-hooks.md) — **Source:** Deep research conducted 2026-02-21 *(updated 2026-04-05)*
+- [Claude Code Subagents & Agent Teams — Complete Reference](archive/planning/epics/EPIC-12-PLATFORM-INTEGRATION/research/claude-code-subagents.md) — **Source:** Deep research conducted 2026-02-21 *(updated 2026-04-05)*
+- [Cursor / Electron Threading and Multi-CPU Usage — Verification](archive/planning/epics/EPIC-12-PLATFORM-INTEGRATION/research/cursor-electron-threading.md) — **Purpose:** Verify whether Cursor IDE can utilize multiple CPUs (multi-threading) for a single heavy task (e.g. AI a... *(updated 2026-04-05)*
+- [Cursor IDE Features — Complete Reference](archive/planning/epics/EPIC-12-PLATFORM-INTEGRATION/research/cursor-features.md) — **Source:** Deep research conducted 2026-02-21 *(updated 2026-04-05)*
+- [Platform Comparison — Claude Code vs Cursor vs VS Code](archive/planning/epics/EPIC-12-PLATFORM-INTEGRATION/research/platform-comparison.md) — **Source:** Deep research conducted 2026-02-21 *(updated 2026-04-05)*
+- [Skills (SKILL.md) — Cross-Platform Reference](archive/planning/epics/EPIC-12-PLATFORM-INTEGRATION/research/skills-format.md) — **Source:** Deep research conducted 2026-02-21 *(updated 2026-04-05)*
+- [MCP Tool Annotations — Reference](archive/planning/epics/EPIC-12-PLATFORM-INTEGRATION/research/tool-annotations.md) — **Source:** Deep research conducted 2026-02-21 *(updated 2026-04-05)*
+- [Epic 13: Structured Tool Outputs (MCP 2025-11-25)](archive/planning/epics/EPIC-13-STRUCTURED-OUTPUTS.md) — **Status:** Complete — 12 tools wired with structuredContent + outputSchema patched into FastMCP tool registration *(updated 2026-04-05)*
+- [Epic 14: Dead Code Detection (Vulture)](archive/planning/epics/EPIC-14-DEAD-CODE-DETECTION.md) — **Status:** Complete — vulture.py, dead_code.py, scorer integration, tapps_dead_code tool, whitelist patterns, 45 tests *(updated 2026-04-05)*
+- [Epic 15: Dependency Vulnerability Scanning (pip-audit)](archive/planning/epics/EPIC-15-DEPENDENCY-VULNERABILITY-SCANNING.md) — **Status:** Complete - 2 source files (pip_audit.py, dependency_security.py), 47 tests, tapps_dependency_scan tool *(updated 2026-04-05)*
+- [Epic 16: Documentation Backend Resilience (Multi-Provider)](archive/planning/epics/EPIC-16-DOCUMENTATION-BACKEND-RESILIENCE.md) — **Status:** Complete — Deepcon, Context7, Docfork, LlmsTxt providers; per-provider circuit breaker; provider metrics;... *(updated 2026-04-05)*
+- [Epic 16: Intelligent Content Generation](archive/planning/epics/EPIC-16-INTELLIGENT-CONTENT-GENERATION.md) — **Status:** Complete *(updated 2026-04-05)*
+- [Epic 17: Documentation Polish & Validation](archive/planning/epics/EPIC-17-DOCUMENTATION-POLISH-VALIDATION.md) — **Status:** Complete *(updated 2026-04-05)*
+- [Epic 18: LLM Engagement Level Configuration](archive/planning/epics/EPIC-18-LLM-ENGAGEMENT-LEVEL.md) — **Status:** Complete (Epic 18.1–18.8 — Configuration, templates, checklist, init/CLI, tapps_set_engagement_level, hoo... *(updated 2026-04-05)*
+- [Epic 19: GitHub Issue & PR Templates](archive/planning/epics/EPIC-19-GITHUB-ISSUE-PR-TEMPLATES.md) — **Status:** Complete (Stories 19.1–19.6) *(updated 2026-04-05)*
+- [Epic 2: Knowledge & Documentation Lookup](archive/planning/epics/EPIC-2-KNOWLEDGE-DOCS.md) — **Status:** Complete *(updated 2026-04-05)*
+- [Epic 21: GitHub Copilot Agent Integration](archive/planning/epics/EPIC-21-GITHUB-COPILOT-AGENT-INTEGRATION.md) — **Status:** Complete (Stories 21.1–21.7) *(updated 2026-04-05)*
+- [Epic 23: Shared Memory Foundation](archive/planning/epics/EPIC-23-SHARED-MEMORY-FOUNDATION.md) — **Status:** Proposed *(updated 2026-04-05)*
+- [Epic 24: Memory Intelligence](archive/planning/epics/EPIC-24-MEMORY-INTELLIGENCE.md) — **Status:** Proposed *(updated 2026-04-05)*
+- [Epic 25: Memory Retrieval & Integration](archive/planning/epics/EPIC-25-MEMORY-RETRIEVAL-INTEGRATION.md) — **Status:** Proposed *(updated 2026-04-05)*
+- [Epic 28: Quality Review Remediation](archive/planning/epics/EPIC-28-QUALITY-REVIEW-REMEDIATION.md) — **Status:** Complete (all phases 1-5, 2026-03-02) — 6 failing files remediated (Phase 1), test coverage gaps closed (... *(updated 2026-04-05)*
+- [Epic 29: Doc Provider Simplification](archive/planning/epics/EPIC-29-DOC-PROVIDER-SIMPLIFICATION.md) — **Status:** Proposed *(updated 2026-04-05)*
+- [Epic 3: Expert System & Domain Knowledge](archive/planning/epics/EPIC-3-EXPERT-SYSTEM.md) — **Status:** Complete *(updated 2026-04-05)*
+- [Epic 30: Benchmark Infrastructure & AGENTBench Integration](archive/planning/epics/EPIC-30-BENCHMARK-INFRASTRUCTURE.md) — **Status:** Complete *(updated 2026-04-05)*
+- [Epic 31: Template Self-Optimization Loop](archive/planning/epics/EPIC-31-TEMPLATE-SELF-OPTIMIZATION.md) — **Status:** Complete *(updated 2026-04-05)*
+- [Epic 32: MCP Tool Effectiveness Benchmarking](archive/planning/epics/EPIC-32-MCP-TOOL-EFFECTIVENESS.md) — **Status:** Complete *(updated 2026-04-05)*
+- [Epic 33: Platform Artifact Correctness](archive/planning/epics/EPIC-33-PLATFORM-ARTIFACT-CORRECTNESS.md) — **Status:** Complete (2026-03-01) — all 5 stories, 142 new tests *(updated 2026-04-05)*
+- [Epic 34: Memory Retrieval & Reinforcement Upgrade](archive/planning/epics/EPIC-34-MEMORY-RETRIEVAL-UPGRADE.md) — **Status:** Complete (2026-03-01) — all 6 stories, 110 new tests *(updated 2026-04-05)*
+- [Epic 35: Expert System Adaptive Integration](archive/planning/epics/EPIC-35-EXPERT-ADAPTIVE-INTEGRATION.md) — **Status:** Complete (2026-03-01) — all 4 stories, 72 new tests *(updated 2026-04-05)*
+- [Epic 36: Hook & Platform Generation Expansion](archive/planning/epics/EPIC-36-HOOK-PLATFORM-EXPANSION.md) — **Status:** Complete *(updated 2026-04-05)*
+- [Epic 38: Top-10 Self-Review Remediation](archive/planning/epics/EPIC-38-TOP10-SELF-REVIEW-REMEDIATION.md) — **Status:** Complete *(updated 2026-04-05)*
+- [Epic 39: MCP Context Progress Adoption](archive/planning/epics/EPIC-39-CTX-PROGRESS-ADOPTION.md) — **Status:** Complete *(updated 2026-04-05)*
+- [Epic 4: Project Context & Session Management](archive/planning/epics/EPIC-4-PROJECT-CONTEXT.md) — **Status:** Complete *(updated 2026-04-05)*
+- [Epic 40: Report Sidecar Progress & Hook Integration](archive/planning/epics/EPIC-40-REPORT-SIDECAR-HOOKS.md) — **Status:** Complete *(updated 2026-04-05)*
+- [Epic 41: Async Upgrade Conversion & Remaining ctx Adoption](archive/planning/epics/EPIC-41-ASYNC-UPGRADE-CTX.md) — **Status:** Complete *(updated 2026-04-05)*
+- [Epic 42: tapps_memory 2026 Enhancements](archive/planning/epics/EPIC-42-TAPPS-MEMORY-2026-ENHANCEMENTS.md) — **Status:** Complete *(updated 2026-04-05)*
+- [Epic 43: Business Expert Foundation](archive/planning/epics/EPIC-43-BUSINESS-EXPERT-FOUNDATION.md) — - **Status:** Complete *(updated 2026-04-05)*
+- [Epic 44: Business Expert Consultation and Integration](archive/planning/epics/EPIC-44-BUSINESS-EXPERT-CONSULTATION.md) — - **Status:** Complete *(updated 2026-04-05)*
+- [Epic 45: Business Expert Lifecycle Management](archive/planning/epics/EPIC-45-BUSINESS-EXPERT-LIFECYCLE.md) — - **Status:** Complete *(updated 2026-04-05)*
+- [Epic 47: Workspace-Scoped Init](archive/planning/epics/EPIC-47-WORKSPACE-SCOPED-INIT.md) — **Status:** Complete *(updated 2026-04-05)*
+- [Epic 48: MCP Host Visibility & Agent Fallbacks](archive/planning/epics/EPIC-48-MCP-HOST-VISIBILITY-AGENT-FALLBACKS.md) — **Status:** Complete *(updated 2026-04-05)*
+- [Epic 49: Doctor Robustness & Quick Mode](archive/planning/epics/EPIC-49-DOCTOR-ROBUSTNESS-QUICK-MODE.md) — **Status:** Complete *(updated 2026-04-05)*
+- [Epic 5: Adaptive Learning & Intelligence](archive/planning/epics/EPIC-5-ADAPTIVE-LEARNING.md) — **Status:** Complete *(updated 2026-04-05)*
+- [Epic 50: Consumer Requirements & Verification](archive/planning/epics/EPIC-50-CONSUMER-REQUIREMENTS-VERIFICATION.md) — **Status:** Complete *(updated 2026-04-05)*
+- [Epic 52: Session Startup Performance](archive/planning/epics/EPIC-52-SESSION-STARTUP-PERFORMANCE.md) — **Status:** Complete *(updated 2026-04-05)*
+- [Epic 53: CLI Parity for MCP-Only Tools](archive/planning/epics/EPIC-53-CLI-PARITY-MCP-TOOLS.md) — **Status:** Complete *(updated 2026-04-05)*
+- [Epic 54: Non-Python RAG & Custom Documentation Sources](archive/planning/epics/EPIC-54-NON-PYTHON-RAG-CUSTOM-DOC-SOURCES.md) — **Status:** Complete *(updated 2026-04-05)*
+- [Epic 55: Memory & Dashboard Enhancements](archive/planning/epics/EPIC-55-MEMORY-DASHBOARD-ENHANCEMENTS.md) — **Status:** Complete *(updated 2026-04-05)*
+- [Epic 56: Non-Python Language Scoring](archive/planning/epics/EPIC-56-NON-PYTHON-LANGUAGE-SCORING.md) — **Status:** Complete (Stories 56.1-56.6 done) *(updated 2026-04-05)*
+- [Epic 57: Adaptive Business Domain Learning](archive/planning/epics/EPIC-57-ADAPTIVE-BUSINESS-DOMAIN-LEARNING.md) — **Status:** Complete *(updated 2026-04-05)*
+- [Epic 58 — Memory Consolidation: COMPLETE](archive/planning/epics/EPIC-58-HANDOFF.md) — All 7/7 stories delivered on 2026-03-06. *(updated 2026-04-05)*
+- [Epic 58: Memory Consolidation](archive/planning/epics/EPIC-58-MEMORY-CONSOLIDATION.md) — **Status:** Complete (2026-03-06) *(updated 2026-04-05)*
+- [Epic 59: MCP Registry Submission](archive/planning/epics/EPIC-59-MCP-REGISTRY-SUBMISSION.md) — **Status:** Complete *(updated 2026-04-05)*
+- [Epic 6: Distribution, Production Readiness & Future](archive/planning/epics/EPIC-6-DISTRIBUTION.md) — **Status:** Complete - 7 stories, 5 source files + npm wrapper, 84 new tests (1186 total), 7 skipped *(updated 2026-04-05)*
+- [Epic 62: Context7-Assisted Memory Validation & Enrichment](archive/planning/epics/EPIC-62-CONTEXT7-MEMORY-VALIDATION.md) — **Status:** Complete *(updated 2026-04-05)*
+- [Epic 63: Auto Expert Generator](archive/planning/epics/EPIC-63-AUTO-EXPERT-GENERATOR.md) — **Status:** Complete *(updated 2026-04-05)*
+- [Epic 64: Cross-Project Memory Federation](archive/planning/epics/EPIC-64-CROSS-PROJECT-MEMORY-FEDERATION.md) — **Status:** Complete *(updated 2026-04-05)*
+- [Epic 65.1: Memory Stats in Dashboard (2026 Best Practices)](archive/planning/epics/EPIC-65.1-MEMORY-STATS-DASHBOARD.md) — **Status:** Complete *(updated 2026-04-05)*
+- [Epic 65.10: Session Indexing (2026 Best Practices)](archive/planning/epics/EPIC-65.10-SESSION-INDEXING.md) — **Status:** Complete *(updated 2026-04-05)*
+- [Epic 65.11: Procedural Memory Tier (2026 Best Practices)](archive/planning/epics/EPIC-65.11-PROCEDURAL-MEMORY-TIER.md) — **Status:** Complete *(updated 2026-04-05)*
+- [Epic 65.12: Entity/Relationship Extraction in Consolidation (2026 Best Practices)](archive/planning/epics/EPIC-65.12-ENTITY-RELATIONSHIP-EXTRACTION.md) — **Status:** Complete *(updated 2026-04-05)*
+- [Epic 65.13: Relationship-Aware Retrieval (2026 Best Practices)](archive/planning/epics/EPIC-65.13-RELATIONSHIP-AWARE-RETRIEVAL.md) — **Status:** Complete *(updated 2026-04-05)*
+- [Epic 65.14: Memory Retrieval Policy (2026 Best Practices)](archive/planning/epics/EPIC-65.14-MEMORY-RETRIEVAL-POLICY.md) — **Status:** Complete *(updated 2026-04-05)*
+- [Epic 65.15: Memory Maintenance Schedule (2026 Best Practices)](archive/planning/epics/EPIC-65.15-MEMORY-MAINTENANCE-SCHEDULE.md) — **Status:** Complete *(updated 2026-04-05)*
+- [Epic 65.16: Context Budget for Memory Injection (2026 Best Practices)](archive/planning/epics/EPIC-65.16-CONTEXT-BUDGET.md) — **Status:** Complete *(updated 2026-04-05)*
+- [Epic 65.17: Optional Write Rules Validation (2026 Best Practices)](archive/planning/epics/EPIC-65.17-WRITE-RULES-VALIDATION.md) — **Status:** Complete *(updated 2026-04-05)*
+- [Epic 65.2: Markdown Export & Curation (2026 Best Practices)](archive/planning/epics/EPIC-65.2-MARKDOWN-EXPORT.md) — **Status:** Complete *(updated 2026-04-05)*
+- [Epic 65.4: Auto-Recall Hook (2026 Best Practices)](archive/planning/epics/EPIC-65.4-AUTO-RECALL-HOOK.md) — **Status:** Complete *(updated 2026-04-05)*
+- [Epic 65.5: Auto-Capture Hook (2026 Best Practices)](archive/planning/epics/EPIC-65.5-AUTO-CAPTURE-HOOK.md) — **Status:** Complete *(updated 2026-04-05)*
+- [Epic 65.6: Hook Integration in tapps_init (2026 Best Practices)](archive/planning/epics/EPIC-65.6-HOOK-INTEGRATION.md) — **Status:** Complete *(updated 2026-04-05)*
+- [Epic 65.7: Optional Vector/Embedding Provider (2026 Best Practices)](archive/planning/epics/EPIC-65.7-OPTIONAL-VECTOR-PROVIDER.md) — **Status:** Complete *(updated 2026-04-05)*
+- [Epic 65.8: Hybrid Search with Reciprocal Rank Fusion (2026 Best Practices)](archive/planning/epics/EPIC-65.8-HYBRID-SEARCH-RRF.md) — **Status:** Complete *(updated 2026-04-05)*
+- [Epic 65.9: Optional Reranking (2026 Best Practices)](archive/planning/epics/EPIC-65.9-OPTIONAL-RERANKING.md) — **Status:** Complete *(updated 2026-04-05)*
+- [Epic 66.1: validate_changed Path Mapping Hints (Tool UX)](archive/planning/epics/EPIC-66.1-VALIDATE-CHANGED-PATH-HINTS.md) — **Status:** Complete *(updated 2026-04-05)*
+- [Epic 66.2: Checklist Validation Note for 0 Files (Tool UX)](archive/planning/epics/EPIC-66.2-CHECKLIST-VALIDATION-NOTE.md) — **Status:** Complete *(updated 2026-04-05)*
+- [Epic 67: Init & Upgrade Hardening](archive/planning/epics/EPIC-67-INIT-UPGRADE-HARDENING.md) — <!-- docsmcp:start:metadata --> *(updated 2026-04-05)*
+- [Epic 68: Expert & Research Effectiveness](archive/planning/epics/EPIC-68-EXPERT-RESEARCH-EFFECTIVENESS.md) — <!-- docsmcp:start:metadata --> *(updated 2026-04-05)*
+- [Epic 69: Expert Personas](archive/planning/epics/EPIC-69-EXPERT-PERSONAS.md) — <!-- docsmcp:start:metadata --> *(updated 2026-04-05)*
+- [Story 69.2 -- Wire persona into consultation answer assembly](archive/planning/epics/EPIC-69/story-69.2-wire-persona-into-consultation-answer-as.md) — <!-- docsmcp:start:user-story --> *(updated 2026-04-05)*
+- [Story 69.3 -- Add pilot personas and docs](archive/planning/epics/EPIC-69/story-69.3-add-pilot-personas-and-docs.md) — <!-- docsmcp:start:user-story --> *(updated 2026-04-05)*
+- [Epic 7: Metrics, Observability & Dashboard](archive/planning/epics/EPIC-7-METRICS-DASHBOARD.md) — **Status:** Complete - 9 stories, 15 source files, 150 new tests (1102 total), 7 skipped *(updated 2026-04-05)*
+- [Epic 70: Expert Persona Completion (Agency-Personas Leverage)](archive/planning/epics/EPIC-70-EXPERT-PERSONA-COMPLETION.md) — <!-- docsmcp:start:metadata --> *(updated 2026-04-05)*
+- [Story 70.1 — Define personas for remaining 15 built-in experts](archive/planning/epics/EPIC-70/story-70.1-define-personas-remaining-15-experts.md) — <!-- docsmcp:start:user-story --> *(updated 2026-04-05)*
+- [Epic 71: Expert Critical Rules & Default Stance (Agency-Personas Leverage)](archive/planning/epics/EPIC-71-EXPERT-CRITICAL-RULES-AND-STANCE.md) — <!-- docsmcp:start:metadata --> *(updated 2026-04-05)*
+- [Story 71.1 — Add critical_rules / default_stance field to ExpertConfig and business config](archive/planning/epics/EPIC-71/story-71.1-add-critical-rules-field.md) — <!-- docsmcp:start:user-story --> *(updated 2026-04-05)*
+- [Story 71.2 — Wire critical rules into consultation answer assembly](archive/planning/epics/EPIC-71/story-71.2-wire-critical-rules-into-answer-assembly.md) — <!-- docsmcp:start:user-story --> *(updated 2026-04-05)*
+- [Story 71.3 — Add pilot critical rules for Security, Testing, and Accessibility experts](archive/planning/epics/EPIC-71/story-71.3-add-pilot-critical-rules-security-testing-accessibility.md) — <!-- docsmcp:start:user-story --> *(updated 2026-04-05)*
+- [Epic 72: Expert Knowledge Enrichment (Agency-Personas Leverage)](archive/planning/epics/EPIC-72-EXPERT-KNOWLEDGE-ENRICHMENT.md) — <!-- docsmcp:start:metadata --> *(updated 2026-04-05)*
+- [Epic 72: Content Plan — Success Metrics, Workflow Hints, Templates](archive/planning/epics/EPIC-72/story-72-content-plan.md) — **Date:** 2026-03-11 *(updated 2026-04-05)*
+- [Story 72.1 — Add Success metrics / Definition of done sections to key knowledge files](archive/planning/epics/EPIC-72/story-72.1-success-metrics-sections.md) — <!-- docsmcp:start:user-story --> *(updated 2026-04-05)*
+- [Story 72.2 — Add workflow hints (Typical steps / Recommended process) to knowledge](archive/planning/epics/EPIC-72/story-72.2-workflow-hints.md) — <!-- docsmcp:start:user-story --> *(updated 2026-04-05)*
+- [Story 72.3 — Add deliverable templates (report / checklist) to selected domains](archive/planning/epics/EPIC-72/story-72.3-deliverable-templates.md) — <!-- docsmcp:start:user-story --> *(updated 2026-04-05)*
+- [Epic 73: Expert Communication Style (Agency-Personas Leverage — Optional)](archive/planning/epics/EPIC-73-EXPERT-COMMUNICATION-STYLE.md) — <!-- docsmcp:start:metadata --> *(updated 2026-04-05)*
+- [Story 73.1 — Add communication_style field and wire into answer assembly](archive/planning/epics/EPIC-73/story-73.1-communication-style-field-and-assembly.md) — <!-- docsmcp:start:user-story --> *(updated 2026-04-05)*
+- [Story 74.1: tapps_quick_check batch mode](archive/planning/epics/EPIC-74/story-74.1-quick-check-batch-mode.md) — **Epic:** [EPIC-74-CONSUMER-FEEDBACK-AUTOMATION-PIPELINE-UX](archive/planning/epics/EPIC-74-CONSUMER-FEEDBACK-AUTOMATION-PIPELINE-UX.md) *(updated 2026-04-05)*
+- [Story 74.2: tapps_checklist compact/JSON output](archive/planning/epics/EPIC-74/story-74.2-checklist-compact-json-output.md) — **Epic:** [EPIC-74-CONSUMER-FEEDBACK-AUTOMATION-PIPELINE-UX](archive/planning/epics/EPIC-74-CONSUMER-FEEDBACK-AUTOMATION-PIPELINE-UX.md) *(updated 2026-04-05)*
+- [Story 74.3: tapps_validate_changed base_ref zero-diff warning](archive/planning/epics/EPIC-74/story-74.3-validate-changed-base-ref-warning.md) — **Epic:** [EPIC-74-CONSUMER-FEEDBACK-AUTOMATION-PIPELINE-UX](archive/planning/epics/EPIC-74-CONSUMER-FEEDBACK-AUTOMATION-PIPELINE-UX.md) *(updated 2026-04-05)*
+- [Story 74.4: tapps_validate_changed optional traceability](archive/planning/epics/EPIC-74/story-74.4-validate-changed-traceability.md) — **Epic:** [EPIC-74-CONSUMER-FEEDBACK-AUTOMATION-PIPELINE-UX](archive/planning/epics/EPIC-74-CONSUMER-FEEDBACK-AUTOMATION-PIPELINE-UX.md) *(updated 2026-04-05)*
+- [Epic 75: LLM Artifact Structure & Prompt Generation](archive/planning/epics/EPIC-75-LLM-ARTIFACT-STRUCTURE-AND-PROMPT-GENERATION.md) — <!-- docsmcp:start:metadata --> *(updated 2026-04-05)*
+- [Story 75.2: Cross-File Type Error Detection in quick_check](archive/planning/epics/EPIC-75/story-75.2-cross-file-type-detection.md) — **Epic:** [EPIC-75-DOCKER-PIPELINE-RELIABILITY](archive/planning/epics/EPIC-75-DOCKER-PIPELINE-RELIABILITY.md) *(updated 2026-04-05)*
+- [Story 75.2: PromptGenerator and docs_generate_prompt tool](archive/planning/epics/EPIC-75/story-75.2-prompt-generator-and-docs-generate-prompt.md)
+- [Story 75.3: Common schema documentation and epic/story alignment](archive/planning/epics/EPIC-75/story-75.3-common-schema-docs-and-alignment.md)
+- [Story 75.3: Session Start Cache Directory Bootstrap](archive/planning/epics/EPIC-75/story-75.3-session-cache-bootstrap.md) — **Epic:** [EPIC-75-DOCKER-PIPELINE-RELIABILITY](archive/planning/epics/EPIC-75-DOCKER-PIPELINE-RELIABILITY.md) *(updated 2026-04-05)*
+- [Story 75.4: Optional compact LLM view for epic/story/prompt](archive/planning/epics/EPIC-75/story-75.4-compact-llm-view.md)
+- [Story 75.4: validate_changed Per-File Pass/Fail Rows](archive/planning/epics/EPIC-75/story-75.4-validate-changed-per-file-rows.md) — **Epic:** [EPIC-75-DOCKER-PIPELINE-RELIABILITY](archive/planning/epics/EPIC-75-DOCKER-PIPELINE-RELIABILITY.md) *(updated 2026-04-05)*
+- [Story 75.5: Checklist Git Commit Metadata Linkage](archive/planning/epics/EPIC-75/story-75.5-checklist-git-metadata.md) — **Epic:** [EPIC-75-DOCKER-PIPELINE-RELIABILITY](archive/planning/epics/EPIC-75-DOCKER-PIPELINE-RELIABILITY.md) *(updated 2026-04-05)*
+- [Epic 76: Skills Spec Compliance & Validation](archive/planning/epics/EPIC-76-SKILLS-SPEC-COMPLIANCE-AND-VALIDATION.md) — <!-- docsmcp:start:metadata --> *(updated 2026-04-05)*
+- [Story 76.1: Description length validation (≤1024 chars)](archive/planning/epics/EPIC-76/story-76.1-description-length-validation.md) — **Epic:** [EPIC-76-SKILLS-SPEC-COMPLIANCE-AND-VALIDATION](archive/planning/epics/EPIC-76-SKILLS-SPEC-COMPLIANCE-AND-VALIDATION.md) *(updated 2026-04-05)*
+- [Story 76.2: Claude allowed-tools: space-delimited for spec](archive/planning/epics/EPIC-76/story-76.2-claude-allowed-tools-format.md) — **Epic:** [EPIC-76-SKILLS-SPEC-COMPLIANCE-AND-VALIDATION](archive/planning/epics/EPIC-76-SKILLS-SPEC-COMPLIANCE-AND-VALIDATION.md) *(updated 2026-04-05)*
+- [Story 76.3: Cursor: allowed-tools vs mcp_tools decision](archive/planning/epics/EPIC-76/story-76.3-cursor-allowed-tools-vs-mcp-tools.md) — **Epic:** [EPIC-76-SKILLS-SPEC-COMPLIANCE-AND-VALIDATION](archive/planning/epics/EPIC-76-SKILLS-SPEC-COMPLIANCE-AND-VALIDATION.md) *(updated 2026-04-05)*
+- [Story 76.4: Optional skills spec validator (test or CLI)](archive/planning/epics/EPIC-76/story-76.4-skills-spec-validator.md) — **Epic:** [EPIC-76-SKILLS-SPEC-COMPLIANCE-AND-VALIDATION](archive/planning/epics/EPIC-76-SKILLS-SPEC-COMPLIANCE-AND-VALIDATION.md) *(updated 2026-04-05)*
+- [Epic 77: Agency-Agents Integration (Documentation & Optional Hint)](archive/planning/epics/EPIC-77-AGENCY-AGENTS-INTEGRATION.md) — <!-- docsmcp:start:metadata --> *(updated 2026-04-05)*
+- [Story 77.1: Document TappsMCP + agency-agents coexistence](archive/planning/epics/EPIC-77/story-77.1-document-tappsmcp-agency-agents-coexistence.md) — **Epic:** [EPIC-77-AGENCY-AGENTS-INTEGRATION](archive/planning/epics/EPIC-77-AGENCY-AGENTS-INTEGRATION.md) *(updated 2026-04-05)*
+- [Story 77.2: Optional init/AGENTS.md hint for agency-agents](archive/planning/epics/EPIC-77/story-77.2-optional-init-agents-md-hint-agency-agents.md) — **Epic:** [EPIC-77-AGENCY-AGENTS-INTEGRATION](archive/planning/epics/EPIC-77-AGENCY-AGENTS-INTEGRATION.md) *(updated 2026-04-05)*
+- [Epic 78: Canonical Persona Injection (Prompt-Injection Defense)](archive/planning/epics/EPIC-78-CANONICAL-PERSONA-INJECTION-PROMPT-INJECTION-DEFENSE.md) — <!-- docsmcp:start:metadata --> *(updated 2026-04-05)*
+- [Story 78.1: Tool tapps_get_canonical_persona (resolve name → allowlisted path, return markdown)](archive/planning/epics/EPIC-78/story-78.1-tool-tapps-get-canonical-persona.md)
+- [Story 78.2: Rule/instruction: prepend canonical persona when user requests a persona](archive/planning/epics/EPIC-78/story-78.2-rule-instruction-prepend-canonical-persona.md)
+- [Story 78.3: Document canonical persona injection as prompt-injection defense](archive/planning/epics/EPIC-78/story-78.3-document-canonical-persona-injection.md)
+- [Story 78.4: Optional audit log when persona request + injection pattern in same message](archive/planning/epics/EPIC-78/story-78.4-optional-audit-log-persona-request-risk-pattern.md)
+- [Epic 79: MCP Tool Count & Curation (2026 Best Practices)](archive/planning/epics/EPIC-79-MCP-TOOL-COUNT-CURATION.md) — <!-- docsmcp:start:metadata --> *(updated 2026-04-05)*
+- [Story 79.4: Document recommended tool subsets and Docker tool filtering](archive/planning/epics/EPIC-79/story-79.4-document-recommended-tool-subsets.md) — **Epic:** [EPIC-79-MCP-TOOL-COUNT-CURATION](archive/planning/epics/EPIC-79-MCP-TOOL-COUNT-CURATION.md) *(updated 2026-04-05)*
+- [Epic 80: Consumer Init & Bootstrap Hardening (tapps-mcp init)](archive/planning/epics/EPIC-80-CONSUMER-INIT-BOOTSTRAP-HARDENING.md) — <!-- docsmcp:start:metadata --> *(updated 2026-04-05)*
+- [Story 80.1 -- Fix PostToolUse hook script generation (validate/report)](archive/planning/epics/EPIC-80/story-80.1-fix-posttooluse-hook-scripts-validate-report.md) — **Status:** Complete *(updated 2026-04-05)*
+- [Story 80.10 -- Regression tests: init root hooks non-interactive](archive/planning/epics/EPIC-80/story-80.10-regression-tests-init-hooks-noninteractive.md) — **Status:** Complete *(updated 2026-04-05)*
+- [Story 80.2 -- Doctor: verify hook files exist for settings references](archive/planning/epics/EPIC-80/story-80.2-doctor-verify-hook-files-exist.md) — **Status:** Complete *(updated 2026-04-05)*
+- [Story 80.3 -- Init default project root and TappMCP self-bootstrap guard](archive/planning/epics/EPIC-80/story-80.3-init-project-root-self-bootstrap-guard.md) — **Status:** Complete *(updated 2026-04-05)*
+- [Story 80.4 -- Non-interactive init: MCP overwrite and env/TTY behavior](archive/planning/epics/EPIC-80/story-80.4-noninteractive-init-mcp-overwrite.md) — **Status:** Complete *(updated 2026-04-05)*
+- [Story 80.7 -- docs-mcp parity across hosts](archive/planning/epics/EPIC-80/story-80.7-docs-mcp-parity-across-hosts.md) — **Status:** Complete *(updated 2026-04-05)*
+- [Story 80.8 -- TECH_STACK low-confidence wrapper layouts](archive/planning/epics/EPIC-80/story-80.8-tech-stack-low-confidence-wrappers.md) — **Status:** Complete *(updated 2026-04-05)*
+- [Story 80.9 -- Doctor: user-scope Claude MCP vs project-only](archive/planning/epics/EPIC-80/story-80.9-doctor-project-only-mcp.md) — **Status:** Complete *(updated 2026-04-05)*
+- [Epic 9: Scoring Reliability & Actionable Feedback](archive/planning/epics/EPIC-9-SCORING-RELIABILITY.md) — **Status:** Complete (6 of 6 stories complete) *(updated 2026-04-05)*
+- [Handoff — 2026-03-11 (Post Epic 75, 76, 77)](archive/planning/epics/HANDOFF-2026-03-11-EPIC-75-76-77.md) — Session completed **Epic 77** (Agency-Agents Integration), **Epic 76** (Skills Spec Compliance), and **Epic 75.1–75.2... *(updated 2026-04-05)*
+- [Handoff — 2026-03-11 (Post Epic 74 & 79)](archive/planning/epics/HANDOFF-2026-03-11.md) — Session closed Epic 74, completed Epic 79 (79.4–79.6), reconciled Epic 65, and marked Epic 66 complete. Use this hand... *(updated 2026-04-05)*
+- [Open Epics and Stories — Review](archive/planning/epics/OPEN-EPICS-AND-STORIES-REVIEW.md) — **Date:** 2026-03-12 *(updated 2026-04-05)*
+- [Which agency-agents to Copy, Leverage, or Reference for TappsMCP & DocsMCP](archive/planning/research/2026-AGENCY-AGENTS-LEVERAGE-FOR-TAPPSMCP-DOCSMCP.md) — **Source:** [agency-agents](https://github.com/msitarzewski/agency-agents) (29k+ stars, 120 agents across Engineering... *(updated 2026-04-05)*
+- [2026 Research: Claude & Cursor Agents + agency-agents Integration](archive/planning/research/2026-AGENTS-RESEARCH-CLAUDE-CURSOR-AGENCY-AGENTS.md) — **Date:** 2026-03-11 *(updated 2026-04-05)*
+- [2026 Best Practices Research & Next Steps Plan](archive/planning/research/2026-BEST-PRACTICES-NEXT-STEPS-PLAN.md) — **Date:** 2026-03-11 *(updated 2026-04-05)*
+- [2026 Research: Epics 70–73 (Expert Personas) — Deep Dive & Recommendation](archive/planning/research/2026-EXPERT-PERSONAS-EPICS-70-73-RESEARCH.md) — **Date:** 2026-03-11 *(updated 2026-04-05)*
+- [2026 Deep Research: LLM Prompt & Context Best Practices](archive/planning/research/2026-LLM-PROMPT-CONTEXT-RESEARCH.md) — **Status:** Research summary *(updated 2026-04-05)*
+- [2026 MCP Tools: Best Practices & Optimal Tool Count for LLMs](archive/planning/research/2026-MCP-TOOLS-BEST-PRACTICES-OPTIMAL-COUNT.md) — **Date:** 2026-03-11 *(updated 2026-04-05)*
+- [2026 Skills Research: Are We Doing It Wrong?](archive/planning/research/2026-SKILLS-RESEARCH-TAPPSMCP.md) — **Date:** 2026-03-11 *(updated 2026-04-05)*
+- [Role presets to implement first (full list)](archive/planning/research/ROLE-PRESETS-IMPLEMENT-FIRST.md) — **Source:** Expanded from [DISCUSSION-PERSONA-ENVIRONMENT-AUTO-TOOLS.md](DISCUSSION-PERSONA-ENVIRONMENT-AUTO-TOOLS.md) *(updated 2026-04-05)*
+- [Epic 67: MCP Tool Usage Review](archive/reviews/EPIC-67-MCP-TOOL-USAGE-REVIEW.md) — **Date:** 2026-03-10 *(updated 2026-04-05)*
+- [EpicGenerator & StoryGenerator — Output Quality & Enhancement Recommendations](archive/reviews/EPIC-GENERATOR-STORY-GENERATOR-QUALITY.md) — **Date:** 2026-03-10 *(updated 2026-04-05)*
+- [Post-TAP-1628 brain integration cleanup](epics/EPIC-post-tap-1628-brain-integration-cleanup.md) — We are completing the tapps-brain 3.17.2 integration by addressing 7 remaining cleanup items that finish the TAP-1628... *(updated 2026-05-15)*
+- [Story 100.1 -- Architecture pattern classifier](stories/STORY-100.1-pattern-classifier.md) — <!-- docsmcp:start:user-story --> *(updated 2026-04-14)*
+- [Story 102.3 -- Auto-recall hook for tapps_validate_changed](stories/STORY-102.3-auto-recall-hook.md) — <!-- docsmcp:start:user-story --> *(updated 2026-04-14)*
+- [Epic 2: System Hardening](../packages/docs-mcp/docs/issues/epic-002-system-hardening.md) — <!-- docsmcp:start:metadata --> *(updated 2026-04-08)*
+- [Epic 3: Observability Stack](../packages/docs-mcp/docs/issues/epic-003-observability-stack.md) — <!-- docsmcp:start:metadata --> *(updated 2026-04-08)*
+- [Epic 4: Backup and Recovery](../packages/docs-mcp/docs/issues/epic-004-backup-recovery.md) — <!-- docsmcp:start:metadata --> *(updated 2026-04-08)*
+- [Epic 5: Secrets Management](../packages/docs-mcp/docs/issues/epic-005-secrets-management.md) — <!-- docsmcp:start:metadata --> *(updated 2026-04-08)*
+- [Epic 6: Supply Chain Security](../packages/docs-mcp/docs/issues/epic-006-supply-chain-security.md) — <!-- docsmcp:start:metadata --> *(updated 2026-04-08)*
+- [Epic 7: AI Agent Security](../packages/docs-mcp/docs/issues/epic-007-agent-security.md) — <!-- docsmcp:start:metadata --> *(updated 2026-04-08)*
+- [Story 9.3 -- Evaluate CLI Fallback Agent (Aider or Codex)](../packages/docs-mcp/docs/issues/story-009.3-cli-fallback-eval.md) — <!-- docsmcp:start:user-story --> *(updated 2026-04-08)*
+- [init.py: _bootstrap_claude skips CLAUDE.md obligation updates on upgrade](../packages/docs-mcp/docs/stories/STORY-tapps-obligations-marker-block.md) — On 2026-04-24 I shipped TAP-964 (tapps_linear_snapshot_get/put/invalidate) and TAP-967 (narrow list_issues triage) in... *(updated 2026-04-28)*
+- [Epic 86: Zeek 8.x Native Telemetry & Capture Health Dashboard](../stories/epic-86-zeek-telemetry-capture-health.md) — <!-- docsmcp:start:metadata --> *(updated 2026-04-05)*
+## Release
+
+- [Changelog](../CHANGELOG.md) — All notable changes to this project will be documented in this file. *(updated 2026-05-19)*
+- [Init and Upgrade — Feature List](INIT_AND_UPGRADE_FEATURE_LIST.md) — This document lists what each init-related process does. The codebase has **two init flows** plus **upgrade commands*... *(updated 2026-05-12)*
+- [tapps-brain v2.1.0 — Tag Required](TAPPS_BRAIN_V2.1_TAG.md) — **Date:** 2026-04-07 *(updated 2026-04-07)*
+- [Upgrading TappsMCP — Guide for Consuming Projects](UPGRADE_FOR_CONSUMERS.md) — When you **install or upgrade** TappsMCP in a project that uses it for quality checks, doc lookup, and experts, you m... *(updated 2026-05-12)*
+- [Task List: Ralph Feedback on tapps-mcp upgrade](archive/feedback/TAPPS_RALPH_FEEDBACK_TASKS.md) — External feedback from the Ralph project (a bash-first, non-greenfield publisher *(updated 2026-04-20)*
+- [Changelog](../packages/docs-mcp/docs/CHANGELOG_GENERATED.md) — All notable changes to this project will be documented in this file. *(updated 2026-04-13)*
+- [Changelog](../plugin/cursor/CHANGELOG.md) — - Initial release of TappsMCP Quality Tools for Cursor *(updated 2026-04-05)*

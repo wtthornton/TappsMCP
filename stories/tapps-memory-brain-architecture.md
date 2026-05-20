@@ -472,7 +472,7 @@ Project A                      Hub                         Project B
 
 ## 15. Session Indexing
 
-Source: [`packages/tapps-core/src/tapps_core/memory/session_index.py`](../packages/tapps-core/src/tapps_core/memory/session_index.py)
+Source: `tapps_brain/memory/session_index.py` (lives in the [tapps-brain](https://github.com/wtthornton/tapps-brain) repo; native session-memory replaces the local session_index path per TAP-1633)
 
 Stores chunks of session text for searchability:
 - Max 50 chunks per session, 500 chars each

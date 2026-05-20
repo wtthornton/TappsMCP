@@ -239,3 +239,71 @@ Docker images and registry artifacts in `docker-mcp/`. Servers are registered as
 ## MCP Context progress notifications (Epics 39-41)
 
 Long-running tools use `ctx.info()` and `ctx.report_progress()`. Shared `emit_ctx_info()` helper in `server_helpers.py`. Sidecar progress files for hook-based feedback.
+
+## Architecture diagrams
+
+All diagrams are auto-generated from source by `docs-mcp`. See [docs/diagrams/README.md](diagrams/README.md) for the full index and regeneration instructions. The full visual architecture report is [docs/ARCHITECTURE.html](ARCHITECTURE.html) (open in a browser — embedded SVGs, dependency-flow visualization, component deep-dive). Pan/zoom Mermaid view: [docs/diagrams/interactive.html](diagrams/interactive.html).
+
+### Quality pipeline flow
+
+```mermaid
+sequenceDiagram
+    title TAPPS Quality Pipeline
+
+    participant Agent as Agent
+    participant tapps_session_start as tapps_session_start
+    participant tapps_lookup_docs as tapps_lookup_docs
+    participant tapps_quick_check as tapps_quick_check
+    participant tapps_validate_changed as tapps_validate_changed
+    participant tapps_checklist as tapps_checklist
+    participant tapps_memory as tapps_memory
+
+    Agent->>tapps_session_start: bootstrap context
+    tapps_session_start->>Agent: server info + memory status
+    Agent->>tapps_lookup_docs: library docs (Context7)
+    tapps_lookup_docs->>Agent: current API surface
+    Agent->>tapps_quick_check: after file edit
+    tapps_quick_check->>Agent: score + gate + security
+    Agent->>tapps_validate_changed: before declaring complete
+    tapps_validate_changed->>Agent: per-file pass/fail
+    Agent->>tapps_checklist: final verification
+    tapps_checklist->>Agent: missing-required hints
+    Agent->>tapps_memory: save learnings (architectural/pattern)
+```
+
+### Container view (tapps-mcp + docs-mcp + tapps-core)
+
+```mermaid
+C4Container
+    title Container diagram for tapps-mcp
+
+    System_Boundary(monorepo, "tapps-mcp monorepo") {
+        Container(tapps_mcp, "tapps-mcp", "Python / FastMCP", "32 quality tools")
+        Container(docs_mcp, "docs-mcp", "Python / FastMCP", "38 documentation tools")
+        Container(tapps_core, "tapps-core", "Python library", "Shared: config, security, logging, knowledge, metrics")
+    }
+    System_Ext(brain, "tapps-brain", "Postgres @ :8080")
+    System_Ext(ctx7, "Context7", "Live library docs")
+    Person(Agent, "AI Agent")
+
+    Rel(Agent, tapps_mcp, "stdio MCP")
+    Rel(Agent, docs_mcp, "stdio MCP")
+    Rel(tapps_mcp, tapps_core, "imports")
+    Rel(docs_mcp, tapps_core, "imports")
+    Rel(tapps_mcp, brain, "BrainBridge HTTP")
+    Rel(docs_mcp, brain, "BrainBridge HTTP")
+    Rel(tapps_core, ctx7, "knowledge.context7_client")
+```
+
+### Per-package component breakdowns
+
+- [tapps-mcp internal components](diagrams/05-c4-component-tapps-mcp.md) — 30 modules, `server*` registration surface in pink, scoring/tools/validators in teal, memory bridge in purple.
+- [docs-mcp internal components](diagrams/06-c4-component-docs-mcp.md) — 19 modules, generators/extractors/analyzers in teal.
+
+### Public API (auto-generated)
+
+- [docs/api/tapps-mcp.md](api/tapps-mcp.md) — 1,275 public names across 365 modules
+- [docs/api/docs-mcp.md](api/docs-mcp.md)
+- [docs/api/tapps-core.md](api/tapps-core.md)
+
+Regenerate any of the above with the corresponding `docs_generate_*` MCP tool — see the file header of each artifact for the exact invocation.
