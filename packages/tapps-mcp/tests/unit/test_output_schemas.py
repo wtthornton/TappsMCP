@@ -21,7 +21,6 @@ from tapps_mcp.common.output_schemas import (
     SecurityScanOutput,
     SessionStartOutput,
     StructuredOutput,
-    TappsQuickCheckResponse,
     TappsSessionStartResponse,
     ToolError,
     ValidateChangedOutput,
@@ -960,70 +959,3 @@ class TestTappsSessionStartResponse:
         dumped = err.model_dump()
         assert dumped["http_status"] == 401
         assert dumped["token_state"] == "present"
-
-
-class TestTappsQuickCheckResponse:
-    """B2 — outputSchema for ``tapps_quick_check``."""
-
-    def test_input_and_output_schema_both_nonempty(self) -> None:
-        """FastMCP registers both inputSchema and outputSchema for the tool."""
-        from mcp.server.fastmcp.tools.base import Tool
-
-        from tapps_mcp.server_scoring_tools import tapps_quick_check
-
-        tool = Tool.from_function(tapps_quick_check)
-        assert tool.parameters, "inputSchema must be non-empty"
-        assert tool.parameters.get("properties"), "inputSchema must declare properties"
-        assert tool.output_schema is not None, "outputSchema must be declared"
-        props = tool.output_schema.get("properties", {})
-        assert "success" in props
-        assert "data" in props
-        assert "error" in props
-        assert tool.output_schema.get("additionalProperties") is True
-
-    def test_validates_single_file_envelope(self) -> None:
-        """Single-file response shape round-trips through the model."""
-        envelope = {
-            "tool": "tapps_quick_check",
-            "success": True,
-            "elapsed_ms": 14,
-            "data": {
-                "file_path": "app.py",
-                "overall_score": 92.5,
-                "gate_passed": True,
-                "security_passed": True,
-                "lint_issue_count": 0,
-                "security_issue_count": 0,
-                "suggestions": ["Add unit tests"],
-            },
-        }
-        model = TappsQuickCheckResponse.model_validate(envelope)
-        dumped = model.model_dump(mode="json")
-        assert dumped["data"]["gate_passed"] is True
-        assert dumped["data"]["overall_score"] == 92.5
-        # extra preserved:
-        assert dumped["data"]["suggestions"] == ["Add unit tests"]
-
-    def test_validates_batch_envelope(self) -> None:
-        """Batch response shape round-trips through the model."""
-        envelope = {
-            "tool": "tapps_quick_check",
-            "success": True,
-            "elapsed_ms": 320,
-            "data": {
-                "files_checked": 3,
-                "all_passed": False,
-                "failure_count": 1,
-                "results": [
-                    {"file_path": "a.py", "gate_passed": True, "success": True},
-                    {"file_path": "b.py", "gate_passed": False, "success": True},
-                    {"file_path": "c.py", "gate_passed": True, "success": True},
-                ],
-            },
-        }
-        model = TappsQuickCheckResponse.model_validate(envelope)
-        dumped = model.model_dump(mode="json")
-        assert dumped["data"]["files_checked"] == 3
-        assert dumped["data"]["all_passed"] is False
-        assert dumped["data"]["failure_count"] == 1
-        assert len(dumped["data"]["results"]) == 3

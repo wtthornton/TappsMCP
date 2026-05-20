@@ -9,7 +9,7 @@ from __future__ import annotations
 import ast
 import asyncio
 import time
-from typing import TYPE_CHECKING, Any, cast
+from typing import TYPE_CHECKING, Any
 
 import structlog
 from mcp.server.fastmcp import (
@@ -18,7 +18,6 @@ from mcp.server.fastmcp import (
 from mcp.types import ToolAnnotations
 
 from tapps_core.config.settings import load_settings
-from tapps_mcp.common.output_schemas import TappsQuickCheckResponse
 from tapps_mcp.quick_check_recurring import record_quick_check_recurring
 from tapps_mcp.server_helpers import (
     _get_scorer_for_file,
@@ -695,7 +694,7 @@ async def tapps_quick_check(
     preset: str = "standard",
     fix: bool = False,
     file_paths: str = "",
-) -> TappsQuickCheckResponse:
+) -> dict[str, Any]:
     """Bundles scoring + quality gate + basic security check into one fast
     call (typically < 1s) — the default per-file post-edit verifier.
 
@@ -736,13 +735,8 @@ async def tapps_quick_check(
         raw_paths = [p.strip() for p in file_paths.split(",") if p.strip()]
         if not raw_paths:
             _record_call("tapps_quick_check", success=False)
-            return cast(
-                TappsQuickCheckResponse,
-                error_response(
-                    "tapps_quick_check",
-                    "invalid_input",
-                    "file_paths is empty after parsing",
-                ),
+            return error_response(
+                "tapps_quick_check", "invalid_input", "file_paths is empty after parsing"
             )
 
         settings = load_settings()
@@ -786,18 +780,15 @@ async def tapps_quick_check(
         if failure_count > 0:
             _record_call("tapps_quick_check", success=False)
 
-        return cast(
-            TappsQuickCheckResponse,
-            success_response(
-                "tapps_quick_check",
-                elapsed_ms,
-                {
-                    "files_checked": len(result_list),
-                    "all_passed": failure_count == 0,
-                    "failure_count": failure_count,
-                    "results": result_list,
-                },
-            ),
+        return success_response(
+            "tapps_quick_check",
+            elapsed_ms,
+            {
+                "files_checked": len(result_list),
+                "all_passed": failure_count == 0,
+                "failure_count": failure_count,
+                "results": result_list,
+            },
         )
 
     # --- Single-file mode (original behavior) ---
@@ -805,10 +796,7 @@ async def tapps_quick_check(
         resolved = _validate_file_path(file_path)
     except (ValueError, FileNotFoundError) as exc:
         _record_call("tapps_quick_check", success=False)
-        return cast(
-            TappsQuickCheckResponse,
-            error_response("tapps_quick_check", "path_denied", str(exc)),
-        )
+        return error_response("tapps_quick_check", "path_denied", str(exc))
 
     # STORY-101.1 — SHA-256 content-hash cache. Safe to consult for
     # read-only runs; skipped when ``fix=True`` since fix mutates the file.
@@ -844,22 +832,15 @@ async def tapps_quick_check(
                 resp = success_response("tapps_quick_check", elapsed_ms, hit_data)
                 if cached_structured is not None:
                     resp["structuredContent"] = cached_structured
-                return cast(
-                    TappsQuickCheckResponse,
-                    _with_nudges(
-                        "tapps_quick_check",
-                        resp,
-                        {
-                            "gate_passed": cached_gate_passed,
-                            "security_passed": cached_security_passed,
-                            "overall_score": round(
-                                float(cached.get("overall_score", 0.0)), 2
-                            ),
-                            "security_issue_count": int(
-                                cached.get("security_issue_count", 0)
-                            ),
-                        },
-                    ),
+                return _with_nudges(
+                    "tapps_quick_check",
+                    resp,
+                    {
+                        "gate_passed": cached_gate_passed,
+                        "security_passed": cached_security_passed,
+                        "overall_score": round(float(cached.get("overall_score", 0.0)), 2),
+                        "security_issue_count": int(cached.get("security_issue_count", 0)),
+                    },
                 )
         except (OSError, FileNotFoundError):
             cache_key = None
@@ -872,14 +853,11 @@ async def tapps_quick_check(
     scorer = _get_scorer_for_file(resolved)
     if scorer is None:
         _record_call("tapps_quick_check", success=False)
-        return cast(
-            TappsQuickCheckResponse,
-            error_response(
-                "tapps_quick_check",
-                "unsupported_language",
-                f"File extension not supported for scoring: {resolved.suffix}. "
-                "Supported: .py, .pyi, .ts, .tsx, .js, .jsx, .mjs, .cjs, .go, .rs",
-            ),
+        return error_response(
+            "tapps_quick_check",
+            "unsupported_language",
+            f"File extension not supported for scoring: {resolved.suffix}. "
+            "Supported: .py, .pyi, .ts, .tsx, .js, .jsx, .mjs, .cjs, .go, .rs",
         )
 
     is_python = scorer.language == "python"
@@ -910,20 +888,14 @@ async def tapps_quick_check(
         except Exception as exc:
             logger.error("quick_check_failed", file_path=str(resolved), error=str(exc))
             _record_call("tapps_quick_check", success=False)
-            return cast(
-                TappsQuickCheckResponse,
-                error_response("tapps_quick_check", "scoring_failed", str(exc)),
-            )
+            return error_response("tapps_quick_check", "scoring_failed", str(exc))
     else:
         try:
             score_result = await score_coro
         except Exception as exc:
             logger.error("quick_check_failed", file_path=str(resolved), error=str(exc))
             _record_call("tapps_quick_check", success=False)
-            return cast(
-                TappsQuickCheckResponse,
-                error_response("tapps_quick_check", "scoring_failed", str(exc)),
-            )
+            return error_response("tapps_quick_check", "scoring_failed", str(exc))
 
         from tapps_mcp.security.security_scanner import SecurityScanResult
 
@@ -1001,18 +973,15 @@ async def tapps_quick_check(
             cache_payload["__structured_content__"] = resp["structuredContent"]
         _chc.set(_chc.KIND_QUICK_CHECK, cache_key, cache_payload)
 
-    return cast(
-        TappsQuickCheckResponse,
-        _with_nudges(
-            "tapps_quick_check",
-            resp,
-            {
-                "gate_passed": gate_result.passed,
-                "security_passed": sec_result.passed,
-                "overall_score": round(score_result.overall_score, 2),
-                "security_issue_count": sec_result.total_issues,
-            },
-        ),
+    return _with_nudges(
+        "tapps_quick_check",
+        resp,
+        {
+            "gate_passed": gate_result.passed,
+            "security_passed": sec_result.passed,
+            "overall_score": round(score_result.overall_score, 2),
+            "security_issue_count": sec_result.total_issues,
+        },
     )
 
 
