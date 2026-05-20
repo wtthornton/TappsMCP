@@ -26,13 +26,14 @@ import dataclasses
 import time
 from collections.abc import Callable
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, cast
 
 import structlog
 from mcp.server.fastmcp import Context
 from mcp.types import ToolAnnotations
 
 from tapps_core.config.settings import load_settings
+from tapps_mcp.common.output_schemas import TappsSessionStartResponse
 from tapps_mcp.server_helpers import (
     collect_session_hive_status,
     emit_ctx_info,
@@ -533,7 +534,7 @@ async def tapps_session_start(
     project_root: str = "",
     quick: bool = False,
     force: bool = False,
-) -> dict[str, Any]:
+) -> TappsSessionStartResponse:
     """Bootstraps project context: server info, installed checkers, brain
     auth, memory status, cache health, install-drift, and pipeline
     progress for the current task.
@@ -584,7 +585,7 @@ async def tapps_session_start(
             data["cached"] = True
             data["elapsed_ms"] = elapsed_ms
             resp["data"] = data
-            return resp
+            return cast(TappsSessionStartResponse, resp)
 
     try:
         from tapps_mcp.tools.checklist import CallTracker
@@ -597,7 +598,7 @@ async def tapps_session_start(
     if quick:
         resp = await _session_start_quick(start, _record_execution, _with_nudges)
         _SESSION_START_CACHE[_session_start_cache_key(True)] = resp
-        return resp
+        return cast(TappsSessionStartResponse, resp)
 
     settings = load_settings()
     (
@@ -653,7 +654,7 @@ async def tapps_session_start(
     # actionable.
     auth_failure_response = _detect_brain_auth_failure(settings, memory_status, elapsed_ms)
     if auth_failure_response is not None:
-        return auth_failure_response
+        return cast(TappsSessionStartResponse, auth_failure_response)
 
     # TAP-1414: Surface ruff/mypy missing on Python projects as a loud warning.
     degraded_checkers, degraded_warning = _ssc.compute_python_degraded_checkers(
@@ -687,7 +688,7 @@ async def tapps_session_start(
     # TAP-1379: memoize the full response so subsequent same-process calls
     # (without force=True) return instantly from cache.
     _SESSION_START_CACHE[_session_start_cache_key(False)] = resp
-    return resp
+    return cast(TappsSessionStartResponse, resp)
 
 
 async def _session_start_quick(

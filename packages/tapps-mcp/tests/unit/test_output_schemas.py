@@ -21,6 +21,8 @@ from tapps_mcp.common.output_schemas import (
     SecurityScanOutput,
     SessionStartOutput,
     StructuredOutput,
+    TappsSessionStartResponse,
+    ToolError,
     ValidateChangedOutput,
     ValidateConfigOutput,
     get_output_schema,
@@ -867,3 +869,93 @@ class TestSessionStartOutput:
         assert output.has_ci is False
         assert output.has_docker is False
         assert output.has_tests is False
+
+
+# ---------------------------------------------------------------------------
+# Phase B envelope response models — FastMCP advertises outputSchema
+# in ``tools/list`` for these. Each test asserts the schema is non-empty and
+# that the actual handler dict validates against the model with extras
+# preserved.
+# ---------------------------------------------------------------------------
+
+
+class TestTappsSessionStartResponse:
+    """B1 — outputSchema for ``tapps_session_start``."""
+
+    def test_input_and_output_schema_both_nonempty(self) -> None:
+        """FastMCP registers both inputSchema and outputSchema for the tool."""
+        from mcp.server.fastmcp.tools.base import Tool
+
+        from tapps_mcp.server_pipeline_tools import tapps_session_start
+
+        tool = Tool.from_function(tapps_session_start)
+        assert tool.parameters, "inputSchema must be non-empty"
+        assert tool.parameters.get("properties"), "inputSchema must declare properties"
+        assert tool.output_schema is not None, "outputSchema must be declared"
+        props = tool.output_schema.get("properties", {})
+        assert "success" in props
+        assert "data" in props
+        assert "error" in props
+        # Permissive envelope: additional fields (next_steps, warnings, ...)
+        # must be allowed so the response payload is preserved.
+        assert tool.output_schema.get("additionalProperties") is True
+
+    def test_validates_real_envelope_shape_with_extras_preserved(self) -> None:
+        """The model accepts the full envelope dict and preserves unknown fields."""
+        envelope = {
+            "tool": "tapps_session_start",
+            "success": True,
+            "elapsed_ms": 42,
+            "data": {
+                "project_root": ".",
+                "server": {"name": "TappsMCP", "version": "3.10.18"},
+                "configuration": {"project_root": ".", "quality_preset": "standard"},
+                "installed_checkers": [{"name": "ruff", "available": True}],
+                "checker_environment": "mcp_server",
+                "next_steps": ["Call tapps_lookup_docs()"],  # extra inside data
+            },
+            "next_steps": ["NEXT: ..."],  # extra at envelope level
+            "warnings": ["foo"],
+        }
+        model = TappsSessionStartResponse.model_validate(envelope)
+        dumped = model.model_dump(mode="json")
+        assert dumped["success"] is True
+        assert dumped["data"]["server"]["version"] == "3.10.18"
+        # Extras preserved both at envelope and inside data:
+        assert dumped["next_steps"] == ["NEXT: ..."]
+        assert dumped["warnings"] == ["foo"]
+        assert dumped["data"]["next_steps"] == ["Call tapps_lookup_docs()"]
+
+    def test_validates_error_envelope_shape(self) -> None:
+        """The same model accepts error envelopes (success=False, error block)."""
+        envelope = {
+            "tool": "tapps_session_start",
+            "success": False,
+            "elapsed_ms": 0,
+            "error": {
+                "code": "brain_auth_failed",
+                "message": "tapps-brain auth probe returned HTTP 401",
+                "category": "external",
+                "retryable": False,
+                "remediation": "Set TAPPS_BRAIN_AUTH_TOKEN",
+            },
+        }
+        model = TappsSessionStartResponse.model_validate(envelope)
+        assert model.success is False
+        assert model.error is not None
+        assert model.error.code == "brain_auth_failed"
+        assert model.data is None
+
+    def test_tool_error_allows_extras(self) -> None:
+        """ToolError.extra fields (e.g. http_status, token_state) survive."""
+        err = ToolError.model_validate(
+            {
+                "code": "brain_auth_failed",
+                "message": "...",
+                "http_status": 401,
+                "token_state": "present",
+            }
+        )
+        dumped = err.model_dump()
+        assert dumped["http_status"] == 401
+        assert dumped["token_state"] == "present"

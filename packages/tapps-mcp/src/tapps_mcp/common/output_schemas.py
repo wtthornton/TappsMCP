@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 
 class StructuredOutput(BaseModel):
@@ -255,6 +255,66 @@ class SessionStartOutput(StructuredOutput):
     has_ci: bool = False
     has_docker: bool = False
     has_tests: bool = False
+
+
+# ---------------------------------------------------------------------------
+# Envelope response models (Phase B — declared outputSchema on tools/list)
+# ---------------------------------------------------------------------------
+#
+# These wrap the standard TappsMCP response envelope so the FastMCP layer can
+# advertise an outputSchema for each high-traffic tool. ``extra="allow"``
+# preserves dynamic fields (e.g. ``next_steps``, ``warnings``, tool-specific
+# diagnostics) that aren't enumerated here, so the response payload is
+# unchanged byte-for-byte while the catalog now carries a schema agents can
+# read at tool-selection time.
+#
+# Per-tool models capture ONLY the response fields an agent typically branches
+# on (success, error code, a handful of data fields the docs reference). The
+# rest is admitted by ``extra="allow"`` without enforcement.
+
+
+class ToolError(BaseModel):
+    """Standard error block emitted by ``server_helpers.error_response``."""
+
+    model_config = ConfigDict(extra="allow")
+
+    code: str
+    message: str
+    category: str | None = None
+    retryable: bool | None = None
+    remediation: str | None = None
+
+
+class _ToolEnvelope(BaseModel):
+    """Common envelope fields shared by every TappsMCP tool response."""
+
+    model_config = ConfigDict(extra="allow")
+
+    tool: str
+    success: bool
+    elapsed_ms: int
+    error: ToolError | None = None
+    degraded: bool | None = None
+
+
+class SessionStartData(BaseModel):
+    """Fields from ``tapps_session_start.data`` that agents typically branch on."""
+
+    model_config = ConfigDict(extra="allow")
+
+    project_root: str | None = None
+    server: dict[str, Any] | None = None
+    configuration: dict[str, Any] | None = None
+    installed_checkers: list[dict[str, Any]] = Field(default_factory=list)
+    checker_environment: str | None = None
+    cached: bool = False
+
+
+class TappsSessionStartResponse(_ToolEnvelope):
+    """Output schema for ``tapps_session_start`` (B1)."""
+
+    tool: str = "tapps_session_start"
+    data: SessionStartData | None = None
 
 
 # Registry for looking up output schema by tool name.
