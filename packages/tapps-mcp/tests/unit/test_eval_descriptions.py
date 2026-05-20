@@ -9,9 +9,11 @@ not unit tests, because it requires OAuth + the live MCP catalog.
 from __future__ import annotations
 
 import importlib.util
+import subprocess
 import sys
 from pathlib import Path
 from typing import TYPE_CHECKING
+from unittest.mock import patch
 
 import pytest
 
@@ -180,6 +182,60 @@ class TestBuildSummary:
         assert s["by_verdict"]["wrong"] == 1
         assert s["accuracy_strict"] == 0.5
         assert s["accuracy_lenient"] == 0.75
+
+
+class TestScenarioTimeoutAndPrewarm:
+    """Phase A harness changes — generous timeout + MCP pre-warm hook."""
+
+    def test_scenario_timeout_is_240s(self, run_mod) -> None:
+        # Cold-start MCP + uv venv can spend 30-50s; 120s was too tight and
+        # produced 4 timeouts per side in the baseline run. 240s gives headroom.
+        assert run_mod._SCENARIO_TIMEOUT_SECONDS == 240
+
+    def test_prewarm_timeout_is_bounded(self, run_mod) -> None:
+        # Pre-warm timing out is not fatal, but it must be bounded so a hung
+        # MCP server doesn't block the eval indefinitely.
+        assert 60 <= run_mod._PREWARM_TIMEOUT_SECONDS <= 240
+
+    def test_prewarm_skips_when_no_mcp_config(self, run_mod, tmp_path) -> None:
+        # With no MCP config we have nothing to warm — function returns 0
+        # without spawning any subprocess.
+        with patch.object(run_mod.subprocess, "run") as mock_run:
+            elapsed = run_mod.prewarm_mcp(None, tmp_path)
+        assert elapsed == 0
+        mock_run.assert_not_called()
+
+    def test_prewarm_invokes_claude_p_with_mcp_config(
+        self, run_mod, tmp_path,
+    ) -> None:
+        mcp_config = tmp_path / ".mcp.json"
+        mcp_config.write_text("{}", encoding="utf-8")
+        with patch.object(run_mod.subprocess, "run") as mock_run:
+            mock_run.return_value = subprocess.CompletedProcess(
+                args=[], returncode=0, stdout="", stderr="",
+            )
+            run_mod.prewarm_mcp(mcp_config, tmp_path)
+        assert mock_run.called
+        cmd = mock_run.call_args.args[0]
+        assert cmd[0] == "claude"
+        assert "--strict-mcp-config" in cmd
+        assert "--mcp-config" in cmd
+        assert str(mcp_config) in cmd
+        # Must use the same disallowed-tools set as real scenarios so a
+        # pre-warm cannot accidentally do useful work that skews timing.
+        for builtin in run_mod._DISALLOWED_BUILTINS:
+            assert builtin in cmd
+
+    def test_prewarm_swallows_timeout(self, run_mod, tmp_path) -> None:
+        mcp_config = tmp_path / ".mcp.json"
+        mcp_config.write_text("{}", encoding="utf-8")
+        with patch.object(run_mod.subprocess, "run") as mock_run:
+            mock_run.side_effect = subprocess.TimeoutExpired(
+                cmd=["claude"], timeout=run_mod._PREWARM_TIMEOUT_SECONDS,
+            )
+            # Must not raise — a timed-out pre-warm is best-effort.
+            elapsed = run_mod.prewarm_mcp(mcp_config, tmp_path)
+        assert elapsed >= 0
 
 
 class TestSafeRefLabel:

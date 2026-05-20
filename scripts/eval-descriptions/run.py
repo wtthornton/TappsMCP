@@ -43,8 +43,15 @@ SCENARIOS_PATH = Path(__file__).resolve().parent / "scenarios.yaml"
 # (TodoWrite is kept allowed — we want the agent free to plan internally.)
 _DISALLOWED_BUILTINS = ["Edit", "Write", "Bash", "NotebookEdit", "WebFetch", "WebSearch"]
 
-# How long a single scenario is allowed to run before we kill it.
-_SCENARIO_TIMEOUT_SECONDS = 120
+# How long a single scenario is allowed to run before we kill it. Cold-start
+# can spend 30-50s on MCP server spawn + uv venv resolution; 240s leaves
+# headroom for that plus the agent step without inflating the noise floor.
+_SCENARIO_TIMEOUT_SECONDS = 240
+
+# Cap on the pre-warm dummy invocation. Pre-warm timing-out is not fatal —
+# it just means the first real scenario eats whatever latency we tried to
+# absorb. Set generously so the warm-up genuinely completes one MCP handshake.
+_PREWARM_TIMEOUT_SECONDS = 120
 
 _SYSTEM_PROMPT = """\
 You are an evaluator for the tapps-mcp tool catalog. Your job is to pick \
@@ -206,6 +213,53 @@ def run_scenario(
     )
 
 
+def prewarm_mcp(mcp_config: Path | None, cwd: Path) -> int:
+    """Spawn one throwaway `claude -p` invocation to warm MCP servers before
+    the timed scenario loop.
+
+    `claude -p` re-spawns each MCP server on every invocation, but the
+    uv-managed venv, Python `.pyc` bytecode cache, and OS filesystem cache
+    persist across invocations within the same worktree. Pre-warming pulls
+    those one-time costs out of the first real scenario's 240s budget,
+    cutting cold-start timeouts to near-zero.
+
+    The dummy prompt is intentionally trivial ("ping") and built-in tools
+    are disallowed so the agent cannot accidentally do useful work that
+    would skew downstream scenarios.
+
+    Returns elapsed milliseconds (best-effort, capped at the timeout).
+    """
+    if mcp_config is None:
+        return 0
+    cmd: list[str] = [
+        "claude",
+        "-p",
+        "ping",
+        "--output-format=stream-json",
+        "--no-session-persistence",
+        "--dangerously-skip-permissions",
+        "--disallowed-tools",
+        *_DISALLOWED_BUILTINS,
+        "--strict-mcp-config",
+        "--mcp-config",
+        str(mcp_config),
+        "--verbose",
+    ]
+    start = time.perf_counter()
+    try:
+        subprocess.run(  # nosec B603 — explicit `claude` args, no shell.
+            cmd,
+            cwd=cwd,
+            capture_output=True,
+            text=True,
+            timeout=_PREWARM_TIMEOUT_SECONDS,
+            check=False,
+        )
+    except subprocess.TimeoutExpired:
+        pass
+    return int((time.perf_counter() - start) * 1000)
+
+
 _VERDICT_COLORS: dict[str, str] = {
     "exact": "\033[32m",       # green
     "acceptable": "\033[33m",  # yellow
@@ -303,6 +357,11 @@ def main() -> int:
     raw_dir.mkdir(parents=True, exist_ok=True)
     mcp_hint = f" with MCP config {args.mcp_config}" if args.mcp_config else ""
     print(f"Running {len(scenarios)} scenarios against {args.cwd}{mcp_hint}...", file=sys.stderr)
+
+    if args.mcp_config is not None:
+        print("  Pre-warming MCP servers (dummy `claude -p ping`)...", file=sys.stderr)
+        warm_ms = prewarm_mcp(args.mcp_config, args.cwd)
+        print(f"  Pre-warm done in {warm_ms}ms.", file=sys.stderr)
 
     results: list[ScenarioResult] = []
     for i, scenario in enumerate(scenarios, 1):
