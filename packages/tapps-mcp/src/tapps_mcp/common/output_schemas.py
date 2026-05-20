@@ -317,6 +317,37 @@ class TappsSessionStartResponse(_ToolEnvelope):
     data: SessionStartData | None = None
 
 
+class QuickCheckData(BaseModel):
+    """Fields agents typically branch on from ``tapps_quick_check.data``.
+
+    Covers both single-file mode (``gate_passed`` / ``security_passed`` /
+    ``overall_score``) and batch mode (``all_passed`` / ``failure_count`` /
+    ``files_checked`` / ``results``). All fields optional + extras allowed.
+    """
+
+    model_config = ConfigDict(extra="allow")
+
+    # Single-file mode
+    file_path: str | None = None
+    overall_score: float | None = None
+    gate_passed: bool | None = None
+    security_passed: bool | None = None
+    lint_issue_count: int | None = None
+    security_issue_count: int | None = None
+    # Batch mode
+    files_checked: int | None = None
+    all_passed: bool | None = None
+    failure_count: int | None = None
+    results: list[dict[str, Any]] | None = None
+
+
+class TappsQuickCheckResponse(_ToolEnvelope):
+    """Output schema for ``tapps_quick_check`` (B2)."""
+
+    tool: str = "tapps_quick_check"
+    data: QuickCheckData | None = None
+
+
 # Registry for looking up output schema by tool name.
 #
 # DISABLED (v0.4.1): The MCP SDK validates the full return dict against the
