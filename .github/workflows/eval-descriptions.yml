@@ -74,6 +74,23 @@ jobs:
           echo "head_ref=$head_ref" >> "$GITHUB_OUTPUT"
           echo "base_ref=$base_ref" >> "$GITHUB_OUTPUT"
 
+      - name: Write CI .mcp.json (gitignored on dev machines; minimal here)
+        run: |
+          cat > .mcp.json <<'EOF'
+          {
+            "mcpServers": {
+              "tapps-mcp": {
+                "type": "stdio",
+                "command": "uv",
+                "args": ["run", "tapps-mcp", "serve"],
+                "env": {
+                  "TAPPS_MCP_PROJECT_ROOT": "."
+                }
+              }
+            }
+          }
+          EOF
+
       - name: Run A/B (--backend=api)
         env:
           EVAL_BACKEND: api
