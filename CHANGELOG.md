@@ -9,6 +9,58 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **`feat(eval): description-eval harness Phase B + Phase C (CI gate)`.**
+  Phase B per-tool outputSchema A/Bs ran for B1 `tapps_session_start`
+  (KEEP, +4.2pt strict / +8.3pt lenient at HEAD `30149b1`), B2
+  `tapps_quick_check` (revert, 0.0pt), and B3 `tapps_validate_changed`
+  (reverted — A/B was corrupted by Claude CLI Max-plan rate limiting
+  mid-run; raw transcripts at `/tmp/eval-HEAD-raw/*.jsonl` contain
+  `"type":"rate_limit_event"`). Phase B halted at B3 per the brief's
+  "NEGATIVE cumulative → STOP" rule; B4–B8 deferred. Rollup at
+  [`docs/benchmarks/2026-05-outputschema-rollup.md`](docs/benchmarks/2026-05-outputschema-rollup.md)
+  documents the per-tool results plus the corpus-resolution caveat
+  (24 scenarios + ±4pt noise floor + 1 scenario per tool = per-tool
+  signal-to-noise of zero; B1's improvements were both in
+  non-B1-targeted scenarios, so attribution is honestly "variance").
+
+  Phase C lands the CI infrastructure that sidesteps the Max-plan rate
+  limit. New `--backend=api` mode in [`scripts/eval-descriptions/run.py`](scripts/eval-descriptions/run.py)
+  lazy-imports the `anthropic` SDK, spawns the tapps-mcp stdio server,
+  lists its tool catalog (names prefixed `mcp__tapps-mcp__` to match
+  `scenarios.yaml`), and calls `messages.create()` per scenario with
+  `tools=`. Forwards through [`compare.py`](scripts/eval-descriptions/compare.py)
+  via `--backend=api --model=<override>`. Default model
+  `claude-sonnet-4-6`; cost ~$1 per 48-scenario A/B. The Messages API
+  tool format does NOT carry `outputSchema`, so the API backend
+  measures description quality only — outputSchema effects need the
+  CLI backend or a future MCP-passthrough variant.
+
+  New workflow [`.github/workflows/eval-descriptions.yml`](.github/workflows/eval-descriptions.yml)
+  runs the A/B (`HEAD^^` → push HEAD) on every push to master via the
+  API backend, posts the strict-accuracy delta via
+  `::notice title=Tool-description eval`, and fails the workflow when
+  the delta is ≤ -2pt. **Manual setup required:** add
+  `ANTHROPIC_API_KEY` to repository secrets and set the
+  `ENABLE_EVAL_DESCRIPTIONS` repository variable to `true`; without
+  the variable, the job is skipped entirely (no-op). `anthropic>=0.40`
+  added to `[tool.uv.dev-dependencies]` in [`pyproject.toml`](pyproject.toml);
+  `uv sync --all-packages` picks it up.
+
+- **`feat(mcp): outputSchema on tapps_session_start` (B1, commit `30149b1`).**
+  Permissive Pydantic envelope (`extra="allow"`) declared as the
+  handler's return annotation so FastMCP advertises an `outputSchema`
+  for `tapps_session_start` in `tools/list`. Captures the envelope
+  fields agents typically branch on (`success`, `error.code`,
+  `data.server`, `data.installed_checkers`, `data.cached`); admits the
+  full envelope's dynamic fields (`next_steps`, `warnings`,
+  diagnostics blocks) without enforcement so the response payload is
+  unchanged byte-for-byte. Unit tests in
+  [`TestTappsSessionStartResponse`](packages/tapps-mcp/tests/unit/test_output_schemas.py)
+  assert the schema is non-empty and that both success and error
+  envelopes round-trip with extras preserved. B1's +4.2pt A/B result
+  is at the Phase A ±4pt noise floor and the improved scenarios were
+  not B1-targeted — see the rollup for honest attribution.
+
 - **`feat(eval): description-eval harness Phase A — 0-error noise floor` (v3.10.18, commit `962514a`).** `_SCENARIO_TIMEOUT_SECONDS` raised 120s → 240s in [`scripts/eval-descriptions/run.py`](scripts/eval-descriptions/run.py) to absorb the 30–50s MCP cold-start that was killing 4 scenarios per side in the original baseline. New `prewarm_mcp()` runs one throwaway `claude -p "ping"` per worktree before the timed loop, pulling uv-venv resolution + Python `.pyc` cache + first MCP handshake out of the first real scenario's budget. Bounded at 120s; pre-warm timeouts are swallowed (best-effort, never fatal). **Result on the cc1d340^ → HEAD A/B:** 0 errors / 0 timeouts per side (down from 4+4 in the original run). The "Error-introduced" + "Error-recovered" noise buckets from the [2026-05-19 report](docs/benchmarks/2026-05-19-description-eval.md) are now empty — every scenario produces a real verdict, see [`docs/benchmarks/2026-05-20-description-eval.md`](docs/benchmarks/2026-05-20-description-eval.md). Residual LLM-level run-to-run variance remains (`decompose_vague_task` flipping between exact and no_tool across runs), so future per-tool A/B comparisons should use ≥2pt deltas as the kept-vs-reverted threshold, not 1pt. Test coverage in [`TestScenarioTimeoutAndPrewarm`](packages/tapps-mcp/tests/unit/test_eval_descriptions.py) covers both knobs.
 - **`fix(descriptions): restore release_update direct-call trigger + strengthen decompose triggers` (commit `4c11f2f`).** The original 2026-05-19 baseline surfaced 1 true regression (`release_update_announce`: baseline=exact → HEAD=no_tool) and 1 stable failure across both versions (`decompose_vague_task`: no_tool on both sides) — both targeted by this fix. `release_update_announce` recovered to `exact` on HEAD; `decompose_vague_task` got an `exact` in one post-fix run and a `no_tool` in another (LLM-level variance, not description-quality).
 - **`feat(eval): tool-description eval harness under scripts/eval-descriptions/`.** Greenfield harness that measures tool-selection accuracy of the live tapps-mcp MCP catalog via `claude -p --output-format=stream-json --strict-mcp-config` — Claude Code OAuth handles auth (no `ANTHROPIC_API_KEY` plumbing), Max plan covers cost. Each scenario in [`scenarios.yaml`](scripts/eval-descriptions/scenarios.yaml) (26 scenarios across 11 categories) is a user-intent prompt; the harness captures the first MCP `tool_use` event and scores against `expected_tool` + `acceptable_alternatives`. [`compare.py`](scripts/eval-descriptions/compare.py) A/B's two git refs via `git worktree` + `uv sync --all-packages` per ref. [`report.py`](scripts/eval-descriptions/report.py) emits a Markdown report with raw + noise-adjusted numbers (the latter excludes scenarios that errored on either side — typically 120s MCP cold-start timeouts that are orthogonal to description quality). 26 unit tests in [`test_eval_descriptions.py`](packages/tapps-mcp/tests/unit/test_eval_descriptions.py) cover the pure-logic functions (parsing, scoring, diffing); the Claude-CLI flow is exercised by manual runs, not unit tests.

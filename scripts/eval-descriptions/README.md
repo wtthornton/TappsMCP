@@ -33,8 +33,11 @@ For each scenario in `scenarios.yaml`, the harness:
 ## Usage
 
 ```bash
-# A/B compare a description change
+# A/B compare a description change (CLI backend, Max-plan OAuth)
 python3 scripts/eval-descriptions/compare.py cc1d340^ HEAD
+
+# A/B compare using the Anthropic API directly (rate-limit-immune, CI backend)
+ANTHROPIC_API_KEY=sk-ant-... python3 scripts/eval-descriptions/compare.py cc1d340^ HEAD --backend=api
 
 # Smoke test (3 scenarios, HEAD only)
 python3 scripts/eval-descriptions/run.py \
@@ -44,6 +47,26 @@ python3 scripts/eval-descriptions/run.py \
 # Re-render report from existing JSON
 python3 scripts/eval-descriptions/compare.py cc1d340^ HEAD --skip-run
 ```
+
+## Backends
+
+| Backend | Auth | Rate limit | Best for |
+|---|---|---|---|
+| `--backend=cli` (default) | Claude CLI OAuth (Max plan) | ~130 calls/hour | Local-dev runs |
+| `--backend=api` | `ANTHROPIC_API_KEY` env var | Per-API-key quota | CI, large A/B campaigns, rate-limit recovery |
+
+`--backend=api` lazy-imports the `anthropic` Python SDK (a dev dep — run
+`uv sync --all-packages` to install). It spawns the tapps-mcp stdio
+server once per ref, lists its tool catalog, and calls
+`messages.create()` per scenario with the catalog passed as `tools=`.
+Tool names are prefixed with `mcp__tapps-mcp__` so scenarios.yaml
+`expected_tool` values match without modification. The Anthropic
+Messages API tool format does NOT include `outputSchema`, so this
+backend measures description quality only — not outputSchema effects.
+
+Default model for the API backend is `claude-sonnet-4-6`; override
+with `--model`. Cost is ~$0.01–0.03 per scenario at Sonnet 4.6
+(~$1 per 48-scenario A/B).
 
 ## Adding a scenario
 

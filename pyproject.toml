@@ -28,6 +28,9 @@ dev-dependencies = [
     "tree-sitter-go>=0.23.4,<1",
     "tree-sitter-rust>=0.23.2,<1",
     "tree-sitter-java>=0.23.5,<1",
+    # eval-descriptions harness --backend=api (Phase C). Lazy-imported by
+    # scripts/eval-descriptions/run.py; not a runtime dep of any package.
+    "anthropic>=0.40,<1",
 ]
 
 [tool.ruff]

@@ -5,8 +5,18 @@ For each scenario in scenarios.yaml, invokes a fresh `claude -p` agent
 with the live MCP tool catalog loaded, parses the stream-json output to
 find the first MCP tool call, and scores against the expected tool.
 
-Uses Claude CLI for auth (OAuth) and cost (subscription / Max plan).
-No ANTHROPIC_API_KEY plumbing required.
+Two backends:
+
+* ``--backend=cli`` (default): subprocess ``claude -p`` per scenario. Uses
+  Claude CLI OAuth (Max-plan subscription); no ``ANTHROPIC_API_KEY``
+  required, but subject to the Max-plan rate limit (~130 calls per hour
+  window). Local-dev default.
+* ``--backend=api``: Anthropic Messages API directly via the ``anthropic``
+  Python SDK (lazy-imported). Spawns one tapps-mcp stdio session per run,
+  lists tools, and calls ``messages.create()`` with ``tools=`` per
+  scenario. Needs ``ANTHROPIC_API_KEY``. Bills per-token (~$0.01–0.03 per
+  scenario at Sonnet 4.6). Rate-limit-immune; this is the CI backend
+  ([.github/workflows/eval-descriptions.yml](../../.github/workflows/eval-descriptions.yml)).
 
 Usage:
     # Run against current tree, write results to /tmp/eval-HEAD.json
@@ -18,13 +28,18 @@ Usage:
     # Custom MCP config (e.g., for a baseline worktree)
     python3 scripts/eval-descriptions/run.py --mcp-config /path/to/baseline/.mcp.json
 
+    # CI backend (Anthropic API, needs ANTHROPIC_API_KEY)
+    python3 scripts/eval-descriptions/run.py --backend=api --output /tmp/eval-HEAD.json
+
 The output JSON shape is consumed by compare.py and report.py.
 """
 
 from __future__ import annotations
 
 import argparse
+import asyncio
 import json
+import os
 import subprocess  # nosec B404 — we invoke `claude` with explicit, hard-coded args.
 import sys
 import tempfile
@@ -260,6 +275,188 @@ def prewarm_mcp(mcp_config: Path | None, cwd: Path) -> int:
     return int((time.perf_counter() - start) * 1000)
 
 
+# ---------------------------------------------------------------------------
+# API backend (Anthropic Messages API direct)
+# ---------------------------------------------------------------------------
+
+# Default model for ``--backend=api``. Sonnet 4.6 is the right cost/quality
+# point for first-call selection: comparable selection accuracy to Opus on
+# this corpus at ~10x lower per-token cost.
+_API_DEFAULT_MODEL = "claude-sonnet-4-6"
+
+# Per-scenario API timeout. The API is fast (typically <5s); set
+# generously so transient slow responses don't false-fail.
+_API_SCENARIO_TIMEOUT_SECONDS = 60
+
+
+def _expand_env(env_dict: dict[str, str] | None) -> dict[str, str]:
+    """Expand ``${VAR}`` references in a .mcp.json env block.
+
+    Falls back to the parent process env for unset variables (same shape as
+    Claude Code's .mcp.json substitution).
+    """
+    if not env_dict:
+        return {}
+    return {k: os.path.expandvars(v) for k, v in env_dict.items()}
+
+
+def _load_tapps_mcp_server_config(mcp_config: Path) -> dict[str, Any]:
+    """Read the tapps-mcp server entry from a .mcp.json."""
+    with mcp_config.open(encoding="utf-8") as f:
+        cfg = json.load(f)
+    servers = cfg.get("mcpServers", {})
+    server = servers.get("tapps-mcp")
+    if server is None:
+        raise ValueError(f"{mcp_config} has no mcpServers.tapps-mcp entry")
+    return server
+
+
+async def _run_scenarios_api(
+    scenarios: list[dict[str, Any]],
+    *,
+    mcp_config: Path,
+    cwd: Path,
+    raw_output_dir: Path,
+    model: str,
+) -> list[ScenarioResult]:
+    """Run scenarios via Anthropic Messages API (rate-limit-immune backend).
+
+    Spawns one tapps-mcp stdio session, lists its tools, and calls
+    ``messages.create()`` per scenario with the catalog. Captures the
+    first ``tool_use`` block as the agent's choice. Tool names are
+    prefixed with ``mcp__tapps-mcp__`` so they match ``scenarios.yaml``
+    ``expected_tool`` values without modification.
+    """
+    try:
+        from anthropic import AsyncAnthropic  # noqa: PLC0415
+        from mcp import ClientSession  # noqa: PLC0415
+        from mcp.client.stdio import StdioServerParameters, stdio_client  # noqa: PLC0415
+    except ImportError as exc:  # pragma: no cover
+        raise RuntimeError(
+            "--backend=api requires the `anthropic` and `mcp` Python SDKs. "
+            "Run `uv sync --all-packages` (anthropic is in [tool.uv.dev-dependencies])."
+        ) from exc
+
+    server_cfg = _load_tapps_mcp_server_config(mcp_config)
+    server_params = StdioServerParameters(
+        command=server_cfg["command"],
+        args=list(server_cfg.get("args", [])),
+        env={**os.environ, **_expand_env(server_cfg.get("env"))},
+        cwd=str(cwd),
+    )
+
+    anthropic_client = AsyncAnthropic()
+
+    async with stdio_client(server_params) as (read, write):
+        async with ClientSession(read, write) as mcp_client:
+            await mcp_client.initialize()
+            tools_result = await mcp_client.list_tools()
+
+            api_tools: list[dict[str, Any]] = [
+                {
+                    "name": f"mcp__tapps-mcp__{t.name}",
+                    "description": t.description or "",
+                    "input_schema": t.inputSchema,
+                }
+                for t in tools_result.tools
+            ]
+            print(
+                f"  API backend: loaded {len(api_tools)} tools from tapps-mcp catalog",
+                file=sys.stderr,
+            )
+
+            results: list[ScenarioResult] = []
+            for i, scenario in enumerate(scenarios, 1):
+                r = await _run_scenario_api(
+                    scenario,
+                    anthropic_client=anthropic_client,
+                    api_tools=api_tools,
+                    raw_output_dir=raw_output_dir,
+                    model=model,
+                )
+                _print_progress(i, len(scenarios), scenario["id"], r)
+                results.append(r)
+            return results
+
+
+async def _run_scenario_api(
+    scenario: dict[str, Any],
+    *,
+    anthropic_client: Any,
+    api_tools: list[dict[str, Any]],
+    raw_output_dir: Path,
+    model: str,
+) -> ScenarioResult:
+    """Run a single scenario via ``messages.create()``; score the first tool_use."""
+    sid = scenario["id"]
+    prompt = scenario["prompt"]
+    expected = scenario["expected_tool"]
+    alternatives = scenario.get("acceptable_alternatives") or []
+    category = scenario.get("category", "uncategorized")
+
+    start = time.perf_counter()
+    raw_path = raw_output_dir / f"{sid}.json"
+    try:
+        response = await asyncio.wait_for(
+            anthropic_client.messages.create(
+                model=model,
+                max_tokens=512,
+                system=_SYSTEM_PROMPT,
+                messages=[{"role": "user", "content": prompt}],
+                tools=api_tools,
+            ),
+            timeout=_API_SCENARIO_TIMEOUT_SECONDS,
+        )
+    except TimeoutError:
+        return ScenarioResult(
+            scenario_id=sid,
+            category=category,
+            expected_tool=expected,
+            acceptable_alternatives=alternatives,
+            actual_tool=None,
+            verdict="error",
+            elapsed_ms=int((time.perf_counter() - start) * 1000),
+            error=f"API call exceeded {_API_SCENARIO_TIMEOUT_SECONDS}s",
+        )
+    except Exception as exc:  # noqa: BLE001 — surface any API error verbatim
+        return ScenarioResult(
+            scenario_id=sid,
+            category=category,
+            expected_tool=expected,
+            acceptable_alternatives=alternatives,
+            actual_tool=None,
+            verdict="error",
+            elapsed_ms=int((time.perf_counter() - start) * 1000),
+            error=f"{type(exc).__name__}: {str(exc)[:500]}",
+        )
+
+    elapsed_ms = int((time.perf_counter() - start) * 1000)
+    # Persist a serializable view of the response for debugging.
+    try:
+        raw_path.write_text(response.model_dump_json(indent=2), encoding="utf-8")
+    except (OSError, AttributeError):
+        pass
+
+    actual: str | None = None
+    for block in getattr(response, "content", []):
+        if getattr(block, "type", None) == "tool_use":
+            name = getattr(block, "name", "")
+            if name.startswith("mcp__"):
+                actual = name
+                break
+
+    return ScenarioResult(
+        scenario_id=sid,
+        category=category,
+        expected_tool=expected,
+        acceptable_alternatives=alternatives,
+        actual_tool=actual,
+        verdict=score(expected, alternatives, actual),
+        elapsed_ms=elapsed_ms,
+        raw_events_path=str(raw_path),
+    )
+
+
 _VERDICT_COLORS: dict[str, str] = {
     "exact": "\033[32m",       # green
     "acceptable": "\033[33m",  # yellow
@@ -291,6 +488,24 @@ def _build_arg_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--ref-label", type=str, default="",
         help="Optional label to include in results (e.g. 'HEAD', 'baseline-cc1d340').",
+    )
+    parser.add_argument(
+        "--backend",
+        type=str,
+        default="cli",
+        choices=("cli", "api"),
+        help=(
+            "cli (default): subprocess `claude -p` per scenario via Max-plan "
+            "OAuth. api: Anthropic Messages API direct (needs ANTHROPIC_API_KEY); "
+            "rate-limit-immune CI backend."
+        ),
+    )
+    parser.add_argument(
+        "--model", type=str, default=_API_DEFAULT_MODEL,
+        help=(
+            f"Model for --backend=api (default: {_API_DEFAULT_MODEL}). "
+            "Ignored for --backend=cli (uses whatever Claude CLI is configured for)."
+        ),
     )
     return parser
 
@@ -356,22 +571,55 @@ def main() -> int:
     raw_dir = args.output.parent / f"{args.output.stem}-raw"
     raw_dir.mkdir(parents=True, exist_ok=True)
     mcp_hint = f" with MCP config {args.mcp_config}" if args.mcp_config else ""
-    print(f"Running {len(scenarios)} scenarios against {args.cwd}{mcp_hint}...", file=sys.stderr)
+    print(
+        f"Running {len(scenarios)} scenarios against {args.cwd}{mcp_hint} "
+        f"(backend={args.backend})...",
+        file=sys.stderr,
+    )
 
-    if args.mcp_config is not None:
-        print("  Pre-warming MCP servers (dummy `claude -p ping`)...", file=sys.stderr)
-        warm_ms = prewarm_mcp(args.mcp_config, args.cwd)
-        print(f"  Pre-warm done in {warm_ms}ms.", file=sys.stderr)
+    if args.backend == "api":
+        if args.mcp_config is None:
+            print(
+                "--backend=api requires --mcp-config (used to spawn the "
+                "tapps-mcp stdio server for tool catalog discovery).",
+                file=sys.stderr,
+            )
+            return 1
+        if not os.environ.get("ANTHROPIC_API_KEY"):
+            print(
+                "--backend=api requires ANTHROPIC_API_KEY in the environment.",
+                file=sys.stderr,
+            )
+            return 1
+        results = asyncio.run(
+            _run_scenarios_api(
+                scenarios,
+                mcp_config=args.mcp_config,
+                cwd=args.cwd,
+                raw_output_dir=raw_dir,
+                model=args.model,
+            )
+        )
+    else:
+        if args.mcp_config is not None:
+            print("  Pre-warming MCP servers (dummy `claude -p ping`)...", file=sys.stderr)
+            warm_ms = prewarm_mcp(args.mcp_config, args.cwd)
+            print(f"  Pre-warm done in {warm_ms}ms.", file=sys.stderr)
 
-    results: list[ScenarioResult] = []
-    for i, scenario in enumerate(scenarios, 1):
-        r = run_scenario(scenario, mcp_config=args.mcp_config, cwd=args.cwd, raw_output_dir=raw_dir)
-        results.append(r)
-        _print_progress(i, len(scenarios), scenario["id"], r)
+        results = []
+        for i, scenario in enumerate(scenarios, 1):
+            r = run_scenario(
+                scenario, mcp_config=args.mcp_config, cwd=args.cwd, raw_output_dir=raw_dir
+            )
+            results.append(r)
+            _print_progress(i, len(scenarios), scenario["id"], r)
 
     summary = build_summary(
         results, ref_label=args.ref_label, cwd=args.cwd, mcp_config=args.mcp_config,
     )
+    summary["backend"] = args.backend
+    if args.backend == "api":
+        summary["model"] = args.model
     args.output.write_text(json.dumps(summary, indent=2) + "\n", encoding="utf-8")
     print(
         f"\nSummary: strict={summary['accuracy_strict']:.1%} "

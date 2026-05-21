@@ -1139,6 +1139,24 @@ If you see `ModuleNotFoundError`, run `uv sync --all-packages` first.
 
 Pre-commit hooks are configured (`.pre-commit-config.yaml`). CI runs on push/PR to `master`/`main` (lint + tests on Ubuntu, Windows, macOS x Python 3.12, 3.13).
 
+### Tool-description eval harness
+
+[`scripts/eval-descriptions/`](scripts/eval-descriptions/README.md) measures
+whether changes to tapps-mcp tool descriptions actually move tool-selection
+accuracy. Two backends:
+
+- `--backend=cli` (default): subprocess `claude -p` per scenario via Claude
+  CLI OAuth (Max plan). Rate-limited (~130 calls/hour); fine for local dev.
+- `--backend=api`: Anthropic Messages API direct via the `anthropic` Python
+  SDK (a dev dep). Needs `ANTHROPIC_API_KEY`. Rate-limit-immune.
+
+CI gate at [`.github/workflows/eval-descriptions.yml`](.github/workflows/eval-descriptions.yml)
+runs the A/B (`HEAD^^` → push HEAD) on every push to master via the API
+backend and fails the build if strict accuracy drops ≥2pt. **Manual setup
+required:** add `ANTHROPIC_API_KEY` to repository secrets and set the
+`ENABLE_EVAL_DESCRIPTIONS` repository variable to `true` to activate the
+workflow. Without the variable, the job is skipped entirely (no-op).
+
 ### Cross-platform notes
 
 TappsMCP runs on **Linux, macOS, and Windows**. Platform-specific behavior:

@@ -131,6 +131,8 @@ def run_eval(
     worktree: Path,
     output_json: Path,
     only: str = "",
+    backend: str = "cli",
+    model: str | None = None,
 ) -> dict:
     mcp_config = copy_mcp_config(worktree)
     cmd: list[str] = [
@@ -140,10 +142,13 @@ def run_eval(
         "--mcp-config", str(mcp_config),
         "--output", str(output_json),
         "--ref-label", ref,
+        "--backend", backend,
     ]
+    if model:
+        cmd.extend(["--model", model])
     if only:
         cmd.extend(["--only", only])
-    print(f"  Running eval against {ref}...", file=sys.stderr)
+    print(f"  Running eval against {ref} (backend={backend})...", file=sys.stderr)
     subprocess.run(cmd, check=True)  # nosec B603 — explicit args, no shell, no user input.
     return json.loads(output_json.read_text(encoding="utf-8"))
 
@@ -240,6 +245,21 @@ def _build_arg_parser() -> argparse.ArgumentParser:
             "docs/benchmarks/<date>-description-eval.md)."
         ),
     )
+    parser.add_argument(
+        "--backend",
+        type=str,
+        default="cli",
+        choices=("cli", "api"),
+        help=(
+            "Eval backend forwarded to run.py. cli (default): Max-plan "
+            "OAuth via Claude CLI. api: Anthropic Messages API direct "
+            "(needs ANTHROPIC_API_KEY); use for CI to sidestep rate limits."
+        ),
+    )
+    parser.add_argument(
+        "--model", type=str, default="",
+        help="Model override for --backend=api (default: run.py's default).",
+    )
     return parser
 
 
@@ -252,8 +272,11 @@ def _run_both_evals(
     base_json: Path,
     head_json: Path,
     only: str,
+    backend: str = "cli",
+    model: str = "",
 ) -> None:
     """Materialize both worktrees, sync, eval each, clean up."""
+    model_arg = model or None
     with tempfile.TemporaryDirectory(prefix="eval-wt-") as tmpdir:
         tmp = Path(tmpdir)
         base_wt = tmp / "baseline"
@@ -265,14 +288,28 @@ def _run_both_evals(
             )
             add_worktree(baseline_ref, base_wt)
             sync_uv_in_worktree(base_wt)
-            run_eval(baseline_ref, worktree=base_wt, output_json=base_json, only=only)
+            run_eval(
+                baseline_ref,
+                worktree=base_wt,
+                output_json=base_json,
+                only=only,
+                backend=backend,
+                model=model_arg,
+            )
             print(
                 f"==> Setting up head worktree at {head_wt} "
                 f"({head_ref}={head_sha})", file=sys.stderr,
             )
             add_worktree(head_ref, head_wt)
             sync_uv_in_worktree(head_wt)
-            run_eval(head_ref, worktree=head_wt, output_json=head_json, only=only)
+            run_eval(
+                head_ref,
+                worktree=head_wt,
+                output_json=head_json,
+                only=only,
+                backend=backend,
+                model=model_arg,
+            )
         finally:
             remove_worktree(base_wt)
             remove_worktree(head_wt)
@@ -310,6 +347,7 @@ def main() -> int:
             baseline_ref=args.baseline_ref, head_ref=args.head_ref,
             base_sha=base_sha, head_sha=head_sha,
             base_json=base_json, head_json=head_json, only=args.only,
+            backend=args.backend, model=args.model,
         )
 
     baseline = json.loads(base_json.read_text(encoding="utf-8"))

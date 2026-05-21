@@ -1,0 +1,101 @@
+# .github/workflows/eval-descriptions.yml
+# Phase C — CI gate on tool-description selection accuracy.
+#
+# Runs the eval-descriptions A/B between PUSH HEAD and HEAD^^ on every
+# push to master via the Anthropic Messages API (--backend=api). The
+# Claude CLI Max-plan rate limit makes the cli backend unusable in CI;
+# the api backend bills per-token on ANTHROPIC_API_KEY (~$1 per A/B at
+# Sonnet 4.6). Manual ANTHROPIC_API_KEY secret setup is required —
+# see README + CHANGELOG.
+#
+# Gate: fails the workflow when strict accuracy drops ≥2pt vs HEAD^^
+# (the Phase A noise-floor threshold; lower would be variance).
+name: tool-description eval
+
+on:
+  push:
+    branches: [main, master]
+  workflow_dispatch:
+    inputs:
+      head_ref:
+        description: "Override HEAD ref (default: $GITHUB_SHA)"
+        required: false
+        default: ""
+      baseline_ref:
+        description: "Override baseline ref (default: HEAD^^)"
+        required: false
+        default: ""
+
+permissions:
+  contents: read
+  statuses: write
+
+concurrency:
+  group: eval-descriptions-${{ github.ref }}
+  cancel-in-progress: false  # don't cancel — each push pays for its own A/B
+
+jobs:
+  ab:
+    name: A/B baseline^^ → HEAD
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    # Skip entirely if the secret hasn't been added — the workflow is a
+    # no-op until ANTHROPIC_API_KEY is wired up (manual step; see README).
+    if: ${{ vars.ENABLE_EVAL_DESCRIPTIONS == 'true' }}
+    env:
+      ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+    steps:
+      - name: Checkout (full history for A/B refs)
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v7
+
+      - name: Sync workspace
+        run: uv sync --all-packages
+
+      - name: Resolve refs
+        id: refs
+        run: |
+          head_ref="${{ github.event.inputs.head_ref || github.sha }}"
+          base_ref="${{ github.event.inputs.baseline_ref || 'HEAD^^' }}"
+          echo "head_ref=$head_ref" >> "$GITHUB_OUTPUT"
+          echo "base_ref=$base_ref" >> "$GITHUB_OUTPUT"
+
+      - name: Run A/B (--backend=api)
+        env:
+          EVAL_BACKEND: api
+        run: |
+          set -euo pipefail
+          uv run python3 scripts/eval-descriptions/compare.py \
+            "${{ steps.refs.outputs.base_ref }}" \
+            "${{ steps.refs.outputs.head_ref }}" \
+            --output /tmp/eval-ci.json \
+            --backend=api
+
+      - name: Enforce ≥2pt strict-accuracy gate
+        id: gate
+        run: |
+          set -euo pipefail
+          uv run python3 - <<'PY'
+          import json, sys
+          with open("/tmp/eval-ci.json", encoding="utf-8") as f:
+              data = json.load(f)
+          delta = data.get("accuracy_delta_strict", 0.0) * 100
+          print(f"::notice title=Tool-description eval::strict delta {delta:+.1f}pt")
+          if delta <= -2.0:
+              print(f"::error title=Tool-description eval::strict accuracy dropped {delta:+.1f}pt (>=2pt drop)")
+              sys.exit(1)
+          PY
+
+      - name: Upload comparison JSON
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: eval-descriptions-${{ github.sha }}
+          path: |
+            /tmp/eval-ci.json
+            /tmp/eval-*.json
+          retention-days: 14
