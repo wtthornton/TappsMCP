@@ -585,9 +585,19 @@ def main() -> int:
                 file=sys.stderr,
             )
             return 1
-        if not os.environ.get("ANTHROPIC_API_KEY"):
+        # Auth: prefer ANTHROPIC_AUTH_TOKEN (Max-plan OAuth bearer; same
+        # credential Claude Code uses) over ANTHROPIC_API_KEY (paid API).
+        # The anthropic SDK reads either env var automatically; we just
+        # need at least one to be present.
+        has_auth = bool(
+            os.environ.get("ANTHROPIC_AUTH_TOKEN")
+            or os.environ.get("ANTHROPIC_API_KEY")
+        )
+        if not has_auth:
             print(
-                "--backend=api requires ANTHROPIC_API_KEY in the environment.",
+                "--backend=api requires either ANTHROPIC_AUTH_TOKEN "
+                "(Max-plan OAuth, preferred) or ANTHROPIC_API_KEY "
+                "(paid API) in the environment.",
                 file=sys.stderr,
             )
             return 1

@@ -39,12 +39,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   runs the A/B (`HEAD^^` → push HEAD) on every push to master via the
   API backend, posts the strict-accuracy delta via
   `::notice title=Tool-description eval`, and fails the workflow when
-  the delta is ≤ -2pt. **Manual setup required:** add
-  `ANTHROPIC_API_KEY` to repository secrets and set the
-  `ENABLE_EVAL_DESCRIPTIONS` repository variable to `true`; without
-  the variable, the job is skipped entirely (no-op). `anthropic>=0.40`
-  added to `[tool.uv.dev-dependencies]` in [`pyproject.toml`](pyproject.toml);
-  `uv sync --all-packages` picks it up.
+  the delta is ≤ -2pt. **Manual setup required:** set the
+  `ENABLE_EVAL_DESCRIPTIONS` repository variable to `true`, then add
+  one of these repo secrets:
+  - `CLAUDE_CODE_OAUTH_TOKEN` (preferred) — the Max-plan OAuth bearer
+    from `~/.claude/.credentials.json`. The workflow exposes it as
+    `ANTHROPIC_AUTH_TOKEN`, which the anthropic SDK reads directly. No
+    per-token cost; same auth path Claude Code itself uses.
+  - `ANTHROPIC_API_KEY` — fallback for users without Max. Bills per
+    token (~$1 per 48-scenario A/B at Sonnet 4.6).
+
+  `anthropic>=0.40` added to `[tool.uv.dev-dependencies]` in
+  [`pyproject.toml`](pyproject.toml); `uv sync --all-packages` picks
+  it up.
 
 - **`feat(mcp): outputSchema on tapps_session_start` (B1, commit `30149b1`).**
   Permissive Pydantic envelope (`extra="allow"`) declared as the

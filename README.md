@@ -1152,10 +1152,19 @@ accuracy. Two backends:
 
 CI gate at [`.github/workflows/eval-descriptions.yml`](.github/workflows/eval-descriptions.yml)
 runs the A/B (`HEAD^^` → push HEAD) on every push to master via the API
-backend and fails the build if strict accuracy drops ≥2pt. **Manual setup
-required:** add `ANTHROPIC_API_KEY` to repository secrets and set the
-`ENABLE_EVAL_DESCRIPTIONS` repository variable to `true` to activate the
-workflow. Without the variable, the job is skipped entirely (no-op).
+backend and fails the build if strict accuracy drops ≥2pt.
+
+**Manual setup required** to activate the workflow:
+
+1. Set the `ENABLE_EVAL_DESCRIPTIONS` repository variable to `true`
+   (GitHub repo settings → Variables). Without it the job is a no-op.
+2. Add **one** of these repository secrets:
+   - `CLAUDE_CODE_OAUTH_TOKEN` (preferred) — the Max-plan OAuth bearer
+     from `~/.claude/.credentials.json` on a logged-in machine. The
+     workflow exposes it as `ANTHROPIC_AUTH_TOKEN`, which the anthropic
+     SDK reads directly. No per-token cost; inherits Max-plan quotas.
+   - `ANTHROPIC_API_KEY` — only if you don't have a Max subscription.
+     Bills per-token (~$1 per 48-scenario A/B at Sonnet 4.6).
 
 ### Cross-platform notes
 

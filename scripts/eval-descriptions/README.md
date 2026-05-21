@@ -65,8 +65,22 @@ Messages API tool format does NOT include `outputSchema`, so this
 backend measures description quality only — not outputSchema effects.
 
 Default model for the API backend is `claude-sonnet-4-6`; override
-with `--model`. Cost is ~$0.01–0.03 per scenario at Sonnet 4.6
-(~$1 per 48-scenario A/B).
+with `--model`.
+
+### Auth for `--backend=api`
+
+The anthropic SDK accepts either credential — set whichever matches your
+subscription:
+
+| Env var | What it is | Cost | Get it from |
+|---|---|---|---|
+| `ANTHROPIC_AUTH_TOKEN` | Max-plan OAuth bearer | included in Max | `~/.claude/.credentials.json` on a logged-in machine |
+| `ANTHROPIC_API_KEY` | Paid API key | ~$1 per A/B at Sonnet 4.6 | console.anthropic.com |
+
+Prefer `ANTHROPIC_AUTH_TOKEN` if you already pay for Max — same
+authentication path Claude Code itself uses, no double-billing. The
+SDK reads either env var transparently; the eval harness only checks
+that at least one is set.
 
 ## Adding a scenario
 
