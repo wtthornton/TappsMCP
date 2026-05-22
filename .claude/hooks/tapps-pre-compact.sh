@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# tapps-mcp-hook-version: 3.10.4
+# tapps-mcp-hook-version: 3.10.18
 # TappsMCP PreCompact hook
 # Backs up scoring context before context window compaction.
 INPUT=$(cat)

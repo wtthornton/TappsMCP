@@ -194,6 +194,15 @@
             "command": ".claude/hooks/tapps-post-linear-snapshot-get.sh"
           }
         ]
+      },
+      {
+        "matcher": "mcp__plugin_linear_linear__list_issues",
+        "hooks": [
+          {
+            "type": "command",
+            "command": ".claude/hooks/tapps-post-linear-list.sh"
+          }
+        ]
       }
     ],
     "Stop": [

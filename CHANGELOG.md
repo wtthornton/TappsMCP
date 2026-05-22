@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [3.10.19] - 2026-05-22
+
 ### Added
 
 - **`feat(eval): description-eval harness Phase B + Phase C (CI gate)`.**
@@ -67,6 +69,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   envelopes round-trip with extras preserved. B1's +4.2pt A/B result
   is at the Phase A ±4pt noise floor and the improved scenarios were
   not B1-targeted — see the rollup for honest attribution.
+
+## [3.10.11 — 3.10.18] - 2026-05-11—2026-05-20
+
+Bucket entry — these items shipped between 3.10.11 and 3.10.18 but were
+accumulated under `[Unreleased]` without per-version cuts (recovered
+during the 3.10.19 release prep). Commit SHAs are authoritative for
+attributing individual items to specific versions; the bucket exists
+so the CHANGELOG isn't a single 100-line `[Unreleased]` blob.
+
+### Added
 
 - **`feat(eval): description-eval harness Phase A — 0-error noise floor` (v3.10.18, commit `962514a`).** `_SCENARIO_TIMEOUT_SECONDS` raised 120s → 240s in [`scripts/eval-descriptions/run.py`](scripts/eval-descriptions/run.py) to absorb the 30–50s MCP cold-start that was killing 4 scenarios per side in the original baseline. New `prewarm_mcp()` runs one throwaway `claude -p "ping"` per worktree before the timed loop, pulling uv-venv resolution + Python `.pyc` cache + first MCP handshake out of the first real scenario's budget. Bounded at 120s; pre-warm timeouts are swallowed (best-effort, never fatal). **Result on the cc1d340^ → HEAD A/B:** 0 errors / 0 timeouts per side (down from 4+4 in the original run). The "Error-introduced" + "Error-recovered" noise buckets from the [2026-05-19 report](docs/benchmarks/2026-05-19-description-eval.md) are now empty — every scenario produces a real verdict, see [`docs/benchmarks/2026-05-20-description-eval.md`](docs/benchmarks/2026-05-20-description-eval.md). Residual LLM-level run-to-run variance remains (`decompose_vague_task` flipping between exact and no_tool across runs), so future per-tool A/B comparisons should use ≥2pt deltas as the kept-vs-reverted threshold, not 1pt. Test coverage in [`TestScenarioTimeoutAndPrewarm`](packages/tapps-mcp/tests/unit/test_eval_descriptions.py) covers both knobs.
 - **`fix(descriptions): restore release_update direct-call trigger + strengthen decompose triggers` (commit `4c11f2f`).** The original 2026-05-19 baseline surfaced 1 true regression (`release_update_announce`: baseline=exact → HEAD=no_tool) and 1 stable failure across both versions (`decompose_vague_task`: no_tool on both sides) — both targeted by this fix. `release_update_announce` recovered to `exact` on HEAD; `decompose_vague_task` got an `exact` in one post-fix run and a `no_tool` in another (LLM-level variance, not description-quality).

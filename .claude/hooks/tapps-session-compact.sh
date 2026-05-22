@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# tapps-mcp-hook-version: 3.10.4
+# tapps-mcp-hook-version: 3.10.18
 # TappsMCP SessionStart hook (compact)
 # Re-injects TappsMCP context after context compaction.
 INPUT=$(cat)
