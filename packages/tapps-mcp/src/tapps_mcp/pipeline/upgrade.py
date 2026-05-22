@@ -402,6 +402,43 @@ def _refresh_karpathy_blocks(
     }
 
 
+def _mcp_json_has_unresolved_workspacefolder(project_root: Path, host: str) -> bool:
+    """TAP-2199: return ``True`` when the on-disk ``.mcp.json`` still contains the
+    broken literal ``${workspaceFolder}`` in the tapps-mcp or docs-mcp env block.
+
+    Used by :func:`_upgrade_mcp_config` to force a regenerate even when the
+    file would otherwise pass :func:`_validate_config_file`. Without this,
+    consumers who installed before the fix never get the env block rewritten.
+    """
+    import json as _json
+
+    from tapps_mcp.distribution.setup_generator import _get_config_path, _get_servers_key
+
+    config_path = _get_config_path(host, project_root)
+    if not config_path.exists():
+        return False
+    try:
+        data = _json.loads(config_path.read_text(encoding="utf-8"))
+    except (OSError, _json.JSONDecodeError):
+        return False
+    if not isinstance(data, dict):
+        return False
+    servers = data.get(_get_servers_key(host))
+    if not isinstance(servers, dict):
+        return False
+    for entry in servers.values():
+        if not isinstance(entry, dict):
+            continue
+        env = entry.get("env")
+        if not isinstance(env, dict):
+            continue
+        for key in ("TAPPS_MCP_PROJECT_ROOT", "DOCS_MCP_PROJECT_ROOT"):
+            value = env.get(key)
+            if isinstance(value, str) and "${" in value:
+                return True
+    return False
+
+
 def _upgrade_mcp_config(
     host: str,
     project_root: Path,
@@ -416,6 +453,12 @@ def _upgrade_mcp_config(
     Consent gate: only regenerates ``.mcp.json`` when the user has previously
     opted in (entry exists) or ``force=True``.  Missing entries are not
     treated as broken — greenfield projects should go through ``tapps_init``.
+
+    TAP-2199: when the on-disk env block still contains the literal
+    ``${workspaceFolder}`` we self-heal by forcing a regen regardless of
+    ``_validate_config_file`` verdict. The merge in :func:`_generate_config`
+    overlays the new (absolute) env values over the broken ones, so user
+    customizations on other keys survive.
     """
     from tapps_mcp.distribution.setup_generator import (
         _generate_config,
@@ -428,7 +471,19 @@ def _upgrade_mcp_config(
     servers_key = _get_servers_key(host)
     error = _validate_config_file(config_path, servers_key)
     already_opted_in = _mcp_json_has_tapps_entry(project_root, host)
-    if error is None:
+    needs_heal = _mcp_json_has_unresolved_workspacefolder(project_root, host)
+    if needs_heal and already_opted_in:
+        if dry_run:
+            result["components"]["mcp_config"] = (
+                "needs-heal: ${workspaceFolder} in env block "
+                "(TAP-2199 — rerun without dry_run to fix)"
+            )
+        else:
+            _generate_config(host, project_root, force=True, upgrade_mode=True)
+            result["components"]["mcp_config"] = (
+                "healed: rewrote ${workspaceFolder} to absolute project root (TAP-2199)"
+            )
+    elif error is None:
         result["components"]["mcp_config"] = "ok"
     elif not already_opted_in and not force:
         result["components"]["mcp_config"] = {

@@ -650,3 +650,86 @@ class TestUpgradeEndToEnd:
         skills_dir = tmp_path / ".cursor" / "skills"
         assert skills_dir.exists()
         assert any(skills_dir.iterdir())
+
+
+# ---------------------------------------------------------------------------
+# TAP-2199: upgrade self-heals broken ${workspaceFolder} env block
+# ---------------------------------------------------------------------------
+
+
+class TestUpgradeWorkspaceFolderSelfHeal:
+    """Existing consumers who installed before the TAP-2199 fix have
+    ``${workspaceFolder}`` in their .mcp.json env block — Claude Code CLI
+    won't expand it. The upgrade flow must detect and rewrite that value."""
+
+    def _write_broken_cursor_config(self, project: Path) -> None:
+        cursor_dir = project / ".cursor"
+        cursor_dir.mkdir(parents=True, exist_ok=True)
+        broken = {
+            "mcpServers": {
+                "tapps-mcp": {
+                    "type": "stdio",
+                    "command": "tapps-mcp",
+                    "args": ["serve"],
+                    "env": {
+                        "TAPPS_MCP_PROJECT_ROOT": "${workspaceFolder}",
+                        "CUSTOM_KEY": "preserve-me",
+                    },
+                },
+            },
+        }
+        (cursor_dir / "mcp.json").write_text(json.dumps(broken), encoding="utf-8")
+
+    def test_dry_run_flags_broken_env_as_needs_heal(self, tmp_path: Path) -> None:
+        """Dry-run reports the broken env as ``needs-heal`` with a TAP-2199 hint."""
+        from tapps_mcp.pipeline.upgrade import upgrade_pipeline
+
+        _setup_cursor_project(tmp_path)
+        self._write_broken_cursor_config(tmp_path)
+
+        result = upgrade_pipeline(tmp_path, platform="cursor", dry_run=True)
+        platforms = result["components"]["platforms"]
+        mcp_config = platforms[0]["components"]["mcp_config"]
+        assert "needs-heal" in str(mcp_config)
+        assert "TAP-2199" in str(mcp_config)
+
+    def test_live_upgrade_rewrites_broken_env(self, tmp_path: Path) -> None:
+        """A live upgrade rewrites the env block to the resolved project path."""
+        from tapps_mcp.pipeline.upgrade import upgrade_pipeline
+
+        _setup_cursor_project(tmp_path)
+        self._write_broken_cursor_config(tmp_path)
+
+        result = upgrade_pipeline(tmp_path, platform="cursor")
+        platforms = result["components"]["platforms"]
+        mcp_config = platforms[0]["components"]["mcp_config"]
+        assert "healed" in str(mcp_config)
+
+        data = json.loads((tmp_path / ".cursor" / "mcp.json").read_text(encoding="utf-8"))
+        env = data["mcpServers"]["tapps-mcp"]["env"]
+        assert env["TAPPS_MCP_PROJECT_ROOT"] == str(tmp_path.resolve())
+        assert "${" not in env["TAPPS_MCP_PROJECT_ROOT"]
+        assert env["CUSTOM_KEY"] == "preserve-me"
+
+    def test_clean_config_reports_ok(self, tmp_path: Path) -> None:
+        """A clean config (absolute path already) reports ``ok`` rather than healed."""
+        from tapps_mcp.pipeline.upgrade import upgrade_pipeline
+
+        _setup_cursor_project(tmp_path)
+        cursor_dir = tmp_path / ".cursor"
+        good = {
+            "mcpServers": {
+                "tapps-mcp": {
+                    "type": "stdio",
+                    "command": "tapps-mcp",
+                    "args": ["serve"],
+                    "env": {"TAPPS_MCP_PROJECT_ROOT": str(tmp_path.resolve())},
+                },
+            },
+        }
+        (cursor_dir / "mcp.json").write_text(json.dumps(good), encoding="utf-8")
+
+        result = upgrade_pipeline(tmp_path, platform="cursor")
+        platforms = result["components"]["platforms"]
+        mcp_config = platforms[0]["components"]["mcp_config"]
+        assert mcp_config == "ok"

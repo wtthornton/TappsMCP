@@ -733,6 +733,37 @@ class TappsMCPSettings(BaseSettings):
         default_factory=Path.cwd,
         description="Project root boundary - all file paths must be within this directory.",
     )
+
+    @field_validator("project_root", mode="before")
+    @classmethod
+    def _reject_unresolved_variable_refs(cls, value: Any) -> Any:
+        """TAP-2199: fail loudly when ``project_root`` is a raw VS Code variable.
+
+        Claude Code CLI does not expand ``${workspaceFolder}`` (or any
+        ``${...}`` ref) the way Cursor / VS Code do, so the literal string
+        leaks into the server process. The path validator then mkdirs a
+        phantom ``./${workspaceFolder}/.tapps-mcp-cache/`` at the real
+        project root and ``tapps_upgrade`` plans against the wrong directory
+        — data-loss-class for consumers. Layer-A fixes the emit-time bug
+        in :mod:`tapps_mcp.distribution.setup_generator`; this validator is
+        the defense-in-depth so a broken value can never reach ``mkdir``.
+        """
+        if value is None:
+            return value
+        as_str = str(value).strip()
+        if not as_str:
+            return value
+        if "${" in as_str:
+            raise ValueError(
+                "TAP-2199: TAPPS_MCP_PROJECT_ROOT contains an unresolved "
+                f"variable reference ({as_str!r}). This usually means the "
+                "host MCP client (Claude Code CLI) did not expand "
+                "${workspaceFolder} from .mcp.json. Re-run "
+                "`tapps-mcp upgrade` to rewrite the env block with an "
+                "absolute project root, or set TAPPS_MCP_PROJECT_ROOT to a "
+                "real absolute path in your environment."
+            )
+        return value
     host_project_root: str | None = Field(
         default=None,
         description=(

@@ -7,6 +7,47 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- **`fix(init): resolve TAPPS_MCP_PROJECT_ROOT to absolute path; reject literal ${workspaceFolder}` ([TAP-2199](https://linear.app/tappscodingagents/issue/TAP-2199)).**
+  `tapps_init` / `tapps_upgrade` previously emitted the literal string
+  `${workspaceFolder}` in `.cursor/mcp.json` and `.vscode/mcp.json` for
+  `TAPPS_MCP_PROJECT_ROOT` and `DOCS_MCP_PROJECT_ROOT`. Claude Code CLI
+  does not expand VS Code variables, so the server treated the literal
+  as a relative path and silently mkdir'd a phantom
+  `./${workspaceFolder}/.tapps-mcp-cache/` directory at the real project
+  root — `tapps_upgrade(dry_run=True)` then planned against the wrong
+  directory and a real upgrade was data-loss-class for affected
+  consumers.
+
+  Fix is three layers:
+  1. **Emit-time** ([`packages/tapps-mcp/src/tapps_mcp/distribution/setup_generator.py`](packages/tapps-mcp/src/tapps_mcp/distribution/setup_generator.py)):
+     new helper `_resolve_project_root_value(host, project_root)` returns
+     `"."` for Claude Code (launch CWD == project root) and
+     `str(project_root.resolve())` for Cursor and VS Code. Applied
+     symmetrically to `_build_server_entry` (tapps-mcp) and
+     `_build_docsmcp_server_entry` (docs-mcp).
+  2. **Server-side guard**
+     ([`packages/tapps-core/src/tapps_core/config/settings.py`](packages/tapps-core/src/tapps_core/config/settings.py)):
+     new `@field_validator("project_root", mode="before")` on
+     `TappsMCPSettings` raises `ValueError` citing TAP-2199 when the
+     value contains any unresolved `${...}` reference, so a broken
+     env value can never reach `mkdir`.
+  3. **Upgrade self-heal** ([`packages/tapps-mcp/src/tapps_mcp/pipeline/upgrade.py`](packages/tapps-mcp/src/tapps_mcp/pipeline/upgrade.py)):
+     `_upgrade_mcp_config` now detects the broken `${workspaceFolder}`
+     in the on-disk env block (`_mcp_json_has_unresolved_workspacefolder`)
+     and forces a regenerate, surfacing `"healed: rewrote
+     ${workspaceFolder} to absolute project root (TAP-2199)"` (or
+     `"needs-heal"` under `dry_run`) in the upgrade response. User
+     customizations on other env keys survive the merge.
+
+  Note: `packages/tapps-mcp/src/tapps_mcp/pipeline/platform_bundles.py:526`
+  (the redistributable Cursor plugin bundle written by
+  `tapps-mcp build-plugin`) is intentionally left with
+  `${workspaceFolder}` because the consumer project root is unknown at
+  build time and Cursor IDE — the sole consumer of that artifact —
+  expands the variable natively.
+
 ## [3.10.19] - 2026-05-22
 
 ### Added

@@ -167,8 +167,11 @@ class TestMergeConfigUpgradeMode:
         entry = result["mcpServers"]["tapps-mcp"]
         assert entry["command"] == r"C:\custom\tapps-mcp.exe"
         assert entry["args"] == ["serve"]
-        # env should still be updated
-        assert entry["env"]["TAPPS_MCP_PROJECT_ROOT"] == "${workspaceFolder}"
+        # TAP-2199: env is rewritten with an absolute path, never the literal
+        # ${workspaceFolder}. Caller passes no project_root, so the helper
+        # falls back to cwd.resolve().
+        assert "${" not in entry["env"]["TAPPS_MCP_PROJECT_ROOT"]
+        assert Path(entry["env"]["TAPPS_MCP_PROJECT_ROOT"]).is_absolute()
 
     def test_upgrade_mode_false_overwrites_command(self) -> None:
         """upgrade_mode=False (default) overwrites command."""

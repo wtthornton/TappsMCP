@@ -251,6 +251,29 @@ def _derive_brain_project_id(project_root: Path | None) -> str:
     return "-".join(name.lower().split())
 
 
+def _resolve_project_root_value(host: str, project_root: Path | None) -> str:
+    """Return the value to emit for ``TAPPS_MCP_PROJECT_ROOT`` / ``DOCS_MCP_PROJECT_ROOT``.
+
+    TAP-2199: never emit the literal ``${workspaceFolder}``. Claude Code CLI
+    does not expand VS Code variables, so a literal ``${workspaceFolder}``
+    leaks into the server process and ``Path("${workspaceFolder}")`` silently
+    creates a phantom ``./${workspaceFolder}/`` directory at the real project
+    root. Resolving to an absolute path at render time fixes this uniformly
+    across Claude Code, Cursor, and VS Code (all three host launchers accept
+    a literal absolute path).
+    """
+    if host == "claude-code":
+        # Claude Code launches with CWD == project root; "." is unambiguous
+        # and keeps the file portable across machines.
+        return "."
+    if project_root is None:
+        # Defensive: callers in legacy paths may not pass project_root.
+        # Resolve against cwd so we still emit a real absolute path rather
+        # than the broken literal.
+        return str(Path.cwd().resolve())
+    return str(project_root.resolve())
+
+
 def _build_server_entry(
     host: str,
     *,
@@ -274,10 +297,11 @@ def _build_server_entry(
     consuming projects can safely commit ``.mcp.json``. The merge logic in
     :func:`_merge_config` preserves any user-customized values on upgrade.
 
-    Claude Code uses ``"."`` because it launches the MCP server with CWD set to
-    the project root and does **not** resolve VS Code variables like
-    ``${workspaceFolder}``.  Cursor and VS Code resolve ``${workspaceFolder}``
-    natively so it is used there.
+    Claude Code uses ``"."`` (launch CWD == project root). Cursor and VS Code
+    get the resolved absolute path. TAP-2199: we never emit the literal
+    ``${workspaceFolder}`` because Claude Code CLI does not expand VS Code
+    variables and the server then mkdirs a phantom ``${workspaceFolder}/``
+    directory at the real project root.
 
     Uses :func:`_resolve_tapps_mcp_launch` for command and args unless
     *uv_launch* is provided (Issue #77 — consumer uv projects).
@@ -286,8 +310,7 @@ def _build_server_entry(
         command, args = uv_launch
     else:
         command, args = _resolve_tapps_mcp_launch()
-    # Claude Code CWD == project root; VS Code/Cursor resolve ${workspaceFolder}
-    project_root_value = "." if host == "claude-code" else "${workspaceFolder}"
+    project_root_value = _resolve_project_root_value(host, project_root)
     env: dict[str, str] = {
         "TAPPS_MCP_PROJECT_ROOT": project_root_value,
         "TAPPS_MCP_MEMORY_BRAIN_HTTP_URL": "http://localhost:8080",
@@ -312,12 +335,15 @@ def _build_docsmcp_server_entry(
     host: str,
     *,
     uv_launch: tuple[str, list[str]] | None = None,
+    project_root: Path | None = None,
 ) -> dict[str, Any]:
     """Build the docs-mcp server entry (optional ``--with-docs-mcp``, Epic 80.7).
 
     When *uv_launch* is provided (consumer uv project, Issue #79 sub-issue),
     mirrors the same ``uv run`` pattern but launches ``docsmcp serve`` instead
-    of ``tapps-mcp serve``.
+    of ``tapps-mcp serve``. TAP-2199: ``DOCS_MCP_PROJECT_ROOT`` resolves the
+    same way as ``TAPPS_MCP_PROJECT_ROOT`` — never the literal
+    ``${workspaceFolder}``.
     """
     if uv_launch is not None:
         # Derive a docs-mcp equivalent: replace 'tapps-mcp' with 'docsmcp' in args.
@@ -326,7 +352,7 @@ def _build_docsmcp_server_entry(
         # Replace 'serve' keyword coming after the tool name — already present.
     else:
         command, args = _resolve_docsmcp_launch()
-    project_root_value = "." if host == "claude-code" else "${workspaceFolder}"
+    project_root_value = _resolve_project_root_value(host, project_root)
     entry: dict[str, Any] = {
         "type": "stdio",
         "command": command,
@@ -756,7 +782,7 @@ def _generate_config(
     if with_docs_mcp:
         merged.setdefault(servers_key, {})
         old_docs = merged[servers_key].get("docs-mcp")
-        new_docs = _build_docsmcp_server_entry(host, uv_launch=uv_launch)
+        new_docs = _build_docsmcp_server_entry(host, uv_launch=uv_launch, project_root=project_root)
         if isinstance(old_docs, dict):
             old_env = old_docs.get("env")
             new_env = new_docs.get("env") or {}

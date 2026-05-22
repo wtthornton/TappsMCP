@@ -864,22 +864,26 @@ class TestEnvInConfig:
         assert entry["env"]["TAPPS_MCP_PROJECT_ROOT"] == "."
 
     def test_cursor_has_env(self, tmp_path):
-        """Cursor config includes env with TAPPS_MCP_PROJECT_ROOT."""
+        """Cursor config gets the resolved absolute project root (TAP-2199)."""
         project = tmp_path / "project"
         project.mkdir()
         _generate_config("cursor", project)
         data = json.loads((project / ".cursor" / "mcp.json").read_text(encoding="utf-8"))
         entry = data["mcpServers"]["tapps-mcp"]
-        assert entry["env"]["TAPPS_MCP_PROJECT_ROOT"] == "${workspaceFolder}"
+        assert entry["env"]["TAPPS_MCP_PROJECT_ROOT"] == str(project.resolve())
+        # TAP-2199: never the literal ${workspaceFolder} — Claude Code CLI does
+        # not expand it and the server then mkdirs a phantom directory.
+        assert "${" not in entry["env"]["TAPPS_MCP_PROJECT_ROOT"]
 
     def test_vscode_has_env(self, tmp_path):
-        """VS Code config includes env with TAPPS_MCP_PROJECT_ROOT."""
+        """VS Code config gets the resolved absolute project root (TAP-2199)."""
         project = tmp_path / "project"
         project.mkdir()
         _generate_config("vscode", project)
         data = json.loads((project / ".vscode" / "mcp.json").read_text(encoding="utf-8"))
         entry = data["servers"]["tapps-mcp"]
-        assert entry["env"]["TAPPS_MCP_PROJECT_ROOT"] == "${workspaceFolder}"
+        assert entry["env"]["TAPPS_MCP_PROJECT_ROOT"] == str(project.resolve())
+        assert "${" not in entry["env"]["TAPPS_MCP_PROJECT_ROOT"]
 
     def test_env_preserves_command_and_args(self, tmp_path):
         """env block does not interfere with command and args fields."""
@@ -981,8 +985,8 @@ class TestEnvInConfig:
         _generate_config("cursor", project)
         data = json.loads((cursor_dir / "mcp.json").read_text(encoding="utf-8"))
         assert "other" in data["mcpServers"]
-        assert data["mcpServers"]["tapps-mcp"]["env"]["TAPPS_MCP_PROJECT_ROOT"] == (
-            "${workspaceFolder}"
+        assert data["mcpServers"]["tapps-mcp"]["env"]["TAPPS_MCP_PROJECT_ROOT"] == str(
+            project.resolve()
         )
 
 
@@ -1603,3 +1607,104 @@ class TestUvContextDetection:
         result = runner.invoke(main, ["init", "--help"])
         assert result.exit_code == 0
         assert "--with-context7" in result.output
+
+
+# ---------------------------------------------------------------------------
+# TAP-2199: never emit literal ${workspaceFolder} into .mcp.json
+# ---------------------------------------------------------------------------
+
+
+class TestNoWorkspaceFolderLiteral:
+    """Regression — Claude Code CLI does not expand VS Code variables, so the
+    server would treat ``${workspaceFolder}`` as a relative path and mkdir a
+    phantom directory at the real project root."""
+
+    @pytest.mark.parametrize(
+        "host,config_rel,servers_key",
+        [
+            ("cursor", ".cursor/mcp.json", "mcpServers"),
+            ("vscode", ".vscode/mcp.json", "servers"),
+        ],
+    )
+    def test_emit_resolves_to_absolute_path(self, tmp_path, host, config_rel, servers_key):
+        """Cursor and VS Code env blocks contain a resolved absolute path."""
+        project = tmp_path / "myproject"
+        project.mkdir()
+        _generate_config(host, project)
+        data = json.loads((project / config_rel).read_text(encoding="utf-8"))
+        env = data[servers_key]["tapps-mcp"]["env"]
+        assert env["TAPPS_MCP_PROJECT_ROOT"] == str(project.resolve())
+        assert "${" not in env["TAPPS_MCP_PROJECT_ROOT"]
+
+    def test_claude_code_keeps_dot(self, tmp_path):
+        """Claude Code stays on "." — launch CWD == project root."""
+        project = tmp_path / "myproject"
+        project.mkdir()
+        with patch("tapps_mcp.distribution.setup_generator.Path.home", return_value=tmp_path):
+            _generate_config("claude-code", project, scope="user")
+        data = json.loads((tmp_path / ".claude.json").read_text(encoding="utf-8"))
+        env = data["mcpServers"]["tapps-mcp"]["env"]
+        assert env["TAPPS_MCP_PROJECT_ROOT"] == "."
+        assert "${" not in env["TAPPS_MCP_PROJECT_ROOT"]
+
+    @pytest.mark.parametrize(
+        "host,config_rel,servers_key",
+        [
+            ("cursor", ".cursor/mcp.json", "mcpServers"),
+            ("vscode", ".vscode/mcp.json", "servers"),
+        ],
+    )
+    def test_docs_mcp_env_also_absolute(self, tmp_path, host, config_rel, servers_key):
+        """DOCS_MCP_PROJECT_ROOT gets the same treatment as TAPPS_MCP_PROJECT_ROOT."""
+        project = tmp_path / "myproject"
+        project.mkdir()
+        _generate_config(host, project, with_docs_mcp=True)
+        data = json.loads((project / config_rel).read_text(encoding="utf-8"))
+        docs_env = data[servers_key]["docs-mcp"]["env"]
+        assert docs_env["DOCS_MCP_PROJECT_ROOT"] == str(project.resolve())
+        assert "${" not in docs_env["DOCS_MCP_PROJECT_ROOT"]
+
+    def test_no_unresolved_variable_in_any_env_key(self, tmp_path):
+        """No emitted env value contains an unresolved ``${...}`` other than the
+        known env-var substitutions (``${TAPPS_BRAIN_AUTH_TOKEN}``,
+        ``${TAPPS_MCP_CONTEXT7_API_KEY}``) which the host resolves at launch.
+        """
+        project = tmp_path / "myproject"
+        project.mkdir()
+        _generate_config("cursor", project)
+        env = json.loads((project / ".cursor" / "mcp.json").read_text(encoding="utf-8"))[
+            "mcpServers"
+        ]["tapps-mcp"]["env"]
+        for key, value in env.items():
+            if key in {"TAPPS_MCP_MEMORY_BRAIN_AUTH_TOKEN", "TAPPS_MCP_CONTEXT7_API_KEY"}:
+                continue
+            assert "${" not in str(value), f"Unresolved variable leaked in env[{key!r}]={value!r}"
+
+    def test_upgrade_self_heals_broken_workspacefolder(self, tmp_path):
+        """An existing .mcp.json with ``${workspaceFolder}`` gets rewritten on
+        re-merge — the new entry overlays the old env so the broken value is
+        replaced with the resolved absolute path.
+        """
+        project = tmp_path / "demo"
+        cursor_dir = project / ".cursor"
+        cursor_dir.mkdir(parents=True)
+        broken = {
+            "mcpServers": {
+                "tapps-mcp": {
+                    "type": "stdio",
+                    "command": "tapps-mcp",
+                    "args": ["serve"],
+                    "env": {
+                        "TAPPS_MCP_PROJECT_ROOT": "${workspaceFolder}",
+                        "CUSTOM_KEY": "keep-me",
+                    },
+                },
+            },
+        }
+        (cursor_dir / "mcp.json").write_text(json.dumps(broken), encoding="utf-8")
+        _generate_config("cursor", project, force=True, upgrade_mode=True)
+        env = json.loads((cursor_dir / "mcp.json").read_text(encoding="utf-8"))[
+            "mcpServers"
+        ]["tapps-mcp"]["env"]
+        assert env["TAPPS_MCP_PROJECT_ROOT"] == str(project.resolve())
+        assert env["CUSTOM_KEY"] == "keep-me"
