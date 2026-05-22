@@ -152,6 +152,11 @@ if [[ -n "$_status_block" ]]; then
   linear_open_count=$(echo "$_status_block" | grep -E "^[[:space:]]*LINEAR_OPEN_COUNT:" | tail -1 | sed -E 's/^[[:space:]]*LINEAR_OPEN_COUNT:[[:space:]]*//' | tr -d '[:space:]' || echo "")
   linear_done_count=$(echo "$_status_block" | grep -E "^[[:space:]]*LINEAR_DONE_COUNT:" | tail -1 | sed -E 's/^[[:space:]]*LINEAR_DONE_COUNT:[[:space:]]*//' | tr -d '[:space:]' || echo "")
   tests_status=$(echo "$_status_block" | grep -E "^[[:space:]]*TESTS_STATUS:" | tail -1 | sed -E 's/^[[:space:]]*TESTS_STATUS:[[:space:]]*//' | tr -d '[:space:]' || echo "")
+  # T4 / 2.15.9: optional NEXT_INTENDED_ISSUE field for brief-lookahead.
+  # Claude emits this when it knows which ticket it will pick on the next
+  # loop. Used by ralph_spawn_coordinator to consume a pre-warmed
+  # brief-next.json instead of cold-spawning. Optional — graceful absence.
+  next_intended_issue=$(echo "$_status_block" | grep -E "^[[:space:]]*NEXT_INTENDED_ISSUE:" | tail -1 | sed -E 's/^[[:space:]]*NEXT_INTENDED_ISSUE:[[:space:]]*//' | tr -d '[:space:]' || echo "")
 else
   # No structured status block found — extract from full text
   exit_signal="false"
@@ -168,6 +173,7 @@ else
   linear_open_count=""
   linear_done_count=""
   tests_status=""
+  next_intended_issue=""
 fi
 
 # LINEAR-DASH: sanitize Linear fields; empty strings become JSON null
@@ -181,6 +187,19 @@ fi
 
 # Normalize TESTS_STATUS to upper-case for comparison
 tests_status="${tests_status^^}"
+
+# T4 / 2.15.9: persist NEXT_INTENDED_ISSUE for the harness lookahead.
+# Accept TAP-NNNN-style identifiers only; "none" / empty / non-matching → remove.
+[[ "$next_intended_issue" =~ ^[Nn]one$ ]] && next_intended_issue=""
+if [[ "$next_intended_issue" =~ ^[A-Z][A-Z0-9]*-[0-9]+$ ]]; then
+    _nii_file="$RALPH_DIR/.next_intended_issue"
+    _nii_tmp="${_nii_file}.tmp.$$.${RANDOM}"
+    printf '%s\n' "$next_intended_issue" > "$_nii_tmp" 2>/dev/null \
+        && mv -f "$_nii_tmp" "$_nii_file" 2>/dev/null \
+        || rm -f "$_nii_tmp" 2>/dev/null
+else
+    rm -f "$RALPH_DIR/.next_intended_issue" 2>/dev/null
+fi
 
 # Defaults for empty values
 exit_signal="${exit_signal:-false}"
@@ -304,6 +323,20 @@ fi
 # Validate loop_count is numeric before arithmetic
 [[ "$loop_count" =~ ^[0-9]+$ ]] || loop_count=0
 loop_count=$((loop_count + 1))
+
+# TAP-2346 (F7): when ralph_loop.sh::main exports LOOP_COUNT for the
+# current iteration, prefer it over the inherited+1 value. Without this,
+# the harness's per-invocation counter (reset to 0 on each `ralph` start)
+# and the hook's cumulative-across-sessions counter diverge — operators
+# observed "Response Analysis - Loop #19" while the harness was on
+# iteration #10. LOOP_COUNT is only set inside the RALPH_LOOP_ACTIVE-
+# guarded path (ralph_loop.sh:4975), so behavior for interactive Claude
+# Code sessions is unchanged (the RALPH_LOOP_ACTIVE guard above already
+# returned 0 for those).
+if [[ -n "${LOOP_COUNT:-}" && "${LOOP_COUNT}" =~ ^[0-9]+$ ]]; then
+  loop_count="$LOOP_COUNT"
+fi
+
 [[ "$prev_session_cost" =~ ^[0-9]+(\.[0-9]+)?$ ]] || prev_session_cost=0
 [[ "$prev_session_input" =~ ^[0-9]+$ ]] || prev_session_input=0
 [[ "$prev_session_output" =~ ^[0-9]+$ ]] || prev_session_output=0
@@ -495,7 +528,17 @@ if [[ -n "$_transcript" && -f "$_transcript" ]]; then
     _proj_dir="${CLAUDE_PROJECT_DIR%/}"
     _proj_dir_escaped="${_proj_dir//\\/\\\\}"
     _proj_dir_escaped="${_proj_dir_escaped//|/\\|}"
-    sed -i "s|^${_proj_dir_escaped}/||" "$_lcf_tmp" 2>/dev/null || true
+    # `sed -i` syntax differs between GNU (Linux) and BSD (macOS): BSD requires
+    # an explicit backup-extension argument (empty string for in-place). Use a
+    # tmp + mv instead to stay portable across both — silent failure here on
+    # macOS would have left CLAUDE_PROJECT_DIR-prefixed absolute paths in the
+    # file, breaking lib/linear_optimizer.sh Jaccard scoring (which compares
+    # against repo-relative paths).
+    if sed "s|^${_proj_dir_escaped}/||" "$_lcf_tmp" > "${_lcf_tmp}.new" 2>/dev/null; then
+      mv -f "${_lcf_tmp}.new" "$_lcf_tmp" 2>/dev/null || rm -f "${_lcf_tmp}.new" 2>/dev/null
+    else
+      rm -f "${_lcf_tmp}.new" 2>/dev/null
+    fi
     # Re-sort+dedupe in case normalization produced collisions.
     sort -u -o "$_lcf_tmp" "$_lcf_tmp" 2>/dev/null || true
   fi
@@ -802,21 +845,37 @@ fi
 _nsb_threshold="${RALPH_HALT_NO_STATUS_BLOCK_THRESHOLD:-3}"
 _nsb_count_file="$RALPH_DIR/.no_status_block_count"
 if [[ -z "$_status_block" ]]; then
-  _nsb_prev=0
-  if [[ -f "$_nsb_count_file" ]]; then
-    read -r _nsb_prev < "$_nsb_count_file" 2>/dev/null || _nsb_prev=0
-    [[ "$_nsb_prev" =~ ^[0-9]+$ ]] || _nsb_prev=0
-  fi
-  _nsb_new=$((_nsb_prev + 1))
-  printf '%s\n' "$_nsb_new" > "$_nsb_count_file" 2>/dev/null || true
-  if [[ "$_nsb_new" -ge "$_nsb_threshold" && ! -f "$RALPH_DIR/.harness_halt_reason" ]]; then
-    _resp_len=${#response_text}
-    printf 'no_status_block_%sx loop=%s response_bytes=%s\n' \
-      "$_nsb_new" "$loop_count" "$_resp_len" > "$RALPH_DIR/.harness_halt_reason" 2>/dev/null || true
+  # TAP-1899: productivity guard. A truncated-but-productive response (e.g.
+  # the 30-min adaptive-timeout case observed in AgentForge 2026-05-21) has
+  # no RALPH_STATUS footer because the stream was killed before Claude
+  # emitted it — but `.files_modified_this_loop` (maintained by the
+  # PreToolUse hook) records the real work. Treat that as progress and
+  # reset the counter, same way TAP-1683 (USYNC-2) resets its own counter
+  # on tasks_done/files_modified at line 859 below. Without this guard,
+  # productive timeouts trip no_status_block_3x after 3 long-running loops
+  # and halt the campaign mid-flight.
+  if [[ "$files_modified" -ge 1 || "$tasks_done" -ge 1 ]]; then
+    rm -f "$_nsb_count_file" 2>/dev/null || true
     if [[ -f "$_ralph_log" ]]; then
-      echo "[$_ts] [FATAL] on-stop: $_nsb_new consecutive responses with no RALPH_STATUS block — halting (loop=$loop_count, response_bytes=$_resp_len)" >> "$_ralph_log"
+      echo "[$_ts] [INFO] on-stop: no RALPH_STATUS block but loop was productive (files=$files_modified tasks=$tasks_done) — counter reset (TAP-1899)" >> "$_ralph_log"
     fi
-    echo "FATAL: $_nsb_new consecutive responses with no RALPH_STATUS block — halting" >&2
+  else
+    _nsb_prev=0
+    if [[ -f "$_nsb_count_file" ]]; then
+      read -r _nsb_prev < "$_nsb_count_file" 2>/dev/null || _nsb_prev=0
+      [[ "$_nsb_prev" =~ ^[0-9]+$ ]] || _nsb_prev=0
+    fi
+    _nsb_new=$((_nsb_prev + 1))
+    printf '%s\n' "$_nsb_new" > "$_nsb_count_file" 2>/dev/null || true
+    if [[ "$_nsb_new" -ge "$_nsb_threshold" && ! -f "$RALPH_DIR/.harness_halt_reason" ]]; then
+      _resp_len=${#response_text}
+      printf 'no_status_block_%sx loop=%s response_bytes=%s\n' \
+        "$_nsb_new" "$loop_count" "$_resp_len" > "$RALPH_DIR/.harness_halt_reason" 2>/dev/null || true
+      if [[ -f "$_ralph_log" ]]; then
+        echo "[$_ts] [FATAL] on-stop: $_nsb_new consecutive responses with no RALPH_STATUS block — halting (loop=$loop_count, response_bytes=$_resp_len)" >> "$_ralph_log"
+      fi
+      echo "FATAL: $_nsb_new consecutive responses with no RALPH_STATUS block — halting" >&2
+    fi
   fi
 else
   # Successful parse — reset counter
