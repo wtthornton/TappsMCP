@@ -517,13 +517,20 @@ def generate_cursor_plugin_bundle(
         files_created.append(f"rules/{name}")
 
     # mcp.json
+    # NOTE (TAP-2199): ``${workspaceFolder}`` is intentional here — this bundle
+    # is a redistributable Cursor plugin (`tapps-mcp build-plugin`) installed
+    # into an unknown consumer project, so the absolute path cannot be resolved
+    # at build time. Cursor IDE, the sole consumer of this artifact, expands
+    # ``${workspaceFolder}`` natively at launch. The TAP-2199 bug only affects
+    # ``setup_generator.py`` (per-project ``tapps_init`` / ``tapps_upgrade``),
+    # where the project root IS known at render time.
     mcp_config = {
         "mcpServers": {
             "tapps-mcp": {
                 "command": "uvx",
                 "args": ["tapps-mcp", "serve"],
                 "env": {
-                    "TAPPS_MCP_PROJECT_ROOT": ("${workspaceFolder}"),
+                    "TAPPS_MCP_PROJECT_ROOT": "${workspaceFolder}",
                 },
             },
         },

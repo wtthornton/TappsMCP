@@ -733,3 +733,69 @@ class TestUpgradeWorkspaceFolderSelfHeal:
         platforms = result["components"]["platforms"]
         mcp_config = platforms[0]["components"]["mcp_config"]
         assert mcp_config == "ok"
+
+
+# ---------------------------------------------------------------------------
+# TECH_STACK.md — upgrade preserves existing, hints when missing
+# ---------------------------------------------------------------------------
+
+
+class TestUpgradeTechStackMd:
+    """``TECH_STACK.md`` captures user tech choices, not tapps scaffolding.
+    Upgrade preserves existing files and surfaces a hint when missing,
+    so consumers know the artifact is known to the system without
+    risking clobbering their content.
+    """
+
+    def test_existing_tech_stack_md_preserved(self, tmp_path: Path) -> None:
+        """An existing TECH_STACK.md is never overwritten on upgrade."""
+        from tapps_mcp.pipeline.upgrade import upgrade_pipeline
+
+        _setup_claude_project(tmp_path)
+        original = "# Custom Tech Stack\n\nPython 3.12, fastapi, custom-orm\n"
+        (tmp_path / "TECH_STACK.md").write_text(original, encoding="utf-8")
+
+        result = upgrade_pipeline(tmp_path, platform="claude")
+        component = result["components"]["tech_stack_md"]
+        assert isinstance(component, dict)
+        assert component["action"] == "preserved"
+        assert (tmp_path / "TECH_STACK.md").read_text(encoding="utf-8") == original
+
+    def test_missing_tech_stack_md_surfaces_hint(self, tmp_path: Path) -> None:
+        """When TECH_STACK.md is missing, the report names the remediation path."""
+        from tapps_mcp.pipeline.upgrade import upgrade_pipeline
+
+        _setup_claude_project(tmp_path)
+
+        result = upgrade_pipeline(tmp_path, platform="claude")
+        component = result["components"]["tech_stack_md"]
+        assert isinstance(component, dict)
+        assert component["action"] == "missing"
+        assert "tapps-mcp init" in component["hint"]
+        assert not (tmp_path / "TECH_STACK.md").exists()
+
+    def test_skip_token_honored(self, tmp_path: Path) -> None:
+        """``upgrade_skip_files: [TECH_STACK.md]`` short-circuits the handler."""
+        from tapps_mcp.pipeline.upgrade import upgrade_pipeline
+
+        _setup_claude_project(tmp_path)
+        (tmp_path / ".tapps-mcp.yaml").write_text(
+            "upgrade_skip_files: [TECH_STACK.md]\n", encoding="utf-8"
+        )
+
+        result = upgrade_pipeline(tmp_path, platform="claude")
+        component = result["components"]["tech_stack_md"]
+        assert isinstance(component, dict)
+        assert component["action"] == "skipped (upgrade_skip_files)"
+
+    def test_mcp_only_skips(self, tmp_path: Path) -> None:
+        """mcp_only mode short-circuits all platform-independent components."""
+        from tapps_mcp.pipeline.upgrade import upgrade_pipeline
+
+        _setup_claude_project(tmp_path)
+        (tmp_path / "TECH_STACK.md").write_text("# custom\n", encoding="utf-8")
+
+        result = upgrade_pipeline(tmp_path, platform="claude", mcp_only=True)
+        component = result["components"]["tech_stack_md"]
+        assert isinstance(component, dict)
+        assert component["action"] == "skipped (mcp_only)"

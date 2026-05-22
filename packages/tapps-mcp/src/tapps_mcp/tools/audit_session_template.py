@@ -11,7 +11,7 @@ it is saved, so it must conform to the AGENT 5-section template
 from __future__ import annotations
 
 from collections.abc import Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Protocol
 
 if TYPE_CHECKING:
@@ -41,6 +41,7 @@ class SessionTicket:
 
     title: str
     body: str
+    labels: list[str] = field(default_factory=lambda: ["audit-readonly"])
 
 
 def render_session_ticket(
@@ -111,11 +112,12 @@ def _render_body(
     sections: list[str] = []
 
     sections.append(
+        "<!-- ralph: audit-readonly -->\n\n"
         "## What\n\n"
         f"Read-only quality audit of the {chunk.size} files listed in `## Where`. "
         "Score every file, then file any findings as **new** Linear issues "
         "under this ticket per the protocol in `## Refs`. "
-        "**Do not edit, fix, or close anything in this scope.**"
+        "**Do not edit or fix anything in this scope.**"
     )
 
     sections.append(
@@ -147,8 +149,9 @@ def _render_body(
         "on this ticket — do not file empty issues\n"
         "- [ ] Session note saved via `tapps_session_notes`\n"
         "- [ ] No source file in `## Where` modified by this session\n"
-        "- [ ] This ticket left in its current status — orchestrator closes "
-        "after the coverage manifest update"
+        "- [ ] After findings filed, close this ticket with a summary "
+        "comment per the ralph-workflow audit-session protocol "
+        "(R1 exempt for audit work)"
     )
 
     sections.append(
@@ -187,8 +190,10 @@ def _render_body(
         "### Constraints\n\n"
         "- **Do not** edit any file in `## Where`\n"
         "- **Do not** run formatters, `ruff --fix`, or any auto-fixer\n"
-        "- **Do not** close this ticket — orchestrator (`tapps_audit_campaign`) "
-        "closes after coverage manifest update\n"
+        "- After findings are filed, close this ticket with a summary "
+        "comment per the ralph-workflow audit-session protocol "
+        "(R1 exempt for audit work). The `audit-readonly` label on this "
+        "ticket signals the contract to compatible runners.\n"
         "- If understanding a finding requires reading files outside "
         "`## Where`, note that in the digest body and stop — escalate rather "
         "than scope-creep\n\n"
@@ -196,8 +201,7 @@ def _render_body(
         f"- Parent epic: {epic_ref}\n"
         f"- Campaign id: `{campaign_id}`\n"
         f"- Cohesion rationale: {chunk.rationale}\n"
-        "- Coverage manifest: brain memory keys `audit:coverage:<file>` "
-        "(updated by orchestrator after close)"
+        "- Coverage manifest: brain memory keys `audit:coverage:<file>`"
     )
 
     return "\n\n".join(sections) + "\n"

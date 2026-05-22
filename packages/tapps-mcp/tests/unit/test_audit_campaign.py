@@ -111,9 +111,11 @@ class TestBuildCampaignSpec:
         for session in spec.sessions:
             assert session.title.startswith("audit: ")
             assert len(session.title) <= 80
-            assert session.body.startswith("## What")
+            assert session.body.startswith("<!-- ralph: audit-readonly -->")
+            assert "## What" in session.body[:500]
             assert _EPIC_REF_PLACEHOLDER in session.body
             assert "abc1234" in session.body
+            assert session.labels == ["audit-readonly"]
 
     def test_epic_title_and_body(self, tmp_path: Path) -> None:
         _write_two_cluster_project(tmp_path)
@@ -242,7 +244,9 @@ class TestMCPHandler:
         assert data["sessions"]
         for session in data["sessions"]:
             assert session["title"].startswith("audit: ")
-            assert session["body"].startswith("## What")
+            assert session["body"].startswith("<!-- ralph: audit-readonly -->")
+            assert "## What" in session["body"][:500]
+            assert session["labels"] == ["audit-readonly"]
         # persisted_to_brain key is present (value may be True or False
         # depending on bridge availability in the test env).
         assert "persisted_to_brain" in data

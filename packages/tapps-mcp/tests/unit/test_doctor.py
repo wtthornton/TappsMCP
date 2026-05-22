@@ -24,6 +24,7 @@ from tapps_mcp.distribution.doctor import (
     check_hooks,
     check_json_config,
     check_mcp_client_config,
+    check_mcp_config_unresolved_project_root,
     check_plaintext_secrets,
     check_scope_recommendation,
     check_stale_exe_backups,
@@ -925,6 +926,144 @@ class TestCheckMcpClientConfig:
         checks = _collect_checks(tmp_path, quick=True)
         names = [c.name for c in checks]
         assert "MCP client config" in names
+
+
+# ---------------------------------------------------------------------------
+# TAP-2199: detect unresolved ${...} in TAPPS_MCP_PROJECT_ROOT env values
+# ---------------------------------------------------------------------------
+
+
+class TestCheckMcpConfigUnresolvedProjectRoot:
+    """Probe surfaces broken consumer .mcp.json before tapps_upgrade self-heals."""
+
+    def test_no_configs_passes(self, tmp_path):
+        """No config files on disk = nothing broken to report."""
+        result = check_mcp_config_unresolved_project_root(tmp_path)
+        assert result.ok is True
+        assert "no unresolved" in result.message
+
+    def test_clean_absolute_path_passes(self, tmp_path):
+        """A resolved absolute path is accepted."""
+        cursor_dir = tmp_path / ".cursor"
+        cursor_dir.mkdir()
+        config = {
+            "mcpServers": {
+                "tapps-mcp": {
+                    "command": "tapps-mcp",
+                    "env": {"TAPPS_MCP_PROJECT_ROOT": str(tmp_path)},
+                },
+            },
+        }
+        (cursor_dir / "mcp.json").write_text(json.dumps(config), encoding="utf-8")
+        result = check_mcp_config_unresolved_project_root(tmp_path)
+        assert result.ok is True
+
+    def test_dot_passes(self, tmp_path):
+        """The Claude Code "." convention is accepted."""
+        config = {
+            "mcpServers": {
+                "tapps-mcp": {
+                    "command": "tapps-mcp",
+                    "env": {"TAPPS_MCP_PROJECT_ROOT": "."},
+                },
+            },
+        }
+        (tmp_path / ".mcp.json").write_text(json.dumps(config), encoding="utf-8")
+        result = check_mcp_config_unresolved_project_root(tmp_path)
+        assert result.ok is True
+
+    def test_workspacefolder_literal_fails(self, tmp_path):
+        """Detects the TAP-2199 broken state in Cursor config."""
+        cursor_dir = tmp_path / ".cursor"
+        cursor_dir.mkdir()
+        config = {
+            "mcpServers": {
+                "tapps-mcp": {
+                    "command": "tapps-mcp",
+                    "env": {"TAPPS_MCP_PROJECT_ROOT": "${workspaceFolder}"},
+                },
+            },
+        }
+        (cursor_dir / "mcp.json").write_text(json.dumps(config), encoding="utf-8")
+        result = check_mcp_config_unresolved_project_root(tmp_path)
+        assert result.ok is False
+        assert "Cursor" in result.detail
+        assert "${workspaceFolder}" in result.detail
+        assert "tapps-mcp upgrade" in result.detail
+
+    def test_docs_mcp_env_also_checked(self, tmp_path):
+        """``DOCS_MCP_PROJECT_ROOT`` is checked alongside ``TAPPS_MCP_PROJECT_ROOT``."""
+        vscode_dir = tmp_path / ".vscode"
+        vscode_dir.mkdir()
+        config = {
+            "servers": {
+                "docs-mcp": {
+                    "command": "docsmcp",
+                    "env": {"DOCS_MCP_PROJECT_ROOT": "${workspaceFolder}"},
+                },
+            },
+        }
+        (vscode_dir / "mcp.json").write_text(json.dumps(config), encoding="utf-8")
+        result = check_mcp_config_unresolved_project_root(tmp_path)
+        assert result.ok is False
+        assert "DOCS_MCP_PROJECT_ROOT" in result.detail
+
+    def test_other_env_keys_ignored(self, tmp_path):
+        """Unresolved ${...} in OTHER env keys (auth tokens, API keys) is not flagged.
+        Those are env-var substitutions consumed by the host launcher.
+        """
+        cursor_dir = tmp_path / ".cursor"
+        cursor_dir.mkdir()
+        config = {
+            "mcpServers": {
+                "tapps-mcp": {
+                    "command": "tapps-mcp",
+                    "env": {
+                        "TAPPS_MCP_PROJECT_ROOT": str(tmp_path),
+                        "TAPPS_MCP_MEMORY_BRAIN_AUTH_TOKEN": "${TAPPS_BRAIN_AUTH_TOKEN}",
+                        "TAPPS_MCP_CONTEXT7_API_KEY": "${TAPPS_MCP_CONTEXT7_API_KEY}",
+                    },
+                },
+            },
+        }
+        (cursor_dir / "mcp.json").write_text(json.dumps(config), encoding="utf-8")
+        result = check_mcp_config_unresolved_project_root(tmp_path)
+        assert result.ok is True
+
+    def test_multiple_broken_servers_reported(self, tmp_path):
+        """Counts and reports broken env values across multiple servers/hosts."""
+        cursor_dir = tmp_path / ".cursor"
+        cursor_dir.mkdir()
+        config = {
+            "mcpServers": {
+                "tapps-mcp": {
+                    "command": "tapps-mcp",
+                    "env": {"TAPPS_MCP_PROJECT_ROOT": "${workspaceFolder}"},
+                },
+                "docs-mcp": {
+                    "command": "docsmcp",
+                    "env": {"DOCS_MCP_PROJECT_ROOT": "${workspaceFolder}"},
+                },
+            },
+        }
+        (cursor_dir / "mcp.json").write_text(json.dumps(config), encoding="utf-8")
+        result = check_mcp_config_unresolved_project_root(tmp_path)
+        assert result.ok is False
+        assert "2 env value" in result.message
+
+    def test_malformed_json_does_not_raise(self, tmp_path):
+        """Invalid JSON is silently ignored (other checks own that error)."""
+        cursor_dir = tmp_path / ".cursor"
+        cursor_dir.mkdir()
+        (cursor_dir / "mcp.json").write_text("not json {", encoding="utf-8")
+        result = check_mcp_config_unresolved_project_root(tmp_path)
+        assert result.ok is True
+
+    def test_included_in_collect_checks(self, tmp_path):
+        """The TAP-2199 probe is wired into _collect_checks."""
+        checks = _collect_checks(tmp_path, quick=True)
+        names = [c.name for c in checks]
+        assert "MCP env (TAP-2199)" in names
         assert "Memory pipeline (effective config)" in names
 
 

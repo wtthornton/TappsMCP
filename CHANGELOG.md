@@ -7,6 +7,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **`feat(doctor): probe for unresolved ${...} in consumer .mcp.json`.**
+  New `check_mcp_config_unresolved_project_root()` diagnostic scans
+  `.mcp.json` across all three hosts (Claude Code, Cursor, VS Code),
+  detects unresolved `${workspaceFolder}` references in
+  `TAPPS_MCP_PROJECT_ROOT` and `DOCS_MCP_PROJECT_ROOT` env blocks
+  ([TAP-2199](https://linear.app/tappscodingagents/issue/TAP-2199) residual),
+  and surfaces clear remediation steps: upgrade to the fixed version or
+  manually set absolute paths.
+
+- **`feat(upgrade): preserve TECH_STACK.md and hint on missing.**
+  Upgrade pipeline now explicitly handles `TECH_STACK.md` as a
+  leave-alone file (no overwrite), matching the treatment of
+  `CLAUDE.md` and custom rules. When the file is absent, upgrade
+  surfaces a helpful message suggesting the user re-run `tapps-mcp
+  init` to regenerate if needed.
+
 ### Fixed
 
 - **`fix(init): resolve TAPPS_MCP_PROJECT_ROOT to absolute path; reject literal ${workspaceFolder}` ([TAP-2199](https://linear.app/tappscodingagents/issue/TAP-2199)).**

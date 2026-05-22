@@ -1174,6 +1174,7 @@ async def tapps_audit_campaign(
                 "intra_edges": s.intra_edges,
                 "boundary_edges": s.boundary_edges,
                 "rationale": s.rationale,
+                "labels": list(s.labels),
             }
             for s in spec.sessions
         ],

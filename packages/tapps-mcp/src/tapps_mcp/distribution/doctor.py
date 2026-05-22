@@ -309,6 +309,83 @@ def check_mcp_client_config(
     )
 
 
+_UNRESOLVED_VAR_RE = re.compile(r"\$\{[^}]+\}")
+_PROJECT_ROOT_ENV_KEYS = ("TAPPS_MCP_PROJECT_ROOT", "DOCS_MCP_PROJECT_ROOT")
+
+
+def _unresolved_project_root_in_mcp_json(
+    config_path: Path,
+    servers_key: str,
+) -> list[tuple[str, str, str]]:
+    """Return [(server_name, env_key, value), ...] for tapps/docs servers whose
+    ``*_PROJECT_ROOT`` env value contains an unresolved ``${...}`` reference.
+
+    TAP-2199: Claude Code CLI does not expand VS Code variables. A literal
+    ``${workspaceFolder}`` in the consumer's ``.mcp.json`` would cause the
+    server to mkdir a phantom directory at the real project root. Surface
+    the broken state to ``tapps doctor`` so consumers can run ``tapps_upgrade``
+    (which self-heals) instead of silently running with a corrupted root.
+    """
+    if not config_path.exists():
+        return []
+    try:
+        data = json.loads(config_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return []
+    if not isinstance(data, dict):
+        return []
+    servers = data.get(servers_key)
+    if not isinstance(servers, dict):
+        return []
+    findings: list[tuple[str, str, str]] = []
+    for server_name, entry in servers.items():
+        if not isinstance(entry, dict):
+            continue
+        env = entry.get("env")
+        if not isinstance(env, dict):
+            continue
+        for key in _PROJECT_ROOT_ENV_KEYS:
+            value = env.get(key)
+            if isinstance(value, str) and _UNRESOLVED_VAR_RE.search(value):
+                findings.append((str(server_name), key, value))
+    return findings
+
+
+def check_mcp_config_unresolved_project_root(project_root: Path) -> CheckResult:
+    """TAP-2199: detect broken ``${workspaceFolder}`` in any .mcp.json on disk.
+
+    Runs across the project-scoped Cursor, VS Code, and Claude Code config
+    paths.  When any ``TAPPS_MCP_PROJECT_ROOT`` / ``DOCS_MCP_PROJECT_ROOT``
+    holds an unresolved ``${...}`` reference, the consumer's MCP server is
+    silently mkdir'ing a phantom directory at the real project root. The
+    fix is one ``tapps_upgrade`` call (the upgrade flow self-heals).
+    """
+    candidates: list[tuple[Path, str, str]] = [
+        (project_root / ".mcp.json", "mcpServers", "Claude Code (project)"),
+        (project_root / ".cursor" / "mcp.json", "mcpServers", "Cursor"),
+        (project_root / ".vscode" / "mcp.json", "servers", "VS Code"),
+    ]
+    broken: list[str] = []
+    for path, servers_key, label in candidates:
+        for server_name, env_key, value in _unresolved_project_root_in_mcp_json(
+            path, servers_key
+        ):
+            broken.append(f"{label} [{server_name}].env.{env_key} = {value!r}")
+    if not broken:
+        return CheckResult(
+            "MCP env (TAP-2199)",
+            True,
+            "no unresolved ${...} in any TAPPS_MCP_PROJECT_ROOT / DOCS_MCP_PROJECT_ROOT",
+        )
+    return CheckResult(
+        "MCP env (TAP-2199)",
+        False,
+        f"Unresolved variable refs in {len(broken)} env value(s)",
+        "Run `tapps-mcp upgrade` to rewrite to an absolute project root "
+        "(self-heals per TAP-2199). Found:\n  " + "\n  ".join(broken),
+    )
+
+
 _HOOK_SCRIPT_PATH_RE = re.compile(
     r'(\.claude/hooks/tapps-[^"\'\s]+\.(?:ps1|sh))',
     re.IGNORECASE,
@@ -2215,6 +2292,7 @@ def _collect_checks(root: Path, *, quick: bool = False) -> list[CheckResult]:
     checks.append(check_cursor_config(root))
     checks.append(check_vscode_config(root))
     checks.append(check_mcp_client_config(root))
+    checks.append(check_mcp_config_unresolved_project_root(root))
     checks.append(check_scope_recommendation(root))
     checks.append(check_claude_md(root))
     checks.append(check_cursor_rules(root))

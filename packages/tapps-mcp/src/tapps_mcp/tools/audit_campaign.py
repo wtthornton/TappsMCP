@@ -68,6 +68,7 @@ class CampaignSession:
     intra_edges: int
     boundary_edges: int
     rationale: str
+    labels: list[str] = field(default_factory=lambda: ["audit-readonly"])
 
 
 @dataclass
@@ -167,6 +168,7 @@ def build_campaign_spec(
                 intra_edges=chunk.intra_edges,
                 boundary_edges=chunk.boundary_edges,
                 rationale=chunk.rationale,
+                labels=list(ticket.labels),
             )
         )
 

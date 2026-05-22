@@ -23,15 +23,6 @@ log = get_logger(__name__)
 # Config templates per host
 # ---------------------------------------------------------------------------
 
-_TAPPS_SERVER_ENTRY: dict[str, Any] = {
-    "type": "stdio",
-    "command": "tapps-mcp",
-    "args": ["serve"],
-    "env": {
-        "TAPPS_MCP_PROJECT_ROOT": ".",
-    },
-}
-
 _SERVER_INSTRUCTIONS = (
     "Code quality scoring (0-100 across 7 categories), security scanning "
     "(Bandit + secret detection), quality gates (pass/fail against configurable "

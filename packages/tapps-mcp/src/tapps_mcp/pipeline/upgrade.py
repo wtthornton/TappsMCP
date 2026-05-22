@@ -86,6 +86,7 @@ log = get_logger(__name__)
 _SKIP_TOKENS: dict[str, frozenset[str]] = {
     "agents_md": frozenset({"AGENTS.md"}),
     "claude_md": frozenset({"CLAUDE.md"}),
+    "tech_stack_md": frozenset({"TECH_STACK.md"}),
     "claude_settings": frozenset({".claude/settings.json"}),
     "claude_hooks": frozenset({".claude/hooks"}),
     "claude_agents": frozenset({".claude/agents"}),
@@ -1656,6 +1657,28 @@ def upgrade_pipeline(
         except Exception as exc:
             result["errors"].append(f"AGENTS.md: {exc}")
             result["components"]["agents_md"] = {"action": "error", "detail": str(exc)}
+
+    # TECH_STACK.md (platform-independent) — preserve only. Generated once
+    # by tapps_init from the detected stack profile; never refreshed by
+    # upgrade because the content captures user tech choices, not
+    # tapps-managed scaffolding. Surface its existence in the upgrade
+    # report so consumers see it as a known artifact, and hint at
+    # ``tapps_init --create-tech-stack-md=True`` when it is missing.
+    if mcp_only:
+        result["components"]["tech_stack_md"] = {"action": "skipped (mcp_only)"}
+    elif _skipped("tech_stack_md", skip_files):
+        result["components"]["tech_stack_md"] = {"action": "skipped (upgrade_skip_files)"}
+    elif (project_root / "TECH_STACK.md").exists():
+        result["components"]["tech_stack_md"] = {"action": "preserved"}
+    else:
+        result["components"]["tech_stack_md"] = {
+            "action": "missing",
+            "hint": (
+                "TECH_STACK.md was not generated. Run `tapps-mcp init` "
+                "(or re-run with --create-tech-stack-md) to render it "
+                "from the detected stack profile."
+            ),
+        }
 
     # Detect platform if not specified
     detected = platform or _detect_platform(project_root)
