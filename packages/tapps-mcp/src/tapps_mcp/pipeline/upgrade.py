@@ -548,7 +548,7 @@ def _build_dry_run_summary(result: dict[str, Any]) -> dict[str, Any]:
         _absorb_component("repo", name, value)
 
     claude_md = result.get("components", {}).get("claude_md")
-    if isinstance(claude_md, str) and claude_md.startswith("would"):
+    if isinstance(claude_md, str) and claude_md.startswith("would-merge"):
         review_flags.append("claude_md")
     agents_md = result.get("components", {}).get("agents_md")
     if isinstance(agents_md, dict) and agents_md.get("action", "").startswith("would"):
@@ -602,6 +602,32 @@ def _enumerate_preserved(
     return sorted(preserved)
 
 
+def _dry_run_claude_md_status(project_root: Path, *, force: bool) -> str:
+    """Report the would-do verdict for CLAUDE.md based on the version stamp.
+
+    TAP-2334: parallel to the AGENTS.md stamp check. The verdict drives
+    whether the dry-run summary flags CLAUDE.md as ``review-recommended``.
+    """
+    from tapps_mcp.pipeline.claude_md import ClaudeValidation
+
+    claude_md = project_root / "CLAUDE.md"
+    from tapps_mcp import __version__
+
+    if not claude_md.exists():
+        return "would-create"
+    if force:
+        return "would-refresh (force)"
+    try:
+        validation = ClaudeValidation(claude_md.read_text(encoding="utf-8"))
+    except OSError as exc:
+        return f"check-needed: {exc}"
+    if validation.is_up_to_date:
+        return "up-to-date"
+    if validation.needs_stamp:
+        return "would-add-stamp (legacy CLAUDE.md, no version marker)"
+    return f"would-merge (stamp {validation.existing_version or '<none>'} != {__version__})"
+
+
 def _upgrade_claude_code_dry_run(
     project_root: Path,
     result: dict[str, Any],
@@ -623,7 +649,10 @@ def _upgrade_claude_code_dry_run(
     from tapps_mcp.pipeline.platform_skills import CLAUDE_SKILLS
     from tapps_mcp.pipeline.platform_subagents import CLAUDE_AGENTS
 
-    result["components"]["claude_md"] = "would-refresh" if force else "check-needed"
+    if _skipped("claude_md", skip):
+        result["components"]["claude_md"] = "skipped (upgrade_skip_files)"
+    else:
+        result["components"]["claude_md"] = _dry_run_claude_md_status(project_root, force=force)
     result["components"]["settings"] = (
         "skipped (upgrade_skip_files)"
         if _skipped("claude_settings", skip)
@@ -1190,13 +1219,22 @@ def _upgrade_platform_content_return(
     result: dict[str, Any] = {"host": host, "components": {}}
 
     if host == "claude-code":
+        from tapps_mcp.pipeline.claude_md import merge_claude_md, render_fresh_claude_md
+
         content = load_platform_rules("claude", engagement_level=engagement_level)
         claude_md_path = project_root / "CLAUDE.md"
-        mode = "overwrite" if (claude_md_path.exists() or force) else "create"
+        if claude_md_path.exists() and not force:
+            existing = claude_md_path.read_text(encoding="utf-8")
+            merged, _changes = merge_claude_md(existing, content)
+            payload = merged
+            mode = "overwrite"
+        else:
+            payload = render_fresh_claude_md(content)
+            mode = "overwrite" if force and claude_md_path.exists() else "create"
         ops.append(
             FileOperation(
                 path="CLAUDE.md",
-                content=content,
+                content=payload,
                 mode=mode,
                 description="Claude Code platform rules with TappsMCP pipeline.",
                 priority=2,

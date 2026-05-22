@@ -1298,33 +1298,31 @@ def _bootstrap_claude(
 ) -> str:
     """Create or refresh the marker-wrapped TAPPS obligations in CLAUDE.md.
 
-    Returns ``'created'``, ``'updated'``, ``'unchanged'``, or ``'skipped'``.
+    Returns ``'created'``, ``'updated'``, ``'unchanged'``, ``'needs-stamp'``,
+    or ``'skipped'``.
 
     TAP-970: refreshes a ``<!-- BEGIN: tapps-obligations vX.Y.Z -->`` /
     ``<!-- END: tapps-obligations -->`` region surgically. On a legacy
     consumer with an unmarked ``# TAPPS Quality Pipeline`` section, the
     section is wrapped in markers as a one-time migration. Custom lines
-    outside the markers always survive. ``overwrite=True`` keeps the legacy
-    full-section replace via :func:`_replace_tapps_section`.
+    outside the markers always survive. ``overwrite=True`` rewrites the
+    file with just the markered block + stamp.
+
+    TAP-2334: a top-level ``<!-- tapps-claude-version: X.Y.Z -->`` stamp is
+    added (or refreshed) so ``tapps_upgrade`` can detect stale consumer
+    CLAUDE.md files and skip the merge when nothing has changed. See
+    :mod:`claude_md` for the section-aware merge.
     """
-    from tapps_mcp.pipeline.tapps_obligations_block import install_or_refresh
+    from tapps_mcp.pipeline.claude_md import update_claude_md
 
     claude_md = project_root / "CLAUDE.md"
     content = load_platform_rules("claude", engagement_level=engagement_level)
-
-    if overwrite and claude_md.exists():
-        existing = claude_md.read_text(encoding="utf-8")
-        if "# TAPPS Quality Pipeline" in existing:
-            new_content = _replace_tapps_section(existing, content)
-            claude_md.write_text(new_content, encoding="utf-8")
-            return "updated"
-
-    action = install_or_refresh(claude_md, content)
-    if action == "created":
-        return "created"
-    if action == "unchanged":
+    action, _detail = update_claude_md(claude_md, content, overwrite=overwrite)
+    if action == "validated":
         return "unchanged"
-    return "updated"
+    if action == "overwritten":
+        return "updated"
+    return action
 
 
 def _split_by_h1_headings(content: str) -> list[tuple[str, str]]:

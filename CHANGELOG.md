@@ -9,6 +9,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **`feat(upgrade): CLAUDE.md version stamp + section-aware smart-merge` ([TAP-2334](https://linear.app/tappscodingagents/issue/TAP-2334)).**
+  CLAUDE.md now ships with a `<!-- tapps-claude-version: X.Y.Z -->` stamp at
+  the top of the file, parallel to the existing AGENTS.md stamp. `tapps_upgrade`
+  reads the stamp via the new [`pipeline/claude_md.py`](packages/tapps-mcp/src/tapps_mcp/pipeline/claude_md.py)
+  module: when it matches the installed package the merge is skipped, when it
+  is stale the marker-wrapped TAPPS obligations block is refreshed in-place,
+  and when it is missing (legacy consumers) the stamp is added without
+  touching user content outside the markers. Canonical H2 sections (`Tapps
+  Rules`, `Recommended Tool Call Obligations`, `Memory System`, `Quality Gate
+  Behavior`, `Upgrade & Rollback`) are replaced wholesale via the existing
+  obligations marker block; any other H1/H2 the consumer added is preserved
+  verbatim. `tapps_upgrade(dry_run=True)` surfaces the merge verdict as
+  `up-to-date`, `would-merge (stamp X != Y)`, `would-add-stamp`, or
+  `would-create`. The new `check_claude_md_stamp` doctor probe reports drift,
+  and `scripts/bump-versions.py --check` now refuses to push when CLAUDE.md
+  lags AGENTS.md or pyproject so consumer refresh ships atomically.
+
 - **`feat(doctor): probe for unresolved ${...} in consumer .mcp.json`.**
   New `check_mcp_config_unresolved_project_root()` diagnostic scans
   `.mcp.json` across all three hosts (Claude Code, Cursor, VS Code),

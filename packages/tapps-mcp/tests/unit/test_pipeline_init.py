@@ -362,23 +362,27 @@ class TestBootstrapClaudeOverwrite:
 
     def test_claude_overwrite_false_migrates_legacy_unmarked_section(self, tmp_path):
         """TAP-970: a legacy unmarked TAPPS section is auto-wrapped in markers
-        on the first overwrite=False run instead of being skipped (which
-        previously left consumers stuck on stale obligations after upgrade)."""
+        on the first overwrite=False run. TAP-2334: returns ``needs-stamp``
+        because the prior file had no ``tapps-claude-version`` marker; the
+        marker block migration still runs."""
         claude_md = tmp_path / "CLAUDE.md"
         old_tapps = load_platform_rules("claude")
         claude_md.write_text("# Project\n\n" + old_tapps, encoding="utf-8")
 
         action = _bootstrap_claude(tmp_path, overwrite=False)
 
-        assert action == "updated"
+        assert action == "needs-stamp"
         content = claude_md.read_text(encoding="utf-8")
         assert "<!-- BEGIN: tapps-obligations" in content
         assert "<!-- END: tapps-obligations -->" in content
         assert "# Project" in content
+        assert "tapps-claude-version" in content
 
     def test_claude_overwrite_false_unchanged_when_markers_match(self, tmp_path):
         """TAP-970: a CLAUDE.md whose marker block already matches the current
-        obligations is left untouched (returns 'unchanged')."""
+        obligations is left untouched. TAP-2334: returns ``needs-stamp`` when
+        the file is missing the top-level ``tapps-claude-version`` marker; the
+        stamp is added in-place."""
         from tapps_mcp.pipeline.tapps_obligations_block import wrap_with_markers
 
         claude_md = tmp_path / "CLAUDE.md"
@@ -387,7 +391,8 @@ class TestBootstrapClaudeOverwrite:
 
         action = _bootstrap_claude(tmp_path, overwrite=False)
 
-        assert action == "unchanged"
+        assert action == "needs-stamp"
+        assert "tapps-claude-version" in claude_md.read_text(encoding="utf-8")
 
     def test_claude_creates_when_file_missing(self, tmp_path):
         """When CLAUDE.md does not exist, create it."""
@@ -398,16 +403,19 @@ class TestBootstrapClaudeOverwrite:
         assert "TAPPS" in content
 
     def test_claude_appends_when_no_tapps_present(self, tmp_path):
-        """When CLAUDE.md exists but has no TAPPS content, append."""
+        """When CLAUDE.md exists but has no TAPPS content, append and add the
+        TAP-2334 stamp. Returns ``needs-stamp`` because the prior file had no
+        ``tapps-claude-version`` marker."""
         claude_md = tmp_path / "CLAUDE.md"
         claude_md.write_text("# My Project\n\nJust custom rules.\n", encoding="utf-8")
 
         action = _bootstrap_claude(tmp_path, overwrite=False)
 
-        assert action == "updated"
+        assert action == "needs-stamp"
         content = claude_md.read_text(encoding="utf-8")
         assert "# My Project" in content
         assert "TAPPS" in content
+        assert "tapps-claude-version" in content
 
 
 class TestReplaceTappsSection:

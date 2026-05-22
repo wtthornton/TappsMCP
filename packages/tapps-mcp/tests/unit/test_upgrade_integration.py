@@ -799,3 +799,181 @@ class TestUpgradeTechStackMd:
         component = result["components"]["tech_stack_md"]
         assert isinstance(component, dict)
         assert component["action"] == "skipped (mcp_only)"
+
+
+# ---------------------------------------------------------------------------
+# TAP-2334: CLAUDE.md version stamp + section-aware smart-merge
+# ---------------------------------------------------------------------------
+
+
+class TestUpgradeClaudeMdStamp:
+    """End-to-end coverage for the CLAUDE.md stamp + smart-merge feature.
+
+    Mirrors the AGENTS.md stamp tests: fresh write, version-match-skip,
+    version-mismatch-merge, user-customization-preserved, and malformed-stamp
+    tolerated.
+    """
+
+    def test_fresh_write_includes_stamp(self, tmp_path: Path) -> None:
+        from tapps_mcp import __version__
+        from tapps_mcp.pipeline.upgrade import upgrade_pipeline
+
+        _setup_claude_project(tmp_path)
+
+        result = upgrade_pipeline(tmp_path, platform="claude")
+        assert result["success"] is True
+        claude_md = tmp_path / "CLAUDE.md"
+        assert claude_md.exists()
+        content = claude_md.read_text(encoding="utf-8")
+        assert content.startswith(f"<!-- tapps-claude-version: {__version__} -->\n")
+
+    def test_version_match_skips_merge(self, tmp_path: Path) -> None:
+        """When the stamp matches, validation returns up-to-date and the merge
+        path is not triggered (CLAUDE.md content unchanged beyond the Karpathy
+        refresh)."""
+        from tapps_mcp.pipeline.upgrade import upgrade_pipeline
+
+        _setup_claude_project(tmp_path)
+        upgrade_pipeline(tmp_path, platform="claude")
+        claude_md = tmp_path / "CLAUDE.md"
+        first = claude_md.read_text(encoding="utf-8")
+
+        upgrade_pipeline(tmp_path, platform="claude")
+        second = claude_md.read_text(encoding="utf-8")
+        assert first == second
+
+    def test_version_mismatch_triggers_merge(self, tmp_path: Path) -> None:
+        """A stale stamp causes the upgrade to rewrite the obligations block
+        and bump the stamp."""
+        from tapps_mcp import __version__
+        from tapps_mcp.pipeline.upgrade import upgrade_pipeline
+        from tapps_mcp.pipeline.tapps_obligations_block import wrap_with_markers
+        from tapps_mcp.prompts.prompt_loader import load_platform_rules
+
+        _setup_claude_project(tmp_path)
+        claude_md = tmp_path / "CLAUDE.md"
+        claude_md.write_text(
+            "<!-- tapps-claude-version: 0.0.1 -->\n"
+            + wrap_with_markers(load_platform_rules("claude"), version="0.0.1")
+            + "\n",
+            encoding="utf-8",
+        )
+
+        upgrade_pipeline(tmp_path, platform="claude")
+        content = claude_md.read_text(encoding="utf-8")
+        assert f"<!-- tapps-claude-version: {__version__} -->" in content
+        assert "tapps-claude-version: 0.0.1" not in content
+        assert f"<!-- BEGIN: tapps-obligations v{__version__} -->" in content
+
+    def test_user_customizations_preserved_on_merge(self, tmp_path: Path) -> None:
+        """User content outside the markered obligations block survives a
+        stamp-bump merge."""
+        from tapps_mcp.pipeline.upgrade import upgrade_pipeline
+        from tapps_mcp.pipeline.tapps_obligations_block import wrap_with_markers
+        from tapps_mcp.prompts.prompt_loader import load_platform_rules
+
+        _setup_claude_project(tmp_path)
+        claude_md = tmp_path / "CLAUDE.md"
+        claude_md.write_text(
+            "<!-- tapps-claude-version: 0.0.1 -->\n"
+            "# CLAUDE.md\n\n"
+            "## Project Notes\n\n"
+            "Custom guidance that must survive upgrade.\n\n"
+            + wrap_with_markers(load_platform_rules("claude"), version="0.0.1")
+            + "\n"
+            "## Trailing Notes\n\nAlso keep.\n",
+            encoding="utf-8",
+        )
+
+        upgrade_pipeline(tmp_path, platform="claude")
+        content = claude_md.read_text(encoding="utf-8")
+        assert "## Project Notes" in content
+        assert "Custom guidance that must survive upgrade." in content
+        assert "## Trailing Notes" in content
+        assert "Also keep." in content
+
+    def test_legacy_no_stamp_returns_needs_stamp(self, tmp_path: Path) -> None:
+        """A CLAUDE.md without a stamp gets the stamp added without losing
+        user content."""
+        from tapps_mcp import __version__
+        from tapps_mcp.pipeline.upgrade import upgrade_pipeline
+        from tapps_mcp.pipeline.tapps_obligations_block import wrap_with_markers
+        from tapps_mcp.prompts.prompt_loader import load_platform_rules
+
+        _setup_claude_project(tmp_path)
+        claude_md = tmp_path / "CLAUDE.md"
+        claude_md.write_text(
+            "# CLAUDE.md\n\n"
+            "## My Project\n\nUser content.\n\n"
+            + wrap_with_markers(load_platform_rules("claude"), version="0.0.1")
+            + "\n",
+            encoding="utf-8",
+        )
+
+        result = upgrade_pipeline(tmp_path, platform="claude")
+        assert result["success"] is True
+        content = claude_md.read_text(encoding="utf-8")
+        assert content.startswith(f"<!-- tapps-claude-version: {__version__} -->\n")
+        assert "## My Project" in content
+        assert "User content." in content
+
+    def test_malformed_stamp_tolerated(self, tmp_path: Path) -> None:
+        """A non-semver stamp is treated as missing — upgrade prepends the
+        canonical stamp without crashing on the malformed value."""
+        from tapps_mcp import __version__
+        from tapps_mcp.pipeline.upgrade import upgrade_pipeline
+        from tapps_mcp.pipeline.tapps_obligations_block import wrap_with_markers
+        from tapps_mcp.prompts.prompt_loader import load_platform_rules
+
+        _setup_claude_project(tmp_path)
+        claude_md = tmp_path / "CLAUDE.md"
+        claude_md.write_text(
+            "<!-- tapps-claude-version: not-a-version -->\n"
+            "# CLAUDE.md\n\n## User content\n\nKeep.\n\n"
+            + wrap_with_markers(load_platform_rules("claude"), version="0.0.1")
+            + "\n",
+            encoding="utf-8",
+        )
+
+        result = upgrade_pipeline(tmp_path, platform="claude")
+        assert result["success"] is True
+        content = claude_md.read_text(encoding="utf-8")
+        assert content.startswith(f"<!-- tapps-claude-version: {__version__} -->\n")
+        assert "## User content" in content
+        assert "Keep." in content
+
+    def test_dry_run_reports_would_merge(self, tmp_path: Path) -> None:
+        """Dry-run with a stale stamp surfaces ``would-merge`` and does not
+        write to disk."""
+        from tapps_mcp.pipeline.upgrade import upgrade_pipeline
+        from tapps_mcp.pipeline.tapps_obligations_block import wrap_with_markers
+        from tapps_mcp.prompts.prompt_loader import load_platform_rules
+
+        _setup_claude_project(tmp_path)
+        claude_md = tmp_path / "CLAUDE.md"
+        original = (
+            "<!-- tapps-claude-version: 0.0.1 -->\n"
+            + wrap_with_markers(load_platform_rules("claude"), version="0.0.1")
+            + "\n"
+        )
+        claude_md.write_text(original, encoding="utf-8")
+
+        result = upgrade_pipeline(tmp_path, platform="claude", dry_run=True)
+        platforms = result["components"]["platforms"]
+        claude_md_status = platforms[0]["components"]["claude_md"]
+        assert isinstance(claude_md_status, str)
+        assert claude_md_status.startswith("would-merge")
+        # File on disk untouched by the dry run.
+        assert claude_md.read_text(encoding="utf-8") == original
+
+    def test_dry_run_up_to_date(self, tmp_path: Path) -> None:
+        """Dry-run on a fresh CLAUDE.md reports ``up-to-date``."""
+        from tapps_mcp.pipeline.upgrade import upgrade_pipeline
+
+        _setup_claude_project(tmp_path)
+        upgrade_pipeline(tmp_path, platform="claude")
+
+        result = upgrade_pipeline(tmp_path, platform="claude", dry_run=True)
+        platforms = result["components"]["platforms"]
+        claude_md_status = platforms[0]["components"]["claude_md"]
+        assert claude_md_status == "up-to-date"

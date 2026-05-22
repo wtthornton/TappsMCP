@@ -37,14 +37,29 @@ PACKAGES: list[tuple[str, str | None]] = [
     ("packages/docs-mcp/pyproject.toml", "npm-docs-mcp/package.json"),
 ]
 
-# tapps-mcp's pyproject is the source of truth for the AGENTS.md stamp.
+# tapps-mcp's pyproject is the source of truth for the AGENTS.md / CLAUDE.md stamps.
 TAPPS_MCP_PYPROJECT = "packages/tapps-mcp/pyproject.toml"
 
-# Files containing a `<!-- tapps-agents-version: X.Y.Z -->` stamp that must
-# match tapps-mcp pyproject. AGENTS.md is the canonical consumer-facing one.
-STAMPED_FILES: tuple[str, ...] = ("AGENTS.md",)
+# Files containing a TappsMCP version stamp that must match tapps-mcp pyproject.
+# Each entry is ``(relative_path, stamp_key)`` where stamp_key is the HTML
+# comment marker name (without surrounding ``<!-- ... -->``).
+# TAP-2334 added the CLAUDE.md stamp alongside the AGENTS.md stamp so both
+# refresh atomically per bump.
+STAMPED_FILES: tuple[tuple[str, str], ...] = (
+    ("AGENTS.md", "tapps-agents-version"),
+    ("CLAUDE.md", "tapps-claude-version"),
+)
 
-_STAMP_RE = re.compile(r"<!--\s*tapps-agents-version:\s*([\d.]+)\s*-->")
+_STAMP_RE_CACHE: dict[str, re.Pattern[str]] = {}
+
+
+def _stamp_regex(key: str) -> re.Pattern[str]:
+    """Return (and cache) a regex matching ``<!-- <key>: X.Y.Z -->``."""
+    if key not in _STAMP_RE_CACHE:
+        _STAMP_RE_CACHE[key] = re.compile(
+            rf"<!--\s*{re.escape(key)}:\s*([\d.]+)\s*-->"
+        )
+    return _STAMP_RE_CACHE[key]
 
 
 def parse_version(version: str) -> tuple[int, int, int]:
@@ -96,25 +111,26 @@ def update_npm_version(path: Path, new_version: str) -> str:
     return json.dumps(data, indent=2) + "\n"
 
 
-def read_stamp(path: Path) -> str | None:
-    """Return the `<!-- tapps-agents-version: X.Y.Z -->` value, or None."""
+def read_stamp(path: Path, stamp_key: str) -> str | None:
+    """Return the ``<!-- <stamp_key>: X.Y.Z -->`` value, or None."""
     if not path.exists():
         return None
-    match = _STAMP_RE.search(path.read_text(encoding="utf-8"))
+    match = _stamp_regex(stamp_key).search(path.read_text(encoding="utf-8"))
     return match.group(1) if match else None
 
 
-def rewrite_stamp(path: Path, new_version: str) -> tuple[str | None, str]:
-    """Rewrite the version stamp in `path`. Returns (old_stamp, new_content).
+def rewrite_stamp(path: Path, stamp_key: str, new_version: str) -> tuple[str | None, str]:
+    """Rewrite the named version stamp in *path*. Returns (old_stamp, new_content).
 
-    Raises ValueError if `path` has no recognised stamp.
+    Raises ValueError if *path* has no matching stamp.
     """
     content = path.read_text(encoding="utf-8")
-    match = _STAMP_RE.search(content)
+    regex = _stamp_regex(stamp_key)
+    match = regex.search(content)
     if not match:
-        raise ValueError(f"No tapps-agents-version stamp found in {path}")
+        raise ValueError(f"No {stamp_key} stamp found in {path}")
     old = match.group(1)
-    new_content = _STAMP_RE.sub(f"<!-- tapps-agents-version: {new_version} -->", content, count=1)
+    new_content = regex.sub(f"<!-- {stamp_key}: {new_version} -->", content, count=1)
     return old, new_content
 
 
@@ -160,11 +176,11 @@ def collect_drift(target_version: str) -> list[str]:
     """
     findings: list[str] = []
 
-    for rel in STAMPED_FILES:
+    for rel, stamp_key in STAMPED_FILES:
         path = REPO_ROOT / rel
-        stamp = read_stamp(path)
+        stamp = read_stamp(path, stamp_key)
         if stamp is None:
-            findings.append(f"{rel}: missing tapps-agents-version stamp")
+            findings.append(f"{rel}: missing {stamp_key} stamp")
         elif stamp != target_version:
             findings.append(f"{rel}: stamp {stamp} != pyproject {target_version}")
 
@@ -285,13 +301,19 @@ def collect_bump_changes(part: str | None) -> list[tuple[Path, str, str, str]]:
     if new_tapps_mcp_version is None:
         return changes
 
-    # Refresh derived files: AGENTS.md stamp + canonical hook manifest.
-    for stamped_rel in STAMPED_FILES:
+    # Refresh derived files: AGENTS.md + CLAUDE.md stamps + canonical hook manifest.
+    for stamped_rel, stamp_key in STAMPED_FILES:
         stamped_path = REPO_ROOT / stamped_rel
         if not stamped_path.exists():
             print(f"  SKIP {stamped_rel} (not found)")
             continue
-        old_stamp, new_content = rewrite_stamp(stamped_path, new_tapps_mcp_version)
+        try:
+            old_stamp, new_content = rewrite_stamp(
+                stamped_path, stamp_key, new_tapps_mcp_version
+            )
+        except ValueError:
+            print(f"  SKIP {stamped_rel} ({stamp_key} stamp not found)")
+            continue
         changes.append((stamped_path, old_stamp or "<none>", new_tapps_mcp_version, new_content))
         print(f"  {stamped_rel} stamp: {old_stamp} -> {new_tapps_mcp_version}")
 

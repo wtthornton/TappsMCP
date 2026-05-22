@@ -513,6 +513,65 @@ def check_cursor_rules(project_root: Path) -> CheckResult:
     )
 
 
+def check_claude_md_stamp(project_root: Path) -> CheckResult:
+    """Verify CLAUDE.md carries the ``<!-- tapps-claude-version: X.Y.Z -->`` stamp
+    and that it matches the installed TappsMCP (TAP-2334).
+
+    Parallel to :func:`check_agents_md_stamp_matches_package` — surfaces stale
+    or unversioned CLAUDE.md files so consumers know to run
+    ``tapps-mcp upgrade``. When CLAUDE.md does not exist (Cursor-only project),
+    this check is reported as a soft pass.
+    """
+    claude_md = project_root / "CLAUDE.md"
+    if not claude_md.exists():
+        cursor_rules = project_root / ".cursor" / "rules" / "tapps-pipeline.md"
+        if cursor_rules.exists():
+            return CheckResult(
+                "CLAUDE.md stamp",
+                True,
+                "CLAUDE.md not found (Cursor rules present instead)",
+            )
+        return CheckResult(
+            "CLAUDE.md stamp",
+            False,
+            "CLAUDE.md not found in project root",
+            "Run: tapps-mcp upgrade (or tapps_init via MCP)",
+        )
+
+    from tapps_mcp import __version__
+    from tapps_mcp.pipeline.claude_md import ClaudeValidation
+
+    validation = ClaudeValidation(claude_md.read_text(encoding="utf-8"))
+    existing = validation.existing_version or "<none>"
+
+    if validation.existing_version is None:
+        return CheckResult(
+            "CLAUDE.md stamp",
+            False,
+            "CLAUDE.md has no tapps-claude-version marker (legacy consumer)",
+            "Run `uv run tapps-mcp upgrade` to add the stamp and refresh canonical sections",
+        )
+    if validation.existing_version != __version__:
+        return CheckResult(
+            "CLAUDE.md stamp",
+            False,
+            f"stamp {existing} != package {__version__}",
+            "Run `uv run tapps-mcp upgrade` then commit CLAUDE.md",
+        )
+    if validation.sections_missing:
+        return CheckResult(
+            "CLAUDE.md stamp",
+            False,
+            f"stamp {existing} matches but sections missing: {', '.join(validation.sections_missing)}",
+            "Run `uv run tapps-mcp upgrade` to restore canonical sections",
+        )
+    return CheckResult(
+        "CLAUDE.md stamp",
+        True,
+        f"stamp {existing} matches package {__version__}",
+    )
+
+
 def check_agents_md_stamp_matches_package(project_root: Path) -> CheckResult:
     """Strict stamp check for release gating (TAP-982).
 
@@ -2295,6 +2354,7 @@ def _collect_checks(root: Path, *, quick: bool = False) -> list[CheckResult]:
     checks.append(check_mcp_config_unresolved_project_root(root))
     checks.append(check_scope_recommendation(root))
     checks.append(check_claude_md(root))
+    checks.append(check_claude_md_stamp(root))
     checks.append(check_cursor_rules(root))
     checks.append(check_linear_standards_rule(root))
     checks.append(check_autonomy_rule(root))
