@@ -55,6 +55,10 @@ def fake_repo(tmp_path: Path, bump_module: ModuleType) -> Path:
     (tmp_path / "AGENTS.md").write_text(
         "<!-- tapps-agents-version: 1.0.0 -->\n# Agents\n", encoding="utf-8"
     )
+    # TAP-2334: CLAUDE.md ships a parallel stamp the bumper must keep in sync.
+    (tmp_path / "CLAUDE.md").write_text(
+        "<!-- tapps-claude-version: 1.0.0 -->\n# Claude\n", encoding="utf-8"
+    )
     # Copy the real templates + upgrade.py so manifest checks against the
     # real registry (smaller surface than mocking).
     src = (
@@ -78,7 +82,7 @@ def fake_repo(tmp_path: Path, bump_module: ModuleType) -> Path:
 class TestStampRewrite:
     def test_rewrite_stamp_updates_version(self, fake_repo: Path, bump_module) -> None:
         path = fake_repo / "AGENTS.md"
-        old, new_content = bump_module.rewrite_stamp(path, "2.5.0")
+        old, new_content = bump_module.rewrite_stamp(path, "tapps-agents-version", "2.5.0")
         assert old == "1.0.0"
         assert "<!-- tapps-agents-version: 2.5.0 -->" in new_content
 
@@ -86,10 +90,23 @@ class TestStampRewrite:
         target = tmp_path / "no-stamp.md"
         target.write_text("# no stamp here\n", encoding="utf-8")
         with pytest.raises(ValueError, match="No tapps-agents-version stamp"):
-            bump_module.rewrite_stamp(target, "2.0.0")
+            bump_module.rewrite_stamp(target, "tapps-agents-version", "2.0.0")
 
     def test_read_stamp_extracts_version(self, fake_repo: Path, bump_module) -> None:
-        assert bump_module.read_stamp(fake_repo / "AGENTS.md") == "1.0.0"
+        assert (
+            bump_module.read_stamp(fake_repo / "AGENTS.md", "tapps-agents-version") == "1.0.0"
+        )
+
+    def test_rewrite_claude_stamp(self, fake_repo: Path, bump_module) -> None:
+        path = fake_repo / "CLAUDE.md"
+        old, new_content = bump_module.rewrite_stamp(path, "tapps-claude-version", "2.5.0")
+        assert old == "1.0.0"
+        assert "<!-- tapps-claude-version: 2.5.0 -->" in new_content
+
+    def test_read_claude_stamp(self, fake_repo: Path, bump_module) -> None:
+        assert (
+            bump_module.read_stamp(fake_repo / "CLAUDE.md", "tapps-claude-version") == "1.0.0"
+        )
 
 
 class TestCheckMode:
@@ -138,7 +155,12 @@ class TestBumpAtomicity:
             bump_module.read_pyproject_version(fake_repo / "packages/tapps-mcp/pyproject.toml")
             == "1.0.1"
         )
-        assert bump_module.read_stamp(fake_repo / "AGENTS.md") == "1.0.1"
+        assert (
+            bump_module.read_stamp(fake_repo / "AGENTS.md", "tapps-agents-version") == "1.0.1"
+        )
+        assert (
+            bump_module.read_stamp(fake_repo / "CLAUDE.md", "tapps-claude-version") == "1.0.1"
+        )
         # Post-bump must pass --check immediately.
         assert bump_module.run_check() == 0
 
@@ -179,6 +201,9 @@ class TestUnifiedVersioning:
         (fake_repo / "AGENTS.md").write_text(
             "<!-- tapps-agents-version: 1.0.5 -->\n", encoding="utf-8"
         )
+        (fake_repo / "CLAUDE.md").write_text(
+            "<!-- tapps-claude-version: 1.0.5 -->\n", encoding="utf-8"
+        )
         # tapps-core + docs-mcp still at 1.0.0; npm files at 1.0.0.
         changes = bump_module.collect_bump_changes("patch")
         for path, _, _, content in changes:
@@ -196,7 +221,12 @@ class TestUnifiedVersioning:
         assert (
             bump_module.read_npm_version(fake_repo / "npm-docs-mcp/package.json") == "1.0.6"
         )
-        assert bump_module.read_stamp(fake_repo / "AGENTS.md") == "1.0.6"
+        assert (
+            bump_module.read_stamp(fake_repo / "AGENTS.md", "tapps-agents-version") == "1.0.6"
+        )
+        assert (
+            bump_module.read_stamp(fake_repo / "CLAUDE.md", "tapps-claude-version") == "1.0.6"
+        )
         # Post-bump --check must pass.
         assert bump_module.run_check() == 0
 
@@ -212,6 +242,9 @@ class TestUnifiedVersioning:
         )
         (fake_repo / "AGENTS.md").write_text(
             "<!-- tapps-agents-version: 1.0.9 -->\n", encoding="utf-8"
+        )
+        (fake_repo / "CLAUDE.md").write_text(
+            "<!-- tapps-claude-version: 1.0.9 -->\n", encoding="utf-8"
         )
         changes = bump_module.collect_bump_changes(None)  # --sync semantics
         for path, _, _, content in changes:

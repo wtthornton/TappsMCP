@@ -205,6 +205,7 @@ a = Analysis(
         "tapps_mcp.pipeline.init",
         "tapps_mcp.pipeline.upgrade",
         "tapps_mcp.pipeline.agents_md",
+        "tapps_mcp.pipeline.claude_md",
         "tapps_mcp.pipeline.karpathy_block",
         "tapps_mcp.pipeline.github_templates",
         "tapps_mcp.pipeline.ci_install",
