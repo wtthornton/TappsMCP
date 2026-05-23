@@ -1636,6 +1636,28 @@ def upgrade_pipeline(
         "errors": [],
     }
 
+    # TAP-2200: Gate on install drift before running the upgrade.
+    # When sibling tools (docsmcp, tapps-brain-mcp) are behind the in-process
+    # version, the upgrade plan is not trustworthy — templates reference
+    # capabilities the lagging binary does not yet expose. Block with a clear
+    # error and the literal remediation command so the operator can fix the
+    # install before proceeding. Dry-run bypasses the gate so operators can
+    # still preview the diff while drift is present.
+    if not dry_run:
+        from tapps_mcp.diagnostics import check_install_drift
+
+        _drift = check_install_drift()
+        if _drift.drift_detected:
+            stale = [e.binary for e in _drift.entries if e.drifted]
+            result["errors"].append(
+                f"Upgrade blocked: install drift detected for {stale}. "
+                f"All sibling tools must be at version {__version__} before upgrading. "
+                f"Run: {_drift.remediation_hint} — then re-run tapps_upgrade. "
+                "To preview the upgrade plan despite drift, use dry_run=True."
+            )
+            result["install_drift"] = _drift.model_dump()
+            return result
+
     # Pre-upgrade backup (skip in dry-run mode)
     if not dry_run:
         try:

@@ -9,6 +9,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **`feat(upgrade): block tapps_upgrade when sibling tool versions drift` ([TAP-2200](https://linear.app/tappscodingagents/issue/TAP-2200)).**
+  `tapps_upgrade` now gates on install drift before running: when any sibling
+  binary (`docsmcp`, `tapps-brain-mcp`) lags the in-process `tapps-mcp`
+  version, the upgrade returns a blocking error with the literal
+  `uv tool install -e --reinstall` remediation command instead of silently
+  generating an upgrade plan based on stale templates. `dry_run=True` bypasses
+  the gate so operators can preview the planned changes while resolving drift.
+  The existing soft `remediation_hint` in `tapps_session_start` is unchanged —
+  this story escalates only the `tapps_upgrade` code path.
+
 - **`feat(upgrade): CLAUDE.md version stamp + section-aware smart-merge` ([TAP-2334](https://linear.app/tappscodingagents/issue/TAP-2334)).**
   CLAUDE.md now ships with a `<!-- tapps-claude-version: X.Y.Z -->` stamp at
   the top of the file, parallel to the existing AGENTS.md stamp. `tapps_upgrade`

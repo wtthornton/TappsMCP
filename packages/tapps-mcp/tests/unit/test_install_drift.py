@@ -1,4 +1,4 @@
-"""Tests for TAP-2129 install-drift diagnostic.
+"""Tests for TAP-2129 install-drift diagnostic and TAP-2200 upgrade drift gate.
 
 Covers the three branches:
 
@@ -6,12 +6,14 @@ Covers the three branches:
 2. **Drifted** — global binary version != source version → ``drifted=True``, ``drift_detected=True``, remediation hint populated.
 3. **No global install** — ``shutil.which`` returns ``None`` → entry omitted; check silently skipped.
 
-Also covers the ``doctor.check_docsmcp_binary_version_mismatch`` helper.
+Also covers the ``doctor.check_docsmcp_binary_version_mismatch`` helper and the
+TAP-2200 ``upgrade_pipeline`` drift gate.
 """
 
 from __future__ import annotations
 
 import subprocess
+from pathlib import Path
 from unittest.mock import patch
 
 import pytest
@@ -166,3 +168,68 @@ class TestDoctorChecks:
         assert result.ok is False
         assert "uv tool install -e --reinstall" in result.detail
         assert "packages/docs-mcp" in result.detail
+
+
+# ---------------------------------------------------------------------------
+# TAP-2200: upgrade_pipeline drift gate
+# ---------------------------------------------------------------------------
+
+
+def _drifted_diagnostic() -> InstallDriftDiagnostic:
+    """Return a fake drift diagnostic with docsmcp lagging."""
+    from tapps_mcp import __version__
+
+    return InstallDriftDiagnostic(
+        drift_detected=True,
+        entries=[
+            InstallDriftEntry(
+                binary="docsmcp",
+                binary_path="/fake/docsmcp",
+                binary_version="0.0.1",
+                source_version=__version__,
+                drifted=True,
+            )
+        ],
+        remediation_hint=(
+            "Refresh global tools: uv tool install -e --reinstall"
+            " <path>/packages/tapps-mcp (and the same for packages/docs-mcp)"
+        ),
+    )
+
+
+class TestUpgradePipelineDriftGate:
+    """TAP-2200: upgrade_pipeline blocks on detected install drift."""
+
+    def test_drift_returns_error_and_no_backup(self, tmp_path: Path) -> None:
+        """Non-dry-run upgrade blocked when drift is present; returns before backup."""
+        from tapps_mcp.pipeline.upgrade import upgrade_pipeline
+
+        with patch("tapps_mcp.diagnostics.check_install_drift", return_value=_drifted_diagnostic()):
+            result = upgrade_pipeline(tmp_path)
+
+        assert result["errors"], "Expected at least one error when drift is detected"
+        assert any("Upgrade blocked" in e for e in result["errors"])
+        assert any("docsmcp" in e for e in result["errors"])
+        assert result.get("install_drift", {}).get("drift_detected") is True
+        # Returned early — no backup should have been attempted
+        assert "backup" not in result
+
+    def test_drift_error_includes_remediation_hint(self, tmp_path: Path) -> None:
+        """Error message surfaces the literal remediation command."""
+        from tapps_mcp.pipeline.upgrade import upgrade_pipeline
+
+        with patch("tapps_mcp.diagnostics.check_install_drift", return_value=_drifted_diagnostic()):
+            result = upgrade_pipeline(tmp_path)
+
+        combined = " ".join(result["errors"])
+        assert "uv tool install -e --reinstall" in combined
+
+    def test_dry_run_bypasses_drift_gate(self, tmp_path: Path) -> None:
+        """dry_run=True skips the drift gate so operators can preview despite drift."""
+        from tapps_mcp.pipeline.upgrade import upgrade_pipeline
+
+        with patch("tapps_mcp.diagnostics.check_install_drift", return_value=_drifted_diagnostic()):
+            result = upgrade_pipeline(tmp_path, dry_run=True)
+
+        drift_block_errors = [e for e in result.get("errors", []) if "Upgrade blocked" in e]
+        assert not drift_block_errors, "dry_run should bypass the drift gate"
