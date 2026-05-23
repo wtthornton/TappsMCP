@@ -61,18 +61,21 @@ class TestParseBanditJson:
         assert issues[1].severity == "high"
 
     def test_empty_string(self):
-        assert parse_bandit_json("") == []
+        # Empty output = tool ran but produced nothing — parse failure → None
+        assert parse_bandit_json("") is None
 
     def test_whitespace_string(self):
-        assert parse_bandit_json("   ") == []
+        assert parse_bandit_json("   ") is None
 
     def test_invalid_json(self):
-        assert parse_bandit_json("not json") == []
+        assert parse_bandit_json("not json") is None
 
     def test_no_results_key(self):
+        # Valid JSON dict but no "results" key — ambiguous; treat as no issues
         assert parse_bandit_json('{"errors": []}') == []
 
     def test_empty_results(self):
+        # Valid JSON with empty results list → genuinely zero findings
         assert parse_bandit_json('{"results": []}') == []
 
     def test_owasp_mapping_applied(self):
@@ -143,6 +146,7 @@ class TestRunBanditCheck:
 
     @patch("tapps_mcp.tools.bandit.run_command")
     def test_empty_output(self, mock_cmd):
+        # Empty stdout = tool ran but produced no usable output → None (parse failure)
         mock_cmd.return_value = CommandResult(returncode=0, stdout="", stderr="")
-        issues = run_bandit_check("test.py")
-        assert issues == []
+        result = run_bandit_check("test.py")
+        assert result is None

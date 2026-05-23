@@ -67,3 +67,10 @@ class ScoreResult(BaseModel):
     tool_errors: dict[str, str] = Field(
         default_factory=dict, description="Per-tool error reasons when tools fail."
     )
+    degraded_categories: list[str] = Field(
+        default_factory=list,
+        description=(
+            "Categories that fell back to AST heuristic because a tool ran but produced "
+            "empty or unparseable output. Non-empty implies degraded=True."
+        ),
+    )

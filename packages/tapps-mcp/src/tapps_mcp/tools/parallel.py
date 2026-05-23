@@ -48,6 +48,7 @@ class ParallelResults:
     missing_tools: list[str] = field(default_factory=list)
     degraded: bool = False
     tool_errors: dict[str, str] = field(default_factory=dict)
+    tool_parse_failures: list[str] = field(default_factory=list)
 
 
 def _mark_missing(name: str, results: ParallelResults) -> None:
@@ -63,7 +64,13 @@ def _assign_result(name: str, results: ParallelResults, value: object) -> None:
     elif name == "mypy":
         results.type_issues = value  # type: ignore[assignment]
     elif name == "bandit":
-        results.security_issues = value  # type: ignore[assignment]
+        if value is None:
+            # Tool ran but produced empty/unparseable output — record parse failure.
+            # security_issues stays as the default empty list; the scorer will fall
+            # back to the AST heuristic and populate degraded_categories.
+            results.tool_parse_failures.append("bandit")
+        else:
+            results.security_issues = value  # type: ignore[assignment]
     elif name == "radon_cc":
         results.radon_cc = value  # type: ignore[assignment]
     elif name == "radon_mi":

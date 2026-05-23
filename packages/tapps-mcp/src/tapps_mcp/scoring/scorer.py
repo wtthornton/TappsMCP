@@ -265,13 +265,21 @@ class CodeScorer(ScorerBase):
 
         overall = self._calculate_overall(cats)
 
+        # Derive degraded_categories from any non-informational category with fallback=True.
+        degraded_cats = [
+            name
+            for name, cat in cats.items()
+            if cat.details.get("fallback") is True and name != "linting"
+        ]
+
         return ScoreResult(
             file_path=str(resolved),
             categories=cats,
             overall_score=overall,
             lint_issues=issues,
-            degraded=bool(missing),
+            degraded=bool(missing or degraded_cats),
             missing_tools=missing,
+            degraded_categories=degraded_cats,
         )
 
     async def score_file(self, file_path: Path, *, mode: str = "subprocess") -> ScoreResult:
@@ -308,6 +316,14 @@ class CodeScorer(ScorerBase):
         categories, dep_vuln_count = self._build_categories(code, resolved, parallel)
         overall = self._calculate_overall(categories)
 
+        # Derive degraded_categories: any non-informational category that fell back
+        # to an AST heuristic because a tool ran but produced empty/unparseable output.
+        degraded_cats = [
+            name
+            for name, cat in categories.items()
+            if cat.details.get("fallback") is True and name != "linting"
+        ]
+
         return ScoreResult(
             file_path=str_path,
             categories=categories,
@@ -317,9 +333,10 @@ class CodeScorer(ScorerBase):
             security_issues=parallel.security_issues,
             dead_code_count=len(parallel.dead_code),
             dependency_vuln_count=dep_vuln_count,
-            degraded=parallel.degraded,
+            degraded=parallel.degraded or bool(degraded_cats),
             missing_tools=parallel.missing_tools,
             tool_errors=parallel.tool_errors,
+            degraded_categories=degraded_cats,
         )
 
     # ------------------------------------------------------------------
@@ -378,7 +395,13 @@ class CodeScorer(ScorerBase):
         """
         w = self._weights
         details: dict[str, object] = {"issue_count": len(parallel.security_issues)}
-        using_bandit = parallel.security_issues or "bandit" not in parallel.missing_tools
+        # Use the real bandit result unless: (a) bandit is missing/unavailable, or
+        # (b) bandit ran but its output was empty/unparseable (parse failure).
+        bandit_parse_failed = "bandit" in parallel.tool_parse_failures
+        using_bandit = (
+            not bandit_parse_failed
+            and (parallel.security_issues or "bandit" not in parallel.missing_tools)
+        )
         if using_bandit:
             score = calculate_security_score(parallel.security_issues)
         else:

@@ -58,7 +58,11 @@ def _run_bandit_scan(
     if not available:
         logger.info("bandit_not_available", hint="pip install bandit")
         return [], False
-    return run_bandit_check(file_path, cwd=cwd, timeout=timeout), True
+    # run_bandit_check returns None when output is empty/unparseable (parse failure).
+    # In the security-scan context we treat that as zero findings (scan available but
+    # produced no usable data); the quality scorer handles degraded tracking separately.
+    result = run_bandit_check(file_path, cwd=cwd, timeout=timeout)
+    return result if result is not None else [], True
 
 
 def _run_secret_scan(

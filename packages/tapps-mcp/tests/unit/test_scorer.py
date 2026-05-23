@@ -117,6 +117,32 @@ class TestCodeScorerFull:
         assert result.overall_score == 0.0
         assert result.degraded is True
 
+    @pytest.mark.asyncio
+    async def test_degraded_categories_bandit_empty_stdout(self, tmp_path):
+        """TAP-1759: bandit available but returns empty stdout → degraded_categories."""
+        f = tmp_path / "sample.py"
+        f.write_text("x = 1\n", encoding="utf-8")
+        (tmp_path / "pyproject.toml").write_text("[project]\n", encoding="utf-8")
+
+        # Simulate: bandit ran (not in missing_tools) but produced empty stdout
+        # → parse failure recorded in tool_parse_failures, security_issues stays []
+        parallel = ParallelResults(
+            lint_issues=[],
+            type_issues=[],
+            security_issues=[],
+            radon_cc=[{"name": "x", "complexity": 1}],
+            radon_mi=80.0,
+            tool_parse_failures=["bandit"],
+        )
+
+        with patch("tapps_mcp.scoring.scorer.run_all_tools", new_callable=AsyncMock) as mock_tools:
+            mock_tools.return_value = parallel
+            scorer = CodeScorer()
+            result = await scorer.score_file(f)
+
+        assert "security" in result.degraded_categories
+        assert result.degraded is True
+
 
 class TestCodeScorerSync:
     @patch("tapps_mcp.scoring.scorer.run_all_tools", new_callable=AsyncMock)

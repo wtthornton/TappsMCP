@@ -66,16 +66,23 @@ def _map_owasp(code: str) -> str | None:
     return _OWASP_MAP.get(code)
 
 
-def parse_bandit_json(raw: str) -> list[SecurityIssue]:
-    """Parse bandit ``-f json`` output into ``SecurityIssue`` models."""
+def parse_bandit_json(raw: str) -> list[SecurityIssue] | None:
+    """Parse bandit ``-f json`` output into ``SecurityIssue`` models.
+
+    Returns ``None`` when the output is empty or unparseable — meaning the tool
+    ran but produced no usable data.  Callers should treat ``None`` as a parse
+    failure (the category fell back to an AST heuristic) rather than as a clean
+    zero-issue result.  An empty-``results`` dict that JSON-parsed cleanly still
+    returns ``[]`` (genuinely no issues found).
+    """
     if not raw.strip():
-        return []
+        return None  # tool ran but produced no output — parse failure
     try:
         data = json.loads(raw)
     except json.JSONDecodeError:
-        return []
+        return None  # garbage output — parse failure
     if not isinstance(data, dict):
-        return []
+        return None
     results = data.get("results", [])
     if not isinstance(results, list):
         return []
@@ -118,8 +125,12 @@ _BANDIT_ARGS: list[str] = [
 
 def run_bandit_check(
     file_path: str, *, cwd: str | None = None, timeout: int = 30
-) -> list[SecurityIssue]:
-    """Run bandit on a single file synchronously."""
+) -> list[SecurityIssue] | None:
+    """Run bandit on a single file synchronously.
+
+    Returns ``None`` when the output is empty or unparseable (parse failure).
+    Returns ``[]`` when bandit ran and found zero issues.
+    """
     result = run_command(
         [*_BANDIT_ARGS, file_path],
         cwd=cwd,
@@ -131,8 +142,12 @@ def run_bandit_check(
 
 async def run_bandit_check_async(
     file_path: str, *, cwd: str | None = None, timeout: int = 30
-) -> list[SecurityIssue]:
-    """Run bandit on a single file asynchronously."""
+) -> list[SecurityIssue] | None:
+    """Run bandit on a single file asynchronously.
+
+    Returns ``None`` when the output is empty or unparseable (parse failure).
+    Returns ``[]`` when bandit ran and found zero issues.
+    """
     result = await run_command_async(
         [*_BANDIT_ARGS, file_path],
         cwd=cwd,
