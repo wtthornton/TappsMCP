@@ -1,0 +1,54 @@
+# .github/workflows/tool-budget-lint.yml
+# TAP-2029: reject commits that add new @mcp.tool() registrations without
+# updating docs/architecture/tool-budget.md.
+#
+# Bypass: add "Tool-Budget: deferred" or "Tool-Budget: skip" to the commit
+# message for exceptional cases (e.g. tool_search-only deferred tools whose
+# count doesn't change the eager budget). Document the reason in the issue.
+name: tool-budget lint
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+    branches: [main, master]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: tool-budget-lint-${{ github.head_ref || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    name: check tool-budget.md updated with new @mcp.tool registrations
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Checkout (with history for diff)
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 2
+
+      - name: Install Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Run self-tests
+        run: python3 scripts/check-tool-budget.py --test
+
+      - name: Check tool-budget on push (single-commit)
+        if: github.event_name == 'push'
+        run: |
+          python3 scripts/check-tool-budget.py \
+            --diff-range "HEAD~1..HEAD" \
+            --commit-msg "$(git log -1 --format='%B')"
+
+      - name: Check tool-budget on PR
+        if: github.event_name == 'pull_request'
+        run: |
+          python3 scripts/check-tool-budget.py \
+            --diff-range "${{ github.event.pull_request.base.sha }}..${{ github.event.pull_request.head.sha }}" \
+            --commit-msg "$(git log --format='%B' ${{ github.event.pull_request.base.sha }}..${{ github.event.pull_request.head.sha }})"
