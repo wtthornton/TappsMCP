@@ -46,8 +46,11 @@ dependencies = [
     "cryptography>=46.0.7,<47",        # CVE-2026-26007, -34073, -39892 via mcp[cli]->pyjwt[crypto]
     "pygments>=2.20.0,<3",             # CVE-2026-4539 via bandit->rich, pytest
     "pyjwt>=2.12.0,<3",                # CVE-2026-32597 via mcp[cli]
-    "python-multipart>=0.0.26,<1",     # CVE-2026-40347 via mcp[cli]
+    "python-multipart>=0.0.27,<1",     # CVE-2026-40347, CVE-2026-42561 via mcp[cli]
     "requests>=2.33.0,<3",             # CVE-2026-25645 via pip-audit->cachecontrol
+    "urllib3>=2.7.0,<3",               # CVE-2026-44431, CVE-2026-44432 via pip-audit->requests
+    "python-dotenv>=1.2.2,<2",         # CVE-2026-28684 via mcp[cli]->pydantic-settings
+    "pip>=26.1",                        # CVE-2026-3219, CVE-2026-6357 via pip-audit->pip-api
 ]
 
 [project.optional-dependencies]

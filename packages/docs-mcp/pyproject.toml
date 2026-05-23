@@ -29,14 +29,15 @@ dependencies = [
     "mcp[cli]>=1.26.0,<2",
     "click>=8.3.1,<9",
     "jinja2>=3.1.6,<4",
-    "gitpython>=3.1.44,<4",
+    "gitpython>=3.1.49,<4",
     "pydantic>=2.12.5,<3",
     "structlog>=25.5.0,<26",
     "pyyaml>=6.0.3,<7",
     # Security floors for transitive CVEs via mcp[cli] (TAP-608).
     "cryptography>=46.0.7,<47",        # CVE-2026-26007, -34073, -39892
     "pyjwt>=2.12.0,<3",                # CVE-2026-32597
-    "python-multipart>=0.0.26,<1",     # CVE-2026-40347
+    "python-multipart>=0.0.27,<1",     # CVE-2026-40347, CVE-2026-42561
+    "python-dotenv>=1.2.2,<2",         # CVE-2026-28684 via pydantic-settings
 ]
 
 [project.optional-dependencies]

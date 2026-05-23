@@ -26,6 +26,8 @@ dependencies = [
     "pydantic>=2.12.5,<3",
     "pydantic-settings>=2.13.1,<3",
     "structlog>=25.5.0,<26",
+    # Security floors for transitive CVEs (TAP-1764).
+    "python-dotenv>=1.2.2,<2",         # CVE-2026-28684 via pydantic-settings
     "pyyaml>=6.0.3,<7",
     "httpx>=0.28.1,<1",
 ]
