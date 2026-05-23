@@ -14,6 +14,7 @@ import pytest
 
 from tapps_core.adaptive.persistence import DomainWeightStore
 from tapps_core.config.settings import _reset_settings_cache, load_settings
+from tapps_core.metrics import reset_metrics_hub
 from tapps_mcp.server_metrics_tools import _EXPERT_TOOLS, tapps_feedback
 
 
@@ -21,8 +22,10 @@ from tapps_mcp.server_metrics_tools import _EXPERT_TOOLS, tapps_feedback
 def _isolated_project(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("TAPPS_MCP_PROJECT_ROOT", str(tmp_path))
     _reset_settings_cache()
+    reset_metrics_hub()  # clear stale MetricsHub singleton so metrics_dir points to tmp_path
     yield
     _reset_settings_cache()
+    reset_metrics_hub()
 
 
 def test_expert_tools_includes_lookup_docs() -> None:
