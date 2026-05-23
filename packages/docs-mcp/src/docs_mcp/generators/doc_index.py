@@ -7,6 +7,7 @@ index/map with categories, descriptions, and freshness indicators.
 from __future__ import annotations
 
 import os
+import re
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import ClassVar
@@ -15,6 +16,11 @@ import structlog
 from pydantic import BaseModel
 
 logger: structlog.stdlib.BoundLogger = structlog.get_logger()
+
+# Markdown link pattern: [anchor text](url) — used to strip link syntax from
+# extracted descriptions so that relative paths (valid only from the source file)
+# and truncated URLs do not appear verbatim in the generated index.
+_MARKDOWN_LINK_RE: re.Pattern[str] = re.compile(r"\[([^\]]*)\]\([^)]*\)")
 
 # Directories to skip when scanning.
 _SKIP_DIRS: frozenset[str] = frozenset(
@@ -228,7 +234,15 @@ class DocIndexGenerator:
         return fallback.replace("-", " ").replace("_", " ").title()
 
     def _extract_description(self, content: str) -> str:
-        """Extract first non-heading, non-empty paragraph as description."""
+        """Extract first non-heading, non-empty paragraph as description.
+
+        Markdown link syntax is stripped before storage: ``[text](url)`` →
+        ``text``. Relative link targets are valid only from the source file;
+        when rendered in the index (which lives at a different path) they
+        would be broken. Long targets also cause the 120-char truncation to
+        land mid-URL, leaving an unclosed ``(`` in the generated markdown
+        (TAP-2195 / TAP-2196).
+        """
         lines = content.split("\n")
         in_frontmatter = False
         for line in lines[:30]:
@@ -242,10 +256,13 @@ class DocIndexGenerator:
                 continue
             if stripped.startswith("```"):
                 break
+            # Strip markdown links: keep anchor text, drop URL targets so that
+            # relative paths from the source file don't bleed into the index.
+            plain = _MARKDOWN_LINK_RE.sub(r"\1", stripped)
             # Return first real paragraph, truncated
-            if len(stripped) > 120:
-                return stripped[:117] + "..."
-            return stripped
+            if len(plain) > 120:
+                return plain[:117] + "..."
+            return plain
         return ""
 
     def _categorize(self, rel_path: str, content: str) -> str:

@@ -590,6 +590,7 @@ async def docs_check_cross_refs(
     check_backlinks: bool = True,
     project_root: str = "",
     group_by_source: bool = False,
+    exclude: str = "",
 ) -> dict[str, Any]:
     """Validate cross-references between documentation files.
 
@@ -612,6 +613,10 @@ async def docs_check_cross_refs(
             response and return only grouped-by-source + patterns data. Big
             response-size win on projects where broken refs cluster in a few
             files.
+        exclude: Comma-separated glob patterns to skip during scanning, in
+            addition to the built-in ``archive_paths`` baseline. When empty,
+            falls back to ``cross_ref_exclude`` in ``.docsmcp.yaml``; an
+            explicit value overrides the config entirely (TAP-2197).
     """
     _record_call("docs_check_cross_refs")
     start = time.perf_counter_ns()
@@ -635,12 +640,18 @@ async def docs_check_cross_refs(
     try:
         validator = CrossRefValidator()
         archive_paths = list(getattr(settings, "archive_paths", []) or [])
+        # Merge cross_ref_exclude from config (or explicit call-time override).
+        if exclude.strip():
+            extra_exclude = [e.strip() for e in exclude.split(",") if e.strip()]
+        else:
+            extra_exclude = list(getattr(settings, "cross_ref_exclude", []) or [])
+        combined_exclude = archive_paths + extra_exclude
         report = validator.validate(
             root,
             doc_dirs=dirs_list,
             check_backlinks=check_backlinks,
             group_by_source=group_by_source,
-            archive_paths=archive_paths,
+            archive_paths=combined_exclude,
         )
     except Exception as exc:
         return error_response(

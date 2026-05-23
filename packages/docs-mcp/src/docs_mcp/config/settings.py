@@ -303,6 +303,17 @@ class DocsMCPSettings(BaseSettings):
             "Env: DOCS_MCP_FRESHNESS_EXCLUDE (CSV)."
         ),
     )
+    cross_ref_exclude: list[str] = Field(
+        default_factory=list,
+        description=(
+            "Default exclude glob patterns for docs_check_cross_refs, on top of "
+            "the built-in baseline (archive_paths). Overridden when "
+            "docs_check_cross_refs is called with an explicit exclude argument. "
+            "Useful for suppressing false positives on template files whose "
+            "relative links resolve only in the deployed consumer, not the source. "
+            "Env: DOCS_MCP_CROSS_REF_EXCLUDE (CSV)."
+        ),
+    )
 
     @field_validator("drift_ignore_patterns", mode="before")
     @classmethod
@@ -320,7 +331,7 @@ class DocsMCPSettings(BaseSettings):
             return [str(s) for s in v]
         return []
 
-    @field_validator("completeness_exclude", "freshness_exclude", mode="before")
+    @field_validator("completeness_exclude", "freshness_exclude", "cross_ref_exclude", mode="before")
     @classmethod
     def _parse_validator_exclude(cls, v: Any) -> list[str]:
         if v is None:
