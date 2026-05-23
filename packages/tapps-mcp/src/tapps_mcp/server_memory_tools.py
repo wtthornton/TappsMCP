@@ -497,7 +497,8 @@ async def tapps_memory(
     rating: str = "",
     details_json: str = "",
 ) -> dict[str, Any]:
-    """Cross-session memory store: saves, recalls, searches, and maintains
+    """[DEPRECATED 2026-Q3 — use mcp__tapps-brain__* tools directly]
+    Cross-session memory store: saves, recalls, searches, and maintains
     durable project knowledge through the tapps-brain service.
 
     Call this with ``action="search"`` at the start of a non-trivial task
@@ -574,59 +575,113 @@ async def tapps_memory(
             Agent/inferred sources cannot self-bypass. (H3c)
 
     Actions:
-        save: Store a new memory or update an existing one. When
+        save: [DEPRECATED 2026-Q3 — use mcp__tapps-brain__brain_remember] Store a
+            new memory or update an existing one. When
             memory.auto_supersede_architectural is True, tier=architectural uses
-            MemoryStore.supersede on the active chain head (store.history) instead of overwrite;
-            response may include status="superseded" and new_key.
-        save_bulk: Save multiple memories in one call (requires entries parameter).
-        get: Retrieve a memory by key.
-        list: List all memories with optional filters.
-        delete: Remove a memory by key.
-        search: Full-text search across memories.
-        reinforce: Boost confidence and reset decay clock for a memory (requires key).
-        gc: Run garbage collection to archive stale/contradicted memories.
-        contradictions: Detect memories that contradict observable project state.
-        reseed: Re-seed memory from project profile (only updates auto-seeded entries).
-        import: Import memories from a JSON file (requires file_path).
-        export: Export memories to JSON or Markdown (format: json|markdown, optional
-            file_path, tier, scope filters, include_frontmatter, group_by).
-        consolidate: Merge related entries into a consolidated entry with provenance.
-            Use entry_ids for explicit keys or query to find similar entries.
-            Use dry_run=True to preview. (Epic 58, Story 58.4)
-        unconsolidate: Undo a consolidation. Restores source entries and removes the
-            consolidated entry. Requires key of the consolidated entry. (Epic 58, Story 58.6)
-        federate_register: Register this project in the federation hub for cross-project sharing.
+            MemoryStore.supersede on the active chain head (store.history) instead of
+            overwrite; response may include status="superseded" and new_key.
+        save_bulk: [DEPRECATED 2026-Q3 — use mcp__tapps-brain__brain_remember] Save
+            multiple memories in one call (requires entries parameter).
+        get: [DEPRECATED 2026-Q3 — use mcp__tapps-brain__brain_recall] Retrieve a
+            memory by key.
+        list: [DEPRECATED 2026-Q3 — use mcp__tapps-brain__brain_recall] List all
+            memories with optional filters.
+        delete: [DEPRECATED 2026-Q3 — use mcp__tapps-brain__brain_recall] Remove a
+            memory by key.
+        search: [DEPRECATED 2026-Q3 — use mcp__tapps-brain__memory_search] Full-text
+            search across memories.
+        reinforce: [DEPRECATED 2026-Q3 — use mcp__tapps-brain__brain_remember] Boost
+            confidence and reset decay clock for a memory (requires key).
+        gc: [DEPRECATED 2026-Q3 — use mcp__tapps-brain__brain_status] Run garbage
+            collection to archive stale/contradicted memories.
+        contradictions: [DEPRECATED 2026-Q3 — use mcp__tapps-brain__brain_status]
+            Detect memories that contradict observable project state.
+        reseed: [DEPRECATED 2026-Q3 — use mcp__tapps-brain__brain_status] Re-seed
+            memory from project profile (only updates auto-seeded entries).
+        import: [DEPRECATED 2026-Q3 — use mcp__tapps-brain__brain_remember] Import
+            memories from a JSON file (requires file_path).
+        export: [DEPRECATED 2026-Q3 — use mcp__tapps-brain__brain_recall] Export
+            memories to JSON or Markdown (format: json|markdown, optional file_path,
+            tier, scope filters, include_frontmatter, group_by).
+        consolidate: [DEPRECATED 2026-Q3 — use mcp__tapps-brain__brain_recall] Merge
+            related entries into a consolidated entry with provenance. Use entry_ids
+            for explicit keys or query to find similar entries. Use dry_run=True to
+            preview. (Epic 58, Story 58.4)
+        unconsolidate: [DEPRECATED 2026-Q3 — use mcp__tapps-brain__brain_recall] Undo
+            a consolidation. Restores source entries and removes the consolidated
+            entry. Requires key of the consolidated entry. (Epic 58, Story 58.6)
+        federate_register: [DEPRECATED 2026-Q3 — use mcp__tapps-brain__brain_status]
+            Register this project in the federation hub for cross-project sharing.
             Optional project_id (auto-detected) and tags. (Epic 64)
-        federate_publish: Publish shared-scope memories to the federation hub.
-            Optional key list to publish specific entries. (Epic 64)
-        federate_subscribe: Subscribe to memories from other projects.
-            Requires sources (comma-separated project IDs). Optional tags, min_confidence. (Epic 64)
-        federate_sync: Pull subscribed memories from the hub into local store. (Epic 64)
-        federate_search: Search across local and federated memories. Uses query param. (Epic 64)
-        federate_status: Show federation hub status and registered projects. (Epic 64)
-        validate: Validate memories against authoritative documentation via Context7. (Epic 62)
+        federate_publish: [DEPRECATED 2026-Q3 — use mcp__tapps-brain__brain_status]
+            Publish shared-scope memories to the federation hub. Optional key list to
+            publish specific entries. (Epic 64)
+        federate_subscribe: [DEPRECATED 2026-Q3 — use mcp__tapps-brain__brain_status]
+            Subscribe to memories from other projects. Requires sources
+            (comma-separated project IDs). Optional tags, min_confidence. (Epic 64)
+        federate_sync: [DEPRECATED 2026-Q3 — use mcp__tapps-brain__brain_status] Pull
+            subscribed memories from the hub into local store. (Epic 64)
+        federate_search: [DEPRECATED 2026-Q3 — use mcp__tapps-brain__hive_search]
+            Search across local and federated memories. Uses query param. (Epic 64)
+        federate_status: [DEPRECATED 2026-Q3 — use mcp__tapps-brain__brain_status]
+            Show federation hub status and registered projects. (Epic 64)
+        validate: [DEPRECATED 2026-Q3 — use mcp__tapps-brain__brain_status] Validate
+            memories against authoritative documentation via Context7. (Epic 62)
             Params: key (single), query (search), stale_only, dry_run, max_entries.
-        safety_check: Pre-flight content safety validation. Checks value for prompt
-            injection patterns without saving. Returns flagged patterns and match count.
-            (Epic M1)
-        verify_integrity: Check all memory entries for tampering. Computes content
-            hashes and reports any mismatches. (Epic M1)
-        profile_info: Show the active memory profile with layer details, decay config,
-            scoring weights, and promotion status. (Epic M2)
-        profile_list: List all available built-in profiles with descriptions. (Epic M2)
-        profile_switch: Switch to a different memory profile. Pass the profile name as
-            value (e.g., "research-knowledge"). Persists choice and resets the store. (Epic M2)
-        hive_status: Show Hive / Agent Teams status (requires CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS).
+        maintain: [DEPRECATED 2026-Q3 — use mcp__tapps-brain__brain_status] Run
+            scheduled maintenance (defrag, index rebuild, housekeeping).
+        safety_check: [DEPRECATED 2026-Q3 — use mcp__tapps-brain__brain_status]
+            Pre-flight content safety validation. Checks value for prompt injection
+            patterns without saving. Returns flagged patterns and match count. (Epic M1)
+        verify_integrity: [DEPRECATED 2026-Q3 — use mcp__tapps-brain__brain_status]
+            Check all memory entries for tampering. Computes content hashes and
+            reports any mismatches. (Epic M1)
+        health: [DEPRECATED 2026-Q3 — use mcp__tapps-brain__brain_status] Report
+            brain service health and connectivity status.
+        profile_info: [DEPRECATED 2026-Q3 — use mcp__tapps-brain__brain_status] Show
+            the active memory profile with layer details, decay config, scoring
+            weights, and promotion status. (Epic M2)
+        profile_list: [DEPRECATED 2026-Q3 — use mcp__tapps-brain__brain_status] List
+            all available built-in profiles with descriptions. (Epic M2)
+        profile_switch: [DEPRECATED 2026-Q3 — use mcp__tapps-brain__brain_status]
+            Switch to a different memory profile. Pass the profile name as value
+            (e.g., "research-knowledge"). Persists choice and resets the store. (Epic M2)
+        hive_status: [DEPRECATED 2026-Q3 — use mcp__tapps-brain__brain_status] Show
+            Hive / Agent Teams status (requires CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS).
             Mirrors session-start hive_status. Registers this process when enabled.
             Propagation tier rules are enforced server-side by tapps-brain's
             PropagationEngine; clients read outcomes from hive_propagate / hive_push
             responses rather than mirroring rules locally. (Epic M3)
-        hive_search: Search the Hive store (query or value = search text). Optional tags =
+        hive_search: [DEPRECATED 2026-Q3 — use mcp__tapps-brain__hive_search] Search
+            the Hive store (query or value = search text). Optional tags =
             comma-separated namespace filter. limit/min_confidence apply. (Epic M3)
-        hive_propagate: Push eligible local MemoryStore entries to Hive via PropagationEngine
-            (uses entry agent_scope). limit caps entries scanned (0 = default cap). (Epic M3)
-        agent_register: Register an agent in Hive (key=agent id, value=display name,
+        hive_propagate: [DEPRECATED 2026-Q3 — use mcp__tapps-brain__brain_status]
+            Push eligible local MemoryStore entries to Hive via PropagationEngine
+            (uses entry agent_scope). limit caps entries scanned (0 = default cap).
+            (Epic M3)
+        agent_register: [DEPRECATED 2026-Q3 — use mcp__tapps-brain__brain_status]
+            Register an agent in Hive (key=agent id, value=display name,
             tags=comma-separated skills). Profile comes from memory settings. (Epic M3)
+        related: [DEPRECATED 2026-Q3 — use mcp__tapps-brain__memory_find_related] Find
+            memories related to a given key via knowledge graph traversal. (TAP-1630)
+        relations: [DEPRECATED 2026-Q3 — use mcp__tapps-brain__memory_find_related]
+            List all explicit relations for a memory key. (TAP-1630)
+        neighbors: [DEPRECATED 2026-Q3 — use mcp__tapps-brain__brain_get_neighbors]
+            Get N-hop neighbors of a memory in the knowledge graph. (TAP-1630)
+        explain_connection: [DEPRECATED 2026-Q3 — use mcp__tapps-brain__brain_explain_connection]
+            Explain how two memory keys are connected. (TAP-1630)
+        recall_many: [DEPRECATED 2026-Q3 — use mcp__tapps-brain__brain_recall]
+            Batch-recall multiple memories by key list (single round trip). (TAP-1631)
+        reinforce_many: [DEPRECATED 2026-Q3 — use mcp__tapps-brain__brain_remember]
+            Batch-reinforce multiple memory keys (single round trip). (TAP-1631)
+        rate: [DEPRECATED 2026-Q3 — use mcp__tapps-brain__brain_remember] Submit
+            quality feedback on a memory (feedback flywheel). (TAP-1632)
+        index_session: [DEPRECATED 2026-Q3 — use mcp__tapps-brain__brain_remember]
+            Index the current session's conversation into memory. (TAP-1633)
+        search_sessions: [DEPRECATED 2026-Q3 — use mcp__tapps-brain__memory_search]
+            Search indexed session memories by query. (TAP-1633)
+        session_end: [DEPRECATED 2026-Q3 — use mcp__tapps-brain__brain_status] Flush
+            and finalize the current session's memory index. (TAP-1633)
     """
     await ensure_session_initialized()
     _record_call("tapps_memory")
