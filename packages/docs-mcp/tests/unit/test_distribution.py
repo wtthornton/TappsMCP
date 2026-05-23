@@ -170,15 +170,15 @@ class TestInstallationDocs:
         assert "docker" in content.lower()
         assert "docker run" in content.lower() or "docker build" in content.lower()
 
-    def test_installation_has_pip_instructions(self) -> None:
+    def test_installation_has_uv_tool_instructions(self) -> None:
         docs_dir = Path(__file__).parents[2] / "docs"
         content = (docs_dir / "INSTALLATION.md").read_text(encoding="utf-8")
-        assert "pip install" in content
+        assert "uv tool install" in content
 
-    def test_installation_has_uv_instructions(self) -> None:
+    def test_installation_has_uv_sync_instructions(self) -> None:
         docs_dir = Path(__file__).parents[2] / "docs"
         content = (docs_dir / "INSTALLATION.md").read_text(encoding="utf-8")
-        assert "uv add" in content
+        assert "uv sync" in content
 
     def test_readme_exists(self) -> None:
         docs_dir = Path(__file__).parents[2] / "docs"

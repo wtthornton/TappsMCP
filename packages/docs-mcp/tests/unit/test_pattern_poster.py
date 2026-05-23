@@ -437,39 +437,7 @@ class TestDiagramGeneratorIntegration:
 
 
 class TestAutoPosterForSmallProjects:
-    """dependency diagram auto-selects pattern_card when project is small."""
-
-    def test_small_project_redirects_dependency_to_pattern_card(self, tmp_path: Path) -> None:
-        gen = DiagramGenerator()
-        fake_mm = MagicMock()
-        # 5 nodes → below _POSTER_AUTO_THRESHOLD (15)
-        fake_mm.module_tree = [MagicMock() for _ in range(5)]
-        for i, node in enumerate(fake_mm.module_tree):
-            node.name = f"pkg{i}"
-
-        with (
-            patch(
-                "docs_mcp.analyzers.module_map.ModuleMapAnalyzer.analyze",
-                return_value=fake_mm,
-            ),
-            patch(
-                "docs_mcp.generators.diagrams.DiagramGenerator._generate_pattern_card"
-            ) as mock_pc,
-        ):
-            mock_pc.return_value = MagicMock(
-                diagram_type="pattern_card",
-                format="mermaid",
-                content="flowchart TD",
-                node_count=5,
-                edge_count=0,
-                degraded=False,
-                scanned_dirs=[],
-                skipped_count=0,
-                adr_link=None,
-            )
-            gen.generate(tmp_path, diagram_type="dependency", output_format="mermaid")
-
-        mock_pc.assert_called_once()
+    """dependency diagram behaviour for small vs large projects (TAP-2198: no silent redirect)."""
 
     def test_large_project_keeps_dependency_diagram(self, tmp_path: Path) -> None:
         gen = DiagramGenerator()
