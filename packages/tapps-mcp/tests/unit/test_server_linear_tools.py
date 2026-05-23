@@ -16,10 +16,12 @@ from unittest.mock import patch
 import pytest
 
 from tapps_mcp.server_linear_tools import (
+    _COMPACT_FIELDS,
     _cache_dir,
     _cache_key,
     _cache_read,
     _cache_write,
+    _compact_issue,
     _filter_hash,
     _resolve_cache_key,
     _ttl_for_state,
@@ -357,3 +359,157 @@ async def test_invalidate_then_get_returns_miss(
     await tapps_linear_snapshot_invalidate(team="T", project="P")
     miss = await tapps_linear_snapshot_get(team="T", project="P", state="backlog")
     assert miss["data"]["cached"] is False
+
+
+# ---------------------------------------------------------------------------
+# compact projection tests (TAP-2437)
+# ---------------------------------------------------------------------------
+
+_HEAVY_ISSUE: dict[str, Any] = {
+    "id": "LIN-99",
+    "identifier": "TAP-99",
+    "title": "Heavy issue",
+    "state": {"name": "Backlog", "type": "backlog"},
+    "priority": {"value": 2, "name": "High"},
+    "estimate": {"value": 3, "name": "3 Points"},
+    "assignee": {"name": "Alice"},
+    "parent": None,
+    # Heavy fields that compact projection must strip:
+    "description": "## Long description\n\n" + "x" * 1000,
+    "comments": [{"body": "comment"} for _ in range(10)],
+    "attachments": [{"url": "https://example.com"}],
+    "history": [{"event": "created"}],
+    "labels": ["Bug", "P2"],
+    "url": "https://linear.app/...",
+    "createdAt": "2026-01-01T00:00:00Z",
+    "updatedAt": "2026-01-02T00:00:00Z",
+}
+
+
+def test_compact_issue_returns_only_allowed_fields() -> None:
+    result = _compact_issue(_HEAVY_ISSUE)
+    assert set(result.keys()) == _COMPACT_FIELDS & set(_HEAVY_ISSUE.keys())
+    for key in result:
+        assert key in _COMPACT_FIELDS
+
+
+def test_compact_issue_preserves_allowed_field_values() -> None:
+    result = _compact_issue(_HEAVY_ISSUE)
+    assert result["id"] == "LIN-99"
+    assert result["identifier"] == "TAP-99"
+    assert result["title"] == "Heavy issue"
+    assert result["state"] == {"name": "Backlog", "type": "backlog"}
+
+
+def test_compact_issue_excludes_heavy_fields() -> None:
+    result = _compact_issue(_HEAVY_ISSUE)
+    for heavy in ("description", "comments", "attachments", "history"):
+        assert heavy not in result
+
+
+@pytest.mark.asyncio
+async def test_get_compact_projection_returns_projected_issues(
+    tmp_path: Path, mock_load_settings: Any
+) -> None:
+    """snapshot_get with projection="compact" strips heavy fields."""
+    cache_dir = _cache_dir(tmp_path)
+    key = _resolve_cache_key("T", "P", "backlog", "", 50)
+    _cache_write(
+        cache_dir,
+        key,
+        {
+            "issues": [_HEAVY_ISSUE],
+            "expires_at": time.time() + 600,
+            "cached_at": time.time() - 1,
+        },
+    )
+
+    result = await tapps_linear_snapshot_get(
+        team="T", project="P", state="backlog", projection="compact"
+    )
+    assert result["success"] is True
+    assert result["data"]["cached"] is True
+    assert result["data"]["projection"] == "compact"
+    returned = result["data"]["issues"]
+    assert len(returned) == 1
+    issue = returned[0]
+    for heavy in ("description", "comments", "attachments", "history"):
+        assert heavy not in issue
+    assert issue["id"] == "LIN-99"
+    assert issue["title"] == "Heavy issue"
+
+
+@pytest.mark.asyncio
+async def test_get_full_projection_preserves_all_fields(
+    tmp_path: Path, mock_load_settings: Any
+) -> None:
+    """snapshot_get with projection="full" (default) returns issues unchanged."""
+    cache_dir = _cache_dir(tmp_path)
+    key = _resolve_cache_key("T", "P", "backlog", "", 50)
+    _cache_write(
+        cache_dir,
+        key,
+        {
+            "issues": [_HEAVY_ISSUE],
+            "expires_at": time.time() + 600,
+            "cached_at": time.time() - 1,
+        },
+    )
+
+    result = await tapps_linear_snapshot_get(
+        team="T", project="P", state="backlog", projection="full"
+    )
+    assert result["success"] is True
+    assert result["data"]["issues"][0]["description"] == _HEAVY_ISSUE["description"]
+    assert result["data"]["issues"][0]["comments"] == _HEAVY_ISSUE["comments"]
+
+
+@pytest.mark.asyncio
+async def test_get_default_projection_is_full(
+    tmp_path: Path, mock_load_settings: Any
+) -> None:
+    """snapshot_get with no projection kwarg returns full issues (no data loss)."""
+    cache_dir = _cache_dir(tmp_path)
+    key = _resolve_cache_key("T", "P", "backlog", "", 50)
+    _cache_write(
+        cache_dir,
+        key,
+        {
+            "issues": [_HEAVY_ISSUE],
+            "expires_at": time.time() + 600,
+            "cached_at": time.time() - 1,
+        },
+    )
+
+    result = await tapps_linear_snapshot_get(team="T", project="P", state="backlog")
+    assert result["success"] is True
+    # Default path returns raw issues — projection key may be absent or "full".
+    assert "description" in result["data"]["issues"][0]
+
+
+@pytest.mark.asyncio
+async def test_get_compact_byte_budget_50_issues(
+    tmp_path: Path, mock_load_settings: Any
+) -> None:
+    """A 50-issue compact snapshot must serialise to under 48,000 bytes."""
+    fifty_issues = [dict(_HEAVY_ISSUE, id=f"LIN-{i}", identifier=f"TAP-{i}") for i in range(50)]
+    cache_dir = _cache_dir(tmp_path)
+    key = _resolve_cache_key("T", "P", "backlog", "", 50)
+    _cache_write(
+        cache_dir,
+        key,
+        {
+            "issues": fifty_issues,
+            "expires_at": time.time() + 600,
+            "cached_at": time.time() - 1,
+        },
+    )
+
+    result = await tapps_linear_snapshot_get(
+        team="T", project="P", state="backlog", projection="compact"
+    )
+    assert result["success"] is True
+    issues_json = json.dumps(result["data"]["issues"])
+    assert len(issues_json) < 48_000, (
+        f"Compact 50-issue payload too large: {len(issues_json)} bytes (limit 48,000)"
+    )

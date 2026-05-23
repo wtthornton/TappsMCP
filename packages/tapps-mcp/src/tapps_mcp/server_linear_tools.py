@@ -79,6 +79,21 @@ _FETCH_HINT = (
     "tapps_linear_snapshot_put(issues_json=...) to populate the cache."
 )
 
+# Fields returned in compact projection — covers triage/backlog reads without
+# pulling in description, comments, attachments, history, or audit fields.
+_COMPACT_FIELDS: frozenset[str] = frozenset(
+    {"id", "identifier", "title", "state", "priority", "estimate", "assignee", "parent"}
+)
+
+
+def _compact_issue(issue: dict[str, Any]) -> dict[str, Any]:
+    """Return a copy of *issue* with only the triage-relevant fields retained.
+
+    Drops heavy fields (description, comments, attachments, history, etc.) so
+    that a 50-issue backlog serialises to well under the 25 k-token Read cap.
+    """
+    return {k: v for k, v in issue.items() if k in _COMPACT_FIELDS}
+
 
 def _record_call(tool_name: str) -> None:
     """Delegate to server._record_call."""
@@ -178,6 +193,7 @@ async def tapps_linear_snapshot_get(
     state: str = "",
     label: str = "",
     limit: int = 50,
+    projection: str = "full",
 ) -> dict[str, Any]:
     """Reads a Linear issue snapshot from the local cache, returning
     ``cached=True`` + the stored issues on hit or ``cached=False`` + a
@@ -199,11 +215,20 @@ async def tapps_linear_snapshot_get(
             ``"started"``, ``"completed"``, ``"canceled"``). Empty = any.
         label: Optional label name to filter by. Empty = any.
         limit: Max issues the caller requested (part of the cache key).
+        projection: ``"compact"`` returns only triage-relevant fields
+            ``{id, identifier, title, state, priority, estimate, assignee,
+            parent}``, dropping description, comments, attachments, and
+            history. A 50-issue backlog in compact mode serialises to
+            under 48 kB — well within the 25 k-token Read cap that
+            subagents face. ``"full"`` (default) returns the stored
+            issue dicts unchanged.
 
     Returns:
         Envelope with:
           - ``data.cached``: ``True`` on hit, ``False`` on miss/expired.
-          - ``data.issues``: stored list (only on hit).
+          - ``data.issues``: stored list (only on hit; projected if
+            ``projection="compact"``).
+          - ``data.projection``: the projection mode applied.
           - ``data.cache_key``: cache-file stem.
           - ``data.cached_at`` / ``data.expires_at`` / ``data.age_seconds``
             on hit; ``data.hint`` on miss.
@@ -241,12 +266,16 @@ async def tapps_linear_snapshot_get(
 
     now = time.time()
     cached_at = float(cached.get("cached_at", 0))
+    issues: list[dict[str, Any]] = cached.get("issues", [])
+    if projection == "compact":
+        issues = [_compact_issue(i) for i in issues]
     return success_response(
         "tapps_linear_snapshot_get",
         elapsed_ms,
         {
             "cached": True,
-            "issues": cached.get("issues", []),
+            "issues": issues,
+            "projection": projection,
             "cache_key": key,
             "cached_at": cached_at,
             "expires_at": cached.get("expires_at"),
