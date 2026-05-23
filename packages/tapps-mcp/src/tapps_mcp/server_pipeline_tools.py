@@ -326,6 +326,10 @@ _ANNOTATIONS_SIDE_EFFECT_IDEMPOTENT = ToolAnnotations(
     openWorldHint=False,
 )
 
+# TAP-1986: defer_loading meta for non-daily-driver pipeline tools.
+# tapps_session_start and tapps_validate_changed are daily drivers (eager).
+_META_DEFERRED: dict[str, Any] = {"defer_loading": True}
+
 
 # ---------------------------------------------------------------------------
 # tapps_session_start
@@ -1317,22 +1321,32 @@ async def tapps_pipeline(
 
 
 def register(mcp_instance: FastMCP, allowed_tools: frozenset[str]) -> None:
-    """Register pipeline/validation tools on *mcp_instance*."""
+    """Register pipeline/validation tools on *mcp_instance*.
+
+    TAP-1986: tapps_session_start and tapps_validate_changed are eager daily drivers.
+    All other pipeline tools carry defer_loading=True.
+    """
     if "tapps_validate_changed" in allowed_tools:
         mcp_instance.tool(annotations=_ANNOTATIONS_READ_ONLY)(tapps_validate_changed)
     if "tapps_session_start" in allowed_tools:
         mcp_instance.tool(annotations=_ANNOTATIONS_SIDE_EFFECT_IDEMPOTENT)(tapps_session_start)
     if "tapps_init" in allowed_tools:
-        mcp_instance.tool(annotations=_ANNOTATIONS_SIDE_EFFECT_IDEMPOTENT)(tapps_init)
+        mcp_instance.tool(
+            annotations=_ANNOTATIONS_SIDE_EFFECT_IDEMPOTENT, meta=_META_DEFERRED
+        )(tapps_init)
     if "tapps_set_engagement_level" in allowed_tools:
-        mcp_instance.tool(annotations=_ANNOTATIONS_SIDE_EFFECT_IDEMPOTENT)(
-            tapps_set_engagement_level
-        )
+        mcp_instance.tool(
+            annotations=_ANNOTATIONS_SIDE_EFFECT_IDEMPOTENT, meta=_META_DEFERRED
+        )(tapps_set_engagement_level)
     if "tapps_upgrade" in allowed_tools:
-        mcp_instance.tool(annotations=_ANNOTATIONS_SIDE_EFFECT_IDEMPOTENT)(tapps_upgrade)
+        mcp_instance.tool(
+            annotations=_ANNOTATIONS_SIDE_EFFECT_IDEMPOTENT, meta=_META_DEFERRED
+        )(tapps_upgrade)
     if "tapps_doctor" in allowed_tools:
-        mcp_instance.tool(annotations=_ANNOTATIONS_READ_ONLY)(tapps_doctor)
+        mcp_instance.tool(annotations=_ANNOTATIONS_READ_ONLY, meta=_META_DEFERRED)(tapps_doctor)
     if "tapps_pipeline" in allowed_tools:
-        mcp_instance.tool(annotations=_ANNOTATIONS_READ_ONLY)(tapps_pipeline)
+        mcp_instance.tool(annotations=_ANNOTATIONS_READ_ONLY, meta=_META_DEFERRED)(tapps_pipeline)
     if "tapps_decompose" in allowed_tools:
-        mcp_instance.tool(annotations=_ANNOTATIONS_READ_ONLY)(tapps_decompose)
+        mcp_instance.tool(annotations=_ANNOTATIONS_READ_ONLY, meta=_META_DEFERRED)(
+            tapps_decompose
+        )

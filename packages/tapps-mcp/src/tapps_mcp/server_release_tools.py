@@ -30,6 +30,9 @@ _ANNOTATIONS_READ_ONLY = ToolAnnotations(
     openWorldHint=False,
 )
 
+# TAP-1986: tapps_release_update is deferred (not a daily driver).
+_META_DEFERRED: dict[str, Any] = {"defer_loading": True}
+
 
 def _record_call(tool_name: str) -> None:
     from tapps_mcp.server import _record_call as _rc
@@ -184,6 +187,11 @@ def _today() -> str:
 
 
 def register(mcp_instance: "FastMCP", allowed_tools: frozenset[str]) -> None:
-    """Register release update tool on the shared mcp instance."""
+    """Register release update tool on the shared mcp instance.
+
+    TAP-1986: tapps_release_update is deferred (not a daily driver).
+    """
     if "tapps_release_update" in allowed_tools:
-        mcp_instance.tool(annotations=_ANNOTATIONS_READ_ONLY)(tapps_release_update)
+        mcp_instance.tool(annotations=_ANNOTATIONS_READ_ONLY, meta=_META_DEFERRED)(
+            tapps_release_update
+        )

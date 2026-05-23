@@ -70,6 +70,11 @@ _ANNOTATIONS_READ_ONLY_OPEN = ToolAnnotations(
     openWorldHint=True,
 )
 
+# TAP-1986: defer_loading meta — non-daily-driver tools carry this so
+# Claude Code (with advanced-tool-use-2025-11-20 header) loads them
+# on-demand via Tool Search, keeping the eager catalog ≤ 8 tools.
+_META_DEFERRED: dict[str, Any] = {"defer_loading": True}
+
 # ---------------------------------------------------------------------------
 # FastMCP server instance
 # ---------------------------------------------------------------------------
@@ -1523,15 +1528,25 @@ async def tapps_checklist(
 
 
 def _register_core_tools(mcp_instance: FastMCP, allowed_tools: frozenset[str]) -> None:
-    """Register core tools (server.py) when their name is in allowed_tools (Epic 79.1)."""
+    """Register core tools (server.py) when their name is in allowed_tools (Epic 79.1).
+
+    TAP-1986: tapps_lookup_docs and tapps_checklist are daily-driver eager tools.
+    tapps_server_info, tapps_security_scan, tapps_validate_config are deferred.
+    """
     if "tapps_server_info" in allowed_tools:
-        mcp_instance.tool(annotations=_ANNOTATIONS_READ_ONLY)(tapps_server_info)
+        mcp_instance.tool(annotations=_ANNOTATIONS_READ_ONLY, meta=_META_DEFERRED)(
+            tapps_server_info
+        )
     if "tapps_security_scan" in allowed_tools:
-        mcp_instance.tool(annotations=_ANNOTATIONS_READ_ONLY)(tapps_security_scan)
+        mcp_instance.tool(annotations=_ANNOTATIONS_READ_ONLY, meta=_META_DEFERRED)(
+            tapps_security_scan
+        )
     if "tapps_lookup_docs" in allowed_tools:
         mcp_instance.tool(annotations=_ANNOTATIONS_READ_ONLY_OPEN)(tapps_lookup_docs)
     if "tapps_validate_config" in allowed_tools:
-        mcp_instance.tool(annotations=_ANNOTATIONS_READ_ONLY)(tapps_validate_config)
+        mcp_instance.tool(annotations=_ANNOTATIONS_READ_ONLY, meta=_META_DEFERRED)(
+            tapps_validate_config
+        )
     if "tapps_checklist" in allowed_tools:
         mcp_instance.tool(annotations=_ANNOTATIONS_READ_ONLY)(tapps_checklist)
 

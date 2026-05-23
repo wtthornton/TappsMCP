@@ -207,6 +207,84 @@ class TestAnnotationCategories:
         )
 
 
+class TestDeferLoading:
+    """TAP-1986: verify eager/deferred split keeps the eager catalog ≤ 8 tools."""
+
+    # Daily-driver tools — must be EAGER (no defer_loading).
+    _DAILY_DRIVERS: frozenset[str] = frozenset(
+        {
+            "tapps_session_start",
+            "tapps_validate_changed",
+            "tapps_score_file",
+            "tapps_quality_gate",
+            "tapps_quick_check",
+            "tapps_lookup_docs",
+            "tapps_checklist",
+            "tapps_impact_analysis",
+        }
+    )
+    _EAGER_BUDGET = 8
+
+    def test_eager_tool_count_within_budget(self) -> None:
+        """Eager tool count must be ≤ _EAGER_BUDGET (currently 8)."""
+        tools = mcp._tool_manager._tools
+        eager = [n for n, t in tools.items() if not (t.meta or {}).get("defer_loading")]
+        assert len(eager) <= self._EAGER_BUDGET, (
+            f"Eager tool count {len(eager)} exceeds budget {self._EAGER_BUDGET}. "
+            f"Eager tools: {sorted(eager)}"
+        )
+
+    def test_daily_drivers_are_eager(self) -> None:
+        """Each daily-driver tool must NOT have defer_loading=True."""
+        tools = mcp._tool_manager._tools
+        for name in self._DAILY_DRIVERS:
+            assert name in tools, f"Daily-driver {name!r} not registered"
+            meta = tools[name].meta or {}
+            assert not meta.get("defer_loading"), (
+                f"Daily-driver {name!r} has defer_loading=True but should be eager"
+            )
+
+    @pytest.mark.parametrize(
+        "tool_name",
+        sorted(
+            [
+                "tapps_server_info",
+                "tapps_security_scan",
+                "tapps_validate_config",
+                "tapps_init",
+                "tapps_set_engagement_level",
+                "tapps_upgrade",
+                "tapps_doctor",
+                "tapps_pipeline",
+                "tapps_decompose",
+                "tapps_dashboard",
+                "tapps_stats",
+                "tapps_feedback",
+                "tapps_memory",
+                "tapps_session_notes",
+                "tapps_report",
+                "tapps_dead_code",
+                "tapps_dependency_scan",
+                "tapps_dependency_graph",
+                "tapps_audit_campaign",
+                "tapps_linear_snapshot_get",
+                "tapps_linear_snapshot_put",
+                "tapps_linear_snapshot_invalidate",
+                "tapps_linear_count",
+                "tapps_release_update",
+            ]
+        ),
+    )
+    def test_deferred_tools_have_flag(self, tool_name: str) -> None:
+        """Non-daily-driver tools must have meta[defer_loading]=True."""
+        tools = mcp._tool_manager._tools
+        assert tool_name in tools, f"Tool {tool_name!r} not registered"
+        meta = tools[tool_name].meta or {}
+        assert meta.get("defer_loading") is True, (
+            f"{tool_name!r} missing defer_loading=True in meta: {meta}"
+        )
+
+
 class TestLargeOutputMeta:
     """TAP-961: large-output analysis tools declare _meta[anthropic/maxResultSizeChars]
     so Claude Code keeps results in-context instead of persisting to disk."""

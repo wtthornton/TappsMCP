@@ -43,6 +43,9 @@ _ANNOTATIONS_SIDE_EFFECT = ToolAnnotations(
     openWorldHint=False,
 )
 
+# TAP-1986: all metrics tools are deferred (not daily drivers).
+_META_DEFERRED: dict[str, Any] = {"defer_loading": True}
+
 
 def _sanitize_param(value: str, max_len: int = 100) -> str:
     """Strip control characters and truncate a parameter value."""
@@ -543,10 +546,13 @@ def _adjust_domain_weights(domain: str, helpful: bool) -> tuple[bool, str | None
 
 
 def register(mcp_instance: FastMCP, allowed_tools: frozenset[str]) -> None:
-    """Register metrics/feedback tools on *mcp_instance*."""
+    """Register metrics/feedback tools on *mcp_instance*.
+
+    TAP-1986: all three tools are deferred (not daily drivers).
+    """
     if "tapps_dashboard" in allowed_tools:
-        mcp_instance.tool(annotations=_ANNOTATIONS_READ_ONLY)(tapps_dashboard)
+        mcp_instance.tool(annotations=_ANNOTATIONS_READ_ONLY, meta=_META_DEFERRED)(tapps_dashboard)
     if "tapps_stats" in allowed_tools:
-        mcp_instance.tool(annotations=_ANNOTATIONS_READ_ONLY)(tapps_stats)
+        mcp_instance.tool(annotations=_ANNOTATIONS_READ_ONLY, meta=_META_DEFERRED)(tapps_stats)
     if "tapps_feedback" in allowed_tools:
-        mcp_instance.tool(annotations=_ANNOTATIONS_SIDE_EFFECT)(tapps_feedback)
+        mcp_instance.tool(annotations=_ANNOTATIONS_SIDE_EFFECT, meta=_META_DEFERRED)(tapps_feedback)

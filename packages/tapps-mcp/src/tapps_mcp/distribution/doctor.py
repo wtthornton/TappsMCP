@@ -2051,10 +2051,12 @@ def check_brain_version_delta(root: Path) -> CheckResult:
 
 # Known preset tool counts — keep in sync with server.py (ALL_TOOL_NAMES,
 # TAPPS_TOOL_PRESET_QUALITY, TAPPS_TOOL_PRESET_ADMIN).
+# TAP-1986: counts reflect EAGER tools only (defer_loading=False).
+# Non-daily-driver tools carry defer_loading=True and are loaded on-demand via Tool Search.
 _TAPPS_MCP_MODE_TOOL_COUNTS: dict[str, int] = {
-    "full": 32,     # len(ALL_TOOL_NAMES)
-    "quality": 15,  # len(TAPPS_TOOL_PRESET_QUALITY)
-    "admin": 12,    # len(TAPPS_TOOL_PRESET_ADMIN)
+    "full": 8,     # TAP-1986: 8 eager daily-driver tools; 24 deferred via Tool Search
+    "quality": 8,  # TAP-1986: 8 eager (same daily drivers visible in quality preset)
+    "admin": 0,    # TAP-1986: 0 eager (all admin tools are deferred)
 }
 _DOCS_MCP_TOOL_COUNT: int = 6  # TAP-1987: 6 eager tools; 32 deferred via Tool Search
 _DEFAULT_TOOL_BUDGET: int = 20

@@ -17,12 +17,15 @@ server's eager tool count exceeds the budget.
 
 ## Known server tool counts
 
-| Server | Mode | Eager tools |
-|---|---|---|
-| `tapps-mcp` | full (no `--mode`) | 32 |
-| `tapps-quality` | `--mode quality` | 15 |
-| `tapps-admin` | `--mode admin` | 12 |
-| `docs-mcp` | — | 38 |
+Post TAP-1986/TAP-1987: non-daily-driver tools carry `defer_loading=True` and are loaded
+on-demand via Tool Search. The counts below reflect **eager** tools only.
+
+| Server | Mode | Eager tools | Deferred tools |
+|---|---|---|---|
+| `tapps-mcp` | full (no `--mode`) | 8 | 24 |
+| `tapps-quality` | `--mode quality` | 8 | 7 |
+| `tapps-admin` | `--mode admin` | 0 | 12 |
+| `docs-mcp` | — | 6 | 32 |
 
 ## Updating the budget
 

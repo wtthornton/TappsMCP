@@ -65,6 +65,9 @@ _ANNOTATIONS_INVALIDATE = ToolAnnotations(
     openWorldHint=False,
 )
 
+# TAP-1986: all Linear cache tools are deferred (not daily drivers).
+_META_DEFERRED: dict[str, Any] = {"defer_loading": True}
+
 # State values that indicate an open workflow (short TTL).
 _OPEN_STATE_BUCKETS: frozenset[str] = frozenset(
     {"backlog", "unstarted", "started", "triage"}
@@ -581,16 +584,23 @@ async def tapps_linear_count(
 
 
 def register(mcp_instance: FastMCP, allowed_tools: frozenset[str]) -> None:
-    """Register Linear tools on the shared *mcp_instance*."""
+    """Register Linear tools on the shared *mcp_instance*.
+
+    TAP-1986: all four Linear cache tools are deferred (not daily drivers).
+    """
     if "tapps_linear_snapshot_get" in allowed_tools:
-        mcp_instance.tool(annotations=_ANNOTATIONS_READ_ONLY)(
+        mcp_instance.tool(annotations=_ANNOTATIONS_READ_ONLY, meta=_META_DEFERRED)(
             tapps_linear_snapshot_get
         )
     if "tapps_linear_snapshot_put" in allowed_tools:
-        mcp_instance.tool(annotations=_ANNOTATIONS_WRITE)(tapps_linear_snapshot_put)
+        mcp_instance.tool(annotations=_ANNOTATIONS_WRITE, meta=_META_DEFERRED)(
+            tapps_linear_snapshot_put
+        )
     if "tapps_linear_snapshot_invalidate" in allowed_tools:
-        mcp_instance.tool(annotations=_ANNOTATIONS_INVALIDATE)(
+        mcp_instance.tool(annotations=_ANNOTATIONS_INVALIDATE, meta=_META_DEFERRED)(
             tapps_linear_snapshot_invalidate
         )
     if "tapps_linear_count" in allowed_tools:
-        mcp_instance.tool(annotations=_ANNOTATIONS_READ_ONLY)(tapps_linear_count)
+        mcp_instance.tool(annotations=_ANNOTATIONS_READ_ONLY, meta=_META_DEFERRED)(
+            tapps_linear_count
+        )

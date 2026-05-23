@@ -68,6 +68,12 @@ _ANNOTATIONS_READ_ONLY_OPEN = ToolAnnotations(
 _META_LARGE_OUTPUT_200K: dict[str, Any] = {"anthropic/maxResultSizeChars": 200_000}
 _META_LARGE_OUTPUT_100K: dict[str, Any] = {"anthropic/maxResultSizeChars": 100_000}
 
+# TAP-1986: tapps_impact_analysis is the only daily-driver analysis tool (eager).
+# All other analysis tools are deferred — combined dicts for large-output+deferred.
+_META_DEFERRED: dict[str, Any] = {"defer_loading": True}
+_META_LARGE_OUTPUT_100K_D: dict[str, Any] = {**_META_LARGE_OUTPUT_100K, "defer_loading": True}
+_META_LARGE_OUTPUT_200K_D: dict[str, Any] = {**_META_LARGE_OUTPUT_200K, "defer_loading": True}
+
 
 # ---------------------------------------------------------------------------
 # Shared helpers (imported lazily from server.py to avoid circular imports)
@@ -1285,28 +1291,36 @@ async def _resolve_git_short_sha(root: Path) -> str:
 
 
 def register(mcp_instance: FastMCP, allowed_tools: frozenset[str]) -> None:
-    """Register analysis tools on the shared *mcp_instance* (Epic 79.1: conditional)."""
+    """Register analysis tools on the shared *mcp_instance* (Epic 79.1: conditional).
+
+    TAP-1986: tapps_impact_analysis is the only eager daily-driver here.
+    All other analysis tools carry defer_loading=True (combined with size hints where needed).
+    """
     if "tapps_session_notes" in allowed_tools:
-        mcp_instance.tool(annotations=_ANNOTATIONS_READ_ONLY)(tapps_session_notes)
+        mcp_instance.tool(annotations=_ANNOTATIONS_READ_ONLY, meta=_META_DEFERRED)(
+            tapps_session_notes
+        )
     if "tapps_impact_analysis" in allowed_tools:
         mcp_instance.tool(
             annotations=_ANNOTATIONS_READ_ONLY, meta=_META_LARGE_OUTPUT_100K
         )(tapps_impact_analysis)
     if "tapps_report" in allowed_tools:
-        mcp_instance.tool(annotations=_ANNOTATIONS_READ_ONLY, meta=_META_LARGE_OUTPUT_100K)(
+        mcp_instance.tool(annotations=_ANNOTATIONS_READ_ONLY, meta=_META_LARGE_OUTPUT_100K_D)(
             tapps_report
         )
     if "tapps_dead_code" in allowed_tools:
-        mcp_instance.tool(annotations=_ANNOTATIONS_READ_ONLY, meta=_META_LARGE_OUTPUT_100K)(
+        mcp_instance.tool(annotations=_ANNOTATIONS_READ_ONLY, meta=_META_LARGE_OUTPUT_100K_D)(
             tapps_dead_code
         )
     if "tapps_dependency_scan" in allowed_tools:
-        mcp_instance.tool(annotations=_ANNOTATIONS_READ_ONLY_OPEN)(tapps_dependency_scan)
+        mcp_instance.tool(annotations=_ANNOTATIONS_READ_ONLY_OPEN, meta=_META_DEFERRED)(
+            tapps_dependency_scan
+        )
     if "tapps_dependency_graph" in allowed_tools:
-        mcp_instance.tool(annotations=_ANNOTATIONS_READ_ONLY, meta=_META_LARGE_OUTPUT_200K)(
+        mcp_instance.tool(annotations=_ANNOTATIONS_READ_ONLY, meta=_META_LARGE_OUTPUT_200K_D)(
             tapps_dependency_graph
         )
     if "tapps_audit_campaign" in allowed_tools:
-        mcp_instance.tool(annotations=_ANNOTATIONS_READ_ONLY, meta=_META_LARGE_OUTPUT_200K)(
+        mcp_instance.tool(annotations=_ANNOTATIONS_READ_ONLY, meta=_META_LARGE_OUTPUT_200K_D)(
             tapps_audit_campaign
         )

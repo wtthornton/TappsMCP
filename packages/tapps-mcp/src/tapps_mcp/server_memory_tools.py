@@ -49,6 +49,9 @@ _ANNOTATIONS_MEMORY = ToolAnnotations(
     openWorldHint=False,
 )
 
+# TAP-1986: tapps_memory is deferred (not a daily driver).
+_META_DEFERRED: dict[str, Any] = {"defer_loading": True}
+
 _VALUE_PREVIEW_LEN = 200
 
 logger = structlog.get_logger(__name__)
@@ -3972,6 +3975,9 @@ def _record_call(tool_name: str, *, success: bool = True) -> None:
 
 
 def register(mcp_instance: FastMCP, allowed_tools: frozenset[str]) -> None:
-    """Register memory tools on the shared *mcp_instance* (Epic 79.1: conditional)."""
+    """Register memory tools on the shared *mcp_instance* (Epic 79.1: conditional).
+
+    TAP-1986: tapps_memory is deferred (not a daily driver).
+    """
     if "tapps_memory" in allowed_tools:
-        mcp_instance.tool(annotations=_ANNOTATIONS_MEMORY)(tapps_memory)
+        mcp_instance.tool(annotations=_ANNOTATIONS_MEMORY, meta=_META_DEFERRED)(tapps_memory)
