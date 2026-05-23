@@ -8,10 +8,92 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from tapps_mcp.tools.release_update import (
-    build_release_content,
+    _parse_changelog_bullets,
     source_changelog_section,
     source_git_log,
 )
+
+# ---------------------------------------------------------------------------
+# _parse_changelog_bullets
+# ---------------------------------------------------------------------------
+
+
+class TestParseChangelogBullets:
+    """Unit tests for the multi-line bullet parser (TAP-2056)."""
+
+    def test_single_line_bullet(self) -> None:
+        text = "- Fixed a bug\n"
+        assert _parse_changelog_bullets(text) == ["Fixed a bug"]
+
+    def test_multiple_single_line_bullets(self) -> None:
+        text = "- First fix\n- Second fix\n- Third fix\n"
+        result = _parse_changelog_bullets(text)
+        assert result == ["First fix", "Second fix", "Third fix"]
+
+    def test_multiline_bullet_joins_continuation(self) -> None:
+        """Continuation lines (indented 2+ spaces) are joined to the parent bullet."""
+        text = "- **MatchType.CLOSE confirmations now**: First sentence\n  continued text that wraps\n"
+        result = _parse_changelog_bullets(text)
+        assert len(result) == 1
+        assert "First sentence" in result[0]
+        # Content from the 2nd physical line must appear
+        assert "continued text that wraps" in result[0]
+
+    def test_multiline_and_singleline_mixed(self) -> None:
+        text = (
+            "- **Feature A**: Bold header\n"
+            "  second line of A\n"
+            "- Simple bullet B\n"
+            "- **Feature C**: Another header\n"
+            "  second line of C\n"
+            "  third line of C\n"
+        )
+        result = _parse_changelog_bullets(text)
+        assert len(result) == 3
+        assert "second line of A" in result[0]
+        assert result[1] == "Simple bullet B"
+        assert "second line of C" in result[2]
+        assert "third line of C" in result[2]
+
+    def test_empty_line_terminates_bullet(self) -> None:
+        text = "- First\n\n- Second\n"
+        result = _parse_changelog_bullets(text)
+        assert result == ["First", "Second"]
+
+    def test_section_header_terminates_bullet(self) -> None:
+        text = "- Bullet text\n## Next Section\n- New bullet\n"
+        result = _parse_changelog_bullets(text)
+        assert "Bullet text" in result[0]
+        assert "New bullet" in result[1]
+
+    def test_nine_bullets_agentforge_shape(self) -> None:
+        """Simulates the AgentForge v4.9.0 reproducer from TAP-2056."""
+        section = "\n".join([
+            "## [4.9.0] - 2026-05-17",
+            "",
+            *[
+                line
+                for i in range(1, 10)
+                for line in (
+                    f"- **Feature {i}**: First sentence of bullet {i}",
+                    f"  continuation of bullet {i}",
+                )
+            ],
+        ])
+        result = _parse_changelog_bullets(section)
+        assert len(result) == 9
+        for i, bullet in enumerate(result, 1):
+            assert f"continuation of bullet {i}" in bullet, (
+                f"Bullet {i} missing its continuation line: {bullet!r}"
+            )
+
+    def test_no_false_regression_on_lone_dash(self) -> None:
+        """Lone dashes (section separators) are skipped without error."""
+        text = "- Real bullet\n-\n- Another bullet\n"
+        result = _parse_changelog_bullets(text)
+        assert "Real bullet" in result
+        assert "Another bullet" in result
+        assert "" not in result  # no empty strings from lone dash
 
 
 # ---------------------------------------------------------------------------
@@ -200,3 +282,40 @@ class TestTappsReleaseUpdateHandler:
             result = await tapps_release_update(version="1.5.0", prev_version="1.4.2", dry_run=True)
 
         assert result["data"]["source"] == "changelog"
+
+    async def test_multiline_changelog_bullets_preserved(self, tmp_path: Path) -> None:
+        """Regression test for TAP-2056: multi-line CHANGELOG bullets must not be truncated."""
+        from tapps_mcp.server_release_tools import tapps_release_update
+
+        changelog = tmp_path / "CHANGELOG.md"
+        changelog.write_text(
+            "## [1.5.0] - 2026-04-29\n\n"
+            "- **Feature A**: First line of bullet A\n"
+            "  second line of bullet A completing the sentence\n"
+            "- **Feature B**: Single-line bullet B\n"
+            "- **Feature C**: First line of bullet C\n"
+            "  second line of bullet C with more detail\n\n"
+            "## [1.4.2] - 2026-04-01\n\n"
+            "- Old stuff\n",
+            encoding="utf-8",
+        )
+
+        with (
+            patch("tapps_core.config.settings.load_settings") as mock_settings,
+            patch("tapps_mcp.server_release_tools._record_call"),
+        ):
+            mock_settings.return_value = MagicMock(project_root=str(tmp_path))
+            result = await tapps_release_update(version="1.5.0", prev_version="1.4.2", dry_run=True)
+
+        assert result["success"] is True
+        body = result["data"]["body"]
+
+        # Content from the 2nd physical line of each multi-line bullet must appear in the body
+        assert "second line of bullet A completing the sentence" in body, (
+            f"Continuation of bullet A missing from body:\n{body}"
+        )
+        assert "second line of bullet C with more detail" in body, (
+            f"Continuation of bullet C missing from body:\n{body}"
+        )
+        # Single-line bullet must also appear
+        assert "Feature B" in body, f"Feature B missing from body:\n{body}"

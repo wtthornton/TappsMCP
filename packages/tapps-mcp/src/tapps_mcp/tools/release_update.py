@@ -101,6 +101,57 @@ def _clean_description(msg: str) -> str:
     return desc or msg
 
 
+def _parse_changelog_bullets(changelog_section: str) -> list[str]:
+    """Parse multi-line bullet items from a CHANGELOG section.
+
+    Handles the Keep-a-Changelog format where a bullet spans multiple
+    physical lines, with the continuation indented by 2+ spaces:
+
+        - **Header**: First sentence
+          continued text on the next line
+
+    Returns a list of complete bullet texts, stripped of the leading ``- ``.
+    Single-line bullets are returned unchanged; multi-line bullets have
+    their continuation lines joined with a space.
+    """
+    bullets: list[str] = []
+    current_parts: list[str] = []
+
+    for line in changelog_section.splitlines():
+        stripped = line.strip()
+
+        if line.startswith("- "):
+            # New top-level bullet — flush any previous one
+            if current_parts:
+                bullets.append(" ".join(current_parts))
+            current_parts = [stripped[2:].strip()]
+        elif stripped == "-":
+            # Lone dash — flush and skip
+            if current_parts:
+                bullets.append(" ".join(current_parts))
+            current_parts = []
+        elif current_parts and stripped and line.startswith(" ") and not stripped.startswith("#"):
+            # Continuation line: indented, non-empty, not a section header
+            current_parts.append(stripped)
+        elif not stripped:
+            # Empty line — end current bullet
+            if current_parts:
+                bullets.append(" ".join(current_parts))
+            current_parts = []
+        elif stripped.startswith("#"):
+            # Section header — end current bullet
+            if current_parts:
+                bullets.append(" ".join(current_parts))
+            current_parts = []
+        # Non-indented prose lines that aren't bullets: ignore
+
+    # Flush the final bullet
+    if current_parts:
+        bullets.append(" ".join(current_parts))
+
+    return bullets
+
+
 def build_release_content(
     version: str,
     prev_version: str,
@@ -119,11 +170,7 @@ def build_release_content(
     # Try CHANGELOG first
     changelog_body = source_changelog_section(project_root, version)
     if changelog_body:
-        highlights = [
-            line.lstrip("- ").strip()
-            for line in changelog_body.splitlines()
-            if line.strip().startswith("-") and line.strip() != "-"
-        ][:10]
+        highlights = _parse_changelog_bullets(changelog_body)[:10]
         from docs_mcp.generators.release_update import scrape_tap_refs
 
         tap_refs = scrape_tap_refs(changelog_body)
