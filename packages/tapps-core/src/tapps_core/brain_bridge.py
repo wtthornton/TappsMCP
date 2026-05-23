@@ -2240,12 +2240,18 @@ class HttpBrainBridge(BrainBridge):
     # -------------------------------------------------------------------------
 
     async def health(self) -> dict[str, Any]:
-        """Return health dict by probing ``{brain_http_url}/health``."""
+        """Return health dict by probing ``{brain_http_url}/health``.
+
+        Uses ``httpx.AsyncClient`` so the call does not block the event loop
+        (TAP-1743: the old ``httpx.get`` in an ``async def`` stalled every
+        concurrent MCP tool handler for the duration of the round-trip).
+        """
         try:
-            response = httpx.get(
-                f"{self._http_url}/health",
-                timeout=_BRAIN_HEALTH_TIMEOUT_SECONDS,
-            )
+            async with httpx.AsyncClient() as client:
+                response = await client.get(
+                    f"{self._http_url}/health",
+                    timeout=_BRAIN_HEALTH_TIMEOUT_SECONDS,
+                )
             response.raise_for_status()
             payload = response.json()
             base = payload if isinstance(payload, dict) else {}
@@ -2563,21 +2569,39 @@ class HttpBrainBridge(BrainBridge):
         return {"drained": drained, "dropped": dropped, "remaining": remaining}
 
     def close(self, drain_timeout: float = _DRAIN_DEADLINE_SECONDS) -> None:
-        """Drain queued writes then close the async HTTP client."""
+        """Drain queued writes then close the async HTTP client.
+
+        TAP-1744: the old implementation used the deprecated
+        ``asyncio.get_event_loop()`` and silently skipped ``aclose()`` when
+        called from inside a running loop (Jupyter / embedded async context),
+        leaking the connection pool.  The new approach:
+
+        * If a loop is already running → schedule ``aclose()`` as a task so
+          the coroutine is awaited on the next iteration without blocking.
+        * If no loop is running → use ``asyncio.run()`` for a clean
+          synchronous teardown.
+        * Failures are surfaced via ``logger.warning`` instead of swallowed.
+        """
         try:
             self.drain_blocking(drain_timeout)
         except Exception as exc:
             logger.warning("brain_bridge.drain_on_close_failed", error=str(exc))
-        if self._http_client is not None:
-            with contextlib.suppress(Exception):
-                try:
-                    loop = asyncio.get_event_loop()
-                    if not loop.is_closed() and not loop.is_running():
-                        loop.run_until_complete(self._http_client.aclose())
-                except Exception:
-                    pass
-            self._http_client = None
+        client = self._http_client
+        self._http_client = None
         self._session_id = None
+        if client is not None:
+            try:
+                # Running loop detected (e.g. embedded MCP server, Jupyter).
+                # Schedule aclose as a fire-and-forget task; the coroutine will
+                # execute on the next event-loop iteration.
+                loop = asyncio.get_running_loop()
+                loop.create_task(client.aclose())  # noqa: RUF006 — intentional fire-and-forget on shutdown
+            except RuntimeError:
+                # No running loop — close synchronously.
+                try:
+                    asyncio.run(client.aclose())
+                except Exception as exc:
+                    logger.warning("brain_bridge.http_client_close_failed", error=str(exc))
 
 
 # -----------------------------------------------------------------------------

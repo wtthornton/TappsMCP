@@ -1696,10 +1696,12 @@ class TestHttpSessionLifecycle:
         bridge = _make_http_bridge()
         bridge._session_id = "to-clear"
         bridge._http_client = AsyncMock()
-        # Simulate closed loop so close() doesn't try to aclose the client.
-        bridge._http_client.aclose = AsyncMock()
 
-        bridge.close(drain_timeout=0.1)
+        with (
+            patch("asyncio.get_running_loop", side_effect=RuntimeError("no loop")),
+            patch("asyncio.run"),
+        ):
+            bridge.close(drain_timeout=0.1)
 
         assert bridge._session_id is None
 
@@ -1746,6 +1748,84 @@ class TestHttpSessionLifecycle:
         await bridge._http_mcp_call("memory_list", {"limit": 1})
 
         assert bridge._session_id == "__no_session__"
+
+
+# ---------------------------------------------------------------------------
+# async health() — TAP-1743
+# ---------------------------------------------------------------------------
+
+
+class TestHttpHealthAsync:
+    """Verify that HttpBrainBridge.health() is truly async (TAP-1743).
+
+    The old implementation used the blocking ``httpx.get`` inside an
+    ``async def``, stalling the event loop.  The fix wraps it in
+    ``httpx.AsyncClient``.
+    """
+
+    @pytest.mark.asyncio
+    async def test_health_ok_returns_status_ok(self) -> None:
+        bridge = _make_http_bridge("http://brain:8080")
+        mock_response = MagicMock()
+        mock_response.raise_for_status = MagicMock()
+        mock_response.json.return_value = {"status": "ok", "version": "3.19.0"}
+
+        with patch("httpx.AsyncClient") as mock_cls:
+            mock_client_instance = AsyncMock()
+            mock_client_instance.get = AsyncMock(return_value=mock_response)
+            mock_cls.return_value.__aenter__ = AsyncMock(return_value=mock_client_instance)
+            mock_cls.return_value.__aexit__ = AsyncMock(return_value=False)
+
+            result = await bridge.health()
+
+        assert result["status"] == "ok"
+        assert result["version"] == "3.19.0"
+        mock_client_instance.get.assert_awaited_once()
+
+    @pytest.mark.asyncio
+    async def test_health_degraded_on_network_error(self) -> None:
+        bridge = _make_http_bridge("http://brain:8080")
+
+        with patch("httpx.AsyncClient") as mock_cls:
+            mock_client_instance = AsyncMock()
+            mock_client_instance.get = AsyncMock(
+                side_effect=httpx.ConnectError("refused", request=MagicMock())
+            )
+            mock_cls.return_value.__aenter__ = AsyncMock(return_value=mock_client_instance)
+            mock_cls.return_value.__aexit__ = AsyncMock(return_value=False)
+
+            result = await bridge.health()
+
+        assert result["status"] == "degraded"
+        assert "refused" in result["error"]
+
+    @pytest.mark.asyncio
+    async def test_health_does_not_block_concurrent_task(self) -> None:
+        """health() must not block a concurrent asyncio.sleep(0) task (TAP-1743)."""
+        import asyncio
+
+        bridge = _make_http_bridge("http://brain:8080")
+        mock_response = MagicMock()
+        mock_response.raise_for_status = MagicMock()
+        mock_response.json.return_value = {"status": "ok"}
+
+        concurrent_ran = False
+
+        async def set_flag() -> None:
+            nonlocal concurrent_ran
+            await asyncio.sleep(0)
+            concurrent_ran = True
+
+        with patch("httpx.AsyncClient") as mock_cls:
+            mock_client_instance = AsyncMock()
+            mock_client_instance.get = AsyncMock(return_value=mock_response)
+            mock_cls.return_value.__aenter__ = AsyncMock(return_value=mock_client_instance)
+            mock_cls.return_value.__aexit__ = AsyncMock(return_value=False)
+
+            # Run both concurrently; if health() blocks the loop, set_flag never runs.
+            await asyncio.gather(bridge.health(), set_flag())
+
+        assert concurrent_ran, "Concurrent task did not run — health() is blocking the loop"
 
 
 # ---------------------------------------------------------------------------
@@ -2070,26 +2150,57 @@ class TestHttpStoreProperty:
 
 
 class TestHttpClose:
-    def test_close_releases_client(self) -> None:
+    def test_close_releases_client_no_running_loop(self) -> None:
+        """close() clears _http_client when no event loop is running (TAP-1744)."""
         bridge = _make_http_bridge()
         mock_client = AsyncMock()
         bridge._http_client = mock_client
 
-        with patch("asyncio.get_event_loop") as mock_loop:
-            mock_loop.return_value.is_closed.return_value = False
-            mock_loop.return_value.run_until_complete = MagicMock()
+        # Simulate: no running loop → asyncio.run() path
+        with (
+            patch("asyncio.get_running_loop", side_effect=RuntimeError("no loop")),
+            patch("asyncio.run") as mock_run,
+        ):
             bridge.close()
 
         assert bridge._http_client is None
+        mock_run.assert_called_once()
 
-    def test_close_handles_missing_event_loop(self) -> None:
+    def test_close_with_running_loop_schedules_task(self) -> None:
+        """close() uses create_task when a loop is already running (TAP-1744)."""
+        bridge = _make_http_bridge()
+        mock_client = AsyncMock()
+        bridge._http_client = mock_client
+        mock_loop = MagicMock()
+
+        with patch("asyncio.get_running_loop", return_value=mock_loop):
+            bridge.close()
+
+        assert bridge._http_client is None
+        mock_loop.create_task.assert_called_once()
+
+    def test_close_handles_aclose_failure(self) -> None:
+        """close() logs a warning when asyncio.run(aclose()) raises (TAP-1744)."""
         bridge = _make_http_bridge()
         bridge._http_client = AsyncMock()
 
-        with patch("asyncio.get_event_loop", side_effect=RuntimeError("no loop")):
-            bridge.close()  # should not raise
+        with (
+            patch("asyncio.get_running_loop", side_effect=RuntimeError("no loop")),
+            patch("asyncio.run", side_effect=RuntimeError("aclose failed")),
+        ):
+            bridge.close()  # must not propagate the exception
 
         assert bridge._http_client is None
+
+    def test_close_clears_session_id(self) -> None:
+        """close() always clears session_id regardless of client state (TAP-1744)."""
+        bridge = _make_http_bridge()
+        bridge._session_id = "to-clear"
+        bridge._http_client = None  # no client, but session_id must still clear
+
+        bridge.close()
+
+        assert bridge._session_id is None
 
 
 # ---------------------------------------------------------------------------
