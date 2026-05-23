@@ -95,6 +95,9 @@ TOOL_REASONS: dict[str, str] = {
     "tapps_session_start": (
         "Call as the FIRST action in every session to discover server version, installed checkers, and project context."
     ),
+    "tapps_session_end": (
+        "Call at session end to process session events through the brain flywheel and close the feedback loop."
+    ),
     "tapps_score_file": (
         "Score the file for quality; use quick=True during edits, full before done."
     ),

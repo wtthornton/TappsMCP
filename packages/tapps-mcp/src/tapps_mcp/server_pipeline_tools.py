@@ -25,6 +25,7 @@ import asyncio
 import dataclasses
 import time
 from collections.abc import Callable
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, cast
 
@@ -215,6 +216,7 @@ __all__ = [
     "tapps_doctor",
     "tapps_init",
     "tapps_pipeline",
+    "tapps_session_end",
     "tapps_session_start",
     "tapps_set_engagement_level",
     "tapps_upgrade",
@@ -258,6 +260,9 @@ class _SessionFlags:
     gc_done: bool = False
     consolidation_done: bool = False
     doc_validation_done: bool = False
+    # TAP-2005: ISO-8601 timestamp of the most recent session start; consumed
+    # by tapps_session_end to scope flywheel_process to this session's events.
+    session_start_iso: str = ""
 
 
 _session_state = _SessionFlags()
@@ -286,6 +291,7 @@ def _reset_session_state() -> None:
     _session_state.gc_done = False
     _session_state.consolidation_done = False
     _session_state.doc_validation_done = False
+    _session_state.session_start_iso = ""
 
 
 # Prevent garbage collection of fire-and-forget background tasks.
@@ -696,6 +702,9 @@ async def tapps_session_start(
             "auto_initialized": False,
         }
     )
+    # TAP-2005: record session start time so tapps_session_end can scope
+    # flywheel_process to this session's events.
+    _session_state.session_start_iso = datetime.now(UTC).isoformat()
     # TAP-975: refresh sidecar so the UserPromptSubmit hook stays silent for
     # the next 30 minutes of prompts.
     write_session_start_marker(settings.project_root)
@@ -1329,6 +1338,32 @@ async def tapps_pipeline(
     return success_response("tapps_pipeline", elapsed_ms, data)
 
 
+async def tapps_session_end() -> dict[str, Any]:
+    """Close the feedback loop by processing this session's brain events.
+
+    Calls ``flywheel_process(since=<session_start_iso>)`` so brain
+    reconciles the session's feedback events into adaptive weight updates.
+    Best-effort: a brain outage does not raise an error.
+    """
+    from tapps_mcp.server import _record_call, _record_execution
+    from tapps_mcp.tools.session_end_helpers import call_flywheel_process
+
+    start = time.perf_counter_ns()
+    _record_call("tapps_session_end")
+
+    since = _session_state.session_start_iso
+    flywheel = await call_flywheel_process(since)
+
+    elapsed_ms = (time.perf_counter_ns() - start) // 1_000_000
+    _record_execution("tapps_session_end", start)
+
+    data: dict[str, Any] = {
+        "flywheel": flywheel,
+        "session_start_iso": since or None,
+    }
+    return success_response("tapps_session_end", elapsed_ms, data)
+
+
 # ---------------------------------------------------------------------------
 # MCP tool registration (Epic 79.1: conditional)
 # ---------------------------------------------------------------------------
@@ -1344,6 +1379,10 @@ def register(mcp_instance: FastMCP, allowed_tools: frozenset[str]) -> None:
         mcp_instance.tool(annotations=_ANNOTATIONS_READ_ONLY)(tapps_validate_changed)
     if "tapps_session_start" in allowed_tools:
         mcp_instance.tool(annotations=_ANNOTATIONS_SIDE_EFFECT_IDEMPOTENT)(tapps_session_start)
+    if "tapps_session_end" in allowed_tools:
+        mcp_instance.tool(
+            annotations=_ANNOTATIONS_SIDE_EFFECT_IDEMPOTENT, meta=_META_DEFERRED
+        )(tapps_session_end)
     if "tapps_init" in allowed_tools:
         mcp_instance.tool(
             annotations=_ANNOTATIONS_SIDE_EFFECT_IDEMPOTENT, meta=_META_DEFERRED

@@ -270,6 +270,7 @@ _BRIDGE_USED_TOOLS: frozenset[str] = frozenset(
         "feedback_rate",
         "feedback_gap",
         "flywheel_report",
+        "flywheel_process",
         "diagnostics_report",
         # TAP-1633: native session memory (replaces the local session_index path).
         "memory_index_session",
@@ -1874,6 +1875,19 @@ class HttpBrainBridge(BrainBridge):
         """Summary of feedback signal collected over the last *period_days*."""
         result = await self._http_mcp_call("flywheel_report", {"period_days": period_days})
         return result if isinstance(result, dict) else {"summary": result}
+
+    async def flywheel_process(self, since: str = "") -> dict[str, Any]:
+        """Process feedback events since *since* (ISO-8601 timestamp) via the flywheel.
+
+        TAP-2005: called at session end so brain reconciles session events into
+        adaptive weight updates. *since* should be the session-start ISO timestamp;
+        empty string means "all unprocessed events".
+        """
+        args: dict[str, Any] = {}
+        if since:
+            args["since"] = since
+        result = await self._http_mcp_call("flywheel_process", args)
+        return result if isinstance(result, dict) else {"processed": True}
 
     async def diagnostics_report(self, record_history: bool = True) -> dict[str, Any]:
         """Brain-quality snapshot (decay, coverage, contradiction load)."""

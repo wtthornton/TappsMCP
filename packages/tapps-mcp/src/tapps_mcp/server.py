@@ -201,6 +201,7 @@ ALL_TOOL_NAMES: frozenset[str] = frozenset(
     {
         "tapps_server_info",
         "tapps_session_start",
+        "tapps_session_end",
         "tapps_score_file",
         "tapps_security_scan",
         "tapps_quality_gate",
@@ -1611,6 +1612,7 @@ tapps_quality_gate = _scoring.tapps_quality_gate
 tapps_quick_check = _scoring.tapps_quick_check
 tapps_validate_changed = _pipeline.tapps_validate_changed
 tapps_session_start = _pipeline.tapps_session_start
+tapps_session_end = _pipeline.tapps_session_end
 tapps_init = _pipeline.tapps_init
 tapps_dashboard = _metrics.tapps_dashboard
 tapps_stats = _metrics.tapps_stats
