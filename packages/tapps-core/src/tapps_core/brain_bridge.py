@@ -1905,6 +1905,47 @@ class HttpBrainBridge(BrainBridge):
         result = await self._http_mcp_call("brain_record_event", args)
         return result if isinstance(result, dict) else {"recorded": True}
 
+    async def record_kg_event(
+        self,
+        event_type: str,
+        entities: list[dict[str, str]],
+        edges: list[dict[str, str]] | None = None,
+        payload_data: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
+        """TAP-2003: Fire a rich KG event via ``brain_record_event`` (best-effort).
+
+        Use for structured events with multiple entities and typed edges:
+        - quality gate failures: file entity + rule entity + ``violates`` edge
+        - dependency tracking
+        - audit telemetry
+
+        Args:
+            event_type: Brain event type string (e.g. ``"quality_gate_fail"``).
+            entities: List of ``{"type": <str>, "id": <str>}`` dicts — at
+                least one required.
+            edges: Optional list of ``{"src": <id>, "predicate": <str>,
+                "dst": <id>}`` dicts describing relationships between entities.
+            payload_data: Optional dict of scalar metadata stored with the
+                event (scores, thresholds, etc.).
+
+        Results are queryable via
+        ``brain_get_neighbors(entity_ids=[<entity_id>], hops=2)``.
+        """
+        import json
+
+        event_payload: dict[str, Any] = {
+            "event_type": event_type,
+            "entities": entities,
+        }
+        if edges:
+            event_payload["edges"] = edges
+        if payload_data:
+            event_payload["payload"] = payload_data
+
+        args = {"payload_json": json.dumps(event_payload)}
+        result = await self._http_mcp_call("brain_record_event", args)
+        return result if isinstance(result, dict) else {"recorded": True}
+
     # -------------------------------------------------------------------------
     # Native session memory (TAP-1633)
     # -------------------------------------------------------------------------

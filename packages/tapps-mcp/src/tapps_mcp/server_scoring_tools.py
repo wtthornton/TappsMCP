@@ -20,6 +20,7 @@ from mcp.types import ToolAnnotations
 from tapps_core.config.settings import load_settings
 from tapps_mcp.quick_check_recurring import record_quick_check_recurring
 from tapps_mcp.server_helpers import (
+    _get_brain_bridge,
     _get_scorer_for_file,
     ensure_session_initialized,
     error_response,
@@ -32,7 +33,7 @@ if TYPE_CHECKING:
 
     from mcp.server.fastmcp import FastMCP
 
-    from tapps_mcp.gates.models import GateResult
+    from tapps_mcp.gates.models import GateFailure, GateResult
     from tapps_mcp.scoring.models import ScoreResult
     from tapps_mcp.security.security_scanner import SecurityScanResult
 
@@ -48,6 +49,60 @@ logger = structlog.get_logger(__name__)
 # Complexity thresholds for AST heuristic
 _CC_MODERATE_THRESHOLD = 10
 _CC_HIGH_THRESHOLD = 15
+
+
+# ---------------------------------------------------------------------------
+# TAP-2003: KG event helpers
+# ---------------------------------------------------------------------------
+
+
+def _fire_quality_gate_events(file_path: str, failures: list[GateFailure]) -> None:  # type: ignore[name-defined]
+    """Fire brain KG events for every quality gate failure (fire-and-forget).
+
+    Each failure emits a ``quality_gate_fail`` event with:
+    - a file entity and a rule entity
+    - a ``file VIOLATES rule`` directed edge
+    - a payload carrying score, threshold, and category
+
+    Results are queryable via
+    ``brain_get_neighbors(entity_ids=[<file_path>], hops=2)``.
+
+    This is best-effort: a brain outage or call failure must never block
+    the quality gate response.
+    """
+
+    async def _emit() -> None:
+        try:
+            bridge = _get_brain_bridge()
+            if bridge is None or not hasattr(bridge, "record_kg_event"):
+                return
+            for failure in failures:
+                await bridge.record_kg_event(  # type: ignore[union-attr]
+                    event_type="quality_gate_fail",
+                    entities=[
+                        {"type": "file", "id": file_path},
+                        {"type": "rule", "id": failure.category},
+                    ],
+                    edges=[
+                        {
+                            "src": file_path,
+                            "predicate": "violates",
+                            "dst": failure.category,
+                        }
+                    ],
+                    payload_data={
+                        "score": failure.actual,
+                        "category": failure.category,
+                        "threshold": failure.threshold,
+                    },
+                )
+        except Exception:
+            pass  # best-effort: never block quality gate for telemetry
+
+    try:
+        asyncio.create_task(_emit())  # noqa: RUF006
+    except Exception:
+        pass
 
 
 def _build_score_file_data(
@@ -375,6 +430,11 @@ async def tapps_quality_gate(
         _record_call("tapps_quality_gate", success=False)
         return error_response("tapps_quality_gate", "scoring_failed", str(exc))
     gate_result = evaluate_gate(score_result, preset=preset)
+
+    # TAP-2003: record gate failures as KG events so the next agent can
+    # discover the failure history via brain_get_neighbors.
+    if not gate_result.passed and gate_result.failures:
+        _fire_quality_gate_events(str(resolved), gate_result.failures)
 
     elapsed_ms = (time.perf_counter_ns() - start) // 1_000_000
     _record_execution(
