@@ -27,7 +27,7 @@ if TYPE_CHECKING:
     from mcp.server.fastmcp import FastMCP
 
 from docs_mcp.linters.linear_issue import lint_issue
-from docs_mcp.server import _ANNOTATIONS_READ_ONLY, _record_call
+from docs_mcp.server import _ANNOTATIONS_READ_ONLY, _META_DEFERRED, _record_call
 from docs_mcp.server_helpers import success_response
 from docs_mcp.triage.linear_issue import triage_issues
 from docs_mcp.validators.linear_issue import validate_issue
@@ -320,10 +320,16 @@ def _triage_next_steps(data: dict[str, Any]) -> list[str]:
 
 
 def register(mcp_instance: FastMCP, allowed_tools: frozenset[str]) -> None:
-    """Register Linear-issue tools on the shared mcp instance."""
+    """Register Linear-issue tools on the shared mcp instance.
+
+    TAP-1987: docs_lint_linear_issue and docs_validate_linear_issue are daily
+    drivers (eager). docs_linear_triage is deferred.
+    """
     if "docs_lint_linear_issue" in allowed_tools:
         mcp_instance.tool(annotations=_ANNOTATIONS_READ_ONLY)(docs_lint_linear_issue)
     if "docs_validate_linear_issue" in allowed_tools:
         mcp_instance.tool(annotations=_ANNOTATIONS_READ_ONLY)(docs_validate_linear_issue)
     if "docs_linear_triage" in allowed_tools:
-        mcp_instance.tool(annotations=_ANNOTATIONS_READ_ONLY)(docs_linear_triage)
+        mcp_instance.tool(annotations=_ANNOTATIONS_READ_ONLY, meta=_META_DEFERRED)(
+            docs_linear_triage
+        )

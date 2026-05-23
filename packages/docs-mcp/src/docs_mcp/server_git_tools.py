@@ -11,7 +11,7 @@ from collections import Counter
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
-from docs_mcp.server import _ANNOTATIONS_READ_ONLY, _record_call
+from docs_mcp.server import _ANNOTATIONS_READ_ONLY, _META_DEFERRED, _record_call
 from docs_mcp.server_helpers import _get_settings, error_response, success_response
 
 if TYPE_CHECKING:
@@ -131,6 +131,11 @@ async def docs_git_summary(
 
 
 def register(mcp_instance: FastMCP, allowed_tools: frozenset[str]) -> None:
-    """Register git tools on the shared mcp instance (Epic 79.2: conditional)."""
+    """Register git tools on the shared mcp instance (Epic 79.2: conditional).
+
+    TAP-1987: docs_git_summary is deferred (not on the daily-driver list).
+    """
     if "docs_git_summary" in allowed_tools:
-        mcp_instance.tool(annotations=_ANNOTATIONS_READ_ONLY)(docs_git_summary)
+        mcp_instance.tool(annotations=_ANNOTATIONS_READ_ONLY, meta=_META_DEFERRED)(
+            docs_git_summary
+        )

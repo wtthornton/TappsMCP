@@ -19,9 +19,10 @@ import structlog
 from docs_mcp.server import (
     _ANNOTATIONS_READ_ONLY,
     _ANNOTATIONS_SIDE_EFFECT_IDEMPOTENT,
-    _META_SIZE_100K,
-    _META_SIZE_200K,
-    _META_SIZE_400K,
+    _META_DEFERRED,
+    _META_SIZE_100K_D,
+    _META_SIZE_200K_D,
+    _META_SIZE_400K_D,
     _record_call,
 )
 from docs_mcp.server_helpers import (
@@ -2387,54 +2388,82 @@ async def docs_generate_release_update(
 
 
 def register(mcp_instance: FastMCP, allowed_tools: frozenset[str]) -> None:
-    """Register generation tools on the shared mcp instance (Epic 79.2: conditional)."""
+    """Register generation tools on the shared mcp instance (Epic 79.2: conditional).
+
+    TAP-1987: Daily drivers (EAGER — no defer_loading):
+      docs_generate_changelog, docs_generate_epic, docs_generate_story.
+    All other generators are DEFERRED and loaded on-demand via Tool Search.
+    """
+    # EAGER — daily drivers
     if "docs_generate_changelog" in allowed_tools:
         mcp_instance.tool(annotations=_ANNOTATIONS_SIDE_EFFECT_IDEMPOTENT)(docs_generate_changelog)
-    if "docs_generate_release_notes" in allowed_tools:
-        mcp_instance.tool(annotations=_ANNOTATIONS_READ_ONLY)(docs_generate_release_notes)
-    if "docs_generate_readme" in allowed_tools:
-        mcp_instance.tool(annotations=_ANNOTATIONS_SIDE_EFFECT_IDEMPOTENT)(docs_generate_readme)
-    if "docs_generate_api" in allowed_tools:
-        mcp_instance.tool(
-            annotations=_ANNOTATIONS_SIDE_EFFECT_IDEMPOTENT, meta=_META_SIZE_200K
-        )(docs_generate_api)
-    if "docs_generate_adr" in allowed_tools:
-        mcp_instance.tool(annotations=_ANNOTATIONS_SIDE_EFFECT_IDEMPOTENT)(docs_generate_adr)
-    if "docs_generate_onboarding" in allowed_tools:
-        mcp_instance.tool(annotations=_ANNOTATIONS_SIDE_EFFECT_IDEMPOTENT)(docs_generate_onboarding)
-    if "docs_generate_contributing" in allowed_tools:
-        mcp_instance.tool(annotations=_ANNOTATIONS_SIDE_EFFECT_IDEMPOTENT)(
-            docs_generate_contributing
-        )
-    if "docs_generate_prd" in allowed_tools:
-        mcp_instance.tool(annotations=_ANNOTATIONS_SIDE_EFFECT_IDEMPOTENT)(docs_generate_prd)
-    if "docs_generate_diagram" in allowed_tools:
-        mcp_instance.tool(annotations=_ANNOTATIONS_READ_ONLY, meta=_META_SIZE_100K)(
-            docs_generate_diagram
-        )
-    if "docs_generate_architecture" in allowed_tools:
-        mcp_instance.tool(
-            annotations=_ANNOTATIONS_SIDE_EFFECT_IDEMPOTENT, meta=_META_SIZE_400K
-        )(docs_generate_architecture)
     if "docs_generate_epic" in allowed_tools:
         mcp_instance.tool(annotations=_ANNOTATIONS_SIDE_EFFECT_IDEMPOTENT)(docs_generate_epic)
     if "docs_generate_story" in allowed_tools:
         mcp_instance.tool(annotations=_ANNOTATIONS_SIDE_EFFECT_IDEMPOTENT)(docs_generate_story)
+
+    # DEFERRED — loaded on-demand via Tool Search
+    if "docs_generate_release_notes" in allowed_tools:
+        mcp_instance.tool(annotations=_ANNOTATIONS_READ_ONLY, meta=_META_DEFERRED)(
+            docs_generate_release_notes
+        )
+    if "docs_generate_readme" in allowed_tools:
+        mcp_instance.tool(annotations=_ANNOTATIONS_SIDE_EFFECT_IDEMPOTENT, meta=_META_DEFERRED)(
+            docs_generate_readme
+        )
+    if "docs_generate_api" in allowed_tools:
+        mcp_instance.tool(
+            annotations=_ANNOTATIONS_SIDE_EFFECT_IDEMPOTENT, meta=_META_SIZE_200K_D
+        )(docs_generate_api)
+    if "docs_generate_adr" in allowed_tools:
+        mcp_instance.tool(annotations=_ANNOTATIONS_SIDE_EFFECT_IDEMPOTENT, meta=_META_DEFERRED)(
+            docs_generate_adr
+        )
+    if "docs_generate_onboarding" in allowed_tools:
+        mcp_instance.tool(annotations=_ANNOTATIONS_SIDE_EFFECT_IDEMPOTENT, meta=_META_DEFERRED)(
+            docs_generate_onboarding
+        )
+    if "docs_generate_contributing" in allowed_tools:
+        mcp_instance.tool(annotations=_ANNOTATIONS_SIDE_EFFECT_IDEMPOTENT, meta=_META_DEFERRED)(
+            docs_generate_contributing
+        )
+    if "docs_generate_prd" in allowed_tools:
+        mcp_instance.tool(annotations=_ANNOTATIONS_SIDE_EFFECT_IDEMPOTENT, meta=_META_DEFERRED)(
+            docs_generate_prd
+        )
+    if "docs_generate_diagram" in allowed_tools:
+        mcp_instance.tool(annotations=_ANNOTATIONS_READ_ONLY, meta=_META_SIZE_100K_D)(
+            docs_generate_diagram
+        )
+    if "docs_generate_architecture" in allowed_tools:
+        mcp_instance.tool(
+            annotations=_ANNOTATIONS_SIDE_EFFECT_IDEMPOTENT, meta=_META_SIZE_400K_D
+        )(docs_generate_architecture)
     if "docs_generate_prompt" in allowed_tools:
-        mcp_instance.tool(annotations=_ANNOTATIONS_SIDE_EFFECT_IDEMPOTENT)(docs_generate_prompt)
+        mcp_instance.tool(annotations=_ANNOTATIONS_SIDE_EFFECT_IDEMPOTENT, meta=_META_DEFERRED)(
+            docs_generate_prompt
+        )
     if "docs_generate_llms_txt" in allowed_tools:
-        mcp_instance.tool(annotations=_ANNOTATIONS_SIDE_EFFECT_IDEMPOTENT)(docs_generate_llms_txt)
+        mcp_instance.tool(annotations=_ANNOTATIONS_SIDE_EFFECT_IDEMPOTENT, meta=_META_DEFERRED)(
+            docs_generate_llms_txt
+        )
     if "docs_generate_frontmatter" in allowed_tools:
-        mcp_instance.tool(annotations=_ANNOTATIONS_SIDE_EFFECT_IDEMPOTENT)(
+        mcp_instance.tool(annotations=_ANNOTATIONS_SIDE_EFFECT_IDEMPOTENT, meta=_META_DEFERRED)(
             docs_generate_frontmatter
         )
     if "docs_generate_interactive_diagrams" in allowed_tools:
         mcp_instance.tool(
-            annotations=_ANNOTATIONS_SIDE_EFFECT_IDEMPOTENT, meta=_META_SIZE_400K
+            annotations=_ANNOTATIONS_SIDE_EFFECT_IDEMPOTENT, meta=_META_SIZE_400K_D
         )(docs_generate_interactive_diagrams)
     if "docs_generate_purpose" in allowed_tools:
-        mcp_instance.tool(annotations=_ANNOTATIONS_SIDE_EFFECT_IDEMPOTENT)(docs_generate_purpose)
+        mcp_instance.tool(annotations=_ANNOTATIONS_SIDE_EFFECT_IDEMPOTENT, meta=_META_DEFERRED)(
+            docs_generate_purpose
+        )
     if "docs_generate_doc_index" in allowed_tools:
-        mcp_instance.tool(annotations=_ANNOTATIONS_SIDE_EFFECT_IDEMPOTENT)(docs_generate_doc_index)
+        mcp_instance.tool(annotations=_ANNOTATIONS_SIDE_EFFECT_IDEMPOTENT, meta=_META_DEFERRED)(
+            docs_generate_doc_index
+        )
     if "docs_generate_release_update" in allowed_tools:
-        mcp_instance.tool(annotations=_ANNOTATIONS_READ_ONLY)(docs_generate_release_update)
+        mcp_instance.tool(annotations=_ANNOTATIONS_READ_ONLY, meta=_META_DEFERRED)(
+            docs_generate_release_update
+        )

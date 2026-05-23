@@ -2056,7 +2056,7 @@ _TAPPS_MCP_MODE_TOOL_COUNTS: dict[str, int] = {
     "quality": 15,  # len(TAPPS_TOOL_PRESET_QUALITY)
     "admin": 12,    # len(TAPPS_TOOL_PRESET_ADMIN)
 }
-_DOCS_MCP_TOOL_COUNT: int = 38
+_DOCS_MCP_TOOL_COUNT: int = 6  # TAP-1987: 6 eager tools; 32 deferred via Tool Search
 _DEFAULT_TOOL_BUDGET: int = 20
 
 

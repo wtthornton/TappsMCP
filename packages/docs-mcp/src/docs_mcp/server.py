@@ -51,6 +51,14 @@ _META_SIZE_100K: dict[str, Any] = {"anthropic/maxResultSizeChars": 100_000}
 _META_SIZE_200K: dict[str, Any] = {"anthropic/maxResultSizeChars": 200_000}
 _META_SIZE_400K: dict[str, Any] = {"anthropic/maxResultSizeChars": 400_000}
 
+# TAP-1987: defer_loading meta dicts — mark non-daily-driver tools as deferred
+# so Claude Code (with the advanced-tool-use-2025-11-20 beta header) only loads
+# them on-demand via Tool Search, keeping the default catalog ≤ 6 tools.
+_META_DEFERRED: dict[str, Any] = {"defer_loading": True}
+_META_SIZE_100K_D: dict[str, Any] = {**_META_SIZE_100K, "defer_loading": True}
+_META_SIZE_200K_D: dict[str, Any] = {**_META_SIZE_200K, "defer_loading": True}
+_META_SIZE_400K_D: dict[str, Any] = {**_META_SIZE_400K, "defer_loading": True}
+
 # ---------------------------------------------------------------------------
 # FastMCP server instance
 # ---------------------------------------------------------------------------
@@ -166,15 +174,24 @@ def _resolve_allowed_tools(
 
 
 def _register_core_tools(mcp_instance: FastMCP, allowed_tools: frozenset[str]) -> None:
-    """Register core tools (server.py) when their name is in allowed_tools (Epic 79.2)."""
+    """Register core tools (server.py) when their name is in allowed_tools (Epic 79.2).
+
+    TAP-1987: docs_session_start, docs_project_scan, docs_config are not on the
+    daily-driver list (see docs/architecture/tool-budget.md), so they carry
+    ``defer_loading: True`` and are loaded on-demand via Tool Search.
+    """
     if "docs_session_start" in allowed_tools:
-        mcp_instance.tool(annotations=_ANNOTATIONS_READ_ONLY)(docs_session_start)
+        mcp_instance.tool(annotations=_ANNOTATIONS_READ_ONLY, meta=_META_DEFERRED)(
+            docs_session_start
+        )
     if "docs_project_scan" in allowed_tools:
-        mcp_instance.tool(annotations=_ANNOTATIONS_READ_ONLY, meta=_META_SIZE_100K)(
+        mcp_instance.tool(annotations=_ANNOTATIONS_READ_ONLY, meta=_META_SIZE_100K_D)(
             docs_project_scan
         )
     if "docs_config" in allowed_tools:
-        mcp_instance.tool(annotations=_ANNOTATIONS_SIDE_EFFECT_IDEMPOTENT)(docs_config)
+        mcp_instance.tool(annotations=_ANNOTATIONS_SIDE_EFFECT_IDEMPOTENT, meta=_META_DEFERRED)(
+            docs_config
+        )
 
 
 # ---------------------------------------------------------------------------

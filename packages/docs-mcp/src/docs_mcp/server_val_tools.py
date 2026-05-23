@@ -21,7 +21,7 @@ if TYPE_CHECKING:
 
 _logger = structlog.get_logger(__name__)
 
-from docs_mcp.server import _ANNOTATIONS_READ_ONLY, _record_call
+from docs_mcp.server import _ANNOTATIONS_READ_ONLY, _META_DEFERRED, _record_call
 from docs_mcp.server_helpers import (
     _get_settings,
     build_custom_terms_for_style,
@@ -1114,24 +1114,39 @@ async def docs_release_gate(
 
 
 def register(mcp_instance: "FastMCP", allowed_tools: frozenset[str]) -> None:  # noqa: UP037
-    """Register validation tools on the shared mcp instance (Epic 79.2: conditional)."""
+    """Register validation tools on the shared mcp instance (Epic 79.2: conditional).
+
+    TAP-1987: docs_release_gate is the only daily driver in this module (eager).
+    All other validation tools carry defer_loading=True and are loaded on-demand.
+    """
     if "docs_check_drift" in allowed_tools:
-        mcp_instance.tool(annotations=_ANNOTATIONS_READ_ONLY)(docs_check_drift)
+        mcp_instance.tool(annotations=_ANNOTATIONS_READ_ONLY, meta=_META_DEFERRED)(docs_check_drift)
     if "docs_check_completeness" in allowed_tools:
-        mcp_instance.tool(annotations=_ANNOTATIONS_READ_ONLY)(docs_check_completeness)
+        mcp_instance.tool(annotations=_ANNOTATIONS_READ_ONLY, meta=_META_DEFERRED)(
+            docs_check_completeness
+        )
     if "docs_check_links" in allowed_tools:
-        mcp_instance.tool(annotations=_ANNOTATIONS_READ_ONLY)(docs_check_links)
+        mcp_instance.tool(annotations=_ANNOTATIONS_READ_ONLY, meta=_META_DEFERRED)(docs_check_links)
     if "docs_check_freshness" in allowed_tools:
-        mcp_instance.tool(annotations=_ANNOTATIONS_READ_ONLY)(docs_check_freshness)
+        mcp_instance.tool(annotations=_ANNOTATIONS_READ_ONLY, meta=_META_DEFERRED)(
+            docs_check_freshness
+        )
     if "docs_validate_epic" in allowed_tools:
-        mcp_instance.tool(annotations=_ANNOTATIONS_READ_ONLY)(docs_validate_epic)
+        mcp_instance.tool(annotations=_ANNOTATIONS_READ_ONLY, meta=_META_DEFERRED)(docs_validate_epic)
     if "docs_check_diataxis" in allowed_tools:
-        mcp_instance.tool(annotations=_ANNOTATIONS_READ_ONLY)(docs_check_diataxis)
+        mcp_instance.tool(annotations=_ANNOTATIONS_READ_ONLY, meta=_META_DEFERRED)(
+            docs_check_diataxis
+        )
     if "docs_check_cross_refs" in allowed_tools:
-        mcp_instance.tool(annotations=_ANNOTATIONS_READ_ONLY)(docs_check_cross_refs)
+        mcp_instance.tool(annotations=_ANNOTATIONS_READ_ONLY, meta=_META_DEFERRED)(
+            docs_check_cross_refs
+        )
     if "docs_check_style" in allowed_tools:
-        mcp_instance.tool(annotations=_ANNOTATIONS_READ_ONLY)(docs_check_style)
+        mcp_instance.tool(annotations=_ANNOTATIONS_READ_ONLY, meta=_META_DEFERRED)(docs_check_style)
     if "docs_validate_release_update" in allowed_tools:
-        mcp_instance.tool(annotations=_ANNOTATIONS_READ_ONLY)(docs_validate_release_update)
+        mcp_instance.tool(annotations=_ANNOTATIONS_READ_ONLY, meta=_META_DEFERRED)(
+            docs_validate_release_update
+        )
     if "docs_release_gate" in allowed_tools:
+        # EAGER — daily driver: pre-release validation gate (docs/architecture/tool-budget.md)
         mcp_instance.tool(annotations=_ANNOTATIONS_READ_ONLY)(docs_release_gate)
