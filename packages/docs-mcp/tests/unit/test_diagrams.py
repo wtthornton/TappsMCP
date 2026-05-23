@@ -152,11 +152,10 @@ def python_project(tmp_path: Path) -> Path:
 
 @pytest.fixture
 def large_python_project(tmp_path: Path) -> Path:
-    """Create a project with enough top-level packages to exceed the auto-poster threshold.
+    """Create a project with 16 top-level packages for dependency diagram tests.
 
-    The auto-select redirect (STORY-100.6) only fires when a project has fewer than
-    _POSTER_AUTO_THRESHOLD (15) top-level packages.  Dependency-diagram tests must use
-    this fixture so they receive a real dependency diagram rather than a pattern_card.
+    Useful for tests that need a rich dependency graph with many packages and
+    cross-package import edges.
     """
     root = tmp_path / "large_project"
     root.mkdir()
@@ -283,17 +282,58 @@ class TestDiagramValidation:
 
 
 # ---------------------------------------------------------------------------
+# TAP-2198: dependency diagram must never silently fall back to pattern_card
+# ---------------------------------------------------------------------------
+
+
+class TestDependencyNoSilentFallback:
+    """TAP-2198: diagram_type='dependency' must return dependency or explicit error.
+
+    Previously, projects with fewer than _POSTER_AUTO_THRESHOLD top-level
+    packages would silently receive a pattern_card diagram instead of the
+    requested dependency diagram.  After the fix, the response MUST have
+    diagram_type='dependency' regardless of project size.
+    """
+
+    def test_small_project_returns_dependency_not_pattern_card(
+        self, generator: DiagramGenerator, python_project: Path
+    ) -> None:
+        """A small project (1 package) requesting dependency gets diagram_type='dependency'."""
+        result = generator.generate(python_project, diagram_type="dependency")
+        assert result.diagram_type == "dependency", (
+            f"Expected diagram_type='dependency' but got '{result.diagram_type}'. "
+            "Silent pattern_card substitution must not occur (TAP-2198)."
+        )
+
+    def test_small_project_returns_content_or_explicit_error(
+        self, generator: DiagramGenerator, python_project: Path
+    ) -> None:
+        """Small project dependency request returns content or an error field — never silent empty."""
+        result = generator.generate(python_project, diagram_type="dependency")
+        # Either we got real diagram content, OR there is an explicit error message.
+        has_content = bool(result.content.strip())
+        has_error = result.error is not None
+        assert has_content or has_error, (
+            "Dependency diagram for a small project must return either content "
+            "or an explicit result.error — not a silent empty response."
+        )
+
+    def test_dependency_diagram_result_error_field_defaults_none(
+        self, generator: DiagramGenerator, large_python_project: Path
+    ) -> None:
+        """error field is None on a successful dependency diagram."""
+        result = generator.generate(large_python_project, diagram_type="dependency")
+        assert result.error is None
+        assert result.diagram_type == "dependency"
+
+
+# ---------------------------------------------------------------------------
 # Dependency diagrams -- Mermaid
 # ---------------------------------------------------------------------------
 
 
 class TestDependencyDiagramMermaid:
-    """Dependency diagrams in Mermaid format.
-
-    Uses the ``large_python_project`` fixture (16 packages) so the STORY-100.6
-    auto-poster redirect (_POSTER_AUTO_THRESHOLD=15) is never triggered and these
-    tests receive a genuine dependency diagram rather than a pattern_card.
-    """
+    """Dependency diagrams in Mermaid format."""
 
     def test_generates_graph_td(
         self, generator: DiagramGenerator, large_python_project: Path

@@ -41,10 +41,6 @@ _MIN_RESULTS_THRESHOLD = 3
 # Maximum packages shown on a pattern_card poster (README-embeddable size).
 _MAX_PATTERN_NODES = 8
 
-# STORY-100.6: projects with fewer top-level packages than this threshold
-# automatically use the pattern_card poster when diagram_type is "dependency".
-_POSTER_AUTO_THRESHOLD = 15
-
 # Fixed semantic-role palette. Shared across renderers (STORY-100.2 will
 # re-use these colors for the other 7 diagram types so every docs-mcp visual
 # speaks the same visual language).
@@ -152,6 +148,7 @@ class DiagramResult(BaseModel):
     scanned_dirs: list[str] = []
     skipped_count: int = 0
     adr_link: str | None = None
+    error: str | None = None
 
 
 class DiagramGenerator:
@@ -224,25 +221,6 @@ class DiagramGenerator:
         Returns:
             A :class:`DiagramResult` with the rendered content.
         """
-        # STORY-100.6: auto-select pattern_card for small projects when the
-        # caller requested the default "dependency" diagram and HTML output.
-        # Counts top-level packages; falls through silently on any error.
-        if diagram_type == "dependency" and output_format in ("mermaid", "html"):
-            try:
-                from docs_mcp.analyzers.module_map import ModuleMapAnalyzer
-
-                _mm = ModuleMapAnalyzer().analyze(project_root, depth=1)
-                _pkg_count = len({n.name for n in _mm.module_tree if n.name})
-                if _pkg_count < _POSTER_AUTO_THRESHOLD:
-                    logger.info(
-                        "auto_select_pattern_card",
-                        package_count=_pkg_count,
-                        threshold=_POSTER_AUTO_THRESHOLD,
-                    )
-                    diagram_type = "pattern_card"
-            except Exception as exc:
-                logger.debug("diagram_auto_select_failed", error=str(exc))
-
         if diagram_type not in self.VALID_TYPES:
             logger.warning("invalid_diagram_type", diagram_type=diagram_type)
             return DiagramResult(diagram_type=diagram_type, format=output_format, content="")
@@ -342,14 +320,24 @@ class DiagramGenerator:
         output_format: str,
     ) -> DiagramResult:
         """Generate a dependency / import-graph diagram."""
+        _scope_hint = (
+            "Tip: scope to a specific package directory for a more focused graph,"
+            " e.g. scope='src/my_package'."
+        )
         try:
             from docs_mcp.analyzers.dependency import ImportGraphBuilder
 
             builder = ImportGraphBuilder()
             graph = builder.build(project_root)
-        except Exception:
+        except Exception as exc:
             logger.warning("dependency_build_failed", path=str(project_root))
-            return DiagramResult(diagram_type="dependency", format=output_format, content="")
+            return DiagramResult(
+                diagram_type="dependency",
+                format=output_format,
+                content="",
+                degraded=True,
+                error=f"Failed to build import graph: {exc}. {_scope_hint}",
+            )
 
         try:
             if output_format == "mermaid":
@@ -360,9 +348,15 @@ class DiagramGenerator:
                 content, nodes, edges = self._dependency_to_plantuml(
                     graph, direction, show_external
                 )
-        except Exception:
+        except Exception as exc:
             logger.warning("dependency_render_failed")
-            return DiagramResult(diagram_type="dependency", format=output_format, content="")
+            return DiagramResult(
+                diagram_type="dependency",
+                format=output_format,
+                content="",
+                degraded=True,
+                error=f"Failed to render dependency diagram: {exc}. {_scope_hint}",
+            )
 
         return DiagramResult(
             diagram_type="dependency",
