@@ -1880,6 +1880,31 @@ class HttpBrainBridge(BrainBridge):
         result = await self._http_mcp_call("diagnostics_report", {"record_history": record_history})
         return result if isinstance(result, dict) else {"report": result}
 
+    async def record_event(
+        self,
+        event_type: str,
+        entity_id: str,
+    ) -> dict[str, Any]:
+        """TAP-1992: Fire a KG event via ``brain_record_event`` (best-effort).
+
+        Designed for deprecation-usage telemetry: pass ``event_type`` (e.g.
+        ``"deprecated_tool_call"``) and ``entity_id`` (e.g.
+        ``"tapps_memory:save"``) to capture a KG edge that can later be
+        queried via ``brain_get_neighbors``.
+
+        The brain stores the event as a KG entity + edge. Results are
+        queryable via ``brain_get_neighbors(entity_ids=["tapps_memory:save"])``.
+        """
+        import json
+
+        payload = {
+            "event_type": event_type,
+            "entities": [{"type": "tool", "id": entity_id}],
+        }
+        args = {"payload_json": json.dumps(payload)}
+        result = await self._http_mcp_call("brain_record_event", args)
+        return result if isinstance(result, dict) else {"recorded": True}
+
     # -------------------------------------------------------------------------
     # Native session memory (TAP-1633)
     # -------------------------------------------------------------------------

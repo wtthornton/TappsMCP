@@ -6,6 +6,7 @@ registered on the ``mcp`` instance via :func:`register`.
 
 from __future__ import annotations
 
+import asyncio
 import dataclasses
 import json
 import os
@@ -698,6 +699,26 @@ async def tapps_memory(
             "invalid_action",
             f"Invalid action '{action}'. Must be one of: {', '.join(sorted(_VALID_ACTIONS))}",
         )
+
+    # TAP-1992: best-effort deprecation telemetry — fire-and-forget KG event so
+    # removal timing is data-driven. Never blocks or raises; a brain outage here
+    # must not break tapps_memory callers.
+    try:
+        _ev_bridge = _get_brain_bridge()
+        if _ev_bridge is not None and hasattr(_ev_bridge, "record_event"):
+
+            async def _fire_deprecation_event() -> None:
+                try:
+                    await _ev_bridge.record_event(  # type: ignore[union-attr]
+                        "deprecated_tool_call",
+                        f"tapps_memory:{action}",
+                    )
+                except Exception:
+                    pass
+
+            asyncio.create_task(_fire_deprecation_event())  # noqa: RUF006
+    except Exception:
+        pass  # never block tapps_memory for telemetry
 
     try:
         store = _get_memory_store()
