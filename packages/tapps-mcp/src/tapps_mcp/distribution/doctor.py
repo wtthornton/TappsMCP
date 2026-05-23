@@ -7,10 +7,12 @@ import re
 import shutil
 import sys
 from datetime import UTC, datetime, timedelta
+from importlib.metadata import requires as _requires
 from pathlib import Path
 from typing import Any, cast
 
 import click
+import httpx
 
 from tapps_core.common.logging import get_logger
 from tapps_mcp.pipeline.platform_hook_templates import (
@@ -1931,6 +1933,118 @@ def check_brain_health(root: Path) -> CheckResult:
     )
 
 
+def _parse_version_tuple(ver_str: str) -> tuple[int, int, int]:
+    """Parse ``'3.18.0'`` → ``(3, 18, 0)``.  Returns ``(0, 0, 0)`` on error."""
+    try:
+        parts = ver_str.split(".")[:3]
+        return (int(parts[0]), int(parts[1]) if len(parts) > 1 else 0, int(parts[2]) if len(parts) > 2 else 0)
+    except Exception:
+        return (0, 0, 0)
+
+
+def _read_brain_floor_pin() -> str | None:
+    """Return the ``tapps-brain`` floor version from ``tapps-core`` package metadata.
+
+    Parses ``requires('tapps-core')`` looking for a ``tapps-brain>=X.Y.Z`` entry and
+    returns ``X.Y.Z``.  Returns ``None`` when the metadata is unavailable or the
+    requirement cannot be parsed.
+    """
+    try:
+        for req in (_requires("tapps-core") or []):
+            m = re.match(r"^tapps.brain\s*>=\s*([0-9]+\.[0-9]+(?:\.[0-9]+)?)", req, re.IGNORECASE)
+            if m:
+                return m.group(1)
+    except Exception:
+        pass
+    return None
+
+
+def check_brain_version_delta(root: Path) -> CheckResult:
+    """TAP-2025: compare the running brain-service version against the pinned floor.
+
+    Reads the ``tapps-brain>=X.Y.Z`` floor constraint from ``tapps-core``'s
+    installed package metadata and compares it against the live
+    ``brain_version`` field returned by ``{brain_http_url}/healthz``.
+
+    Emits WARN when the running brain version is more than 2 minor versions
+    ahead of the floor pin — a signal that it is time to bump the pin.
+    Emits CRITICAL when the major version differs (API-breaking).
+
+    The check is skipped (passes) when HTTP mode is inactive.
+    """
+    import os
+
+    http_url = os.environ.get("TAPPS_MCP_MEMORY_BRAIN_HTTP_URL", "").strip()
+    if not http_url:
+        return CheckResult(
+            "tapps-brain version delta",
+            True,
+            "Not in HTTP mode (TAPPS_MCP_MEMORY_BRAIN_HTTP_URL unset)",
+        )
+
+    # Probe /healthz (v3.19.0+) first; fall back to /health for older brains
+    brain_ver_str: str | None = None
+    for path in ("/healthz", "/health"):
+        try:
+            resp = httpx.get(f"{http_url.rstrip('/')}{path}", timeout=3.0)
+            resp.raise_for_status()
+            body = resp.json()
+            brain_ver_str = body.get("brain_version") or body.get("version")
+            if brain_ver_str:
+                break
+        except Exception:
+            continue
+
+    if not brain_ver_str:
+        return CheckResult(
+            "tapps-brain version delta",
+            True,
+            "Brain health endpoint did not return a version — skipping delta check",
+        )
+
+    floor_str = _read_brain_floor_pin()
+    if not floor_str:
+        return CheckResult(
+            "tapps-brain version delta",
+            True,
+            f"Running brain {brain_ver_str} (floor pin unresolvable from tapps-core metadata)",
+        )
+
+    running = _parse_version_tuple(brain_ver_str)
+    floor = _parse_version_tuple(floor_str)
+    running_str = ".".join(str(v) for v in running)
+    floor_str_fmt = ".".join(str(v) for v in floor)
+
+    if running[0] != floor[0]:
+        return CheckResult(
+            "tapps-brain version delta",
+            False,
+            f"CRITICAL: major version mismatch — running {running_str}, floor pin {floor_str_fmt}",
+            "Update the tapps-brain pin in tapps-core/pyproject.toml and re-install.",
+        )
+
+    minor_delta = running[1] - floor[1]
+    if minor_delta > 2:
+        return CheckResult(
+            "tapps-brain version delta",
+            False,
+            (
+                f"WARN: running brain {running_str} is {minor_delta} minor version(s) "
+                f"ahead of floor pin {floor_str_fmt}"
+            ),
+            f"Bump tapps-brain floor in tapps-core/pyproject.toml to >={running_str}.",
+        )
+
+    return CheckResult(
+        "tapps-brain version delta",
+        True,
+        (
+            f"brain {running_str} within 2 minor versions of floor pin "
+            f"{floor_str_fmt} (delta={minor_delta})"
+        ),
+    )
+
+
 def check_memory_pipeline_config(root: Path) -> CheckResult:
     """Echo effective memory-related settings (informational; always passes).
 
@@ -2376,6 +2490,7 @@ def _collect_checks(root: Path, *, quick: bool = False) -> list[CheckResult]:
     checks.append(check_brain_http_auth(root))
     checks.append(check_brain_profile(root))
     checks.append(check_brain_health(root))
+    checks.append(check_brain_version_delta(root))
     checks.append(check_memory_pipeline_config(root))
     checks.append(check_dual_memory_server(root))
     checks.append(check_plaintext_secrets(root))

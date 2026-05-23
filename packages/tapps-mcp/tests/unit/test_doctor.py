@@ -2,7 +2,7 @@
 
 import json
 import sys
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 from click.testing import CliRunner
@@ -11,9 +11,12 @@ from tapps_mcp.cli import main
 from tapps_mcp.distribution.doctor import (
     CheckResult,
     _collect_checks,
+    _parse_version_tuple,
+    _read_brain_floor_pin,
     _read_engagement_level,
     check_agents_md,
     check_binary_on_path,
+    check_brain_version_delta,
     check_claude_code_project,
     check_claude_code_user,
     check_claude_hook_scripts,
@@ -1661,3 +1664,117 @@ class TestFetchExposedTools:
         assert exposed == {"memory_save"}
         assert source == "rest"
         httpx_mod.post.assert_not_called()
+
+
+# ---------------------------------------------------------------------------
+# TAP-2025: check_brain_version_delta
+# ---------------------------------------------------------------------------
+
+
+class TestParseVersionTuple:
+    """Tests for _parse_version_tuple helper."""
+
+    def test_full_version(self) -> None:
+        assert _parse_version_tuple("3.18.0") == (3, 18, 0)
+
+    def test_two_part_version(self) -> None:
+        assert _parse_version_tuple("3.18") == (3, 18, 0)
+
+    def test_parse_error_returns_zeros(self) -> None:
+        assert _parse_version_tuple("not-a-version") == (0, 0, 0)
+
+
+class TestReadBrainFloorPin:
+    """Tests for _read_brain_floor_pin helper."""
+
+    def test_reads_floor_from_metadata(self) -> None:
+        with patch(
+            "tapps_mcp.distribution.doctor._requires",
+            return_value=["tapps-brain>=3.18.0,<4", "pydantic>=2"],
+        ):
+            result = _read_brain_floor_pin()
+        assert result == "3.18.0"
+
+    def test_returns_none_when_absent(self) -> None:
+        with patch(
+            "tapps_mcp.distribution.doctor._requires",
+            return_value=["pydantic>=2"],
+        ):
+            result = _read_brain_floor_pin()
+        assert result is None
+
+
+class TestCheckBrainVersionDelta:
+    """TAP-2025: check_brain_version_delta covers WARN, CRITICAL, and OK paths."""
+
+    def _make_mock_response(self, brain_version: str) -> MagicMock:
+        resp = MagicMock()
+        resp.raise_for_status.return_value = None
+        resp.json.return_value = {"brain_version": brain_version}
+        return resp
+
+    def test_skip_when_not_http_mode(self, tmp_path) -> None:  # type: ignore[no-untyped-def]
+        """Passes silently when TAPPS_MCP_MEMORY_BRAIN_HTTP_URL is unset."""
+        with patch.dict("os.environ", {}, clear=True):
+            result = check_brain_version_delta(tmp_path)
+        assert result.ok is True
+        assert "Not in HTTP mode" in result.message
+
+    def test_ok_when_delta_within_two(self, tmp_path) -> None:  # type: ignore[no-untyped-def]
+        """running=3.20.0, floor=3.18.0 → delta=2, passes."""
+        httpx_mod = MagicMock()
+        httpx_mod.get.return_value = self._make_mock_response("3.20.0")
+
+        with (
+            patch.dict("os.environ", {"TAPPS_MCP_MEMORY_BRAIN_HTTP_URL": "http://brain:8080"}),
+            patch("tapps_mcp.distribution.doctor.httpx", httpx_mod),
+            patch("tapps_mcp.distribution.doctor._read_brain_floor_pin", return_value="3.18.0"),
+        ):
+            result = check_brain_version_delta(tmp_path)
+        assert result.ok is True
+        assert "3.20" in result.message
+        assert "3.18" in result.message
+
+    def test_warn_when_minor_delta_exceeds_two(self, tmp_path) -> None:  # type: ignore[no-untyped-def]
+        """running=3.18.0, floor=3.8.0 → delta=10, WARN (False)."""
+        httpx_mod = MagicMock()
+        httpx_mod.get.return_value = self._make_mock_response("3.18.0")
+
+        with (
+            patch.dict("os.environ", {"TAPPS_MCP_MEMORY_BRAIN_HTTP_URL": "http://brain:8080"}),
+            patch("tapps_mcp.distribution.doctor.httpx", httpx_mod),
+            patch("tapps_mcp.distribution.doctor._read_brain_floor_pin", return_value="3.8.0"),
+        ):
+            result = check_brain_version_delta(tmp_path)
+        assert result.ok is False
+        assert "WARN" in result.message
+        assert "10" in result.message
+
+    def test_critical_when_major_delta(self, tmp_path) -> None:  # type: ignore[no-untyped-def]
+        """running=4.0.0, floor=3.18.0 → major delta=1, CRITICAL (False)."""
+        httpx_mod = MagicMock()
+        httpx_mod.get.return_value = self._make_mock_response("4.0.0")
+
+        with (
+            patch.dict("os.environ", {"TAPPS_MCP_MEMORY_BRAIN_HTTP_URL": "http://brain:8080"}),
+            patch("tapps_mcp.distribution.doctor.httpx", httpx_mod),
+            patch("tapps_mcp.distribution.doctor._read_brain_floor_pin", return_value="3.18.0"),
+        ):
+            result = check_brain_version_delta(tmp_path)
+        assert result.ok is False
+        assert "CRITICAL" in result.message
+        assert "4.0" in result.message
+
+    def test_passes_when_floor_unresolvable(self, tmp_path) -> None:  # type: ignore[no-untyped-def]
+        """Informational pass when importlib metadata unavailable."""
+        httpx_mod = MagicMock()
+        httpx_mod.get.return_value = self._make_mock_response("3.20.0")
+
+        with (
+            patch.dict("os.environ", {"TAPPS_MCP_MEMORY_BRAIN_HTTP_URL": "http://brain:8080"}),
+            patch("tapps_mcp.distribution.doctor.httpx", httpx_mod),
+            patch("tapps_mcp.distribution.doctor._read_brain_floor_pin", return_value=None),
+        ):
+            result = check_brain_version_delta(tmp_path)
+        assert result.ok is True
+        assert "3.20" in result.message
