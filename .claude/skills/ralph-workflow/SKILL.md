@@ -5,7 +5,7 @@ description: >
   RALPH_STATUS exit block, epic-boundary QA deferral, and the dual-condition
   EXIT_SIGNAL gate. Invoke at the start of every Ralph loop so the response
   follows the contract the harness depends on.
-version: 1.1.0
+version: 1.2.0
 ralph: true
 ralph_local: true
 user-invocable: false
@@ -683,6 +683,20 @@ names the workaround, and the hook tokenizes argv so wrapping in `env`,
 `bash -lc`, `uv run`, etc. does not bypass it. Full recipe (including
 sibling interpreters) lives in the `python-introspection` skill.
 
+**Parallel-batch cascade (TAP-2436).** When a `python3 -c` call appears
+in the SAME parallel Bash batch as other Bash commands, the hook's exit-2
+cancels ALL calls in that batch — not just the blocked one. A `python3
+/tmp/snippet.py` call issued alongside a `python3 -c` call in a single
+message gets cancelled too, even though it would have been allowed on its
+own. Recovery pattern: re-issue ONLY the script-file call as a
+**standalone, independent Bash group** (separate message, no other Bash
+calls in the same parallel batch). The common cascade: `list_issues`
+response too large → dumped to file → agent tries `python3 -c` to parse
+the file → block cancels sibling calls → loop burns 6+ minutes. Use the
+`linear-read` skill (which calls `tapps_linear_snapshot_get` first) so
+`list_issues` responses stay cached and compact-projected — no file dump,
+no parse step, no -c temptation.
+
 ## What not to do
 
 - Don't run tests after every task (see epic-boundary rules).
@@ -692,3 +706,35 @@ sibling interpreters) lives in the `python-introspection` skill.
 - Don't omit the status block. Without it the harness cannot tell what
   happened and counts the loop as no-progress.
 - Don't emit the status block and then keep going. End of response = block.
+
+## Revision history
+
+This skill's `version` field is the contract pin downstream projects use
+to know which behaviors the harness expects. Bump the minor when any of
+the hard rules below change; bump the patch for clarifications.
+
+- **1.2.0** — consolidates everything that landed against the original
+  1.1.0 stamp without a version bump. No new contract relative to a
+  project running the latest harness; this is a stamp catch-up so
+  downstream projects can pin a known set of rules:
+  - **R0** branch-first rule + harness-side block on `git push` to
+    `main`/`master` (Ralph 2.15.6 / PR #27 + #29).
+  - **R1 async-merge mode** under `RALPH_ASYNC_MERGE=true` —
+    `gh pr create`, append to `.ralph/pending-merges.json`, stop the
+    loop (Ralph 2.16.0 / PR #41).
+  - **T3 sub-agent fan-out anti-patterns** — single-message multi-Task
+    dispatch at epic boundary, FAIL/TIMEOUT collapse rule (PR #37).
+  - **T4 brief lookahead** — `NEXT_INTENDED_ISSUE` field +
+    `.ralph/brief-next.json` consumer (PR #39).
+  - **`linear-read` skill mandatory** for any multi-issue Linear read
+    (cache-first dance via `tapps_linear_snapshot_get`) (PR #36).
+  - **F1+F2+F3 post-AgentForge feedback bundle** — periodic push,
+    debrief stderr, exit-learning gate, Linear `state` field (PR #32).
+  - **TAP-2256** — `python-introspection` skill referenced for ad-hoc
+    Python (replaces `python3 -c` which `validate-command.sh` blocks).
+  - **TAP-2349** — coordinator brief path discipline: write
+    `.ralph/brief.json` (slash, under `.ralph/`), never
+    `.ralph-brief.json` (dash, repo root).
+- **1.1.0** — read-only audit-session support (R1 exemption when
+  `WORK_TYPE: AUDIT` and `FILES_MODIFIED: 0`).
+- **1.0.x** — initial per-loop execution contract.
