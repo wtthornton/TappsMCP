@@ -388,6 +388,53 @@ class TestCreateBrainBridgeDispatch:
         assert isinstance(result, HttpBrainBridge)
         assert "X-Brain-Profile" not in result._http_headers
 
+    def test_profile_status_pre_negotiation_with_coder_default(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """TAP-1924 integration: bridge created via default factory with
+        ``default_profile='coder'`` reports ``declared_profile='coder'`` and
+        ``gated_used_tools=[]`` before any session negotiation occurs.
+
+        The wire is authoritative for gating decisions (TAP-2100); the pre-
+        negotiation ``gated_used_tools=[]`` reflects that ``_exposed_tools`` is
+        not yet populated — no call has been made to the brain yet.
+        """
+        monkeypatch.setenv("TAPPS_MCP_MEMORY_BRAIN_HTTP_URL", "http://brain:8080")
+        monkeypatch.delenv("TAPPS_BRAIN_PROFILE", raising=False)
+        from tapps_core.brain_bridge import HttpBrainBridge, create_brain_bridge
+
+        settings = MagicMock()
+        settings.memory.brain_http_url = "http://brain:8080"
+        settings.memory.brain_auth_token = None
+        settings.memory.brain_project_id = ""
+        settings.memory.brain_profile = ""
+        settings.project_root = "."
+
+        with patch(
+            "tapps_core.brain_bridge.check_brain_version",
+            return_value={
+                "ok": True,
+                "skipped": True,
+                "degraded": False,
+                "url": "",
+                "floor": "3.18.0",
+                "ceiling": "4.0.0",
+                "version": None,
+                "errors": [],
+                "warnings": [],
+            },
+        ):
+            result = create_brain_bridge(settings, default_profile="coder")
+
+        assert isinstance(result, HttpBrainBridge)
+        status = result.profile_status()
+        # Pre-negotiation: declared header is set; no wire call made yet.
+        assert status["declared_profile"] == "coder"
+        # _exposed_tools is None → gated_used_tools is empty (wire is authoritative).
+        assert status["gated_used_tools"] == []
+        assert status["profile_mismatch"] is False
+        assert status["negotiated"] is False
+
 
 # ---------------------------------------------------------------------------
 # HttpBrainBridge._do_mcp_post

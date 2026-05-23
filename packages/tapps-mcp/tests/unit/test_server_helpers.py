@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, patch
 
 from tapps_mcp.server_helpers import error_response, serialize_issues, success_response
 
@@ -63,3 +63,39 @@ class TestSerializeIssues:
             item.model_dump.return_value = {"i": i}
         result = serialize_issues(items, limit=5)
         assert len(result) == 5
+
+
+class TestGetBrainBridgeProfile:
+    """TAP-1924: server_helpers._get_brain_bridge passes default_profile='coder'."""
+
+    def test_get_brain_bridge_uses_coder_default_profile(self) -> None:
+        """``_get_brain_bridge()`` must call ``create_brain_bridge`` with
+        ``default_profile='coder'`` so tapps-mcp always requests the minimum
+        brain surface rather than the server-side default (``full`` / 59 tools).
+        """
+        from tapps_mcp.server_helpers import _get_brain_bridge, _reset_brain_bridge_cache
+
+        mock_bridge = MagicMock()
+        mock_settings = MagicMock()
+
+        # load_settings is imported lazily inside _get_brain_bridge, so patch at
+        # the source module, not at tapps_mcp.server_helpers.
+        with (
+            patch(
+                "tapps_core.brain_bridge.create_brain_bridge", return_value=mock_bridge
+            ) as mock_create,
+            patch(
+                "tapps_core.config.settings.load_settings", return_value=mock_settings
+            ),
+        ):
+            _reset_brain_bridge_cache()
+            bridge = _get_brain_bridge()
+
+        assert bridge is mock_bridge
+        mock_create.assert_called_once()
+        _, call_kwargs = mock_create.call_args
+        assert call_kwargs.get("default_profile") == "coder", (
+            f"Expected default_profile='coder', got {call_kwargs}"
+        )
+        # Cleanup singleton so other tests start clean.
+        _reset_brain_bridge_cache()
