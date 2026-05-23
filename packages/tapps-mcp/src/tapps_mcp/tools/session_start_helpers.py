@@ -314,6 +314,56 @@ def _process_session_capture(
         return None
 
 
+def _cleanup_legacy_learning_dir(project_root: Path) -> bool:
+    """One-shot cleanup of the legacy ``.tapps-mcp/learning/`` directory (TAP-2023).
+
+    The directory was created by ``FileOutcomeTracker`` and
+    ``FilePerformanceTracker`` in ``tapps-core``, but neither class is
+    instantiated in production code — they exist only as backward-compat
+    re-exports.  The directory is therefore a cargo-cult artifact; this
+    function removes it on the next session start.
+
+    Only removes the directory if it is empty or contains only the two
+    known JSONL files (``outcomes.jsonl``, ``expert_performance.jsonl``).
+    Leaves unknown files untouched and logs a warning so operators can
+    inspect them.
+
+    Returns ``True`` if the directory was removed, ``False`` otherwise.
+    """
+    learning_dir = project_root / ".tapps-mcp" / "learning"
+    if not learning_dir.exists():
+        return False
+
+    known_files = {"outcomes.jsonl", "expert_performance.jsonl"}
+    try:
+        actual = {p.name for p in learning_dir.iterdir()}
+    except OSError:
+        _logger.debug("legacy_learning_dir_list_failed", exc_info=True)
+        return False
+
+    unexpected = actual - known_files
+    if unexpected:
+        _logger.warning(
+            "legacy_learning_dir_has_unknown_files",
+            directory=str(learning_dir),
+            unexpected=sorted(unexpected),
+        )
+        return False
+
+    # Remove known files then the directory itself.
+    for name in actual & known_files:
+        with contextlib.suppress(OSError):
+            (learning_dir / name).unlink(missing_ok=True)
+
+    try:
+        learning_dir.rmdir()
+        _logger.info("legacy_learning_dir_removed", directory=str(learning_dir))
+        return True
+    except OSError:
+        _logger.debug("legacy_learning_dir_rmdir_failed", exc_info=True)
+        return False
+
+
 async def _maybe_validate_memories(
     store: MemoryStore,
     settings: TappsMCPSettings,
@@ -415,6 +465,11 @@ def _schedule_background_maintenance(
     async def _run_maintenance() -> None:
         """Execute all maintenance ops sequentially in the background."""
         total_count: int = snapshot.total_count
+        try:
+            _cleanup_legacy_learning_dir(settings.project_root)
+        except Exception:
+            _logger.debug("background_legacy_learning_cleanup_failed", exc_info=True)
+
         try:
             _host._maybe_auto_gc(mem_store, total_count, settings)
         except Exception:

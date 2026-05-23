@@ -304,3 +304,52 @@ class TestSessionBoundaryRoundTrip:
         mock_bridge.search_sessions.assert_awaited_once_with(
             "2026-05-23T10:00:00+00:00", limit=10
         )
+
+
+class TestCleanupLegacyLearningDir:
+    """TAP-2023: _cleanup_legacy_learning_dir removes the cargo-cult artifact."""
+
+    def test_returns_false_when_directory_absent(self, tmp_path: Path) -> None:
+        """No-op when .tapps-mcp/learning/ does not exist."""
+        from tapps_mcp.server_pipeline_tools import _cleanup_legacy_learning_dir
+
+        assert _cleanup_legacy_learning_dir(tmp_path) is False
+
+    def test_removes_empty_directory(self, tmp_path: Path) -> None:
+        """Removes an empty learning/ directory and returns True."""
+        from tapps_mcp.server_pipeline_tools import _cleanup_legacy_learning_dir
+
+        learning = tmp_path / ".tapps-mcp" / "learning"
+        learning.mkdir(parents=True)
+        assert _cleanup_legacy_learning_dir(tmp_path) is True
+        assert not learning.exists()
+
+    def test_removes_directory_with_known_files(self, tmp_path: Path) -> None:
+        """Removes learning/ even when it contains the expected JSONL files."""
+        from tapps_mcp.server_pipeline_tools import _cleanup_legacy_learning_dir
+
+        learning = tmp_path / ".tapps-mcp" / "learning"
+        learning.mkdir(parents=True)
+        (learning / "outcomes.jsonl").write_text("{}", encoding="utf-8")
+        (learning / "expert_performance.jsonl").write_text("{}", encoding="utf-8")
+        assert _cleanup_legacy_learning_dir(tmp_path) is True
+        assert not learning.exists()
+
+    def test_leaves_directory_with_unknown_files(self, tmp_path: Path) -> None:
+        """Does NOT remove learning/ when it has unexpected contents."""
+        from tapps_mcp.server_pipeline_tools import _cleanup_legacy_learning_dir
+
+        learning = tmp_path / ".tapps-mcp" / "learning"
+        learning.mkdir(parents=True)
+        (learning / "custom-data.json").write_text("{}", encoding="utf-8")
+        assert _cleanup_legacy_learning_dir(tmp_path) is False
+        assert learning.exists()
+
+    def test_idempotent_second_call_returns_false(self, tmp_path: Path) -> None:
+        """A second call after successful removal is a no-op returning False."""
+        from tapps_mcp.server_pipeline_tools import _cleanup_legacy_learning_dir
+
+        learning = tmp_path / ".tapps-mcp" / "learning"
+        learning.mkdir(parents=True)
+        assert _cleanup_legacy_learning_dir(tmp_path) is True
+        assert _cleanup_legacy_learning_dir(tmp_path) is False

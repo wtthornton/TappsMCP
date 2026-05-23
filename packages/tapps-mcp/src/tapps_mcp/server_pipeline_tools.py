@@ -58,6 +58,7 @@ from tapps_mcp.tools.decompose_helpers import (
 from tapps_mcp.tools.session_start_helpers import (
     _DOCS_COVERED,
     _build_search_first,
+    _cleanup_legacy_learning_dir,
     _collect_brain_bridge_health,
     _collect_memory_status,
     _enrich_memory_profile_status,
@@ -174,6 +175,7 @@ __all__ = [
     "_cache_hit_as_file_result",
     "_classify_model_tier",
     "_classify_risk",
+    "_cleanup_legacy_learning_dir",
     "_collect_brain_bridge_health",
     "_collect_memory_status",
     "_collect_results",
