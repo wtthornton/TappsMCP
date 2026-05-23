@@ -68,6 +68,7 @@ from tapps_mcp.tools.session_start_helpers import (
     _normalise_dep,
     _process_session_capture,
     _schedule_background_maintenance,
+    call_memory_index_session_start,
 )
 from tapps_mcp.tools.validate_changed import (
     _AUTO_DETECT_BUDGET_S as _AUTO_DETECT_BUDGET_S,
@@ -210,6 +211,7 @@ __all__ = [
     "_validate_single_file",
     "_warm_dependency_cache",
     "_write_validate_ok_marker",
+    "call_memory_index_session_start",
     "load_settings",
     "register",
     "tapps_decompose",
@@ -1343,22 +1345,32 @@ async def tapps_session_end() -> dict[str, Any]:
 
     Calls ``flywheel_process(since=<session_start_iso>)`` so brain
     reconciles the session's feedback events into adaptive weight updates.
-    Best-effort: a brain outage does not raise an error.
+
+    TAP-1999: also calls ``memory_search_sessions`` to fetch the live
+    brain-native session record written by ``call_memory_index_session_start``
+    at session start.
+
+    Both operations are best-effort — a brain outage does not raise an error.
     """
     from tapps_mcp.server import _record_call, _record_execution
-    from tapps_mcp.tools.session_end_helpers import call_flywheel_process
+    from tapps_mcp.tools.session_end_helpers import (
+        call_flywheel_process,
+        call_memory_search_sessions,
+    )
 
     start = time.perf_counter_ns()
     _record_call("tapps_session_end")
 
     since = _session_state.session_start_iso
     flywheel = await call_flywheel_process(since)
+    session_search = await call_memory_search_sessions(since or "recent")
 
     elapsed_ms = (time.perf_counter_ns() - start) // 1_000_000
     _record_execution("tapps_session_end", start)
 
     data: dict[str, Any] = {
         "flywheel": flywheel,
+        "session_search": session_search,
         "session_start_iso": since or None,
     }
     return success_response("tapps_session_end", elapsed_ms, data)

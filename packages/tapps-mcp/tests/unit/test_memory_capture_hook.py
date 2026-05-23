@@ -41,9 +41,11 @@ class TestMemoryCaptureHookTemplate:
         # Should NOT block (no exit 2)
         assert "exit 2" not in script
 
-    def test_bash_script_writes_session_capture_json(self) -> None:
+    def test_bash_script_no_longer_writes_session_capture_json(self) -> None:
+        """TAP-1999: session capture migrated to brain-native memory_index_session."""
         script = CLAUDE_HOOK_SCRIPTS["tapps-memory-capture.sh"]
-        assert "session-capture.json" in script
+        assert "session-capture.json" not in script
+        assert "memory_index_session" in script
 
     def test_bash_script_checks_validation_marker(self) -> None:
         script = CLAUDE_HOOK_SCRIPTS["tapps-memory-capture.sh"]
@@ -57,9 +59,11 @@ class TestMemoryCaptureHookTemplate:
         script = CLAUDE_HOOK_SCRIPTS_PS["tapps-memory-capture.ps1"]
         assert "stop_hook_active" in script
 
-    def test_powershell_script_writes_session_capture_json(self) -> None:
+    def test_powershell_script_no_longer_writes_session_capture_json(self) -> None:
+        """TAP-1999: session capture migrated to brain-native memory_index_session."""
         script = CLAUDE_HOOK_SCRIPTS_PS["tapps-memory-capture.ps1"]
-        assert "session-capture.json" in script
+        assert "session-capture.json" not in script
+        assert "memory_index_session" in script
 
 
 # ---------------------------------------------------------------------------

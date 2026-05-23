@@ -204,6 +204,57 @@ def _maybe_consolidation_scan(
         return {"ran": False, "error": "consolidation scan failed"}
 
 
+async def call_memory_index_session_start(
+    session_id: str,
+    project_root: Path,
+) -> dict[str, Any]:
+    """Index this session's start in the brain-native session store.
+
+    TAP-1999: replaces the legacy ``_process_session_capture`` disk-file
+    pattern.  Registers the session with ``memory_index_session`` so it is
+    queryable via ``memory_search_sessions`` across sessions.
+
+    Best-effort — brain unavailability must not prevent session start
+    from completing.
+    """
+    try:
+        from tapps_mcp.server_helpers import _get_brain_bridge
+
+        bridge = _get_brain_bridge()
+    except Exception as exc:
+        _logger.debug("memory_index_session_start_bridge_failed", error=str(exc))
+        return {"success": False, "skipped": True, "reason": "bridge_unavailable"}
+
+    if bridge is None:
+        return {"success": False, "skipped": True, "reason": "bridge_unavailable"}
+
+    if not hasattr(bridge, "index_session"):
+        return {"success": False, "skipped": True, "reason": "index_session_not_supported"}
+
+    chunks = [
+        f"session_start:{session_id}",
+        f"project:{project_root.name}",
+    ]
+
+    try:
+        result = await bridge.index_session(session_id, chunks)
+    except Exception as exc:
+        _logger.warning(
+            "memory_index_session_start_failed",
+            error=str(exc),
+            session_id=session_id,
+        )
+        return {"success": False, "error": str(exc)}
+
+    _logger.info("memory_index_session_start_completed", session_id=session_id)
+    return {
+        "success": True,
+        "session_id": session_id,
+        "chunks": len(chunks),
+        "result": result,
+    }
+
+
 def _process_session_capture(
     project_root: Path,
     store: MemoryStore,
@@ -347,13 +398,15 @@ def _schedule_background_maintenance(
 ) -> None:
     """Schedule heavy memory maintenance ops as fire-and-forget background tasks.
 
-    Moves GC, consolidation scan, doc validation, and session capture
-    processing off the critical path so ``tapps_session_start`` returns faster.
+    Moves GC, consolidation scan, doc validation, and session indexing
+    off the critical path so ``tapps_session_start`` returns faster.
 
     Epic 68.2: Session start performance optimization.
+    TAP-1999: ``_process_session_capture`` (disk-file) replaced by
+    ``call_memory_index_session_start`` (brain-native).
 
     Looks up ``_maybe_auto_gc``, ``_maybe_consolidation_scan``,
-    ``_maybe_validate_memories``, and ``_process_session_capture`` on the
+    ``_maybe_validate_memories``, and ``call_memory_index_session_start`` on the
     ``server_pipeline_tools`` module at call time so that tests patching
     those symbols on the host module are honoured.
     """
@@ -378,9 +431,13 @@ def _schedule_background_maintenance(
             _logger.debug("background_doc_validation_failed", exc_info=True)
 
         try:
-            _host._process_session_capture(settings.project_root, mem_store)
+            from datetime import UTC
+            from datetime import datetime as _dt
+
+            _iso = _host._session_state.session_start_iso or _dt.now(UTC).isoformat()
+            await _host.call_memory_index_session_start(_iso, settings.project_root)
         except Exception:
-            _logger.debug("background_session_capture_failed", exc_info=True)
+            _logger.debug("background_session_index_failed", exc_info=True)
 
     task = asyncio.create_task(_run_maintenance())
     _host._background_tasks.add(task)

@@ -1,7 +1,13 @@
-"""Tests for TAP-2005: tapps_session_end calls flywheel_process to close feedback loop."""
+"""Tests for tapps session lifecycle helpers.
+
+TAP-2005: tapps_session_end calls flywheel_process to close feedback loop.
+TAP-1999: session_start calls memory_index_session; session_end calls
+memory_search_sessions to fetch the live brain-native session record.
+"""
 
 from __future__ import annotations
 
+from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -119,3 +125,182 @@ class TestSessionStateIsoStamp:
 
         _spt._reset_session_state()
         assert _spt._session_state.session_start_iso == ""
+
+
+class TestCallMemoryIndexSessionStart:
+    """TAP-1999: unit tests for session_start_helpers.call_memory_index_session_start."""
+
+    @pytest.mark.asyncio
+    async def test_calls_index_session_with_session_id_and_project(self) -> None:
+        """index_session called with session_id and a chunk containing project name."""
+        bridge = MagicMock()
+        bridge.index_session = AsyncMock(return_value={"stored": True})
+
+        with patch("tapps_mcp.server_helpers._get_brain_bridge", return_value=bridge):
+            from tapps_mcp.tools.session_start_helpers import call_memory_index_session_start
+
+            result = await call_memory_index_session_start(
+                "2026-05-23T10:00:00+00:00", Path("/repo/tapps-mcp")
+            )
+
+        bridge.index_session.assert_awaited_once()
+        call_args = bridge.index_session.await_args
+        session_id_arg, chunks_arg = call_args.args
+        assert session_id_arg == "2026-05-23T10:00:00+00:00"
+        assert any("session_start:2026-05-23T10:00:00+00:00" in c for c in chunks_arg)
+        assert any("project:tapps-mcp" in c for c in chunks_arg)
+        assert result["success"] is True
+        assert result["session_id"] == "2026-05-23T10:00:00+00:00"
+
+    @pytest.mark.asyncio
+    async def test_returns_skipped_when_bridge_none(self) -> None:
+        """Returns skipped=True when no bridge is available."""
+        with patch("tapps_mcp.server_helpers._get_brain_bridge", return_value=None):
+            from tapps_mcp.tools.session_start_helpers import call_memory_index_session_start
+
+            result = await call_memory_index_session_start(
+                "2026-05-23T10:00:00+00:00", Path("/repo/tapps-mcp")
+            )
+
+        assert result["success"] is False
+        assert result["skipped"] is True
+        assert result["reason"] == "bridge_unavailable"
+
+    @pytest.mark.asyncio
+    async def test_returns_skipped_when_method_missing(self) -> None:
+        """Returns skipped=True when bridge has no index_session method."""
+        bridge = MagicMock(spec=[])  # no methods
+
+        with patch("tapps_mcp.server_helpers._get_brain_bridge", return_value=bridge):
+            from tapps_mcp.tools.session_start_helpers import call_memory_index_session_start
+
+            result = await call_memory_index_session_start(
+                "2026-05-23T10:00:00+00:00", Path("/repo/tapps-mcp")
+            )
+
+        assert result["success"] is False
+        assert result["skipped"] is True
+        assert result["reason"] == "index_session_not_supported"
+
+    @pytest.mark.asyncio
+    async def test_returns_error_on_bridge_exception(self) -> None:
+        """Best-effort: exceptions from index_session surface as error, not raised."""
+        bridge = MagicMock()
+        bridge.index_session = AsyncMock(side_effect=RuntimeError("network error"))
+
+        with patch("tapps_mcp.server_helpers._get_brain_bridge", return_value=bridge):
+            from tapps_mcp.tools.session_start_helpers import call_memory_index_session_start
+
+            result = await call_memory_index_session_start(
+                "2026-05-23T10:00:00+00:00", Path("/repo/tapps-mcp")
+            )
+
+        assert result["success"] is False
+        assert "network error" in result["error"]
+
+
+class TestCallMemorySearchSessions:
+    """TAP-1999: unit tests for session_end_helpers.call_memory_search_sessions."""
+
+    @pytest.mark.asyncio
+    async def test_calls_search_sessions_with_query(self) -> None:
+        """search_sessions called with the provided query and returns results."""
+        bridge = MagicMock()
+        bridge.search_sessions = AsyncMock(
+            return_value={"results": [{"session_id": "abc", "score": 0.9}]}
+        )
+
+        with patch("tapps_mcp.server_helpers._get_brain_bridge", return_value=bridge):
+            from tapps_mcp.tools.session_end_helpers import call_memory_search_sessions
+
+            result = await call_memory_search_sessions("2026-05-23T10:00:00+00:00")
+
+        bridge.search_sessions.assert_awaited_once_with(
+            "2026-05-23T10:00:00+00:00", limit=10
+        )
+        assert result["success"] is True
+        assert result["query"] == "2026-05-23T10:00:00+00:00"
+
+    @pytest.mark.asyncio
+    async def test_calls_search_sessions_with_custom_limit(self) -> None:
+        """search_sessions is called with the specified limit."""
+        bridge = MagicMock()
+        bridge.search_sessions = AsyncMock(return_value={"results": []})
+
+        with patch("tapps_mcp.server_helpers._get_brain_bridge", return_value=bridge):
+            from tapps_mcp.tools.session_end_helpers import call_memory_search_sessions
+
+            await call_memory_search_sessions("recent", limit=5)
+
+        bridge.search_sessions.assert_awaited_once_with("recent", limit=5)
+
+    @pytest.mark.asyncio
+    async def test_returns_skipped_when_bridge_none(self) -> None:
+        """Returns skipped=True when no bridge available."""
+        with patch("tapps_mcp.server_helpers._get_brain_bridge", return_value=None):
+            from tapps_mcp.tools.session_end_helpers import call_memory_search_sessions
+
+            result = await call_memory_search_sessions("recent")
+
+        assert result["success"] is False
+        assert result["skipped"] is True
+        assert result["reason"] == "bridge_unavailable"
+
+    @pytest.mark.asyncio
+    async def test_returns_skipped_when_method_missing(self) -> None:
+        """Returns skipped=True when bridge lacks search_sessions."""
+        bridge = MagicMock(spec=[])
+
+        with patch("tapps_mcp.server_helpers._get_brain_bridge", return_value=bridge):
+            from tapps_mcp.tools.session_end_helpers import call_memory_search_sessions
+
+            result = await call_memory_search_sessions("recent")
+
+        assert result["success"] is False
+        assert result["skipped"] is True
+        assert result["reason"] == "search_sessions_not_supported"
+
+    @pytest.mark.asyncio
+    async def test_returns_error_on_exception(self) -> None:
+        """Best-effort: exceptions from search_sessions surface as error."""
+        bridge = MagicMock()
+        bridge.search_sessions = AsyncMock(side_effect=RuntimeError("timeout"))
+
+        with patch("tapps_mcp.server_helpers._get_brain_bridge", return_value=bridge):
+            from tapps_mcp.tools.session_end_helpers import call_memory_search_sessions
+
+            result = await call_memory_search_sessions("recent")
+
+        assert result["success"] is False
+        assert "timeout" in result["error"]
+
+
+class TestSessionBoundaryRoundTrip:
+    """TAP-1999: session start indexes via brain; session end searches via brain."""
+
+    @pytest.mark.asyncio
+    async def test_session_end_includes_session_search_key(self) -> None:
+        """tapps_session_end response includes session_search from memory_search_sessions."""
+        from tapps_mcp import server_pipeline_tools as _spt
+
+        _spt._reset_session_state()
+        _spt._session_state.session_start_iso = "2026-05-23T10:00:00+00:00"
+
+        mock_bridge = MagicMock()
+        mock_bridge.flywheel_process = AsyncMock(return_value={"processed": 0})
+        mock_bridge.search_sessions = AsyncMock(return_value={"results": []})
+
+        with (
+            patch("tapps_mcp.server_helpers._get_brain_bridge", return_value=mock_bridge),
+            patch("tapps_mcp.server._record_call"),
+            patch("tapps_mcp.server._record_execution"),
+        ):
+            result = await _spt.tapps_session_end()
+
+        assert result["success"] is True
+        data = result["data"]
+        assert "session_search" in data
+        assert data["session_start_iso"] == "2026-05-23T10:00:00+00:00"
+        mock_bridge.search_sessions.assert_awaited_once_with(
+            "2026-05-23T10:00:00+00:00", limit=10
+        )

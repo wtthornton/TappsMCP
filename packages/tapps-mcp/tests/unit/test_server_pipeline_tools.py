@@ -1614,7 +1614,7 @@ class TestScheduleBackgroundMaintenance:
 
     @pytest.mark.asyncio
     async def test_schedules_all_maintenance_ops(self) -> None:
-        """Background task calls GC, consolidation, doc validation, session capture."""
+        """Background task calls GC, consolidation, doc validation, session index."""
         import asyncio
 
         from tapps_mcp.server_pipeline_tools import _schedule_background_maintenance
@@ -1637,8 +1637,9 @@ class TestScheduleBackgroundMaintenance:
                 new_callable=AsyncMock,
             ) as mock_doc_val,
             patch(
-                "tapps_mcp.server_pipeline_tools._process_session_capture",
-            ) as mock_capture,
+                "tapps_mcp.server_pipeline_tools.call_memory_index_session_start",
+                new_callable=AsyncMock,
+            ) as mock_index,
         ):
             _schedule_background_maintenance(mock_store, mock_snapshot, mock_settings)
             # Allow background task to complete
@@ -1647,7 +1648,11 @@ class TestScheduleBackgroundMaintenance:
         mock_gc.assert_called_once_with(mock_store, 100, mock_settings)
         mock_consol.assert_called_once_with(mock_store, mock_settings)
         mock_doc_val.assert_called_once_with(mock_store, mock_settings)
-        mock_capture.assert_called_once_with(Path("/fake"), mock_store)
+        # TAP-1999: brain-native session indexing replaces disk-file capture.
+        mock_index.assert_awaited_once()
+        _call_args = mock_index.await_args
+        assert _call_args is not None
+        assert _call_args.args[1] == Path("/fake")  # project_root positional arg
 
     @pytest.mark.asyncio
     async def test_background_task_tolerates_failures(self) -> None:
@@ -1677,15 +1682,16 @@ class TestScheduleBackgroundMaintenance:
                 side_effect=RuntimeError("doc val boom"),
             ),
             patch(
-                "tapps_mcp.server_pipeline_tools._process_session_capture",
-            ) as mock_capture,
+                "tapps_mcp.server_pipeline_tools.call_memory_index_session_start",
+                new_callable=AsyncMock,
+            ) as mock_index,
         ):
             _schedule_background_maintenance(mock_store, mock_snapshot, mock_settings)
             # Allow background task to complete
             await asyncio.sleep(0.05)
 
-        # Session capture still called despite earlier failures
-        mock_capture.assert_called_once()
+        # TAP-1999: session index still called despite earlier failures
+        mock_index.assert_awaited_once()
 
 
 class TestRegister:
