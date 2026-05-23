@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from pathlib import Path
+
 import structlog
 
 from tapps_mcp.scoring.models import TypeIssue
@@ -17,6 +19,9 @@ def parse_mypy_output(raw: str, target_file: str | None = None) -> list[TypeIssu
 
         path/to/file.py:10: error: Incompatible types [assignment]
     """
+    # Pre-compute resolved target path once for efficient per-line comparison.
+    _target_resolved: Path | None = Path(target_file).resolve() if target_file else None
+
     issues: list[TypeIssue] = []
     for line in raw.strip().splitlines():
         if (
@@ -30,9 +35,24 @@ def parse_mypy_output(raw: str, target_file: str | None = None) -> list[TypeIssu
         if len(parts) < min_parts:
             continue
         filename = parts[0].strip()
-        # Filter to target file if specified
-        if target_file and target_file not in filename:
-            continue
+        # Filter to target file if specified.
+        # Use Path.resolve() for robust comparison that handles absolute/relative
+        # mismatches: mypy may emit a relative path (e.g. "src/foo.py") even when
+        # invoked with an absolute target path ("/abs/path/src/foo.py").
+        # The old substring check silently dropped all findings in that case.
+        if _target_resolved is not None:
+            try:
+                filename_resolved = Path(filename).resolve()
+            except OSError:
+                filename_resolved = Path(filename)
+            # Primary check: resolved absolute-path equality.
+            if filename_resolved != _target_resolved:
+                # Fallback: suffix match for when the mypy-emitted filename is a
+                # relative path whose CWD differs from the Python process CWD.
+                # Example: target="/abs/src/foo.py", mypy emits "src/foo.py".
+                target_str = str(_target_resolved)
+                if not (target_str.endswith("/" + filename) or target_str == filename):
+                    continue
         try:
             line_num = int(parts[1].strip())
         except ValueError:

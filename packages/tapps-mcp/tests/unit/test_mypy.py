@@ -62,6 +62,29 @@ class TestParseMypyOutput:
         assert len(issues) == 1
         assert issues[0].file == "src/test.py"
 
+    def test_filter_absolute_target_vs_relative_mypy_output(self):
+        """Absolute target path must match mypy's relative filename output (TAP-1742).
+
+        When mypy is invoked with an absolute path it may still emit a relative
+        path in its output.  The old substring check silently dropped all findings
+        in that case; the fix uses path-resolution + suffix matching.
+        """
+        raw = "src/foo.py:5: error: Incompatible types [assignment]\n"
+        # Caller passes an absolute target; mypy emits only the relative suffix.
+        target = "/some/project/root/src/foo.py"
+        issues = parse_mypy_output(raw, target_file=target)
+        assert len(issues) == 1, (
+            "Finding dropped when target is absolute but mypy emits a relative path"
+        )
+        assert issues[0].line == 5
+
+    def test_filter_absolute_target_drops_unrelated_file(self):
+        """Findings for other files must still be excluded (TAP-1742 regression guard)."""
+        raw = "other/file.py:10: error: Bad [assignment]\n"
+        target = "/some/project/root/src/foo.py"
+        issues = parse_mypy_output(raw, target_file=target)
+        assert issues == []
+
     def test_message_without_error_code(self):
         raw = "test.py:1: error: Something wrong\n"
         issues = parse_mypy_output(raw)
