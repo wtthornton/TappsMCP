@@ -1,7 +1,5 @@
 #!/usr/bin/env bash
-# .githooks/pre-push
-#
-# Tapps-mcp pre-push test gate.
+# .githooks/pre-push — two-tier test gate (TAP-2453)
 #
 # Why this exists
 # ---------------
@@ -11,17 +9,21 @@
 # CI goes red, real regressions hide in noise, and the "is my change safe"
 # bar drifts to "did I break MORE tests" instead of "tests pass."
 #
-# What it does
-# ------------
-# When pushing any ref to master, runs the same scope CI runs
-# (`pytest packages/tapps-mcp/tests/ -m "not slow"`) on the local checkout
-# and aborts the push on red. Pushes to non-master branches are not gated.
-# Slow tests are excluded — they have their own CI job and would push
-# runtime past anyone's patience.
+# Two-tier model (TAP-2453)
+# -------------------------
+# TIER 1 — Fast gate (synchronous, target <60s):
+#   Runs tests for only the packages that changed in commits being pushed.
+#   Blocks the push on red. Most pushes finish the gate in <30s.
 #
-# IMPORTANT: scope must mirror .github/workflows/non-slow-tests.yml exactly,
-# otherwise CI will fail on what the local hook lets through (this happened
-# once already — integration tests caught what unit-only didn't).
+# TIER 2 — Full suite (detached background):
+#   After tier 1 passes, the full non-slow suite runs in the background
+#   (nohup + disown) and appends a JSON summary line to
+#   .tapps-mcp/.push-test-log. Surface background failures via
+#   `tapps-mcp doctor` or by reading the log directly.
+#
+# IMPORTANT: the fast-tier package scope must mirror what CI runs
+# (.github/workflows/non-slow-tests.yml). If CI tests more than the fast
+# tier does, CI will catch regressions that the local hook lets through.
 #
 # Bypass
 # ------
@@ -37,9 +39,7 @@
 # picked up automatically. No symlinks; no per-developer .git/hooks/ edits.
 
 set -e
-# TAP-1784: pipefail so `pytest ... | tail -20` surfaces pytest's exit code,
-# not tail's (always-zero) one. Without this, the `if !` branch below never
-# fires on red, and broken changes ship to master.
+# TAP-1784: pipefail so pytest ... | tail exit code is pytest's, not tail's.
 set -o pipefail
 
 remote="$1"
@@ -48,10 +48,14 @@ url="$2"
 # Read the refs being pushed from stdin (git's pre-push protocol).
 # Format: <local_ref> <local_sha> <remote_ref> <remote_sha>
 gating_master=0
-while IFS=' ' read -r local_ref local_sha remote_ref remote_sha; do
-  case "$remote_ref" in
+local_sha=""
+remote_sha=""
+while IFS=' ' read -r lref lsha rref rsha; do
+  case "$rref" in
     refs/heads/master|refs/heads/main)
       gating_master=1
+      local_sha="$lsha"
+      remote_sha="$rsha"
       ;;
   esac
 done
@@ -60,27 +64,24 @@ if [[ "$gating_master" -eq 0 ]]; then
   exit 0
 fi
 
+PUSH_LOG_DIR=".tapps-mcp"
+mkdir -p "$PUSH_LOG_DIR" 2>/dev/null || true
+
+# --- Bypass ---
 if [[ -n "${TAPPS_SKIP_PREPUSH:-}" ]]; then
   ts="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
   sha="$(git rev-parse HEAD)"
-  log_dir=".tapps-mcp"
-  mkdir -p "$log_dir" 2>/dev/null || true
   printf '{"ts":"%s","commit":"%s","reason":"TAPPS_SKIP_PREPUSH=%s"}\n' \
     "$ts" "$sha" "${TAPPS_SKIP_PREPUSH}" \
-    >> "$log_dir/.bypass-log.jsonl" 2>/dev/null || true
-  echo "[pre-push] TAPPS_SKIP_PREPUSH set; skipping test gate. Logged to $log_dir/.bypass-log.jsonl" >&2
+    >> "$PUSH_LOG_DIR/.bypass-log.jsonl" 2>/dev/null || true
+  echo "[pre-push] TAPPS_SKIP_PREPUSH set; skipping test gate. Logged to $PUSH_LOG_DIR/.bypass-log.jsonl" >&2
   exit 0
 fi
 
-# Version-parity check: tapps-mcp, docs-mcp, and tapps-core must share the
-# same version, and derived files (AGENTS.md stamp, npm/package.json, the
-# canonical hook manifest) must match. Drift here means a release ships
-# one package against stale siblings — the very situation TAP-2129
-# install-drift and the `tapps_upgrade` flow assume cannot happen.
-# Delegated to scripts/bump-versions.py --check, which is the single
-# source of truth for "are all derived files in sync".
-#
-# Bypass: same TAPPS_SKIP_PREPUSH=1 escape hatch as the test gate below.
+# --- Version parity check ---
+# tapps-mcp, docs-mcp, and tapps-core must share the same version, and
+# derived files (AGENTS.md stamp, npm/package.json, the canonical hook
+# manifest) must match. Delegated to scripts/bump-versions.py --check.
 if ! python3 scripts/bump-versions.py --check >&2; then
   echo "" >&2
   echo "[pre-push] VERSION DRIFT detected. Push blocked." >&2
@@ -91,16 +92,70 @@ if ! python3 scripts/bump-versions.py --check >&2; then
   exit 1
 fi
 
-echo "[pre-push] Running tapps-mcp non-slow unit suite before push to $remote_ref..." >&2
-echo "[pre-push] Bypass with TAPPS_SKIP_PREPUSH=1 git push (logged)." >&2
+# --- Tier 1: fast gate — scope to changed packages ---
+#
+# Determine which packages changed in the commits being pushed. Diff
+# between the remote tip and what we're pushing; fall back to HEAD~1..HEAD
+# for first-push (remote_sha all-zeros) or other edge cases.
+NULL_SHA="0000000000000000000000000000000000000000"
+if [[ "$remote_sha" == "$NULL_SHA" || -z "$remote_sha" ]]; then
+  CHANGED_FILES="$(git diff --name-only HEAD~1 HEAD 2>/dev/null || git show --name-only --format='' HEAD 2>/dev/null || echo "")"
+else
+  CHANGED_FILES="$(git diff --name-only "$remote_sha" "${local_sha:-HEAD}" 2>/dev/null || git diff --name-only HEAD~1 HEAD 2>/dev/null || echo "")"
+fi
 
-if ! uv run pytest packages/tapps-mcp/tests/ -m "not slow" -q --tb=no --timeout=60 2>&1 | tail -20; then
+FAST_TEST_PATHS=()
+echo "$CHANGED_FILES" | grep -q "^packages/tapps-mcp/"  && FAST_TEST_PATHS+=("packages/tapps-mcp/tests/")
+echo "$CHANGED_FILES" | grep -q "^packages/tapps-core/" && FAST_TEST_PATHS+=("packages/tapps-core/tests/")
+echo "$CHANGED_FILES" | grep -q "^packages/docs-mcp/"   && FAST_TEST_PATHS+=("packages/docs-mcp/tests/")
+
+# Fallback: if only root-level files changed (scripts/, .githooks/, etc.)
+# run the tapps-mcp core suite as the minimum sanity check.
+if [[ ${#FAST_TEST_PATHS[@]} -eq 0 ]]; then
+  FAST_TEST_PATHS=("packages/tapps-mcp/tests/")
+fi
+
+echo "[pre-push] Tier 1 (fast gate): ${FAST_TEST_PATHS[*]}" >&2
+echo "[pre-push] Bypass: TAPPS_SKIP_PREPUSH=1 git push" >&2
+
+if ! uv run pytest "${FAST_TEST_PATHS[@]}" -m "not slow" -q --tb=short --timeout=60 2>&1 | tail -25; then
   echo "" >&2
-  echo "[pre-push] FAILED. Push blocked." >&2
-  echo "[pre-push] Investigate: uv run pytest packages/tapps-mcp/tests/ -m 'not slow' -v" >&2
+  echo "[pre-push] FAST GATE FAILED. Push blocked." >&2
+  echo "[pre-push] Investigate: uv run pytest ${FAST_TEST_PATHS[*]} -m 'not slow' -v" >&2
   echo "[pre-push] Bypass:      TAPPS_SKIP_PREPUSH=1 git push" >&2
   exit 1
 fi
 
-echo "[pre-push] OK — proceeding with push." >&2
+echo "[pre-push] Tier 1 passed." >&2
+
+# --- Tier 2: full suite in background ---
+#
+# Detach a comprehensive run (all three packages, not-slow) so regressions
+# in untouched packages still surface — just after the push, not blocking it.
+# Results are appended to .tapps-mcp/.push-test-log as JSONL.
+COMMIT_SHA="$(git rev-parse HEAD)"
+PUSH_TEST_LOG="$PUSH_LOG_DIR/.push-test-log"
+BG_STDOUT="$PUSH_LOG_DIR/.bg-test-stdout.log"
+
+nohup bash -c "
+  START_TS=\$(date -u +%Y-%m-%dT%H:%M:%SZ)
+  PASSED=0; FAILED=0; STATUS=PASS
+  for PKG in packages/tapps-mcp packages/tapps-core packages/docs-mcp; do
+    if uv run pytest \"\$PKG/tests/\" -m 'not slow' -q --tb=no --timeout=60 >> '$BG_STDOUT' 2>&1; then
+      PASSED=\$((PASSED + 1))
+    else
+      FAILED=\$((FAILED + 1))
+      STATUS=FAIL
+    fi
+  done
+  END_TS=\$(date -u +%Y-%m-%dT%H:%M:%SZ)
+  printf '{\"ts\":\"%s\",\"end_ts\":\"%s\",\"commit\":\"%s\",\"status\":\"%s\",\"packages_passed\":%d,\"packages_failed\":%d}\n' \
+    \"\$START_TS\" \"\$END_TS\" \"$COMMIT_SHA\" \"\$STATUS\" \"\$PASSED\" \"\$FAILED\" \
+    >> '$PUSH_TEST_LOG'
+" > /dev/null 2>&1 &
+disown "$!"
+
+echo "[pre-push] Tier 2 (full suite) launched in background. Results → $PUSH_TEST_LOG" >&2
+echo "[pre-push] Check: tail -5 $PUSH_TEST_LOG   OR   uv run tapps-mcp doctor" >&2
+echo "[pre-push] OK — push proceeding." >&2
 exit 0

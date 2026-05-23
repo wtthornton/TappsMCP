@@ -38,6 +38,11 @@ for hook in .githooks/*; do
   fi
 done
 
+# Ensure the tapps-mcp log directory exists for background test results.
+# TAP-2453: the two-tier pre-push gate writes .tapps-mcp/.push-test-log
+# after each push; the directory must exist before the first push.
+mkdir -p .tapps-mcp 2>/dev/null || true
+
 echo
 echo "Installed. Active hooks under .githooks/:"
 ls -1 .githooks/ | sed 's/^/  - /'
@@ -45,3 +50,6 @@ echo
 echo "To bypass the pre-push test gate in an emergency:"
 echo "  TAPPS_SKIP_PREPUSH=1 git push"
 echo "(Bypasses are logged to .tapps-mcp/.bypass-log.jsonl.)"
+echo
+echo "Background full-suite results (after each push):"
+echo "  tail -5 .tapps-mcp/.push-test-log   OR   uv run tapps-mcp doctor"

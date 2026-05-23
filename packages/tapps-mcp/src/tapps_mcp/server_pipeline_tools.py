@@ -585,7 +585,7 @@ async def tapps_session_start(
             data["cached"] = True
             data["elapsed_ms"] = elapsed_ms
             resp["data"] = data
-            return cast(TappsSessionStartResponse, resp)
+            return cast("TappsSessionStartResponse", resp)
 
     try:
         from tapps_mcp.tools.checklist import CallTracker
@@ -598,7 +598,7 @@ async def tapps_session_start(
     if quick:
         resp = await _session_start_quick(start, _record_execution, _with_nudges)
         _SESSION_START_CACHE[_session_start_cache_key(True)] = resp
-        return cast(TappsSessionStartResponse, resp)
+        return cast("TappsSessionStartResponse", resp)
 
     settings = load_settings()
     (
@@ -654,7 +654,7 @@ async def tapps_session_start(
     # actionable.
     auth_failure_response = _detect_brain_auth_failure(settings, memory_status, elapsed_ms)
     if auth_failure_response is not None:
-        return cast(TappsSessionStartResponse, auth_failure_response)
+        return cast("TappsSessionStartResponse", auth_failure_response)
 
     # TAP-1414: Surface ruff/mypy missing on Python projects as a loud warning.
     degraded_checkers, degraded_warning = _ssc.compute_python_degraded_checkers(
@@ -688,7 +688,7 @@ async def tapps_session_start(
     # TAP-1379: memoize the full response so subsequent same-process calls
     # (without force=True) return instantly from cache.
     _SESSION_START_CACHE[_session_start_cache_key(False)] = resp
-    return cast(TappsSessionStartResponse, resp)
+    return cast("TappsSessionStartResponse", resp)
 
 
 async def _session_start_quick(
@@ -1183,6 +1183,36 @@ def tapps_doctor(
         if degraded_checkers:
             result["degraded_checkers"] = degraded_checkers
             result["degraded_checkers_warning"] = degraded_warning
+    except Exception:
+        pass
+
+    # TAP-2453: surface last 5 background push-test results so failures are
+    # visible without digging into .tapps-mcp/.push-test-log manually.
+    try:
+        import json as _json
+
+        push_log = Path(root) / ".tapps-mcp" / ".push-test-log"
+        if push_log.exists():
+            raw_lines = push_log.read_text(encoding="utf-8").splitlines()
+            entries: list[dict[str, object]] = []
+            for line in raw_lines[-5:]:
+                line = line.strip()
+                if line:
+                    try:
+                        entries.append(_json.loads(line))
+                    except _json.JSONDecodeError:
+                        entries.append({"raw": line})
+            last_status = entries[-1].get("status", "UNKNOWN") if entries else "NO_RESULTS"
+            result["push_test_log"] = {
+                "last_5_entries": entries,
+                "last_status": last_status,
+                "log_path": str(push_log),
+            }
+            if last_status == "FAIL":
+                result["push_test_log"]["warning"] = (
+                    "Background full-suite test run FAILED after last push. "
+                    f"Inspect {push_log} or .tapps-mcp/.bg-test-stdout.log."
+                )
     except Exception:
         pass
 
