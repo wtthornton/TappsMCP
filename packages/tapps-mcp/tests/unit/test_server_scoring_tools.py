@@ -12,6 +12,7 @@ from tapps_mcp.gates.models import GateFailure, GateResult, GateThresholds
 from tapps_mcp.scoring.models import CategoryScore, LintIssue, ScoreResult, SecurityIssue
 from tapps_mcp.security.security_scanner import SecurityScanResult
 from tapps_mcp.server_scoring_tools import (
+    _attach_uncached_libraries_hint,
     _build_quality_gate_data,
     _build_quick_check_data,
     _build_score_file_data,
@@ -911,3 +912,43 @@ class TestQualityGateKGEvents:
         assert result["success"] is True
         assert result["data"]["passed"] is True
         mock_fire.assert_not_called()
+
+
+class TestAttachUncachedLibrariesHint:
+    """TAP-1757: _attach_uncached_libraries_hint error path."""
+
+    def test_error_sets_docs_hint_unavailable(self, tmp_path: Path) -> None:
+        """When hint detection raises, data must contain docs_hint_unavailable=True."""
+        data: dict[str, Any] = {}
+        py_file = tmp_path / "subject.py"
+        py_file.write_text("import requests\n", encoding="utf-8")
+
+        # KBCache is a lazy import inside the function — patch at source module.
+        with patch(
+            "tapps_mcp.knowledge.cache.KBCache",
+            side_effect=RuntimeError("cache init failed"),
+        ):
+            _attach_uncached_libraries_hint(data, py_file, tmp_path)
+
+        assert data.get("docs_hint_unavailable") is True
+        assert "uncached_libraries" not in data
+        assert "docs_hint" not in data
+
+    def test_error_promotes_to_warning(self, tmp_path: Path) -> None:
+        """logger.warning must be called (not logger.debug) on exception (TAP-1757)."""
+        data: dict[str, Any] = {}
+        py_file = tmp_path / "subject.py"
+        py_file.write_text("import boto3\n", encoding="utf-8")
+
+        mock_logger = MagicMock()
+        with (
+            patch("tapps_mcp.server_scoring_tools.logger", mock_logger),
+            patch(
+                "tapps_mcp.knowledge.cache.KBCache",
+                side_effect=RuntimeError("boom"),
+            ),
+        ):
+            _attach_uncached_libraries_hint(data, py_file, tmp_path)
+
+        mock_logger.warning.assert_called_once()
+        mock_logger.debug.assert_not_called()

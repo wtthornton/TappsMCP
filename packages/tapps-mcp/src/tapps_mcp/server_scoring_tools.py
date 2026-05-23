@@ -615,7 +615,8 @@ def _attach_uncached_libraries_hint(
                 f"Call tapps_lookup_docs for {', '.join(uncached[:5])} to avoid hallucinated APIs"
             )
     except Exception:
-        logger.debug("uncached_libraries detection failed", exc_info=True)
+        logger.warning("uncached_libraries_hint_failed", exc_info=True)
+        data["docs_hint_unavailable"] = True
 
 
 def _attach_quick_check_structured_output(
