@@ -138,7 +138,7 @@ async def _report_tracker_progress(report: Any, tracker: _ProgressTracker) -> No
 
 __all__ = [
     "_PROGRESS_HEARTBEAT_INTERVAL",
-    "_ProgressTracker",
     "_VALIDATION_PROGRESS_FILE",
+    "_ProgressTracker",
     "_validate_progress_heartbeat",
 ]
