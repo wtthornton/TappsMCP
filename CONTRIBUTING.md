@@ -98,6 +98,56 @@ When TappsMCP's own MCP server is available, use it on this codebase:
 4. Add to `AGENTS.md` and `README.md` tools reference
 5. Add tests in `packages/tapps-mcp/tests/unit/` and optionally `tests/integration/`
 
+## Tool Versioning
+
+The MCP specification does not include tool-level versioning — it only date-stamps protocol revisions (most recent as of 2025-11-25). When a change would break existing callers (parameter rename, return-type change, removed field), use an additive rename instead:
+
+1. Ship the new behavior under `<tool_name>_v2` (or `_v3`, etc.).
+2. Keep the old name live and mark it deprecated (see [Deprecation Playbook](#deprecation-playbook) below).
+3. Remove the old name only after the minimum deprecation window has elapsed.
+
+**Example**: `tapps_memory_recall` gained a `tier` filter in v3.12.0. Because the filter changed default semantics, the new tool shipped as `tapps_memory_recall_v2`; the old tool logs a deprecation warning on every call and will be removed at the next minor release.
+
+This rule applies to both `tapps-mcp` and `docs-mcp` tools.
+
+## Deprecation Playbook
+
+Removing or breaking a tool affects every downstream project that has installed TappsMCP. Follow this three-phase pattern:
+
+### Phase 1 — Soft deprecation (ship alongside the replacement)
+
+1. Add a `DEPRECATED: use <replacement> instead` note to the tool's docstring and `AGENTS.md` entry.
+2. Emit a structured deprecation notice in the tool response:
+   ```json
+   { "deprecated": true, "message": "Use <replacement> instead.", "result": <original_result> }
+   ```
+3. Announce in `CHANGELOG.md` with the earliest planned removal version (90 days / next minor at earliest).
+
+### Phase 2 — Surface reduction (optional, if usage is high)
+
+1. Update `tapps_checklist` to flag the old tool name as a soft violation so agents are nudged away.
+2. Add a `brain_record_event(event_type="tool_deprecated", tool=<name>)` call inside the handler so the feedback flywheel tracks declining usage.
+
+### Phase 3 — Hard removal
+
+1. Remove the handler, `@mcp.tool()` registration, checklist entry, and `AGENTS.md` reference.
+2. Create a migration doc at `docs/migrations/<tool_name>.md` using the [template](docs/migrations/template.md).
+3. Bump the **minor** version (breaking rename ships as `_v2`; hard removal is a minor bump per semver).
+
+**Minimum window**: 90 days **or** one minor version release after the Phase 1 announcement, whichever is later.
+
+## Hive Writes Require a Linked Approval
+
+Calling `tapps_memory` with `agent_scope="hive"`, `action="hive_push"`, or `action="hive_propagate"` propagates memory entries to every agent and project that shares the Hive. Accidental hive writes cause cross-project context pollution.
+
+**Rule**: every code path that performs a hive write must reference a Linear issue or PR comment that explicitly approves it.
+
+1. Open a Linear issue (or add a PR comment) describing what will be written to the Hive and why it needs to be cross-project.
+2. Get a maintainer thumbs-up.
+3. Add a `# hive-approved: TAP-XXXX` comment on the same line (or the immediately preceding line) as the write call.
+
+A CI lint job (`.github/workflows/hive-write-lint.yml`) greps for `agent_scope.*hive`, `hive_push`, and `hive_propagate` and fails the build if any occurrence lacks a `# hive-approved:` annotation within two lines.
+
 ## Submitting Changes
 
 This repository follows a **commit-direct-to-master** workflow — no feature branches, no pull requests. See [`.claude/rules/repo-workflow.md`](.claude/rules/repo-workflow.md).

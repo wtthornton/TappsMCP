@@ -31,3 +31,4 @@ None
 - [ ] Self-review of code completed
 - [ ] Tests added for new functionality
 - [ ] Documentation updated if needed
+- [ ] Hive writes? Each `agent_scope="hive"` / `hive_push` / `hive_propagate` call has a `# hive-approved: TAP-XXXX` annotation linking to a maintainer-approved issue.
