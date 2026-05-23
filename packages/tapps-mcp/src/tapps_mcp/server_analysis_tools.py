@@ -24,6 +24,7 @@ from mcp.types import ToolAnnotations
 
 from tapps_core.config.settings import load_settings
 from tapps_mcp.server_helpers import (
+    _get_brain_bridge,
     build_impact_memory_context,
     emit_ctx_info,
     ensure_session_initialized,
@@ -615,6 +616,20 @@ async def tapps_dead_code(
 
     start = time.perf_counter_ns()
     _record_call("tapps_dead_code")
+    # TAP-2022: fire-and-forget call-count event via brain so usage is measurable.
+    try:
+        _dc_bridge = _get_brain_bridge()
+        if _dc_bridge is not None and hasattr(_dc_bridge, "record_event"):
+
+            async def _fire_dead_code_event() -> None:
+                try:
+                    await _dc_bridge.record_event("tool_call", "tapps_dead_code")  # type: ignore[union-attr]
+                except Exception:
+                    pass
+
+            asyncio.create_task(_fire_dead_code_event())  # noqa: RUF006
+    except Exception:
+        pass  # never block tapps_dead_code for telemetry
     await ensure_session_initialized()
 
     min_confidence = clamp_confidence(min_confidence)

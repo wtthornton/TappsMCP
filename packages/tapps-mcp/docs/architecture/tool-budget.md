@@ -26,7 +26,8 @@ mechanism before they can be called.
 | `tapps_score_file` | Per-file scoring — feeds the quality gate and surfaces category-level breakdowns |
 
 **Deferred (loaded via Tool Search):** `tapps_audit_campaign`,
-`tapps_dashboard`, `tapps_dead_code`, `tapps_dependency_graph`,
+`tapps_dashboard`, `tapps_dead_code` *(preview — see note below)*,
+`tapps_dependency_graph`,
 `tapps_dependency_scan`, `tapps_doctor`, `tapps_feedback`, `tapps_init`,
 `tapps_linear_count`, `tapps_linear_snapshot_get`,
 `tapps_linear_snapshot_invalidate`, `tapps_linear_snapshot_put`,
@@ -99,3 +100,25 @@ Reference: [Tool Search — Anthropic Docs](https://platform.claude.com/docs/en/
 The implementation for tapps-mcp and docs-mcp is tracked in TAP-1986 and
 TAP-1987 respectively. This document is the prerequisite spec that those
 stories reference.
+
+---
+
+## Tool review decisions
+
+### `tapps_dead_code` — Preview (TAP-2022, 2026-05-23)
+
+**Audit signal:** IDE linters already provide dead-code detection; vulture
+produces false positives on dynamic dispatch, plugin entry points, and CLI
+entry functions.  Usage signal was unknown at audit time; the tool was not
+previously emitting `record_event` telemetry.
+
+**Decision:** Mark as **preview**.  Usage tracking via `bridge.record_event`
+was wired up on 2026-05-23 (TAP-2022).  Thresholds for the next review:
+
+| Monthly call count | Action |
+|---|---|
+| < 5 | Delete — not earning its place |
+| 5–50 | Keep deferred; keep preview label |
+| > 50 | Remove preview label; document the use-case niche |
+
+Review date: **2026-06-23** (30 days from tracking start).
