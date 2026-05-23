@@ -11,7 +11,7 @@ calls must be reset here.  When adding a new cache:
 2. Import and call it in ``_reset_caches()`` below.
 3. Verify isolation by running the new tests twice in a row.
 
-Current resets (11 total):
+Current resets (12 total):
   - settings              — ``tapps_core.config.settings._reset_settings_cache``
   - feature_flags         — ``tapps_core.config.feature_flags.feature_flags.reset``
   - scorer           — ``tapps_mcp.server_helpers._reset_scorer_cache``
@@ -21,6 +21,7 @@ Current resets (11 total):
   - session_state    — ``tapps_mcp.server_helpers._reset_session_state``
   - tools_detection  — ``tapps_mcp.tools.tool_detection._reset_tools_cache``
   - session_gc_flag  — ``tapps_mcp.server_pipeline_tools._reset_session_gc_flag``
+  - background_tasks — ``tapps_mcp.server_pipeline_tools._reset_background_tasks``
   - dependency_cache — ``tapps_mcp.tools.dependency_scan_cache.clear_dependency_cache``
   - quick_check_recurring — ``tapps_mcp.quick_check_recurring._reset_recurring_quick_check_state``
 """
@@ -456,6 +457,7 @@ def _reset_caches() -> Generator[None, None, None]:
         _reset_session_state,
     )
     from tapps_mcp.server_pipeline_tools import (
+        _reset_background_tasks,
         _reset_session_gc_flag,
         _reset_session_start_cache,
     )
@@ -470,6 +472,7 @@ def _reset_caches() -> Generator[None, None, None]:
     _reset_tools_cache()
     _reset_session_gc_flag()
     _reset_session_start_cache()
+    _reset_background_tasks()
     clear_dependency_cache()
     _reset_recurring_quick_check_state()
 

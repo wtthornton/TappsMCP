@@ -1,7 +1,9 @@
-"""Integration tests verifying Epic 25 code against the real MemoryStore.
+"""Integration tests verifying seeding / retrieval / injection against a real MemoryStore.
 
-These tests use tmp_path to create real SQLite-backed stores,
-verifying seeding, retrieval, injection, and import/export end-to-end.
+Each test gets an isolated ``MemoryStore(tmp_path)`` backed by
+``InMemoryPrivateBackend`` (injected by the autouse ``_inject_in_memory_private_backend``
+conftest fixture). The backend is a thread-safe in-memory dict — no SQLite, no Postgres,
+no file I/O. Registry is cleared between tests, so state cannot cross test boundaries.
 """
 
 from __future__ import annotations
@@ -24,7 +26,13 @@ from tapps_mcp.security.path_validator import PathValidator
 
 @pytest.fixture()
 def store(tmp_path: Path) -> MemoryStore:
-    """Create a real MemoryStore backed by SQLite in a temp directory."""
+    """Create a real MemoryStore in a temp directory.
+
+    The autouse ``_inject_in_memory_private_backend`` conftest fixture
+    intercepts ``MemoryStore.__init__`` and supplies an isolated
+    ``InMemoryPrivateBackend`` keyed by *tmp_path*. Each test therefore
+    starts with an empty, independent store — no SQLite, no Postgres needed.
+    """
     return MemoryStore(tmp_path)
 
 

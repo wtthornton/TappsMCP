@@ -154,16 +154,16 @@ if TYPE_CHECKING:
     from mcp.server.fastmcp import FastMCP
 
 __all__ = [
-    # Re-exports for backward compatibility
-    "TaskUnit",
     "_AUTO_DETECT_BUDGET_S",
     "_DOCS_COVERED",
     "_PROGRESS_HEARTBEAT_INTERVAL",
-    "_ProgressTracker",
     "_SEVERITY_RANK",
     "_VALIDATE_CONCURRENCY",
     "_VALIDATE_OK_MARKER",
     "_VALIDATION_PROGRESS_FILE",
+    # Re-exports for backward compatibility
+    "TaskUnit",
+    "_ProgressTracker",
     "_background_tasks",
     "_build_per_file_results",
     "_build_search_first",
@@ -192,6 +192,7 @@ __all__ = [
     "_partition_by_cache",
     "_process_session_capture",
     "_report_initial_progress",
+    "_reset_background_tasks",
     "_reset_session_consolidation_flag",
     "_reset_session_doc_validation_flag",
     "_reset_session_gc_flag",
@@ -290,6 +291,19 @@ def _reset_session_state() -> None:
 # Prevent garbage collection of fire-and-forget background tasks.
 # Without strong references, asyncio tasks may be collected before completion.
 _background_tasks: set[asyncio.Task[Any]] = set()
+
+
+def _reset_background_tasks() -> None:
+    """Discard all tracked background tasks (for testing).
+
+    In production the set drains via done-callbacks; in tests the
+    function-scoped event loop cancels any remaining tasks when it closes.
+    Clearing the set here prevents stale Task objects from a previous test's
+    event loop leaking into the next test's loop — a known source of false
+    "task attached to a different loop" warnings and timing-sensitive flakiness
+    (TAP-2101).
+    """
+    _background_tasks.clear()
 
 
 # TAP-1379: Per-process cache of tapps_session_start responses keyed by the
