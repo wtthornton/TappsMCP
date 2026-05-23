@@ -95,7 +95,7 @@ async def run_auto_capture(
         return result
 
     settings = load_settings(project_root=project_root)
-    bridge = create_brain_bridge(settings)
+    bridge = create_brain_bridge(settings, default_profile="coder")
     if bridge is None:
         result["degraded"] = True
         result["errors"].append("TAPPS_BRAIN_DATABASE_URL not configured; skipping auto-capture.")

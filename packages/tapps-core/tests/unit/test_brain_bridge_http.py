@@ -248,6 +248,146 @@ class TestCreateBrainBridgeDispatch:
 
         assert isinstance(result, HttpBrainBridge)
 
+    # TAP-1924: default_profile parameter
+    def test_default_profile_applied_when_no_explicit_profile(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """``default_profile`` is written into ``X-Brain-Profile`` when no
+        explicit profile is set via settings or ``TAPPS_BRAIN_PROFILE`` env.
+        """
+        monkeypatch.setenv("TAPPS_MCP_MEMORY_BRAIN_HTTP_URL", "http://brain:8080")
+        monkeypatch.delenv("TAPPS_BRAIN_PROFILE", raising=False)
+        from tapps_core.brain_bridge import HttpBrainBridge, create_brain_bridge
+
+        settings = MagicMock()
+        settings.memory.brain_http_url = "http://brain:8080"
+        settings.memory.brain_auth_token = None
+        settings.memory.brain_project_id = ""
+        settings.memory.brain_profile = ""
+        settings.project_root = "."
+
+        with patch(
+            "tapps_core.brain_bridge.check_brain_version",
+            return_value={
+                "ok": True,
+                "skipped": True,
+                "degraded": False,
+                "url": "",
+                "floor": "3.18.0",
+                "ceiling": "4.0.0",
+                "version": None,
+                "errors": [],
+                "warnings": [],
+            },
+        ):
+            result = create_brain_bridge(settings, default_profile="coder")
+
+        assert isinstance(result, HttpBrainBridge)
+        assert result._http_headers.get("X-Brain-Profile") == "coder"
+
+    def test_env_override_takes_precedence_over_default_profile(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """``TAPPS_BRAIN_PROFILE`` env var overrides ``default_profile``."""
+        monkeypatch.setenv("TAPPS_MCP_MEMORY_BRAIN_HTTP_URL", "http://brain:8080")
+        monkeypatch.setenv("TAPPS_BRAIN_PROFILE", "operator")
+        from tapps_core.brain_bridge import HttpBrainBridge, create_brain_bridge
+
+        settings = MagicMock()
+        settings.memory.brain_http_url = "http://brain:8080"
+        settings.memory.brain_auth_token = None
+        settings.memory.brain_project_id = ""
+        settings.memory.brain_profile = ""
+        settings.project_root = "."
+
+        with patch(
+            "tapps_core.brain_bridge.check_brain_version",
+            return_value={
+                "ok": True,
+                "skipped": True,
+                "degraded": False,
+                "url": "",
+                "floor": "3.18.0",
+                "ceiling": "4.0.0",
+                "version": None,
+                "errors": [],
+                "warnings": [],
+            },
+        ):
+            result = create_brain_bridge(settings, default_profile="coder")
+
+        assert isinstance(result, HttpBrainBridge)
+        # env "operator" wins over default "coder" — resolved by HttpBrainBridge.__init__
+        assert result._http_headers.get("X-Brain-Profile") == "operator"
+
+    def test_settings_profile_takes_precedence_over_default_profile(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Explicit ``settings.memory.brain_profile`` wins over ``default_profile``."""
+        monkeypatch.setenv("TAPPS_MCP_MEMORY_BRAIN_HTTP_URL", "http://brain:8080")
+        monkeypatch.delenv("TAPPS_BRAIN_PROFILE", raising=False)
+        from tapps_core.brain_bridge import HttpBrainBridge, create_brain_bridge
+
+        settings = MagicMock()
+        settings.memory.brain_http_url = "http://brain:8080"
+        settings.memory.brain_auth_token = None
+        settings.memory.brain_project_id = ""
+        settings.memory.brain_profile = "reviewer"
+        settings.project_root = "."
+
+        with patch(
+            "tapps_core.brain_bridge.check_brain_version",
+            return_value={
+                "ok": True,
+                "skipped": True,
+                "degraded": False,
+                "url": "",
+                "floor": "3.18.0",
+                "ceiling": "4.0.0",
+                "version": None,
+                "errors": [],
+                "warnings": [],
+            },
+        ):
+            result = create_brain_bridge(settings, default_profile="coder")
+
+        assert isinstance(result, HttpBrainBridge)
+        assert result._http_headers.get("X-Brain-Profile") == "reviewer"
+
+    def test_no_default_profile_leaves_header_absent(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Omitting ``default_profile`` preserves old behaviour — no header sent."""
+        monkeypatch.setenv("TAPPS_MCP_MEMORY_BRAIN_HTTP_URL", "http://brain:8080")
+        monkeypatch.delenv("TAPPS_BRAIN_PROFILE", raising=False)
+        from tapps_core.brain_bridge import HttpBrainBridge, create_brain_bridge
+
+        settings = MagicMock()
+        settings.memory.brain_http_url = "http://brain:8080"
+        settings.memory.brain_auth_token = None
+        settings.memory.brain_project_id = ""
+        settings.memory.brain_profile = ""
+        settings.project_root = "."
+
+        with patch(
+            "tapps_core.brain_bridge.check_brain_version",
+            return_value={
+                "ok": True,
+                "skipped": True,
+                "degraded": False,
+                "url": "",
+                "floor": "3.18.0",
+                "ceiling": "4.0.0",
+                "version": None,
+                "errors": [],
+                "warnings": [],
+            },
+        ):
+            result = create_brain_bridge(settings)
+
+        assert isinstance(result, HttpBrainBridge)
+        assert "X-Brain-Profile" not in result._http_headers
+
 
 # ---------------------------------------------------------------------------
 # HttpBrainBridge._do_mcp_post

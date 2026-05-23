@@ -148,7 +148,9 @@ def _get_brain_bridge() -> _BrainBridgeType | None:
                 from tapps_core.brain_bridge import create_brain_bridge
                 from tapps_core.config.settings import load_settings
 
-                _brain_bridge = create_brain_bridge(load_settings())
+                _brain_bridge = create_brain_bridge(
+                    load_settings(), default_profile="coder"
+                )
     return _brain_bridge
 
 

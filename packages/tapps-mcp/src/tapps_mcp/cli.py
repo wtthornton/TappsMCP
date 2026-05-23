@@ -752,7 +752,7 @@ def memory_recall(query: str, project_root: str, max_results: int, min_score: fl
 
     async def _recall() -> list[dict[str, object]]:
         settings = load_settings(project_root=root)
-        bridge = create_brain_bridge(settings)
+        bridge = create_brain_bridge(settings, default_profile="coder")
         if bridge is None:
             return []
         try:
@@ -1013,7 +1013,7 @@ def migrate_memory_cmd(
     )
 
     settings = load_settings()
-    bridge = create_brain_bridge(settings)
+    bridge = create_brain_bridge(settings, default_profile="operator")
     if bridge is None:
         click.echo(
             click.style(

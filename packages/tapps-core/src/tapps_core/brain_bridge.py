@@ -1215,11 +1215,18 @@ class HttpBrainBridge(BrainBridge):
         }
         self._http_url: str = http_url.rstrip("/")
         self._http_headers: dict[str, str] = dict(headers)
-        # TAP-1616: declare ``X-Brain-Profile`` only when the caller (factory
-        # via ``build_brain_headers``) has resolved a non-empty profile. When
-        # the header is absent the server applies its ``TAPPS_BRAIN_DEFAULT_PROFILE``
-        # — ``full`` for legacy deployments. Honouring the env var here covers
-        # the no-settings factory path (`_create_http_bridge(settings=None)`).
+        # TAP-1616 / TAP-1924: declare ``X-Brain-Profile`` only when the
+        # header has not already been set by the factory.  Resolution order:
+        #
+        #   1. ``settings.memory.brain_profile`` / ``TAPPS_BRAIN_PROFILE`` env
+        #      → resolved by ``build_brain_headers`` in ``_create_http_bridge``.
+        #   2. ``default_profile`` arg to ``create_brain_bridge`` (caller-set
+        #      minimum surface, e.g. ``"coder"`` for tapps-mcp, TAP-1924).
+        #   3. This env-var fallback — covers direct construction without a
+        #      factory (tests, CLI one-shots with ``settings=None``).
+        #
+        # When the factory already set the header (steps 1–2), the check below
+        # is False and the env var is NOT re-read, avoiding a double-resolution.
         if "X-Brain-Profile" not in self._http_headers:
             env_profile = os.environ.get("TAPPS_BRAIN_PROFILE", "").strip()
             if env_profile:
@@ -2701,7 +2708,9 @@ def check_brain_version(
 # -----------------------------------------------------------------------------
 
 
-def create_brain_bridge(settings: Any = None) -> BrainBridge | None:
+def create_brain_bridge(
+    settings: Any = None, *, default_profile: str = ""
+) -> BrainBridge | None:
     """Create a :class:`BrainBridge` from settings or environment.
 
     Dispatch order:
@@ -2714,6 +2723,18 @@ def create_brain_bridge(settings: Any = None) -> BrainBridge | None:
        local :class:`tapps_brain.AgentBrain`. Requires ``TAPPS_BRAIN_DATABASE_URL``
        (or ``settings.memory.database_url``).
     3. Return ``None`` when neither transport is configured.
+
+    Args:
+        settings: Optional settings object. When omitted, transport and auth are
+            resolved from environment variables only.
+        default_profile: Fallback ``X-Brain-Profile`` header value for the HTTP
+            path (TAP-1924/1925). Applied only when no explicit profile is
+            configured via ``settings.memory.brain_profile`` *and* the
+            ``TAPPS_BRAIN_PROFILE`` env var is unset. Callers should pass the
+            minimum profile that covers their tool surface (e.g. ``"coder"`` for
+            the tapps-mcp server, ``"agent_brain"`` for docs-mcp). The empty
+            string (default) preserves the existing behaviour — no header sent,
+            server-side default profile applies.
     """
     # --- Resolve transport settings ------------------------------------------
     brain_http_url: str = ""
@@ -2728,7 +2749,7 @@ def create_brain_bridge(settings: Any = None) -> BrainBridge | None:
 
     # --- HTTP path -----------------------------------------------------------
     if brain_http_url:
-        return _create_http_bridge(brain_http_url, settings)
+        return _create_http_bridge(brain_http_url, settings, default_profile=default_profile)
 
     # --- In-process path -----------------------------------------------------
     from tapps_brain import AgentBrain
@@ -2812,7 +2833,9 @@ def create_brain_bridge(settings: Any = None) -> BrainBridge | None:
     return bridge
 
 
-def _create_http_bridge(brain_http_url: str, settings: Any) -> BrainBridge | None:
+def _create_http_bridge(
+    brain_http_url: str, settings: Any, *, default_profile: str = ""
+) -> BrainBridge | None:
     """Create an :class:`HttpBrainBridge` for the tapps-brain HTTP API."""
     from tapps_core.brain_auth import BrainAuthConfigError, build_brain_headers
 
@@ -2830,6 +2853,16 @@ def _create_http_bridge(brain_http_url: str, settings: Any) -> BrainBridge | Non
             headers["Authorization"] = f"Bearer {token}"
         if project_id:
             headers["X-Project-Id"] = project_id
+
+    # TAP-1924/1925: apply the caller-supplied default profile when no explicit
+    # profile was resolved by build_brain_headers (settings.memory.brain_profile
+    # or TAPPS_BRAIN_PROFILE env) and no TAPPS_BRAIN_PROFILE override is present.
+    # Setting the header here means HttpBrainBridge.__init__'s env-fallback
+    # path will see it already set and skip the re-derive.
+    if "X-Brain-Profile" not in headers and default_profile:
+        env_profile = os.environ.get("TAPPS_BRAIN_PROFILE", "").strip()
+        if not env_profile:
+            headers["X-Brain-Profile"] = default_profile
 
     if "Authorization" not in headers:
         logger.warning(
