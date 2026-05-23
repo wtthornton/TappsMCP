@@ -115,6 +115,7 @@ a = Analysis(
         "tapps_mcp.tools.validation_progress",
         "tapps_mcp.tools.session_start_helpers",
         "tapps_mcp.tools.session_start_core",
+        "tapps_mcp.tools.session_end_helpers",
         "tapps_mcp.tools.decompose_helpers",
         "tapps_mcp.tools.pipeline_init_helpers",
         "tapps_mcp.tools.pipeline_orchestrator",

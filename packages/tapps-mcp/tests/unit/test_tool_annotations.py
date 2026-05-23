@@ -79,8 +79,9 @@ EXPECTED_ANNOTATIONS: dict[str, ToolAnnotations] = {
     # Read-only, open-world (2 tools)
     "tapps_lookup_docs": _READ_ONLY_OPEN,
     "tapps_dependency_scan": _READ_ONLY_OPEN,
-    # Side-effect, idempotent (5 tools)
+    # Side-effect, idempotent (6 tools)
     "tapps_session_start": _SIDE_EFFECT_IDEMPOTENT,
+    "tapps_session_end": _SIDE_EFFECT_IDEMPOTENT,
     "tapps_init": _SIDE_EFFECT_IDEMPOTENT,
     "tapps_upgrade": _SIDE_EFFECT_IDEMPOTENT,
     "tapps_set_engagement_level": _SIDE_EFFECT_IDEMPOTENT,
@@ -177,9 +178,9 @@ class TestAnnotationCategories:
             for name, tool in tools.items()
             if tool.annotations and not tool.annotations.readOnlyHint
         ]
-        # 4 idempotent + 2 non-idempotent + linear-snapshot-put + linear-snapshot-invalidate = 8
-        assert len(side_effect) == 8, (
-            f"Expected 8 side-effect tools, got {len(side_effect)}"
+        # 5 idempotent + 2 non-idempotent + linear-snapshot-put + linear-snapshot-invalidate = 9
+        assert len(side_effect) == 9, (
+            f"Expected 9 side-effect tools, got {len(side_effect)}"
         )
 
     def test_open_world_count(self) -> None:
@@ -201,9 +202,9 @@ class TestAnnotationCategories:
             if tool.annotations and tool.annotations.idempotentHint
         ]
         # 22 prior + 3 linear-snapshot + 1 release-update + 1 tapps_linear_count (TAP-1847)
-        # + 1 tapps_audit_campaign (TAP-2036) = 28
-        assert len(idempotent) == 28, (
-            f"Expected 28 idempotent tools, got {len(idempotent)}: {sorted(idempotent)}"
+        # + 1 tapps_audit_campaign (TAP-2036) + 1 tapps_session_end (TAP-2005) = 29
+        assert len(idempotent) == 29, (
+            f"Expected 29 idempotent tools, got {len(idempotent)}: {sorted(idempotent)}"
         )
 
 
