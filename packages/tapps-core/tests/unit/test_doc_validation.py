@@ -826,7 +826,7 @@ class TestSessionStartValidation:
         """Reset session state before each test."""
         from tapps_mcp.server_pipeline_tools import _session_state
 
-        _session_state["doc_validation_done"] = False
+        _session_state.doc_validation_done = False
 
     def _make_settings(
         self,
@@ -861,7 +861,7 @@ class TestSessionStartValidation:
             _session_state,
         )
 
-        _session_state["doc_validation_done"] = True
+        _session_state.doc_validation_done = True
         settings = self._make_settings()
         store = MagicMock()
         result = await _maybe_validate_memories(store, settings)
@@ -887,7 +887,7 @@ class TestSessionStartValidation:
         store.list_all.return_value = {}
 
         result = await _maybe_validate_memories(store, settings)
-        assert _session_state["doc_validation_done"] is True
+        assert _session_state.doc_validation_done is True
         assert result is not None
 
         # Second call should be skipped

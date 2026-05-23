@@ -282,9 +282,14 @@ def _check_profile_loaded_lenient(
 async def test_negotiation_against_full_profile_exposes_bridge_tools(
     brain_url: str, auth_token: str, project_id: str
 ) -> None:
-    """TAP-1629 happy path: the ``full`` profile exposes every tool the
-    bridge depends on, so :meth:`HttpBrainBridge.profile_status` reports
-    ``profile_mismatch=False`` after the first session.
+    """TAP-1629 happy path: the ``full`` profile exposes bridge tools.
+
+    Under tapps-brain v3.19.0+ the server uses deferred loading (Tool Search
+    BETA) so ``tools/list`` only returns the eager subset (~8 tools).
+    Bridge-used tools absent from ``tools/list`` show up in
+    ``gated_used_tools`` for diagnostic purposes but are still callable on
+    the wire — the preflight short-circuit was removed in TAP-2100. The key
+    invariant is that negotiation completes and the eager tools are present.
     """
     skip_reason = _check_profile_loaded_lenient(brain_url, auth_token, project_id, "full")
     if skip_reason:
@@ -300,8 +305,16 @@ async def test_negotiation_against_full_profile_exposes_bridge_tools(
     assert status["negotiated"] is True
     assert status["declared_profile"] == "full"
     assert status["exposed_tools"], "tools/list must return at least one tool on full"
-    assert status["gated_used_tools"] == []
-    assert status["profile_mismatch"] is False
+    # With deferred loading (v3.19.0+), only eager tools appear in tools/list.
+    # Deferred tools are callable on the wire but absent from exposed_tools.
+    # We verify the eager-loaded bridge tools are present; gated_used_tools
+    # may be non-empty (deferred tools) without indicating a real profile issue.
+    _EAGER_BRIDGE_TOOLS = {"memory_find_related", "brain_get_neighbors", "brain_explain_connection"}
+    for tool in _EAGER_BRIDGE_TOOLS:
+        assert tool in status["exposed_tools"], (
+            f"expected eager bridge tool {tool!r} in exposed_tools; "
+            f"got {sorted(status['exposed_tools'])}"
+        )
 
 
 @pytest.mark.asyncio
@@ -358,11 +371,14 @@ async def test_knowledge_graph_methods_reach_the_wire(
     brain_url: str, auth_token: str, project_id: str
 ) -> None:
     """Smoke-level check that the four new bridge methods (TAP-1630) reach
-    the brain without raising. Uses the ``full`` profile so every graph tool
-    is exposed; ``memory_find_related`` / ``memory_relations`` /
-    ``memory_query_relations`` / ``brain_get_neighbors`` / ``brain_explain_connection``
-    are all in ``_BRIDGE_USED_TOOLS`` and the negotiation must record them
-    as exposed (no profile_mismatch).
+    the brain without raising. Uses the ``full`` profile.
+
+    Under tapps-brain v3.19.0+ the server uses deferred loading (Tool Search
+    BETA), so ``tools/list`` only returns eager tools. ``memory_relations`` and
+    ``memory_query_relations`` are deferred — they are callable on the wire but
+    will not appear in ``exposed_tools``. We check only the eager graph tools
+    for profile exposure and rely on the method calls below to verify the
+    deferred tools reach the wire.
     """
     skip_reason = _check_profile_loaded_lenient(brain_url, auth_token, project_id, "full")
     if skip_reason:
@@ -373,15 +389,14 @@ async def test_knowledge_graph_methods_reach_the_wire(
         # Drive negotiation first so profile_status() is populated.
         await bridge._http_mcp_call("brain_status", {})
         status = bridge.profile_status()
+        # Only check eager-loaded graph tools in exposed_tools.
+        # memory_relations / memory_query_relations are deferred under v3.19.0+.
         for tool in (
             "memory_find_related",
-            "memory_relations",
-            "memory_query_relations",
             "brain_get_neighbors",
             "brain_explain_connection",
         ):
             assert tool in status["exposed_tools"], tool
-            assert tool not in status["gated_used_tools"], tool
 
         # Each method returns the shape its handler expects. The four working
         # methods run first; ``brain_get_neighbors`` is exercised LAST because
@@ -555,8 +570,13 @@ async def test_session_methods_reach_the_wire(
 ) -> None:
     """End-to-end smoke that ``memory_index_session`` /
     ``memory_search_sessions`` / ``tapps_brain_session_end`` are reachable
-    via the new bridge methods. Uses the ``full`` profile so all three
-    tools are exposed.
+    via the new bridge methods. Uses the ``full`` profile.
+
+    Under tapps-brain v3.19.0+ the server uses deferred loading (Tool Search
+    BETA). All three session tools are deferred — they will not appear in
+    ``tools/list`` / ``exposed_tools`` but remain callable on the wire. We
+    skip the profile-exposure assertions and rely on the method calls below
+    to confirm the wire contract is satisfied.
     """
     import uuid
 
@@ -567,16 +587,11 @@ async def test_session_methods_reach_the_wire(
     session_id = f"tap-1633-probe-{uuid.uuid4().hex[:8]}"
     bridge = _build_bridge(brain_url, auth_token, project_id, "full")
     try:
-        # Drive negotiation so all three tools end up in exposed_tools.
+        # Drive negotiation so the bridge is initialized.
+        # Session tools (memory_index_session / memory_search_sessions /
+        # tapps_brain_session_end) are deferred under v3.19.0+ and absent from
+        # exposed_tools — no profile-exposure assertion here.
         await bridge._http_mcp_call("brain_status", {})
-        status = bridge.profile_status()
-        for tool in (
-            "memory_index_session",
-            "memory_search_sessions",
-            "tapps_brain_session_end",
-        ):
-            assert tool in status["exposed_tools"], tool
-            assert tool not in status["gated_used_tools"], tool
 
         index_resp = await bridge.index_session(
             session_id,

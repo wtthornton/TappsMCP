@@ -346,7 +346,7 @@ class TestProfileSwitchAction:
         def get_store_side_effect():
             nonlocal call_count
             call_count += 1
-            return mock_store if call_count <= 1 else new_store
+            return mock_store if call_count <= 2 else new_store
 
         with (
             patch("tapps_mcp.server_memory_tools._record_call"),
