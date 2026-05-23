@@ -221,3 +221,72 @@ class TestAnalyzeCrossReferences:
         assert d["cross_file_analysis"] == "partial"
         assert d["files_resolved"] == 2
         assert d["findings_count"] == 0
+
+    # -----------------------------------------------------------------------
+    # TAP-2210: stdlib short-circuit regression tests
+    # -----------------------------------------------------------------------
+
+    def test_dataclasses_field_no_false_positive(self, tmp_path: Path) -> None:
+        """dataclasses.field(default_factory=..., repr=...) must not produce findings."""
+        caller = tmp_path / "caller.py"
+        caller.write_text(
+            "from dataclasses import field\n"
+            "x = field(default_factory=list)\n"
+            "y = field(repr=False)\n",
+            encoding="utf-8",
+        )
+        result = analyze_cross_references(caller, tmp_path)
+        assert result.findings == [], (
+            f"Expected no findings for dataclasses.field, got: {result.findings}"
+        )
+        assert result.files_skipped_stdlib > 0, "Expected stdlib skips to be counted"
+
+    def test_stdlib_skip_does_not_degrade_status(self, tmp_path: Path) -> None:
+        """Stdlib skips are not counted as unresolved — status stays 'full'."""
+        caller = tmp_path / "caller.py"
+        caller.write_text(
+            "from dataclasses import field\n"
+            "x = field(default_factory=dict)\n",
+            encoding="utf-8",
+        )
+        result = analyze_cross_references(caller, tmp_path)
+        assert result.status == "full", f"Stdlib skip degraded status to {result.status!r}"
+        assert result.files_unresolved == 0
+
+    def test_local_shadow_of_stdlib_still_analyzed(self, tmp_path: Path) -> None:
+        """A local project file shadowing a stdlib name is NOT skipped.
+
+        If the project has its own myproject/dataclasses.py with a field()
+        function, kwarg mismatches against that local function are still flagged.
+        """
+        # Create a local module that shadows the stdlib name
+        pkg = tmp_path / "myproject"
+        pkg.mkdir()
+        (pkg / "__init__.py").write_text("", encoding="utf-8")
+        # Local "dataclasses.py" with a field() that only accepts one param
+        (pkg / "dataclasses.py").write_text(
+            "def field(name):\n    pass\n",
+            encoding="utf-8",
+        )
+
+        caller = tmp_path / "caller.py"
+        caller.write_text(
+            "from myproject.dataclasses import field\n"
+            # Caller uses 'default_factory' which is NOT a param of the local field()
+            "x = field(default_factory=list)\n",
+            encoding="utf-8",
+        )
+
+        result = analyze_cross_references(caller, tmp_path)
+        # The local shadow must be analyzed and the mismatch caught
+        assert len(result.findings) == 1, (
+            f"Expected 1 finding for local stdlib shadow, got {result.findings}"
+        )
+        assert "default_factory" in result.findings[0].issue
+
+    def test_to_dict_includes_files_skipped_stdlib(self) -> None:
+        """to_dict must expose files_skipped_stdlib for API consumers."""
+        result = CrossRefResult(files_skipped_stdlib=3)
+        d = result.to_dict()
+        assert "files_skipped_stdlib" in d
+        assert d["files_skipped_stdlib"] == 3

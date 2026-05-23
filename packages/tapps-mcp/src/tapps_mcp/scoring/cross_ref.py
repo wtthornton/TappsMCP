@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import ast
 import importlib.util
+import sys
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -61,6 +62,7 @@ class CrossRefResult:
     status: str = "full"  # "full", "partial", "degraded"
     files_resolved: int = 0
     files_unresolved: int = 0
+    files_skipped_stdlib: int = 0
 
     def to_dict(self) -> dict[str, Any]:
         """Serialize to dict for API response."""
@@ -70,6 +72,7 @@ class CrossRefResult:
             "findings": [f.to_dict() for f in self.findings],
             "files_resolved": self.files_resolved,
             "files_unresolved": self.files_unresolved,
+            "files_skipped_stdlib": self.files_skipped_stdlib,
         }
 
 
@@ -267,6 +270,20 @@ def analyze_cross_references(
         if callee_file is None:
             result.files_unresolved += 1
             continue
+
+        # Short-circuit stdlib modules: they cannot be reliably analyzed from
+        # source (kwarg-only signatures, C extensions, etc.) and produce false
+        # positives. Keyed on the resolved *path* so local shadows — a project
+        # file named the same as a stdlib module — are still analyzed normally.
+        top_level_module = module_path.split(".")[0]
+        if top_level_module in sys.stdlib_module_names:
+            try:
+                is_local = callee_file.is_relative_to(search_root)
+            except ValueError:
+                is_local = False
+            if not is_local:
+                result.files_skipped_stdlib += 1
+                continue
 
         result.files_resolved += 1
 
