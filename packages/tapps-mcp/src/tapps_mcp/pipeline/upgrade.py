@@ -56,10 +56,17 @@ so consumers can audit exactly which paths would change:
   ``tapps-*`` files the upgrade would write; ``preserved_*`` lists the
   existing consumer-custom files that stay untouched.
 - ``components.settings`` is a string describing the hook-merge behavior.
+- ``components.github_templates`` may carry a ``would_recreate_deleted_files``
+  list when the project is established (``AGENTS.md`` exists) and one or more
+  files from ``MANAGED_GITHUB_ROOT_FILES`` are absent from ``.github/``. Each
+  entry is ``{"file": ".github/<name>", "note": "<hint>"}`` describing the
+  file and suggesting ``upgrade_skip_files`` if the deletion was intentional.
+  Fresh-project dry-runs (no ``AGENTS.md``) never populate this list.
 - ``dry_run_summary`` at the top level rolls this up into a ``verdict``
-  (``"safe-to-run"`` or ``"review-recommended"``), counts, and the full
-  preserved-file list — enough for an agent to decide whether to proceed
-  without parsing per-component details.
+  (``"safe-to-run"`` or ``"review-recommended"``), counts, the full
+  preserved-file list, and a ``would_recreate_deleted_files`` rollup —
+  enough for an agent to decide whether to proceed without parsing
+  per-component details.
 """
 
 from __future__ import annotations
@@ -567,6 +574,13 @@ def _build_dry_run_summary(result: dict[str, Any]) -> dict[str, Any]:
             "files preserved."
         )
 
+    # TAP-2201: Surface would_recreate_deleted_files from github_templates component.
+    would_recreate: list[dict[str, str]] = []
+    for name in ("github_templates",):
+        value = result.get("components", {}).get(name)
+        if isinstance(value, dict):
+            would_recreate.extend(value.get("would_recreate_deleted_files", []))
+
     return {
         "verdict": verdict,
         "message": message,
@@ -575,6 +589,7 @@ def _build_dry_run_summary(result: dict[str, Any]) -> dict[str, Any]:
         "preserved_files": sorted(preserved_items),
         "skipped_components": sorted(skipped),
         "review_recommended_for": sorted(review_flags),
+        "would_recreate_deleted_files": would_recreate,
     }
 
 
@@ -1462,6 +1477,26 @@ def _dry_run_github_artifacts(project_root: Path, result: dict[str, Any]) -> Non
         "ISSUE_TEMPLATE",
         "workflows",
     }
+
+    # TAP-2201: Detect managed root files absent from an established project.
+    # "Established" = AGENTS.md exists (tapps was previously initialised).
+    # Fresh installs are excluded so their safe-to-run verdicts stay unchanged.
+    is_established = (project_root / "AGENTS.md").exists()
+    would_recreate_deleted: list[dict[str, str]] = []
+    if is_established:
+        for fname in MANAGED_GITHUB_ROOT_FILES:
+            if not (github_root_dir / fname).exists():
+                would_recreate_deleted.append(
+                    {
+                        "file": f".github/{fname}",
+                        "note": (
+                            "File is absent from repo. If deleted intentionally, "
+                            f"add '{fname}' to upgrade_skip_files in "
+                            ".tapps-mcp.yaml to suppress recreation."
+                        ),
+                    }
+                )
+
     result["components"]["github_templates"] = {
         "action": "would-write-managed-files",
         "managed_files": sorted(
@@ -1476,6 +1511,7 @@ def _dry_run_github_artifacts(project_root: Path, result: dict[str, Any]) -> Non
                 *_enumerate_preserved(github_root_dir, github_root_managed_for_listing),
             ]
         ),
+        "would_recreate_deleted_files": would_recreate_deleted,
     }
 
     result["components"]["github_copilot"] = {"action": "would-regenerate"}

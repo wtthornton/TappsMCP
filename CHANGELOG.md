@@ -9,6 +9,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **`feat(upgrade): dry-run flags deliberately-deleted managed files` ([TAP-2201](https://linear.app/tappscodingagents/issue/TAP-2201)).**
+  `tapps_upgrade(dry_run=True)` now distinguishes three states for files in
+  `MANAGED_GITHUB_ROOT_FILES` (currently `dependabot.yml` and
+  `PULL_REQUEST_TEMPLATE.md`). When the project is established (an `AGENTS.md`
+  exists) and a managed file is absent, the dry-run output includes a new
+  `would_recreate_deleted_files` key in `components.github_templates` and in
+  `dry_run_summary`. Each entry carries the file path and a note pointing to
+  `upgrade_skip_files` in `.tapps-mcp.yaml` as the durable opt-out. Fresh
+  projects (no `AGENTS.md`) are unaffected — their `safe-to-run` verdicts are
+  unchanged. This closes the design gap where silent recreation would undo a
+  deliberate consumer opt-out (e.g. disabling Dependabot version updates).
+
 - **`feat(upgrade): block tapps_upgrade when sibling tool versions drift` ([TAP-2200](https://linear.app/tappscodingagents/issue/TAP-2200)).**
   `tapps_upgrade` now gates on install drift before running: when any sibling
   binary (`docsmcp`, `tapps-brain-mcp`) lags the in-process `tapps-mcp`
