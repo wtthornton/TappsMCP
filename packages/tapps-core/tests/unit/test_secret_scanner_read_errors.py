@@ -54,15 +54,21 @@ def test_read_error_logs_warning(
     scanner: SecretScanner,
     tmp_path: Path,
     capsys: pytest.CaptureFixture[str],
+    caplog: pytest.LogCaptureFixture,
 ) -> None:
     target = tmp_path / "x.py"
     target.write_text("x = 1\n", encoding="utf-8")
 
-    with patch.object(Path, "read_text", side_effect=OSError("simulated")):
-        scanner.scan_file(str(target))
+    import logging
 
+    with caplog.at_level(logging.WARNING):
+        with patch.object(Path, "read_text", side_effect=OSError("simulated")):
+            scanner.scan_file(str(target))
+
+    # structlog may route to raw stderr (ConsoleRenderer) or through the stdlib
+    # logging module depending on the test-suite configuration. Check both.
     out, err = capsys.readouterr()
-    combined = out + err
+    combined = out + err + caplog.text
     assert "secret_scan_read_failed" in combined, (
         f"read failure must emit a WARNING log entry; captured:\n{combined!r}"
     )
