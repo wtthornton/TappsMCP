@@ -138,6 +138,36 @@ fi
 
 echo "[pre-push] Tier 1 passed." >&2
 
+# --- Pending-close sentinel (TAP-2467) ---
+#
+# After each push to master/main, extract any TAP ticket IDs referenced in
+# the newly pushed commits (via feat(TAP-####) or fix(TAP-####) convention)
+# and write one JSONL line per ticket to .tapps-mcp/.pending-linear-close.jsonl.
+# The next Ralph loop's coordinator step reads this file and closes the tickets
+# automatically, recovering from API-error resets that interrupted post-push
+# Linear status updates.
+PENDING_CLOSE_LOG="$PUSH_LOG_DIR/.pending-linear-close.jsonl"
+PUSH_TS="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+if [[ -n "$remote_sha" && "$remote_sha" != "$NULL_SHA" ]]; then
+  _commit_range="${remote_sha}..${local_sha:-HEAD}"
+else
+  _commit_range="HEAD~1..HEAD"
+fi
+# Extract TAP IDs from commit messages (feat(TAP-####) or fix(TAP-####) patterns)
+TAP_IDS=$(git log "$_commit_range" --format='%s' 2>/dev/null \
+  | grep -oE '(feat|fix)\(TAP-[0-9]+\)' \
+  | grep -oE 'TAP-[0-9]+' \
+  | sort -u || true)
+if [[ -n "$TAP_IDS" ]]; then
+  _push_sha="${local_sha:-$(git rev-parse HEAD)}"
+  for _tap_id in $TAP_IDS; do
+    printf '{"ts":"%s","ticket":"%s","sha":"%s","status":"pending_close"}\n' \
+      "$PUSH_TS" "$_tap_id" "$_push_sha" \
+      >> "$PENDING_CLOSE_LOG" 2>/dev/null || true
+  done
+  echo "[pre-push] Pending-close sentinels written for: $TAP_IDS → $PENDING_CLOSE_LOG" >&2
+fi
+
 # --- Tier 2: full suite in background ---
 #
 # Detach a comprehensive run (all three packages, not-slow) so regressions
