@@ -130,3 +130,10 @@ target/
 .claude/agent-memory/
 .claude/agent-memory-local/
 .ralph_backup_*
+
+# Ralph managed entries
+.ralph-brief.json
+.ralphrc.local
+
+# Third-party skill clones (separate git repos, contains node_modules)
+.claude/skills/linear/

@@ -13,6 +13,7 @@ tools:
   - mcp__tapps-brain__brain_remember
   - mcp__tapps-brain__brain_learn_success
   - mcp__tapps-brain__brain_learn_failure
+  - mcp__plugin_linear_linear__list_issues
 disallowedTools:
   - Bash(*)
   - Bash(rm *)
@@ -68,6 +69,11 @@ Run in one of three modes determined by your task input:
      content:   <the JSON object below, no surrounding prose, no markdown fence>
    ```
 
+   The file_path is literal: `.ralph/brief.json` (slash, under `.ralph/`).
+   Never write `.ralph-brief.json` (dash, repo root) or any other path —
+   only `.ralph/brief.json`. The harness reads only the canonical path;
+   any other location leaks into the project's git working tree (TAP-2349).
+
    The JSON body MUST contain every required field defined in
    `lib/brief.sh:brief_validate` — `brief_validate` rejects briefs that
    are missing fields, have the wrong types, or use disallowed enum
@@ -95,9 +101,37 @@ Run in one of three modes determined by your task input:
    {`LOW`, `MEDIUM`, `HIGH`}; `delegate_to` ∈ {`ralph`, `ralph-architect`};
    `coordinator_confidence` ∈ `[0.0, 1.0]`.
 
-4. Return a ≤3-line summary to the caller: complexity verdict, top
+4. **Locality hint (best-effort, Linear mode only).** Skip silently if
+   `task_source != "linear"`, if `.ralph/.last_completed_files` is missing
+   or empty, or if `.ralph/.linear_optimize_disabled` exists. Otherwise:
+
+   a. Read `.ralph/.last_completed_files` (one repo-relative path per
+      line) into set A.
+   b. Call `mcp__plugin_linear_linear__list_issues` once with the
+      project / team from your input, `orderBy="updatedAt"`, `limit=15`.
+      Do not pass `state` — filter client-side to issues whose
+      `state.type` is one of `backlog`, `unstarted`, or `started`.
+   c. For each candidate issue, extract candidate file paths from the
+      `description` field by matching the regex
+      `([\w./-]+/)?[\w-]+\.(py|js|ts|tsx|jsx|sh|md|json|yaml|yml|toml|sql|bats)`
+      (deduplicate). This is set B for that candidate.
+   d. Pick the issue whose set B has the largest intersection with set
+      A. Tie-break on Linear priority ascending (1=Urgent best, 0=None
+      worst). Require ≥1 intersecting path — if every candidate has
+      zero overlap, write nothing and continue.
+   e. Write the winning issue's `identifier` (e.g. `TAP-1234`) as a
+      single line to `.ralph/.linear_next_issue` via the Write tool. The
+      harness reads only the first non-comment line; do not add
+      surrounding prose, JSON, or trailing whitespace beyond a newline.
+
+   This step is best-effort. Errors from `list_issues`, regex misses, or
+   zero-overlap candidates are all valid skip conditions and do NOT trip
+   the regression detector — only step 3 (brief.json) is required.
+
+5. Return a ≤3-line summary to the caller: complexity verdict, top
    learning, and one risk to watch. The summary is the LAST action — the
-   Write tool call MUST come first.
+   brief.json Write call MUST come first; the locality-hint Write (if
+   any) precedes the summary.
 
 **MODE=debrief** (invoked at epic boundary or task close):
 
@@ -175,10 +209,11 @@ Set `complexity` to one of `TRIVIAL`, `SMALL`, `MEDIUM`, `LARGE`,
 Write `.ralph/brief.json` via a single Write-tool call — the Claude Code
 Write tool is atomic at the tool layer (it replaces the file's contents
 as a single observable operation, equivalent to the tmp + `mv` pattern
-that `lib/brief.sh:atomic_write` uses at the shell layer). Do NOT modify
-any other file. Do NOT call Edit, Bash, or sub-agent tools. If you
-cannot determine `recommended_files`, write `[]` and let the caller fall
-back to ralph-explorer.
+that `lib/brief.sh:atomic_write` uses at the shell layer). The only
+other file you may write is `.ralph/.linear_next_issue` (single-line
+locality hint, described in MODE=brief step 4). Do NOT call Edit, Bash,
+or sub-agent tools. If you cannot determine `recommended_files`, write
+`[]` and let the caller fall back to ralph-explorer.
 
 ## Out of Scope
 

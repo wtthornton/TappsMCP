@@ -56,7 +56,15 @@ fi
 #      settings even though existing `.ralphrc` edits were blocked.
 # TAP-2344: anchor to the project root so a sibling project's .ralphrc
 # isn't accidentally caught when the agent is editing across repos.
-if [[ "$FILE_PATH" == "$_proj_dir/.ralphrc" ]] || [[ "$FILE_PATH" == .ralphrc ]]; then
+#
+# .ralphrc.local is the operator-only override surface (gitignored, sourced
+# by ralph_loop.sh after .ralphrc). It exists precisely so direct-to-main
+# repos can persist RALPH_ALLOW_PUSH_MAIN=1 without the agent being able to
+# self-unlock the R0 push-to-main block in validate-command.sh — so it must
+# be blocked here too. Same anchoring rule: project-local only, never a
+# sibling repo's file.
+if [[ "$FILE_PATH" == "$_proj_dir/.ralphrc" ]]       || [[ "$FILE_PATH" == .ralphrc ]] || \
+   [[ "$FILE_PATH" == "$_proj_dir/.ralphrc.local" ]] || [[ "$FILE_PATH" == .ralphrc.local ]]; then
   echo "BLOCKED: Cannot modify Ralph configuration: $FILE_PATH" >&2
   exit 2
 fi
