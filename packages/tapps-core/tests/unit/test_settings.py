@@ -36,9 +36,45 @@ class TestScoringWeights:
     def test_env_override(self) -> None:
         from tapps_core.config.settings import ScoringWeights
 
-        with mock.patch.dict(os.environ, {"TAPPS_MCP_WEIGHT_SECURITY": "0.50"}):
+        # Increase security by 0.03 and decrease devex by 0.03 so the sum stays ~1.0.
+        with mock.patch.dict(
+            os.environ,
+            {"TAPPS_MCP_WEIGHT_SECURITY": "0.30", "TAPPS_MCP_WEIGHT_DEVEX": "0.02"},
+        ):
             w = ScoringWeights()
-            assert w.security == 0.50
+            assert w.security == 0.30
+
+    def test_weights_sum_validation_rejects_inflated_preset(self) -> None:
+        """Misconfigured weights (sum > 1.01) must raise ValidationError (TAP-1747)."""
+        import pytest
+        from pydantic import ValidationError
+
+        from tapps_core.config.settings import ScoringWeights
+
+        # Setting security=0.50 with all other defaults gives sum ~1.23
+        with pytest.raises(ValidationError, match="sum to 1.0"):
+            with mock.patch.dict(os.environ, {"TAPPS_MCP_WEIGHT_SECURITY": "0.50"}):
+                ScoringWeights()
+
+    def test_weights_sum_validation_rejects_deflated_preset(self) -> None:
+        """Weights summing below 0.99 must also raise ValidationError (TAP-1747)."""
+        import pytest
+        from pydantic import ValidationError
+
+        from tapps_core.config.settings import ScoringWeights
+
+        # security=0.01 with defaults gives sum ~0.75
+        with pytest.raises(ValidationError, match="sum to 1.0"):
+            with mock.patch.dict(os.environ, {"TAPPS_MCP_WEIGHT_SECURITY": "0.01"}):
+                ScoringWeights()
+
+    def test_weights_sum_validation_tolerates_floating_point_noise(self) -> None:
+        """Weights that sum to 1.0000000001 must NOT raise (tolerance ±0.01)."""
+        from tapps_core.config.settings import ScoringWeights
+
+        # Defaults sum to exactly 1.0; should never raise.
+        w = ScoringWeights()
+        assert w is not None
 
 
 class TestQualityPreset:

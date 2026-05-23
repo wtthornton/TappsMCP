@@ -33,6 +33,32 @@ class ScoringWeights(BaseSettings):
     structure: float = Field(default=0.05, ge=0.0, le=1.0)
     devex: float = Field(default=0.05, ge=0.0, le=1.0)
 
+    @model_validator(mode="after")
+    def weights_must_sum_to_one(self) -> ScoringWeights:
+        """Enforce that all category weights sum to ~1.0 (tolerance ±0.01).
+
+        ``_calculate_overall()`` does ``clamp_overall(total * 10.0)`` on a
+        weighted sum of 0-10 category scores.  The ``* 10.0`` factor only
+        produces a correct 0-100 scale when weights normalise to exactly 1.0.
+        A preset drifted to e.g. 1.2 silently inflates every overall score and
+        renders the gate threshold meaningless (TAP-1747).
+        """
+        total = (
+            self.complexity
+            + self.security
+            + self.maintainability
+            + self.test_coverage
+            + self.performance
+            + self.structure
+            + self.devex
+        )
+        if not 0.99 <= total <= 1.01:
+            raise ValueError(
+                f"ScoringWeights must sum to 1.0 (±0.01) but got {total:.4f}. "
+                f"Adjust category weights so they normalise to 1.0."
+            )
+        return self
+
 
 class QualityPreset(BaseSettings):
     """Quality gate thresholds."""
