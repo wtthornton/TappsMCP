@@ -49,6 +49,7 @@ class CommandResult:
     stderr: str = ""
     command: list[str] | None = None
     timed_out: bool = False
+    truncated: bool = False
 
     @property
     def success(self) -> bool:

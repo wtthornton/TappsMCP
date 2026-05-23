@@ -18,6 +18,7 @@ from tapps_mcp.tools.subprocess_utils import CommandResult, wrap_windows_cmd_shi
 logger = structlog.get_logger(__name__)
 
 DEFAULT_TIMEOUT: int = 60
+MAX_OUTPUT_BYTES: int = 8 * 1024 * 1024  # 8 MiB per stream
 
 
 def run_command(
@@ -56,11 +57,23 @@ def run_command(
             env=env,
             input=stdin_data,
         )
+        stdout_raw = result.stdout or ""
+        stderr_raw = result.stderr or ""
+        truncated = False
+        if len(stdout_raw.encode()) > MAX_OUTPUT_BYTES:
+            stdout_raw = stdout_raw.encode()[:MAX_OUTPUT_BYTES].decode("utf-8", errors="replace")
+            truncated = True
+            logger.warning("command_output_truncated", cmd=cmd, stream="stdout")
+        if len(stderr_raw.encode()) > MAX_OUTPUT_BYTES:
+            stderr_raw = stderr_raw.encode()[:MAX_OUTPUT_BYTES].decode("utf-8", errors="replace")
+            truncated = True
+            logger.warning("command_output_truncated", cmd=cmd, stream="stderr")
         return CommandResult(
             returncode=result.returncode,
-            stdout=result.stdout or "",
-            stderr=result.stderr or "",
+            stdout=stdout_raw,
+            stderr=stderr_raw,
             command=cmd,
+            truncated=truncated,
         )
     except subprocess.TimeoutExpired:
         logger.warning("command_timeout", cmd=cmd, timeout=timeout)
@@ -119,11 +132,23 @@ async def run_command_async(
             ),
             timeout=timeout,
         )
+        stdout_raw = stdout_bytes.decode("utf-8", errors="replace").strip() if stdout_bytes else ""
+        stderr_raw = stderr_bytes.decode("utf-8", errors="replace").strip() if stderr_bytes else ""
+        truncated = False
+        if stdout_bytes and len(stdout_bytes) > MAX_OUTPUT_BYTES:
+            stdout_raw = stdout_bytes[:MAX_OUTPUT_BYTES].decode("utf-8", errors="replace").strip()
+            truncated = True
+            logger.warning("command_output_truncated", cmd=cmd, stream="stdout")
+        if stderr_bytes and len(stderr_bytes) > MAX_OUTPUT_BYTES:
+            stderr_raw = stderr_bytes[:MAX_OUTPUT_BYTES].decode("utf-8", errors="replace").strip()
+            truncated = True
+            logger.warning("command_output_truncated", cmd=cmd, stream="stderr")
         return CommandResult(
             returncode=proc.returncode or 0,
-            stdout=stdout_bytes.decode("utf-8", errors="replace").strip() if stdout_bytes else "",
-            stderr=stderr_bytes.decode("utf-8", errors="replace").strip() if stderr_bytes else "",
+            stdout=stdout_raw,
+            stderr=stderr_raw,
             command=cmd,
+            truncated=truncated,
         )
     except TimeoutError:
         logger.warning("command_timeout_async", cmd=cmd, timeout=timeout)

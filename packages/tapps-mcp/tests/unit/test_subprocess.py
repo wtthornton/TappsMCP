@@ -1,9 +1,10 @@
 """Tests for tools.subprocess_utils and tools.subprocess_runner."""
 
 import platform
-from unittest.mock import patch
+import subprocess
+from unittest.mock import MagicMock, patch
 
-from tapps_mcp.tools.subprocess_runner import run_command
+from tapps_mcp.tools.subprocess_runner import MAX_OUTPUT_BYTES, run_command
 from tapps_mcp.tools.subprocess_utils import CommandResult, wrap_windows_cmd_shim
 
 
@@ -34,6 +35,11 @@ class TestCommandResult:
         assert CommandResult(returncode=1).success is False
         assert CommandResult(returncode=-1).success is False
 
+    def test_truncated_defaults_false(self):
+        """truncated field must default to False (TAP-1762)."""
+        r = CommandResult(returncode=0)
+        assert r.truncated is False
+
 
 class TestRunCommand:
     def test_run_echo(self):
@@ -55,3 +61,38 @@ class TestRunCommand:
         result = run_command(cmd, timeout=1)
         assert result.timed_out is True
         assert result.success is False
+
+    def test_stdout_truncated_when_over_limit(self) -> None:
+        """stdout exceeding MAX_OUTPUT_BYTES must be truncated and flagged (TAP-1762)."""
+        big_stdout = "x" * (MAX_OUTPUT_BYTES + 100)
+        mock_result = MagicMock(spec=subprocess.CompletedProcess)
+        mock_result.returncode = 0
+        mock_result.stdout = big_stdout
+        mock_result.stderr = ""
+        with patch("tapps_mcp.tools.subprocess_runner.subprocess.run", return_value=mock_result):
+            result = run_command(["echo", "ignored"])
+        assert result.truncated is True
+        assert len(result.stdout.encode()) <= MAX_OUTPUT_BYTES
+
+    def test_stderr_truncated_when_over_limit(self) -> None:
+        """stderr exceeding MAX_OUTPUT_BYTES must be truncated and flagged (TAP-1762)."""
+        big_stderr = "e" * (MAX_OUTPUT_BYTES + 100)
+        mock_result = MagicMock(spec=subprocess.CompletedProcess)
+        mock_result.returncode = 1
+        mock_result.stdout = ""
+        mock_result.stderr = big_stderr
+        with patch("tapps_mcp.tools.subprocess_runner.subprocess.run", return_value=mock_result):
+            result = run_command(["some_tool"])
+        assert result.truncated is True
+        assert len(result.stderr.encode()) <= MAX_OUTPUT_BYTES
+
+    def test_small_output_not_truncated(self) -> None:
+        """Normal-sized output must not be truncated (TAP-1762)."""
+        mock_result = MagicMock(spec=subprocess.CompletedProcess)
+        mock_result.returncode = 0
+        mock_result.stdout = "hello world"
+        mock_result.stderr = ""
+        with patch("tapps_mcp.tools.subprocess_runner.subprocess.run", return_value=mock_result):
+            result = run_command(["echo", "hello"])
+        assert result.truncated is False
+        assert result.stdout == "hello world"
