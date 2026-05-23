@@ -107,10 +107,21 @@ Run in one of three modes determined by your task input:
 
    a. Read `.ralph/.last_completed_files` (one repo-relative path per
       line) into set A.
-   b. Call `mcp__plugin_linear_linear__list_issues` once with the
-      project / team from your input, `orderBy="updatedAt"`, `limit=15`.
-      Do not pass `state` — filter client-side to issues whose
-      `state.type` is one of `backlog`, `unstarted`, or `started`.
+   b. Call `mcp__plugin_linear_linear__list_issues` with the project /
+      team from your input, `orderBy="updatedAt"`, `state="started"`,
+      `limit=50`. State-narrowing matters: pre-TAP-2472 the call
+      fetched 15 issues of any state and filtered client-side, which
+      on large backlogs returned many KB of unrelated description
+      bodies and pushed wall-clock past the 126s adaptive coordinator
+      timeout (observed 2026-05-22/23 in all 3 sibling projects).
+      In-flight issues are also where locality scoring is most useful
+      — they're what the operator was just editing.
+
+      If the `started` call returns fewer than 3 candidates, make a
+      second call with the same `orderBy` / `limit=50` but
+      `state="unstarted"` (backlog). Combine both result sets for
+      scoring. Do NOT issue a third call for other states — the
+      latency budget does not justify it.
    c. For each candidate issue, extract candidate file paths from the
       `description` field by matching the regex
       `([\w./-]+/)?[\w-]+\.(py|js|ts|tsx|jsx|sh|md|json|yaml|yml|toml|sql|bats)`

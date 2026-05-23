@@ -683,20 +683,6 @@ names the workaround, and the hook tokenizes argv so wrapping in `env`,
 `bash -lc`, `uv run`, etc. does not bypass it. Full recipe (including
 sibling interpreters) lives in the `python-introspection` skill.
 
-**Parallel-batch cascade (TAP-2436).** When a `python3 -c` call appears
-in the SAME parallel Bash batch as other Bash commands, the hook's exit-2
-cancels ALL calls in that batch — not just the blocked one. A `python3
-/tmp/snippet.py` call issued alongside a `python3 -c` call in a single
-message gets cancelled too, even though it would have been allowed on its
-own. Recovery pattern: re-issue ONLY the script-file call as a
-**standalone, independent Bash group** (separate message, no other Bash
-calls in the same parallel batch). The common cascade: `list_issues`
-response too large → dumped to file → agent tries `python3 -c` to parse
-the file → block cancels sibling calls → loop burns 6+ minutes. Use the
-`linear-read` skill (which calls `tapps_linear_snapshot_get` first) so
-`list_issues` responses stay cached and compact-projected — no file dump,
-no parse step, no -c temptation.
-
 ## What not to do
 
 - Don't run tests after every task (see epic-boundary rules).

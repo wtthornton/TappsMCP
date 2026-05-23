@@ -35,14 +35,31 @@ _is_project_ralph() {
 }
 
 if _is_project_ralph "$FILE_PATH"; then
-  # Allow fix_plan.md edits (Ralph checks off tasks) and status.json updates
-  # (the hooks write this).
+  # Allow agent/coordinator-owned state files. The coordinator agent
+  # (.claude/agents/ralph-coordinator.md MODE=brief) writes brief.json
+  # and .linear_next_issue via the Claude Write tool, which fires this
+  # PreToolUse hook. Pre-TAP-2471 the only allowed paths were fix_plan.md
+  # and status.json — every coordinator write hit exit 2, silently masked
+  # by the TAP-1875 retry-once + WARN-and-clear path. Evidence:
+  # tapps-mcp/.ralph/.coordinator-brief.err captured Claude's own
+  # thinking ("caught in a circular dependency"). Allowed paths:
+  #   - fix_plan.md         — Ralph checks off tasks
+  #   - status.json         — the hooks write this
+  #   - brief.json          — coordinator MODE=brief step 3 (canonical brief)
+  #   - .linear_next_issue  — coordinator MODE=brief step 4e (locality hint)
+  #   - .last_completed_files — on-stop hook writes this; coordinator reads
+  #   - .brief_cache/<id>.json — brief cache (parent harness writes via
+  #     atomic_write, but the coordinator may also be asked to seed it)
   case "$FILE_PATH" in
     "$RALPH_DIR"/fix_plan.md|.ralph/fix_plan.md) exit 0 ;;
     "$RALPH_DIR"/status.json|.ralph/status.json) exit 0 ;;
+    "$RALPH_DIR"/brief.json|.ralph/brief.json) exit 0 ;;
+    "$RALPH_DIR"/.linear_next_issue|.ralph/.linear_next_issue) exit 0 ;;
+    "$RALPH_DIR"/.last_completed_files|.ralph/.last_completed_files) exit 0 ;;
+    "$RALPH_DIR"/.brief_cache/*|.ralph/.brief_cache/*) exit 0 ;;
   esac
   echo "BLOCKED: Cannot modify Ralph infrastructure file: $FILE_PATH" >&2
-  echo "Only .ralph/fix_plan.md checkboxes may be updated by the agent." >&2
+  echo "Allowed agent-writable paths under .ralph/: fix_plan.md, status.json, brief.json, .linear_next_issue, .last_completed_files, .brief_cache/." >&2
   exit 2
 fi
 
