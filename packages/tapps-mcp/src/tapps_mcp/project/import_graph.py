@@ -126,7 +126,17 @@ def _file_to_module(
     project_root: Path,
     top_level: str,
 ) -> str:
-    """Convert a file path to a dotted module name."""
+    """Convert a file path to a dotted module name.
+
+    Handles three common layouts:
+
+    * **Monorepo** (``packages/<pkg>/src/<top>/...``) — auto-detected when the
+      path starts with ``packages/<anything>/src/``; the three-component prefix
+      is stripped so module names match the actual import path used in source.
+    * **Simple src layout** (``src/<top>/...``) — prefix ``src/`` stripped when
+      ``top_level`` is explicitly provided.
+    * **Flat layout** (``<top>/...``) — no stripping needed.
+    """
     try:
         rel = file_path.relative_to(project_root)
     except ValueError:
@@ -134,7 +144,13 @@ def _file_to_module(
     parts = list(rel.with_suffix("").parts)
     if not parts:
         return ""
-    if parts[0] == "src" and top_level:
+    # Monorepo layout: packages/<pkg>/src/<top>/...
+    # Strip the three-component prefix so the resulting name matches the
+    # import path used inside the package (e.g. `tapps_mcp.tools.bandit`).
+    if len(parts) >= 3 and parts[0] == "packages" and parts[2] == "src":
+        parts = parts[3:]
+    elif parts[0] == "src" and top_level:
+        # Simple src layout with explicit top_level hint
         parts = parts[1:]
     if parts and parts[-1] == "__init__":
         parts = parts[:-1]

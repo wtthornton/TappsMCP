@@ -58,6 +58,38 @@ class TestFileToModule:
         result = _file_to_module(file_path, project_root, "")
         assert result == ""
 
+    # --- monorepo layout (TAP-2035) ---
+
+    def test_monorepo_packages_src_layout(self, tmp_path):
+        """packages/<pkg>/src/<top>/ prefix is stripped automatically."""
+        project_root = tmp_path
+        file_path = tmp_path / "packages" / "foo" / "src" / "foo" / "utils.py"
+        result = _file_to_module(file_path, project_root, "")
+        assert result == "foo.utils"
+
+    def test_monorepo_packages_src_layout_nested(self, tmp_path):
+        """Nested modules under packages/<pkg>/src/ resolve correctly."""
+        project_root = tmp_path
+        file_path = (
+            tmp_path / "packages" / "tapps-mcp" / "src" / "tapps_mcp" / "tools" / "bandit.py"
+        )
+        result = _file_to_module(file_path, project_root, "")
+        assert result == "tapps_mcp.tools.bandit"
+
+    def test_monorepo_packages_src_init(self, tmp_path):
+        """__init__.py under packages/<pkg>/src/<top>/ maps to package name."""
+        project_root = tmp_path
+        file_path = tmp_path / "packages" / "foo" / "src" / "foo" / "__init__.py"
+        result = _file_to_module(file_path, project_root, "")
+        assert result == "foo"
+
+    def test_monorepo_does_not_break_src_layout(self, tmp_path):
+        """Simple src/ layout (no packages/ prefix) is still handled."""
+        project_root = tmp_path
+        file_path = tmp_path / "src" / "mypkg" / "core.py"
+        result = _file_to_module(file_path, project_root, "mypkg")
+        assert result == "mypkg.core"
+
 
 # ---------------------------------------------------------------------------
 # _extract_imports
