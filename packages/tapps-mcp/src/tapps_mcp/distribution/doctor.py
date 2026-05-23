@@ -2045,6 +2045,125 @@ def check_brain_version_delta(root: Path) -> CheckResult:
     )
 
 
+# ---------------------------------------------------------------------------
+# TAP-2026 / TAP-1989: per-server eager-tool budget
+# ---------------------------------------------------------------------------
+
+# Known preset tool counts — keep in sync with server.py (ALL_TOOL_NAMES,
+# TAPPS_TOOL_PRESET_QUALITY, TAPPS_TOOL_PRESET_ADMIN).
+_TAPPS_MCP_MODE_TOOL_COUNTS: dict[str, int] = {
+    "full": 32,     # len(ALL_TOOL_NAMES)
+    "quality": 15,  # len(TAPPS_TOOL_PRESET_QUALITY)
+    "admin": 12,    # len(TAPPS_TOOL_PRESET_ADMIN)
+}
+_DOCS_MCP_TOOL_COUNT: int = 38
+_DEFAULT_TOOL_BUDGET: int = 20
+
+
+def _detect_server_tool_count(server_name: str, server_cfg: dict[str, object]) -> int | None:
+    """Return the eager-tool count for a known tapps-family MCP server, or None.
+
+    Returns ``None`` for servers that require a live connection to probe
+    (e.g. HTTP or unknown stdio servers).
+    """
+    raw_args = server_cfg.get("args", [])
+    args: list[str] = list(raw_args) if isinstance(raw_args, list) else []
+    command: str = str(server_cfg.get("command", ""))
+
+    # tapps-mcp family: command is uv/uvx/python3, "tapps-mcp" and "serve" in args
+    if "tapps-mcp" in args and "serve" in args:
+        mode = "full"
+        if "--mode" in args:
+            idx = args.index("--mode")
+            if idx + 1 < len(args):
+                mode = args[idx + 1]
+        return _TAPPS_MCP_MODE_TOOL_COUNTS.get(mode, _TAPPS_MCP_MODE_TOOL_COUNTS["full"])
+    # uvx tapps-mcp serve (no explicit "run")
+    if command in ("uvx",) and "tapps-mcp" in args:
+        return _TAPPS_MCP_MODE_TOOL_COUNTS["full"]
+    # docs-mcp family: "docsmcp" in args or command
+    if "docsmcp" in args or "docsmcp" in command:
+        return _DOCS_MCP_TOOL_COUNT
+    return None
+
+
+def _read_tool_budget(root: Path) -> int:
+    """Read ``doctor_tool_budget_limit`` from ``.tapps-mcp.yaml`` (default 20)."""
+    import yaml  # pyyaml — always available
+
+    config_path = root / ".tapps-mcp.yaml"
+    if not config_path.exists():
+        return _DEFAULT_TOOL_BUDGET
+    try:
+        with config_path.open(encoding="utf-8") as fh:
+            cfg: dict[str, object] = yaml.safe_load(fh) or {}
+        raw = cfg.get("doctor_tool_budget_limit", _DEFAULT_TOOL_BUDGET)
+        return int(raw) if isinstance(raw, (int, float, str)) else _DEFAULT_TOOL_BUDGET
+    except Exception:
+        return _DEFAULT_TOOL_BUDGET
+
+
+def check_mcp_tool_budget(root: Path) -> CheckResult:
+    """TAP-2026/TAP-1989: WARN when a known MCP server exposes more eager tools than budget.
+
+    Reads ``.mcp.json`` at *root*, computes tool counts for recognized
+    tapps-family servers from their ``--mode`` flag, and compares against the
+    ``doctor_tool_budget_limit`` in ``.tapps-mcp.yaml`` (default 20).
+
+    Only tapps-mcp / docs-mcp servers are probed; unknown or HTTP-only servers
+    are skipped (they require a live connection).
+    """
+    mcp_json = root / ".mcp.json"
+    if not mcp_json.exists():
+        return CheckResult(
+            "MCP tool budget",
+            True,
+            "No .mcp.json found — skipping tool budget check",
+        )
+
+    try:
+        cfg = json.loads(mcp_json.read_text(encoding="utf-8"))
+    except Exception as exc:
+        return CheckResult("MCP tool budget", False, f".mcp.json parse error: {exc}")
+
+    servers: dict[str, object] = cfg.get("mcpServers", {})
+    if not isinstance(servers, dict) or not servers:
+        return CheckResult("MCP tool budget", True, "No servers in .mcp.json — nothing to check")
+
+    budget = _read_tool_budget(root)
+    lines: list[str] = []
+    over_budget: list[str] = []
+
+    for server_name, server_cfg in servers.items():
+        if not isinstance(server_cfg, dict):
+            continue
+        count = _detect_server_tool_count(server_name, server_cfg)
+        if count is None:
+            continue
+        tag = "WARN" if count > budget else "OK"
+        lines.append(f"{server_name}: {count} tools [{tag}]")
+        if count > budget:
+            over_budget.append(f"{server_name}({count})")
+
+    if not lines:
+        return CheckResult(
+            "MCP tool budget",
+            True,
+            f"No recognized tapps-family servers in .mcp.json (budget={budget})",
+        )
+
+    summary = f"budget={budget}; " + ", ".join(lines)
+    if over_budget:
+        return CheckResult(
+            "MCP tool budget",
+            False,
+            f"WARN: {', '.join(over_budget)} exceed eager-tool budget. {summary}",
+            "Reduce tool count with --mode quality/admin, or set "
+            "doctor_tool_budget_limit in .tapps-mcp.yaml.",
+        )
+    return CheckResult("MCP tool budget", True, f"All servers within budget. {summary}")
+
+
 def check_memory_pipeline_config(root: Path) -> CheckResult:
     """Echo effective memory-related settings (informational; always passes).
 
@@ -2465,6 +2584,7 @@ def _collect_checks(root: Path, *, quick: bool = False) -> list[CheckResult]:
     checks.append(check_cursor_config(root))
     checks.append(check_vscode_config(root))
     checks.append(check_mcp_client_config(root))
+    checks.append(check_mcp_tool_budget(root))
     checks.append(check_mcp_config_unresolved_project_root(root))
     checks.append(check_scope_recommendation(root))
     checks.append(check_claude_md(root))

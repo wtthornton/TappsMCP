@@ -28,6 +28,7 @@ from tapps_mcp.distribution.doctor import (
     check_json_config,
     check_mcp_client_config,
     check_mcp_config_unresolved_project_root,
+    check_mcp_tool_budget,
     check_plaintext_secrets,
     check_scope_recommendation,
     check_stale_exe_backups,
@@ -1778,3 +1779,70 @@ class TestCheckBrainVersionDelta:
             result = check_brain_version_delta(tmp_path)
         assert result.ok is True
         assert "3.20" in result.message
+
+
+# ---------------------------------------------------------------------------
+# TAP-2026 / TAP-1989: check_mcp_tool_budget
+# ---------------------------------------------------------------------------
+
+
+class TestCheckMcpToolBudget:
+    """TAP-2026: per-server eager-tool budget WARN."""
+
+    def _mcp_json(self, tmp_path, servers: dict) -> None:
+        import json as _json
+        (tmp_path / ".mcp.json").write_text(_json.dumps({"mcpServers": servers}))
+
+    def test_skips_when_no_mcp_json(self, tmp_path) -> None:  # type: ignore[no-untyped-def]
+        """Passes silently when .mcp.json is absent."""
+        result = check_mcp_tool_budget(tmp_path)
+        assert result.ok is True
+        assert "No .mcp.json" in result.message
+
+    def test_ok_within_default_budget(self, tmp_path) -> None:  # type: ignore[no-untyped-def]
+        """tapps-quality (15 tools) is within default budget of 20."""
+        self._mcp_json(tmp_path, {"tapps-quality": {
+            "command": "uv", "args": ["run", "tapps-mcp", "serve", "--mode", "quality"],
+        }})
+        result = check_mcp_tool_budget(tmp_path)
+        assert result.ok is True
+        assert "15" in result.message
+
+    def test_warn_15_tools_at_budget_8(self, tmp_path) -> None:  # type: ignore[no-untyped-def]
+        """Fixture: 15 eager tools (tapps-quality preset) at budget=8 triggers WARN."""
+        self._mcp_json(tmp_path, {"tapps-quality": {
+            "command": "uv", "args": ["run", "tapps-mcp", "serve", "--mode", "quality"],
+        }})
+        (tmp_path / ".tapps-mcp.yaml").write_text("doctor_tool_budget_limit: 8\n")
+        result = check_mcp_tool_budget(tmp_path)
+        assert result.ok is False
+        assert "WARN" in result.message
+        assert "15" in result.message
+
+    def test_full_mode_warns_over_default_budget(self, tmp_path) -> None:  # type: ignore[no-untyped-def]
+        """tapps-mcp full (32 tools) exceeds default budget of 20."""
+        self._mcp_json(tmp_path, {"tapps-mcp": {
+            "command": "uv", "args": ["run", "tapps-mcp", "serve"],
+        }})
+        result = check_mcp_tool_budget(tmp_path)
+        assert result.ok is False
+        assert "WARN" in result.message
+        assert "32" in result.message
+
+    def test_admin_mode_within_default_budget(self, tmp_path) -> None:  # type: ignore[no-untyped-def]
+        """tapps-admin (12 tools) is within default budget of 20."""
+        self._mcp_json(tmp_path, {"tapps-admin": {
+            "command": "uv", "args": ["run", "tapps-mcp", "serve", "--mode", "admin"],
+        }})
+        result = check_mcp_tool_budget(tmp_path)
+        assert result.ok is True
+        assert "12" in result.message
+
+    def test_unknown_server_skipped(self, tmp_path) -> None:  # type: ignore[no-untyped-def]
+        """Unknown servers (e.g. plain HTTP) are silently skipped."""
+        self._mcp_json(tmp_path, {"my-custom-mcp": {
+            "command": "node", "args": ["server.js"],
+        }})
+        result = check_mcp_tool_budget(tmp_path)
+        assert result.ok is True
+        assert "No recognized" in result.message
