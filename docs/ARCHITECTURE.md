@@ -186,6 +186,8 @@ Stable agent identity (UUIDv4) persisted to `.tapps-mcp/agent.id` is attached to
 
 **Cross-session handoff.** The default `project` scope is already cross-session: a `tapps_memory(action="save", scope="project")` write from one Claude Code / Cursor session is readable by `action="get"` / `action="search"` from any later session in the same repo. This is the recommended path for passing tokens, IDs, or short payloads between sessions instead of relying on stdout. For cross-agent handoff in Agent Teams, use `action="hive_propagate"` (see Hive section in [docs/MEMORY_REFERENCE.md](MEMORY_REFERENCE.md)); for cross-project, use the federation actions (`federate_publish` / `federate_subscribe` / `federate_sync`).
 
+**Compaction resilience.** Context compaction is a lossy event — any state that exists only in the context window is silently discarded. The PreCompact hook (Claude Code 2.1.105+) and `memory_index_session` form the defense. See [docs/specs/compaction-resilience.md](specs/compaction-resilience.md) for the full pattern, the `_session_state.json` rehydration surface, and the failure-mode catalogue from Anthropic Issue #54393 (2026-04-28).
+
 ## Platform generation
 
 Split across `pipeline/` modules: hooks, rules, skills, subagents, bundles. AGENTS.md smart-merge preserves custom sections. Three engagement levels (high/medium/low) for all templates.
