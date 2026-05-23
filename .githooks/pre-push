@@ -118,9 +118,19 @@ fi
 echo "[pre-push] Tier 1 (fast gate): ${FAST_TEST_PATHS[*]}" >&2
 echo "[pre-push] Bypass: TAPPS_SKIP_PREPUSH=1 git push" >&2
 
-if ! uv run pytest "${FAST_TEST_PATHS[@]}" -m "not slow" -q --tb=short --timeout=60 2>&1 | tail -25; then
-  echo "" >&2
-  echo "[pre-push] FAST GATE FAILED. Push blocked." >&2
+# Run each package separately to avoid conftest.py collision when multiple
+# packages change in the same push (ImportPathMismatchError on tests.conftest).
+TIER1_FAILED=0
+for _TIER1_PATH in "${FAST_TEST_PATHS[@]}"; do
+  echo "[pre-push] Running: uv run pytest $_TIER1_PATH -m 'not slow' -q --tb=short --timeout=60" >&2
+  if ! uv run pytest "$_TIER1_PATH" -m "not slow" -q --tb=short --timeout=60 2>&1 | tail -25; then
+    TIER1_FAILED=1
+    echo "" >&2
+    echo "[pre-push] FAST GATE FAILED on $_TIER1_PATH. Push blocked." >&2
+  fi
+done
+
+if [[ "$TIER1_FAILED" -ne 0 ]]; then
   echo "[pre-push] Investigate: uv run pytest ${FAST_TEST_PATHS[*]} -m 'not slow' -v" >&2
   echo "[pre-push] Bypass:      TAPPS_SKIP_PREPUSH=1 git push" >&2
   exit 1
