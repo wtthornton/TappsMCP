@@ -656,7 +656,13 @@ class TestScoreFileQuickEnriched:
 
     @patch("tapps_mcp.scoring.scorer.run_ruff_check")
     def test_degraded_flag_set(self, mock_ruff, tmp_path):
-        """Result should be marked degraded with missing tools."""
+        """Result degraded=True because bandit placeholder is pending merge.
+
+        radon is NOT in missing_tools: it is used in-process (CC/MI/HAL) when
+        the library is installed.  mypy is not run by score_file_quick_enriched
+        at all.  The bandit placeholder is replaced by
+        _merge_bandit_into_score_result in _quick_check_single.
+        """
         mock_ruff.return_value = []
         f = tmp_path / "clean.py"
         f.write_text("x = 1\n", encoding="utf-8")
@@ -664,9 +670,13 @@ class TestScoreFileQuickEnriched:
         scorer = CodeScorer()
         result = scorer.score_file_quick_enriched(f)
         assert result.degraded is True
+        # bandit is always listed — security uses a heuristic placeholder until
+        # _merge_bandit_into_score_result patches it with real bandit output
         assert "bandit" in result.missing_tools
-        assert "radon" in result.missing_tools
-        assert "mypy" in result.missing_tools
+        # radon is used in-process: NOT listed as missing when the library is available
+        assert "radon" not in result.missing_tools
+        # mypy is never run by score_file_quick_enriched
+        assert "mypy" not in result.missing_tools
 
     @patch("tapps_mcp.scoring.scorer.run_ruff_check")
     def test_security_detects_eval(self, mock_ruff, tmp_path):
@@ -680,6 +690,149 @@ class TestScoreFileQuickEnriched:
         sec_cat = result.categories["security"]
         assert sec_cat.score < 10.0
         assert "eval(" in sec_cat.details.get("patterns_found", [])
+
+
+# ---------------------------------------------------------------------------
+# TAP-2209: scoring formula unification regression tests
+# ---------------------------------------------------------------------------
+
+_FORMULA_FIXTURE_CODE = """\
+\"\"\"Multi-issue fixture for TAP-2209 formula-unification regression tests.\"\"\"
+from __future__ import annotations
+
+import os
+
+
+def complex_fn(x: int, y: int, z: int) -> int:
+    \"\"\"Complex function with many branches — exercises radon CC.\"\"\"
+    if x > 0:
+        for i in range(x):
+            if y > i:
+                if z > 0:
+                    return i * y * z
+                elif y < 0:
+                    return -i
+    return 0
+
+
+def risky_fn(cmd: str) -> int:
+    \"\"\"Uses os.system — a bandit-flagged pattern.\"\"\"
+    return os.system(cmd)
+"""
+
+
+class TestScoringFormulaUnification:
+    """TAP-2209: quick_check and tapps_report formulas must agree within 0.01."""
+
+    def test_maintainability_uses_radon_mi_not_ast(self, tmp_path: Path) -> None:
+        """Maintainability must use radon MI (not AST heuristic) when radon is available."""
+        f = tmp_path / "fixture.py"
+        f.write_text(_FORMULA_FIXTURE_CODE, encoding="utf-8")
+
+        with patch("tapps_mcp.scoring.scorer.run_ruff_check", return_value=[]):
+            scorer = CodeScorer()
+            result = scorer.score_file_quick_enriched(f)
+
+        maint = result.categories["maintainability"]
+        assert "mi_value" in maint.details, (
+            "Maintainability should use radon MI when radon is installed; "
+            "got AST-fallback details: " + str(maint.details)
+        )
+        assert "fallback" not in maint.details
+
+    def test_complexity_uses_radon_cc_not_ast(self, tmp_path: Path) -> None:
+        """Complexity must use radon CC (not AST heuristic) when radon is available."""
+        f = tmp_path / "fixture.py"
+        f.write_text(_FORMULA_FIXTURE_CODE, encoding="utf-8")
+
+        with patch("tapps_mcp.scoring.scorer.run_ruff_check", return_value=[]):
+            scorer = CodeScorer()
+            result = scorer.score_file_quick_enriched(f)
+
+        complexity = result.categories["complexity"]
+        assert "max_cc" in complexity.details, (
+            "Complexity should use radon CC when radon is installed; "
+            "got AST-fallback details: " + str(complexity.details)
+        )
+        assert "fallback" not in complexity.details
+
+    @pytest.mark.asyncio
+    async def test_quick_and_full_scores_agree(self, tmp_path: Path) -> None:
+        """TAP-2209: abs(quick_check.overall_score - tapps_report.overall_score) < 0.01.
+
+        Uses deterministic mocked tool outputs (same radon CC/MI/HAL and bandit
+        results for both paths) to verify formula unification.  Perflint is
+        intentionally absent from the quick path (subprocess), so the fixture
+        avoids perflint-triggering patterns.  Dead code and dependency penalties
+        are neutralised via empty vulture/dep-findings returns.
+        """
+        from tapps_mcp.security.security_scanner import SecurityScanResult
+        from tapps_mcp.server_scoring_tools import _merge_bandit_into_score_result
+
+        fixture = tmp_path / "multi_issue.py"
+        fixture.write_text(_FORMULA_FIXTURE_CODE, encoding="utf-8")
+
+        # Deterministic tool outputs — identical for both scoring paths
+        known_cc: list[dict[str, object]] = [
+            {"name": "complex_fn", "complexity": 8, "type": "F"},
+        ]
+        known_mi: float = 51.7  # matches tapps-brain load_smoke.py reproducer
+        known_hal: list[dict[str, object]] = []  # no Halstead issues
+        known_bandit: list[object] = []
+        known_lint: list[object] = []
+
+        scorer = CodeScorer()
+
+        # ── Quick path ──────────────────────────────────────────────────────
+        with (
+            patch("tapps_mcp.scoring.scorer.run_ruff_check", return_value=known_lint),
+            patch("tapps_mcp.scoring.scorer._radon_cc_direct", return_value=known_cc),
+            patch("tapps_mcp.scoring.scorer._radon_mi_direct", return_value=known_mi),
+            patch("tapps_mcp.scoring.scorer._radon_hal_direct", return_value=known_hal),
+            patch("tapps_mcp.scoring.scorer._is_radon_importable", return_value=True),
+        ):
+            quick_result = scorer.score_file_quick_enriched(fixture)
+
+        sec_result = SecurityScanResult(
+            passed=True,
+            bandit_issues=known_bandit,  # type: ignore[arg-type]
+            secret_findings=[],
+            bandit_available=True,
+            total_issues=0,
+        )
+        quick_result = _merge_bandit_into_score_result(quick_result, sec_result, scorer)
+
+        # ── Full path ───────────────────────────────────────────────────────
+        mock_parallel = ParallelResults(
+            lint_issues=known_lint,  # type: ignore[arg-type]
+            radon_cc=known_cc,
+            radon_mi=known_mi,
+            radon_hal=known_hal,
+            security_issues=known_bandit,  # type: ignore[arg-type]
+            type_issues=[],
+            dead_code=[],
+            missing_tools=[],
+        )
+
+        with (
+            patch(
+                "tapps_mcp.scoring.scorer.run_all_tools",
+                new=AsyncMock(return_value=mock_parallel),
+            ),
+            patch(
+                "tapps_mcp.tools.dependency_scan_cache.get_dependency_findings",
+                return_value=[],
+            ),
+        ):
+            full_result = await scorer.score_file(fixture)
+
+        diff = abs(quick_result.overall_score - full_result.overall_score)
+        assert diff < 0.01, (
+            f"TAP-2209 formula divergence: "
+            f"quick={quick_result.overall_score:.4f}, "
+            f"full={full_result.overall_score:.4f}, "
+            f"diff={diff:.4f}"
+        )
 
 
 # ---------------------------------------------------------------------------

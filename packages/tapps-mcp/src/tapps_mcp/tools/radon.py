@@ -194,7 +194,7 @@ def _radon_cc_direct(file_path: str) -> list[dict[str, object]]:
         logger.debug("radon_library_unavailable", purpose="cc")
         return []
     try:
-        from radon.complexity import SCORE, cc_visit
+        from radon.complexity import cc_rank, cc_visit
 
         code = _read_source(file_path)
         if code is None:
@@ -209,7 +209,7 @@ def _radon_cc_direct(file_path: str) -> list[dict[str, object]]:
                     "complexity": block.complexity,
                     "lineno": block.lineno,
                     "endline": block.endline,
-                    "rank": SCORE[block.complexity - 1] if block.complexity <= len(SCORE) else "F",
+                    "rank": cc_rank(block.complexity),
                 }
             )
         logger.info("radon_cc_direct_success", file=file_path, functions=len(entries))

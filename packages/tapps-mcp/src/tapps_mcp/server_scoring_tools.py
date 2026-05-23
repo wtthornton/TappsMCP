@@ -597,6 +597,43 @@ def _attach_quick_check_structured_output(
 
 _BATCH_CONCURRENCY = 10
 
+
+def _merge_bandit_into_score_result(
+    score_result: ScoreResult,
+    sec_result: SecurityScanResult,
+    scorer: Any,
+) -> ScoreResult:
+    """Replace the heuristic security score with real bandit data.
+
+    ``score_file_quick_enriched`` places a placeholder security category
+    (heuristic pattern match) and lists ``"bandit"`` in ``missing_tools``.
+    After the parallel ``run_security_scan`` completes in
+    ``_quick_check_single``, this function patches the score with the actual
+    bandit result — matching the formula used by ``score_file`` (full mode).
+
+    When bandit was not available (``sec_result.bandit_available is False``),
+    the placeholder is left in place so the heuristic still applies.
+    """
+    if not sec_result.bandit_available:
+        return score_result
+
+    from tapps_mcp.scoring.models import CategoryScore
+    from tapps_mcp.tools.bandit import calculate_security_score
+
+    real_sec_score = calculate_security_score(sec_result.bandit_issues)
+    w = score_result.categories["security"].weight
+    score_result.categories["security"] = CategoryScore(
+        name="security",
+        score=real_sec_score,
+        weight=w,
+        details={"issue_count": len(sec_result.bandit_issues)},
+    )
+    score_result.missing_tools = [t for t in score_result.missing_tools if t != "bandit"]
+    score_result.overall_score = scorer._calculate_overall(score_result.categories)
+    score_result.degraded = bool(score_result.missing_tools)
+    return score_result
+
+
 # STORY-101.6: Performance budget for tapps_quick_check on a single file.
 # Cache hits must return well under this threshold. Regression tests assert
 # the cache path does not re-invoke the scorer when content is unchanged.
@@ -648,6 +685,10 @@ async def _quick_check_single(
             timeout=settings.tool_timeout,
         )
         score_result, sec_result = await asyncio.gather(score_coro, sec_coro)
+        # TAP-2209: patch the heuristic security placeholder with real bandit data
+        # so quick_check overall_score matches score_file (tapps_report) on the
+        # same formula.
+        score_result = _merge_bandit_into_score_result(score_result, sec_result, scorer)
     else:
         score_result = await score_coro
         from tapps_mcp.security.security_scanner import SecurityScanResult

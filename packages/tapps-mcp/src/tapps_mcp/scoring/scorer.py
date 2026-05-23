@@ -45,7 +45,14 @@ from tapps_mcp.scoring.scorer_base import STANDARD_CATEGORIES, ScorerBase
 from tapps_mcp.tools.bandit import calculate_security_score
 from tapps_mcp.tools.mypy import calculate_type_score
 from tapps_mcp.tools.parallel import ParallelResults, run_all_tools
-from tapps_mcp.tools.radon import calculate_complexity_score, calculate_maintainability_score
+from tapps_mcp.tools.radon import (
+    _is_radon_importable,
+    _radon_cc_direct,
+    _radon_hal_direct,
+    _radon_mi_direct,
+    calculate_complexity_score,
+    calculate_maintainability_score,
+)
 from tapps_mcp.tools.ruff import calculate_lint_score, run_ruff_check
 
 logger = structlog.get_logger(__name__)
@@ -123,35 +130,59 @@ class CodeScorer(ScorerBase):
         )
 
     def score_file_quick_enriched(self, file_path: Path) -> ScoreResult:
-        """Quick-enriched mode: ruff + AST heuristics for all 7 categories.
+        """Quick-enriched mode: ruff + real tool data (when available) for all 7 categories.
 
-        Runs ruff for linting, then supplements with AST-based heuristics
-        for complexity, security, maintainability, test_coverage, performance,
-        structure, and devex. No external tools beyond ruff are invoked.
+        Runs ruff for linting, then uses radon in-process (``_radon_cc_direct``,
+        ``_radon_mi_direct``) for complexity and maintainability when the radon
+        library is installed — falling back to AST heuristics only when it is not.
+        Security uses a heuristic placeholder; the caller (``_quick_check_single``)
+        merges real bandit data via ``_merge_bandit_into_score_result`` after the
+        parallel security scan completes.
+
+        This keeps the method synchronous (no subprocess latency for radon) while
+        producing scores that agree with ``score_file``'s formula when tools are
+        present.
         """
         resolved = file_path.resolve()
-        issues = run_ruff_check(str(resolved), cwd=str(resolved.parent))
+        str_path = str(resolved)
+        cwd = str(resolved.parent)
+        issues = run_ruff_check(str_path, cwd=cwd)
         lint_score = calculate_lint_score(issues)
 
         try:
             code = resolved.read_text(encoding="utf-8", errors="replace")
         except (OSError, PermissionError) as exc:
-            logger.error("file_read_failed", path=str(resolved), error=str(exc))
-            return self._error_result(str(resolved))
+            logger.error("file_read_failed", path=str_path, error=str(exc))
+            return self._error_result(str_path)
 
         w = self._weights
         cats: dict[str, CategoryScore] = {}
+        missing: list[str] = []
 
-        # 1) Complexity (AST fallback)
-        complexity_raw = self._ast_complexity(code)
+        # 1) Complexity — radon CC direct (in-process, ~1ms) or AST fallback
+        radon_cc = _radon_cc_direct(str_path)
+        if radon_cc:
+            complexity_raw = calculate_complexity_score(radon_cc)
+            max_entry = max(radon_cc, key=lambda e: float(str(e.get("complexity", 0))))
+            complexity_details: dict[str, object] = {
+                "functions_analysed": len(radon_cc),
+                "max_cc": float(str(max_entry.get("complexity", 0))),
+                "max_cc_function": str(max_entry.get("name", "")),
+            }
+        else:
+            complexity_raw = self._ast_complexity(code)
+            complexity_details = {"fallback": True}
+            if not _is_radon_importable():
+                missing.append("radon")
         cats["complexity"] = CategoryScore(
             name="complexity",
             score=complexity_raw,
             weight=w.complexity,
-            details={"fallback": True},
+            details=complexity_details,
         )
 
-        # 2) Security (heuristic)
+        # 2) Security — heuristic placeholder; real bandit data merged by caller
+        # after the parallel run_security_scan completes in _quick_check_single.
         sec_score = self._heuristic_security(code)
         patterns_found = [p for p in _INSECURE_PATTERNS if p in code]
         cats["security"] = CategoryScore(
@@ -160,17 +191,30 @@ class CodeScorer(ScorerBase):
             weight=w.security,
             details={"fallback": True, "patterns_found": patterns_found},
         )
+        missing.append("bandit")
 
-        # 3) Maintainability (AST)
-        maint_score = self._ast_maintainability(code)
+        # 3) Maintainability — radon MI direct (in-process, ~1ms) or AST fallback
+        if _is_radon_importable():
+            radon_mi = _radon_mi_direct(str_path)
+            maint_score = calculate_maintainability_score(radon_mi)
+            maint_details: dict[str, object] = {
+                "mi_value": radon_mi,
+                "line_count": len(code.splitlines()),
+                "has_docstring": '"""' in code or "'''" in code,
+            }
+        else:
+            maint_score = self._ast_maintainability(code)
+            maint_details = {"fallback": True, "line_count": len(code.splitlines())}
+            if "radon" not in missing:
+                missing.append("radon")
         cats["maintainability"] = CategoryScore(
             name="maintainability",
             score=maint_score,
             weight=w.maintainability,
-            details={"fallback": True, "line_count": len(code.splitlines())},
+            details=maint_details,
         )
 
-        # 4) Test coverage (heuristic)
+        # 4) Test coverage (heuristic — no external tool)
         coverage = self._coverage_heuristic(resolved)
         cats["test_coverage"] = CategoryScore(
             name="test_coverage",
@@ -179,13 +223,20 @@ class CodeScorer(ScorerBase):
             details={"stem": resolved.stem},
         )
 
-        # 5) Performance (AST)
-        perf, perf_issues = self._ast_performance_detailed(code)
+        # 5) Performance (AST heuristics + Halstead via radon_hal_direct when available)
+        # Matches score_file formula: AST penalty + Halstead penalty; no perflint (subprocess)
+        perf_ast, perf_ast_issues = self._ast_performance_detailed(code)
+        ast_penalty = 10.0 - perf_ast
+        radon_hal = _radon_hal_direct(str_path) if _is_radon_importable() else []
+        hal_issues = _halstead_issues(radon_hal)
+        hal_penalty = sum(PERFORMANCE_PENALTY_MAP.get(i, 0.5) for i in hal_issues)
+        perf = clamp_individual(10.0 - ast_penalty - hal_penalty)
+        perf_all_issues = sorted(set(perf_ast_issues) | set(hal_issues))
         cats["performance"] = CategoryScore(
             name="performance",
             score=perf,
             weight=w.performance,
-            details={"issues_found": sorted(perf_issues)},
+            details={"issues_found": perf_all_issues},
         )
 
         # 6) Structure
@@ -204,7 +255,7 @@ class CodeScorer(ScorerBase):
             weight=w.devex,
         )
 
-        # Bonus: linting (informational, weight=0)
+        # Linting (informational, weight=0)
         cats["linting"] = CategoryScore(
             name="linting",
             score=lint_score,
@@ -219,8 +270,8 @@ class CodeScorer(ScorerBase):
             categories=cats,
             overall_score=overall,
             lint_issues=issues,
-            degraded=True,
-            missing_tools=["bandit", "radon", "mypy"],
+            degraded=bool(missing),
+            missing_tools=missing,
         )
 
     async def score_file(self, file_path: Path, *, mode: str = "subprocess") -> ScoreResult:
