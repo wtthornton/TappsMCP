@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import ast
 import asyncio
+import math
 from collections.abc import Sequence
 from pathlib import Path
 from typing import TYPE_CHECKING, ClassVar
@@ -194,8 +195,11 @@ class CodeScorer(ScorerBase):
         missing.append("bandit")
 
         # 3) Maintainability — radon MI direct (in-process, ~1ms) or AST fallback
+        nan_inf_coerced = False
         if _is_radon_importable():
             radon_mi = _radon_mi_direct(str_path)
+            if math.isnan(radon_mi) or math.isinf(radon_mi):
+                nan_inf_coerced = True
             maint_score = calculate_maintainability_score(radon_mi)
             maint_details: dict[str, object] = {
                 "mi_value": radon_mi,
@@ -277,7 +281,7 @@ class CodeScorer(ScorerBase):
             categories=cats,
             overall_score=overall,
             lint_issues=issues,
-            degraded=bool(missing or degraded_cats),
+            degraded=bool(missing or degraded_cats or nan_inf_coerced),
             missing_tools=missing,
             degraded_categories=degraded_cats,
         )

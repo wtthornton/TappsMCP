@@ -1,6 +1,7 @@
 """Tests for scoring.constants."""
 
 import math
+from unittest.mock import patch
 
 from tapps_mcp.scoring.constants import (
     COMPLEXITY_SCALING_FACTOR,
@@ -112,6 +113,38 @@ class TestClampIndividual:
     def test_returns_float(self):
         result = clamp_individual(7.5)
         assert isinstance(result, float)
+
+    def test_nan_emits_warning(self) -> None:
+        """NaN input must call logger.warning (TAP-1753).
+
+        structlog does not propagate to stdlib logging, so we patch the module-level
+        logger rather than using caplog.
+        """
+        import tapps_mcp.scoring.constants as _mod
+
+        with patch.object(_mod, "logger") as mock_log:
+            result = clamp_individual(float("nan"), category="maintainability")
+        assert result == 5.0
+        mock_log.warning.assert_called_once()
+        call_kwargs = mock_log.warning.call_args
+        assert call_kwargs is not None
+
+    def test_inf_emits_warning(self) -> None:
+        """Inf input must also call logger.warning (TAP-1753)."""
+        import tapps_mcp.scoring.constants as _mod
+
+        with patch.object(_mod, "logger") as mock_log:
+            result = clamp_individual(float("inf"), category="performance")
+        assert result == 5.0
+        mock_log.warning.assert_called_once()
+
+    def test_normal_value_no_warning(self) -> None:
+        """Normal values must not trigger a warning (TAP-1753)."""
+        import tapps_mcp.scoring.constants as _mod
+
+        with patch.object(_mod, "logger") as mock_log:
+            clamp_individual(7.5, category="maintainability")
+        mock_log.warning.assert_not_called()
 
 
 class TestClampOverall:

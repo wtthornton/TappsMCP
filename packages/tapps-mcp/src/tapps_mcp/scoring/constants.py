@@ -4,6 +4,10 @@ from __future__ import annotations
 
 import math
 
+import structlog
+
+logger = structlog.get_logger(__name__)
+
 # ---------------------------------------------------------------------------
 # Scale boundaries
 # ---------------------------------------------------------------------------
@@ -82,9 +86,20 @@ PERFORMANCE_PENALTY_MAP: dict[str, float] = {
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
-def clamp_individual(score: float) -> float:
-    """Clamp a 0-10 category score."""
+def clamp_individual(score: float, *, category: str = "") -> float:
+    """Clamp a 0-10 category score.
+
+    When *score* is NaN or Inf, the value is coerced to the neutral midpoint
+    (5.0) and a warning is emitted so that callers can surface ``degraded``
+    state in the enclosing ``ScoreResult``.
+    """
     if math.isnan(score) or math.isinf(score):
+        logger.warning(
+            "nan_inf_score_coerced",
+            category=category or "unknown",
+            original=score,
+            clamped=5.0,
+        )
         return 5.0
     return max(INDIVIDUAL_MIN, min(INDIVIDUAL_MAX, score))
 
