@@ -387,3 +387,76 @@ class TestMergeUpdatesStaleVersionMarker:
         # fallback `added_version_marker` may not be needed. Either way we must
         # NOT see `updated_version_marker` because there was no stamp to update.
         assert "updated_version_marker" not in changes
+
+
+# ---------------------------------------------------------------------------
+# TAP-2454: missing-section insert must not mash onto the preceding line.
+# ---------------------------------------------------------------------------
+
+
+class TestMergeAppendsWithNewline:
+    """TAP-2454: the append path for missing EXPECTED sections must emit a
+    leading blank line so the H2 heading lands on its own line.  Pre-existing
+    mashed headings from older upgrades must also be detected and fixed."""
+
+    def test_missing_section_lands_on_own_line(self) -> None:
+        """Inserting a missing section must NOT produce ``prose## Heading``."""
+        template = _template()
+        existing = _template_without_section("Tapps Rules")
+        merged, changes = merge_agents_md(existing, template)
+
+        assert "added_section:Tapps Rules" in changes
+        # Every occurrence of ## Tapps Rules must be at the start of a line.
+        import re
+
+        assert not re.search(r"[^\n]## Tapps Rules", merged), (
+            "## Tapps Rules was mashed onto a preceding line"
+        )
+
+    def test_idempotency_no_duplicate_sections(self) -> None:
+        """Running the merger twice must not produce duplicate sections."""
+        template = _template()
+        existing = _template_without_section("Tapps Rules")
+
+        # First upgrade
+        merged1, _ = merge_agents_md(existing, template)
+        # Second upgrade (simulate re-running tapps_upgrade)
+        merged2, changes2 = merge_agents_md(merged1, template)
+
+        count = merged2.count("\n## Tapps Rules")
+        assert count == 1, f"Expected exactly one ## Tapps Rules, found {count}"
+        # Second run must not re-add the section
+        assert "added_section:Tapps Rules" not in changes2
+
+    def test_pre_existing_mash_is_fixed(self) -> None:
+        """A file with ``---## Tapps Rules`` (pre-TAP-2454 artifact) must be
+        repaired so that subsequent upgrades are idempotent."""
+        template = _template()
+        # Simulate a mashed existing file: remove the section first, then
+        # manually inject the mashed form that the old append path produced.
+        base = _template_without_section("Tapps Rules")
+        # Strip trailing newline from base and append the mashed heading
+        mashed = base.rstrip("\n") + "\n---## Tapps Rules\n\nSome rules.\n"
+
+        merged, _ = merge_agents_md(mashed, template)
+
+        # After merge, the section must appear clean and exactly once.
+        import re
+
+        assert not re.search(r"[^\n]## Tapps Rules", merged), (
+            "## Tapps Rules still mashed after merge"
+        )
+        count = merged.count("\n## Tapps Rules")
+        assert count == 1, f"Expected exactly one ## Tapps Rules after fixing mash, found {count}"
+
+    def test_no_triple_newlines_in_output(self) -> None:
+        """The appended section must not introduce 3+ consecutive newlines."""
+        template = _template()
+        existing = _template_without_section("Tapps Rules")
+        merged, _ = merge_agents_md(existing, template)
+
+        import re
+
+        assert not re.search(r"\n{3,}", merged), (
+            "Output contains 3+ consecutive newlines"
+        )

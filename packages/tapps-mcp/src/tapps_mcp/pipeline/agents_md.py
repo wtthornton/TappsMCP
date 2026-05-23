@@ -196,6 +196,23 @@ def _strip_karpathy_content(content: str) -> tuple[str, bool]:
     return content, had_content
 
 
+def _normalize_section_breaks(content: str) -> str:
+    """Ensure every ``## `` H2 section heading starts on its own line.
+
+    Fixes mashed sections like ``---## Tapps Rules`` or
+    ``last-paragraph## Tapps Rules`` produced by the pre-TAP-2454 append
+    path, which concatenated template bodies without a leading blank-line
+    separator.
+
+    The pattern ``[non-newline, non-#]## `` is replaced by
+    ``[non-newline, non-#]\n\n## `` so that ``_split_into_sections`` can
+    parse the heading correctly on the next pass.  Excluding ``#`` from the
+    lookbehind prevents ``### subheadings`` from being mis-expanded (they
+    contain the substring ``## `` starting at the second character).
+    """
+    return re.sub(r"([^\n#])(## )", r"\1\n\n\2", content)
+
+
 def merge_agents_md(
     existing_content: str,
     template_content: str,
@@ -211,6 +228,10 @@ def merge_agents_md(
     # report whether the merge actually moved it.
     existing_stamp_match = _VERSION_RE.search(existing_content)
     existing_stamp = existing_stamp_match.group(1) if existing_stamp_match else None
+
+    # TAP-2454: fix pre-existing mashed headings (e.g. "---## Tapps Rules")
+    # before section-splitting so they are detected and replaced correctly.
+    existing_content = _normalize_section_breaks(existing_content)
 
     # Excise Karpathy content before section-split (see _strip_karpathy_content).
     # install_or_refresh runs after merge_agents_md in the upgrade pipeline and
@@ -249,13 +270,21 @@ def merge_agents_md(
             # User-added section: preserve as-is
             merged_parts.append(body)
 
-    # Append any EXPECTED sections that were missing entirely
+    # Append any EXPECTED sections that were missing entirely.
+    # TAP-2454: prepend "\n\n" so the H2 heading lands on its own line
+    # regardless of how the preceding part ends.  The normalisation pass
+    # below collapses any resulting triple-newline runs.
     for heading in EXPECTED_SECTIONS:
         if heading not in seen_expected and heading in template_map:
-            merged_parts.append(template_map[heading])
+            merged_parts.append("\n\n" + template_map[heading])
             changes.append(f"added_section:{heading}")
 
     merged = "".join(merged_parts)
+
+    # TAP-2454: collapse runs of 3+ newlines that can arise when sections
+    # are appended (the prepended "\n\n" may follow a part that already ends
+    # with "\n", producing three consecutive newlines).
+    merged = re.sub(r"\n{3,}", "\n\n", merged)
 
     # TAP-1795: keep the stamp aligned with the content. The merge above
     # rewrote canonical sections from the current template; leaving an older
