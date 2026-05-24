@@ -57,9 +57,14 @@ if _is_project_ralph "$FILE_PATH"; then
     "$RALPH_DIR"/.linear_next_issue|.ralph/.linear_next_issue) exit 0 ;;
     "$RALPH_DIR"/.last_completed_files|.ralph/.last_completed_files) exit 0 ;;
     "$RALPH_DIR"/.brief_cache/*|.ralph/.brief_cache/*) exit 0 ;;
+    # TAP-2502: structured exit-signal sentinel — line 1 action enum,
+    # line 2+ reason. on-file-change.sh validates + captures + deletes.
+    # Narrow surface (single-shot write per loop) so the agent can't
+    # use this to leak data; the file is removed by the hook after capture.
+    "$RALPH_DIR"/.exit_signal_intent|.ralph/.exit_signal_intent) exit 0 ;;
   esac
   echo "BLOCKED: Cannot modify Ralph infrastructure file: $FILE_PATH" >&2
-  echo "Allowed agent-writable paths under .ralph/: fix_plan.md, status.json, brief.json, .linear_next_issue, .last_completed_files, .brief_cache/." >&2
+  echo "Allowed agent-writable paths under .ralph/: fix_plan.md, status.json, brief.json, .linear_next_issue, .last_completed_files, .brief_cache/, .exit_signal_intent." >&2
   exit 2
 fi
 
