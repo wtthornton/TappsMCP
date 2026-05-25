@@ -48,7 +48,8 @@ You only see these tools when the host has started the TappsMCP server and attac
 | **tapps_session_notes** | When you make a **key decision or discover a constraint** - save it so you can recall it later in a long session. Use `action="promote"` to promote a session note to persistent cross-session memory. |
 | **tapps_impact_analysis** | Before **modifying a file's public API** - shows what depends on it and what could break. |
 | **tapps_report** | After scoring/gating, when the user wants a **formatted quality summary** (Markdown, JSON, or HTML). |
-| **tapps_checklist** | **Before declaring work complete** - reports which tools were called and which are missing (with reasons). Fix missing required steps before saying done. |
+| **tapps_checklist** | **Before declaring work complete** - reports which tools were called and which are missing (with reasons). Fix missing required steps before saying done. Response includes an inline `usage_gaps` payload (same data as `tapps_usage`) - read it. |
+| **tapps_usage** | When you want to see what you missed this session - returns `gaps` (e.g. `edits_without_validation`, `lookup_docs_underused`) plus concrete `recommendations`. Composes from in-process CallTracker + `.tapps-mcp/loop-metrics.jsonl` + `.tapps-mcp/.completion-gate-violations.jsonl`. Also available as the inline `usage_gaps` field on every `tapps_checklist` response. |
 | **tapps_dashboard** | When the user wants to **review how TappsMCP is performing** - scoring accuracy, gate pass rates, expert effectiveness, cache performance, quality trends, and alerts. Supports json, markdown, and html output. |
 | **tapps_stats** | When the user wants **usage statistics** - call counts, success rates, average durations, cache hit rates, and gate pass rates. Filterable by tool and time period. |
 | **tapps_feedback** | After receiving a tool result - report whether the output was **helpful or not**. This feedback improves adaptive scoring and expert weights over time. |
@@ -120,8 +121,12 @@ Use this when writing project-specific tool priority docs or integrating TappsMC
 6. **During edits:** Call `tapps_quick_check(file_path=...)` or `tapps_score_file(file_path=..., quick=True)` after each change.
 7. **Before declaring work complete:**
    - Call `tapps_validate_changed()` to score + gate on all changed files (default quick mode). Pass `security_depth='full'` or `quick=false` to include security scan.
-   - Call `tapps_checklist(task_type=...)` and, if `complete` is false, call the missing required tools (use `missing_required_hints` for reasons).
+   - Call `tapps_checklist(task_type=...)` and, if `complete` is false, call the missing required tools (use `missing_required_hints` for reasons). The response also carries an inline `usage_gaps` block — review it for any per-session gaps (skipped doc lookups, unvalidated edits) before declaring done.
    - Optionally call `tapps_report(format="markdown")` to generate a quality summary.
+
+   **Stop-hook telemetry (warn mode):** if you edited Python/TS/Go files without running `tapps_validate_changed` + `tapps_checklist`, the Stop hook (`tapps-stop.sh`) writes a record to `.tapps-mcp/.completion-gate-violations.jsonl`. No block — pure telemetry that feeds `tapps_usage`. `tapps_doctor` reports `completion_gate_hook.installed`.
+
+   **next_steps shape:** high-traffic tools (`tapps_score_file`, `tapps_quick_check`) template `{file_path}` into next-tool suggestions, so you get ready-to-paste signatures like `tapps_security_scan(file_path='src/foo.py')` instead of empty `tapps_security_scan()`.
 8. **When in doubt:** Use `tapps_lookup_docs` for domain-specific questions and library guidance; use `tapps_validate_config` for Docker/infra files.
 
 ### Review Pipeline (multi-file)
@@ -226,8 +231,11 @@ Thirteen SKILL.md files per platform in `.claude/skills/` or `.cursor/skills/`:
 - **tapps-report** - Generate quality reports across changed Python files
 - **tapps-tool-reference** - Full per-tool reference and when-to-use guidance
 - **tapps-init** - Bootstrap TappsMCP scaffolding in a project
+- **tapps-upgrade** - Reinstall global CLIs from latest source, restart MCP, run `tapps-mcp upgrade` + doctor + checklist
 - **tapps-engagement** - Switch enforcement intensity (high/medium/low)
 - **tapps-apply-files** - Apply content-return file operations (Docker fallback)
+
+> **DEPRECATED (removal in v3.12.0):** `tapps-score`, `tapps-gate`, `tapps-validate`, `tapps-report` are thin wrappers around single MCP tools. Prefer the direct tool calls or `/tapps-finish-task` for the end-of-task bundle.
 
 ### Agent Teams (opt-in, Claude Code only)
 

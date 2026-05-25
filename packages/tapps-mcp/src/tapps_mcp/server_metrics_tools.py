@@ -545,10 +545,58 @@ def _adjust_domain_weights(domain: str, helpful: bool) -> tuple[bool, str | None
         return False, None
 
 
+def tapps_usage(
+    output_format: str = "json",
+    rolling_window_days: int = 7,
+) -> dict[str, Any]:
+    """Returns a per-session gap report: what the agent did vs what the
+    TAPPS pipeline recommends.
+
+    Composes three telemetry substrates already present in this repo:
+    in-process ``CallTracker`` (current session), ``loop-metrics.jsonl``
+    (per-Stop-event metrics from the Stop hook), and
+    ``.completion-gate-violations.jsonl`` (warn-mode violations).
+
+    Use this when investigating "what did I miss?" — the response carries
+    a ``gaps`` list (e.g. ``edits_without_validation``) and a
+    ``recommendations`` list of specific next calls. Hooked into
+    ``tapps_checklist`` so end-of-task checks surface gaps inline.
+
+    Args:
+        output_format: ``"json"`` (default, machine-readable) or
+            ``"markdown"`` (human-readable summary in ``data.markdown``).
+        rolling_window_days: Trailing window for ``loop-metrics.jsonl``
+            aggregation. Default 7.
+    """
+    from pathlib import Path as _Path
+
+    from tapps_mcp.config import load_settings
+    from tapps_mcp.server import _record_call, _record_execution, _with_nudges
+    from tapps_mcp.tools.usage import compute_gaps, render_markdown
+
+    start = time.perf_counter_ns()
+    _record_call("tapps_usage")
+
+    settings = load_settings()
+    project_root = _Path(settings.project_root).expanduser().resolve()
+
+    report = compute_gaps(project_root, rolling_window_days=rolling_window_days)
+    if output_format == "markdown":
+        report["markdown"] = render_markdown(report)
+
+    elapsed_ms = (time.perf_counter_ns() - start) // 1_000_000
+    _record_execution("tapps_usage", start)
+
+    resp = success_response("tapps_usage", elapsed_ms, report)
+    return _with_nudges("tapps_usage", resp)
+
+
 def register(mcp_instance: FastMCP, allowed_tools: frozenset[str]) -> None:
     """Register metrics/feedback tools on *mcp_instance*.
 
-    TAP-1986: all three tools are deferred (not daily drivers).
+    TAP-1986: metrics tools are deferred (not daily drivers). tapps_usage
+    is not deferred — it's part of the end-of-task pipeline alongside
+    tapps_checklist.
     """
     if "tapps_dashboard" in allowed_tools:
         mcp_instance.tool(annotations=_ANNOTATIONS_READ_ONLY, meta=_META_DEFERRED)(tapps_dashboard)
@@ -556,3 +604,5 @@ def register(mcp_instance: FastMCP, allowed_tools: frozenset[str]) -> None:
         mcp_instance.tool(annotations=_ANNOTATIONS_READ_ONLY, meta=_META_DEFERRED)(tapps_stats)
     if "tapps_feedback" in allowed_tools:
         mcp_instance.tool(annotations=_ANNOTATIONS_SIDE_EFFECT, meta=_META_DEFERRED)(tapps_feedback)
+    if "tapps_usage" in allowed_tools:
+        mcp_instance.tool(annotations=_ANNOTATIONS_READ_ONLY)(tapps_usage)

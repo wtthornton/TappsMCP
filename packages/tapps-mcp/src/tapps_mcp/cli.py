@@ -272,6 +272,11 @@ def upgrade(
     Creates a timestamped backup under `.tapps-mcp/backups/` before overwriting.
     Preserves custom MCP command paths. Review `.tapps-mcp.yaml` after major upgrades if you
     relied on older default flags (memory pipeline, hooks). See docs/UPGRADE_FOR_CONSUMERS.md.
+
+    v3.11.0 surfaces: refreshed `tapps-stop.sh` (warn-mode completion-gate telemetry on every
+    project, not just Ralph), new `tapps-upgrade` skill in `.claude/skills/` and `.cursor/skills/`,
+    and DEPRECATED notices on wrapper skills (tapps-score, tapps-gate, tapps-validate, tapps-report)
+    scheduled for removal in v3.12.0.
     """
     from tapps_mcp.distribution.setup_generator import run_upgrade
 
@@ -303,6 +308,10 @@ def doctor(project_root: str, quick: bool) -> None:
     """Diagnose MCP config, bootstrap files, hooks, checkers, tapps-brain, and memory flags.
 
     Includes an informational **Memory pipeline (effective config)** row (resolved settings).
+    Since v3.11.0 also reports `completion_gate_hook` (warns when ``.claude/hooks/tapps-stop.sh``
+    is missing so warn-mode telemetry to ``.completion-gate-violations.jsonl`` is inactive)
+    and a `usage_gaps` summary (gap count + top recommendation from ``tapps_usage``).
+
     Use `--quick` to skip per-tool version probes.
     """
     from tapps_mcp.distribution.doctor import run_doctor

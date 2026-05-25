@@ -30,7 +30,9 @@ Consider calling `tapps_quick_check(file_path)` after editing Python files.
 
 ### Before Declaring Work Complete
 
-Consider calling `tapps_validate_changed(file_paths="file1.py,file2.py")` with explicit paths for multi-file changes and `tapps_checklist(task_type)` to verify steps. Default is quick mode; only use `quick=false` as a last resort.
+Consider calling `tapps_validate_changed(file_paths="file1.py,file2.py")` with explicit paths for multi-file changes and `tapps_checklist(task_type)` to verify steps. Default is quick mode; only use `quick=false` as a last resort. The checklist response carries an inline `usage_gaps` block (same data as `tapps_usage`) — optional read. A warn-mode Stop hook (`tapps-stop.sh`) may log to `.tapps-mcp/.completion-gate-violations.jsonl` when code edits ship without validation; telemetry only, no block.
+
+> Note: `tapps-score`, `tapps-gate`, `tapps-validate`, `tapps-report` are deprecated wrappers (removal in v3.12.0). Prefer the direct MCP tool calls or `/tapps-finish-task`.
 
 ### Domain Decisions
 

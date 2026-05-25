@@ -27,7 +27,8 @@ These are the seven rules every agent in this project MUST follow. They override
 | **tapps_session_start** | **FIRST call in every session** - server info only |
 | **tapps_quick_check** | **After editing any Python file** - quick score + gate + security |
 | **tapps_validate_changed** | **Before declaring multi-file work complete** - score + gate on changed files. **Always pass explicit `file_paths`** (comma-separated). Default is quick mode; only use `quick=false` as a last resort. |
-| **tapps_checklist** | **Before declaring work complete** - reports missing required steps |
+| **tapps_checklist** | **Before declaring work complete** - reports missing required steps. Response carries an inline `usage_gaps` payload — you MUST read it before declaring done. |
+| **tapps_usage** | **REQUIRED on any session that touched code** - returns per-session gaps (`edits_without_validation`, `lookup_docs_underused`, etc.) and concrete `recommendations`. Same payload inlined as `usage_gaps` on every `tapps_checklist` response. |
 | **tapps_quality_gate** | Before declaring work complete - ensures file passes preset |
 | **tapps_memory** | **REQUIRED** - persistent cross-session knowledge (42 actions). Search at session start, save before end. See **Memory action reference** below. |
 
@@ -80,7 +81,12 @@ These are the seven rules every agent in this project MUST follow. They override
 6. **Before declaring work complete (BLOCKING):**
    - REQUIRED: Invoke the `/tapps-finish-task` skill — it bundles `tapps_validate_changed` + `tapps_checklist` + an optional memory save into one call. This is the recommended close-out path.
    - If invoking the skill is not possible, run the steps manually: `tapps_validate_changed(file_paths="file1.py,file2.py")` with explicit paths (never call without `file_paths` — auto-detect scans all git-changed files and can be very slow), then `tapps_checklist(task_type=...)` as the FINAL step. If `complete` is false, call the missing required tools. NEVER declare work complete without running the checklist.
+   - MANDATORY: Read the inline `usage_gaps` block on the `tapps_checklist` response (same data as `tapps_usage`). If gaps list missed `tapps_lookup_docs` or unvalidated edits, fix them before declaring done.
    - Optionally call `tapps_report(format="markdown")` to generate a quality summary.
+
+   **Stop-hook telemetry (warn mode):** the Stop hook (`tapps-stop.sh`) writes to `.tapps-mcp/.completion-gate-violations.jsonl` whenever Python/TS/Go edits ship without `tapps_validate_changed` + `tapps_checklist`. WARN mode only — no block. Feeds `tapps_usage`. `tapps_doctor` reports `completion_gate_hook.installed` and warns when the hook is absent.
+
+   **next_steps shape:** high-traffic tools (`tapps_score_file`, `tapps_quick_check`) now template `{file_path}` into next-tool suggestions, producing paste-ready signatures like `tapps_security_scan(file_path='src/foo.py')`.
 7. **Domain decisions (REQUIRED):** You MUST call `tapps_lookup_docs` for domain-specific decisions and library guidance. Use `tapps_validate_config` for Docker/infra files.
 
 ### Review Pipeline (multi-file)
@@ -259,8 +265,11 @@ Thirteen SKILL.md files per platform in `.claude/skills/` or `.cursor/skills/`:
 - **tapps-report** - Generate quality reports across changed Python files
 - **tapps-tool-reference** - Full per-tool reference and when-to-use guidance
 - **tapps-init** - Bootstrap TappsMCP scaffolding in a project
+- **tapps-upgrade** - Reinstall global CLIs from latest source, restart MCP, run `tapps-mcp upgrade` + doctor + checklist
 - **tapps-engagement** - Switch enforcement intensity (high/medium/low)
 - **tapps-apply-files** - Apply content-return file operations (Docker fallback)
+
+> **DEPRECATED (removal in v3.12.0):** `tapps-score`, `tapps-gate`, `tapps-validate`, `tapps-report` are thin wrappers around single MCP tools. You MUST prefer the direct tool calls or `/tapps-finish-task` for the end-of-task bundle.
 
 ### Agent Teams (opt-in, Claude Code only)
 

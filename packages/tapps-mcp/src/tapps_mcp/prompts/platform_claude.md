@@ -31,7 +31,7 @@ Skipping this means quality issues and vulnerabilities go undetected.
 For multi-file changes: You MUST call `tapps_validate_changed()` to batch-validate all changed files.
 The quality gate MUST pass. Work is NOT done until the gate passes or the user explicitly accepts the risk.
 You MUST call `tapps_checklist(task_type)` as the FINAL step to verify no required tools were skipped.
-NEVER declare work complete without running the checklist.
+NEVER declare work complete without running the checklist. The `tapps_checklist` response carries an inline `usage_gaps` payload (same data as the standalone `tapps_usage` tool) — read it before declaring done. The Stop hook (`tapps-stop.sh`) also writes to `.tapps-mcp/.completion-gate-violations.jsonl` in warn mode when code edits ship without validation; no block, but the telemetry feeds `tapps_usage`.
 
 ### Domain Decisions (REQUIRED)
 
@@ -84,6 +84,9 @@ Every tool response includes:
 
 Record progress in `docs/TAPPS_HANDOFF.md` and `docs/TAPPS_RUNLOG.md`.
 For task-specific recommended tool call order, use the `tapps_workflow` MCP prompt (e.g. `tapps_workflow(task_type="feature")`).
+For high-traffic tools (`tapps_score_file`, `tapps_quick_check`), `next_steps` are now templated with the active `file_path` — paste them verbatim instead of re-typing the call.
+
+> **Skill deprecations (v3.12.0):** `tapps-score`, `tapps-gate`, `tapps-validate`, `tapps-report` are deprecated thin wrappers. Prefer the direct MCP tool calls or `/tapps-finish-task`.
 
 ## Agent Teams (Optional)
 

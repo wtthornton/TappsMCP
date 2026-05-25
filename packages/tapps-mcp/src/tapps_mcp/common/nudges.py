@@ -77,29 +77,29 @@ _TOOL_NUDGES: dict[str, list[NudgeRule]] = {
     "tapps_score_file": [
         (
             lambda _called, ctx: (ctx or {}).get("security_issue_count", 0) > 0,
-            "WARNING: Security issues detected. Call tapps_security_scan() for full analysis.",
+            "WARNING: Security issues detected. Call tapps_security_scan(file_path='{file_path}') for full analysis.",
             _IMPACT_BLOCKING,
         ),
         (
             lambda called, _ctx: "tapps_quality_gate" not in called,
-            "NEXT: Call tapps_quality_gate() to verify this file passes the quality bar.",
+            "NEXT: Call tapps_quality_gate(file_path='{file_path}') to verify this file passes the quality bar.",
             _IMPACT_HIGH,
         ),
     ],
     "tapps_quick_check": [
         (
             lambda _called, ctx: (ctx or {}).get("gate_passed") is False,
-            "Gate FAILED. Fix the issues, then re-run tapps_quick_check().",
+            "Gate FAILED. Fix the issues, then re-run tapps_quick_check(file_path='{file_path}').",
             _IMPACT_BLOCKING,
         ),
         (
             lambda _called, ctx: (ctx or {}).get("security_passed") is False,
-            "Security issues detected. Call tapps_security_scan() for full analysis.",
+            "Security issues detected. Call tapps_security_scan(file_path='{file_path}') for full analysis.",
             _IMPACT_BLOCKING,
         ),
         (
             lambda called, _ctx: "tapps_checklist" not in called,
-            "NEXT: Call tapps_checklist() as the final step before declaring done.",
+            "NEXT: Call tapps_checklist(task_type='feature') as the final step before declaring done.",
             _IMPACT_MEDIUM,
         ),
     ],
@@ -226,6 +226,13 @@ def compute_next_steps(
 
     for condition, text, impact in _TOOL_NUDGES.get(tool_name, []):
         if condition(called, context):
+            # Templated nudges (e.g. "Call tapps_security_scan(file_path='{file_path}')")
+            # render with the call context when a placeholder is present.
+            if "{" in text and context:
+                try:
+                    text = text.format(**context)
+                except (KeyError, IndexError):
+                    pass
             candidates.append((impact, text))
 
     # Global nudge: session-init guard for scoring/validation tools.

@@ -283,6 +283,7 @@ async def tapps_score_file(
         "tapps_score_file",
         resp,
         {
+            "file_path": str(resolved),
             "security_issue_count": len(result.security_issues),
             "overall_score": round(result.overall_score, 2),
         },
@@ -938,6 +939,7 @@ async def tapps_quick_check(
                     "tapps_quick_check",
                     resp,
                     {
+                        "file_path": str(resolved),
                         "gate_passed": cached_gate_passed,
                         "security_passed": cached_security_passed,
                         "overall_score": round(float(cached.get("overall_score", 0.0)), 2),
@@ -1079,6 +1081,7 @@ async def tapps_quick_check(
         "tapps_quick_check",
         resp,
         {
+            "file_path": str(resolved),
             "gate_passed": gate_result.passed,
             "security_passed": sec_result.passed,
             "overall_score": round(score_result.overall_score, 2),

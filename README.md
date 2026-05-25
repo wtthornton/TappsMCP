@@ -26,6 +26,16 @@ Two MCP servers — **TappsMCP** (code quality) and **DocsMCP** (documentation) 
 
 **Tapps Platform** ships two MCP servers for AI-assisted development: **TappsMCP** (code quality, security, shared memory) and **DocsMCP** (documentation generation and maintenance). Together they expose **70 tools** with structured, deterministic outputs suitable for Claude Code, Cursor, VS Code, and any MCP host.
 
+### What's new in v3.11
+
+- **Quality-pipeline usage uplift** — closes the gap between the recommended pipeline and what the agent actually runs. Four pieces:
+  - **`tapps_usage` (new tool)** — per-session gap report. Returns `gaps` (e.g. `edits_without_validation`, `lookup_docs_underused`) and `recommendations` (specific next calls). Also inlined as `usage_gaps` on every `tapps_checklist` response.
+  - **Stop-hook warn-mode telemetry** — `tapps-stop.sh` now writes `.tapps-mcp/.completion-gate-violations.jsonl` on EVERY project (not just Ralph) when source files were edited without `tapps_validate_changed` + `tapps_checklist`. Warn mode only — no blocks. Telemetry feeds `tapps_usage`.
+  - **`next_steps` enrichment** — top-traffic tools template `{file_path}` into suggested calls so the agent gets ready-to-paste signatures like `tapps_security_scan(file_path='/path/to/X.py')` instead of empty `tapps_security_scan()`.
+  - **`tapps-upgrade` (new shipped skill)** — orchestrates `uv tool install --reinstall` + MCP restart + `tapps-mcp upgrade` + doctor + checklist. Deployed to consumers via `tapps_init` / `tapps_upgrade`.
+- **Wrapper skills deprecated** — `tapps-score`, `tapps-gate`, `tapps-validate`, `tapps-report` carry DEPRECATED notices pointing at their direct MCP tool or `/tapps-finish-task`. Scheduled removal in v3.12.0.
+- **Profile-aware skill filtering** — DEFERRED. Design still pending (skills are deploy-time, not runtime); will land in a future release.
+
 ### What's new in v3.10
 
 - **Brain profile declaration** (TAP-1616) — `BrainBridge` sends `X-Brain-Profile: <name>` on every tapps-brain HTTP call when `memory.brain_profile` (or `TAPPS_BRAIN_PROFILE`) is set, and surfaces `-32602 INVALID_PARAMS` with `data.reason == "out_of_profile"` as a distinct `ToolNotInProfileError` (vs. `-32601 METHOD_NOT_FOUND` for genuinely removed tools). Upstream wire contract: [tapps-brain `docs/guides/mcp-client-repo-setup.md` — "Profile wire contract"](https://github.com/wtthornton/tapps-brain/blob/main/docs/guides/mcp-client-repo-setup.md).

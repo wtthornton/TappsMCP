@@ -220,6 +220,7 @@ ALL_TOOL_NAMES: frozenset[str] = frozenset(
         "tapps_dashboard",
         "tapps_stats",
         "tapps_feedback",
+        "tapps_usage",
         "tapps_dead_code",
         "tapps_dependency_scan",
         "tapps_dependency_graph",
@@ -326,6 +327,7 @@ TAPPS_TOOL_PRESET_QUALITY: frozenset[str] = frozenset(
         "tapps_dependency_scan",
         "tapps_dependency_graph",
         "tapps_audit_campaign",
+        "tapps_usage",
     }
 )
 
@@ -340,6 +342,7 @@ TAPPS_TOOL_PRESET_ADMIN: frozenset[str] = frozenset(
         "tapps_dashboard",
         "tapps_stats",
         "tapps_feedback",
+        "tapps_usage",
         "tapps_report",
         "tapps_pipeline",
         "tapps_decompose",
@@ -1444,6 +1447,25 @@ async def tapps_checklist(
         resp_data["otel_trace_hint"] = trace_hint
         if result.checklist_policy_version:
             resp_data["checklist_policy_version"] = result.checklist_policy_version
+
+        # Inline the usage gap-report so end-of-task checks surface
+        # edits-without-validation / lookup-docs-underused inline.
+        try:
+            from pathlib import Path as _Path
+
+            from tapps_mcp.tools.usage import compute_gaps
+
+            usage = compute_gaps(_Path(settings.project_root).expanduser().resolve())
+            resp_data["usage_gaps"] = {
+                "gaps": usage.get("gaps", []),
+                "recommendations": usage.get("recommendations", []),
+                "rolling_gate_skip_rate": usage.get("rolling_stats", {}).get(
+                    "gate_skip_rate", 0.0
+                ),
+                "rolling_loops": usage.get("rolling_stats", {}).get("loops", 0),
+            }
+        except Exception:  # noqa: BLE001
+            logger.debug("usage_gaps_inline_failed", exc_info=True)
 
         # Epic 66.2: Surface validation_note in next_steps
         if auto_run_results.get("validate_changed", {}).get("validation_note"):

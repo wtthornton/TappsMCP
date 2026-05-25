@@ -29,6 +29,8 @@ allowed-tools: mcp__tapps-mcp__tapps_score_file mcp__tapps-mcp__tapps_quick_chec
 argument-hint: "[file-path]"
 ---
 
+> **DEPRECATED (v3.11.0+):** This skill wraps a single MCP tool and adds no orchestration. Call `mcp__tapps-mcp__tapps_quick_check(file_path=...)` directly, or invoke `/tapps-finish-task` for end-of-task orchestration. Scheduled for removal in v3.12.0.
+
 Score the specified Python file using TappsMCP:
 
 1. Call `mcp__tapps-mcp__tapps_quick_check` with the file path to get an instant score
@@ -48,6 +50,8 @@ argument-hint: "[file-path]"
 disable-model-invocation: true
 ---
 
+> **DEPRECATED (v3.11.0+):** This skill wraps a single MCP tool and adds no orchestration. Call `mcp__tapps-mcp__tapps_quality_gate(file_path=...)` directly, or invoke `/tapps-finish-task` for end-of-task orchestration. Scheduled for removal in v3.12.0.
+
 Run a quality gate check using TappsMCP:
 
 1. Call `mcp__tapps-mcp__tapps_quality_gate` with the current project
@@ -65,6 +69,8 @@ description: Validate all changed files meet quality thresholds before declaring
 allowed-tools: mcp__tapps-mcp__tapps_validate_changed
 disable-model-invocation: true
 ---
+
+> **DEPRECATED (v3.11.0+):** This skill wraps a single MCP tool and adds no orchestration. Call `mcp__tapps-mcp__tapps_validate_changed(file_paths="...")` directly, or invoke `/tapps-finish-task` which bundles validate + checklist + memory save. Scheduled for removal in v3.12.0.
 
 Validate changed files using TappsMCP:
 
@@ -106,6 +112,8 @@ description: >-
 allowed-tools: mcp__tapps-mcp__tapps_report
 argument-hint: "[file-path or empty for project-wide]"
 ---
+
+> **DEPRECATED (v3.11.0+):** This skill wraps a single MCP tool and adds no orchestration. Call `mcp__tapps-mcp__tapps_report(file_paths=...)` directly. Scheduled for removal in v3.12.0.
 
 Generate a quality report using TappsMCP:
 
@@ -345,6 +353,51 @@ Bootstrap TappsMCP in a new or existing project:
 1. Run from the project root: `tapps-mcp upgrade --force --host auto`
 2. Then verify: `tapps-mcp doctor`
 3. Restart your MCP host to pick up the new config
+""",
+    "tapps-upgrade": """\
+---
+name: tapps-upgrade
+user-invocable: true
+model: claude-sonnet-4-6
+description: >-
+  Upgrade tapps-mcp / docs-mcp in this project to the latest version.
+  Reinstalls global CLIs, restarts the MCP servers, refreshes scaffolding
+  via `tapps-mcp upgrade` (dry-run preview + timestamped backup), and
+  verifies via doctor + checklist.
+allowed-tools: Bash mcp__tapps-mcp__tapps_session_start mcp__tapps-mcp__tapps_doctor mcp__tapps-mcp__tapps_checklist
+argument-hint: "[--from-checkout <path> | --from-tag vX.Y.Z]"
+---
+
+Upgrade tapps-mcp / docs-mcp end-to-end. The user's request to upgrade is standing authorization for the full pipeline — do NOT pause mid-flow.
+
+**Pick an install source from the prompt:**
+
+- Local checkout (`--from-checkout <path>` or user mentions a local clone):
+  `uv tool install --reinstall --from <path>/packages/tapps-mcp tapps-mcp`
+  and the same for `docs-mcp`.
+- Git tag (`--from-tag vX.Y.Z`):
+  `uv tool install --reinstall "git+https://github.com/wtthornton/tapps-mcp.git@vX.Y.Z#subdirectory=packages/tapps-mcp" tapps-mcp`
+  and the same for `docs-mcp`.
+- If neither is specified, ASK once which to use.
+
+**Steps:**
+
+1. **Reinstall global CLIs.** Run both `uv tool install --reinstall ...` commands. Verify: `uv tool list | grep -E '(tapps-mcp|docs-mcp)'` — both must show the same version.
+2. **Restart MCP servers.** The running processes still hold old code. Tell the user to exit/reopen (or `/mcp` reconnect), then re-invoke this skill. Stop here on the first invocation.
+3. **Verify new version is live.** Call `mcp__tapps-mcp__tapps_session_start(force=true)`. Confirm `server.version` matches target and `diagnostics.install_drift.drift_detected == false`. If drift persists, the server wasn't restarted — go back to step 2.
+4. **Dry-run the scaffolding refresh.** Run `tapps-mcp upgrade --dry-run`. Review the diff for AGENTS.md, CLAUDE.md, .claude/hooks/, .claude/rules/, .claude/agents/, .claude/skills/, .mcp.json. The smart-merge preserves customizations in non-canonical sections; canonical sections are replaced wholesale. Pause if a customized canonical section will be overwritten.
+5. **Apply the upgrade.** Run `tapps-mcp upgrade` (writes timestamped backup to `.tapps-mcp/backups/<ts>/`).
+6. **Verify.** Run `tapps-mcp doctor` AND `mcp__tapps-mcp__tapps_checklist(task_type="upgrade")`. Surface any problems — do not declare done on a failure.
+7. **Report.** One-line summary: `Upgraded: tapps-mcp X.Y.Z, docs-mcp X.Y.Z. Scaffolding: N files. Doctor: OK. Checklist: complete. Backup: .tapps-mcp/backups/<ts>/`.
+
+**Rollback (only if step 5/6 broke something):** `tapps-mcp rollback` restores from the most recent backup. Do NOT roll back "to be safe" after a clean run.
+
+**Do NOT:**
+
+- Publish to PyPI / npm — tapps-mcp is local-install only.
+- Bump versions in the tapps-mcp dev repo itself — separate workflow.
+- Touch tapps-brain — separate Docker service with its own release flow.
+- Add `tapps-brain` as a top-level `.mcp.json` entry — it's bridge-only via tapps-mcp's BrainBridge.
 """,
     "tapps-engagement": """\
 ---
@@ -601,6 +654,8 @@ mcp_tools:
   - tapps_quick_check
 ---
 
+> **DEPRECATED (v3.11.0+):** Wraps a single MCP tool with no orchestration. Call `tapps_quick_check` directly or invoke the `tapps-finish-task` skill. Scheduled for removal in v3.12.0.
+
 Score the specified Python file using TappsMCP:
 
 1. Call `tapps_quick_check` with the file path to get an instant score
@@ -617,6 +672,8 @@ mcp_tools:
   - tapps_quality_gate
 ---
 
+> **DEPRECATED (v3.11.0+):** Wraps a single MCP tool with no orchestration. Call `tapps_quality_gate` directly or invoke the `tapps-finish-task` skill. Scheduled for removal in v3.12.0.
+
 Run a quality gate check using TappsMCP:
 
 1. Call `tapps_quality_gate` with the current project
@@ -632,6 +689,8 @@ description: Validate all changed files meet quality thresholds before declaring
 mcp_tools:
   - tapps_validate_changed
 ---
+
+> **DEPRECATED (v3.11.0+):** Wraps a single MCP tool with no orchestration. Call `tapps_validate_changed` directly or invoke the `tapps-finish-task` skill (bundles validate + checklist + memory save). Scheduled for removal in v3.12.0.
 
 Validate changed files using TappsMCP:
 
@@ -670,6 +729,8 @@ description: >-
 mcp_tools:
   - tapps_report
 ---
+
+> **DEPRECATED (v3.11.0+):** Wraps a single MCP tool with no orchestration. Call `tapps_report` directly. Scheduled for removal in v3.12.0.
 
 Generate a quality report using TappsMCP:
 
@@ -850,6 +911,42 @@ Bootstrap TappsMCP in a new or existing project:
 1. Run from the project root: `tapps-mcp upgrade --force --host auto`
 2. Then verify: `tapps-mcp doctor`
 3. Restart your MCP host to pick up the new config
+""",
+    "tapps-upgrade": """\
+---
+name: tapps-upgrade
+description: >-
+  Upgrade tapps-mcp / docs-mcp in this project to the latest version.
+  Reinstalls global CLIs, restarts MCP servers, refreshes scaffolding via
+  `tapps-mcp upgrade`, verifies via doctor + checklist.
+mcp_tools:
+  - tapps_session_start
+  - tapps_doctor
+  - tapps_checklist
+---
+
+Upgrade tapps-mcp / docs-mcp end-to-end. The user's request is standing authorization — do NOT pause mid-flow.
+
+**Pick install source from prompt:**
+
+- Local checkout: `uv tool install --reinstall --from <path>/packages/tapps-mcp tapps-mcp` (and same for `docs-mcp`).
+- Git tag: `uv tool install --reinstall "git+https://github.com/wtthornton/tapps-mcp.git@vX.Y.Z#subdirectory=packages/tapps-mcp" tapps-mcp`.
+
+If unspecified, ask once.
+
+**Steps:**
+
+1. Reinstall both CLIs. Verify with `uv tool list | grep -E '(tapps-mcp|docs-mcp)'`.
+2. Restart MCP servers (exit + reopen Cursor, or reconnect). Stop on first invocation; resume after restart.
+3. `tapps_session_start(force=true)`. Confirm `server.version` matches and `install_drift.drift_detected == false`.
+4. `tapps-mcp upgrade --dry-run`. Review diff for AGENTS.md, hooks, rules, skills, .mcp.json. Pause if a customized canonical section will be overwritten.
+5. `tapps-mcp upgrade` (writes timestamped backup to `.tapps-mcp/backups/<ts>/`).
+6. `tapps-mcp doctor` AND `tapps_checklist(task_type="upgrade")`. Stop on failure.
+7. One-line summary: versions, files refreshed, doctor + checklist status, backup path.
+
+**Rollback:** `tapps-mcp rollback` (only if step 5/6 reveals a regression).
+
+**Do NOT:** publish to PyPI/npm; bump tapps-mcp repo versions; touch tapps-brain; add `tapps-brain` as a top-level `.mcp.json` entry.
 """,
     "tapps-engagement": """\
 ---

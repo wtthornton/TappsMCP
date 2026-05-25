@@ -25,7 +25,8 @@ When the **TappsMCP** MCP server is configured, you can use its tools for code q
 | **tapps_session_start** | **FIRST call in every session** - server info only |
 | **tapps_quick_check** | **After editing any Python file** - quick score + gate + security |
 | **tapps_validate_changed** | **Before declaring multi-file work complete** - score + gate on changed files. **Pass explicit `file_paths`** when possible. Default is quick mode; only use `quick=false` as a last resort. |
-| **tapps_checklist** | **Before declaring work complete** - reports missing required steps |
+| **tapps_checklist** | **Before declaring work complete** - reports missing required steps. Response includes an inline `usage_gaps` block (same data as `tapps_usage`) - skim it if useful. |
+| **tapps_usage** | Optional: see what you missed this session - per-session `gaps` + `recommendations`. Also inlined as `usage_gaps` on every `tapps_checklist` response. |
 | **tapps_quality_gate** | Before declaring work complete - ensures file passes preset |
 
 **For full tool reference** (32 tools), invoke the **tapps-tool-reference** skill when asked about tools.
@@ -65,7 +66,7 @@ When the **TappsMCP** MCP server is configured, you can use its tools for code q
 3. **Before using a library:** Consider calling `tapps_lookup_docs(library=...)` to avoid hallucinated APIs.
 4. **Before modifying a file's API:** Consider `tapps_impact_analysis(file_path=...)` to see what depends on it.
 5. **During edits:** Consider `tapps_quick_check(file_path=...)` or `tapps_score_file(file_path=..., quick=True)` after Python file edits.
-6. **Before declaring work complete:** Consider invoking the `/tapps-finish-task` skill, which bundles validate + checklist + optional memory save in one call. If you prefer the manual path, call `tapps_validate_changed(file_paths="file1.py,file2.py")` with explicit paths and then `tapps_checklist(task_type=...)`. Default is quick mode; only use `quick=false` as a last resort. Use `tapps_report(format="markdown")` if the user wants a summary.
+6. **Before declaring work complete:** Consider invoking the `/tapps-finish-task` skill, which bundles validate + checklist + optional memory save in one call. If you prefer the manual path, call `tapps_validate_changed(file_paths="file1.py,file2.py")` with explicit paths and then `tapps_checklist(task_type=...)`. Default is quick mode; only use `quick=false` as a last resort. The checklist response carries an inline `usage_gaps` block (same data as `tapps_usage`) — optional read. Use `tapps_report(format="markdown")` if the user wants a summary. Note: a warn-mode Stop hook (`tapps-stop.sh`) may log to `.tapps-mcp/.completion-gate-violations.jsonl` when code edits ship without validation — telemetry only, no block.
 7. **When in doubt:** Consider `tapps_lookup_docs` for domain questions and library guidance; use `tapps_validate_config` for Docker/infra files.
 
 ### Review Pipeline (multi-file)
@@ -169,8 +170,11 @@ Thirteen SKILL.md files per platform in `.claude/skills/` or `.cursor/skills/`:
 - **tapps-report** - Generate quality reports across changed Python files
 - **tapps-tool-reference** - Full per-tool reference and when-to-use guidance
 - **tapps-init** - Bootstrap TappsMCP scaffolding in a project
+- **tapps-upgrade** - Reinstall global CLIs from latest source, restart MCP, run `tapps-mcp upgrade` + doctor + checklist
 - **tapps-engagement** - Switch enforcement intensity (high/medium/low)
 - **tapps-apply-files** - Apply content-return file operations (Docker fallback)
+
+> Note: `tapps-score`, `tapps-gate`, `tapps-validate`, `tapps-report` are deprecated (removal in v3.12.0). Prefer the direct MCP tool calls or `/tapps-finish-task`.
 
 ### Agent Teams (opt-in, Claude Code only)
 

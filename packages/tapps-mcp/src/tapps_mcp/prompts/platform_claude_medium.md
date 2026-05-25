@@ -39,7 +39,9 @@ This runs scoring + quality gate + security scan in a single call.
 
 For multi-file changes: You should call `tapps_validate_changed(file_paths="file1.py,file2.py")` with explicit paths to batch-validate changed files. **Always pass `file_paths`** — auto-detect scans all git-changed files and can be very slow. Default is quick mode; only use `quick=false` as a last resort (pre-release, security audit).
 Run the quality gate before considering work done.
-You should call `tapps_checklist(task_type)` as the final step to verify no required tools were skipped.
+You should call `tapps_checklist(task_type)` as the final step to verify no required tools were skipped. The response carries an inline `usage_gaps` payload (same data as the standalone `tapps_usage` tool) — read it for any missed lookups or unvalidated edits before declaring done. The Stop hook (`tapps-stop.sh`) writes to `.tapps-mcp/.completion-gate-violations.jsonl` in warn mode when code edits ship without validation; no block — pure telemetry that feeds `tapps_usage`.
+
+> **Skill deprecations (v3.12.0):** `tapps-score`, `tapps-gate`, `tapps-validate`, `tapps-report` are deprecated wrappers around single MCP tools. Prefer the direct tool calls or `/tapps-finish-task`.
 
 ### Domain Decisions
 

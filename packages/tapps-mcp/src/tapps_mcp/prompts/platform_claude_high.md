@@ -43,7 +43,7 @@ Skipping this means quality issues and vulnerabilities go undetected.
 For multi-file changes: You MUST call `tapps_validate_changed(file_paths="file1.py,file2.py")` with explicit paths to batch-validate changed files. **Never call without `file_paths`** — auto-detect scans all git-changed files and can be very slow in large repos. Default is quick mode (ruff-only, ~10s); only use `quick=false` as a **last resort** (pre-release, security audit — 1-5+ min per file).
 The quality gate MUST pass. Work is NOT done until the gate passes or the user explicitly accepts the risk.
 You MUST call `tapps_checklist(task_type)` as the FINAL step to verify no required tools were skipped.
-NEVER declare work complete without running the checklist.
+NEVER declare work complete without running the checklist. The `tapps_checklist` response carries an inline `usage_gaps` payload (same data as `tapps_usage`) — you MUST read it and address any flagged gaps (skipped doc lookups, unvalidated edits, low completion-gate health) before declaring done. The Stop hook (`tapps-stop.sh`) writes to `.tapps-mcp/.completion-gate-violations.jsonl` in warn mode on every project when code edits ship without `tapps_validate_changed` + `tapps_checklist` — no block, but the telemetry feeds `tapps_usage`. `tapps_doctor` reports `completion_gate_hook.installed` and warns if absent.
 
 ### Domain Decisions (REQUIRED)
 
@@ -106,6 +106,9 @@ Every tool response includes:
 
 Record progress in `docs/TAPPS_HANDOFF.md` and `docs/TAPPS_RUNLOG.md`.
 For task-specific recommended tool call order, use the `tapps_workflow` MCP prompt (e.g. `tapps_workflow(task_type="feature")`).
+High-traffic tools (`tapps_score_file`, `tapps_quick_check`) template `{file_path}` into `next_steps` so the suggested call (`tapps_security_scan(file_path='src/foo.py')`) is paste-ready. Use it verbatim.
+
+> **Skill deprecations (v3.12.0):** `tapps-score`, `tapps-gate`, `tapps-validate`, `tapps-report` are deprecated thin wrappers. You MUST prefer the direct MCP tool calls or `/tapps-finish-task` for the end-of-task bundle.
 
 ## Quality Gate Behavior
 

@@ -1247,6 +1247,40 @@ def tapps_doctor(
     except Exception:
         pass
 
+    # Completion-gate Stop-hook presence (warn-mode telemetry path).
+    # When missing, the agent gets no "edits without validation" warn at end-of-turn.
+    try:
+        hook_path = Path(root) / ".claude" / "hooks" / "tapps-stop.sh"
+        installed = hook_path.exists()
+        result["completion_gate_hook"] = {
+            "path": str(hook_path),
+            "installed": installed,
+        }
+        if not installed:
+            result["completion_gate_hook"]["warning"] = (
+                "Stop hook tapps-stop.sh is not installed. The completion-gate "
+                "warn-mode telemetry that writes .tapps-mcp/.completion-gate-violations.jsonl "
+                "is inactive. Run tapps_upgrade to install."
+            )
+    except Exception:
+        pass
+
+    # Usage gap summary (per-session). Surfaces edits-without-validation,
+    # lookup-docs-underused, etc. from tapps_usage tool data sources.
+    try:
+        from tapps_mcp.tools.usage import compute_gaps
+
+        usage_summary = compute_gaps(Path(root))
+        gaps = usage_summary.get("gaps", [])
+        recs = usage_summary.get("recommendations", [])
+        result["usage_gaps"] = {
+            "gap_count": len(gaps),
+            "gaps": gaps,
+            "top_recommendation": recs[0] if recs else None,
+        }
+    except Exception:
+        pass
+
     elapsed_ms = (time.perf_counter_ns() - start) // 1_000_000
     _record_execution("tapps_doctor", start)
 
@@ -1254,6 +1288,8 @@ def tapps_doctor(
     resp = _with_nudges("tapps_doctor", resp)
     if result.get("degraded_checkers_warning"):
         _prepend_next_step(resp, result["degraded_checkers_warning"])
+    if result.get("completion_gate_hook", {}).get("warning"):
+        _prepend_next_step(resp, result["completion_gate_hook"]["warning"])
     return resp
 
 
