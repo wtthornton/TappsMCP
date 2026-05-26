@@ -110,6 +110,7 @@ a = Analysis(
         "tapps_mcp.tools.dependency_scan_cache",
         "tapps_mcp.tools.content_hash_cache",
         "tapps_mcp.tools.perflint",
+        "tapps_mcp.tools.usage",
         "tapps_mcp.tools.validate_changed",
         "tapps_mcp.tools.validate_changed_output",
         "tapps_mcp.tools.validation_progress",

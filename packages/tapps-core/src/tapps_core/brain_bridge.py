@@ -465,6 +465,10 @@ class BrainBridge:
             return False
 
     async def _drain_write_queue(self) -> None:
+        # Claim self._drain_task so the recursive _maybe_start_drain triggered
+        # by each self.save() below sees an active task and does not spawn a
+        # parallel drain that races against this one.
+        self._drain_task = asyncio.current_task()
         while not self._write_queue.empty():
             if self.circuit_open:
                 break

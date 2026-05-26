@@ -213,5 +213,5 @@ class TestToolPresetConstants:
 
         # 26 core + 3 linear-snapshot (TAP-964, shipped 3.3.0) + 1 release_update
         # + 1 tapps_linear_count (TAP-1847) + 1 tapps_audit_campaign (TAP-2036)
-        # + 1 tapps_session_end (TAP-2005) = 33.
-        assert len(ALL_TOOL_NAMES) == 33
+        # + 1 tapps_session_end (TAP-2005) + 1 tapps_usage (v3.11.0) = 34.
+        assert len(ALL_TOOL_NAMES) == 34

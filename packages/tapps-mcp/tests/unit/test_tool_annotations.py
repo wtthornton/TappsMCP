@@ -166,9 +166,10 @@ class TestAnnotationCategories:
             if tool.annotations and tool.annotations.readOnlyHint
         ]
         # 18 closed-world + 2 open-world + 1 linear-snapshot-get + 1 release-update
-        # + 1 tapps_linear_count (TAP-1847) + 1 tapps_audit_campaign (TAP-2036) = 24
-        assert len(read_only) == 24, (
-            f"Expected 24 read-only tools, got {len(read_only)}"
+        # + 1 tapps_linear_count (TAP-1847) + 1 tapps_audit_campaign (TAP-2036)
+        # + 1 tapps_usage (v3.11.0) = 25
+        assert len(read_only) == 25, (
+            f"Expected 25 read-only tools, got {len(read_only)}"
         )
 
     def test_side_effect_count(self) -> None:
@@ -202,14 +203,20 @@ class TestAnnotationCategories:
             if tool.annotations and tool.annotations.idempotentHint
         ]
         # 22 prior + 3 linear-snapshot + 1 release-update + 1 tapps_linear_count (TAP-1847)
-        # + 1 tapps_audit_campaign (TAP-2036) + 1 tapps_session_end (TAP-2005) = 29
-        assert len(idempotent) == 29, (
-            f"Expected 29 idempotent tools, got {len(idempotent)}: {sorted(idempotent)}"
+        # + 1 tapps_audit_campaign (TAP-2036) + 1 tapps_session_end (TAP-2005)
+        # + 1 tapps_usage (v3.11.0) = 30
+        assert len(idempotent) == 30, (
+            f"Expected 30 idempotent tools, got {len(idempotent)}: {sorted(idempotent)}"
         )
 
 
 class TestDeferLoading:
-    """TAP-1986: verify eager/deferred split keeps the eager catalog ≤ 8 tools."""
+    """TAP-1986: verify eager/deferred split keeps the eager catalog ≤ 9 tools.
+
+    v3.11.0 added tapps_usage as the 9th eager tool — it is intentionally
+    not deferred because it is part of the end-of-task pipeline alongside
+    tapps_checklist. See server_metrics_tools.register().
+    """
 
     # Daily-driver tools — must be EAGER (no defer_loading).
     _DAILY_DRIVERS: frozenset[str] = frozenset(
@@ -224,7 +231,7 @@ class TestDeferLoading:
             "tapps_impact_analysis",
         }
     )
-    _EAGER_BUDGET = 8
+    _EAGER_BUDGET = 9
 
     def test_eager_tool_count_within_budget(self) -> None:
         """Eager tool count must be ≤ _EAGER_BUDGET (currently 8)."""

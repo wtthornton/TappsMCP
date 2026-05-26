@@ -202,9 +202,10 @@ class TestSkipExisting:
 
     def test_result_dict_tracks_created(self, tmp_path):
         result = generate_skills(tmp_path, "claude")
-        # 13 tapps-* skills (incl. tapps-finish-task from TAP-977) + linear-issue
-        # + linear-release-update + linear-read (TAP-1260).
-        assert len(result["created"]) == 16
+        # 14 tapps-* skills (incl. tapps-finish-task from TAP-977 and
+        # tapps-upgrade from v3.11.0) + linear-issue + linear-release-update
+        # + linear-read (TAP-1260).
+        assert len(result["created"]) == 17
         assert len(result["skipped"]) == 0
 
     def test_unknown_platform_returns_error(self, tmp_path):
