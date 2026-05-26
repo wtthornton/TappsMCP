@@ -570,7 +570,7 @@ def tapps_usage(
     """
     from pathlib import Path as _Path
 
-    from tapps_mcp.config import load_settings
+    from tapps_core.config.settings import load_settings
     from tapps_mcp.server import _record_call, _record_execution, _with_nudges
     from tapps_mcp.tools.usage import compute_gaps, render_markdown
 
