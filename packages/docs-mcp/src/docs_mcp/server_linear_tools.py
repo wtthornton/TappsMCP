@@ -18,6 +18,8 @@ Policy reference: ``docs/linear/AGENT_ISSUES.md``.
 
 from __future__ import annotations
 
+import asyncio
+import threading
 import time
 from typing import TYPE_CHECKING, Any
 
@@ -33,6 +35,96 @@ from docs_mcp.triage.linear_issue import triage_issues
 from docs_mcp.validators.linear_issue import validate_issue
 
 _logger = structlog.get_logger(__name__)
+
+# ---------------------------------------------------------------------------
+# TAP-2007: PR-shape procedural pattern write (once per session)
+# ---------------------------------------------------------------------------
+
+_pr_shape_lock = threading.Lock()
+_pr_shape_written: bool = False
+
+
+def _reset_pr_shape_written() -> None:
+    """Reset the per-session flag (for tests and process hygiene)."""
+    global _pr_shape_written
+    with _pr_shape_lock:
+        _pr_shape_written = False
+
+
+async def _write_pr_shape_to_brain(score: int, common_rules: list[str]) -> None:
+    """Write a procedural PR-shape memory via the tapps_core brain bridge.
+
+    Best-effort — never raises.  Uses the supersede-then-save pattern so
+    repeat invocations across multiple sessions update rather than orphan.
+    """
+    key = "procedural.pr-shape.session"
+    rules_str = ", ".join(common_rules[:5]) if common_rules else "none"
+    value = (
+        f"Agent-ready Linear issue shape: score threshold 100, "
+        f"requires ## What / ## Where (file:LINE anchor) / ## Why / ## Acceptance (checkboxes) / ## Refs. "
+        f"Common lint rules seen: [{rules_str}]. "
+        f"Use docs_lint_linear_issue to pre-validate before create."
+    )[:1024]
+    tags = ["procedural", "pr-shape", "auto-captured", "docs-mcp"]
+
+    try:
+        from tapps_core.brain_bridge import create_brain_bridge
+
+        bridge = create_brain_bridge(settings=None)
+        if bridge is None:
+            return
+
+        # Try supersede first (preserves history chain on regen)
+        if hasattr(bridge, "supersede"):
+            try:
+                sup: dict[str, Any] | None = await bridge.supersede(key=key, new_value=value)
+                if sup is not None and not (
+                    isinstance(sup, dict) and sup.get("error") == "not_found"
+                ):
+                    _logger.debug("pr_shape_supersede_ok")
+                    return
+            except Exception:
+                pass
+
+        await bridge.save(
+            key=key,
+            value=value,
+            tier="procedural",
+            source="agent",
+            source_agent="docs-mcp",
+            scope="project",
+            tags=tags,
+            skip_consolidation=True,
+        )
+        _logger.debug("pr_shape_save_ok")
+    except Exception:
+        _logger.debug("pr_shape_write_failed", exc_info=True)
+
+
+def _fire_pr_shape_pattern(lint_result_dict: dict[str, Any]) -> None:
+    """Schedule the PR-shape procedural write once per session (fire-and-forget).
+
+    Only fires when the linted issue is agent-ready.  Deduplicates via the
+    module-level ``_pr_shape_written`` flag so only one write is emitted per
+    MCP server process lifetime.
+    """
+    global _pr_shape_written
+    if not lint_result_dict.get("agent_ready"):
+        return
+    with _pr_shape_lock:
+        if _pr_shape_written:
+            return
+        _pr_shape_written = True
+
+    score: int = lint_result_dict.get("score", 0)
+    common_rules = [f["rule"] for f in lint_result_dict.get("findings", [])[:5]]
+    try:
+        asyncio.create_task(  # noqa: RUF006
+            _write_pr_shape_to_brain(score, common_rules)
+        )
+    except Exception:
+        pass
+    _logger.info("pr_shape_pattern_scheduled")
 
 
 async def docs_lint_linear_issue(
@@ -97,13 +189,18 @@ async def docs_lint_linear_issue(
         is_epic=is_epic,
     )
 
+    result_dict = result.to_dict()
+
+    # TAP-2007: write PR-shape procedural memory once per session on agent-ready lint.
+    _fire_pr_shape_pattern(result_dict)
+
     elapsed_ms = (time.perf_counter_ns() - start) // 1_000_000
-    next_steps = _build_next_steps(result.to_dict())
+    next_steps = _build_next_steps(result_dict)
 
     return success_response(
         "docs_lint_linear_issue",
         elapsed_ms,
-        result.to_dict(),
+        result_dict,
         next_steps=next_steps,
     )
 

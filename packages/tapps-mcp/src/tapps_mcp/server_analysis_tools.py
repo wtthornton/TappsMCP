@@ -336,6 +336,16 @@ async def tapps_impact_analysis(
     report = analyze_impact(resolved, root, change_type)
     mem_ctx = build_impact_memory_context(resolved, root, settings)
 
+    # TAP-2007: write procedural refactor-sequence memory on completion.
+    from tapps_mcp.tools.procedural_patterns import fire_refactor_sequence
+
+    fire_refactor_sequence(
+        str(resolved),
+        report.severity,
+        len(report.direct_dependents),
+        report.recommendations,
+    )
+
     elapsed_ms = (time.perf_counter_ns() - start) // 1_000_000
     _record_execution("tapps_impact_analysis", start, file_path=str(resolved))
 

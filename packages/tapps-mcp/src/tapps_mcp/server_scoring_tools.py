@@ -437,6 +437,17 @@ async def tapps_quality_gate(
     if not gate_result.passed and gate_result.failures:
         _fire_quality_gate_events(str(resolved), gate_result.failures)
 
+    # TAP-2007: write a procedural fix-recipe memory on FAIL→PASS transitions.
+    from tapps_mcp.tools.procedural_patterns import (
+        fire_fix_recipe_on_pass,
+        record_gate_outcome,
+    )
+
+    failing_cats = [f.category for f in gate_result.failures]
+    prev_failures = record_gate_outcome(str(resolved), gate_result.passed, failing_cats)
+    if gate_result.passed and prev_failures:
+        fire_fix_recipe_on_pass(str(resolved), prev_failures, score=score_result.overall_score)
+
     elapsed_ms = (time.perf_counter_ns() - start) // 1_000_000
     _record_execution(
         "tapps_quality_gate",

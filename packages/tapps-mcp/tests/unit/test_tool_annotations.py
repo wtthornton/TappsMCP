@@ -180,8 +180,9 @@ class TestAnnotationCategories:
         ]
         # 5 idempotent + 1 non-idempotent (tapps_feedback) + linear-snapshot-put
         # + linear-snapshot-invalidate = 8 (TAP-1994: tapps_memory removed)
-        assert len(side_effect) == 8, (
-            f"Expected 9 side-effect tools, got {len(side_effect)}"
+        # + 2 hive elevation tools (TAP-2014) = 10.
+        assert len(side_effect) == 10, (
+            f"Expected 10 side-effect tools, got {len(side_effect)}"
         )
 
     def test_open_world_count(self) -> None:

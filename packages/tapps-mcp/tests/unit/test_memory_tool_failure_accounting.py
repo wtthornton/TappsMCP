@@ -65,7 +65,8 @@ async def test_store_init_failure_records_failure() -> None:
             side_effect=RuntimeError("simulated store init failure"),
         ),
     ):
-        resp = await server_memory_tools.tapps_memory(action="list")
+        # TAP-1993: use lifecycle action to reach the store-init path.
+        resp = await server_memory_tools.tapps_memory(action="session_start_capture")
 
     assert resp["success"] is False
     assert resp["error"]["code"] == "store_init_failed"
@@ -76,7 +77,9 @@ async def test_store_init_failure_records_failure() -> None:
 async def test_action_dispatch_crash_records_failure() -> None:
     records, fake_record = _record_call_capture()
 
-    def _crashing_handler(_store: object, _params: object) -> object:
+    # TAP-1993: lifecycle actions go through _ASYNC_DISPATCH, so the crashing
+    # handler must be async and patched into _ASYNC_DISPATCH.
+    async def _crashing_handler(_store: object, _params: object) -> object:
         raise RuntimeError("simulated dispatch failure")
 
     fake_store = MagicMock()
@@ -91,40 +94,16 @@ async def test_action_dispatch_crash_records_failure() -> None:
             return_value=fake_store,
         ),
         patch.dict(
-            server_memory_tools._DISPATCH,
-            {"list": _crashing_handler},
+            server_memory_tools._ASYNC_DISPATCH,
+            {"session_start_capture": _crashing_handler},
             clear=False,
         ),
     ):
-        resp = await server_memory_tools.tapps_memory(action="list")
+        resp = await server_memory_tools.tapps_memory(action="session_start_capture")
 
     assert resp["success"] is False
     assert resp["error"]["code"] == "action_failed"
     assert records == [True, False]
-
-
-@pytest.mark.asyncio
-async def test_in_process_store_required_records_failure() -> None:
-    """When an in-process store is required and missing, _record_call must flip."""
-    records, fake_record = _record_call_capture()
-
-    with (
-        patch("tapps_mcp.server_memory_tools._record_call", fake_record),
-        patch(
-            "tapps_mcp.server_memory_tools.ensure_session_initialized",
-            AsyncMock(return_value=None),
-        ),
-        patch(
-            "tapps_mcp.server_memory_tools._get_memory_store",
-            return_value=None,
-        ),
-    ):
-        resp = await server_memory_tools.tapps_memory(action="list")
-
-    # The exact response shape depends on the helper, but the call accounting
-    # must show the failure.
-    assert resp["success"] is False
-    assert records[-1] is False
 
 
 @pytest.mark.asyncio

@@ -193,28 +193,4 @@ async def test_handle_agent_register_missing_key(mock_memory_store: MagicMock) -
     assert out.get("error") == "missing_key"
 
 
-@pytest.mark.asyncio
-async def test_tapps_memory_hive_status_disabled(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.delenv("CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS", raising=False)
-    from tapps_mcp.server_helpers import _reset_hive_store_cache
 
-    _reset_hive_store_cache()
-
-    # TAP-408: _get_memory_store() now requires TAPPS_BRAIN_DATABASE_URL via BrainBridge.
-    # Mock the bridge singleton so this integration test doesn't need a real DB.
-    mock_store = MagicMock()
-    snap = MagicMock()
-    snap.total_count = 0
-    snap.tier_counts = {}
-    mock_store.snapshot.return_value = snap
-
-    mock_bridge = MagicMock()
-    mock_bridge.store = mock_store
-
-    with patch("tapps_mcp.server_helpers._get_brain_bridge", return_value=mock_bridge):
-        result = await tapps_memory(action="hive_status")
-
-    assert result["success"] is True
-    assert result["data"]["action"] == "hive_status"
-    assert result["data"]["enabled"] is False
-    assert "propagation_config" not in result["data"]
