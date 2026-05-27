@@ -7,6 +7,8 @@ allowed-tools: mcp__tapps-mcp__tapps_score_file mcp__tapps-mcp__tapps_quick_chec
 argument-hint: "[file-path]"
 ---
 
+> **DEPRECATED (v3.11.0+):** This skill wraps a single MCP tool and adds no orchestration. Call `mcp__tapps-mcp__tapps_quick_check(file_path=...)` directly, or invoke `/tapps-finish-task` for end-of-task orchestration. Scheduled for removal in v3.12.0.
+
 Score the specified Python file using TappsMCP:
 
 1. Call `mcp__tapps-mcp__tapps_quick_check` with the file path to get an instant score

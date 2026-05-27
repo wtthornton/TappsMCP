@@ -8,6 +8,8 @@ argument-hint: "[file-path]"
 disable-model-invocation: true
 ---
 
+> **DEPRECATED (v3.11.0+):** This skill wraps a single MCP tool and adds no orchestration. Call `mcp__tapps-mcp__tapps_quality_gate(file_path=...)` directly, or invoke `/tapps-finish-task` for end-of-task orchestration. Scheduled for removal in v3.12.0.
+
 Run a quality gate check using TappsMCP:
 
 1. Call `mcp__tapps-mcp__tapps_quality_gate` with the current project

@@ -5,6 +5,8 @@ mcp_tools:
   - tapps_quality_gate
 ---
 
+> **DEPRECATED (v3.11.0+):** Wraps a single MCP tool with no orchestration. Call `tapps_quality_gate` directly or invoke the `tapps-finish-task` skill. Scheduled for removal in v3.12.0.
+
 Run a quality gate check using TappsMCP:
 
 1. Call `tapps_quality_gate` with the current project

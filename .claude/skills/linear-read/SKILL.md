@@ -11,13 +11,11 @@ Multi-issue Linear reads are cache-first by contract (TAP-967 audit found 5,368 
 
 **When to invoke this skill:** "list Linear issues", "what's open in TAP", "find issues assigned to X", "review the backlog", "show me high-priority bugs", "what's in flight", "triage" (also routes through `linear-issue`). Do NOT invoke for single-issue lookups when the user has an issue id (e.g. "what's TAP-686 about?") — go straight to `mcp__plugin_linear_linear__get_issue(id="TAP-686")`.
 
-**Ralph task-selection (MANDATORY — TAP-2466):** Always pass `projection="compact"` to every `tapps_linear_snapshot_get` call. Compact mode returns only `{id, identifier, title, state, priority, estimate, assignee, parent}` — roughly 5 KB for 50 issues. The full projection dumps ~80 KB (>25k tokens) which overflows the Read tool ceiling and forces a slow fallback parse. When a `list_issues` response is redirected to a file (the error says "File content (N tokens) exceeds maximum allowed tokens"), do NOT attempt `Read` on that file — write a parser to `/tmp/parse_issues.py` and run it via `python3 /tmp/parse_issues.py` in a separate Bash call. Note: in the list_issues file, issues use `id` (not `identifier`) and `status`/`statusType` (not `state.name`/`state.type`) as field names.
-
 **Core flow — every multi-issue read goes through these four steps in order:**
 
-1. **`tapps_linear_snapshot_get(team, project, state, label?, projection="compact")` first.** Always pass `projection="compact"`. Pass the same `state`, `label`, and `limit` you would pass to `list_issues`. State buckets the cache TTL (5 min for `open`/`unstarted`/`started`, 1 h for `completed`/`canceled`).
+1. **`tapps_linear_snapshot_get(team, project, state, label?)` first.** Pass the same `state`, `label`, and `limit` you would pass to `list_issues`. State buckets the cache TTL (5 min for `open`/`unstarted`/`started`, 1 h for `completed`/`canceled`).
 2. **On `cached=true`**, use `data.issues` and filter in-memory for the rest of the user's question — `list_issues` is NOT called. Project the fields you need with a list comprehension; do not re-query.
-3. **On `cached=false`**, call `mcp__plugin_linear_linear__list_issues` with NARROW filters: `team`, `project`, `state`, `includeArchived=false`. Never call without filters; never call with only `team` + `limit:250`. If the response exceeds 25k tokens and is saved to a file, parse it via a `/tmp/parse_issues.py` script rather than Read.
+3. **On `cached=false`**, call `mcp__plugin_linear_linear__list_issues` with NARROW filters: `team`, `project`, `state`, `includeArchived=false`. Never call without filters; never call with only `team` + `limit:250`.
 4. **Immediately after the miss-fetch**, populate the cache via `tapps_linear_snapshot_put(team, project, issues_json=json.dumps(issues), state, label?, limit?)` using the **same** key dimensions as the get call so the keys align.
 
 **The 6-poll kickoff antipattern (the single biggest source of TAP-967's call volume):**

@@ -6,6 +6,8 @@ mcp_tools:
   - tapps_quick_check
 ---
 
+> **DEPRECATED (v3.11.0+):** Wraps a single MCP tool with no orchestration. Call `tapps_quick_check` directly or invoke the `tapps-finish-task` skill. Scheduled for removal in v3.12.0.
+
 Score the specified Python file using TappsMCP:
 
 1. Call `tapps_quick_check` with the file path to get an instant score

@@ -9,6 +9,8 @@ allowed-tools: mcp__tapps-mcp__tapps_report
 argument-hint: "[file-path or empty for project-wide]"
 ---
 
+> **DEPRECATED (v3.11.0+):** This skill wraps a single MCP tool and adds no orchestration. Call `mcp__tapps-mcp__tapps_report(file_paths=...)` directly. Scheduled for removal in v3.12.0.
+
 Generate a quality report using TappsMCP:
 
 1. Call `mcp__tapps-mcp__tapps_report` with an optional file path

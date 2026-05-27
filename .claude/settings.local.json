@@ -6,7 +6,10 @@
       "Edit(*)",
       "Write(*)",
       "mcp__tapps-mcp__*",
-      "mcp__docs-mcp__*"
+      "mcp__docs-mcp__*",
+      "Bash(mkdir -p ~/.claude/skills/tapps-upgrade)",
+      "Read(//home/wtthornton/.claude/skills/**)",
+      "mcp__tapps-admin__tapps_upgrade"
     ],
     "deny": [
       "Bash(rm -rf /)",

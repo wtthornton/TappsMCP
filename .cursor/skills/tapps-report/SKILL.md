@@ -7,6 +7,8 @@ mcp_tools:
   - tapps_report
 ---
 
+> **DEPRECATED (v3.11.0+):** Wraps a single MCP tool with no orchestration. Call `tapps_report` directly. Scheduled for removal in v3.12.0.
+
 Generate a quality report using TappsMCP:
 
 1. Call `tapps_report` with an optional file path

@@ -5,6 +5,8 @@ mcp_tools:
   - tapps_validate_changed
 ---
 
+> **DEPRECATED (v3.11.0+):** Wraps a single MCP tool with no orchestration. Call `tapps_validate_changed` directly or invoke the `tapps-finish-task` skill (bundles validate + checklist + memory save). Scheduled for removal in v3.12.0.
+
 Validate changed files using TappsMCP:
 
 1. Identify the Python files you changed in this session (from git status or your edit history)

@@ -7,6 +7,8 @@ allowed-tools: mcp__tapps-mcp__tapps_validate_changed
 disable-model-invocation: true
 ---
 
+> **DEPRECATED (v3.11.0+):** This skill wraps a single MCP tool and adds no orchestration. Call `mcp__tapps-mcp__tapps_validate_changed(file_paths="...")` directly, or invoke `/tapps-finish-task` which bundles validate + checklist + memory save. Scheduled for removal in v3.12.0.
+
 Validate changed files using TappsMCP:
 
 1. Identify the Python files you changed in this session (from git status or your edit history)

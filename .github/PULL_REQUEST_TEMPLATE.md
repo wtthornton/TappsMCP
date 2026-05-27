@@ -1,4 +1,4 @@
-<!-- tapps-generated: v3.10.18 -->
+<!-- tapps-generated: v3.11.1 -->
 ## Summary
 
 <!-- 1-3 bullet points describing what this PR does -->
@@ -31,4 +31,3 @@ None
 - [ ] Self-review of code completed
 - [ ] Tests added for new functionality
 - [ ] Documentation updated if needed
-- [ ] Hive writes? Each `agent_scope="hive"` / `hive_push` / `hive_propagate` call has a `# hive-approved: TAP-XXXX` annotation linking to a maintainer-approved issue.
