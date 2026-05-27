@@ -61,7 +61,8 @@ class TestResolveAllowedTools:
         settings.tool_preset = "pipeline"
         allowed = _resolve_allowed_tools(settings)
         assert allowed == TOOL_PRESET_PIPELINE
-        assert len(allowed) == 12
+        # TAP-1994: tapps_memory removed from catalog; was 12, now 11
+        assert len(allowed) == 11
 
     def test_preset_full(self) -> None:
         from tapps_mcp.server import ALL_TOOL_NAMES, _resolve_allowed_tools
@@ -93,7 +94,8 @@ class TestResolveAllowedTools:
         settings.tool_preset = "planner"
         allowed = _resolve_allowed_tools(settings)
         assert allowed == TOOL_PRESET_PLANNER
-        assert len(allowed) == 6
+        # TAP-1994: tapps_memory removed from catalog; was 6, now 5
+        assert len(allowed) == 5
 
     def test_preset_frontend(self) -> None:
         from tapps_mcp.server import TOOL_PRESET_FRONTEND, _resolve_allowed_tools
@@ -115,7 +117,8 @@ class TestResolveAllowedTools:
         settings.tool_preset = "developer"
         allowed = _resolve_allowed_tools(settings)
         assert allowed == TOOL_PRESET_DEVELOPER
-        assert len(allowed) == 10
+        # TAP-1994: tapps_memory removed from catalog; was 10, now 9
+        assert len(allowed) == 9
 
     def test_enabled_tools_invalid_names_ignored(self) -> None:
         from tapps_mcp.server import _resolve_allowed_tools
@@ -201,17 +204,18 @@ class TestToolPresetConstants:
         assert TOOL_PRESET_CORE <= TOOL_PRESET_PIPELINE
         tier2 = {
             "tapps_score_file",
-            "tapps_memory",
             "tapps_impact_analysis",
             "tapps_validate_config",
         }
         assert tier2 <= TOOL_PRESET_PIPELINE
-        assert len(TOOL_PRESET_PIPELINE) == 12
+        # TAP-1994: tapps_memory removed from catalog; was 12, now 11
+        assert len(TOOL_PRESET_PIPELINE) == 11
 
     def test_all_tool_names_count(self) -> None:
         from tapps_mcp.server import ALL_TOOL_NAMES
 
         # 26 core + 3 linear-snapshot (TAP-964, shipped 3.3.0) + 1 release_update
         # + 1 tapps_linear_count (TAP-1847) + 1 tapps_audit_campaign (TAP-2036)
-        # + 1 tapps_session_end (TAP-2005) + 1 tapps_usage (v3.11.0) = 34.
-        assert len(ALL_TOOL_NAMES) == 34
+        # + 1 tapps_session_end (TAP-2005) + 1 tapps_usage (v3.11.0)
+        # -1 tapps_memory (TAP-1994) = 33.
+        assert len(ALL_TOOL_NAMES) == 33

@@ -86,9 +86,8 @@ EXPECTED_ANNOTATIONS: dict[str, ToolAnnotations] = {
     "tapps_upgrade": _SIDE_EFFECT_IDEMPOTENT,
     "tapps_set_engagement_level": _SIDE_EFFECT_IDEMPOTENT,
     "tapps_linear_snapshot_put": _SIDE_EFFECT_IDEMPOTENT,
-    # Side-effect, non-idempotent (2 tools)
+    # Side-effect, non-idempotent (1 tool — TAP-1994: tapps_memory removed from catalog)
     "tapps_feedback": _SIDE_EFFECT,
-    "tapps_memory": _SIDE_EFFECT,
     # Destructive, idempotent (1 tool — cache eviction)
     "tapps_linear_snapshot_invalidate": _DESTRUCTIVE_IDEMPOTENT,
 }
@@ -179,8 +178,9 @@ class TestAnnotationCategories:
             for name, tool in tools.items()
             if tool.annotations and not tool.annotations.readOnlyHint
         ]
-        # 5 idempotent + 2 non-idempotent + linear-snapshot-put + linear-snapshot-invalidate = 9
-        assert len(side_effect) == 9, (
+        # 5 idempotent + 1 non-idempotent (tapps_feedback) + linear-snapshot-put
+        # + linear-snapshot-invalidate = 8 (TAP-1994: tapps_memory removed)
+        assert len(side_effect) == 8, (
             f"Expected 9 side-effect tools, got {len(side_effect)}"
         )
 
@@ -268,7 +268,6 @@ class TestDeferLoading:
                 "tapps_dashboard",
                 "tapps_stats",
                 "tapps_feedback",
-                "tapps_memory",
                 "tapps_session_notes",
                 "tapps_report",
                 "tapps_dead_code",

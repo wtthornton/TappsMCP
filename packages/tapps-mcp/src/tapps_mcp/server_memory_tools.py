@@ -40,18 +40,6 @@ if TYPE_CHECKING:
     from tapps_core.memory.models import MemoryEntry
     from tapps_core.memory.store import MemoryStore
 
-from mcp.types import ToolAnnotations
-
-_ANNOTATIONS_MEMORY = ToolAnnotations(
-    readOnlyHint=False,
-    destructiveHint=False,
-    idempotentHint=False,
-    openWorldHint=False,
-)
-
-# TAP-1986: tapps_memory is deferred (not a daily driver).
-_META_DEFERRED: dict[str, Any] = {"defer_loading": True}
-
 _VALUE_PREVIEW_LEN = 200
 
 logger = structlog.get_logger(__name__)
@@ -4100,9 +4088,10 @@ def _record_call(tool_name: str, *, success: bool = True) -> None:
 
 
 def register(mcp_instance: FastMCP, allowed_tools: frozenset[str]) -> None:
-    """Register memory tools on the shared *mcp_instance* (Epic 79.1: conditional).
+    """Register memory tools on the shared *mcp_instance*.
 
-    TAP-1986: tapps_memory is deferred (not a daily driver).
+    TAP-1994 (Phase 3): tapps_memory removed from MCP catalog. Session-lifecycle
+    helpers (_handle_session_start_capture, _handle_session_end_consolidate) remain
+    as internal functions called from tapps_session_start / tapps_session_end via
+    call_memory_index_session_start in tools/session_start_helpers.py.
     """
-    if "tapps_memory" in allowed_tools:
-        mcp_instance.tool(annotations=_ANNOTATIONS_MEMORY, meta=_META_DEFERRED)(tapps_memory)

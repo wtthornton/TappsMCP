@@ -1,11 +1,9 @@
-"""TAP-1993: tapps_memory Phase 2 — refused-envelope redirect tests.
+"""TAP-1993/TAP-1994: tapps_memory internal-function tests.
 
-After Phase 2, only ``session_start_capture`` and ``session_end_consolidate``
-actually dispatch. Every other action returns a structured refused envelope:
-
-    {"refused": True, "use": "mcp__tapps-brain__<tool>", "action": "<original>"}
-
-so agents can self-correct without parsing a human error message.
+TAP-1993 (Phase 2): non-lifecycle actions return a refused-redirect envelope.
+TAP-1994 (Phase 3): tapps_memory is no longer registered as an MCP tool.
+The function continues to exist as an internal helper for lifecycle calls;
+all non-lifecycle behaviour remains as before (refused envelope redirects).
 """
 
 from __future__ import annotations
@@ -213,4 +211,26 @@ class TestLifecycleActions:
         missing = non_lifecycle - set(_REFUSED_BRAIN_TOOL.keys())
         assert not missing, (
             f"These non-lifecycle actions are missing from _REFUSED_BRAIN_TOOL: {sorted(missing)}"
+        )
+
+
+class TestMcpCatalogRemoval:
+    """TAP-1994 (Phase 3): tapps_memory must NOT appear in the MCP tool catalog."""
+
+    def test_tapps_memory_not_in_mcp_tool_catalog(self) -> None:
+        """tapps_memory must be absent from the live MCP tool registry after Phase 3."""
+        from tapps_mcp.server import mcp
+
+        tools = mcp._tool_manager._tools
+        assert "tapps_memory" not in tools, (
+            "tapps_memory is still registered as an MCP tool — "
+            "TAP-1994 requires it to be removed from the catalog"
+        )
+
+    def test_tapps_memory_not_in_all_tool_names(self) -> None:
+        """ALL_TOOL_NAMES must not include tapps_memory after Phase 3."""
+        from tapps_mcp.server import ALL_TOOL_NAMES
+
+        assert "tapps_memory" not in ALL_TOOL_NAMES, (
+            "tapps_memory still listed in ALL_TOOL_NAMES — remove it (TAP-1994)"
         )

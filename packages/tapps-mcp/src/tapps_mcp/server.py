@@ -7,7 +7,7 @@ Tool handlers are split across modules for maintainability:
   - ``server_scoring_tools``: tapps_score_file, tapps_quality_gate, tapps_quick_check
   - ``server_pipeline_tools``: tapps_validate_changed, tapps_session_start, tapps_init
   - ``server_metrics_tools``: tapps_dashboard, tapps_stats, tapps_feedback
-  - ``server_memory_tools``: tapps_memory
+  - ``server_memory_tools``: (internal lifecycle helpers only; no public MCP tools)
   - ``server_analysis_tools``: tapps_session_notes, tapps_impact_analysis, tapps_report,
     tapps_dead_code, tapps_dependency_scan, tapps_dependency_graph, tapps_audit_campaign
   - ``server_resources``: MCP resources and prompts
@@ -225,7 +225,6 @@ ALL_TOOL_NAMES: frozenset[str] = frozenset(
         "tapps_dependency_scan",
         "tapps_dependency_graph",
         "tapps_audit_campaign",
-        "tapps_memory",
         "tapps_pipeline",
         "tapps_decompose",
         "tapps_linear_snapshot_get",
@@ -254,7 +253,6 @@ TOOL_PRESET_CORE: frozenset[str] = frozenset(
 TOOL_PRESET_PIPELINE: frozenset[str] = TOOL_PRESET_CORE | frozenset(
     {
         "tapps_score_file",
-        "tapps_memory",
         "tapps_impact_analysis",
         "tapps_validate_config",
     }
@@ -281,7 +279,6 @@ TOOL_PRESET_PLANNER: frozenset[str] = frozenset(
         "tapps_validate_changed",
         "tapps_quality_gate",
         "tapps_score_file",
-        "tapps_memory",
     }
 )
 TOOL_PRESET_FRONTEND: frozenset[str] = frozenset(
@@ -303,7 +300,6 @@ TOOL_PRESET_DEVELOPER: frozenset[str] = frozenset(
         "tapps_score_file",
         "tapps_security_scan",
         "tapps_lookup_docs",
-        "tapps_memory",
         "tapps_impact_analysis",
     }
 )
@@ -320,7 +316,6 @@ TAPPS_TOOL_PRESET_QUALITY: frozenset[str] = frozenset(
         "tapps_validate_changed",
         "tapps_security_scan",
         "tapps_lookup_docs",
-        "tapps_memory",
         "tapps_dead_code",
         "tapps_impact_analysis",
         "tapps_validate_config",
@@ -1639,7 +1634,6 @@ tapps_init = _pipeline.tapps_init
 tapps_dashboard = _metrics.tapps_dashboard
 tapps_stats = _metrics.tapps_stats
 tapps_feedback = _metrics.tapps_feedback
-tapps_memory = _memory.tapps_memory
 tapps_session_notes = _analysis.tapps_session_notes
 tapps_impact_analysis = _analysis.tapps_impact_analysis
 tapps_report = _analysis.tapps_report
