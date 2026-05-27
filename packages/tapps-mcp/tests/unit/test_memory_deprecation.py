@@ -18,7 +18,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from tapps_mcp.server_memory_tools import _VALID_ACTIONS, tapps_memory
+from tapps_mcp.server_memory_tools import _LIFECYCLE_ACTIONS, _VALID_ACTIONS, tapps_memory
 
 
 class TestDeprecationNotices:
@@ -44,9 +44,13 @@ class TestDeprecationNotices:
             "tapps_memory docstring must reference mcp__tapps-brain__* as the migration target."
         )
 
-    @pytest.mark.parametrize("action", sorted(_VALID_ACTIONS))
+    @pytest.mark.parametrize("action", sorted(_VALID_ACTIONS - _LIFECYCLE_ACTIONS))
     def test_action_has_deprecation_prefix(self, action: str) -> None:
-        """Each action in _VALID_ACTIONS must have a [DEPRECATED 2026-Q3] prefix in the Actions: block."""
+        """Each deprecated action in _VALID_ACTIONS must have a [DEPRECATED 2026-Q3] prefix.
+
+        Lifecycle actions (session_start_capture, session_end_consolidate) are excluded
+        because they are active, non-deprecated actions (TAP-1993).
+        """
         doc = self._get_docstring()
         # The Actions: block uses "        action_name: [DEPRECATED..." format.
         # We check for the action name followed by the deprecation tag anywhere in the doc.
@@ -56,9 +60,12 @@ class TestDeprecationNotices:
             f"Expected to find '{deprecated_marker}' in the Actions: block."
         )
 
-    @pytest.mark.parametrize("action", sorted(_VALID_ACTIONS))
+    @pytest.mark.parametrize("action", sorted(_VALID_ACTIONS - _LIFECYCLE_ACTIONS))
     def test_action_deprecation_names_brain_tool(self, action: str) -> None:
-        """Each action's deprecation line must name a specific mcp__tapps-brain__ target."""
+        """Each deprecated action's docstring entry must name a specific mcp__tapps-brain__ target.
+
+        Lifecycle actions are excluded (TAP-1993 — they are active, not deprecated).
+        """
         doc = self._get_docstring()
         # Find the line with this action's deprecation tag.
         deprecated_marker = f"{action}: [DEPRECATED 2026-Q3"

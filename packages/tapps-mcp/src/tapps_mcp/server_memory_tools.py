@@ -107,6 +107,9 @@ _VALID_ACTIONS = {
     # TAP-1633: native session memory replaces the bespoke local index.
     "search_sessions",
     "session_end",
+    # TAP-1993: Phase 2 lifecycle-only actions (NOT deprecated — tapps-internal).
+    "session_start_capture",
+    "session_end_consolidate",
 }
 
 # Scope values accepted by save / save_bulk / get / list / search.
@@ -149,6 +152,9 @@ _ASYNC_ACTIONS = {
     "index_session",
     "search_sessions",
     "session_end",
+    # TAP-1993: lifecycle-only actions.
+    "session_start_capture",
+    "session_end_consolidate",
 }
 
 # TAP-1080: async actions that work when the in-process store is None
@@ -179,6 +185,9 @@ _ASYNC_HTTP_OK_ACTIONS = {
     "index_session",
     "search_sessions",
     "session_end",
+    # TAP-1993: lifecycle-only actions — HTTP-only.
+    "session_start_capture",
+    "session_end_consolidate",
 }
 
 # TAP-1421: sync actions whose primitives are also exposed on BrainBridge as
@@ -198,6 +207,62 @@ _HTTP_BRIDGE_FALLBACK_ACTIONS = {
     # TAP-1631: bulk save in HTTP mode routes to memory_save_many (1 round
     # trip) instead of the N-call in-process loop.
     "save_bulk",
+}
+
+# TAP-1993: Phase 2 — only these two actions actually dispatch; all others
+# return a structured refused envelope pointing to the brain tool directly.
+_LIFECYCLE_ACTIONS: frozenset[str] = frozenset(
+    {
+        "session_start_capture",
+        "session_end_consolidate",
+    }
+)
+
+# Maps each non-lifecycle tapps_memory action to its direct brain replacement.
+# Used to build the refused-envelope `use` field so agents can self-correct.
+_REFUSED_BRAIN_TOOL: dict[str, str] = {
+    "save": "mcp__tapps-brain__brain_remember",
+    "save_bulk": "mcp__tapps-brain__brain_remember",
+    "get": "mcp__tapps-brain__brain_recall",
+    "list": "mcp__tapps-brain__brain_recall",
+    "delete": "mcp__tapps-brain__brain_recall",
+    "search": "mcp__tapps-brain__memory_search",
+    "reinforce": "mcp__tapps-brain__brain_remember",
+    "gc": "mcp__tapps-brain__brain_status",
+    "contradictions": "mcp__tapps-brain__brain_status",
+    "reseed": "mcp__tapps-brain__brain_status",
+    "import": "mcp__tapps-brain__brain_remember",
+    "export": "mcp__tapps-brain__brain_recall",
+    "consolidate": "mcp__tapps-brain__brain_recall",
+    "unconsolidate": "mcp__tapps-brain__brain_recall",
+    "federate_register": "mcp__tapps-brain__brain_status",
+    "federate_publish": "mcp__tapps-brain__brain_status",
+    "federate_subscribe": "mcp__tapps-brain__brain_status",
+    "federate_sync": "mcp__tapps-brain__brain_status",
+    "federate_search": "mcp__tapps-brain__hive_search",
+    "federate_status": "mcp__tapps-brain__brain_status",
+    "validate": "mcp__tapps-brain__brain_status",
+    "maintain": "mcp__tapps-brain__brain_status",
+    "safety_check": "mcp__tapps-brain__brain_status",
+    "verify_integrity": "mcp__tapps-brain__brain_status",
+    "health": "mcp__tapps-brain__brain_status",
+    "profile_info": "mcp__tapps-brain__brain_status",
+    "profile_list": "mcp__tapps-brain__brain_status",
+    "profile_switch": "mcp__tapps-brain__brain_status",
+    "hive_status": "mcp__tapps-brain__brain_status",
+    "hive_search": "mcp__tapps-brain__hive_search",
+    "hive_propagate": "mcp__tapps-brain__brain_status",
+    "agent_register": "mcp__tapps-brain__brain_status",
+    "related": "mcp__tapps-brain__memory_find_related",
+    "relations": "mcp__tapps-brain__memory_find_related",
+    "neighbors": "mcp__tapps-brain__brain_get_neighbors",
+    "explain_connection": "mcp__tapps-brain__brain_explain_connection",
+    "recall_many": "mcp__tapps-brain__brain_recall",
+    "reinforce_many": "mcp__tapps-brain__brain_remember",
+    "rate": "mcp__tapps-brain__brain_remember",
+    "index_session": "mcp__tapps-brain__brain_remember",
+    "search_sessions": "mcp__tapps-brain__memory_search",
+    "session_end": "mcp__tapps-brain__brain_status",
 }
 
 
@@ -686,6 +751,11 @@ async def tapps_memory(
             Search indexed session memories by query. (TAP-1633)
         session_end: [DEPRECATED 2026-Q3 — use mcp__tapps-brain__brain_status] Flush
             and finalize the current session's memory index. (TAP-1633)
+        session_start_capture: Index the start of the current session into brain memory.
+            Canonical lifecycle action (TAP-1993). Delegates to the brain index-session
+            primitive. Pass value=<session summary or context> to capture session intent.
+        session_end_consolidate: Finalize and consolidate the current session in brain
+            memory. Canonical lifecycle action (TAP-1993). Pass value=<session summary>.
     """
     await ensure_session_initialized()
     _record_call("tapps_memory")
@@ -712,7 +782,7 @@ async def tapps_memory(
 
             async def _fire_deprecation_event() -> None:
                 try:
-                    await _ev_bridge.record_event(  # type: ignore[union-attr]
+                    await _ev_bridge.record_event(
                         "deprecated_tool_call",
                         f"tapps_memory:{action}",
                     )
@@ -722,6 +792,25 @@ async def tapps_memory(
             asyncio.create_task(_fire_deprecation_event())  # noqa: RUF006
     except Exception:
         pass  # never block tapps_memory for telemetry
+
+    # TAP-1993: Phase 2 — non-lifecycle actions are fully redirected to direct
+    # brain tools. Return a machine-readable refused envelope so agents can
+    # self-correct without parsing a human error message.
+    if action not in _LIFECYCLE_ACTIONS:
+        brain_tool = _REFUSED_BRAIN_TOOL.get(action, "mcp__tapps-brain__brain_recall")
+        return success_response(
+            "tapps_memory",
+            0,
+            {
+                "refused": True,
+                "use": brain_tool,
+                "action": action,
+                "hint": (
+                    f"tapps_memory(action='{action}') has been retired. "
+                    f"Call {brain_tool} directly instead."
+                ),
+            },
+        )
 
     try:
         store = _get_memory_store()
@@ -2027,6 +2116,39 @@ async def _handle_session_end(store: MemoryStore, p: _Params) -> dict[str, Any]:
         "daily_note": p.dry_run,
         "result": result,
     }
+
+
+# TAP-1993: lifecycle-only action handlers. These are thin wrappers around the
+# existing session-bridge primitives so the dispatch table can key on the new
+# canonical action names while reusing all the logic above.
+
+
+async def _handle_session_start_capture(store: MemoryStore, p: _Params) -> dict[str, Any]:
+    """Capture the start of the current session in tapps-brain (TAP-1993).
+
+    Delegates to ``_handle_index_session``; the canonical lifecycle action name
+    is ``session_start_capture`` while the underlying brain call is unchanged.
+    """
+    result = await _handle_index_session(store, p)
+    # Remap the ``action`` key so callers see the lifecycle name, not the
+    # deprecated ``index_session`` name.
+    if isinstance(result, dict) and result.get("action") == "index_session":
+        result = {**result, "action": "session_start_capture"}
+    return result
+
+
+async def _handle_session_end_consolidate(store: MemoryStore, p: _Params) -> dict[str, Any]:
+    """Finalize and consolidate the current session in tapps-brain (TAP-1993).
+
+    Delegates to ``_handle_session_end``; the canonical lifecycle action name
+    is ``session_end_consolidate`` while the underlying brain call is unchanged.
+    """
+    result = await _handle_session_end(store, p)
+    # Remap the ``action`` key so callers see the lifecycle name, not the
+    # deprecated ``session_end`` name.
+    if isinstance(result, dict) and result.get("action") == "session_end":
+        result = {**result, "action": "session_end_consolidate"}
+    return result
 
 
 def _handle_federate_register(store: MemoryStore, params: _Params) -> dict[str, Any]:
@@ -3758,6 +3880,9 @@ _ASYNC_DISPATCH: dict[str, Any] = {
     "index_session": _handle_index_session,
     "search_sessions": _handle_search_sessions,
     "session_end": _handle_session_end,
+    # TAP-1993: lifecycle-only canonical actions (Phase 2).
+    "session_start_capture": _handle_session_start_capture,
+    "session_end_consolidate": _handle_session_end_consolidate,
 }
 
 
