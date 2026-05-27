@@ -868,6 +868,13 @@ Before writing client-side logic that talks to an external system, ask:
 1. Does the server already enforce this decision? If yes, just call and react to the response — don't pre-check.
 2. Is the auth path I'm proposing already solved by an existing plugin / OAuth session? If yes, use it; don't add a parallel credential.
 3. Does this claim about an external API come from a subagent report, or did I read the producer's code myself? If the former, verify before citing.
+
+## See also
+
+The mechanical implementation of rule 1 is the **Agent Gateway pattern** — server-side refusal envelopes with machine-readable `code` fields. See:
+
+- [docs/ARCHITECTURE.md — Agent Gateway pattern](../../docs/ARCHITECTURE.md#agent-gateway-pattern-tap-2008-2026) — architecture overview, industry refs (Google Agent Gateway, Databricks Unity AI Gateway), and the gates currently implemented in tapps-mcp.
+- [docs/architecture/gateway-envelope.md](../../docs/architecture/gateway-envelope.md) — full field spec, refusal codes, and copy-paste JSON examples for each gate.
 """
 
 

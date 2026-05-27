@@ -240,6 +240,60 @@ The `tapps_doctor` tool/CLI command runs configuration and connectivity checks:
 - **Completion-gate hook** (v3.11.0+): `.claude/hooks/tapps-stop.sh` presence; warns when missing because warn-mode telemetry to `.completion-gate-violations.jsonl` is inactive without it
 - **Usage gaps** (v3.11.0+): pulls the latest gap report from `tapps_usage` (gap count, top recommendation) so triage surfaces "what did the agent miss?" without a separate call
 
+## Agent Gateway pattern (TAP-2008, 2026)
+
+The Agent Gateway pattern is the 2026 industry-standard approach to MCP policy enforcement: push decisions to the server, return structured refusal envelopes, and let the client react. The alternative — fetching policy rules client-side, caching them, and re-deriving the decision locally — creates a second source of truth that drifts from the server's copy.
+
+### Core principle
+
+> If the server already enforces a decision, just make the call and read the response. Don't pre-check.
+
+This is documented in `.claude/rules/integration-hygiene.md` as rule 1 ("Don't mirror server-enforced state in the client"). The gateway pattern is how that principle is implemented mechanically.
+
+### Industry references (2026)
+
+- **Google Agent Gateway** (`docs.cloud.google.com/gemini-enterprise-agent-platform/govern/gateways/agent-gateway-overview`) — Google's canonical deployment for MCP security and policy enforcement at the gateway layer: auth, rate limits, audit, and structured refusal.
+- **Databricks Unity AI Gateway** — same pattern applied to model access, data governance, and policy-as-code via OPA.
+- **InfoQ: Building AI Agent Gateways with MCP** (`infoq.com/articles/building-ai-agent-gateway-mcp`) — architectural walkthrough of the gateway-as-MCP-server pattern.
+
+### Refusal envelope shape
+
+When a server-side gate fires (missing prerequisite, rate limit, policy violation), it returns a structured envelope instead of a plain error. This lets the client react without inspecting error strings:
+
+```json
+{
+  "ok": false,
+  "code": "gate_miss",
+  "gate": "linear_cache_first_read",
+  "hint": "Call tapps_linear_snapshot_get(team, project, state) first, then list_issues.",
+  "bypass_env": "TAPPS_LINEAR_SKIP_CACHE_GATE",
+  "logged_to": ".tapps-mcp/.cache-gate-violations.jsonl"
+}
+```
+
+Full field spec: [docs/architecture/gateway-envelope.md](architecture/gateway-envelope.md).
+
+### Implemented gates (tapps-mcp + docs-mcp)
+
+| Gate | Server | Trigger | Envelope code |
+|---|---|---|---|
+| Linear cache-first read | tapps-mcp PreToolUse hook | `list_issues` without prior `snapshot_get` | `gate_miss` |
+| Linear write validation | tapps-mcp PreToolUse hook | `save_issue` without prior `docs_validate_linear_issue` | `validate_missing` |
+| Completion gate | tapps-mcp Stop hook | session end without `tapps_checklist` | `checklist_missing` |
+
+### How to add a new gate
+
+1. Implement the server-side check in the appropriate `server_*.py` handler or hook script.
+2. Return the structured refusal envelope (see spec) on failure — never raise a bare exception.
+3. Document the gate in this table and the envelope spec file.
+4. Add a `bypass_env` escape hatch (logged to `.bypass-log.jsonl`) for genuine emergencies.
+
+### Anti-patterns
+
+- **Client-side rule cache**: fetching `/api/policy` and re-checking locally. The server re-checks on submit anyway; the client copy drifts.
+- **String-matching error messages**: parsing `"error: missing validate"` instead of reading `code: "validate_missing"`.
+- **Silent pass-through**: returning HTTP 200 with `"allowed": false` buried in the body — use a top-level `ok: false` so the client can branch unconditionally.
+
 ## Config scope (Epic 47)
 
 Default is `"project"` scope (`.mcp.json` in project root). The `doctor` command warns when tapps-mcp is in user-scope `~/.claude.json`.
