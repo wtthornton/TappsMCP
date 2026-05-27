@@ -1,7 +1,9 @@
 """Output-shaping helpers for validate_changed.
 
 Extracted from ``validate_changed.py`` to keep that module under the
-800-line budget.
+800-line budget. TAP-2468 added the response-data assembly, judge
+invocation, and timeout-hint helpers that were previously in
+``validate_changed.py``.
 """
 
 from __future__ import annotations
@@ -261,13 +263,72 @@ def _handle_no_changed_files(
     return with_nudges("tapps_validate_changed", resp)
 
 
+def _build_response_data(
+    results: list[dict[str, Any]],
+    all_passed: bool,
+    total_sec: int,
+    per_file_results: list[dict[str, Any]],
+    summary_rows: list[str],
+    summary: str,
+    impact_data: dict[str, Any] | None,
+) -> dict[str, Any]:
+    """Assemble the base response data dict for tapps_validate_changed."""
+    resp_data: dict[str, Any] = {
+        "files_validated": len(results),
+        "all_gates_passed": all_passed,
+        "total_security_issues": total_sec,
+        "per_file_results": per_file_results,
+        "summary_rows": summary_rows,
+        "results": results,
+        "summary": summary,
+    }
+    if impact_data is not None:
+        resp_data["impact_summary"] = impact_data
+    return resp_data
+
+
+async def _run_judges(
+    judges: list[dict[str, Any]],
+    project_root: Path,
+) -> dict[str, Any]:
+    """Invoke judges and return the judge-result payload (advisory by default)."""
+    try:
+        from tapps_core.metrics.judge import run_judges
+
+        return await run_judges(judges, cwd=project_root)
+    except Exception:
+        _logger.debug("judge_run_failed", exc_info=True)
+        return {"judge_results": [], "judges_passed": False}
+
+
+def _append_timeout_hint(
+    resp: dict[str, Any],
+    files_remaining: list[Path],
+) -> None:
+    """Inject an auto-detect-budget hint into the response's next_steps."""
+    from tapps_mcp import server_pipeline_tools as _host
+
+    data = resp.get("data", {})
+    sample = ",".join(str(p) for p in files_remaining[:10])
+    hint = (
+        f"Auto-detect exceeded {_host._AUTO_DETECT_BUDGET_S:.0f}s budget with "
+        f"{len(files_remaining)} files unvalidated. Finish with explicit "
+        f'paths: tapps_validate_changed(file_paths="{sample}")'
+    )
+    existing = list(data.get("next_steps") or [])
+    data["next_steps"] = [hint, *existing][:5]
+
+
 __all__ = [
     "_SEVERITY_RANK",
+    "_append_timeout_hint",
     "_build_file_entry",
     "_build_per_file_results",
+    "_build_response_data",
     "_build_structured_validation_output",
     "_build_validation_summary",
     "_compute_impact_analysis",
     "_handle_no_changed_files",
     "_resolve_security_depth",
+    "_run_judges",
 ]
