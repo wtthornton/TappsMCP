@@ -598,7 +598,7 @@ Three sequential `list_issues({state: "backlog"})`, `({state: "unstarted"})`, `(
 
 - Calling `list_issues` without a prior `snapshot_get` for the same key.
 - Calling `list_issues({})` or `list_issues({team: "TAP", limit: 250})` (the unfiltered scroll — TAP-967's worst offender).
-- Re-fetching the same narrow query 5–12 times in one assistant turn with no intervening writes (use the cache).
+- Re-fetching the same narrow query 5-12 times in one assistant turn with no intervening writes (use the cache).
 - Single-issue lookup via `list_issues` filtering — use `get_issue(id)` instead.
 
 **Linear plugin parameter cheatsheet** (the flat parameters cover almost every real query — there is no need for raw GraphQL filter shapes):
@@ -1097,7 +1097,7 @@ Multi-issue Linear reads are cache-first by contract (TAP-967 audit: 5,368 `list
 3. On `cached=false`, call `linear_list_issues` with NARROW filters: `team`, `project`, `state`, `includeArchived=false`.
 4. Immediately call `tapps_linear_snapshot_put(team, project, issues_json=json.dumps(issues), state, label?, limit?)` with the **same** key dimensions as the get call.
 
-**The 6-poll kickoff antipattern:** firing six `list_issues` calls (one per state×priority bucket) collapses to one `snapshot_get(state="open")` plus an in-memory filter. The 5-min open-state TTL means the next session warms instantly.
+**The 6-poll kickoff antipattern:** firing six `list_issues` calls (one per state x priority bucket) collapses to one `snapshot_get(state="open")` plus an in-memory filter. The 5-min open-state TTL means the next session warms instantly.
 
 **Status-bucket sweep antipattern:** three sequential `list_issues` calls for `backlog`/`unstarted`/`started` collapses to one `snapshot_get(state="open")` + memory filter on `state.type`.
 
@@ -1105,7 +1105,7 @@ Multi-issue Linear reads are cache-first by contract (TAP-967 audit: 5,368 `list
 
 - `list_issues` without a prior `snapshot_get` for the same key.
 - `list_issues({})` or `list_issues({team, limit:250})` (the unfiltered scroll).
-- Re-fetching the same narrow query 5–12 times in one turn with no intervening writes.
+- Re-fetching the same narrow query 5-12 times in one turn with no intervening writes.
 - Single-issue lookup via `list_issues` filtering — use `get_issue(id)` instead.
 """,
 }
