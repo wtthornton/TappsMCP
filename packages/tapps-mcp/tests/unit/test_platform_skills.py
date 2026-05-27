@@ -93,7 +93,10 @@ class TestClaudeArgumentHint:
 class TestClaudeDisableModelInvocation:
     """Workflow-only skills must have disable-model-invocation: true."""
 
-    @pytest.mark.parametrize("skill_name", ["tapps-gate", "tapps-validate"])
+    @pytest.mark.parametrize(
+        "skill_name",
+        ["tapps-gate", "tapps-validate", "tapps-score", "tapps-report"],
+    )
     def test_disable_model_invocation_present(self, skill_name: str) -> None:
         fm = _get_frontmatter(CLAUDE_SKILLS[skill_name])
         assert "disable-model-invocation: true" in fm
@@ -101,7 +104,6 @@ class TestClaudeDisableModelInvocation:
     @pytest.mark.parametrize(
         "skill_name",
         [
-            "tapps-score",
             "tapps-review-pipeline",
             "tapps-research",
             "tapps-security",
