@@ -16,6 +16,13 @@ emergencies, bypass with `TAPPS_SKIP_PREPUSH=1 git push` — bypasses are
 logged to `.tapps-mcp/.bypass-log.jsonl`. Do not bypass for routine work; if
 the suite is red, fix it or pause.
 
+The pre-push hook also enforces a **tapps-brain version floor** (TAP-1923):
+it reads the `tapps-brain>=X.Y.Z` line from `packages/tapps-core/pyproject.toml`
+and blocks the push if the floor is below `3.18.0` (the ADR-0010 minimum,
+required to avoid crashes from the v3.18.0 alias removals). The same
+`TAPPS_SKIP_PREPUSH=1` bypass applies. Do not lower the floor below `3.18.0`
+— if you need to test an older brain, do so in a branch, never on master.
+
 The post-merge auto-sync hook (`.githooks/post-merge`) runs `uv sync
 --all-packages` after any merge / pull that touches `pyproject.toml`,
 `packages/*/pyproject.toml`, or `uv.lock` — so the project venv stays in
