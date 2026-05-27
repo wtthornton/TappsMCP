@@ -29,7 +29,7 @@ def get_dependency_findings(project_root: str, ttl: int = _CACHE_TTL) -> list[Vu
         return []
     findings, ts = entry
     if time.monotonic() - ts > ttl:
-        del _cache[str(project_root)]
+        _cache.pop(str(project_root), None)
         return []
     return findings
 

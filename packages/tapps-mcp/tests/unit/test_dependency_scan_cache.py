@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import threading
 from unittest.mock import patch
 
 from tapps_mcp.tools.dependency_scan_cache import (
@@ -76,6 +77,38 @@ class TestTTLExpiry:
             result = get_dependency_findings("/project", ttl=300)
 
         assert result == []
+
+
+    def test_concurrent_expiry_no_exception(self) -> None:
+        """Two concurrent reads on an expired entry never raise KeyError (TAP-1745).
+
+        Regression test for the check-then-del race: the first coroutine that
+        detects expiry should evict the key atomically so a concurrent second
+        reader finds nothing rather than raising KeyError.
+        """
+        from tapps_mcp.tools.dependency_scan_cache import _cache as dep_cache
+
+        # Plant an already-expired entry (ts=0.0 is always past any ttl > 0).
+        dep_cache["/race-test"] = ([], 0.0)
+
+        errors: list[Exception] = []
+        barrier = threading.Barrier(2)
+
+        def _reader() -> None:
+            barrier.wait()  # maximise overlap between the two reads
+            try:
+                get_dependency_findings("/race-test", ttl=1)
+            except Exception as exc:  # noqa: BLE001
+                errors.append(exc)
+
+        threads = [threading.Thread(target=_reader) for _ in range(2)]
+        for t in threads:
+            t.start()
+        for t in threads:
+            t.join(timeout=5.0)
+
+        assert not any(t.is_alive() for t in threads), "Threads did not complete"
+        assert errors == [], f"Concurrent expiry raised exceptions: {errors}"
 
 
 class TestClearDependencyCache:
