@@ -2,4 +2,4 @@
 
 from __future__ import annotations
 
-from tapps_core.memory.reinforcement import reinforce as reinforce
+from tapps_brain.reinforcement import reinforce as reinforce

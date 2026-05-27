@@ -16,7 +16,7 @@ import structlog
 if TYPE_CHECKING:
     from datetime import datetime
 
-    from tapps_core.memory.store import MemoryStore
+    from tapps_brain.store import MemoryStore
 
 from tapps_core.common.utils import utc_now
 from tapps_core.metrics.alerts import AlertManager
@@ -624,7 +624,7 @@ class DashboardGenerator:
     ) -> dict[str, Any] | None:
         """Build federation subsection when federation is available (Epic 65.1)."""
         try:
-            from tapps_core.memory.federation import (
+            from tapps_brain.federation import (
                 FederatedStore,
                 load_federation_config,
             )

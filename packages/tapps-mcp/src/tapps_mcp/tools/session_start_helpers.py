@@ -22,8 +22,8 @@ import structlog
 
 if TYPE_CHECKING:
     from tapps_core.config.settings import TappsMCPSettings
-    from tapps_core.memory.models import MemorySnapshot
-    from tapps_core.memory.store import MemoryStore
+    from tapps_brain.models import MemorySnapshot
+    from tapps_brain.store import MemoryStore
 
 _logger = structlog.get_logger(__name__)
 
@@ -111,7 +111,7 @@ def _enrich_memory_status_hints(
                 f"{consolidation['source_entries_count']} source entries"
             )
 
-        from tapps_core.memory.federation import load_federation_config
+        from tapps_brain.federation import load_federation_config
 
         config = load_federation_config()
         project_root_str = str(settings.project_root)
@@ -488,7 +488,7 @@ async def _maybe_validate_memories(
     try:
         from tapps_core.knowledge.cache import KBCache
         from tapps_core.knowledge.lookup import LookupEngine
-        from tapps_core.memory.doc_validation import MemoryDocValidator
+        from tapps_brain.doc_validation import MemoryDocValidator
 
         _cache = KBCache(settings.project_root / ".tapps-mcp-cache")
         lookup = LookupEngine(_cache, settings=settings)

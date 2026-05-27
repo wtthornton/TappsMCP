@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import pytest
 
-from tapps_core.memory.reranker import (
+from tapps_brain.reranker import (
     RERANKER_TOP_CANDIDATES,
     NoopReranker,
     get_reranker,
@@ -88,7 +88,7 @@ class TestGetReranker:
             import flashrank  # type: ignore[import-untyped]  # noqa: F401
         except ImportError:
             pytest.skip("flashrank not installed")
-        from tapps_core.memory.reranker import FlashRankReranker
+        from tapps_brain.reranker import FlashRankReranker
 
         r = get_reranker(enabled=True)
         assert isinstance(r, FlashRankReranker)

@@ -75,7 +75,7 @@ class TestMemoryExportContentReturn:
         return _Params(**defaults)  # type: ignore[arg-type]
 
     def test_export_content_return_json(self, tmp_path: Path) -> None:
-        from tapps_core.memory.store import MemoryStore
+        from tapps_brain.store import MemoryStore
         from tapps_mcp.server_memory_tools import _handle_export
 
         store = MemoryStore(project_root=tmp_path)
@@ -93,7 +93,7 @@ class TestMemoryExportContentReturn:
     def test_export_direct_write(self, tmp_path: Path) -> None:
         from unittest.mock import MagicMock
 
-        from tapps_core.memory.store import MemoryStore
+        from tapps_brain.store import MemoryStore
         from tapps_mcp.server_memory_tools import _handle_export
 
         store = MemoryStore(project_root=tmp_path)

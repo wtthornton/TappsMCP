@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from tapps_core.memory.io import (
+from tapps_brain.io import (
     export_memories,
     export_to_markdown,
     import_memories,

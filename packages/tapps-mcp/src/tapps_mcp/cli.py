@@ -685,7 +685,7 @@ def memory_list(tier: str | None, scope: str | None, as_json: bool) -> None:
     """List all memory entries with optional filters."""
     import json
 
-    from tapps_core.memory.store import MemoryStore
+    from tapps_brain.store import MemoryStore
 
     store = MemoryStore(_get_project_root(), store_dir=".tapps-mcp")
     try:
@@ -722,7 +722,7 @@ def memory_save(key: str, value: str, tier: str, tags: str) -> None:
     """Save a memory entry."""
     import json
 
-    from tapps_core.memory.store import MemoryStore
+    from tapps_brain.store import MemoryStore
 
     store = MemoryStore(_get_project_root(), store_dir=".tapps-mcp")
     try:
@@ -743,7 +743,7 @@ def memory_get(key: str) -> None:
     """Retrieve a memory entry by key."""
     import json
 
-    from tapps_core.memory.store import MemoryStore
+    from tapps_brain.store import MemoryStore
 
     store = MemoryStore(_get_project_root(), store_dir=".tapps-mcp")
     try:
@@ -840,7 +840,7 @@ def memory_search(query: str, limit: int, as_json: bool) -> None:
     """Search memories by full-text query."""
     import json
 
-    from tapps_core.memory.store import MemoryStore
+    from tapps_brain.store import MemoryStore
 
     store = MemoryStore(_get_project_root(), store_dir=".tapps-mcp")
     try:
@@ -866,7 +866,7 @@ def memory_search(query: str, limit: int, as_json: bool) -> None:
 @click.option("--key", required=True, help="Memory key to delete.")
 def memory_delete(key: str) -> None:
     """Delete a memory entry."""
-    from tapps_core.memory.store import MemoryStore
+    from tapps_brain.store import MemoryStore
 
     store = MemoryStore(_get_project_root(), store_dir=".tapps-mcp")
     try:
@@ -886,8 +886,8 @@ def memory_import(file_path: str, overwrite: bool) -> None:
     """Import memories from a JSON file."""
     from pathlib import Path
 
-    from tapps_core.memory.io import import_memories
-    from tapps_core.memory.store import MemoryStore
+    from tapps_brain.io import import_memories
+    from tapps_brain.store import MemoryStore
     from tapps_core.security.path_validator import PathValidator
 
     root = _get_project_root()
@@ -916,8 +916,8 @@ def memory_export(file_path: str) -> None:
     """Export memories to a JSON file."""
     from pathlib import Path
 
-    from tapps_core.memory.io import export_memories
-    from tapps_core.memory.store import MemoryStore
+    from tapps_brain.io import export_memories
+    from tapps_brain.store import MemoryStore
     from tapps_core.security.path_validator import PathValidator
 
     root = _get_project_root()

@@ -26,7 +26,7 @@ def _mock_session(monkeypatch: pytest.MonkeyPatch) -> None:
 @pytest.fixture()
 def mock_store(tmp_path: Path):
     """Create a real MemoryStore and patch _get_memory_store."""
-    from tapps_core.memory.store import MemoryStore
+    from tapps_brain.store import MemoryStore
 
     store = MemoryStore(tmp_path)
     try:

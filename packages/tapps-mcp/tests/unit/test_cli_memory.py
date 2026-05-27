@@ -9,7 +9,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 from click.testing import CliRunner
 
-from tapps_core.memory.models import MemoryEntry, MemoryScope, MemorySource, MemoryTier
+from tapps_brain.models import MemoryEntry, MemoryScope, MemorySource, MemoryTier
 from tapps_mcp.cli import main
 
 

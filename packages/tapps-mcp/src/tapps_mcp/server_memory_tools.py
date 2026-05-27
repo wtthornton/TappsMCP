@@ -37,8 +37,8 @@ if TYPE_CHECKING:
 
     from mcp.server.fastmcp import FastMCP
 
-    from tapps_core.memory.models import MemoryEntry
-    from tapps_core.memory.store import MemoryStore
+    from tapps_brain.models import MemoryEntry
+    from tapps_brain.store import MemoryStore
 
 _VALUE_PREVIEW_LEN = 200
 
@@ -1363,8 +1363,8 @@ def _handle_reinforce(store: MemoryStore, p: _Params) -> dict[str, Any]:
     old_confidence = entry.confidence
     old_tier = entry.tier if isinstance(entry.tier, str) else entry.tier.value
 
-    from tapps_core.memory.decay import DecayConfig
-    from tapps_core.memory.reinforcement import reinforce
+    from tapps_brain.decay import DecayConfig
+    from tapps_brain.reinforcement import reinforce
 
     config = DecayConfig()
     updates = reinforce(entry, config)
@@ -1463,7 +1463,7 @@ async def _handle_contradictions(store: MemoryStore, _p: _Params) -> dict[str, A
 def _handle_reseed(store: MemoryStore, _p: _Params) -> dict[str, Any]:
     """Re-seed memory from project profile (auto-seeded entries only)."""
     from tapps_core.config.settings import load_settings
-    from tapps_core.memory.seeding import reseed_from_profile
+    from tapps_brain.seeding import reseed_from_profile
     from tapps_mcp.project.profiler import detect_project_profile
 
     settings = load_settings()
@@ -1487,7 +1487,7 @@ def _handle_import(store: MemoryStore, p: _Params) -> dict[str, Any]:
         }
 
     from tapps_core.config.settings import load_settings
-    from tapps_core.memory.io import import_memories
+    from tapps_brain.io import import_memories
     from tapps_core.security.path_validator import PathValidator
 
     settings = load_settings()
@@ -1533,7 +1533,7 @@ def _handle_export(store: MemoryStore, p: _Params) -> dict[str, Any]:
     write_mode = detect_write_mode(settings.project_root)
 
     if write_mode == WriteMode.DIRECT_WRITE:
-        from tapps_core.memory.io import export_memories
+        from tapps_brain.io import export_memories
 
         result = export_memories(
             store,
@@ -1557,7 +1557,7 @@ def _handle_export(store: MemoryStore, p: _Params) -> dict[str, Any]:
         FileManifest,
         FileOperation,
     )
-    from tapps_core.memory.io import export_to_markdown
+    from tapps_brain.io import export_to_markdown
 
     snapshot = store.snapshot()
     entries = snapshot.entries
@@ -1908,9 +1908,9 @@ def _find_entries_by_query(
 ) -> list[MemoryEntry] | dict[str, Any]:
     """Find entries by query for consolidation."""
     from tapps_core.config.settings import load_settings
-    from tapps_core.memory.reranker import get_reranker
-    from tapps_core.memory.retrieval import MemoryRetriever
-    from tapps_core.memory.similarity import find_consolidation_groups
+    from tapps_brain.reranker import get_reranker
+    from tapps_brain.retrieval import MemoryRetriever
+    from tapps_brain.similarity import find_consolidation_groups
 
     settings = load_settings()
     rr = settings.memory.reranker
@@ -2142,7 +2142,7 @@ async def _handle_session_end_consolidate(store: MemoryStore, p: _Params) -> dic
 def _handle_federate_register(store: MemoryStore, params: _Params) -> dict[str, Any]:
     """Register this project in the federation hub."""
     from tapps_core.config.settings import load_settings
-    from tapps_core.memory.federation import register_project
+    from tapps_brain.federation import register_project
 
     settings = load_settings()
     pid = params.project_id or settings.project_root.name.lower().replace(" ", "-")
@@ -2165,7 +2165,7 @@ def _handle_federate_register(store: MemoryStore, params: _Params) -> dict[str, 
 def _handle_federate_publish(store: MemoryStore, params: _Params) -> dict[str, Any]:
     """Publish shared-scope memories to the federation hub."""
     from tapps_core.config.settings import load_settings
-    from tapps_core.memory.federation import FederatedStore, sync_to_hub
+    from tapps_brain.federation import FederatedStore, sync_to_hub
 
     settings = load_settings()
     pid = params.project_id or settings.project_root.name.lower().replace(" ", "-")
@@ -2193,7 +2193,7 @@ def _handle_federate_publish(store: MemoryStore, params: _Params) -> dict[str, A
 def _handle_federate_subscribe(store: MemoryStore, params: _Params) -> dict[str, Any]:
     """Subscribe to memories from other projects."""
     from tapps_core.config.settings import load_settings
-    from tapps_core.memory.federation import add_subscription
+    from tapps_brain.federation import add_subscription
 
     settings = load_settings()
     pid = params.project_id or settings.project_root.name.lower().replace(" ", "-")
@@ -2220,7 +2220,7 @@ def _handle_federate_subscribe(store: MemoryStore, params: _Params) -> dict[str,
 def _handle_federate_sync(store: MemoryStore, params: _Params) -> dict[str, Any]:
     """Pull subscribed memories from the federation hub."""
     from tapps_core.config.settings import load_settings
-    from tapps_core.memory.federation import FederatedStore, sync_from_hub
+    from tapps_brain.federation import FederatedStore, sync_from_hub
 
     settings = load_settings()
     pid = params.project_id or settings.project_root.name.lower().replace(" ", "-")
@@ -2245,7 +2245,7 @@ def _handle_federate_sync(store: MemoryStore, params: _Params) -> dict[str, Any]
 def _handle_federate_search(store: MemoryStore, params: _Params) -> dict[str, Any]:
     """Search across local and federated memories."""
     from tapps_core.config.settings import load_settings
-    from tapps_core.memory.federation import FederatedStore, federated_search
+    from tapps_brain.federation import FederatedStore, federated_search
 
     if not params.query:
         return {
@@ -2296,7 +2296,7 @@ def _handle_federate_search(store: MemoryStore, params: _Params) -> dict[str, An
 
 def _handle_federate_status(store: MemoryStore, params: _Params) -> dict[str, Any]:
     """Show federation hub status."""
-    from tapps_core.memory.federation import FederatedStore, load_federation_config
+    from tapps_brain.federation import FederatedStore, load_federation_config
 
     config = load_federation_config()
     federated = FederatedStore()
@@ -3765,7 +3765,7 @@ async def _handle_validate(store: MemoryStore, params: _Params) -> dict[str, Any
     from tapps_core.config.settings import load_settings
     from tapps_core.knowledge.cache import KBCache
     from tapps_core.knowledge.lookup import LookupEngine
-    from tapps_core.memory.doc_validation import MemoryDocValidator
+    from tapps_brain.doc_validation import MemoryDocValidator
 
     settings = load_settings()
     _cache = KBCache(settings.project_root / ".tapps-mcp-cache")
@@ -3888,8 +3888,8 @@ def _ranked_search(
 ) -> dict[str, Any]:
     """Execute ranked BM25 search via MemoryRetriever (hybrid + reranker when enabled)."""
     from tapps_core.config.settings import load_settings
-    from tapps_core.memory.reranker import get_reranker
-    from tapps_core.memory.retrieval import MemoryRetriever
+    from tapps_brain.reranker import get_reranker
+    from tapps_brain.retrieval import MemoryRetriever
 
     settings = load_settings()
     rr = settings.memory.reranker

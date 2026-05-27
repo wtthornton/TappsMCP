@@ -20,7 +20,7 @@ def metrics_dir(tmp_path: Path) -> Path:
 @pytest.fixture()
 def memory_store(tmp_path: Path):
     """Create a real MemoryStore with some test data."""
-    from tapps_core.memory.store import MemoryStore
+    from tapps_brain.store import MemoryStore
 
     store = MemoryStore(tmp_path / "memory")
     store.save(key="arch-1", value="Architecture decision", tier="architectural")
@@ -72,7 +72,7 @@ class TestDashboardMemoryMetrics:
         tmp_path: Path,
     ) -> None:
         """Verify alert fires when memory capacity > 80%."""
-        from tapps_core.memory.store import MemoryStore
+        from tapps_brain.store import MemoryStore
 
         store = MemoryStore(tmp_path / "mem_alert")
         # Save enough entries to exceed 80% of a small max_memories
@@ -134,7 +134,7 @@ class TestDashboardMemoryMetrics:
         metrics_dir: Path,
     ) -> None:
         """Epic 65.1: memory_metrics includes consolidation stats."""
-        from tapps_core.memory.store import MemoryStore
+        from tapps_brain.store import MemoryStore
 
         store = MemoryStore(tmp_path / "memory")
         store.save(key="arch-1", value="Architecture decision", tier="architectural")
@@ -180,7 +180,7 @@ class TestDashboardMemoryMetrics:
         metrics_dir: Path,
     ) -> None:
         """Epic 65.1: memory_metrics includes federation when available."""
-        from tapps_core.memory.store import MemoryStore
+        from tapps_brain.store import MemoryStore
 
         store = MemoryStore(tmp_path / "memory")
         store.save(key="k1", value="v1", tier="pattern")

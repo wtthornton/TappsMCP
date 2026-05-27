@@ -148,7 +148,7 @@ class TestMemoryRecallCLI:
         """Memory recall outputs <memory_context> XML when memories match."""
         from click.testing import CliRunner
 
-        from tapps_core.memory.store import MemoryStore
+        from tapps_brain.store import MemoryStore
 
         # Create memory store with an entry
         store = MemoryStore(tmp_path)

@@ -22,7 +22,7 @@ except ImportError:
         allow_module_level=True,
     )
 
-from tapps_core.memory.federation import (
+from tapps_brain.federation import (
     FederatedSearchResult,
     FederatedStore,
     FederationConfig,
@@ -37,7 +37,7 @@ from tapps_core.memory.federation import (
     sync_to_hub,
     unregister_project,
 )
-from tapps_core.memory.models import MemoryEntry, MemoryScope, MemorySource, MemoryTier
+from tapps_brain.models import MemoryEntry, MemoryScope, MemorySource, MemoryTier
 
 # ---------------------------------------------------------------------------
 # Fixtures

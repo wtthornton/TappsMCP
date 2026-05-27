@@ -12,7 +12,7 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
-from tapps_core.memory.doc_validation import (
+from tapps_brain.doc_validation import (
     AlignmentLevel,
     ApplyResult,
     ClaimExtractor,
@@ -28,7 +28,7 @@ from tapps_core.memory.doc_validation import (
     _manage_doc_tags,
     _source_ceiling,
 )
-from tapps_core.memory.models import MemoryEntry
+from tapps_brain.models import MemoryEntry
 
 # ---------------------------------------------------------------------------
 # Helpers

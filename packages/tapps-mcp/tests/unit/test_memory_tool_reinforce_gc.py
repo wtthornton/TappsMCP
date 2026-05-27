@@ -27,7 +27,7 @@ def _mock_session(monkeypatch: pytest.MonkeyPatch) -> None:
 @pytest.fixture()
 def mock_store(tmp_path: Path):
     """Create a real MemoryStore backed by tmp_path and patch _get_memory_store."""
-    from tapps_core.memory.store import MemoryStore
+    from tapps_brain.store import MemoryStore
 
     store = MemoryStore(tmp_path)
     with patch("tapps_mcp.server_memory_tools._get_memory_store", return_value=store):
@@ -109,8 +109,8 @@ class TestGCAction:
 
     async def test_gc_evicts_stale_session_entries(self, tmp_path: Path) -> None:
         """GC archives expired session-scoped memories."""
-        from tapps_core.memory.models import MemoryEntry
-        from tapps_core.memory.store import MemoryStore
+        from tapps_brain.models import MemoryEntry
+        from tapps_brain.store import MemoryStore
 
         store = MemoryStore(tmp_path)
 

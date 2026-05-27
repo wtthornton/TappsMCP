@@ -30,7 +30,7 @@ def _mock_session(monkeypatch: pytest.MonkeyPatch) -> None:
 @pytest.fixture()
 def mock_store(tmp_path: Path):
     """Create a real MemoryStore and patch _get_memory_store."""
-    from tapps_core.memory.store import MemoryStore
+    from tapps_brain.store import MemoryStore
 
     store = MemoryStore(tmp_path)
     try:
@@ -45,14 +45,14 @@ class TestIsConsolidatedSource:
 
     def test_not_contradicted_returns_false(self) -> None:
         """Non-contradicted entries are not consolidated sources."""
-        from tapps_core.memory.models import MemoryEntry
+        from tapps_brain.models import MemoryEntry
 
         entry = MemoryEntry(key="test", value="test value")
         assert _is_consolidated_source(entry) is False
 
     def test_contradicted_without_reason_returns_false(self) -> None:
         """Contradicted entries without consolidated marker return False."""
-        from tapps_core.memory.models import MemoryEntry
+        from tapps_brain.models import MemoryEntry
 
         entry = MemoryEntry(
             key="test",
@@ -64,7 +64,7 @@ class TestIsConsolidatedSource:
 
     def test_contradicted_with_consolidated_marker_returns_true(self) -> None:
         """Entries marked as consolidated into another return True."""
-        from tapps_core.memory.models import MemoryEntry
+        from tapps_brain.models import MemoryEntry
 
         entry = MemoryEntry(
             key="test",
@@ -76,7 +76,7 @@ class TestIsConsolidatedSource:
 
     def test_marker_case_insensitive(self) -> None:
         """Consolidated marker detection is case-insensitive."""
-        from tapps_core.memory.models import MemoryEntry
+        from tapps_brain.models import MemoryEntry
 
         entry = MemoryEntry(
             key="test",
@@ -88,7 +88,7 @@ class TestIsConsolidatedSource:
 
     def test_none_contradiction_reason(self) -> None:
         """None contradiction_reason doesn't crash."""
-        from tapps_core.memory.models import MemoryEntry
+        from tapps_brain.models import MemoryEntry
 
         entry = MemoryEntry(
             key="test",
@@ -109,7 +109,7 @@ class TestFilterConsolidatedSources:
 
     def test_no_consolidated_sources(self) -> None:
         """List without consolidated sources unchanged."""
-        from tapps_core.memory.models import MemoryEntry
+        from tapps_brain.models import MemoryEntry
 
         entries = [
             MemoryEntry(key="a", value="value a"),
@@ -120,7 +120,7 @@ class TestFilterConsolidatedSources:
 
     def test_filters_consolidated_sources(self) -> None:
         """Filters out entries marked as consolidated."""
-        from tapps_core.memory.models import MemoryEntry
+        from tapps_brain.models import MemoryEntry
 
         entries = [
             MemoryEntry(key="active", value="active entry"),
@@ -137,7 +137,7 @@ class TestFilterConsolidatedSources:
 
     def test_preserves_non_consolidated_contradicted(self) -> None:
         """Non-consolidated contradicted entries are preserved."""
-        from tapps_core.memory.models import MemoryEntry
+        from tapps_brain.models import MemoryEntry
 
         entries = [
             MemoryEntry(

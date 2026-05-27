@@ -47,8 +47,7 @@ The four most-used entry points by tapps-mcp and docs-mcp:
 The memory package is a re-export shim. New code should import from `tapps_brain` directly; the shim exists for backwards compatibility:
 
 ```python
-from tapps_brain.store import MemoryStore        # preferred
-from tapps_core.memory.store import MemoryStore   # legacy re-export
+from tapps_brain.store import MemoryStore
 ```
 
 See the [tapps-brain repo](https://github.com/wtthornton/tapps-brain) for storage internals (Postgres in Docker, HTTP service at `localhost:8080`), retrieval, and operational docs — that is the source of truth for memory behaviour.

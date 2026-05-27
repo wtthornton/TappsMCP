@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from tapps_core.memory.extraction import extract_durable_facts
+from tapps_brain.extraction import extract_durable_facts
 
 
 class TestExtractDurableFacts:

@@ -2,5 +2,5 @@
 
 from __future__ import annotations
 
-from tapps_core.memory.store import _MAX_ENTRIES as _MAX_ENTRIES
-from tapps_core.memory.store import MemoryStore as MemoryStore
+from tapps_brain.store import _MAX_ENTRIES_DEFAULT as _MAX_ENTRIES
+from tapps_brain.store import MemoryStore as MemoryStore
