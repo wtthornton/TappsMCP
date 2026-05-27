@@ -245,6 +245,7 @@ a = Analysis(
         "tapps_mcp.memory.injection",
         "tapps_mcp.memory.seeding",
         "tapps_mcp.memory.io",
+        "tapps_mcp.memory.compact_index",
         "tapps_mcp.benchmark",
         "tapps_mcp.benchmark.ablation",
         "tapps_mcp.benchmark.adaptive_feedback",
