@@ -48,7 +48,7 @@ def _mock_store(entries: list[MemoryEntry] | None = None) -> MagicMock:
 
 
 _ROOT_PATCH = "tapps_mcp.cli._get_project_root"
-_STORE_PATCH = "tapps_core.memory.store.MemoryStore"
+_STORE_PATCH = "tapps_brain.store.MemoryStore"
 
 
 class TestMemoryList:
@@ -265,7 +265,7 @@ class TestMemoryImportExport:
         with (
             patch(_ROOT_PATCH, return_value=tmp_path),
             patch(_STORE_PATCH, return_value=mock_store),
-            patch("tapps_core.memory.io.import_memories") as mock_import,
+            patch("tapps_brain.io.import_memories") as mock_import,
         ):
             mock_import.return_value = {
                 "imported_count": 3,
@@ -284,7 +284,7 @@ class TestMemoryImportExport:
         with (
             patch(_ROOT_PATCH, return_value=tmp_path),
             patch(_STORE_PATCH, return_value=mock_store),
-            patch("tapps_core.memory.io.export_memories") as mock_export,
+            patch("tapps_brain.io.export_memories") as mock_export,
         ):
             mock_export.return_value = {
                 "exported_count": 5,
