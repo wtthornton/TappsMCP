@@ -338,6 +338,70 @@ class TestTappsSessionStart:
 
 
 # ---------------------------------------------------------------------------
+# _enrich_health_with_async_native (TAP-1982)
+# ---------------------------------------------------------------------------
+
+
+class TestEnrichHealthWithAsyncNative:
+    """Unit tests for _enrich_health_with_async_native in session_start_helpers."""
+
+    def _make_http_bridge(self) -> MagicMock:
+        bridge = MagicMock()
+        bridge.is_http_mode = True
+        return bridge
+
+    def _make_inprocess_bridge(self) -> MagicMock:
+        bridge = MagicMock()
+        bridge.is_http_mode = False
+        return bridge
+
+    def test_async_native_true_when_db_ok_true(self) -> None:
+        """async_native=True when /healthz returns db_ok=True (postgres reachable)."""
+        from tapps_mcp.tools.session_start_helpers import _enrich_health_with_async_native
+
+        bridge = self._make_http_bridge()
+        report: dict = {"details": {"db_ok": True, "brain_version": "3.19.0"}}
+        _enrich_health_with_async_native(bridge, report)
+        assert report["async_native"] is True
+
+    def test_async_native_false_when_db_ok_false(self) -> None:
+        """async_native=False when /healthz returns db_ok=False (DSN set but unreachable)."""
+        from tapps_mcp.tools.session_start_helpers import _enrich_health_with_async_native
+
+        bridge = self._make_http_bridge()
+        report: dict = {"details": {"db_ok": False}}
+        _enrich_health_with_async_native(bridge, report)
+        assert report["async_native"] is False
+
+    def test_async_native_absent_when_db_ok_missing(self) -> None:
+        """async_native not set for legacy brain (pre-v3.19.0, no db_ok in healthz)."""
+        from tapps_mcp.tools.session_start_helpers import _enrich_health_with_async_native
+
+        bridge = self._make_http_bridge()
+        report: dict = {"details": {"brain_version": "3.18.0"}}
+        _enrich_health_with_async_native(bridge, report)
+        assert "async_native" not in report
+
+    def test_async_native_absent_for_inprocess_bridge(self) -> None:
+        """async_native not set for in-process BrainBridge (no HTTP adapter)."""
+        from tapps_mcp.tools.session_start_helpers import _enrich_health_with_async_native
+
+        bridge = self._make_inprocess_bridge()
+        report: dict = {"details": {"db_ok": True}}
+        _enrich_health_with_async_native(bridge, report)
+        assert "async_native" not in report
+
+    def test_async_native_absent_when_bridge_lacks_is_http_mode(self) -> None:
+        """async_native not set when bridge does not expose is_http_mode attribute."""
+        from tapps_mcp.tools.session_start_helpers import _enrich_health_with_async_native
+
+        bridge = MagicMock(spec=[])  # no is_http_mode attr
+        report: dict = {"details": {"db_ok": True}}
+        _enrich_health_with_async_native(bridge, report)
+        assert "async_native" not in report
+
+
+# ---------------------------------------------------------------------------
 # tapps_set_engagement_level
 # ---------------------------------------------------------------------------
 

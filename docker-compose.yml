@@ -21,6 +21,9 @@ services:
       # TAPPS_MCP_HOST_PROJECT_ROOT: "C:\\cursor\\TappsMCP"
       TAPPS_MCP_QUALITY_PRESET: standard
       TAPPS_MCP_LOG_LEVEL: INFO
+      # Brain HTTP connection (required when running tapps-brain as a separate service)
+      # TAPPS_MCP_MEMORY_BRAIN_HTTP_URL: "http://tapps-brain:8080"
+      # TAPPS_MCP_MEMORY_BRAIN_AUTH_TOKEN: "${TAPPS_BRAIN_AUTH_TOKEN}"
     volumes:
       - .:/workspace
       - tapps-state:/workspace/.tapps-mcp

@@ -620,7 +620,32 @@ def _collect_brain_bridge_health() -> dict[str, Any]:
     except Exception as exc:
         return {"enabled": True, "ok": False, "errors": [f"health_check_raised: {exc}"]}
     _enrich_health_with_auth_probe(bridge, report)
+    _enrich_health_with_async_native(bridge, report)
     return {"enabled": True, **report}
+
+
+def _enrich_health_with_async_native(bridge: Any, report: dict[str, Any]) -> None:
+    """TAP-1982: surface async-native write status from the brain healthz response.
+
+    The brain's async backend activates when ``TAPPS_BRAIN_DATABASE_URL``
+    (or ``TAPPS_BRAIN_HIVE_DSN``) is set in the **brain container** environment.
+    There is no client-side flag — the gate is DSN presence at the brain HTTP
+    adapter level. When the ``/healthz`` response includes ``db_ok``, we surface
+    ``async_native`` so operators can verify the fast write path is active without
+    checking the brain container env directly.
+
+    Only meaningful for HTTP bridge mode; in-process BrainBridge does not run
+    an HTTP adapter, so ``async_native`` is omitted for that mode.
+    """
+    if not getattr(bridge, "is_http_mode", False):
+        return
+    details = report.get("details") or {}
+    db_ok = details.get("db_ok")
+    if db_ok is True:
+        report["async_native"] = True
+    elif db_ok is False:
+        report["async_native"] = False
+    # else: absent (legacy brain, pre-v3.19.0 /healthz) — omit; cannot determine
 
 
 def _enrich_health_with_auth_probe(bridge: Any, report: dict[str, Any]) -> None:
