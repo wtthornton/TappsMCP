@@ -595,7 +595,7 @@ async def tapps_dead_code(
     Args:
         file_path: Path to a single Python file. Required when
             ``scope="file"``; ignored otherwise.
-        min_confidence: Vulture confidence threshold (0–100). Default
+        min_confidence: Vulture confidence threshold (0-100). Default
             ``80`` filters most false positives; drop to ``60`` for
             deeper sweeps, raise to ``95`` for high-precision results.
         scope: ``"file"`` (single file specified by ``file_path``),
@@ -1085,8 +1085,8 @@ async def tapps_audit_campaign(
             ``{"quality", "security", "dead_code", "docs"}``.
             Default ``"quality,security,dead_code"``.
         chunk_size: Soft target for files per session story. Default
-            ``6``. Raise to ``10–12`` for shallow audits, drop to
-            ``3–4`` for deep ones.
+            ``6``. Raise to ``10-12`` for shallow audits, drop to
+            ``3-4`` for deep ones.
         graph_root: Source root used to build the import graph for
             cohesive chunking. Empty (default) = ``project_root``.
             **Set this for monorepos** (e.g.
