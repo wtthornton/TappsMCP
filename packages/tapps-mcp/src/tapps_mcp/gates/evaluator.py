@@ -167,18 +167,18 @@ def evaluate_gate(
         )
 
     # 7) Critical security floor — absolute minimum regardless of thresholds
+    # Always emit the floor failure as a separate record so operators see
+    # both the bandit-issue failure and the catastrophic floor breach.
     sec_for_floor = cats.get("security")
     if sec_for_floor and sec_for_floor.score < _SECURITY_FLOOR_INDIVIDUAL:
-        has_security_failure = any(f.category == "security" for f in failures)
-        if not has_security_failure:
-            _fail(
-                failures,
-                "security",
-                sec_for_floor.score,
-                _SECURITY_FLOOR_INDIVIDUAL,
-                "CRITICAL: Security score below minimum threshold (50)",
-                weights,
-            )
+        _fail(
+            failures,
+            "security",
+            sec_for_floor.score,
+            _SECURITY_FLOOR_INDIVIDUAL,
+            "CRITICAL: Security score below minimum threshold (50)",
+            weights,
+        )
 
     # Sort failures by category weight (highest weight first)
     failures.sort(key=lambda f: f.weight, reverse=True)

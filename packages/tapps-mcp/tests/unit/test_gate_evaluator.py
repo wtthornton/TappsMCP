@@ -87,6 +87,33 @@ class TestFailureWeighting:
         assert "CRITICAL" in security_failures[0].message
         assert "minimum threshold (50)" in security_failures[0].message
 
+    def test_security_floor_and_bandit_both_appear(self) -> None:
+        """Floor failure is a separate record even when a threshold failure already exists.
+
+        Regression test for TAP-1752: when security score is below BOTH the
+        caller-configured minimum AND the hard floor, two security failures must
+        appear in the results — one for the threshold breach and one for the
+        critical floor breach.
+        """
+        # security_min=6.0 triggers a threshold failure (score=4.0 < 6.0).
+        # security=4.0 also triggers the floor (4.0 < _SECURITY_FLOOR_INDIVIDUAL).
+        thresholds = GateThresholds(
+            overall_min=0.0,
+            security_min=6.0,
+        )
+        score = _make_score(overall=80.0, security=4.0)
+        result = evaluate_gate(score, thresholds=thresholds)
+
+        assert result.passed is False
+        security_failures = [f for f in result.failures if f.category == "security"]
+        assert len(security_failures) == 2, (
+            f"Expected 2 security failures (threshold + floor), got {security_failures}"
+        )
+        floor_msgs = [f for f in security_failures if "CRITICAL" in f.message]
+        assert len(floor_msgs) == 1, "CRITICAL floor message must appear exactly once"
+        threshold_msgs = [f for f in security_failures if "CRITICAL" not in f.message]
+        assert len(threshold_msgs) == 1, "Threshold-breach message must appear exactly once"
+
     def test_security_at_boundary(self) -> None:
         """Security score exactly at floor (5.0 on 0-10 scale) passes."""
         score = _make_score(overall=85.0, security=_SECURITY_FLOOR_INDIVIDUAL)
@@ -165,14 +192,20 @@ class TestGateFailureWeight:
         # Overall should be first in the sorted list
         assert result.failures[0].category == "overall"
 
-    def test_security_floor_does_not_duplicate(self) -> None:
-        """When security already fails via threshold, floor doesn't add a second failure."""
+    def test_security_floor_and_threshold_both_appear(self) -> None:
+        """When security fails both the threshold and the hard floor, two records appear.
+
+        TAP-1752: the floor failure is a separate record so operators see the
+        catastrophic-floor signal even when a threshold failure is already present.
+        """
         thresholds = GateThresholds(overall_min=0.0, security_min=8.0)
-        score = _make_score(security=3.0)  # Below both threshold and floor
+        score = _make_score(security=3.0)  # Below both threshold (8.0) and floor (5.0)
         result = evaluate_gate(score, thresholds=thresholds)
 
         security_failures = [f for f in result.failures if f.category == "security"]
-        assert len(security_failures) == 1  # Only one, not duplicated
+        assert len(security_failures) == 2  # threshold breach + floor breach
+        floor_msgs = [f for f in security_failures if "CRITICAL" in f.message]
+        assert len(floor_msgs) == 1
 
     def test_single_failure_no_priority_suggestion(self) -> None:
         """A single failure should NOT include the priority suggestion."""
