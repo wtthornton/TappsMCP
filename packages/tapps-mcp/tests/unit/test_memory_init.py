@@ -73,7 +73,12 @@ class TestClassifyStoreInitError:
 
 @pytest.mark.asyncio()
 class TestStoreInitFailedSubCode:
-    """The store_init_failed error envelope carries a discriminating sub_code."""
+    """The store_init_failed error envelope carries a discriminating sub_code.
+
+    TAP-1993/TAP-1994: non-lifecycle actions are refused before reaching store
+    init. Sub-code testing must use lifecycle actions (session_start_capture or
+    session_end_consolidate) so the store-init failure path is actually reached.
+    """
 
     async def test_dsn_missing_sub_code(self, monkeypatch: pytest.MonkeyPatch) -> None:
         def _raise() -> None:
@@ -87,7 +92,7 @@ class TestStoreInitFailedSubCode:
             _raise,
         )
 
-        result = await tapps_memory(action="search", query="x")
+        result = await tapps_memory(action="session_start_capture", value="test")
 
         assert result["success"] is False
         assert result["error"]["code"] == "store_init_failed"
@@ -105,7 +110,7 @@ class TestStoreInitFailedSubCode:
             _raise,
         )
 
-        result = await tapps_memory(action="save", key="k", value="v")
+        result = await tapps_memory(action="session_start_capture", value="test")
 
         assert result["error"]["code"] == "store_init_failed"
         assert result["error"]["sub_code"] == "import_error"
@@ -120,7 +125,7 @@ class TestStoreInitFailedSubCode:
             _raise,
         )
 
-        result = await tapps_memory(action="health")
+        result = await tapps_memory(action="session_end_consolidate", value="done")
 
         assert result["error"]["code"] == "store_init_failed"
         assert result["error"]["sub_code"] == "auth_failed"
@@ -133,28 +138,15 @@ class TestAsyncDispatchNoneStoreGuard:
     Before TAP-1080, store=None reached async handlers like _handle_consolidate
     that bare-access store.list_all() and crashed with "'NoneType' object has
     no attribute 'list_all'". The dispatch now returns a structured error.
+
+    TAP-1993/TAP-1994 note: consolidate and validate are now refused before
+    reaching async dispatch (they are non-lifecycle actions). The null-deref
+    protection is now guaranteed by the refused check, making the
+    requires_in_process_store path unreachable through the public interface.
+    The two tests below verify that HTTP-OK actions (hive_status, health) do
+    not crash regardless of store state — still meaningful because those
+    actions skip the refused check via _ASYNC_HTTP_OK_ACTIONS.
     """
-
-    async def test_consolidate_with_none_store_returns_structured_error(self) -> None:
-        with patch(
-            "tapps_mcp.server_memory_tools._get_memory_store",
-            return_value=None,
-        ):
-            result = await tapps_memory(action="consolidate")
-
-        assert result["success"] is False
-        assert result["error"]["code"] == "requires_in_process_store"
-        assert "consolidate" in result["error"]["message"]
-
-    async def test_validate_with_none_store_returns_structured_error(self) -> None:
-        with patch(
-            "tapps_mcp.server_memory_tools._get_memory_store",
-            return_value=None,
-        ):
-            result = await tapps_memory(action="validate", key="x")
-
-        assert result["success"] is False
-        assert result["error"]["code"] == "requires_in_process_store"
 
     async def test_hive_status_with_none_store_does_not_crash(self) -> None:
         """hive_status is on the HTTP-OK allowlist — None store must not block it."""
