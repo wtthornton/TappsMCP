@@ -3,7 +3,9 @@ name: tapps-upgrade
 description: >-
   Upgrade tapps-mcp / docs-mcp in this project to the latest version.
   Reinstalls global CLIs, restarts MCP servers, refreshes scaffolding via
-  `tapps-mcp upgrade`, verifies via doctor + checklist.
+  `tapps-mcp upgrade`, verifies via doctor + checklist. Use when a new
+  tapps-mcp or docs-mcp version is available and the project scaffolding
+  needs to be refreshed.
 mcp_tools:
   - tapps_session_start
   - tapps_doctor

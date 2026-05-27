@@ -1,6 +1,6 @@
 ---
 name: linear-read
-description: Read multi-issue Linear data via cache-first dance. MANDATORY for any list-style Linear read. Single-issue lookups go straight to get_issue. Routes through tapps_linear_snapshot_get/put before list_issues.
+description: Read multi-issue Linear data via cache-first dance. MANDATORY for any list-style Linear read. Routes through tapps_linear_snapshot_get/put before list_issues. Use when listing, filtering, or reviewing Linear issues (backlog review, "what's open", triage, "find issues assigned to X"). Single-issue lookups go straight to get_issue instead.
 mcp_tools:
   - tapps_linear_snapshot_get
   - tapps_linear_snapshot_put
@@ -19,7 +19,7 @@ Multi-issue Linear reads are cache-first by contract (TAP-967 audit: 5,368 `list
 3. On `cached=false`, call `linear_list_issues` with NARROW filters: `team`, `project`, `state`, `includeArchived=false`.
 4. Immediately call `tapps_linear_snapshot_put(team, project, issues_json=json.dumps(issues), state, label?, limit?)` with the **same** key dimensions as the get call.
 
-**The 6-poll kickoff antipattern:** firing six `list_issues` calls (one per state×priority bucket) collapses to one `snapshot_get(state="open")` plus an in-memory filter. The 5-min open-state TTL means the next session warms instantly.
+**The 6-poll kickoff antipattern:** firing six `list_issues` calls (one per state x priority bucket) collapses to one `snapshot_get(state="open")` plus an in-memory filter. The 5-min open-state TTL means the next session warms instantly.
 
 **Status-bucket sweep antipattern:** three sequential `list_issues` calls for `backlog`/`unstarted`/`started` collapses to one `snapshot_get(state="open")` + memory filter on `state.type`.
 
@@ -27,5 +27,5 @@ Multi-issue Linear reads are cache-first by contract (TAP-967 audit: 5,368 `list
 
 - `list_issues` without a prior `snapshot_get` for the same key.
 - `list_issues({})` or `list_issues({team, limit:250})` (the unfiltered scroll).
-- Re-fetching the same narrow query 5–12 times in one turn with no intervening writes.
+- Re-fetching the same narrow query 5-12 times in one turn with no intervening writes.
 - Single-issue lookup via `list_issues` filtering — use `get_issue(id)` instead.

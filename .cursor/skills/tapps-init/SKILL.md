@@ -2,7 +2,8 @@
 name: tapps-init
 description: >-
   Bootstrap TappsMCP in a project. Creates AGENTS.md, TECH_STACK.md,
-  platform rules, hooks, agents, skills, and MCP config.
+  platform rules, hooks, agents, skills, and MCP config. Use when setting
+  up TappsMCP in a new or existing project for the first time.
 mcp_tools:
   - tapps_init
   - tapps_doctor

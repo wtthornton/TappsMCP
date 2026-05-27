@@ -1,6 +1,6 @@
 ---
 name: tapps-score
-description: Score a Python file across 7 quality categories and display a structured report.
+description: Score a Python file across 7 quality categories and display a structured report. Use when reviewing a Python file's quality scores before a code review or pull request.
 mcp_tools:
   - tapps_score_file
   - tapps_quick_check

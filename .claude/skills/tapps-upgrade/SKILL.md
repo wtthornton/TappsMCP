@@ -6,7 +6,8 @@ description: >-
   Upgrade tapps-mcp / docs-mcp in this project to the latest version.
   Reinstalls global CLIs, restarts the MCP servers, refreshes scaffolding
   via `tapps-mcp upgrade` (dry-run preview + timestamped backup), and
-  verifies via doctor + checklist.
+  verifies via doctor + checklist. Use when a new tapps-mcp or docs-mcp
+  version is available and the project scaffolding needs to be refreshed.
 allowed-tools: Bash mcp__tapps-mcp__tapps_session_start mcp__tapps-mcp__tapps_doctor mcp__tapps-mcp__tapps_checklist
 argument-hint: "[--from-checkout <path> | --from-tag vX.Y.Z]"
 ---

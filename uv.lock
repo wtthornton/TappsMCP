@@ -25,7 +25,7 @@ dev = [
     { name = "pytest-randomly", specifier = ">=3.16.0,<4" },
     { name = "pytest-timeout", specifier = ">=2.4.0,<3" },
     { name = "pytest-xdist", specifier = ">=3.5.0,<4" },
-    { name = "ruff", specifier = ">=0.15.13,<1" },
+    { name = "ruff", specifier = ">=0.15.14,<1" },
     { name = "tree-sitter", specifier = ">=0.24.0,<1" },
     { name = "tree-sitter-go", specifier = ">=0.23.4,<1" },
     { name = "tree-sitter-java", specifier = ">=0.23.5,<1" },
@@ -549,7 +549,7 @@ wheels = [
 
 [[package]]
 name = "docs-mcp"
-version = "3.11.5"
+version = "3.12.0"
 source = { editable = "packages/docs-mcp" }
 dependencies = [
     { name = "click" },
@@ -2650,7 +2650,7 @@ dependencies = [
 
 [[package]]
 name = "tapps-core"
-version = "3.11.5"
+version = "3.12.0"
 source = { editable = "packages/tapps-core" }
 dependencies = [
     { name = "httpx" },
@@ -2690,7 +2690,7 @@ provides-extras = ["vector", "reranker"]
 
 [[package]]
 name = "tapps-mcp"
-version = "3.11.5"
+version = "3.12.0"
 source = { editable = "packages/tapps-mcp" }
 dependencies = [
     { name = "anyio" },

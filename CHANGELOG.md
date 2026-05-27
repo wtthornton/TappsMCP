@@ -7,8 +7,35 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [3.12.0] - 2026-05-27
+
+Headline release after a 119-commit cycle since v3.10.14. Major shipped: compaction-boundary memory rehydration (TAP-2017), the `tapps_core/memory/` shim deletion (TAP-1995, internal-breaking), the brain-version-floor pre-push gate (TAP-1923), the hive-elevation safety gate (TAP-2014), and the Agent Gateway pattern (TAP-2011). 17+ stories closed.
+
 ### Added
 
+- **Compaction resilience: PreCompact hook + brain memory indexing + session-start rehydration** ([TAP-2017](https://linear.app/tappscodingagents/issue/TAP-2017)).
+  New `tapps_mcp.memory.compact_index` module and `tapps-mcp compact-index` CLI; the PreCompact Claude Code hook indexes session state into tapps-brain so post-compact `tapps_session_start` can surface prior context via `data.compaction_rehydration`. Marker file at `.tapps-mcp/compaction-marker.json`; escape hatch via `TAPPS_MCP_COMPACTION_REHYDRATE=false`.
+- **Hive elevation safety gate (propose → approve → push)** ([TAP-2014](https://linear.app/tappscodingagents/issue/TAP-2014)).
+- **Pre-push brain-version-floor gate (>=3.18.0)** ([TAP-1923](https://linear.app/tappscodingagents/issue/TAP-1923)). Refuses pushes when sibling `tapps-brain` lags the ADR-0010 floor; enforces the version pin at the gate.
+- **Agent Gateway pattern + envelope spec + ARCHITECTURE.md cross-link** ([TAP-2011](https://linear.app/tappscodingagents/issue/TAP-2011)).
+- **`async_native` write status surfaced in `brain_bridge_health`** ([TAP-1982](https://linear.app/tappscodingagents/issue/TAP-1982)).
+- **`disable-model-invocation` flag on tapps-score and tapps-report** ([TAP-2490](https://linear.app/tappscodingagents/issue/TAP-2490)).
+- **Use-when trigger clauses on all 31 skill descriptions** ([TAP-2489](https://linear.app/tappscodingagents/issue/TAP-2489)).
+- **SKILL_AUTHORING.md** with skill template conventions ([TAP-2488](https://linear.app/tappscodingagents/issue/TAP-2488)).
+- **`memory_supersede` on doc regen in brain_writer** ([TAP-2004](https://linear.app/tappscodingagents/issue/TAP-2004)).
+- **Procedural pattern capture via brain `memory_save tier=procedural`** ([TAP-2007](https://linear.app/tappscodingagents/issue/TAP-2007)).
+- **Quality-pipeline usage uplift** — hooks, next_steps, tapps_usage; deprecated wrappers (v3.11.0).
+- **Two-tier pre-push gate — fast sync + background full suite** ([TAP-2453](https://linear.app/tappscodingagents/issue/TAP-2453)).
+- **`projection="compact"` for `tapps_linear_snapshot_get`** to prevent 25k-token overflow ([TAP-2437](https://linear.app/tappscodingagents/issue/TAP-2437)).
+- **Per-server eager-tool budget WARN in `tapps_doctor`** ([TAP-2026](https://linear.app/tappscodingagents/issue/TAP-2026)/[TAP-1989](https://linear.app/tappscodingagents/issue/TAP-1989)).
+- **Brain version delta surfaced in `tapps_doctor`** ([TAP-2025](https://linear.app/tappscodingagents/issue/TAP-2025)).
+- **Tool-description eval harness + first baseline run + CI gate (`--backend=api`)** with `anthropic>=0.40` dev-dep and the `eval-descriptions.yml` workflow.
+- **Coder profile pinned by default for tapps-mcp brain-bridge** ([TAP-1924](https://linear.app/tappscodingagents/issue/TAP-1924)).
+- **`tapps_audit_campaign` mode=plan/dispatch handlers** + audit chunker + per-session ticket template ([TAP-2036](https://linear.app/tappscodingagents/issue/TAP-2036)).
+- **`tapps_linear_count` tool for credential-free Linear counts** ([TAP-1847](https://linear.app/tappscodingagents/issue/TAP-1847)).
+- **`degraded_categories` on `ScoreResult` for AST-fallback tracking** ([TAP-1759](https://linear.app/tappscodingagents/issue/TAP-1759)).
+- **`quality_gate` failures recorded as brain KG events** ([TAP-2003](https://linear.app/tappscodingagents/issue/TAP-2003)).
+- **docs-mcp defers non-daily-driver tools via `meta[defer_loading]`** ([TAP-1987](https://linear.app/tappscodingagents/issue/TAP-1987)).
 - **`feat(upgrade): dry-run flags deliberately-deleted managed files` ([TAP-2201](https://linear.app/tappscodingagents/issue/TAP-2201)).**
   `tapps_upgrade(dry_run=True)` now distinguishes three states for files in
   `MANAGED_GITHUB_ROOT_FILES` (currently `dependabot.yml` and
@@ -64,6 +91,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   surfaces a helpful message suggesting the user re-run `tapps-mcp
   init` to regenerate if needed.
 
+### Changed
+
+- **Internal-breaking: deleted `tapps_core/memory/` re-export shims** ([TAP-1995](https://linear.app/tappscodingagents/issue/TAP-1995)). Callers must now import from `tapps_brain` directly. The `BrainBridge` adapter lives at `tapps_core.brain_bridge` (single module replacing the old `tapps_core.memory.*` layout). 30-file refactor; affected: `server_memory_tools.py`, `tools/session_start_helpers.py`, all docs-mcp callers.
+- **`tapps_memory` reduced to session-lifecycle actions only** — Phase 2 ([TAP-1993](https://linear.app/tappscodingagents/issue/TAP-1993)) trimmed the action surface; Phase 3 ([TAP-1994](https://linear.app/tappscodingagents/issue/TAP-1994)) removed `tapps_memory` from the MCP tool catalog and replaced CRUD responses with refused-redirect envelopes pointing at `mcp__tapps-brain__*`.
+- **Split `validate_changed.py` by responsibility** — `_collection.py`, `_orchestrator.py`, `_output.py`, plus a facade ([TAP-2468](https://linear.app/tappscodingagents/issue/TAP-2468)).
+- **Sync hooks to Ralph 2.20.0 templates** ([TAP-2494](https://linear.app/tappscodingagents/issue/TAP-2494)/[TAP-2501](https://linear.app/tappscodingagents/issue/TAP-2501)/[TAP-2502](https://linear.app/tappscodingagents/issue/TAP-2502)).
+- **Rewrote all tool descriptions in 2026 MCP / Context7 pattern** (preceded by the description-eval harness).
+- **Pin tapps-brain by release tag, not commit SHA** ([TAP-2132](https://linear.app/tappscodingagents/issue/TAP-2132); supersedes ADR-0009).
+
 ### Fixed
 
 - **`fix(init): resolve TAPPS_MCP_PROJECT_ROOT to absolute path; reject literal ${workspaceFolder}` ([TAP-2199](https://linear.app/tappscodingagents/issue/TAP-2199)).**
@@ -104,6 +140,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `${workspaceFolder}` because the consumer project root is unknown at
   build time and Cursor IDE — the sole consumer of that artifact —
   expands the variable natively.
+
+- **Removed obsolete `test_memory_tool.py` + 11 related test files** after the TAP-1993/TAP-1994 catalog shrinkage ([TAP-2613](https://linear.app/tappscodingagents/issue/TAP-2613) + cleanup sweep `216d1ba`).
+- **Security floor failure now emitted as separate record** ([TAP-1752](https://linear.app/tappscodingagents/issue/TAP-1752)).
+- **`dependency_scan_cache` TTL eviction made atomic** ([TAP-1745](https://linear.app/tappscodingagents/issue/TAP-1745)).
+- **Removed experimental gate from `collect_session_hive_status`** ([TAP-2021](https://linear.app/tappscodingagents/issue/TAP-2021)).
+- **Subprocess stdout/stderr capped at 8 MiB** to prevent OOM on runaway tools ([TAP-1762](https://linear.app/tappscodingagents/issue/TAP-1762)).
+- **`ScoringWeights` sum validation at model init** ([TAP-1747](https://linear.app/tappscodingagents/issue/TAP-1747)).
+- **Async `health()` + `close()` resource-leak fixes in brain-bridge** ([TAP-1743](https://linear.app/tappscodingagents/issue/TAP-1743), [TAP-1744](https://linear.app/tappscodingagents/issue/TAP-1744)).
+- **Security floor pins bumped for 5 CVE packages** ([TAP-1764](https://linear.app/tappscodingagents/issue/TAP-1764)).
+- **`tapps_memory` records `success=False` on error paths** ([TAP-1801](https://linear.app/tappscodingagents/issue/TAP-1801)).
+- **`tapps_feedback` calls `_adjust_domain_weights`** ([TAP-1798](https://linear.app/tappscodingagents/issue/TAP-1798)).
+- **`ChecklistCalibrator` uses an absolute token budget** ([TAP-1800](https://linear.app/tappscodingagents/issue/TAP-1800)).
+- **`linear-write` and `pre-bash` hooks fail closed** ([TAP-1785](https://linear.app/tappscodingagents/issue/TAP-1785)).
+- **Pre-push hook uses `pipefail` so pytest failures gate** ([TAP-1784](https://linear.app/tappscodingagents/issue/TAP-1784)).
+- **SSRF / redirect / size guard on doc-source URL fetch** ([TAP-1791](https://linear.app/tappscodingagents/issue/TAP-1791)).
+- **PyInstaller spec updated** with `compact_index`, `validate_changed_collection`, `validate_changed_orchestrator` hiddenimports ([TAP-2017](https://linear.app/tappscodingagents/issue/TAP-2017) follow-up).
+
+### Removed
+
+- **`tapps_core.memory.*` re-export shim package** ([TAP-1995](https://linear.app/tappscodingagents/issue/TAP-1995)). Internal-breaking for consumers that imported via the old shim paths; migrate to `tapps_brain` directly. The `BrainBridge` adapter now lives at `tapps_core.brain_bridge`.
+- **`tapps_memory` CRUD actions** (`save` / `get` / `list` / `delete` / `search`) from the MCP tool catalog ([TAP-1993](https://linear.app/tappscodingagents/issue/TAP-1993) Phase 2 → [TAP-1994](https://linear.app/tappscodingagents/issue/TAP-1994) Phase 3). Replaced with refused-redirect envelopes pointing at `mcp__tapps-brain__*`.
+- **`test_memory_tool.py` and 11 obsolete `tapps_memory` test files** ([TAP-2613](https://linear.app/tappscodingagents/issue/TAP-2613), post-TAP-1993/1994 cleanup).
 
 ## [3.10.19] - 2026-05-22
 

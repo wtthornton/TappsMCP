@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# tapps-mcp-hook-version: 3.11.1
+# tapps-mcp-hook-version: 3.12.0
 # TappsMCP PostToolUse hook (tapps_report)
 # Reads the report sidecar progress file and echoes a summary.
 INPUT=$(cat)
