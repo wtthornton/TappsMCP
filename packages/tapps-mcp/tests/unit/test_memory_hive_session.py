@@ -17,14 +17,24 @@ from tapps_core.config.settings import load_settings
 
 
 @pytest.mark.asyncio
-async def test_collect_session_hive_status_disabled(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Agent Teams flag unset -> baseline (no probe, no bridge touch)."""
+async def test_collect_session_hive_status_bridge_not_configured(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Bridge absent (brain not configured) -> ``enabled: "unknown"`` regardless of env var.
+
+    TAP-2021: Gate removed — ``CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS`` no
+    longer short-circuits the probe.  When the bridge is ``None`` the response
+    is degraded-unknown, not the old ``{"enabled": False}`` baseline.
+    """
     monkeypatch.delenv("CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS", raising=False)
     from tapps_mcp.server_helpers import collect_session_hive_status
 
-    settings = load_settings()
-    out = await collect_session_hive_status(settings)
-    assert out == {"enabled": False}
+    with patch("tapps_mcp.server_helpers._get_brain_bridge", return_value=None):
+        settings = load_settings()
+        out = await collect_session_hive_status(settings)
+
+    assert out["enabled"] == "unknown"
+    assert out.get("degraded") is True
 
 
 @pytest.mark.asyncio
@@ -171,28 +181,34 @@ async def test_collect_session_hive_status_handles_bridge_exception(
 async def test_session_start_quick_does_not_require_database_url(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """TAP-572: ``_session_start_quick`` must complete successfully without
-    ``TAPPS_BRAIN_DATABASE_URL`` set, whether or not Agent Teams is on.
+    """TAP-572/TAP-2021: ``_session_start_quick`` must complete successfully without
+    ``TAPPS_BRAIN_DATABASE_URL`` set.  When brain is not reachable the session
+    still succeeds and hive_status is degraded-unknown (not an error).
     """
     monkeypatch.delenv("CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS", raising=False)
     monkeypatch.delenv("TAPPS_BRAIN_DATABASE_URL", raising=False)
 
     from tapps_mcp.server_pipeline_tools import _session_start_quick
 
-    start_ns = 0
+    with patch("tapps_mcp.server_helpers._get_brain_bridge", return_value=None):
+        start_ns = 0
 
-    def _noop_record(_tool: str, _ns: int) -> None:
-        return None
+        def _noop_record(_tool: str, _ns: int) -> None:
+            return None
 
-    def _noop_nudges(_tool: str, resp: dict[str, Any], _ctx: dict[str, Any]) -> dict[str, Any]:
-        return resp
+        def _noop_nudges(
+            _tool: str, resp: dict[str, Any], _ctx: dict[str, Any]
+        ) -> dict[str, Any]:
+            return resp
 
-    result = await _session_start_quick(start_ns, _noop_record, _noop_nudges)
+        result = await _session_start_quick(start_ns, _noop_record, _noop_nudges)
+
     assert result["success"] is True
     hs = result["data"].get("hive_status")
     assert hs is not None
-    # Agent Teams off -> baseline
-    assert hs.get("enabled") is False
+    # TAP-2021: gate removed; bridge absent -> enabled unknown (not False)
+    assert hs.get("enabled") == "unknown"
+    assert hs.get("degraded") is True
 
 
 @pytest.mark.asyncio

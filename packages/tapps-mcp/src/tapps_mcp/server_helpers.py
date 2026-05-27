@@ -345,24 +345,23 @@ async def collect_session_hive_status(settings: TappsMCPSettings) -> dict[str, A
     fabricating a client-side DSN error — per the memory rule *"no client-side
     mirror of server-enforced rules"*.
 
+    TAP-2021: Gate removed — hive status is always probed when the bridge is
+    reachable. ``CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS`` no longer gates this
+    call; the probe is passive and degrades gracefully when brain is absent.
+
     Behavior:
 
-    * ``CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS`` unset -> ``{"enabled": False}``.
-    * Agent Teams on, bridge unavailable -> ``enabled: "unknown"``,
-      ``degraded: true``, message points at brain connectivity
-      (``TAPPS_BRAIN_BASE_URL`` / ``TAPPS_BRAIN_AUTH_TOKEN`` /
+    * Bridge unavailable (brain not configured / unreachable) ->
+      ``enabled: "unknown"``, ``degraded: true``, message points at brain
+      connectivity (``TAPPS_BRAIN_BASE_URL`` / ``TAPPS_BRAIN_AUTH_TOKEN`` /
       ``TAPPS_BRAIN_DATABASE_URL`` on the brain server) — not a local DSN.
-    * Agent Teams on, bridge available -> pass through
-      ``bridge.hive_status(...)`` result, with ``agent_id`` surfaced for the
-      session-start payload.
+    * Bridge available -> pass through ``bridge.hive_status(...)`` result,
+      with ``agent_id`` surfaced for the session-start payload.
 
     Propagation tier rules (``auto_propagate_tiers`` / ``private_tiers``) are
     intentionally not mirrored here: tapps-brain's ``PropagationEngine``
     enforces them server-side on every ``hive_propagate`` / ``hive_push`` call.
     """
-    if not _agent_teams_env_enabled():
-        return initial_session_hive_status()
-
     from tapps_core.agent_identity import get_stable_agent_id
 
     bridge = _get_brain_bridge()
