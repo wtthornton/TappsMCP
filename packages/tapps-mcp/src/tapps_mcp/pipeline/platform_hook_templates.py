@@ -489,13 +489,22 @@ exit 0
 """,
     "tapps-pre-compact.sh": """\
 #!/usr/bin/env bash
-# TappsMCP PreCompact hook
-# Backs up scoring context before context window compaction.
+# TappsMCP PreCompact hook (TAP-2017)
+# Indexes pre-compaction session state in brain for post-compact rehydration.
+# Set TAPPS_MCP_COMPACTION_REHYDRATE=false to disable.
 INPUT=$(cat)
-BACKUP_DIR="${CLAUDE_PROJECT_DIR:-.}/.tapps-mcp"
+PROJECT_DIR="${CLAUDE_PROJECT_DIR:-.}"
+BACKUP_DIR="$PROJECT_DIR/.tapps-mcp"
 mkdir -p "$BACKUP_DIR"
+# Keep disk backup as fallback for operators without brain configured.
 echo "$INPUT" > "$BACKUP_DIR/pre-compact-context.json"
-echo "[TappsMCP] Scoring context backed up to $BACKUP_DIR/pre-compact-context.json"
+# Index in brain and write rehydration marker via tapps-mcp CLI.
+if command -v tapps-mcp >/dev/null 2>&1; then
+  echo "$INPUT" | tapps-mcp compact-index --project-root "$PROJECT_DIR" 2>/dev/null || true
+elif command -v python3 >/dev/null 2>&1; then
+  echo "$INPUT" | python3 -m tapps_mcp.cli compact-index --project-root "$PROJECT_DIR" 2>/dev/null || true
+fi
+echo "[TappsMCP] Pre-compact session indexed for rehydration."
 exit 0
 """,
     "tapps-subagent-start.sh": """\
@@ -911,8 +920,9 @@ if (Test-Path $progress) {
 exit 0
 """,
     "tapps-pre-compact.ps1": """\
-# TappsMCP PreCompact hook
-# Backs up scoring context before context window compaction.
+# TappsMCP PreCompact hook (TAP-2017)
+# Indexes pre-compaction session state in brain for post-compact rehydration.
+# Set TAPPS_MCP_COMPACTION_REHYDRATE=false to disable.
 $rawInput = @($input) -join "`n"
 $projDir = $env:CLAUDE_PROJECT_DIR
 $backupDir = if ($projDir) { "$projDir/.tapps-mcp" } else { ".tapps-mcp" }
@@ -921,7 +931,11 @@ if (-not (Test-Path $backupDir)) {
 }
 $outFile = "$backupDir/pre-compact-context.json"
 $rawInput | Set-Content -Path $outFile -Encoding UTF8
-Write-Output "[TappsMCP] Scoring context backed up to $outFile"
+# Index in brain and write rehydration marker via tapps-mcp CLI.
+if (Get-Command tapps-mcp -ErrorAction SilentlyContinue) {
+    $rawInput | tapps-mcp compact-index --project-root ($projDir ?? ".") 2>$null
+}
+Write-Output "[TappsMCP] Pre-compact session indexed for rehydration."
 exit 0
 """,
     "tapps-subagent-start.ps1": """\

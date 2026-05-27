@@ -674,6 +674,18 @@ async def tapps_session_start(
         except Exception:
             data["cache_warm"] = {"scheduled": False, "skipped": "exception"}
 
+    # TAP-2017: Detect and surface compaction rehydration data when the
+    # PreCompact hook indexed the prior session in brain.  Best-effort —
+    # a missing marker or brain outage must not block session start.
+    try:
+        from tapps_mcp.tools.session_start_helpers import _check_compaction_rehydration
+
+        rehydration = await _check_compaction_rehydration(settings.project_root)
+        if rehydration is not None:
+            data["compaction_rehydration"] = rehydration
+    except Exception:
+        _logger.debug("compaction_rehydration_session_start_failed", exc_info=True)
+
     # TAP-1082: Hard-fail on tapps-brain auth probe 401/403 unless explicitly
     # tolerated. Audit (38 sessions, worst case 18 retries) shows agents do
     # not act on degraded:true buried inside memory_status — they retry, or

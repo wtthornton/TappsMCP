@@ -314,6 +314,100 @@ def _process_session_capture(
         return None
 
 
+async def _check_compaction_rehydration(
+    project_root: Path,
+) -> dict[str, Any] | None:
+    """Check for a compaction-marker written by the PreCompact hook (TAP-2017).
+
+    When ``tapps-pre-compact.sh`` runs before Claude Code compacts the context,
+    it calls ``tapps-mcp compact-index`` which:
+      1. Writes ``.tapps-mcp/compaction-marker.json`` with the session_id and
+         a list of indexable chunks.
+      2. Calls ``memory_index_session`` on the brain bridge so the pre-compact
+         state is persisted and queryable via ``memory_search_sessions``.
+
+    This function checks for that marker on session start.  If found:
+      - Reads the session_id and indexed_in_brain flag.
+      - Calls ``bridge.search_sessions()`` to pull back any matching chunks.
+      - Deletes the marker so subsequent session-start calls don't re-surface
+        stale rehydration data.
+
+    Returns ``None`` when no marker is present or the check is disabled via
+    ``TAPPS_MCP_COMPACTION_REHYDRATE=false``.  Failures are silently suppressed
+    so a brain outage cannot block session start.
+    """
+    import json as _json
+    import os
+
+    if os.environ.get("TAPPS_MCP_COMPACTION_REHYDRATE", "true").lower() == "false":
+        return None
+
+    from tapps_mcp.memory.compact_index import COMPACTION_MARKER_FILENAME
+
+    marker_path = project_root / ".tapps-mcp" / COMPACTION_MARKER_FILENAME
+    if not marker_path.exists():
+        return None
+
+    try:
+        marker: dict[str, Any] = _json.loads(marker_path.read_text(encoding="utf-8"))
+    except Exception:
+        _logger.debug("compaction_rehydration_marker_read_failed", exc_info=True)
+        return None
+    finally:
+        # Always delete the marker — even on read failure — to avoid infinite
+        # rehydration loops on subsequent session starts.
+        try:
+            marker_path.unlink(missing_ok=True)
+        except OSError:
+            pass
+
+    session_id = marker.get("session_id", "")
+    compacted_at = marker.get("compacted_at", 0.0)
+    indexed = marker.get("indexed_in_brain", False)
+
+    result: dict[str, Any] = {
+        "session_id": session_id,
+        "compacted_at": compacted_at,
+        "indexed_in_brain": indexed,
+        "prior_chunks": [],
+    }
+
+    if not indexed or not session_id:
+        return result
+
+    # Attempt to fetch prior context from the brain.
+    try:
+        from tapps_mcp.server_helpers import (
+            _get_brain_bridge as _get_brain_bridge_fn,
+        )
+
+        bridge = _get_brain_bridge_fn()
+        if bridge is not None and hasattr(bridge, "search_sessions"):
+            search_result = await bridge.search_sessions(  # type: ignore[misc]
+                f"compaction_boundary:{session_id}", limit=5
+            )
+            if isinstance(search_result, dict):
+                hits = search_result.get("results", [])
+                result["prior_chunks"] = [
+                    h.get("chunk", "") for h in hits if isinstance(h, dict)
+                ]
+                result["search_result_count"] = len(hits)
+    except Exception as exc:
+        _logger.debug(
+            "compaction_rehydration_search_failed",
+            error=str(exc),
+            session_id=session_id,
+        )
+
+    _logger.info(
+        "compaction_rehydration_check_completed",
+        session_id=session_id,
+        indexed=indexed,
+        prior_chunks=len(result.get("prior_chunks", [])),
+    )
+    return result
+
+
 def _cleanup_legacy_learning_dir(project_root: Path) -> bool:
     """One-shot cleanup of the legacy ``.tapps-mcp/learning/`` directory (TAP-2023).
 

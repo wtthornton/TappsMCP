@@ -380,6 +380,37 @@ def auto_capture(project_root: str, max_facts: int) -> None:
     run_auto_capture(raw, project_root_path, max_facts=max_facts)
 
 
+@main.command("compact-index")
+@click.option(
+    "--project-root",
+    default=".",
+    type=click.Path(exists=True, file_okay=False, path_type=str),
+    help="Project root directory (default: CLAUDE_PROJECT_DIR or current).",
+)
+def compact_index_cmd(project_root: str) -> None:
+    """Index pre-compaction session state in brain (PreCompact hook, TAP-2017).
+
+    Read JSON from stdin (Claude Code PreCompact event), index the session
+    context via memory_index_session, and write a compaction marker so
+    tapps_session_start can surface prior session context on rehydration.
+
+    Disabled by setting TAPPS_MCP_COMPACTION_REHYDRATE=false.
+    """
+    import asyncio
+    import sys
+    from pathlib import Path
+
+    project_root_path = Path(
+        os.environ.get("CLAUDE_PROJECT_DIR")
+        or os.environ.get("TAPPS_MCP_PROJECT_ROOT")
+        or project_root
+    ).resolve()
+    raw = sys.stdin.read()
+    from tapps_mcp.memory.compact_index import run_compact_index
+
+    asyncio.run(run_compact_index(raw, project_root_path))
+
+
 @main.command("validate-changed")
 @click.option(
     "--quick/--full",
