@@ -348,6 +348,11 @@ class BrainBridge:
             "errors": [],
             "warnings": [],
         }
+        # TAP-2014: optional approval gate for hive promotion.
+        # Set by the caller (tapps-mcp server_helpers) after bridge creation.
+        # When set, hive_propagate checks this callable(memory_key) -> bool
+        # before propagating each entry; refused entries are counted separately.
+        self.elevation_guard: Callable[[str], bool] | None = None
 
     # -------------------------------------------------------------------------
     # Circuit breaker
@@ -665,7 +670,59 @@ class BrainBridge:
         (counted as ``skipped_private``); ``domain`` goes to the agent profile
         namespace; ``hive`` goes to ``universal``. Returns ``degraded: true`` when
         the hive backend is not available.
+
+        TAP-2014: when :attr:`elevation_guard` is set, each entry's key is
+        checked against the approval store before propagation.  Entries without
+        a valid approval are counted in ``refused_no_approval`` and excluded
+        from the propagation batch.
         """
+        # TAP-2014: apply elevation guard before entering the sync _fn block.
+        guard = self.elevation_guard
+        refused: list[dict[str, Any]] = []
+        approved_entries: list[Any] = []
+        if guard is not None:
+            for entry in entries:
+                key: str
+                if hasattr(entry, "key"):
+                    key = str(entry.key) if entry.key else ""
+                elif isinstance(entry, dict):
+                    raw = entry.get("key")
+                    key = str(raw) if raw else ""
+                else:
+                    key = ""
+                if key and not guard(key):
+                    refused.append({
+                        "key": key,
+                        "refused": True,
+                        "reason": "elevation_approval_required",
+                    })
+                    logger.warning(
+                        "hive_propagate.refused_no_approval",
+                        memory_key=key,
+                        hint="Call brain_propose_hive_elevation then brain_approve_hive_elevation",
+                    )
+                else:
+                    approved_entries.append(entry)
+            filtered = approved_entries
+        else:
+            filtered = entries
+
+        if refused and not filtered:
+            return {
+                "enabled": True,
+                "degraded": False,
+                "propagated": 0,
+                "skipped_private": 0,
+                "refused_no_approval": len(refused),
+                "scanned": len(entries),
+                "details": refused,
+                "error": "elevation_approval_required",
+                "message": (
+                    "All entries refused: no approved hive elevation proposal found. "
+                    "Call brain_propose_hive_elevation(memory_key, justification) then "
+                    "brain_approve_hive_elevation(proposal_id) before retrying."
+                ),
+            }
 
         def _fn() -> dict[str, Any]:
             from tapps_brain.backends import PropagationEngine
@@ -677,16 +734,17 @@ class BrainBridge:
                     "degraded": True,
                     "propagated": 0,
                     "skipped_private": 0,
-                    "scanned": 0,
-                    "details": [],
+                    "refused_no_approval": len(refused),
+                    "scanned": len(entries),
+                    "details": refused,
                     "message": "Hive backend not available.",
                 }
 
             propagated = 0
             skipped_private = 0
-            details: list[dict[str, Any]] = []
+            details: list[dict[str, Any]] = list(refused)
 
-            for entry in entries:
+            for entry in filtered:
                 conf = entry.confidence if entry.confidence >= 0.0 else 0.6
                 tier_val = getattr(entry.tier, "value", str(entry.tier))
                 source_val = getattr(entry.source, "value", str(entry.source))
@@ -715,6 +773,7 @@ class BrainBridge:
                 "degraded": False,
                 "propagated": propagated,
                 "skipped_private": skipped_private,
+                "refused_no_approval": len(refused),
                 "scanned": len(entries),
                 "details": details,
             }
@@ -1254,6 +1313,8 @@ class HttpBrainBridge(BrainBridge):
         self._exposed_tools: frozenset[str] | None = None
         self._memory_profile: dict[str, Any] | None = None
         self._negotiation_error: str | None = None
+        # TAP-2014: elevation guard (shared attribute; set by server_helpers).
+        self.elevation_guard: Callable[[str], bool] | None = None
 
     # -------------------------------------------------------------------------
     # HTTP JSON-RPC call layer
@@ -2064,9 +2125,13 @@ class HttpBrainBridge(BrainBridge):
         # call. Iterate over the batch the caller passed in and aggregate,
         # preserving the Python API's list-of-entries shape
         # (TAP-800 drift 4).
+        #
+        # TAP-2014: apply elevation_guard before each propagation call.
         _ = agent_id
+        guard = self.elevation_guard
         propagated = 0
         skipped_private = 0
+        refused_no_approval = 0
         details: list[dict[str, Any]] = []
         for entry in entries:
             key: str | None
@@ -2079,10 +2144,29 @@ class HttpBrainBridge(BrainBridge):
                 key = None
             if not key:
                 continue
-            scope = getattr(entry, "agent_scope", None)
+            # Handle both dict and object entries for agent_scope.
+            scope = (
+                entry.get("agent_scope")
+                if isinstance(entry, dict)
+                else getattr(entry, "agent_scope", None)
+            )
             if scope == "private":
                 skipped_private += 1
                 details.append({"key": key, "skipped": "private"})
+                continue
+            # TAP-2014: check elevation guard before propagating.
+            if guard is not None and not guard(key):
+                refused_no_approval += 1
+                details.append({
+                    "key": key,
+                    "refused": True,
+                    "reason": "elevation_approval_required",
+                })
+                logger.warning(
+                    "hive_propagate.refused_no_approval",
+                    memory_key=key,
+                    hint="Call brain_propose_hive_elevation then brain_approve_hive_elevation",
+                )
                 continue
             try:
                 per = await self._http_mcp_call(
@@ -2102,6 +2186,7 @@ class HttpBrainBridge(BrainBridge):
         return {
             "enabled": True,
             "degraded": False,
+            "refused_no_approval": refused_no_approval,
             "propagated": propagated,
             "skipped_private": skipped_private,
             "scanned": len(entries),

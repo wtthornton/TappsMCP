@@ -140,6 +140,9 @@ def _get_brain_bridge() -> _BrainBridgeType | None:
     :class:`~tapps_core.brain_bridge.BrainBridge` when
     ``TAPPS_BRAIN_DATABASE_URL`` is set, or ``None`` when neither is
     configured.
+
+    TAP-2014: after creation, wires the hive elevation guard so that
+    ``bridge.hive_propagate`` refuses entries without a valid approval.
     """
     global _brain_bridge
     if _brain_bridge is None:
@@ -148,9 +151,16 @@ def _get_brain_bridge() -> _BrainBridgeType | None:
                 from tapps_core.brain_bridge import create_brain_bridge
                 from tapps_core.config.settings import load_settings
 
-                _brain_bridge = create_brain_bridge(
-                    load_settings(), default_profile="coder"
-                )
+                settings = load_settings()
+                _brain_bridge = create_brain_bridge(settings, default_profile="coder")
+
+                # TAP-2014: wire elevation guard after bridge creation.
+                if _brain_bridge is not None:
+                    from tapps_mcp.tools.hive_safety import get_elevation_store
+
+                    cache_dir = settings.project_root / ".tapps-mcp-cache"
+                    store = get_elevation_store(cache_dir)
+                    _brain_bridge.elevation_guard = store.check_approved
     return _brain_bridge
 
 

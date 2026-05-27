@@ -232,6 +232,9 @@ ALL_TOOL_NAMES: frozenset[str] = frozenset(
         "tapps_linear_snapshot_invalidate",
         "tapps_linear_count",
         "tapps_release_update",
+        # TAP-2014: hive elevation safety gate
+        "brain_propose_hive_elevation",
+        "brain_approve_hive_elevation",
     }
 )
 

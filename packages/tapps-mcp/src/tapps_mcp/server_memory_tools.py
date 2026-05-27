@@ -4083,9 +4083,175 @@ def _record_call(tool_name: str, *, success: bool = True) -> None:
 
 
 # ---------------------------------------------------------------------------
-# Registration
+# TAP-2014: Hive elevation safety gate — propose / approve
 # ---------------------------------------------------------------------------
 
+
+async def brain_propose_hive_elevation(
+    memory_key: str,
+    justification: str,
+) -> dict[str, Any]:
+    """Propose a memory key for hive elevation (operator approval required).
+
+    Records a *hive_elevation_proposed* event in brain and writes a pending
+    approval entry to the local elevation store.  The actual
+    ``hive_propagate`` call will be refused until
+    :func:`brain_approve_hive_elevation` is called with the returned
+    ``proposal_id``.
+
+    Args:
+        memory_key: The brain memory key being proposed for hive elevation.
+        justification: Human-readable rationale for the elevation request.
+
+    Returns:
+        Envelope with ``proposal_id`` and ``message`` on success.
+    """
+    start = time.monotonic()
+
+    if not memory_key:
+        return error_response(
+            "brain_propose_hive_elevation",
+            "missing_param",
+            "memory_key is required",
+        )
+    if not justification:
+        return error_response(
+            "brain_propose_hive_elevation",
+            "missing_param",
+            "justification is required",
+        )
+
+    try:
+        from tapps_core.config.settings import load_settings
+        from tapps_mcp.tools.hive_safety import get_elevation_store
+
+        settings = load_settings()
+        cache_dir = settings.project_root / ".tapps-mcp-cache"
+        store = get_elevation_store(cache_dir)
+        proposal_id = store.propose(memory_key, justification)
+    except Exception as exc:
+        return error_response(
+            "brain_propose_hive_elevation",
+            "store_error",
+            f"Failed to record elevation proposal: {exc}",
+        )
+
+    # Best-effort: fire a brain KG event for telemetry.
+    bridge = _get_brain_bridge()
+    if bridge is not None:
+        try:
+            await bridge.record_kg_event(
+                event_type="hive_elevation_proposed",
+                entities=[{"type": "memory_key", "id": memory_key}],
+                payload_data={"proposal_id": proposal_id, "justification": justification},
+            )
+        except Exception as exc:  # noqa: BLE001
+            logger.debug("hive_propose.kg_event_failed", error=str(exc))
+
+    elapsed = int((time.monotonic() - start) * 1000)
+    return success_response(
+        "brain_propose_hive_elevation",
+        elapsed,
+        {
+            "proposal_id": proposal_id,
+            "memory_key": memory_key,
+            "status": "pending",
+            "message": (
+                f"Proposal recorded. Call brain_approve_hive_elevation("
+                f"proposal_id='{proposal_id}') to authorize the hive push."
+            ),
+        },
+        next_steps=[
+            f"Call brain_approve_hive_elevation(proposal_id='{proposal_id}') "
+            "to authorize the hive elevation.",
+            "Approvals expire after 7 days.",
+        ],
+    )
+
+
+async def brain_approve_hive_elevation(
+    proposal_id: str,
+) -> dict[str, Any]:
+    """Approve a pending hive elevation proposal.
+
+    Once approved, :meth:`~tapps_core.brain_bridge.BrainBridge.hive_propagate`
+    will allow the matching memory key to be promoted to the shared hive.
+    Approvals expire after 7 days.
+
+    Args:
+        proposal_id: The ID returned by :func:`brain_propose_hive_elevation`.
+
+    Returns:
+        Envelope with ``approved``, ``proposal_id``, and ``memory_key`` on
+        success, or an error envelope when the proposal is not found.
+    """
+    start = time.monotonic()
+
+    if not proposal_id:
+        return error_response(
+            "brain_approve_hive_elevation",
+            "missing_param",
+            "proposal_id is required",
+        )
+
+    try:
+        from tapps_core.config.settings import load_settings
+        from tapps_mcp.tools.hive_safety import get_elevation_store
+
+        settings = load_settings()
+        cache_dir = settings.project_root / ".tapps-mcp-cache"
+        store = get_elevation_store(cache_dir)
+        result = store.approve(proposal_id)
+    except Exception as exc:
+        return error_response(
+            "brain_approve_hive_elevation",
+            "store_error",
+            f"Failed to approve elevation proposal: {exc}",
+        )
+
+    if not result.get("approved"):
+        return error_response(
+            "brain_approve_hive_elevation",
+            "proposal_not_found",
+            f"No pending proposal found with id '{proposal_id}'",
+        )
+
+    memory_key: str = result.get("memory_key", "")
+
+    # Best-effort: fire a brain KG event for the approval.
+    bridge = _get_brain_bridge()
+    if bridge is not None:
+        try:
+            await bridge.record_kg_event(
+                event_type="hive_elevation_approved",
+                entities=[{"type": "memory_key", "id": memory_key}],
+                payload_data={"proposal_id": proposal_id},
+            )
+        except Exception as exc:  # noqa: BLE001
+            logger.debug("hive_approve.kg_event_failed", error=str(exc))
+
+    elapsed = int((time.monotonic() - start) * 1000)
+    return success_response(
+        "brain_approve_hive_elevation",
+        elapsed,
+        {
+            **result,
+            "message": (
+                f"Hive elevation approved for key '{memory_key}'. "
+                "The next hive_propagate call for this key will proceed. "
+                "Approval expires in 7 days."
+            ),
+        },
+        next_steps=[
+            "Call bridge.hive_propagate (or tapps_memory(action='hive_propagate')) "
+            "to push the approved key to the shared hive.",
+        ],
+    )
+
+
+# ---------------------------------------------------------------------------
+# Registration
+# ---------------------------------------------------------------------------
 
 def register(mcp_instance: FastMCP, allowed_tools: frozenset[str]) -> None:
     """Register memory tools on the shared *mcp_instance*.
@@ -4094,4 +4260,25 @@ def register(mcp_instance: FastMCP, allowed_tools: frozenset[str]) -> None:
     helpers (_handle_session_start_capture, _handle_session_end_consolidate) remain
     as internal functions called from tapps_session_start / tapps_session_end via
     call_memory_index_session_start in tools/session_start_helpers.py.
+
+    TAP-2014: brain_propose_hive_elevation and brain_approve_hive_elevation
+    registered here (deferred — not daily drivers).
     """
+    from mcp.types import ToolAnnotations
+
+    _ann_write = ToolAnnotations(
+        readOnlyHint=False,
+        destructiveHint=False,
+        idempotentHint=False,
+        openWorldHint=False,
+    )
+    _meta_deferred: dict[str, Any] = {"defer_loading": True}
+
+    if "brain_propose_hive_elevation" in allowed_tools:
+        mcp_instance.tool(annotations=_ann_write, meta=_meta_deferred)(
+            brain_propose_hive_elevation
+        )
+    if "brain_approve_hive_elevation" in allowed_tools:
+        mcp_instance.tool(annotations=_ann_write, meta=_meta_deferred)(
+            brain_approve_hive_elevation
+        )
