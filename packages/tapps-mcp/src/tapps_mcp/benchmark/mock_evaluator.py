@@ -80,6 +80,7 @@ class MockEvaluator:
         template_override: str | None = None,
     ) -> list[BenchmarkResult]:
         """Evaluate a batch of instances."""
+        del template_override  # mock returns fixed results; template not used
         results: list[BenchmarkResult] = []
         for inst in instances:
             result = await self.evaluate_instance(inst, context_mode, engagement_level)

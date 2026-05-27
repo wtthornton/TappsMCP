@@ -167,6 +167,7 @@ class TypeScriptExtractor(TreeSitterExtractor):
         *,
         exported: bool = False,
     ) -> FunctionInfo | None:
+        del exported  # caller sets for future use; ignored by this extractor impl
         name_node = self._child_by_field(node, "name")
         if name_node is None:
             return None

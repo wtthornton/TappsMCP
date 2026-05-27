@@ -42,8 +42,8 @@ class DashboardGenerator:
         rag_tracker: RAGMetricsTracker | None = None,
         memory_store: MemoryStore | None = None,
         # Deprecated params kept for backward compat — ignored
-        expert_tracker: object | None = None,
-        business_collector: object | None = None,
+        _expert_tracker: object | None = None,
+        _business_collector: object | None = None,
     ) -> None:
         self._metrics_dir = metrics_dir
         self._dashboard_dir = metrics_dir.parent / "dashboard"

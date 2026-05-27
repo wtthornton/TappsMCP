@@ -111,6 +111,7 @@ class Evaluator:
         Returns:
             List of results in the same order as instances.
         """
+        del template_override  # accepted for Protocol compat; not yet wired to evaluate_instance
         semaphore = asyncio.Semaphore(self._config.workers)
         completed = 0
 

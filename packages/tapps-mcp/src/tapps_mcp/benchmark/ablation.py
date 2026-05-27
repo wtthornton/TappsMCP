@@ -48,7 +48,9 @@ class _EvaluatorProtocol(Protocol):
         context_mode: Any,
         engagement_level: str,
         template_override: str | None = None,
-    ) -> list[BenchmarkResult]: ...
+    ) -> list[BenchmarkResult]:
+        _ = template_override  # used by callers (ablation runner); concrete impls accept it
+        ...
 
 
 # ---------------------------------------------------------------------------

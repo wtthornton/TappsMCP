@@ -98,9 +98,6 @@ from tapps_mcp.pipeline.platform_hook_templates import (
     PROMPT_HOOK_CONFIG as _PROMPT_HOOK_CONFIG,
 )
 from tapps_mcp.pipeline.platform_hook_templates import (
-    SUPPORTED_CLAUDE_HOOK_KEYS as _SUPPORTED_CLAUDE_HOOK_KEYS,  # noqa: F401  (re-export)
-)
-from tapps_mcp.pipeline.platform_hook_templates import (
     SUPPORTED_CURSOR_HOOK_KEYS as _SUPPORTED_CURSOR_HOOK_KEYS,
 )
 from tapps_mcp.pipeline.platform_hook_templates import (
