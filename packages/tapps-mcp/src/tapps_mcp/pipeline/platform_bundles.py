@@ -342,7 +342,7 @@ def generate_claude_plugin_bundle(
     # can skip the hook when the tool call doesn't match. Non-tool events
     # (SessionStart, Stop, SessionEnd, etc.) silently ignore `if:`, but we
     # only copy it forward to keep the emitted manifest clean.
-    _TOOL_EVENTS = frozenset(
+    _tool_events = frozenset(
         {
             "PreToolUse",
             "PostToolUse",
@@ -357,7 +357,7 @@ def generate_claude_plugin_bundle(
             pe: dict[str, Any] = {}
             if "matcher" in entry:
                 pe["matcher"] = entry["matcher"]
-            if event in _TOOL_EVENTS and "if" in entry:
+            if event in _tool_events and "if" in entry:
                 pe["if"] = entry["if"]
             pe["hooks"] = [
                 {
