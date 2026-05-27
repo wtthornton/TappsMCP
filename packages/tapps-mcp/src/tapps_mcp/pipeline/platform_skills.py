@@ -24,7 +24,7 @@ CLAUDE_SKILLS: dict[str, str] = {
 name: tapps-score
 user-invocable: true
 model: claude-haiku-4-5-20251001
-description: Score a Python file across 7 quality categories and display a structured report.
+description: Score a Python file across 7 quality categories and display a structured report. Use when reviewing a Python file's quality scores before a code review or pull request.
 allowed-tools: mcp__tapps-mcp__tapps_score_file mcp__tapps-mcp__tapps_quick_check
 argument-hint: "[file-path]"
 ---
@@ -44,7 +44,7 @@ Score the specified Python file using TappsMCP:
 name: tapps-gate
 user-invocable: true
 model: claude-haiku-4-5-20251001
-description: Run a quality gate check and report pass/fail with blocking issues.
+description: Run a quality gate check and report pass/fail with blocking issues. Use when checking if a Python file passes the quality threshold before declaring a task complete.
 allowed-tools: mcp__tapps-mcp__tapps_quality_gate
 argument-hint: "[file-path]"
 disable-model-invocation: true
@@ -65,7 +65,7 @@ Run a quality gate check using TappsMCP:
 name: tapps-validate
 user-invocable: true
 model: claude-haiku-4-5-20251001
-description: Validate all changed files meet quality thresholds before declaring work complete.
+description: Validate all changed files meet quality thresholds before declaring work complete. Use when you have finished editing Python files and want to batch-validate all changed files against the quality gate.
 allowed-tools: mcp__tapps-mcp__tapps_validate_changed
 disable-model-invocation: true
 ---
@@ -86,7 +86,7 @@ Validate changed files using TappsMCP:
 name: tapps-finish-task
 user-invocable: true
 model: claude-haiku-4-5-20251001
-description: Run the end-of-task TAPPS pipeline in one shot — validate_changed, then checklist, then an optional memory save for anything architectural or patterned learned this session. The recommended final step before declaring work complete.
+description: Run the end-of-task TAPPS pipeline in one shot — validate_changed, then checklist, then an optional memory save for anything architectural or patterned learned this session. The recommended final step before declaring work complete. Use when you have finished implementing a task and want to validate, run the checklist, and save learnings in one shot.
 allowed-tools: mcp__tapps-mcp__tapps_validate_changed mcp__tapps-mcp__tapps_checklist mcp__tapps-mcp__tapps_memory
 argument-hint: "[task_type: feature|bugfix|refactor|security|review]"
 ---
@@ -108,7 +108,8 @@ user-invocable: true
 model: claude-haiku-4-5-20251001
 description: >-
   Generate a quality report across Python files in the project.
-  Scores multiple files and presents an aggregate summary.
+  Scores multiple files and presents an aggregate summary. Use when you
+  want an aggregate quality overview across multiple Python files.
 allowed-tools: mcp__tapps-mcp__tapps_report
 argument-hint: "[file-path or empty for project-wide]"
 ---
@@ -130,7 +131,9 @@ user-invocable: true
 model: claude-sonnet-4-6
 description: >-
   Orchestrate a parallel review-fix-validate pipeline across multiple changed files.
-  Spawns tapps-review-fixer agents in worktrees for parallel processing.
+  Spawns tapps-review-fixer agents in worktrees for parallel processing. Use when
+  you have multiple changed Python files that need parallel review, scoring, and
+  quality gate fixing before declaring work complete.
 allowed-tools: mcp__tapps-mcp__tapps_validate_changed mcp__tapps-mcp__tapps_checklist
 context: fork
 agent: general-purpose
@@ -155,7 +158,8 @@ name: tapps-research
 user-invocable: true
 description: >-
   Look up library documentation and research best practices
-  for the technologies used in this project.
+  for the technologies used in this project. Use when writing code that uses
+  an external library or when you need API reference or version-specific guidance.
 allowed-tools: mcp__tapps-mcp__tapps_lookup_docs
 argument-hint: "[library] [topic]"
 context: fork
@@ -177,7 +181,8 @@ user-invocable: true
 model: claude-sonnet-4-6
 description: >-
   Run a comprehensive security audit including vulnerability scanning
-  and dependency CVE checks.
+  and dependency CVE checks. Use when reviewing security-sensitive changes,
+  before a security audit, or before a production release.
 allowed-tools: >-
   mcp__tapps-mcp__tapps_security_scan
   mcp__tapps-mcp__tapps_dependency_scan
@@ -199,6 +204,7 @@ model: claude-sonnet-4-6
 description: >-
   Manage shared project memory for cross-session knowledge persistence.
   42 actions: save, search, federation, profiles, Hive, knowledge graph, batch ops, feedback, native session memory, and more.
+  Use when saving cross-session decisions, searching prior patterns, or managing the project knowledge store.
 allowed-tools: mcp__tapps-mcp__tapps_memory mcp__tapps-mcp__tapps_session_notes
 argument-hint: "[action] [key]"
 ---
@@ -272,6 +278,7 @@ model: claude-haiku-4-5-20251001
 description: >-
   Look up when to use each TappsMCP tool. Full tool reference with per-tool
   guidance for session start, scoring, validation, checklist, docs, experts, and more.
+  Use when you need guidance on which TappsMCP tool to call for a given situation.
 allowed-tools: mcp__tapps-mcp__tapps_server_info
 argument-hint: "[tool-name or 'all']"
 ---
@@ -333,7 +340,8 @@ user-invocable: true
 model: claude-sonnet-4-6
 description: >-
   Bootstrap TappsMCP in a project. Creates AGENTS.md, TECH_STACK.md,
-  platform rules, hooks, agents, skills, and MCP config.
+  platform rules, hooks, agents, skills, and MCP config. Use when setting
+  up TappsMCP in a new or existing project for the first time.
 allowed-tools: mcp__tapps-mcp__tapps_init mcp__tapps-mcp__tapps_doctor
 argument-hint: "[project-root]"
 ---
@@ -363,7 +371,8 @@ description: >-
   Upgrade tapps-mcp / docs-mcp in this project to the latest version.
   Reinstalls global CLIs, restarts the MCP servers, refreshes scaffolding
   via `tapps-mcp upgrade` (dry-run preview + timestamped backup), and
-  verifies via doctor + checklist.
+  verifies via doctor + checklist. Use when a new tapps-mcp or docs-mcp
+  version is available and the project scaffolding needs to be refreshed.
 allowed-tools: Bash mcp__tapps-mcp__tapps_session_start mcp__tapps-mcp__tapps_doctor mcp__tapps-mcp__tapps_checklist
 argument-hint: "[--from-checkout <path> | --from-tag vX.Y.Z]"
 ---
@@ -406,7 +415,8 @@ user-invocable: true
 model: claude-haiku-4-5-20251001
 description: >-
   Change the TappsMCP enforcement intensity (high, medium, or low).
-  Controls which quality tools are mandatory vs optional.
+  Controls which quality tools are mandatory vs optional. Use when you want
+  to switch between strict, balanced, or advisory enforcement modes.
 allowed-tools: mcp__tapps-mcp__tapps_set_engagement_level
 argument-hint: "[high|medium|low]"
 disable-model-invocation: true
@@ -427,8 +437,9 @@ name: tapps-apply-files
 user-invocable: false
 model: claude-haiku-4-5-20251001
 description: >-
-  Apply file operations from a TappsMCP content-return response.
-  Used when the MCP server runs in Docker and cannot write files directly.
+  Apply file operations from a TappsMCP content-return response. Use when
+  a TappsMCP or DocsMCP tool returns content_return: true with a file_manifest
+  because the server runs in Docker and cannot write files directly.
 allowed-tools: ""
 ---
 
@@ -476,7 +487,7 @@ the server could not write files (Docker / read-only filesystem).  Apply the fil
 name: linear-issue
 user-invocable: true
 model: claude-haiku-4-5-20251001
-description: Create, lint, validate, or triage Linear issues and epics for agents. MANDATORY for all Linear writes — never call plugin save_issue directly. Routes to docs-mcp generator/validator/triage tools and the Linear plugin by user intent.
+description: Create, lint, validate, or triage Linear issues and epics for agents. MANDATORY for all Linear writes — never call plugin save_issue directly. Routes to docs-mcp generator/validator/triage tools and the Linear plugin by user intent. Use when creating, linting, validating, or triaging a Linear issue or epic.
 allowed-tools: mcp__docs-mcp__docs_generate_epic mcp__docs-mcp__docs_generate_story mcp__docs-mcp__docs_lint_linear_issue mcp__docs-mcp__docs_validate_linear_issue mcp__docs-mcp__docs_linear_triage mcp__plugin_linear_linear__save_issue mcp__plugin_linear_linear__get_issue mcp__plugin_linear_linear__list_issues mcp__tapps-mcp__tapps_linear_snapshot_get mcp__tapps-mcp__tapps_linear_snapshot_put mcp__tapps-mcp__tapps_linear_snapshot_invalidate
 argument-hint: "[create-epic|create-story|lint TAP-###|validate|triage] [free-form detail]"
 ---
@@ -538,7 +549,7 @@ Linear rendering workarounds (observed 2026-04-24):
 name: linear-read
 user-invocable: true
 model: claude-haiku-4-5-20251001
-description: Read multi-issue Linear data via cache-first dance. MANDATORY for any list-style Linear read (triage, backlog review, "what's open", "find issues assigned to X"). Single-issue lookups go straight to get_issue. Routes through tapps_linear_snapshot_get/put before list_issues.
+description: Read multi-issue Linear data via cache-first dance. MANDATORY for any list-style Linear read. Routes through tapps_linear_snapshot_get/put before list_issues. Use when listing, filtering, or reviewing Linear issues (backlog review, "what's open", triage, "find issues assigned to X"). Single-issue lookups go straight to get_issue instead.
 allowed-tools: mcp__tapps-mcp__tapps_linear_snapshot_get mcp__tapps-mcp__tapps_linear_snapshot_put mcp__plugin_linear_linear__list_issues mcp__plugin_linear_linear__get_issue
 argument-hint: "[free-form query, e.g. 'open issues in TAP', 'backlog assigned to me']"
 ---
@@ -607,7 +618,7 @@ Three sequential `list_issues({state: "backlog"})`, `({state: "unstarted"})`, `(
 name: linear-release-update
 user-invocable: true
 model: claude-haiku-4-5-20251001
-description: Post a structured Linear project update document on a version release. Orchestrates tapps_release_update → docs_validate_release_update → save_document → cache invalidation.
+description: Post a structured Linear project update document on a version release. Orchestrates tapps_release_update → docs_validate_release_update → save_document → cache invalidation. Use when posting a release announcement to Linear after shipping a new version.
 allowed-tools: mcp__tapps-mcp__tapps_release_update mcp__docs-mcp__docs_generate_release_update mcp__docs-mcp__docs_validate_release_update mcp__plugin_linear_linear__save_document mcp__tapps-mcp__tapps_linear_snapshot_invalidate
 argument-hint: "--version vX.Y.Z --prev-version vX.Y.W [--team <team>] [--project <project>] [--dry-run]"
 ---
@@ -648,7 +659,7 @@ CURSOR_SKILLS: dict[str, str] = {
     "tapps-score": """\
 ---
 name: tapps-score
-description: Score a Python file across 7 quality categories and display a structured report.
+description: Score a Python file across 7 quality categories and display a structured report. Use when reviewing a Python file's quality scores before a code review or pull request.
 mcp_tools:
   - tapps_score_file
   - tapps_quick_check
@@ -667,7 +678,7 @@ Score the specified Python file using TappsMCP:
     "tapps-gate": """\
 ---
 name: tapps-gate
-description: Run a quality gate check and report pass/fail with blocking issues.
+description: Run a quality gate check and report pass/fail with blocking issues. Use when checking if a Python file passes the quality threshold before declaring a task complete.
 mcp_tools:
   - tapps_quality_gate
 ---
@@ -685,7 +696,7 @@ Run a quality gate check using TappsMCP:
     "tapps-validate": """\
 ---
 name: tapps-validate
-description: Validate all changed files meet quality thresholds before declaring work complete.
+description: Validate all changed files meet quality thresholds before declaring work complete. Use when you have finished editing Python files and want to batch-validate all changed files against the quality gate.
 mcp_tools:
   - tapps_validate_changed
 ---
@@ -706,7 +717,9 @@ Validate changed files using TappsMCP:
 name: tapps-finish-task
 description: >-
   Run the end-of-task TAPPS pipeline in one shot: validate changed files,
-  verify the checklist, and optionally save learnings to memory.
+  verify the checklist, and optionally save learnings to memory. Use when
+  you have finished implementing a task and want to validate, checklist,
+  and save learnings in one shot.
 mcp_tools:
   - tapps_validate_changed
   - tapps_checklist
@@ -725,7 +738,8 @@ Close out the current task end-to-end. Run each step; do NOT skip one that faile
 name: tapps-report
 description: >-
   Generate a quality report across Python files in the project.
-  Scores multiple files and presents an aggregate summary.
+  Scores multiple files and presents an aggregate summary. Use when you
+  want an aggregate quality overview across multiple Python files.
 mcp_tools:
   - tapps_report
 ---
@@ -745,7 +759,9 @@ Generate a quality report using TappsMCP:
 name: tapps-review-pipeline
 description: >-
   Orchestrate a parallel review-fix-validate pipeline across multiple changed files.
-  Spawns tapps-review-fixer agents for parallel processing.
+  Spawns tapps-review-fixer agents for parallel processing. Use when you have
+  multiple changed Python files that need parallel review, scoring, and quality
+  gate fixing before declaring work complete.
 mcp_tools:
   - tapps_validate_changed
   - tapps_checklist
@@ -769,7 +785,8 @@ Run a parallel review-fix-validate pipeline on changed Python files:
 name: tapps-research
 description: >-
   Look up library documentation and research best practices
-  for the technologies used in this project.
+  for the technologies used in this project. Use when writing code that uses
+  an external library or when you need API reference or version-specific guidance.
 mcp_tools:
   - tapps_lookup_docs
 ---
@@ -787,7 +804,8 @@ Look up library documentation using TappsMCP:
 name: tapps-security
 description: >-
   Run a comprehensive security audit on a Python file including vulnerability scanning
-  and dependency CVE checks.
+  and dependency CVE checks. Use when reviewing security-sensitive changes,
+  before a security audit, or before a production release.
 mcp_tools:
   - tapps_security_scan
   - tapps_dependency_scan
@@ -806,6 +824,7 @@ name: tapps-memory
 description: >-
   Manage shared project memory for cross-session knowledge persistence.
   42 actions: save, search, federation, profiles, Hive, knowledge graph, batch ops, feedback, native session memory, and more.
+  Use when saving cross-session decisions, searching prior patterns, or managing the project knowledge store.
 mcp_tools:
   - tapps_memory
   - tapps_session_notes
@@ -876,6 +895,7 @@ name: tapps-tool-reference
 description: >-
   Look up when to use each TappsMCP tool. Full tool reference with per-tool
   guidance for session start, scoring, validation, checklist, docs, experts.
+  Use when you need guidance on which TappsMCP tool to call for a given situation.
 mcp_tools:
   - tapps_server_info
 ---
@@ -890,7 +910,8 @@ For the full table, see the skill content. Call tapps_server_info for workflow.
 name: tapps-init
 description: >-
   Bootstrap TappsMCP in a project. Creates AGENTS.md, TECH_STACK.md,
-  platform rules, hooks, agents, skills, and MCP config.
+  platform rules, hooks, agents, skills, and MCP config. Use when setting
+  up TappsMCP in a new or existing project for the first time.
 mcp_tools:
   - tapps_init
   - tapps_doctor
@@ -918,7 +939,9 @@ name: tapps-upgrade
 description: >-
   Upgrade tapps-mcp / docs-mcp in this project to the latest version.
   Reinstalls global CLIs, restarts MCP servers, refreshes scaffolding via
-  `tapps-mcp upgrade`, verifies via doctor + checklist.
+  `tapps-mcp upgrade`, verifies via doctor + checklist. Use when a new
+  tapps-mcp or docs-mcp version is available and the project scaffolding
+  needs to be refreshed.
 mcp_tools:
   - tapps_session_start
   - tapps_doctor
@@ -953,7 +976,8 @@ If unspecified, ask once.
 name: tapps-engagement
 description: >-
   Change the TappsMCP enforcement intensity (high, medium, or low).
-  Controls which quality tools are mandatory vs optional.
+  Controls which quality tools are mandatory vs optional. Use when you want
+  to switch between strict, balanced, or advisory enforcement modes.
 mcp_tools:
   - tapps_set_engagement_level
 ---
@@ -971,8 +995,9 @@ Set the TappsMCP LLM engagement level:
 ---
 name: tapps-apply-files
 description: >-
-  Apply file operations from a TappsMCP content-return response.
-  Used when the MCP server runs in Docker and cannot write files directly.
+  Apply file operations from a TappsMCP content-return response. Use when
+  a TappsMCP or DocsMCP tool returns content_return: true with a file_manifest
+  because the server runs in Docker and cannot write files directly.
 mcp_tools: []
 ---
 
@@ -995,7 +1020,7 @@ the server could not write files (Docker / read-only filesystem).  Apply the fil
     "linear-issue": """\
 ---
 name: linear-issue
-description: Create, lint, validate, or triage Linear issues for agents. Routes to docs-mcp Linear tools and the Linear plugin by user intent.
+description: Create, lint, validate, or triage Linear issues for agents. Routes to docs-mcp Linear tools and the Linear plugin by user intent. Use when creating, linting, validating, or triaging a Linear issue or epic.
 mcp_tools:
   - docs_generate_story
   - docs_lint_linear_issue
@@ -1051,7 +1076,7 @@ Rules (enforced by docs-mcp tools):
     "linear-read": """\
 ---
 name: linear-read
-description: Read multi-issue Linear data via cache-first dance. MANDATORY for any list-style Linear read. Single-issue lookups go straight to get_issue. Routes through tapps_linear_snapshot_get/put before list_issues.
+description: Read multi-issue Linear data via cache-first dance. MANDATORY for any list-style Linear read. Routes through tapps_linear_snapshot_get/put before list_issues. Use when listing, filtering, or reviewing Linear issues (backlog review, "what's open", triage, "find issues assigned to X"). Single-issue lookups go straight to get_issue instead.
 mcp_tools:
   - tapps_linear_snapshot_get
   - tapps_linear_snapshot_put
