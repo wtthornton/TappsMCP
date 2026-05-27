@@ -281,12 +281,46 @@ class ArchitectureBrainWriter:
         key: str,
         value: str,
     ) -> None:
-        """Attempt a single bridge.save(); update BrainWriteResult in-place.
+        """Write key/value to brain, preferring supersede over save on regen.
 
-        Treats explicit ``success: False`` / ``degraded: True`` responses
-        from the bridge (e.g. circuit-open) as a failed write rather than
-        a silent success.
+        Tries ``bridge.supersede(key, new_value)`` first so regeneration
+        preserves the supersession chain in brain's history. Falls back to
+        ``bridge.save()`` when the key is absent (first write) — indicated by
+        either a ``{"error": "not_found"}`` response or an exception from the
+        in-process bridge (which raises on missing keys rather than returning
+        an error dict).
         """
+        # --- supersede path (regen: key already exists) ---
+        supersede_result: dict[str, Any] | None = None
+        try:
+            supersede_result = await bridge.supersede(key=key, new_value=value)
+        except Exception:
+            # In-process bridge raises BrainBridgeUnavailable (wrapping e.g.
+            # KeyError) when the key is absent.  Any exception here means we
+            # should fall through to the save path below.
+            supersede_result = None
+
+        if supersede_result is not None and not (
+            isinstance(supersede_result, dict)
+            and supersede_result.get("error") == "not_found"
+        ):
+            # Supersede was attempted and the key existed.
+            if isinstance(supersede_result, dict) and (
+                supersede_result.get("success") is False
+                or supersede_result.get("degraded") is True
+            ):
+                logger.warning(
+                    "brain_supersede_degraded",
+                    key=key,
+                    reason=supersede_result.get("reason", ""),
+                )
+                br.failed += 1
+                return
+            br.written += 1
+            br.entries_written.append(key)
+            return
+
+        # --- save path (first write: key absent) ---
         try:
             result = await bridge.save(
                 key=key,

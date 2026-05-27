@@ -28,14 +28,27 @@ from docs_mcp.integrations.brain_writer import (
 
 
 class FakeBridge:
-    """Minimal stand-in for tapps_core.brain_bridge.BrainBridge."""
+    """Minimal stand-in for tapps_core.brain_bridge.BrainBridge.
+
+    ``supersede`` returns ``{"error": "not_found"}`` by default so that
+    existing tests (which only check ``bridge.calls`` for *save* kwargs)
+    continue to exercise the save fallback path.  Override
+    ``supersede_result`` to simulate a successful supersede.
+    """
 
     def __init__(self) -> None:
         self.calls: list[dict[str, Any]] = []
+        self.supersede_calls: list[dict[str, Any]] = []
+        # Default: key absent → not_found → falls back to save.
+        self.supersede_result: dict[str, Any] = {"error": "not_found"}
 
     async def save(self, **kwargs: Any) -> dict[str, Any]:
         self.calls.append(kwargs)
         return {"key": kwargs["key"]}
+
+    async def supersede(self, key: str, new_value: str, **kwargs: Any) -> dict[str, Any]:
+        self.supersede_calls.append({"key": key, "new_value": new_value, **kwargs})
+        return self.supersede_result
 
 
 def _make_arch_result(
@@ -407,3 +420,80 @@ class TestWriteFromModuleMap:
         mm = _make_module_map()
         await writer.write_from_module_map(mm)
         assert bridge.calls[0]["memory_group"] == "insights"
+
+
+# ---------------------------------------------------------------------------
+# _save supersede / fallback behaviour (TAP-2004)
+# ---------------------------------------------------------------------------
+
+
+class TestSaveSupersedeFallback:
+    """Verify that _save tries supersede first and falls back to save on miss."""
+
+    def _make_writer(self, tmp_path: Path) -> tuple[ArchitectureBrainWriter, FakeBridge]:
+        bridge = FakeBridge()
+        writer = ArchitectureBrainWriter(tmp_path)
+        writer._bridge = bridge
+        writer._bridge_resolved = True
+        return writer, bridge
+
+    async def test_supersede_called_before_save(self, tmp_path: Path) -> None:
+        """_save always attempts supersede first."""
+        writer, bridge = self._make_writer(tmp_path)
+        # Default: supersede returns not_found → falls back to save.
+        result = await writer.write_from_architecture_result(_make_arch_result(), "myproject")
+        assert len(bridge.supersede_calls) == 1
+        assert bridge.supersede_calls[0]["key"] == "arch.myproject.structure"
+
+    async def test_fallback_to_save_when_not_found(self, tmp_path: Path) -> None:
+        """When supersede returns not_found, save is called (first-write path)."""
+        writer, bridge = self._make_writer(tmp_path)
+        bridge.supersede_result = {"error": "not_found"}
+        result = await writer.write_from_architecture_result(_make_arch_result(), "myproject")
+        assert result.written == 1
+        assert len(bridge.calls) == 1  # save was called
+
+    async def test_fallback_to_save_when_supersede_raises(self, tmp_path: Path) -> None:
+        """When supersede raises (in-process bridge: key absent), save is the fallback."""
+        bridge = FakeBridge()
+        bridge.supersede = AsyncMock(side_effect=RuntimeError("key not found"))  # type: ignore[method-assign]
+        writer = ArchitectureBrainWriter(tmp_path)
+        writer._bridge = bridge
+        writer._bridge_resolved = True
+        result = await writer.write_from_architecture_result(_make_arch_result(), "myproject")
+        assert result.written == 1
+        assert len(bridge.calls) == 1
+
+    async def test_supersede_success_skips_save(self, tmp_path: Path) -> None:
+        """When supersede succeeds, save is NOT called (regen path)."""
+        writer, bridge = self._make_writer(tmp_path)
+        bridge.supersede_result = {"key": "arch.myproject.structure"}  # success
+        result = await writer.write_from_architecture_result(_make_arch_result(), "myproject")
+        assert result.written == 1
+        assert len(bridge.calls) == 0  # save was NOT called
+        assert len(bridge.supersede_calls) == 1
+
+    async def test_supersede_success_records_entry_key(self, tmp_path: Path) -> None:
+        """Supersede success records the key in entries_written."""
+        writer, bridge = self._make_writer(tmp_path)
+        bridge.supersede_result = {"key": "arch.myproject.structure"}
+        result = await writer.write_from_architecture_result(_make_arch_result(), "myproject")
+        assert len(result.entries_written) == 1
+        assert "myproject" in result.entries_written[0]
+
+    async def test_supersede_degraded_counted_as_failed(self, tmp_path: Path) -> None:
+        """A degraded supersede response is counted as a failure."""
+        writer, bridge = self._make_writer(tmp_path)
+        bridge.supersede_result = {"success": False, "degraded": True, "reason": "circuit open"}
+        result = await writer.write_from_architecture_result(_make_arch_result(), "myproject")
+        assert result.failed == 1
+        assert result.written == 0
+
+    async def test_new_value_passed_to_supersede(self, tmp_path: Path) -> None:
+        """The key value is forwarded as new_value to supersede."""
+        writer, bridge = self._make_writer(tmp_path)
+        bridge.supersede_result = {"key": "arch.myproject.structure"}
+        await writer.write_from_architecture_result(
+            _make_arch_result(package_count=5), "myproject"
+        )
+        assert "5" in bridge.supersede_calls[0]["new_value"]
