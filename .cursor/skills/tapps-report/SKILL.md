@@ -2,7 +2,8 @@
 name: tapps-report
 description: >-
   Generate a quality report across Python files in the project.
-  Scores multiple files and presents an aggregate summary.
+  Scores multiple files and presents an aggregate summary. Use when you
+  want an aggregate quality overview across multiple Python files.
 mcp_tools:
   - tapps_report
 ---

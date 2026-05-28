@@ -2,7 +2,9 @@
 name: tapps-finish-task
 description: >-
   Run the end-of-task TAPPS pipeline in one shot: validate changed files,
-  verify the checklist, and optionally save learnings to memory.
+  verify the checklist, and optionally save learnings to memory. Use when
+  you have finished implementing a task and want to validate, checklist,
+  and save learnings in one shot.
 mcp_tools:
   - tapps_validate_changed
   - tapps_checklist

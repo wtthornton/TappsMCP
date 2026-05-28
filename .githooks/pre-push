@@ -120,6 +120,40 @@ if [[ -f "$_CORE_PYPROJECT" ]]; then
   fi
 fi
 
+# --- Static lints (migrated from GitHub Actions to cut CI spend) ---
+#
+# Replaces hive-write-lint.yml and tool-budget-lint.yml. Both are fast,
+# deterministic, and need no remote state, so they belong in the local gate.
+
+# Hive-write annotations: every hive_push / hive_propagate / agent_scope="hive"
+# must have "# hive-approved: TAP-XXXX" on the same or preceding line.
+_HIVE_VIOLATIONS=0
+while IFS=: read -r _hf _hln _; do
+  [[ -z "$_hf" ]] && continue
+  _start=$(( _hln - 2 ))
+  [[ "$_start" -lt 1 ]] && _start=1
+  _ctx=$(sed -n "${_start},${_hln}p" "$_hf" 2>/dev/null)
+  if ! echo "$_ctx" | grep -qE '#\s*hive-approved:\s*TAP-'; then
+    echo "[pre-push] hive-write violation: $_hf:$_hln — missing # hive-approved: TAP-XXXX" >&2
+    _HIVE_VIOLATIONS=$(( _HIVE_VIOLATIONS + 1 ))
+  fi
+done < <(grep -rnE 'agent_scope\s*=\s*"hive"|action\s*=\s*"hive_(push|propagate)"' \
+  packages/ --include="*.py" -n 2>/dev/null)
+if [[ "$_HIVE_VIOLATIONS" -gt 0 ]]; then
+  echo "[pre-push] $_HIVE_VIOLATIONS unapproved hive write(s). Add '# hive-approved: TAP-XXXX' on the same or preceding line." >&2
+  echo "[pre-push] Bypass (emergency only): TAPPS_SKIP_PREPUSH=1 git push" >&2
+  exit 1
+fi
+
+# Tool-budget: new @mcp.tool() registrations must touch docs/architecture/tool-budget.md.
+if ! python3 scripts/check-tool-budget.py \
+    --diff-range "HEAD~1..HEAD" \
+    --commit-msg "$(git log -1 --format='%B')" >&2; then
+  echo "[pre-push] tool-budget check failed. Update docs/architecture/tool-budget.md or add 'Tool-Budget: deferred' to the commit message." >&2
+  echo "[pre-push] Bypass (emergency only): TAPPS_SKIP_PREPUSH=1 git push" >&2
+  exit 1
+fi
+
 # --- Tier 1: fast gate — scope to changed packages ---
 #
 # Determine which packages changed in the commits being pushed. Diff

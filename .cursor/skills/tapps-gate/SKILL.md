@@ -1,6 +1,6 @@
 ---
 name: tapps-gate
-description: Run a quality gate check and report pass/fail with blocking issues.
+description: Run a quality gate check and report pass/fail with blocking issues. Use when checking if a Python file passes the quality threshold before declaring a task complete.
 mcp_tools:
   - tapps_quality_gate
 ---

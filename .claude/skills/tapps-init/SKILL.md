@@ -4,7 +4,8 @@ user-invocable: true
 model: claude-sonnet-4-6
 description: >-
   Bootstrap TappsMCP in a project. Creates AGENTS.md, TECH_STACK.md,
-  platform rules, hooks, agents, skills, and MCP config.
+  platform rules, hooks, agents, skills, and MCP config. Use when setting
+  up TappsMCP in a new or existing project for the first time.
 allowed-tools: mcp__tapps-mcp__tapps_init mcp__tapps-mcp__tapps_doctor
 argument-hint: "[project-root]"
 ---

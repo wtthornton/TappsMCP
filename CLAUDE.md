@@ -1,4 +1,4 @@
-<!-- tapps-claude-version: 3.11.5 -->
+<!-- tapps-claude-version: 3.12.0 -->
 # CLAUDE.md
 
 This file provides guidance to Claude Code when working with code in this repository.
@@ -18,7 +18,7 @@ This is a **uv workspace monorepo** with three packages plus an external depende
 | **tapps-mcp** | `packages/tapps-mcp/` | Code quality MCP server (32 tools) |
 | **docs-mcp** | `packages/docs-mcp/` | Documentation MCP server (38 tools) |
 
-tapps-core's `memory/` modules are re-export shims delegating to tapps-brain (except `injection.py` which is a bridge adapter). tapps-mcp re-exports from tapps-core for backward compatibility (`from tapps_mcp.config import load_settings` still works).
+tapps-core no longer ships a `memory/` package — the re-export shims that previously delegated to tapps-brain were removed in [TAP-1995](https://linear.app/tappscodingagents/issue/TAP-1995). Callers now import from `tapps_brain` directly. The `BrainBridge` adapter lives at `tapps_core.brain_bridge` (single module, replacing the old `tapps_core.memory.*` layout). tapps-mcp re-exports from tapps-core for backward compatibility (`from tapps_mcp.config import load_settings` still works).
 
 For detailed module maps and internal architecture, see [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 

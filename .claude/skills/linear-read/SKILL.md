@@ -2,7 +2,7 @@
 name: linear-read
 user-invocable: true
 model: claude-haiku-4-5-20251001
-description: Read multi-issue Linear data via cache-first dance. MANDATORY for any list-style Linear read (triage, backlog review, "what's open", "find issues assigned to X"). Single-issue lookups go straight to get_issue. Routes through tapps_linear_snapshot_get/put before list_issues.
+description: Read multi-issue Linear data via cache-first dance. MANDATORY for any list-style Linear read. Routes through tapps_linear_snapshot_get/put before list_issues. Use when listing, filtering, or reviewing Linear issues (backlog review, "what's open", triage, "find issues assigned to X"). Single-issue lookups go straight to get_issue instead.
 allowed-tools: mcp__tapps-mcp__tapps_linear_snapshot_get mcp__tapps-mcp__tapps_linear_snapshot_put mcp__plugin_linear_linear__list_issues mcp__plugin_linear_linear__get_issue
 argument-hint: "[free-form query, e.g. 'open issues in TAP', 'backlog assigned to me']"
 ---
@@ -49,7 +49,7 @@ Three sequential `list_issues({state: "backlog"})`, `({state: "unstarted"})`, `(
 
 - Calling `list_issues` without a prior `snapshot_get` for the same key.
 - Calling `list_issues({})` or `list_issues({team: "TAP", limit: 250})` (the unfiltered scroll — TAP-967's worst offender).
-- Re-fetching the same narrow query 5–12 times in one assistant turn with no intervening writes (use the cache).
+- Re-fetching the same narrow query 5-12 times in one assistant turn with no intervening writes (use the cache).
 - Single-issue lookup via `list_issues` filtering — use `get_issue(id)` instead.
 
 **Linear plugin parameter cheatsheet** (the flat parameters cover almost every real query — there is no need for raw GraphQL filter shapes):
