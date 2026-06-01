@@ -1689,6 +1689,32 @@ def _fetch_exposed_tools_jsonrpc(
     return exposed, "jsonrpc"
 
 
+def _probe_warm_cache_status(root: Path, headers: dict[str, str]) -> str:
+    """TAP-1927: return a short human-readable label for the warm-cache state.
+
+    Labels: ``warm(<age>s)`` when the pre-warm file is present and within TTL,
+    ``stale(<age>s)`` when it exists but has expired, or ``miss`` when absent.
+    """
+    import re as _re
+    import time as _time
+
+    from tapps_core.brain_bridge import _TOOLS_CACHE_TTL_SECONDS
+
+    raw_profile = headers.get("X-Brain-Profile") or ""
+    safe_profile = _re.sub(r"[^A-Za-z0-9_-]", "_", raw_profile) if raw_profile else ""
+    cache_file = root / ".tapps-mcp" / f".brain-tools-list.{safe_profile}.json"
+    try:
+        if not cache_file.exists():
+            return "miss"
+        age = _time.time() - cache_file.stat().st_mtime
+        age_s = int(age)
+        if age < _TOOLS_CACHE_TTL_SECONDS:
+            return f"warm({age_s}s)"
+        return f"stale({age_s}s)"
+    except Exception:  # noqa: BLE001
+        return "miss"
+
+
 def check_brain_profile(root: Path) -> CheckResult:
     """TAP-1629 / TAP-2100: probe the tapps-brain capability profile via tools/list.
 
@@ -1742,6 +1768,9 @@ def check_brain_profile(root: Path) -> CheckResult:
 
     declared = headers.get("X-Brain-Profile") or "(server default)"
 
+    # TAP-1927: report the warm-cache status alongside the live probe result.
+    _warm_cache_label = _probe_warm_cache_status(root, headers)
+
     try:
         import httpx as _httpx
     except Exception as exc:
@@ -1768,14 +1797,14 @@ def check_brain_profile(root: Path) -> CheckResult:
             "tapps-brain capability profile",
             True,
             f"profile={declared}, exposed={len(exposed)} tools "
-            f"({source}), no bridge mismatch",
+            f"({source}), no bridge mismatch; warm-cache={_warm_cache_label}",
         )
 
     return CheckResult(
         "tapps-brain capability profile",
         False,
         f"profile={declared} hides {len(gated_used)} bridge tool(s) from eager tools/list "
-        f"({source}): {', '.join(gated_used)}",
+        f"({source}): {', '.join(gated_used)}; warm-cache={_warm_cache_label}",
         "On tapps-brain v3.19.0+ this is expected for the 'full'/'operator' profiles — "
         "deferred tools remain callable via tools/call (TAP-1985). If memory operations are "
         "actually failing, set memory.brain_profile (or TAPPS_BRAIN_PROFILE) to a profile "

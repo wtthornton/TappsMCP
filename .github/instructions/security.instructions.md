@@ -1,4 +1,4 @@
-<!-- tapps-generated: v3.12.1 -->
+<!-- tapps-generated: v3.12.6 -->
 ---
 applyTo: "**/security/**"
 ---

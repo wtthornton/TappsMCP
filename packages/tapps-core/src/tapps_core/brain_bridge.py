@@ -28,6 +28,7 @@ from __future__ import annotations
 import asyncio
 import atexit
 import contextlib
+import json
 import os
 import random
 import re
@@ -73,6 +74,59 @@ _BRAIN_HEALTH_TIMEOUT_SECONDS: float = 5.0
 # Bounded deadline (seconds) that ``close`` / ``drain_blocking`` waits for the
 # offline write queue to drain on shutdown before giving up (TAP-517).
 _DRAIN_DEADLINE_SECONDS: float = 5.0
+
+# --- Tools-list pre-warm cache (TAP-1927) ------------------------------------
+# TTL matches the brain's Cache-Control window (300 s). The cache file lives at
+# ``.tapps-mcp/.brain-tools-list.<profile>.json`` relative to the project root
+# and is written by the SessionStart hook via ``curl`` before the Python process
+# starts.  When present and fresh, ``_negotiate_profile_locked`` reads from it
+# instead of incurring the live MCP ``tools/list`` round-trip.
+_TOOLS_CACHE_TTL_SECONDS: int = 300
+
+
+def _read_tools_warm_cache(cache_path: Path) -> frozenset[str] | None:
+    """Read the pre-warm tools-list cache file if present and not yet expired.
+
+    Returns a frozenset of tool names when the file exists, is younger than
+    :data:`_TOOLS_CACHE_TTL_SECONDS`, and parses as ``{"tools": [...]}``.
+    Returns ``None`` on any miss, TTL expiry, or parse error so callers can
+    fall through to the live MCP ``tools/list`` round-trip.
+    """
+    try:
+        if not cache_path.exists():
+            return None
+        age = time.time() - cache_path.stat().st_mtime
+        if age >= _TOOLS_CACHE_TTL_SECONDS:
+            return None
+        payload = json.loads(cache_path.read_text(encoding="utf-8"))
+        if not isinstance(payload, dict):
+            return None
+        tools = payload.get("tools", [])
+        if not isinstance(tools, list) or not tools:
+            return None
+        names: frozenset[str] = frozenset(
+            str(t["name"])
+            for t in tools
+            if isinstance(t, dict) and isinstance(t.get("name"), str) and t["name"]
+        )
+        return names if names else None
+    except Exception:  # noqa: BLE001
+        return None
+
+
+def _write_tools_warm_cache(cache_path: Path, tools: frozenset[str]) -> None:
+    """Write tool names to the pre-warm cache file (best-effort, silent on error).
+
+    Shape matches the brain REST ``/v1/tools/list`` response:
+    ``{"tools": [{"name": "<tool>"}, ...]}``.
+    """
+    try:
+        cache_path.parent.mkdir(parents=True, exist_ok=True)
+        payload = {"tools": [{"name": n} for n in sorted(tools)]}
+        cache_path.write_text(json.dumps(payload), encoding="utf-8")
+    except Exception:  # noqa: BLE001
+        pass
+
 
 # --- MCP streamable-HTTP transport ------------------------------------------
 # FastMCP's streamable-HTTP transport (tapps-brain /mcp) is strict about both
@@ -1261,7 +1315,7 @@ class HttpBrainBridge(BrainBridge):
 
     is_http_mode: bool = True
 
-    def __init__(self, http_url: str, headers: dict[str, str]) -> None:
+    def __init__(self, http_url: str, headers: dict[str, str], *, cache_dir: Path | None = None) -> None:
         # Initialise shared resilience state without a local AgentBrain.
         self._failures: int = 0
         self._open_at: float | None = None
@@ -1317,6 +1371,9 @@ class HttpBrainBridge(BrainBridge):
         self._negotiation_error: str | None = None
         # TAP-2014: elevation guard (shared attribute; set by server_helpers).
         self.elevation_guard: Callable[[str], bool] | None = None
+        # TAP-1927: directory for the tools-list pre-warm cache.  Resolved from
+        # the project root by ``_create_http_bridge``; ``None`` disables caching.
+        self._tools_cache_dir: Path | None = cache_dir
 
     # -------------------------------------------------------------------------
     # HTTP JSON-RPC call layer
@@ -1415,37 +1472,57 @@ class HttpBrainBridge(BrainBridge):
         if session_id and session_id != "__no_session__":
             extra_headers["Mcp-Session-Id"] = session_id
 
-        # --- tools/list -----------------------------------------------------
-        try:
-            tools_response = await self._http_client.post(
-                f"{self._http_url}/mcp/",
-                json={"jsonrpc": "2.0", "id": "negotiate_tools", "method": "tools/list"},
-                headers=extra_headers,
-            )
-            tools_response.raise_for_status()
-            tools_payload = tools_response.json()
-            tools = tools_payload.get("result", {}).get("tools", [])
-            tool_names: set[str] = {
-                str(t["name"])
-                for t in tools
-                if isinstance(t, dict) and isinstance(t.get("name"), str) and t["name"]
-            }
-            if tool_names:
-                # Only cache when we actually got a non-empty list — a malformed
-                # response or empty array (impossible on a healthy brain even on
-                # the narrowest profile, which always exposes brain_*) would
-                # otherwise short-circuit every subsequent bridge call. Surface
-                # the anomaly via ``negotiation_error`` instead.
-                self._exposed_tools = frozenset(tool_names)
-            else:
-                self._negotiation_error = "tools_list_empty"
-                logger.warning(
-                    "brain_bridge.tools_list_empty",
-                    declared_profile=self._http_headers.get("X-Brain-Profile") or None,
+        # --- tools/list warm-cache check (TAP-1927) ---------------------------
+        # A session-start hook writes .tapps-mcp/.brain-tools-list.<profile>.json
+        # via a background curl so the live MCP round-trip can be skipped here.
+        _cache_path: Path | None = None
+        if self._tools_cache_dir is not None:
+            _raw_profile = self._http_headers.get("X-Brain-Profile") or ""
+            _safe_profile = re.sub(r"[^A-Za-z0-9_-]", "_", _raw_profile) if _raw_profile else ""
+            _cache_path = self._tools_cache_dir / f".brain-tools-list.{_safe_profile}.json"
+            _cached_tools = _read_tools_warm_cache(_cache_path)
+            if _cached_tools is not None:
+                self._exposed_tools = _cached_tools
+                logger.debug(
+                    "brain_bridge.tools_list_warm_hit",
+                    tool_count=len(_cached_tools),
+                    declared_profile=_raw_profile or None,
                 )
-        except Exception as exc:
-            self._negotiation_error = f"tools_list_failed: {exc}"
-            logger.warning("brain_bridge.tools_list_failed", error=str(exc))
+
+        # --- tools/list (live MCP round-trip — skipped on warm-cache hit) ---
+        if self._exposed_tools is None:
+            try:
+                tools_response = await self._http_client.post(
+                    f"{self._http_url}/mcp/",
+                    json={"jsonrpc": "2.0", "id": "negotiate_tools", "method": "tools/list"},
+                    headers=extra_headers,
+                )
+                tools_response.raise_for_status()
+                tools_payload = tools_response.json()
+                tools = tools_payload.get("result", {}).get("tools", [])
+                tool_names: set[str] = {
+                    str(t["name"])
+                    for t in tools
+                    if isinstance(t, dict) and isinstance(t.get("name"), str) and t["name"]
+                }
+                if tool_names:
+                    # Only cache when we actually got a non-empty list — a malformed
+                    # response or empty array (impossible on a healthy brain even on
+                    # the narrowest profile, which always exposes brain_*) would
+                    # otherwise short-circuit every subsequent bridge call. Surface
+                    # the anomaly via ``negotiation_error`` instead.
+                    self._exposed_tools = frozenset(tool_names)
+                    if _cache_path is not None:
+                        _write_tools_warm_cache(_cache_path, frozenset(tool_names))
+                else:
+                    self._negotiation_error = "tools_list_empty"
+                    logger.warning(
+                        "brain_bridge.tools_list_empty",
+                        declared_profile=self._http_headers.get("X-Brain-Profile") or None,
+                    )
+            except Exception as exc:
+                self._negotiation_error = f"tools_list_failed: {exc}"
+                logger.warning("brain_bridge.tools_list_failed", error=str(exc))
 
         # --- profile_info (best-effort) ------------------------------------
         try:
@@ -3028,7 +3105,20 @@ def _create_http_bridge(
             ),
         )
 
-    bridge = HttpBrainBridge(brain_http_url, headers)
+    # TAP-1927: resolve the project-local cache directory for the tools-list
+    # pre-warm file.  Use settings.project_root when available; fall back to
+    # the TAPPS_PROJECT_ROOT env var; finally None (disables caching).
+    _cache_dir: Path | None = None
+    if settings is not None:
+        _proj_root = getattr(settings, "project_root", None)
+        if _proj_root:
+            _cache_dir = Path(str(_proj_root)) / ".tapps-mcp"
+    if _cache_dir is None:
+        _env_root = os.environ.get("TAPPS_PROJECT_ROOT", "").strip()
+        if _env_root:
+            _cache_dir = Path(_env_root) / ".tapps-mcp"
+
+    bridge = HttpBrainBridge(brain_http_url, headers, cache_dir=_cache_dir)
 
     version_check = check_brain_version(brain_http_url)
     if not version_check["ok"] and not version_check["skipped"]:

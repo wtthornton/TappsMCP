@@ -4,6 +4,7 @@ description: Read multi-issue Linear data via cache-first dance. MANDATORY for a
 mcp_tools:
   - tapps_linear_snapshot_get
   - tapps_linear_snapshot_put
+  - tapps_linear_list_issues
   - linear_list_issues
   - linear_get_issue
 ---
@@ -16,7 +17,7 @@ Multi-issue Linear reads are cache-first by contract (TAP-967 audit: 5,368 `list
 
 1. `tapps_linear_snapshot_get(team, project, state, label?)` first.
 2. On `cached=true`, use `data.issues` and filter in-memory — `list_issues` is NOT called.
-3. On `cached=false`, call `linear_list_issues` with NARROW filters: `team`, `project`, `state`, `includeArchived=false`.
+3. On `cached=false`, call `tapps_linear_list_issues(team, project, state, label?, limit?)` as a gate check (TAP-2010). On `ok=true`, call `linear_list_issues` with NARROW filters. On `ok=false`, follow the `hint` (re-call `snapshot_get` first).
 4. Immediately call `tapps_linear_snapshot_put(team, project, issues_json=json.dumps(issues), state, label?, limit?)` with the **same** key dimensions as the get call.
 
 **The 6-poll kickoff antipattern:** firing six `list_issues` calls (one per state x priority bucket) collapses to one `snapshot_get(state="open")` plus an in-memory filter. The 5-min open-state TTL means the next session warms instantly.
