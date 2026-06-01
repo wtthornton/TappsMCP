@@ -583,10 +583,80 @@ async def tapps_linear_count(
     )
 
 
+async def tapps_linear_list_issues(
+    team: str,
+    project: str,
+    state: str = "",
+    label: str = "",
+    limit: int = 50,
+) -> dict[str, Any]:
+    """Pre-list gate for Linear issue reads (TAP-2010).
+
+    Checks whether ``tapps_linear_snapshot_get`` has been called recently
+    (within 5 minutes, for the same ``(team, project, state, label, limit)``
+    slice) before allowing a ``list_issues`` call to proceed.
+
+    When the gate passes, returns ``{ok: true}`` — the agent should then call
+    ``mcp__plugin_linear_linear__list_issues`` with the same params. When the
+    gate fires, returns the standard ``gate_miss`` refusal envelope (see
+    ``docs/architecture/gateway-envelope.md``); call
+    ``tapps_linear_snapshot_get`` first to satisfy the gate.
+
+    This is the server-side counterpart to
+    ``.claude/hooks/tapps-pre-linear-list.sh``, providing defence-in-depth
+    when hooks are absent (other MCP clients, CI, read-only Claude Code
+    configs).
+
+    Args:
+        team: Linear team name — must match the ``tapps_linear_snapshot_get``
+            call that preceded this one.
+        project: Linear project name — same as above.
+        state: Linear state filter (e.g. ``"backlog"``, ``"open"``).
+        label: Optional label filter.
+        limit: Max results requested — part of the cache key.
+    """
+    _record_call("tapps_linear_list_issues")
+    start_ns = time.perf_counter_ns()
+
+    from tapps_mcp.tools.linear_list_gateway import gate_linear_list
+
+    settings = load_settings()
+    refusal = gate_linear_list(settings.project_root, team, project, state, label, limit)
+    elapsed_ms = (time.perf_counter_ns() - start_ns) // 1_000_000
+
+    if refusal is not None:
+        return success_response(
+            "tapps_linear_list_issues",
+            elapsed_ms,
+            refusal,
+            next_steps=[
+                f"Call tapps_linear_snapshot_get(team={team!r}, project={project!r}, state={state!r}) first.",
+                "On cached=false, call list_issues then tapps_linear_snapshot_put.",
+            ],
+        )
+
+    return success_response(
+        "tapps_linear_list_issues",
+        elapsed_ms,
+        {
+            "ok": True,
+            "message": (
+                "Gate passed — call mcp__plugin_linear_linear__list_issues "
+                "with the same team, project, state, label, and limit params."
+            ),
+        },
+        next_steps=[
+            "Call mcp__plugin_linear_linear__list_issues(team, project, state, ...) now.",
+            "Then call tapps_linear_snapshot_put to cache the result.",
+        ],
+    )
+
+
 def register(mcp_instance: FastMCP, allowed_tools: frozenset[str]) -> None:
     """Register Linear tools on the shared *mcp_instance*.
 
     TAP-1986: all four Linear cache tools are deferred (not daily drivers).
+    TAP-2010: tapps_linear_list_issues is a deferred gate tool.
     """
     if "tapps_linear_snapshot_get" in allowed_tools:
         mcp_instance.tool(annotations=_ANNOTATIONS_READ_ONLY, meta=_META_DEFERRED)(
@@ -603,4 +673,8 @@ def register(mcp_instance: FastMCP, allowed_tools: frozenset[str]) -> None:
     if "tapps_linear_count" in allowed_tools:
         mcp_instance.tool(annotations=_ANNOTATIONS_READ_ONLY, meta=_META_DEFERRED)(
             tapps_linear_count
+        )
+    if "tapps_linear_list_issues" in allowed_tools:
+        mcp_instance.tool(annotations=_ANNOTATIONS_READ_ONLY, meta=_META_DEFERRED)(
+            tapps_linear_list_issues
         )

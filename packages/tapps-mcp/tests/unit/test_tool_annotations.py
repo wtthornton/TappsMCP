@@ -166,9 +166,9 @@ class TestAnnotationCategories:
         ]
         # 18 closed-world + 2 open-world + 1 linear-snapshot-get + 1 release-update
         # + 1 tapps_linear_count (TAP-1847) + 1 tapps_audit_campaign (TAP-2036)
-        # + 1 tapps_usage (v3.11.0) = 25
-        assert len(read_only) == 25, (
-            f"Expected 25 read-only tools, got {len(read_only)}"
+        # + 1 tapps_usage (v3.11.0) + 1 tapps_linear_list_issues (TAP-2010) = 26
+        assert len(read_only) == 26, (
+            f"Expected 26 read-only tools, got {len(read_only)}"
         )
 
     def test_side_effect_count(self) -> None:
@@ -205,9 +205,9 @@ class TestAnnotationCategories:
         ]
         # 22 prior + 3 linear-snapshot + 1 release-update + 1 tapps_linear_count (TAP-1847)
         # + 1 tapps_audit_campaign (TAP-2036) + 1 tapps_session_end (TAP-2005)
-        # + 1 tapps_usage (v3.11.0) = 30
-        assert len(idempotent) == 30, (
-            f"Expected 30 idempotent tools, got {len(idempotent)}: {sorted(idempotent)}"
+        # + 1 tapps_usage (v3.11.0) + 1 tapps_linear_list_issues (TAP-2010) = 31
+        assert len(idempotent) == 31, (
+            f"Expected 31 idempotent tools, got {len(idempotent)}: {sorted(idempotent)}"
         )
 
 
