@@ -13,6 +13,7 @@ import asyncio
 import contextlib
 import dataclasses
 import json as _json
+import os
 import time
 from datetime import UTC, datetime
 from pathlib import Path as _Path
@@ -41,6 +42,12 @@ if TYPE_CHECKING:
     from tapps_mcp.project.session_notes import SessionNoteStore
 
 logger = structlog.get_logger(__name__)
+
+# Cap simultaneous file scorers in project-wide reports. Each scorer forks
+# ruff + mypy + bandit + radon + vulture subprocesses, so an unbounded
+# asyncio.gather over max_files (up to 100) spawns hundreds of processes at
+# once and blows past the request deadline / file-descriptor limits.
+_REPORT_MAX_CONCURRENCY = min(8, (os.cpu_count() or 4))
 
 # ---------------------------------------------------------------------------
 # Tool annotation presets
@@ -501,13 +508,21 @@ async def tapps_report(
     scorer = _get_scorer()
     score_results: list[Any] = []
     gate_results: list[Any] = []
+    skipped_files: list[dict[str, str]] = []
 
     if file_path:
         try:
             resolved = _validate_file_path_lazy(file_path)
         except (ValueError, FileNotFoundError) as exc:
             return error_response("tapps_report", "path_denied", str(exc))
-        result = await scorer.score_file(resolved)
+        try:
+            result = await scorer.score_file(resolved)
+        except Exception as exc:  # surface cause, never an empty message
+            return error_response(
+                "tapps_report",
+                "scan_failed",
+                f"Failed to score {resolved.name}: {type(exc).__name__}: {exc}",
+            )
         score_results.append(result)
         gate_results.append(evaluate_gate(result, preset=settings.quality_preset))
     else:
@@ -521,9 +536,18 @@ async def tapps_report(
         tracker = _ReportProgressTracker(total=len(py_files))
         tracker.init_sidecar(settings.project_root)
 
+        # Bound concurrent scorers (see _REPORT_MAX_CONCURRENCY) so a project-wide
+        # scan does not fork hundreds of subprocesses at once.
+        sem = asyncio.Semaphore(_REPORT_MAX_CONCURRENCY)
+
         async def _score_one(pf: _Path) -> tuple[Any, Any] | None:
-            try:
-                res = await scorer.score_file(pf)
+            async with sem:
+                try:
+                    res = await scorer.score_file(pf)
+                except Exception as e:  # one bad file must not abort the report
+                    logger.warning("report_file_skip", file=str(pf), error=str(e))
+                    skipped_files.append({"file": str(pf), "error": f"{type(e).__name__}: {e}"})
+                    return None
                 gate = evaluate_gate(res, preset=settings.quality_preset)
                 tracker.completed += 1
                 tracker.last_file = pf.name
@@ -531,9 +555,6 @@ async def tapps_report(
                 tracker.record_file_result(str(pf), {"overall_score": score_val})
                 await emit_ctx_info(ctx, f"Scored {pf.name}: {score_val}/100")
                 return res, gate
-            except (ValueError, OSError, RuntimeError) as e:
-                logger.warning("report_file_skip", file=str(pf), error=str(e))
-                return None
 
         # Heartbeat task for project-wide progress reporting
         _stop_event = asyncio.Event()
@@ -556,17 +577,28 @@ async def tapps_report(
 
         try:
             tasks = [_score_one(pf) for pf in py_files]
-            outcomes = await asyncio.gather(*tasks, return_exceptions=False)
-            for out in outcomes:
+            # return_exceptions=True: a stray BaseException from one file (e.g.
+            # a per-file cancellation) is recorded, not allowed to abort the run.
+            outcomes = await asyncio.gather(*tasks, return_exceptions=True)
+            for pf, out in zip(py_files, outcomes, strict=True):
+                if isinstance(out, BaseException):
+                    logger.warning("report_file_skip", file=str(pf), error=str(out))
+                    skipped_files.append({"file": str(pf), "error": f"{type(out).__name__}: {out}"})
+                    continue
                 if out is not None:
                     score_results.append(out[0])
                     gate_results.append(out[1])
 
             elapsed_ms_inner = (time.perf_counter_ns() - start) // 1_000_000
             tracker.finalize(f"{len(score_results)} files scored", elapsed_ms_inner)
-        except Exception as exc:
-            tracker.finalize_error(str(exc))
-            raise
+        except Exception as exc:  # return the real cause, never an empty message
+            tracker.finalize_error(f"{type(exc).__name__}: {exc}")
+            return error_response(
+                "tapps_report",
+                "scan_failed",
+                f"{type(exc).__name__}: {exc} (last file: {tracker.last_file or 'n/a'})",
+                extra={"skipped_files": skipped_files},
+            )
         finally:
             _stop_event.set()
             if _heartbeat_task is not None:
@@ -574,7 +606,17 @@ async def tapps_report(
                 with contextlib.suppress(asyncio.CancelledError):
                     await _heartbeat_task
 
-    report_data = generate_report(score_results, gate_results, report_format=report_format)
+    try:
+        report_data = generate_report(score_results, gate_results, report_format=report_format)
+    except Exception as exc:  # return the real cause, never an empty message
+        return error_response(
+            "tapps_report",
+            "scan_failed",
+            f"Report rendering failed: {type(exc).__name__}: {exc}",
+            extra={"skipped_files": skipped_files},
+        )
+    if skipped_files:
+        report_data["skipped_files"] = skipped_files
     elapsed_ms = (time.perf_counter_ns() - start) // 1_000_000
     _record_execution("tapps_report", start, file_path=file_path or None)
     resp = success_response("tapps_report", elapsed_ms, report_data)
@@ -1188,9 +1230,7 @@ async def tapps_audit_campaign(
             campaign_id=campaign_id,
         )
     except ValueError as exc:
-        return error_response(
-            "tapps_audit_campaign", "invalid_categories", str(exc)
-        )
+        return error_response("tapps_audit_campaign", "invalid_categories", str(exc))
 
     elapsed_ms = (time.perf_counter_ns() - start) // 1_000_000
     _record_execution("tapps_audit_campaign", start)
@@ -1234,9 +1274,7 @@ async def tapps_audit_campaign(
     return _with_nudges("tapps_audit_campaign", resp)
 
 
-async def _persist_campaign_spec(
-    campaign_id: str, spec_dict: dict[str, Any]
-) -> bool:
+async def _persist_campaign_spec(campaign_id: str, spec_dict: dict[str, Any]) -> bool:
     """Save the rendered spec to brain so dispatch can pick it up."""
     from tapps_mcp.tools.audit_manifest import save_campaign_spec
 
@@ -1286,9 +1324,7 @@ async def _handle_dispatch_mode(
     try:
         finalized = finalize_session_bodies(spec, epic_ref)
     except ValueError as exc:
-        return error_response(
-            "tapps_audit_campaign", "invalid_epic_ref", str(exc)
-        )
+        return error_response("tapps_audit_campaign", "invalid_epic_ref", str(exc))
 
     re_persisted = await save_campaign_spec(campaign_id, finalized)
     finalized["persisted_to_brain"] = re_persisted
@@ -1341,9 +1377,7 @@ async def _handle_fix_plan_mode(
     try:
         fix_plan = build_fix_plan_spec(spec)
     except ValueError as exc:
-        return error_response(
-            "tapps_audit_campaign", "invalid_campaign_spec", str(exc)
-        )
+        return error_response("tapps_audit_campaign", "invalid_campaign_spec", str(exc))
 
     data: dict[str, Any] = {
         "campaign_id": fix_plan.campaign_id,
@@ -1392,9 +1426,7 @@ async def _handle_fix_plan_mode(
     return _with_nudges("tapps_audit_campaign", resp)
 
 
-async def _persist_fix_plan_spec(
-    campaign_id: str, spec_dict: dict[str, Any]
-) -> bool:
+async def _persist_fix_plan_spec(campaign_id: str, spec_dict: dict[str, Any]) -> bool:
     """Save the rendered fix-plan spec to brain under ``fix:campaign:<id>``."""
     from tapps_mcp.tools.audit_manifest import save_fix_plan_spec
 
@@ -1605,9 +1637,9 @@ def register(mcp_instance: FastMCP, allowed_tools: frozenset[str]) -> None:
             tapps_session_notes
         )
     if "tapps_impact_analysis" in allowed_tools:
-        mcp_instance.tool(
-            annotations=_ANNOTATIONS_READ_ONLY, meta=_META_LARGE_OUTPUT_100K
-        )(tapps_impact_analysis)
+        mcp_instance.tool(annotations=_ANNOTATIONS_READ_ONLY, meta=_META_LARGE_OUTPUT_100K)(
+            tapps_impact_analysis
+        )
     if "tapps_report" in allowed_tools:
         mcp_instance.tool(annotations=_ANNOTATIONS_READ_ONLY, meta=_META_LARGE_OUTPUT_100K_D)(
             tapps_report
