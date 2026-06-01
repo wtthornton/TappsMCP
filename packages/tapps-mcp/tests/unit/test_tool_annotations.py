@@ -235,7 +235,7 @@ class TestDeferLoading:
     _EAGER_BUDGET = 9
 
     def test_eager_tool_count_within_budget(self) -> None:
-        """Eager tool count must be ≤ _EAGER_BUDGET (currently 8)."""
+        """Eager tool count must be ≤ _EAGER_BUDGET (currently 9)."""
         tools = mcp._tool_manager._tools
         eager = [n for n, t in tools.items() if not (t.meta or {}).get("defer_loading")]
         assert len(eager) <= self._EAGER_BUDGET, (

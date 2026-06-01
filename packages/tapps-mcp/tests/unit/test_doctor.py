@@ -1800,43 +1800,43 @@ class TestCheckMcpToolBudget:
         assert "No .mcp.json" in result.message
 
     def test_ok_within_default_budget(self, tmp_path) -> None:  # type: ignore[no-untyped-def]
-        """tapps-quality (8 eager tools after TAP-1986) is within default budget of 20."""
+        """tapps-quality (9 eager tools: 8 from TAP-1986 + tapps_usage added in v3.11.0) is within default budget of 20."""
         self._mcp_json(tmp_path, {"tapps-quality": {
             "command": "uv", "args": ["run", "tapps-mcp", "serve", "--mode", "quality"],
         }})
         result = check_mcp_tool_budget(tmp_path)
         assert result.ok is True
-        assert "8" in result.message
+        assert "9" in result.message
 
-    def test_warn_15_tools_at_budget_8(self, tmp_path) -> None:  # type: ignore[no-untyped-def]
-        """TAP-1986: quality preset now has 8 eager tools, so budget=8 is exactly at limit (OK)."""
+    def test_warn_15_tools_at_budget_9(self, tmp_path) -> None:  # type: ignore[no-untyped-def]
+        """quality preset has 9 eager tools; budget=9 is exactly at limit (OK), budget=8 would WARN."""
         self._mcp_json(tmp_path, {"tapps-quality": {
             "command": "uv", "args": ["run", "tapps-mcp", "serve", "--mode", "quality"],
         }})
-        (tmp_path / ".tapps-mcp.yaml").write_text("doctor_tool_budget_limit: 8\n")
+        (tmp_path / ".tapps-mcp.yaml").write_text("doctor_tool_budget_limit: 9\n")
         result = check_mcp_tool_budget(tmp_path)
-        # 8 eager tools <= budget 8 → OK (no WARN)
+        # 9 eager tools <= budget 9 → OK (no WARN)
         assert result.ok is True
-        assert "8" in result.message
+        assert "9" in result.message
 
     def test_full_mode_warns_over_default_budget(self, tmp_path) -> None:  # type: ignore[no-untyped-def]
-        """TAP-1986: tapps-mcp full now has 8 eager tools, which is within default budget of 20."""
+        """tapps-mcp full has 9 eager tools, which is within default budget of 20."""
         self._mcp_json(tmp_path, {"tapps-mcp": {
             "command": "uv", "args": ["run", "tapps-mcp", "serve"],
         }})
         result = check_mcp_tool_budget(tmp_path)
-        # 8 eager tools ≤ 20 → OK (no WARN)
+        # 9 eager tools ≤ 20 → OK (no WARN)
         assert result.ok is True
-        assert "8" in result.message
+        assert "9" in result.message
 
     def test_admin_mode_within_default_budget(self, tmp_path) -> None:  # type: ignore[no-untyped-def]
-        """TAP-1986: tapps-admin has 0 eager tools (all deferred), well within budget."""
+        """tapps-admin has 1 eager tool (tapps_usage), well within budget."""
         self._mcp_json(tmp_path, {"tapps-admin": {
             "command": "uv", "args": ["run", "tapps-mcp", "serve", "--mode", "admin"],
         }})
         result = check_mcp_tool_budget(tmp_path)
         assert result.ok is True
-        assert "0" in result.message
+        assert "1" in result.message
 
     def test_unknown_server_skipped(self, tmp_path) -> None:  # type: ignore[no-untyped-def]
         """Unknown servers (e.g. plain HTTP) are silently skipped."""

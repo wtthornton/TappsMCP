@@ -2054,9 +2054,13 @@ def check_brain_version_delta(root: Path) -> CheckResult:
 # TAP-1986: counts reflect EAGER tools only (defer_loading=False).
 # Non-daily-driver tools carry defer_loading=True and are loaded on-demand via Tool Search.
 _TAPPS_MCP_MODE_TOOL_COUNTS: dict[str, int] = {
-    "full": 8,     # TAP-1986: 8 eager daily-driver tools; 24 deferred via Tool Search
-    "quality": 8,  # TAP-1986: 8 eager (same daily drivers visible in quality preset)
-    "admin": 0,    # TAP-1986: 0 eager (all admin tools are deferred)
+    # TAP-1986 set 8 eager; tapps_usage added in v3.11.0 raised this to 9.
+    # Eager set: session_start, validate_changed, score_file, quality_gate,
+    # quick_check, lookup_docs, checklist, impact_analysis, usage (9 total).
+    # Deferred: 26 (full=35 total; quality=15 total; admin=13 total).
+    "full": 9,     # 9 eager daily-driver tools; 26 deferred via Tool Search (35 total)
+    "quality": 9,  # 9 eager (all 9 daily drivers are in the quality preset; 6 deferred)
+    "admin": 1,    # 1 eager (tapps_usage); 12 deferred
 }
 _DOCS_MCP_TOOL_COUNT: int = 6  # TAP-1987: 6 eager tools; 32 deferred via Tool Search
 _DEFAULT_TOOL_BUDGET: int = 20

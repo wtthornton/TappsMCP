@@ -18,14 +18,23 @@ server's eager tool count exceeds the budget.
 ## Known server tool counts
 
 Post TAP-1986/TAP-1987: non-daily-driver tools carry `defer_loading=True` and are loaded
-on-demand via Tool Search. The counts below reflect **eager** tools only.
+on-demand via Tool Search. The counts below reflect the current **eager** vs **deferred** split.
 
-| Server | Mode | Eager tools | Deferred tools |
-|---|---|---|---|
-| `tapps-mcp` | full (no `--mode`) | 8 | 24 |
-| `tapps-quality` | `--mode quality` | 8 | 7 |
-| `tapps-admin` | `--mode admin` | 0 | 12 |
-| `docs-mcp` | — | 6 | 32 |
+Eager tools: `tapps_session_start`, `tapps_validate_changed`, `tapps_score_file`,
+`tapps_quality_gate`, `tapps_quick_check`, `tapps_lookup_docs`, `tapps_checklist`,
+`tapps_impact_analysis`, `tapps_usage` (9 total).
+
+| Server | Mode | Eager tools | Deferred tools | Total |
+|---|---|---|---|---|
+| `tapps-mcp` | full (no `--mode`) | 9 | 26 | 35 |
+| `tapps-quality` | `--mode quality` | 9 | 6 | 15 |
+| `tapps-admin` | `--mode admin` | 1 | 12 | 13 |
+| `docs-mcp` | — | 6 | 32 | 38 |
+
+> **Note:** The original TAP-1986 count was 8 eager tools. `tapps_usage` was added
+> as an eager daily-driver in v3.11.0, and two deferred brain-elevation tools
+> (`brain_propose_hive_elevation`, `brain_approve_hive_elevation`) were added in
+> TAP-2014, bringing full-mode totals to 35 tools (9 eager, 26 deferred).
 
 ## Updating the budget
 
@@ -45,7 +54,7 @@ to enforce quality-preset-level discipline.
 To bring a server within budget:
 
 1. **Use a preset**: start tapps-mcp with `--mode quality` (15 tools) or `--mode admin`
-   (12 tools) instead of the default full mode.
+   (13 tools) instead of the default full mode.
 2. **Disable individual tools**: set `disabled_tools` in `.tapps-mcp.yaml`:
    ```yaml
    disabled_tools:
