@@ -2597,3 +2597,120 @@ class TestProfileStatusShape:
         assert status["memory_profile_name"] == "repo-brain"
         assert "memory_save" in status["gated_used_tools"]
         assert status["profile_mismatch"] is True
+
+
+# ---------------------------------------------------------------------------
+# TAP-1938: record_feedback
+# ---------------------------------------------------------------------------
+
+
+class TestRecordFeedback:
+    """HttpBrainBridge.record_feedback — edge + memory paths, error handling."""
+
+    @pytest.mark.asyncio
+    async def test_record_feedback_edge_path_success(self) -> None:
+        """Happy path: edge_id feedback; result dict returned and args wired correctly."""
+        bridge = _make_http_bridge()
+        bridge._session_id = "__test__"
+        bridge._negotiated = True
+        bridge._http_client = AsyncMock()
+        post_mock = _make_async_post(_mcp_response({"recorded": True, "edge_id": "edge-abc"}))
+        bridge._http_client.post = post_mock
+
+        result = await bridge.record_feedback(
+            feedback_type="edge_helpful",
+            edge_id="edge-abc",
+            utility_score=0.8,
+            details={"note": "useful"},
+        )
+
+        assert result == {"recorded": True, "edge_id": "edge-abc"}
+        args = post_mock.call_args[1]["json"]["params"]["arguments"]
+        assert args["feedback_type"] == "edge_helpful"
+        assert args["edge_id"] == "edge-abc"
+        assert json.loads(args["details_json"]) == {"note": "useful"}
+
+    @pytest.mark.asyncio
+    async def test_record_feedback_memory_path_success(self) -> None:
+        """Happy path: entry_key memory feedback; result dict returned."""
+        bridge = _make_http_bridge()
+        bridge._session_id = "__test__"
+        bridge._negotiated = True
+        bridge._http_client = AsyncMock()
+        post_mock = _make_async_post(_mcp_response({"recorded": True, "entry_key": "some/key"}))
+        bridge._http_client.post = post_mock
+
+        result = await bridge.record_feedback(
+            feedback_type="recall_rated",
+            entry_key="some/key",
+            utility_score=0.5,
+        )
+
+        assert result == {"recorded": True, "entry_key": "some/key"}
+        args = post_mock.call_args[1]["json"]["params"]["arguments"]
+        assert args["entry_key"] == "some/key"
+        assert args["details_json"] == ""  # no details → empty string
+
+    @pytest.mark.asyncio
+    async def test_record_feedback_no_details_sends_empty_string(self) -> None:
+        """details=None → details_json='', not 'null'."""
+        bridge = _make_http_bridge()
+        bridge._session_id = "__test__"
+        bridge._negotiated = True
+        bridge._http_client = AsyncMock()
+        post_mock = _make_async_post(_mcp_response({"recorded": True}))
+        bridge._http_client.post = post_mock
+
+        await bridge.record_feedback(feedback_type="edge_helpful", edge_id="e1")
+
+        args = post_mock.call_args[1]["json"]["params"]["arguments"]
+        assert args["details_json"] == ""
+
+    @pytest.mark.asyncio
+    async def test_record_feedback_validation_error_returns_error_dict(self) -> None:
+        """Brain returns error dict as a success response → bridge returns it as-is."""
+        bridge = _make_http_bridge()
+        bridge._session_id = "__test__"
+        bridge._negotiated = True
+        bridge._http_client = AsyncMock()
+        post_mock = _make_async_post(
+            _mcp_response({"error": "validation_error", "detail": "feedback_type required"})
+        )
+        bridge._http_client.post = post_mock
+
+        result = await bridge.record_feedback(feedback_type="")
+
+        assert result["error"] == "validation_error"
+        assert result["detail"] == "feedback_type required"
+
+    @pytest.mark.asyncio
+    async def test_record_feedback_circuit_open_raises(self) -> None:
+        """Circuit open → BrainBridgeUnavailable raised without hitting the wire."""
+        from tapps_core.brain_bridge import BrainBridgeUnavailable
+
+        bridge = _make_http_bridge()
+        for _ in range(3):
+            bridge._record_failure()
+        assert bridge.circuit_open is True
+
+        with pytest.raises(BrainBridgeUnavailable):
+            await bridge.record_feedback(feedback_type="edge_helpful", edge_id="e1")
+
+    @pytest.mark.asyncio
+    async def test_record_feedback_non_dict_response_normalised(self) -> None:
+        """Non-dict brain response normalised to {'recorded': True}."""
+        bridge = _make_http_bridge()
+        bridge._session_id = "__test__"
+        bridge._negotiated = True
+        bridge._http_client = AsyncMock()
+        bridge._http_client.post = _make_async_post(_mcp_response("ok"))
+
+        result = await bridge.record_feedback(feedback_type="edge_helpful", edge_id="e1")
+
+        assert result == {"recorded": True}
+
+    def test_brain_record_feedback_in_bridge_used_tools(self) -> None:
+        """brain_record_feedback in _BRIDGE_USED_TOOLS so profile health checks surface it."""
+        from tapps_core.brain_bridge import _BRIDGE_USED_TOOLS
+
+        assert "brain_record_feedback" in _BRIDGE_USED_TOOLS

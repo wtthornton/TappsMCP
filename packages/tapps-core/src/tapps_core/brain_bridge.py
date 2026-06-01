@@ -276,6 +276,8 @@ _BRIDGE_USED_TOOLS: frozenset[str] = frozenset(
         "memory_index_session",
         "memory_search_sessions",
         "tapps_brain_session_end",
+        # TAP-1938: feedback flywheel — edge and memory feedback recording.
+        "brain_record_feedback",
     }
 )
 
@@ -2030,6 +2032,42 @@ class HttpBrainBridge(BrainBridge):
 
         args = {"payload_json": json.dumps(event_payload)}
         result = await self._http_mcp_call("brain_record_event", args)
+        return result if isinstance(result, dict) else {"recorded": True}
+
+    async def record_feedback(
+        self,
+        feedback_type: str,
+        edge_id: str = "",
+        entry_key: str = "",
+        session_id: str = "",
+        utility_score: float = 0.0,
+        details: dict[str, Any] | None = None,
+        agent_id: str = "",
+    ) -> dict[str, Any]:
+        """TAP-1938: Record feedback for a KG edge or memory entry.
+
+        Routes to the edge-feedback path when ``edge_id`` is set, or the
+        memory-feedback path when ``entry_key`` is set (``edge_id`` takes
+        precedence server-side).  ``details`` is JSON-serialised to
+        ``details_json`` before dispatch.
+
+        Participates in circuit-breaker + retry semantics matching other
+        bridge calls.  Does **not** enqueue when the circuit is open —
+        feedback loss is preferable to stale queue growth.
+        """
+        import json
+
+        args: dict[str, Any] = {
+            "feedback_type": feedback_type,
+            "edge_id": edge_id,
+            "entry_key": entry_key,
+            "session_id": session_id,
+            "utility_score": utility_score,
+            "details_json": json.dumps(details) if details else "",
+        }
+        if agent_id:
+            args["agent_id"] = agent_id
+        result = await self._http_mcp_call("brain_record_feedback", args)
         return result if isinstance(result, dict) else {"recorded": True}
 
     # -------------------------------------------------------------------------
