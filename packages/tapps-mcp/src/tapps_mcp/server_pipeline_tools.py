@@ -629,6 +629,26 @@ async def tapps_session_start(
         return cast("TappsSessionStartResponse", resp)
 
     settings = load_settings()
+
+    # TAP-1928: file-based sentinel short-circuit for sub-agent reuse.
+    # Distinct from the in-process _SESSION_START_CACHE (TAP-1379): the sentinel
+    # persists across MCP server restarts so Ralph sub-agents (fresh processes)
+    # skip redundant checker / brain-health / memory-GC phases when the primary
+    # agent bootstrapped within the last hour.  force=True bypasses both caches.
+    if not force:
+        sentinel_age = _ssc.read_session_sentinel(settings.project_root)
+        if sentinel_age is not None:
+            _record_execution("tapps_session_start", start)
+            elapsed_ms = (time.perf_counter_ns() - start) // 1_000_000
+            data = {
+                "cached": True,
+                "sentinel_age_s": sentinel_age,
+                "elapsed_ms": elapsed_ms,
+            }
+            resp = success_response("tapps_session_start", elapsed_ms, data)
+            resp = _with_nudges("tapps_session_start", resp, {})
+            return cast("TappsSessionStartResponse", resp)
+
     (
         info,
         memory_status,
@@ -724,6 +744,9 @@ async def tapps_session_start(
     # TAP-975: refresh sidecar so the UserPromptSubmit hook stays silent for
     # the next 30 minutes of prompts.
     write_session_start_marker(settings.project_root)
+    # TAP-1928: write the file-based sentinel so subsequent sub-agent calls
+    # can skip the full bootstrap for up to SENTINEL_TTL_S seconds.
+    _ssc.write_session_sentinel(settings.project_root)
 
     resp = _with_nudges("tapps_session_start", resp, {})
     if degraded_warning:

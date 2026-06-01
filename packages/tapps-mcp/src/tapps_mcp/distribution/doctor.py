@@ -2199,6 +2199,47 @@ def check_mcp_tool_budget(root: Path) -> CheckResult:
     return CheckResult("MCP tool budget", True, f"All servers within budget. {summary}")
 
 
+def check_session_sentinel(root: Path) -> CheckResult:
+    """TAP-1928: report the presence and age of the tapps_session_start sentinel.
+
+    ``.tapps-mcp/.tapps-session-id`` is written after each full bootstrap and
+    read by sub-agent MCP processes to skip redundant checker / brain-health /
+    memory-GC phases (≈700 ms saved per sub-agent call).  Absent is not an
+    error — it will be created on the next full ``tapps_session_start``.
+    """
+    import time as _time
+
+    from tapps_mcp.tools.session_start_core import SENTINEL_FILENAME, SENTINEL_TTL_S
+
+    sentinel = root / ".tapps-mcp" / SENTINEL_FILENAME
+    if not sentinel.exists():
+        return CheckResult(
+            "session-start sentinel",
+            True,
+            f"{SENTINEL_FILENAME}: absent — will be created on next full bootstrap",
+        )
+    try:
+        age_s = int(_time.time() - sentinel.stat().st_mtime)
+    except OSError as exc:
+        return CheckResult(
+            "session-start sentinel",
+            False,
+            f"{SENTINEL_FILENAME}: stat failed — {exc}",
+        )
+    if age_s < SENTINEL_TTL_S:
+        remaining = SENTINEL_TTL_S - age_s
+        return CheckResult(
+            "session-start sentinel",
+            True,
+            f"{SENTINEL_FILENAME}: fresh (age {age_s}s, {remaining}s until expiry)",
+        )
+    return CheckResult(
+        "session-start sentinel",
+        True,
+        f"{SENTINEL_FILENAME}: stale (age {age_s}s > TTL {SENTINEL_TTL_S}s) — will refresh on next bootstrap",
+    )
+
+
 def check_memory_pipeline_config(root: Path) -> CheckResult:
     """Echo effective memory-related settings (informational; always passes).
 
@@ -2646,6 +2687,7 @@ def _collect_checks(root: Path, *, quick: bool = False) -> list[CheckResult]:
     checks.append(check_brain_profile(root))
     checks.append(check_brain_health(root))
     checks.append(check_brain_version_delta(root))
+    checks.append(check_session_sentinel(root))
     checks.append(check_memory_pipeline_config(root))
     checks.append(check_dual_memory_server(root))
     checks.append(check_plaintext_secrets(root))

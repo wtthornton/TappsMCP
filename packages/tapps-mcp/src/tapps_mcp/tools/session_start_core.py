@@ -11,6 +11,19 @@ import time
 from pathlib import Path
 from typing import Any
 
+# ---------------------------------------------------------------------------
+# TAP-1928: file-based session sentinel (.tapps-mcp/.tapps-session-id)
+# ---------------------------------------------------------------------------
+# The sentinel is written by the primary agent after a full bootstrap and
+# read by sub-agent MCP processes so they skip redundant checker / brain-health
+# / memory-GC phases.  Distinct from the hook-layer prompt sentinel
+# (.tapps-mcp/.session-start-fired-$SID) added by TAP-1379 — that file only
+# suppresses the REQUIRED echo in the hook script; it does NOT short-circuit
+# the tool body.  Do not reuse or collide those file names.
+
+SENTINEL_FILENAME: str = ".tapps-session-id"
+SENTINEL_TTL_S: int = 3600  # 1 hour
+
 import structlog
 
 from tapps_mcp.server_helpers import (
@@ -33,6 +46,37 @@ _PYTHON_DEGRADED_WARNING_SINGLE = (
     "WARNING: {checker} is missing — quality gate will run degraded. "
     "Install: uv tool install tapps-mcp --with {checker}"
 )
+
+
+def read_session_sentinel(project_root: Path, ttl_s: int = SENTINEL_TTL_S) -> int | None:
+    """Return the sentinel file's age in seconds when it is fresh, else ``None``.
+
+    Reads ``.tapps-mcp/.tapps-session-id`` and compares its mtime to *now*.
+    Returns the age (≥ 0) when the file exists and is younger than *ttl_s*.
+    Returns ``None`` when the file is absent, unreadable, or stale.
+    """
+    sentinel = project_root / ".tapps-mcp" / SENTINEL_FILENAME
+    try:
+        age = int(time.time() - sentinel.stat().st_mtime)
+        if age < ttl_s:
+            return age
+    except (OSError, ValueError):
+        pass
+    return None
+
+
+def write_session_sentinel(project_root: Path) -> None:
+    """Create or touch ``.tapps-mcp/.tapps-session-id`` with the current mtime.
+
+    Silently ignores I/O errors so sentinel unavailability never prevents the
+    full bootstrap from completing.
+    """
+    sentinel_dir = project_root / ".tapps-mcp"
+    try:
+        sentinel_dir.mkdir(parents=True, exist_ok=True)
+        (sentinel_dir / SENTINEL_FILENAME).touch()
+    except OSError:
+        _logger.debug("session_sentinel_write_failed", exc_info=True)
 
 
 def _is_python_project(project_root: Path) -> bool:
@@ -258,6 +302,8 @@ async def collect_session_start_phases(
 
 
 __all__ = [
+    "SENTINEL_FILENAME",
+    "SENTINEL_TTL_S",
     "attach_quick_session_structured_output",
     "attach_session_start_structured_output",
     "build_session_start_data",
@@ -265,4 +311,6 @@ __all__ = [
     "compute_python_degraded_checkers",
     "detect_path_mapping",
     "get_checklist_session_id",
+    "read_session_sentinel",
+    "write_session_sentinel",
 ]
