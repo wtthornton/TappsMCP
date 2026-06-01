@@ -2,7 +2,9 @@
 
 import platform
 import subprocess
-from unittest.mock import MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
+
+import pytest
 
 from tapps_mcp.tools.subprocess_runner import MAX_OUTPUT_BYTES, run_command
 from tapps_mcp.tools.subprocess_utils import CommandResult, wrap_windows_cmd_shim
@@ -96,3 +98,51 @@ class TestRunCommand:
             result = run_command(["echo", "hello"])
         assert result.truncated is False
         assert result.stdout == "hello world"
+
+
+# ---------------------------------------------------------------------------
+# run_command_async — TAP-1763
+# ---------------------------------------------------------------------------
+
+
+class TestRunCommandAsync:
+    """Tests for the async command runner (TAP-1763)."""
+
+    @pytest.mark.asyncio
+    async def test_non_utf8_stdin_returns_error_result(self) -> None:
+        """Non-UTF-8 stdin_data must return a degraded CommandResult, not raise."""
+        from tapps_mcp.tools.subprocess_runner import run_command_async
+
+        # Surrogate character — cannot be encoded as plain UTF-8
+        bad_stdin = "\ud800"
+
+        mock_proc = MagicMock()
+        mock_proc.kill = MagicMock()
+
+        with patch(
+            "tapps_mcp.tools.subprocess_runner.asyncio.create_subprocess_exec",
+            new=AsyncMock(return_value=mock_proc),
+        ):
+            result = await run_command_async(["echo", "hello"], stdin_data=bad_stdin)
+
+        assert result.returncode == -1
+        assert result.success is False
+        assert "encoding error" in result.stderr.lower()
+        mock_proc.kill.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_non_utf8_stdin_does_not_raise(self) -> None:
+        """run_command_async must never raise on non-UTF-8 stdin — returns CommandResult."""
+        from tapps_mcp.tools.subprocess_runner import run_command_async
+
+        mock_proc = MagicMock()
+        mock_proc.kill = MagicMock()
+
+        with patch(
+            "tapps_mcp.tools.subprocess_runner.asyncio.create_subprocess_exec",
+            new=AsyncMock(return_value=mock_proc),
+        ):
+            try:
+                result = await run_command_async(["echo", "x"], stdin_data="\ud83d")
+            except UnicodeEncodeError:
+                pytest.fail("run_command_async raised UnicodeEncodeError — must not propagate")

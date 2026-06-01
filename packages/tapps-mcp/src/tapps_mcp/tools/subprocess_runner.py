@@ -126,10 +126,9 @@ async def run_command_async(
             stderr=asyncio.subprocess.PIPE,
             env=env,
         )
+        stdin_bytes: bytes | None = stdin_data.encode() if stdin_data else None
         stdout_bytes, stderr_bytes = await asyncio.wait_for(
-            proc.communicate(
-                input=stdin_data.encode() if stdin_data else None,
-            ),
+            proc.communicate(input=stdin_bytes),
             timeout=timeout,
         )
         stdout_raw = stdout_bytes.decode("utf-8", errors="replace").strip() if stdout_bytes else ""
@@ -168,5 +167,16 @@ async def run_command_async(
             returncode=-1,
             stdout="",
             stderr=f"Command error: {exc}",
+            command=cmd,
+        )
+    except UnicodeEncodeError as exc:
+        logger.error("stdin_encode_error", cmd=cmd[0] if cmd else "<empty>", error=str(exc))
+        with contextlib.suppress(Exception):
+            if proc is not None:
+                proc.kill()
+        return CommandResult(
+            returncode=-1,
+            stdout="",
+            stderr=f"stdin_data encoding error: {exc}",
             command=cmd,
         )
