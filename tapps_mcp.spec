@@ -132,6 +132,7 @@ a = Analysis(
         "tapps_mcp.tools.audit_session_template",
         "tapps_mcp.tools.hive_safety",
         "tapps_mcp.tools.linear_list_gateway",
+        "tapps_mcp.tools.finding_to_story",
         "tapps_mcp.knowledge",
         "tapps_mcp.knowledge.models",
         "tapps_mcp.knowledge.cache",

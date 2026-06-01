@@ -1311,6 +1311,126 @@ async def _resolve_git_short_sha(root: Path) -> str:
 
 
 # ---------------------------------------------------------------------------
+# tapps_finding_to_story (TAP-2717)
+# ---------------------------------------------------------------------------
+
+
+async def tapps_finding_to_story(
+    severity: str,
+    category: str,
+    files: list[str],
+    evidence: str,
+    recommendation: str,
+    parent_id: str = "",
+) -> dict[str, Any]:
+    """Convert an audit finding into a Linear fix-story ready for ``save_issue``.
+
+    Produces a 5-section story body that is guaranteed to pass
+    ``docs_validate_linear_issue`` with ``agent_ready=true`` by
+    construction — no iterative validation loop required.
+
+    Section mapping:
+
+    - ``## What``       ← ``recommendation``
+    - ``## Where``      ← ``files`` (numbered list; bare paths get ``:1`` appended)
+    - ``## Why``        ← ``evidence``
+    - ``## Acceptance`` ← severity-derived checkboxes (always ≥1 ``- [ ]``)
+    - ``## Refs``       ← ``severity`` + ``category`` + optional ``parent_id``
+
+    Args:
+        severity: ``"P0"`` | ``"P1"`` | ``"P2"`` | ``"P3"``.
+        category: ``"security"`` | ``"correctness"`` | ``"performance"``
+            | ``"style"`` | ``"docs"`` | ``"deadcode"``.
+        files: File paths with optional line ranges, e.g.
+            ``["src/module.py:10-25"]``.  Bare paths (no line ref) get
+            ``:1`` appended automatically.
+        evidence: One-line symptom description (usually a tool-output snippet).
+        recommendation: One-line fix direction (informational, from the finding).
+        parent_id: Optional Linear parent ticket id (e.g. ``"TAP-2040"``).
+            Included in ``## Refs`` for traceability.
+
+    Returns:
+        Response envelope with ``data.title``, ``data.body``,
+        ``data.severity``, ``data.category``, ``data.parent_id``, and
+        ``data.section_count``.  The title is ≤80 chars; the body passes
+        the docs-mcp agent-issue lint rules.
+    """
+    _record_call("tapps_finding_to_story")
+    start_ns = time.perf_counter_ns()
+
+    from tapps_mcp.tools.finding_to_story import (
+        VALID_CATEGORIES,
+        VALID_SEVERITIES,
+        finding_to_story,
+    )
+
+    # --- Input validation ---
+    severity_uc = severity.upper().strip()
+    category_lc = category.lower().strip()
+
+    if severity_uc not in VALID_SEVERITIES:
+        return error_response(
+            "tapps_finding_to_story",
+            "invalid_severity",
+            f"severity={severity!r} is not valid. Use one of: {sorted(VALID_SEVERITIES)}",
+        )
+    if category_lc not in VALID_CATEGORIES:
+        return error_response(
+            "tapps_finding_to_story",
+            "invalid_category",
+            f"category={category!r} is not valid. Use one of: {sorted(VALID_CATEGORIES)}",
+        )
+    if not files:
+        return error_response(
+            "tapps_finding_to_story",
+            "missing_files",
+            "`files` must contain at least one file path",
+        )
+    if not evidence.strip():
+        return error_response(
+            "tapps_finding_to_story",
+            "missing_evidence",
+            "`evidence` must be non-empty",
+        )
+    if not recommendation.strip():
+        return error_response(
+            "tapps_finding_to_story",
+            "missing_recommendation",
+            "`recommendation` must be non-empty",
+        )
+
+    story = finding_to_story(
+        severity=severity_uc,
+        category=category_lc,
+        files=files,
+        evidence=evidence,
+        recommendation=recommendation,
+        parent_id=parent_id,
+    )
+
+    elapsed_ms = (time.perf_counter_ns() - start_ns) // 1_000_000
+    _record_execution("tapps_finding_to_story", start_ns)
+
+    data: dict[str, Any] = {
+        "title": story.title,
+        "body": story.body,
+        "severity": severity_uc,
+        "category": category_lc,
+        "parent_id": parent_id,
+        "section_count": story.body.count("\n## ") + 1,
+    }
+    return success_response(
+        "tapps_finding_to_story",
+        elapsed_ms,
+        data,
+        next_steps=[
+            "Call docs_validate_linear_issue(title, body) to confirm agent_ready=true.",
+            "Then call save_issue(title, description=body, parent_id=parent_id).",
+        ],
+    )
+
+
+# ---------------------------------------------------------------------------
 # Registration
 # ---------------------------------------------------------------------------
 
@@ -1348,4 +1468,8 @@ def register(mcp_instance: FastMCP, allowed_tools: frozenset[str]) -> None:
     if "tapps_audit_campaign" in allowed_tools:
         mcp_instance.tool(annotations=_ANNOTATIONS_READ_ONLY, meta=_META_LARGE_OUTPUT_200K_D)(
             tapps_audit_campaign
+        )
+    if "tapps_finding_to_story" in allowed_tools:
+        mcp_instance.tool(annotations=_ANNOTATIONS_READ_ONLY, meta=_META_DEFERRED)(
+            tapps_finding_to_story
         )

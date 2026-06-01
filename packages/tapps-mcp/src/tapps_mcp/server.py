@@ -195,7 +195,7 @@ def _validate_file_path(file_path: str) -> Path:
 # Constants extracted to avoid duplication
 # ---------------------------------------------------------------------------
 
-# Canonical list of all TappsMCP tools (36).
+# Canonical list of all TappsMCP tools (37).
 # Used for filtering and fallback.
 ALL_TOOL_NAMES: frozenset[str] = frozenset(
     {
@@ -237,6 +237,8 @@ ALL_TOOL_NAMES: frozenset[str] = frozenset(
         "brain_approve_hive_elevation",
         # TAP-2010: list_issues cache-first read gate
         "tapps_linear_list_issues",
+        # TAP-2717: deterministic finding-to-story converter
+        "tapps_finding_to_story",
     }
 )
 
