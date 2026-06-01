@@ -20,8 +20,8 @@ from tapps_mcp.tools.audit_session_template import (
     SessionTicket,
     _normalise_anchor,
     render_digest_ticket,
+    render_session_ticket,
 )
-
 
 # ---------------------------------------------------------------------------
 # _normalise_anchor
@@ -353,3 +353,62 @@ class TestDigestTicketAgentReadyValidation:
         assert report.agent_ready, (
             f"DigestTicket body is NOT agent_ready: {report.missing}"
         )
+
+
+# ---------------------------------------------------------------------------
+# render_session_ticket — Done-state instruction (TAP-2785)
+# ---------------------------------------------------------------------------
+
+
+def _make_chunk():  # type: ignore[return]
+    from tapps_mcp.tools.audit_chunker import AuditChunk
+
+    return AuditChunk(
+        session_index=1,
+        files=["packages/tapps-mcp/src/tapps_mcp/server.py"],
+        modules=["tapps_mcp.server"],
+        rationale="single-module cluster",
+        intra_edges=0,
+        boundary_edges=2,
+    )
+
+
+class TestRenderSessionTicketDoneInstruction:
+    """Verify the session ticket body instructs Ralph to set state=Done (TAP-2785)."""
+
+    def setup_method(self) -> None:
+        chunk = _make_chunk()
+        self.ticket = render_session_ticket(
+            chunk,
+            campaign_id="campaign-abc123",
+            epic_ref="TAP-2036",
+            commit_sha="deadbeef",
+            categories=["quality"],
+            file_line_counts={"packages/tapps-mcp/src/tapps_mcp/server.py": 200},
+        )
+
+    def test_acceptance_contains_done_state(self) -> None:
+        """## Acceptance must instruct executor to set ticket state to Done."""
+        assert "Done" in self.ticket.body
+
+    def test_acceptance_contains_save_issue_call(self) -> None:
+        """## Acceptance must include the save_issue mechanism."""
+        assert "save_issue" in self.ticket.body
+
+    def test_acceptance_warns_against_in_progress(self) -> None:
+        """## Acceptance must warn about leaving ticket In Progress."""
+        assert "In Progress" in self.ticket.body
+
+    def test_constraints_contain_done_instruction(self) -> None:
+        """### Constraints must spell out the Done transition."""
+        constraints = self.ticket.body.split("### Constraints")[1]
+        assert "Done" in constraints
+
+    def test_constraints_warn_against_in_progress(self) -> None:
+        """Constraints must mention the re-selection risk."""
+        constraints = self.ticket.body.split("### Constraints")[1]
+        assert "In Progress" in constraints
+
+    def test_body_does_not_say_close_this_ticket(self) -> None:
+        """The ambiguous 'close this ticket' phrase must not appear (TAP-2785)."""
+        assert "close this ticket" not in self.ticket.body
