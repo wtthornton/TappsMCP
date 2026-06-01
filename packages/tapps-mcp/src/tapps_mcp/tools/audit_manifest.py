@@ -55,6 +55,7 @@ class CoverageEntry:
     campaign_id: str
     findings: FindingCounts = field(default_factory=FindingCounts)
     finding_tickets: list[str] = field(default_factory=list)
+    fix_tickets: list[str] = field(default_factory=list)
 
 
 def coverage_key(rel_path: str) -> str:
@@ -145,6 +146,44 @@ async def write_coverage(entry: CoverageEntry) -> bool:
         )
         return False
     return True
+
+
+async def close_coverage(
+    rel_path: str,
+    new_sha: str,
+    *,
+    fix_ticket: str = "",
+    finding_ticket: str = "",
+) -> bool:
+    """Update a coverage entry to record a completed fix (TAP-2722).
+
+    Sets ``audited_sha`` to *new_sha* so subsequent :func:`is_fresh` calls
+    reflect the post-fix file state.  Appends *fix_ticket* to
+    ``fix_tickets`` (deduped) and ensures *finding_ticket* is present in
+    ``finding_tickets``, providing a traceable coverage → finding → fix chain.
+
+    Returns ``True`` on success, ``False`` if the bridge is unavailable, the
+    entry does not yet exist for *rel_path*, or the write fails (degraded mode).
+    """
+    bridge = _get_bridge_or_none()
+    if bridge is None:
+        logger.debug(
+            "audit_manifest_close_coverage_degraded",
+            reason="bridge_unavailable",
+            rel_path=rel_path,
+        )
+        return False
+    entries = await read_coverage_for([rel_path])
+    entry = entries.get(rel_path)
+    if entry is None:
+        logger.debug("audit_manifest_close_coverage_missing", rel_path=rel_path)
+        return False
+    entry.audited_sha = new_sha
+    if fix_ticket and fix_ticket not in entry.fix_tickets:
+        entry.fix_tickets.append(fix_ticket)
+    if finding_ticket and finding_ticket not in entry.finding_tickets:
+        entry.finding_tickets.append(finding_ticket)
+    return await write_coverage(entry)
 
 
 async def save_campaign_spec(campaign_id: str, spec_dict: dict[str, Any]) -> bool:
@@ -334,6 +373,7 @@ def _deserialize_coverage(
             campaign_id=str(payload.get("campaign_id", "")),
             findings=findings,
             finding_tickets=list(payload.get("finding_tickets", [])),
+            fix_tickets=list(payload.get("fix_tickets", [])),
         )
     except (TypeError, ValueError):
         return None

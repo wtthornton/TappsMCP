@@ -13,6 +13,7 @@ from tapps_mcp.tools.audit_manifest import (
     FindingCounts,
     _serialize_coverage,
     campaign_key,
+    close_coverage,
     coverage_key,
     is_fresh,
     load_campaign_spec,
@@ -107,6 +108,19 @@ class TestSerialization:
         assert payload["audited_sha"] == "abc1234"
         assert payload["findings"]["p0"] == 1
         assert payload["finding_tickets"] == ["TAP-2"]
+
+    def test_serialize_includes_fix_tickets(self) -> None:
+        entry = CoverageEntry(
+            rel_path="src/foo.py",
+            audited_sha="abc1234",
+            audited_at="2026-05-17T18:00:00+00:00",
+            session_ticket="TAP-1",
+            campaign_id="c1",
+            finding_tickets=["TAP-2"],
+            fix_tickets=["TAP-456"],
+        )
+        payload = _serialize_coverage(entry)
+        assert payload["fix_tickets"] == ["TAP-456"]
 
 
 class TestReadCoverage:
@@ -281,6 +295,95 @@ class TestBridgeFailures:
     ) -> None:
         result = await read_coverage_for(["a.py"])
         assert result == {"a.py": None}
+
+
+class TestCloseCoverage:
+    """TAP-2722: close_coverage updates SHA and links tickets."""
+
+    def _entry(self, sha: str, age_days: int = 0) -> CoverageEntry:
+        when = datetime.now(tz=UTC) - timedelta(days=age_days)
+        return CoverageEntry(
+            rel_path="src/foo.py",
+            audited_sha=sha,
+            audited_at=when.isoformat(),
+            session_ticket="TAP-1",
+            campaign_id="c1",
+            finding_tickets=["TAP-2"],
+        )
+
+    @pytest.mark.asyncio
+    async def test_updates_sha(self, fake_bridge: FakeBridge) -> None:
+        await write_coverage(self._entry("old-sha"))
+        result = await close_coverage("src/foo.py", "new-sha")
+        assert result is True
+        loaded = (await read_coverage_for(["src/foo.py"]))["src/foo.py"]
+        assert loaded is not None
+        assert loaded.audited_sha == "new-sha"
+
+    @pytest.mark.asyncio
+    async def test_is_fresh_reflects_new_sha(self, fake_bridge: FakeBridge) -> None:
+        await write_coverage(self._entry("old-sha"))
+        await close_coverage("src/foo.py", "new-sha")
+        loaded = (await read_coverage_for(["src/foo.py"]))["src/foo.py"]
+        assert loaded is not None
+        # is_fresh is True at the new sha; False if the file changes again.
+        assert is_fresh(loaded, "new-sha") is True
+        assert is_fresh(loaded, "changed-again") is False
+
+    @pytest.mark.asyncio
+    async def test_appends_fix_ticket(self, fake_bridge: FakeBridge) -> None:
+        await write_coverage(self._entry("old-sha"))
+        await close_coverage("src/foo.py", "new-sha", fix_ticket="TAP-456")
+        loaded = (await read_coverage_for(["src/foo.py"]))["src/foo.py"]
+        assert loaded is not None
+        assert "TAP-456" in loaded.fix_tickets
+
+    @pytest.mark.asyncio
+    async def test_ensures_finding_ticket_present(
+        self, fake_bridge: FakeBridge
+    ) -> None:
+        entry = CoverageEntry(
+            rel_path="src/foo.py",
+            audited_sha="old-sha",
+            audited_at=now_iso(),
+            session_ticket="TAP-1",
+            campaign_id="c1",
+        )
+        await write_coverage(entry)
+        await close_coverage("src/foo.py", "new-sha", finding_ticket="TAP-3")
+        loaded = (await read_coverage_for(["src/foo.py"]))["src/foo.py"]
+        assert loaded is not None
+        assert "TAP-3" in loaded.finding_tickets
+
+    @pytest.mark.asyncio
+    async def test_no_duplicate_tickets(self, fake_bridge: FakeBridge) -> None:
+        # self._entry already has finding_tickets=["TAP-2"]
+        await write_coverage(self._entry("old-sha"))
+        await close_coverage(
+            "src/foo.py", "new-sha", finding_ticket="TAP-2", fix_ticket="TAP-456"
+        )
+        loaded = (await read_coverage_for(["src/foo.py"]))["src/foo.py"]
+        assert loaded is not None
+        assert loaded.finding_tickets.count("TAP-2") == 1
+        assert "TAP-456" in loaded.fix_tickets
+
+    @pytest.mark.asyncio
+    async def test_missing_entry_returns_false(
+        self, fake_bridge: FakeBridge
+    ) -> None:
+        result = await close_coverage("nonexistent.py", "new-sha")
+        assert result is False
+
+    @pytest.mark.asyncio
+    async def test_degraded_mode_returns_false(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setattr(
+            "tapps_mcp.tools.audit_manifest._get_bridge_or_none",
+            lambda: None,
+        )
+        result = await close_coverage("src/foo.py", "new-sha")
+        assert result is False
 
 
 class TestStoreShapes:
