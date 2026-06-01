@@ -230,6 +230,8 @@ class FixStory:
     files: list[str]
     labels: list[str] = field(default_factory=lambda: ["audit-fix"])
     agent_ready: bool = True
+    estimate: int = 2  # TAP-2720: story-point estimate from finding_to_story
+    priority: int = 3  # TAP-2720: Linear priority (3=Normal for P2 default)
 
 
 @dataclass
@@ -385,6 +387,8 @@ def build_fix_plan_spec(spec_dict: dict[str, Any]) -> FixPlanSpec:
                 files=files,
                 labels=list(story.labels),
                 agent_ready=True,
+                estimate=story.estimate,
+                priority=story.priority,
             )
         )
 

@@ -555,6 +555,11 @@ class TestFixPlanMode:
             assert "## Acceptance" in story["body"]
             assert story["labels"] == ["audit-fix"]
             assert story["files"]  # non-empty file list
+            # TAP-2720: estimate and priority must be surfaced per story.
+            assert isinstance(story["estimate"], int)
+            assert story["estimate"] >= 1
+            assert isinstance(story["priority"], int)
+            assert story["priority"] in {1, 2, 3, 4}  # valid Linear priority range
 
         # Fix plan is stored under a distinct brain key (fix:campaign:)
         # while audit plan lives under audit:campaign:

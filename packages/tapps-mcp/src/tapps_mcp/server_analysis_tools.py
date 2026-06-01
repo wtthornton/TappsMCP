@@ -1360,6 +1360,8 @@ async def _handle_fix_plan_mode(
                 "files": s.files,
                 "labels": list(s.labels),
                 "agent_ready": s.agent_ready,
+                "estimate": s.estimate,
+                "priority": s.priority,
             }
             for s in fix_plan.fix_stories
         ],
@@ -1432,6 +1434,7 @@ async def tapps_finding_to_story(
     evidence: str,
     recommendation: str,
     parent_id: str = "",
+    avg_complexity: float = 0.0,
 ) -> dict[str, Any]:
     """Convert an audit finding into a Linear fix-story ready for ``save_issue``.
 
@@ -1458,12 +1461,16 @@ async def tapps_finding_to_story(
         recommendation: One-line fix direction (informational, from the finding).
         parent_id: Optional Linear parent ticket id (e.g. ``"TAP-2040"``).
             Included in ``## Refs`` for traceability.
+        avg_complexity: Average radon cyclomatic complexity of affected files
+            (TAP-2720). Increases the story-point estimate when above 10 (+1)
+            or 20 (+2). Default ``0.0`` (no bonus).
 
     Returns:
         Response envelope with ``data.title``, ``data.body``,
-        ``data.severity``, ``data.category``, ``data.parent_id``, and
-        ``data.section_count``.  The title is ≤80 chars; the body passes
-        the docs-mcp agent-issue lint rules.
+        ``data.severity``, ``data.category``, ``data.parent_id``,
+        ``data.estimate``, ``data.priority``, and ``data.section_count``.
+        The title is ≤80 chars; the body passes the docs-mcp agent-issue
+        lint rules.
     """
     _record_call("tapps_finding_to_story")
     start_ns = time.perf_counter_ns()
@@ -1516,6 +1523,7 @@ async def tapps_finding_to_story(
         evidence=evidence,
         recommendation=recommendation,
         parent_id=parent_id,
+        avg_complexity=avg_complexity,
     )
 
     elapsed_ms = (time.perf_counter_ns() - start_ns) // 1_000_000
@@ -1528,6 +1536,8 @@ async def tapps_finding_to_story(
         "category": category_lc,
         "parent_id": parent_id,
         "labels": list(story.labels),
+        "estimate": story.estimate,
+        "priority": story.priority,
         "section_count": story.body.count("\n## ") + 1,
     }
     return success_response(

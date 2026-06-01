@@ -18,6 +18,7 @@ import pytest
 
 from tapps_mcp.tools.finding_to_story import (
     FindingStory,
+    _derive_estimate,
     _make_title,
     _normalise_file_anchor,
     _render_acceptance,
@@ -528,3 +529,187 @@ class TestTappsFindingToStoryHandler:
         )
         assert result["success"] is True
         assert result["data"]["category"] == "style"
+
+
+# ---------------------------------------------------------------------------
+# TAP-2720: priority mapping and estimate derivation
+# ---------------------------------------------------------------------------
+
+
+class TestSeverityPriorityMapping:
+    """TAP-2720: severity → Linear priority (1=Urgent … 3=Normal)."""
+
+    @pytest.mark.parametrize(
+        "severity,expected_priority",
+        [
+            ("P0", 1),  # Urgent
+            ("P1", 2),  # High
+            ("P2", 3),  # Normal
+            ("P3", 3),  # Normal
+        ],
+    )
+    def test_priority_from_severity(self, severity: str, expected_priority: int) -> None:
+        story = finding_to_story(
+            severity=severity,
+            category="correctness",
+            files=["src/mod.py:1"],
+            evidence="finding evidence",
+            recommendation="apply fix",
+        )
+        assert story.priority == expected_priority
+
+    def test_unknown_severity_defaults_to_normal(self) -> None:
+        # _SEVERITY_PRIORITY.get(unknown, 3) → 3
+        from tapps_mcp.tools.finding_to_story import _SEVERITY_PRIORITY
+
+        assert _SEVERITY_PRIORITY.get("P9", 3) == 3
+
+    def test_priority_field_is_int(self) -> None:
+        story = finding_to_story(
+            severity="P1",
+            category="security",
+            files=["src/auth.py:1"],
+            evidence="missing check",
+            recommendation="add guard",
+        )
+        assert isinstance(story.priority, int)
+
+
+class TestEstimateDerivation:
+    """TAP-2720: story-point estimate derivation (Fibonacci-aligned)."""
+
+    def test_p0_base_estimate_is_8(self) -> None:
+        est = _derive_estimate("P0", ["f.py:1"], 0.0)
+        assert est == 8
+
+    def test_p1_base_estimate_is_5(self) -> None:
+        est = _derive_estimate("P1", ["f.py:1"], 0.0)
+        assert est == 5
+
+    def test_p2_base_estimate_is_2(self) -> None:
+        est = _derive_estimate("P2", ["f.py:1"], 0.0)
+        assert est == 2
+
+    def test_p3_base_estimate_is_1(self) -> None:
+        est = _derive_estimate("P3", ["f.py:1"], 0.0)
+        assert est == 1
+
+    def test_file_bonus_adds_one_per_three_extra_files(self) -> None:
+        # 4 files: base=2 (P2), bonus = (4-1)//3 = 1 → 3
+        est = _derive_estimate("P2", ["f.py:1"] * 4, 0.0)
+        assert est == 3
+
+    def test_file_bonus_not_fractional(self) -> None:
+        # 3 files: bonus = (3-1)//3 = 0 → no bonus
+        est_three = _derive_estimate("P2", ["f.py:1"] * 3, 0.0)
+        est_one = _derive_estimate("P2", ["f.py:1"], 0.0)
+        assert est_three == est_one
+
+    def test_complexity_bonus_above_10_adds_one(self) -> None:
+        base = _derive_estimate("P2", ["f.py:1"], 0.0)
+        with_complexity = _derive_estimate("P2", ["f.py:1"], 15.0)
+        assert with_complexity == base + 1
+
+    def test_complexity_bonus_above_20_adds_two(self) -> None:
+        base = _derive_estimate("P2", ["f.py:1"], 0.0)
+        with_complexity = _derive_estimate("P2", ["f.py:1"], 25.0)
+        assert with_complexity == base + 2
+
+    def test_complexity_at_exactly_10_no_bonus(self) -> None:
+        est_zero = _derive_estimate("P2", ["f.py:1"], 0.0)
+        est_ten = _derive_estimate("P2", ["f.py:1"], 10.0)
+        assert est_ten == est_zero
+
+    def test_estimate_capped_at_13(self) -> None:
+        # P0 base=8 + many files + high complexity → cap at 13
+        many_files = ["f.py:1"] * 20  # bonus = 19//3 = 6 → 8+6+2=16 → capped
+        est = _derive_estimate("P0", many_files, 25.0)
+        assert est == 13
+
+    def test_estimate_minimum_is_1(self) -> None:
+        est = _derive_estimate("P3", ["f.py:1"], 0.0)
+        assert est >= 1
+
+    def test_finding_to_story_returns_estimate(self) -> None:
+        story = finding_to_story(
+            severity="P2",
+            category="style",
+            files=["src/utils.py:1-30"],
+            evidence="unused import",
+            recommendation="remove unused import",
+        )
+        assert isinstance(story.estimate, int)
+        assert story.estimate >= 1
+
+    def test_avg_complexity_param_propagates(self) -> None:
+        story_low = finding_to_story(
+            severity="P2",
+            category="correctness",
+            files=["src/mod.py:1"],
+            evidence="complexity issue",
+            recommendation="refactor function",
+            avg_complexity=0.0,
+        )
+        story_high = finding_to_story(
+            severity="P2",
+            category="correctness",
+            files=["src/mod.py:1"],
+            evidence="complexity issue",
+            recommendation="refactor function",
+            avg_complexity=25.0,
+        )
+        assert story_high.estimate > story_low.estimate
+
+
+class TestTappsFindingToStoryHandlerEstimateAndPriority:
+    """TAP-2720: handler exposes estimate and priority in response data."""
+
+    @pytest.mark.asyncio()
+    async def test_handler_returns_estimate_field(self) -> None:
+        from tapps_mcp.server_analysis_tools import tapps_finding_to_story
+
+        result = await tapps_finding_to_story(
+            severity="P1",
+            category="security",
+            files=["src/auth.py:10-50"],
+            evidence="missing auth check",
+            recommendation="add authentication guard",
+        )
+        assert "estimate" in result["data"]
+        assert isinstance(result["data"]["estimate"], int)
+
+    @pytest.mark.asyncio()
+    async def test_handler_returns_priority_field(self) -> None:
+        from tapps_mcp.server_analysis_tools import tapps_finding_to_story
+
+        result = await tapps_finding_to_story(
+            severity="P0",
+            category="security",
+            files=["src/x.py:1-10"],
+            evidence="sql injection",
+            recommendation="use parameterised queries",
+        )
+        assert "priority" in result["data"]
+        assert result["data"]["priority"] == 1  # P0 → Urgent
+
+    @pytest.mark.asyncio()
+    async def test_handler_avg_complexity_increases_estimate(self) -> None:
+        from tapps_mcp.server_analysis_tools import tapps_finding_to_story
+
+        result_low = await tapps_finding_to_story(
+            severity="P2",
+            category="correctness",
+            files=["src/mod.py:1"],
+            evidence="issue",
+            recommendation="fix",
+            avg_complexity=0.0,
+        )
+        result_high = await tapps_finding_to_story(
+            severity="P2",
+            category="correctness",
+            files=["src/mod.py:1"],
+            evidence="issue",
+            recommendation="fix",
+            avg_complexity=25.0,
+        )
+        assert result_high["data"]["estimate"] > result_low["data"]["estimate"]

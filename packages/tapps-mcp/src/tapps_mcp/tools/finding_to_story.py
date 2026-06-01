@@ -15,6 +15,10 @@ Section mapping:
 
 The generated title uses the ``"{category}: {recommendation}"`` pattern,
 truncated to ≤80 characters at a word boundary.
+
+TAP-2720: ``FindingStory`` now carries ``priority`` and ``estimate`` fields.
+Priority maps P0→1 (Urgent), P1→2 (High), P2/P3→3 (Normal). Estimate
+scales with severity base, file count, and optional average radon complexity.
 """
 
 from __future__ import annotations
@@ -39,6 +43,22 @@ _TITLE_MAX_LEN: int = 80
 # Matches a trailing line-range reference ":N" or ":N-N" (N = digits)
 _HAS_LINE_REF_RE = re.compile(r":\d+(?:-\d+)?$")
 
+# TAP-2720: Linear priority values (1=Urgent … 4=Low, 0=None)
+_SEVERITY_PRIORITY: dict[str, int] = {
+    "P0": 1,  # Urgent
+    "P1": 2,  # High
+    "P2": 3,  # Normal
+    "P3": 3,  # Normal
+}
+
+# TAP-2720: Base story-point estimates by severity (Fibonacci-aligned)
+_SEVERITY_BASE_ESTIMATE: dict[str, int] = {
+    "P0": 8,  # security/correctness hole — likely cross-cutting
+    "P1": 5,  # high-severity correctness — non-trivial root cause
+    "P2": 2,  # style/minor refactor — routine
+    "P3": 1,  # informational — low effort
+}
+
 
 # ---------------------------------------------------------------------------
 # Output model
@@ -53,6 +73,11 @@ class FindingStory:
         title: Linear issue title (≤80 chars).
         body: 5-section Markdown body (``## What`` / ``## Where`` /
             ``## Why`` / ``## Acceptance`` / ``## Refs``).
+        estimate: Story-point estimate for the fix (TAP-2720). Derived
+            from severity base, file count, and optional radon CC.
+            Fibonacci-aligned: 1, 2, 3, 5, 8, or 13.
+        priority: Linear priority value (TAP-2720). Mapped from severity:
+            P0→1 (Urgent), P1→2 (High), P2/P3→3 (Normal).
         labels: Linear labels to apply when filing the issue.
             Defaults to ``("audit-fix",)`` so Ralph selects it as an
             implementable fix story and skips ``audit-digest`` digests.
@@ -60,6 +85,8 @@ class FindingStory:
 
     title: str
     body: str
+    estimate: int
+    priority: int
     labels: tuple[str, ...] = ("audit-fix",)
 
 
@@ -124,6 +151,29 @@ def _render_acceptance(severity: str) -> str:
     return "\n".join(items)
 
 
+def _derive_estimate(severity: str, files: list[str], avg_complexity: float) -> int:
+    """Compute a Fibonacci-aligned story-point estimate (TAP-2720).
+
+    Formula (additive, capped at 13):
+
+    - Base by severity: P0→8, P1→5, P2→2, P3→1
+    - +1 per 3 additional files beyond the first (file-count bonus)
+    - +1 if ``avg_complexity > 10``; +2 if ``avg_complexity > 20``
+      (radon cyclomatic-complexity bonus — 0 when not supplied)
+
+    The result is always a positive integer in the range ``[1, 13]``.
+    """
+    base = _SEVERITY_BASE_ESTIMATE.get(severity, 2)
+    file_bonus = max(0, len(files) - 1) // 3
+    if avg_complexity > 20:
+        complexity_bonus = 2
+    elif avg_complexity > 10:
+        complexity_bonus = 1
+    else:
+        complexity_bonus = 0
+    return min(base + file_bonus + complexity_bonus, 13)
+
+
 def _render_refs(severity: str, category: str, parent_id: str) -> str:
     """Render ``## Refs`` with audit provenance metadata."""
     lines: list[str] = [
@@ -148,6 +198,7 @@ def finding_to_story(
     evidence: str,
     recommendation: str,
     parent_id: str = "",
+    avg_complexity: float = 0.0,
 ) -> FindingStory:
     """Convert an audit finding into a Linear fix-story with 5 canonical sections.
 
@@ -157,6 +208,10 @@ def finding_to_story(
     - ``## Where`` always contains ≥1 file anchor (``path/to/file.ext:N``).
     - ``## Acceptance`` always contains ≥1 ``- [ ]`` checkbox.
     - Title is ≤80 chars and non-empty.
+
+    The returned :class:`FindingStory` also carries ``priority`` (mapped from
+    severity) and ``estimate`` (derived from severity, file count, and
+    ``avg_complexity``) for direct use in ``save_issue`` (TAP-2720).
 
     Args:
         severity: ``"P0"`` | ``"P1"`` | ``"P2"`` | ``"P3"``.
@@ -169,9 +224,13 @@ def finding_to_story(
         recommendation: One-line fix direction (informational only).
         parent_id: Linear parent ticket identifier (e.g. ``"TAP-2040"``).
             Included in ``## Refs`` when provided.
+        avg_complexity: Average radon cyclomatic complexity of the affected
+            files (optional). Increases the estimate when above thresholds
+            of 10 (+1 point) or 20 (+2 points). Default ``0.0`` (no bonus).
 
     Returns:
-        :class:`FindingStory` with ``title`` and ``body`` ready to pass to
+        :class:`FindingStory` with ``title``, ``body``, ``estimate``,
+        ``priority``, and ``labels`` ready to pass to
         ``docs_validate_linear_issue`` and then ``save_issue``.
 
     Raises:
@@ -199,4 +258,9 @@ def finding_to_story(
     ]
 
     body = "\n\n".join(sections) + "\n"
-    return FindingStory(title=title, body=body)
+    return FindingStory(
+        title=title,
+        body=body,
+        estimate=_derive_estimate(severity, files, avg_complexity),
+        priority=_SEVERITY_PRIORITY.get(severity, 3),
+    )
