@@ -1000,11 +1000,26 @@ if [[ -z "$_status_block" ]]; then
   # on tasks_done/files_modified at line 859 below. Without this guard,
   # productive timeouts trip no_status_block_3x after 3 long-running loops
   # and halt the campaign mid-flight.
-  if [[ "$files_modified" -ge 1 || "$tasks_done" -ge 1 ]]; then
+  #
+  # TAP-2636: a loop that completed a story by squash-merging a PR (or
+  # otherwise advancing main) modifies zero files in the working tree and
+  # may emit no RALPH_STATUS footer — but HEAD moved. Compare against the
+  # loop-start SHA recorded by execute_claude_code (.loop_start_sha) so a
+  # demonstrably productive merge loop also resets the counter instead of
+  # tipping toward a sticky halt.
+  _commit_landed=0
+  if [[ -s "$RALPH_DIR/.loop_start_sha" ]] && command -v git >/dev/null 2>&1; then
+    _loop_start_sha=$(tr -cd '0-9a-fA-F' < "$RALPH_DIR/.loop_start_sha" 2>/dev/null || echo "")
+    _head_now=$(git rev-parse HEAD 2>/dev/null || echo "")
+    if [[ -n "$_loop_start_sha" && -n "$_head_now" && "$_loop_start_sha" != "$_head_now" ]]; then
+      _commit_landed=1
+    fi
+  fi
+  if [[ "$files_modified" -ge 1 || "$tasks_done" -ge 1 || "$_commit_landed" -eq 1 ]]; then
     rm -f "$_nsb_count_file" 2>/dev/null || true
     _nsb_log_diag "productivity-reset"
     if [[ -f "$_ralph_log" ]]; then
-      echo "[$_ts] [INFO] on-stop: no RALPH_STATUS block but loop was productive (files=$files_modified tasks=$tasks_done) — counter reset (TAP-1899)" >> "$_ralph_log"
+      echo "[$_ts] [INFO] on-stop: no RALPH_STATUS block but loop was productive (files=$files_modified tasks=$tasks_done commit_landed=$_commit_landed) — counter reset (TAP-1899/TAP-2636)" >> "$_ralph_log"
     fi
   else
     _nsb_prev=0

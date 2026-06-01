@@ -9,7 +9,7 @@ tools:
   - Glob
   - Grep
   - Bash
-model: sonnet
+model: claude-opus-4-8
 maxTurns: 15
 isolation: worktree
 effort: low

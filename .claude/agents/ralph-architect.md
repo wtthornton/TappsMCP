@@ -20,7 +20,7 @@ disallowedTools:
   - Bash(git rm *)
   - Bash(git reset --hard *)
   - Bash(rm -rf *)
-model: claude-opus-4-7
+model: claude-opus-4-8
 permissionMode: bypassPermissions
 maxTurns: 50
 memory: project

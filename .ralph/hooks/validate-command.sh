@@ -114,16 +114,23 @@ if [[ "$CMD0" == "git" ]]; then
             for arg in "${ARGV[@]:2}"; do
                 case "$arg" in
                     main|master) block "direct push to ${arg} forbidden (R0). Use a feature branch + gh pr merge --squash" ;;
-                    *:main|*:master|HEAD:main|HEAD:master) block "direct push to refs/heads/${arg##*:} forbidden (R0). Use a feature branch + gh pr merge --squash" ;;
+                    *:main|*:master|HEAD:main|HEAD:master|*:refs/heads/main|*:refs/heads/master) block "direct push to refs/heads/${arg##*:} forbidden (R0). Use a feature branch + gh pr merge --squash" ;;
                 esac
             done
         fi
     fi
 
-    # `git reset --hard`, `git clean -f*`, `git rm`
-    case "$REST" in
-        *" clean "*|*" rm "*|*" reset --hard"*|*" reset --hard "*)
-            block "destructive git subcommand" ;;
+    # `git reset --hard`, `git clean -f*`, `git rm`. Anchor to the subcommand
+    # position (ARGV[1]) — the prior substring scan over the whole command
+    # matched these words inside commit messages (e.g.
+    # `git commit -m "refactor: clean up"` was wrongly blocked).
+    case "${ARGV[1]:-}" in
+        clean|rm) block "destructive git subcommand (${ARGV[1]})" ;;
+        reset)
+            for arg in "${ARGV[@]:2}"; do
+                [[ "$arg" == "--hard" ]] && block "destructive git reset --hard"
+            done
+            ;;
     esac
 fi
 
@@ -220,6 +227,16 @@ _is_protected_path() {
     local p="$1"
     p="${p%\"}"; p="${p#\"}"; p="${p%\'}"; p="${p#\'}"
     case "$p" in
+        # Carve-out FIRST (TAP-2599): Ralph self-manages its transient
+        # task-selection caches under .ralph/. The ralph-workflow skill
+        # (step 0) tells the agent to `rm -f .ralph/.linear_next_issue`
+        # after honoring a locality hint, and the optimizer rewrites it
+        # every session. Blanket-protecting it forced a cancelled tool
+        # call every selection loop. These are ephemeral hints, never
+        # durable state — durable files (status.json, fix_plan.md,
+        # .circuit_breaker_state, .harness_halt_reason) stay protected by
+        # the blanket arm below.
+        "$RALPH_DIR"/.linear_next*|.ralph/.linear_next*|./.ralph/.linear_next*) return 1 ;;
         "$RALPH_DIR"|"$RALPH_DIR"/*) return 0 ;;
         .ralph|.ralph/*|./.ralph/*) return 0 ;;
         "$_proj_dir"/.ralphrc) return 0 ;;
@@ -262,25 +279,31 @@ esac
 # TAP-2344: anchor .ralph/ redirects to the project prefix so the global
 # `~/.ralph/` install isn't caught. .claude/ remains globally blocked
 # (see _is_protected_path above for the rationale).
-case "$NORM" in
-    *" > $RALPH_DIR/"*|*" >> $RALPH_DIR/"*) block "redirect into project .ralph/" ;;
-    *" > .ralph/"*|*" >> .ralph/"*|*" > ./.ralph/"*|*" >> ./.ralph/"*)
+#
+# Canonicalize every redirect operator (`>`, `>>`, `>|`, fd-numbered `1>`,
+# `&>`, and no-space forms like `x>.ralph/y`) to a single ` > ` token so the
+# space-anchored patterns below can't be bypassed. Without this, `echo x
+# >.ralph/status.json` (no space) and `1>`/`&>`/`>|` variants slipped past.
+RNORM=$(printf '%s' "$NORM" | sed -E 's/[0-9]*&?>{1,2}[|]?/ > /g' | tr -s ' ')
+case "$RNORM" in
+    *" > $RALPH_DIR/"*) block "redirect into project .ralph/" ;;
+    *" > .ralph/"*|*" > ./.ralph/"*)
         block "redirect into .ralph/" ;;
 esac
 # TAP-2345 (F4): allow redirects into .claude/rules/, .claude/skills/,
 # .claude/commands/ — those are routine agent surface area and the
 # Edit-side hook already allows them. Settings, agents/, hooks/ stay
 # blocked. The carve-out cases must precede the catch-all so they win.
-case "$NORM" in
-    *" > .claude/rules/"*|*" >> .claude/rules/"*|*" > ./.claude/rules/"*|*" >> ./.claude/rules/"*) ;;
-    *" > .claude/skills/"*|*" >> .claude/skills/"*|*" > ./.claude/skills/"*|*" >> ./.claude/skills/"*) ;;
-    *" > .claude/commands/"*|*" >> .claude/commands/"*|*" > ./.claude/commands/"*|*" >> ./.claude/commands/"*) ;;
-    *" > .claude/"*|*" >> .claude/"*|*" > ./.claude/"*|*" >> ./.claude/"*)
+case "$RNORM" in
+    *" > .claude/rules/"*|*" > ./.claude/rules/"*) ;;
+    *" > .claude/skills/"*|*" > ./.claude/skills/"*) ;;
+    *" > .claude/commands/"*|*" > ./.claude/commands/"*) ;;
+    *" > .claude/"*|*" > ./.claude/"*)
         block "redirect into .claude/" ;;
 esac
-case "$NORM" in
-    *" > $_proj_dir/.ralphrc"*|*" >> $_proj_dir/.ralphrc"*) block "redirect into project .ralphrc" ;;
-    *" > .ralphrc"*|*" >> .ralphrc"*) block "redirect into .ralphrc" ;;
+case "$RNORM" in
+    *" > $_proj_dir/.ralphrc"*) block "redirect into project .ralphrc" ;;
+    *" > .ralphrc"*) block "redirect into .ralphrc" ;;
 esac
 
 exit 0

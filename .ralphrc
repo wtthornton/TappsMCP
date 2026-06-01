@@ -343,3 +343,17 @@ RALPH_PUSH_EVERY_LOOP=true
 # After each successful loop iteration that produced commits, run `git push`
 # =============================================================================
 # CONTEXT MANAGEMENT (Phase 14)
+# =============================================================================
+# EPIC-BOUNDARY DESLOP (ralph-workflow skill step 7.5)
+# =============================================================================
+# At each epic boundary, after QA is green, the ralph-workflow skill tells
+# Claude to run the `simplify` skill on the files changed in the epic
+# (removes dead code, unused imports, redundant comments, speculative error
+# handling — never adds). This is an agent-honored flag: it is exported to
+# the Claude CLI subprocess via `set -a`, and the skill checks it. When true,
+# the deslop pass is skipped.
+RALPH_NO_DESLOP=false
+# =============================================================================
+# At each epic boundary, after QA is green, the ralph-workflow skill tells
+# =============================================================================
+# Linear cache-locality optimizer (TAP-589 LINOPT epic)

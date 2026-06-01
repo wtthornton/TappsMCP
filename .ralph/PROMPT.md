@@ -42,6 +42,19 @@ about — fill it in for your project.
 - Pipes (`|`) and `&&` between **read-only** commands (`git status`,
   `grep`, `find`) are fine and even encouraged for parallel observation.
 
+## Editing Guidelines
+- **Read before Edit.** Before your first Edit/Write to a file in a loop,
+  issue a `Read` on that file. The Edit tool rejects writes to a file it
+  hasn't seen this session (`File has not been read yet. Read it first`),
+  and a blind write can clobber state you didn't know was there.
+- **Guard shared/busy directories.** Before editing under a directory that
+  other in-flight tickets are known to touch, run `git status`. If unstaged
+  changes don't trace to your current ticket, emit `STATUS: BLOCKED` naming
+  the suspected conflicting ticket and pivot to a different task instead of
+  editing into a conflict. The busy-directory list is per-project and set
+  via `.ralphrc` (`RALPH_BUSY_DIRS`, space- or colon-separated; default
+  empty — no directories are treated as busy).
+
 ## Protected Files (DO NOT MODIFY)
 These files are Ralph's control surface. Never delete, move, rename, or
 overwrite them:
