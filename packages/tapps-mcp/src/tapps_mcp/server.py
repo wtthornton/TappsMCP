@@ -42,6 +42,7 @@ from tapps_mcp.common.developer_workflow import (
     RECOMMENDED_WORKFLOW_TEXT,
 )
 from tapps_mcp.server_helpers import (
+    _get_brain_bridge,
     error_response,
     serialize_issues,
     success_response,
@@ -677,6 +678,74 @@ async def _server_info_async() -> dict[str, Any]:
     return _with_nudges("tapps_server_info", resp)
 
 
+_SECURITY_EMISSION_SEVERITIES: frozenset[str] = frozenset({"critical", "high", "medium"})
+
+
+def _fire_security_scan_events(
+    file_path: str,
+    bandit_issues: list[Any],
+    secret_findings: list[Any],
+) -> None:
+    """Fire brain KG events for above-floor security findings (fire-and-forget).
+
+    Emits one ``security_finding`` event per bandit/secret finding with severity
+    in ``{critical, high, medium}``. Dispatched via ``asyncio.create_task`` —
+    never blocks the security scan response. Mirror of ``_fire_quality_gate_events``
+    in ``server_scoring_tools.py``.
+    """
+
+    async def _emit() -> None:
+        try:
+            bridge = _get_brain_bridge()
+            if bridge is None or not hasattr(bridge, "record_kg_event"):
+                return
+            for issue in bandit_issues:
+                if issue.severity not in _SECURITY_EMISSION_SEVERITIES:
+                    continue
+                finding_id = f"bandit:{issue.code}"
+                await bridge.record_kg_event(  # type: ignore[union-attr]
+                    event_type="security_finding",
+                    entities=[
+                        {"type": "file", "id": file_path},
+                        {"type": "rule", "id": finding_id},
+                    ],
+                    edges=[
+                        {"src": file_path, "predicate": "has_finding", "dst": finding_id}
+                    ],
+                    payload_data={
+                        "severity": issue.severity,
+                        "line": issue.line,
+                        "file": issue.file,
+                    },
+                )
+            for finding in secret_findings:
+                if finding.severity not in _SECURITY_EMISSION_SEVERITIES:
+                    continue
+                finding_id = f"secret:{finding.secret_type}"
+                await bridge.record_kg_event(  # type: ignore[union-attr]
+                    event_type="security_finding",
+                    entities=[
+                        {"type": "file", "id": file_path},
+                        {"type": "rule", "id": finding_id},
+                    ],
+                    edges=[
+                        {"src": file_path, "predicate": "has_finding", "dst": finding_id}
+                    ],
+                    payload_data={
+                        "severity": finding.severity,
+                        "line": finding.line_number,
+                        "file": finding.file_path,
+                    },
+                )
+        except Exception:
+            pass  # best-effort: never block security scan for telemetry
+
+    try:
+        asyncio.create_task(_emit())  # noqa: RUF006
+    except Exception:
+        pass
+
+
 def tapps_security_scan(
     file_path: str,
     scan_secrets: bool = True,
@@ -860,6 +929,7 @@ def tapps_security_scan(
     except Exception:
         logger.warning("structured_output_failed", tool="tapps_security_scan", exc_info=True)
 
+    _fire_security_scan_events(str(resolved), result.bandit_issues, result.secret_findings)
     return _with_nudges("tapps_security_scan", resp)
 
 
