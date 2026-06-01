@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# tapps-mcp-hook-version: 3.12.0
+# tapps-mcp-hook-version: 3.12.1
 # TappsMCP PostToolUse hook (Edit/Write) — TAP-1326 / TAP-1330
 # Records edited gate-tracked files to .ralph/.edits_this_loop and detects
 # new external imports requiring tapps_lookup_docs. Advisory only here; the

@@ -1,4 +1,4 @@
-<!-- tapps-generated: v3.12.0 -->
+<!-- tapps-generated: v3.12.1 -->
 ---
 applyTo: "tests/**"
 ---
