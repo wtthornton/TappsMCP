@@ -479,6 +479,65 @@ class TestSaveSupersedeFallback:
         bridge.supersede_result = {"key": "arch.myproject.structure"}
         result = await writer.write_from_architecture_result(_make_arch_result(), "myproject")
         assert len(result.entries_written) == 1
+
+
+# ---------------------------------------------------------------------------
+# TAP-1925: profile pinning — factory must request agent_brain
+# ---------------------------------------------------------------------------
+
+
+class TestBrainWriterProfile:
+    """docs-mcp BrainBridge factory is pinned to the agent_brain profile (TAP-1925).
+
+    The ``agent_brain`` profile exposes only the 10-tool ``brain_*`` facade,
+    preventing docs-mcp from accidentally calling ``memory_*`` / ``hive_*`` tools
+    that are not part of its contracted surface.
+    """
+
+    def test_factory_called_with_agent_brain_profile(self, tmp_path: Path) -> None:
+        """create_brain_bridge must receive default_profile='agent_brain'."""
+        writer = ArchitectureBrainWriter(tmp_path)
+        with patch(
+            "tapps_core.brain_bridge.create_brain_bridge",
+            return_value=None,
+        ) as mock_factory:
+            writer._get_bridge()
+        mock_factory.assert_called_once_with(settings=None, default_profile="agent_brain")
+
+    def test_factory_not_called_twice_on_resolved_bridge(self, tmp_path: Path) -> None:
+        """Second call to _get_bridge uses cache — factory called exactly once."""
+        writer = ArchitectureBrainWriter(tmp_path)
+        with patch(
+            "tapps_core.brain_bridge.create_brain_bridge",
+            return_value=None,
+        ) as mock_factory:
+            writer._get_bridge()
+            writer._get_bridge()
+        mock_factory.assert_called_once()
+
+
+# ---------------------------------------------------------------------------
+# TestSaveSupersedeFallback — remaining tests that were below the insertion point
+# ---------------------------------------------------------------------------
+
+
+class TestSaveSupersedeFallbackExtra:
+    """Additional supersede / fallback tests that complement TestSaveSupersedeFallback."""
+
+    def _make_writer(self, tmp_path: Path) -> tuple[ArchitectureBrainWriter, FakeBridge]:
+        bridge = FakeBridge()
+        writer = ArchitectureBrainWriter(tmp_path)
+        writer._bridge = bridge
+        writer._bridge_resolved = True
+        return writer, bridge
+
+    async def test_supersede_success_records_project_in_entry_key(
+        self, tmp_path: Path
+    ) -> None:
+        """entries_written records the key name, which includes the project."""
+        writer, bridge = self._make_writer(tmp_path)
+        bridge.supersede_result = {"key": "arch.myproject.structure"}
+        result = await writer.write_from_architecture_result(_make_arch_result(), "myproject")
         assert "myproject" in result.entries_written[0]
 
     async def test_supersede_degraded_counted_as_failed(self, tmp_path: Path) -> None:

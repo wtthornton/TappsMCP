@@ -14,6 +14,17 @@ importing :class:`tapps_brain.store.MemoryStore` directly — is a violation
 of ``.claude/rules/integration-hygiene.md`` and produces silent data loss
 into an embedded SQLite shadow.
 
+Profile pinning (TAP-1925)
+--------------------------
+The bridge factory is called with ``default_profile="agent_brain"`` so
+docs-mcp only sees the 10-tool ``brain_*`` facade on the wire
+(``brain_remember``, ``brain_recall``, ``brain_record_event``,
+``brain_get_neighbors``, ``brain_explain_connection``). Any attempt to call
+``memory_*``, ``hive_*``, or ``maintenance_*`` tools surfaces a
+:class:`tapps_core.brain_bridge.ToolNotInProfileError` — loud, never silent.
+The ``agent_brain`` profile is the minimum surface docs-mcp needs and
+reduces the ``/v1/tools/list`` payload from ~40 entries to 10.
+
 Key tagging convention
 ----------------------
 Every entry written by this module carries:
@@ -259,7 +270,7 @@ class ArchitectureBrainWriter:
         try:
             from tapps_core.brain_bridge import create_brain_bridge
 
-            self._bridge = create_brain_bridge(settings=None)
+            self._bridge = create_brain_bridge(settings=None, default_profile="agent_brain")
             if self._bridge is None:
                 logger.debug("brain_bridge_unavailable", root=str(self._root))
             return self._bridge
