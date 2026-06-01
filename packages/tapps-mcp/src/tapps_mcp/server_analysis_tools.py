@@ -1435,6 +1435,7 @@ async def tapps_finding_to_story(
     recommendation: str,
     parent_id: str = "",
     avg_complexity: float = 0.0,
+    snapshot_issues_json: str = "",
 ) -> dict[str, Any]:
     """Convert an audit finding into a Linear fix-story ready for ``save_issue``.
 
@@ -1464,13 +1465,22 @@ async def tapps_finding_to_story(
         avg_complexity: Average radon cyclomatic complexity of affected files
             (TAP-2720). Increases the story-point estimate when above 10 (+1)
             or 20 (+2). Default ``0.0`` (no bonus).
+        snapshot_issues_json: JSON-encoded list of existing Linear issue dicts
+            (TAP-2721 dedup). Each dict must carry at least ``"id"`` and
+            ``"title"`` keys.  Pass the ``data.issues`` list from a prior
+            ``tapps_linear_snapshot_get`` call (compact projection is fine).
+            When non-empty, the generated title is compared against existing
+            titles; if a match is found, ``data.should_file`` is ``false``
+            and ``data.duplicate_of`` holds the existing issue id.  Default
+            ``""`` (skip dedup — always file).
 
     Returns:
         Response envelope with ``data.title``, ``data.body``,
         ``data.severity``, ``data.category``, ``data.parent_id``,
-        ``data.estimate``, ``data.priority``, and ``data.section_count``.
-        The title is ≤80 chars; the body passes the docs-mcp agent-issue
-        lint rules.
+        ``data.estimate``, ``data.priority``, ``data.section_count``,
+        ``data.should_file``, ``data.duplicate_found``, and
+        ``data.duplicate_of``.  The title is ≤80 chars; the body passes
+        the docs-mcp agent-issue lint rules.
     """
     _record_call("tapps_finding_to_story")
     start_ns = time.perf_counter_ns()
@@ -1526,9 +1536,24 @@ async def tapps_finding_to_story(
         avg_complexity=avg_complexity,
     )
 
+    # --- TAP-2721: Dedup against cached Linear snapshot ---
+    import json as _json
+
+    from tapps_mcp.tools.finding_to_story import find_duplicate_in_snapshot
+
+    duplicate: dict[str, Any] | None = None
+    if snapshot_issues_json.strip():
+        try:
+            snapshot_issues = _json.loads(snapshot_issues_json)
+            if isinstance(snapshot_issues, list):
+                duplicate = find_duplicate_in_snapshot(story.title, snapshot_issues)
+        except (ValueError, TypeError):
+            pass  # malformed JSON — skip dedup, proceed to file
+
     elapsed_ms = (time.perf_counter_ns() - start_ns) // 1_000_000
     _record_execution("tapps_finding_to_story", start_ns)
 
+    should_file = duplicate is None
     data: dict[str, Any] = {
         "title": story.title,
         "body": story.body,
@@ -1539,17 +1564,28 @@ async def tapps_finding_to_story(
         "estimate": story.estimate,
         "priority": story.priority,
         "section_count": story.body.count("\n## ") + 1,
+        "should_file": should_file,
+        "duplicate_found": not should_file,
+        "duplicate_of": duplicate.get("id") if duplicate else None,
     }
-    return success_response(
-        "tapps_finding_to_story",
-        elapsed_ms,
-        data,
-        next_steps=[
+    if should_file:
+        next_steps = [
             "Call docs_validate_linear_issue(title, body) to confirm agent_ready=true.",
             "Then call save_issue(title, description=body, parent_id=parent_id, "
             "labels=data['labels']) — pass labels so the audit-fix tag lands on "
             "the Linear issue and Ralph can select it.",
-        ],
+        ]
+    else:
+        next_steps = [
+            f"Issue {duplicate.get('id')!r} already covers this finding — "
+            "skip filing or link to it instead of creating a duplicate.",
+            "Set data['should_file']=false in your filing logic to suppress the write.",
+        ]
+    return success_response(
+        "tapps_finding_to_story",
+        elapsed_ms,
+        data,
+        next_steps=next_steps,
     )
 
 

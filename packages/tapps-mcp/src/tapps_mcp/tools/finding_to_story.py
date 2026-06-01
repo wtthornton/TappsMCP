@@ -19,12 +19,18 @@ truncated to ≤80 characters at a word boundary.
 TAP-2720: ``FindingStory`` now carries ``priority`` and ``estimate`` fields.
 Priority maps P0→1 (Urgent), P1→2 (High), P2/P3→3 (Normal). Estimate
 scales with severity base, file count, and optional average radon complexity.
+
+TAP-2721: ``find_duplicate_in_snapshot()`` checks a pre-fetched Linear
+snapshot for an issue whose title already covers the same finding. The
+caller (``tapps_finding_to_story`` handler) passes cached snapshot issues;
+no unfiltered ``list_issues`` calls are made.
 """
 
 from __future__ import annotations
 
 import re
 from dataclasses import dataclass
+from typing import Any
 
 # ---------------------------------------------------------------------------
 # Constants
@@ -184,6 +190,61 @@ def _render_refs(severity: str, category: str, parent_id: str) -> str:
         lines.append(f"- Audit session: {parent_id}")
     lines.append("- Source: `tapps_finding_to_story` (deterministic converter)")
     return "\n".join(lines)
+
+
+# ---------------------------------------------------------------------------
+# TAP-2721: Duplicate detection against cached Linear snapshots
+# ---------------------------------------------------------------------------
+
+# Regex for title normalisation — collapse any run of non-alphanumeric chars
+# (punctuation, dashes, colons, ellipsis) to a single space for comparison.
+_DEDUP_NORM_RE = re.compile(r"\W+")
+
+
+def _normalise_for_dedup(title: str) -> str:
+    """Lowercase and collapse punctuation for duplicate-title comparison.
+
+    The generated title pattern is ``"{category}: {recommendation}"``.
+    Normalising both sides removes cosmetic differences (trailing ellipsis,
+    punctuation, extra whitespace) so an exact string match catches true
+    semantic duplicates while ignoring formatting noise.
+    """
+    return _DEDUP_NORM_RE.sub(" ", title.lower()).strip()
+
+
+def find_duplicate_in_snapshot(
+    title: str,
+    issues: list[dict[str, Any]],
+) -> dict[str, Any] | None:
+    """Search *issues* for an existing issue that duplicates *title*.
+
+    Uses normalised title comparison (lowercase, punctuation collapsed)
+    so minor formatting differences (trailing ``…``, colons, dashes) do
+    not prevent a match.  Returns the first matching issue dict — which
+    must contain at minimum ``"id"`` and ``"title"`` keys — or ``None``
+    when no duplicate is found.
+
+    The caller is responsible for supplying *issues* from a prior
+    ``tapps_linear_snapshot_get`` call so no unfiltered ``list_issues``
+    requests are made inside this function (TAP-2721).
+
+    Args:
+        title: Generated story title (from :func:`finding_to_story`).
+        issues: List of issue dicts from a Linear snapshot.  Each dict
+            must contain ``"id"`` (the issue identifier, e.g. ``"TAP-123"``)
+            and ``"title"`` (the issue title string).
+
+    Returns:
+        The first matching issue dict, or ``None``.
+    """
+    needle = _normalise_for_dedup(title)
+    if not needle:
+        return None
+    for issue in issues:
+        existing = _normalise_for_dedup(str(issue.get("title") or ""))
+        if existing and existing == needle:
+            return issue
+    return None
 
 
 # ---------------------------------------------------------------------------
