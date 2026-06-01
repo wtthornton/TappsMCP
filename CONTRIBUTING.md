@@ -136,7 +136,7 @@ Removing or breaking a tool affects every downstream project that has installed 
 
 **Minimum window**: 90 days **or** one minor version release after the Phase 1 announcement, whichever is later.
 
-**Completed example**: `tapps_memory` went through all three phases (TAP-1991 → TAP-1992/TAP-1993 → TAP-1994). Phase 1 embedded deprecation warnings in every sub-action docstring; Phase 2 wired `brain_record_event("deprecated_tool_call", ...)` telemetry to track declining usage; Phase 3 (v3.12.0) removed the `@mcp.tool()` registration entirely. Agents now call `mcp__tapps-brain__brain_remember` / `mcp__tapps-brain__brain_recall` directly. Migration guide: `docs/migrations/tapps-memory-deprecation.md`.
+**Completed example**: `tapps_memory` went through all three phases (TAP-1991 → TAP-1992/TAP-1993 → TAP-1994). Phase 1 embedded deprecation warnings in every sub-action docstring; Phase 2 wired `brain_record_event("deprecated_tool_call", ...)` telemetry to track declining usage; Phase 3 (v3.12.0) dropped the MCP tool registration entirely (server_memory_tools.register is now a no-op). Agents now call `mcp__tapps-brain__brain_remember` / `mcp__tapps-brain__brain_recall` directly. Migration guide: `docs/migrations/tapps-memory-deprecation.md`.
 
 ## Hive Writes Require a Linked Approval
 
