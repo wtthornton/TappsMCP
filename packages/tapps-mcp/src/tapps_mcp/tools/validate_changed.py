@@ -36,7 +36,7 @@ from typing import TYPE_CHECKING, Any
 
 from mcp.server.fastmcp import Context
 
-from tapps_mcp.server_helpers import success_response
+from tapps_mcp.server_helpers import _get_brain_bridge, success_response
 from tapps_mcp.tools.validate_changed_collection import (
     _VALIDATE_OK_MARKER,
     _cache_hit_as_file_result,
@@ -406,6 +406,63 @@ async def _assemble_response(
     return resp
 
 
+# ---------------------------------------------------------------------------
+# TAP-1943: KG event helper — validate_changed completion emission
+# ---------------------------------------------------------------------------
+
+
+def _fire_validate_events(
+    paths: list[Path],
+    outcome: _BatchOutcome,
+    elapsed_ms: int,
+) -> None:
+    """Fire a brain KG event for validate_changed completion (fire-and-forget).
+
+    Emits a ``validate_completed`` event with one file entity per changed
+    path and a scalar payload carrying the overall verdict, per-file scores,
+    and elapsed time.  Best-effort: a brain outage must never affect the
+    verdict response.
+    """
+
+    async def _emit() -> None:
+        try:
+            bridge = _get_brain_bridge()
+            if bridge is None or not hasattr(bridge, "record_kg_event"):
+                return
+            if not outcome.all_passed:
+                verdict = "fail"
+                utility_score = 0.0
+            elif outcome.total_sec > 0:
+                verdict = "warn"
+                utility_score = 0.5
+            else:
+                verdict = "pass"
+                utility_score = 1.0
+            per_file_scores = {
+                str(r.get("file_path", "")): r.get("overall_score", 0.0)
+                for r in outcome.results
+                if r.get("file_path")
+            }
+            await bridge.record_kg_event(  # type: ignore[union-attr]
+                event_type="validate_completed",
+                entities=[{"type": "file", "id": str(p)} for p in paths],
+                edges=[],
+                payload_data={
+                    "overall_verdict": verdict,
+                    "per_category_scores": per_file_scores,
+                    "elapsed_ms": elapsed_ms,
+                    "utility_score": utility_score,
+                },
+            )
+        except Exception:
+            pass  # best-effort: never block validate_changed for telemetry
+
+    try:
+        asyncio.create_task(_emit())  # noqa: RUF006
+    except Exception:
+        pass
+
+
 async def tapps_validate_changed(
     file_paths: str = "",
     base_ref: str = "HEAD",
@@ -509,7 +566,10 @@ async def tapps_validate_changed(
     )
     task_results, timeout_info = await _run_with_progress(bc)
     outcome = _finalize_outcome(bc, task_results, timeout_info)
-    return await _assemble_response(bc, outcome)
+    resp = await _assemble_response(bc, outcome)
+    elapsed_ms = (time.perf_counter_ns() - bc.start) // 1_000_000
+    _fire_validate_events(bc.paths, outcome, elapsed_ms)
+    return resp
 
 
 async def _stop_progress_task(
