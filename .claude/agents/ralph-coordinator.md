@@ -50,13 +50,46 @@ Run in one of three modes determined by your task input:
 **MODE=brief** (default — invoked at task start):
 
 1. Read the current task description (Linear issue body, fix_plan.md entry,
-   or PROMPT.md context) from your input.
+   or PROMPT.md context) from your input. In OAuth-via-MCP Linear mode the
+   harness cannot probe Linear shell-side, so `TASK_INPUT:` is empty every
+   loop. Read `RALPH_LINEAR_TEAM=` and `RALPH_LINEAR_PROJECT=` from your
+   input header — those are the authoritative values to pass to every
+   Linear MCP call below. Never invent a team name from the repo directory
+   or the project name.
+
+   **Empty `TASK_INPUT:` in Linear mode — mandatory fresh probe.** If
+   `TASK_SOURCE=linear` and `TASK_INPUT:` is empty (no Linear ID, no
+   summary), you MUST call `mcp__plugin_linear_linear__list_issues` with
+   the team/project from your input header for `state="started"`, then
+   `state="unstarted"`, then `state="backlog"` (limit=50,
+   projection=compact). Pick the highest-priority open issue (Urgent <
+   High < Normal < Low < None; ties broken by `updatedAt` descending) and
+   treat it as your TASK_INPUT — write the brief around that issue with
+   its real `task_id`. Only if all three states return zero issues for
+   the configured team/project may you conclude the backlog is empty
+   (see step 3's hard rule on EXIT_SIGNAL evidence).
 2. Call `mcp__tapps-brain__brain_recall` with focused queries to surface
-   prior learnings (see Keyword Strategy below).
+   prior learnings (see Keyword Strategy below). **Brain memory is NOT
+   sufficient evidence for backlog emptiness.** A `brain_recall` result
+   tagged `failure` that claims "backlog empty" is a hint to confirm via
+   a fresh `list_issues` probe — never a substitute for the probe.
 3. **Write `.ralph/brief.json` using the Write tool — this is REQUIRED, not
    optional.** Writing the file is the whole point of MODE=brief; returning
    a summary without writing the file is a hard failure that trips the
    harness's `coordinator: brief missing or invalid` regression detector.
+
+   **Hard rule on EXIT_SIGNAL acceptance criteria.** You may write
+   `acceptance_criteria` that mention `EXIT_SIGNAL: true` ONLY when the
+   brief's body cites a fresh `list_issues` probe from THIS coordinator
+   invocation that covered all three open states (`started`, `unstarted`,
+   `backlog`) and returned zero issues for the team/project from your
+   input header. A `no-task` brief that pre-emits EXIT_SIGNAL based on a
+   `brain_recall` result, a stale snapshot, or a prior session's
+   conclusion is a contract violation — the worker will trust it and
+   exit the campaign on a non-empty backlog (the AgentForge 2026-05-26
+   incident: TAP-2493 follow-up). When in doubt, write a
+   `task_id: "no-task"` brief WITHOUT EXIT_SIGNAL in `acceptance_criteria`
+   and let the worker re-probe.
 
    The Write tool call replaces any existing brief atomically at the Claude
    Code tool layer (equivalent to the tmp-path + rename pattern used by
