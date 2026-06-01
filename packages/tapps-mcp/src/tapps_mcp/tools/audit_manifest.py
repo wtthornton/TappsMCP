@@ -26,6 +26,9 @@ logger = structlog.get_logger(__name__)
 
 _COVERAGE_KEY_PREFIX = "audit:coverage:"
 _CAMPAIGN_KEY_PREFIX = "audit:campaign:"
+# Fix-plan specs are stored under a distinct prefix so audit and fix coverage
+# can be tracked, queried, and expired independently (TAP-2718).
+_FIX_CAMPAIGN_KEY_PREFIX = "fix:campaign:"
 _COVERAGE_TIER = "pattern"
 _CAMPAIGN_TIER = "procedural"
 _SOURCE_AGENT = "tapps-audit-campaign"
@@ -60,6 +63,11 @@ def coverage_key(rel_path: str) -> str:
 
 def campaign_key(campaign_id: str) -> str:
     return f"{_CAMPAIGN_KEY_PREFIX}{campaign_id}"
+
+
+def fix_campaign_key(campaign_id: str) -> str:
+    """Brain key for a fix-plan spec — distinct from the audit campaign key."""
+    return f"{_FIX_CAMPAIGN_KEY_PREFIX}{campaign_id}"
 
 
 def now_iso() -> str:
@@ -201,6 +209,78 @@ async def load_campaign_spec(campaign_id: str) -> dict[str, Any] | None:
     except json.JSONDecodeError:
         logger.warning(
             "audit_manifest_corrupt_campaign_spec",
+            campaign_id=campaign_id,
+        )
+        return None
+    return loaded if isinstance(loaded, dict) else None
+
+
+async def save_fix_plan_spec(campaign_id: str, spec_dict: dict[str, Any]) -> bool:
+    """Persist a fix-plan spec under ``fix:campaign:<campaign_id>``.
+
+    Stored separately from the audit campaign spec (``audit:campaign:<id>``)
+    so that audit coverage and fix coverage can be tracked, queried, and
+    expired independently (TAP-2718).
+
+    Returns ``True`` on success, ``False`` if the bridge is unavailable or
+    the write fails (degraded mode — caller decides whether to fall back).
+    """
+    bridge = _get_bridge_or_none()
+    if bridge is None:
+        logger.debug(
+            "audit_manifest_save_fix_plan_degraded",
+            reason="bridge_unavailable",
+            campaign_id=campaign_id,
+        )
+        return False
+    try:
+        await bridge.save(
+            key=fix_campaign_key(campaign_id),
+            value=json.dumps(spec_dict),
+            tier=_CAMPAIGN_TIER,
+            scope="project",
+            source="agent",
+            source_agent=_SOURCE_AGENT,
+            tags=["audit", "fix", "campaign", campaign_id],
+        )
+    except Exception as exc:  # degraded-mode catch-all (BLE001 not enabled in ruff)
+        logger.debug(
+            "audit_manifest_save_fix_plan_failed",
+            campaign_id=campaign_id,
+            error=str(exc),
+        )
+        return False
+    return True
+
+
+async def load_fix_plan_spec(campaign_id: str) -> dict[str, Any] | None:
+    """Load a previously-saved fix-plan spec by campaign id.
+
+    Returns ``None`` for missing keys, bridge unavailability, or any
+    failure during the read.
+    """
+    bridge = _get_bridge_or_none()
+    if bridge is None:
+        return None
+    try:
+        entry = await bridge.get(fix_campaign_key(campaign_id))
+    except Exception as exc:  # degraded-mode catch-all (BLE001 not enabled in ruff)
+        logger.debug(
+            "audit_manifest_load_fix_plan_failed",
+            campaign_id=campaign_id,
+            error=str(exc),
+        )
+        return None
+    if not entry:
+        return None
+    value = _extract_value(entry)
+    if not value:
+        return None
+    try:
+        loaded = json.loads(value)
+    except json.JSONDecodeError:
+        logger.warning(
+            "audit_manifest_corrupt_fix_plan_spec",
             campaign_id=campaign_id,
         )
         return None

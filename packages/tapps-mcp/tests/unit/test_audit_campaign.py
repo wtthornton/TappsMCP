@@ -452,3 +452,117 @@ class TestDispatchMode:
             assert "<campaign-epic>" not in session["body"]
             assert "TAP-9999" in session["body"]
         assert dispatch_resp["data"]["persisted_to_brain"] is True
+
+
+class TestFixPlanMode:
+    """Round-trip and error tests for mode='fix_plan'."""
+
+    @pytest.mark.asyncio
+    async def test_fix_plan_missing_campaign_id_returns_error(
+        self, tmp_path: Path
+    ) -> None:
+        from tapps_mcp.server_analysis_tools import tapps_audit_campaign
+
+        resp = await tapps_audit_campaign(
+            mode="fix_plan",
+            project_root=str(tmp_path),
+        )
+        assert resp["success"] is False
+        assert resp["error"]["code"] == "missing_campaign_id"
+
+    @pytest.mark.asyncio
+    async def test_fix_plan_campaign_not_in_brain_returns_error(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setattr(
+            "tapps_mcp.tools.audit_manifest._get_bridge_or_none",
+            lambda: None,
+        )
+        from tapps_mcp.server_analysis_tools import tapps_audit_campaign
+
+        resp = await tapps_audit_campaign(
+            mode="fix_plan",
+            campaign_id="not-found",
+            project_root=str(tmp_path),
+        )
+        assert resp["success"] is False
+        assert resp["error"]["code"] == "campaign_not_found"
+
+    @pytest.mark.asyncio
+    async def test_plan_then_fix_plan_round_trip(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """plan mode persists; fix_plan loads and emits a fix epic + stories."""
+
+        class _Bridge:
+            def __init__(self) -> None:
+                self.store: dict[str, dict[str, Any]] = {}
+
+            async def save(self, **kwargs: Any) -> dict[str, Any]:
+                self.store[kwargs["key"]] = {"value": kwargs["value"]}
+                return self.store[kwargs["key"]]
+
+            async def get(self, key: str) -> dict[str, Any] | None:
+                return self.store.get(key)
+
+        bridge = _Bridge()
+        monkeypatch.setattr(
+            "tapps_mcp.tools.audit_manifest._get_bridge_or_none",
+            lambda: bridge,
+        )
+
+        _write_two_cluster_project(tmp_path)
+        from tapps_mcp.server_analysis_tools import tapps_audit_campaign
+
+        # Step 1: plan
+        plan_resp = await tapps_audit_campaign(
+            scope=str(tmp_path / "mypkg"),
+            categories="quality",
+            chunk_size=3,
+            project_root=str(tmp_path),
+        )
+        assert plan_resp["success"] is True
+        campaign_id = plan_resp["data"]["campaign_id"]
+        assert plan_resp["data"]["persisted_to_brain"] is True
+
+        # Step 2: fix_plan
+        fix_resp = await tapps_audit_campaign(
+            mode="fix_plan",
+            campaign_id=campaign_id,
+            project_root=str(tmp_path),
+        )
+        assert fix_resp["success"] is True, fix_resp.get("error")
+        fix_data = fix_resp["data"]
+
+        # Fix epic is present with proper structure.
+        assert "fix_epic" in fix_data
+        assert fix_data["fix_epic"]["title"].startswith("fix campaign:")
+        assert len(fix_data["fix_epic"]["title"]) <= 80
+        assert "## Purpose & Intent" in fix_data["fix_epic"]["body"]
+        assert "## Acceptance Criteria" in fix_data["fix_epic"]["body"]
+
+        # Fix stories map 1-to-1 with audit sessions.
+        plan_session_count = plan_resp["data"]["total_chunks"]
+        assert fix_data["total_fix_stories"] == plan_session_count
+        assert len(fix_data["fix_stories"]) == plan_session_count
+
+        # Each fix story meets the agent_ready contract.
+        for story in fix_data["fix_stories"]:
+            assert story["agent_ready"] is True
+            assert story["title"]
+            assert "## What" in story["body"]
+            assert "## Where" in story["body"]
+            assert "## Acceptance" in story["body"]
+            assert story["labels"] == ["audit-fix"]
+            assert story["files"]  # non-empty file list
+
+        # Fix plan is stored under a distinct brain key (fix:campaign:)
+        # while audit plan lives under audit:campaign:
+        audit_key = f"audit:campaign:{campaign_id}"
+        fix_key = f"fix:campaign:{campaign_id}"
+        assert audit_key in bridge.store
+        assert fix_key in bridge.store
+        assert audit_key != fix_key
+
+        # persisted flag is set on the fix_plan response too.
+        assert fix_data["persisted_to_brain"] is True

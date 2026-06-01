@@ -1075,15 +1075,19 @@ async def tapps_audit_campaign(
     epic_ref: str = "",
     ctx: Context[Any, Any, Any] | None = None,
 ) -> dict[str, Any]:
-    """Plans or finalizes a multi-session audit campaign: clusters files
-    into ~chunk_size session-sized work units, renders parent-epic +
-    per-session bodies, and persists the spec to brain memory.
+    """Plans, finalizes, or converts an audit campaign to a fix plan.
 
     Call ``mode="plan"`` when scoping a "review every file in directory
     X" effort — the response is a campaign spec ready for the
     ``linear-issue`` skill to file as an epic + N session stories. Call
     ``mode="dispatch"`` after the epic is filed to substitute the real
     Linear epic id into every session body before filing the children.
+    Call ``mode="fix_plan"`` after a campaign has been planned to generate
+    a companion fix epic + child fix stories (one per audit session cluster)
+    that Ralph can implement. Fix stories carry ``agent_ready=True`` by
+    construction and are tracked under ``fix:campaign:<id>`` in brain,
+    distinct from the audit spec at ``audit:campaign:<id>``.
+
     Use ``categories`` to focus the audit; ``"quality,security,
     dead_code"`` is the default well-balanced bundle.
 
@@ -1105,12 +1109,12 @@ async def tapps_audit_campaign(
         project_root: Override the project root. Empty (default) uses
             the server-configured root.
         campaign_id: Explicit campaign id. **Required for**
-            ``mode="dispatch"``. Empty in plan mode auto-generates an
-            id from scope + date + SHA.
-        mode: ``"plan"`` (default) or ``"dispatch"``.
+            ``mode="dispatch"`` and ``mode="fix_plan"``. Empty in plan
+            mode auto-generates an id from scope + date + SHA.
+        mode: ``"plan"`` (default), ``"dispatch"``, or ``"fix_plan"``.
         epic_ref: Linear identifier of the filed campaign epic (e.g.
             ``"TAP-2050"``). **Required for** ``mode="dispatch"``;
-            ignored in plan mode.
+            ignored in other modes.
         ctx: MCP context handle for progress notifications. Injected
             by the host.
     """
@@ -1118,11 +1122,11 @@ async def tapps_audit_campaign(
     _record_call("tapps_audit_campaign")
     await ensure_session_initialized()
 
-    if mode not in {"plan", "dispatch"}:
+    if mode not in {"plan", "dispatch", "fix_plan"}:
         return error_response(
             "tapps_audit_campaign",
             "invalid_mode",
-            f"mode must be 'plan' or 'dispatch', got: {mode!r}",
+            f"mode must be 'plan', 'dispatch', or 'fix_plan', got: {mode!r}",
         )
 
     if mode == "dispatch":
@@ -1130,6 +1134,13 @@ async def tapps_audit_campaign(
             start=start,
             campaign_id=campaign_id,
             epic_ref=epic_ref,
+            ctx=ctx,
+        )
+
+    if mode == "fix_plan":
+        return await _handle_fix_plan_mode(
+            start=start,
+            campaign_id=campaign_id,
             ctx=ctx,
         )
 
@@ -1291,6 +1302,105 @@ async def _handle_dispatch_mode(
     )
     resp = success_response("tapps_audit_campaign", elapsed_ms, finalized)
     return _with_nudges("tapps_audit_campaign", resp)
+
+
+async def _handle_fix_plan_mode(
+    *,
+    start: int,
+    campaign_id: str,
+    ctx: Context[Any, Any, Any] | None,
+) -> dict[str, Any]:
+    """Load a planned campaign spec and emit an implementable fix epic + stories.
+
+    Each session cluster in the persisted spec becomes one fix story via
+    :func:`~tapps_mcp.tools.audit_campaign.build_fix_plan_spec`. Stories
+    are guaranteed ``agent_ready=True`` by construction (no iterative
+    validator loop required). The fix plan is persisted under the distinct
+    brain key ``fix:campaign:<campaign_id>`` so audit and fix coverage
+    remain independently trackable (TAP-2718).
+    """
+    from tapps_mcp.tools.audit_campaign import build_fix_plan_spec
+    from tapps_mcp.tools.audit_manifest import load_campaign_spec
+
+    if not campaign_id:
+        return error_response(
+            "tapps_audit_campaign",
+            "missing_campaign_id",
+            "mode='fix_plan' requires campaign_id from a prior plan run",
+        )
+
+    spec = await load_campaign_spec(campaign_id)
+    if spec is None:
+        return error_response(
+            "tapps_audit_campaign",
+            "campaign_not_found",
+            f"no campaign spec found in brain for campaign_id={campaign_id!r}. "
+            "Run mode='plan' first.",
+        )
+
+    try:
+        fix_plan = build_fix_plan_spec(spec)
+    except ValueError as exc:
+        return error_response(
+            "tapps_audit_campaign", "invalid_campaign_spec", str(exc)
+        )
+
+    data: dict[str, Any] = {
+        "campaign_id": fix_plan.campaign_id,
+        "total_fix_stories": fix_plan.total_stories,
+        "fix_epic": {
+            "title": fix_plan.fix_epic_title,
+            "body": fix_plan.fix_epic_body,
+        },
+        "fix_stories": [
+            {
+                "session_index": s.session_index,
+                "title": s.title,
+                "body": s.body,
+                "files": s.files,
+                "labels": list(s.labels),
+                "agent_ready": s.agent_ready,
+            }
+            for s in fix_plan.fix_stories
+        ],
+    }
+    persisted = await _persist_fix_plan_spec(fix_plan.campaign_id, data)
+    data["persisted_to_brain"] = persisted
+
+    elapsed_ms = (time.perf_counter_ns() - start) // 1_000_000
+    _record_execution("tapps_audit_campaign", start)
+    await emit_ctx_info(
+        ctx,
+        f"Fix plan for campaign {campaign_id}: "
+        f"{fix_plan.total_stories} fix stories generated "
+        f"(persisted={persisted})",
+    )
+    resp = success_response(
+        "tapps_audit_campaign",
+        elapsed_ms,
+        data,
+        next_steps=[
+            "Use the linear-issue skill to file fix_epic as a new epic "
+            "(title=data['fix_epic']['title'], description=data['fix_epic']['body']).",
+            "File each entry in data['fix_stories'] as a child story under the fix epic "
+            "(labels=['audit-fix'], parent_id=<fix epic id>).",
+            "Mark this campaign's audit epic as Done once all fix stories are filed.",
+        ],
+    )
+    return _with_nudges("tapps_audit_campaign", resp)
+
+
+async def _persist_fix_plan_spec(
+    campaign_id: str, spec_dict: dict[str, Any]
+) -> bool:
+    """Save the rendered fix-plan spec to brain under ``fix:campaign:<id>``."""
+    from tapps_mcp.tools.audit_manifest import save_fix_plan_spec
+
+    try:
+        return await save_fix_plan_spec(campaign_id, spec_dict)
+    except (OSError, RuntimeError, ValueError) as exc:
+        logger.debug("audit_campaign_persist_fix_plan_failed", error=str(exc))
+        return False
 
 
 async def _resolve_git_short_sha(root: Path) -> str:
