@@ -47,10 +47,20 @@ _HAS_LINE_REF_RE = re.compile(r":\d+(?:-\d+)?$")
 
 @dataclass(frozen=True)
 class FindingStory:
-    """Rendered title + body for a single fix story derived from an audit finding."""
+    """Rendered title + body for a single fix story derived from an audit finding.
+
+    Attributes:
+        title: Linear issue title (≤80 chars).
+        body: 5-section Markdown body (``## What`` / ``## Where`` /
+            ``## Why`` / ``## Acceptance`` / ``## Refs``).
+        labels: Linear labels to apply when filing the issue.
+            Defaults to ``("audit-fix",)`` so Ralph selects it as an
+            implementable fix story and skips ``audit-digest`` digests.
+    """
 
     title: str
     body: str
+    labels: tuple[str, ...] = ("audit-fix",)
 
 
 # ---------------------------------------------------------------------------

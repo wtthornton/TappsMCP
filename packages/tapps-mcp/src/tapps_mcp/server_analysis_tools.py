@@ -1417,6 +1417,7 @@ async def tapps_finding_to_story(
         "severity": severity_uc,
         "category": category_lc,
         "parent_id": parent_id,
+        "labels": list(story.labels),
         "section_count": story.body.count("\n## ") + 1,
     }
     return success_response(
@@ -1425,7 +1426,9 @@ async def tapps_finding_to_story(
         data,
         next_steps=[
             "Call docs_validate_linear_issue(title, body) to confirm agent_ready=true.",
-            "Then call save_issue(title, description=body, parent_id=parent_id).",
+            "Then call save_issue(title, description=body, parent_id=parent_id, "
+            "labels=data['labels']) — pass labels so the audit-fix tag lands on "
+            "the Linear issue and Ralph can select it.",
         ],
     )
 

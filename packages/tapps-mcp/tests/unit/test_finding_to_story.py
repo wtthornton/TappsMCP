@@ -282,6 +282,90 @@ class TestFileAnchorNormalisation:
 
 
 # ---------------------------------------------------------------------------
+# finding_to_story — label assertions (TAP-2719)
+# ---------------------------------------------------------------------------
+
+
+class TestFindingStoryLabels:
+    """TAP-2719: generated fix stories must carry the audit-fix label."""
+
+    def test_default_label_is_audit_fix(self) -> None:
+        story = finding_to_story(
+            severity="P0",
+            category="security",
+            files=["src/auth.py:1-50"],
+            evidence="sql injection at line 20",
+            recommendation="use parameterised queries",
+        )
+        assert "audit-fix" in story.labels
+
+    @pytest.mark.parametrize("severity", ["P0", "P1", "P2", "P3"])
+    def test_all_severities_have_audit_fix_label(self, severity: str) -> None:
+        story = finding_to_story(
+            severity=severity,
+            category="correctness",
+            files=["src/mod.py:1"],
+            evidence="finding evidence",
+            recommendation="apply fix",
+        )
+        assert "audit-fix" in story.labels
+
+    def test_label_is_tuple(self) -> None:
+        story = finding_to_story(
+            severity="P1",
+            category="style",
+            files=["src/utils.py:5-10"],
+            evidence="unused import",
+            recommendation="remove unused import",
+        )
+        assert isinstance(story.labels, tuple)
+
+    def test_audit_fix_label_not_empty(self) -> None:
+        story = finding_to_story(
+            severity="P2",
+            category="docs",
+            files=["src/api.py:1"],
+            evidence="missing docstring",
+            recommendation="add docstring",
+        )
+        assert len(story.labels) >= 1
+
+
+# ---------------------------------------------------------------------------
+# tapps_finding_to_story handler — label in response (TAP-2719)
+# ---------------------------------------------------------------------------
+
+
+class TestTappsFindingToStoryHandlerLabels:
+    @pytest.mark.asyncio()
+    async def test_handler_returns_labels_field(self) -> None:
+        from tapps_mcp.server_analysis_tools import tapps_finding_to_story
+
+        result = await tapps_finding_to_story(
+            severity="P1",
+            category="security",
+            files=["src/auth.py:10-50"],
+            evidence="missing auth check at line 20",
+            recommendation="Add authentication guard before privileged operation",
+        )
+        assert "labels" in result["data"]
+        assert "audit-fix" in result["data"]["labels"]
+
+    @pytest.mark.asyncio()
+    async def test_handler_labels_is_list(self) -> None:
+        from tapps_mcp.server_analysis_tools import tapps_finding_to_story
+
+        result = await tapps_finding_to_story(
+            severity="P0",
+            category="security",
+            files=["src/x.py:1-10"],
+            evidence="sql injection",
+            recommendation="use parameterised queries",
+        )
+        assert isinstance(result["data"]["labels"], list)
+
+
+# ---------------------------------------------------------------------------
 # finding_to_story — validation against docs-mcp validator
 # ---------------------------------------------------------------------------
 
