@@ -15,6 +15,8 @@ strings programmatically.
 | `code` | `str` | yes | Machine-readable refusal code (see table below). |
 | `gate` | `str` | yes | Which gate fired (e.g. `linear_cache_first_read`). |
 | `hint` | `str` | yes | Human-readable corrective action — for logs and agent reasoning. |
+| `use` | `str` | no | Tool name the agent should call to satisfy the gate (e.g. `docs_validate_linear_issue`). |
+| `args` | `object` | no | Arguments to pass to the `use` tool — allows the agent to retry without reformulating the call. |
 | `bypass_env` | `str` | no | Environment variable name the caller can set to skip this gate (logged). |
 | `logged_to` | `str` | no | Path of the violations log where this firing was recorded. |
 | `extra` | `object` | no | Gate-specific context (e.g. `{"cache_key": "...", "age_seconds": 310}`). |
@@ -54,7 +56,9 @@ strings programmatically.
   "ok": false,
   "code": "validate_missing",
   "gate": "linear_write_validation",
-  "hint": "Run docs_validate_linear_issue(title, description) and confirm agent_ready=true before calling save_issue.",
+  "use": "docs_validate_linear_issue",
+  "args": {"title": "<issue title>", "description": "<body>"},
+  "hint": "Call docs_validate_linear_issue(title, description) and confirm agent_ready=true before calling save_issue. The sentinel expires after 30 minutes.",
   "bypass_env": "TAPPS_LINEAR_SKIP_VALIDATE",
   "logged_to": ".tapps-mcp/.bypass-log.jsonl"
 }

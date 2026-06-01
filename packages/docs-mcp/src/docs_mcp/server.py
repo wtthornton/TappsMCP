@@ -124,6 +124,7 @@ ALL_DOCS_TOOL_NAMES: frozenset[str] = frozenset(
         "docs_lint_linear_issue",
         "docs_validate_linear_issue",
         "docs_linear_triage",
+        "docs_save_linear_issue",
         "docs_generate_release_update",
         "docs_validate_release_update",
         "docs_release_gate",

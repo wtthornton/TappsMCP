@@ -416,11 +416,87 @@ def _triage_next_steps(data: dict[str, Any]) -> list[str]:
     return steps[:3]
 
 
+async def docs_save_linear_issue(
+    title: str,
+    description: str = "",
+    project_root: str = "",
+) -> dict[str, Any]:
+    """Pre-save gate for Linear issues (TAP-2009).
+
+    Checks whether ``docs_validate_linear_issue`` has been called recently
+    (within 30 minutes) before allowing a Linear ``save_issue`` to proceed.
+
+    When the gate passes, returns ``{ok: true}`` — the agent should then call
+    ``mcp__plugin_linear_linear__save_issue`` with the same title and
+    description.  When the gate fires, returns the standard
+    ``validate_missing`` refusal envelope (see
+    ``docs/architecture/gateway-envelope.md``); call
+    ``docs_validate_linear_issue`` first to satisfy the gate.
+
+    This is the server-side counterpart to
+    ``.claude/hooks/tapps-pre-linear-write.sh``, providing defence-in-depth
+    when hooks are absent (other MCP clients, CI, read-only Claude Code
+    configs).
+
+    Args:
+        title: Issue title — passed through to the refusal envelope so the
+            agent knows which ``docs_validate_linear_issue`` call will satisfy
+            the gate.
+        description: Issue description (markdown) — same pass-through purpose.
+        project_root: Optional override for project root directory. Defaults
+            to the DocsMCP project root detected from settings.
+    """
+    _record_call("docs_save_linear_issue")
+    start = time.perf_counter_ns()
+
+    from pathlib import Path
+
+    from docs_mcp.config.settings import load_docs_settings
+    from docs_mcp.integrations.linear_gateway import gate_linear_save
+    from docs_mcp.server_helpers import error_response
+
+    try:
+        root_override = Path(project_root) if project_root.strip() else None
+        settings = load_docs_settings(root_override)
+    except Exception as exc:
+        return error_response("docs_save_linear_issue", "CONFIG_ERROR", str(exc))
+
+    refusal = gate_linear_save(settings.project_root, title, description)
+    elapsed_ms = (time.perf_counter_ns() - start) // 1_000_000
+
+    if refusal is not None:
+        return success_response(
+            "docs_save_linear_issue",
+            elapsed_ms,
+            refusal,
+            next_steps=[
+                f"Call docs_validate_linear_issue(title={title!r}, description=...) first.",
+                "Confirm agent_ready=true, then call docs_save_linear_issue again.",
+            ],
+        )
+
+    return success_response(
+        "docs_save_linear_issue",
+        elapsed_ms,
+        {
+            "ok": True,
+            "message": (
+                "Gate passed — call mcp__plugin_linear_linear__save_issue "
+                "with the same title and description params."
+            ),
+        },
+        next_steps=[
+            "Call mcp__plugin_linear_linear__save_issue(team, project, title, description, ...) now.",
+        ],
+    )
+
+
 def register(mcp_instance: FastMCP, allowed_tools: frozenset[str]) -> None:
     """Register Linear-issue tools on the shared mcp instance.
 
     TAP-1987: docs_lint_linear_issue and docs_validate_linear_issue are daily
     drivers (eager). docs_linear_triage is deferred.
+    TAP-2009: docs_save_linear_issue is a daily-driver gate (eager).
     """
     if "docs_lint_linear_issue" in allowed_tools:
         mcp_instance.tool(annotations=_ANNOTATIONS_READ_ONLY)(docs_lint_linear_issue)
@@ -430,3 +506,5 @@ def register(mcp_instance: FastMCP, allowed_tools: frozenset[str]) -> None:
         mcp_instance.tool(annotations=_ANNOTATIONS_READ_ONLY, meta=_META_DEFERRED)(
             docs_linear_triage
         )
+    if "docs_save_linear_issue" in allowed_tools:
+        mcp_instance.tool(annotations=_ANNOTATIONS_READ_ONLY)(docs_save_linear_issue)
