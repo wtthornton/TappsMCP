@@ -236,3 +236,49 @@ class TestNonEmptyError:
         assert msg
         assert "RuntimeError" in msg
         assert "scorer crashed" in msg
+
+
+class TestHeartbeatDoesNotLeak:
+    """A scan that outlives a heartbeat interval must still succeed.
+
+    Regression for the empty-message bug: the progress heartbeat's
+    ``asyncio.wait_for(stop_event.wait(), timeout=...)`` raises TimeoutError
+    on every interval while the scan runs. The original code only suppressed
+    CancelledError, so the heartbeat task died with TimeoutError and the
+    ``finally`` re-raised it as an empty "Error executing tool tapps_report:".
+    Only reproduces with a real ``ctx.report_progress`` and a scan longer than
+    one heartbeat interval.
+    """
+
+    @pytest.mark.asyncio
+    async def test_long_scan_with_progress_ctx_succeeds(self) -> None:
+        import tapps_mcp.server_analysis_tools as mod
+        from tapps_mcp.server_analysis_tools import tapps_report
+
+        files = [Path(f"/fake/project/mod_{i}.py") for i in range(4)]
+        mock_settings = MagicMock(project_root=Path("/fake/project"), quality_preset="standard")
+        gate = MagicMock(passed=True, failures=[])
+
+        async def _score(_pf: Path) -> Any:
+            # Each file takes longer than the (shrunk) heartbeat interval, so the
+            # heartbeat's wait_for times out repeatedly during the scan.
+            await asyncio.sleep(0.03)
+            return MagicMock(overall_score=80.0, security_issues=[])
+
+        scorer = MagicMock()
+        scorer.score_file = AsyncMock(side_effect=_score)
+
+        ctx = MagicMock()
+        ctx.info = AsyncMock()
+        ctx.report_progress = AsyncMock()
+
+        extra = (
+            *_project_wide_extra(files, gate, {"summary": {"files_scored": 4}, "files": []}),
+            patch.object(mod, "_REPORT_HEARTBEAT_INTERVAL_S", 0.01),
+        )
+        with report_env(mock_settings, scorer, *extra):
+            result = await tapps_report(report_format="json", max_files=10, ctx=ctx)
+
+        assert result["success"] is True
+        # The heartbeat must have fired at least once (proving the timeout path ran).
+        assert ctx.report_progress.await_count >= 1

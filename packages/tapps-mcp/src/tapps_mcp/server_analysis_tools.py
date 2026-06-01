@@ -49,6 +49,10 @@ logger = structlog.get_logger(__name__)
 # once and blows past the request deadline / file-descriptor limits.
 _REPORT_MAX_CONCURRENCY = min(8, (os.cpu_count() or 4))
 
+# Interval between project-wide progress heartbeats. Module-level so tests can
+# shrink it to exercise the heartbeat wake-up path quickly.
+_REPORT_HEARTBEAT_INTERVAL_S = 5.0
+
 # ---------------------------------------------------------------------------
 # Tool annotation presets
 # ---------------------------------------------------------------------------
@@ -570,8 +574,15 @@ async def tapps_report(
                             total=tracker.total,
                             message=f"Scored {tracker.completed}/{tracker.total} files ({tracker.last_file or 'starting...'})",
                         )
-                    with contextlib.suppress(asyncio.CancelledError):
-                        await asyncio.wait_for(_stop_event.wait(), timeout=5.0)
+                    # wait_for raises TimeoutError every 5s while the scan is
+                    # still running — that is the expected wake-up, not a failure.
+                    # Suppress it (and CancelledError) so the heartbeat task never
+                    # dies with an exception that the finally below would re-raise
+                    # as an empty-message error.
+                    with contextlib.suppress(TimeoutError, asyncio.CancelledError):
+                        await asyncio.wait_for(
+                            _stop_event.wait(), timeout=_REPORT_HEARTBEAT_INTERVAL_S
+                        )
 
             _heartbeat_task = asyncio.create_task(_report_heartbeat())
 
@@ -603,8 +614,9 @@ async def tapps_report(
             _stop_event.set()
             if _heartbeat_task is not None:
                 _heartbeat_task.cancel()
-                with contextlib.suppress(asyncio.CancelledError):
-                    await _heartbeat_task
+                # gather(return_exceptions=True) drains the task without
+                # re-raising whatever it stored (CancelledError or otherwise).
+                await asyncio.gather(_heartbeat_task, return_exceptions=True)
 
     try:
         report_data = generate_report(score_results, gate_results, report_format=report_format)
@@ -873,8 +885,11 @@ async def tapps_dependency_scan(
                         total=0,
                         message=f"Scanning dependencies... ({elapsed}s elapsed)",
                     )
-                with contextlib.suppress(asyncio.CancelledError):
-                    await asyncio.wait_for(_stop_event.wait(), timeout=5.0)
+                # TimeoutError is the expected per-interval wake-up; suppress it
+                # (and CancelledError) so the heartbeat task never dies with an
+                # exception the finally below would re-raise as an empty error.
+                with contextlib.suppress(TimeoutError, asyncio.CancelledError):
+                    await asyncio.wait_for(_stop_event.wait(), timeout=_REPORT_HEARTBEAT_INTERVAL_S)
 
         _heartbeat_task = asyncio.create_task(_scan_heartbeat())
 
@@ -889,8 +904,7 @@ async def tapps_dependency_scan(
         _stop_event.set()
         if _heartbeat_task is not None:
             _heartbeat_task.cancel()
-            with contextlib.suppress(asyncio.CancelledError):
-                await _heartbeat_task
+            await asyncio.gather(_heartbeat_task, return_exceptions=True)
 
     # Populate session cache so scorer.py applies dependency penalties
     if not result.error:
