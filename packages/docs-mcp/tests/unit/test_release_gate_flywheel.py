@@ -74,6 +74,19 @@ async def test_bridge_unavailable_leaves_verdict_unchanged() -> None:
     assert data["verdict"] == "pass"
 
 
+async def test_subcheck_exception_returns_wellformed_error() -> None:
+    """Regression: the aggregation except branch must build a valid error
+    envelope, not raise TypeError from a malformed error_response call."""
+    with patch(
+        "docs_mcp.server_val_tools.docs_check_drift",
+        AsyncMock(side_effect=RuntimeError("drift exploded")),
+    ):
+        resp = await docs_release_gate(prev_version="v1")
+    assert resp["success"] is False
+    assert resp["error"]["code"] == "release_gate_failure"
+    assert "drift exploded" in resp["error"]["message"]
+
+
 async def test_flywheel_does_not_upgrade_a_failing_gate() -> None:
     """A gate already failing local checks stays 'warn' regardless of low gaps."""
     failing_drift = {"data": {"drift_score": 80, "items": [{}]}}

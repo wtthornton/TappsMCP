@@ -1130,12 +1130,10 @@ async def docs_release_gate(
         freshness = await docs_check_freshness(project_root=project_root)
         links = await docs_check_links(project_root=project_root)
     except Exception as exc:
-        elapsed_ms = (time.perf_counter_ns() - start) // 1_000_000
         return error_response(
             "docs_release_gate",
-            elapsed_ms,
+            "release_gate_failure",
             f"docs_release_gate aggregation failed: {exc}",
-            code="release_gate_failure",
         )
 
     def _data(resp: dict[str, Any]) -> dict[str, Any]:
