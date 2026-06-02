@@ -1659,10 +1659,12 @@ async def tapps_audit_close_coverage(
     """Close an audit finding by updating its brain coverage record (TAP-2722).
 
     Wraps the internal ``close_coverage`` helper so Ralph's audit-fix loop can
-    record a landed fix without importing tapps-mcp internals. Sets the coverage
-    entry's ``audited_sha`` to *new_sha* (so subsequent freshness checks reflect
-    the post-fix file) and links the fix/finding tickets into the coverage →
-    finding → fix chain.
+    record a landed fix without importing tapps-mcp internals. Records *new_sha*
+    as the entry's ``fix_sha`` and links the fix/finding tickets into the
+    coverage → finding → fix chain. It deliberately leaves ``audited_sha``
+    untouched: a fix is not an audit, so the post-fix file reads as *changed*
+    and a subsequent ``tapps_audit_campaign`` re-audits it (re-audit-as-changed,
+    per the audit-fix-loop handoff — see TAP-2799).
 
     Call this after committing a fix that resolves an audit finding, passing the
     new short SHA of the fixed file. The finding's coverage entry must already
@@ -1671,7 +1673,7 @@ async def tapps_audit_close_coverage(
     Args:
         rel_path: Repo-relative path of the fixed file (e.g.
             ``"packages/tapps-mcp/src/tapps_mcp/server.py"``).
-        new_sha: The git SHA recording the post-fix file state.
+        new_sha: The git SHA the fix landed at (recorded as ``fix_sha``).
         fix_ticket: Optional Linear id of the fix story (e.g. ``"TAP-2799"``).
             Appended to the entry's ``fix_tickets`` (deduped).
         finding_ticket: Optional Linear id of the original finding. Ensured
@@ -1743,8 +1745,9 @@ async def tapps_audit_close_coverage(
     }
     if ok:
         next_steps = [
-            "Coverage closed — the file is now marked audited at new_sha. Re-run "
-            "tapps_audit_campaign to confirm the finding no longer surfaces.",
+            "Coverage closed — fix recorded and tickets linked. The file now reads "
+            "as changed, so re-run tapps_audit_campaign to re-audit it and confirm "
+            "the finding no longer surfaces.",
         ]
     else:
         next_steps = [

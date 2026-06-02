@@ -45,10 +45,13 @@ CHANGE 2 — Call coverage-close at fix-story completion.
   the tapps-mcp coverage-close mechanism (TAP-2722) for each changed file, passing the fixed
   file path(s), the new commit SHA, and the fix-ticket id. This updates
   `audit:coverage:<rel_path>` so a subsequent campaign treats those files as changed
-  (not stale-clean).
+  (not stale-clean). Mechanism (TAP-2799): coverage-close records the new SHA as the
+  entry's `fix_sha` and links the fix/finding tickets, but leaves `audited_sha` untouched
+  — a fix is not an audit — so `is_fresh()` returns `False` at the post-fix SHA and the
+  re-audit re-examines the file (re-audit-as-changed).
 - Acceptance:
   - On completing an `audit-fix` story, Ralph invokes coverage-close for each changed file.
-  - A subsequent campaign treats those files as changed.
+  - A subsequent campaign treats those files as changed (re-audits them, not stale-clean).
   - Add a test covering the post-commit coverage-close call.
 
 Then: run the repo's test suite, fix anything red, and commit per this repo's workflow.

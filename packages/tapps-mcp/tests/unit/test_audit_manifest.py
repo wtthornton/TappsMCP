@@ -312,23 +312,35 @@ class TestCloseCoverage:
         )
 
     @pytest.mark.asyncio
-    async def test_updates_sha(self, fake_bridge: FakeBridge) -> None:
-        await write_coverage(self._entry("old-sha"))
-        result = await close_coverage("src/foo.py", "new-sha")
+    async def test_records_fix_sha_without_marking_audited(
+        self, fake_bridge: FakeBridge
+    ) -> None:
+        # TAP-2799: close_coverage records the fix sha but does NOT claim the
+        # post-fix content was audited — a fix is not an audit. audited_sha
+        # still reflects the last sha actually audited (the pre-fix sha).
+        await write_coverage(self._entry("audited-sha"))
+        result = await close_coverage("src/foo.py", "post-fix-sha")
         assert result is True
         loaded = (await read_coverage_for(["src/foo.py"]))["src/foo.py"]
         assert loaded is not None
-        assert loaded.audited_sha == "new-sha"
+        assert loaded.fix_sha == "post-fix-sha"
+        assert loaded.audited_sha == "audited-sha"
 
     @pytest.mark.asyncio
-    async def test_is_fresh_reflects_new_sha(self, fake_bridge: FakeBridge) -> None:
-        await write_coverage(self._entry("old-sha"))
-        await close_coverage("src/foo.py", "new-sha")
+    async def test_re_audit_treats_fixed_file_as_changed(
+        self, fake_bridge: FakeBridge
+    ) -> None:
+        # TAP-2799 contradiction reproduction: after close_coverage, the fixed
+        # file must read as NOT fresh at its post-fix sha so a subsequent
+        # campaign RE-AUDITS it (re-audit-as-changed), matching the handoff
+        # contract. The TAP-2722 bug set audited_sha=new_sha → is_fresh True →
+        # the file was silently skipped, the opposite of the stated behavior.
+        await write_coverage(self._entry("audited-sha"))
+        await close_coverage("src/foo.py", "post-fix-sha")
         loaded = (await read_coverage_for(["src/foo.py"]))["src/foo.py"]
         assert loaded is not None
-        # is_fresh is True at the new sha; False if the file changes again.
-        assert is_fresh(loaded, "new-sha") is True
-        assert is_fresh(loaded, "changed-again") is False
+        # current sha == the post-fix sha → must be treated as changed.
+        assert is_fresh(loaded, "post-fix-sha") is False
 
     @pytest.mark.asyncio
     async def test_appends_fix_ticket(self, fake_bridge: FakeBridge) -> None:
@@ -428,17 +440,20 @@ class TestTappsAuditCloseCoverageHandler:
         )
 
     @pytest.mark.asyncio
-    async def test_success_updates_sha(self, fake_bridge: FakeBridge) -> None:
+    async def test_success_records_fix_sha(self, fake_bridge: FakeBridge) -> None:
         from tapps_mcp.server_analysis_tools import tapps_audit_close_coverage
 
-        await write_coverage(self._entry("old-sha"))
-        result = await tapps_audit_close_coverage("src/foo.py", "new-sha")
+        await write_coverage(self._entry("audited-sha"))
+        result = await tapps_audit_close_coverage("src/foo.py", "post-fix-sha")
         assert result["success"] is True
         assert result["data"]["ok"] is True
         assert result["data"]["reason"] == ""
         loaded = (await read_coverage_for(["src/foo.py"]))["src/foo.py"]
         assert loaded is not None
-        assert loaded.audited_sha == "new-sha"
+        # TAP-2799: fix sha recorded; audited_sha unchanged so re-audit picks it up.
+        assert loaded.fix_sha == "post-fix-sha"
+        assert loaded.audited_sha == "audited-sha"
+        assert is_fresh(loaded, "post-fix-sha") is False
 
     @pytest.mark.asyncio
     async def test_success_links_tickets(self, fake_bridge: FakeBridge) -> None:

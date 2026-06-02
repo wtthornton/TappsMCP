@@ -52,10 +52,12 @@ explicit.
 
 ### 2. Invoke coverage-close at fix-story completion
 
-tapps-mcp will provide a coverage-close mechanism (TAP-2722) that updates
-`audit:coverage:{rel_path}` with the new commit SHA and links
-finding-ticket → fix-ticket → coverage so `is_fresh()` detects the change and a
-re-audit re-examines the fixed file.
+tapps-mcp will provide a coverage-close mechanism (TAP-2722) that records the
+new commit SHA on `audit:coverage:{rel_path}` (as `fix_sha`) and links
+finding-ticket → fix-ticket → coverage. It deliberately does NOT update
+`audited_sha` — a fix is not an audit (TAP-2799) — so `is_fresh()` returns
+`False` at the post-fix SHA and a re-audit re-examines the fixed file
+(re-audit-as-changed).
 
 Ralph must call this when it completes a fix story carrying the `audit-fix`
 label, after the commit lands, passing the fixed file path(s), the new SHA, and

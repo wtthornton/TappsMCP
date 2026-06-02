@@ -56,6 +56,10 @@ class CoverageEntry:
     findings: FindingCounts = field(default_factory=FindingCounts)
     finding_tickets: list[str] = field(default_factory=list)
     fix_tickets: list[str] = field(default_factory=list)
+    # The sha a fix landed at (TAP-2799). Recorded by close_coverage for
+    # traceability — distinct from audited_sha, which only ever reflects a
+    # sha that was actually AUDITED (a fix is not an audit).
+    fix_sha: str = ""
 
 
 def coverage_key(rel_path: str) -> str:
@@ -155,12 +159,19 @@ async def close_coverage(
     fix_ticket: str = "",
     finding_ticket: str = "",
 ) -> bool:
-    """Update a coverage entry to record a completed fix (TAP-2722).
+    """Update a coverage entry to record a completed fix (TAP-2722, TAP-2799).
 
-    Sets ``audited_sha`` to *new_sha* so subsequent :func:`is_fresh` calls
-    reflect the post-fix file state.  Appends *fix_ticket* to
-    ``fix_tickets`` (deduped) and ensures *finding_ticket* is present in
-    ``finding_tickets``, providing a traceable coverage → finding → fix chain.
+    Records *new_sha* — the sha the fix landed at — in ``fix_sha``, and links
+    *fix_ticket* (deduped into ``fix_tickets``) and *finding_ticket* (ensured
+    in ``finding_tickets``), giving a traceable coverage → finding → fix chain.
+
+    Crucially it does **not** touch ``audited_sha``: a fix is not an audit, so
+    the post-fix file content has not been audited. ``audited_sha`` keeps
+    pointing at the last sha that was actually audited (the pre-fix sha), so
+    :func:`is_fresh` returns ``False`` at the post-fix sha and a subsequent
+    campaign re-audits the fixed file (re-audit-as-changed). Setting
+    ``audited_sha = new_sha`` here was the TAP-2799 contradiction: it made the
+    fixed file read fresh/clean and silently skip re-review.
 
     Returns ``True`` on success, ``False`` if the bridge is unavailable, the
     entry does not yet exist for *rel_path*, or the write fails (degraded mode).
@@ -178,7 +189,7 @@ async def close_coverage(
     if entry is None:
         logger.debug("audit_manifest_close_coverage_missing", rel_path=rel_path)
         return False
-    entry.audited_sha = new_sha
+    entry.fix_sha = new_sha
     if fix_ticket and fix_ticket not in entry.fix_tickets:
         entry.fix_tickets.append(fix_ticket)
     if finding_ticket and finding_ticket not in entry.finding_tickets:
@@ -374,6 +385,7 @@ def _deserialize_coverage(
             findings=findings,
             finding_tickets=list(payload.get("finding_tickets", [])),
             fix_tickets=list(payload.get("fix_tickets", [])),
+            fix_sha=str(payload.get("fix_sha", "")),
         )
     except (TypeError, ValueError):
         return None
