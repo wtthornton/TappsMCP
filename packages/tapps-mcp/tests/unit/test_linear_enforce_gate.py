@@ -51,6 +51,14 @@ class TestGateHooksConfig:
     def test_pre_save_script_references_linear_standards_rule(self) -> None:
         assert "linear-standards.md" in LINEAR_GATE_PRE_SAVE_SCRIPT
 
+    def test_pre_save_labels_hook_only_refusal_layer(self) -> None:
+        # TAP-2008: the hook refusal identifies itself as the defense-in-depth
+        # (hook-only) layer and names the primary server gate, distinguishing it
+        # from the docs_save_linear_issue wrapper's primary envelope refusal.
+        assert "layer=hook-only/defense-in-depth" in LINEAR_GATE_PRE_SAVE_SCRIPT
+        assert "docs_save_linear_issue" in LINEAR_GATE_PRE_SAVE_SCRIPT
+        assert "layer=hook-only/defense-in-depth" in LINEAR_GATE_PRE_SAVE_SCRIPT_PS
+
     def test_post_validate_script_writes_sentinel(self) -> None:
         assert ".linear-validate-sentinel" in LINEAR_GATE_POST_VALIDATE_SCRIPT
 

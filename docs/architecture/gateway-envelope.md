@@ -64,12 +64,27 @@ strings programmatically.
 }
 ```
 
+## Refusal layers — primary vs defense-in-depth (TAP-2008)
+
+Each gate now refuses at **two** layers, and the two are distinguishable in logs:
+
+- **Server-side primary refusal.** The agent calls the server wrapper tool
+  (`docs_save_linear_issue`, `tapps_linear_list_issues`); the wrapper returns the structured
+  `{ok:false, code, use, args}` envelope above. The structured `code` (`validate_missing` /
+  `gate_miss`) identifies it as the primary refusal — the agent self-corrects against it.
+- **Hook-only / defense-in-depth refusal.** The agent calls the *raw* Linear plugin directly,
+  bypassing the wrapper. The PreToolUse hook fires as a fallback and prefixes its stderr output
+  with `[TappsMCP refusal layer=hook-only/defense-in-depth] Primary gate is the <wrapper> server
+  tool (TAP-2008 Agent Gateway)`. A hook firing therefore signals that the wrapper was bypassed
+  (e.g. the `linear-issue` / `linear-read` skill routing did not run) — useful for spotting
+  drift, not the intended path.
+
 ## Hook implementation
 
 tapps-mcp gates are implemented as Claude Code hook pairs:
 
 - **PostToolUse** on the prerequisite tool → writes a sentinel file with the Unix epoch.
-- **PreToolUse** on the guarded tool → reads the sentinel; if missing or stale, exits 2 with the envelope JSON on stderr.
+- **PreToolUse** on the guarded tool → reads the sentinel; if missing or stale, exits 2 with the envelope JSON on stderr (prefixed with the hook-only/defense-in-depth marker per the layer note above).
 
 The sentinel + exit-2 pattern is described in full in `docs/ARCHITECTURE.md` under
 [Hook system and MCP server lifecycle](../ARCHITECTURE.md#hook-system-and-mcp-server-lifecycle).

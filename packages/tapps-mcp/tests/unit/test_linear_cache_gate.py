@@ -57,6 +57,14 @@ class TestCacheGateConfig:
     def test_post_snapshot_writes_sentinel(self) -> None:
         assert ".linear-snapshot-sentinel-" in LINEAR_CACHE_GATE_POST_SNAPSHOT_SCRIPT
 
+    def test_pre_list_labels_hook_only_refusal_layer(self) -> None:
+        # TAP-2008: the hook refusal must identify itself as the
+        # defense-in-depth (hook-only) layer and name the primary server gate,
+        # distinguishing it from the server wrapper's primary envelope refusal.
+        assert "layer=hook-only/defense-in-depth" in LINEAR_CACHE_GATE_PRE_LIST_SCRIPT
+        assert "tapps_linear_list_issues" in LINEAR_CACHE_GATE_PRE_LIST_SCRIPT
+        assert "layer=hook-only/defense-in-depth" in LINEAR_CACHE_GATE_PRE_LIST_SCRIPT_PS
+
     def test_render_warn_bakes_warn(self) -> None:
         scripts = render_cache_gate_scripts("warn")
         assert 'MODE="warn"' in scripts["tapps-pre-linear-list.sh"]

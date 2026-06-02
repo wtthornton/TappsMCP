@@ -1870,6 +1870,7 @@ ROOT="${CLAUDE_PROJECT_DIR:-$PWD}"
 SENTINEL="$ROOT/.tapps-mcp/.linear-validate-sentinel"
 if [ ! -f "$SENTINEL" ]; then
   cat >&2 <<'MSG'
+[TappsMCP refusal layer=hook-only/defense-in-depth] Primary gate is the docs_save_linear_issue server tool (TAP-2008 Agent Gateway). This hook is the fallback layer — it fired because the raw Linear plugin was called directly instead of through the wrapper.
 TappsMCP: Blocked mcp__plugin_linear_linear__save_issue — no recent docs_validate_linear_issue call.
 Route Linear writes through the `linear-issue` skill:
   1. docs_generate_story (or docs_generate_epic)
@@ -1892,6 +1893,7 @@ if [ "$AGE" -le 1800 ]; then
   exit 0
 fi
 cat >&2 <<MSG
+[TappsMCP refusal layer=hook-only/defense-in-depth] Primary gate is the docs_save_linear_issue server tool (TAP-2008 Agent Gateway). This hook is the fallback layer — it fired because the raw Linear plugin was called directly instead of through the wrapper.
 TappsMCP: Blocked mcp__plugin_linear_linear__save_issue — last docs_validate_linear_issue was ${AGE}s ago (> 1800s freshness window).
 Re-validate before push: docs_validate_linear_issue(title=..., description=..., ...)
 Or set TAPPS_LINEAR_SKIP_VALIDATE=1 for emergency bypass (logged).
@@ -2007,6 +2009,7 @@ if ($env:TAPPS_LINEAR_SKIP_VALIDATE -eq '1') {
 }
 $sentinel = Join-Path $dir '.linear-validate-sentinel'
 if (-not (Test-Path $sentinel)) {
+    [Console]::Error.WriteLine("[TappsMCP refusal layer=hook-only/defense-in-depth] Primary gate is the docs_save_linear_issue server tool (TAP-2008 Agent Gateway). This hook is the fallback layer - it fired because the raw Linear plugin was called directly instead of through the wrapper.")
     [Console]::Error.WriteLine("TappsMCP: Blocked mcp__plugin_linear_linear__save_issue - no recent docs_validate_linear_issue call.")
     [Console]::Error.WriteLine("Route Linear writes through the linear-issue skill:")
     [Console]::Error.WriteLine("  1. docs_generate_story (or docs_generate_epic)")
@@ -2031,6 +2034,7 @@ $age = $now - $sent
 if ($age -le 1800) {
     exit 0
 }
+[Console]::Error.WriteLine("[TappsMCP refusal layer=hook-only/defense-in-depth] Primary gate is the docs_save_linear_issue server tool (TAP-2008 Agent Gateway). This hook is the fallback layer - it fired because the raw Linear plugin was called directly instead of through the wrapper.")
 [Console]::Error.WriteLine("TappsMCP: Blocked mcp__plugin_linear_linear__save_issue - last docs_validate_linear_issue was ${age}s ago (> 1800s freshness window).")
 [Console]::Error.WriteLine("Re-validate before push: docs_validate_linear_issue(title=..., description=..., ...)")
 [Console]::Error.WriteLine("Or set TAPPS_LINEAR_SKIP_VALIDATE=1 for emergency bypass (logged).")
@@ -2276,6 +2280,7 @@ if [ "$CATEGORY" = "cross_project" ]; then
 fi
 if [ "$MODE" = "warn" ]; then
   cat >&2 <<MSG
+[TappsMCP refusal layer=hook-only/defense-in-depth] Primary gate is the tapps_linear_list_issues server tool (TAP-2008 Agent Gateway). This hook is the fallback layer — it fired because the raw Linear plugin was called directly instead of through the wrapper.
 TappsMCP: Linear cache-first read rule (TAP-1224, warn mode) — no recent tapps_linear_snapshot_get for this (team, project, state) slice.
 Route reads through the \\`linear-read\\` skill (TAP-1260):
   1. tapps_linear_snapshot_get(team, project, state)
@@ -2286,6 +2291,7 @@ MSG
   exit 0
 fi
 cat >&2 <<MSG
+[TappsMCP refusal layer=hook-only/defense-in-depth] Primary gate is the tapps_linear_list_issues server tool (TAP-2008 Agent Gateway). This hook is the fallback layer — it fired because the raw Linear plugin was called directly instead of through the wrapper.
 TappsMCP: Blocked mcp__plugin_linear_linear__list_issues — no recent tapps_linear_snapshot_get for this (team, project, state) slice.
 Route reads through the \\`linear-read\\` skill (TAP-1260):
   1. tapps_linear_snapshot_get(team, project, state)
@@ -2548,11 +2554,13 @@ if (-not (Test-Path $dir)) { New-Item -ItemType Directory -Force -Path $dir | Ou
 $violation = @{ ts = (Get-Date -Format 'o'); key = $key; mode = $mode } | ConvertTo-Json -Compress
 Add-Content -Path (Join-Path $dir '.cache-gate-violations.jsonl') -Value $violation
 if ($mode -eq 'warn') {
+    [Console]::Error.WriteLine("[TappsMCP refusal layer=hook-only/defense-in-depth] Primary gate is the tapps_linear_list_issues server tool (TAP-2008 Agent Gateway). This hook is the fallback layer - it fired because the raw Linear plugin was called directly instead of through the wrapper.")
     [Console]::Error.WriteLine("TappsMCP: Linear cache-first read rule (TAP-1224, warn mode) - no recent tapps_linear_snapshot_get for this slice.")
     [Console]::Error.WriteLine("Route reads through the linear-read skill. Allowed (warn) but logged to .tapps-mcp/.cache-gate-violations.jsonl.")
     [Console]::Error.WriteLine("See .claude/rules/linear-standards.md.")
     exit 0
 }
+[Console]::Error.WriteLine("[TappsMCP refusal layer=hook-only/defense-in-depth] Primary gate is the tapps_linear_list_issues server tool (TAP-2008 Agent Gateway). This hook is the fallback layer - it fired because the raw Linear plugin was called directly instead of through the wrapper.")
 [Console]::Error.WriteLine("TappsMCP: Blocked mcp__plugin_linear_linear__list_issues - no recent tapps_linear_snapshot_get for this slice.")
 [Console]::Error.WriteLine("Route reads through the linear-read skill (TAP-1260): tapps_linear_snapshot_get -> filter on hit, or list_issues + snapshot_put on miss.")
 [Console]::Error.WriteLine("For a single-issue lookup, use get_issue. Bypass: TAPPS_LINEAR_SKIP_CACHE_GATE=1 (logged).")
