@@ -353,6 +353,16 @@ class DocsMCPSettings(BaseSettings):
         ),
     )
 
+    # docs_release_gate flywheel signal (TAP-1952)
+    release_gate_flywheel_gap_threshold: int = Field(
+        default=5,
+        description=(
+            "docs_release_gate downgrades the verdict from 'pass' to 'warn' when "
+            "the brain reports more than this many flywheel gaps over the last 7 "
+            "days. Env: DOCS_MCP_RELEASE_GATE_FLYWHEEL_GAP_THRESHOLD."
+        ),
+    )
+
 
 # Settings cache - only the no-arg (default) case is cached.
 _cached_settings: DocsMCPSettings | None = None

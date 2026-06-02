@@ -29,6 +29,94 @@ from docs_mcp.server_helpers import (
     success_response,
 )
 
+# Max distinct drifted paths to emit drift_detected events for per run (TAP-1951).
+_MAX_DRIFT_EVENTS = 50
+
+
+def _get_brain_bridge() -> Any:
+    """Return a BrainBridge, or None when no transport is configured.
+
+    Mirrors ``brain_writer``'s lazy resolution: the factory selects the HTTP
+    or in-process transport from env and returns None when neither is set.
+    Any failure is a silent None so brain wiring never breaks a read tool.
+    """
+    try:
+        from tapps_core.brain_bridge import create_brain_bridge
+
+        return create_brain_bridge(settings=None, default_profile="agent_brain")
+    except Exception:
+        _logger.debug("brain_bridge_unavailable", exc_info=True)
+        return None
+
+
+async def _emit_drift_events(report: Any) -> None:
+    """Fire one ``drift_detected`` KG event per drifted doc path (TAP-1951).
+
+    Best-effort and side-effect-only: bridge unavailable / circuit open / any
+    error is a silent no-op and never changes the drift verdict. Reuses the
+    atomic ``record_kg_event`` wrapper rather than a new write path.
+    """
+    if report.drift_score <= 0 or not report.items:
+        return
+    bridge = _get_brain_bridge()
+    if bridge is None:
+        return
+    seen: set[str] = set()
+    for item in report.items:
+        path = item.file_path
+        if not path or path in seen:
+            continue
+        seen.add(path)
+        if len(seen) > _MAX_DRIFT_EVENTS:
+            _logger.info("drift_events_capped", cap=_MAX_DRIFT_EVENTS)
+            return
+        try:
+            await bridge.record_kg_event(
+                event_type="drift_detected",
+                entities=[{"type": "doc", "id": f"docs:{path}"}],
+                payload_data={
+                    "path": path,
+                    "drift_score": report.drift_score,
+                    "drift_type": item.drift_type,
+                    "symbols": item.symbols[:20],
+                    "code_last_modified": item.code_last_modified,
+                    "doc_last_modified": item.doc_last_modified,
+                },
+            )
+        except Exception:
+            # Circuit likely open — stop trying, leave the verdict untouched.
+            _logger.debug("drift_event_emit_failed", path=path, exc_info=True)
+            return
+
+
+async def _flywheel_block(threshold: int) -> dict[str, Any]:
+    """Cross-session gap signal for the release gate (TAP-1952).
+
+    Reads the brain's ``flywheel_report`` (gap detection over the last 7 days)
+    and returns ``{available, gaps_total, top_gaps}``. Bridge unavailable or
+    any error returns ``{available: False}`` so the gate degrades cleanly.
+    """
+    bridge = _get_brain_bridge()
+    if bridge is None:
+        return {"available": False}
+    try:
+        report = await bridge.flywheel_report(period_days=7)
+    except Exception:
+        _logger.debug("flywheel_report_failed", exc_info=True)
+        return {"available": False}
+    if not isinstance(report, dict):
+        return {"available": False}
+    gaps_total = int(report.get("gaps_total", 0) or 0)
+    raw_gaps = report.get("gaps") or []
+    top_gaps: list[dict[str, Any]] = []
+    if isinstance(raw_gaps, list):
+        for gap in raw_gaps[:3]:
+            if isinstance(gap, dict):
+                top_gaps.append(
+                    {"name": gap.get("name", ""), "count": int(gap.get("count", 0) or 0)}
+                )
+    return {"available": True, "gaps_total": gaps_total, "top_gaps": top_gaps}
+
 
 async def docs_check_drift(
     since: str = "",
@@ -179,6 +267,9 @@ async def docs_check_drift(
                 }
     except Exception as exc:
         _logger.debug("tapps_enrichment_failed", error=str(exc))
+
+    # TAP-1951: emit a per-path drift signal to the brain (best-effort).
+    await _emit_drift_events(report)
 
     elapsed_ms = (time.perf_counter_ns() - start) // 1_000_000
 
@@ -1092,17 +1183,38 @@ async def docs_release_gate(
         )
 
     agent_ready = drift_score < 30 and ancient_count == 0 and broken_count == 0
+
+    # TAP-1952: fold the brain's cross-session gap signal into the verdict.
+    threshold = _get_settings().release_gate_flywheel_gap_threshold
+    flywheel = await _flywheel_block(threshold)
+    verdict = "pass" if agent_ready else "warn"
+    reason = ""
+    if (
+        verdict == "pass"
+        and flywheel.get("available")
+        and flywheel.get("gaps_total", 0) > threshold
+    ):
+        verdict = "warn"
+        reason = "flywheel gaps exceed threshold"
+        recommendations.append(
+            f"{flywheel['gaps_total']} flywheel gaps over 7 days (> {threshold}) — "
+            "review recurring doc gaps before release."
+        )
+
     elapsed_ms = (time.perf_counter_ns() - start) // 1_000_000
     return success_response(
         "docs_release_gate",
         elapsed_ms,
         {
             "agent_ready": agent_ready,
+            "verdict": verdict,
+            "reason": reason,
             "prev_version": prev_version,
             "version": version,
             "drift": {"drift_score": drift_score, "items_count": items_count},
             "freshness": {"stale_count": stale_count, "ancient_count": ancient_count},
             "broken_links": {"broken_count": broken_count, "total_links": total_links},
+            "flywheel": flywheel,
             "recommendations": recommendations,
         },
     )
