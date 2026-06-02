@@ -25,24 +25,25 @@ docs-mcp only sees the 10-tool ``brain_*`` facade on the wire
 The ``agent_brain`` profile is the minimum surface docs-mcp needs and
 reduces the ``/v1/tools/list`` payload from ~40 entries to 10.
 
-Key tagging convention
-----------------------
-Every entry written by this module carries:
-  - ``"architecture"`` — marks the domain
-  - ``"docs-mcp"`` — marks the producing server
-  - ``"insight-type:{type}"`` — e.g. ``"insight-type:architecture"``
-  - ``"schema-v1"`` — marks the INSIGHT_SCHEMA_VERSION
+KG triple emission (TAP-1948)
+-----------------------------
+This module emits Knowledge-Graph triples — entities, typed edges, and
+grounding evidence — rather than flat ``arch.{project}.*`` memory entries.
+All writes go through the ``BrainBridge`` semantic-upsert shims (TAP-1947),
+which delegate to ``record_kg_event`` (no second write path):
 
-memory_group
-  ``"insights"`` — separates insight entries from session/project memories.
+  - ``package`` / ``module`` entity per node in the module tree
+  - ``symbol`` entity per public API name, with an ``exports`` edge from its
+    owning module
+  - ``depends_on`` edge per internal import (from the import graph)
+  - one evidence row per entity and per edge, anchored to ``(file_path,
+    line_range, commit_sha)`` per GroundedKG-RAG
 
-Key scheme
-----------
-All keys are lowercase slugs matching ``^[a-z0-9][a-z0-9._-]{0,127}$``::
-
-    arch.{project}.structure         ← overall project structure summary
-    arch.{project}.pkg.{pkg_name}    ← per-package description + stats
-    arch.{project}.entry_points      ← comma-separated entry point list
+Entity IDs are the deterministic UUIDv5 from ``kg_keys.entity_uuid``
+(TAP-1949), so re-running an analysis upserts the same rows instead of
+duplicating them. The brain scopes entities by the bridge's project
+(``X-Project-Id`` header), so the shims are called with the default
+``project_id``.
 
 tapps-brain availability
 ------------------------
@@ -54,9 +55,8 @@ configured (no ``TAPPS_MCP_MEMORY_BRAIN_HTTP_URL`` and no
 
 from __future__ import annotations
 
-import re
 import time
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
@@ -72,51 +72,27 @@ logger = structlog.get_logger(__name__)
 # Constants
 # ---------------------------------------------------------------------------
 
-_SOURCE_AGENT = "docs-mcp"
-_MEMORY_TIER = "architectural"
-_MEMORY_SCOPE = "project"
-_MEMORY_GROUP = "insights"
-_BASE_TAGS: list[str] = ["architecture", "docs-mcp", "insight-type:architecture", "schema-v1"]
+# Entity types — the closed vocabulary shared with the brain KG schema.
+_ENTITY_PROJECT = "project"
+_ENTITY_PACKAGE = "package"
+_ENTITY_MODULE = "module"
+_ENTITY_SYMBOL = "symbol"
 
-# Key length ceiling (tapps-brain enforces 128 chars)
-_MAX_KEY_LEN = 128
-# Max packages to write per module_map call (avoid flooding the store)
-_MAX_PACKAGES = 30
-# Max value length (tapps-brain enforces 4096 chars)
+# Caps to avoid flooding the graph on large projects (logged when reached).
+_MAX_NODES = 200
+_MAX_SYMBOLS_PER_NODE = 50
+_MAX_IMPORT_EDGES = 400
+# Max metadata string length (tapps-brain enforces 4096 chars on values).
 _MAX_VALUE_LEN = 4096
 
 
 # ---------------------------------------------------------------------------
-# Key slug helpers
+# Helpers
 # ---------------------------------------------------------------------------
-
-_SLUG_ALLOWED = re.compile(r"[^a-z0-9._-]")
-
-
-def _slugify(text: str) -> str:
-    """Convert an arbitrary string into a valid tapps-brain key segment.
-
-    Lowercases, collapses invalid characters to ``.``, strips leading/trailing
-    dots and hyphens, and truncates to avoid overflowing the key budget.
-    """
-    lowered = text.lower()
-    slugged = _SLUG_ALLOWED.sub(".", lowered)
-    # Collapse runs of separators
-    slugged = re.sub(r"[._-]{2,}", ".", slugged)
-    slugged = slugged.strip(".-")
-    return slugged or "unknown"
-
-
-def _build_key(*parts: str) -> str:
-    """Join key segments and ensure max length."""
-    key = ".".join(_slugify(p) for p in parts)
-    # Ensure starts with alphanumeric
-    key = re.sub(r"^[._-]+", "", key)
-    return key[:_MAX_KEY_LEN]
 
 
 def _truncate(value: str) -> str:
-    """Truncate value to tapps-brain's max length."""
+    """Truncate a metadata string to tapps-brain's max value length."""
     return value[:_MAX_VALUE_LEN]
 
 
@@ -127,25 +103,32 @@ def _truncate(value: str) -> str:
 
 @dataclass
 class BrainWriteResult:
-    """Result of a brain write operation."""
+    """Result of a KG triple-write operation.
 
-    written: int = 0
-    skipped: int = 0
+    Reports entity / edge / evidence counts separately (TAP-1948).
+    ``degraded`` is set when any write was queued offline (circuit open).
+    """
+
+    entities_written: int = 0
+    edges_written: int = 0
+    evidence_rows: int = 0
     failed: int = 0
     elapsed_ms: float = 0.0
     available: bool = True
-    entries_written: list[str] = field(default_factory=list)
+    degraded: bool = False
 
     @property
     def total(self) -> int:
-        return self.written + self.skipped + self.failed
+        return self.entities_written + self.edges_written + self.evidence_rows
 
     def to_dict(self) -> dict[str, Any]:
         return {
             "brain_write": {
                 "available": self.available,
-                "written": self.written,
-                "skipped": self.skipped,
+                "degraded": self.degraded,
+                "entities_written": self.entities_written,
+                "edges_written": self.edges_written,
+                "evidence_rows": self.evidence_rows,
                 "failed": self.failed,
                 "elapsed_ms": round(self.elapsed_ms, 1),
             }
@@ -175,6 +158,7 @@ class ArchitectureBrainWriter:
         self._root = project_root
         self._bridge: Any = None  # tapps_core.brain_bridge.BrainBridge | None
         self._bridge_resolved: bool = False
+        self._sha: str | None = None  # cached HEAD sha for evidence grounding
 
     # ------------------------------------------------------------------
     # Public API
@@ -185,10 +169,14 @@ class ArchitectureBrainWriter:
         result: ArchitectureResult,
         project_name: str,
     ) -> BrainWriteResult:
-        """Write a top-level structure summary from an ArchitectureGenerator result.
+        """Upsert a project-level KG entity summarising the architecture.
 
-        Produces a single ``arch.{project}.structure`` entry summarising package,
-        module, edge and class counts.
+        ``ArchitectureResult`` carries only aggregate counts (no per-node
+        structure), so this path emits a single ``project`` entity with the
+        package / module / edge / class counts as metadata, plus one evidence
+        row. The per-package / per-module / per-symbol entities and the
+        ``depends_on`` / ``exports`` edges are emitted by
+        :meth:`write_from_module_map`, which receives the full module tree.
         """
         t0 = time.perf_counter()
         bridge = self._get_bridge()
@@ -196,28 +184,32 @@ class ArchitectureBrainWriter:
             return BrainWriteResult(available=False)
 
         br = BrainWriteResult()
-        key = _build_key("arch", project_name, "structure")
-        value = _truncate(
-            f"Architecture summary for {project_name}: "
-            f"{result.package_count} packages, {result.module_count} modules, "
-            f"{result.edge_count} import edges, {result.class_count} classes."
+        sha = self._commit_sha()
+        metadata = {
+            "packages": result.package_count,
+            "modules": result.module_count,
+            "import_edges": result.edge_count,
+            "classes": result.class_count,
+        }
+        await self._upsert_entity(
+            bridge, br, project_name, _ENTITY_PROJECT, sha, ".", metadata=metadata
         )
-        await self._save(bridge, br, key, value)
         br.elapsed_ms = (time.perf_counter() - t0) * 1000
         logger.info(
             "arch_brain_write_structure",
             project=project_name,
-            written=br.written,
+            entities=br.entities_written,
             failed=br.failed,
         )
         return br
 
     async def write_from_module_map(self, module_map: ModuleMap) -> BrainWriteResult:
-        """Write per-package and entry-point facts from a ModuleMap result.
+        """Emit the KG structure for a project.
 
-        Writes one ``arch.{project}.pkg.{name}`` entry per top-level package
-        (capped at :data:`_MAX_PACKAGES`) and an ``arch.{project}.entry_points``
-        entry when entry points are present.
+        Walks the module tree to upsert ``package`` / ``module`` entities, a
+        ``symbol`` entity + ``exports`` edge per public API name, and a
+        ``depends_on`` edge per internal import (from the import graph). Every
+        entity and edge gets an evidence row anchored to its producing file.
         """
         t0 = time.perf_counter()
         bridge = self._get_bridge()
@@ -226,26 +218,27 @@ class ArchitectureBrainWriter:
 
         br = BrainWriteResult()
         project = module_map.project_name
+        sha = self._commit_sha()
+        # (entity_type, canonical_name) -> entity_id, dedups endpoints shared
+        # between the tree walk and the import graph within one run.
+        seen: dict[tuple[str, str], str] = {}
 
-        # Per-package entries
-        for node in module_map.module_tree[:_MAX_PACKAGES]:
-            key = _build_key("arch", project, "pkg", node.name)
-            value = self._describe_node(project, node)
-            await self._save(bridge, br, key, value)
+        budget = _MAX_NODES
+        for node in module_map.module_tree:
+            if budget <= 0:
+                logger.info("kg_nodes_capped", project=project, cap=_MAX_NODES)
+                break
+            budget = await self._emit_node(bridge, br, seen, node, sha, budget)
 
-        # Entry points
-        if module_map.entry_points:
-            ep_key = _build_key("arch", project, "entry_points")
-            ep_value = _truncate(
-                f"Entry points for {project}: " + ", ".join(module_map.entry_points[:20])
-            )
-            await self._save(bridge, br, ep_key, ep_value)
+        await self._emit_imports(bridge, br, seen, sha)
 
         br.elapsed_ms = (time.perf_counter() - t0) * 1000
         logger.info(
             "arch_brain_write_module_map",
             project=project,
-            written=br.written,
+            entities=br.entities_written,
+            edges=br.edges_written,
+            evidence=br.evidence_rows,
             failed=br.failed,
         )
         return br
@@ -285,101 +278,222 @@ class ArchitectureBrainWriter:
             )
             return None
 
-    async def _save(
+    async def _emit_node(
         self,
         bridge: Any,
         br: BrainWriteResult,
-        key: str,
-        value: str,
-    ) -> None:
-        """Write key/value to brain, preferring supersede over save on regen.
+        seen: dict[tuple[str, str], str],
+        node: ModuleNode,
+        sha: str,
+        budget: int,
+    ) -> int:
+        """Upsert a node's entity, its symbol entities + ``exports`` edges, and
+        recurse into submodules. Returns the remaining node budget."""
+        if budget <= 0:
+            return 0
+        entity_type = _ENTITY_PACKAGE if node.is_package else _ENTITY_MODULE
+        module_id = await self._get_or_upsert_entity(
+            bridge, br, seen, node.name, entity_type, sha, node.path,
+            metadata=self._node_metadata(node),
+        )
+        budget -= 1
 
-        Tries ``bridge.supersede(key, new_value)`` first so regeneration
-        preserves the supersession chain in brain's history. Falls back to
-        ``bridge.save()`` when the key is absent (first write) — indicated by
-        either a ``{"error": "not_found"}`` response or an exception from the
-        in-process bridge (which raises on missing keys rather than returning
-        an error dict).
-        """
-        # --- supersede path (regen: key already exists) ---
-        supersede_result: dict[str, Any] | None = None
-        try:
-            supersede_result = await bridge.supersede(key=key, new_value=value)
-        except Exception:
-            # In-process bridge raises BrainBridgeUnavailable (wrapping e.g.
-            # KeyError) when the key is absent.  Any exception here means we
-            # should fall through to the save path below.
-            supersede_result = None
-
-        if supersede_result is not None and not (
-            isinstance(supersede_result, dict)
-            and supersede_result.get("error") == "not_found"
-        ):
-            # Supersede was attempted and the key existed.
-            if isinstance(supersede_result, dict) and (
-                supersede_result.get("success") is False
-                or supersede_result.get("degraded") is True
-            ):
-                logger.warning(
-                    "brain_supersede_degraded",
-                    key=key,
-                    reason=supersede_result.get("reason", ""),
+        exports = node.all_exports or []
+        if len(exports) > _MAX_SYMBOLS_PER_NODE:
+            logger.info(
+                "kg_symbols_capped", module=node.name, total=len(exports),
+                cap=_MAX_SYMBOLS_PER_NODE,
+            )
+        for symbol in exports[:_MAX_SYMBOLS_PER_NODE]:
+            symbol_id = await self._get_or_upsert_entity(
+                bridge, br, seen, f"{node.name}.{symbol}", _ENTITY_SYMBOL, sha, node.path,
+            )
+            if module_id and symbol_id:
+                await self._upsert_edge(
+                    bridge, br, module_id, "exports", symbol_id, node.path, sha,
                 )
-                br.failed += 1
-                return
-            br.written += 1
-            br.entries_written.append(key)
+
+        for submodule in node.submodules:
+            if budget <= 0:
+                break
+            budget = await self._emit_node(bridge, br, seen, submodule, sha, budget)
+        return budget
+
+    async def _emit_imports(
+        self,
+        bridge: Any,
+        br: BrainWriteResult,
+        seen: dict[tuple[str, str], str],
+        sha: str,
+    ) -> None:
+        """Upsert a ``depends_on`` edge per internal import, grounded at the
+        import statement's ``file:line``."""
+        try:
+            from docs_mcp.analyzers.dependency import ImportGraphBuilder
+
+            graph = ImportGraphBuilder().build(self._root)
+        except Exception:
+            logger.warning("kg_import_graph_failed", root=str(self._root), exc_info=True)
             return
 
-        # --- save path (first write: key absent) ---
+        edges = graph.edges
+        if len(edges) > _MAX_IMPORT_EDGES:
+            logger.info("kg_import_edges_capped", total=len(edges), cap=_MAX_IMPORT_EDGES)
+        for edge in edges[:_MAX_IMPORT_EDGES]:
+            if not edge.source or not edge.target:
+                continue
+            source_id = await self._get_or_upsert_entity(
+                bridge, br, seen, edge.source, _ENTITY_MODULE, sha, edge.source,
+            )
+            target_id = await self._get_or_upsert_entity(
+                bridge, br, seen, edge.target, _ENTITY_MODULE, sha, edge.target,
+            )
+            if source_id and target_id:
+                await self._upsert_edge(
+                    bridge, br, source_id, "depends_on", target_id, edge.source, sha,
+                    line_range=str(edge.line),
+                )
+
+    async def _get_or_upsert_entity(
+        self,
+        bridge: Any,
+        br: BrainWriteResult,
+        seen: dict[tuple[str, str], str],
+        canonical_name: str,
+        entity_type: str,
+        sha: str,
+        file_path: str,
+        *,
+        metadata: dict[str, Any] | None = None,
+    ) -> str:
+        """Upsert an entity once per run; cached by ``(type, name)``."""
+        cache_key = (entity_type, canonical_name)
+        cached = seen.get(cache_key)
+        if cached is not None:
+            return cached
+        entity_id = await self._upsert_entity(
+            bridge, br, canonical_name, entity_type, sha, file_path, metadata=metadata,
+        )
+        seen[cache_key] = entity_id
+        return entity_id
+
+    async def _upsert_entity(
+        self,
+        bridge: Any,
+        br: BrainWriteResult,
+        canonical_name: str,
+        entity_type: str,
+        sha: str,
+        file_path: str,
+        *,
+        metadata: dict[str, Any] | None = None,
+    ) -> str:
+        """Upsert one entity and attach its evidence row. Returns the id ("" on
+        failure)."""
         try:
-            result = await bridge.save(
-                key=key,
-                value=value,
-                tier=_MEMORY_TIER,
-                source="system",
-                source_agent=_SOURCE_AGENT,
-                scope=_MEMORY_SCOPE,
-                tags=list(_BASE_TAGS),
-                memory_group=_MEMORY_GROUP,
-                skip_consolidation=True,
+            result = await bridge.upsert_entity(
+                canonical_name, entity_type, metadata=metadata,
             )
         except Exception:
-            logger.warning("brain_write_failed", key=key, exc_info=True)
+            logger.warning("kg_entity_upsert_failed", name=canonical_name, exc_info=True)
             br.failed += 1
-            return
-        if isinstance(result, dict) and (
-            result.get("success") is False or result.get("degraded") is True
-        ):
-            logger.warning(
-                "brain_write_degraded",
-                key=key,
-                reason=result.get("reason", ""),
-                queued=result.get("queued", False),
+            return ""
+        self._note_degraded(br, result)
+        entity_id = str(result.get("entity_id", "")) if isinstance(result, dict) else ""
+        br.entities_written += 1
+        if entity_id and file_path:
+            await self._add_evidence(bridge, br, file_path, sha, entity_id=entity_id)
+        return entity_id
+
+    async def _upsert_edge(
+        self,
+        bridge: Any,
+        br: BrainWriteResult,
+        subject_id: str,
+        predicate: str,
+        object_id: str,
+        file_path: str,
+        sha: str,
+        *,
+        line_range: str = "",
+    ) -> None:
+        """Upsert one typed edge with its paired evidence row (ADR-012)."""
+        evidence = {"file_path": file_path, "line_range": line_range, "commit_sha": sha}
+        try:
+            result = await bridge.upsert_edge(
+                subject_id, predicate, object_id, evidence=evidence,
             )
+        except ValueError:
+            # ADR-012 evidence-required — unreachable (file_path always passed),
+            # guarded so a future caller omission fails loud, not silent.
+            logger.warning("kg_edge_rejected", predicate=predicate)
             br.failed += 1
             return
-        br.written += 1
-        br.entries_written.append(key)
+        except Exception:
+            logger.warning("kg_edge_failed", predicate=predicate, exc_info=True)
+            br.failed += 1
+            return
+        self._note_degraded(br, result)
+        br.edges_written += 1
+        br.evidence_rows += 1  # the edge carries a paired evidence row
+
+    async def _add_evidence(
+        self,
+        bridge: Any,
+        br: BrainWriteResult,
+        file_path: str,
+        sha: str,
+        *,
+        entity_id: str = "",
+        edge_id: str = "",
+        line_range: str = "",
+    ) -> None:
+        """Attach a standalone evidence row to an entity or edge."""
+        try:
+            result = await bridge.add_evidence(
+                file_path=file_path, line_range=line_range, commit_sha=sha,
+                entity_id=entity_id, edge_id=edge_id,
+            )
+        except Exception:
+            logger.warning("kg_evidence_failed", file_path=file_path, exc_info=True)
+            br.failed += 1
+            return
+        self._note_degraded(br, result)
+        br.evidence_rows += 1
 
     @staticmethod
-    def _describe_node(project: str, node: ModuleNode) -> str:
-        """Build a concise value string for a ModuleNode."""
-        parts = [f"Package {node.name} in {project}:"]
+    def _note_degraded(br: BrainWriteResult, result: Any) -> None:
+        """Flag the result degraded when a write was queued offline."""
+        if isinstance(result, dict) and result.get("degraded"):
+            br.degraded = True
+
+    @staticmethod
+    def _node_metadata(node: ModuleNode) -> dict[str, Any] | None:
+        """Build the metadata dict stored on a module/package entity."""
+        metadata: dict[str, Any] = {}
         if node.module_docstring:
-            # Take the first sentence / line of the docstring
             first_line = node.module_docstring.split("\n")[0].strip().rstrip(".")
             if first_line:
-                parts.append(first_line + ".")
-        stats: list[str] = []
+                metadata["summary"] = _truncate(first_line)
         if node.public_api_count:
-            stats.append(f"{node.public_api_count} public API symbols")
+            metadata["public_api_count"] = node.public_api_count
         if node.class_count:
-            stats.append(f"{node.class_count} classes")
+            metadata["class_count"] = node.class_count
         if node.function_count:
-            stats.append(f"{node.function_count} functions")
-        if node.submodules:
-            stats.append(f"{len(node.submodules)} submodules")
-        if stats:
-            parts.append("Contains " + ", ".join(stats) + ".")
-        return _truncate(" ".join(parts))
+            metadata["function_count"] = node.function_count
+        return metadata or None
+
+    def _commit_sha(self) -> str:
+        """Best-effort short HEAD sha for evidence grounding (cached, "" if no
+        repo)."""
+        if self._sha is not None:
+            return self._sha
+        sha = ""
+        try:
+            import git
+
+            sha = git.Repo(self._root).head.commit.hexsha[:12]
+        except Exception:
+            logger.debug("kg_commit_sha_unavailable", root=str(self._root))
+        self._sha = sha
+        return sha
