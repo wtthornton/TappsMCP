@@ -128,6 +128,7 @@ ALL_DOCS_TOOL_NAMES: frozenset[str] = frozenset(
         "docs_generate_release_update",
         "docs_validate_release_update",
         "docs_release_gate",
+        "docs_kg_query",
     }
 )
 
@@ -1044,6 +1045,7 @@ def _register_tool_modules() -> None:
         server_analysis,
         server_gen_tools,
         server_git_tools,
+        server_kg_tools,
         server_linear_tools,
         server_val_tools,
     )
@@ -1053,6 +1055,7 @@ def _register_tool_modules() -> None:
     server_gen_tools.register(mcp, allowed_tools)
     server_val_tools.register(mcp, allowed_tools)
     server_linear_tools.register(mcp, allowed_tools)
+    server_kg_tools.register(mcp, allowed_tools)
 
     # Resources and prompts (no tool filtering)
     import docs_mcp.server_resources as _  # noqa: F401  # register resources on mcp

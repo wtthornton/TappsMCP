@@ -23,6 +23,7 @@ _logger = structlog.get_logger(__name__)
 
 from docs_mcp.server import _ANNOTATIONS_READ_ONLY, _META_DEFERRED, _record_call
 from docs_mcp.server_helpers import (
+    _get_brain_bridge,
     _get_settings,
     build_custom_terms_for_style,
     error_response,
@@ -31,22 +32,6 @@ from docs_mcp.server_helpers import (
 
 # Max distinct drifted paths to emit drift_detected events for per run (TAP-1951).
 _MAX_DRIFT_EVENTS = 50
-
-
-def _get_brain_bridge() -> Any:
-    """Return a BrainBridge, or None when no transport is configured.
-
-    Mirrors ``brain_writer``'s lazy resolution: the factory selects the HTTP
-    or in-process transport from env and returns None when neither is set.
-    Any failure is a silent None so brain wiring never breaks a read tool.
-    """
-    try:
-        from tapps_core.brain_bridge import create_brain_bridge
-
-        return create_brain_bridge(settings=None, default_profile="agent_brain")
-    except Exception:
-        _logger.debug("brain_bridge_unavailable", exc_info=True)
-        return None
 
 
 async def _emit_drift_events(report: Any) -> None:

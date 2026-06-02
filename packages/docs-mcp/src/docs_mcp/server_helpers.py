@@ -8,7 +8,11 @@ import unicodedata
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
+import structlog
+
 from docs_mcp.config.settings import DocsMCPSettings
+
+_logger = structlog.get_logger(__name__)
 
 
 # ---------------------------------------------------------------------------
@@ -58,6 +62,27 @@ def _reset_settings_cache() -> None:
     """Reset the cached :class:`DocsMCPSettings` singleton (for testing)."""
     global _settings
     _settings = None
+
+
+# ---------------------------------------------------------------------------
+# tapps-brain bridge accessor (shared by the brain-backed tools).
+# ---------------------------------------------------------------------------
+
+
+def _get_brain_bridge() -> Any:
+    """Return a BrainBridge, or None when no transport is configured.
+
+    The factory selects the HTTP or in-process transport from env and returns
+    None when neither is set. Any failure is a silent None so brain wiring
+    never breaks a read tool (TAP-1950/1951/1952).
+    """
+    try:
+        from tapps_core.brain_bridge import create_brain_bridge
+
+        return create_brain_bridge(settings=None, default_profile="agent_brain")
+    except Exception:
+        _logger.debug("brain_bridge_unavailable", exc_info=True)
+        return None
 
 
 # ---------------------------------------------------------------------------
