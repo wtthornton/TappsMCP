@@ -196,6 +196,59 @@ def migrate_arch_to_kg(execute: bool) -> None:
         raise SystemExit(1)
 
 
+@cli.command(name="gc-migrated-arch")
+@click.option(
+    "--execute/--dry-run",
+    "execute",
+    default=False,
+    help="--execute deletes eligible entries; --dry-run (default) only reports.",
+)
+@click.option(
+    "--older-than-days",
+    default=14,
+    type=int,
+    help="Only GC entries migrated more than this many days ago (default 14).",
+)
+def gc_migrated_arch(execute: bool, older_than_days: int) -> None:
+    """Garbage-collect flat ``arch.*`` entries migrated to the KG (TAP-1954).
+
+    Deletes flat entries tagged ``migrated_to_kg=true`` whose ``migrated_to_kg_at``
+    date is older than ``--older-than-days`` (default 14) — the retention buffer
+    that lets an operator verify the migration before the flat copy is dropped.
+    Undated entries are skipped as a safety guard. Exits non-zero on partial
+    failure. Run only after ``migrate-arch-to-kg --execute``.
+    """
+    import asyncio
+
+    from docs_mcp.config.settings import load_docs_settings
+    from docs_mcp.integrations.arch_migration import ArchMigrator
+
+    settings = load_docs_settings()
+    migrator = ArchMigrator(Path(str(settings.project_root)))
+    result = asyncio.run(migrator.gc_migrated(older_than_days=older_than_days, execute=execute))
+
+    mode = "EXECUTE" if execute else "DRY-RUN"
+    click.echo(f"gc-migrated-arch [{mode}] (older-than {older_than_days}d)")
+    if not result.available:
+        click.echo("  brain unavailable: " + "; ".join(result.errors), err=True)
+        raise SystemExit(1)
+
+    click.echo(f"  migrated entries scanned: {result.scanned}")
+    click.echo(f"  skipped (within window):  {result.skipped_recent}")
+    click.echo(f"  skipped (no date tag):    {result.skipped_undated}")
+    verb = "deleted" if execute else "would delete"
+    for key in result.eligible:
+        click.echo(f"  - {verb}: {key}")
+    if execute:
+        click.echo(f"  deleted: {result.deleted}  failed: {result.failed}")
+    else:
+        click.echo(f"  eligible: {len(result.eligible)}")
+    if result.failed:
+        for err in result.errors:
+            click.echo(f"  error: {err}", err=True)
+        raise SystemExit(1)
+
+
 @cli.command()
 def version() -> None:
     """Print DocsMCP version."""

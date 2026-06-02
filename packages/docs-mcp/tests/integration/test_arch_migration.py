@@ -7,6 +7,7 @@ async tests need no marker.
 
 from __future__ import annotations
 
+from datetime import date
 from pathlib import Path
 from typing import Any
 
@@ -14,6 +15,7 @@ from click.testing import CliRunner
 
 from docs_mcp.cli import cli
 from docs_mcp.integrations.arch_migration import (
+    MIGRATED_AT_PREFIX,
     MIGRATED_TAG,
     ArchMigrator,
     _derive,
@@ -32,6 +34,7 @@ class FakeBridge:
         self.upserts: list[tuple[str, str, dict[str, Any] | None]] = []
         self.evidence: list[dict[str, Any]] = []
         self.saves: list[dict[str, Any]] = []
+        self.deletes: list[str] = []
 
     async def list_memories(self, limit: int = 20, tier: str | None = None) -> list[dict[str, Any]]:
         return list(self._entries)
@@ -74,6 +77,10 @@ class FakeBridge:
         self.saves.append({"key": key, "value": value, "tier": tier, "tags": tags or []})
         return {"key": key, "success": True}
 
+    async def delete(self, key: str) -> bool:
+        self.deletes.append(key)
+        return True
+
 
 def _structure_entry(project: str = "myproj") -> dict[str, Any]:
     return {
@@ -95,11 +102,18 @@ def _pkg_entry(name: str = "tapps_core", project: str = "myproj") -> dict[str, A
     }
 
 
-def _migrator(tmp_path: Path, read: FakeBridge, kg: FakeBridge, tag: FakeBridge) -> ArchMigrator:
+def _migrator(
+    tmp_path: Path,
+    read: FakeBridge,
+    kg: FakeBridge,
+    tag: FakeBridge,
+    deleter: FakeBridge | None = None,
+) -> ArchMigrator:
     m = ArchMigrator(tmp_path)
     m._reader, m._reader_resolved = read, True
     m._kg, m._kg_resolved = kg, True
     m._tagger, m._tagger_resolved = tag, True
+    m._deleter, m._deleter_resolved = deleter or FakeBridge(), True
     return m
 
 
@@ -174,7 +188,7 @@ class TestExecute:
         kg, tag = FakeBridge(), FakeBridge()
         m = _migrator(tmp_path, FakeBridge([_structure_entry(), _pkg_entry()]), kg, tag)
 
-        result = await m.migrate(execute=True)
+        result = await m.migrate(execute=True, today=date(2026, 6, 2))
 
         assert result.migrated == 2 and result.failed == 0 and result.ok
         # one entity + one evidence row per entry
@@ -182,9 +196,10 @@ class TestExecute:
         assert len(kg.evidence) == 2
         assert all(ev["commit_sha"] == "arch-to-kg-migration" for ev in kg.evidence)
         assert all(ev["file_path"].startswith("brain-migration:") for ev in kg.evidence)
-        # flat entries re-tagged migrated, never deleted
+        # flat entries re-tagged migrated + dated, never deleted
         assert len(tag.saves) == 2
         assert all(MIGRATED_TAG in s["tags"] for s in tag.saves)
+        assert all(f"{MIGRATED_AT_PREFIX}2026-06-02" in s["tags"] for s in tag.saves)
 
     async def test_idempotent_second_run_is_noop(self, tmp_path: Path) -> None:
         already = _structure_entry()
@@ -214,6 +229,105 @@ class TestExecute:
         m._reader, m._reader_resolved = None, True
 
         result = await m.migrate(execute=False)
+
+        assert result.available is False and not result.ok
+
+
+# ---------------------------------------------------------------------------
+# GC (TAP-1954)
+# ---------------------------------------------------------------------------
+
+
+def _migrated_entry(migrated_at: str, key: str = "arch.myproj.structure") -> dict[str, Any]:
+    """A flat entry already migrated on *migrated_at* (ISO date)."""
+    return {
+        "key": key,
+        "value": "Architecture summary for myproj: 1 packages.",
+        "tier": "architectural",
+        "scope": "project",
+        "tags": ["architecture", MIGRATED_TAG, f"{MIGRATED_AT_PREFIX}{migrated_at}"],
+    }
+
+
+_NOW = date(2026, 6, 2)
+
+
+class TestGc:
+    async def test_old_entry_eligible_and_deleted_on_execute(self, tmp_path: Path) -> None:
+        deleter = FakeBridge()
+        entry = _migrated_entry("2026-05-01")  # 32 days old
+        m = _migrator(tmp_path, FakeBridge([entry]), FakeBridge(), FakeBridge(), deleter)
+
+        result = await m.gc_migrated(older_than_days=14, execute=True, today=_NOW)
+
+        assert result.eligible == ["arch.myproj.structure"]
+        assert result.deleted == 1 and result.failed == 0 and result.ok
+        assert deleter.deletes == ["arch.myproj.structure"]
+
+    async def test_dry_run_lists_without_deleting(self, tmp_path: Path) -> None:
+        deleter = FakeBridge()
+        m = _migrator(
+            tmp_path,
+            FakeBridge([_migrated_entry("2026-05-01")]),
+            FakeBridge(),
+            FakeBridge(),
+            deleter,
+        )
+
+        result = await m.gc_migrated(older_than_days=14, execute=False, today=_NOW)
+
+        assert result.dry_run and len(result.eligible) == 1
+        assert result.deleted == 0 and deleter.deletes == []
+
+    async def test_recent_entry_skipped(self, tmp_path: Path) -> None:
+        entry = _migrated_entry("2026-05-30")  # 3 days old, within 14d window
+        m = _migrator(tmp_path, FakeBridge([entry]), FakeBridge(), FakeBridge())
+
+        result = await m.gc_migrated(older_than_days=14, execute=True, today=_NOW)
+
+        assert result.scanned == 1 and result.skipped_recent == 1
+        assert result.eligible == [] and result.deleted == 0
+
+    async def test_undated_entry_skipped_as_safety_guard(self, tmp_path: Path) -> None:
+        entry = _structure_entry()
+        entry["tags"] = ["architecture", MIGRATED_TAG]  # migrated but no date tag
+        m = _migrator(tmp_path, FakeBridge([entry]), FakeBridge(), FakeBridge())
+
+        result = await m.gc_migrated(older_than_days=14, execute=True, today=_NOW)
+
+        assert result.scanned == 1 and result.skipped_undated == 1
+        assert result.eligible == []
+
+    async def test_unmigrated_entry_ignored(self, tmp_path: Path) -> None:
+        m = _migrator(tmp_path, FakeBridge([_structure_entry()]), FakeBridge(), FakeBridge())
+
+        result = await m.gc_migrated(older_than_days=14, execute=True, today=_NOW)
+
+        assert result.scanned == 0 and result.eligible == []
+
+    async def test_delete_failure_recorded_and_not_ok(self, tmp_path: Path) -> None:
+        class BoomDeleter(FakeBridge):
+            async def delete(self, key: str) -> bool:
+                raise RuntimeError("delete blew up")
+
+        m = _migrator(
+            tmp_path,
+            FakeBridge([_migrated_entry("2026-05-01")]),
+            FakeBridge(),
+            FakeBridge(),
+            BoomDeleter(),
+        )
+
+        result = await m.gc_migrated(older_than_days=14, execute=True, today=_NOW)
+
+        assert result.failed == 1 and not result.ok
+        assert "delete blew up" in result.errors[0]
+
+    async def test_unavailable_reader_marks_result(self, tmp_path: Path) -> None:
+        m = ArchMigrator(tmp_path)
+        m._reader, m._reader_resolved = None, True
+
+        result = await m.gc_migrated(older_than_days=14, execute=False)
 
         assert result.available is False and not result.ok
 
@@ -255,3 +369,34 @@ class TestCli:
 
         assert result.exit_code == 1
         assert "failed: 1" in result.output
+
+    def test_cli_gc_dry_run_lists_eligible(self, tmp_path: Path, monkeypatch: Any) -> None:
+        deleter = FakeBridge()
+        # "2020-01-01" is always >14 days before any real today.
+        read = FakeBridge([_migrated_entry("2020-01-01")])
+
+        def _fake_migrator(_root: Path) -> ArchMigrator:
+            return _migrator(tmp_path, read, FakeBridge(), FakeBridge(), deleter)
+
+        monkeypatch.setattr("docs_mcp.integrations.arch_migration.ArchMigrator", _fake_migrator)
+
+        result = CliRunner().invoke(cli, ["gc-migrated-arch", "--dry-run"])
+
+        assert result.exit_code == 0, result.output
+        assert "DRY-RUN" in result.output and "eligible: 1" in result.output
+        assert deleter.deletes == []
+
+    def test_cli_gc_execute_deletes(self, tmp_path: Path, monkeypatch: Any) -> None:
+        deleter = FakeBridge()
+        read = FakeBridge([_migrated_entry("2020-01-01")])
+
+        def _fake_migrator(_root: Path) -> ArchMigrator:
+            return _migrator(tmp_path, read, FakeBridge(), FakeBridge(), deleter)
+
+        monkeypatch.setattr("docs_mcp.integrations.arch_migration.ArchMigrator", _fake_migrator)
+
+        result = CliRunner().invoke(cli, ["gc-migrated-arch", "--execute"])
+
+        assert result.exit_code == 0, result.output
+        assert "deleted: 1" in result.output
+        assert deleter.deletes == ["arch.myproj.structure"]
