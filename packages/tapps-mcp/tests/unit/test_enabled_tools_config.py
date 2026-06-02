@@ -218,5 +218,6 @@ class TestToolPresetConstants:
         # + 1 tapps_linear_count (TAP-1847) + 1 tapps_audit_campaign (TAP-2036)
         # + 1 tapps_session_end (TAP-2005) + 1 tapps_usage (v3.11.0)
         # -1 tapps_memory (TAP-1994) + 2 hive elevation tools (TAP-2014)
-        # + 1 tapps_linear_list_issues (TAP-2010) + 1 tapps_finding_to_story (TAP-2717) = 37.
-        assert len(ALL_TOOL_NAMES) == 37
+        # + 1 tapps_linear_list_issues (TAP-2010) + 1 tapps_finding_to_story (TAP-2717)
+        # + 1 tapps_audit_close_coverage (TAP-2798) = 38.
+        assert len(ALL_TOOL_NAMES) == 38

@@ -413,3 +413,87 @@ class TestStoreShapes:
         result = await read_coverage_for(["a.py"])
         assert result["a.py"] is not None
         assert result["a.py"].audited_sha == "abc"
+
+
+class TestTappsAuditCloseCoverageHandler:
+    """TAP-2798: the MCP wrapper around close_coverage."""
+
+    def _entry(self, sha: str) -> CoverageEntry:
+        return CoverageEntry(
+            rel_path="src/foo.py",
+            audited_sha=sha,
+            audited_at=now_iso(),
+            session_ticket="TAP-1",
+            campaign_id="c1",
+        )
+
+    @pytest.mark.asyncio
+    async def test_success_updates_sha(self, fake_bridge: FakeBridge) -> None:
+        from tapps_mcp.server_analysis_tools import tapps_audit_close_coverage
+
+        await write_coverage(self._entry("old-sha"))
+        result = await tapps_audit_close_coverage("src/foo.py", "new-sha")
+        assert result["success"] is True
+        assert result["data"]["ok"] is True
+        assert result["data"]["reason"] == ""
+        loaded = (await read_coverage_for(["src/foo.py"]))["src/foo.py"]
+        assert loaded is not None
+        assert loaded.audited_sha == "new-sha"
+
+    @pytest.mark.asyncio
+    async def test_success_links_tickets(self, fake_bridge: FakeBridge) -> None:
+        from tapps_mcp.server_analysis_tools import tapps_audit_close_coverage
+
+        await write_coverage(self._entry("old-sha"))
+        result = await tapps_audit_close_coverage(
+            "src/foo.py", "new-sha", fix_ticket="TAP-2799", finding_ticket="TAP-2722"
+        )
+        assert result["data"]["ok"] is True
+        loaded = (await read_coverage_for(["src/foo.py"]))["src/foo.py"]
+        assert loaded is not None
+        assert "TAP-2799" in loaded.fix_tickets
+        assert "TAP-2722" in loaded.finding_tickets
+
+    @pytest.mark.asyncio
+    async def test_missing_entry_returns_ok_false(
+        self, fake_bridge: FakeBridge
+    ) -> None:
+        from tapps_mcp.server_analysis_tools import tapps_audit_close_coverage
+
+        result = await tapps_audit_close_coverage("nonexistent.py", "new-sha")
+        assert result["success"] is True
+        assert result["data"]["ok"] is False
+        assert result["data"]["reason"] == "coverage_entry_missing_or_write_failed"
+
+    @pytest.mark.asyncio
+    async def test_degraded_bridge_structured_envelope(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        from tapps_mcp.server_analysis_tools import tapps_audit_close_coverage
+
+        monkeypatch.setattr(
+            "tapps_mcp.tools.audit_manifest._get_bridge_or_none",
+            lambda: None,
+        )
+        result = await tapps_audit_close_coverage("src/foo.py", "new-sha")
+        # Structured {ok:false, reason} instead of a bare False (TAP-2798).
+        assert result["success"] is True
+        assert result["degraded"] is True
+        assert result["data"]["ok"] is False
+        assert result["data"]["reason"] == "bridge_unavailable"
+
+    @pytest.mark.asyncio
+    async def test_empty_rel_path_is_error(self, fake_bridge: FakeBridge) -> None:
+        from tapps_mcp.server_analysis_tools import tapps_audit_close_coverage
+
+        result = await tapps_audit_close_coverage("", "new-sha")
+        assert result["success"] is False
+        assert result["error"]["code"] == "missing_rel_path"
+
+    @pytest.mark.asyncio
+    async def test_empty_new_sha_is_error(self, fake_bridge: FakeBridge) -> None:
+        from tapps_mcp.server_analysis_tools import tapps_audit_close_coverage
+
+        result = await tapps_audit_close_coverage("src/foo.py", "")
+        assert result["success"] is False
+        assert result["error"]["code"] == "missing_new_sha"

@@ -196,7 +196,7 @@ def _validate_file_path(file_path: str) -> Path:
 # Constants extracted to avoid duplication
 # ---------------------------------------------------------------------------
 
-# Canonical list of all TappsMCP tools (37).
+# Canonical list of all TappsMCP tools (38).
 # Used for filtering and fallback.
 ALL_TOOL_NAMES: frozenset[str] = frozenset(
     {
@@ -240,6 +240,8 @@ ALL_TOOL_NAMES: frozenset[str] = frozenset(
         "tapps_linear_list_issues",
         # TAP-2717: deterministic finding-to-story converter
         "tapps_finding_to_story",
+        # TAP-2798: close audit coverage after a fix lands (audit-fix loop)
+        "tapps_audit_close_coverage",
     }
 )
 

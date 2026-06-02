@@ -79,13 +79,14 @@ EXPECTED_ANNOTATIONS: dict[str, ToolAnnotations] = {
     # Read-only, open-world (2 tools)
     "tapps_lookup_docs": _READ_ONLY_OPEN,
     "tapps_dependency_scan": _READ_ONLY_OPEN,
-    # Side-effect, idempotent (6 tools)
+    # Side-effect, idempotent (7 tools)
     "tapps_session_start": _SIDE_EFFECT_IDEMPOTENT,
     "tapps_session_end": _SIDE_EFFECT_IDEMPOTENT,
     "tapps_init": _SIDE_EFFECT_IDEMPOTENT,
     "tapps_upgrade": _SIDE_EFFECT_IDEMPOTENT,
     "tapps_set_engagement_level": _SIDE_EFFECT_IDEMPOTENT,
     "tapps_linear_snapshot_put": _SIDE_EFFECT_IDEMPOTENT,
+    "tapps_audit_close_coverage": _SIDE_EFFECT_IDEMPOTENT,  # TAP-2798
     # Side-effect, non-idempotent (1 tool — TAP-1994: tapps_memory removed from catalog)
     "tapps_feedback": _SIDE_EFFECT,
     # Destructive, idempotent (1 tool — cache eviction)
@@ -181,9 +182,10 @@ class TestAnnotationCategories:
         ]
         # 5 idempotent + 1 non-idempotent (tapps_feedback) + linear-snapshot-put
         # + linear-snapshot-invalidate = 8 (TAP-1994: tapps_memory removed)
-        # + 2 hive elevation tools (TAP-2014) = 10.
-        assert len(side_effect) == 10, (
-            f"Expected 10 side-effect tools, got {len(side_effect)}"
+        # + 2 hive elevation tools (TAP-2014)
+        # + 1 tapps_audit_close_coverage (TAP-2798) = 11.
+        assert len(side_effect) == 11, (
+            f"Expected 11 side-effect tools, got {len(side_effect)}"
         )
 
     def test_open_world_count(self) -> None:
@@ -207,9 +209,10 @@ class TestAnnotationCategories:
         # 22 prior + 3 linear-snapshot + 1 release-update + 1 tapps_linear_count (TAP-1847)
         # + 1 tapps_audit_campaign (TAP-2036) + 1 tapps_session_end (TAP-2005)
         # + 1 tapps_usage (v3.11.0) + 1 tapps_linear_list_issues (TAP-2010)
-        # + 1 tapps_finding_to_story (TAP-2717) = 32
-        assert len(idempotent) == 32, (
-            f"Expected 32 idempotent tools, got {len(idempotent)}: {sorted(idempotent)}"
+        # + 1 tapps_finding_to_story (TAP-2717)
+        # + 1 tapps_audit_close_coverage (TAP-2798) = 33
+        assert len(idempotent) == 33, (
+            f"Expected 33 idempotent tools, got {len(idempotent)}: {sorted(idempotent)}"
         )
 
 

@@ -71,6 +71,16 @@ _ANNOTATIONS_READ_ONLY_OPEN = ToolAnnotations(
     openWorldHint=True,
 )
 
+# TAP-2798: tapps_audit_close_coverage writes a brain coverage record (a
+# side effect) but is idempotent — re-closing the same file at the same SHA
+# yields the same final state (sha set, tickets deduped).
+_ANNOTATIONS_SIDE_EFFECT_IDEMPOTENT = ToolAnnotations(
+    readOnlyHint=False,
+    destructiveHint=False,
+    idempotentHint=True,
+    openWorldHint=False,
+)
+
 # TAP-961: large-output tools advertise a per-tool result-size ceiling via
 # the MCP `_meta` tool field. Claude Code reads `anthropic/maxResultSizeChars`
 # from `tools/list` and keeps the result in-context instead of persisting it
@@ -1636,6 +1646,120 @@ async def tapps_finding_to_story(
 
 
 # ---------------------------------------------------------------------------
+# tapps_audit_close_coverage (TAP-2798)
+# ---------------------------------------------------------------------------
+
+
+async def tapps_audit_close_coverage(
+    rel_path: str,
+    new_sha: str,
+    fix_ticket: str = "",
+    finding_ticket: str = "",
+) -> dict[str, Any]:
+    """Close an audit finding by updating its brain coverage record (TAP-2722).
+
+    Wraps the internal ``close_coverage`` helper so Ralph's audit-fix loop can
+    record a landed fix without importing tapps-mcp internals. Sets the coverage
+    entry's ``audited_sha`` to *new_sha* (so subsequent freshness checks reflect
+    the post-fix file) and links the fix/finding tickets into the coverage →
+    finding → fix chain.
+
+    Call this after committing a fix that resolves an audit finding, passing the
+    new short SHA of the fixed file. The finding's coverage entry must already
+    exist (created by a prior ``tapps_audit_campaign`` audit session).
+
+    Args:
+        rel_path: Repo-relative path of the fixed file (e.g.
+            ``"packages/tapps-mcp/src/tapps_mcp/server.py"``).
+        new_sha: The git SHA recording the post-fix file state.
+        fix_ticket: Optional Linear id of the fix story (e.g. ``"TAP-2799"``).
+            Appended to the entry's ``fix_tickets`` (deduped).
+        finding_ticket: Optional Linear id of the original finding. Ensured
+            present in the entry's ``finding_tickets``.
+
+    Returns:
+        Response envelope. ``data.ok`` is ``True`` when the coverage entry was
+        updated. When the brain bridge is unavailable the envelope is
+        ``degraded=True`` with ``data.ok=False`` and
+        ``data.reason="bridge_unavailable"``; when no coverage entry exists for
+        *rel_path* (or the write failed) ``data.ok=False`` and
+        ``data.reason="coverage_entry_missing_or_write_failed"``.
+    """
+    _record_call("tapps_audit_close_coverage")
+    start_ns = time.perf_counter_ns()
+
+    from tapps_mcp.tools.audit_manifest import _get_bridge_or_none, close_coverage
+
+    if not rel_path.strip():
+        return error_response(
+            "tapps_audit_close_coverage",
+            "missing_rel_path",
+            "`rel_path` must be a non-empty repo-relative file path",
+        )
+    if not new_sha.strip():
+        return error_response(
+            "tapps_audit_close_coverage",
+            "missing_new_sha",
+            "`new_sha` must be a non-empty git SHA",
+        )
+
+    # Detect the degraded-bridge path explicitly so we can return a structured
+    # {ok:false, reason} envelope instead of an ambiguous bare False (TAP-2798).
+    if _get_bridge_or_none() is None:
+        elapsed_ms = (time.perf_counter_ns() - start_ns) // 1_000_000
+        _record_execution("tapps_audit_close_coverage", start_ns, degraded=True)
+        return success_response(
+            "tapps_audit_close_coverage",
+            elapsed_ms,
+            {
+                "ok": False,
+                "reason": "bridge_unavailable",
+                "rel_path": rel_path,
+                "new_sha": new_sha,
+            },
+            degraded=True,
+            next_steps=[
+                "Brain bridge unavailable — coverage was NOT updated. Re-run after "
+                "tapps_session_start succeeds, or fix brain auth (TAPPS_BRAIN_AUTH_TOKEN).",
+            ],
+        )
+
+    ok = await close_coverage(
+        rel_path,
+        new_sha,
+        fix_ticket=fix_ticket,
+        finding_ticket=finding_ticket,
+    )
+    elapsed_ms = (time.perf_counter_ns() - start_ns) // 1_000_000
+    _record_execution("tapps_audit_close_coverage", start_ns)
+
+    data: dict[str, Any] = {
+        "ok": ok,
+        "reason": "" if ok else "coverage_entry_missing_or_write_failed",
+        "rel_path": rel_path,
+        "new_sha": new_sha,
+        "fix_ticket": fix_ticket,
+        "finding_ticket": finding_ticket,
+    }
+    if ok:
+        next_steps = [
+            "Coverage closed — the file is now marked audited at new_sha. Re-run "
+            "tapps_audit_campaign to confirm the finding no longer surfaces.",
+        ]
+    else:
+        next_steps = [
+            f"No coverage entry exists for {rel_path!r} (or the write failed). Audit "
+            "the file via tapps_audit_campaign before closing its coverage.",
+        ]
+    return success_response(
+        "tapps_audit_close_coverage",
+        elapsed_ms,
+        data,
+        next_steps=next_steps,
+    )
+
+
+# ---------------------------------------------------------------------------
 # Registration
 # ---------------------------------------------------------------------------
 
@@ -1678,3 +1802,7 @@ def register(mcp_instance: FastMCP, allowed_tools: frozenset[str]) -> None:
         mcp_instance.tool(annotations=_ANNOTATIONS_READ_ONLY, meta=_META_DEFERRED)(
             tapps_finding_to_story
         )
+    if "tapps_audit_close_coverage" in allowed_tools:
+        mcp_instance.tool(
+            annotations=_ANNOTATIONS_SIDE_EFFECT_IDEMPOTENT, meta=_META_DEFERRED
+        )(tapps_audit_close_coverage)

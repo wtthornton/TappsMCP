@@ -138,6 +138,10 @@ TOOL_REASONS: dict[str, str] = {
         "Generate and validate a release update document body from CHANGELOG or git log."
         " Call before posting a version release to Linear via the linear-release-update skill."
     ),
+    "tapps_audit_close_coverage": (
+        "Close an audit finding's brain coverage after a fix lands — updates the file's"
+        " audited SHA and links the fix/finding tickets. Call after committing an audit fix."
+    ),
 }
 
 
@@ -173,6 +177,7 @@ TASK_TOOL_MAP: dict[str, dict[str, list[str]]] = {
             "tapps_dependency_scan",
             "tapps_dependency_graph",
             "tapps_audit_campaign",
+            "tapps_audit_close_coverage",
             "tapps_memory",
         ],
     },
@@ -222,6 +227,7 @@ TASK_TOOL_MAP_HIGH: dict[str, dict[str, list[str]]] = {
             "tapps_dependency_scan",
             "tapps_dependency_graph",
             "tapps_audit_campaign",
+            "tapps_audit_close_coverage",
         ],
     },
     "epic": {
