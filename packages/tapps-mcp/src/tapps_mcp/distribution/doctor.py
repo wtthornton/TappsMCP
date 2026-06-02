@@ -1812,6 +1812,124 @@ def check_brain_profile(root: Path) -> CheckResult:
     )
 
 
+_BRAIN_PROBE_METRIC = "tapps_brain_mcp_probe_duration_seconds"
+
+
+def _parse_histogram_quantiles(
+    metrics_text: str,
+    metric: str,
+    quantiles: tuple[float, ...],
+) -> dict[float, float] | None:
+    """Parse a Prometheus histogram from ``/metrics`` text into quantiles.
+
+    Returns ``{quantile: seconds}`` computed from the cumulative
+    ``<metric>_bucket{le=...}`` counts via linear interpolation within the
+    matched bucket (the ``histogram_quantile`` algorithm). Bucket counts are
+    summed across label sets at the same ``le`` (equivalent to PromQL
+    ``sum by (le)``) so multi-series histograms aggregate cleanly. Returns
+    ``None`` when the metric/buckets are absent or the total count is zero.
+    """
+    import math
+    import re
+
+    pattern = re.compile(
+        r"^" + re.escape(metric) + r'_bucket\{[^}]*\ble="([^"]+)"[^}]*\}\s+([0-9.eE+]+)',
+        re.MULTILINE,
+    )
+    agg: dict[float, float] = {}
+    for le_raw, count_raw in pattern.findall(metrics_text):
+        try:
+            le = math.inf if le_raw in ("+Inf", "Inf") else float(le_raw)
+            count = float(count_raw)
+        except ValueError:
+            continue
+        agg[le] = agg.get(le, 0.0) + count
+    if not agg:
+        return None
+    buckets = sorted(agg.items())  # ascending by le; +Inf sorts last
+    total = buckets[-1][1]
+    if total <= 0:
+        return None
+
+    out: dict[float, float] = {}
+    for q in quantiles:
+        rank = q * total
+        prev_le = 0.0
+        prev_count = 0.0
+        value = buckets[-1][0]
+        for le, cum in buckets:
+            if cum >= rank:
+                if math.isinf(le):
+                    # quantile falls in the +Inf bucket — best lower-bound
+                    # estimate is the largest finite le seen so far.
+                    value = prev_le
+                else:
+                    bucket_count = cum - prev_count
+                    value = (
+                        le
+                        if bucket_count <= 0
+                        else prev_le + (le - prev_le) * (rank - prev_count) / bucket_count
+                    )
+                break
+            prev_le = le
+            prev_count = cum
+        out[q] = value
+    return out
+
+
+def check_brain_probe_latency(root: Path) -> CheckResult:
+    """TAP-1931: surface tapps-brain MCP probe latency quantiles in doctor.
+
+    GETs ``{brain_http_url}/metrics`` and parses the
+    ``tapps_brain_mcp_probe_duration_seconds`` histogram (TAP-1849) into
+    p50 / p95 / p99. Reports ``unavailable`` (passing) on any error or when
+    the metric is absent — telemetry gaps must never fail the doctor run.
+    Profile parity stays in :func:`check_brain_profile`; this check is
+    latency-only.
+
+    Skipped (passing) when HTTP mode is not active.
+    """
+    import os
+
+    name = "tapps-brain probe latency"
+    http_url = os.environ.get("TAPPS_MCP_MEMORY_BRAIN_HTTP_URL", "").strip()
+    if not http_url:
+        return CheckResult(
+            name, True, "Not in HTTP mode (TAPPS_MCP_MEMORY_BRAIN_HTTP_URL unset)"
+        )
+
+    headers: dict[str, str] = {}
+    try:
+        from tapps_core.brain_auth import build_brain_headers
+        from tapps_core.config.settings import load_settings
+
+        headers = build_brain_headers(load_settings(project_root=root))
+    except Exception:  # noqa: BLE001 — auth headers are best-effort for /metrics
+        headers = {}
+
+    metrics_url = http_url.rstrip("/") + "/metrics"
+    try:
+        resp = httpx.get(metrics_url, headers=headers, timeout=5.0)
+    except Exception as exc:  # noqa: BLE001 — connection errors must not fail doctor
+        return CheckResult(name, True, f"probe latency: unavailable ({type(exc).__name__})")
+    if resp.status_code != 200:
+        return CheckResult(
+            name, True, f"probe latency: unavailable (/metrics HTTP {resp.status_code})"
+        )
+
+    quantiles = _parse_histogram_quantiles(resp.text, _BRAIN_PROBE_METRIC, (0.5, 0.95, 0.99))
+    if not quantiles:
+        return CheckResult(name, True, "probe latency: unavailable (metric absent in /metrics)")
+
+    return CheckResult(
+        name,
+        True,
+        "mcp_probe_duration "
+        f"p50: {quantiles[0.5]:.3f}s / p95: {quantiles[0.95]:.3f}s "
+        f"/ p99: {quantiles[0.99]:.3f}s",
+    )
+
+
 def check_brain_health(root: Path) -> CheckResult:
     """TAP-1632: pull flywheel + diagnostics summary from tapps-brain.
 
@@ -2685,6 +2803,7 @@ def _collect_checks(root: Path, *, quick: bool = False) -> list[CheckResult]:
     checks.append(check_tapps_brain())
     checks.append(check_brain_http_auth(root))
     checks.append(check_brain_profile(root))
+    checks.append(check_brain_probe_latency(root))
     checks.append(check_brain_health(root))
     checks.append(check_brain_version_delta(root))
     checks.append(check_session_sentinel(root))

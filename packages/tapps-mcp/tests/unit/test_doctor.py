@@ -11,11 +11,13 @@ from tapps_mcp.cli import main
 from tapps_mcp.distribution.doctor import (
     CheckResult,
     _collect_checks,
+    _parse_histogram_quantiles,
     _parse_version_tuple,
     _read_brain_floor_pin,
     _read_engagement_level,
     check_agents_md,
     check_binary_on_path,
+    check_brain_probe_latency,
     check_brain_version_delta,
     check_claude_code_project,
     check_claude_code_user,
@@ -1846,3 +1848,134 @@ class TestCheckMcpToolBudget:
         result = check_mcp_tool_budget(tmp_path)
         assert result.ok is True
         assert "No recognized" in result.message
+
+
+_SAMPLE_PROBE_METRICS = """\
+# HELP tapps_brain_mcp_probe_duration_seconds Probe duration
+# TYPE tapps_brain_mcp_probe_duration_seconds histogram
+tapps_brain_mcp_probe_duration_seconds_bucket{le="0.005"} 0
+tapps_brain_mcp_probe_duration_seconds_bucket{le="0.01"} 0
+tapps_brain_mcp_probe_duration_seconds_bucket{le="0.025"} 1
+tapps_brain_mcp_probe_duration_seconds_bucket{le="0.05"} 3
+tapps_brain_mcp_probe_duration_seconds_bucket{le="0.1"} 7
+tapps_brain_mcp_probe_duration_seconds_bucket{le="0.25"} 9
+tapps_brain_mcp_probe_duration_seconds_bucket{le="0.5"} 10
+tapps_brain_mcp_probe_duration_seconds_bucket{le="+Inf"} 10
+tapps_brain_mcp_probe_duration_seconds_sum 1.23
+tapps_brain_mcp_probe_duration_seconds_count 10
+"""
+
+
+class TestParseHistogramQuantiles:
+    """TAP-1931: Prometheus histogram_quantile parsing."""
+
+    def test_parses_p50_p95_p99(self) -> None:
+        q = _parse_histogram_quantiles(
+            _SAMPLE_PROBE_METRICS,
+            "tapps_brain_mcp_probe_duration_seconds",
+            (0.5, 0.95, 0.99),
+        )
+        assert q is not None
+        # Linear interpolation within the matched bucket (see issue AC).
+        assert q[0.5] == pytest.approx(0.075)
+        assert q[0.95] == pytest.approx(0.375)
+        assert q[0.99] == pytest.approx(0.475)
+
+    def test_missing_metric_returns_none(self) -> None:
+        assert (
+            _parse_histogram_quantiles("# nothing here\n", "absent_metric", (0.5,))
+            is None
+        )
+
+    def test_zero_total_returns_none(self) -> None:
+        body = (
+            'absent_bucket{le="0.1"} 0\n'
+            'tapps_brain_mcp_probe_duration_seconds_bucket{le="0.1"} 0\n'
+            'tapps_brain_mcp_probe_duration_seconds_bucket{le="+Inf"} 0\n'
+        )
+        assert (
+            _parse_histogram_quantiles(
+                body, "tapps_brain_mcp_probe_duration_seconds", (0.5,)
+            )
+            is None
+        )
+
+    def test_aggregates_multi_series_by_le(self) -> None:
+        # Two label series at the same le sum (PromQL sum by (le)).
+        body = (
+            'm_bucket{le="0.1",profile="coder"} 2\n'
+            'm_bucket{le="0.1",profile="operator"} 3\n'
+            'm_bucket{le="+Inf",profile="coder"} 2\n'
+            'm_bucket{le="+Inf",profile="operator"} 3\n'
+        )
+        q = _parse_histogram_quantiles(body, "m", (0.5,))
+        assert q is not None
+        # total=5, rank=2.5 → within the le=0.1 bucket (cum 5): 0 + 0.1*2.5/5.
+        assert q[0.5] == pytest.approx(0.05)
+
+
+class TestCheckBrainProbeLatency:
+    """TAP-1931: the doctor latency check."""
+
+    def test_skip_when_not_http_mode(self, tmp_path) -> None:  # type: ignore[no-untyped-def]
+        with patch.dict("os.environ", {}, clear=True):
+            result = check_brain_probe_latency(tmp_path)
+        assert result.ok is True
+        assert "Not in HTTP mode" in result.message
+
+    def test_reports_quantiles_on_success(self, tmp_path) -> None:  # type: ignore[no-untyped-def]
+        resp = MagicMock()
+        resp.status_code = 200
+        resp.text = _SAMPLE_PROBE_METRICS
+        httpx_mod = MagicMock()
+        httpx_mod.get.return_value = resp
+        with (
+            patch.dict("os.environ", {"TAPPS_MCP_MEMORY_BRAIN_HTTP_URL": "http://brain:8080"}),
+            patch("tapps_mcp.distribution.doctor.httpx", httpx_mod),
+        ):
+            result = check_brain_probe_latency(tmp_path)
+        assert result.ok is True
+        assert "mcp_probe_duration" in result.message
+        assert "p50: 0.075s" in result.message
+        assert "p95: 0.375s" in result.message
+        assert "p99: 0.475s" in result.message
+
+    def test_unavailable_on_connection_error(self, tmp_path) -> None:  # type: ignore[no-untyped-def]
+        httpx_mod = MagicMock()
+        httpx_mod.get.side_effect = RuntimeError("connection refused")
+        with (
+            patch.dict("os.environ", {"TAPPS_MCP_MEMORY_BRAIN_HTTP_URL": "http://brain:8080"}),
+            patch("tapps_mcp.distribution.doctor.httpx", httpx_mod),
+        ):
+            result = check_brain_probe_latency(tmp_path)
+        # Telemetry gaps must not fail the doctor run.
+        assert result.ok is True
+        assert "unavailable" in result.message
+
+    def test_unavailable_on_404(self, tmp_path) -> None:  # type: ignore[no-untyped-def]
+        resp = MagicMock()
+        resp.status_code = 404
+        httpx_mod = MagicMock()
+        httpx_mod.get.return_value = resp
+        with (
+            patch.dict("os.environ", {"TAPPS_MCP_MEMORY_BRAIN_HTTP_URL": "http://brain:8080"}),
+            patch("tapps_mcp.distribution.doctor.httpx", httpx_mod),
+        ):
+            result = check_brain_probe_latency(tmp_path)
+        assert result.ok is True
+        assert "unavailable" in result.message
+        assert "404" in result.message
+
+    def test_unavailable_when_metric_absent(self, tmp_path) -> None:  # type: ignore[no-untyped-def]
+        resp = MagicMock()
+        resp.status_code = 200
+        resp.text = "# some other metrics\nother_metric 1\n"
+        httpx_mod = MagicMock()
+        httpx_mod.get.return_value = resp
+        with (
+            patch.dict("os.environ", {"TAPPS_MCP_MEMORY_BRAIN_HTTP_URL": "http://brain:8080"}),
+            patch("tapps_mcp.distribution.doctor.httpx", httpx_mod),
+        ):
+            result = check_brain_probe_latency(tmp_path)
+        assert result.ok is True
+        assert "unavailable" in result.message
