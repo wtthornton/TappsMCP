@@ -43,6 +43,8 @@ import httpx
 import structlog
 from packaging.version import InvalidVersion, Version
 
+from tapps_core.knowledge.kg_keys import entity_uuid
+
 if TYPE_CHECKING:
     from tapps_brain import AgentBrain
 
@@ -538,9 +540,18 @@ class BrainBridge:
             except asyncio.QueueEmpty:
                 break
             try:
-                await self.save(**entry)
+                await self._replay_queued_write(entry)
             except Exception as exc:
                 logger.warning("brain_bridge.drain_failed", error=str(exc))
+
+    async def _replay_queued_write(self, entry: dict[str, Any]) -> None:
+        """Replay one queued write entry.
+
+        The base queue only ever holds ``save`` kwargs; HttpBrainBridge
+        overrides this to also route KG-event entries (TAP-1947) back through
+        :meth:`record_kg_event`.
+        """
+        await self.save(**entry)
 
     def _maybe_start_drain(self) -> None:
         if not self.circuit_open and not self._write_queue.empty():
@@ -2110,6 +2121,163 @@ class HttpBrainBridge(BrainBridge):
         args = {"payload_json": json.dumps(event_payload)}
         result = await self._http_mcp_call("brain_record_event", args)
         return result if isinstance(result, dict) else {"recorded": True}
+
+    # -------------------------------------------------------------------------
+    # KG semantic upsert shims (TAP-1947)
+    #
+    # Thin verbs over :meth:`record_kg_event` — no second write path. Entity
+    # IDs are derived deterministically (TAP-1949) so a re-run upserts the
+    # same row instead of inserting a duplicate, and the caller learns the id
+    # without a round-trip (even when the write is queued offline).
+    # -------------------------------------------------------------------------
+
+    def _resolve_project_id(self, project_id: str) -> str:
+        """Resolve the brain project slug for entity-key derivation.
+
+        Falls back to the bridge's ``X-Project-Id`` header (set by the
+        factory from ``TAPPS_MCP_MEMORY_BRAIN_PROJECT_ID``), then the
+        ``TAPPS_BRAIN_PROJECT`` env var, so all writers on the same project
+        derive identical entity UUIDs.
+        """
+        if project_id:
+            return project_id
+        header = self._http_headers.get("X-Project-Id", "")
+        return header or os.environ.get("TAPPS_BRAIN_PROJECT", "")
+
+    def _queue_kg_event(
+        self,
+        event_type: str,
+        entities: list[dict[str, str]],
+        edges: list[dict[str, str]] | None,
+        payload_data: dict[str, Any] | None,
+    ) -> dict[str, Any]:
+        """Enqueue a KG event for offline drain and return a degraded envelope."""
+        queued = self._enqueue_write(
+            {
+                "_kind": "kg_event",
+                "event_type": event_type,
+                "entities": entities,
+                "edges": edges,
+                "payload_data": payload_data,
+            }
+        )
+        return {
+            "success": False,
+            "degraded": True,
+            "reason": "circuit open",
+            "queued": queued,
+            "queue_depth": self.queue_depth,
+        }
+
+    async def upsert_entity(
+        self,
+        canonical_name: str,
+        entity_type: str,
+        *,
+        aliases: list[str] | None = None,
+        metadata: dict[str, Any] | None = None,
+        project_id: str = "",
+    ) -> dict[str, Any]:
+        """Idempotently upsert a KG entity; return ``{"entity_id": <uuid>}``.
+
+        Idempotent on ``(canonical_name, entity_type, project_id)`` — the id
+        is the deterministic UUIDv5 from :func:`kg_keys.entity_uuid`, so
+        repeated upserts of the same entity collapse to one ``kg_entities``
+        row. When the circuit is open the event is queued for later drain;
+        the returned ``entity_id`` is still valid because it is derived, not
+        assigned by the brain.
+        """
+        pid = self._resolve_project_id(project_id)
+        eid = str(entity_uuid(pid, entity_type, canonical_name))
+        entities = [{"type": entity_type, "id": eid}]
+        payload: dict[str, Any] = {"canonical_name": canonical_name}
+        if aliases:
+            payload["aliases"] = aliases
+        if metadata:
+            payload["metadata"] = metadata
+        if self.circuit_open:
+            envelope = self._queue_kg_event("entity_upsert", entities, None, payload)
+            return {"entity_id": eid, **envelope}
+        result = await self.record_kg_event("entity_upsert", entities, None, payload)
+        return {"entity_id": eid, **result}
+
+    async def upsert_edge(
+        self,
+        subject_id: str,
+        predicate: str,
+        object_id: str,
+        *,
+        evidence: dict[str, Any],
+        confidence: float = 1.0,
+    ) -> dict[str, Any]:
+        """Upsert a typed edge with a paired evidence row (ADR-012).
+
+        ADR-012 forbids evidence-free edges: ``evidence`` must carry at least
+        a ``file_path``. The edge and its evidence are emitted in one atomic
+        ``record_kg_event`` call. Raises :class:`ValueError` (validation) when
+        evidence is absent.
+        """
+        if not evidence or not evidence.get("file_path"):
+            raise ValueError(
+                "upsert_edge requires a paired evidence row with a file_path "
+                "(ADR-012: no evidence-free edges)"
+            )
+        entities = [
+            {"type": "node", "id": subject_id},
+            {"type": "node", "id": object_id},
+        ]
+        edges = [{"src": subject_id, "predicate": predicate, "dst": object_id}]
+        payload: dict[str, Any] = {"confidence": confidence, "evidence": evidence}
+        if self.circuit_open:
+            return self._queue_kg_event("edge_upsert", entities, edges, payload)
+        return await self.record_kg_event("edge_upsert", entities, edges, payload)
+
+    async def add_evidence(
+        self,
+        *,
+        file_path: str,
+        line_range: str,
+        commit_sha: str,
+        entity_id: str = "",
+        edge_id: str = "",
+    ) -> dict[str, Any]:
+        """Attach an evidence row to exactly one entity OR edge (XOR).
+
+        Stores ``(file_path, line_range, commit_sha)`` against the target.
+        Raises :class:`ValueError` (validation) unless exactly one of
+        ``entity_id`` / ``edge_id`` is given.
+        """
+        if bool(entity_id) == bool(edge_id):
+            raise ValueError(
+                "add_evidence requires exactly one of entity_id or edge_id"
+            )
+        target_kind = "entity" if entity_id else "edge"
+        target_id = entity_id or edge_id
+        entities = [{"type": f"{target_kind}_ref", "id": target_id}]
+        payload: dict[str, Any] = {
+            "target_kind": target_kind,
+            "file_path": file_path,
+            "line_range": line_range,
+            "commit_sha": commit_sha,
+        }
+        if self.circuit_open:
+            return self._queue_kg_event("evidence_add", entities, None, payload)
+        return await self.record_kg_event("evidence_add", entities, None, payload)
+
+    async def _replay_queued_write(self, entry: dict[str, Any]) -> None:
+        """Route queued KG events back through :meth:`record_kg_event`.
+
+        Save-shaped entries (no ``_kind``) fall through to the base behaviour.
+        """
+        if entry.get("_kind") == "kg_event":
+            await self.record_kg_event(
+                entry["event_type"],
+                entry["entities"],
+                entry.get("edges"),
+                entry.get("payload_data"),
+            )
+            return
+        await self.save(**entry)
 
     async def record_feedback(
         self,
