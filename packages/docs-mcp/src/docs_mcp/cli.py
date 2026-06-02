@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from pathlib import Path
+
 import click
 
 from docs_mcp import __version__
@@ -143,6 +145,55 @@ def scan() -> None:
     except Exception as e:
         click.echo(f"Scan failed: {e}", err=True)
         raise SystemExit(1) from None
+
+
+@cli.command(name="migrate-arch-to-kg")
+@click.option(
+    "--execute/--dry-run",
+    "execute",
+    default=False,
+    help="--execute performs the migration; --dry-run (default) only reports.",
+)
+def migrate_arch_to_kg(execute: bool) -> None:
+    """Migrate flat ``arch.{project}.*`` brain entries to KG triples (TAP-1953).
+
+    Reads pre-TAP-1948 leftover flat architecture entries, re-emits each as a KG
+    entity (prose preserved as ``summary`` metadata + a provenance evidence row),
+    and tags the flat entry ``migrated_to_kg=true``. Idempotent: already-tagged
+    entries are skipped, so a second ``--execute`` is a no-op. Flat entries are
+    never deleted (that is the TAP-1954 GC). Exits non-zero on partial failure.
+    """
+    import asyncio
+
+    from docs_mcp.config.settings import load_docs_settings
+    from docs_mcp.integrations.arch_migration import ArchMigrator
+
+    settings = load_docs_settings()
+    migrator = ArchMigrator(Path(str(settings.project_root)))
+    result = asyncio.run(migrator.migrate(execute=execute))
+
+    mode = "EXECUTE" if execute else "DRY-RUN"
+    click.echo(f"migrate-arch-to-kg [{mode}]")
+    if not result.available:
+        click.echo("  brain unavailable: " + "; ".join(result.errors), err=True)
+        raise SystemExit(1)
+
+    click.echo(f"  flat arch.* entries found: {result.flat_total}")
+    click.echo(f"  already migrated (skipped): {result.already_migrated}")
+    click.echo(f"  unparseable (skipped):      {result.unparseable}")
+    for planned in result.planned:
+        if planned.status == "already_migrated":
+            continue
+        verb = {"migrated": "migrated", "failed": "FAILED", "planned": "would migrate"}[
+            planned.status
+        ]
+        click.echo(f"  - {verb}: {planned.key} -> {planned.entity_type}:{planned.canonical_name}")
+    if execute:
+        click.echo(f"  migrated: {result.migrated}  failed: {result.failed}")
+    if result.failed:
+        for err in result.errors:
+            click.echo(f"  error: {err}", err=True)
+        raise SystemExit(1)
 
 
 @cli.command()
