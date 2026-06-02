@@ -233,7 +233,7 @@ uv tool install --reinstall -e packages/tapps-mcp
 uv tool install --reinstall -e packages/docs-mcp
 ```
 
-Then run `tapps-mcp upgrade` inside a consuming project to refresh AGENTS.md, platform rules, hooks, and permissions. A backup is created automatically before overwriting — use `tapps-mcp rollback` if needed. See [CHANGELOG.md](CHANGELOG.md) for changes and [docs/UPGRADE_FOR_CONSUMERS.md](docs/UPGRADE_FOR_CONSUMERS.md) for the full upgrade guide.
+Then run `tapps-mcp upgrade` inside a consuming project to refresh AGENTS.md, platform rules, hooks, and permissions. A backup is created automatically before overwriting — use `tapps-mcp rollback` if needed. See [CHANGELOG.md](CHANGELOG.md) for changes and [docs/UPGRADE_FOR_CONSUMERS.md](docs/UPGRADE_FOR_CONSUMERS.md) for the full upgrade guide. For driving the upgrade from inside a consuming project's Claude Code session, paste the self-contained prompt in [docs/UPGRADE-PROMPT.md](docs/UPGRADE-PROMPT.md).
 
 ### Install from source (workspace dev)
 
