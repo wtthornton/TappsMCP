@@ -423,6 +423,8 @@ def generate_claude_plugin_bundle(
                     "TAPPS_BRAIN_HTTP_URL": "${user_config.memory_http_url}",
                     "TAPPS_LLM_ENGAGEMENT_LEVEL": "${user_config.engagement_level}",
                     "TAPPS_QUALITY_PRESET": "${user_config.quality_preset}",
+                    # TAP-1935: minimal brain profile for the code-quality surface.
+                    "TAPPS_BRAIN_PROFILE": "coder",
                 },
             },
         },
@@ -531,6 +533,8 @@ def generate_cursor_plugin_bundle(
                 "args": ["tapps-mcp", "serve"],
                 "env": {
                     "TAPPS_MCP_PROJECT_ROOT": "${workspaceFolder}",
+                    # TAP-1935: minimal brain profile for the code-quality surface.
+                    "TAPPS_BRAIN_PROFILE": "coder",
                 },
             },
         },

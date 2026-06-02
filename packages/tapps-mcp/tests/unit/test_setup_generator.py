@@ -916,6 +916,50 @@ class TestEnvInConfig:
         assert env["TAPPS_MCP_MEMORY_BRAIN_AUTH_TOKEN"] == "${TAPPS_BRAIN_AUTH_TOKEN}"
         assert env["TAPPS_MCP_MEMORY_BRAIN_PROJECT_ID"] == "myproject"
 
+    def test_tapps_mcp_entry_pins_coder_brain_profile(self, tmp_path):
+        """TAP-1935: the tapps-mcp entry pins TAPPS_BRAIN_PROFILE=coder."""
+        project = tmp_path / "demo"
+        project.mkdir()
+        _generate_config("cursor", project)
+        data = json.loads((project / ".cursor" / "mcp.json").read_text(encoding="utf-8"))
+        assert data["mcpServers"]["tapps-mcp"]["env"]["TAPPS_BRAIN_PROFILE"] == "coder"
+
+    def test_docs_mcp_entry_pins_agent_brain_profile(self, tmp_path):
+        """TAP-1935: the docs-mcp entry pins TAPPS_BRAIN_PROFILE=agent_brain."""
+        project = tmp_path / "demo"
+        project.mkdir()
+        _generate_config("cursor", project, force=True, with_docs_mcp=True)
+        data = json.loads((project / ".cursor" / "mcp.json").read_text(encoding="utf-8"))
+        assert (
+            data["mcpServers"]["docs-mcp"]["env"]["TAPPS_BRAIN_PROFILE"] == "agent_brain"
+        )
+
+    def test_upgrade_reemits_brain_profile(self, tmp_path):
+        """TAP-1935: an existing config missing the profile gets it on upgrade,
+        and the merge preserves a human-added sibling env key."""
+        project = tmp_path / "demo"
+        project.mkdir()
+        cfg = project / ".cursor" / "mcp.json"
+        cfg.parent.mkdir(parents=True)
+        cfg.write_text(
+            json.dumps(
+                {
+                    "mcpServers": {
+                        "tapps-mcp": {
+                            "command": "tapps-mcp",
+                            "args": ["serve"],
+                            "env": {"MY_CUSTOM_KEY": "keep-me"},
+                        }
+                    }
+                }
+            ),
+            encoding="utf-8",
+        )
+        _generate_config("cursor", project, force=True, upgrade_mode=True)
+        env = json.loads(cfg.read_text(encoding="utf-8"))["mcpServers"]["tapps-mcp"]["env"]
+        assert env["TAPPS_BRAIN_PROFILE"] == "coder"
+        assert env["MY_CUSTOM_KEY"] == "keep-me"  # human-added key preserved
+
     def test_brain_env_token_is_substitution_not_literal(self, tmp_path):
         """The auth token must never be written as a literal value (commit safety)."""
         project = tmp_path / "demo"

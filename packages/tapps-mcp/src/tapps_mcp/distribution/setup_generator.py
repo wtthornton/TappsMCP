@@ -307,6 +307,10 @@ def _build_server_entry(
         "TAPPS_MCP_MEMORY_BRAIN_HTTP_URL": "http://localhost:8080",
         "TAPPS_MCP_MEMORY_BRAIN_AUTH_TOKEN": "${TAPPS_BRAIN_AUTH_TOKEN}",
         "TAPPS_MCP_CONTEXT7_API_KEY": "${TAPPS_MCP_CONTEXT7_API_KEY}",
+        # TAP-1935: pin the brain capability profile to the minimal surface
+        # tapps-mcp declares (TAP-1924 default). Operator-overridable knob —
+        # export TAPPS_BRAIN_PROFILE=operator for a maintenance session.
+        "TAPPS_BRAIN_PROFILE": "coder",
     }
     project_id = _derive_brain_project_id(project_root)
     if project_id:
@@ -348,7 +352,11 @@ def _build_docsmcp_server_entry(
         "type": "stdio",
         "command": command,
         "args": args,
-        "env": {"DOCS_MCP_PROJECT_ROOT": project_root_value},
+        "env": {
+            "DOCS_MCP_PROJECT_ROOT": project_root_value,
+            # TAP-1935: docs-mcp needs the brain_* facade surface.
+            "TAPPS_BRAIN_PROFILE": "agent_brain",
+        },
     }
     if host == "claude-code":
         entry["instructions"] = _DOCS_SERVER_INSTRUCTIONS
