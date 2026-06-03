@@ -210,8 +210,15 @@ class ArchMigrator:
     bridges are only opened for an ``execute`` run.
     """
 
-    def __init__(self, project_root: Path) -> None:
+    def __init__(self, project_root: Path, settings: Any = None) -> None:
         self._root = project_root
+        # tapps-core settings object (TAP-1955). When provided, the brain
+        # transport + auth headers resolve from ``.tapps-mcp.yaml`` instead of
+        # env vars only — so a CLI operator who configured the brain in their
+        # project file does not also have to export
+        # ``TAPPS_MCP_MEMORY_BRAIN_HTTP_URL`` / ``_AUTH_TOKEN``. ``None``
+        # preserves the env-only behaviour (and test bridge injection).
+        self._settings = settings
         self._reader: Any = None
         self._kg: Any = None
         self._tagger: Any = None
@@ -230,7 +237,7 @@ class ArchMigrator:
         try:
             from tapps_core.brain_bridge import create_brain_bridge
 
-            bridge = create_brain_bridge(settings=None, default_profile=profile)
+            bridge = create_brain_bridge(settings=self._settings, default_profile=profile)
         except ImportError:
             logger.debug("tapps_core_not_available", root=str(self._root))
             return None

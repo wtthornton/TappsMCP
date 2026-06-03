@@ -9,6 +9,25 @@ import click
 from docs_mcp import __version__
 
 
+def _load_tapps_settings(project_root: Path) -> object | None:
+    """Load tapps-core settings so brain transport resolves from config (TAP-1955).
+
+    The arch-migration CLI commands construct their brain bridge via
+    ``create_brain_bridge``, which — when handed ``settings=None`` — resolves
+    the HTTP transport and auth from environment variables only. A CLI operator
+    who configured ``memory.brain_http_url`` (and ``brain_auth_token``) in
+    ``.tapps-mcp.yaml`` would otherwise hit "brain unavailable" unless they also
+    exported the env vars. Loading tapps-core settings here closes that gap.
+    Returns ``None`` on import/config failure, preserving the env-only path.
+    """
+    try:
+        from tapps_core.config.settings import load_settings
+
+        return load_settings(project_root)
+    except Exception:  # pragma: no cover - falls back to env-only resolution
+        return None
+
+
 @click.group()
 @click.version_option(package_name="docs-mcp", version=__version__)
 def cli() -> None:
@@ -169,7 +188,8 @@ def migrate_arch_to_kg(execute: bool) -> None:
     from docs_mcp.integrations.arch_migration import ArchMigrator
 
     settings = load_docs_settings()
-    migrator = ArchMigrator(Path(str(settings.project_root)))
+    project_root = Path(str(settings.project_root))
+    migrator = ArchMigrator(project_root, settings=_load_tapps_settings(project_root))
     result = asyncio.run(migrator.migrate(execute=execute))
 
     mode = "EXECUTE" if execute else "DRY-RUN"
@@ -224,7 +244,8 @@ def gc_migrated_arch(execute: bool, older_than_days: int) -> None:
     from docs_mcp.integrations.arch_migration import ArchMigrator
 
     settings = load_docs_settings()
-    migrator = ArchMigrator(Path(str(settings.project_root)))
+    project_root = Path(str(settings.project_root))
+    migrator = ArchMigrator(project_root, settings=_load_tapps_settings(project_root))
     result = asyncio.run(migrator.gc_migrated(older_than_days=older_than_days, execute=execute))
 
     mode = "EXECUTE" if execute else "DRY-RUN"

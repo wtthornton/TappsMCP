@@ -234,6 +234,44 @@ class TestExecute:
 
 
 # ---------------------------------------------------------------------------
+# Bridge resolution (TAP-1955)
+# ---------------------------------------------------------------------------
+
+
+class TestBridgeResolution:
+    """``_make_bridge`` forwards the injected settings to the bridge factory."""
+
+    def test_settings_forwarded_to_factory(self, tmp_path: Path, monkeypatch: Any) -> None:
+        captured: dict[str, Any] = {}
+
+        def fake_factory(settings: Any = None, *, default_profile: str = "") -> None:
+            captured["settings"] = settings
+            captured["default_profile"] = default_profile
+
+        monkeypatch.setattr("tapps_core.brain_bridge.create_brain_bridge", fake_factory)
+        sentinel = object()
+
+        ArchMigrator(tmp_path, settings=sentinel)._make_bridge("reviewer")
+
+        assert captured["settings"] is sentinel
+        assert captured["default_profile"] == "reviewer"
+
+    def test_settings_default_none_preserves_env_only(
+        self, tmp_path: Path, monkeypatch: Any
+    ) -> None:
+        captured: dict[str, Any] = {}
+
+        def fake_factory(settings: Any = None, *, default_profile: str = "") -> None:
+            captured["settings"] = settings
+
+        monkeypatch.setattr("tapps_core.brain_bridge.create_brain_bridge", fake_factory)
+
+        ArchMigrator(tmp_path)._make_bridge("reviewer")
+
+        assert captured["settings"] is None
+
+
+# ---------------------------------------------------------------------------
 # GC (TAP-1954)
 # ---------------------------------------------------------------------------
 
@@ -342,7 +380,7 @@ class TestCli:
         kg, tag = FakeBridge(), FakeBridge()
         read = FakeBridge([_structure_entry()])
 
-        def _fake_migrator(_root: Path) -> ArchMigrator:
+        def _fake_migrator(_root: Path, settings: Any = None) -> ArchMigrator:
             return _migrator(tmp_path, read, kg, tag)
 
         # ArchMigrator is imported inside the command; patch the source symbol.
@@ -360,7 +398,7 @@ class TestCli:
             async def upsert_entity(self, *a: Any, **k: Any) -> dict[str, Any]:
                 raise RuntimeError("brain down")
 
-        def _fake_migrator(_root: Path) -> ArchMigrator:
+        def _fake_migrator(_root: Path, settings: Any = None) -> ArchMigrator:
             return _migrator(tmp_path, FakeBridge([_structure_entry()]), BoomKG(), FakeBridge())
 
         monkeypatch.setattr("docs_mcp.integrations.arch_migration.ArchMigrator", _fake_migrator)
@@ -375,7 +413,7 @@ class TestCli:
         # "2020-01-01" is always >14 days before any real today.
         read = FakeBridge([_migrated_entry("2020-01-01")])
 
-        def _fake_migrator(_root: Path) -> ArchMigrator:
+        def _fake_migrator(_root: Path, settings: Any = None) -> ArchMigrator:
             return _migrator(tmp_path, read, FakeBridge(), FakeBridge(), deleter)
 
         monkeypatch.setattr("docs_mcp.integrations.arch_migration.ArchMigrator", _fake_migrator)
@@ -390,7 +428,7 @@ class TestCli:
         deleter = FakeBridge()
         read = FakeBridge([_migrated_entry("2020-01-01")])
 
-        def _fake_migrator(_root: Path) -> ArchMigrator:
+        def _fake_migrator(_root: Path, settings: Any = None) -> ArchMigrator:
             return _migrator(tmp_path, read, FakeBridge(), FakeBridge(), deleter)
 
         monkeypatch.setattr("docs_mcp.integrations.arch_migration.ArchMigrator", _fake_migrator)
