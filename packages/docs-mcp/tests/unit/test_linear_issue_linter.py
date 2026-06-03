@@ -256,6 +256,55 @@ class TestMissingFileAnchor:
                 f"got findings={rules}"
             )
 
+    def test_frontend_extension_anchor_passes(self) -> None:
+        # NLTlabsPE 2026-06-03: frontend extensions were missing from the
+        # regex allowlist, so a story whose only anchors were stylesheets /
+        # components failed missing-file-anchor and routed to Triage. The
+        # allowlist was dropped in favor of matching the anchor shape.
+        for anchor in (
+            "poc/.template/src/styles/global.css:57-73",
+            "src/pages/index.astro:1-40",
+            "assets/logo.svg:12",
+            "src/styles/tokens.scss:45-58",
+            "src/App.vue:1-100",
+            "src/Button.svelte:5-9",
+            "public/index.html:1",
+        ):
+            result = lint_issue(
+                title="x",
+                description=(
+                    f"## What\nthing\n## Where\n`{anchor}`\n"
+                    "## Acceptance\n- [ ] done\n"
+                ),
+                priority=3,
+                estimate=1.0,
+            )
+            rules = [f.rule for f in result.findings]
+            assert RULE_MISSING_FILE_ANCHOR not in rules, (
+                f"frontend anchor {anchor!r} should satisfy file-anchor rule, "
+                f"got findings={rules}"
+            )
+
+    def test_prose_colon_numbers_still_fail(self) -> None:
+        # The fix must not loosen so far that ratios / times read as anchors.
+        # A letter-led extension is required, so `3.5:1` and `16:9` do not
+        # match — these descriptions have no real `path.ext:LINE` anchor.
+        for prose in ("aspect ratio 3.5:1", "16:9 at 12:30"):
+            result = lint_issue(
+                title="x",
+                description=(
+                    f"## What\n{prose}\n## Where\nsee above\n"
+                    "## Acceptance\n- [ ] done\n"
+                ),
+                priority=3,
+                estimate=1.0,
+            )
+            rules = [f.rule for f in result.findings]
+            assert RULE_MISSING_FILE_ANCHOR in rules, (
+                f"prose {prose!r} must not be mistaken for a file anchor, "
+                f"got findings={rules}"
+            )
+
 
 # ---------------------------------------------------------------------------
 # Rule: missing-acceptance / acceptance-empty

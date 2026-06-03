@@ -46,13 +46,14 @@ _AUTOLINK_MANGLE_RE = re.compile(r"\[([^\]]+)\]\(<https?://([^>\s]+)>\)")
 _UUID_WRAPPED_REF_RE = re.compile(r'<issue\s+id="[^"]+"\s*>\s*(TAP-\d+)\s*</issue>')
 
 # Regex: file anchor — `path/to/file.ext:LINE` or `:LINE-LINE`.
-# Extension allowlist must include shell scripts (sh/bash/zsh) — without
-# them, every `## Where` anchor pointing at a shell file fails with
-# missing-file-anchor regardless of path shape (with or without a directory
-# component, with or without a `./` prefix). Tracked: TAP-1420.
-_FILE_ANCHOR_RE = re.compile(
-    r"[\w./\\-]+\.(?:py|pyi|ts|tsx|js|jsx|md|yaml|yml|toml|json|rs|go|java|rb|cpp|c|h|sh|bash|zsh):\d+(?:-\d+)?"
-)
+# Extension-agnostic by design. A curated allowlist bit legitimate file types
+# twice — TAP-1420 had to add shell scripts (sh/bash/zsh), and NLTlabsPE hit
+# the same wall with frontend extensions (css/astro/svg/scss/vue/svelte/html).
+# The signal that matters is the anchor SHAPE — a repo-relative path followed
+# by `:LINE` or `:LINE-RANGE` — not which extension it ends in. The extension
+# must be letter-led so prose like `3.5:1` (ratios) or `12:30` (times) is not
+# misread as a file anchor.
+_FILE_ANCHOR_RE = re.compile(r"[\w./\\-]+\.[A-Za-z][A-Za-z0-9]*:\d+(?:-\d+)?")
 
 # Regex: fenced code block opening fence (capturing position only).
 _FENCE_RE = re.compile(r"^```", re.MULTILINE)
