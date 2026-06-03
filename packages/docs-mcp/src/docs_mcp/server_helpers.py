@@ -77,9 +77,12 @@ def _get_brain_bridge() -> Any:
     never breaks a read tool (TAP-1950/1951/1952).
     """
     try:
-        from tapps_core.brain_bridge import create_brain_bridge
+        from tapps_core.brain_bridge import BRAIN_PROFILE_FACADE, create_brain_bridge
 
-        return create_brain_bridge(settings=None, default_profile="agent_brain")
+        # docs_kg_query calls only the brain_* facade (get_neighbors /
+        # explain_connection); ``agent_brain`` is the least-privilege profile
+        # that exposes it (ADR-0012).
+        return create_brain_bridge(settings=None, default_profile=BRAIN_PROFILE_FACADE)
     except Exception:
         _logger.debug("brain_bridge_unavailable", exc_info=True)
         return None

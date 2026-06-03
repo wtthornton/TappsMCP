@@ -338,6 +338,46 @@ _BRIDGE_USED_TOOLS: frozenset[str] = frozenset(
 )
 
 
+# ---------------------------------------------------------------------------
+# Capability-profile selection per consumer role (ADR-0012).
+#
+# tapps-brain gates its tool surface by the ``X-Brain-Profile`` header, and
+# from v3.20.0 it enforces that gate on every ``tools/call`` — a tool absent
+# from the negotiated profile fails with ``ToolNotInProfileError``. No single
+# profile fits every consumer, so each role below names the *least-privilege*
+# profile that still spans every tool that role calls:
+#
+#   SERVER  → "full":       the ``tapps_memory`` facade exercises the whole
+#                           read+write+hive+KG+feedback surface
+#                           (``_BRIDGE_USED_TOOLS``). ``full`` is the smallest
+#                           profile that exposes all of it. Maintenance ops
+#                           (``maintenance_gc`` / ``maintenance_consolidate``)
+#                           are operator-only, are *not* in
+#                           ``_BRIDGE_USED_TOOLS``, and degrade gracefully.
+#   OPERATOR→ "operator":   CLI maintenance (gc / consolidate / config / export).
+#   READONLY→ "reviewer":   read-only recall/search (e.g. CLI auto-recall,
+#                           which calls only ``memory_search``).
+#   HOOKS   → "coder":      auto-recall/capture/reinforce + KG reads only.
+#   FACADE  → "agent_brain": ``brain_*`` facade only (docs-mcp KG queries).
+#
+# A consumer overrides any of these via ``memory.brain_profile`` in
+# ``.tapps-mcp.yaml`` (or the ``TAPPS_BRAIN_PROFILE`` env var); that value
+# wins over the ``default_profile`` passed to :func:`create_brain_bridge`.
+# ---------------------------------------------------------------------------
+BRAIN_PROFILE_SERVER: str = "full"
+BRAIN_PROFILE_OPERATOR: str = "operator"
+BRAIN_PROFILE_READONLY: str = "reviewer"
+BRAIN_PROFILE_HOOKS: str = "coder"
+BRAIN_PROFILE_FACADE: str = "agent_brain"
+
+# Roles whose profile is broad enough that a ``_BRIDGE_USED_TOOLS`` member
+# missing from the eager ``tools/list`` is benign deferred-loading (TAP-1985,
+# still callable via ``tools/call``) rather than a genuine profile gate.
+BRAIN_PROFILES_DEFERRED_OK: frozenset[str] = frozenset(
+    {BRAIN_PROFILE_SERVER, BRAIN_PROFILE_OPERATOR}
+)
+
+
 def _classify_mcp_error(exc: BaseException) -> str:
     """Return one of ``"gated"`` / ``"removed"`` / ``"other"`` for a brain failure.
 

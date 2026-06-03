@@ -1745,7 +1745,12 @@ def check_brain_profile(root: Path) -> CheckResult:
 
     try:
         from tapps_core.brain_auth import build_brain_headers
-        from tapps_core.brain_bridge import _BRIDGE_USED_TOOLS, _MCP_ACCEPT_HEADERS
+        from tapps_core.brain_bridge import (
+            _BRIDGE_USED_TOOLS,
+            _MCP_ACCEPT_HEADERS,
+            BRAIN_PROFILE_SERVER,
+            BRAIN_PROFILES_DEFERRED_OK,
+        )
         from tapps_core.config.settings import load_settings
     except Exception as exc:
         return CheckResult(
@@ -1766,7 +1771,16 @@ def check_brain_profile(root: Path) -> CheckResult:
             "Fix .tapps-mcp.yaml or env vars and re-run doctor.",
         )
 
-    declared = headers.get("X-Brain-Profile") or "(server default)"
+    # ADR-0012: when no profile is configured, the runtime server bridge applies
+    # BRAIN_PROFILE_SERVER as its default_profile. Probe with that same effective
+    # profile so the diagnosis matches what the tapps_memory facade actually uses.
+    if "X-Brain-Profile" not in headers:
+        headers["X-Brain-Profile"] = BRAIN_PROFILE_SERVER
+        effective_profile = BRAIN_PROFILE_SERVER
+        declared = f"{BRAIN_PROFILE_SERVER} (server default)"
+    else:
+        effective_profile = headers["X-Brain-Profile"]
+        declared = effective_profile
 
     # TAP-1927: report the warm-cache status alongside the live probe result.
     _warm_cache_label = _probe_warm_cache_status(root, headers)
@@ -1800,15 +1814,29 @@ def check_brain_profile(root: Path) -> CheckResult:
             f"({source}), no bridge mismatch; warm-cache={_warm_cache_label}",
         )
 
+    # ADR-0012: distinguish a benign deferred-loading gap (``full``/``operator``,
+    # where the missing tools carry ``defer_loading`` and remain callable via
+    # tools/call — TAP-1985) from a genuine profile gate (``coder``/``reviewer``/
+    # ``agent_brain``/``seeder``, where the tools are absent from the profile and
+    # tools/call rejects them with ToolNotInProfileError).
+    if effective_profile in BRAIN_PROFILES_DEFERRED_OK:
+        return CheckResult(
+            "tapps-brain capability profile",
+            True,
+            f"profile={declared}, {len(gated_used)} bridge tool(s) deferred from eager "
+            f"tools/list but callable via tools/call ({source}); warm-cache={_warm_cache_label}",
+        )
+
     return CheckResult(
         "tapps-brain capability profile",
         False,
-        f"profile={declared} hides {len(gated_used)} bridge tool(s) from eager tools/list "
-        f"({source}): {', '.join(gated_used)}; warm-cache={_warm_cache_label}",
-        "On tapps-brain v3.19.0+ this is expected for the 'full'/'operator' profiles — "
-        "deferred tools remain callable via tools/call (TAP-1985). If memory operations are "
-        "actually failing, set memory.brain_profile (or TAPPS_BRAIN_PROFILE) to a profile "
-        "that exposes the tools the bridge needs, or adjust the brain's default profile.",
+        f"profile={declared} GATES {len(gated_used)} bridge tool(s) ({source}): "
+        f"{', '.join(gated_used)}; these calls fail with ToolNotInProfileError on "
+        f"tapps-brain v3.20.0+; warm-cache={_warm_cache_label}",
+        "The declared profile is too narrow for the tapps_memory facade. Set "
+        "memory.brain_profile (or TAPPS_BRAIN_PROFILE) to 'full' (ADR-0012) — or "
+        "'operator' if maintenance ops must run live — so the bridge's tools are "
+        "exposed. 'coder'/'reviewer'/'agent_brain' are intended for narrower consumers.",
     )
 
 

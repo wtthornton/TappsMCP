@@ -13,6 +13,7 @@ import json
 import stat
 from typing import TYPE_CHECKING, Any
 
+from tapps_core.brain_bridge import BRAIN_PROFILE_SERVER
 from tapps_mcp.pipeline.platform_hook_templates import (
     AGENT_TEAMS_CLAUDE_MD_SECTION,
     AGENT_TEAMS_HOOK_SCRIPTS,
@@ -423,8 +424,9 @@ def generate_claude_plugin_bundle(
                     "TAPPS_BRAIN_HTTP_URL": "${user_config.memory_http_url}",
                     "TAPPS_LLM_ENGAGEMENT_LEVEL": "${user_config.engagement_level}",
                     "TAPPS_QUALITY_PRESET": "${user_config.quality_preset}",
-                    # TAP-1935: minimal brain profile for the code-quality surface.
-                    "TAPPS_BRAIN_PROFILE": "coder",
+                    # ADR-0012: the tapps-mcp server backs the full tapps_memory
+                    # facade — it needs the ``full`` profile, not ``coder``.
+                    "TAPPS_BRAIN_PROFILE": BRAIN_PROFILE_SERVER,
                 },
             },
         },
@@ -533,8 +535,9 @@ def generate_cursor_plugin_bundle(
                 "args": ["tapps-mcp", "serve"],
                 "env": {
                     "TAPPS_MCP_PROJECT_ROOT": "${workspaceFolder}",
-                    # TAP-1935: minimal brain profile for the code-quality surface.
-                    "TAPPS_BRAIN_PROFILE": "coder",
+                    # ADR-0012: the tapps-mcp server backs the full tapps_memory
+                    # facade — it needs the ``full`` profile, not ``coder``.
+                    "TAPPS_BRAIN_PROFILE": BRAIN_PROFILE_SERVER,
                 },
             },
         },

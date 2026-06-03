@@ -916,13 +916,14 @@ class TestEnvInConfig:
         assert env["TAPPS_MCP_MEMORY_BRAIN_AUTH_TOKEN"] == "${TAPPS_BRAIN_AUTH_TOKEN}"
         assert env["TAPPS_MCP_MEMORY_BRAIN_PROJECT_ID"] == "myproject"
 
-    def test_tapps_mcp_entry_pins_coder_brain_profile(self, tmp_path):
-        """TAP-1935: the tapps-mcp entry pins TAPPS_BRAIN_PROFILE=coder."""
+    def test_tapps_mcp_entry_pins_full_brain_profile(self, tmp_path):
+        """ADR-0012: the tapps-mcp entry pins TAPPS_BRAIN_PROFILE=full — the
+        server backs the full tapps_memory facade, which ``coder`` would gate."""
         project = tmp_path / "demo"
         project.mkdir()
         _generate_config("cursor", project)
         data = json.loads((project / ".cursor" / "mcp.json").read_text(encoding="utf-8"))
-        assert data["mcpServers"]["tapps-mcp"]["env"]["TAPPS_BRAIN_PROFILE"] == "coder"
+        assert data["mcpServers"]["tapps-mcp"]["env"]["TAPPS_BRAIN_PROFILE"] == "full"
 
     def test_docs_mcp_entry_pins_agent_brain_profile(self, tmp_path):
         """TAP-1935: the docs-mcp entry pins TAPPS_BRAIN_PROFILE=agent_brain."""
@@ -957,7 +958,7 @@ class TestEnvInConfig:
         )
         _generate_config("cursor", project, force=True, upgrade_mode=True)
         env = json.loads(cfg.read_text(encoding="utf-8"))["mcpServers"]["tapps-mcp"]["env"]
-        assert env["TAPPS_BRAIN_PROFILE"] == "coder"
+        assert env["TAPPS_BRAIN_PROFILE"] == "full"
         assert env["MY_CUSTOM_KEY"] == "keep-me"  # human-added key preserved
 
     def test_brain_env_token_is_substitution_not_literal(self, tmp_path):

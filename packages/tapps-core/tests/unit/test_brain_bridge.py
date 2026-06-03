@@ -597,3 +597,41 @@ class TestLifecycle:
     def test_close_tolerates_exception(self, bridge: Any) -> None:
         bridge._brain.close.side_effect = RuntimeError("already closed")
         bridge.close()  # should not raise
+
+
+class TestBrainProfileRoleConstants:
+    """ADR-0012: per-consumer capability-profile role constants."""
+
+    def test_role_constant_values(self) -> None:
+        from tapps_core.brain_bridge import (
+            BRAIN_PROFILE_FACADE,
+            BRAIN_PROFILE_HOOKS,
+            BRAIN_PROFILE_OPERATOR,
+            BRAIN_PROFILE_READONLY,
+            BRAIN_PROFILE_SERVER,
+        )
+
+        assert BRAIN_PROFILE_SERVER == "full"
+        assert BRAIN_PROFILE_OPERATOR == "operator"
+        assert BRAIN_PROFILE_READONLY == "reviewer"
+        assert BRAIN_PROFILE_HOOKS == "coder"
+        assert BRAIN_PROFILE_FACADE == "agent_brain"
+
+    def test_server_profile_is_broad_surface(self) -> None:
+        """The server bridge backs the full tapps_memory facade, so its profile
+        must be one where a missing eager tool is benign deferred-loading — not
+        a narrow facade profile that genuinely gates the bridge's tools."""
+        from tapps_core.brain_bridge import (
+            BRAIN_PROFILE_FACADE,
+            BRAIN_PROFILE_HOOKS,
+            BRAIN_PROFILE_READONLY,
+            BRAIN_PROFILE_SERVER,
+            BRAIN_PROFILES_DEFERRED_OK,
+        )
+
+        assert BRAIN_PROFILE_SERVER in BRAIN_PROFILES_DEFERRED_OK
+        # Narrow profiles must NOT be treated as deferred-ok — under them the
+        # bridge's tools are genuinely gated (ToolNotInProfileError on v3.20.0+).
+        assert BRAIN_PROFILE_HOOKS not in BRAIN_PROFILES_DEFERRED_OK
+        assert BRAIN_PROFILE_READONLY not in BRAIN_PROFILES_DEFERRED_OK
+        assert BRAIN_PROFILE_FACADE not in BRAIN_PROFILES_DEFERRED_OK

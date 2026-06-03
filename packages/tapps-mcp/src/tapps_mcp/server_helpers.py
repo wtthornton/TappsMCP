@@ -148,11 +148,21 @@ def _get_brain_bridge() -> _BrainBridgeType | None:
     if _brain_bridge is None:
         with _brain_bridge_lock:
             if _brain_bridge is None:
-                from tapps_core.brain_bridge import create_brain_bridge
+                from tapps_core.brain_bridge import (
+                    BRAIN_PROFILE_SERVER,
+                    create_brain_bridge,
+                )
                 from tapps_core.config.settings import load_settings
 
                 settings = load_settings()
-                _brain_bridge = create_brain_bridge(settings, default_profile="coder")
+                # The server singleton backs the full tapps_memory facade, which
+                # exercises the whole read+write+hive+KG+feedback surface. Use
+                # the ``full`` profile (ADR-0012) — ``coder`` gates ~18 of the
+                # bridge's tools (memory_save/get/search/list/supersede, hive_*,
+                # batch ops, …) and would fail those calls on brain v3.20.0+.
+                _brain_bridge = create_brain_bridge(
+                    settings, default_profile=BRAIN_PROFILE_SERVER
+                )
 
                 # TAP-2014: wire elevation guard after bridge creation.
                 if _brain_bridge is not None:

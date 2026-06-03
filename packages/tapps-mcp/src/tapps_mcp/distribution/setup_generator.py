@@ -15,6 +15,7 @@ from typing import Any
 
 import click
 
+from tapps_core.brain_bridge import BRAIN_PROFILE_FACADE, BRAIN_PROFILE_SERVER
 from tapps_core.common.logging import get_logger
 
 log = get_logger(__name__)
@@ -307,10 +308,12 @@ def _build_server_entry(
         "TAPPS_MCP_MEMORY_BRAIN_HTTP_URL": "http://localhost:8080",
         "TAPPS_MCP_MEMORY_BRAIN_AUTH_TOKEN": "${TAPPS_BRAIN_AUTH_TOKEN}",
         "TAPPS_MCP_CONTEXT7_API_KEY": "${TAPPS_MCP_CONTEXT7_API_KEY}",
-        # TAP-1935: pin the brain capability profile to the minimal surface
-        # tapps-mcp declares (TAP-1924 default). Operator-overridable knob —
-        # export TAPPS_BRAIN_PROFILE=operator for a maintenance session.
-        "TAPPS_BRAIN_PROFILE": "coder",
+        # ADR-0012: the tapps-mcp server backs the full tapps_memory facade,
+        # which exercises the whole read+write+hive+KG+feedback surface — so it
+        # needs the ``full`` profile, not ``coder`` (which gates ~18 of those
+        # tools on tapps-brain v3.20.0+). Operator-overridable knob — export
+        # TAPPS_BRAIN_PROFILE=operator for a maintenance session.
+        "TAPPS_BRAIN_PROFILE": BRAIN_PROFILE_SERVER,
     }
     project_id = _derive_brain_project_id(project_root)
     if project_id:
@@ -354,8 +357,8 @@ def _build_docsmcp_server_entry(
         "args": args,
         "env": {
             "DOCS_MCP_PROJECT_ROOT": project_root_value,
-            # TAP-1935: docs-mcp needs the brain_* facade surface.
-            "TAPPS_BRAIN_PROFILE": "agent_brain",
+            # ADR-0012: docs-mcp needs only the brain_* facade surface.
+            "TAPPS_BRAIN_PROFILE": BRAIN_PROFILE_FACADE,
         },
     }
     if host == "claude-code":

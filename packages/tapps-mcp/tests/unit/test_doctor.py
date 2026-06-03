@@ -1979,3 +1979,48 @@ class TestCheckBrainProbeLatency:
             result = check_brain_probe_latency(tmp_path)
         assert result.ok is True
         assert "unavailable" in result.message
+
+
+class TestCheckBrainProfileGateVsDeferral:
+    """ADR-0012: a profile gap is a real gate under narrow profiles, but benign
+    deferred-loading under ``full``/``operator``."""
+
+    def _run(self, tmp_path, headers, exposed):  # type: ignore[no-untyped-def]
+        from tapps_mcp.distribution.doctor import check_brain_profile
+
+        with (
+            patch.dict(
+                "os.environ", {"TAPPS_MCP_MEMORY_BRAIN_HTTP_URL": "http://brain:8080"}
+            ),
+            patch("tapps_core.config.settings.load_settings", return_value=MagicMock()),
+            patch("tapps_core.brain_auth.build_brain_headers", return_value=dict(headers)),
+            patch(
+                "tapps_mcp.distribution.doctor._probe_warm_cache_status",
+                return_value="n/a",
+            ),
+            patch(
+                "tapps_mcp.distribution.doctor._fetch_exposed_tools",
+                return_value=(frozenset(exposed), "rest"),
+            ),
+        ):
+            return check_brain_profile(tmp_path)
+
+    def test_narrow_profile_gap_is_a_real_gate(self, tmp_path) -> None:  # type: ignore[no-untyped-def]
+        result = self._run(tmp_path, {"X-Brain-Profile": "coder"}, {"brain_recall"})
+        assert result.ok is False
+        assert "GATES" in result.message
+        assert "ToolNotInProfileError" in result.message
+        assert "full" in (result.detail or "")
+
+    def test_full_profile_gap_is_benign_deferral(self, tmp_path) -> None:  # type: ignore[no-untyped-def]
+        result = self._run(tmp_path, {"X-Brain-Profile": "full"}, {"brain_recall"})
+        assert result.ok is True
+        assert "deferred" in result.message
+
+    def test_no_profile_uses_server_default_full(self, tmp_path) -> None:  # type: ignore[no-untyped-def]
+        # No X-Brain-Profile header → doctor probes with the server default
+        # (``full``), so the gap is classified as benign deferral, not a gate.
+        result = self._run(tmp_path, {}, {"brain_recall"})
+        assert result.ok is True
+        assert "deferred" in result.message
+        assert "server default" in result.message

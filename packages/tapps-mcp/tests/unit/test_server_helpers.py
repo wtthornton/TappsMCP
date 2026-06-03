@@ -66,14 +66,27 @@ class TestSerializeIssues:
 
 
 class TestGetBrainBridgeProfile:
-    """TAP-1924: server_helpers._get_brain_bridge passes default_profile='coder'."""
+    """ADR-0012: the server bridge backs the full tapps_memory facade, so it
+    must declare the ``full`` profile — ``coder`` gates ~18 of the bridge's
+    tools (memory_save/get/search/list/supersede, hive_*, batch ops, …), which
+    fail with ToolNotInProfileError on tapps-brain v3.20.0+.
+    """
 
-    def test_get_brain_bridge_uses_coder_default_profile(self) -> None:
+    def test_get_brain_bridge_uses_full_default_profile(self) -> None:
         """``_get_brain_bridge()`` must call ``create_brain_bridge`` with
-        ``default_profile='coder'`` so tapps-mcp always requests the minimum
-        brain surface rather than the server-side default (``full`` / 59 tools).
-        """
+        ``default_profile=BRAIN_PROFILE_SERVER`` (``full``)."""
+        from tapps_core.brain_bridge import (
+            BRAIN_PROFILE_SERVER,
+            BRAIN_PROFILES_DEFERRED_OK,
+            _BRIDGE_USED_TOOLS,
+        )
         from tapps_mcp.server_helpers import _get_brain_bridge, _reset_brain_bridge_cache
+
+        # Guard the invariant the choice rests on: the server profile must be a
+        # broad-surface profile (one where a missing eager tool is benign
+        # deferred-loading, not a real gate) — never a narrow facade profile.
+        assert BRAIN_PROFILE_SERVER in BRAIN_PROFILES_DEFERRED_OK
+        assert len(_BRIDGE_USED_TOOLS) > 18  # facade needs the wide surface
 
         mock_bridge = MagicMock()
         mock_settings = MagicMock()
@@ -94,8 +107,8 @@ class TestGetBrainBridgeProfile:
         assert bridge is mock_bridge
         mock_create.assert_called_once()
         _, call_kwargs = mock_create.call_args
-        assert call_kwargs.get("default_profile") == "coder", (
-            f"Expected default_profile='coder', got {call_kwargs}"
+        assert call_kwargs.get("default_profile") == BRAIN_PROFILE_SERVER == "full", (
+            f"Expected default_profile='full', got {call_kwargs}"
         )
         # Cleanup singleton so other tests start clean.
         _reset_brain_bridge_cache()

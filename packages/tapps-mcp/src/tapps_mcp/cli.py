@@ -783,7 +783,7 @@ def memory_recall(query: str, project_root: str, max_results: int, min_score: fl
     import sys
     from pathlib import Path
 
-    from tapps_core.brain_bridge import create_brain_bridge
+    from tapps_core.brain_bridge import BRAIN_PROFILE_READONLY, create_brain_bridge
     from tapps_core.config.settings import load_settings
 
     root = _get_project_root() if project_root == "." else Path(project_root).resolve()
@@ -792,7 +792,10 @@ def memory_recall(query: str, project_root: str, max_results: int, min_score: fl
 
     async def _recall() -> list[dict[str, object]]:
         settings = load_settings(project_root=root)
-        bridge = create_brain_bridge(settings, default_profile="coder")
+        # Read-only auto-recall calls only ``memory_search``; ``reviewer`` is
+        # the least-privilege profile that exposes it (ADR-0012). ``coder``
+        # hides ``memory_search`` and silently returned no hits on v3.20.0+.
+        bridge = create_brain_bridge(settings, default_profile=BRAIN_PROFILE_READONLY)
         if bridge is None:
             return []
         try:
