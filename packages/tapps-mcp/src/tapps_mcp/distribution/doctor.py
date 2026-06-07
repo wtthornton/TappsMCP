@@ -986,6 +986,29 @@ def check_finish_task_skill(project_root: Path) -> CheckResult:
     )
 
 
+def check_continuous_learning_v2_skill(project_root: Path) -> CheckResult:
+    """Check the ``continuous-learning-v2`` skill is deployed (ECC v2.1).
+
+    The skill bundles instinct-based session observation, project-scoped
+    instinct storage, and evolution commands (instinct-status, evolve,
+    promote, projects).  Hooks fire deterministically (100%) vs the v1
+    skill-based observation (~50-80%).
+    """
+    skill_path = project_root / ".claude" / "skills" / "continuous-learning-v2" / "SKILL.md"
+    if not skill_path.exists():
+        return CheckResult(
+            "continuous-learning-v2 skill",
+            False,
+            ".claude/skills/continuous-learning-v2/SKILL.md not found",
+            "Run: tapps-mcp upgrade",
+        )
+    return CheckResult(
+        "continuous-learning-v2 skill",
+        True,
+        f"Present: {skill_path}",
+    )
+
+
 def check_agents_md(project_root: Path) -> CheckResult:
     """Check if AGENTS.md exists and its version matches the installed TappsMCP."""
     agents_md = project_root / "AGENTS.md"
@@ -2820,6 +2843,7 @@ def _collect_checks(root: Path, *, quick: bool = False) -> list[CheckResult]:
     checks.append(check_config_files_rule(root))
     checks.append(check_linear_issue_skill_current(root))
     checks.append(check_finish_task_skill(root))
+    checks.append(check_continuous_learning_v2_skill(root))
     checks.append(check_pretooluse_matchers(root))
     checks.append(check_agents_md(root))
     checks.append(check_karpathy_guidelines(root))
