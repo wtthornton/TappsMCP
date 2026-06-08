@@ -18,6 +18,7 @@ if TYPE_CHECKING:
 
 _logger = structlog.get_logger(__name__)
 
+from docs_mcp.mcp_register import register_tool
 from docs_mcp.server import _ANNOTATIONS_READ_ONLY, _META_DEFERRED, _record_call
 from docs_mcp.server_helpers import _get_brain_bridge, error_response, success_response
 
@@ -101,4 +102,6 @@ async def _safe_call(fn: Any, *args: Any, **kwargs: Any) -> Any:
 def register(mcp_instance: "FastMCP", allowed_tools: frozenset[str]) -> None:  # noqa: UP037
     """Register docs_kg_query on the shared mcp instance when enabled."""
     if "docs_kg_query" in allowed_tools:
-        mcp_instance.tool(annotations=_ANNOTATIONS_READ_ONLY, meta=_META_DEFERRED)(docs_kg_query)
+        register_tool(
+            mcp_instance, docs_kg_query, annotations=_ANNOTATIONS_READ_ONLY, meta=_META_DEFERRED
+        )

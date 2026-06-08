@@ -10,6 +10,7 @@ import time
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
+from docs_mcp.mcp_register import register_tool
 from docs_mcp.server import (
     _ANNOTATIONS_READ_ONLY,
     _META_SIZE_100K_D,
@@ -224,10 +225,16 @@ def register(mcp_instance: FastMCP, allowed_tools: frozenset[str]) -> None:
     TAP-1987: both analysis tools are deferred (not on the daily-driver list).
     """
     if "docs_module_map" in allowed_tools:
-        mcp_instance.tool(annotations=_ANNOTATIONS_READ_ONLY, meta=_META_SIZE_200K_D)(
-            docs_module_map
+        register_tool(
+            mcp_instance,
+            docs_module_map,
+            annotations=_ANNOTATIONS_READ_ONLY,
+            meta=_META_SIZE_200K_D,
         )
     if "docs_api_surface" in allowed_tools:
-        mcp_instance.tool(annotations=_ANNOTATIONS_READ_ONLY, meta=_META_SIZE_100K_D)(
-            docs_api_surface
+        register_tool(
+            mcp_instance,
+            docs_api_surface,
+            annotations=_ANNOTATIONS_READ_ONLY,
+            meta=_META_SIZE_100K_D,
         )

@@ -24,6 +24,7 @@ from mcp.server.fastmcp import Context
 from mcp.types import ToolAnnotations
 
 from tapps_core.config.settings import load_settings
+from tapps_mcp.mcp_register import register_tool
 from tapps_mcp.server_helpers import (
     _get_brain_bridge,
     build_impact_memory_context,
@@ -1775,38 +1776,62 @@ def register(mcp_instance: FastMCP, allowed_tools: frozenset[str]) -> None:
     All other analysis tools carry defer_loading=True (combined with size hints where needed).
     """
     if "tapps_session_notes" in allowed_tools:
-        mcp_instance.tool(annotations=_ANNOTATIONS_READ_ONLY, meta=_META_DEFERRED)(
-            tapps_session_notes
+        register_tool(
+            mcp_instance, tapps_session_notes, annotations=_ANNOTATIONS_READ_ONLY, meta=_META_DEFERRED
         )
     if "tapps_impact_analysis" in allowed_tools:
-        mcp_instance.tool(annotations=_ANNOTATIONS_READ_ONLY, meta=_META_LARGE_OUTPUT_100K)(
-            tapps_impact_analysis
+        register_tool(
+            mcp_instance,
+            tapps_impact_analysis,
+            annotations=_ANNOTATIONS_READ_ONLY,
+            meta=_META_LARGE_OUTPUT_100K,
         )
     if "tapps_report" in allowed_tools:
-        mcp_instance.tool(annotations=_ANNOTATIONS_READ_ONLY, meta=_META_LARGE_OUTPUT_100K_D)(
-            tapps_report
+        register_tool(
+            mcp_instance,
+            tapps_report,
+            annotations=_ANNOTATIONS_READ_ONLY,
+            meta=_META_LARGE_OUTPUT_100K_D,
         )
     if "tapps_dead_code" in allowed_tools:
-        mcp_instance.tool(annotations=_ANNOTATIONS_READ_ONLY, meta=_META_LARGE_OUTPUT_100K_D)(
-            tapps_dead_code
+        register_tool(
+            mcp_instance,
+            tapps_dead_code,
+            annotations=_ANNOTATIONS_READ_ONLY,
+            meta=_META_LARGE_OUTPUT_100K_D,
         )
     if "tapps_dependency_scan" in allowed_tools:
-        mcp_instance.tool(annotations=_ANNOTATIONS_READ_ONLY_OPEN, meta=_META_DEFERRED)(
-            tapps_dependency_scan
+        register_tool(
+            mcp_instance,
+            tapps_dependency_scan,
+            annotations=_ANNOTATIONS_READ_ONLY_OPEN,
+            meta=_META_DEFERRED,
         )
     if "tapps_dependency_graph" in allowed_tools:
-        mcp_instance.tool(annotations=_ANNOTATIONS_READ_ONLY, meta=_META_LARGE_OUTPUT_200K_D)(
-            tapps_dependency_graph
+        register_tool(
+            mcp_instance,
+            tapps_dependency_graph,
+            annotations=_ANNOTATIONS_READ_ONLY,
+            meta=_META_LARGE_OUTPUT_200K_D,
         )
     if "tapps_audit_campaign" in allowed_tools:
-        mcp_instance.tool(annotations=_ANNOTATIONS_READ_ONLY, meta=_META_LARGE_OUTPUT_200K_D)(
-            tapps_audit_campaign
+        register_tool(
+            mcp_instance,
+            tapps_audit_campaign,
+            annotations=_ANNOTATIONS_READ_ONLY,
+            meta=_META_LARGE_OUTPUT_200K_D,
         )
     if "tapps_finding_to_story" in allowed_tools:
-        mcp_instance.tool(annotations=_ANNOTATIONS_READ_ONLY, meta=_META_DEFERRED)(
-            tapps_finding_to_story
+        register_tool(
+            mcp_instance,
+            tapps_finding_to_story,
+            annotations=_ANNOTATIONS_READ_ONLY,
+            meta=_META_DEFERRED,
         )
     if "tapps_audit_close_coverage" in allowed_tools:
-        mcp_instance.tool(
-            annotations=_ANNOTATIONS_SIDE_EFFECT_IDEMPOTENT, meta=_META_DEFERRED
-        )(tapps_audit_close_coverage)
+        register_tool(
+            mcp_instance,
+            tapps_audit_close_coverage,
+            annotations=_ANNOTATIONS_SIDE_EFFECT_IDEMPOTENT,
+            meta=_META_DEFERRED,
+        )

@@ -29,6 +29,7 @@ if TYPE_CHECKING:
     from mcp.server.fastmcp import FastMCP
 
 from docs_mcp.linters.linear_issue import lint_issue
+from docs_mcp.mcp_register import register_tool
 from docs_mcp.server import _ANNOTATIONS_READ_ONLY, _META_DEFERRED, _record_call
 from docs_mcp.server_helpers import success_response
 from docs_mcp.triage.linear_issue import triage_issues
@@ -499,12 +500,17 @@ def register(mcp_instance: FastMCP, allowed_tools: frozenset[str]) -> None:
     TAP-2009: docs_save_linear_issue is a daily-driver gate (eager).
     """
     if "docs_lint_linear_issue" in allowed_tools:
-        mcp_instance.tool(annotations=_ANNOTATIONS_READ_ONLY)(docs_lint_linear_issue)
+        register_tool(mcp_instance, docs_lint_linear_issue, annotations=_ANNOTATIONS_READ_ONLY)
     if "docs_validate_linear_issue" in allowed_tools:
-        mcp_instance.tool(annotations=_ANNOTATIONS_READ_ONLY)(docs_validate_linear_issue)
+        register_tool(
+            mcp_instance, docs_validate_linear_issue, annotations=_ANNOTATIONS_READ_ONLY
+        )
     if "docs_linear_triage" in allowed_tools:
-        mcp_instance.tool(annotations=_ANNOTATIONS_READ_ONLY, meta=_META_DEFERRED)(
-            docs_linear_triage
+        register_tool(
+            mcp_instance,
+            docs_linear_triage,
+            annotations=_ANNOTATIONS_READ_ONLY,
+            meta=_META_DEFERRED,
         )
     if "docs_save_linear_issue" in allowed_tools:
-        mcp_instance.tool(annotations=_ANNOTATIONS_READ_ONLY)(docs_save_linear_issue)
+        register_tool(mcp_instance, docs_save_linear_issue, annotations=_ANNOTATIONS_READ_ONLY)

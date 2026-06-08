@@ -14,6 +14,7 @@ from typing import TYPE_CHECKING, Any
 
 import structlog
 
+from tapps_mcp.mcp_register import register_tool
 from tapps_mcp.server_helpers import error_response, success_response
 
 if TYPE_CHECKING:
@@ -192,6 +193,9 @@ def register(mcp_instance: "FastMCP", allowed_tools: frozenset[str]) -> None:
     TAP-1986: tapps_release_update is deferred (not a daily driver).
     """
     if "tapps_release_update" in allowed_tools:
-        mcp_instance.tool(annotations=_ANNOTATIONS_READ_ONLY, meta=_META_DEFERRED)(
-            tapps_release_update
+        register_tool(
+            mcp_instance,
+            tapps_release_update,
+            annotations=_ANNOTATIONS_READ_ONLY,
+            meta=_META_DEFERRED,
         )

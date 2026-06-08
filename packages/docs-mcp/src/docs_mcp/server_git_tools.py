@@ -11,6 +11,7 @@ from collections import Counter
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
+from docs_mcp.mcp_register import register_tool
 from docs_mcp.server import _ANNOTATIONS_READ_ONLY, _META_DEFERRED, _record_call
 from docs_mcp.server_helpers import _get_settings, error_response, success_response
 
@@ -136,6 +137,9 @@ def register(mcp_instance: FastMCP, allowed_tools: frozenset[str]) -> None:
     TAP-1987: docs_git_summary is deferred (not on the daily-driver list).
     """
     if "docs_git_summary" in allowed_tools:
-        mcp_instance.tool(annotations=_ANNOTATIONS_READ_ONLY, meta=_META_DEFERRED)(
-            docs_git_summary
+        register_tool(
+            mcp_instance,
+            docs_git_summary,
+            annotations=_ANNOTATIONS_READ_ONLY,
+            meta=_META_DEFERRED,
         )

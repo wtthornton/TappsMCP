@@ -12,6 +12,7 @@ from typing import TYPE_CHECKING, Any
 
 from mcp.types import ToolAnnotations
 
+from tapps_mcp.mcp_register import register_tool
 from tapps_mcp.server_helpers import (
     error_response,
     success_response,
@@ -599,10 +600,16 @@ def register(mcp_instance: FastMCP, allowed_tools: frozenset[str]) -> None:
     tapps_checklist.
     """
     if "tapps_dashboard" in allowed_tools:
-        mcp_instance.tool(annotations=_ANNOTATIONS_READ_ONLY, meta=_META_DEFERRED)(tapps_dashboard)
+        register_tool(
+            mcp_instance, tapps_dashboard, annotations=_ANNOTATIONS_READ_ONLY, meta=_META_DEFERRED
+        )
     if "tapps_stats" in allowed_tools:
-        mcp_instance.tool(annotations=_ANNOTATIONS_READ_ONLY, meta=_META_DEFERRED)(tapps_stats)
+        register_tool(
+            mcp_instance, tapps_stats, annotations=_ANNOTATIONS_READ_ONLY, meta=_META_DEFERRED
+        )
     if "tapps_feedback" in allowed_tools:
-        mcp_instance.tool(annotations=_ANNOTATIONS_SIDE_EFFECT, meta=_META_DEFERRED)(tapps_feedback)
+        register_tool(
+            mcp_instance, tapps_feedback, annotations=_ANNOTATIONS_SIDE_EFFECT, meta=_META_DEFERRED
+        )
     if "tapps_usage" in allowed_tools:
-        mcp_instance.tool(annotations=_ANNOTATIONS_READ_ONLY)(tapps_usage)
+        register_tool(mcp_instance, tapps_usage, annotations=_ANNOTATIONS_READ_ONLY)

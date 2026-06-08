@@ -4283,6 +4283,7 @@ def register(mcp_instance: FastMCP, allowed_tools: frozenset[str]) -> None:
     TAP-2014: brain_propose_hive_elevation and brain_approve_hive_elevation
     registered here (deferred — not daily drivers).
     """
+    from tapps_mcp.mcp_register import register_tool
     from mcp.types import ToolAnnotations
 
     _ann_write = ToolAnnotations(
@@ -4294,12 +4295,18 @@ def register(mcp_instance: FastMCP, allowed_tools: frozenset[str]) -> None:
     _meta_deferred: dict[str, Any] = {"defer_loading": True}
 
     if "brain_propose_hive_elevation" in allowed_tools:
-        mcp_instance.tool(annotations=_ann_write, meta=_meta_deferred)(
-            brain_propose_hive_elevation
+        register_tool(
+            mcp_instance,
+            brain_propose_hive_elevation,
+            annotations=_ann_write,
+            meta=_meta_deferred,
         )
     if "brain_approve_hive_elevation" in allowed_tools:
-        mcp_instance.tool(annotations=_ann_write, meta=_meta_deferred)(
-            brain_approve_hive_elevation
+        register_tool(
+            mcp_instance,
+            brain_approve_hive_elevation,
+            annotations=_ann_write,
+            meta=_meta_deferred,
         )
 
 

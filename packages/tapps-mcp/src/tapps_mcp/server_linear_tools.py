@@ -37,6 +37,7 @@ from typing import TYPE_CHECKING, Any
 import structlog
 
 from tapps_core.config.settings import load_settings
+from tapps_mcp.mcp_register import register_tool
 from tapps_mcp.server_helpers import error_response, success_response
 
 if TYPE_CHECKING:
@@ -727,22 +728,37 @@ def register(mcp_instance: FastMCP, allowed_tools: frozenset[str]) -> None:
     TAP-2010: tapps_linear_list_issues is a deferred gate tool.
     """
     if "tapps_linear_snapshot_get" in allowed_tools:
-        mcp_instance.tool(annotations=_ANNOTATIONS_READ_ONLY, meta=_META_DEFERRED)(
-            tapps_linear_snapshot_get
+        register_tool(
+            mcp_instance,
+            tapps_linear_snapshot_get,
+            annotations=_ANNOTATIONS_READ_ONLY,
+            meta=_META_DEFERRED,
         )
     if "tapps_linear_snapshot_put" in allowed_tools:
-        mcp_instance.tool(annotations=_ANNOTATIONS_WRITE, meta=_META_DEFERRED)(
-            tapps_linear_snapshot_put
+        register_tool(
+            mcp_instance,
+            tapps_linear_snapshot_put,
+            annotations=_ANNOTATIONS_WRITE,
+            meta=_META_DEFERRED,
         )
     if "tapps_linear_snapshot_invalidate" in allowed_tools:
-        mcp_instance.tool(annotations=_ANNOTATIONS_INVALIDATE, meta=_META_DEFERRED)(
-            tapps_linear_snapshot_invalidate
+        register_tool(
+            mcp_instance,
+            tapps_linear_snapshot_invalidate,
+            annotations=_ANNOTATIONS_INVALIDATE,
+            meta=_META_DEFERRED,
         )
     if "tapps_linear_count" in allowed_tools:
-        mcp_instance.tool(annotations=_ANNOTATIONS_READ_ONLY, meta=_META_DEFERRED)(
-            tapps_linear_count
+        register_tool(
+            mcp_instance,
+            tapps_linear_count,
+            annotations=_ANNOTATIONS_READ_ONLY,
+            meta=_META_DEFERRED,
         )
     if "tapps_linear_list_issues" in allowed_tools:
-        mcp_instance.tool(annotations=_ANNOTATIONS_READ_ONLY, meta=_META_DEFERRED)(
-            tapps_linear_list_issues
+        register_tool(
+            mcp_instance,
+            tapps_linear_list_issues,
+            annotations=_ANNOTATIONS_READ_ONLY,
+            meta=_META_DEFERRED,
         )

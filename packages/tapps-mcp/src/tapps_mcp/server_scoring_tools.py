@@ -19,6 +19,7 @@ from mcp.types import ToolAnnotations
 
 from tapps_core.config.settings import load_settings
 from tapps_mcp.quick_check_recurring import record_quick_check_recurring
+from tapps_mcp.mcp_register import register_tool
 from tapps_mcp.server_helpers import (
     _get_brain_bridge,
     _get_scorer_for_file,
@@ -1143,8 +1144,8 @@ def ast_quick_complexity(code: str) -> int | None:
 def register(mcp_instance: FastMCP, allowed_tools: frozenset[str]) -> None:
     """Register scoring/gate tools on the shared *mcp_instance* (Epic 79.1: conditional)."""
     if "tapps_score_file" in allowed_tools:
-        mcp_instance.tool(annotations=_ANNOTATIONS_READ_ONLY)(tapps_score_file)
+        register_tool(mcp_instance, tapps_score_file, annotations=_ANNOTATIONS_READ_ONLY)
     if "tapps_quality_gate" in allowed_tools:
-        mcp_instance.tool(annotations=_ANNOTATIONS_READ_ONLY)(tapps_quality_gate)
+        register_tool(mcp_instance, tapps_quality_gate, annotations=_ANNOTATIONS_READ_ONLY)
     if "tapps_quick_check" in allowed_tools:
-        mcp_instance.tool(annotations=_ANNOTATIONS_READ_ONLY)(tapps_quick_check)
+        register_tool(mcp_instance, tapps_quick_check, annotations=_ANNOTATIONS_READ_ONLY)

@@ -9,6 +9,9 @@ tools:
   - Write
   - Glob
   - Grep
+  - mcp__tapps-brain__memory_recall_many
+  - mcp__tapps-brain__memory_find_related
+  - mcp__tapps-brain__feedback_rate
   - mcp__tapps-brain__brain_recall
   - mcp__tapps-brain__brain_remember
   - mcp__tapps-brain__brain_learn_success
@@ -68,11 +71,16 @@ Run in one of three modes determined by your task input:
    its real `task_id`. Only if all three states return zero issues for
    the configured team/project may you conclude the backlog is empty
    (see step 3's hard rule on EXIT_SIGNAL evidence).
-2. Call `mcp__tapps-brain__brain_recall` with focused queries to surface
-   prior learnings (see Keyword Strategy below). **Brain memory is NOT
-   sufficient evidence for backlog emptiness.** A `brain_recall` result
-   tagged `failure` that claims "backlog empty" is a hint to confirm via
-   a fresh `list_issues` probe — never a substitute for the probe.
+2. Call `mcp__tapps-brain__memory_recall_many` once with a `queries` array
+   built from the Keyword Strategy below (max 5 strings). This replaces
+   the old pattern of 3 separate `brain_recall` calls. **Brain memory is
+   NOT sufficient evidence for backlog emptiness.** A recall result tagged
+   `failure` that claims "backlog empty" is a hint to confirm via a fresh
+   `list_issues` probe — never a substitute for the probe.
+   When a hit references a known entity key (e.g. a memory `key` or Linear
+   ID you will cite in `prior_learnings`), follow up with a single
+   `mcp__tapps-brain__memory_find_related` on that key instead of issuing
+   another recall for the same entity.
 3. **Write `.ralph/brief.json` using the Write tool — this is REQUIRED, not
    optional.** Writing the file is the whole point of MODE=brief; returning
    a summary without writing the file is a hard failure that trips the
@@ -192,15 +200,24 @@ Run in one of three modes determined by your task input:
    surprising root cause, a constraint worth preserving), additionally
    call `mcp__tapps-brain__brain_remember` with the insight text,
    `tier=procedural`, `agent_scope=domain`.
-5. Clear the brief — delete `.ralph/brief.json` (brief_clear) so the
+5. **Rate entries used in the brief.** For each `prior_learnings` entry
+   that influenced the brief (success or failure), call
+   `mcp__tapps-brain__feedback_rate` once with `entry_key=<key>` and
+   `rating=helpful` or `rating=not_helpful` depending on whether the
+   learning still applied. Skip when recall returned no keyed entries.
+6. Clear the brief — delete `.ralph/brief.json` (brief_clear) so the
    next loop starts fresh.
-6. Return a one-line confirmation.
+7. Return a one-line confirmation.
 
-## brain_recall Keyword Strategy
+## recall_many Keyword Strategy (TAP-1887)
 
-Extract three classes of keywords from the task and run one recall per
-class. Cap at 3 recall calls per brief — over-querying inflates context
-without adding signal.
+Extract up to five query strings from the task and pass them as a single
+`queries` array to `mcp__tapps-brain__memory_recall_many`. **One batch
+call per brief** — do not fall back to per-keyword `brain_recall` unless
+`memory_recall_many` is unavailable (bridge down), in which case cap at
+one `brain_recall` with the highest-priority keyword only.
+
+Priority order when building the array (stop at 5):
 
 1. **Linear ID** if present (e.g. `TAP-915`) — surfaces explicit prior
    context for that ticket or its predecessors.
@@ -209,18 +226,24 @@ without adding signal.
 3. **Task-type keywords**: `refactor`, `test`, `hook`, `circuit breaker`,
    `rate limit`, `session`, `stream`, `optimizer`.
 
-Combine results, dedupe by content similarity, keep the top 5 most
+Combine batch results, dedupe by content similarity, keep the top 5 most
 relevant entries for `prior_learnings[]`. Filter out entries with
-`tier=cache` (those are short-lived caches, not durable learnings); keep
-`tier=procedural` and `tier=semantic`. Within those, bias toward entries
-tagged `failure` — failures are more informative than successes for
-avoiding the same trap twice. If recall returns nothing relevant, emit
+`tier=cache` (short-lived caches, not durable learnings); keep
+`tier=procedural` and `tier=semantic`. Bias toward entries tagged
+`failure` — failures are more informative than successes for avoiding
+the same trap twice. If recall returns nothing relevant, emit
 `prior_learnings: []` rather than fabricating entries.
+
+When a hit includes a stable `key` and you need graph context (related
+modules, prior failures on the same file), call
+`mcp__tapps-brain__memory_find_related` with that `key` once — do not
+re-query the same entity via another recall.
 
 ## coordinator_confidence Rubric
 
 Set `coordinator_confidence` (a number in `[0.0, 1.0]`) based on the
-quality of the brain_recall hits:
+quality of the recall hits (from `memory_recall_many` or the fallback
+`brain_recall`):
 
 - **0.9 – 1.0** — ≥3 `procedural` entries whose tags include the current
   task-ID OR the primary affected module.

@@ -41,6 +41,7 @@ from tapps_mcp.common.developer_workflow import (
     DAILY_STEPS,
     RECOMMENDED_WORKFLOW_TEXT,
 )
+from tapps_mcp.mcp_register import register_tool
 from tapps_mcp.server_helpers import (
     _get_brain_bridge,
     error_response,
@@ -1631,21 +1632,27 @@ def _register_core_tools(mcp_instance: FastMCP, allowed_tools: frozenset[str]) -
     tapps_server_info, tapps_security_scan, tapps_validate_config are deferred.
     """
     if "tapps_server_info" in allowed_tools:
-        mcp_instance.tool(annotations=_ANNOTATIONS_READ_ONLY, meta=_META_DEFERRED)(
-            tapps_server_info
+        register_tool(
+            mcp_instance, tapps_server_info, annotations=_ANNOTATIONS_READ_ONLY, meta=_META_DEFERRED
         )
     if "tapps_security_scan" in allowed_tools:
-        mcp_instance.tool(annotations=_ANNOTATIONS_READ_ONLY, meta=_META_DEFERRED)(
-            tapps_security_scan
+        register_tool(
+            mcp_instance,
+            tapps_security_scan,
+            annotations=_ANNOTATIONS_READ_ONLY,
+            meta=_META_DEFERRED,
         )
     if "tapps_lookup_docs" in allowed_tools:
-        mcp_instance.tool(annotations=_ANNOTATIONS_READ_ONLY_OPEN)(tapps_lookup_docs)
+        register_tool(mcp_instance, tapps_lookup_docs, annotations=_ANNOTATIONS_READ_ONLY_OPEN)
     if "tapps_validate_config" in allowed_tools:
-        mcp_instance.tool(annotations=_ANNOTATIONS_READ_ONLY, meta=_META_DEFERRED)(
-            tapps_validate_config
+        register_tool(
+            mcp_instance,
+            tapps_validate_config,
+            annotations=_ANNOTATIONS_READ_ONLY,
+            meta=_META_DEFERRED,
         )
     if "tapps_checklist" in allowed_tools:
-        mcp_instance.tool(annotations=_ANNOTATIONS_READ_ONLY)(tapps_checklist)
+        register_tool(mcp_instance, tapps_checklist, annotations=_ANNOTATIONS_READ_ONLY)
 
 
 def _register_tool_modules() -> None:

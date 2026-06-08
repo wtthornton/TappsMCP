@@ -17,6 +17,7 @@ from mcp.server.fastmcp import FastMCP
 from mcp.types import ToolAnnotations
 
 from docs_mcp import __version__
+from docs_mcp.mcp_register import register_tool
 from docs_mcp.server_helpers import (
     build_style_checker_for_project,
     error_response,
@@ -183,16 +184,22 @@ def _register_core_tools(mcp_instance: FastMCP, allowed_tools: frozenset[str]) -
     ``defer_loading: True`` and are loaded on-demand via Tool Search.
     """
     if "docs_session_start" in allowed_tools:
-        mcp_instance.tool(annotations=_ANNOTATIONS_READ_ONLY, meta=_META_DEFERRED)(
-            docs_session_start
+        register_tool(
+            mcp_instance, docs_session_start, annotations=_ANNOTATIONS_READ_ONLY, meta=_META_DEFERRED
         )
     if "docs_project_scan" in allowed_tools:
-        mcp_instance.tool(annotations=_ANNOTATIONS_READ_ONLY, meta=_META_SIZE_100K_D)(
-            docs_project_scan
+        register_tool(
+            mcp_instance,
+            docs_project_scan,
+            annotations=_ANNOTATIONS_READ_ONLY,
+            meta=_META_SIZE_100K_D,
         )
     if "docs_config" in allowed_tools:
-        mcp_instance.tool(annotations=_ANNOTATIONS_SIDE_EFFECT_IDEMPOTENT, meta=_META_DEFERRED)(
-            docs_config
+        register_tool(
+            mcp_instance,
+            docs_config,
+            annotations=_ANNOTATIONS_SIDE_EFFECT_IDEMPOTENT,
+            meta=_META_DEFERRED,
         )
 
 

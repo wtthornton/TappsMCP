@@ -42,6 +42,7 @@ from tapps_mcp.server_helpers import (
     initial_session_hive_status,
     success_response,
 )
+from tapps_mcp.mcp_register import register_tool
 
 # ---------------------------------------------------------------------------
 # Re-exports from split modules (backward compatibility for tests)
@@ -1461,30 +1462,59 @@ def register(mcp_instance: FastMCP, allowed_tools: frozenset[str]) -> None:
     All other pipeline tools carry defer_loading=True.
     """
     if "tapps_validate_changed" in allowed_tools:
-        mcp_instance.tool(annotations=_ANNOTATIONS_READ_ONLY)(tapps_validate_changed)
+        register_tool(mcp_instance, tapps_validate_changed, annotations=_ANNOTATIONS_READ_ONLY)
     if "tapps_session_start" in allowed_tools:
-        mcp_instance.tool(annotations=_ANNOTATIONS_SIDE_EFFECT_IDEMPOTENT)(tapps_session_start)
+        register_tool(
+            mcp_instance,
+            tapps_session_start,
+            annotations=_ANNOTATIONS_SIDE_EFFECT_IDEMPOTENT,
+        )
     if "tapps_session_end" in allowed_tools:
-        mcp_instance.tool(
-            annotations=_ANNOTATIONS_SIDE_EFFECT_IDEMPOTENT, meta=_META_DEFERRED
-        )(tapps_session_end)
+        register_tool(
+            mcp_instance,
+            tapps_session_end,
+            annotations=_ANNOTATIONS_SIDE_EFFECT_IDEMPOTENT,
+            meta=_META_DEFERRED,
+        )
     if "tapps_init" in allowed_tools:
-        mcp_instance.tool(
-            annotations=_ANNOTATIONS_SIDE_EFFECT_IDEMPOTENT, meta=_META_DEFERRED
-        )(tapps_init)
+        register_tool(
+            mcp_instance,
+            tapps_init,
+            annotations=_ANNOTATIONS_SIDE_EFFECT_IDEMPOTENT,
+            meta=_META_DEFERRED,
+        )
     if "tapps_set_engagement_level" in allowed_tools:
-        mcp_instance.tool(
-            annotations=_ANNOTATIONS_SIDE_EFFECT_IDEMPOTENT, meta=_META_DEFERRED
-        )(tapps_set_engagement_level)
+        register_tool(
+            mcp_instance,
+            tapps_set_engagement_level,
+            annotations=_ANNOTATIONS_SIDE_EFFECT_IDEMPOTENT,
+            meta=_META_DEFERRED,
+        )
     if "tapps_upgrade" in allowed_tools:
-        mcp_instance.tool(
-            annotations=_ANNOTATIONS_SIDE_EFFECT_IDEMPOTENT, meta=_META_DEFERRED
-        )(tapps_upgrade)
+        register_tool(
+            mcp_instance,
+            tapps_upgrade,
+            annotations=_ANNOTATIONS_SIDE_EFFECT_IDEMPOTENT,
+            meta=_META_DEFERRED,
+        )
     if "tapps_doctor" in allowed_tools:
-        mcp_instance.tool(annotations=_ANNOTATIONS_READ_ONLY, meta=_META_DEFERRED)(tapps_doctor)
+        register_tool(
+            mcp_instance,
+            tapps_doctor,
+            annotations=_ANNOTATIONS_READ_ONLY,
+            meta=_META_DEFERRED,
+        )
     if "tapps_pipeline" in allowed_tools:
-        mcp_instance.tool(annotations=_ANNOTATIONS_READ_ONLY, meta=_META_DEFERRED)(tapps_pipeline)
+        register_tool(
+            mcp_instance,
+            tapps_pipeline,
+            annotations=_ANNOTATIONS_READ_ONLY,
+            meta=_META_DEFERRED,
+        )
     if "tapps_decompose" in allowed_tools:
-        mcp_instance.tool(annotations=_ANNOTATIONS_READ_ONLY, meta=_META_DEFERRED)(
-            tapps_decompose
+        register_tool(
+            mcp_instance,
+            tapps_decompose,
+            annotations=_ANNOTATIONS_READ_ONLY,
+            meta=_META_DEFERRED,
         )
