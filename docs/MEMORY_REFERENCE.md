@@ -193,6 +193,16 @@ so the feedback flywheel receives explicit signals.
 
 See [AGENTS.md](../AGENTS.md#brain-health-diagnostics-brain_bridge_health) for the agent-facing summary of the same block.
 
+## CLI memory commands (TAP-1960)
+
+Operator workflows for import/export/reseed live on the CLI — not the MCP tool surface:
+
+| Command | Description |
+|---------|-------------|
+| `uv run tapps-mcp memory import-file --file <path> [--overwrite]` | Import memories from JSON |
+| `uv run tapps-mcp memory export-file --file <path> [--format json\|markdown] [--tier …] [--scope …] [--min-confidence 0.8]` | Export with tier/scope/format filters |
+| `uv run tapps-mcp memory reseed --confirm` | Re-seed auto-seeded entries from the detected project profile |
+
 ## Cross-session chat transfer
 
 For moving work between fresh chats (not just compaction recovery):

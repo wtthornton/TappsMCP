@@ -1,6 +1,8 @@
 """Tests for execution metrics collector."""
 
+import asyncio
 from datetime import UTC, datetime, timedelta
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
@@ -177,3 +179,32 @@ class TestToolCallMetricsCollector:
 
         summary = collector.get_summary()
         assert summary.p95_duration_ms > 0
+
+
+class TestBrainTelemetryDualWrite:
+    @pytest.mark.asyncio
+    async def test_record_call_emits_quality_metric_when_loop_running(
+        self, collector: ToolCallMetricsCollector
+    ) -> None:
+        mock_bridge = MagicMock()
+        mock_bridge.record_kg_event = AsyncMock(return_value={"recorded": True})
+        metric = ToolCallMetric(
+            call_id="abc",
+            tool_name="tapps_score_file",
+            status="success",
+            duration_ms=12.0,
+            started_at="2025-01-01T00:00:00+00:00",
+            completed_at="2025-01-01T00:00:00.012+00:00",
+            file_path="/tmp/x.py",
+            score=88.0,
+        )
+        with patch(
+            "tapps_core.brain_bridge.create_brain_bridge",
+            return_value=mock_bridge,
+        ):
+            collector.record_call(metric)
+            await asyncio.sleep(0)
+        mock_bridge.record_kg_event.assert_awaited_once()
+        kwargs = mock_bridge.record_kg_event.await_args.kwargs
+        assert kwargs["event_type"] == "quality_metric"
+        assert kwargs["payload_data"]["score"] == 88.0

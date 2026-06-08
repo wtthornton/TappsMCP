@@ -1558,6 +1558,19 @@ async def tapps_checklist(
         if ev is not None:
             resp_data["epic_validation"] = ev.model_dump()
 
+        # TAP-2000: best-effort prior outcome from brain + emit checklist_outcome event.
+        try:
+            from tapps_mcp.server_helpers import (
+                fetch_prior_checklist_outcome,
+                write_checklist_state_marker,
+            )
+
+            prior = await fetch_prior_checklist_outcome(settings.project_root)
+            if prior is not None:
+                resp_data["prior_checklist_outcome"] = prior
+        except Exception:
+            logger.debug("prior_checklist_outcome_failed", exc_info=True)
+
         resp = success_response("tapps_checklist", elapsed_ms, resp_data)
 
         # Attach structured output (markdown/json only - compact is already minimal)
@@ -1581,14 +1594,12 @@ async def tapps_checklist(
             except Exception:
                 logger.debug("structured_output_failed: tapps_checklist", exc_info=True)
 
-        # TAP-975: persist checklist outcome so the UserPromptSubmit hook can
-        # surface "open checklist" reminders across topic shifts.
+        # TAP-2000: emit checklist_outcome brain event (advisory; hook reads dropped).
         try:
-            from tapps_mcp.config import load_settings as _load_settings
             from tapps_mcp.server_helpers import write_checklist_state_marker
 
             write_checklist_state_marker(
-                _load_settings().project_root,
+                settings.project_root,
                 complete=result.complete,
                 missing_required=list(result.missing_required),
             )

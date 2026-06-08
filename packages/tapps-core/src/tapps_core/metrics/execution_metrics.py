@@ -97,6 +97,9 @@ class ToolCallMetricsCollector:
         with self._write_lock:
             self._buffer.append(metric)
             self._append_to_file(metric)
+        from tapps_core.metrics.brain_telemetry import emit_quality_metric_event
+
+        emit_quality_metric_event(metric)
 
     def record(
         self,

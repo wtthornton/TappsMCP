@@ -891,6 +891,7 @@ def memory_import(file_path: str, overwrite: bool) -> None:
 
     from tapps_brain.io import import_memories
     from tapps_brain.store import MemoryStore
+
     from tapps_core.security.path_validator import PathValidator
 
     root = _get_project_root()
@@ -913,22 +914,95 @@ def memory_import(file_path: str, overwrite: bool) -> None:
     "file_path",
     required=True,
     type=click.Path(),
-    help="Output JSON file path.",
+    help="Output file path (.json or .md).",
 )
-def memory_export(file_path: str) -> None:
-    """Export memories to a JSON file."""
+@click.option(
+    "--format",
+    "export_format",
+    type=click.Choice(["json", "markdown"]),
+    default="json",
+    show_default=True,
+    help="Export format.",
+)
+@click.option(
+    "--tier",
+    type=click.Choice(["architectural", "pattern", "procedural", "context"]),
+    default=None,
+    help="Filter by memory tier.",
+)
+@click.option(
+    "--scope",
+    type=click.Choice(["project", "branch", "session", "shared"]),
+    default=None,
+    help="Filter by memory scope.",
+)
+@click.option(
+    "--min-confidence",
+    type=float,
+    default=-1.0,
+    help="Minimum confidence threshold (0.0-1.0). Default: no filter.",
+)
+def memory_export(
+    file_path: str,
+    export_format: str,
+    tier: str | None,
+    scope: str | None,
+    min_confidence: float,
+) -> None:
+    """Export memories to a JSON or Markdown file."""
     from pathlib import Path
 
     from tapps_brain.io import export_memories
     from tapps_brain.store import MemoryStore
+
     from tapps_core.security.path_validator import PathValidator
 
     root = _get_project_root()
     store = MemoryStore(root, store_dir=".tapps-mcp")
     validator = PathValidator(root)
     try:
-        result = export_memories(store, Path(file_path), validator)
+        result = export_memories(
+            store,
+            Path(file_path),
+            validator,
+            tier=tier,
+            scope=scope,
+            min_confidence=min_confidence if min_confidence >= 0 else None,
+            export_format=export_format,
+        )
         click.echo(f"Exported {result['exported_count']} memories to {result['file_path']}")
+    finally:
+        store.close()
+
+
+@memory.command("reseed")
+@click.option(
+    "--confirm",
+    is_flag=True,
+    required=True,
+    help="Confirm re-seeding from the detected project profile.",
+)
+def memory_reseed(confirm: bool) -> None:
+    """Re-seed memories from the project profile (auto-seeded entries only)."""
+    if not confirm:
+        raise SystemExit("Pass --confirm to re-seed memories.")
+    from tapps_brain.seeding import reseed_from_profile
+    from tapps_brain.store import MemoryStore
+
+    from tapps_core.config.settings import load_settings
+    from tapps_mcp.project.profiler import detect_project_profile
+
+    root = _get_project_root()
+    store = MemoryStore(root, store_dir=".tapps-mcp")
+    try:
+        settings = load_settings(root)
+        profile = detect_project_profile(settings.project_root)
+        profile.project_type = profile.project_type or ""
+        result = reseed_from_profile(store, profile)  # type: ignore[arg-type]
+        click.echo(
+            f"Re-seeded {result.get('seeded_count', result.get('count', 0))} "
+            f"memories from project profile."
+        )
     finally:
         store.close()
 

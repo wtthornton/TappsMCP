@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
-from unittest.mock import MagicMock, patch
+from pathlib import Path
+from typing import Any
+from unittest.mock import AsyncMock, MagicMock, patch
 
 from tapps_mcp.server_helpers import error_response, serialize_issues, success_response
 
@@ -111,4 +113,39 @@ class TestGetBrainBridgeProfile:
             f"Expected default_profile='full', got {call_kwargs}"
         )
         # Cleanup singleton so other tests start clean.
+        _reset_brain_bridge_cache()
+
+
+class TestChecklistStateMarker:
+    """TAP-2000: checklist outcomes emit brain events, not local JSON."""
+
+    def test_emits_checklist_outcome_event(self, tmp_path: Path) -> None:
+        from tapps_mcp.server_helpers import _reset_brain_bridge_cache, write_checklist_state_marker
+
+        mock_bridge = MagicMock()
+        mock_bridge.record_kg_event = AsyncMock(return_value={"recorded": True})
+        captured: list[Any] = []
+
+        with (
+            patch("tapps_mcp.server_helpers._reset_brain_bridge_cache"),
+            patch("tapps_mcp.server_helpers._get_brain_bridge", return_value=mock_bridge),
+            patch(
+                "tapps_mcp.server_helpers.asyncio.create_task",
+                side_effect=lambda coro: captured.append(coro),
+            ),
+        ):
+            write_checklist_state_marker(
+                tmp_path,
+                complete=False,
+                missing_required=["tapps_validate_changed"],
+            )
+            import asyncio
+
+            asyncio.run(captured[0])
+
+        kwargs = mock_bridge.record_kg_event.await_args.kwargs
+        assert kwargs["event_type"] == "checklist_outcome"
+        assert kwargs["payload_data"]["complete"] is False
+        assert kwargs["payload_data"]["missing_required"] == ["tapps_validate_changed"]
+        assert "ts" in kwargs["payload_data"]
         _reset_brain_bridge_cache()
