@@ -21,9 +21,10 @@ from typing import TYPE_CHECKING, Any
 import structlog
 
 if TYPE_CHECKING:
-    from tapps_core.config.settings import TappsMCPSettings
     from tapps_brain.models import MemorySnapshot
     from tapps_brain.store import MemoryStore
+
+    from tapps_core.config.settings import TappsMCPSettings
 
 _logger = structlog.get_logger(__name__)
 
@@ -388,9 +389,7 @@ async def _check_compaction_rehydration(
             )
             if isinstance(search_result, dict):
                 hits = search_result.get("results", [])
-                result["prior_chunks"] = [
-                    h.get("chunk", "") for h in hits if isinstance(h, dict)
-                ]
+                result["prior_chunks"] = [h.get("chunk", "") for h in hits if isinstance(h, dict)]
                 result["search_result_count"] = len(hits)
     except Exception as exc:
         _logger.debug(
@@ -486,9 +485,10 @@ async def _maybe_validate_memories(
         _host._session_state.doc_validation_done = True
 
     try:
+        from tapps_brain.doc_validation import MemoryDocValidator
+
         from tapps_core.knowledge.cache import KBCache
         from tapps_core.knowledge.lookup import LookupEngine
-        from tapps_brain.doc_validation import MemoryDocValidator
 
         _cache = KBCache(settings.project_root / ".tapps-mcp-cache")
         lookup = LookupEngine(_cache, settings=settings)

@@ -36,6 +36,7 @@ dependencies = [
     "httpx>=0.28.1,<1",
     "filelock>=3.24.3,<4",
     "bandit>=1.8",
+    "defusedxml>=0.7.1,<1",
     "radon>=6.0",
     "vulture>=2.14",
     "pylint>=3.3",

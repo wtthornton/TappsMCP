@@ -372,45 +372,58 @@ class TestCollectPythonFiles:
 # collect_changed_python_files
 # ---------------------------------------------------------------------------
 class TestCollectChangedPythonFiles:
-    @patch("tapps_mcp.tools.vulture.subprocess.run")
+    @patch("tapps_mcp.tools.vulture.run_command")
     def test_collects_changed_files(self, mock_run: object, tmp_path: Path) -> None:
+        from tapps_mcp.tools.subprocess_utils import CommandResult
+
         (tmp_path / "changed.py").write_text("pass")
 
-        import subprocess as sp
-
         mock_run.side_effect = [  # type: ignore[union-attr]
-            sp.CompletedProcess(args=[], returncode=0, stdout="changed.py\n", stderr=""),
-            sp.CompletedProcess(args=[], returncode=0, stdout="", stderr=""),
+            CommandResult(returncode=0, stdout="changed.py\n", stderr="", command=["git"]),
+            CommandResult(returncode=0, stdout="", stderr="", command=["git"]),
         ]
         result = collect_changed_python_files(tmp_path)
         assert result == ["changed.py"]
 
-    @patch("tapps_mcp.tools.vulture.subprocess.run")
+    @patch("tapps_mcp.tools.vulture.run_command")
     def test_deduplicates(self, mock_run: object, tmp_path: Path) -> None:
+        from tapps_mcp.tools.subprocess_utils import CommandResult
+
         (tmp_path / "dup.py").write_text("pass")
 
-        import subprocess as sp
-
         mock_run.side_effect = [  # type: ignore[union-attr]
-            sp.CompletedProcess(args=[], returncode=0, stdout="dup.py\n", stderr=""),
-            sp.CompletedProcess(args=[], returncode=0, stdout="dup.py\n", stderr=""),
+            CommandResult(returncode=0, stdout="dup.py\n", stderr="", command=["git"]),
+            CommandResult(returncode=0, stdout="dup.py\n", stderr="", command=["git"]),
         ]
         result = collect_changed_python_files(tmp_path)
         assert result == ["dup.py"]
 
-    @patch("tapps_mcp.tools.vulture.subprocess.run")
+    @patch("tapps_mcp.tools.vulture.run_command")
     def test_filters_non_py(self, mock_run: object, tmp_path: Path) -> None:
-        import subprocess as sp
+        from tapps_mcp.tools.subprocess_utils import CommandResult
 
         mock_run.side_effect = [  # type: ignore[union-attr]
-            sp.CompletedProcess(args=[], returncode=0, stdout="readme.md\napp.js\n", stderr=""),
-            sp.CompletedProcess(args=[], returncode=0, stdout="", stderr=""),
+            CommandResult(
+                returncode=0,
+                stdout="readme.md\napp.js\n",
+                stderr="",
+                command=["git"],
+            ),
+            CommandResult(returncode=0, stdout="", stderr="", command=["git"]),
         ]
         result = collect_changed_python_files(tmp_path)
         assert result == []
 
-    @patch("tapps_mcp.tools.vulture.subprocess.run", side_effect=FileNotFoundError)
-    def test_git_not_available(self, _mock: object, tmp_path: Path) -> None:
+    @patch("tapps_mcp.tools.vulture.run_command")
+    def test_git_not_available(self, mock_run: object, tmp_path: Path) -> None:
+        from tapps_mcp.tools.subprocess_utils import CommandResult
+
+        mock_run.return_value = CommandResult(  # type: ignore[union-attr]
+            returncode=-1,
+            stdout="",
+            stderr="Command not found: git",
+            command=["git"],
+        )
         result = collect_changed_python_files(tmp_path)
         assert result == []
 

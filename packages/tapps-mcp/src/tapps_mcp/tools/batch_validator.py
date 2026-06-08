@@ -2,13 +2,14 @@
 
 from __future__ import annotations
 
-import subprocess
 from concurrent.futures import ThreadPoolExecutor
 from concurrent.futures import TimeoutError as FuturesTimeoutError
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any
 
 import structlog
+
+from tapps_mcp.tools.subprocess_runner import run_command
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -25,19 +26,22 @@ _GIT_DIFF_TIMEOUT = 5
 
 def _git_diff_names(project_root: Path, *args: str) -> set[str]:
     """Run git diff --name-only with given args; return set of filenames or empty."""
-    try:
-        result = subprocess.run(
-            ["git", "diff", "--name-only", *args],
-            cwd=str(project_root),
-            capture_output=True,
-            text=True,
-            timeout=_GIT_DIFF_TIMEOUT,
-            check=False,
+    result = run_command(
+        ["git", "diff", "--name-only", *args],
+        cwd=str(project_root),
+        timeout=_GIT_DIFF_TIMEOUT,
+    )
+    if result.returncode == 0 and result.stdout:
+        return set(result.stdout.strip().splitlines())
+    if result.timed_out:
+        logger.debug("git_diff_timed_out", args=args, project_root=str(project_root))
+    elif result.returncode != 0:
+        logger.debug(
+            "git_diff_failed",
+            args=args,
+            returncode=result.returncode,
+            stderr=result.stderr,
         )
-        if result.returncode == 0 and result.stdout:
-            return set(result.stdout.strip().splitlines())
-    except (subprocess.TimeoutExpired, FileNotFoundError, OSError):
-        pass
     return set()
 
 

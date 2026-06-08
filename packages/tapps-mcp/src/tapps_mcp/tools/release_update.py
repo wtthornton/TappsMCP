@@ -7,11 +7,12 @@ scraping. Called by the tapps_release_update MCP tool handler.
 from __future__ import annotations
 
 import re
-import subprocess
 from pathlib import Path
 from typing import Any
 
 import structlog
+
+from tapps_mcp.tools.subprocess_runner import run_command
 
 logger = structlog.get_logger(__name__)
 
@@ -53,20 +54,18 @@ def source_git_log(
     - issues_closed: "TAP-### description" strings scraped from commit messages
     """
     rev_range = f"v{prev_version.lstrip('v')}..{version}"
-    try:
-        result = subprocess.run(
-            ["git", "log", "--oneline", rev_range],
-            capture_output=True,
-            text=True,
-            cwd=project_root,
-            timeout=10,
-        )
-        if result.returncode != 0:
-            logger.debug("git_log_failed", stderr=result.stderr[:200])
-            return [], []
-        raw_lines = result.stdout.strip().splitlines()
-    except (subprocess.TimeoutExpired, FileNotFoundError, OSError):
+    result = run_command(
+        ["git", "log", "--oneline", rev_range],
+        cwd=str(project_root),
+        timeout=10,
+    )
+    if result.timed_out:
+        logger.debug("git_log_timed_out", rev_range=rev_range)
         return [], []
+    if result.returncode != 0:
+        logger.debug("git_log_failed", stderr=result.stderr[:200])
+        return [], []
+    raw_lines = result.stdout.strip().splitlines()
 
     highlights: list[str] = []
     tap_refs: dict[str, str] = {}

@@ -10,13 +10,12 @@ from __future__ import annotations
 import fnmatch
 import re
 import shutil
-import subprocess
 from dataclasses import dataclass, field
 from pathlib import Path
 
 import structlog
 
-from tapps_mcp.tools.subprocess_runner import run_command_async
+from tapps_mcp.tools.subprocess_runner import run_command, run_command_async
 
 logger = structlog.get_logger(__name__)
 
@@ -277,19 +276,26 @@ def collect_changed_python_files(project_root: Path) -> list[str]:
     """
     files: set[str] = set()
     for extra_args in (["HEAD"], ["--cached"]):
-        try:
-            result = subprocess.run(
-                ["git", "diff", "--name-only", *extra_args],
-                cwd=str(project_root),
-                capture_output=True,
-                text=True,
-                timeout=_GIT_DIFF_TIMEOUT,
-                check=False,
+        result = run_command(
+            ["git", "diff", "--name-only", *extra_args],
+            cwd=str(project_root),
+            timeout=_GIT_DIFF_TIMEOUT,
+        )
+        if result.returncode == 0 and result.stdout:
+            files.update(result.stdout.strip().splitlines())
+        elif result.timed_out:
+            logger.debug(
+                "vulture_git_diff_timed_out",
+                args=extra_args,
+                project_root=str(project_root),
             )
-            if result.returncode == 0 and result.stdout:
-                files.update(result.stdout.strip().splitlines())
-        except (subprocess.TimeoutExpired, FileNotFoundError, OSError):
-            pass
+        elif result.returncode != 0:
+            logger.debug(
+                "vulture_git_diff_failed",
+                args=extra_args,
+                returncode=result.returncode,
+                stderr=result.stderr,
+            )
 
     py_files: list[str] = []
     for f in sorted(files):

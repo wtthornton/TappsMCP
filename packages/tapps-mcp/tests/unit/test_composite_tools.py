@@ -1154,7 +1154,7 @@ class TestChecklistEquivalence:
 class TestBatchValidator:
     """Tests for the batch_validator module."""
 
-    @patch("tapps_mcp.tools.batch_validator.subprocess.run")
+    @patch("tapps_mcp.tools.batch_validator.run_command")
     def test_detect_changed_filters_py_only(
         self,
         mock_run: MagicMock,
@@ -1176,7 +1176,7 @@ class TestBatchValidator:
         assert len(result) == 2
         assert all(p.suffix == ".py" for p in result)
 
-    @patch("tapps_mcp.tools.batch_validator.subprocess.run")
+    @patch("tapps_mcp.tools.batch_validator.run_command")
     def test_detect_changed_empty_diff(
         self,
         mock_run: MagicMock,
@@ -1188,7 +1188,7 @@ class TestBatchValidator:
         result = detect_changed_python_files(tmp_path)
         assert result == []
 
-    @patch("tapps_mcp.tools.batch_validator.subprocess.run")
+    @patch("tapps_mcp.tools.batch_validator.run_command")
     def test_detect_changed_deduplicates(
         self,
         mock_run: MagicMock,

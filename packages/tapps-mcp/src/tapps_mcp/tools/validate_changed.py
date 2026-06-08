@@ -34,9 +34,13 @@ import time
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
+import structlog
 from mcp.server.fastmcp import Context
 
 from tapps_mcp.server_helpers import _get_brain_bridge, success_response
+
+_logger = structlog.get_logger(__name__)
+
 from tapps_mcp.tools.validate_changed_collection import (
     _VALIDATE_OK_MARKER,
     _cache_hit_as_file_result,
@@ -455,12 +459,12 @@ def _fire_validate_events(
                 },
             )
         except Exception:
-            pass  # best-effort: never block validate_changed for telemetry
+            _logger.debug("validate_kg_event_emit_failed", exc_info=True)
 
     try:
         asyncio.create_task(_emit())  # noqa: RUF006
     except Exception:
-        pass
+        _logger.debug("validate_kg_event_task_failed", exc_info=True)
 
 
 async def tapps_validate_changed(

@@ -136,40 +136,75 @@ class TestSourceChangelogSection:
 
 class TestSourceGitLog:
     def test_returns_empty_on_git_failure(self, tmp_path: Path) -> None:
-        with patch("subprocess.run") as mock_run:
-            mock_run.return_value = MagicMock(returncode=1, stdout="", stderr="fatal: not a git repo")
+        from tapps_mcp.tools.subprocess_utils import CommandResult
+
+        with patch("tapps_mcp.tools.release_update.run_command") as mock_run:
+            mock_run.return_value = CommandResult(
+                returncode=1,
+                stdout="",
+                stderr="fatal: not a git repo",
+                command=["git"],
+            )
             highlights, issues = source_git_log(tmp_path, "1.4.2")
         assert highlights == []
         assert issues == []
 
     def test_parses_feat_commits(self, tmp_path: Path) -> None:
+        from tapps_mcp.tools.subprocess_utils import CommandResult
+
         git_output = "abc1234 feat(tools): add tapps_release_update (TAP-1112)\ndef5678 fix: edge case in scorer\n"
-        with patch("subprocess.run") as mock_run:
-            mock_run.return_value = MagicMock(returncode=0, stdout=git_output, stderr="")
+        with patch("tapps_mcp.tools.release_update.run_command") as mock_run:
+            mock_run.return_value = CommandResult(
+                returncode=0,
+                stdout=git_output,
+                stderr="",
+                command=["git"],
+            )
             highlights, _ = source_git_log(tmp_path, "1.4.2")
         assert any("add tapps_release_update" in h for h in highlights)
 
     def test_scrapes_tap_refs(self, tmp_path: Path) -> None:
+        from tapps_mcp.tools.subprocess_utils import CommandResult
+
         git_output = "abc1234 feat: something (TAP-1112)\ndef5678 fix: other thing (TAP-999)\n"
-        with patch("subprocess.run") as mock_run:
-            mock_run.return_value = MagicMock(returncode=0, stdout=git_output, stderr="")
+        with patch("tapps_mcp.tools.release_update.run_command") as mock_run:
+            mock_run.return_value = CommandResult(
+                returncode=0,
+                stdout=git_output,
+                stderr="",
+                command=["git"],
+            )
             _, issues = source_git_log(tmp_path, "1.4.2")
         tap_ids = [i.split(":")[0] for i in issues]
         assert "TAP-1112" in tap_ids
         assert "TAP-999" in tap_ids
 
     def test_deduplicates_tap_refs(self, tmp_path: Path) -> None:
+        from tapps_mcp.tools.subprocess_utils import CommandResult
+
         git_output = "abc1234 feat: thing TAP-1112\ndef5678 fix: same TAP-1112\n"
-        with patch("subprocess.run") as mock_run:
-            mock_run.return_value = MagicMock(returncode=0, stdout=git_output, stderr="")
+        with patch("tapps_mcp.tools.release_update.run_command") as mock_run:
+            mock_run.return_value = CommandResult(
+                returncode=0,
+                stdout=git_output,
+                stderr="",
+                command=["git"],
+            )
             _, issues = source_git_log(tmp_path, "1.4.2")
         tap_ids = [i.split(":")[0] for i in issues]
         assert tap_ids.count("TAP-1112") == 1
 
     def test_timeout_returns_empty(self, tmp_path: Path) -> None:
-        import subprocess
+        from tapps_mcp.tools.subprocess_utils import CommandResult
 
-        with patch("subprocess.run", side_effect=subprocess.TimeoutExpired("git", 10)):
+        with patch("tapps_mcp.tools.release_update.run_command") as mock_run:
+            mock_run.return_value = CommandResult(
+                returncode=-1,
+                stdout="",
+                stderr="Timed out after 10s",
+                command=["git"],
+                timed_out=True,
+            )
             highlights, issues = source_git_log(tmp_path, "1.4.2")
         assert highlights == []
         assert issues == []
@@ -257,10 +292,17 @@ class TestTappsReleaseUpdateHandler:
         with (
             patch("tapps_core.config.settings.load_settings") as mock_settings,
             patch("tapps_mcp.server_release_tools._record_call"),
-            patch("subprocess.run") as mock_run,
+            patch("tapps_mcp.tools.release_update.run_command") as mock_run,
         ):
+            from tapps_mcp.tools.subprocess_utils import CommandResult
+
             mock_settings.return_value = MagicMock(project_root=str(tmp_path))
-            mock_run.return_value = MagicMock(returncode=0, stdout="", stderr="")
+            mock_run.return_value = CommandResult(
+                returncode=0,
+                stdout="",
+                stderr="",
+                command=["git"],
+            )
             result = await tapps_release_update(version="1.5.0", prev_version="1.4.2", dry_run=True)
 
         assert result["data"]["source"] == "git_log"

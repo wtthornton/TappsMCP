@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
-import subprocess
+import subprocess  # nosec B404
 
 import structlog
 
@@ -47,7 +47,7 @@ def run_command(
     logger.debug("run_command", cmd=cmd, cwd=cwd, timeout=timeout)
 
     try:
-        result = subprocess.run(
+        result = subprocess.run(  # nosec B603
             cmd,
             cwd=cwd,
             timeout=timeout,
