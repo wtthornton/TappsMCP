@@ -17,6 +17,8 @@ import subprocess
 import sys
 import time
 from pathlib import Path
+from typing import Any
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
@@ -55,31 +57,45 @@ class TestSidecarWriters:
         # Writer must not raise.
         write_session_start_marker("/dev/null/cannot-mkdir-here")
 
-    def test_checklist_state_marker_writes_json(self, tmp_path: Path) -> None:
-        write_checklist_state_marker(
-            tmp_path,
-            complete=False,
-            missing_required=["tapps_score_file", "tapps_quality_gate"],
-        )
-        path = tmp_path / ".tapps-mcp" / ".checklist-state.json"
-        assert path.exists()
-        data = json.loads(path.read_text(encoding="utf-8"))
-        assert data["complete"] is False
-        assert data["missing_required"] == [
-            "tapps_score_file",
-            "tapps_quality_gate",
-        ]
-        assert isinstance(data["ts"], int)
+    def test_checklist_state_marker_emits_brain_event(self, tmp_path: Path) -> None:
+        mock_bridge = MagicMock()
+        mock_bridge.record_kg_event = AsyncMock(return_value={"recorded": True})
+        captured: list[Any] = []
 
-    def test_checklist_state_marker_complete(self, tmp_path: Path) -> None:
-        write_checklist_state_marker(tmp_path, complete=True)
-        data = json.loads(
-            (tmp_path / ".tapps-mcp" / ".checklist-state.json").read_text(
-                encoding="utf-8"
+        with (
+            patch("tapps_mcp.server_helpers._reset_brain_bridge_cache"),
+            patch("tapps_mcp.server_helpers._get_brain_bridge", return_value=mock_bridge),
+            patch(
+                "tapps_mcp.server_helpers.asyncio.create_task",
+                side_effect=lambda coro: captured.append(coro),
+            ),
+        ):
+            write_checklist_state_marker(
+                tmp_path,
+                complete=False,
+                missing_required=["tapps_quality_gate"],
             )
-        )
-        assert data["complete"] is True
-        assert data["missing_required"] == []
+            assert len(captured) == 1
+            import asyncio
+
+            asyncio.run(captured[0])
+
+        mock_bridge.record_kg_event.assert_awaited_once()
+        call_kwargs = mock_bridge.record_kg_event.await_args.kwargs
+        assert call_kwargs["event_type"] == "checklist_outcome"
+        assert call_kwargs["payload_data"]["complete"] is False
+        assert call_kwargs["payload_data"]["missing_required"] == ["tapps_quality_gate"]
+        assert (tmp_path / ".tapps-mcp" / ".checklist-state.json").exists() is False
+
+    def test_checklist_state_marker_swallows_errors(self, tmp_path: Path) -> None:
+        with (
+            patch("tapps_mcp.server_helpers.asyncio.create_task"),
+            patch(
+                "tapps_mcp.server_helpers._get_brain_bridge",
+                side_effect=RuntimeError("brain down"),
+            ),
+        ):
+            write_checklist_state_marker(tmp_path, complete=True)
 
 
 class TestScriptContent:
@@ -91,15 +107,15 @@ class TestScriptContent:
     def test_ps_script_exists(self) -> None:
         assert "tapps-user-prompt-submit.ps1" in CLAUDE_HOOK_SCRIPTS_PS
 
-    def test_bash_references_both_sidecars(self) -> None:
+    def test_bash_references_session_sidecar(self) -> None:
         body = CLAUDE_HOOK_SCRIPTS["tapps-user-prompt-submit.sh"]
         assert ".session-start-marker" in body
-        assert ".checklist-state.json" in body
+        assert ".checklist-state.json" not in body
 
-    def test_ps_references_both_sidecars(self) -> None:
+    def test_ps_references_session_sidecar(self) -> None:
         body = CLAUDE_HOOK_SCRIPTS_PS["tapps-user-prompt-submit.ps1"]
         assert ".session-start-marker" in body
-        assert ".checklist-state.json" in body
+        assert ".checklist-state.json" not in body
 
     def test_bash_uses_1800s_window(self) -> None:
         # The AC's "30 minute" freshness check.
@@ -108,13 +124,9 @@ class TestScriptContent:
     def test_ps_uses_1800s_window(self) -> None:
         assert "1800" in CLAUDE_HOOK_SCRIPTS_PS["tapps-user-prompt-submit.ps1"]
 
-    def test_bash_mentions_finish_task(self) -> None:
+    def test_bash_mentions_brain_checklist_note(self) -> None:
         body = CLAUDE_HOOK_SCRIPTS["tapps-user-prompt-submit.sh"]
-        assert "/tapps-finish-task" in body
-
-    def test_ps_mentions_finish_task(self) -> None:
-        body = CLAUDE_HOOK_SCRIPTS_PS["tapps-user-prompt-submit.ps1"]
-        assert "/tapps-finish-task" in body
+        assert "checklist_outcome" in body or "tapps_checklist" in body
 
     def test_bash_exits_zero(self) -> None:
         # UserPromptSubmit advisory only — exit 2 would block the prompt.
@@ -249,27 +261,17 @@ class TestBehavior:
         assert rc == 0
         assert "tapps_session_start" in stderr
 
-    def test_open_checklist_warns_even_when_session_fresh(
+    def test_open_checklist_sidecar_no_longer_triggers_hook(
         self, tmp_path: Path
     ) -> None:
+        """TAP-2000: checklist reminders moved to brain; hook stays silent."""
         write_session_start_marker(tmp_path)
-        write_checklist_state_marker(
-            tmp_path,
-            complete=False,
-            missing_required=["tapps_quality_gate"],
-        )
-        script = self._setup(tmp_path)
-        rc, _, stderr = self._run(
-            script, stdin="{}", env={"CLAUDE_PROJECT_DIR": str(tmp_path)}
-        )
-        assert rc == 0
-        assert "tapps_checklist" in stderr
-        assert "tapps_quality_gate" in stderr
-        assert "/tapps-finish-task" in stderr
-
-    def test_complete_checklist_does_not_warn(self, tmp_path: Path) -> None:
-        write_session_start_marker(tmp_path)
-        write_checklist_state_marker(tmp_path, complete=True)
+        with patch("tapps_mcp.server_helpers.asyncio.create_task"):
+            write_checklist_state_marker(
+                tmp_path,
+                complete=False,
+                missing_required=["tapps_quality_gate"],
+            )
         script = self._setup(tmp_path)
         rc, _, stderr = self._run(
             script, stdin="{}", env={"CLAUDE_PROJECT_DIR": str(tmp_path)}

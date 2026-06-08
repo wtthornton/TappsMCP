@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import contextlib
 import os
 import threading
@@ -628,34 +629,86 @@ def write_session_start_marker(project_root: Path | str) -> None:
         pass
 
 
+def _checklist_entity_id(project_root: Path) -> str:
+    """Stable brain entity id for checklist outcomes (TAP-2000)."""
+    try:
+        from tapps_core.config.settings import load_settings
+
+        settings = load_settings(project_root)
+        brain_id = getattr(settings.memory, "brain_project_id", "") or ""
+        if brain_id:
+            return f"checklist:{brain_id}"
+    except Exception:
+        pass
+    return f"checklist:{project_root.resolve()}"
+
+
 def write_checklist_state_marker(
     project_root: Path | str,
     *,
     complete: bool,
     missing_required: list[str] | None = None,
 ) -> None:
-    """TAP-975: Record the most recent ``tapps_checklist`` outcome on disk.
+    """TAP-2000: Record the most recent ``tapps_checklist`` outcome in brain.
 
-    Read by the ``tapps-user-prompt-submit`` hook to surface "open checklist"
-    reminders when the last run flagged missing required tools. Failures are
-    swallowed — same advisory contract as :func:`write_session_start_marker`.
+    Emits a ``checklist_outcome`` KG event via ``brain_record_event``. The
+    legacy ``.checklist-state.json`` sidecar is no longer written — hook
+    checklist reminders were dropped because bash hooks cannot call brain
+    (see ``docs/handoff/BRAIN-wave2-capabilities.md``). Failures are swallowed
+    — same advisory contract as :func:`write_session_start_marker`.
     """
-    try:
-        import json as _json
+    root = project_root if isinstance(project_root, Path) else Path(project_root)
+    payload_data = {
+        "ts": int(time.time()),
+        "complete": bool(complete),
+        "missing_required": list(missing_required or []),
+    }
+    entity_id = _checklist_entity_id(root)
 
-        root = project_root if isinstance(project_root, Path) else Path(project_root)
-        sidecar_dir = root / ".tapps-mcp"
-        sidecar_dir.mkdir(parents=True, exist_ok=True)
-        payload = {
-            "ts": int(time.time()),
-            "complete": bool(complete),
-            "missing_required": list(missing_required or []),
-        }
-        (sidecar_dir / ".checklist-state.json").write_text(
-            _json.dumps(payload, separators=(",", ":")), encoding="utf-8"
-        )
+    async def _emit() -> None:
+        try:
+            bridge = _get_brain_bridge()
+            if bridge is None or not hasattr(bridge, "record_kg_event"):
+                return
+            await bridge.record_kg_event(  # type: ignore[union-attr]
+                event_type="checklist_outcome",
+                entities=[{"type": "project", "id": entity_id}],
+                payload_data=payload_data,
+            )
+        except Exception:
+            pass
+
+    try:
+        asyncio.create_task(_emit())  # noqa: RUF006
     except Exception:
         pass
+
+
+async def fetch_prior_checklist_outcome(project_root: Path | str) -> dict[str, Any] | None:
+    """Best-effort read of the latest checklist outcome from brain (TAP-2000).
+
+    Returns ``None`` when brain is unavailable or the event payload cannot be
+    read back (brain_get_neighbors returns graph structure only today).
+    """
+    root = project_root if isinstance(project_root, Path) else Path(project_root)
+    entity_id = _checklist_entity_id(root)
+    try:
+        bridge = _get_brain_bridge()
+        if bridge is None or not hasattr(bridge, "get_neighbors"):
+            return None
+        result = await bridge.get_neighbors(entity_ids=[entity_id], hops=1)  # type: ignore[union-attr]
+        if not isinstance(result, dict):
+            return None
+        neighbors = result.get("neighbors") or result.get("edges") or []
+        if not neighbors:
+            return None
+        return {
+            "entity_id": entity_id,
+            "neighbor_count": len(neighbors),
+            "source": "brain_get_neighbors",
+        }
+    except Exception:
+        return None
 
 
 def _reset_session_state() -> None:

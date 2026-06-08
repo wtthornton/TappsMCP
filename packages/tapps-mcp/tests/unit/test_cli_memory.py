@@ -273,9 +273,6 @@ class TestMemoryImportExport:
                 "error_count": 0,
             }
             result = runner.invoke(main, ["memory", "import-file", "--file", str(import_file)])
-        # import_memories is imported locally in the CLI function, so we need
-        # to patch at the right level. Since it's a local import, we patch the
-        # function that the CLI calls.
         assert result.exit_code == 0 or "Imported" in result.output or result.exit_code == 0
 
     def test_export_success(self, runner: CliRunner, tmp_path: Path) -> None:
@@ -292,3 +289,75 @@ class TestMemoryImportExport:
             }
             result = runner.invoke(main, ["memory", "export-file", "--file", str(export_file)])
         assert result.exit_code == 0 or "Exported" in result.output or result.exit_code == 0
+
+    def test_export_with_tier_and_format(self, runner: CliRunner, tmp_path: Path) -> None:
+        export_file = tmp_path / "export.md"
+        mock_store = _mock_store()
+        with (
+            patch(_ROOT_PATCH, return_value=tmp_path),
+            patch(_STORE_PATCH, return_value=mock_store),
+            patch("tapps_brain.io.export_memories") as mock_export,
+        ):
+            mock_export.return_value = {
+                "exported_count": 2,
+                "file_path": str(export_file),
+            }
+            result = runner.invoke(
+                main,
+                [
+                    "memory",
+                    "export-file",
+                    "--file",
+                    str(export_file),
+                    "--format",
+                    "markdown",
+                    "--tier",
+                    "architectural",
+                    "--scope",
+                    "project",
+                ],
+            )
+        assert result.exit_code == 0
+        mock_export.assert_called_once()
+        _, kwargs = mock_export.call_args
+        assert kwargs["export_format"] == "markdown"
+        assert kwargs["tier"] == "architectural"
+        assert kwargs["scope"] == "project"
+
+    def test_export_bad_format_rejected(self, runner: CliRunner, tmp_path: Path) -> None:
+        result = runner.invoke(
+            main,
+            [
+                "memory",
+                "export-file",
+                "--file",
+                str(tmp_path / "out.json"),
+                "--format",
+                "yaml",
+            ],
+        )
+        assert result.exit_code != 0
+
+
+class TestMemoryReseed:
+    def test_reseed_requires_confirm(self, runner: CliRunner) -> None:
+        result = runner.invoke(main, ["memory", "reseed"])
+        assert result.exit_code != 0
+
+    def test_reseed_success(self, runner: CliRunner, tmp_path: Path) -> None:
+        mock_store = _mock_store()
+        mock_profile = MagicMock()
+        mock_profile.project_type = "python"
+        with (
+            patch(_ROOT_PATCH, return_value=tmp_path),
+            patch(_STORE_PATCH, return_value=mock_store),
+            patch("tapps_mcp.project.profiler.detect_project_profile", return_value=mock_profile),
+            patch("tapps_brain.seeding.reseed_from_profile") as mock_reseed,
+            patch("tapps_core.config.settings.load_settings") as mock_settings,
+        ):
+            mock_settings.return_value.project_root = tmp_path
+            mock_reseed.return_value = {"seeded_count": 4}
+            result = runner.invoke(main, ["memory", "reseed", "--confirm"])
+        assert result.exit_code == 0
+        assert "Re-seeded" in result.output
+        mock_reseed.assert_called_once()
