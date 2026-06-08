@@ -416,3 +416,25 @@ class TestFinishTaskSkill:
         generate_skills(tmp_path, "cursor")
         target = tmp_path / ".cursor" / "skills" / "tapps-finish-task" / "SKILL.md"
         assert target.exists()
+
+
+class TestSessionHandoffSkills:
+    """Session transfer skills: handoff-session + continue-session."""
+
+    def test_registered_in_both_platforms(self) -> None:
+        for skills in (CLAUDE_SKILLS, CURSOR_SKILLS):
+            assert "tapps-handoff-session" in skills
+            assert "tapps-continue-session" in skills
+
+    def test_handoff_references_session_handoff_file(self) -> None:
+        assert "session-handoff.md" in CLAUDE_SKILLS["tapps-handoff-session"]
+        assert "tapps_session_end" in CURSOR_SKILLS["tapps-handoff-session"]
+
+    def test_continue_references_session_start(self) -> None:
+        assert "tapps_session_start" in CURSOR_SKILLS["tapps-continue-session"]
+        assert "session-handoff.md" in CLAUDE_SKILLS["tapps-continue-session"]
+
+    def test_generated_handoff_and_continue_skills(self, tmp_path: Path) -> None:
+        generate_skills(tmp_path, "cursor")
+        assert (tmp_path / ".cursor" / "skills" / "tapps-handoff-session" / "SKILL.md").exists()
+        assert (tmp_path / ".cursor" / "skills" / "tapps-continue-session" / "SKILL.md").exists()

@@ -79,7 +79,7 @@ This validates against security and operational best practices.
 
 **Memory hooks:** Auto-recall and auto-capture default **on** in shipped `default.yaml`; tune under `memory_hooks` in `.tapps-mcp.yaml`.
 
-**Cross-session handoff:** for tokens/IDs/payloads needed by a later session, `tapps_memory(action="save", key=..., value=...)` (default `project` scope is cross-session) and `action="get"` to retrieve. Cross-agent: `action="hive_propagate"`. Cross-project: federation actions.
+**Cross-session handoff:** `/tapps-handoff-session` + `/tapps-continue-session`, or `tapps-mcp memory save/get`. Cross-agent: `hive_propagate`. Cross-project: federation actions.
 
 ## 5-Stage Pipeline
 

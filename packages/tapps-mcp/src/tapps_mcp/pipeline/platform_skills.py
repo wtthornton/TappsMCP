@@ -101,6 +101,107 @@ Close out the current task end-to-end. Run each step; do NOT skip one that faile
 3. **Save learnings (conditional).** If this session produced a non-obvious architectural or pattern-level decision — a new convention, a subtle trade-off, a gotcha someone else would re-discover — call `mcp__tapps-mcp__tapps_memory(action="save", tier=<"architectural"|"pattern">, ...)` with a concise body. Skip this step for routine fixes, refactors where the code itself documents the decision, or trivial bugfixes.
 
 4. **Report.** Emit a one-line summary: `Files validated: N pass. Checklist: <task_type> complete. Memory saved: yes|no.` If any step failed or was skipped, say so explicitly.
+
+5. **Transfer (optional).** If the user is ending the chat and wants the next session to pick up cleanly, invoke `/tapps-handoff-session` instead of pasting a long prompt.
+""",
+    "tapps-handoff-session": """\
+---
+name: tapps-handoff-session
+user-invocable: true
+model: claude-haiku-4-5-20251001
+description: >-
+  Write a structured cross-session handoff and close the TAPPS session
+  lifecycle so the next chat can continue without a long paste. Use when
+  ending a session, handing off to a fresh chat, or the user says hand
+  off, save session state, or continue next time.
+allowed-tools: mcp__tapps-mcp__tapps_session_end Bash
+argument-hint: "[optional Linear issue id e.g. TAP-1234]"
+disable-model-invocation: true
+---
+
+End the session with a durable handoff the next chat can load via `/tapps-continue-session`.
+
+1. **Draft handoff (5–10 bullets).** From this session's work, write:
+   - **Done** — what shipped or was verified
+   - **Open** — in-progress or untested
+   - **Next (P0)** — one concrete next action (prefer a Linear id if known)
+   - **Blockers** — or `none`
+   - **Verify** — commands to run first in the next session
+   - **Success criterion** — one line
+
+2. **Persist (file is canonical).** Write or overwrite `.tapps-mcp/session-handoff.md` using this shape:
+
+```markdown
+# Session handoff
+**Updated:** <ISO-8601 UTC>
+**Linear P0:** <TAP-#### or none>
+
+## Done
+- ...
+
+## Open
+- ...
+
+## Next (P0)
+- ...
+
+## Blockers
+- ...
+
+## Verify
+- ...
+
+## Success criterion
+- ...
+```
+
+3. **Persist (brain, best-effort).** If tapps-brain is reachable, also run:
+   `uv run tapps-mcp memory save --key session-handoff --tier context --tags handoff,cross-session --value "<same bullets as markdown, plain text>"`
+   Skip silently when brain is offline — the markdown file is enough.
+
+4. **Close lifecycle.** Call `mcp__tapps-mcp__tapps_session_end()`. Best-effort; do not fail the handoff if it degrades.
+
+5. **Report.** One line: `Handoff written: .tapps-mcp/session-handoff.md. Linear P0: <id|none>. session_end: ok|skipped. Next session: invoke /tapps-continue-session`
+""",
+    "tapps-continue-session": """\
+---
+name: tapps-continue-session
+user-invocable: true
+model: claude-haiku-4-5-20251001
+description: >-
+  Bootstrap a fresh session from the last handoff by reading session-handoff.md,
+  optional Linear context, and TAPPS session start — without pasting a long
+  manifesto. Use when the user says continue, pick up where we left off, resume,
+  or start a new session on an existing task (optional TAP-#### argument).
+allowed-tools: mcp__tapps-mcp__tapps_session_start mcp__plugin_linear_linear__get_issue Bash Read
+argument-hint: "[optional Linear issue id e.g. TAP-1234]"
+---
+
+Start work in a fresh context window by assembling structured state — not a user paste.
+
+1. **Session bootstrap.** Call `mcp__tapps-mcp__tapps_session_start()`. If `data.compaction_rehydration` is present, summarize it in one sentence.
+
+2. **Load handoff (priority order).**
+   - Read `.tapps-mcp/session-handoff.md` if it exists — primary source.
+   - Else best-effort: `uv run tapps-mcp memory get --key session-handoff` (brain offline → skip).
+   - Optional supplements (only if present, do not require):
+     - `docs/NEXT_SESSION_PROMPT.md` — short user-maintained prompt
+     - `docs/TAPPS_HANDOFF.md` — scan for `**Next:**` or the latest stage section
+
+3. **Linear context.**
+   - If the user passed `TAP-####` (argument or in handoff **Linear P0**), call `mcp__plugin_linear_linear__get_issue(id=...)`.
+   - For backlog/triage without a known id, invoke the `linear-read` skill instead of raw `list_issues`.
+
+4. **Emit continue block (~15 lines max).** Present:
+   - **P0** — next action + Linear link if available
+   - **Done / Open / Blockers** — from handoff (compressed)
+   - **Verify first** — commands from handoff
+   - **Success criterion**
+   - **Stale warning** if handoff **Updated** is >7 days old
+
+5. **Confirm and proceed.** Ask only if P0 is ambiguous; otherwise start on P0 using normal TAPPS workflow (`tapps_quick_check` after Python edits, etc.).
+
+Do **not** ask the user to re-paste prior context when handoff files exist.
 """,
     "tapps-report": """\
 ---
@@ -1062,6 +1163,83 @@ Close out the current task end-to-end. Run each step; do NOT skip one that faile
 2. **Verify the checklist.** Call `tapps_checklist(task_type=<feature|bugfix|refactor|security|review>)`. If `complete: false`, address each entry in `missing_steps` and re-run.
 3. **Save learnings (conditional).** If the session produced a non-obvious architectural or pattern-level decision, call `tapps_memory(action="save", tier=<"architectural"|"pattern">)`. Skip for routine fixes.
 4. **Report.** Emit a one-line summary: `Files validated: N pass. Checklist: <task_type> complete. Memory saved: yes|no.`
+
+5. **Transfer (optional).** If the user is ending the chat, invoke the `tapps-handoff-session` skill so the next session can run `tapps-continue-session`.
+""",
+    "tapps-handoff-session": """\
+---
+name: tapps-handoff-session
+description: >-
+  Write a structured cross-session handoff and close the TAPPS session
+  lifecycle so the next chat can continue without a long paste. Use when
+  ending a session, handing off to a fresh chat, or the user says hand
+  off, save session state, or continue next time.
+mcp_tools:
+  - tapps_session_end
+---
+
+End the session with a durable handoff the next chat loads via `tapps-continue-session`.
+
+1. **Draft handoff (5–10 bullets):** Done, Open, Next (P0), Blockers, Verify commands, Success criterion (one line).
+
+2. **Persist (file is canonical).** Write or overwrite `.tapps-mcp/session-handoff.md`:
+
+```markdown
+# Session handoff
+**Updated:** <ISO-8601 UTC>
+**Linear P0:** <TAP-#### or none>
+
+## Done
+- ...
+
+## Open
+- ...
+
+## Next (P0)
+- ...
+
+## Blockers
+- ...
+
+## Verify
+- ...
+
+## Success criterion
+- ...
+```
+
+3. **Persist (brain, best-effort).** Run:
+   `uv run tapps-mcp memory save --key session-handoff --tier context --tags handoff,cross-session --value "<plain-text bullets>"`
+   Skip silently if brain is offline.
+
+4. **Close lifecycle.** Call `tapps_session_end()`. Best-effort.
+
+5. **Report.** `Handoff: .tapps-mcp/session-handoff.md. Linear P0: <id|none>. Next: tapps-continue-session`
+""",
+    "tapps-continue-session": """\
+---
+name: tapps-continue-session
+description: >-
+  Bootstrap a fresh session from the last handoff by reading session-handoff.md,
+  optional Linear context, and TAPPS session start — without pasting a long
+  manifesto. Use when the user says continue, pick up where we left off, resume,
+  or start a new session on an existing task (optional TAP-#### argument).
+mcp_tools:
+  - tapps_session_start
+  - linear_get_issue
+---
+
+Start work in a fresh context by assembling structured state.
+
+1. Call `tapps_session_start()`. Note `compaction_rehydration` if present.
+
+2. **Load handoff (priority):** Read `.tapps-mcp/session-handoff.md`; else `uv run tapps-mcp memory get --key session-handoff`. Optional: `docs/NEXT_SESSION_PROMPT.md`, `docs/TAPPS_HANDOFF.md` (**Next:** section).
+
+3. **Linear:** `get_issue(id=...)` when user or handoff names `TAP-####`; else use `linear-read` for lists.
+
+4. **Emit ~15-line continue block:** P0, Done/Open/Blockers (compressed), Verify first, Success criterion. Warn if handoff **Updated** >7 days old.
+
+5. Proceed on P0; do not ask for a re-paste when handoff exists.
 """,
     "tapps-report": """\
 ---

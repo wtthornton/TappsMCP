@@ -1484,13 +1484,50 @@ class TestCheckFinishTaskSkill:
         result = check_finish_task_skill(tmp_path)
         assert result.ok is True
 
+    def test_cursor_host_passes(self, tmp_path):
+        from tapps_mcp.distribution.doctor import check_finish_task_skill
+
+        skill_dir = tmp_path / ".cursor" / "skills" / "tapps-finish-task"
+        skill_dir.mkdir(parents=True)
+        (skill_dir / "SKILL.md").write_text("---\nname: tapps-finish-task\n---\n")
+        result = check_finish_task_skill(tmp_path)
+        assert result.ok is True
+
     def test_absent_fails_with_hint(self, tmp_path):
         from tapps_mcp.distribution.doctor import check_finish_task_skill
 
         result = check_finish_task_skill(tmp_path)
         assert result.ok is False
-        assert "not found" in result.message
+        assert "Missing:" in result.message
         assert "upgrade" in result.detail
+
+
+class TestCheckSessionHandoffSkills:
+    """check_session_handoff_skills covers cross-chat transfer skills."""
+
+    def _write_skill(self, base, name: str) -> None:
+        skill_dir = base / name
+        skill_dir.mkdir(parents=True, exist_ok=True)
+        (skill_dir / "SKILL.md").write_text(f"---\nname: {name}\n---\n")
+
+    def test_both_skills_on_claude_passes(self, tmp_path):
+        from tapps_mcp.distribution.doctor import check_session_handoff_skills
+
+        base = tmp_path / ".claude" / "skills"
+        self._write_skill(base, "tapps-handoff-session")
+        self._write_skill(base, "tapps-continue-session")
+        result = check_session_handoff_skills(tmp_path)
+        assert result.ok is True
+        assert "tapps-handoff-session" in result.message
+
+    def test_missing_continue_fails(self, tmp_path):
+        from tapps_mcp.distribution.doctor import check_session_handoff_skills
+
+        base = tmp_path / ".cursor" / "skills"
+        self._write_skill(base, "tapps-handoff-session")
+        result = check_session_handoff_skills(tmp_path)
+        assert result.ok is False
+        assert "tapps-continue-session" in result.message
 
 
 # ---------------------------------------------------------------------------

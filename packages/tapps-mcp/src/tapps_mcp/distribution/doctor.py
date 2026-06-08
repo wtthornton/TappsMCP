@@ -965,24 +965,74 @@ def _categorize_cache_gate_violations_24h(project_root: Path) -> dict[str, int]:
     return counts
 
 
+def _tapps_skill_bases(project_root: Path) -> list[tuple[str, Path]]:
+    """Return ``(host_label, skills_dir)`` for bootstrapped TappsMCP skill hosts."""
+    bases: list[tuple[str, Path]] = []
+    for host_label, rel in (("claude", ".claude/skills"), ("cursor", ".cursor/skills")):
+        base = project_root / rel
+        if base.is_dir() and any(base.iterdir()):
+            bases.append((host_label, base))
+    if not bases:
+        bases.append(("claude", project_root / ".claude" / "skills"))
+    return bases
+
+
+def _missing_tapps_skills(project_root: Path, skill_names: tuple[str, ...]) -> list[str]:
+    """List ``host/skill`` paths missing ``SKILL.md`` under each skills host."""
+    missing: list[str] = []
+    for host_label, base in _tapps_skill_bases(project_root):
+        if not base.is_dir():
+            missing.append(f"{host_label}: skills directory missing")
+            continue
+        for skill_name in skill_names:
+            skill_path = base / skill_name / "SKILL.md"
+            if not skill_path.exists():
+                missing.append(f"{host_label}/{skill_name}")
+    return missing
+
+
 def check_finish_task_skill(project_root: Path) -> CheckResult:
     """Check the ``tapps-finish-task`` composite skill is deployed (TAP-977).
 
     The skill bundles validate_changed -> checklist -> optional memory.save as
     one invocation so agents don't drop steps of the closing sequence.
     """
-    skill_path = project_root / ".claude" / "skills" / "tapps-finish-task" / "SKILL.md"
-    if not skill_path.exists():
+    missing = _missing_tapps_skills(project_root, ("tapps-finish-task",))
+    if missing:
         return CheckResult(
             "tapps-finish-task skill",
             False,
-            ".claude/skills/tapps-finish-task/SKILL.md not found",
-            "Run: tapps-mcp upgrade",
+            f"Missing: {', '.join(missing)}",
+            "Run: tapps-mcp upgrade (or upgrade --host cursor for Cursor-only projects)",
         )
+    hosts = ", ".join(host for host, _ in _tapps_skill_bases(project_root))
     return CheckResult(
         "tapps-finish-task skill",
         True,
-        f"Present: {skill_path}",
+        f"Present on: {hosts}",
+    )
+
+
+def check_session_handoff_skills(project_root: Path) -> CheckResult:
+    """Check session-transfer skills are deployed (``tapps-handoff-session`` + ``tapps-continue-session``).
+
+    These skills write/read ``.tapps-mcp/session-handoff.md`` and pair with
+    ``tapps_session_end`` / ``tapps_session_start`` for cross-chat continuity.
+    """
+    skill_names = ("tapps-handoff-session", "tapps-continue-session")
+    missing = _missing_tapps_skills(project_root, skill_names)
+    if missing:
+        return CheckResult(
+            "session handoff skills",
+            False,
+            f"Missing: {', '.join(missing)}",
+            "Run: tapps-mcp upgrade --force (or upgrade --host cursor)",
+        )
+    hosts = ", ".join(host for host, _ in _tapps_skill_bases(project_root))
+    return CheckResult(
+        "session handoff skills",
+        True,
+        f"tapps-handoff-session + tapps-continue-session present on: {hosts}",
     )
 
 
@@ -2843,6 +2893,7 @@ def _collect_checks(root: Path, *, quick: bool = False) -> list[CheckResult]:
     checks.append(check_config_files_rule(root))
     checks.append(check_linear_issue_skill_current(root))
     checks.append(check_finish_task_skill(root))
+    checks.append(check_session_handoff_skills(root))
     checks.append(check_continuous_learning_v2_skill(root))
     checks.append(check_pretooluse_matchers(root))
     checks.append(check_agents_md(root))

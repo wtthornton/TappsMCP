@@ -175,19 +175,20 @@ class TestSkillTemplates:
     """Verify skill template dicts and generation."""
 
     def test_claude_skills_count(self) -> None:
-        # 14 tapps-* (incl. tapps-finish-task + tapps-upgrade v3.11.0) + linear-issue
-        # + linear-release-update + linear-read (TAP-1260) = 17.
-        assert len(CLAUDE_SKILLS) == 17
+        # 16 tapps-* (incl. tapps-finish-task, tapps-handoff-session,
+        # tapps-continue-session, tapps-upgrade v3.11.0) + continuous-learning-v2
+        # + linear-issue + linear-release-update + linear-read (TAP-1260) = 20.
+        assert len(CLAUDE_SKILLS) == 20
 
     def test_cursor_skills_count(self) -> None:
-        # 14 tapps-* (incl. tapps-upgrade v3.11.0) + linear-issue + linear-read
-        # (TAP-1260) = 16. Cursor does not ship linear-release-update
-        # (Linear plugin is Claude-only for that flow).
-        assert len(CURSOR_SKILLS) == 16
+        # 16 tapps-* (incl. tapps-upgrade v3.11.0, tapps-handoff-session,
+        # tapps-continue-session) + continuous-learning-v2 + linear-issue
+        # + linear-read (TAP-1260) = 19. Cursor does not ship linear-release-update.
+        assert len(CURSOR_SKILLS) == 19
 
     def test_generate_claude_skills(self, tmp_path: Path) -> None:
         result = generate_skills(tmp_path, "claude")
-        assert len(result["created"]) == 17
+        assert len(result["created"]) == 20
         assert (tmp_path / ".claude" / "skills" / "tapps-score" / "SKILL.md").exists()
 
     def test_generate_skills_high_engagement(self, tmp_path: Path) -> None:
@@ -205,9 +206,7 @@ class TestSkillTemplates:
     def test_generate_skills_skips_existing(self, tmp_path: Path) -> None:
         generate_skills(tmp_path, "claude")
         result = generate_skills(tmp_path, "claude")
-        # 14 tapps-* (incl. tapps-upgrade v3.11.0) + linear-issue
-        # + linear-release-update + linear-read (TAP-1260) = 17.
-        assert len(result["skipped"]) == 17
+        assert len(result["skipped"]) == 20
         assert len(result["created"]) == 0
 
 

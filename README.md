@@ -34,6 +34,7 @@ Two MCP servers — **TappsMCP** (code quality) and **DocsMCP** (documentation) 
   - **`next_steps` enrichment** — top-traffic tools template `{file_path}` into suggested calls so the agent gets ready-to-paste signatures like `tapps_security_scan(file_path='/path/to/X.py')` instead of empty `tapps_security_scan()`.
   - **`tapps-upgrade` (new shipped skill)** — orchestrates `uv tool install --reinstall` + MCP restart + `tapps-mcp upgrade` + doctor + checklist. Deployed to consumers via `tapps_init` / `tapps_upgrade`.
 - **Wrapper skills deprecated** — `tapps-score`, `tapps-gate`, `tapps-validate`, `tapps-report` carry DEPRECATED notices pointing at their direct MCP tool or `/tapps-finish-task`. Scheduled removal in v3.12.0.
+- **Session transfer skills** — `/tapps-handoff-session` writes `.tapps-mcp/session-handoff.md` + `tapps_session_end`; `/tapps-continue-session` bootstraps the next chat from that file (optional `TAP-####`). `tapps doctor` checks both skills are deployed.
 - **Profile-aware skill filtering** — DEFERRED. Design still pending (skills are deploy-time, not runtime); will land in a future release.
 
 ### What's new in v3.10
@@ -412,7 +413,7 @@ TappsMCP includes CLI commands to set up, diagnose, and run the server. All comm
 | `tapps-mcp serve` | Start the MCP server. Options: `--transport stdio\|http` (default: stdio), `--host` (default: 127.0.0.1), `--port` (default: 8000). |
 | `tapps-mcp init` | Bootstrap TappsMCP in a project. Creates MCP config, AGENTS.md, TECH_STACK.md, hooks, agents, skills, and platform rules. See [init options](#tapps-mcp-init-options) below. |
 | `tapps-mcp upgrade` | Refresh all generated files (AGENTS.md, rules, hooks, settings) after upgrading TappsMCP. Creates a backup first. |
-| `tapps-mcp doctor` | Diagnose configuration and connectivity: MCP config, AGENTS.md, hooks, checkers, tapps-brain, dual-memory warning, **memory pipeline effective config** (resolved `memory.*` / `memory_hooks.*`). |
+| `tapps-mcp doctor` | Diagnose configuration and connectivity: MCP config, AGENTS.md, hooks, checkers, tapps-brain, dual-memory warning, **session handoff skills** (`tapps-handoff-session`, `tapps-continue-session`), **memory pipeline effective config** (resolved `memory.*` / `memory_hooks.*`). |
 | `tapps-mcp validate-changed` | Run quality validation on changed files from the CLI (same as MCP tool). Options: `--quick` (default) or `--full`. |
 | `tapps-mcp show-config` | Dump effective TappsMCP configuration as YAML (redacts secrets). |
 | `tapps-mcp build-plugin` | Generate a Claude Code plugin directory with skills, agents, hooks, MCP config, and rules. |
@@ -469,11 +470,12 @@ TappsMCP includes CLI commands to set up, diagnose, and run the server. All comm
 | **TECH_STACK.md** | Auto-detected project profile (type, frameworks, CI, tests, package managers). |
 | **CLAUDE.md** or **.cursor/rules/** | Platform-specific pipeline rules for quality enforcement. |
 | **.mcp.json** or **~/.claude.json** | MCP server configuration for your AI client. |
-| **docs/TAPPS_HANDOFF.md** | Session handoff template for multi-session work. |
+| **docs/TAPPS_HANDOFF.md** | Pipeline-stage handoff template for multi-session TAPPS work. |
+| **.tapps-mcp/session-handoff.md** | Cross-chat continue block (written by `/tapps-handoff-session`, read by `/tapps-continue-session`). |
 | **docs/TAPPS_RUNLOG.md** | Pipeline run log template. |
 | **.claude/hooks/** or **.cursor/hooks/** | Hook scripts (quality gate on edit, memory capture on stop). |
 | **.claude/agents/** or **.cursor/agents/** | Subagent definitions (reviewer, researcher, validator, review-fixer). |
-| **.claude/skills/** or **.cursor/skills/** | Skill templates (score, gate, validate, review, research, memory, security). |
+| **.claude/skills/** or **.cursor/skills/** | Skill templates (score, gate, validate, finish-task, handoff-session, continue-session, review, research, memory, security). |
 | **.claude/settings.json** | Claude Code permission wildcards + hooks config. |
 | **.github/copilot-instructions.md** | VS Code Copilot tool guidance. |
 | **.github/workflows/tapps-quality.yml** | CI quality gate workflow. |

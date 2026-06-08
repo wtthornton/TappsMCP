@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [3.12.12] - 2026-06-08
+
+### Added
+
+- **Session transfer skills** — `tapps-handoff-session` writes `.tapps-mcp/session-handoff.md` and calls `tapps_session_end`; `tapps-continue-session` bootstraps a fresh chat from that file plus optional Linear context.
+- **`tapps doctor` check** — `session handoff skills` verifies both skills are deployed on Claude and/or Cursor hosts.
+- **`tapps_init` verification** — records `session_handoff_skills` in the bootstrap result after skill generation.
+
+### Changed
+
+- **Cross-session handoff docs** — AGENTS.md templates, platform rules, README, ARCHITECTURE.md, and MEMORY_REFERENCE.md now document the handoff/continue skill workflow instead of legacy `tapps_memory` save/get guidance.
+- **`tapps-finish-task`** — optional step pointing at `tapps-handoff-session` when ending a chat.
+
 ## [3.12.0] - 2026-05-27
 
 Headline release after a 119-commit cycle since v3.10.14. Major shipped: compaction-boundary memory rehydration (TAP-2017), the `tapps_core/memory/` shim deletion (TAP-1995, internal-breaking), the brain-version-floor pre-push gate (TAP-1923), the hive-elevation safety gate (TAP-2014), and the Agent Gateway pattern (TAP-2011). 17+ stories closed.

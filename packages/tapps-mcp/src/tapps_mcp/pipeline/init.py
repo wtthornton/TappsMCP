@@ -552,6 +552,18 @@ def _detect_docsmcp(state: _BootstrapState) -> bool:
     return False
 
 
+def _record_session_handoff_skill_check(state: _BootstrapState) -> None:
+    """Verify session-transfer skills landed after ``generate_skills`` (init/upgrade parity with doctor)."""
+    from tapps_mcp.distribution.doctor import check_session_handoff_skills
+
+    check = check_session_handoff_skills(state.project_root)
+    state.result["session_handoff_skills"] = {
+        "ok": check.ok,
+        "message": check.message,
+        "detail": check.detail,
+    }
+
+
 def _verify_server(cfg: BootstrapConfig, state: _BootstrapState) -> None:
     """Run server verification and optional checker install.
 
@@ -967,6 +979,9 @@ def _setup_platform(cfg: BootstrapConfig, state: _BootstrapState) -> None:
         "platform": cfg.platform,
         "action": platform_action or "skipped",
     }
+
+    if not cfg.minimal and not cfg.dry_run and cfg.platform in {"claude", "cursor"}:
+        _record_session_handoff_skill_check(state)
 
     if not cfg.minimal:
         _setup_github_templates(state)

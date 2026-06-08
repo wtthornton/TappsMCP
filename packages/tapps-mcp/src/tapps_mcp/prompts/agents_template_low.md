@@ -121,7 +121,7 @@ OPTIONAL: Consider using `tapps_memory` for important architecture decisions.
 
 **Tiers:** `architectural` (180-day), `pattern` (60-day), `procedural` (30-day), `context` (14-day). **Scopes:** `project` (default), `branch`, `session`. Cross-project sharing goes through federation actions, not a `scope=` value. Max 1500 entries per project. Configure `capture_prompt` and `write_rules` in `.tapps-mcp.yaml`.
 
-**Cross-session handoff:** to pass a token, ID, or short payload to a later session in the same project, call `tapps_memory(action="save", key="<slug>", value="<payload>")` instead of printing to stdout — `project` scope is already cross-session. Read back via `action="get"` or `action="search"`.
+**Cross-session handoff:** use `/tapps-handoff-session` then `/tapps-continue-session` for chat transfers (`.tapps-mcp/session-handoff.md`). For short payloads, `tapps-mcp memory save/get --key <slug>`.
 
 ---
 
@@ -158,11 +158,13 @@ Four agent definitions per platform in `.claude/agents/` or `.cursor/agents/`:
 
 ### Skills (auto-generated)
 
-Thirteen SKILL.md files per platform in `.claude/skills/` or `.cursor/skills/`:
+Thirteen core tapps-* SKILL.md files per platform in `.claude/skills/` or `.cursor/skills/` (plus linear-* and optional continuous-learning-v2):
 - **tapps-score** - Score a Python file across 7 quality categories
 - **tapps-gate** - Run a quality gate check and report pass/fail
 - **tapps-validate** - Validate all changed files before declaring work complete
 - **tapps-finish-task** - End-of-task pipeline: validate_changed + checklist + optional memory save
+- **tapps-handoff-session** - Write `.tapps-mcp/session-handoff.md` before ending a chat
+- **tapps-continue-session** - Bootstrap a fresh chat from the last handoff
 - **tapps-review-pipeline** - Orchestrate a parallel review-fix-validate pipeline
 - **tapps-research** - Look up library documentation and research best practices
 - **tapps-security** - Run a comprehensive security audit with vulnerability scanning

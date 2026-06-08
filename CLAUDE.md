@@ -1,4 +1,4 @@
-<!-- tapps-claude-version: 3.12.11 -->
+<!-- tapps-claude-version: 3.12.12 -->
 # CLAUDE.md
 
 This file provides guidance to Claude Code when working with code in this repository.
@@ -179,7 +179,7 @@ You should call `tapps_validate_config(file_path)` when changing Dockerfile, doc
 
 `tapps_memory` provides persistent cross-session knowledge with **42 actions** (save, search, consolidate, federation, profiles, hive, health, knowledge graph, batch ops, feedback, native session memory, and more). **Tiers:** architectural (180d), pattern (60d), procedural (30d), context (14d). **Scopes:** project, branch, session. Max 1500 entries. Configure `memory_hooks` in `.tapps-mcp.yaml` for auto-recall and auto-capture.
 
-**Cross-session handoff:** when one session needs to pass a token, ID, or payload to a later session, call `tapps_memory(action="save", key="<slug>", value="<payload>")` instead of printing to stdout — the default `project` scope is already cross-session within the same repo. Read it back from the next session with `action="get"` (by key) or `action="search"`. For cross-agent handoff in Agent Teams, use `action="hive_propagate"`; for cross-project, use the federation actions.
+**Cross-session handoff:** prefer `/tapps-handoff-session` at chat end and `/tapps-continue-session` at chat start — they read/write `.tapps-mcp/session-handoff.md` (canonical) with an optional brain mirror (`tapps-mcp memory save --key session-handoff`). For ad-hoc key/value payloads, use `tapps-mcp memory save/get` or brain recall. Cross-agent: `hive_propagate`; cross-project: federation actions.
 
 ## Quality Gate Behavior
 

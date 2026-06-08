@@ -1,4 +1,4 @@
-<!-- tapps-agents-version: 3.12.11 -->
+<!-- tapps-agents-version: 3.12.12 -->
 # TappsMCP - instructions for AI assistants
 
 When the **TappsMCP** MCP server is configured, you have access to tools for **code quality, doc lookup, and domain expert advice**. Use them to avoid hallucinated APIs, missed quality steps, and inconsistent output.
@@ -146,7 +146,7 @@ The checklist uses this to decide which tools are required vs recommended vs opt
 
 **Subagents:** tapps-reviewer (sonnet), tapps-researcher (haiku), tapps-validator (sonnet), tapps-review-fixer (sonnet + worktree).
 
-**Skills:** tapps-score, tapps-gate, tapps-validate, tapps-review-pipeline, tapps-research, tapps-security, tapps-memory, tapps-tool-reference, tapps-init, tapps-engagement, tapps-report.
+**Skills:** tapps-score, tapps-gate, tapps-validate, tapps-finish-task, tapps-handoff-session, tapps-continue-session, tapps-review-pipeline, tapps-research, tapps-security, tapps-memory, tapps-tool-reference, tapps-init, tapps-engagement, tapps-report.
 
 ## Agent ecosystem (using TappsMCP with other agent libraries)
 
@@ -226,7 +226,7 @@ Every `tapps_session_start` response includes a `data.brain_bridge_health` block
 
 **Configuration:** Override `memory.profile`, `memory.capture_prompt`, `memory.write_rules`, and `memory_hooks` in `.tapps-mcp.yaml`. Max 1500 entries per project. Auto-GC at 80% capacity.
 
-**Cross-session handoff:** when one session needs to pass a token, ID, or short payload to a later session in the same project, call `tapps_memory(action="save", key="<slug>", value="<payload>")` instead of printing it to stdout. The default `project` scope is already cross-session within the same repo. Read it back with `action="get"` (by key) or `action="search"`. For cross-agent handoff in Agent Teams, use `action="hive_propagate"`; for cross-project, use the federation actions above.
+**Cross-session handoff:** prefer `/tapps-handoff-session` at chat end and `/tapps-continue-session` at chat start — they read/write `.tapps-mcp/session-handoff.md` (canonical) with an optional brain mirror (`tapps-mcp memory save --key session-handoff`). For ad-hoc key/value payloads, use `tapps-mcp memory save/get` or brain recall. Cross-agent: `hive_propagate`; cross-project: federation actions above.
 
 ---
 
@@ -336,11 +336,13 @@ Four agent definitions per platform in `.claude/agents/` or `.cursor/agents/`:
 
 ### Skills (auto-generated)
 
-Thirteen SKILL.md files per platform in `.claude/skills/` or `.cursor/skills/`:
+Thirteen core tapps-* SKILL.md files per platform in `.claude/skills/` or `.cursor/skills/` (plus linear-* and optional continuous-learning-v2):
 - **tapps-score** - Score a Python file across 7 quality categories
 - **tapps-gate** - Run a quality gate check and report pass/fail
 - **tapps-validate** - Validate all changed files before declaring work complete
 - **tapps-finish-task** - End-of-task pipeline: validate_changed + checklist + optional memory save
+- **tapps-handoff-session** - Write `.tapps-mcp/session-handoff.md` and call `tapps_session_end` before ending a chat
+- **tapps-continue-session** - Bootstrap a fresh chat from the last handoff + optional Linear issue
 - **tapps-review-pipeline** - Orchestrate a parallel review-fix-validate pipeline
 - **tapps-research** - Look up library documentation and research best practices
 - **tapps-security** - Run a comprehensive security audit with vulnerability scanning

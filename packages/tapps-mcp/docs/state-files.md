@@ -37,6 +37,7 @@ unknown files are present and leaves them alone.
 
 | Path | Writer | Purpose |
 |---|---|---|
+| `.tapps-mcp/session-handoff.md` | `tapps-handoff-session` skill (or manual) | Cross-session continue block; read by `tapps-continue-session` on next chat. Brain mirror via `tapps-mcp memory save --key session-handoff`. |
 | `.tapps-mcp/session-capture.json` | `tapps-memory-capture.sh` Stop hook (legacy) | Session summary written at session end; read at next session start. Superseded by `call_memory_index_session_start` (TAP-1999) but kept for backward compat. |
 | `.tapps-mcp/.linear-validate-sentinel` | `tapps-post-docs-validate.sh` | Confirms `docs_validate_linear_issue` ran before `save_issue` |
 | `.tapps-mcp/.linear-snapshot-sentinel-*` | `tapps-post-linear-snapshot-get.sh` | Per-key unlock for Linear list-issues cache gate |

@@ -183,7 +183,7 @@ Your project may have two complementary memory systems. Use the right one for ea
 
 Use `tapps_memory` for architecture decisions and quality patterns.
 
-**Cross-session handoff:** when one session needs to pass a token, ID, or short payload to a later session in the same project, call `tapps_memory(action="save", key="<slug>", value="<payload>")` instead of printing it to stdout. The default `project` scope is already cross-session within the same repo. Read it back from the next session with `tapps_memory(action="get", key="<slug>")` or `action="search"`. For cross-agent handoff in Agent Teams, use `action="hive_propagate"`; for cross-project, use the federation actions.
+**Cross-session handoff:** for tokens/IDs/payloads, prefer `/tapps-handoff-session` at chat end and `/tapps-continue-session` at chat start — they read/write `.tapps-mcp/session-handoff.md` (canonical) with an optional brain mirror (`tapps-mcp memory save --key session-handoff`). For ad-hoc key/value payloads, use `tapps-mcp memory save/get` or brain recall directly. Cross-agent: `hive_propagate`; cross-project: federation actions.
 
 **Brain health (`brain_bridge_health`):** every `tapps_session_start` response carries a `data.brain_bridge_health` block — `enabled`, `ok`, `dsn_reachable`, `pool_config_valid`, `native_health_ok`, `errors`, `warnings`, plus `details` (mode, `http_url`, `brain_version`, `brain_status`). `tapps doctor` runs the same probe. See [docs/MEMORY_REFERENCE.md](docs/MEMORY_REFERENCE.md#brain-health-diagnostics) for troubleshooting `brain_auth_failed`, `BrainBridgeUnavailable`, and version-floor mismatches.
 
@@ -219,11 +219,13 @@ Four agent definitions per platform in `.claude/agents/` or `.cursor/agents/`:
 
 ### Skills (auto-generated)
 
-Thirteen SKILL.md files per platform in `.claude/skills/` or `.cursor/skills/`:
+Thirteen core tapps-* SKILL.md files per platform in `.claude/skills/` or `.cursor/skills/` (plus linear-* and optional continuous-learning-v2):
 - **tapps-score** - Score a Python file across 7 quality categories
 - **tapps-gate** - Run a quality gate check and report pass/fail
 - **tapps-validate** - Validate all changed files before declaring work complete
 - **tapps-finish-task** - End-of-task pipeline: validate_changed + checklist + optional memory save
+- **tapps-handoff-session** - Write `.tapps-mcp/session-handoff.md` and call `tapps_session_end` before ending a chat
+- **tapps-continue-session** - Bootstrap a fresh chat from the last handoff + optional Linear issue
 - **tapps-review-pipeline** - Orchestrate a parallel review-fix-validate pipeline
 - **tapps-research** - Look up library documentation and research best practices
 - **tapps-security** - Run a comprehensive security audit with vulnerability scanning

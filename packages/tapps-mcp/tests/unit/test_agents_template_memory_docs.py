@@ -39,23 +39,16 @@ class TestMemorySystemsSection:
 
     @pytest.mark.parametrize("level", ["high", "medium", "low"])
     def test_template_documents_cross_session_handoff(self, level: str) -> None:
-        """Each AGENTS.md template must teach the cross-session handoff pattern.
-
-        Sessions often need to pass tokens, IDs, or short payloads to a later
-        session in the same project. The correct path is `tapps_memory(action="save",
-        scope="project", ...)`, not stdout. If this guidance disappears from a
-        template the next time someone refactors it, agents will fall back to
-        printing secrets to stdout — drift catch.
-        """
+        """Each AGENTS.md template must teach the cross-session handoff pattern."""
         content = load_agents_template(engagement_level=level)
         assert "Cross-session handoff" in content, (
             f"AGENTS.md template ({level}) is missing the 'Cross-session handoff' "
             "guidance. See packages/tapps-mcp/src/tapps_mcp/prompts/agents_template*.md."
         )
-        # Ensure it actually points at the save action with project scope, not just
-        # mentioning the phrase in passing.
-        assert 'tapps_memory(action="save"' in content
-        assert "project" in content.split("Cross-session handoff")[1].split("##")[0]
+        handoff_section = content.split("Cross-session handoff")[1].split("##")[0]
+        assert "tapps-handoff-session" in handoff_section
+        assert "tapps-continue-session" in handoff_section
+        assert "session-handoff.md" in handoff_section
 
     # ------------------------------------------------------------------
     # Drift guard: templates must not promise save scopes the API rejects.
@@ -143,4 +136,6 @@ class TestMemorySystemsSection:
             f"platform_{platform}_{level}.md is missing 'Cross-session handoff' "
             "guidance. See packages/tapps-mcp/src/tapps_mcp/prompts/platform_*.md."
         )
-        assert 'tapps_memory(action="save"' in content
+        handoff_section = content.split("Cross-session handoff")[1].split("\n")[0]
+        assert "tapps-handoff-session" in handoff_section
+        assert "tapps-continue-session" in handoff_section

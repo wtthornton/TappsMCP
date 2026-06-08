@@ -187,7 +187,11 @@ Shipped defaults enable expert auto-save, recurring quick_check memory, architec
 
 ### Cross-session handoff
 
-When one session needs to pass a token, ID, or short payload to a later session in the same project, call `tapps_memory(action="save", key="<slug>", value="<payload>")` instead of printing it to stdout. The default `project` scope is already cross-session within the same repo. Read it back from the next session with `tapps_memory(action="get", key="<slug>")` or `action="search"`. For cross-agent handoff in Agent Teams, use `action="hive_propagate"` (see Hive section above); for cross-project handoff, use the federation actions (`federate_publish` + `federate_subscribe` + `federate_sync`).
+When transferring work between chats in the same project, use this workflow:
+1. **End chat:** invoke `/tapps-handoff-session` — writes `.tapps-mcp/session-handoff.md` and calls `tapps_session_end`.
+2. **Fresh chat:** invoke `/tapps-continue-session` — reads the handoff, optional `TAP-####`, and calls `tapps_session_start`.
+
+For ad-hoc key/value payloads (tokens, IDs), use `tapps-mcp memory save/get --key <slug>` or brain recall. Cross-agent: `action="hive_propagate"` (Hive section above); cross-project: federation actions (`federate_publish` + `federate_subscribe` + `federate_sync`).
 
 ### Memory configuration (`.tapps-mcp.yaml`)
 
@@ -253,11 +257,13 @@ Four agent definitions per platform in `.claude/agents/` or `.cursor/agents/`:
 
 ### Skills (auto-generated)
 
-Thirteen SKILL.md files per platform in `.claude/skills/` or `.cursor/skills/`:
+Thirteen core tapps-* SKILL.md files per platform in `.claude/skills/` or `.cursor/skills/` (plus linear-* and optional continuous-learning-v2):
 - **tapps-score** - Score a Python file across 7 quality categories
 - **tapps-gate** - Run a quality gate check and report pass/fail
 - **tapps-validate** - Validate all changed files before declaring work complete
 - **tapps-finish-task** - End-of-task pipeline: validate_changed + checklist + optional memory save
+- **tapps-handoff-session** - Write `.tapps-mcp/session-handoff.md` and call `tapps_session_end` before ending a chat
+- **tapps-continue-session** - Bootstrap a fresh chat from the last handoff + optional Linear issue
 - **tapps-review-pipeline** - Orchestrate a parallel review-fix-validate pipeline
 - **tapps-research** - Look up library documentation and research best practices
 - **tapps-security** - Run a comprehensive security audit with vulnerability scanning
