@@ -292,13 +292,10 @@ class ProfileMismatchError(ToolNotInProfileError):
         self.exposed_tools = exposed_tools
 
 
-# Tools the HTTP bridge invokes at runtime. After the handshake completes,
-# the bridge compares this set against the server's ``tools/list`` and
-# surfaces the missing-but-used subset via :meth:`HttpBrainBridge.profile_status`
-# so ``tapps_memory(action=health)`` and ``tapps doctor`` can warn before a
-# real call hits the wire. Keep in sync with the method tool-name mapping
-# documented on :class:`HttpBrainBridge`.
-_BRIDGE_USED_TOOLS: frozenset[str] = frozenset(
+# Regression snapshot captured at TAP-1961 merge time. The live set is
+# registered by tapps-mcp from ``server_memory_tools`` dispatch maps; tests
+# assert the derived set equals this snapshot.
+_BRIDGE_USED_TOOLS_SNAPSHOT: frozenset[str] = frozenset(
     {
         "memory_save",
         "memory_get",
@@ -336,6 +333,33 @@ _BRIDGE_USED_TOOLS: frozenset[str] = frozenset(
         "brain_record_feedback",
     }
 )
+
+_registered_bridge_used_tools: frozenset[str] | None = None
+
+
+def register_bridge_used_tools(tools: frozenset[str] | set[str]) -> None:
+    """Register the brain MCP tool names tapps-mcp invokes (TAP-1961).
+
+    Called once at ``server_memory_tools`` import time. tapps-core tests that
+    do not import tapps-mcp fall back to :data:`_BRIDGE_USED_TOOLS_SNAPSHOT`.
+    """
+    global _registered_bridge_used_tools
+    _registered_bridge_used_tools = frozenset(tools)
+
+
+def get_bridge_used_tools() -> frozenset[str]:
+    """Return the registered bridge tool set, or the regression snapshot."""
+    if _registered_bridge_used_tools is not None:
+        return _registered_bridge_used_tools
+    return _BRIDGE_USED_TOOLS_SNAPSHOT
+
+
+def __getattr__(name: str) -> frozenset[str]:
+    """Backward-compatible lazy alias for :func:`get_bridge_used_tools`."""
+    if name == "_BRIDGE_USED_TOOLS":
+        return get_bridge_used_tools()
+    msg = f"module {__name__!r} has no attribute {name!r}"
+    raise AttributeError(msg)
 
 
 # ---------------------------------------------------------------------------
@@ -1604,7 +1628,7 @@ class HttpBrainBridge(BrainBridge):
 
         self._negotiated = True
         if self._exposed_tools is not None:
-            gated_used = sorted(_BRIDGE_USED_TOOLS - self._exposed_tools)
+            gated_used = sorted(get_bridge_used_tools() - self._exposed_tools)
             if gated_used:
                 logger.warning(
                     "brain_bridge.profile_mismatch",
@@ -1648,19 +1672,19 @@ class HttpBrainBridge(BrainBridge):
                 "memory_profile_name": memory_profile_name,
                 "memory_profile": self._memory_profile,
                 "exposed_tools": [],
-                "bridge_used_tools": sorted(_BRIDGE_USED_TOOLS),
+                "bridge_used_tools": sorted(get_bridge_used_tools()),
                 "gated_used_tools": [],
                 "profile_mismatch": False,
                 "negotiation_error": self._negotiation_error,
             }
-        gated_used = sorted(_BRIDGE_USED_TOOLS - exposed)
+        gated_used = sorted(get_bridge_used_tools() - exposed)
         return {
             "negotiated": True,
             "declared_profile": declared,
             "memory_profile_name": memory_profile_name,
             "memory_profile": self._memory_profile,
             "exposed_tools": sorted(exposed),
-            "bridge_used_tools": sorted(_BRIDGE_USED_TOOLS),
+            "bridge_used_tools": sorted(get_bridge_used_tools()),
             "gated_used_tools": gated_used,
             "profile_mismatch": bool(gated_used),
             "negotiation_error": self._negotiation_error,

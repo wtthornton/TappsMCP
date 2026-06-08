@@ -3845,6 +3845,53 @@ _ASYNC_DISPATCH: dict[str, Any] = {
     "session_end_consolidate": _handle_session_end_consolidate,
 }
 
+# TAP-1961: brain MCP tool names invoked per tapps_memory action (dispatch maps).
+# Values may be tuples when one action calls multiple brain tools.
+_ACTION_BRAIN_TOOLS: dict[str, tuple[str, ...]] = {
+    "save": ("memory_save", "memory_supersede"),
+    "get": ("memory_get",),
+    "delete": ("memory_delete",),
+    "search": ("memory_search", "feedback_gap"),
+    "list": ("memory_list",),
+    "reinforce": ("memory_reinforce",),
+    "save_bulk": ("memory_save_many",),
+    "health": ("flywheel_report", "flywheel_process", "diagnostics_report"),
+    "hive_status": ("hive_status",),
+    "hive_search": ("hive_search",),
+    "hive_propagate": ("hive_propagate",),
+    "agent_register": ("agent_register",),
+    "related": ("memory_find_related",),
+    "relations": ("memory_relations", "memory_query_relations"),
+    "neighbors": ("brain_get_neighbors",),
+    "explain_connection": ("brain_explain_connection",),
+    "recall_many": ("memory_recall_many",),
+    "reinforce_many": ("memory_reinforce_many",),
+    "rate": ("feedback_rate",),
+    "index_session": ("memory_index_session",),
+    "search_sessions": ("memory_search_sessions",),
+    "session_end": ("tapps_brain_session_end",),
+}
+
+# Bridge API methods without a dedicated tapps_memory action key.
+_BRIDGE_API_ONLY_TOOLS: frozenset[str] = frozenset(
+    {
+        "memory_recall",
+        "brain_record_feedback",
+    }
+)
+
+
+def derive_memory_bridge_used_tools() -> frozenset[str]:
+    """Derive brain tool names from HTTP/async dispatch maps (TAP-1961)."""
+    routed = set(_HTTP_BRIDGE_DISPATCH) | set(_ASYNC_DISPATCH)
+    routed -= _LIFECYCLE_ACTIONS
+    routed.discard("validate")
+    tools: set[str] = set(_BRIDGE_API_ONLY_TOOLS)
+    for action in routed:
+        if action in _ACTION_BRAIN_TOOLS:
+            tools.update(_ACTION_BRAIN_TOOLS[action])
+    return frozenset(tools)
+
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -4254,3 +4301,9 @@ def register(mcp_instance: FastMCP, allowed_tools: frozenset[str]) -> None:
         mcp_instance.tool(annotations=_ann_write, meta=_meta_deferred)(
             brain_approve_hive_elevation
         )
+
+
+# TAP-1961: register derived bridge tool names at import time.
+from tapps_core.brain_bridge import register_bridge_used_tools as _register_bridge_used_tools
+
+_register_bridge_used_tools(derive_memory_bridge_used_tools())

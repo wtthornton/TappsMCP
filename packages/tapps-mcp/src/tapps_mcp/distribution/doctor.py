@@ -1970,9 +1970,11 @@ def check_brain_profile(root: Path) -> CheckResult:
         )
 
     try:
+        import tapps_mcp.server_memory_tools  # noqa: F401 — TAP-1961 registration
+
         from tapps_core.brain_auth import build_brain_headers
         from tapps_core.brain_bridge import (
-            _BRIDGE_USED_TOOLS,
+            get_bridge_used_tools,
             _MCP_ACCEPT_HEADERS,
             BRAIN_PROFILE_SERVER,
             BRAIN_PROFILES_DEFERRED_OK,
@@ -2030,7 +2032,7 @@ def check_brain_profile(root: Path) -> CheckResult:
             exc.hint,
         )
 
-    gated_used = sorted(_BRIDGE_USED_TOOLS - exposed)
+    gated_used = sorted(get_bridge_used_tools() - exposed)
 
     if not gated_used:
         return CheckResult(
