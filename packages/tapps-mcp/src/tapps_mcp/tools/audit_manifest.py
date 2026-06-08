@@ -142,7 +142,7 @@ async def write_coverage(entry: CoverageEntry) -> bool:
             source_agent=_SOURCE_AGENT,
             tags=["audit", "coverage", entry.campaign_id],
         )
-    except Exception as exc:  # noqa: BLE001 — degraded-mode catch-all
+    except Exception as exc:  # degraded-mode catch-all
         logger.debug(
             "audit_manifest_write_failed",
             key=coverage_key(entry.rel_path),
@@ -221,7 +221,7 @@ async def save_campaign_spec(campaign_id: str, spec_dict: dict[str, Any]) -> boo
             source_agent=_SOURCE_AGENT,
             tags=["audit", "campaign", campaign_id],
         )
-    except Exception as exc:  # noqa: BLE001 — degraded-mode catch-all
+    except Exception as exc:  # degraded-mode catch-all
         logger.debug(
             "audit_manifest_save_campaign_failed",
             campaign_id=campaign_id,
@@ -242,7 +242,7 @@ async def load_campaign_spec(campaign_id: str) -> dict[str, Any] | None:
         return None
     try:
         entry = await bridge.get(campaign_key(campaign_id))
-    except Exception as exc:  # noqa: BLE001 — degraded-mode catch-all
+    except Exception as exc:  # degraded-mode catch-all
         logger.debug(
             "audit_manifest_load_campaign_failed",
             campaign_id=campaign_id,
@@ -340,7 +340,7 @@ async def load_fix_plan_spec(campaign_id: str) -> dict[str, Any] | None:
 async def _read_coverage_one(bridge: Any, rel: str) -> CoverageEntry | None:
     try:
         entry = await bridge.get(coverage_key(rel))
-    except Exception as exc:  # noqa: BLE001 — degraded-mode catch-all
+    except Exception as exc:  # degraded-mode catch-all
         logger.debug(
             "audit_manifest_read_one_failed",
             rel=rel,

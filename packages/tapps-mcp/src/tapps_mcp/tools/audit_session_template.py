@@ -408,7 +408,7 @@ def render_digest_ticket(
         ),
         (
             f"## Refs\n\n"
-            f"- Severity range: P2–P3\n"
+            f"- Severity range: P2-P3\n"
             f"- Categories: {categories}\n"
             f"- Audit session: {parent_ref}\n"
             "- Source: `render_digest_ticket` (deterministic digest renderer)"
@@ -436,7 +436,7 @@ def render_campaign_epic(
     Technical Notes / Refs) and is intended to pass
     ``docs_validate_linear_issue(is_epic=true)`` with ``agent_ready=true``.
     """
-    title = f"audit campaign: {scope} ({campaign_id.split('-')[-1]})"
+    title = f"audit campaign: {scope} ({campaign_id.rsplit('-', 1)[-1]})"
     if len(title) > 80:
         title = title[:77] + "..."
 

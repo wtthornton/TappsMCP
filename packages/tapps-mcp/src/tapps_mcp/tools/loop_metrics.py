@@ -39,7 +39,7 @@ def read_loop_metrics(project_root: Path, *, limit: int = 1000) -> list[dict[str
                     continue
                 try:
                     rows.append(json.loads(line))
-                except Exception:
+                except json.JSONDecodeError:
                     continue
     except Exception:
         return []

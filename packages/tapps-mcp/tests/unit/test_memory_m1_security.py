@@ -19,7 +19,7 @@ class TestDualMemoryServerCheck:
 
         result = check_dual_memory_server(tmp_path)
         assert result.ok is True
-        assert "No dual memory server" in result.message
+        assert "No direct tapps-brain MCP server" in result.message
 
     def test_detects_tapps_brain_mcp_in_config(self, tmp_path: Path) -> None:
         from tapps_mcp.distribution.doctor import check_dual_memory_server
@@ -33,8 +33,9 @@ class TestDualMemoryServerCheck:
         )
 
         result = check_dual_memory_server(tmp_path)
+        assert result.ok is False
         assert "tapps-brain-mcp" in result.message
-        assert "split-brain" in (result.detail or "")
+        assert "BrainBridge" in (result.detail or "") or "ADR" in (result.detail or "")
 
     def test_ignores_unrelated_config(self, tmp_path: Path) -> None:
         from tapps_mcp.distribution.doctor import check_dual_memory_server
@@ -49,4 +50,4 @@ class TestDualMemoryServerCheck:
 
         result = check_dual_memory_server(tmp_path)
         assert result.ok is True
-        assert "No dual memory server" in result.message
+        assert "No direct tapps-brain MCP server" in result.message

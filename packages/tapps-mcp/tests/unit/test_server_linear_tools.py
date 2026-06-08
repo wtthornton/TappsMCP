@@ -8,6 +8,7 @@ cache primitives.
 from __future__ import annotations
 
 import json
+import os
 import time
 from pathlib import Path
 from typing import Any
@@ -16,6 +17,7 @@ from unittest.mock import patch
 import pytest
 
 from tapps_mcp.server_linear_tools import (
+    _CACHE_MAX_FILES,
     _COMPACT_FIELDS,
     _cache_dir,
     _cache_key,
@@ -23,6 +25,7 @@ from tapps_mcp.server_linear_tools import (
     _cache_write,
     _compact_issue,
     _filter_hash,
+    _prune_linear_snapshot_cache,
     _resolve_cache_key,
     _ttl_for_state,
     tapps_linear_snapshot_get,
@@ -136,6 +139,56 @@ def test_cache_read_returns_none_on_corrupt_file(tmp_path: Path) -> None:
     cache_dir.mkdir()
     (cache_dir / "k.json").write_text("{not json", encoding="utf-8")
     assert _cache_read(cache_dir, "k") is None
+
+
+def test_prune_removes_files_older_than_ttl_multiplier(tmp_path: Path) -> None:
+    cache_dir = tmp_path / "cache"
+    cache_dir.mkdir()
+    ttl_open = 300
+    stale_path = cache_dir / "stale.json"
+    stale_path.write_text("{}", encoding="utf-8")
+    old = time.time() - (ttl_open * 10 + 60)
+    os.utime(stale_path, (old, old))
+    assert time.time() - stale_path.stat().st_mtime > ttl_open * 10
+
+    fresh_path = cache_dir / "fresh.json"
+    fresh_path.write_text("{}", encoding="utf-8")
+
+    removed = _prune_linear_snapshot_cache(cache_dir, ttl_open=ttl_open, ttl_closed=3600)
+    assert removed == 1
+    assert not stale_path.exists()
+    assert fresh_path.exists()
+
+
+def test_prune_lru_evicts_beyond_cap(tmp_path: Path) -> None:
+    cache_dir = tmp_path / "cache"
+    cache_dir.mkdir()
+    now = time.time()
+    paths: list[Path] = []
+    for i in range(_CACHE_MAX_FILES + 1):
+        path = cache_dir / f"entry_{i:04d}.json"
+        path.write_text("{}", encoding="utf-8")
+        os.utime(path, (now - i, now - i))
+        paths.append(path)
+
+    removed = _prune_linear_snapshot_cache(cache_dir, ttl_open=300, ttl_closed=3600)
+    assert removed == 1
+    assert len(list(cache_dir.glob("*.json"))) == _CACHE_MAX_FILES
+    assert not paths[-1].exists()
+
+
+@pytest.mark.asyncio
+async def test_get_prunes_stale_files_on_access(
+    tmp_path: Path, mock_load_settings: Any
+) -> None:
+    cache_dir = _cache_dir(tmp_path)
+    stale_path = cache_dir / "old_slice.json"
+    stale_path.write_text("{}", encoding="utf-8")
+    old = time.time() - (mock_load_settings.linear_cache_ttl_open_seconds * 10 + 5)
+    os.utime(stale_path, (old, old))
+
+    await tapps_linear_snapshot_get(team="T", project="P", state="backlog")
+    assert not stale_path.exists()
 
 
 # ---------------------------------------------------------------------------

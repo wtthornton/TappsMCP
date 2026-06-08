@@ -76,6 +76,8 @@ _OPEN_STATE_BUCKETS: frozenset[str] = frozenset(
 _CLOSED_STATE_BUCKETS: frozenset[str] = frozenset({"completed", "canceled"})
 
 _CACHE_SUBDIR = "linear-snapshots"
+_CACHE_MAX_FILES = 500
+_CACHE_STALE_TTL_MULTIPLIER = 10
 _FETCH_HINT = (
     "Cache miss. Call mcp__plugin_linear_linear__list_issues with the same "
     "team/project/state filters, then pass the result to "
@@ -170,6 +172,62 @@ def _cache_write(
         logger.debug("linear_cache_write_failed", key=cache_key, exc=str(exc))
 
 
+def _prune_linear_snapshot_cache(
+    cache_dir: Path,
+    *,
+    ttl_open: int,
+    ttl_closed: int,
+) -> int:
+    """Remove stale snapshot files and LRU-evict when over the file cap (TAP-1766).
+
+    Deletes entries whose mtime age exceeds ``max(ttl_open, ttl_closed) × 10``
+    and trims the directory to :data:`_CACHE_MAX_FILES` by oldest mtime.
+    """
+    if not cache_dir.is_dir():
+        return 0
+
+    # Use the shorter bucket TTL so open-state snapshots are not kept for
+    # closed-state TTL × 10 (which would be hours on default settings).
+    positive = [t for t in (ttl_open, ttl_closed) if t > 0]
+    base_ttl = min(positive) if positive else 1
+    stale_age = base_ttl * _CACHE_STALE_TTL_MULTIPLIER
+    now = time.time()
+    removed = 0
+    survivors: list[tuple[Path, float]] = []
+
+    for entry in cache_dir.glob("*.json"):
+        if entry.name.endswith(".tmp"):
+            continue
+        try:
+            mtime = entry.stat().st_mtime
+        except OSError as exc:
+            logger.debug("linear_cache_prune_stat_failed", path=str(entry), exc=str(exc))
+            continue
+
+        if now - mtime > stale_age:
+            try:
+                entry.unlink()
+                removed += 1
+            except OSError as exc:
+                logger.debug("linear_cache_prune_unlink_failed", path=str(entry), exc=str(exc))
+            continue
+
+        survivors.append((entry, mtime))
+
+    if len(survivors) > _CACHE_MAX_FILES:
+        survivors.sort(key=lambda item: item[1])
+        for entry, _ in survivors[: len(survivors) - _CACHE_MAX_FILES]:
+            try:
+                entry.unlink()
+                removed += 1
+            except OSError as exc:
+                logger.debug("linear_cache_lru_unlink_failed", path=str(entry), exc=str(exc))
+
+    if removed:
+        logger.debug("linear_cache_pruned", removed=removed, dir=str(cache_dir))
+    return removed
+
+
 def _cache_invalidate_prefix(cache_dir: Path, prefix: str) -> int:
     """Remove cache files whose stems start with *prefix*. Return count removed."""
     count = 0
@@ -248,6 +306,11 @@ async def tapps_linear_snapshot_get(
 
     settings = load_settings()
     cache_dir = _cache_dir(settings.project_root)
+    _prune_linear_snapshot_cache(
+        cache_dir,
+        ttl_open=settings.linear_cache_ttl_open_seconds,
+        ttl_closed=settings.linear_cache_ttl_closed_seconds,
+    )
     key = _resolve_cache_key(team, project, state, label, limit)
 
     cached = _cache_read(cache_dir, key)
@@ -354,6 +417,11 @@ async def tapps_linear_snapshot_put(
 
     settings = load_settings()
     cache_dir = _cache_dir(settings.project_root)
+    _prune_linear_snapshot_cache(
+        cache_dir,
+        ttl_open=settings.linear_cache_ttl_open_seconds,
+        ttl_closed=settings.linear_cache_ttl_closed_seconds,
+    )
     key = _resolve_cache_key(team, project, state, label, limit)
 
     now = time.time()

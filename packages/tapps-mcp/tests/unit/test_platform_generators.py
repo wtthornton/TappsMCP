@@ -183,8 +183,8 @@ class TestSkillTemplates:
     def test_cursor_skills_count(self) -> None:
         # 16 tapps-* (incl. tapps-upgrade v3.11.0, tapps-handoff-session,
         # tapps-continue-session) + continuous-learning-v2 + linear-issue
-        # + linear-read (TAP-1260) = 19. Cursor does not ship linear-release-update.
-        assert len(CURSOR_SKILLS) == 19
+        # + linear-read (TAP-1260) + linear-release-update (TAP-3100) = 20.
+        assert len(CURSOR_SKILLS) == 20
 
     def test_generate_claude_skills(self, tmp_path: Path) -> None:
         result = generate_skills(tmp_path, "claude")

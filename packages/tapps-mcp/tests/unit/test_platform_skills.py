@@ -430,6 +430,13 @@ class TestSessionHandoffSkills:
         assert "session-handoff.md" in CLAUDE_SKILLS["tapps-handoff-session"]
         assert "tapps_session_end" in CURSOR_SKILLS["tapps-handoff-session"]
 
+    def test_cursor_handoff_grants_memory_tool(self) -> None:
+        assert "tapps_memory" in CURSOR_SKILLS["tapps-handoff-session"]
+
+    def test_cursor_ships_linear_release_update(self) -> None:
+        assert "linear-release-update" in CURSOR_SKILLS
+        assert "tapps_release_update" in CURSOR_SKILLS["linear-release-update"]
+
     def test_continue_references_session_start(self) -> None:
         assert "tapps_session_start" in CURSOR_SKILLS["tapps-continue-session"]
         assert "session-handoff.md" in CLAUDE_SKILLS["tapps-continue-session"]

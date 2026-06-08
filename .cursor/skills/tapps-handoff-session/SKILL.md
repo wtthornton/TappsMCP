@@ -7,6 +7,7 @@ description: >-
   off, save session state, or continue next time.
 mcp_tools:
   - tapps_session_end
+  - tapps_memory
 ---
 
 End the session with a durable handoff the next chat loads via `tapps-continue-session`.
@@ -39,9 +40,7 @@ End the session with a durable handoff the next chat loads via `tapps-continue-s
 - ...
 ```
 
-3. **Persist (brain, best-effort).** Run:
-   `uv run tapps-mcp memory save --key session-handoff --tier context --tags handoff,cross-session --value "<plain-text bullets>"`
-   Skip silently if brain is offline.
+3. **Persist (brain, best-effort).** Call `tapps_memory(action="save", key="session-handoff", tier="context", tags="handoff,cross-session", value="<plain-text bullets>")`. Skip silently if brain is offline — the markdown file is enough.
 
 4. **Close lifecycle.** Call `tapps_session_end()`. Best-effort.
 

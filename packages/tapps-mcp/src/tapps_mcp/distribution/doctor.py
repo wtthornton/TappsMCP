@@ -252,6 +252,98 @@ def check_vscode_config(project_root: Path) -> CheckResult:
     )
 
 
+_BRAIN_MCP_SERVER_NAMES: frozenset[str] = frozenset({"tapps-brain", "tapps-brain-mcp"})
+_BRAIN_MCP_CONFIG_PATHS: tuple[tuple[str, str], ...] = (
+    (".mcp.json", "mcpServers"),
+    (".cursor/mcp.json", "mcpServers"),
+    (".vscode/mcp.json", "servers"),
+)
+_ADR_0001_REF = "docs/adr/0001-in-process-agentbrain-via-brainbridge.md"
+
+
+def _brain_mcp_offenses(project_root: Path) -> list[str]:
+    """Return human-readable offenses for direct tapps-brain MCP server entries."""
+    offenses: list[str] = []
+    for rel_path, servers_key in _BRAIN_MCP_CONFIG_PATHS:
+        config_path = project_root / rel_path
+        if not config_path.exists():
+            continue
+        try:
+            raw = config_path.read_text(encoding="utf-8-sig")
+            data = json.loads(raw) if raw.strip() else {}
+        except (OSError, json.JSONDecodeError):
+            continue
+        if not isinstance(data, dict):
+            continue
+        servers = data.get(servers_key, {})
+        if not isinstance(servers, dict):
+            continue
+        found = sorted(k for k in servers if k in _BRAIN_MCP_SERVER_NAMES)
+        if found:
+            offenses.append(f"{rel_path}: {', '.join(found)}")
+    return offenses
+
+
+def check_brain_mcp_entry(project_root: Path) -> CheckResult:
+    """Fail when MCP configs declare a direct tapps-brain server (ADR-0001).
+
+    Memory must flow through tapps-mcp's BrainBridge — not a parallel MCP
+    server entry that bypasses profile filtering and flywheel semantics.
+    """
+    offenses = _brain_mcp_offenses(project_root)
+    if offenses:
+        return CheckResult(
+            "Brain MCP entry (bridge-only)",
+            False,
+            f"Direct tapps-brain server configured: {'; '.join(offenses)}",
+            "Remove tapps-brain from MCP config — use tapps_memory via tapps-mcp only "
+            f"(see {_ADR_0001_REF}). Run tapps_upgrade to strip automatically.",
+        )
+    return CheckResult(
+        "Brain MCP entry (bridge-only)",
+        True,
+        "No direct tapps-brain MCP server entry",
+    )
+
+
+def strip_brain_mcp_entries(
+    project_root: Path,
+    *,
+    dry_run: bool = False,
+) -> dict[str, Any]:
+    """Remove direct tapps-brain MCP server keys from host config files (TAP-1888)."""
+    stripped: list[str] = []
+    for rel_path, servers_key in _BRAIN_MCP_CONFIG_PATHS:
+        config_path = project_root / rel_path
+        if not config_path.exists():
+            continue
+        try:
+            raw = config_path.read_text(encoding="utf-8-sig")
+            data = json.loads(raw) if raw.strip() else {}
+        except (OSError, json.JSONDecodeError):
+            continue
+        if not isinstance(data, dict):
+            continue
+        servers = data.get(servers_key, {})
+        if not isinstance(servers, dict):
+            continue
+        removed_keys = [k for k in list(servers) if k in _BRAIN_MCP_SERVER_NAMES]
+        if not removed_keys:
+            continue
+        for key in removed_keys:
+            del servers[key]
+        if dry_run:
+            stripped.append(f"{rel_path} (would remove: {', '.join(removed_keys)})")
+            continue
+        config_path.parent.mkdir(parents=True, exist_ok=True)
+        config_path.write_text(
+            json.dumps(data, indent=2, ensure_ascii=False) + "\n",
+            encoding="utf-8",
+        )
+        stripped.append(rel_path)
+    return {"stripped": stripped, "dry_run": dry_run}
+
+
 def check_mcp_client_config(
     project_root: Path,
     home: Path | None = None,
@@ -788,35 +880,43 @@ def check_config_files_rule(project_root: Path) -> CheckResult:
     )
 
 
-def check_linear_issue_skill_current(project_root: Path) -> CheckResult:
-    """Check the ``linear-issue`` skill is deployed and includes the save_issue tool.
+def _linear_issue_skill_marker(host_label: str) -> str:
+    """Content marker proving the linear-issue skill can complete writes."""
+    if host_label == "claude":
+        return "mcp__plugin_linear_linear__save_issue"
+    return "docs_validate_linear_issue"
 
-    The updated skill (TAP-980 Phase A) grants `mcp__plugin_linear_linear__save_issue`
-    so agents can invoke the full create-and-push flow through the skill rather
-    than calling save_issue directly. Old versions of the skill lacked this tool
-    in ``allowed-tools``, which forced agents to bypass the skill for writes.
+
+def check_linear_issue_skill_current(project_root: Path) -> CheckResult:
+    """Check the ``linear-issue`` skill is deployed and includes write tooling.
+
+    Inspects each bootstrapped skill host (``.claude`` / ``.cursor``). Claude
+    skills must grant ``save_issue``; Cursor skills must include the docs-mcp
+    validator in ``mcp_tools``.
     """
-    skill_path = project_root / ".claude" / "skills" / "linear-issue" / "SKILL.md"
-    if not skill_path.exists():
+    valid_hosts: list[str] = []
+    problems: list[str] = []
+    for host_label, base in _tapps_skill_bases(project_root):
+        skill_path = base / "linear-issue" / "SKILL.md"
+        if not skill_path.exists():
+            problems.append(f"{host_label}/linear-issue missing")
+            continue
+        content = skill_path.read_text(encoding="utf-8")
+        marker = _linear_issue_skill_marker(host_label)
+        if marker not in content:
+            problems.append(f"{host_label}/linear-issue stale (missing {marker})")
+            continue
+        valid_hosts.append(host_label)
+
+    if valid_hosts:
         return CheckResult(
             "linear-issue skill",
-            False,
-            ".claude/skills/linear-issue/SKILL.md not found",
-            "Run: tapps-mcp upgrade",
+            True,
+            f"linear-issue skill current on: {', '.join(valid_hosts)}",
         )
-    content = skill_path.read_text(encoding="utf-8")
-    if "mcp__plugin_linear_linear__save_issue" not in content:
-        return CheckResult(
-            "linear-issue skill",
-            False,
-            "linear-issue skill missing save_issue in allowed-tools (stale version)",
-            "Run: tapps-mcp upgrade --force",
-        )
-    return CheckResult(
-        "linear-issue skill",
-        True,
-        "linear-issue skill includes docs-mcp generators + save_issue",
-    )
+    detail = "Run: tapps-mcp upgrade --force"
+    message = problems[0] if len(problems) == 1 else f"Issues: {'; '.join(problems)}"
+    return CheckResult("linear-issue skill", False, message, detail)
 
 
 def check_pretooluse_matchers(project_root: Path) -> CheckResult:
@@ -965,12 +1065,28 @@ def _categorize_cache_gate_violations_24h(project_root: Path) -> dict[str, int]:
     return counts
 
 
+def _host_has_deployed_skills(base: Path) -> bool:
+    """True when *base* contains at least one skill with a ``SKILL.md`` file."""
+    if not base.is_dir():
+        return False
+    return any(child.is_dir() and (child / "SKILL.md").exists() for child in base.iterdir())
+
+
 def _tapps_skill_bases(project_root: Path) -> list[tuple[str, Path]]:
-    """Return ``(host_label, skills_dir)`` for bootstrapped TappsMCP skill hosts."""
+    """Return ``(host_label, skills_dir)`` for hosts that should be validated.
+
+    Prefer MCP-configured hosts (``.mcp.json`` / ``.cursor/mcp.json``). Otherwise
+    include hosts with deployed skills so Cursor-only projects are not forced to
+    mirror Claude scaffolding.
+    """
+    host_mcp: dict[str, Path] = {
+        "claude": project_root / ".mcp.json",
+        "cursor": project_root / ".cursor" / "mcp.json",
+    }
     bases: list[tuple[str, Path]] = []
     for host_label, rel in (("claude", ".claude/skills"), ("cursor", ".cursor/skills")):
         base = project_root / rel
-        if base.is_dir() and any(base.iterdir()):
+        if host_mcp[host_label].exists() or _host_has_deployed_skills(base):
             bases.append((host_label, base))
     if not bases:
         bases.append(("claude", project_root / ".claude" / "skills"))
@@ -1013,6 +1129,20 @@ def check_finish_task_skill(project_root: Path) -> CheckResult:
     )
 
 
+def _handoff_skill_content_ok(skill_name: str, content: str) -> bool:
+    """Minimal markers proving handoff skills are functional, not empty stubs."""
+    lowered = content.lower()
+    if len(content.strip()) < 80:
+        return False
+    if "session-handoff.md" not in lowered:
+        return False
+    if skill_name == "tapps-handoff-session":
+        return "tapps_session_end" in lowered
+    if skill_name == "tapps-continue-session":
+        return "tapps_session_start" in lowered
+    return False
+
+
 def check_session_handoff_skills(project_root: Path) -> CheckResult:
     """Check session-transfer skills are deployed (``tapps-handoff-session`` + ``tapps-continue-session``).
 
@@ -1028,6 +1158,24 @@ def check_session_handoff_skills(project_root: Path) -> CheckResult:
             f"Missing: {', '.join(missing)}",
             "Run: tapps-mcp upgrade --force (or upgrade --host cursor)",
         )
+
+    stale: list[str] = []
+    for host_label, base in _tapps_skill_bases(project_root):
+        for skill_name in skill_names:
+            skill_path = base / skill_name / "SKILL.md"
+            if skill_path.exists():
+                content = skill_path.read_text(encoding="utf-8")
+                if not _handoff_skill_content_ok(skill_name, content):
+                    stale.append(f"{host_label}/{skill_name}")
+
+    if stale:
+        return CheckResult(
+            "session handoff skills",
+            False,
+            f"Stale or stub skills: {', '.join(stale)}",
+            "Run: tapps-mcp upgrade --force",
+        )
+
     hosts = ", ".join(host for host, _ in _tapps_skill_bases(project_root))
     return CheckResult(
         "session handoff skills",
@@ -1044,18 +1192,23 @@ def check_continuous_learning_v2_skill(project_root: Path) -> CheckResult:
     promote, projects).  Hooks fire deterministically (100%) vs the v1
     skill-based observation (~50-80%).
     """
-    skill_path = project_root / ".claude" / "skills" / "continuous-learning-v2" / "SKILL.md"
-    if not skill_path.exists():
+    present: list[str] = []
+    for host_label, base in _tapps_skill_bases(project_root):
+        skill_path = base / "continuous-learning-v2" / "SKILL.md"
+        if skill_path.exists():
+            present.append(host_label)
+
+    if present:
         return CheckResult(
             "continuous-learning-v2 skill",
-            False,
-            ".claude/skills/continuous-learning-v2/SKILL.md not found",
-            "Run: tapps-mcp upgrade",
+            True,
+            f"Present on: {', '.join(present)}",
         )
     return CheckResult(
         "continuous-learning-v2 skill",
-        True,
-        f"Present: {skill_path}",
+        False,
+        "continuous-learning-v2/SKILL.md not found on any skill host",
+        "Run: tapps-mcp upgrade",
     )
 
 
@@ -2497,44 +2650,49 @@ def check_memory_pipeline_config(root: Path) -> CheckResult:
 
 
 def check_dual_memory_server(root: Path) -> CheckResult:
-    """Warn if tapps-brain-mcp is configured alongside TappsMCP (split-brain risk).
+    """Fail when a direct tapps-brain MCP server is configured (split-brain risk).
 
-    Scans common MCP config locations for a ``tapps-brain-mcp`` or
-    ``tapps-brain`` server entry.  Running both memory servers against the
-    same project causes two processes accessing the same SQLite database.
+    Delegates to :func:`check_brain_mcp_entry` for project MCP JSON files and
+    also scans Claude ``settings.json`` hosts for legacy brain server entries.
     """
-    config_paths = [
+    primary = check_brain_mcp_entry(root)
+    if not primary.ok:
+        return CheckResult(
+            "Dual memory server",
+            False,
+            primary.message,
+            primary.detail,
+        )
+
+    settings_paths = [
         root / ".claude" / "settings.json",
         root / ".claude" / "settings.local.json",
-        root / ".cursor" / "mcp.json",
-        root / ".vscode" / "mcp.json",
         Path.home() / ".claude" / "settings.json",
     ]
-    for cfg in config_paths:
+    for cfg in settings_paths:
         if not cfg.exists():
             continue
         try:
-            text = cfg.read_text(encoding="utf-8-sig")
-            if "tapps-brain-mcp" in text or "tapps-brain" in text.lower():
-                # Exclude our own doctor check reference — look for server config patterns
-                if any(
-                    marker in text
-                    for marker in ['"tapps-brain-mcp"', "'tapps-brain-mcp'", "tapps-brain-mcp"]
-                ):
-                    return CheckResult(
-                        "Dual memory server",
-                        True,
-                        f"tapps-brain-mcp may be configured alongside TappsMCP in {cfg.name}",
-                        "Running both causes split-brain risk. Use tapps_memory for all memory "
-                        "operations. Remove the tapps-brain-mcp server entry if using TappsMCP.",
-                    )
-        except Exception:
+            data = json.loads(cfg.read_text(encoding="utf-8-sig"))
+        except (OSError, json.JSONDecodeError):
             continue
+        servers = data.get("mcpServers", {})
+        if not isinstance(servers, dict):
+            continue
+        found = sorted(k for k in servers if k in _BRAIN_MCP_SERVER_NAMES)
+        if found:
+            return CheckResult(
+                "Dual memory server",
+                False,
+                f"Direct tapps-brain server in {cfg.name}: {', '.join(found)}",
+                "Remove the entry — memory goes through tapps-mcp BrainBridge "
+                f"(see {_ADR_0001_REF}).",
+            )
 
     return CheckResult(
         "Dual memory server",
         True,
-        "No dual memory server detected",
+        "No direct tapps-brain MCP server detected",
     )
 
 
@@ -2881,6 +3039,7 @@ def _collect_checks(root: Path, *, quick: bool = False) -> list[CheckResult]:
     checks.append(check_mcp_client_config(root))
     checks.append(check_mcp_tool_budget(root))
     checks.append(check_mcp_config_unresolved_project_root(root))
+    checks.append(check_brain_mcp_entry(root))
     checks.append(check_scope_recommendation(root))
     checks.append(check_claude_md(root))
     checks.append(check_claude_md_stamp(root))

@@ -1176,6 +1176,7 @@ description: >-
   off, save session state, or continue next time.
 mcp_tools:
   - tapps_session_end
+  - tapps_memory
 ---
 
 End the session with a durable handoff the next chat loads via `tapps-continue-session`.
@@ -1208,9 +1209,7 @@ End the session with a durable handoff the next chat loads via `tapps-continue-s
 - ...
 ```
 
-3. **Persist (brain, best-effort).** Run:
-   `uv run tapps-mcp memory save --key session-handoff --tier context --tags handoff,cross-session --value "<plain-text bullets>"`
-   Skip silently if brain is offline.
+3. **Persist (brain, best-effort).** Call `tapps_memory(action="save", key="session-handoff", tier="context", tags="handoff,cross-session", value="<plain-text bullets>")`. Skip silently if brain is offline — the markdown file is enough.
 
 4. **Close lifecycle.** Call `tapps_session_end()`. Best-effort.
 
@@ -1703,6 +1702,48 @@ Multi-issue Linear reads are cache-first by contract (TAP-967 audit: 5,368 `list
 - `list_issues({})` or `list_issues({team, limit:250})` (the unfiltered scroll).
 - Re-fetching the same narrow query 5-12 times in one turn with no intervening writes.
 - Single-issue lookup via `list_issues` filtering — use `get_issue(id)` instead.
+""",
+    "linear-release-update": """\
+---
+name: linear-release-update
+description: Post a structured Linear project update document on a version release. Orchestrates tapps_release_update → docs_validate_release_update → save_document → cache invalidation. Use when posting a release announcement to Linear after shipping a new version.
+mcp_tools:
+  - tapps_release_update
+  - docs_generate_release_update
+  - docs_validate_release_update
+  - linear_save_document
+  - tapps_linear_snapshot_invalidate
+---
+
+Post a structured Linear project update document when a new version is released. The user's request to post a release update is standing authorization for the full pipeline — do NOT pause mid-flow to ask "should I post this?"
+
+**Flow:**
+
+1. Call `tapps_release_update(version, prev_version, team, project)`.
+   - `version` and `prev_version` are required. Parse from the user's prompt or ask once if both are missing.
+   - `team` and `project`: read from `.tapps-mcp.yaml` if present (`linear_team`, `linear_project` fields), otherwise pass empty strings.
+   - If `dry_run=true` is requested, pass it through — the tool returns the body without requiring validation to pass.
+
+2. Check the response:
+   - If `success=false`: surface the `error.message` and `findings` to the user. Stop — do not post.
+   - If `agent_ready=false` (and not dry_run): surface findings, stop.
+   - If `agent_ready=true`: proceed.
+
+3. Call `linear_save_document`:
+   - `project`: use `data.project` from the tool response.
+   - `title`: use `data.document_title` from the tool response (format: `Release vX.Y.Z — YYYY-MM-DD`).
+   - `content`: use `data.body` from the tool response verbatim.
+
+4. After `save_document` succeeds, call `tapps_linear_snapshot_invalidate`:
+   - `team`: use `data.team` from tool response.
+   - `project`: use `data.project` from tool response.
+
+5. Report the document URL from `save_document` response and the version that was posted.
+
+**Rules:**
+- Never call `save_document` without a prior `agent_ready=true` from `tapps_release_update` (unless `dry_run=true`).
+- `document_title` must use the em-dash format from `data.document_title` — do not construct it manually.
+- Do not modify the body returned by the tool. Pass `data.body` verbatim.
 """,
 }
 

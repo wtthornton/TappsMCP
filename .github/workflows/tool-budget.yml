@@ -1,0 +1,54 @@
+# TAP-2024 / TAP-2029: reject PRs that add @mcp.tool() without updating
+# docs/architecture/tool-budget.md. See scripts/check-tool-budget.py.
+name: tool-budget
+
+on:
+  pull_request:
+    branches: [main, master]
+    paths:
+      - "packages/**/src/**"
+      - "docs/architecture/tool-budget.md"
+      - "scripts/check-tool-budget.py"
+      - ".github/workflows/tool-budget.yml"
+  push:
+    branches: [main, master]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: tool-budget-${{ github.head_ref || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    name: MCP tool-budget lint
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Self-test check-tool-budget.py
+        run: python3 scripts/check-tool-budget.py --test
+
+      - name: Lint PR diff for new tools
+        if: github.event_name == 'pull_request'
+        run: |
+          python3 scripts/check-tool-budget.py \
+            --diff-range "${{ github.event.pull_request.base.sha }}..${{ github.event.pull_request.head.sha }}" \
+            --commit-msg "$(git log -1 --format='%B' ${{ github.event.pull_request.head.sha }})"
+
+      - name: Lint push diff for new tools
+        if: github.event_name == 'push'
+        run: |
+          BEFORE="${{ github.event.before }}"
+          if [ "${BEFORE}" = "0000000000000000000000000000000000000000" ]; then
+            BEFORE="$(git rev-parse HEAD~1)"
+          fi
+          python3 scripts/check-tool-budget.py \
+            --diff-range "${BEFORE}..${{ github.sha }}" \
+            --commit-msg "$(git log -1 --format='%B')"

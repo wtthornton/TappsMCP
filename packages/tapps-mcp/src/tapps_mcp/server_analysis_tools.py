@@ -656,9 +656,10 @@ async def tapps_dead_code(
     scope: str = "file",
     ctx: Context[Any, Any, Any] | None = None,
 ) -> dict[str, Any]:
-    """Reports unused Python code (functions, classes, imports, variables)
+    """[Preview] Reports unused Python code (functions, classes, imports, variables)
     via vulture, with per-finding confidence and line numbers.
 
+    Preview tool — vulture findings are advisory and often false positives.
     Call this during cleanup passes (after a refactor, before a release)
     or as part of an audit campaign. Skip for routine per-edit checks
     (use ``tapps_quick_check``) — vulture is slower and produces false

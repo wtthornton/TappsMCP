@@ -1569,6 +1569,9 @@ def _collect_upgrade_targets(project_root: Path) -> list[Path]:
         project_root / "CLAUDE.md",
         project_root / ".claude" / "settings.json",
         project_root / ".cursor" / "rules" / "tapps-pipeline.md",
+        project_root / ".mcp.json",
+        project_root / ".cursor" / "mcp.json",
+        project_root / ".vscode" / "mcp.json",
         # Docker-related config files (Epic 46)
         project_root / ".tapps-mcp.yaml",
     ]
@@ -1775,6 +1778,17 @@ def upgrade_pipeline(
                 "from the detected stack profile."
             ),
         }
+
+    # TAP-1888: strip direct tapps-brain MCP entries (ADR-0001 bridge-only policy).
+    if _skipped("mcp_config", skip_files):
+        result["components"]["brain_mcp_strip"] = "skipped (upgrade_skip_files)"
+    else:
+        from tapps_mcp.distribution.doctor import strip_brain_mcp_entries
+
+        result["components"]["brain_mcp_strip"] = strip_brain_mcp_entries(
+            project_root,
+            dry_run=dry_run,
+        )
 
     # Detect platform if not specified
     detected = platform or _detect_platform(project_root)

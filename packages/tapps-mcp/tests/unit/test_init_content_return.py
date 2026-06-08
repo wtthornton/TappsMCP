@@ -265,7 +265,7 @@ class TestBootstrapPipelineContentReturn:
             assert len(f["content"]) > 0, f"File {f['path']} has empty content"
 
     def test_content_return_platform_generators_skipped(self, tmp_path: Path) -> None:
-        """Platform generators (hooks, skills) are noted as skipped."""
+        """Platform generators (hooks) are noted as skipped; skills ship in manifest."""
         with patch.dict(os.environ, {"TAPPS_WRITE_MODE": "content"}):
             result = bootstrap_pipeline(
                 tmp_path,
@@ -282,6 +282,14 @@ class TestBootstrapPipelineContentReturn:
         assert skipped is not None
         assert skipped["reason"] == "content_return"
         assert "hooks" in skipped["skipped_components"]
+        assert "skills" in skipped.get("included_components", [])
+        assert "skills" not in skipped["skipped_components"]
+
+        manifest = result["file_manifest"]
+        paths = {f["path"] for f in manifest["files"]}
+        assert ".claude/skills/tapps-handoff-session/SKILL.md" in paths
+        assert ".claude/skills/tapps-continue-session/SKILL.md" in paths
+        assert result["session_handoff_skills"]["ok"] is True
 
     def test_direct_write_unchanged(self, tmp_path: Path) -> None:
         """Direct-write mode (default) still writes files normally."""

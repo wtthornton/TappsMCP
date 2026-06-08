@@ -71,6 +71,17 @@ class TestEnsureMemoryHooksConfig:
         assert action == "skipped"
         assert not (tmp_path / ".tapps-mcp.yaml").exists()
 
+    def test_parse_error_appends_warning(self, tmp_path: Path) -> None:
+        yaml_path = tmp_path / ".tapps-mcp.yaml"
+        yaml_path.write_text("memory_hooks: [invalid", encoding="utf-8")
+        warnings: list[str] = []
+        action = _ensure_memory_hooks_config(
+            tmp_path, "medium", dry_run=False, warnings=warnings
+        )
+        assert action == "skipped"
+        assert warnings
+        assert "parse" in warnings[0].lower() or "memory_hooks" in warnings[0]
+
 
 class TestBootstrapMemoryHooksIntegration:
     """bootstrap_pipeline wires memory_hooks config and hooks."""
@@ -112,3 +123,25 @@ class TestBootstrapMemoryHooksIntegration:
         assert script_sh.exists() or script_ps1.exists(), (
             "auto-recall hook script should be created when enabled"
         )
+
+    def test_explicit_memory_auto_capture_overrides_yaml_disabled(
+        self, tmp_path: Path
+    ) -> None:
+        yaml_path = tmp_path / ".tapps-mcp.yaml"
+        yaml_path.write_text(
+            "memory_hooks:\n  auto_capture:\n    enabled: false\n",
+            encoding="utf-8",
+        )
+        cfg = BootstrapConfig(
+            platform="claude",
+            memory_auto_capture=True,
+            verify_server=False,
+            warm_cache_from_tech_stack=False,
+            warm_expert_rag_from_tech_stack=False,
+            minimal=False,
+        )
+        result = bootstrap_pipeline(tmp_path, config=cfg)
+        assert "memory_auto_capture" in result
+        script_sh = tmp_path / ".claude" / "hooks" / "tapps-memory-auto-capture.sh"
+        script_ps1 = tmp_path / ".claude" / "hooks" / "tapps-memory-auto-capture.ps1"
+        assert script_sh.exists() or script_ps1.exists()

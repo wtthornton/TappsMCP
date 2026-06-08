@@ -3198,16 +3198,6 @@ async def _handle_hive_search(store: MemoryStore, p: _Params) -> dict[str, Any]:
             "store_metadata": _store_metadata(store),
         }
 
-    if not _agent_teams_env_enabled():
-        return {
-            "action": "hive_search",
-            "enabled": False,
-            "message": "Agent Teams not enabled (set CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS).",
-            "results": [],
-            "result_count": 0,
-            "store_metadata": _store_metadata(store),
-        }
-
     bridge = _get_brain_bridge()
     if bridge is None:
         return {
@@ -3267,16 +3257,6 @@ async def _handle_hive_search(store: MemoryStore, p: _Params) -> dict[str, Any]:
 async def _handle_hive_propagate(store: MemoryStore, p: _Params) -> dict[str, Any]:
     """Propagate local memories into Hive via BrainBridge (TAP-413 / EPIC-95.4)."""
     from tapps_core.config.settings import load_settings
-
-    if not _agent_teams_env_enabled():
-        return {
-            "action": "hive_propagate",
-            "enabled": False,
-            "propagated": 0,
-            "skipped_private": 0,
-            "message": "Agent Teams not enabled (set CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS).",
-            "store_metadata": _store_metadata(store),
-        }
 
     bridge = _get_brain_bridge()
     if bridge is None:
@@ -3349,14 +3329,6 @@ async def _handle_agent_register(store: MemoryStore, p: _Params) -> dict[str, An
             "action": "agent_register",
             "error": "missing_key",
             "message": "key is required (unique agent id / slug).",
-            "store_metadata": _store_metadata(store),
-        }
-
-    if not _agent_teams_env_enabled():
-        return {
-            "action": "agent_register",
-            "enabled": False,
-            "message": "Agent Teams not enabled (set CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS).",
             "store_metadata": _store_metadata(store),
         }
 

@@ -98,15 +98,17 @@ async def test_handle_hive_search_missing_query(mock_memory_store: MagicMock) ->
 
 
 @pytest.mark.asyncio
-async def test_handle_hive_search_disabled_env(
+async def test_handle_hive_search_without_bridge_degraded(
     mock_memory_store: MagicMock, monkeypatch: pytest.MonkeyPatch
 ) -> None:
+    """TAP-2018: hive_search no longer gates on CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS."""
     monkeypatch.delenv("CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS", raising=False)
-    out = await _handle_hive_search(
-        mock_memory_store,
-        _minimal_params(query="auth"),
-    )
-    assert out["enabled"] is False
+    with patch("tapps_mcp.server_memory_tools._get_brain_bridge", return_value=None):
+        out = await _handle_hive_search(
+            mock_memory_store,
+            _minimal_params(query="auth"),
+        )
+    assert out.get("degraded") is True
     assert out["result_count"] == 0
 
 

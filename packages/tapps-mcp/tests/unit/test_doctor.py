@@ -1469,7 +1469,23 @@ class TestCheckLinearIssueSkillCurrent:
 
         result = check_linear_issue_skill_current(tmp_path)
         assert result.ok is False
-        assert "not found" in result.message
+        assert "missing" in result.message.lower()
+
+    def test_cursor_host_passes(self, tmp_path):
+        from tapps_mcp.distribution.doctor import check_linear_issue_skill_current
+
+        cursor_dir = tmp_path / ".cursor"
+        cursor_dir.mkdir(parents=True, exist_ok=True)
+        (cursor_dir / "mcp.json").write_text('{"mcpServers": {}}', encoding="utf-8")
+        skill_dir = tmp_path / ".cursor" / "skills" / "linear-issue"
+        skill_dir.mkdir(parents=True)
+        (skill_dir / "SKILL.md").write_text(
+            "---\nname: linear-issue\nmcp_tools:\n  - docs_validate_linear_issue\n---\n",
+            encoding="utf-8",
+        )
+        result = check_linear_issue_skill_current(tmp_path)
+        assert result.ok is True
+        assert "cursor" in result.message
 
 
 class TestCheckFinishTaskSkill:
@@ -1508,7 +1524,12 @@ class TestCheckSessionHandoffSkills:
     def _write_skill(self, base, name: str) -> None:
         skill_dir = base / name
         skill_dir.mkdir(parents=True, exist_ok=True)
-        (skill_dir / "SKILL.md").write_text(f"---\nname: {name}\n---\n")
+        body = f"---\nname: {name}\n---\n"
+        if name == "tapps-handoff-session":
+            body += "\nsession-handoff.md\ntapps_session_end\n" * 5
+        elif name == "tapps-continue-session":
+            body += "\nsession-handoff.md\ntapps_session_start\n" * 5
+        (skill_dir / "SKILL.md").write_text(body, encoding="utf-8")
 
     def test_both_skills_on_claude_passes(self, tmp_path):
         from tapps_mcp.distribution.doctor import check_session_handoff_skills
@@ -1528,6 +1549,43 @@ class TestCheckSessionHandoffSkills:
         result = check_session_handoff_skills(tmp_path)
         assert result.ok is False
         assert "tapps-continue-session" in result.message
+
+    def test_stub_handoff_fails_content_check(self, tmp_path):
+        from tapps_mcp.distribution.doctor import check_session_handoff_skills
+
+        base = tmp_path / ".cursor" / "skills"
+        for name in ("tapps-handoff-session", "tapps-continue-session"):
+            skill_dir = base / name
+            skill_dir.mkdir(parents=True)
+            (skill_dir / "SKILL.md").write_text("---\nname: stub\n---\n", encoding="utf-8")
+        result = check_session_handoff_skills(tmp_path)
+        assert result.ok is False
+        assert "stale" in result.message.lower() or "stub" in result.message.lower()
+
+    def test_cursor_only_ignores_empty_claude_dir(self, tmp_path):
+        from tapps_mcp.distribution.doctor import check_session_handoff_skills
+
+        cursor_dir = tmp_path / ".cursor"
+        cursor_dir.mkdir(parents=True, exist_ok=True)
+        (cursor_dir / "mcp.json").write_text('{"mcpServers": {}}', encoding="utf-8")
+        (tmp_path / ".claude" / "skills" / "stale-placeholder").mkdir(parents=True)
+        base = tmp_path / ".cursor" / "skills"
+        self._write_skill(base, "tapps-handoff-session")
+        self._write_skill(base, "tapps-continue-session")
+        result = check_session_handoff_skills(tmp_path)
+        assert result.ok is True
+
+
+class TestCheckContinuousLearningV2Skill:
+    def test_cursor_host_passes(self, tmp_path):
+        from tapps_mcp.distribution.doctor import check_continuous_learning_v2_skill
+
+        skill_dir = tmp_path / ".cursor" / "skills" / "continuous-learning-v2"
+        skill_dir.mkdir(parents=True)
+        (skill_dir / "SKILL.md").write_text("---\nname: continuous-learning-v2\n---\n")
+        result = check_continuous_learning_v2_skill(tmp_path)
+        assert result.ok is True
+        assert "cursor" in result.message
 
 
 # ---------------------------------------------------------------------------

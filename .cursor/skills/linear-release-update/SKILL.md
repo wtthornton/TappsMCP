@@ -23,7 +23,7 @@ Post a structured Linear project update document when a new version is released.
    - If `agent_ready=false` (and not dry_run): surface findings, stop.
    - If `agent_ready=true`: proceed.
 
-3. Call the Linear plugin's `save_document`:
+3. Call `linear_save_document`:
    - `project`: use `data.project` from the tool response.
    - `title`: use `data.document_title` from the tool response (format: `Release vX.Y.Z — YYYY-MM-DD`).
    - `content`: use `data.body` from the tool response verbatim.
