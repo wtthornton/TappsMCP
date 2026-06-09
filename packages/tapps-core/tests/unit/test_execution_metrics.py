@@ -241,7 +241,12 @@ class TestBrainTelemetryDualWrite:
         ).to_dict()
         mock_bridge = MagicMock()
         mock_bridge.query_events = AsyncMock(
-            return_value=[{"event_type": "quality_metric", "payload": payload}]
+            return_value=[
+                {
+                    "event_type": "quality_metric",
+                    "payload": {"event_type": "quality_metric", "payload": payload},
+                }
+            ]
         )
         with patch("tapps_core.brain_bridge.create_brain_bridge", return_value=mock_bridge):
             loaded = await load_tool_call_metrics_from_brain(limit=10)
@@ -249,6 +254,28 @@ class TestBrainTelemetryDualWrite:
         assert loaded[0].call_id == "xyz"
         assert loaded[0].score == 77.0
         mock_bridge.query_events.assert_awaited_once()
+
+    @pytest.mark.asyncio
+    async def test_parse_nested_brain_event_payload(self):
+        from tapps_core.metrics.brain_telemetry import _parse_metric_event
+
+        payload = ToolCallMetric(
+            call_id="nested",
+            tool_name="tapps_score_file",
+            status="success",
+            duration_ms=9.0,
+            started_at="2025-06-01T00:00:00+00:00",
+            completed_at="2025-06-01T00:00:00.009+00:00",
+            score=91.0,
+        ).to_dict()
+        event = {
+            "event_type": "quality_metric",
+            "payload": {"event_type": "quality_metric", "payload": payload},
+        }
+        metric = _parse_metric_event(event)
+        assert metric is not None
+        assert metric.call_id == "nested"
+        assert metric.score == 91.0
 
     @pytest.mark.asyncio
     async def test_load_tool_call_metrics_falls_back_to_memory_search(self):

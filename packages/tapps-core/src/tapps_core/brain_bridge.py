@@ -2174,7 +2174,10 @@ class HttpBrainBridge(BrainBridge):
             "event_type": event_type,
             "entities": [entity_spec("tool", entity_id)],
         }
-        args = {"payload_json": json.dumps(payload)}
+        args = {
+            "event_type": event_type,
+            "payload_json": json.dumps(payload),
+        }
         result = await self._http_mcp_call("brain_record_event", args)
         return result if isinstance(result, dict) else {"recorded": True}
 
@@ -2217,7 +2220,10 @@ class HttpBrainBridge(BrainBridge):
         if payload_data:
             event_payload["payload"] = payload_data
 
-        args = {"payload_json": json.dumps(event_payload)}
+        args = {
+            "event_type": event_type,
+            "payload_json": json.dumps(event_payload),
+        }
         result = await self._http_mcp_call("brain_record_event", args)
         return result if isinstance(result, dict) else {"recorded": True}
 

@@ -132,11 +132,24 @@ def _parse_metric_entry(entry: dict[str, Any]) -> ToolCallMetric | None:
         return None
 
 
-def _parse_metric_event(event: dict[str, Any]) -> ToolCallMetric | None:
-    payload = event.get("payload")
-    if isinstance(payload, dict):
-        return _parse_metric_payload(payload)
+def _extract_metric_payload(event: dict[str, Any]) -> dict[str, Any] | None:
+    """Return the scalar metric dict from a ``brain_query_events`` row."""
+    outer = event.get("payload")
+    if not isinstance(outer, dict):
+        return None
+    inner = outer.get("payload")
+    if isinstance(inner, dict) and inner.get("call_id"):
+        return inner
+    if outer.get("call_id"):
+        return outer
     return None
+
+
+def _parse_metric_event(event: dict[str, Any]) -> ToolCallMetric | None:
+    payload = _extract_metric_payload(event)
+    if payload is None:
+        return None
+    return _parse_metric_payload(payload)
 
 
 def _metric_in_window(

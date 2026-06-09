@@ -14,7 +14,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
-- **Metrics brain telemetry phase 2** ([TAP-1997](https://linear.app/tappscodingagents/issue/TAP-1997)) — `load_tool_call_metrics_from_brain()` reads `brain_query_events` payloads; emit path drops interim `memory_save`; `tapps_stats` hydrates from brain in `brain` mode; tapps-brain floor raised to **3.24.0** ([ADR-0013](docs/adr/0013-pin-tapps-brain-version-floor-at-3240.md)).
+- **Metrics brain telemetry phase 2** ([TAP-1997](https://linear.app/tappscodingagents/issue/TAP-1997)) — `load_tool_call_metrics_from_brain()` reads `brain_query_events` payloads (nested `payload.payload` envelope); emit path drops interim `memory_save`; `tapps_stats` hydrates from brain in `brain` mode; tapps-brain floor raised to **3.24.0** ([ADR-0013](docs/adr/0013-pin-tapps-brain-version-floor-at-3240.md)).
+- **`brain_record_event` HTTP args (brain 3.24.0)** — `record_kg_event` / `record_event` now pass top-level `event_type` alongside `payload_json` (required by brain 3.24.0 schema).
 - **All `record_kg_event` emitters use `entity_spec`** ([TAP-1997](https://linear.app/tappscodingagents/issue/TAP-1997)) — `quality_metric`, `quality_gate_fail`, `validate_completed`, `security_finding`, `checklist_outcome`, hive elevation, and deprecated-tool telemetry now emit `entity_type` / `canonical_name`, set `subject_key` in payloads, and omit malformed string-based edges.
 
 ### Documentation
