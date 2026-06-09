@@ -33,7 +33,7 @@ payloads, and omit malformed string-based edges. Event types:
 |-------|--------|-------|
 | 1 — KG event + payload write | Done | Phase 1 + entity shapes on all emitters (2026-06-09) |
 | 1.5 — `memory_save` workaround | Done | Interim read path; **remove after P0** |
-| 2 — drop local JSONL by default | Blocked | Needs `brain_query_events` (P0 below) |
+| 2 — drop local JSONL by default | Done (tapps-mcp) | `brain_query_events` read path; `memory_save` removed on emit |
 
 Set `TAPPS_METRICS_STORAGE=brain` to skip local JSONL (opt-in). Requires brain auth +
 memory hydrate or, after P0, `brain_query_events`.
@@ -127,8 +127,8 @@ when P2 ships.
 
 ```
 Done (tapps-mcp):    all record_kg_event entity shapes + subject_key (2026-06-09)
-P0 (tapps-brain):  brain_query_events + index + tests  ← waiting here
-Then (tapps-mcp):  wire query_events consumer; drop JSONL + memory_save workaround
+P0 (tapps-brain):  brain_query_events + index + tests  ← shipped 3.24.0
+Done (tapps-mcp):  query_events consumer; drop memory_save workaround (2026-06-09)
 P2 (tapps-brain):  brain_profile_set/get
 P2 (tapps-mcp):    TAP-1998 domain weights
 ```
@@ -142,7 +142,7 @@ P2 (tapps-mcp):    TAP-1998 domain weights
 | Now | `>=3.22.4,<4` | Resilient side-effect writes; `brain_resolve_entity` |
 | After P0 ships | `>=3.24.0,<4` | `brain_query_events` |
 
-Current pin remains `>=3.18.0,<4` until ADR superseded.
+Floor raised to **3.24.0** per [ADR-0013](../adr/0013-pin-tapps-brain-version-floor-at-3240.md) (rev pin until `v3.24.0` tag).
 
 ## Note for non-Python consumers
 

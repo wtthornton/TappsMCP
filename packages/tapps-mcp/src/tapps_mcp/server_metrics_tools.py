@@ -250,9 +250,22 @@ def tapps_stats(
 
     hub = _get_metrics_hub()
 
+    from tapps_core.metrics.brain_telemetry import (
+        metrics_storage_mode,
+        sync_hydrate_execution_metrics_from_brain,
+    )
+
     if period == "session":
         summary, tool_breakdowns = _session_stats(hub, tool_name)
     else:
+        if metrics_storage_mode() == "brain":
+            from datetime import UTC, datetime, timedelta
+
+            since: datetime | None = None
+            days = _PERIOD_DAYS.get(period)
+            if days is not None:
+                since = datetime.now(tz=UTC) - timedelta(days=days)
+            sync_hydrate_execution_metrics_from_brain(hub.execution, since=since)
         summary, tool_breakdowns = _period_stats(hub, tool_name, period)
 
     recommendations = _generate_stats_recommendations(summary, tool_breakdowns)

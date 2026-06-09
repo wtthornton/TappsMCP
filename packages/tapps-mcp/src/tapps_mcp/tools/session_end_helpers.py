@@ -62,6 +62,28 @@ async def call_memory_search_sessions(
     return {"success": True, "result": result, "query": query}
 
 
+async def run_session_end(session_start_iso: str = "") -> dict[str, Any]:
+    """Shared session-end logic for the MCP tool and CLI (TAP-3174).
+
+    Best-effort — brain outages surface in the result dict, never as exceptions.
+    """
+    since = session_start_iso
+    flywheel = await call_flywheel_process(since)
+    session_search = await call_memory_search_sessions(since or "recent")
+    return {
+        "flywheel": flywheel,
+        "session_search": session_search,
+        "session_start_iso": since or None,
+    }
+
+
+def run_session_end_sync(session_start_iso: str = "") -> dict[str, Any]:
+    """Synchronous wrapper for ``run_session_end`` (CLI entry point)."""
+    import asyncio
+
+    return asyncio.run(run_session_end(session_start_iso))
+
+
 async def call_flywheel_process(session_start_iso: str) -> dict[str, Any]:
     """Call ``flywheel_process(since=session_start_iso)`` on the brain bridge.
 

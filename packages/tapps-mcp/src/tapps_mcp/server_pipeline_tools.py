@@ -1427,26 +1427,16 @@ async def tapps_session_end() -> dict[str, Any]:
     Both operations are best-effort — a brain outage does not raise an error.
     """
     from tapps_mcp.server import _record_call, _record_execution
-    from tapps_mcp.tools.session_end_helpers import (
-        call_flywheel_process,
-        call_memory_search_sessions,
-    )
+    from tapps_mcp.tools.session_end_helpers import run_session_end
 
     start = time.perf_counter_ns()
     _record_call("tapps_session_end")
 
-    since = _session_state.session_start_iso
-    flywheel = await call_flywheel_process(since)
-    session_search = await call_memory_search_sessions(since or "recent")
+    data = await run_session_end(_session_state.session_start_iso)
 
     elapsed_ms = (time.perf_counter_ns() - start) // 1_000_000
     _record_execution("tapps_session_end", start)
 
-    data: dict[str, Any] = {
-        "flywheel": flywheel,
-        "session_search": session_search,
-        "session_start_iso": since or None,
-    }
     return success_response("tapps_session_end", elapsed_ms, data)
 
 

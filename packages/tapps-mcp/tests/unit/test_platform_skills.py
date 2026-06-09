@@ -430,6 +430,25 @@ class TestSessionHandoffSkills:
         assert "session-handoff.md" in CLAUDE_SKILLS["tapps-handoff-session"]
         assert "tapps_session_end" in CURSOR_SKILLS["tapps-handoff-session"]
 
+    def test_handoff_requires_real_utc_timestamp(self) -> None:
+        for skills in (CLAUDE_SKILLS, CURSOR_SKILLS):
+            content = skills["tapps-handoff-session"]
+            assert "date -u +%Y-%m-%dT%H:%M:%SZ" in content
+            assert "T00:00:00Z" in content
+
+    def test_handoff_includes_git_head_and_cli_fallbacks(self) -> None:
+        for skills in (CLAUDE_SKILLS, CURSOR_SKILLS):
+            content = skills["tapps-handoff-session"]
+            assert "git rev-parse --short HEAD" in content
+            assert "uv run tapps-mcp session-end" in content
+            assert "uv run tapps-mcp memory save" in content
+
+    def test_continue_session_cli_bootstrap_fallback(self) -> None:
+        for skills in (CLAUDE_SKILLS, CURSOR_SKILLS):
+            content = skills["tapps-continue-session"]
+            assert "doctor --quick" in content
+            assert ".tapps-mcp.yaml" in content
+
     def test_cursor_handoff_grants_memory_tool(self) -> None:
         assert "tapps_memory" in CURSOR_SKILLS["tapps-handoff-session"]
 

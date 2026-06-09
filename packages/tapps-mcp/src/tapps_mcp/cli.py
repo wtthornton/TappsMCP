@@ -292,6 +292,22 @@ def upgrade(
         raise SystemExit(1)
 
 
+@main.command("session-end")
+def session_end_cmd() -> None:
+    """Close the TAPPS session lifecycle (flywheel + session search).
+
+    Best-effort mirror of ``tapps_session_end`` for hosts without MCP wiring.
+    Always exits 0 — brain outages are reported in the output, not as errors.
+    """
+    import json
+
+    from tapps_mcp.tools.session_end_helpers import run_session_end_sync
+
+    data = run_session_end_sync()
+    click.echo(json.dumps(data, indent=2))
+    # Best-effort: degrade gracefully when brain is offline (TAP-3174).
+
+
 @main.command()
 @click.option(
     "--project-root",
@@ -667,6 +683,23 @@ def _get_project_root() -> Path:
     return Path(root).resolve()
 
 
+def _brain_bridge_unavailable_message() -> str:
+    return (
+        "BrainBridge unavailable — configure memory.brain_http_url / "
+        "TAPPS_MCP_MEMORY_BRAIN_HTTP_URL or TAPPS_BRAIN_DATABASE_URL "
+        "in .tapps-mcp.yaml (or environment) before using memory save/get."
+    )
+
+
+def _create_cli_brain_bridge() -> object | None:
+    """Create a BrainBridge for CLI memory save/get (HTTP or in-process DSN)."""
+    from tapps_core.brain_bridge import BRAIN_PROFILE_HOOKS, create_brain_bridge
+    from tapps_core.config.settings import load_settings
+
+    settings = load_settings(project_root=_get_project_root())
+    return create_brain_bridge(settings, default_profile=BRAIN_PROFILE_HOOKS)
+
+
 # ---------------------------------------------------------------------------
 # Memory CLI group (Story 53.1)
 # ---------------------------------------------------------------------------
@@ -719,41 +752,68 @@ def memory_list(tier: str | None, scope: str | None, as_json: bool) -> None:
 )
 @click.option("--tags", default="", help="Comma-separated tags.")
 def memory_save(key: str, value: str, tier: str, tags: str) -> None:
-    """Save a memory entry."""
+    """Save a memory entry via BrainBridge (HTTP or in-process DSN)."""
+    import asyncio
     import json
 
-    from tapps_brain.store import MemoryStore
+    tag_list = [t.strip() for t in tags.split(",") if t.strip()] if tags else []
 
-    store = MemoryStore(_get_project_root(), store_dir=".tapps-mcp")
+    async def _save() -> dict[str, object]:
+        bridge = _create_cli_brain_bridge()
+        if bridge is None:
+            raise RuntimeError("bridge_unavailable")
+        try:
+            result = await bridge.save(key=key, value=value, tier=tier, tags=tag_list)
+            return result if isinstance(result, dict) else {"key": key, "success": True}
+        finally:
+            bridge.close()
+
     try:
-        tag_list = [t.strip() for t in tags.split(",") if t.strip()] if tags else []
-        result = store.save(key=key, value=value, tier=tier, tags=tag_list)
-        if isinstance(result, dict) and "error" in result:
-            click.echo(f"Error: {result['message']}", err=True)
-            raise SystemExit(1)
-        data = result.model_dump(mode="json") if hasattr(result, "model_dump") else result
-        click.echo(json.dumps(data, indent=2))
-    finally:
-        store.close()
+        result = asyncio.run(_save())
+    except RuntimeError as exc:
+        if str(exc) == "bridge_unavailable":
+            click.echo(_brain_bridge_unavailable_message(), err=True)
+            raise SystemExit(2) from None
+        raise
+
+    if isinstance(result, dict) and result.get("error"):
+        message = result.get("message", result["error"])
+        click.echo(f"Error: {message}", err=True)
+        raise SystemExit(1)
+    if isinstance(result, dict) and result.get("degraded") and not result.get("success", True):
+        click.echo(f"Error: {result.get('reason', 'degraded')}", err=True)
+        raise SystemExit(1)
+    click.echo(json.dumps(result, indent=2))
 
 
 @memory.command("get")
 @click.option("--key", required=True, help="Memory key to retrieve.")
 def memory_get(key: str) -> None:
-    """Retrieve a memory entry by key."""
+    """Retrieve a memory entry by key via BrainBridge (HTTP or in-process DSN)."""
+    import asyncio
     import json
 
-    from tapps_brain.store import MemoryStore
+    async def _get() -> dict[str, object] | None:
+        bridge = _create_cli_brain_bridge()
+        if bridge is None:
+            raise RuntimeError("bridge_unavailable")
+        try:
+            return await bridge.get(key)
+        finally:
+            bridge.close()
 
-    store = MemoryStore(_get_project_root(), store_dir=".tapps-mcp")
     try:
-        entry = store.get(key)
-        if entry is None:
-            click.echo(f"Memory '{key}' not found.", err=True)
-            raise SystemExit(1)
-        click.echo(json.dumps(entry.model_dump(mode="json"), indent=2))
-    finally:
-        store.close()
+        entry = asyncio.run(_get())
+    except RuntimeError as exc:
+        if str(exc) == "bridge_unavailable":
+            click.echo(_brain_bridge_unavailable_message(), err=True)
+            raise SystemExit(2) from None
+        raise
+
+    if entry is None:
+        click.echo(f"Memory '{key}' not found.", err=True)
+        raise SystemExit(1)
+    click.echo(json.dumps(entry, indent=2))
 
 
 @memory.command("recall")

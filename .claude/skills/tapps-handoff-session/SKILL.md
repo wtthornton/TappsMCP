@@ -23,10 +23,13 @@ End the session with a durable handoff the next chat can load via `/tapps-contin
    - **Success criterion** — one line
 
 2. **Persist (file is canonical).** Write or overwrite `.tapps-mcp/session-handoff.md` using this shape:
+   - Set **Updated** to the real current UTC time: run `date -u +%Y-%m-%dT%H:%M:%SZ` and paste the output — never use a placeholder like `T00:00:00Z`.
+   - Optionally add **Git:** `<short-sha>` when inside a git repo (`git rev-parse --short HEAD`).
 
 ```markdown
 # Session handoff
-**Updated:** <ISO-8601 UTC>
+**Updated:** <ISO-8601 UTC from date -u>
+**Git:** <short-sha or omit>
 **Linear P0:** <TAP-#### or none>
 
 ## Done
@@ -48,10 +51,17 @@ End the session with a durable handoff the next chat can load via `/tapps-contin
 - ...
 ```
 
-3. **Persist (brain, best-effort).** If tapps-brain is reachable, also run:
-   `uv run tapps-mcp memory save --key session-handoff --tier context --tags handoff,cross-session --value "<same bullets as markdown, plain text>"`
-   Skip silently when brain is offline — the markdown file is enough.
+3. **Persist (brain, best-effort).** Priority order (file from step 2 is always canonical):
 
-4. **Close lifecycle.** Call `mcp__tapps-mcp__tapps_session_end()`. Best-effort; do not fail the handoff if it degrades.
+   | Priority | When | How |
+   |----------|------|-----|
+   | 1 (preferred MCP) | `tapps_memory` MCP available | `mcp__tapps-mcp__tapps_memory(action="save", key="session-handoff", tier="context", tags="handoff,cross-session", value="<plain-text bullets>")` |
+   | 2 (CLI HTTP) | MCP unavailable, brain HTTP configured | `uv run tapps-mcp memory save --key session-handoff --tier context --tags handoff,cross-session --value "<plain-text bullets>"` |
+   | 3 (skip) | Brain offline | Skip silently — the markdown file is enough |
+
+4. **Close lifecycle.** Best-effort session closure:
+   - **Preferred:** `mcp__tapps-mcp__tapps_session_end()`
+   - **CLI fallback** (MCP unavailable): `uv run tapps-mcp session-end`
+   Do not fail the handoff if either degrades.
 
 5. **Report.** One line: `Handoff written: .tapps-mcp/session-handoff.md. Linear P0: <id|none>. session_end: ok|skipped. Next session: invoke /tapps-continue-session`

@@ -78,7 +78,7 @@ def _check_brain_reachable(url: str) -> str | None:
         return "tapps-brain /health returned non-JSON body"
     version = str(payload.get("version", ""))
     if _parse_version(version) < _REQUIRED_BRAIN_VERSION:
-        return f"tapps-brain version {version} below required 3.18.0"
+        return f"tapps-brain version {version} below required 3.24.0"
     return None
 
 

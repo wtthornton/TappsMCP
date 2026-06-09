@@ -2,12 +2,9 @@
 members = ["packages/*"]
 
 [tool.uv.sources]
-# tapps-brain is sourced from its GitHub repo pinned to the v3.18.0 release tag.
-# See ADR-0011 for the tag-vs-SHA rationale (auditability; uv.lock retains the
-# commit-SHA-level determinism that ADR-0010 originally cited as the SHA-pin
-# justification). See ADR-0010 for the version floor rationale itself
-# (deprecated MCP aliases removed in 3.18.0).
-tapps-brain = { git = "https://github.com/wtthornton/tapps-brain.git", tag = "v3.18.0" }
+# tapps-brain 3.24.0 (brain_query_events). v3.24.0 tag not published yet — pin main
+# HEAD rev; switch to tag = "v3.24.0" once released. See ADR-0013.
+tapps-brain = { git = "https://github.com/wtthornton/tapps-brain.git", rev = "0a3e173181d4b3179244add93e5fb18ce1336fc5" }
 
 [tool.uv]
 dev-dependencies = [

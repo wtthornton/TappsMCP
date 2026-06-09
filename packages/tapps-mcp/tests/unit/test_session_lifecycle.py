@@ -13,6 +13,65 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
 
+class TestRunSessionEnd:
+    """TAP-3174: shared run_session_end helper for MCP tool and CLI."""
+
+    @pytest.mark.asyncio
+    async def test_run_session_end_composes_flywheel_and_search(self) -> None:
+        bridge = MagicMock()
+        bridge.flywheel_process = AsyncMock(return_value={"processed": 1})
+        bridge.search_sessions = AsyncMock(return_value={"results": [{"id": "s1"}]})
+
+        with patch("tapps_mcp.server_helpers._get_brain_bridge", return_value=bridge):
+            from tapps_mcp.tools.session_end_helpers import run_session_end
+
+            result = await run_session_end("2026-06-09T12:00:00+00:00")
+
+        assert result["session_start_iso"] == "2026-06-09T12:00:00+00:00"
+        assert result["flywheel"]["success"] is True
+        assert result["session_search"]["success"] is True
+
+    def test_run_session_end_sync_cli_wrapper(self) -> None:
+        with patch(
+            "tapps_mcp.tools.session_end_helpers.run_session_end",
+            new=AsyncMock(
+                return_value={
+                    "flywheel": {"success": False, "skipped": True},
+                    "session_search": {"success": False, "skipped": True},
+                    "session_start_iso": None,
+                }
+            ),
+        ):
+            from tapps_mcp.tools.session_end_helpers import run_session_end_sync
+
+            result = run_session_end_sync()
+
+        assert result["session_start_iso"] is None
+        assert result["flywheel"]["skipped"] is True
+
+
+class TestSessionEndCli:
+    """TAP-3174: session-end CLI command."""
+
+    def test_session_end_cli_exits_zero_on_degrade(self) -> None:
+        from click.testing import CliRunner
+
+        from tapps_mcp.cli import main
+
+        runner = CliRunner()
+        with patch(
+            "tapps_mcp.tools.session_end_helpers.run_session_end_sync",
+            return_value={
+                "flywheel": {"success": False, "skipped": True, "reason": "bridge_unavailable"},
+                "session_search": {"success": False, "skipped": True},
+                "session_start_iso": None,
+            },
+        ):
+            result = runner.invoke(main, ["session-end"])
+        assert result.exit_code == 0
+        assert "bridge_unavailable" in result.output
+
+
 class TestCallFlywheelProcess:
     """Unit tests for session_end_helpers.call_flywheel_process."""
 

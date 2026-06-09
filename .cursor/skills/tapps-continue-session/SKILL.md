@@ -12,7 +12,9 @@ mcp_tools:
 
 Start work in a fresh context by assembling structured state.
 
-1. Call `tapps_session_start()`. Note `compaction_rehydration` if present.
+1. **Session bootstrap.**
+   - **Preferred:** Call `tapps_session_start()`. Note `compaction_rehydration` if present.
+   - **CLI fallback** (MCP unavailable): Run `uv run tapps-mcp doctor --quick` and read `.tapps-mcp.yaml` for project context. Proceed without blocking.
 
 2. **Load handoff (priority):** Read `.tapps-mcp/session-handoff.md`; else `uv run tapps-mcp memory get --key session-handoff`. Optional: `docs/NEXT_SESSION_PROMPT.md`, `docs/TAPPS_HANDOFF.md` (**Next:** section).
 

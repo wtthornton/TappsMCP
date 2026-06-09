@@ -13,7 +13,9 @@ argument-hint: "[optional Linear issue id e.g. TAP-1234]"
 
 Start work in a fresh context window by assembling structured state — not a user paste.
 
-1. **Session bootstrap.** Call `mcp__tapps-mcp__tapps_session_start()`. If `data.compaction_rehydration` is present, summarize it in one sentence.
+1. **Session bootstrap.**
+   - **Preferred:** Call `mcp__tapps-mcp__tapps_session_start()`. If `data.compaction_rehydration` is present, summarize it in one sentence.
+   - **CLI fallback** (MCP unavailable): Run `uv run tapps-mcp doctor --quick` and read `.tapps-mcp.yaml` for project context (quality preset, brain URL, engagement). Proceed without blocking.
 
 2. **Load handoff (priority order).**
    - Read `.tapps-mcp/session-handoff.md` if it exists — primary source.

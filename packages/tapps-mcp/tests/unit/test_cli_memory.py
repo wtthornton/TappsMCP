@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
-from unittest.mock import MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from click.testing import CliRunner
@@ -49,6 +49,21 @@ def _mock_store(entries: list[MemoryEntry] | None = None) -> MagicMock:
 
 _ROOT_PATCH = "tapps_mcp.cli._get_project_root"
 _STORE_PATCH = "tapps_brain.store.MemoryStore"
+_BRIDGE_PATCH = "tapps_mcp.cli._create_cli_brain_bridge"
+
+
+def _mock_bridge(
+    *,
+    save_result: dict[str, object] | None = None,
+    get_result: dict[str, object] | None = None,
+) -> MagicMock:
+    bridge = MagicMock()
+    bridge.save = AsyncMock(
+        return_value=save_result or {"key": "test-key", "value": "test value", "success": True}
+    )
+    bridge.get = AsyncMock(return_value=get_result)
+    bridge.close = MagicMock()
+    return bridge
 
 
 class TestMemoryList:
@@ -111,26 +126,20 @@ class TestMemoryList:
 
 class TestMemorySave:
     def test_save_success(self, runner: CliRunner) -> None:
-        entry = _make_entry()
-        store = _mock_store([entry])
-        with (
-            patch(_ROOT_PATCH, return_value=Path("/fake")),
-            patch(_STORE_PATCH, return_value=store),
-        ):
+        bridge = _mock_bridge()
+        with patch(_BRIDGE_PATCH, return_value=bridge):
             result = runner.invoke(
                 main, ["memory", "save", "--key", "test-key", "--value", "test value"]
             )
         assert result.exit_code == 0
         data = json.loads(result.output)
         assert data["key"] == "test-key"
+        bridge.save.assert_awaited_once()
+        bridge.close.assert_called_once()
 
     def test_save_with_tags(self, runner: CliRunner) -> None:
-        entry = _make_entry()
-        store = _mock_store([entry])
-        with (
-            patch(_ROOT_PATCH, return_value=Path("/fake")),
-            patch(_STORE_PATCH, return_value=store),
-        ):
+        bridge = _mock_bridge()
+        with patch(_BRIDGE_PATCH, return_value=bridge):
             result = runner.invoke(
                 main,
                 [
@@ -145,47 +154,56 @@ class TestMemorySave:
                 ],
             )
         assert result.exit_code == 0
-        store.save.assert_called_once()
-        _, kwargs = store.save.call_args
-        assert kwargs.get("tags") == ["python", "testing"]
+        bridge.save.assert_awaited_once_with(
+            key="test-key",
+            value="test value",
+            tier="pattern",
+            tags=["python", "testing"],
+        )
 
     def test_save_blocked_by_safety(self, runner: CliRunner) -> None:
-        store = _mock_store()
-        store.save.return_value = {"error": "content_blocked", "message": "Blocked by safety."}
-        with (
-            patch(_ROOT_PATCH, return_value=Path("/fake")),
-            patch(_STORE_PATCH, return_value=store),
-        ):
+        bridge = _mock_bridge(
+            save_result={"error": "content_blocked", "message": "Blocked by safety."}
+        )
+        with patch(_BRIDGE_PATCH, return_value=bridge):
             result = runner.invoke(
                 main, ["memory", "save", "--key", "bad-key", "--value", "bad content"]
             )
         assert result.exit_code == 1
         assert "Blocked by safety" in result.output
 
+    def test_save_bridge_unavailable(self, runner: CliRunner) -> None:
+        with patch(_BRIDGE_PATCH, return_value=None):
+            result = runner.invoke(
+                main, ["memory", "save", "--key", "test-key", "--value", "test value"]
+            )
+        assert result.exit_code == 2
+        assert "brain_http_url" in result.output
+        assert "TAPPS_BRAIN_DATABASE_URL" in result.output
+
 
 class TestMemoryGet:
     def test_get_found(self, runner: CliRunner) -> None:
-        entry = _make_entry()
-        store = _mock_store([entry])
-        with (
-            patch(_ROOT_PATCH, return_value=Path("/fake")),
-            patch(_STORE_PATCH, return_value=store),
-        ):
+        bridge = _mock_bridge(get_result={"key": "test-key", "value": "test value"})
+        with patch(_BRIDGE_PATCH, return_value=bridge):
             result = runner.invoke(main, ["memory", "get", "--key", "test-key"])
         assert result.exit_code == 0
         data = json.loads(result.output)
         assert data["key"] == "test-key"
+        bridge.get.assert_awaited_once_with("test-key")
 
     def test_get_not_found(self, runner: CliRunner) -> None:
-        store = _mock_store()
-        store.get.return_value = None
-        with (
-            patch(_ROOT_PATCH, return_value=Path("/fake")),
-            patch(_STORE_PATCH, return_value=store),
-        ):
+        bridge = _mock_bridge(get_result=None)
+        with patch(_BRIDGE_PATCH, return_value=bridge):
             result = runner.invoke(main, ["memory", "get", "--key", "missing"])
         assert result.exit_code == 1
         assert "not found" in result.output
+
+    def test_get_bridge_unavailable(self, runner: CliRunner) -> None:
+        with patch(_BRIDGE_PATCH, return_value=None):
+            result = runner.invoke(main, ["memory", "get", "--key", "test-key"])
+        assert result.exit_code == 2
+        assert "BrainBridge unavailable" in result.output
 
 
 class TestMemorySearch:
