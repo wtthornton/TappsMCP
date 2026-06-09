@@ -693,11 +693,11 @@ def _brain_bridge_unavailable_message() -> str:
 
 def _create_cli_brain_bridge() -> object | None:
     """Create a BrainBridge for CLI memory save/get (HTTP or in-process DSN)."""
-    from tapps_core.brain_bridge import BRAIN_PROFILE_HOOKS, create_brain_bridge
+    from tapps_core.brain_bridge import BRAIN_PROFILE_SERVER, create_brain_bridge
     from tapps_core.config.settings import load_settings
 
     settings = load_settings(project_root=_get_project_root())
-    return create_brain_bridge(settings, default_profile=BRAIN_PROFILE_HOOKS)
+    return create_brain_bridge(settings, default_profile=BRAIN_PROFILE_SERVER)
 
 
 # ---------------------------------------------------------------------------
