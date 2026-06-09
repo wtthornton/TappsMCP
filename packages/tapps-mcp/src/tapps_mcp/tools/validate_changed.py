@@ -37,6 +37,7 @@ from typing import TYPE_CHECKING, Any
 import structlog
 from mcp.server.fastmcp import Context
 
+from tapps_core.knowledge.kg_keys import entity_spec
 from tapps_mcp.server_helpers import _get_brain_bridge, success_response
 
 _logger = structlog.get_logger(__name__)
@@ -447,16 +448,20 @@ def _fire_validate_events(
                 for r in outcome.results
                 if r.get("file_path")
             }
+            path_strs = [str(p) for p in paths]
+            payload_data: dict[str, Any] = {
+                "overall_verdict": verdict,
+                "per_category_scores": per_file_scores,
+                "elapsed_ms": elapsed_ms,
+                "utility_score": utility_score,
+            }
+            if path_strs:
+                payload_data["subject_key"] = path_strs[0]
             await bridge.record_kg_event(  # type: ignore[union-attr]
                 event_type="validate_completed",
-                entities=[{"type": "file", "id": str(p)} for p in paths],
-                edges=[],
-                payload_data={
-                    "overall_verdict": verdict,
-                    "per_category_scores": per_file_scores,
-                    "elapsed_ms": elapsed_ms,
-                    "utility_score": utility_score,
-                },
+                entities=[entity_spec("file", p) for p in path_strs],
+                edges=None,
+                payload_data=payload_data,
             )
         except Exception:
             _logger.debug("validate_kg_event_emit_failed", exc_info=True)

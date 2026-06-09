@@ -18,8 +18,9 @@ from mcp.server.fastmcp import (
 from mcp.types import ToolAnnotations
 
 from tapps_core.config.settings import load_settings
-from tapps_mcp.quick_check_recurring import record_quick_check_recurring
+from tapps_core.knowledge.kg_keys import entity_spec
 from tapps_mcp.mcp_register import register_tool
+from tapps_mcp.quick_check_recurring import record_quick_check_recurring
 from tapps_mcp.server_helpers import (
     _get_brain_bridge,
     _get_scorer_for_file,
@@ -60,13 +61,9 @@ _CC_HIGH_THRESHOLD = 15
 def _fire_quality_gate_events(file_path: str, failures: list[GateFailure]) -> None:  # type: ignore[name-defined]
     """Fire brain KG events for every quality gate failure (fire-and-forget).
 
-    Each failure emits a ``quality_gate_fail`` event with:
-    - a file entity and a rule entity
-    - a ``file VIOLATES rule`` directed edge
-    - a payload carrying score, threshold, and category
-
-    Results are queryable via
-    ``brain_get_neighbors(entity_ids=[<file_path>], hops=2)``.
+    Each failure emits a ``quality_gate_fail`` event with file + rule entities
+    and a payload carrying score, threshold, category, and ``subject_key``.
+    Payload reads require ``brain_query_events`` once shipped.
 
     This is best-effort: a brain outage or call failure must never block
     the quality gate response.
@@ -81,20 +78,16 @@ def _fire_quality_gate_events(file_path: str, failures: list[GateFailure]) -> No
                 await bridge.record_kg_event(  # type: ignore[union-attr]
                     event_type="quality_gate_fail",
                     entities=[
-                        {"type": "file", "id": file_path},
-                        {"type": "rule", "id": failure.category},
+                        entity_spec("file", file_path),
+                        entity_spec("rule", failure.category),
                     ],
-                    edges=[
-                        {
-                            "src": file_path,
-                            "predicate": "violates",
-                            "dst": failure.category,
-                        }
-                    ],
+                    edges=None,
                     payload_data={
                         "score": failure.actual,
                         "category": failure.category,
                         "threshold": failure.threshold,
+                        "file_path": file_path,
+                        "subject_key": file_path,
                     },
                 )
         except Exception:

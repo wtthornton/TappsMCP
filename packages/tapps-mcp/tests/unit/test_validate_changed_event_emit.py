@@ -98,9 +98,9 @@ class TestFireValidateEvents:
         call_kwargs = mock_bridge.record_kg_event.call_args.kwargs
         assert call_kwargs["event_type"] == "validate_completed"
         # Entities: one per path
-        entity_ids = {e["id"] for e in call_kwargs["entities"]}
-        assert "/project/src/a.py" in entity_ids
-        assert "/project/src/b.py" in entity_ids
+        entity_names = {e["canonical_name"] for e in call_kwargs["entities"]}
+        assert "/project/src/a.py" in entity_names
+        assert "/project/src/b.py" in entity_names
 
     @pytest.mark.asyncio
     async def test_payload_pass_verdict(self) -> None:

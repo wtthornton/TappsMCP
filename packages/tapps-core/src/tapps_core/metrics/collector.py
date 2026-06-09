@@ -27,10 +27,13 @@ class MetricsHub:
     """
 
     def __init__(self, project_root: Path) -> None:
+        from tapps_core.metrics.brain_telemetry import metrics_storage_mode
+
         self.project_root = project_root
         self.session_id = _SESSION_ID
         self._metrics_dir = project_root / ".tapps-mcp" / "metrics"
-        self._metrics_dir.mkdir(parents=True, exist_ok=True)
+        if metrics_storage_mode() != "brain":
+            self._metrics_dir.mkdir(parents=True, exist_ok=True)
 
         self.execution = ToolCallMetricsCollector(self._metrics_dir)
         self.outcomes = OutcomeTracker(self._metrics_dir)

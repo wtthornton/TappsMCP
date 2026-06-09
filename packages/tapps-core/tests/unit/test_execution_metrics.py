@@ -188,6 +188,7 @@ class TestBrainTelemetryDualWrite:
     ) -> None:
         mock_bridge = MagicMock()
         mock_bridge.record_kg_event = AsyncMock(return_value={"recorded": True})
+        mock_bridge.save = AsyncMock(return_value={"success": True})
         metric = ToolCallMetric(
             call_id="abc",
             tool_name="tapps_score_file",
@@ -208,3 +209,41 @@ class TestBrainTelemetryDualWrite:
         kwargs = mock_bridge.record_kg_event.await_args.kwargs
         assert kwargs["event_type"] == "quality_metric"
         assert kwargs["payload_data"]["score"] == 88.0
+        assert kwargs["payload_data"]["subject_key"] == "/tmp/x.py"
+        assert kwargs["edges"] is None
+        assert kwargs["entities"] == [
+            {"entity_type": "file", "canonical_name": "/tmp/x.py"},
+            {"entity_type": "tool", "canonical_name": "tapps_score_file"},
+        ]
+        mock_bridge.save.assert_awaited_once()
+        assert mock_bridge.save.await_args.kwargs["key"] == "metrics:tool_call:abc"
+
+    def test_brain_storage_mode_skips_disk_write(self, metrics_dir, monkeypatch):
+        monkeypatch.setenv("TAPPS_METRICS_STORAGE", "brain")
+        collector = ToolCallMetricsCollector(metrics_dir)
+        now = datetime.now(tz=UTC)
+        collector.record("tapps_score_file", now, now + timedelta(milliseconds=5), score=90.0)
+        assert list(metrics_dir.glob("tool_calls_*.jsonl")) == []
+        summary = collector.get_summary()
+        assert summary.total_calls == 1
+
+    @pytest.mark.asyncio
+    async def test_load_tool_call_metrics_from_brain(self, monkeypatch):
+        from tapps_core.metrics.brain_telemetry import load_tool_call_metrics_from_brain
+
+        payload = ToolCallMetric(
+            call_id="xyz",
+            tool_name="tapps_quality_gate",
+            status="success",
+            duration_ms=5.0,
+            started_at="2025-06-01T00:00:00+00:00",
+            completed_at="2025-06-01T00:00:00.005+00:00",
+            score=77.0,
+        ).to_dict()
+        mock_bridge = MagicMock()
+        mock_bridge.search = AsyncMock(return_value=[{"key": "metrics:tool_call:xyz", "value": __import__("json").dumps(payload)}])
+        with patch("tapps_core.brain_bridge.create_brain_bridge", return_value=mock_bridge):
+            loaded = await load_tool_call_metrics_from_brain(limit=10)
+        assert len(loaded) == 1
+        assert loaded[0].call_id == "xyz"
+        assert loaded[0].score == 77.0

@@ -10,13 +10,15 @@ import time
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
+from tapps_core.knowledge.kg_keys import entity_spec
+
 if TYPE_CHECKING:
     from mcp.server.fastmcp import Context
+    from tapps_brain.store import MemoryStore as _MemoryStoreType
 
     from tapps_core.brain_bridge import BrainBridge as _BrainBridgeType
     from tapps_core.config.settings import TappsMCPSettings
     from tapps_core.knowledge.lookup import LookupEngine as _LookupEngineType
-    from tapps_brain.store import MemoryStore as _MemoryStoreType
     from tapps_mcp.scoring.scorer import CodeScorer as _CodeScorerType
     from tapps_mcp.scoring.scorer_base import ScorerBase as _ScorerBaseType
 
@@ -672,7 +674,7 @@ def write_checklist_state_marker(
                 return
             await bridge.record_kg_event(  # type: ignore[union-attr]
                 event_type="checklist_outcome",
-                entities=[{"type": "project", "id": entity_id}],
+                entities=[entity_spec("project", entity_id)],
                 payload_data=payload_data,
             )
         except Exception:

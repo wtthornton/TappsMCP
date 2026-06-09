@@ -22,6 +22,7 @@ from tapps_core.brain_bridge import (
     BrainMcpError,
     ToolNotInProfileError,
 )
+from tapps_core.knowledge.kg_keys import entity_spec
 from tapps_mcp.server_helpers import (
     _agent_teams_env_enabled,
     _get_brain_bridge,
@@ -4161,7 +4162,7 @@ async def brain_propose_hive_elevation(
         try:
             await bridge.record_kg_event(
                 event_type="hive_elevation_proposed",
-                entities=[{"type": "memory_key", "id": memory_key}],
+                entities=[entity_spec("memory_key", memory_key)],
                 payload_data={"proposal_id": proposal_id, "justification": justification},
             )
         except Exception as exc:  # noqa: BLE001
@@ -4243,7 +4244,7 @@ async def brain_approve_hive_elevation(
         try:
             await bridge.record_kg_event(
                 event_type="hive_elevation_approved",
-                entities=[{"type": "memory_key", "id": memory_key}],
+                entities=[entity_spec("memory_key", memory_key)],
                 payload_data={"proposal_id": proposal_id},
             )
         except Exception as exc:  # noqa: BLE001

@@ -1,79 +1,160 @@
 # Handoff → tapps-brain: capabilities needed to unblock the "migrate local state into brain" epic (TAP-1996)
 
-**Status:** requested by tapps-mcp 2026-06-01. These are **tapps-brain** changes — they
-cannot be made from the tapps-mcp repo (see `.claude/rules/agent-scope.md` /
-`.claude/rules/integration-hygiene.md`). File as issues in the tapps-brain tracker.
+**Status:** requested by tapps-mcp 2026-06-01; revised 2026-06-09 after brain-side review.
+These are **tapps-brain** changes — they cannot be made from the tapps-mcp repo (see
+`.claude/rules/agent-scope.md` / `.claude/rules/integration-hygiene.md`). File as issues in
+the tapps-brain tracker.
+
+## Write-path reality (corrected 2026-06-09)
+
+`tapps-mcp` emits `brain_record_event` payloads with a rich **`experience_events.payload`**
+dict (scores, durations, gate flags, timestamps). That **does persist** even when KG
+side-effects are malformed.
+
+Brain `EntitySpec` expects `entity_type` / `canonical_name` (not `type` / `id`). Brain
+`EdgeSpec` expects pre-resolved entity UUIDs (not `src` / `dst` string paths). Since
+tapps-brain 3.22.4, bad side-effects are skipped with warnings; the core event row still
+commits.
+
+**Implication:** "writes work" means **payload persistence**, not full KG linkage. Per-file
+score history for dashboard migration should use **`brain_query_events` filtered on
+`payload.file_path` / `subject_key`**, not `brain_get_neighbors`.
+
+**Tapps-mcp fix (shipped 2026-06-09):** All `record_kg_event` call sites in
+tapps-core / tapps-mcp now emit `entity_type` / `canonical_name` via
+`kg_keys.entity_spec()`, set `subject_key` (and `file_path` where relevant) in
+payloads, and omit malformed string-based edges. Event types:
+`quality_metric`, `quality_gate_fail`, `validate_completed`, `security_finding`,
+`checklist_outcome`, hive elevation, deprecated-tool telemetry.
+
+## Tapps-mcp progress (TAP-1997)
+
+| Phase | Status | Notes |
+|-------|--------|-------|
+| 1 — KG event + payload write | Done | Phase 1 + entity shapes on all emitters (2026-06-09) |
+| 1.5 — `memory_save` workaround | Done | Interim read path; **remove after P0** |
+| 2 — drop local JSONL by default | Blocked | Needs `brain_query_events` (P0 below) |
+
+Set `TAPPS_METRICS_STORAGE=brain` to skip local JSONL (opt-in). Requires brain auth +
+memory hydrate or, after P0, `brain_query_events`.
 
 ## Why
 
-Epic TAP-1996 (TappsMCP Platform) migrates three per-project local-state files into brain so
-state is visible across sessions/agents:
+Epic TAP-1996 migrates three per-project local-state categories into brain:
 
-- TAP-1997 — `metrics/` quality scores → brain events
-- TAP-2000 — `.checklist-state.json` → brain events
-- TAP-1998 — `adaptive/domain_weights.yaml` → brain profile data
+- TAP-1997 — `metrics/` quality scores → experience events
+- TAP-2000 — checklist outcomes → experience events (write-only today)
+- TAP-1998 — `domain_weights.yaml` → profile-scoped KV
 
-All three have a clean **write** path today (`BrainBridge.record_kg_event` /
-`record_event`). They are blocked on the **read** path: the data written cannot be read
-back in the shape the consumers need. Two distinct brain capabilities are missing.
+## Capability 1 — `brain_query_events` (P0, blocking TAP-1997 phase 2)
 
-## Capability 1 — event reads must return the event payload
+**Problem.** Metrics scalars live on `experience_events.payload`. `brain_get_neighbors`
+returns KG edge structure only — not event payloads. Dashboard / `tapps_stats` aggregations
+cannot drop local JSONL without an event read API.
 
-**Problem.** `brain_record_event` accepts a rich payload (`payload` dict with scalars like
-`score`, `duration_ms`, `timestamp`). But the only event read-back,
-`brain_get_neighbors`, returns *graph structure only*:
-`{edge_id, predicate, edge_confidence, neighbor_id, entity_type, canonical_name, hop}`.
-The scalar payload is not returned. tapps-mcp's dashboard / `tapps_stats` / `tapps_usage`
-rolling aggregations (counts, averages, gate-skip-rate over a rolling window) need those
-scalars, so the local JSON write cannot be removed without losing live telemetry.
+**Do not** extend `brain_get_neighbors` to return payloads — wrong table, wrong scaling.
 
-**Request.** Provide a read that returns recorded event payloads, filterable by
-`event_type` and time window. Suggested shapes (either works for tapps-mcp):
+**Request.** Add MCP tool + REST route (mirror `feedback_query` vocabulary):
 
-- Extend `brain_get_neighbors` to include each edge's stored `payload` dict, **or**
-- Add a `brain_query_events(event_type, since, until, entity_id?, limit)` returning
-  `[{event_type, entities, edges, payload, ts}]`.
+```
+brain_query_events(
+    event_type: str,           # required, e.g. "quality_metric"
+    since?: str,              # ISO-8601 UTC
+    until?: str,
+    entity_id?: str,          # v1: match payload.file_path OR subject_key
+    limit?: int = 100,        # cap 500 server-side
+) -> {
+    events: [{
+        event_id: str,
+        event_type: str,
+        payload: dict,        # full write-time payload
+        ts: str,              # event_time ISO-8601 UTC
+        agent_id: str,
+        session_id?: str,
+    }],
+    count: int,
+}
+```
 
-Unblocks: TAP-1997 (dashboard reads from brain), TAP-2000 (`tapps_checklist` queries prior
-outcomes).
+**v1 `entity_id` filter:** `experience_events` stores `created_entity_id` (first entity
+only). For metrics, filter on `payload->>'file_path'` and/or `subject_key` — tapps-mcp
+sets both.
 
-## Capability 2 — entities addressable by deterministic key (not opaque UUID)
+**Profiles:** `full`, `operator`, `reviewer` (same defer_loading pattern as
+`brain_record_event`).
 
-**Problem.** `brain_get_neighbors` takes a JSON array of entity **UUID** strings. tapps-mcp
-wants to address an entity by a stable, derivable key (e.g. a file path), per TAP-1997's
-acceptance `brain_get_neighbors(entity_ids=[<file_id>])`. There is no path→UUID lookup, and
-keys are not deterministic today.
+**Unblocks:** TAP-1997 dashboard read-back, TAP-2000 prior-outcome reads.
 
-**Request.** This is already scoped as **TAP-1949** (deterministic UUIDv5 entity keys) in the
-KG-migration epic TAP-1916. Capability 1 should land alongside or after TAP-1949 so reads can
-be addressed by derived keys.
+**Version:** tapps-brain **>=3.24.0** once shipped. Bump tapps-mcp floor after release.
 
-Unblocks: TAP-1997 per-file score-history criterion.
+## Capability 2 — entity identity (revised; not a P0 blocker for metrics)
 
-## Capability 3 — profile-data read/write surface (for TAP-1998)
+**Reject UUIDv5 entity IDs (TAP-1949 as originally scoped).** Brain already provides
+stable identity via `brain_resolve_entity(entity_type, canonical_name)` — same inputs →
+same UUID, upsert on `(brain_id, entity_type, canonical_name_norm)`.
 
-**Problem.** The brain/`BrainBridge` profile surface is **negotiation-only**
-(`X-Brain-Profile` header, `profile_status()`, `out_of_profile` envelope). There is no
-`get_profile_data` / `set_profile_data` endpoint to store agent-scoped, per-profile learned
-data (TAP-1998 wants to move `domain_weights.yaml` here so weights transfer across projects
-via the profile/federation system).
+**Optional P0.5 (brain):** `EntitySpec` coercion for legacy `type`/`id` shorthands (same
+pattern as existing `key` shorthand).
 
-**Request.** Add a profile-keyed key/value read/write to the brain, e.g.
-`brain_profile_set(profile, key, value_json)` / `brain_profile_get(profile, key)`, scoped to
-the negotiated agent profile and federation-capable (so `hive_propagate` can share weights).
-If a memory-scope/tag mechanism is the intended substitute, document that as the supported
-path instead.
+**Optional P2 (brain):** `entity_refs: [{entity_type, canonical_name}]` on
+`brain_get_neighbors` for ergonomic graph walks.
 
-Unblocks: TAP-1998 (domain-weights migration).
+**tapps-mcp actions (no brain release required):**
 
-## Note for the non-Python consumers (tapps-mcp side, after the above land)
+- Emit `entity_type` / `canonical_name` on all `record_kg_event` call sites
+- Use `brain_resolve_entity` before graph queries when edges are needed
+- Per-file **metrics** history via `brain_query_events`, not `get_neighbors`
 
-Two readers of the local files are **bash hooks**, which cannot call the async brain:
+## Capability 3 — profile KV (P2, TAP-1998)
 
-- TAP-2000: `tapps-user-prompt-submit.sh` reads `.checklist-state.json` to surface the
-  per-turn "open checklist" reminder.
-- TAP-1997: dashboard/report sidecars are read by `tapps-report` summary hooks.
+**Problem.** No `brain_profile_set` / `brain_profile_get` for learned per-profile data
+(domain weights).
 
-When the local writes are removed, those hook features must either be dropped or backed by a
-tapps-mcp-written local cache derived from a brain read (a tapps-mcp-side decision, tracked on
-the respective stories — not a brain requirement).
+**Request (v1, project-scoped — no federation yet):**
+
+```
+brain_profile_set(profile, key, value_json) -> {ok: bool}
+brain_profile_get(profile, key) -> {ok: bool, value_json?: str}
+```
+
+Table: `(project_id, profile_name, data_key) → value_json`.
+
+**Interim workaround (tapps-mcp):** `brain_remember` with key
+`profile:{profile}:domain_weights` — same debt pattern as `metrics:tool_call:*`; remove
+when P2 ships.
+
+## Dependency order
+
+```
+Done (tapps-mcp):    all record_kg_event entity shapes + subject_key (2026-06-09)
+P0 (tapps-brain):  brain_query_events + index + tests  ← waiting here
+Then (tapps-mcp):  wire query_events consumer; drop JSONL + memory_save workaround
+P2 (tapps-brain):  brain_profile_set/get
+P2 (tapps-mcp):    TAP-1998 domain weights
+```
+
+**Critical path for TAP-1997 phase 2 = P0 only.**
+
+## Version floor (tapps-mcp recommendation)
+
+| When | Floor | Rationale |
+|------|-------|-----------|
+| Now | `>=3.22.4,<4` | Resilient side-effect writes; `brain_resolve_entity` |
+| After P0 ships | `>=3.24.0,<4` | `brain_query_events` |
+
+Current pin remains `>=3.18.0,<4` until ADR superseded.
+
+## Note for non-Python consumers
+
+Bash hooks cannot call brain async APIs. TAP-2000 dropped hook reads of
+`.checklist-state.json`. TAP-1997 dashboard hooks need either a tapps-mcp-written local
+cache derived from brain reads, or feature removal — tapps-mcp-side decision, not a brain
+requirement.
+
+## References (tapps-mcp)
+
+- `packages/tapps-core/src/tapps_core/knowledge/kg_keys.py` — `entity_spec()` helper
+- `packages/tapps-core/src/tapps_core/metrics/brain_telemetry.py` — `quality_metric` emit + `TAPPS_METRICS_STORAGE`
+- `packages/tapps-core/src/tapps_core/brain_bridge.py` — `record_kg_event`, `query_events` scaffold
+- Emitters: `server_scoring_tools.py`, `validate_changed.py`, `server.py`, `server_helpers.py`, `server_memory_tools.py`
+- Linear: TAP-1996, TAP-1997, TAP-1998, TAP-2000

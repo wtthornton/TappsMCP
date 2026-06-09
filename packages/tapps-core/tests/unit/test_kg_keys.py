@@ -6,7 +6,14 @@ import uuid
 
 import pytest
 
-from tapps_core.knowledge.kg_keys import KG_NAMESPACE, entity_uuid
+from tapps_core.knowledge.kg_keys import KG_NAMESPACE, entity_spec, entity_uuid
+
+
+def test_entity_spec_shape() -> None:
+    assert entity_spec("file", "/tmp/x.py") == {
+        "entity_type": "file",
+        "canonical_name": "/tmp/x.py",
+    }
 
 
 def test_returns_uuid() -> None:

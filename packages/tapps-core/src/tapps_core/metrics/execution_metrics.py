@@ -88,17 +88,24 @@ class ToolCallMetricsCollector:
 
     def __init__(self, metrics_dir: Path) -> None:
         self._metrics_dir = metrics_dir
-        self._metrics_dir.mkdir(parents=True, exist_ok=True)
+        from tapps_core.metrics.brain_telemetry import metrics_storage_mode
+
+        if metrics_storage_mode() != "brain":
+            self._metrics_dir.mkdir(parents=True, exist_ok=True)
         self._buffer: deque[ToolCallMetric] = deque(maxlen=_BUFFER_SIZE)
         self._write_lock = threading.Lock()
 
     def record_call(self, metric: ToolCallMetric) -> None:
         """Record a tool call metric to buffer and disk."""
+        from tapps_core.metrics.brain_telemetry import (
+            emit_quality_metric_event,
+            metrics_storage_mode,
+        )
+
         with self._write_lock:
             self._buffer.append(metric)
-            self._append_to_file(metric)
-        from tapps_core.metrics.brain_telemetry import emit_quality_metric_event
-
+            if metrics_storage_mode() != "brain":
+                self._append_to_file(metric)
         emit_quality_metric_event(metric)
 
     def record(
@@ -238,7 +245,21 @@ class ToolCallMetricsCollector:
         since: datetime | None = None,
         until: datetime | None = None,
     ) -> list[ToolCallMetric]:
-        """Load metrics from daily JSONL files."""
+        """Load metrics from daily JSONL files (and in-memory buffer in brain mode)."""
+        from tapps_core.metrics.brain_telemetry import metrics_storage_mode
+
+        if metrics_storage_mode() == "brain":
+            with self._write_lock:
+                buffer_metrics = list(self._buffer)
+            filtered = self._apply_filters(buffer_metrics, None, None, None)
+            if since or until:
+                filtered = [
+                    m
+                    for m in filtered
+                    if self._metric_in_time_window(m, since, until)
+                ]
+            return filtered
+
         metrics: list[ToolCallMetric] = []
 
         for f in sorted(self._metrics_dir.glob("tool_calls_*.jsonl")):
@@ -281,6 +302,22 @@ class ToolCallMetricsCollector:
                     pass
 
         return metrics
+
+    @staticmethod
+    def _metric_in_time_window(
+        metric: ToolCallMetric,
+        since: datetime | None,
+        until: datetime | None,
+    ) -> bool:
+        try:
+            ts = datetime.fromisoformat(metric.started_at)
+            if since and ts < since:
+                return False
+            if until and ts > until:
+                return False
+        except (ValueError, TypeError):
+            pass
+        return True
 
     @staticmethod
     def _apply_filters(

@@ -91,9 +91,9 @@ class TestFireSecurityScanEvents:
         mock_bridge.record_kg_event.assert_awaited_once()
         call_kwargs = mock_bridge.record_kg_event.call_args.kwargs
         assert call_kwargs["event_type"] == "security_finding"
-        entity_ids = {e["id"] for e in call_kwargs["entities"]}
-        assert "/project/src/foo.py" in entity_ids
-        assert "bandit:B110" in entity_ids
+        entity_names = {e["canonical_name"] for e in call_kwargs["entities"]}
+        assert "/project/src/foo.py" in entity_names
+        assert "bandit:B110" in entity_names
         assert call_kwargs["payload_data"]["severity"] == "medium"
         assert call_kwargs["payload_data"]["line"] == 42
 
@@ -117,8 +117,8 @@ class TestFireSecurityScanEvents:
         mock_bridge.record_kg_event.assert_awaited_once()
         call_kwargs = mock_bridge.record_kg_event.call_args.kwargs
         assert call_kwargs["event_type"] == "security_finding"
-        entity_ids = {e["id"] for e in call_kwargs["entities"]}
-        assert "secret:api_key" in entity_ids
+        entity_names = {e["canonical_name"] for e in call_kwargs["entities"]}
+        assert "secret:api_key" in entity_names
         assert call_kwargs["payload_data"]["severity"] == "high"
         assert call_kwargs["payload_data"]["line"] == 7
 

@@ -7,6 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **`entity_spec()` KG helper** ([TAP-1997](https://linear.app/tappscodingagents/issue/TAP-1997)) — `tapps_core.knowledge.kg_keys.entity_spec()` returns brain `EntitySpec`-compatible dicts for `record_kg_event`.
+- **Metrics brain telemetry phase 1.5** ([TAP-1997](https://linear.app/tappscodingagents/issue/TAP-1997)) — dual-write `quality_metric` events to brain plus interim `memory_save` under `metrics:tool_call:<call_id>`; `TAPPS_METRICS_STORAGE=local|dual|brain` env (default `dual`); `brain` mode skips local JSONL writes.
+
+### Changed
+
+- **All `record_kg_event` emitters use `entity_spec`** ([TAP-1997](https://linear.app/tappscodingagents/issue/TAP-1997)) — `quality_metric`, `quality_gate_fail`, `validate_completed`, `security_finding`, `checklist_outcome`, hive elevation, and deprecated-tool telemetry now emit `entity_type` / `canonical_name`, set `subject_key` in payloads, and omit malformed string-based edges. Phase 2 (drop JSONL default) remains blocked on tapps-brain `brain_query_events` — see [docs/handoff/BRAIN-wave2-capabilities.md](docs/handoff/BRAIN-wave2-capabilities.md).
+
+### Documentation
+
+- **Brain wave-2 handoff** — revised write-path reality, dependency order, and tapps-mcp progress table ([TAP-1996](https://linear.app/tappscodingagents/issue/TAP-1996)).
+- **Sprint board** — Track A complete; S10 status reflects emit-shape work and brain P0 wait.
+
 ## [3.12.12] - 2026-06-08
 
 ### Added

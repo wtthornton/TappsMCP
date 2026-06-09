@@ -21,7 +21,7 @@ from __future__ import annotations
 
 import uuid
 
-__all__ = ["KEY_SEPARATOR", "KG_NAMESPACE", "entity_uuid"]
+__all__ = ["KEY_SEPARATOR", "KG_NAMESPACE", "entity_spec", "entity_uuid"]
 
 # Immutable namespace root for all KG entity-ID derivation. DO NOT CHANGE —
 # see the module docstring. The stdlib OID namespace is the stable root per
@@ -33,6 +33,16 @@ KG_NAMESPACE: uuid.UUID = uuid.NAMESPACE_OID
 # identifiers or POSIX paths, so this character never appears within a
 # component — keeping the join injective over the valid input domain.
 KEY_SEPARATOR = "|"
+
+
+def entity_spec(entity_type: str, canonical_name: str) -> dict[str, str]:
+    """Build a brain ``EntitySpec`` dict for :meth:`BrainBridge.record_kg_event`.
+
+    Args:
+        entity_type: Closed-vocabulary entity kind (e.g. ``"file"``, ``"tool"``).
+        canonical_name: Stable identity within the type (path, tool name, rule id).
+    """
+    return {"entity_type": entity_type, "canonical_name": canonical_name}
 
 
 def entity_uuid(project_id: str, entity_type: str, canonical_name: str) -> uuid.UUID:

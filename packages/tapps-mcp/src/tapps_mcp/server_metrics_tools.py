@@ -178,6 +178,17 @@ async def tapps_dashboard(
     dashboard = hub.get_dashboard_generator(memory_store=memory_store)
     since = DashboardGenerator._parse_time_range(time_range)
 
+    from tapps_core.metrics.brain_telemetry import (
+        hydrate_execution_metrics_from_brain,
+        metrics_storage_mode,
+    )
+
+    if metrics_storage_mode() == "brain":
+        await hydrate_execution_metrics_from_brain(
+            hub.execution,
+            since=since,
+        )
+
     if output_format == "json":
         data = dashboard.generate_json_dashboard(sections=sections, since=since)
         data["time_range"] = time_range

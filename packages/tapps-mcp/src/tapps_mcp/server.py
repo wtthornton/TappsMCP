@@ -36,6 +36,7 @@ from mcp.types import ToolAnnotations
 
 from tapps_core.common.logging import setup_logging
 from tapps_core.config.settings import load_settings
+from tapps_core.knowledge.kg_keys import entity_spec
 from tapps_mcp import __version__
 from tapps_mcp.common.developer_workflow import (
     DAILY_STEPS,
@@ -709,16 +710,16 @@ def _fire_security_scan_events(
                 await bridge.record_kg_event(  # type: ignore[union-attr]
                     event_type="security_finding",
                     entities=[
-                        {"type": "file", "id": file_path},
-                        {"type": "rule", "id": finding_id},
+                        entity_spec("file", file_path),
+                        entity_spec("rule", finding_id),
                     ],
-                    edges=[
-                        {"src": file_path, "predicate": "has_finding", "dst": finding_id}
-                    ],
+                    edges=None,
                     payload_data={
                         "severity": issue.severity,
                         "line": issue.line,
                         "file": issue.file,
+                        "file_path": file_path,
+                        "subject_key": file_path,
                     },
                 )
             for finding in secret_findings:
@@ -728,15 +729,15 @@ def _fire_security_scan_events(
                 await bridge.record_kg_event(  # type: ignore[union-attr]
                     event_type="security_finding",
                     entities=[
-                        {"type": "file", "id": file_path},
-                        {"type": "rule", "id": finding_id},
+                        entity_spec("file", file_path),
+                        entity_spec("rule", finding_id),
                     ],
-                    edges=[
-                        {"src": file_path, "predicate": "has_finding", "dst": finding_id}
-                    ],
+                    edges=None,
                     payload_data={
                         "severity": finding.severity,
                         "line": finding.line_number,
+                        "file_path": file_path,
+                        "subject_key": file_path,
                         "file": finding.file_path,
                     },
                 )

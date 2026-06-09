@@ -43,7 +43,7 @@ import httpx
 import structlog
 from packaging.version import InvalidVersion, Version
 
-from tapps_core.knowledge.kg_keys import entity_uuid
+from tapps_core.knowledge.kg_keys import entity_spec, entity_uuid
 
 if TYPE_CHECKING:
     from tapps_brain import AgentBrain
@@ -1964,6 +1964,39 @@ class HttpBrainBridge(BrainBridge):
             return {"neighbors": result}
         return {"neighbors": []}
 
+    async def query_events(
+        self,
+        event_type: str,
+        *,
+        since: str | None = None,
+        until: str | None = None,
+        entity_id: str | None = None,
+        limit: int = 100,
+    ) -> list[dict[str, Any]]:
+        """Query recorded KG events by type (TAP-1997 phase-2).
+
+        Returns an empty list when the brain does not expose
+        ``brain_query_events`` yet (see ``docs/handoff/BRAIN-wave2-capabilities.md``).
+        """
+        args: dict[str, Any] = {"event_type": event_type, "limit": limit}
+        if since:
+            args["since"] = since
+        if until:
+            args["until"] = until
+        if entity_id:
+            args["entity_id"] = entity_id
+        try:
+            result = await self._http_mcp_call("brain_query_events", args)
+        except Exception:
+            logger.debug("brain_query_events_unavailable", event_type=event_type, exc_info=True)
+            return []
+        if isinstance(result, list):
+            return result
+        if isinstance(result, dict):
+            events = result.get("events") or result.get("results") or []
+            return events if isinstance(events, list) else []
+        return []
+
     async def explain_connection(
         self,
         subject_id: str,
@@ -2139,7 +2172,7 @@ class HttpBrainBridge(BrainBridge):
 
         payload = {
             "event_type": event_type,
-            "entities": [{"type": "tool", "id": entity_id}],
+            "entities": [entity_spec("tool", entity_id)],
         }
         args = {"payload_json": json.dumps(payload)}
         result = await self._http_mcp_call("brain_record_event", args)
@@ -2161,15 +2194,17 @@ class HttpBrainBridge(BrainBridge):
 
         Args:
             event_type: Brain event type string (e.g. ``"quality_gate_fail"``).
-            entities: List of ``{"type": <str>, "id": <str>}`` dicts — at
-                least one required.
-            edges: Optional list of ``{"src": <id>, "predicate": <str>,
-                "dst": <id>}`` dicts describing relationships between entities.
-            payload_data: Optional dict of scalar metadata stored with the
-                event (scores, thresholds, etc.).
+            entities: List of ``{"entity_type": <str>, "canonical_name": <str>}``
+                dicts (``EntitySpec`` on the brain side). Legacy ``type``/``id``
+                shorthands are not reliably upserted — prefer canonical names.
+            edges: Optional list of edge specs. Brain ``EdgeSpec`` requires
+                pre-resolved entity UUIDs; omit edges when payload alone suffices
+                (e.g. ``quality_metric`` telemetry).
+            payload_data: Optional dict of scalar metadata stored on
+                ``experience_events.payload`` (scores, thresholds, etc.).
 
-        Results are queryable via
-        ``brain_get_neighbors(entity_ids=[<entity_id>], hops=2)``.
+        Payload reads (dashboard, stats) require ``brain_query_events`` once
+        shipped; ``brain_get_neighbors`` returns KG structure only, not payloads.
         """
         import json
 

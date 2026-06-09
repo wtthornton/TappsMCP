@@ -11,6 +11,23 @@ module's docstring.
 
 ## KG entity-key derivation (`kg_keys.py`)
 
+### Event entity specs
+
+`kg_keys.entity_spec(entity_type, canonical_name)` builds the
+`{"entity_type": …, "canonical_name": …}` dict that `BrainBridge.record_kg_event`
+and tapps-brain `brain_record_event` expect (not legacy `type` / `id` shorthands):
+
+```python
+from tapps_core.knowledge.kg_keys import entity_spec
+
+entities = [
+    entity_spec("file", "/project/src/foo.py"),
+    entity_spec("tool", "tapps_score_file"),
+]
+```
+
+### Deterministic entity UUIDs
+
 `kg_keys.entity_uuid(project_id, entity_type, canonical_name)` derives a
 **deterministic** UUIDv5 for a Knowledge-Graph entity:
 

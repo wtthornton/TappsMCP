@@ -188,6 +188,20 @@ Stable agent identity (UUIDv4) persisted to `.tapps-mcp/agent.id` is attached to
 
 **Compaction resilience.** Context compaction is a lossy event — any state that exists only in the context window is silently discarded. The PreCompact hook (Claude Code 2.1.105+) and `memory_index_session` form the defense. See [docs/specs/compaction-resilience.md](specs/compaction-resilience.md) for the full pattern, the `_session_state.json` rehydration surface, and the failure-mode catalogue from Anthropic Issue #54393 (2026-04-28).
 
+## Metrics and brain telemetry (TAP-1997)
+
+Tool-call metrics still default to local JSONL under `.tapps-mcp/metrics/` (`dual` mode). Each recorded call also fires a best-effort `quality_metric` `brain_record_event` with scalar payload (score, duration, gate flags) and entities built via `kg_keys.entity_spec()`.
+
+| `TAPPS_METRICS_STORAGE` | Local JSONL | Brain KG event | Brain memory key |
+|-------------------------|-------------|----------------|------------------|
+| `local` (legacy) | yes | no | no |
+| `dual` (default) | yes | yes | yes (`metrics:tool_call:<call_id>`) |
+| `brain` (opt-in) | no | yes | yes |
+
+Phase 2 — making `brain` the default read path for `tapps_dashboard` / `tapps_stats` — requires tapps-brain `brain_query_events` (P0 in [docs/handoff/BRAIN-wave2-capabilities.md](handoff/BRAIN-wave2-capabilities.md)). Until then, dashboard hydration in `brain` mode uses the interim memory keys.
+
+Other telemetry (`quality_gate_fail`, `validate_completed`, `security_finding`, `checklist_outcome`) uses the same `entity_spec` shape; payloads carry `subject_key` for future event queries — not `brain_get_neighbors`.
+
 ## Platform generation
 
 Split across `pipeline/` modules: hooks, rules, skills, subagents, bundles. AGENTS.md smart-merge preserves custom sections. Three engagement levels (high/medium/low) for all templates.
