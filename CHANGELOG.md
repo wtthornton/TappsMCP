@@ -7,20 +7,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [3.12.13] - 2026-06-09
+
+Wave-2 brain consumer migration (TAP-1996/1997), session-transfer CLI hardening (TAP-3173–3175), and checklist/metrics brain telemetry.
+
 ### Added
 
 - **`entity_spec()` KG helper** ([TAP-1997](https://linear.app/tappscodingagents/issue/TAP-1997)) — `tapps_core.knowledge.kg_keys.entity_spec()` returns brain `EntitySpec`-compatible dicts for `record_kg_event`.
 - **Metrics brain telemetry phase 1.5** ([TAP-1997](https://linear.app/tappscodingagents/issue/TAP-1997)) — dual-write `quality_metric` events to brain plus interim `memory_save` under `metrics:tool_call:<call_id>`; `TAPPS_METRICS_STORAGE=local|dual|brain` env (default `dual`); `brain` mode skips local JSONL writes.
+- **`tapps-mcp session-end` CLI** ([TAP-3174](https://linear.app/tappscodingagents/issue/TAP-3174)) — best-effort mirror of `tapps_session_end` for hosts without MCP wiring; exits 0 on degrade.
+- **Domain weights brain profile sync** ([TAP-1998](https://linear.app/tappscodingagents/issue/TAP-1998) deferred scope) — `DomainWeightStore` reads/writes via `brain_profile_get`/`set` when brain health is OK; YAML remains local fallback.
 
 ### Changed
 
 - **Metrics brain telemetry phase 2** ([TAP-1997](https://linear.app/tappscodingagents/issue/TAP-1997)) — `load_tool_call_metrics_from_brain()` reads `brain_query_events` payloads (nested `payload.payload` envelope); emit path drops interim `memory_save`; `tapps_stats` hydrates from brain in `brain` mode; tapps-brain floor raised to **3.24.0** ([ADR-0013](docs/adr/0013-pin-tapps-brain-version-floor-at-3240.md)).
 - **`brain_record_event` HTTP args (brain 3.24.0)** — `record_kg_event` / `record_event` now pass top-level `event_type` alongside `payload_json` (required by brain 3.24.0 schema).
 - **All `record_kg_event` emitters use `entity_spec`** ([TAP-1997](https://linear.app/tappscodingagents/issue/TAP-1997)) — `quality_metric`, `quality_gate_fail`, `validate_completed`, `security_finding`, `checklist_outcome`, hive elevation, and deprecated-tool telemetry now emit `entity_type` / `canonical_name`, set `subject_key` in payloads, and omit malformed string-based edges.
+- **CLI `memory save`/`get` via BrainBridge** ([TAP-3173](https://linear.app/tappscodingagents/issue/TAP-3173)) — HTTP-only brain deployments no longer require in-process `MemoryStore` / `TAPPS_BRAIN_DATABASE_URL`.
+- **Handoff/continue skills** ([TAP-3174](https://linear.app/tappscodingagents/issue/TAP-3174), [TAP-3175](https://linear.app/tappscodingagents/issue/TAP-3175)) — real UTC timestamps (`date -u`), optional git HEAD line, unified MCP → CLI HTTP → skip fallback table across Claude and Cursor hosts.
 
 ### Documentation
 
 - **Consumer repo brain wiring guide** — [docs/operations/CONSUMER-REPO-BRAIN-WIRING.md](docs/operations/CONSUMER-REPO-BRAIN-WIRING.md): bridge-only checklist, env propagation (direnv + GUI-launch), doctor/session verification, remediation table; cross-linked from TAPPS-BRAIN-LOCAL-SETUP and MEMORY_REFERENCE.
+- **TAP-1997/1998 consumer migration guide** — [docs/handoff/TAPPS-MCP-CONSUMER-MIGRATION-1997-1998.md](docs/handoff/TAPPS-MCP-CONSUMER-MIGRATION-1997-1998.md).
 - **Docs sync** — README, INIT_AND_UPGRADE_FEATURE_LIST, AGENTS.md templates, tapps-init skills, ARCHITECTURE, CLAUDE.md, and repo-workflow updated for `mcp_config=true` default, bridge-only MCP strip, and brain version floor 3.24.0 (ADR-0013).
 - **Brain wave-2 handoff** — revised write-path reality, dependency order, and tapps-mcp progress table ([TAP-1996](https://linear.app/tappscodingagents/issue/TAP-1996)).
 - **Sprint board** — Track A complete; S10 status reflects emit-shape work and brain P0 wait.
@@ -32,6 +41,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **`tapps_init` / `bootstrap_pipeline` bridge-only** — strip direct `tapps-brain` MCP server entries on init (upgrade already did via TAP-1888).
 - **`tapps_init` MCP config default** — `mcp_config` now defaults to `True`; generation strips stray brain entries and includes docs-mcp when bootstrap detects it (`mcp_config=False` to opt out).
 - **`tapps doctor` lint** — rename `_ProfileProbeFallback` → `_ProfileProbeFallbackError`; fix bandit false positive on bearer token variable.
+- **Cursor MCP config** — prefer globally installed `tapps-mcp`/`docsmcp` CLIs over repo `.venv` paths.
 
 ## [3.12.12] - 2026-06-08
 
