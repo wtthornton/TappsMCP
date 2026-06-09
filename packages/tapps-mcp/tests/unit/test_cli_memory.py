@@ -179,7 +179,7 @@ class TestMemorySave:
             )
         assert result.exit_code == 2
         assert "brain_http_url" in result.output
-        assert "TAPPS_BRAIN_DATABASE_URL" in result.output
+        assert "TAPPS_MCP_MEMORY_BRAIN_AUTH_TOKEN" in result.output
 
 
 class TestMemoryGet:

@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [3.12.15] - 2026-06-09
+
+Patch: metrics default to brain-backed storage; CLI shell auth documentation for handoff workflows.
+
+### Changed
+
+- **Metrics storage default** ([TAP-3199](https://linear.app/tappscodingagents/issue/TAP-3199)) — unset `TAPPS_METRICS_STORAGE` now resolves to `brain` when the bridge passes `health_check`, else `dual` (JSONL write-fallback). Explicit `local`/`dual`/`brain` env values unchanged.
+
+### Documentation
+
+- **CLI brain auth from shell** ([TAP-3200](https://linear.app/tappscodingagents/issue/TAP-3200)) — [CONSUMER-REPO-BRAIN-WIRING.md](docs/operations/CONSUMER-REPO-BRAIN-WIRING.md) § CLI from shell; handoff skill CLI rows document `TAPPS_MCP_MEMORY_BRAIN_AUTH_TOKEN`; doctor remediation and CLI error message reference shell auth propagation.
+
 ## [3.12.14] - 2026-06-09
 
 Hotfix: CLI `memory save`/`get` handoff fallback failed on HTTP brain when the bridge used the `coder` profile (hides `memory_save`).

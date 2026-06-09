@@ -686,8 +686,10 @@ def _get_project_root() -> Path:
 def _brain_bridge_unavailable_message() -> str:
     return (
         "BrainBridge unavailable — configure memory.brain_http_url / "
-        "TAPPS_MCP_MEMORY_BRAIN_HTTP_URL or TAPPS_BRAIN_DATABASE_URL "
-        "in .tapps-mcp.yaml (or environment) before using memory save/get."
+        "TAPPS_MCP_MEMORY_BRAIN_HTTP_URL (and TAPPS_MCP_MEMORY_BRAIN_AUTH_TOKEN "
+        "for HTTP auth) or TAPPS_BRAIN_DATABASE_URL in .tapps-mcp.yaml "
+        "(or environment) before using memory save/get. "
+        "See docs/operations/CONSUMER-REPO-BRAIN-WIRING.md § CLI from shell."
     )
 
 

@@ -1794,7 +1794,10 @@ def check_brain_http_auth(root: Path) -> CheckResult:
         missing.append("brain_auth_token")
         hints.append(
             "Set TAPPS_MCP_MEMORY_BRAIN_AUTH_TOKEN or memory.brain_auth_token in "
-            ".tapps-mcp.yaml (same value as TAPPS_BRAIN_AUTH_TOKEN is fine)."
+            ".tapps-mcp.yaml (same value as TAPPS_BRAIN_AUTH_TOKEN is fine). "
+            "Shell CLI (`tapps-mcp memory save/get`, `session-end`) reads this "
+            "env directly — export it in .env/direnv even when MCP expands "
+            "${TAPPS_BRAIN_AUTH_TOKEN} at IDE launch."
         )
     if not project_id_present:
         missing.append("brain_project_id")

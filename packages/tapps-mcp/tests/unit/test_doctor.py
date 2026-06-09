@@ -1849,6 +1849,20 @@ class TestBrainAuthTokenForDoctor:
         assert result.ok is True
         assert "bearer token" in result.message.lower()
 
+    def test_http_auth_cli_hint_when_token_missing(self, tmp_path, monkeypatch) -> None:
+        from tapps_mcp.distribution.doctor import check_brain_http_auth
+
+        monkeypatch.setenv("TAPPS_MCP_MEMORY_BRAIN_HTTP_URL", "http://brain:8080")
+        monkeypatch.delenv("TAPPS_MCP_MEMORY_BRAIN_AUTH_TOKEN", raising=False)
+        monkeypatch.delenv("TAPPS_BRAIN_AUTH_TOKEN", raising=False)
+        (tmp_path / ".tapps-mcp.yaml").write_text(
+            "memory:\n  brain_project_id: myproj\n",
+            encoding="utf-8",
+        )
+        result = check_brain_http_auth(tmp_path)
+        assert result.ok is False
+        assert "memory save/get" in result.detail
+
 
 class TestBrainVersionFloor:
     """Doctor enforces the hard brain version floor."""

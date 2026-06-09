@@ -73,7 +73,9 @@ class TestToolCallMetricsCollector:
         assert recent[0].tool_name == "tapps_score_file"
         assert recent[0].score == 80.0
 
-    def test_record_creates_daily_file(self, collector, metrics_dir):
+    def test_record_creates_daily_file(self, metrics_dir, monkeypatch):
+        monkeypatch.setenv("TAPPS_METRICS_STORAGE", "local")
+        collector = ToolCallMetricsCollector(metrics_dir)
         now = datetime.now(tz=UTC)
         collector.record(
             tool_name="test_tool",
@@ -313,3 +315,45 @@ class TestBrainTelemetryDualWrite:
         ):
             collector.record("tapps_score_file", now, now + timedelta(milliseconds=5), score=90.0)
         assert list(metrics_dir.glob("tool_calls_*.jsonl")) == []
+
+    def test_default_mode_brain_when_bridge_healthy(self, monkeypatch):
+        monkeypatch.delenv("TAPPS_METRICS_STORAGE", raising=False)
+        from tapps_core.metrics.brain_telemetry import metrics_storage_mode
+
+        with patch(
+            "tapps_core.metrics.brain_telemetry.brain_metrics_bridge_available",
+            return_value=True,
+        ):
+            assert metrics_storage_mode() == "brain"
+
+    def test_default_mode_dual_when_bridge_unhealthy(self, monkeypatch):
+        monkeypatch.delenv("TAPPS_METRICS_STORAGE", raising=False)
+        from tapps_core.metrics.brain_telemetry import metrics_storage_mode
+
+        with patch(
+            "tapps_core.metrics.brain_telemetry.brain_metrics_bridge_available",
+            return_value=False,
+        ):
+            assert metrics_storage_mode() == "dual"
+
+    def test_default_brain_skips_disk_write(self, metrics_dir, monkeypatch):
+        monkeypatch.delenv("TAPPS_METRICS_STORAGE", raising=False)
+        collector = ToolCallMetricsCollector(metrics_dir)
+        now = datetime.now(tz=UTC)
+        with patch(
+            "tapps_core.metrics.brain_telemetry.brain_metrics_bridge_available",
+            return_value=True,
+        ):
+            collector.record(
+                "tapps_score_file",
+                now,
+                now + timedelta(milliseconds=5),
+                score=90.0,
+            )
+        assert list(metrics_dir.glob("tool_calls_*.jsonl")) == []
+
+    def test_invalid_metrics_storage_env_falls_back_to_dual(self, monkeypatch):
+        monkeypatch.setenv("TAPPS_METRICS_STORAGE", "bogus")
+        from tapps_core.metrics.brain_telemetry import metrics_storage_mode
+
+        assert metrics_storage_mode() == "dual"

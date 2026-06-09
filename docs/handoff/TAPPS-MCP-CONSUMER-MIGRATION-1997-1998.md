@@ -53,7 +53,7 @@ Writes already work via `brain_record_event` with `EntitySpec` accepting `{type,
 | Phase 1.5 — dual-write + interim `memory_save` read fallback | **Done** (fallback still in `load_tool_call_metrics_from_brain`) |
 | `brain_bridge.query_events()` consumer | **Done** |
 | `tapps_dashboard` / `tapps_stats` brain hydrate | **Done** when `TAPPS_METRICS_STORAGE=brain` |
-| Default read path (no JSONL on happy path) | **Done** — `dual`/`brain` read `brain_query_events` when `health_check.ok`; JSONL write-fallback in `dual` only |
+| Default read path (no JSONL on happy path) | **Done** — unset env → `brain` when bridge healthy, else `dual`; explicit `dual`/`brain`/`local` override |
 | Per-file `entity_id` filter on reads | **Done** — `entity_id` param on `load_tool_call_metrics_from_brain` / `_load_from_disk` |
 | Checklist / other JSONL consumers | **Not audited** |
 

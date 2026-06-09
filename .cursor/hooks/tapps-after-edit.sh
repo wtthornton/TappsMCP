@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# tapps-mcp-hook-version: 3.12.13
+# tapps-mcp-hook-version: 3.12.14
 # TappsMCP afterFileEdit hook (fire-and-forget)
 # Reminds the agent to check quality after file edits.
 INPUT=$(cat)

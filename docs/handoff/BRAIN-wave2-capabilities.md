@@ -33,9 +33,10 @@ payloads, and omit malformed string-based edges. Event types:
 |-------|--------|-------|
 | 1 — KG event + payload write | Done | Phase 1 + entity shapes on all emitters (2026-06-09) |
 | 1.5 — `memory_save` workaround | Done | Interim read path; **remove after P0** |
-| 2 — drop local JSONL by default | **Done** (tapps-mcp) | `dual`/`brain` modes read `brain_query_events` when brain health is OK; JSONL is write-fallback in `dual` only. `local` unchanged. See [TAPPS-MCP-CONSUMER-MIGRATION-1997-1998.md](TAPPS-MCP-CONSUMER-MIGRATION-1997-1998.md) Task A. |
+| 2 — drop local JSONL by default | **Done** (tapps-mcp) | Unset env → `brain` when bridge healthy; `dual` JSONL fallback when brain down. Explicit `local`/`dual`/`brain` override. See [TAPPS-MCP-CONSUMER-MIGRATION-1997-1998.md](TAPPS-MCP-CONSUMER-MIGRATION-1997-1998.md) Task A. |
 
-Set `TAPPS_METRICS_STORAGE=brain` to skip local JSONL writes and use brain reads (opt-in).
+Unset `TAPPS_METRICS_STORAGE` (default since TAP-3199) skips local JSONL writes
+when the brain bridge is healthy. Set `dual` or `local` to opt out.
 Requires brain auth + `brain_query_events` (brain >=3.24.0).
 
 ## Why

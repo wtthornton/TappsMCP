@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# tapps-mcp-hook-version: 3.12.13
+# tapps-mcp-hook-version: 3.12.14
 # TappsMCP PreCompact hook (TAP-2017)
 # Indexes pre-compaction session state in brain for post-compact rehydration.
 # Set TAPPS_MCP_COMPACTION_REHYDRATE=false to disable.

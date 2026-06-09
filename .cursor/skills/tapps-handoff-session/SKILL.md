@@ -48,12 +48,12 @@ End the session with a durable handoff the next chat loads via `tapps-continue-s
    | Priority | When | How |
    |----------|------|-----|
    | 1 (preferred MCP) | `tapps_memory` MCP available | `tapps_memory(action="save", key="session-handoff", tier="context", tags="handoff,cross-session", value="<plain-text bullets>")` |
-   | 2 (CLI HTTP) | MCP unavailable, brain HTTP configured | `uv run tapps-mcp memory save --key session-handoff --tier context --tags handoff,cross-session --value "<plain-text bullets>"` |
+   | 2 (CLI HTTP) | MCP unavailable; `TAPPS_MCP_MEMORY_BRAIN_HTTP_URL` + `TAPPS_MCP_MEMORY_BRAIN_AUTH_TOKEN` in shell | `uv run tapps-mcp memory save --key session-handoff --tier context --tags handoff,cross-session --value "<plain-text bullets>"` |
    | 3 (skip) | Brain offline | Skip silently — the markdown file is enough |
 
 4. **Close lifecycle.** Best-effort session closure:
    - **Preferred:** `tapps_session_end()`
-   - **CLI fallback** (MCP unavailable): `uv run tapps-mcp session-end`
+   - **CLI fallback** (MCP unavailable): `uv run tapps-mcp session-end` (requires same shell auth as step 3 row 2)
    Do not fail the handoff if either degrades.
 
 5. **Report.** `Handoff: .tapps-mcp/session-handoff.md. Linear P0: <id|none>. session_end: ok|skipped. Next: tapps-continue-session`

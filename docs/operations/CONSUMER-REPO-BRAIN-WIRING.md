@@ -114,6 +114,12 @@ TAPPS_MCP_MEMORY_BRAIN_PROJECT_ID=<project_id>
 Enable direnv (`echo 'dotenv' > .envrc && direnv allow .`) so MCP subprocesses
 and terminal `tapps-mcp doctor` inherit the token.
 
+Minimal `.envrc` (loads `.env` above):
+
+```bash
+dotenv
+```
+
 **GUI-launched IDEs** (Cursor/VS Code from desktop dock) do not source
 `~/.bashrc` or direnv automatically. If `${TAPPS_BRAIN_AUTH_TOKEN}` expands
 empty in MCP config, use `~/.config/environment.d/` (Linux) or `launchctl
@@ -160,7 +166,36 @@ when the host expands `${...}`, but CLI `tapps-mcp doctor` reads
 actions including hive, KG, feedback). Do not downgrade to `coder` unless
 intentionally narrowing scope ([ADR-0012](../adr/0012-brain-capability-profile-per-consumer-role.md)).
 
-### F. Verification (all must pass)
+### F. CLI from shell (memory save/get, session-end)
+
+MCP subprocesses inherit brain auth from the tapps-mcp **env block** in
+`.mcp.json` / `.cursor/mcp.json`. Shell CLI commands do **not** — they read
+environment variables at invocation time.
+
+**Required for HTTP brain from a terminal** (same values as section C):
+
+| Variable | Purpose |
+|----------|---------|
+| `TAPPS_MCP_MEMORY_BRAIN_HTTP_URL` | Brain HTTP endpoint |
+| `TAPPS_MCP_MEMORY_BRAIN_AUTH_TOKEN` | Bearer token (401 without it) |
+| `TAPPS_MCP_MEMORY_BRAIN_PROJECT_ID` | Registered project slug |
+
+`TAPPS_BRAIN_AUTH_TOKEN` alone is **not** enough for CLI unless you also export
+`TAPPS_MCP_MEMORY_BRAIN_AUTH_TOKEN` (doctor accepts either name; CLI bridge
+reads the `TAPPS_MCP_*` names first).
+
+```bash
+cd <consumer-repo>
+direnv reload 2>/dev/null || true
+uv run tapps-mcp memory save --key wiring-smoke --tier context --value "CLI smoke"
+uv run tapps-mcp memory get --key wiring-smoke
+uv run tapps-mcp session-end   # best-effort; exits 0 on degrade
+```
+
+If `memory save/get` returns 401, export `TAPPS_MCP_MEMORY_BRAIN_AUTH_TOKEN`
+in the shell (section C) and re-run `tapps-mcp doctor --quick`.
+
+### G. Verification (all must pass)
 
 #### 1. CLI doctor
 
@@ -205,7 +240,7 @@ Second call must return the saved entry.
 Optional HTTP smoke (from tapps-brain repo, same token): `make brain-smoke-live`
 against the live stack.
 
-### G. Document in repo (minimal)
+### H. Document in repo (minimal)
 
 `tapps_init` already populates `AGENTS.md` with `tapps_memory` guidance. If you
 add a project-specific block to `CLAUDE.md` or `.cursor/rules/`, keep it short:
@@ -221,6 +256,7 @@ add a project-specific block to `CLAUDE.md` or `.cursor/rules/`, keep it short:
 | Symptom | Fix |
 |---------|-----|
 | `brain_auth_failed` | `.env` token + direnv or `environment.d`; restart Cursor/Claude; check `TAPPS_MCP_MEMORY_BRAIN_AUTH_TOKEN` in MCP env |
+| CLI `memory save/get` 401 | Export `TAPPS_MCP_MEMORY_BRAIN_AUTH_TOKEN` in shell (not just MCP `${TAPPS_BRAIN_AUTH_TOKEN}`); `direnv reload`; see § F |
 | `brain_project_id_missing` | Set in `.tapps-mcp.yaml` or `TAPPS_MCP_MEMORY_BRAIN_PROJECT_ID` |
 | `403` / `out_of_profile` | Raise `TAPPS_BRAIN_PROFILE` to `full` (or `suggested_profile` from error) |
 | version below floor | Upgrade brain image; confirm `brain_bridge_health.details.brain_version` ≥ `3.24.0` |
