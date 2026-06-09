@@ -885,13 +885,18 @@ async def tapps_init(
     llm_engagement_level: str | None = None,
     scaffold_experts: bool = False,
     include_karpathy: bool = True,
-    mcp_config: bool = False,
+    mcp_config: bool = True,
     output_mode: str = "auto",
     ctx: Context[Any, Any, Any] | None = None,
 ) -> dict[str, Any]:
     """Bootstraps the TAPPS pipeline into a fresh project: writes
     ``AGENTS.md``, ``TECH_STACK.md``, ``.tapps-mcp.yaml``, platform rules
     (``.claude/`` or ``.cursor/``), git hooks, agents, and skills.
+
+    By default also writes project-scoped MCP config (``mcp_config=True``):
+    merges a ``tapps-mcp`` server entry, strips direct ``tapps-brain`` MCP
+    keys (bridge-only, TAP-1888), and includes docs-mcp when bootstrap
+    detects it. Pass ``mcp_config=False`` to scaffold pipeline files only.
 
     Call this when adding tapps-mcp to a new repo, or to add a previously
     disabled component (e.g., switching ``agent_teams`` on). For an

@@ -20,8 +20,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Documentation
 
+- **Consumer repo brain wiring guide** — [docs/operations/CONSUMER-REPO-BRAIN-WIRING.md](docs/operations/CONSUMER-REPO-BRAIN-WIRING.md): bridge-only checklist, env propagation (direnv + GUI-launch), doctor/session verification, remediation table; cross-linked from TAPPS-BRAIN-LOCAL-SETUP and MEMORY_REFERENCE.
+- **Docs sync** — README, INIT_AND_UPGRADE_FEATURE_LIST, AGENTS.md templates, tapps-init skills, ARCHITECTURE, CLAUDE.md, and repo-workflow updated for `mcp_config=true` default, bridge-only MCP strip, and brain version floor 3.24.0 (ADR-0013).
 - **Brain wave-2 handoff** — revised write-path reality, dependency order, and tapps-mcp progress table ([TAP-1996](https://linear.app/tappscodingagents/issue/TAP-1996)).
 - **Sprint board** — Track A complete; S10 status reflects emit-shape work and brain P0 wait.
+
+### Fixed
+
+- **`tapps_init` project slug** — `_derive_brain_project_id` now uses `_slugify_project_root` so MCP env `TAPPS_MCP_MEMORY_BRAIN_PROJECT_ID` matches runtime `X-Project-Id` (e.g. `foo.bar` → `foo-bar`; generic dirs omitted).
+- **`tapps doctor` brain probes** — HTTP brain checks read `memory.brain_http_url` from `.tapps-mcp.yaml` when `TAPPS_MCP_MEMORY_BRAIN_HTTP_URL` is unset in the shell; accept `TAPPS_BRAIN_AUTH_TOKEN` for CLI direnv workflows; new `tapps-brain version floor` check enforces the 3.24.0 minimum.
+- **`tapps_init` / `bootstrap_pipeline` bridge-only** — strip direct `tapps-brain` MCP server entries on init (upgrade already did via TAP-1888).
+- **`tapps_init` MCP config default** — `mcp_config` now defaults to `True`; generation strips stray brain entries and includes docs-mcp when bootstrap detects it (`mcp_config=False` to opt out).
+- **`tapps doctor` lint** — rename `_ProfileProbeFallback` → `_ProfileProbeFallbackError`; fix bandit false positive on bearer token variable.
 
 ## [3.12.12] - 2026-06-08
 

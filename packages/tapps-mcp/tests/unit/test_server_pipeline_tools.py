@@ -728,10 +728,36 @@ class TestTappsInitMcpConfig:
     @pytest.mark.asyncio
     @patch("tapps_mcp.server_pipeline_tools.load_settings")
     @patch("tapps_mcp.pipeline.init.bootstrap_pipeline")
-    async def test_mcp_config_false_by_default(
+    async def test_mcp_config_true_by_default(
         self, mock_bootstrap: MagicMock, mock_settings: MagicMock, tmp_path: Path
     ) -> None:
-        """Default mcp_config=False does not write MCP config."""
+        """Default mcp_config=True writes project-scoped MCP config."""
+        from tapps_mcp.server_pipeline_tools import tapps_init
+
+        mock_settings.return_value = MagicMock(
+            project_root=tmp_path,
+            memory=MagicMock(enabled=False),
+        )
+        mock_bootstrap.return_value = {"errors": [], "created": []}
+
+        with (
+            patch("tapps_mcp.distribution.doctor.strip_brain_mcp_entries") as mock_strip,
+            patch("tapps_mcp.distribution.setup_generator._generate_config") as mock_gen,
+        ):
+            mock_gen.return_value = True
+            result = await tapps_init(dry_run=False)
+            mock_strip.assert_called_once_with(tmp_path)
+            mock_gen.assert_called_once()
+            assert result["data"]["mcp_config_written"] is True
+            assert result["data"]["brain_mcp_stripped"] is True
+
+    @pytest.mark.asyncio
+    @patch("tapps_mcp.server_pipeline_tools.load_settings")
+    @patch("tapps_mcp.pipeline.init.bootstrap_pipeline")
+    async def test_mcp_config_false_skips_write(
+        self, mock_bootstrap: MagicMock, mock_settings: MagicMock, tmp_path: Path
+    ) -> None:
+        """Explicit mcp_config=False does not write MCP config."""
         from tapps_mcp.server_pipeline_tools import tapps_init
 
         mock_settings.return_value = MagicMock(
@@ -741,7 +767,7 @@ class TestTappsInitMcpConfig:
         mock_bootstrap.return_value = {"errors": [], "created": []}
 
         with patch("tapps_mcp.distribution.setup_generator._generate_config") as mock_gen:
-            result = await tapps_init(dry_run=False)
+            result = await tapps_init(dry_run=False, mcp_config=False)
             mock_gen.assert_not_called()
             assert "mcp_config_written" not in result.get("data", {})
 
@@ -760,14 +786,46 @@ class TestTappsInitMcpConfig:
         )
         mock_bootstrap.return_value = {"errors": [], "created": []}
 
-        with patch("tapps_mcp.distribution.setup_generator._generate_config") as mock_gen:
+        with (
+            patch("tapps_mcp.distribution.doctor.strip_brain_mcp_entries"),
+            patch("tapps_mcp.distribution.setup_generator._generate_config") as mock_gen,
+        ):
             mock_gen.return_value = True
             result = await tapps_init(mcp_config=True)
             mock_gen.assert_called_once()
             call_kwargs = mock_gen.call_args
             assert call_kwargs[1]["scope"] == "project"
+            assert call_kwargs[1]["with_docs_mcp"] is False
             assert result["data"]["mcp_config_written"] is True
             assert result["data"]["mcp_config_scope"] == "project"
+
+    @pytest.mark.asyncio
+    @patch("tapps_mcp.server_pipeline_tools.load_settings")
+    @patch("tapps_mcp.pipeline.init.bootstrap_pipeline")
+    async def test_mcp_config_includes_docs_mcp_when_detected(
+        self, mock_bootstrap: MagicMock, mock_settings: MagicMock, tmp_path: Path
+    ) -> None:
+        """Bootstrap docsmcp_detected=True passes with_docs_mcp to _generate_config."""
+        from tapps_mcp.server_pipeline_tools import tapps_init
+
+        mock_settings.return_value = MagicMock(
+            project_root=tmp_path,
+            memory=MagicMock(enabled=False),
+        )
+        mock_bootstrap.return_value = {
+            "errors": [],
+            "created": [],
+            "docsmcp_detected": True,
+        }
+
+        with (
+            patch("tapps_mcp.distribution.doctor.strip_brain_mcp_entries"),
+            patch("tapps_mcp.distribution.setup_generator._generate_config") as mock_gen,
+        ):
+            mock_gen.return_value = True
+            result = await tapps_init(mcp_config=True)
+            assert mock_gen.call_args[1]["with_docs_mcp"] is True
+            assert result["data"]["mcp_config_with_docs_mcp"] is True
 
     @pytest.mark.asyncio
     @patch("tapps_mcp.server_pipeline_tools.load_settings")

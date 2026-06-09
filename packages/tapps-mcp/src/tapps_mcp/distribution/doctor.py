@@ -261,6 +261,68 @@ _BRAIN_MCP_CONFIG_PATHS: tuple[tuple[str, str], ...] = (
 _ADR_0001_REF = "docs/adr/0001-in-process-agentbrain-via-brainbridge.md"
 
 
+def _brain_http_url_for_checks(project_root: Path) -> str:
+    """Resolve brain HTTP URL for doctor checks: env first, then ``.tapps-mcp.yaml``.
+
+    MCP subprocesses receive ``TAPPS_MCP_MEMORY_BRAIN_HTTP_URL`` from ``.mcp.json``.
+    CLI ``tapps-mcp doctor`` should still exercise brain probes when the URL is
+    configured only under ``memory.brain_http_url`` in project yaml.
+    """
+    import os
+
+    url = os.environ.get("TAPPS_MCP_MEMORY_BRAIN_HTTP_URL", "").strip()
+    if url:
+        return url
+    try:
+        from tapps_core.config.settings import load_settings
+
+        settings = load_settings(project_root=project_root)
+        raw = getattr(settings.memory, "brain_http_url", "")
+        return str(raw or "").strip()
+    except Exception:
+        return ""
+
+
+def _is_unsubstituted_placeholder(value: str) -> bool:
+    """True when *value* is an unresolved ``${VAR}`` MCP-config placeholder."""
+    stripped = value.strip()
+    return stripped.startswith("${") and stripped.endswith("}")
+
+
+def _resolve_brain_auth_token(settings: Any) -> str | None:
+    """Resolve the client bearer token for doctor brain probes.
+
+    Precedence: ``settings.memory.brain_auth_token``, then
+    ``TAPPS_MCP_MEMORY_BRAIN_AUTH_TOKEN``, then ``TAPPS_BRAIN_AUTH_TOKEN``
+    (the shell export name ``tapps_init`` documents for ``.mcp.json``
+    ``${...}`` substitution). Literal ``${...}`` placeholders count as
+    missing.
+    """
+    import os
+
+    secret = getattr(getattr(settings, "memory", None), "brain_auth_token", None)
+    if secret is not None:
+        val = secret.get_secret_value().strip()
+        if val and not _is_unsubstituted_placeholder(val):
+            return val
+    for key in ("TAPPS_MCP_MEMORY_BRAIN_AUTH_TOKEN", "TAPPS_BRAIN_AUTH_TOKEN"):
+        raw = os.environ.get(key, "").strip()
+        if raw and not _is_unsubstituted_placeholder(raw):
+            return raw
+    return None
+
+
+def _doctor_brain_headers(settings: Any) -> dict[str, str]:
+    """Build brain HTTP headers for doctor probes with env token fallback."""
+    from tapps_core.brain_auth import build_brain_headers
+
+    headers = build_brain_headers(settings)
+    bearer = _resolve_brain_auth_token(settings)
+    if bearer and "Authorization" not in headers:
+        headers = {**headers, "Authorization": f"Bearer {bearer}"}
+    return headers
+
+
 def _brain_mcp_offenses(project_root: Path) -> list[str]:
     """Return human-readable offenses for direct tapps-brain MCP server entries."""
     offenses: list[str] = []
@@ -1646,12 +1708,11 @@ def _run_auth_probe(http_url: str, settings: Any) -> dict[str, Any] | None:
     ``None`` when the probe cannot run.
     """
     try:
-        from tapps_core.brain_auth import build_brain_headers
         from tapps_core.brain_bridge import HttpBrainBridge
     except Exception:
         return None
     try:
-        headers = build_brain_headers(settings)
+        headers = _doctor_brain_headers(settings)
         bridge = HttpBrainBridge(http_url, headers)
         result = bridge.auth_probe()
     except Exception:
@@ -1669,25 +1730,23 @@ def check_brain_http_auth(root: Path) -> CheckResult:
     401 or 403 — but ``memory_status.degraded`` looked OK until we fixed it
     because the old probe only hit ``/health`` (unauthenticated).
 
-    A common mistake is setting ``TAPPS_BRAIN_AUTH_TOKEN`` (tapps-brain's
-    server-side token env) instead of ``TAPPS_MCP_MEMORY_BRAIN_AUTH_TOKEN``
-    (the client-side token tapps-mcp reads).
+    A common mistake is exporting ``TAPPS_BRAIN_AUTH_TOKEN`` in the shell but
+    not mapping it to ``TAPPS_MCP_MEMORY_BRAIN_AUTH_TOKEN`` for CLI doctor
+    (MCP hosts expand ``${TAPPS_BRAIN_AUTH_TOKEN}`` in ``.mcp.json`` at launch).
     """
-    import os
-
-    http_url = os.environ.get("TAPPS_MCP_MEMORY_BRAIN_HTTP_URL", "").strip()
+    http_url = _brain_http_url_for_checks(root)
     if not http_url:
         return CheckResult(
             "tapps-brain HTTP auth",
             True,
-            "Not in HTTP mode (TAPPS_MCP_MEMORY_BRAIN_HTTP_URL unset)",
+            "Not in HTTP mode (brain_http_url unset in env and .tapps-mcp.yaml)",
         )
 
     try:
         from tapps_core.config.settings import load_settings
 
         settings = load_settings(project_root=root)
-        token_present = settings.memory.brain_auth_token is not None
+        token_present = _resolve_brain_auth_token(settings) is not None
         project_id_present = bool(settings.memory.brain_project_id)
     except Exception as exc:
         return CheckResult(
@@ -1733,17 +1792,10 @@ def check_brain_http_auth(root: Path) -> CheckResult:
     hints: list[str] = []
     if not token_present:
         missing.append("brain_auth_token")
-        wrong = os.environ.get("TAPPS_BRAIN_AUTH_TOKEN", "")
-        if wrong:
-            hints.append(
-                "Detected TAPPS_BRAIN_AUTH_TOKEN in env — that is tapps-brain's "
-                "server-side token. The client reads TAPPS_MCP_MEMORY_BRAIN_AUTH_TOKEN."
-            )
-        else:
-            hints.append(
-                "Set TAPPS_MCP_MEMORY_BRAIN_AUTH_TOKEN (client bearer token for "
-                "authenticated tapps-brain HTTP calls)."
-            )
+        hints.append(
+            "Set TAPPS_MCP_MEMORY_BRAIN_AUTH_TOKEN or memory.brain_auth_token in "
+            ".tapps-mcp.yaml (same value as TAPPS_BRAIN_AUTH_TOKEN is fine)."
+        )
     if not project_id_present:
         missing.append("brain_project_id")
         hints.append(
@@ -1789,11 +1841,11 @@ def _fetch_exposed_tools(
     """
     try:
         return _fetch_exposed_tools_rest(http_url, headers, httpx_mod)
-    except _ProfileProbeFallback:
+    except _ProfileProbeFallbackError:
         return _fetch_exposed_tools_jsonrpc(http_url, headers, httpx_mod, mcp_accept_headers)
 
 
-class _ProfileProbeFallback(Exception):
+class _ProfileProbeFallbackError(Exception):
     """Internal signal that the REST path is unavailable; try JSON-RPC."""
 
 
@@ -1804,7 +1856,7 @@ def _fetch_exposed_tools_rest(
 
     Sends only ``X-Brain-Profile`` and ``If-None-Match`` — the REST endpoint
     is unauthenticated and Origin-exempt (TAP-1843), so we deliberately do
-    NOT forward the bearer token here. Raises :class:`_ProfileProbeFallback`
+    NOT forward the bearer token here. Raises :class:`_ProfileProbeFallbackError`
     when the endpoint isn't available (404 ⇒ pre-TAP-1843 brain) so the
     caller can switch to the JSON-RPC handshake.
     """
@@ -1824,11 +1876,11 @@ def _fetch_exposed_tools_rest(
             follow_redirects=True,
         )
     except Exception:
-        raise _ProfileProbeFallback() from None
+        raise _ProfileProbeFallbackError() from None
     if response.status_code == 304 and cached is not None:
         return set(cached[1]), "rest-cached"
     if response.status_code == 404:
-        raise _ProfileProbeFallback()
+        raise _ProfileProbeFallbackError()
     if response.status_code != 200:
         raise _ProfileProbeError(
             f"/v1/tools/list returned {response.status_code}",
@@ -1937,7 +1989,7 @@ def _probe_warm_cache_status(root: Path, headers: dict[str, str]) -> str:
         if age < _TOOLS_CACHE_TTL_SECONDS:
             return f"warm({age_s}s)"
         return f"stale({age_s}s)"
-    except Exception:  # noqa: BLE001
+    except Exception:
         return "miss"
 
 
@@ -1959,25 +2011,21 @@ def check_brain_profile(root: Path) -> CheckResult:
 
     Skipped (passing) when HTTP mode is not active.
     """
-    import os
-
-    http_url = os.environ.get("TAPPS_MCP_MEMORY_BRAIN_HTTP_URL", "").strip()
+    http_url = _brain_http_url_for_checks(root)
     if not http_url:
         return CheckResult(
             "tapps-brain capability profile",
             True,
-            "Not in HTTP mode (TAPPS_MCP_MEMORY_BRAIN_HTTP_URL unset)",
+            "Not in HTTP mode (brain_http_url unset in env and .tapps-mcp.yaml)",
         )
 
     try:
         import tapps_mcp.server_memory_tools  # noqa: F401 — TAP-1961 registration
-
-        from tapps_core.brain_auth import build_brain_headers
         from tapps_core.brain_bridge import (
-            get_bridge_used_tools,
             _MCP_ACCEPT_HEADERS,
             BRAIN_PROFILE_SERVER,
             BRAIN_PROFILES_DEFERRED_OK,
+            get_bridge_used_tools,
         )
         from tapps_core.config.settings import load_settings
     except Exception as exc:
@@ -1990,7 +2038,7 @@ def check_brain_profile(root: Path) -> CheckResult:
 
     try:
         settings = load_settings(project_root=root)
-        headers = build_brain_headers(settings)
+        headers = _doctor_brain_headers(settings)
     except Exception as exc:
         return CheckResult(
             "tapps-brain capability profile",
@@ -2145,28 +2193,27 @@ def check_brain_probe_latency(root: Path) -> CheckResult:
 
     Skipped (passing) when HTTP mode is not active.
     """
-    import os
-
     name = "tapps-brain probe latency"
-    http_url = os.environ.get("TAPPS_MCP_MEMORY_BRAIN_HTTP_URL", "").strip()
+    http_url = _brain_http_url_for_checks(root)
     if not http_url:
         return CheckResult(
-            name, True, "Not in HTTP mode (TAPPS_MCP_MEMORY_BRAIN_HTTP_URL unset)"
+            name,
+            True,
+            "Not in HTTP mode (brain_http_url unset in env and .tapps-mcp.yaml)",
         )
 
     headers: dict[str, str] = {}
     try:
-        from tapps_core.brain_auth import build_brain_headers
         from tapps_core.config.settings import load_settings
 
-        headers = build_brain_headers(load_settings(project_root=root))
-    except Exception:  # noqa: BLE001 — auth headers are best-effort for /metrics
+        headers = _doctor_brain_headers(load_settings(project_root=root))
+    except Exception:
         headers = {}
 
     metrics_url = http_url.rstrip("/") + "/metrics"
     try:
         resp = httpx.get(metrics_url, headers=headers, timeout=5.0)
-    except Exception as exc:  # noqa: BLE001 — connection errors must not fail doctor
+    except Exception as exc:
         return CheckResult(name, True, f"probe latency: unavailable ({type(exc).__name__})")
     if resp.status_code != 200:
         return CheckResult(
@@ -2195,18 +2242,15 @@ def check_brain_health(root: Path) -> CheckResult:
     flywheel and whether brain-side quality metrics are degrading.
     Skipped (passing) when HTTP mode is not active.
     """
-    import os
-
-    http_url = os.environ.get("TAPPS_MCP_MEMORY_BRAIN_HTTP_URL", "").strip()
+    http_url = _brain_http_url_for_checks(root)
     if not http_url:
         return CheckResult(
             "tapps-brain health",
             True,
-            "Not in HTTP mode (TAPPS_MCP_MEMORY_BRAIN_HTTP_URL unset)",
+            "Not in HTTP mode (brain_http_url unset in env and .tapps-mcp.yaml)",
         )
 
     try:
-        from tapps_core.brain_auth import build_brain_headers
         from tapps_core.brain_bridge import _MCP_ACCEPT_HEADERS
         from tapps_core.config.settings import load_settings
     except Exception as exc:
@@ -2219,7 +2263,7 @@ def check_brain_health(root: Path) -> CheckResult:
 
     try:
         settings = load_settings(project_root=root)
-        headers = build_brain_headers(settings)
+        headers = _doctor_brain_headers(settings)
     except Exception as exc:
         return CheckResult(
             "tapps-brain health",
@@ -2362,6 +2406,55 @@ def _read_brain_floor_pin() -> str | None:
     return None
 
 
+def check_brain_version_floor(root: Path) -> CheckResult:
+    """Fail when the running brain HTTP service is below the pinned version floor.
+
+    Uses :func:`tapps_core.brain_bridge.check_brain_version` against the resolved
+    HTTP URL so operators see the same hard floor enforcement as
+    ``brain_bridge_health.details.brain_version`` at session start.
+    """
+    http_url = _brain_http_url_for_checks(root)
+    if not http_url:
+        return CheckResult(
+            "tapps-brain version floor",
+            True,
+            "Not in HTTP mode (brain_http_url unset in env and .tapps-mcp.yaml)",
+        )
+
+    from tapps_core.brain_bridge import _BRAIN_VERSION_FLOOR, check_brain_version
+
+    probe = check_brain_version(http_url)
+    floor = probe.get("floor") or _BRAIN_VERSION_FLOOR
+    version = probe.get("version")
+    if probe.get("skipped"):
+        return CheckResult(
+            "tapps-brain version floor",
+            True,
+            "Version probe skipped (no HTTP URL)",
+        )
+    if probe.get("degraded") and not version:
+        return CheckResult(
+            "tapps-brain version floor",
+            False,
+            f"Could not reach brain at {http_url} for version probe",
+            "Start tapps-brain-http and re-run doctor.",
+        )
+    if probe.get("ok"):
+        return CheckResult(
+            "tapps-brain version floor",
+            True,
+            f"brain {version} satisfies >={floor}",
+        )
+    errors = probe.get("errors") or probe.get("warnings") or []
+    detail = errors[0] if errors else f"brain {version!s} below required >={floor}"
+    return CheckResult(
+        "tapps-brain version floor",
+        False,
+        detail,
+        f"Upgrade tapps-brain-http to >={floor} (see ADR-0013).",
+    )
+
+
 def check_brain_version_delta(root: Path) -> CheckResult:
     """TAP-2025: compare the running brain-service version against the pinned floor.
 
@@ -2375,14 +2468,12 @@ def check_brain_version_delta(root: Path) -> CheckResult:
 
     The check is skipped (passes) when HTTP mode is inactive.
     """
-    import os
-
-    http_url = os.environ.get("TAPPS_MCP_MEMORY_BRAIN_HTTP_URL", "").strip()
+    http_url = _brain_http_url_for_checks(root)
     if not http_url:
         return CheckResult(
             "tapps-brain version delta",
             True,
-            "Not in HTTP mode (TAPPS_MCP_MEMORY_BRAIN_HTTP_URL unset)",
+            "Not in HTTP mode (brain_http_url unset in env and .tapps-mcp.yaml)",
         )
 
     # Probe /healthz (v3.19.0+) first; fall back to /health for older brains
@@ -3069,6 +3160,7 @@ def _collect_checks(root: Path, *, quick: bool = False) -> list[CheckResult]:
     checks.append(check_brain_profile(root))
     checks.append(check_brain_probe_latency(root))
     checks.append(check_brain_health(root))
+    checks.append(check_brain_version_floor(root))
     checks.append(check_brain_version_delta(root))
     checks.append(check_session_sentinel(root))
     checks.append(check_memory_pipeline_config(root))

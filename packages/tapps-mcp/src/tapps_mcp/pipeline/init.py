@@ -333,6 +333,15 @@ def bootstrap_pipeline(
     _verify_server(cfg, state)
     if cfg.verify_only:
         return state.finalize()
+
+    if not cfg.dry_run:
+        from tapps_mcp.distribution.doctor import strip_brain_mcp_entries
+
+        state.result["brain_mcp_strip"] = strip_brain_mcp_entries(
+            state.project_root,
+            dry_run=False,
+        )
+
     _detect_profile(cfg, state)
     _detect_docsmcp(state)
     _create_templates(cfg, state)

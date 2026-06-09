@@ -107,10 +107,15 @@ def maybe_write_mcp_config(
     mcp_config: bool,
     dry_run: bool,
 ) -> None:
-    """Write project-scoped MCP config when opt-in (Epic 47.2)."""
+    """Write project-scoped MCP config (Epic 47.2; default on for ``tapps_init``).
+
+    Strips direct ``tapps-brain`` MCP entries before generation (TAP-1888)
+    and includes docs-mcp when bootstrap detected it in the project.
+    """
     if not mcp_config or dry_run:
         return
 
+    from tapps_mcp.distribution.doctor import strip_brain_mcp_entries
     from tapps_mcp.distribution.setup_generator import _generate_config
 
     mcp_host = "claude-code"
@@ -119,15 +124,20 @@ def maybe_write_mcp_config(
     elif platform == "vscode":
         mcp_host = "vscode"
 
+    with_docs_mcp = bool(result.get("docsmcp_detected"))
+    strip_brain_mcp_entries(settings.project_root)
     config_ok = _generate_config(
         mcp_host,
         settings.project_root,
         force=True,
         scope="project",
+        with_docs_mcp=with_docs_mcp,
     )
     if config_ok:
         result["mcp_config_written"] = True
         result["mcp_config_scope"] = "project"
+        result["mcp_config_with_docs_mcp"] = with_docs_mcp
+        result["brain_mcp_stripped"] = True
 
 
 async def emit_init_progress(

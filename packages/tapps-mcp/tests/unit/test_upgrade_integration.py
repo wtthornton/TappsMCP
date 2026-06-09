@@ -977,3 +977,30 @@ class TestUpgradeClaudeMdStamp:
         platforms = result["components"]["platforms"]
         claude_md_status = platforms[0]["components"]["claude_md"]
         assert claude_md_status == "up-to-date"
+
+
+class TestUpgradeBrainMcpStrip:
+    """TAP-1888: upgrade strips direct tapps-brain MCP entries."""
+
+    def test_upgrade_strips_brain_mcp_from_project_config(self, tmp_path: Path) -> None:
+        from tapps_mcp.pipeline.upgrade import upgrade_pipeline
+
+        _setup_claude_project(tmp_path)
+        (tmp_path / ".mcp.json").write_text(
+            json.dumps(
+                {
+                    "mcpServers": {
+                        "tapps-mcp": {"command": "uv"},
+                        "tapps-brain-mcp": {"command": "uv"},
+                    }
+                }
+            ),
+            encoding="utf-8",
+        )
+
+        result = upgrade_pipeline(tmp_path, platform="claude")
+        strip_result = result["components"]["brain_mcp_strip"]
+        assert ".mcp.json" in strip_result["stripped"]
+        updated = json.loads((tmp_path / ".mcp.json").read_text(encoding="utf-8"))
+        assert "tapps-brain-mcp" not in updated["mcpServers"]
+        assert "tapps-mcp" in updated["mcpServers"]

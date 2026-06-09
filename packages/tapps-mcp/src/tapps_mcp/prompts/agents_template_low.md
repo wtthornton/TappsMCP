@@ -51,6 +51,8 @@ When the **TappsMCP** MCP server is configured, you can use its tools for code q
 
 **Lighter tapps_init options** (for timeout-prone MCP clients): Use `dry_run: true` to preview (~2-5s); use `verify_only: true` for a quick server/checker check (~1-3s); or set `warm_cache_from_tech_stack: false` and `warm_expert_rag_from_tech_stack: false` for a faster init without cache warming.
 
+**MCP config (default on):** `tapps_init` writes project MCP config after bootstrap (`mcp_config=true`); strips direct `tapps-brain` entries. Pass `mcp_config=false` to skip.
+
 ---
 
 ## Using tapps_lookup_docs for domain guidance

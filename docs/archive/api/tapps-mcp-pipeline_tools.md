@@ -73,7 +73,10 @@ Bootstrap TAPPS pipeline in the current project.
 | `verify_only` | `bool` | When ``True``, run only server verification and return (~1-3s). Use for quick connectivity/checker checks without creating files. | False |
 | `llm_engagement_level` | `str \| None` | When set, use this level (high/medium/low) for AGENTS.md and platform rules. When ``None``, use config/settings. | None |
 | `scaffold_experts` | `bool` | When ``True`` and ``.tapps-mcp/experts.yaml`` exists, scaffold missing knowledge directories for business experts (creates README.md and overview.md starter files). | False |
+| `mcp_config` | `bool` | When ``True`` (default), write project-scoped MCP config after bootstrap; strips direct ``tapps-brain`` entries; includes docs-mcp when detected. Skipped when ``dry_run=True``. | True |
 | `ctx` | `Context[Any, Any, Any] \| None` |  | None |
+
+> **Note:** This archived API snapshot may omit newer parameters. See README ``tapps_init`` parameter table for the current surface.
 
 ### async `tapps_upgrade`
 

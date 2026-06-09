@@ -578,6 +578,38 @@ class TestCliInit:
         assert result.exit_code == 0
         assert (tmp_path / ".cursor" / "mcp.json").exists()
 
+    def test_init_strips_direct_tapps_brain_mcp_entry(self, tmp_path):
+        """Bridge-only: init removes parallel tapps-brain MCP servers (TAP-1888)."""
+        cursor_dir = tmp_path / ".cursor"
+        cursor_dir.mkdir()
+        config = {
+            "mcpServers": {
+                "tapps-brain": {"command": "tapps-brain", "args": ["serve"]},
+                "other-mcp": {"command": "other"},
+            }
+        }
+        (cursor_dir / "mcp.json").write_text(json.dumps(config), encoding="utf-8")
+
+        runner = CliRunner()
+        result = runner.invoke(
+            main,
+            [
+                "init",
+                "--host",
+                "cursor",
+                "--project-root",
+                str(tmp_path),
+                "--force",
+                "--no-rules",
+            ],
+        )
+        assert result.exit_code == 0
+        data = json.loads((cursor_dir / "mcp.json").read_text(encoding="utf-8"))
+        assert "tapps-brain" not in data["mcpServers"]
+        assert "other-mcp" in data["mcpServers"]
+        assert "tapps-mcp" in data["mcpServers"]
+        assert "bridge-only" in result.output.lower() or "Removed direct" in result.output
+
     def test_init_vscode(self, tmp_path):
         runner = CliRunner()
         result = runner.invoke(
@@ -916,6 +948,26 @@ class TestEnvInConfig:
         # Token uses ${...} substitution so the file is safe to commit.
         assert env["TAPPS_MCP_MEMORY_BRAIN_AUTH_TOKEN"] == "${TAPPS_BRAIN_AUTH_TOKEN}"
         assert env["TAPPS_MCP_MEMORY_BRAIN_PROJECT_ID"] == "myproject"
+
+    def test_brain_project_id_slugifies_special_chars(self, tmp_path):
+        """Init-time slug matches runtime _slugify_project_root (foo.bar → foo-bar)."""
+        project = tmp_path / "foo.bar"
+        project.mkdir()
+        _generate_config("cursor", project)
+        env = json.loads((project / ".cursor" / "mcp.json").read_text(encoding="utf-8"))[
+            "mcpServers"
+        ]["tapps-mcp"]["env"]
+        assert env["TAPPS_MCP_MEMORY_BRAIN_PROJECT_ID"] == "foo-bar"
+
+    def test_brain_project_id_omitted_for_generic_dir(self, tmp_path):
+        """Generic dir names must not auto-emit a colliding tenant slug."""
+        project = tmp_path / "tmp"
+        project.mkdir()
+        _generate_config("cursor", project)
+        env = json.loads((project / ".cursor" / "mcp.json").read_text(encoding="utf-8"))[
+            "mcpServers"
+        ]["tapps-mcp"]["env"]
+        assert "TAPPS_MCP_MEMORY_BRAIN_PROJECT_ID" not in env
 
     def test_tapps_mcp_entry_pins_full_brain_profile(self, tmp_path):
         """ADR-0012: the tapps-mcp entry pins TAPPS_BRAIN_PROFILE=full — the

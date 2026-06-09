@@ -36,10 +36,12 @@ This document lists what each init-related process does. The codebase has **two 
 | **Interactive wizard** | (auto on first run) | When MCP elicitation is supported and no existing `.tapps-mcp.yaml` or `.claude/settings.json` exists, runs a 5-question interactive wizard to configure quality preset, engagement level, agent teams, skill tier, and prompt hooks. Skipped when explicit parameters are provided. |
 | **Dry run** | `dry_run=True` | Computes and returns what would be created without writing files or warming caches. Skips server verification. Keeps run lightweight (~2-5s). |
 | **Verify only** | `verify_only=True` | Runs only server verification and returns immediately (~1-3s). Use for quick connectivity/checker checks. |
+| **MCP config** | `mcp_config=True` (default) | After bootstrap, writes project-scoped MCP config for the selected platform; strips direct `tapps-brain` entries (TAP-1888, bridge-only); includes docs-mcp when `docsmcp_detected`. Skipped when `dry_run=True`. Pass `mcp_config=False` to opt out. |
+| **Brain MCP strip (bootstrap)** | (always, non-dry-run) | `bootstrap_pipeline` records `brain_mcp_strip` after removing stray `tapps-brain` / `tapps-brain-mcp` keys from host MCP JSON (TAP-1888). |
 
 ### Result shape
 
-Returns a dict with: `created`, `skipped`, `errors`, `success`, plus `server_verification`, `agents_md`, `tech_stack_md`, `cache_warming`, `expert_rag_warming`, `hooks`, `agents`, `skills`, `cursor_rules` (Cursor only), `agent_teams` (when opted in).
+Returns a dict with: `created`, `skipped`, `errors`, `success`, plus `server_verification`, `agents_md`, `tech_stack_md`, `cache_warming`, `expert_rag_warming`, `hooks`, `agents`, `skills`, `cursor_rules` (Cursor only), `agent_teams` (when opted in), and when MCP config is written: `mcp_config_written`, `mcp_config_scope`, `mcp_config_with_docs_mcp`, `brain_mcp_stripped`.
 
 ### Idempotency / “upgrade” behavior
 
@@ -86,7 +88,7 @@ So “upgrading” pipeline artifacts and caches is done by **calling `tapps_ini
 
 | Process | Entry point | Purpose |
 |--------|-------------|---------|
-| **tapps_init** | MCP tool `tapps_init` | Bootstrap pipeline files (handoff, runlog, AGENTS.md, TECH_STACK.md), optional platform rules, server verification, cache warming, expert RAG warming. |
+| **tapps_init** | MCP tool `tapps_init` | Bootstrap pipeline files (handoff, runlog, AGENTS.md, TECH_STACK.md), optional platform rules, server verification, cache warming, expert RAG warming; writes project MCP config by default (`mcp_config=true`). |
 | **tapps_upgrade** | MCP tool `tapps_upgrade` | Refresh all generated files (AGENTS.md, rules, hooks, agents, skills, settings) after upgrading TappsMCP. Preserves custom command paths. |
 | **tapps_set_engagement_level** | MCP tool `tapps_set_engagement_level` | Set `llm_engagement_level` in `.tapps-mcp.yaml` (high/medium/low). Run `tapps_init(overwrite_agents_md=True)` afterward to apply. |
 | **tapps_doctor** | MCP tool `tapps_doctor` | Diagnose configuration, rules, hooks, and connectivity with per-check pass/fail results; reports engagement level when set. |
@@ -107,7 +109,7 @@ When you upgrade TappsMCP (`git pull && uv tool install --reinstall -e packages/
 | **AGENTS.md** (workflow, tool hints) | Call `tapps_init` with `overwrite_agents_md=True` to replace AGENTS.md with the latest template. Or rely on validate/smart-merge (default) to add missing sections. |
 | **Platform rules** (CLAUDE.md, .cursor/rules/tapps-pipeline.md) | Call `tapps_init` with `platform="cursor"` or `"claude"` and `overwrite_platform_rules=True` to refresh rule files. |
 | **TECH_STACK.md, caches, RAG indices** | Re-run `tapps_init` with defaults; TECH_STACK is overwritten, cache/RAG warming refreshes as needed. |
-| **MCP host config** | Run `tapps-mcp init --force` to overwrite the tapps-mcp entry in the host config without prompting. |
+| **MCP host config** | `tapps_init` writes by default (`mcp_config=true`); or run `tapps-mcp init --force` to refresh only the server entry. Both strip direct `tapps-brain` MCP keys. |
 
 **Example (via AI):** “Call tapps_init with overwrite_agents_md=True and overwrite_platform_rules=True, platform=cursor, to refresh to the latest TappsMCP templates.”
 

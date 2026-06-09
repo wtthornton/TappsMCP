@@ -69,6 +69,7 @@
 - [9. Pin tapps-brain version floor at 3.17.0 (range: >=3.17.0, <4)](adr/0009-pin-tapps-brain-version-floor-at-3170.md) — Date: 2026-05-15 *(updated 2026-05-16)*
 - [10. Pin tapps-brain version floor at 3.18.0 (range: >=3.18.0, <4)](adr/0010-pin-tapps-brain-version-floor-at-3180.md) — Date: 2026-05-16 *(updated 2026-05-18)*
 - [11. Pin tapps-brain by release tag instead of commit SHA](adr/0011-pin-tapps-brain-by-tag.md) — Date: 2026-05-18 *(updated 2026-05-18)*
+- [13. Pin tapps-brain version floor at 3.24.0 (range: >=3.24.0, <4)](adr/0013-pin-tapps-brain-version-floor-at-3240.md) — Date: 2026-06-09 *(updated 2026-06-09)*
 - [PRD: Zeek Network Intelligence Service](architecture/zeek-network-intelligence-prd.md) — <!-- docsmcp:start:executive-summary --> *(updated 2026-04-05)*
 - [Class Hierarchy](archive/diagrams/class-hierarchy.md) *(updated 2026-04-05)*
 - [docs-mcp Dependency](archive/diagrams/docs-mcp-dependency.md) *(updated 2026-04-05)*
@@ -135,7 +136,8 @@
 - [YouTube MCP Setup](archive/reference/MCP_YOUTUBE_SETUP.md) — The [YouTube MCP server](https://github.com/bendelpino/youtube-mcp) is configured for this workspace. It provides: *(updated 2026-04-05)*
 - [TappsMCP: Setup and Use Summary](archive/reference/TAPPS_MCP_SETUP_AND_USE.md) — TappsMCP is an **MCP (Model Context Protocol) server** that exposes **code quality tools** to LLMs (Claude, Cursor, e... *(updated 2026-04-05)*
 - [TappsMCP Diagrams](diagrams/README.md) — Auto-generated from source by `docs-mcp`. All diagrams render natively on GitHub. *(updated 2026-05-19)*
-- [tapps-brain: Local and Multi-Project Setup](operations/TAPPS-BRAIN-LOCAL-SETUP.md) — This guide explains how to connect tapps-mcp to tapps-brain for persistent memory. *(updated 2026-05-12)*
+- [Consumer repo: verify tapps-mcp ↔ tapps-brain wiring](operations/CONSUMER-REPO-BRAIN-WIRING.md) — Step-by-step checklist for wiring a new LLM coding repo to shared tapps-brain via tapps-mcp (bridge-only). *(updated 2026-06-09)*
+- [tapps-brain: Local and Multi-Project Setup](operations/TAPPS-BRAIN-LOCAL-SETUP.md) — This guide explains how to connect tapps-mcp to tapps-brain for persistent memory. *(updated 2026-06-09)*
 - [TappsMCP Epics](planning/epics/README.md) — Epics are tracked in Linear under the **TappsMCP Platform** project (team `TappsCodingAgents`, prefix `TAP-`). Per th... *(updated 2026-05-02)*
 - [Tutorials](tutorials/README.md) — Three short, copy-paste runnable walkthroughs for the most-asked starter tasks. Each ends with explicit verification ... *(updated 2026-05-02)*
 - [TappsMCP + Agent SDK Examples](../examples/agent-sdk/README.md) — These examples show how to use TappsMCP as an MCP server within Claude Agent SDK *(updated 2026-05-12)*

@@ -492,7 +492,7 @@ The MCP tool exposes a richer parameter surface than the CLI (which auto-fills s
 | `verify_only` | bool | `false` | Check which external checkers are installed without bootstrapping. |
 | `verify_server` | bool | `true` | Sanity-check the MCP server can start before declaring success. |
 | `minimal` | bool | `false` | Minimal init: MCP config + AGENTS.md only (faster, ~5-15s vs 10-35s). |
-| `mcp_config` | bool | `false` | Write MCP config file only (no other files). |
+| `mcp_config` | bool | `true` | After bootstrap, write project-scoped MCP config (`.mcp.json`, `.cursor/mcp.json`, etc.); strips direct `tapps-brain` entries; includes docs-mcp when detected. Pass `false` to skip. |
 | `create_handoff` | bool | `true` | Create docs/TAPPS_HANDOFF.md. |
 | `create_runlog` | bool | `true` | Create docs/TAPPS_RUNLOG.md. |
 | `create_agents_md` | bool | `true` | Create AGENTS.md. |

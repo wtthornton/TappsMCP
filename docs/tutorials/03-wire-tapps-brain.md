@@ -109,11 +109,12 @@ You've confirmed:
 
 ## What you learned
 
-tapps-brain is **opt-in storage**, not a separate MCP server you talk to. tapps-mcp loads `AgentBrain` in-process and routes the `tapps_memory` MCP tool through `BrainBridge` to it (see [ADR-0001](../adr/0001-in-process-agentbrain-via-brainbridge.md) for why). Your agents only ever see `tapps_memory(...)` as a tool call — the brain is the storage backing that tool, not a parallel API.
+tapps-brain is **storage behind `tapps_memory`**, not a separate MCP server you configure. Agents call `tapps_memory(...)` only; tapps-mcp routes through `BrainBridge` to tapps-brain (in-process per [ADR-0001](../adr/0001-in-process-agentbrain-via-brainbridge.md), or HTTP when `memory.brain_http_url` is set). **Do not** add a direct `tapps-brain` entry to `.mcp.json` / `.cursor/mcp.json` — `tapps_init` and `tapps_upgrade` strip stray entries (bridge-only, TAP-1888).
 
-The four pieces that have to line up: brain HTTP service running, `tapps-brain` Python package importable, `TAPPS_BRAIN_AUTH_TOKEN` set in the MCP subprocess env, and `.mcp.json` pointing at tapps-mcp. Miss any one and `tapps doctor` calls it out.
+The four pieces that have to line up: brain HTTP service running (or in-process DSN), `tapps-brain` Python package importable, auth token in the MCP subprocess env, and `.mcp.json` listing **tapps-mcp only**. Miss any one and `tapps doctor` calls it out. Running brain must be **≥ 3.24.0** ([ADR-0013](../adr/0013-pin-tapps-brain-version-floor-at-3240.md)).
 
 ## Going further
 
+- [docs/operations/CONSUMER-REPO-BRAIN-WIRING.md](../operations/CONSUMER-REPO-BRAIN-WIRING.md) — per-repo wiring checklist (bootstrap, registration, verification).
 - [docs/MEMORY_REFERENCE.md](../MEMORY_REFERENCE.md) — full memory reference (42 actions, tier and scope rules, federation).
 - [docs/operations/TAPPS-BRAIN-LOCAL-SETUP.md](../operations/TAPPS-BRAIN-LOCAL-SETUP.md) — production-grade setup, multi-project federation, operational notes.

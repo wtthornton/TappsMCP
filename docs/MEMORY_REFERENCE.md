@@ -185,9 +185,9 @@ so the feedback flywheel receives explicit signals.
 
 | Symptom | Cause | Fix |
 |---------|-------|-----|
-| `errors: ["brain_auth_failed"]`, HTTP 401 / 403 | Brain server requires a bearer token, none supplied. | Set `TAPPS_BRAIN_AUTH_TOKEN` in your shell or `.mcp.json` env. For offline / no-brain workflows, set `memory.tolerate_brain_auth_failure: true` in `.tapps-mcp.yaml` to keep the soft-degraded behavior. See [ADR-0010](adr/0010-pin-tapps-brain-version-floor-at-3180.md) and CLAUDE.md. |
+| `errors: ["brain_auth_failed"]`, HTTP 401 / 403 | Brain server requires a bearer token, none supplied. | Set `TAPPS_BRAIN_AUTH_TOKEN` (expanded into `TAPPS_MCP_MEMORY_BRAIN_AUTH_TOKEN` via `.mcp.json`) or export `TAPPS_MCP_MEMORY_BRAIN_AUTH_TOKEN` for CLI doctor. See [CONSUMER-REPO-BRAIN-WIRING.md](operations/CONSUMER-REPO-BRAIN-WIRING.md). For offline workflows, set `memory.tolerate_brain_auth_failure: true`. |
 | `errors: ["BrainBridgeUnavailable"]`, `enabled: false` | tapps-brain HTTP service is not running, or `memory.brain_url` points nowhere. | Start tapps-brain (`docker compose up -d` in the tapps-brain checkout) and confirm `localhost:8080` responds. Re-run `tapps doctor`. |
-| `details.brain_version` below the floor (e.g. `3.17.x`) | Installed brain is older than the version pinned by tapps-mcp. | Upgrade tapps-brain — see [ADR-0010](adr/0010-pin-tapps-brain-version-floor-at-3180.md) for the current floor. |
+| `details.brain_version` below the floor (e.g. `3.23.x`) | Installed brain is older than the version pinned by tapps-mcp. | Upgrade tapps-brain — current floor is **3.24.0** per [ADR-0013](adr/0013-pin-tapps-brain-version-floor-at-3240.md). |
 | `native_health_ok: false`, `details.brain_status` not `ok` | Brain is reachable but its own self-check failed (schema drift, missing index, embedding model unavailable). | Inspect tapps-brain logs; restart the service. If schema drift, run the brain's migration. |
 | `enabled: true`, `ok: false`, no `errors` | The probe ran but returned an unexpected payload shape. | Check `details` for the raw response and file an issue against tapps-brain. |
 

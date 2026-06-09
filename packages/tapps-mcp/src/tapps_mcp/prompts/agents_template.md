@@ -58,7 +58,7 @@ You only see these tools when the host has started the TappsMCP server and attac
 | **tapps_dependency_graph** | When you want to **understand module dependencies** - builds import graph, detects circular imports, and calculates coupling metrics. Use before refactoring or when investigating import errors. |
 | **tapps_audit_campaign** | When you want to **plan a code-review campaign** for a scope (a directory or the whole project). Clusters files by import relationships into session-sized chunks and renders a parent Linear epic plus per-session ticket bodies, each with a prescriptive tool playbook for the executing session. Read-only — no Linear writes happen here. Set `graph_root` to your package source root for monorepo layouts. |
 | **tapps_workflow** | When you want the **recommended tool call order** for a specific task type (general, feature, bugfix, refactor, security, review). |
-| **tapps_init** | At **pipeline bootstrap** - creates AGENTS.md, TECH_STACK.md, platform rules, optionally warms caches. Call once per project (or when upgrading). |
+| **tapps_init** | At **pipeline bootstrap** - creates AGENTS.md, TECH_STACK.md, platform rules, project MCP config (default), optionally warms caches. Call once per project. Pass `mcp_config=false` to skip MCP config. |
 | **tapps_upgrade** | After a **TappsMCP version update** - validates and refreshes AGENTS.md, platform rules, hooks, agents, skills, and settings. Preserves custom command paths (e.g. PyInstaller exe). Use `dry_run: true` to preview. |
 | **tapps_doctor** | When **diagnosing configuration issues** - checks binary availability, MCP configs, platform rules, generated files, hooks, and installed quality tools. Returns per-check pass/fail with remediation hints. |
 
@@ -81,6 +81,8 @@ You only see these tools when the host has started the TappsMCP server and attac
 **Both in one session?** Yes. If the project is not yet bootstrapped: call `tapps_session_start` first (fast), then `tapps_init` (creates files). If the project is already bootstrapped: call only `tapps_session_start` at session start.
 
 **Lighter tapps_init options** (for timeout-prone MCP clients): Use `dry_run: true` to preview (~2-5s); use `verify_only: true` for a quick server/checker check (~1-3s); or set `warm_cache_from_tech_stack: false` and `warm_expert_rag_from_tech_stack: false` for a faster init without cache warming.
+
+**MCP config (default on):** `tapps_init` writes project-scoped `.mcp.json` / `.cursor/mcp.json` after bootstrap (`mcp_config=true`). Generation strips direct `tapps-brain` MCP entries (bridge-only; use `tapps_memory` only) and includes docs-mcp when detected. For brain HTTP wiring see [docs/operations/CONSUMER-REPO-BRAIN-WIRING.md](docs/operations/CONSUMER-REPO-BRAIN-WIRING.md).
 
 ---
 

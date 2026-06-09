@@ -1765,6 +1765,134 @@ class TestFetchExposedTools:
 
 
 # ---------------------------------------------------------------------------
+# Brain HTTP URL resolution for doctor checks
+# ---------------------------------------------------------------------------
+
+
+class TestBrainHttpUrlForChecks:
+    """Doctor brain probes resolve URL from env first, then .tapps-mcp.yaml."""
+
+    def test_prefers_env_over_yaml(self, tmp_path, monkeypatch) -> None:
+        from tapps_mcp.distribution.doctor import _brain_http_url_for_checks
+
+        monkeypatch.setenv("TAPPS_MCP_MEMORY_BRAIN_HTTP_URL", "http://env:8080")
+        (tmp_path / ".tapps-mcp.yaml").write_text(
+            "memory:\n  brain_http_url: http://yaml:8080\n",
+            encoding="utf-8",
+        )
+        assert _brain_http_url_for_checks(tmp_path) == "http://env:8080"
+
+    def test_falls_back_to_yaml_when_env_unset(self, tmp_path, monkeypatch) -> None:
+        from tapps_mcp.distribution.doctor import _brain_http_url_for_checks
+
+        monkeypatch.delenv("TAPPS_MCP_MEMORY_BRAIN_HTTP_URL", raising=False)
+        (tmp_path / ".tapps-mcp.yaml").write_text(
+            "memory:\n  brain_http_url: http://yaml:8080\n",
+            encoding="utf-8",
+        )
+        assert _brain_http_url_for_checks(tmp_path) == "http://yaml:8080"
+
+
+class TestStripBrainMcpEntries:
+    """TAP-1888: strip direct tapps-brain MCP server keys from host configs."""
+
+    def test_removes_tapps_brain_from_cursor_mcp_json(self, tmp_path) -> None:
+        from tapps_mcp.distribution.doctor import strip_brain_mcp_entries
+
+        cursor_dir = tmp_path / ".cursor"
+        cursor_dir.mkdir()
+        config = {
+            "mcpServers": {
+                "tapps-mcp": {"command": "uv", "args": ["run", "tapps-mcp", "serve"]},
+                "tapps-brain": {"command": "uv", "args": ["run", "tapps-brain", "serve"]},
+            }
+        }
+        (cursor_dir / "mcp.json").write_text(json.dumps(config), encoding="utf-8")
+
+        result = strip_brain_mcp_entries(tmp_path)
+        assert ".cursor/mcp.json" in result["stripped"]
+        updated = json.loads((cursor_dir / "mcp.json").read_text(encoding="utf-8"))
+        assert "tapps-brain" not in updated["mcpServers"]
+        assert "tapps-mcp" in updated["mcpServers"]
+
+    def test_no_op_when_no_brain_entries(self, tmp_path) -> None:
+        from tapps_mcp.distribution.doctor import strip_brain_mcp_entries
+
+        cursor_dir = tmp_path / ".cursor"
+        cursor_dir.mkdir()
+        config = {"mcpServers": {"tapps-mcp": {"command": "uv"}}}
+        (cursor_dir / "mcp.json").write_text(json.dumps(config), encoding="utf-8")
+
+        result = strip_brain_mcp_entries(tmp_path)
+        assert result["stripped"] == []
+
+
+class TestBrainAuthTokenForDoctor:
+    """Doctor accepts TAPPS_BRAIN_AUTH_TOKEN for CLI direnv workflows."""
+
+    def test_http_auth_passes_with_tapps_brain_auth_token_env(
+        self, tmp_path, monkeypatch
+    ) -> None:
+        from tapps_mcp.distribution.doctor import check_brain_http_auth
+
+        monkeypatch.setenv("TAPPS_MCP_MEMORY_BRAIN_HTTP_URL", "http://brain:8080")
+        monkeypatch.setenv("TAPPS_BRAIN_AUTH_TOKEN", "tb_cli_token")
+        (tmp_path / ".tapps-mcp.yaml").write_text(
+            "memory:\n  brain_project_id: myproj\n",
+            encoding="utf-8",
+        )
+        with patch(
+            "tapps_mcp.distribution.doctor._run_auth_probe",
+            return_value=None,
+        ):
+            result = check_brain_http_auth(tmp_path)
+        assert result.ok is True
+        assert "bearer token" in result.message.lower()
+
+
+class TestBrainVersionFloor:
+    """Doctor enforces the hard brain version floor."""
+
+    def test_fails_when_running_brain_below_floor(self, tmp_path, monkeypatch) -> None:
+        from tapps_mcp.distribution.doctor import check_brain_version_floor
+
+        monkeypatch.setenv("TAPPS_MCP_MEMORY_BRAIN_HTTP_URL", "http://brain:8080")
+        with patch(
+            "tapps_core.brain_bridge.check_brain_version",
+            return_value={
+                "ok": False,
+                "skipped": False,
+                "degraded": False,
+                "version": "3.20.0",
+                "floor": "3.24.0",
+                "errors": ["tapps-brain version 3.20.0 does not satisfy required range"],
+            },
+        ):
+            result = check_brain_version_floor(tmp_path)
+        assert result.ok is False
+        assert "3.24.0" in (result.detail or "")
+
+    def test_passes_when_running_brain_meets_floor(self, tmp_path, monkeypatch) -> None:
+        from tapps_mcp.distribution.doctor import check_brain_version_floor
+
+        monkeypatch.setenv("TAPPS_MCP_MEMORY_BRAIN_HTTP_URL", "http://brain:8080")
+        with patch(
+            "tapps_core.brain_bridge.check_brain_version",
+            return_value={
+                "ok": True,
+                "skipped": False,
+                "degraded": False,
+                "version": "3.24.0",
+                "floor": "3.24.0",
+                "errors": [],
+            },
+        ):
+            result = check_brain_version_floor(tmp_path)
+        assert result.ok is True
+        assert "3.24.0" in result.message
+
+
+# ---------------------------------------------------------------------------
 # TAP-2025: check_brain_version_delta
 # ---------------------------------------------------------------------------
 

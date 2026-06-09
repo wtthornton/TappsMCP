@@ -1,6 +1,7 @@
 # Epic 47: Workspace-Scoped Init
 
 **Status:** Complete
+**Supersession (2026-06):** Story 47.2 originally shipped `mcp_config=False` by default. Current behavior: `tapps_init` defaults `mcp_config=True` (writes project MCP config, strips direct `tapps-brain` entries). See README and [CONSUMER-REPO-BRAIN-WIRING.md](../../operations/CONSUMER-REPO-BRAIN-WIRING.md).
 **Priority:** P1
 **Estimated LOE:** ~1-1.5 weeks
 **Dependencies:** None (builds on existing init infrastructure)

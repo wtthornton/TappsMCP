@@ -268,20 +268,21 @@ def _detect_command_path() -> str:
 def _derive_brain_project_id(project_root: Path | None) -> str:
     """TAP-1336: Derive a default ``X-Project-Id`` slug from the project dir name.
 
-    Lowercased, with whitespace collapsed to dashes. Falls back to ``""`` when
-    the path is unusable, in which case tapps-mcp emits a hard error at
-    runtime telling the agent to set ``TAPPS_MCP_MEMORY_BRAIN_PROJECT_ID``
-    explicitly. We deliberately do not silently invent a slug.
+    Uses the same :func:`tapps_core.config.settings._slugify_project_root`
+    helper as runtime ``TappsMCPSettings`` so init-time MCP env and session-time
+    ``X-Project-Id`` never disagree. Returns ``""`` for unusable paths or
+    generic directory names (``tmp``, ``code``, …) — operators must set
+    ``TAPPS_MCP_MEMORY_BRAIN_PROJECT_ID`` explicitly.
     """
     if project_root is None:
         return ""
     try:
-        name = Path(project_root).resolve().name
+        resolved = Path(project_root).resolve()
     except (OSError, RuntimeError):
         return ""
-    if not name:
-        return ""
-    return "-".join(name.lower().split())
+    from tapps_core.config.settings import _slugify_project_root
+
+    return _slugify_project_root(resolved)
 
 
 def _resolve_project_root_value(host: str, project_root: Path | None) -> str:
@@ -1387,6 +1388,20 @@ def run_init(
             print an export reminder (Issue #79).
     """
     root = Path(project_root).resolve()
+
+    if not check and not dry_run:
+        from tapps_mcp.distribution.doctor import strip_brain_mcp_entries
+
+        stripped = strip_brain_mcp_entries(root)
+        if stripped.get("stripped"):
+            click.echo(
+                click.style(
+                    "  Removed direct tapps-brain MCP server entries (bridge-only): "
+                    + ", ".join(stripped["stripped"]),
+                    fg="cyan",
+                )
+            )
+
     log.info(
         "init_command",
         host=mcp_host,
