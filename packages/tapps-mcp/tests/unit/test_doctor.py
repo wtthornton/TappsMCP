@@ -1664,7 +1664,7 @@ class TestFetchExposedToolsRest:
         from unittest.mock import MagicMock
 
         from tapps_mcp.distribution.doctor import (
-            _ProfileProbeFallback,
+            _ProfileProbeFallbackError,
             _fetch_exposed_tools_rest,
         )
 
@@ -1672,7 +1672,7 @@ class TestFetchExposedToolsRest:
         httpx_mod = MagicMock()
         httpx_mod.get.return_value = response
 
-        with pytest.raises(_ProfileProbeFallback):
+        with pytest.raises(_ProfileProbeFallbackError):
             _fetch_exposed_tools_rest("http://brain:8080", {}, httpx_mod)
 
     def test_rest_500_raises_probe_error(self) -> None:

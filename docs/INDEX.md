@@ -59,6 +59,7 @@
 - [TappsMCP Architecture Reference](ARCHITECTURE.md) — Detailed internal architecture for developers working on TappsMCP itself. *(updated 2026-06-09)*
 - [Sprint Board](SPRINT_BOARD.md) — Priority queue for platform work (audit campaign, brain migration). *(updated 2026-06-09)*
 - [Brain wave-2 capabilities handoff](handoff/BRAIN-wave2-capabilities.md) — tapps-brain P0 requests blocking TAP-1997 phase 2 (`brain_query_events`). *(updated 2026-06-09)*
+- [Tapps-mcp consumer migration (TAP-1997 / TAP-1998)](handoff/TAPPS-MCP-CONSUMER-MIGRATION-1997-1998.md) — Retire local metrics JSONL reads and migrate domain weights to brain profile KV; brain EPIC-074/075 shipped. *(added 2026-06-09)*
 - [1. In-process AgentBrain via BrainBridge](adr/0001-in-process-agentbrain-via-brainbridge.md) — Date: 2026-05-02 *(updated 2026-05-12)*
 - [2. Pin tapps-brain version floor at 3.7.2 (range: >=3.7.2, <4)](adr/0002-pin-tapps-brain-version-floor-at-372.md) — Date: 2026-05-02 *(updated 2026-05-15)*
 - [4. Deterministic-tools-only contract](adr/0004-deterministic-tools-only-contract.md) — Date: 2026-05-02 *(updated 2026-05-12)*

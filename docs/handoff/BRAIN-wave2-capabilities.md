@@ -33,10 +33,10 @@ payloads, and omit malformed string-based edges. Event types:
 |-------|--------|-------|
 | 1 — KG event + payload write | Done | Phase 1 + entity shapes on all emitters (2026-06-09) |
 | 1.5 — `memory_save` workaround | Done | Interim read path; **remove after P0** |
-| 2 — drop local JSONL by default | Done (tapps-mcp) | `brain_query_events` read path; `memory_save` removed on emit |
+| 2 — drop local JSONL by default | **Partial** (tapps-mcp) | `brain_query_events` read path wired; hydrate in `tapps_stats`/`tapps_dashboard` when `TAPPS_METRICS_STORAGE=brain`. Default `dual` still reads JSONL. See [TAPPS-MCP-CONSUMER-MIGRATION-1997-1998.md](TAPPS-MCP-CONSUMER-MIGRATION-1997-1998.md) Task A. |
 
-Set `TAPPS_METRICS_STORAGE=brain` to skip local JSONL (opt-in). Requires brain auth +
-memory hydrate or, after P0, `brain_query_events`.
+Set `TAPPS_METRICS_STORAGE=brain` to skip local JSONL writes and use brain reads (opt-in).
+Requires brain auth + `brain_query_events` (brain >=3.24.0).
 
 ## Why
 
@@ -128,9 +128,9 @@ when P2 ships.
 ```
 Done (tapps-mcp):    all record_kg_event entity shapes + subject_key (2026-06-09)
 P0 (tapps-brain):  brain_query_events + index + tests  ← shipped 3.24.0
-Done (tapps-mcp):  query_events consumer; drop memory_save workaround (2026-06-09)
-P2 (tapps-brain):  brain_profile_set/get
-P2 (tapps-mcp):    TAP-1998 domain weights
+Partial (tapps-mcp): query_events consumer + opt-in brain hydrate (2026-06-09); JSONL default read path remains
+Done (tapps-brain):  brain_profile_set/get (EPIC-074/075, commit 1e8b5d3)
+Pending (tapps-mcp): TAP-1997 phase-2 default read path; TAP-1998 domain weights → profile KV
 ```
 
 **Critical path for TAP-1997 phase 2 = P0 only.**
