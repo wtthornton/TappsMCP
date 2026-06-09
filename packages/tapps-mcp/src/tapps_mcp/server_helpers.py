@@ -660,12 +660,13 @@ def write_checklist_state_marker(
     — same advisory contract as :func:`write_session_start_marker`.
     """
     root = project_root if isinstance(project_root, Path) else Path(project_root)
+    entity_id = _checklist_entity_id(root)
     payload_data = {
         "ts": int(time.time()),
         "complete": bool(complete),
         "missing_required": list(missing_required or []),
+        "subject_key": entity_id,
     }
-    entity_id = _checklist_entity_id(root)
 
     async def _emit() -> None:
         try:
@@ -686,28 +687,63 @@ def write_checklist_state_marker(
         pass
 
 
+def _extract_checklist_outcome_payload(event: dict[str, Any]) -> dict[str, Any] | None:
+    """Return checklist scalar fields from a ``brain_query_events`` row."""
+    outer = event.get("payload")
+    if not isinstance(outer, dict):
+        return None
+    inner = outer.get("payload")
+    if isinstance(inner, dict) and "complete" in inner:
+        return inner
+    if "complete" in outer:
+        return outer
+    return None
+
+
+def _checklist_outcome_sort_key(event: dict[str, Any]) -> tuple[int, str]:
+    payload = _extract_checklist_outcome_payload(event) or {}
+    ts = payload.get("ts")
+    if isinstance(ts, int):
+        return (ts, "")
+    if isinstance(ts, str) and ts.isdigit():
+        return (int(ts), "")
+    event_ts = event.get("ts")
+    if isinstance(event_ts, str):
+        return (0, event_ts)
+    return (0, "")
+
+
 async def fetch_prior_checklist_outcome(project_root: Path | str) -> dict[str, Any] | None:
     """Best-effort read of the latest checklist outcome from brain (TAP-2000).
 
-    Returns ``None`` when brain is unavailable or the event payload cannot be
-    read back (brain_get_neighbors returns graph structure only today).
+    Uses ``brain_query_events`` (tapps-brain >=3.24.0) filtered by project
+    ``entity_id`` / ``subject_key``. Returns ``None`` when brain is unavailable
+    or no prior outcome exists.
     """
     root = project_root if isinstance(project_root, Path) else Path(project_root)
     entity_id = _checklist_entity_id(root)
     try:
         bridge = _get_brain_bridge()
-        if bridge is None or not hasattr(bridge, "get_neighbors"):
+        if bridge is None or not hasattr(bridge, "query_events"):
             return None
-        result = await bridge.get_neighbors(entity_ids=[entity_id], hops=1)  # type: ignore[union-attr]
-        if not isinstance(result, dict):
+        events = await bridge.query_events(  # type: ignore[union-attr]
+            "checklist_outcome",
+            entity_id=entity_id,
+            limit=50,
+        )
+        if not events:
             return None
-        neighbors = result.get("neighbors") or result.get("edges") or []
-        if not neighbors:
+        latest = max(events, key=_checklist_outcome_sort_key)
+        payload = _extract_checklist_outcome_payload(latest)
+        if payload is None:
             return None
         return {
             "entity_id": entity_id,
-            "neighbor_count": len(neighbors),
-            "source": "brain_get_neighbors",
+            "complete": bool(payload.get("complete")),
+            "missing_required": list(payload.get("missing_required") or []),
+            "ts": payload.get("ts"),
+            "event_id": latest.get("event_id"),
+            "source": "brain_query_events",
         }
     except Exception:
         return None

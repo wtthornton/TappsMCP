@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 from typing import TYPE_CHECKING
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
@@ -421,6 +422,53 @@ class TestDomainWeightStore:
         assert entry is not None
         assert entry.weight == 1.5
         assert entry.samples == 10
+
+    def test_brain_profile_round_trip(self, tmp_path: Path):
+        stored: dict[str, str] = {}
+        mock_bridge = MagicMock()
+        mock_bridge.health_check.return_value = {"ok": True}
+        mock_bridge.profile_status.return_value = {"memory_profile_name": "repo-brain"}
+        mock_bridge.profile_get = AsyncMock(return_value={"ok": False})
+        mock_bridge.profile_set = AsyncMock(return_value={"ok": True})
+
+        async def _capture_set(profile: str, key: str, value_json: str) -> dict[str, bool]:
+            stored["payload"] = value_json
+            return {"ok": True}
+
+        mock_bridge.profile_set.side_effect = _capture_set
+
+        with patch(
+            "tapps_core.brain_bridge.create_brain_bridge",
+            return_value=mock_bridge,
+        ):
+            store = DomainWeightStore(tmp_path)
+            store.save_weight("security", 1.2, samples=3, domain_type="technical")
+            assert "payload" in stored
+            snapshot = json.loads(stored["payload"])
+            assert snapshot["technical"]["security"]["weight"] == 1.2
+
+    def test_brain_load_migrates_local_yaml(self, tmp_path: Path):
+        store_dir = tmp_path / ".tapps-mcp" / "adaptive"
+        store_dir.mkdir(parents=True, exist_ok=True)
+        yaml_file = store_dir / "domain_weights.yaml"
+        yaml_file.write_text(
+            "technical:\n  security:\n    weight: 1.4\n    samples: 2\n",
+            encoding="utf-8",
+        )
+        mock_bridge = MagicMock()
+        mock_bridge.health_check.return_value = {"ok": True}
+        mock_bridge.profile_status.return_value = {"memory_profile_name": "repo-brain"}
+        mock_bridge.profile_get = AsyncMock(return_value={"ok": False})
+        mock_bridge.profile_set = AsyncMock(return_value={"ok": True})
+
+        with patch(
+            "tapps_core.brain_bridge.create_brain_bridge",
+            return_value=mock_bridge,
+        ):
+            store = DomainWeightStore(tmp_path)
+            snapshot = store.load_weights()
+        assert snapshot.technical["security"].weight == 1.4
+        mock_bridge.profile_set.assert_awaited_once()
 
 
 class TestDomainWeightEntry:

@@ -277,29 +277,39 @@ class TestBrainTelemetryDualWrite:
         assert metric.call_id == "nested"
         assert metric.score == 91.0
 
-    @pytest.mark.asyncio
-    async def test_load_tool_call_metrics_falls_back_to_memory_search(self):
-        from tapps_core.metrics.brain_telemetry import load_tool_call_metrics_from_brain
-
+    def test_dual_mode_reads_from_brain_when_healthy(self, metrics_dir, monkeypatch):
+        monkeypatch.setenv("TAPPS_METRICS_STORAGE", "dual")
         payload = ToolCallMetric(
-            call_id="legacy",
+            call_id="brain-read",
             tool_name="tapps_score_file",
             status="success",
             duration_ms=5.0,
             started_at="2025-06-01T00:00:00+00:00",
             completed_at="2025-06-01T00:00:00.005+00:00",
-        ).to_dict()
-        mock_bridge = MagicMock()
-        mock_bridge.query_events = AsyncMock(return_value=[])
-        mock_bridge.search = AsyncMock(
-            return_value=[
-                {
-                    "key": "metrics:tool_call:legacy",
-                    "value": __import__("json").dumps(payload),
-                }
-            ]
+            score=88.0,
         )
-        with patch("tapps_core.brain_bridge.create_brain_bridge", return_value=mock_bridge):
-            loaded = await load_tool_call_metrics_from_brain(limit=10)
-        assert len(loaded) == 1
-        assert loaded[0].call_id == "legacy"
+        collector = ToolCallMetricsCollector(metrics_dir)
+        with (
+            patch(
+                "tapps_core.metrics.brain_telemetry.brain_metrics_bridge_available",
+                return_value=True,
+            ),
+            patch(
+                "tapps_core.metrics.brain_telemetry.sync_load_tool_call_metrics_from_brain",
+                return_value=[payload],
+            ),
+        ):
+            metrics = collector.get_metrics()
+        assert len(metrics) == 1
+        assert metrics[0].call_id == "brain-read"
+
+    def test_dual_mode_skips_jsonl_write_when_brain_healthy(self, metrics_dir, monkeypatch):
+        monkeypatch.setenv("TAPPS_METRICS_STORAGE", "dual")
+        collector = ToolCallMetricsCollector(metrics_dir)
+        now = datetime.now(tz=UTC)
+        with patch(
+            "tapps_core.metrics.brain_telemetry.brain_metrics_bridge_available",
+            return_value=True,
+        ):
+            collector.record("tapps_score_file", now, now + timedelta(milliseconds=5), score=90.0)
+        assert list(metrics_dir.glob("tool_calls_*.jsonl")) == []

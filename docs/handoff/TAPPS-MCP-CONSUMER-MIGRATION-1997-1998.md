@@ -53,8 +53,8 @@ Writes already work via `brain_record_event` with `EntitySpec` accepting `{type,
 | Phase 1.5 — dual-write + interim `memory_save` read fallback | **Done** (fallback still in `load_tool_call_metrics_from_brain`) |
 | `brain_bridge.query_events()` consumer | **Done** |
 | `tapps_dashboard` / `tapps_stats` brain hydrate | **Done** when `TAPPS_METRICS_STORAGE=brain` |
-| Default read path (no JSONL on happy path) | **Not done** — default is `dual`; `_load_from_disk` still reads JSONL |
-| Per-file `entity_id` filter on reads | **Not done** |
+| Default read path (no JSONL on happy path) | **Done** — `dual`/`brain` read `brain_query_events` when `health_check.ok`; JSONL write-fallback in `dual` only |
+| Per-file `entity_id` filter on reads | **Done** — `entity_id` param on `load_tool_call_metrics_from_brain` / `_load_from_disk` |
 | Checklist / other JSONL consumers | **Not audited** |
 
 ---
@@ -90,15 +90,16 @@ Writes already work via `brain_record_event` with `EntitySpec` accepting `{type,
 
 | Item | Status |
 |------|--------|
-| `DomainWeightStore` YAML persistence | **Still active** — no brain bridge wired |
-| `brain_profile_get` / `brain_profile_set` bridge methods | **Not implemented** |
+| `DomainWeightStore` YAML persistence | **Fallback only** — brain profile KV when bridge healthy; YAML seeds on first read |
+| `brain_profile_get` / `brain_profile_set` bridge methods | **Done** — `HttpBrainBridge.profile_get` / `profile_set` |
 
 ---
 
 ## Out of scope for this handoff (track separately)
 
 - **TAP-1996** — broader local-state file removal (metrics + adaptive + others).
-- **TAP-2000** — checklist state via `brain_record_event`.
+- **TAP-2000** — checklist write via `brain_record_event`; read-back via
+  `fetch_prior_checklist_outcome` → `brain_query_events` (done 2026-06-09).
 - **TAP-2003** — quality gate failures as KG events.
 - **TAP-2981 consumer** — optional: fetch skill via `GET /v1/skill` instead of vendored GitHub raw URL (AgentForge / HTTP-only clients).
 

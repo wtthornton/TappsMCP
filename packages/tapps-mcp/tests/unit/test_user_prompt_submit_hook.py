@@ -31,6 +31,8 @@ from tapps_mcp.pipeline.platform_hook_templates import (
 )
 from tapps_mcp.pipeline.platform_hooks import generate_claude_hooks
 from tapps_mcp.server_helpers import (
+    _checklist_entity_id,
+    fetch_prior_checklist_outcome,
     write_checklist_state_marker,
     write_session_start_marker,
 )
@@ -85,6 +87,7 @@ class TestSidecarWriters:
         assert call_kwargs["event_type"] == "checklist_outcome"
         assert call_kwargs["payload_data"]["complete"] is False
         assert call_kwargs["payload_data"]["missing_required"] == ["tapps_quality_gate"]
+        assert call_kwargs["payload_data"]["subject_key"].startswith("checklist:")
         assert (tmp_path / ".tapps-mcp" / ".checklist-state.json").exists() is False
 
     def test_checklist_state_marker_swallows_errors(self, tmp_path: Path) -> None:
@@ -96,6 +99,71 @@ class TestSidecarWriters:
             ),
         ):
             write_checklist_state_marker(tmp_path, complete=True)
+
+
+class TestFetchPriorChecklistOutcome:
+    @pytest.mark.asyncio
+    async def test_reads_latest_outcome_via_query_events(self, tmp_path: Path) -> None:
+        entity_id = _checklist_entity_id(tmp_path)
+        mock_bridge = MagicMock()
+        mock_bridge.query_events = AsyncMock(
+            return_value=[
+                {
+                    "event_id": "older",
+                    "event_type": "checklist_outcome",
+                    "ts": "2025-06-01T00:00:00+00:00",
+                    "payload": {
+                        "event_type": "checklist_outcome",
+                        "payload": {
+                            "ts": 100,
+                            "complete": True,
+                            "missing_required": [],
+                            "subject_key": entity_id,
+                        },
+                    },
+                },
+                {
+                    "event_id": "newer",
+                    "event_type": "checklist_outcome",
+                    "ts": "2025-06-02T00:00:00+00:00",
+                    "payload": {
+                        "event_type": "checklist_outcome",
+                        "payload": {
+                            "ts": 200,
+                            "complete": False,
+                            "missing_required": ["tapps_quality_gate"],
+                            "subject_key": entity_id,
+                        },
+                    },
+                },
+            ]
+        )
+        with patch("tapps_mcp.server_helpers._get_brain_bridge", return_value=mock_bridge):
+            prior = await fetch_prior_checklist_outcome(tmp_path)
+        assert prior is not None
+        assert prior["source"] == "brain_query_events"
+        assert prior["complete"] is False
+        assert prior["missing_required"] == ["tapps_quality_gate"]
+        assert prior["event_id"] == "newer"
+        mock_bridge.query_events.assert_awaited_once_with(
+            "checklist_outcome",
+            entity_id=entity_id,
+            limit=50,
+        )
+
+    @pytest.mark.asyncio
+    async def test_returns_none_when_brain_unavailable(self, tmp_path: Path) -> None:
+        with patch("tapps_mcp.server_helpers._get_brain_bridge", return_value=None):
+            prior = await fetch_prior_checklist_outcome(tmp_path)
+        assert prior is None
+
+    @pytest.mark.asyncio
+    async def test_returns_none_when_no_events(self, tmp_path: Path) -> None:
+        mock_bridge = MagicMock()
+        mock_bridge.query_events = AsyncMock(return_value=[])
+        with patch("tapps_mcp.server_helpers._get_brain_bridge", return_value=mock_bridge):
+            prior = await fetch_prior_checklist_outcome(tmp_path)
+        assert prior is None
 
 
 class TestScriptContent:

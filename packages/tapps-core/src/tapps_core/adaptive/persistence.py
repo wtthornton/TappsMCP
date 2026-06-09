@@ -10,6 +10,7 @@ routing weights (Epic 57).
 
 from __future__ import annotations
 
+import asyncio
 import contextlib
 import json
 import os
@@ -317,6 +318,18 @@ _MIN_DOMAIN_WEIGHT = 0.1
 # Maximum weight to prevent single domain from dominating.
 _MAX_DOMAIN_WEIGHT = 3.0
 
+_DOMAIN_WEIGHTS_BRAIN_KEY = "domain_weights"
+_DEFAULT_BRAIN_PROFILE = "repo-brain"
+
+
+def _run_brain_coro(coro: Any) -> Any:
+    """Run an async brain call from sync adaptive code."""
+    try:
+        asyncio.get_running_loop()
+    except RuntimeError:
+        return asyncio.run(coro)
+    return None
+
 
 class DomainWeightStore:
     """YAML file-backed domain routing weight store.
@@ -394,21 +407,19 @@ class DomainWeightStore:
         self._persist(snapshot)
 
     def load_weights(self) -> DomainWeightsSnapshot:
-        """Load all domain weights from disk.
+        """Load domain weights from brain profile KV or local files.
 
-        Returns an empty snapshot if the file doesn't exist (graceful degradation).
+        Returns an empty snapshot when no data exists (graceful degradation).
 
         Returns:
             A :class:`DomainWeightsSnapshot` with technical and business weights.
         """
-        # Try YAML first, then JSON fallback
-        if self._file.exists():
-            return self._load_yaml()
-        if self._json_fallback.exists():
-            return self._load_json_fallback()
-
-        # No existing file - return empty snapshot
-        return DomainWeightsSnapshot()
+        bridge = self._get_brain_bridge()
+        if bridge is not None and hasattr(bridge, "profile_get"):
+            brain_snapshot = self._load_from_brain(bridge)
+            if brain_snapshot is not None:
+                return brain_snapshot
+        return self._load_local_files()
 
     def get_weight(
         self,
@@ -610,8 +621,101 @@ class DomainWeightStore:
 
     # -- Private helpers ----------------------------------------------------
 
+    @staticmethod
+    def _get_brain_bridge() -> Any | None:
+        from tapps_core.brain_bridge import create_brain_bridge
+        from tapps_core.config.settings import load_settings
+
+        bridge = create_brain_bridge(load_settings())
+        if bridge is None:
+            return None
+        health_fn = getattr(bridge, "health_check", None)
+        if callable(health_fn):
+            try:
+                report = health_fn()
+            except Exception:
+                return None
+            if not (isinstance(report, dict) and report.get("ok")):
+                return None
+        return bridge
+
+    @staticmethod
+    def _resolve_brain_profile(bridge: Any) -> str:
+        from tapps_core.config.settings import load_settings
+
+        status_fn = getattr(bridge, "profile_status", None)
+        if callable(status_fn):
+            status = status_fn()
+            if isinstance(status, dict):
+                for key in ("memory_profile_name", "declared_profile"):
+                    value = status.get(key)
+                    if isinstance(value, str) and value.strip():
+                        return value.strip()
+        settings = load_settings()
+        memory = getattr(settings, "memory", None)
+        configured = getattr(memory, "brain_profile", "") if memory is not None else ""
+        if isinstance(configured, str) and configured.strip():
+            return configured.strip()
+        env_profile = os.environ.get("TAPPS_BRAIN_PROFILE", "").strip()
+        if env_profile:
+            return env_profile
+        return _DEFAULT_BRAIN_PROFILE
+
+    def _load_from_brain(self, bridge: Any) -> DomainWeightsSnapshot | None:
+        profile = self._resolve_brain_profile(bridge)
+        result = _run_brain_coro(
+            bridge.profile_get(profile, _DOMAIN_WEIGHTS_BRAIN_KEY),
+        )
+        if not isinstance(result, dict):
+            return None
+        if result.get("ok") and result.get("value_json") is not None:
+            parsed = self._parse_brain_value(result["value_json"])
+            return parsed if parsed is not None else DomainWeightsSnapshot()
+        local = self._load_local_files()
+        if local.technical or local.business:
+            self._persist_to_brain(bridge, local, profile=profile)
+            return local
+        return DomainWeightsSnapshot()
+
+    def _persist_to_brain(
+        self,
+        bridge: Any,
+        snapshot: DomainWeightsSnapshot,
+        *,
+        profile: str | None = None,
+    ) -> bool:
+        profile_name = profile or self._resolve_brain_profile(bridge)
+        payload = json.dumps(snapshot.model_dump(mode="json"), ensure_ascii=False)
+        result = _run_brain_coro(
+            bridge.profile_set(profile_name, _DOMAIN_WEIGHTS_BRAIN_KEY, payload),
+        )
+        return isinstance(result, dict) and bool(result.get("ok"))
+
+    @staticmethod
+    def _parse_brain_value(value_json: Any) -> DomainWeightsSnapshot | None:
+        raw = value_json
+        if isinstance(raw, str):
+            try:
+                raw = json.loads(raw)
+            except json.JSONDecodeError:
+                return None
+        if not isinstance(raw, dict):
+            return None
+        return DomainWeightStore._parse_snapshot(raw)
+
+    def _load_local_files(self) -> DomainWeightsSnapshot:
+        if self._file.exists():
+            return self._load_yaml()
+        if self._json_fallback.exists():
+            return self._load_json_fallback()
+        return DomainWeightsSnapshot()
+
     def _persist(self, snapshot: DomainWeightsSnapshot) -> None:
-        """Persist snapshot to disk (YAML preferred, JSON fallback)."""
+        """Persist snapshot to brain profile KV or local YAML fallback."""
+        bridge = self._get_brain_bridge()
+        if bridge is not None and hasattr(bridge, "profile_set"):
+            if self._persist_to_brain(bridge, snapshot):
+                return
         data = snapshot.model_dump(mode="json")
         # Convert DomainWeightEntry dicts for cleaner YAML
         for section in ("technical", "business"):

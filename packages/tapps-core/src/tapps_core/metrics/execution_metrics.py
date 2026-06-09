@@ -98,13 +98,17 @@ class ToolCallMetricsCollector:
     def record_call(self, metric: ToolCallMetric) -> None:
         """Record a tool call metric to buffer and disk."""
         from tapps_core.metrics.brain_telemetry import (
+            brain_metrics_bridge_available,
             emit_quality_metric_event,
             metrics_storage_mode,
         )
 
         with self._write_lock:
             self._buffer.append(metric)
-            if metrics_storage_mode() != "brain":
+            mode = metrics_storage_mode()
+            if mode == "local" or (
+                mode == "dual" and not brain_metrics_bridge_available()
+            ):
                 self._append_to_file(metric)
         emit_quality_metric_event(metric)
 
@@ -244,24 +248,45 @@ class ToolCallMetricsCollector:
         self,
         since: datetime | None = None,
         until: datetime | None = None,
+        *,
+        file_path: str | None = None,
     ) -> list[ToolCallMetric]:
-        """Load metrics from daily JSONL files (and in-memory buffer in brain mode)."""
-        from tapps_core.metrics.brain_telemetry import metrics_storage_mode
+        """Load metrics from brain events and/or daily JSONL files."""
+        from tapps_core.metrics.brain_telemetry import (
+            brain_metrics_bridge_available,
+            metrics_storage_mode,
+            should_read_metrics_from_brain,
+            sync_load_tool_call_metrics_from_brain,
+        )
 
-        if metrics_storage_mode() == "brain":
-            with self._write_lock:
-                buffer_metrics = list(self._buffer)
-            filtered = self._apply_filters(buffer_metrics, None, None, None)
-            if since or until:
-                filtered = [
-                    m
-                    for m in filtered
-                    if self._metric_in_time_window(m, since, until)
-                ]
-            return filtered
+        mode = metrics_storage_mode()
+        with self._write_lock:
+            buffer_metrics = list(self._buffer)
 
-        metrics: list[ToolCallMetric] = []
+        if should_read_metrics_from_brain():
+            metrics: list[ToolCallMetric] = []
+            if brain_metrics_bridge_available():
+                metrics = sync_load_tool_call_metrics_from_brain(
+                    since=since,
+                    until=until,
+                    entity_id=file_path,
+                )
+            seen_ids = {m.call_id for m in metrics}
+            for metric in buffer_metrics:
+                if metric.call_id not in seen_ids:
+                    metrics.append(metric)
+                    seen_ids.add(metric.call_id)
+            if mode == "brain" or metrics:
+                filtered = self._apply_filters(metrics, None, None, None)
+                if since or until:
+                    filtered = [
+                        m
+                        for m in filtered
+                        if self._metric_in_time_window(m, since, until)
+                    ]
+                return filtered
 
+        metrics = []
         for f in sorted(self._metrics_dir.glob("tool_calls_*.jsonl")):
             # Optionally skip files outside date range
             try:

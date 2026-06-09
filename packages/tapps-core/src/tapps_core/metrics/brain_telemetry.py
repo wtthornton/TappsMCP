@@ -9,7 +9,6 @@ See ``docs/handoff/BRAIN-wave2-capabilities.md``.
 from __future__ import annotations
 
 import asyncio
-import json
 import os
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any, Literal
@@ -35,6 +34,31 @@ def metrics_storage_mode() -> Literal["local", "dual", "brain"]:
     if raw in _VALID_STORAGE:
         return raw  # type: ignore[return-value]
     return "dual"
+
+
+def should_read_metrics_from_brain() -> bool:
+    """True when reads should prefer ``brain_query_events`` over local JSONL."""
+    return metrics_storage_mode() in ("dual", "brain")
+
+
+def brain_metrics_bridge_available() -> bool:
+    """True when the brain bridge is configured and passes a sync health probe."""
+    from tapps_core.brain_bridge import HttpBrainBridge, create_brain_bridge
+    from tapps_core.config.settings import load_settings
+
+    bridge = create_brain_bridge(load_settings())
+    if bridge is None:
+        return False
+    if not hasattr(bridge, "query_events"):
+        return False
+    health_fn = getattr(bridge, "health_check", None)
+    if not callable(health_fn):
+        return isinstance(bridge, HttpBrainBridge)
+    try:
+        report = health_fn()
+    except Exception:
+        return False
+    return bool(isinstance(report, dict) and report.get("ok"))
 
 
 def metric_memory_key(call_id: str) -> str:
@@ -113,25 +137,6 @@ def _parse_metric_payload(payload: dict[str, Any]) -> ToolCallMetric | None:
         return None
 
 
-def _parse_metric_entry(entry: dict[str, Any]) -> ToolCallMetric | None:
-    """Parse a legacy memory-search entry (phase-1.5 fallback)."""
-    from tapps_core.metrics.execution_metrics import ToolCallMetric
-
-    raw = entry.get("value") or entry.get("content") or ""
-    if not isinstance(raw, str) or not raw.strip():
-        return None
-    try:
-        data = json.loads(raw)
-    except json.JSONDecodeError:
-        return None
-    if not isinstance(data, dict):
-        return None
-    try:
-        return ToolCallMetric.from_dict(data)
-    except (TypeError, KeyError):
-        return None
-
-
 def _extract_metric_payload(event: dict[str, Any]) -> dict[str, Any] | None:
     """Return the scalar metric dict from a ``brain_query_events`` row."""
     outer = event.get("payload")
@@ -180,6 +185,7 @@ async def load_tool_call_metrics_from_brain(
     *,
     since: datetime | None = None,
     until: datetime | None = None,
+    entity_id: str | None = None,
     limit: int = 500,
 ) -> list[ToolCallMetric]:
     """Load tool-call metrics from ``brain_query_events`` (TAP-1997 phase 2)."""
@@ -187,48 +193,54 @@ async def load_tool_call_metrics_from_brain(
     from tapps_core.config.settings import load_settings
 
     bridge = create_brain_bridge(load_settings())
-    if bridge is None:
+    if bridge is None or not hasattr(bridge, "query_events"):
         return []
 
     metrics: list[ToolCallMetric] = []
-
-    if hasattr(bridge, "query_events"):
-        try:
-            events = await bridge.query_events(
-                _QUALITY_METRIC_EVENT,
-                since=_iso_or_none(since),
-                until=_iso_or_none(until),
-                limit=limit,
-            )
-        except Exception:
-            logger.debug("quality_metric_brain_query_failed", exc_info=True)
-            events = []
-        for event in events:
-            if not isinstance(event, dict):
-                continue
-            metric = _parse_metric_event(event)
-            if metric is None:
-                continue
-            if _metric_in_window(metric, since, until):
-                metrics.append(metric)
-
-    if not metrics and hasattr(bridge, "search"):
-        try:
-            results = await bridge.search(_METRIC_KEY_PREFIX, limit=limit, tier="context")
-        except Exception:
-            logger.debug("quality_metric_brain_load_failed", exc_info=True)
-            results = []
-        for entry in results:
-            if not isinstance(entry, dict):
-                continue
-            metric = _parse_metric_entry(entry)
-            if metric is None:
-                continue
-            if _metric_in_window(metric, since, until):
-                metrics.append(metric)
+    try:
+        events = await bridge.query_events(
+            _QUALITY_METRIC_EVENT,
+            since=_iso_or_none(since),
+            until=_iso_or_none(until),
+            entity_id=entity_id,
+            limit=limit,
+        )
+    except Exception:
+        logger.debug("quality_metric_brain_query_failed", exc_info=True)
+        events = []
+    for event in events:
+        if not isinstance(event, dict):
+            continue
+        metric = _parse_metric_event(event)
+        if metric is None:
+            continue
+        if _metric_in_window(metric, since, until):
+            metrics.append(metric)
 
     metrics.sort(key=lambda m: m.started_at, reverse=True)
     return metrics[:limit]
+
+
+def sync_load_tool_call_metrics_from_brain(
+    *,
+    since: datetime | None = None,
+    until: datetime | None = None,
+    entity_id: str | None = None,
+    limit: int = 500,
+) -> list[ToolCallMetric]:
+    """Sync wrapper for :func:`load_tool_call_metrics_from_brain`."""
+    try:
+        asyncio.get_running_loop()
+    except RuntimeError:
+        return asyncio.run(
+            load_tool_call_metrics_from_brain(
+                since=since,
+                until=until,
+                entity_id=entity_id,
+                limit=limit,
+            )
+        )
+    return []
 
 
 async def hydrate_execution_metrics_from_brain(
@@ -236,10 +248,16 @@ async def hydrate_execution_metrics_from_brain(
     *,
     since: datetime | None = None,
     until: datetime | None = None,
+    entity_id: str | None = None,
     limit: int = 500,
 ) -> int:
     """Merge brain-backed metrics into the collector in-memory buffer."""
-    loaded = await load_tool_call_metrics_from_brain(since=since, until=until, limit=limit)
+    loaded = await load_tool_call_metrics_from_brain(
+        since=since,
+        until=until,
+        entity_id=entity_id,
+        limit=limit,
+    )
     if not loaded:
         return 0
     with collector._write_lock:
@@ -256,6 +274,7 @@ def sync_hydrate_execution_metrics_from_brain(
     *,
     since: datetime | None = None,
     until: datetime | None = None,
+    entity_id: str | None = None,
     limit: int = 500,
 ) -> int:
     """Sync wrapper for :func:`hydrate_execution_metrics_from_brain`."""
@@ -267,6 +286,7 @@ def sync_hydrate_execution_metrics_from_brain(
                 collector,
                 since=since,
                 until=until,
+                entity_id=entity_id,
                 limit=limit,
             )
         )

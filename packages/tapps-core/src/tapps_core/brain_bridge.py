@@ -1997,6 +1997,22 @@ class HttpBrainBridge(BrainBridge):
             return events if isinstance(events, list) else []
         return []
 
+    async def profile_get(self, profile: str, key: str) -> dict[str, Any]:
+        """Read profile-scoped learned data (TAP-1998 / EPIC-074)."""
+        result = await self._http_mcp_call(
+            "brain_profile_get",
+            {"profile": profile, "key": key},
+        )
+        return result if isinstance(result, dict) else {"ok": False}
+
+    async def profile_set(self, profile: str, key: str, value_json: str) -> dict[str, Any]:
+        """Persist profile-scoped learned data (TAP-1998 / EPIC-075)."""
+        result = await self._http_mcp_call(
+            "brain_profile_set",
+            {"profile": profile, "key": key, "value_json": value_json},
+        )
+        return result if isinstance(result, dict) else {"ok": False}
+
     async def explain_connection(
         self,
         subject_id: str,

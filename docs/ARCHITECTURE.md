@@ -190,15 +190,15 @@ Stable agent identity (UUIDv4) persisted to `.tapps-mcp/agent.id` is attached to
 
 ## Metrics and brain telemetry (TAP-1997)
 
-Tool-call metrics still default to local JSONL under `.tapps-mcp/metrics/` (`dual` mode). Each recorded call also fires a best-effort `quality_metric` `brain_record_event` with scalar payload (score, duration, gate flags) and entities built via `kg_keys.entity_spec()`.
+Tool-call metrics use `dual` mode by default. Each recorded call fires a best-effort `quality_metric` `brain_record_event` with scalar payload (score, duration, gate flags) and entities built via `kg_keys.entity_spec()`. Reads prefer `brain_query_events` when the brain bridge passes `health_check` (tapps-brain >=3.24.0).
 
-| `TAPPS_METRICS_STORAGE` | Local JSONL | Brain KG event | Brain memory key |
-|-------------------------|-------------|----------------|------------------|
-| `local` (legacy) | yes | no | no |
-| `dual` (default) | yes | yes | yes (`metrics:tool_call:<call_id>`) |
-| `brain` (opt-in) | no | yes | yes |
+| `TAPPS_METRICS_STORAGE` | Local JSONL write | Brain KG event write | Read path |
+|-------------------------|-------------------|----------------------|-----------|
+| `local` (legacy) | yes | no | JSONL |
+| `dual` (default) | fallback when brain down | yes | `brain_query_events` when brain OK, else JSONL |
+| `brain` (opt-in) | no | yes | `brain_query_events` + in-memory buffer |
 
-Phase 2 — making `brain` the default read path for `tapps_dashboard` / `tapps_stats` — requires tapps-brain `brain_query_events` (P0 in [docs/handoff/BRAIN-wave2-capabilities.md](handoff/BRAIN-wave2-capabilities.md)). Until then, dashboard hydration in `brain` mode uses the interim memory keys.
+Domain weights (`DomainWeightStore`) persist to `brain_profile_set`/`get` under key `domain_weights` when the brain bridge is healthy; local YAML seeds a one-time migration and remains the offline fallback.
 
 Other telemetry (`quality_gate_fail`, `validate_completed`, `security_finding`, `checklist_outcome`) uses the same `entity_spec` shape; payloads carry `subject_key` for future event queries — not `brain_get_neighbors`.
 
