@@ -137,6 +137,11 @@ def record_quick_check_recurring(
     if getattr(mem, "enabled", True) is False:
         return {}
 
+    from tapps_mcp.server_helpers import sync_memory_store_available
+
+    if not sync_memory_store_available(settings):
+        return {}
+
     path_fp = _path_fingerprint(resolved, settings.project_root)
     th_raw = getattr(mem, "recurring_quick_check_threshold", 3)
     threshold = th_raw if isinstance(th_raw, int) else 3

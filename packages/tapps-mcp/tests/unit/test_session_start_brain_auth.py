@@ -24,6 +24,13 @@ import pytest
 from tapps_mcp.server_pipeline_tools import _detect_brain_auth_failure
 
 
+@pytest.fixture(autouse=True)
+def _clear_brain_auth_env(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Isolate auth classification from ambient shell exports."""
+    monkeypatch.delenv("TAPPS_BRAIN_AUTH_TOKEN", raising=False)
+    monkeypatch.delenv("TAPPS_MCP_MEMORY_BRAIN_AUTH_TOKEN", raising=False)
+
+
 class _FakeSecret:
     """Stand-in for pydantic.SecretStr with the same get_secret_value() shape."""
 

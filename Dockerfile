@@ -8,6 +8,7 @@
 
 # Tool versions — keep in sync with pyproject.toml dev-dependencies
 ARG TAPPS_VERSION=1.12.0
+ARG TAPPS_BRAIN_REV=0a3e173181d4b3179244add93e5fb18ce1336fc5
 ARG RUFF_VERSION=0.15.2
 ARG MYPY_VERSION=1.19.1
 ARG BANDIT_VERSION=1.9.3
@@ -15,6 +16,8 @@ ARG RADON_VERSION=6.0.1
 
 # ---- Builder ----
 FROM python:3.12-slim AS builder
+
+ARG TAPPS_BRAIN_REV
 
 WORKDIR /build
 
@@ -25,16 +28,16 @@ RUN apt-get update \
     && rm -rf /var/lib/apt/lists/*
 
 # Build tapps-brain wheel from git (private repo — requires BuildKit secret)
+# Rev pinned to match [tool.uv.sources] in pyproject.toml (ADR-0013 floor >=3.24.0).
 # Build with: docker build --secret id=github_token,env=GITHUB_TOKEN -t tapps-mcp .
-# Or:         docker build --secret id=github_token,src=$HOME/.github_token -t tapps-mcp .
 RUN --mount=type=secret,id=github_token \
     TOKEN=$(cat /run/secrets/github_token 2>/dev/null || echo "") && \
     if [ -n "$TOKEN" ]; then \
         pip wheel --no-deps --wheel-dir /wheels \
-            git+https://${TOKEN}@github.com/wtthornton/tapps-brain.git@v2.0.3; \
+            git+https://${TOKEN}@github.com/wtthornton/tapps-brain.git@${TAPPS_BRAIN_REV}; \
     else \
         pip wheel --no-deps --wheel-dir /wheels \
-            git+https://github.com/wtthornton/tapps-brain.git@v2.0.3; \
+            git+https://github.com/wtthornton/tapps-brain.git@${TAPPS_BRAIN_REV}; \
     fi
 
 # Build tapps-core wheel (dependency)
@@ -86,3 +89,33 @@ EXPOSE 8000
 # Default: stdio transport for MCP client integration
 # HTTP: docker run -p 8000:8000 ... tapps-mcp serve --transport http --host 0.0.0.0 --port 8000
 CMD ["tapps-mcp", "serve"]
+
+# ---- Dev (editable workspace — restart, don't rebuild, on src changes) ----
+FROM python:3.12-slim AS dev
+
+ARG RUFF_VERSION=0.15.2
+ARG MYPY_VERSION=1.19.1
+ARG BANDIT_VERSION=1.9.3
+ARG RADON_VERSION=6.0.1
+
+COPY --from=ghcr.io/astral-sh/uv:0.6.14 /uv /uvx /bin/
+
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends curl git \
+    && pip install --no-cache-dir \
+        ruff==${RUFF_VERSION} mypy==${MYPY_VERSION} bandit==${BANDIT_VERSION} radon==${RADON_VERSION} \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /workspace
+
+COPY docker/dev-entrypoint.sh /usr/local/bin/tapps-mcp-dev-entrypoint.sh
+RUN chmod +x /usr/local/bin/tapps-mcp-dev-entrypoint.sh
+
+ENV TAPPS_MCP_PROJECT_ROOT=/workspace
+ENV PYTHONUNBUFFERED=1
+ENV PATH="/workspace/.venv/bin:${PATH}"
+
+EXPOSE 8000
+
+ENTRYPOINT ["/usr/local/bin/tapps-mcp-dev-entrypoint.sh"]
+CMD ["serve", "--transport", "http", "--host", "0.0.0.0", "--port", "8000"]

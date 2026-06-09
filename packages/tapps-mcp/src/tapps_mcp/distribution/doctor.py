@@ -285,31 +285,16 @@ def _brain_http_url_for_checks(project_root: Path) -> str:
 
 def _is_unsubstituted_placeholder(value: str) -> bool:
     """True when *value* is an unresolved ``${VAR}`` MCP-config placeholder."""
-    stripped = value.strip()
-    return stripped.startswith("${") and stripped.endswith("}")
+    from tapps_core.brain_auth import is_unsubstituted_brain_token_placeholder
+
+    return is_unsubstituted_brain_token_placeholder(value)
 
 
 def _resolve_brain_auth_token(settings: Any) -> str | None:
-    """Resolve the client bearer token for doctor brain probes.
+    """Resolve the client bearer token for doctor brain probes."""
+    from tapps_core.brain_auth import resolve_brain_auth_token
 
-    Precedence: ``settings.memory.brain_auth_token``, then
-    ``TAPPS_MCP_MEMORY_BRAIN_AUTH_TOKEN``, then ``TAPPS_BRAIN_AUTH_TOKEN``
-    (the shell export name ``tapps_init`` documents for ``.mcp.json``
-    ``${...}`` substitution). Literal ``${...}`` placeholders count as
-    missing.
-    """
-    import os
-
-    secret = getattr(getattr(settings, "memory", None), "brain_auth_token", None)
-    if secret is not None:
-        val = secret.get_secret_value().strip()
-        if val and not _is_unsubstituted_placeholder(val):
-            return val
-    for key in ("TAPPS_MCP_MEMORY_BRAIN_AUTH_TOKEN", "TAPPS_BRAIN_AUTH_TOKEN"):
-        raw = os.environ.get(key, "").strip()
-        if raw and not _is_unsubstituted_placeholder(raw):
-            return raw
-    return None
+    return resolve_brain_auth_token(settings)
 
 
 def _doctor_brain_headers(settings: Any) -> dict[str, str]:

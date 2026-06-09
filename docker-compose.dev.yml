@@ -1,0 +1,20 @@
+# Dev override: editable workspace install — restart container on src changes, no rebuild.
+# Usage:
+#   docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d --build   # first time
+#   docker compose -f docker-compose.yml -f docker-compose.dev.yml restart tapps-mcp  # after edits
+#
+# Inner loop (fastest): uv run tapps-mcp serve via Cursor stdio — skip Docker entirely.
+
+services:
+  tapps-mcp:
+    build:
+      target: dev
+    image: tappsmcp:dev
+    container_name: tappsmcp-mcp-dev
+    command: ["serve", "--transport", "http", "--host", "0.0.0.0", "--port", "8000"]
+    volumes:
+      - .:/workspace
+      - tapps-dev-venv:/workspace/.venv
+
+volumes:
+  tapps-dev-venv:

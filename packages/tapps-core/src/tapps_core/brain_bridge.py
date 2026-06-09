@@ -3387,10 +3387,10 @@ def _create_http_bridge(
             http_url=brain_http_url,
             hint=(
                 "HTTP bridge has no Authorization header — every /mcp call will "
-                "return 401/403. Set TAPPS_MCP_MEMORY_BRAIN_AUTH_TOKEN (client "
-                "bearer token) in the environment or memory.brain_auth_token in "
-                ".tapps-mcp.yaml. Note: TAPPS_BRAIN_AUTH_TOKEN is tapps-brain's "
-                "server-side token, not the client token."
+                "return 401/403. Set TAPPS_MCP_MEMORY_BRAIN_AUTH_TOKEN in the "
+                "environment or memory.brain_auth_token in .tapps-mcp.yaml. "
+                "Export TAPPS_BRAIN_AUTH_TOKEN in the shell for MCP ${...} "
+                "substitution and CLI fallback (same value)."
             ),
         )
 

@@ -186,6 +186,39 @@ def _reset_brain_bridge_cache() -> None:
         _brain_bridge = None
 
 
+def _brain_http_url_configured(settings: TappsMCPSettings) -> bool:
+    """True when HTTP brain-bridge mode is active for *settings*."""
+    import os
+
+    return bool(
+        (settings.memory.brain_http_url or os.environ.get("TAPPS_MCP_MEMORY_BRAIN_HTTP_URL", "")).strip()
+    )
+
+
+def brain_kg_events_enabled(settings: TappsMCPSettings | None = None) -> bool:
+    """True when brain KG telemetry should run (memory on + auth present in HTTP mode)."""
+    from tapps_core.brain_auth import resolve_brain_auth_token
+    from tapps_core.config.settings import load_settings
+
+    cfg = settings or load_settings()
+    if not getattr(cfg.memory, "enabled", True):
+        return False
+    if _brain_http_url_configured(cfg) and resolve_brain_auth_token(cfg) is None:
+        return False
+    return True
+
+
+def sync_memory_store_available(settings: TappsMCPSettings) -> bool:
+    """True when the in-process sync ``MemoryStore`` path is usable.
+
+    HTTP bridge mode always returns ``False`` — ``bridge.store`` is ``None`` and
+    recurring quick_check memory uses the sync store API.
+    """
+    if not getattr(settings.memory, "enabled", True):
+        return False
+    return not _brain_http_url_configured(settings)
+
+
 def _peek_brain_bridge() -> _BrainBridgeType | None:
     """Return the cached :class:`BrainBridge` without forcing init (TAP-517).
 
@@ -775,16 +808,26 @@ async def ensure_session_initialized() -> None:
     profile_data: dict[str, Any] = {}
 
     try:
+        from tapps_mcp.project.profile_cache import (
+            load_cached_profile_summary,
+            profile_marker_fingerprint,
+            save_cached_profile_summary,
+        )
         from tapps_mcp.project.profiler import detect_project_profile
 
-        profile = await asyncio.to_thread(detect_project_profile, settings.project_root)
-        profile_data = {
-            "project_type": profile.project_type,
-            "has_tests": profile.has_tests,
-            "has_docker": profile.has_docker,
-            "has_ci": profile.has_ci,
-        }
+        fingerprint = profile_marker_fingerprint(settings.project_root)
+        profile_data = load_cached_profile_summary(settings.project_root, fingerprint) or {}
+        if not profile_data:
+            profile = await asyncio.to_thread(detect_project_profile, settings.project_root)
+            profile_data = {
+                "project_type": profile.project_type,
+                "has_tests": profile.has_tests,
+                "has_docker": profile.has_docker,
+                "has_ci": profile.has_ci,
+            }
+            save_cached_profile_summary(settings.project_root, fingerprint, profile_data)
     except Exception as exc:
+        profile_data = {}
         import structlog
 
         structlog.get_logger(__name__).warning(

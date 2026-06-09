@@ -14,7 +14,12 @@ from typing import TYPE_CHECKING, Any
 import pytest
 from pydantic import SecretStr
 
-from tapps_core.brain_auth import BrainAuthConfigError, build_brain_headers
+from tapps_core.brain_auth import (
+    BrainAuthConfigError,
+    build_brain_headers,
+    classify_brain_auth_token,
+    resolve_brain_auth_token,
+)
 from tapps_core.config.settings import TappsMCPSettings
 
 if TYPE_CHECKING:
@@ -41,9 +46,11 @@ def _make_settings(
 
 @pytest.fixture(autouse=True)
 def _reset_env(monkeypatch: pytest.MonkeyPatch) -> Iterator[None]:
-    """Isolate each test from ambient ``TAPPS_BRAIN_STRICT`` / agent-id env."""
+    """Isolate each test from ambient brain-auth and agent-id env."""
     monkeypatch.delenv("TAPPS_BRAIN_STRICT", raising=False)
     monkeypatch.delenv("CLAUDE_AGENT_ID", raising=False)
+    monkeypatch.delenv("TAPPS_BRAIN_AUTH_TOKEN", raising=False)
+    monkeypatch.delenv("TAPPS_MCP_MEMORY_BRAIN_AUTH_TOKEN", raising=False)
     yield
 
 
@@ -136,3 +143,47 @@ def test_x_agent_id_uses_stable_agent_id(tmp_path: Path, monkeypatch: pytest.Mon
     headers = build_brain_headers(settings)
 
     assert headers["X-Agent-Id"] == expected_agent_id
+
+
+def test_resolve_brain_auth_token_env_fallback(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """TAPPS_BRAIN_AUTH_TOKEN env is used when settings token is unset."""
+    settings = _make_settings(tmp_path, token=None)
+    monkeypatch.setenv("TAPPS_BRAIN_AUTH_TOKEN", "env-bearer-token")
+
+    assert resolve_brain_auth_token(settings) == "env-bearer-token"
+
+
+def test_resolve_brain_auth_token_skips_unsubstituted_template(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Literal ${...} in settings falls through to env."""
+    settings = _make_settings(tmp_path, token="${TAPPS_BRAIN_AUTH_TOKEN}")
+    monkeypatch.setenv("TAPPS_BRAIN_AUTH_TOKEN", "real-token")
+
+    assert resolve_brain_auth_token(settings) == "real-token"
+
+
+def test_classify_present_via_env_when_settings_placeholder(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    settings = _make_settings(tmp_path, token="${TAPPS_BRAIN_AUTH_TOKEN}")
+    monkeypatch.setenv("TAPPS_BRAIN_AUTH_TOKEN", "real-token")
+    assert classify_brain_auth_token(settings) == "present"
+
+
+def test_classify_unsubstituted_when_no_env(tmp_path: Path) -> None:
+    settings = _make_settings(tmp_path, token="${TAPPS_BRAIN_AUTH_TOKEN}")
+    assert classify_brain_auth_token(settings) == "unsubstituted"
+
+
+def test_build_brain_headers_uses_env_token(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    settings = _make_settings(tmp_path, token=None)
+    monkeypatch.setenv("TAPPS_MCP_MEMORY_BRAIN_AUTH_TOKEN", "env-token")
+
+    headers = build_brain_headers(settings)
+
+    assert headers["Authorization"] == "Bearer env-token"

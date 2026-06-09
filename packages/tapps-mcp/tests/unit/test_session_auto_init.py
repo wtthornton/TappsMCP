@@ -59,7 +59,7 @@ class TestEnsureSessionInitialized:
 
     @pytest.mark.asyncio
     async def test_sets_flag(self):
-        with patch("tapps_mcp.config.settings.load_settings") as mock_settings:
+        with patch("tapps_core.config.settings.load_settings") as mock_settings:
             mock_settings.return_value = MagicMock(
                 project_root=MagicMock(),
                 quality_preset="standard",
@@ -85,7 +85,7 @@ class TestEnsureSessionInitialized:
 
     @pytest.mark.asyncio
     async def test_context_has_auto_flag(self):
-        with patch("tapps_mcp.config.settings.load_settings") as mock_settings:
+        with patch("tapps_core.config.settings.load_settings") as mock_settings:
             mock_settings.return_value = MagicMock(
                 project_root=MagicMock(__str__=lambda s: "/tmp/proj"),
                 quality_preset="standard",
@@ -104,7 +104,7 @@ class TestEnsureSessionInitialized:
     @pytest.mark.asyncio
     async def test_profile_failure_still_initializes(self):
         """If project profiling fails, session still initializes."""
-        with patch("tapps_mcp.config.settings.load_settings") as mock_settings:
+        with patch("tapps_core.config.settings.load_settings") as mock_settings:
             mock_settings.return_value = MagicMock(
                 project_root=MagicMock(__str__=lambda s: "/tmp/proj"),
                 quality_preset="strict",
@@ -124,7 +124,7 @@ class TestEnsureSessionInitializedSync:
     """Tests for sync ensure_session_initialized_sync."""
 
     def test_sets_flag(self):
-        with patch("tapps_mcp.config.settings.load_settings") as mock_settings:
+        with patch("tapps_core.config.settings.load_settings") as mock_settings:
             mock_settings.return_value = MagicMock(
                 project_root=MagicMock(__str__=lambda s: "/tmp/proj"),
                 quality_preset="standard",
@@ -139,7 +139,7 @@ class TestEnsureSessionInitializedSync:
         assert ctx.get("first") is True
 
     def test_context_has_sync_only_flag(self):
-        with patch("tapps_mcp.config.settings.load_settings") as mock_settings:
+        with patch("tapps_core.config.settings.load_settings") as mock_settings:
             mock_settings.return_value = MagicMock(
                 project_root=MagicMock(__str__=lambda s: "/tmp/proj"),
                 quality_preset="standard",

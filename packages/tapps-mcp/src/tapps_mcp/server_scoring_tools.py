@@ -71,6 +71,11 @@ def _fire_quality_gate_events(file_path: str, failures: list[GateFailure]) -> No
 
     async def _emit() -> None:
         try:
+            from tapps_core.config.settings import load_settings
+            from tapps_mcp.server_helpers import brain_kg_events_enabled
+
+            if not brain_kg_events_enabled(load_settings()):
+                return
             bridge = _get_brain_bridge()
             if bridge is None or not hasattr(bridge, "record_kg_event"):
                 return

@@ -49,6 +49,54 @@ def _strict_mode() -> bool:
     return raw in {"1", "true", "yes", "on"}
 
 
+def is_unsubstituted_brain_token_placeholder(value: str) -> bool:
+    """True when *value* is an unresolved ``${VAR}`` MCP-config placeholder."""
+    stripped = value.strip()
+    return stripped.startswith("${") and stripped.endswith("}")
+
+
+def resolve_brain_auth_token(settings: TappsMCPSettings) -> str | None:
+    """Resolve the client bearer token with settings + env fallback.
+
+    Precedence: ``settings.memory.brain_auth_token``, then
+    ``TAPPS_MCP_MEMORY_BRAIN_AUTH_TOKEN``, then ``TAPPS_BRAIN_AUTH_TOKEN``.
+    Literal ``${...}`` placeholders count as missing.
+    """
+    secret = settings.memory.brain_auth_token
+    if secret is not None:
+        val = secret.get_secret_value().strip()
+        if val and not is_unsubstituted_brain_token_placeholder(val):
+            return val
+    for key in ("TAPPS_MCP_MEMORY_BRAIN_AUTH_TOKEN", "TAPPS_BRAIN_AUTH_TOKEN"):
+        raw = os.environ.get(key, "").strip()
+        if raw and not is_unsubstituted_brain_token_placeholder(raw):
+            return raw
+    return None
+
+
+def classify_brain_auth_token(settings: TappsMCPSettings) -> str:
+    """Classify brain auth token state without leaking the secret.
+
+    Returns ``unsubstituted``, ``missing``, or ``present``.
+    """
+    had_unsubstituted_template = False
+    secret = settings.memory.brain_auth_token
+    if secret is not None:
+        try:
+            raw = secret.get_secret_value().strip()
+        except Exception:
+            raw = ""
+        if raw and not is_unsubstituted_brain_token_placeholder(raw):
+            return "present"
+        if raw and is_unsubstituted_brain_token_placeholder(raw):
+            had_unsubstituted_template = True
+    if resolve_brain_auth_token(settings) is not None:
+        return "present"
+    if had_unsubstituted_template:
+        return "unsubstituted"
+    return "missing"
+
+
 def build_brain_headers(
     settings: TappsMCPSettings,
     *,
@@ -79,7 +127,7 @@ def build_brain_headers(
     del admin  # Reserved for future per-endpoint token scoping.
 
     memory = settings.memory
-    token_secret = memory.brain_auth_token
+    bearer = resolve_brain_auth_token(settings)
     project_id = memory.brain_project_id
     agent_id = get_stable_agent_id(settings)
     # TAP-1616: prefer the explicit settings field; fall back to the canonical
@@ -91,8 +139,8 @@ def build_brain_headers(
     headers: dict[str, str] = {}
     missing: list[str] = []
 
-    if token_secret is not None:
-        headers["Authorization"] = f"Bearer {token_secret.get_secret_value()}"
+    if bearer:
+        headers["Authorization"] = f"Bearer {bearer}"
     else:
         missing.append("brain_auth_token")
 
@@ -125,4 +173,10 @@ def build_brain_headers(
     return headers
 
 
-__all__ = ["BrainAuthConfigError", "build_brain_headers"]
+__all__ = [
+    "BrainAuthConfigError",
+    "build_brain_headers",
+    "classify_brain_auth_token",
+    "is_unsubstituted_brain_token_placeholder",
+    "resolve_brain_auth_token",
+]

@@ -16,8 +16,19 @@ Run TappsMCP as a **local Docker MCP server** using Streamable HTTP. The server 
 # From the TappsMCP repo root
 cd <path-to-TappsMCP-checkout>
 
-# Build and start
+# Production image (baked wheels — rebuild on code changes)
 docker compose up --build -d
+
+# Dev loop (editable workspace — restart on src changes, no rebuild)
+docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d --build
+# after edits:
+docker compose -f docker-compose.yml -f docker-compose.dev.yml restart tapps-mcp
+
+# Or use the release helper (bump + scoped test + dev restart):
+scripts/dev-release.sh
+
+# Fastest inner loop: skip Docker — use stdio MCP in .cursor/mcp.json:
+#   "command": "uv", "args": ["run", "tapps-mcp", "serve"]
 
 # Check status and logs
 docker compose ps
@@ -178,6 +189,9 @@ docker run --rm -p 8000:8000 -e TAPPS_MCP_PROJECT_ROOT=/workspace tappsmcp:local
 
 | File | Purpose |
 |------|---------|
-| `Dockerfile` | Builds the TappsMCP image (Python 3.12, deps, ruff/mypy/bandit/radon) |
+| `Dockerfile` | Builds the TappsMCP image (Python 3.12, deps, ruff/mypy/bandit/radon); `dev` target for editable workspace |
 | `docker-compose.yml` | Runs the server, port 8000, optional volume, healthcheck |
+| `docker-compose.dev.yml` | Dev override: `uv sync` workspace + restart-without-rebuild workflow |
+| `docker/dev-entrypoint.sh` | Dev container entrypoint — syncs deps when lockfiles change |
+| `scripts/dev-release.sh` | High-cadence bump + scoped test + dev Docker restart |
 | `.dockerignore` | Keeps build context small (excludes tests, docs, .venv, etc.) |

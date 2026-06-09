@@ -431,6 +431,10 @@ def _fire_validate_events(
 
     async def _emit() -> None:
         try:
+            from tapps_mcp.server_helpers import _get_brain_bridge, brain_kg_events_enabled
+
+            if not brain_kg_events_enabled():
+                return
             bridge = _get_brain_bridge()
             if bridge is None or not hasattr(bridge, "record_kg_event"):
                 return

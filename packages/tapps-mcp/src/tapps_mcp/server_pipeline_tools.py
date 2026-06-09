@@ -363,32 +363,10 @@ _META_DEFERRED: dict[str, Any] = {"defer_loading": True}
 
 
 def _classify_brain_auth_token(settings: Any) -> str:
-    """TAP-1336: Classify the configured brain auth token without leaking it.
+    """TAP-1336: Classify the configured brain auth token without leaking it."""
+    from tapps_core.brain_auth import classify_brain_auth_token
 
-    Returns one of:
-
-    * ``"unsubstituted"`` — token is the literal ``${...}`` template, meaning
-      Claude Code (or whatever launched the MCP subprocess) did not expand the
-      env-var reference in ``.mcp.json``. The most common root cause is that
-      ``TAPPS_BRAIN_AUTH_TOKEN`` was not exported in the shell that launched
-      Claude Code.
-    * ``"missing"`` — token is ``None`` or empty after stripping whitespace.
-    * ``"present"`` — non-empty, non-template token. The 401/403 means the
-      server rejected it (wrong / rotated / revoked).
-    """
-    secret = getattr(getattr(settings, "memory", None), "brain_auth_token", None)
-    if secret is None:
-        return "missing"
-    try:
-        raw = secret.get_secret_value() if hasattr(secret, "get_secret_value") else str(secret)
-    except Exception:
-        return "missing"
-    raw = (raw or "").strip()
-    if not raw:
-        return "missing"
-    if raw.startswith("${") and raw.endswith("}"):
-        return "unsubstituted"
-    return "present"
+    return classify_brain_auth_token(settings)
 
 
 def _detect_brain_auth_failure(
