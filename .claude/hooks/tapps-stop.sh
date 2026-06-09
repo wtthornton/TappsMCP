@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# tapps-mcp-hook-version: 3.12.15
+# tapps-mcp-hook-version: 3.12.16
 # TappsMCP Stop hook — TAP-1326 / TAP-1327 (+ completion-gate warn-mode for non-Ralph)
 # Phase 1 (always when transcript exists): scan tool calls, write loop-metrics.jsonl
 #   + write .tapps-mcp/.completion-gate-violations.jsonl when files were edited

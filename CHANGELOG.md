@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [3.12.16] - 2026-06-09
+
+Patch: version stamp sync; republish global CLIs after 3.12.15 install drift.
+
+### Fixed
+
+- **Global CLI install drift** — `uv tool list` could report `3.12.15` while the installed site-packages lacked modules added in that release (`session_start_core`, `linear_list_gateway`). Reinstall from this tag (`uv tool install --reinstall --from packages/tapps-mcp tapps-mcp`).
+
 ## [3.12.15] - 2026-06-09
 
 Patch: metrics default to brain-backed storage; CLI shell auth documentation for handoff workflows.
