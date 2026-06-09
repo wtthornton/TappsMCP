@@ -175,6 +175,44 @@ def _detect_uv_context(project_root: Path) -> dict[str, Any] | None:
     return info
 
 
+def _should_include_docs_mcp(
+    with_docs_mcp: bool,
+    *,
+    existing: dict[str, Any] | None = None,
+    servers_key: str = "mcpServers",
+) -> bool:
+    """Return whether to emit a ``docs-mcp`` server entry.
+
+    Enabled when explicitly requested, when ``docsmcp`` is on ``PATH``, or when
+    an existing config already opted in (preserve on upgrade).
+    """
+    if with_docs_mcp:
+        return True
+    if shutil.which("docsmcp") is not None:
+        return True
+    if existing is not None:
+        servers = existing.get(servers_key, {})
+        if isinstance(servers, dict) and "docs-mcp" in servers:
+            return True
+    return False
+
+
+def _preserve_launch_on_upgrade(
+    upgrade_mode: bool,
+    old_entry: dict[str, Any],
+    *,
+    binary_name: str,
+) -> bool:
+    """Return True when upgrade should keep the on-disk command/args.
+
+    When a global ``uv tool install`` binary is available, prefer upgrading to
+    that launcher instead of preserving a stale ``uv run`` entry.
+    """
+    if not upgrade_mode or "command" not in old_entry:
+        return False
+    return shutil.which(binary_name) is None
+
+
 def _should_use_uv_launch(
     project_root: Path,
     *,
@@ -191,6 +229,9 @@ def _should_use_uv_launch(
         ``(use_uv, extra_name, detection_info)`` tuple.
     """
     if uv_mode == "off":
+        return False, None, None
+    # Global ``uv tool install`` CLIs take precedence over workspace uv run.
+    if uv_mode != "on" and shutil.which("tapps-mcp") is not None:
         return False, None, None
     ctx = _detect_uv_context(project_root)
     if uv_mode == "on":
@@ -510,8 +551,7 @@ def _merge_config(
     new_entry = _build_server_entry(host, uv_launch=uv_launch, project_root=project_root)
     old_entry = merged[servers_key].get("tapps-mcp")
     if isinstance(old_entry, dict):
-        if upgrade_mode and "command" in old_entry:
-            # Preserve custom command paths (exe/uv) during upgrade
+        if _preserve_launch_on_upgrade(upgrade_mode, old_entry, binary_name="tapps-mcp"):
             new_entry["command"] = old_entry["command"]
             if "args" in old_entry:
                 new_entry["args"] = old_entry["args"]
@@ -524,6 +564,31 @@ def _merge_config(
     merged[servers_key]["tapps-mcp"] = new_entry
 
     return merged
+
+
+def _merge_docsmcp_entry(
+    merged: dict[str, Any],
+    host: str,
+    *,
+    upgrade_mode: bool = False,
+    uv_launch: tuple[str, list[str]] | None = None,
+    project_root: Path | None = None,
+) -> None:
+    """Merge or add the ``docs-mcp`` server entry into *merged*."""
+    servers_key = _get_servers_key(host)
+    merged.setdefault(servers_key, {})
+    new_docs = _build_docsmcp_server_entry(host, uv_launch=uv_launch, project_root=project_root)
+    old_docs = merged[servers_key].get("docs-mcp")
+    if isinstance(old_docs, dict):
+        if _preserve_launch_on_upgrade(upgrade_mode, old_docs, binary_name="docsmcp"):
+            new_docs["command"] = old_docs["command"]
+            if "args" in old_docs:
+                new_docs["args"] = old_docs["args"]
+        old_env = old_docs.get("env")
+        new_env = new_docs.get("env") or {}
+        if isinstance(old_env, dict):
+            new_docs["env"] = {**old_env, **new_env}
+    merged[servers_key]["docs-mcp"] = new_docs
 
 
 # ---------------------------------------------------------------------------
@@ -683,6 +748,7 @@ def _generate_config(
     """
     config_path = _get_config_path(host, project_root, scope=scope)
     servers_key = _get_servers_key(host)
+    existing: dict[str, Any] = {}
 
     if config_path.exists():
         # Read existing config and merge
@@ -748,6 +814,12 @@ def _generate_config(
             }
         }
 
+    include_docs_mcp = _should_include_docs_mcp(
+        with_docs_mcp,
+        existing=existing if config_path.exists() else None,
+        servers_key=servers_key,
+    )
+
     # Issue #80.2: When creating a new config for claude-code, migrate env vars
     # (e.g. CONTEXT7_API_KEY) from the *other* scope so the user doesn't silently
     # lose them after re-scoping.
@@ -781,16 +853,14 @@ def _generate_config(
                 env = {}
             tapps_entry["env"] = {**env, **extra_env}
 
-    if with_docs_mcp:
-        merged.setdefault(servers_key, {})
-        old_docs = merged[servers_key].get("docs-mcp")
-        new_docs = _build_docsmcp_server_entry(host, uv_launch=uv_launch, project_root=project_root)
-        if isinstance(old_docs, dict):
-            old_env = old_docs.get("env")
-            new_env = new_docs.get("env") or {}
-            if isinstance(old_env, dict):
-                new_docs["env"] = {**old_env, **new_env}
-        merged[servers_key]["docs-mcp"] = new_docs
+    if include_docs_mcp:
+        _merge_docsmcp_entry(
+            merged,
+            host,
+            upgrade_mode=upgrade_mode,
+            uv_launch=uv_launch,
+            project_root=project_root,
+        )
 
     if dry_run:
         click.echo(
@@ -1362,6 +1432,22 @@ def run_init(
         click.echo(
             click.style(
                 f"uv project detected — emitting '{' '.join([uv_launch[0], *uv_launch[1]])}'",
+                fg="cyan",
+            )
+        )
+    elif shutil.which("tapps-mcp") is not None:
+        click.echo(
+            click.style(
+                "Global tapps-mcp detected — emitting 'tapps-mcp serve'",
+                fg="cyan",
+            )
+        )
+
+    if not with_docs_mcp and _should_include_docs_mcp(False):
+        with_docs_mcp = True
+        click.echo(
+            click.style(
+                "Global docsmcp detected — including docs-mcp server entry",
                 fg="cyan",
             )
         )

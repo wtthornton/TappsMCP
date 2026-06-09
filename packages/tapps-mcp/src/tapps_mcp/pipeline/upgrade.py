@@ -468,15 +468,32 @@ def _upgrade_mcp_config(
     overlays the new (absolute) env values over the broken ones, so user
     customizations on other keys survive.
     """
+    import json
+
     from tapps_mcp.distribution.setup_generator import (
         _generate_config,
         _get_config_path,
         _get_servers_key,
+        _should_include_docs_mcp,
         _validate_config_file,
     )
 
     config_path = _get_config_path(host, project_root)
     servers_key = _get_servers_key(host)
+    existing: dict[str, object] = {}
+    if config_path.exists():
+        try:
+            raw = config_path.read_text(encoding="utf-8")
+            parsed = json.loads(raw) if raw.strip() else {}
+            if isinstance(parsed, dict):
+                existing = parsed
+        except json.JSONDecodeError:
+            existing = {}
+    include_docs_mcp = _should_include_docs_mcp(
+        False,
+        existing=existing,
+        servers_key=servers_key,
+    )
     error = _validate_config_file(config_path, servers_key)
     already_opted_in = _mcp_json_has_tapps_entry(project_root, host)
     needs_heal = _mcp_json_has_unresolved_workspacefolder(project_root, host)
@@ -487,7 +504,13 @@ def _upgrade_mcp_config(
                 "(TAP-2199 — rerun without dry_run to fix)"
             )
         else:
-            _generate_config(host, project_root, force=True, upgrade_mode=True)
+            _generate_config(
+                host,
+                project_root,
+                force=True,
+                upgrade_mode=True,
+                with_docs_mcp=include_docs_mcp,
+            )
             result["components"]["mcp_config"] = (
                 "healed: rewrote ${workspaceFolder} to absolute project root (TAP-2199)"
             )
@@ -502,7 +525,13 @@ def _upgrade_mcp_config(
             ),
         }
     elif not dry_run:
-        _generate_config(host, project_root, force=True, upgrade_mode=True)
+        _generate_config(
+            host,
+            project_root,
+            force=True,
+            upgrade_mode=True,
+            with_docs_mcp=include_docs_mcp,
+        )
         result["components"]["mcp_config"] = "regenerated"
     else:
         result["components"]["mcp_config"] = f"needs-fix: {error}"

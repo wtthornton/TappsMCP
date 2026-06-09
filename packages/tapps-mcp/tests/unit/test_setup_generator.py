@@ -24,6 +24,7 @@ from tapps_mcp.distribution.setup_generator import (
     _load_existing_env_from_other_scope,
     _looks_like_secret_key,
     _merge_config,
+    _should_include_docs_mcp,
     _should_use_uv_launch,
     _value_is_plaintext_secret,
     is_tapps_mcp_package_layout,
@@ -1351,6 +1352,69 @@ class TestEpic80ConsumerInit:
         assert data["mcpServers"]["docs-mcp"]["command"] == "uv"
         assert "docsmcp" in data["mcpServers"]["docs-mcp"]["args"]
 
+    def test_global_clis_emit_direct_commands(self, tmp_path):
+        project = tmp_path / "project"
+        project.mkdir()
+        (project / "pyproject.toml").write_text(
+            '[project]\nname = "demo"\n[project.optional-dependencies]\nmcp = ["tapps-mcp"]\n',
+            encoding="utf-8",
+        )
+        (project / "uv.lock").write_text("", encoding="utf-8")
+
+        def _which(cmd: str) -> str | None:
+            if cmd in ("tapps-mcp", "docsmcp"):
+                return f"/bin/{cmd}"
+            return None
+
+        with patch("tapps_mcp.distribution.setup_generator.shutil.which", side_effect=_which):
+            _generate_config("cursor", project, force=True)
+        data = json.loads((project / ".cursor" / "mcp.json").read_text(encoding="utf-8"))
+        assert data["mcpServers"]["tapps-mcp"]["command"] == "tapps-mcp"
+        assert data["mcpServers"]["tapps-mcp"]["args"] == ["serve"]
+        assert data["mcpServers"]["docs-mcp"]["command"] == "docsmcp"
+        assert data["mcpServers"]["docs-mcp"]["args"] == ["serve"]
+
+    def test_should_include_docs_mcp_when_binary_on_path(self) -> None:
+        with patch(
+            "tapps_mcp.distribution.setup_generator.shutil.which",
+            return_value="/bin/docsmcp",
+        ):
+            assert _should_include_docs_mcp(False) is True
+
+    def test_upgrade_replaces_uv_launch_with_global_binary(self, tmp_path):
+        project = tmp_path / "project"
+        project.mkdir()
+        config = {
+            "mcpServers": {
+                "tapps-mcp": {
+                    "command": "uv",
+                    "args": ["run", "--no-sync", "tapps-mcp", "serve"],
+                    "env": {"TAPPS_MCP_PROJECT_ROOT": str(project)},
+                },
+                "docs-mcp": {
+                    "command": "uv",
+                    "args": ["run", "--no-sync", "docsmcp", "serve"],
+                    "env": {"DOCS_MCP_PROJECT_ROOT": str(project)},
+                },
+            }
+        }
+        (project / ".cursor").mkdir()
+        (project / ".cursor" / "mcp.json").write_text(
+            json.dumps(config, indent=2),
+            encoding="utf-8",
+        )
+
+        def _which(cmd: str) -> str | None:
+            if cmd in ("tapps-mcp", "docsmcp"):
+                return f"/bin/{cmd}"
+            return None
+
+        with patch("tapps_mcp.distribution.setup_generator.shutil.which", side_effect=_which):
+            _generate_config("cursor", project, force=True, upgrade_mode=True)
+        data = json.loads((project / ".cursor" / "mcp.json").read_text(encoding="utf-8"))
+        assert data["mcpServers"]["tapps-mcp"]["command"] == "tapps-mcp"
+        assert data["mcpServers"]["docs-mcp"]["command"] == "docsmcp"
+
 
 # ---------------------------------------------------------------------------
 # Story 47.5: Upgrade command has --scope flag
@@ -1586,6 +1650,19 @@ class TestUvContextDetection:
             encoding="utf-8",
         )
         use_uv, _, _ = _should_use_uv_launch(tmp_path, uv_mode="off")
+        assert use_uv is False
+
+    def test_should_use_uv_launch_prefers_global_binary(self, tmp_path):
+        (tmp_path / "pyproject.toml").write_text(
+            '[project]\nname = "demo"\n[project.optional-dependencies]\nmcp = ["tapps-mcp"]\n',
+            encoding="utf-8",
+        )
+        (tmp_path / "uv.lock").write_text("", encoding="utf-8")
+        with patch(
+            "tapps_mcp.distribution.setup_generator.shutil.which",
+            return_value="/bin/tapps-mcp",
+        ):
+            use_uv, _, _ = _should_use_uv_launch(tmp_path, uv_mode=None)
         assert use_uv is False
 
     def test_should_use_uv_launch_on_forces(self, tmp_path):
