@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [3.12.14] - 2026-06-09
+
+Hotfix: CLI `memory save`/`get` handoff fallback failed on HTTP brain when the bridge used the `coder` profile (hides `memory_save`).
+
+### Fixed
+
+- **CLI brain profile for memory commands** — `_create_cli_brain_bridge()` now uses `BRAIN_PROFILE_SERVER` (`full`) instead of `BRAIN_PROFILE_HOOKS` (`coder`) so `tapps-mcp memory save/get` works on HTTP-only brain deployments without requiring `TAPPS_BRAIN_PROFILE=full` in the shell ([TAP-3173](https://linear.app/tappscodingagents/issue/TAP-3173) follow-up).
+
+### Changed
+
+- **Hook version stamps** — `tapps_upgrade --host auto` refreshed Claude/Cursor hook headers to 3.12.13 after release.
+
 ## [3.12.13] - 2026-06-09
 
 Wave-2 brain consumer migration (TAP-1996/1997), session-transfer CLI hardening (TAP-3173–3175), and checklist/metrics brain telemetry.
