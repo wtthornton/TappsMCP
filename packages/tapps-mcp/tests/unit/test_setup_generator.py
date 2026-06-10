@@ -25,6 +25,8 @@ from tapps_mcp.distribution.setup_generator import (
     _load_existing_env_from_other_scope,
     _looks_like_secret_key,
     _merge_config,
+    _parse_cursor_wrapper_launch,
+    _render_cursor_mcp_wrapper_script,
     _should_include_docs_mcp,
     _should_use_uv_launch,
     _value_is_plaintext_secret,
@@ -225,6 +227,46 @@ class TestCursorMcpWrapper:
         assert "source .env" in text
         assert "TAPPS_MCP_MEMORY_BRAIN_AUTH_TOKEN" in text
         assert "TAPPS_BRAIN_AUTH_TOKEN" in text
+        assert "${TAPPS_BRAIN_AUTH_TOKEN}" in text  # placeholder treated as unset
+        assert "set +u" in text  # .env may reference unset vars
+
+    def test_parse_cursor_wrapper_launch_extracts_exec_line(self, tmp_path: Path) -> None:
+        wrapper = tmp_path / "tapps-mcp-serve.sh"
+        wrapper.write_text(
+            _render_cursor_mcp_wrapper_script(
+                "uv",
+                ["run", "--extra", "mcp", "--no-sync", "tapps-mcp", "serve"],
+            ),
+            encoding="utf-8",
+        )
+        assert _parse_cursor_wrapper_launch(wrapper) == (
+            "uv",
+            ["run", "--extra", "mcp", "--no-sync", "tapps-mcp", "serve"],
+        )
+
+    def test_parse_cursor_wrapper_launch_missing_file(self, tmp_path: Path) -> None:
+        assert _parse_cursor_wrapper_launch(tmp_path / "missing.sh") is None
+
+    def test_upgrade_preserves_uv_launch_in_existing_wrapper(self, tmp_path):
+        """Re-upgrade must not replace uv run embedded in an existing wrapper script."""
+        project = tmp_path / "project"
+        project.mkdir()
+        uv_launch = ("uv", ["run", "--extra", "mcp", "--no-sync", "tapps-mcp", "serve"])
+        _generate_config("cursor", project, uv_launch=uv_launch, force=True)
+        wrapper = project / ".cursor" / "bin" / "tapps-mcp-serve.sh"
+        assert "uv" in wrapper.read_text(encoding="utf-8")
+        assert "--extra" in wrapper.read_text(encoding="utf-8")
+
+        def _which(cmd: str) -> str | None:
+            return None  # no global tapps-mcp — preserve wrapper launch on upgrade
+
+        with patch("tapps_mcp.distribution.setup_generator.shutil.which", side_effect=_which):
+            _generate_config("cursor", project, force=True, upgrade_mode=True)
+
+        script = wrapper.read_text(encoding="utf-8")
+        assert "uv" in script
+        assert "--extra" in script
+        assert "mcp" in script
 
 
 # ---------------------------------------------------------------------------
