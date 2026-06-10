@@ -1154,6 +1154,22 @@ def _missing_tapps_skills(project_root: Path, skill_names: tuple[str, ...]) -> l
     return missing
 
 
+def _memory_skill_content_ok(skill_name: str, content: str) -> bool:
+    """Reject skills that still route agents at removed ``tapps_memory`` MCP."""
+    lowered = content.lower()
+    if len(content.strip()) < 80:
+        return False
+    if "mcp__tapps-mcp__tapps_memory" in lowered:
+        return False
+    if skill_name == "tapps-memory":
+        return "tapps-mcp memory" in lowered and "tapps_session_notes" in lowered
+    if skill_name == "tapps-finish-task":
+        if "tapps_validate_changed" not in lowered or "tapps_checklist" not in lowered:
+            return False
+        return "tapps-mcp memory save" in lowered
+    return False
+
+
 def check_finish_task_skill(project_root: Path) -> CheckResult:
     """Check the ``tapps-finish-task`` composite skill is deployed (TAP-977).
 
@@ -1168,9 +1184,55 @@ def check_finish_task_skill(project_root: Path) -> CheckResult:
             f"Missing: {', '.join(missing)}",
             "Run: tapps-mcp upgrade (or upgrade --host cursor for Cursor-only projects)",
         )
+    stale: list[str] = []
+    for host_label, base in _tapps_skill_bases(project_root):
+        skill_path = base / "tapps-finish-task" / "SKILL.md"
+        if skill_path.exists():
+            content = skill_path.read_text(encoding="utf-8")
+            if not _memory_skill_content_ok("tapps-finish-task", content):
+                stale.append(f"{host_label}/tapps-finish-task")
+    if stale:
+        return CheckResult(
+            "tapps-finish-task skill",
+            False,
+            f"Stale or stub skill: {', '.join(stale)}",
+            "Run: tapps-mcp upgrade --force",
+        )
     hosts = ", ".join(host for host, _ in _tapps_skill_bases(project_root))
     return CheckResult(
         "tapps-finish-task skill",
+        True,
+        f"Present on: {hosts}",
+    )
+
+
+def check_tapps_memory_skill(project_root: Path) -> CheckResult:
+    """Check ``tapps-memory`` skill is deployed and routes via CLI (TAP-1994)."""
+    missing = _missing_tapps_skills(project_root, ("tapps-memory",))
+    if missing:
+        return CheckResult(
+            "tapps-memory skill",
+            False,
+            f"Missing: {', '.join(missing)}",
+            "Run: tapps-mcp upgrade --force",
+        )
+    stale: list[str] = []
+    for host_label, base in _tapps_skill_bases(project_root):
+        skill_path = base / "tapps-memory" / "SKILL.md"
+        if skill_path.exists():
+            content = skill_path.read_text(encoding="utf-8")
+            if not _memory_skill_content_ok("tapps-memory", content):
+                stale.append(f"{host_label}/tapps-memory")
+    if stale:
+        return CheckResult(
+            "tapps-memory skill",
+            False,
+            f"Stale skill (still references tapps_memory MCP): {', '.join(stale)}",
+            "Run: tapps-mcp upgrade --force",
+        )
+    hosts = ", ".join(host for host, _ in _tapps_skill_bases(project_root))
+    return CheckResult(
+        "tapps-memory skill",
         True,
         f"Present on: {hosts}",
     )
@@ -1183,8 +1245,14 @@ def _handoff_skill_content_ok(skill_name: str, content: str) -> bool:
         return False
     if "session-handoff.md" not in lowered:
         return False
+    # TAP-1994: tapps_memory removed from MCP catalog — stale skills still point agents at it.
+    if "mcp__tapps-mcp__tapps_memory" in lowered:
+        return False
     if skill_name == "tapps-handoff-session":
-        return "tapps_session_end" in lowered
+        if "tapps_session_end" not in lowered:
+            return False
+        # Brain mirror must route through CLI, not removed MCP tool.
+        return "tapps-mcp memory save" in lowered
     if skill_name == "tapps-continue-session":
         return "tapps_session_start" in lowered
     return False
@@ -3059,6 +3127,25 @@ def check_plaintext_secrets(project_root: Path) -> CheckResult:
     )
 
 
+def check_report_studio(project_root: Path) -> CheckResult:
+    """Report whether nlt-report-studio is pinned in pyproject.toml."""
+    try:
+        from tapps_mcp.pipeline.report_studio.installer import check_report_studio
+
+        probe = check_report_studio(project_root)
+        if not probe.get("installed"):
+            return CheckResult(
+                "report_studio",
+                True,
+                "Not installed (run tapps_init with with_report_studio=True)",
+            )
+        count = probe.get("report_count", 0)
+        detail = f"Pinned in pyproject.toml ({count} report(s) under reports/)"
+        return CheckResult("report_studio", True, detail)
+    except Exception as exc:
+        return CheckResult("report_studio", False, f"Check failed: {exc}")
+
+
 def check_linear_sdlc(project_root: Path) -> CheckResult:
     """Report whether Linear SDLC templates are absent, current, or stale."""
     from tapps_mcp.pipeline.linear_sdlc.renderer import TEMPLATE_PATHS
@@ -3133,6 +3220,7 @@ def _collect_checks(root: Path, *, quick: bool = False) -> list[CheckResult]:
     checks.append(check_config_files_rule(root))
     checks.append(check_linear_issue_skill_current(root))
     checks.append(check_finish_task_skill(root))
+    checks.append(check_tapps_memory_skill(root))
     checks.append(check_session_handoff_skills(root))
     checks.append(check_continuous_learning_v2_skill(root))
     checks.append(check_pretooluse_matchers(root))
@@ -3156,6 +3244,7 @@ def _collect_checks(root: Path, *, quick: bool = False) -> list[CheckResult]:
     checks.append(check_plaintext_secrets(root))
     checks.append(check_uv_path_mismatch(root))
     checks.append(check_linear_sdlc(root))
+    checks.append(check_report_studio(root))
     if quick:
         checks.append(
             CheckResult(

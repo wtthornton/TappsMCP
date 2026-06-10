@@ -72,6 +72,10 @@ class BootstrapConfig:
     linear_enforce_cache_gate: str = "off"
     install_git_hooks: bool = False
     linear_sdlc: bool = False
+    with_report_studio: bool = False
+    report_studio_tag: str = "v0.1.3"
+    report_studio_scaffold: str = ""
+    report_studio_template: str = "architecture_theory"
     linear_issue_prefix: str = "TAP"
     linear_team_id: str = ""
     linear_project_id: str = ""
@@ -942,6 +946,19 @@ def _setup_platform(cfg: BootstrapConfig, state: _BootstrapState) -> None:
                     content_return=state.content_return,
                 )
                 state.created.extend(state.result["linear_sdlc"].get("files_written", []))
+            if cfg.with_report_studio:
+                from tapps_mcp.pipeline.report_studio.installer import install_report_studio
+
+                scaffold_name = cfg.report_studio_scaffold.strip() or None
+                state.result["report_studio"] = install_report_studio(
+                    state.project_root,
+                    tag=cfg.report_studio_tag,
+                    report_name=scaffold_name,
+                    template_id=cfg.report_studio_template,
+                    dry_run=state.dry_run,
+                    content_return=state.content_return,
+                )
+                state.created.extend(state.result["report_studio"].get("files_written", []))
             state.result["agents"] = generate_subagent_definitions(state.project_root, "claude")
             state.result["skills"] = generate_skills(
                 state.project_root, "claude", engagement_level=engagement
