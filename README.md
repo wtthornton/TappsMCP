@@ -1151,7 +1151,7 @@ If you see `ModuleNotFoundError`, run `uv sync --all-packages` first.
 
 ### Report Studio consumer (TAP-3445)
 
-Pins `nlt-report-studio` via git tag `v0.1.1` in `pyproject.toml` (no sibling `ReportLab` checkout required). For engine development, temporarily switch to `path = "../ReportLab", editable = true`.
+Pins `nlt-report-studio` via git tag `v0.1.3` in `pyproject.toml` (no sibling `ReportLab` checkout required). For engine development, temporarily switch to `path = "../ReportLab", editable = true`.
 
 ```bash
 uv sync --all-packages
