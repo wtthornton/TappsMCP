@@ -3,7 +3,7 @@
 Generates the single CI workflow TappsMCP installs into consumer projects:
 ``codeql-analysis.yml``. Everything else (lint, tests, build, quality gate)
 runs locally via the TappsMCP pipeline — we intentionally do not push that
-work into GitHub Actions.
+work into GitHub Actions. CodeQL is PR + manual only to conserve Actions minutes.
 """
 
 from __future__ import annotations
@@ -36,12 +36,9 @@ _CODEQL_WORKFLOW = """\
 name: CodeQL Analysis
 
 on:
-  push:
-    branches: [main, master]
   pull_request:
     branches: [main, master]
-  schedule:
-    - cron: "30 6 * * 1"  # Monday 6:30 UTC
+  workflow_dispatch:
 
 permissions:
   security-events: write
@@ -55,7 +52,7 @@ jobs:
   analyze:
     name: Analyze
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 15
     strategy:
       fail-fast: false
       matrix:
@@ -69,7 +66,7 @@ jobs:
         uses: github/codeql-action/init@v3
         with:
           languages: ${{ matrix.language }}
-          queries: +security-extended
+          queries: security-and-quality
 
       - name: Autobuild
         uses: github/codeql-action/autobuild@v3

@@ -1,0 +1,62 @@
+# MCP guardrails: tool-budget lint + tool-description length budget.
+# PR-only — checks already pass before merge; push re-runs were pure duplicate cost.
+name: mcp-guardrails
+
+on:
+  pull_request:
+    branches: [main, master]
+    paths:
+      - "packages/**/src/**"
+      - "docs/architecture/tool-budget.md"
+      - "scripts/check-tool-budget.py"
+      - "packages/tapps-mcp/tests/integration/test_tool_descriptions.py"
+      - ".github/workflows/mcp-guardrails.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: mcp-guardrails-${{ github.head_ref || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  tool-budget:
+    name: MCP tool-budget lint
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Self-test check-tool-budget.py
+        run: python3 scripts/check-tool-budget.py --test
+
+      - name: Lint PR diff for new tools
+        run: |
+          python3 scripts/check-tool-budget.py \
+            --diff-range "${{ github.event.pull_request.base.sha }}..${{ github.event.pull_request.head.sha }}" \
+            --commit-msg "$(git log -1 --format='%B' ${{ github.event.pull_request.head.sha }})"
+
+  tool-descriptions:
+    name: MCP tool-description budget
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+
+      - name: Sync workspace
+        run: uv sync --all-packages
+
+      - name: Run tool description budget test
+        run: uv run pytest packages/tapps-mcp/tests/integration/test_tool_descriptions.py -v
