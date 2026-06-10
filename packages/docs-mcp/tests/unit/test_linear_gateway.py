@@ -22,6 +22,7 @@ from docs_mcp.integrations.linear_gateway import (
     check_validate_sentinel,
     gate_linear_save,
     validate_missing_envelope,
+    write_validate_sentinel,
 )
 
 # ---------------------------------------------------------------------------
@@ -52,6 +53,28 @@ def stale_sentinel(project_dir: Path) -> Path:
     stale_epoch = time.time() - _SENTINEL_MAX_AGE_S - 60
     sentinel.write_text(str(stale_epoch), encoding="utf-8")
     return project_dir
+
+
+# ---------------------------------------------------------------------------
+# write_validate_sentinel
+# ---------------------------------------------------------------------------
+
+
+class TestWriteValidateSentinel:
+    def test_writes_sentinel_file(self, project_dir: Path) -> None:
+        assert write_validate_sentinel(project_dir) is True
+        sentinel = project_dir / _SENTINEL_REL
+        assert sentinel.exists()
+        ts = int(sentinel.read_text(encoding="utf-8").strip())
+        assert ts > 0
+
+    def test_creates_parent_directory(self, project_dir: Path) -> None:
+        write_validate_sentinel(project_dir)
+        assert (project_dir / ".tapps-mcp").is_dir()
+
+    def test_fresh_write_passes_gate_check(self, project_dir: Path) -> None:
+        write_validate_sentinel(project_dir)
+        assert check_validate_sentinel(project_dir) is True
 
 
 # ---------------------------------------------------------------------------
@@ -268,3 +291,55 @@ class TestDocsSaveLinearIssueHandler:
             result = await docs_save_linear_issue("title", "desc", str(project_dir))
 
         assert result["data"]["ok"] is True
+
+
+_AGENT_READY_DESCRIPTION = (
+    "## What\na thing breaks\n\n"
+    "## Where\n`packages/foo/foo.py:12-20`\n\n"
+    "## Acceptance\n- [ ] `pytest tests/test_foo.py` passes\n"
+)
+
+
+class TestValidateToSaveRoundTrip:
+    @pytest.mark.asyncio
+    async def test_validate_writes_sentinel_then_save_passes(self, project_dir: Path) -> None:
+        """Server-side sentinel write unlocks docs_save_linear_issue (no hook)."""
+        from docs_mcp.server_linear_tools import docs_save_linear_issue, docs_validate_linear_issue
+
+        settings_mock = MagicMock()
+        settings_mock.project_root = project_dir
+
+        with patch("docs_mcp.config.settings.load_docs_settings", return_value=settings_mock):
+            validate_result = await docs_validate_linear_issue(
+                "foo.py: something breaks",
+                _AGENT_READY_DESCRIPTION,
+                priority=2,
+                estimate=2.0,
+                project_root=str(project_dir),
+            )
+            save_result = await docs_save_linear_issue(
+                "foo.py: something breaks",
+                _AGENT_READY_DESCRIPTION,
+                str(project_dir),
+            )
+
+        assert validate_result["data"]["agent_ready"] is True
+        assert (project_dir / _SENTINEL_REL).exists()
+        assert save_result["data"]["ok"] is True
+
+    @pytest.mark.asyncio
+    async def test_failed_validate_does_not_write_sentinel(self, project_dir: Path) -> None:
+        from docs_mcp.server_linear_tools import docs_validate_linear_issue
+
+        settings_mock = MagicMock()
+        settings_mock.project_root = project_dir
+
+        with patch("docs_mcp.config.settings.load_docs_settings", return_value=settings_mock):
+            result = await docs_validate_linear_issue(
+                "bad title that is way too long and should never be used for a real issue",
+                "## What\nno anchors\n",
+                project_root=str(project_dir),
+            )
+
+        assert result["data"]["agent_ready"] is False
+        assert not (project_dir / _SENTINEL_REL).exists()

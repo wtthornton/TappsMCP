@@ -237,6 +237,7 @@ async def docs_validate_linear_issue(
     estimate: float = -1.0,
     parent_id: str = "",
     is_epic: bool = False,
+    project_root: str = "",
 ) -> dict[str, Any]:
     """Pre-create gate for a Linear issue.
 
@@ -272,6 +273,10 @@ async def docs_validate_linear_issue(
         estimate: Story-point estimate. ``-1`` means not provided.
         parent_id: Parent issue identifier (reserved for hierarchy rules).
         is_epic: When True, relaxes file-anchor and estimate requirements.
+        project_root: Optional override for project root directory. Defaults
+            to the DocsMCP project root detected from settings. The gate
+            sentinel is written under ``{project_root}/.tapps-mcp/`` when
+            ``agent_ready=true``.
     """
     _record_call("docs_validate_linear_issue")
     start = time.perf_counter_ns()
@@ -291,6 +296,9 @@ async def docs_validate_linear_issue(
     )
 
     data = report.model_dump()
+    if data.get("agent_ready"):
+        _persist_validate_sentinel(project_root)
+
     elapsed_ms = (time.perf_counter_ns() - start) // 1_000_000
     next_steps = _validate_next_steps(data)
 
@@ -300,6 +308,22 @@ async def docs_validate_linear_issue(
         data,
         next_steps=next_steps,
     )
+
+
+def _persist_validate_sentinel(project_root: str) -> None:
+    """Write the linear-write gate sentinel after a passing validation."""
+    from pathlib import Path
+
+    from docs_mcp.config.settings import load_docs_settings
+    from docs_mcp.integrations.linear_gateway import write_validate_sentinel
+
+    try:
+        root_override = Path(project_root) if project_root.strip() else None
+        settings = load_docs_settings(root_override)
+        if not write_validate_sentinel(settings.project_root):
+            _logger.warning("validate_sentinel_write_failed", root=str(settings.project_root))
+    except Exception:
+        _logger.warning("validate_sentinel_write_failed", exc_info=True)
 
 
 def _validate_next_steps(data: dict[str, Any]) -> list[str]:
@@ -315,8 +339,11 @@ def _validate_next_steps(data: dict[str, Any]) -> list[str]:
     else:
         steps.append(
             f"Issue is spec-ready (score {data['score']}). "
-            f"Apply label `{data['suggested_label']}` and create in "
-            f"`{data['suggested_status']}` status."
+            "Call docs_save_linear_issue(title, description), then save_issue."
+        )
+        steps.append(
+            f"Create in `{data['suggested_status']}` status "
+            f"(label `{data['suggested_label']}` when applicable)."
         )
     return steps[:2]
 

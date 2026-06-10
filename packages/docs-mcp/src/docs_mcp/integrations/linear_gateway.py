@@ -1,17 +1,13 @@
-"""TAP-2009: Server-side refusal envelope for the Linear write gate.
+"""TAP-2009: Server-side Linear write gate — sentinel I/O and refusal envelope.
 
-Checks that ``docs_validate_linear_issue`` has been called recently (within
-``_SENTINEL_MAX_AGE_S`` seconds, matching the PreToolUse hook) before allowing
+``docs_validate_linear_issue`` writes ``.tapps-mcp/.linear-validate-sentinel``
+when ``agent_ready=true``. ``docs_save_linear_issue`` reads that sentinel
+(within ``_SENTINEL_MAX_AGE_S``, matching the PreToolUse hook) before allowing
 a Linear ``save_issue`` call to proceed.
 
-This module reads the file-sentinel written by
-``.claude/hooks/tapps-post-docs-validate.sh`` and either signals that the
-gate passes (returning ``None``) or produces the standard ``validate_missing``
-refusal envelope for the caller to surface.
-
-This provides defence-in-depth alongside the bash hook: when the hook is
-absent (other MCP clients, CI, read-only Claude Code configs) the server-side
-Python check still enforces the contract.
+Claude Code's ``tapps-post-docs-validate.sh`` PostToolUse hook writes the same
+file for defence-in-depth; the server-side write is the primary path for clients
+without PostToolUse hooks (Cursor, VS Code, CI).
 """
 
 from __future__ import annotations
@@ -26,6 +22,21 @@ _SENTINEL_MAX_AGE_S: int = 1800  # 30 minutes
 
 # Sentinel path relative to project root (written by tapps-post-docs-validate.sh)
 _SENTINEL_REL: str = ".tapps-mcp/.linear-validate-sentinel"
+
+
+def write_validate_sentinel(project_dir: Path) -> bool:
+    """Write a fresh ``docs_validate_linear_issue`` sentinel (Unix epoch seconds).
+
+    Called by ``docs_validate_linear_issue`` when ``agent_ready=true``. Returns
+    ``True`` when the file was written successfully.
+    """
+    sentinel = project_dir / _SENTINEL_REL
+    try:
+        sentinel.parent.mkdir(parents=True, exist_ok=True)
+        sentinel.write_text(str(int(time.time())), encoding="utf-8")
+        return True
+    except OSError:
+        return False
 
 
 def check_validate_sentinel(project_dir: Path) -> bool:
