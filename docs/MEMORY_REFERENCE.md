@@ -181,6 +181,19 @@ so the feedback flywheel receives explicit signals.
 | `errors` / `warnings` | Populated when one of the above failed; surface these to the user instead of swallowing them. |
 | `details` | `mode` (`http` / `in_process`), `http_url`, negotiated `brain_version`, and the brain's `brain_status`. |
 
+### Brain auth token precedence
+
+Same resolution order as [CONSUMER-REPO-BRAIN-WIRING.md § Brain auth token resolution](operations/CONSUMER-REPO-BRAIN-WIRING.md#brain-auth-token-resolution-shared-precedence):
+
+| Priority | Source |
+|----------|--------|
+| 1 | `memory.brain_auth_token` in `.tapps-mcp.yaml` |
+| 2 | `TAPPS_MCP_MEMORY_BRAIN_AUTH_TOKEN` (MCP env block or shell) |
+| 3 | `TAPPS_BRAIN_AUTH_TOKEN` (`.env`; Cursor wrapper maps to (2) before spawn) |
+
+Unresolved `${...}` placeholders in YAML or MCP config are treated as missing.
+Implementation: `tapps_core.brain_auth.resolve_brain_auth_token`.
+
 ### Troubleshooting
 
 | Symptom | Cause | Fix |

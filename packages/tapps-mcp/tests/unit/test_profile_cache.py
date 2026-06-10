@@ -33,3 +33,12 @@ def test_profile_cache_miss_on_marker_change(tmp_path: Path) -> None:
     fp2 = profile_marker_fingerprint(tmp_path)
     assert fp1 != fp2
     assert load_cached_profile_summary(tmp_path, fp2) is None
+
+
+def test_profile_cache_corrupt_file_returns_none(tmp_path: Path) -> None:
+    (tmp_path / "pyproject.toml").write_text("[project]\nname='x'\n", encoding="utf-8")
+    fp = profile_marker_fingerprint(tmp_path)
+    cache_path = tmp_path / PROFILE_CACHE_REL
+    cache_path.parent.mkdir(parents=True, exist_ok=True)
+    cache_path.write_text("{not-json", encoding="utf-8")
+    assert load_cached_profile_summary(tmp_path, fp) is None

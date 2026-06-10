@@ -114,6 +114,29 @@ TAPPS_MCP_MEMORY_BRAIN_PROJECT_ID=<project_id>
 Enable direnv (`echo 'dotenv' > .envrc && direnv allow .`) so MCP subprocesses
 and terminal `tapps-mcp doctor` inherit the token.
 
+### Brain auth token resolution (shared precedence)
+
+tapps-mcp resolves the brain bearer token in **one order** for MCP subprocesses,
+CLI (`tapps-mcp doctor`, `memory save/get`), and `tapps_session_start` probes.
+Literal `${VAR}` placeholders in config count as **missing** (unexpanded).
+
+| Priority | Source | Notes |
+|----------|--------|-------|
+| 1 | `memory.brain_auth_token` in `.tapps-mcp.yaml` | Highest; use for repo-local override |
+| 2 | `TAPPS_MCP_MEMORY_BRAIN_AUTH_TOKEN` | MCP env block + shell export; primary CLI name |
+| 3 | `TAPPS_BRAIN_AUTH_TOKEN` | Shared name in `.env`; mapped to (2) by Cursor wrapper and MCP `${...}` substitution |
+
+**Cursor (TAP-3255):** `tapps-mcp init/upgrade --host cursor` writes
+`.cursor/bin/tapps-mcp-serve.sh`, which sources project `.env` and maps
+`TAPPS_BRAIN_AUTH_TOKEN` → `TAPPS_MCP_MEMORY_BRAIN_AUTH_TOKEN` before
+`exec tapps-mcp serve`. This avoids GUI-launched Cursor failing when
+`${TAPPS_BRAIN_AUTH_TOKEN}` in `mcp.json` does not expand.
+
+**Hints on auth failure:** `tapps_session_start` and `tapps doctor` suggest
+setting `TAPPS_BRAIN_AUTH_TOKEN` in `.env` *or* exporting
+`TAPPS_MCP_MEMORY_BRAIN_AUTH_TOKEN` — both are valid; precedence above decides
+which value wins.
+
 Minimal `.envrc` (loads `.env` above):
 
 ```bash
