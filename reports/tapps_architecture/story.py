@@ -110,7 +110,7 @@ def build_story(
         components.vspace(),
         components.P(
             "Smoke report before investing in a full tapps-mcp architecture narrative. "
-            "Built via report-studio build CLI with nlt-report-studio path dependency.",
+            "Built via report-studio build CLI with nlt-report-studio git tag v0.1.1.",
             resolved_bundle,
         ),
     ]
