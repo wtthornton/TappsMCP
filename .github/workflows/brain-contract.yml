@@ -10,8 +10,8 @@
 #    ships a breaking change (bridge correctness is decoupled from the PR
 #    under review).
 #
-# 2. Nightly scheduled run — catches drift against the live deployment
-#    without blocking merges. See TAP-800 for the current drift backlog.
+# 2. Manual workflow_dispatch — run against the live deployment when needed.
+#    Scheduled runs were removed to save Actions minutes.
 #
 # Required repo secrets (Settings → Secrets and variables → Actions):
 #
@@ -32,8 +32,6 @@ on:
       - "packages/tapps-core/src/tapps_core/brain_bridge.py"
       - "packages/tapps-mcp/tests/integration/test_brain_http_contract.py"
       - ".github/workflows/brain-contract.yml"
-  schedule:
-    - cron: "17 7 * * *"  # 07:17 UTC nightly
   workflow_dispatch:
 
 permissions:

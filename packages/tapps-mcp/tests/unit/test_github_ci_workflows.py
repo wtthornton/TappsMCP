@@ -28,13 +28,15 @@ class TestCodeQLWorkflow:
         content = (tmp_path / ".github" / "workflows" / "codeql-analysis.yml").read_text()
         assert "python" in content
 
-    def test_has_scheduled_run(self, tmp_path):
+    def test_pr_only_no_push_or_schedule(self, tmp_path):
         from tapps_mcp.pipeline.github_ci import generate_codeql_workflow
 
         generate_codeql_workflow(tmp_path)
         content = (tmp_path / ".github" / "workflows" / "codeql-analysis.yml").read_text()
-        assert "schedule:" in content
-        assert "cron:" in content
+        assert "pull_request:" in content
+        assert "workflow_dispatch:" in content
+        assert "push:" not in content
+        assert "schedule:" not in content
 
 
 class TestGenerateAllWorkflows:
