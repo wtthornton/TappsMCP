@@ -42,6 +42,8 @@ _TAPPS_MCP_UV_ROOT_PLACEHOLDER = "<PATH_TO_TAPPS_MCP_MONOREPO_ROOT>"
 
 # TAP-3255: Cursor GUI launches may not expand ${VAR} in mcp.json — wrapper sources .env first.
 _CURSOR_MCP_WRAPPER_REL = Path(".cursor/bin/tapps-mcp-serve.sh")
+# Literal emitted in mcp.json env; wrapper treats this as "unset" when mapping tokens.
+_BRAIN_AUTH_TOKEN_ENV_PLACEHOLDER = "${TAPPS_BRAIN_AUTH_TOKEN}"  # noqa: S105
 
 
 def _resolve_tapps_mcp_monorepo_root() -> str | None:
@@ -312,6 +314,28 @@ def _resolve_project_root_value(host: str, project_root: Path | None) -> str:
     return str(project_root.resolve())
 
 
+def _parse_cursor_wrapper_launch(wrapper_path: Path) -> tuple[str, list[str]] | None:
+    """Extract the embedded ``exec`` launch command from an existing wrapper script."""
+    if not wrapper_path.is_file():
+        return None
+    try:
+        text = wrapper_path.read_text(encoding="utf-8")
+    except OSError:
+        return None
+    for line in text.splitlines():
+        stripped = line.strip()
+        if not stripped.startswith("exec "):
+            continue
+        launch_part = stripped[5:]
+        suffix = ' "$@"'
+        if launch_part.endswith(suffix):
+            launch_part = launch_part[: -len(suffix)]
+        parts = shlex.split(launch_part)
+        if parts:
+            return parts[0], [str(a) for a in parts[1:]]
+    return None
+
+
 def _render_cursor_mcp_wrapper_script(command: str, args: list[str]) -> str:
     """Shell script that sources ``.env`` then execs the tapps-mcp server (TAP-3255)."""
     launch = " ".join([shlex.quote(command), *[shlex.quote(a) for a in args]])
@@ -323,13 +347,18 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "${{BASH_SOURCE[0]}}")/../.." && pwd)"
 cd "$ROOT"
 if [[ -f .env ]]; then
+  set +u
   set -a
   # shellcheck disable=SC1091
   source .env
   set +a
+  set -u
 fi
-if [[ -n "${{TAPPS_BRAIN_AUTH_TOKEN:-}}" && -z "${{TAPPS_MCP_MEMORY_BRAIN_AUTH_TOKEN:-}}" ]]; then
-  export TAPPS_MCP_MEMORY_BRAIN_AUTH_TOKEN="$TAPPS_BRAIN_AUTH_TOKEN"
+if [[ -n "${{TAPPS_BRAIN_AUTH_TOKEN:-}}" ]]; then
+  _mem_token="${{TAPPS_MCP_MEMORY_BRAIN_AUTH_TOKEN:-}}"
+  if [[ -z "$_mem_token" || "$_mem_token" == '{_BRAIN_AUTH_TOKEN_ENV_PLACEHOLDER}' ]]; then
+    export TAPPS_MCP_MEMORY_BRAIN_AUTH_TOKEN="$TAPPS_BRAIN_AUTH_TOKEN"
+  fi
 fi
 exec {launch} "$@"
 """
@@ -357,6 +386,7 @@ def _write_cursor_mcp_wrapper(
 
 def _resolve_wrapper_launch(
     entry: dict[str, Any],
+    project_root: Path,
     *,
     uv_launch: tuple[str, list[str]] | None = None,
 ) -> tuple[str, list[str]]:
@@ -365,8 +395,15 @@ def _resolve_wrapper_launch(
         return uv_launch
     cmd = entry.get("command")
     args = entry.get("args", [])
-    if isinstance(cmd, str) and cmd and not cmd.endswith("tapps-mcp-serve.sh"):
-        if isinstance(args, list):
+    if isinstance(cmd, str) and cmd:
+        if cmd.endswith("tapps-mcp-serve.sh"):
+            wrapper_path = Path(cmd)
+            if not wrapper_path.is_absolute():
+                wrapper_path = project_root / _CURSOR_MCP_WRAPPER_REL
+            parsed = _parse_cursor_wrapper_launch(wrapper_path)
+            if parsed is not None:
+                return parsed
+        elif isinstance(args, list):
             return cmd, [str(a) for a in args]
     return _resolve_tapps_mcp_launch()
 
@@ -378,7 +415,7 @@ def _apply_cursor_launch_wrapper(
     uv_launch: tuple[str, list[str]] | None = None,
 ) -> None:
     """Point Cursor ``tapps-mcp`` MCP entry at the env-sourcing wrapper script."""
-    command, args = _resolve_wrapper_launch(entry, uv_launch=uv_launch)
+    command, args = _resolve_wrapper_launch(entry, project_root, uv_launch=uv_launch)
     wrapper = _write_cursor_mcp_wrapper(project_root, uv_launch=(command, args))
     entry["command"] = str(wrapper)
     entry["args"] = []
@@ -424,7 +461,7 @@ def _build_server_entry(
     env: dict[str, str] = {
         "TAPPS_MCP_PROJECT_ROOT": project_root_value,
         "TAPPS_MCP_MEMORY_BRAIN_HTTP_URL": "http://localhost:8080",
-        "TAPPS_MCP_MEMORY_BRAIN_AUTH_TOKEN": "${TAPPS_BRAIN_AUTH_TOKEN}",
+        "TAPPS_MCP_MEMORY_BRAIN_AUTH_TOKEN": _BRAIN_AUTH_TOKEN_ENV_PLACEHOLDER,
         "TAPPS_MCP_CONTEXT7_API_KEY": "${TAPPS_MCP_CONTEXT7_API_KEY}",
         # ADR-0012: the tapps-mcp server backs the full tapps_memory facade,
         # which exercises the whole read+write+hive+KG+feedback surface — so it

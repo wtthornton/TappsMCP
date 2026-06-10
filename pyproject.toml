@@ -5,6 +5,8 @@ members = ["packages/*"]
 # tapps-brain 3.24.0 (brain_query_events). v3.24.0 tag not published yet — pin main
 # HEAD rev; switch to tag = "v3.24.0" once released. See ADR-0013.
 tapps-brain = { git = "https://github.com/wtthornton/tapps-brain.git", rev = "0a3e173181d4b3179244add93e5fb18ce1336fc5" }
+# TAP-3445 — nlt-report-studio consumer reports
+nlt-report-studio = { path = "../ReportLab", editable = true }
 
 [tool.uv]
 dev-dependencies = [
@@ -28,6 +30,7 @@ dev-dependencies = [
     # eval-descriptions harness --backend=api (Phase C). Lazy-imported by
     # scripts/eval-descriptions/run.py; not a runtime dep of any package.
     "anthropic>=0.40,<1",
+    "nlt-report-studio>=0.1.0",
 ]
 
 [tool.ruff]

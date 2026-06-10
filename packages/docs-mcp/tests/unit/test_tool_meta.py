@@ -6,7 +6,7 @@ instead of persisting to disk as a file reference.
 
 TAP-1987: non-daily-driver tools declare meta["defer_loading"]=True so
 Claude Code only loads their schemas on-demand via Tool Search, keeping the
-eager catalog ≤ 8 tools.
+eager catalog at 7 tools (see docs/architecture/tool-budget.md).
 """
 
 from __future__ import annotations
@@ -32,7 +32,7 @@ _DAILY_DRIVERS: frozenset[str] = frozenset(
     }
 )
 
-_EAGER_BUDGET = 8  # hard cap from tool-budget.md
+_EAGER_BUDGET = 7  # matches docs/architecture/tool-budget.md (7 daily drivers)
 
 EXPECTED_CEILINGS: dict[str, int] = {
     "docs_project_scan": 100_000,
@@ -49,7 +49,7 @@ class TestDeferLoading:
     """TAP-1987: verify eager/deferred split matches the tool-budget.md spec."""
 
     def test_eager_tool_count_within_budget(self) -> None:
-        """Eager tool count must be ≤ _EAGER_BUDGET (currently 8)."""
+        """Eager tool count must match tool-budget.md (7 daily drivers)."""
         tools = mcp._tool_manager._tools
         eager = [n for n, t in tools.items() if not (t.meta or {}).get("defer_loading")]
         assert len(eager) <= _EAGER_BUDGET, (

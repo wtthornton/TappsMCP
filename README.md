@@ -1149,6 +1149,23 @@ uv run ruff format --check packages/*/src/
 
 If you see `ModuleNotFoundError`, run `uv sync --all-packages` first.
 
+### Report Studio consumer (TAP-3445)
+
+Requires sibling checkout `../ReportLab` (nlt-report-studio path dep in `pyproject.toml`).
+
+```bash
+uv sync --all-packages
+uv run report-studio build \
+  --brand nlt-v3.2 \
+  --module reports.tapps_architecture.story:build_story \
+  --out /tmp/tapps-architecture.pdf
+uv run report-studio verify \
+  --builders reports/tapps_architecture/story.py \
+  --root . \
+  --prefix packages/tapps-mcp/src/
+uv run pytest tests/reports/test_tapps_architecture.py -v
+```
+
 Pre-commit hooks are configured (`.pre-commit-config.yaml`). CI runs on push/PR to `master`/`main` (lint + tests on Ubuntu, Windows, macOS x Python 3.12, 3.13).
 
 ### Tool-description eval harness

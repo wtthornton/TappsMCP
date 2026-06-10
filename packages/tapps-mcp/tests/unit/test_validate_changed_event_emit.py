@@ -275,7 +275,7 @@ class TestFireValidateEvents:
         mock_bridge.record_kg_event.assert_not_awaited()
 
     @pytest.mark.asyncio
-    async def test_bridge_probe_at_most_once_across_multiple_emits(self) -> None:
+    async def test_bridge_probe_once_per_emit_not_per_file(self) -> None:
         """TAP-3254: when enabled, bridge lookup runs once per emit, not per file."""
         mock_bridge = MagicMock()
         mock_bridge.record_kg_event = AsyncMock(return_value={"recorded": True})

@@ -471,10 +471,12 @@ def _upgrade_mcp_config(
     import json
 
     from tapps_mcp.distribution.setup_generator import (
+        _build_uv_run_tapps_launch,
         _generate_config,
         _get_config_path,
         _get_servers_key,
         _should_include_docs_mcp,
+        _should_use_uv_launch,
         _validate_config_file,
     )
 
@@ -494,6 +496,8 @@ def _upgrade_mcp_config(
         existing=existing,
         servers_key=servers_key,
     )
+    use_uv, extra_auto, _ = _should_use_uv_launch(project_root, uv_mode=None)
+    uv_launch = _build_uv_run_tapps_launch(extra_auto) if use_uv else None
     error = _validate_config_file(config_path, servers_key)
     already_opted_in = _mcp_json_has_tapps_entry(project_root, host)
     needs_heal = _mcp_json_has_unresolved_workspacefolder(project_root, host)
@@ -510,6 +514,7 @@ def _upgrade_mcp_config(
                 force=True,
                 upgrade_mode=True,
                 with_docs_mcp=include_docs_mcp,
+                uv_launch=uv_launch,
             )
             result["components"]["mcp_config"] = (
                 "healed: rewrote ${workspaceFolder} to absolute project root (TAP-2199)"
@@ -531,6 +536,7 @@ def _upgrade_mcp_config(
             force=True,
             upgrade_mode=True,
             with_docs_mcp=include_docs_mcp,
+            uv_launch=uv_launch,
         )
         result["components"]["mcp_config"] = "regenerated"
     else:
