@@ -6,13 +6,15 @@ When the **DocsMCP** MCP server is configured in your host (Claude Code, Cursor,
 
 ## What DocsMCP is
 
-DocsMCP is an MCP server that provides 38 tools for:
+DocsMCP is an MCP server that provides 40 tools for:
 
 - **Code analysis** -- module maps, API surface extraction, dependency analysis via AST parsing
 - **Git analysis** -- commit history with conventional commit parsing, version detection from tags
 - **Documentation generation** -- README, CHANGELOG, release notes, API reference, ADRs, onboarding guides, contributing guides, PRDs, epics, stories, prompt templates, diagrams (Mermaid/PlantUML/D2), interactive HTML diagrams, llms.txt, frontmatter, architecture templates, doc index
 - **Documentation validation** -- drift detection, completeness scoring, link checking, freshness classification, Diataxis coverage analysis, cross-reference validation, epic validation, deterministic style/tone checks
-- **Linear-issue quality tooling** (v3.0.0+) -- lint, validate, and batch-triage Linear issue payloads against the 5-section agent-issue template (What / Where / Why / Acceptance / Refs) defined in `docs/linear/AGENT_ISSUES.md`. Read-only; the agent fetches issue payloads via the Linear MCP plugin and passes them here for scoring.
+- **Linear-issue quality tooling** (v3.0.0+) -- lint, validate, save gate, and batch-triage Linear issue payloads against the 5-section agent-issue template (What / Where / Why / Acceptance / Refs) defined in `docs/linear/AGENT_ISSUES.md`. Read-only except the save gate sentinel; the agent fetches issue payloads via the Linear MCP plugin and passes them here for scoring.
+- **Release workflow** -- changelog, release notes, release-update documents, release gate (aggregate drift/freshness/links verdict)
+- **Knowledge graph** -- optional brain KG queries (`neighbors`, `explain`) when tapps-brain is configured
 - **Configuration** -- view and update DocsMCP settings per-project
 - **TappsMCP integration** -- optional quality score enrichment when TappsMCP is also available
 
@@ -61,6 +63,11 @@ You only see these tools when the host has started the DocsMCP server and attach
 | **docs_lint_linear_issue** | Lint a Linear issue payload against the agent-issue template (9 rules, agent-readiness label) |
 | **docs_validate_linear_issue** | Pre-create gate: HIGH-severity findings only, returns `{agent_ready, score, missing, issues}` |
 | **docs_linear_triage** | Batch triage of N issue payloads — label proposals, parent groupings, metadata gaps |
+| **docs_save_linear_issue** | Pre-save gate: confirms `docs_validate_linear_issue` was called recently before Linear `save_issue` |
+| **docs_generate_release_update** | Generate a structured release-update document for Linear |
+| **docs_validate_release_update** | Validate a release-update document against the canonical template |
+| **docs_release_gate** | Aggregate pre-release verdict (drift + freshness + broken links) |
+| **docs_kg_query** | Query brain knowledge graph (`mode=neighbors` or `mode=explain`) |
 
 ---
 
@@ -103,6 +110,11 @@ You only see these tools when the host has started the DocsMCP server and attach
 | **docs_lint_linear_issue** | When the user hands you a Linear issue to prep for agent work -- scores against 9 rules (autolink mangle, UUID refs, title length, missing file anchor / Acceptance, fenced-block anchoring, priority / estimate). Returns score, findings, suggested agent-readiness label, and reclaimable-noise byte count. |
 | **docs_validate_linear_issue** | **Pre-create gate** before saving an issue via the Linear plugin -- returns `{agent_ready, score, missing, issues, suggested_label}`. Only HIGH-severity findings surface in `missing[]`; medium/low stay with the lint tool. |
 | **docs_linear_triage** | When auditing a **backlog or batch** of Linear issues -- aggregates label proposals, clusters issues sharing file paths into parent-grouping candidates, summarizes metadata gaps. Read-only, takes N issue payloads as input. |
+| **docs_save_linear_issue** | **Before** calling Linear `save_issue` -- server-side gate paired with the `linear-issue` skill hook; returns `{ok: true}` when a recent validate passed. |
+| **docs_generate_release_update** | When posting a **version release announcement** to Linear (pairs with `linear-release-update` skill). |
+| **docs_validate_release_update** | **Before** posting a release update -- validates structure against the canonical template. |
+| **docs_release_gate** | **Before shipping a release** -- single aggregate verdict from drift, freshness, and link checks. |
+| **docs_kg_query** | When you need **brain KG context** for doc planning -- neighbors of entities or path between two entities. Degrades cleanly when brain is unavailable. |
 
 ---
 
@@ -259,7 +271,7 @@ Settings can be viewed/changed via `docs_config` or set in `.docsmcp.yaml`:
 | `style_auto_detect_max_terms` | `80` | Max terms to add from auto-detect |
 | `enabled_tools` | *(none)* | Allow list: only these tools are exposed. Empty/missing = all tools. Env: `DOCS_MCP_ENABLED_TOOLS` (comma-separated). |
 | `disabled_tools` | `[]` | Deny list: excluded from the exposed set. Ignored when `enabled_tools` is set. Env: `DOCS_MCP_DISABLED_TOOLS`. |
-| `tool_preset` | *(none)* | Preset: `full` (all 38 tools, default) or `core` (6 tools: session_start, project_scan, check_drift, generate_readme, check_completeness, check_links). Env: `DOCS_MCP_TOOL_PRESET`. |
+| `tool_preset` | *(none)* | Preset: `full` (all 40 tools), `core` (6 tools), `planner` (10), `release` (10), `auditor` (10). See § Reducing tool count. Env: `DOCS_MCP_TOOL_PRESET`. |
 
 Environment variables use the `DOCS_MCP_` prefix (e.g., `DOCS_MCP_OUTPUT_DIR`).
 
@@ -269,6 +281,12 @@ When using DocsMCP with TappsMCP or in environments where the combined tool coun
 
 - **enabled_tools** (allow list): when non-empty, only these tools are registered. Comma-separated in env: `DOCS_MCP_ENABLED_TOOLS=docs_session_start,docs_project_scan,docs_check_drift`.
 - **disabled_tools** (deny list): tools to exclude from the full set. Applied when `enabled_tools` is not set. Env: `DOCS_MCP_DISABLED_TOOLS`.
-- **tool_preset**: `full` (all tools, default when unset) or `core` (6 essential tools). Env: `DOCS_MCP_TOOL_PRESET=core`.
+- **tool_preset** role subsets (when `enabled_tools` is unset):
+  - `full` — all 40 tools (default when unset)
+  - `core` — session_start, project_scan, check_drift, generate_readme, check_completeness, check_links (6 tools)
+  - `planner` — epic/story/prompt generation, validate_epic, Linear lint/validate/save/triage (10 tools)
+  - `release` — git_summary, changelog, release notes/update, release_gate, drift/links/freshness (10 tools)
+  - `auditor` — project_scan + full check_* suite + validate_epic (10 tools)
+  - Env: `DOCS_MCP_TOOL_PRESET=planner`
 
-Empty or missing = all 38 tools (backward compatible). Invalid tool names in `enabled_tools` are ignored and logged. See tool-count best practices in the repo planning docs (Epic 79).
+Empty or missing = all 40 tools (backward compatible). Invalid tool names in `enabled_tools` are ignored and logged. Non-daily-driver tools use `defer_loading` (TAP-1987) so only ~7 eager schemas load at session start. See [tool-budget.md](../../docs/architecture/tool-budget.md) and Epic 79 planning docs.

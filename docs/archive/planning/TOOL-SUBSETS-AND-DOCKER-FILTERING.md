@@ -6,7 +6,7 @@
 
 ## Why tool count matters
 
-Research (2026) shows that LLM tool-selection accuracy and context efficiency degrade when too many tools are in context; ~30 tools is a practical upper bound. TappsMCP has 29 tools and DocsMCP 22; combined that is 51 tools. This doc describes how to expose only a subset.
+Research (2026) shows that LLM tool-selection accuracy and context efficiency degrade when too many tools are in context; ~30 tools is a practical upper bound. TappsMCP has 35 tools (9 eager) and DocsMCP 40 tools (7 eager, 33 deferred via `defer_loading`); combined that is 75 registered tools but only ~16 eager schemas at session start. This doc describes how to expose only a subset.
 
 ---
 
@@ -61,7 +61,17 @@ See [docker-mcp/README.md](../docker-mcp/README.md) and [docs/DOCKER_MCP_TOOLKIT
 
 ## 4. DocsMCP subsets
 
-DocsMCP supports `enabled_tools`, `disabled_tools`, and `tool_preset: full | core` in `.docsmcp.yaml` or env `DOCS_MCP_ENABLED_TOOLS`, `DOCS_MCP_TOOL_PRESET`. Core preset exposes 6 tools (e.g. session_start, project_scan, check_drift, generate_readme, check_completeness, check_links). See DocsMCP AGENTS.md.
+DocsMCP supports `enabled_tools`, `disabled_tools`, and `tool_preset` in `.docsmcp.yaml` or env `DOCS_MCP_ENABLED_TOOLS`, `DOCS_MCP_TOOL_PRESET`.
+
+| Preset | Tools | Use case |
+|--------|-------|----------|
+| **core** | 6 | Bootstrap + drift/readme/completeness/links |
+| **planner** | 10 | Epic/story/prompt + Linear lint/validate/save/triage |
+| **release** | 10 | Changelog, release notes/update, release_gate, drift/links/freshness |
+| **auditor** | 10 | project_scan + check_drift/completeness/links/freshness/diataxis/cross_refs/style |
+| **full** | 40 | No restriction (default) |
+
+Non-daily-driver tools use `defer_loading` (TAP-1987) — only 7 eager schemas load at session start in full mode. See DocsMCP `AGENTS.md` and [tool-budget.md](../../architecture/tool-budget.md).
 
 ---
 
@@ -70,7 +80,7 @@ DocsMCP supports `enabled_tools`, `disabled_tools`, and `tool_preset: full | cor
 | Context | How to limit tools |
 |---------|--------------------|
 | **TappsMCP direct stdio** | `tool_preset: core | pipeline | reviewer | planner | frontend | developer` or `enabled_tools` in `.tapps-mcp.yaml` |
-| **DocsMCP direct stdio** | `tool_preset: core` or `enabled_tools` in `.docsmcp.yaml` |
+| **DocsMCP direct stdio** | `tool_preset: core \| planner \| release \| auditor` or `enabled_tools` in `.docsmcp.yaml` |
 | **Docker MCP Gateway** | Use a profile + `tools.yaml` from `docker-mcp/examples/` or the profile’s recommended tool set |
 | **Server-side (TappsMCP)** | Use **tapps-mcp-core** from catalog (same image with `TAPPS_MCP_TOOL_PRESET=core`) to expose 7 tools without gateway filtering |
 

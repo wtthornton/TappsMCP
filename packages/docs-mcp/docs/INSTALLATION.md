@@ -155,7 +155,7 @@ docker run -d --rm \
 
 ## Available Tools
 
-DocsMCP provides 38 MCP tools across these categories:
+DocsMCP provides 40 MCP tools across these categories:
 
 ### Session
 - `docs_session_start` - Initialize session and detect project context
@@ -195,6 +195,33 @@ DocsMCP provides 38 MCP tools across these categories:
 - `docs_check_freshness` - Score documentation freshness (fresh/aging/stale/ancient)
 - `docs_check_diataxis` - Diataxis quadrant coverage analysis and balance scoring
 - `docs_check_cross_refs` - Cross-reference validation (orphans, broken refs, backlinks)
+- `docs_check_style` - Deterministic markdown style/tone checks
+- `docs_validate_release_update` - Validate a release-update document against the canonical template
+- `docs_release_gate` - Aggregate pre-release verdict (drift + freshness + broken links)
+
+### Release generation
+- `docs_generate_release_update` - Generate a structured release-update document
+
+### Linear
+- `docs_lint_linear_issue` - Lint a Linear issue payload against the agent-issue template
+- `docs_validate_linear_issue` - Pre-create gate for Linear issues (`agent_ready`)
+- `docs_save_linear_issue` - Pre-save gate sentinel before Linear `save_issue`
+- `docs_linear_triage` - Batch-triage Linear issue payloads
+
+### Knowledge graph
+- `docs_kg_query` - Query brain knowledge graph (`mode=neighbors` or `mode=explain`)
+
+### Tool presets
+
+Set `tool_preset` in `.docsmcp.yaml` or `DOCS_MCP_TOOL_PRESET` to limit exposed tools:
+
+| Preset | Tools | Use case |
+|--------|-------|----------|
+| `core` | 6 | Bootstrap, drift, readme, completeness, links |
+| `planner` | 10 | Epic/story planning + Linear issue quality |
+| `release` | 10 | Changelog, release notes, release gate |
+| `auditor` | 10 | Full documentation health checks |
+| `full` | 40 | All tools (default) |
 
 ## Environment Variables
 

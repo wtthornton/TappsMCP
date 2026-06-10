@@ -29,7 +29,11 @@ Eager tools: `tapps_session_start`, `tapps_validate_changed`, `tapps_score_file`
 | `tapps-mcp` | full (no `--mode`) | 9 | 26 | 35 |
 | `tapps-quality` | `--mode quality` | 9 | 6 | 15 |
 | `tapps-admin` | `--mode admin` | 1 | 12 | 13 |
-| `docs-mcp` | — | 6 | 32 | 38 |
+| `docs-mcp` | — | 7 | 33 | 40 |
+
+Eager docs-mcp tools: `docs_generate_changelog`, `docs_generate_epic`,
+`docs_generate_story`, `docs_lint_linear_issue`, `docs_validate_linear_issue`,
+`docs_save_linear_issue`, `docs_release_gate` (7 total).
 
 > **Note:** The original TAP-1986 count was 8 eager tools. `tapps_usage` was added
 > as an eager daily-driver in v3.11.0, and two deferred brain-elevation tools
@@ -69,5 +73,7 @@ To bring a server within budget:
      - tapps_quick_check
      - tapps_quality_gate
    ```
+4. **DocsMCP role presets**: set `tool_preset` in `.docsmcp.yaml` to `core`,
+   `planner`, `release`, or `auditor` (see DocsMCP `AGENTS.md` § Reducing tool count).
 
 See [ARCHITECTURE.md](../ARCHITECTURE.md) for the full server mode table.

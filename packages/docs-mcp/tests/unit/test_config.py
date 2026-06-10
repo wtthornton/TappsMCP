@@ -382,7 +382,7 @@ class TestToolCurationSettings:
         assert settings.disabled_tools == ["docs_generate_diagram", "docs_validate_epic"]
 
     def test_tool_preset_values(self) -> None:
-        for preset in ("full", "core"):
+        for preset in ("full", "core", "planner", "release", "auditor"):
             settings = DocsMCPSettings(tool_preset=preset)
             assert settings.tool_preset == preset
 
