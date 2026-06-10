@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 from typing import Any
+from contextlib import contextmanager
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -42,6 +43,16 @@ def _make_paths(file_paths: list[str] | None = None) -> list[Path]:
     return [Path(p) for p in (file_paths or ["/project/src/foo.py"])]
 
 
+@contextmanager
+def patch_kg_emit(*, enabled: bool = True, bridge: Any):
+    """Patch server_helpers gates used by ``_fire_validate_events``."""
+    with (
+        patch("tapps_mcp.server_helpers.brain_kg_events_enabled", return_value=enabled),
+        patch("tapps_mcp.server_helpers._get_brain_bridge", return_value=bridge),
+    ):
+        yield
+
+
 # ---------------------------------------------------------------------------
 # TestFireValidateEvents — unit tests for the helper itself
 # ---------------------------------------------------------------------------
@@ -56,10 +67,7 @@ class TestFireValidateEvents:
         mock_bridge.record_kg_event = AsyncMock(return_value={"recorded": True})
 
         with (
-            patch(
-                "tapps_mcp.tools.validate_changed._get_brain_bridge",
-                return_value=mock_bridge,
-            ),
+            patch_kg_emit(bridge=mock_bridge),
             patch(
                 "tapps_mcp.tools.validate_changed.asyncio.create_task"
             ) as mock_task,
@@ -79,10 +87,7 @@ class TestFireValidateEvents:
             captured.append(coro)
 
         with (
-            patch(
-                "tapps_mcp.tools.validate_changed._get_brain_bridge",
-                return_value=mock_bridge,
-            ),
+            patch_kg_emit(bridge=mock_bridge),
             patch(
                 "tapps_mcp.tools.validate_changed.asyncio.create_task",
                 side_effect=_capture_task,
@@ -110,10 +115,7 @@ class TestFireValidateEvents:
         captured: list[Any] = []
 
         with (
-            patch(
-                "tapps_mcp.tools.validate_changed._get_brain_bridge",
-                return_value=mock_bridge,
-            ),
+            patch_kg_emit(bridge=mock_bridge),
             patch(
                 "tapps_mcp.tools.validate_changed.asyncio.create_task",
                 side_effect=captured.append,
@@ -140,10 +142,7 @@ class TestFireValidateEvents:
         captured: list[Any] = []
 
         with (
-            patch(
-                "tapps_mcp.tools.validate_changed._get_brain_bridge",
-                return_value=mock_bridge,
-            ),
+            patch_kg_emit(bridge=mock_bridge),
             patch(
                 "tapps_mcp.tools.validate_changed.asyncio.create_task",
                 side_effect=captured.append,
@@ -169,10 +168,7 @@ class TestFireValidateEvents:
         captured: list[Any] = []
 
         with (
-            patch(
-                "tapps_mcp.tools.validate_changed._get_brain_bridge",
-                return_value=mock_bridge,
-            ),
+            patch_kg_emit(bridge=mock_bridge),
             patch(
                 "tapps_mcp.tools.validate_changed.asyncio.create_task",
                 side_effect=captured.append,
@@ -196,10 +192,7 @@ class TestFireValidateEvents:
         captured: list[Any] = []
 
         with (
-            patch(
-                "tapps_mcp.tools.validate_changed._get_brain_bridge",
-                return_value=None,
-            ),
+            patch_kg_emit(bridge=None),
             patch(
                 "tapps_mcp.tools.validate_changed.asyncio.create_task",
                 side_effect=captured.append,
@@ -217,10 +210,7 @@ class TestFireValidateEvents:
         captured: list[Any] = []
 
         with (
-            patch(
-                "tapps_mcp.tools.validate_changed._get_brain_bridge",
-                return_value=mock_bridge,
-            ),
+            patch_kg_emit(bridge=mock_bridge),
             patch(
                 "tapps_mcp.tools.validate_changed.asyncio.create_task",
                 side_effect=captured.append,
@@ -239,10 +229,7 @@ class TestFireValidateEvents:
         captured: list[Any] = []
 
         with (
-            patch(
-                "tapps_mcp.tools.validate_changed._get_brain_bridge",
-                return_value=mock_bridge,
-            ),
+            patch_kg_emit(bridge=mock_bridge),
             patch(
                 "tapps_mcp.tools.validate_changed.asyncio.create_task",
                 side_effect=captured.append,
@@ -253,16 +240,81 @@ class TestFireValidateEvents:
             assert len(captured) == 1
             await captured[0]  # must NOT raise even though bridge raised
 
+    @pytest.mark.asyncio
+    async def test_kg_events_skipped_when_brain_kg_disabled(self) -> None:
+        """TAP-3254: no bridge init when brain_kg_events_enabled is False."""
+        mock_bridge = MagicMock()
+        mock_bridge.record_kg_event = AsyncMock(return_value={"recorded": True})
+        captured: list[Any] = []
+
+        with (
+            patch(
+                "tapps_mcp.server_helpers.brain_kg_events_enabled",
+                return_value=False,
+            ),
+            patch(
+                "tapps_mcp.server_helpers._get_brain_bridge",
+                return_value=mock_bridge,
+            ) as mock_get_bridge,
+            patch(
+                "tapps_mcp.tools.validate_changed.asyncio.create_task",
+                side_effect=captured.append,
+            ),
+        ):
+            paths = _make_paths(["/project/a.py", "/project/b.py", "/project/c.py"])
+            for _ in range(3):
+                _fire_validate_events(
+                    paths,
+                    _make_outcome(file_paths=[str(p) for p in paths]),
+                    elapsed_ms=10,
+                )
+            for coro in captured:
+                await coro
+
+        mock_get_bridge.assert_not_called()
+        mock_bridge.record_kg_event.assert_not_awaited()
+
+    @pytest.mark.asyncio
+    async def test_bridge_probe_at_most_once_across_multiple_emits(self) -> None:
+        """TAP-3254: when enabled, bridge lookup runs once per emit, not per file."""
+        mock_bridge = MagicMock()
+        mock_bridge.record_kg_event = AsyncMock(return_value={"recorded": True})
+        captured: list[Any] = []
+
+        with (
+            patch(
+                "tapps_mcp.server_helpers.brain_kg_events_enabled",
+                return_value=True,
+            ),
+            patch(
+                "tapps_mcp.server_helpers._get_brain_bridge",
+                return_value=mock_bridge,
+            ) as mock_get_bridge,
+            patch(
+                "tapps_mcp.tools.validate_changed.asyncio.create_task",
+                side_effect=captured.append,
+            ),
+        ):
+            paths = _make_paths([f"/project/f{i}.py" for i in range(5)])
+            for _ in range(3):
+                _fire_validate_events(
+                    paths,
+                    _make_outcome(file_paths=[str(p) for p in paths]),
+                    elapsed_ms=10,
+                )
+            for coro in captured:
+                await coro
+
+        assert mock_get_bridge.call_count == 3
+        assert mock_bridge.record_kg_event.await_count == 3
+
     def test_create_task_exception_is_swallowed(self) -> None:
         """If create_task itself raises (no running loop), the function does not propagate."""
         mock_bridge = MagicMock()
         mock_bridge.record_kg_event = AsyncMock()
 
         with (
-            patch(
-                "tapps_mcp.tools.validate_changed._get_brain_bridge",
-                return_value=mock_bridge,
-            ),
+            patch_kg_emit(bridge=mock_bridge),
             patch(
                 "tapps_mcp.tools.validate_changed.asyncio.create_task",
                 side_effect=RuntimeError("no running event loop"),

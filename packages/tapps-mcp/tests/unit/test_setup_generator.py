@@ -3,6 +3,7 @@
 import json
 import os
 import sys
+from pathlib import Path
 from unittest.mock import patch
 
 import pytest
@@ -31,6 +32,11 @@ from tapps_mcp.distribution.setup_generator import (
     run_init,
     run_upgrade,
 )
+
+
+def _cursor_wrapper_path(project: Path) -> str:
+    return str((project / ".cursor" / "bin" / "tapps-mcp-serve.sh").resolve())
+
 
 # ---------------------------------------------------------------------------
 # Auto-detection tests
@@ -201,6 +207,26 @@ class TestGetServersKey:
         assert _get_servers_key("vscode") == "servers"
 
 
+class TestCursorMcpWrapper:
+    """TAP-3255: Cursor wrapper script sources .env before spawning tapps-mcp."""
+
+    def test_wrapper_maps_brain_token_and_is_executable(self, tmp_path):
+        project = tmp_path / "project"
+        project.mkdir()
+        (project / ".env").write_text("TAPPS_BRAIN_AUTH_TOKEN=from-env\n", encoding="utf-8")
+        with patch(
+            "tapps_mcp.distribution.setup_generator.shutil.which", return_value="/bin/tapps-mcp"
+        ):
+            _generate_config("cursor", project, force=True)
+        wrapper = project / ".cursor" / "bin" / "tapps-mcp-serve.sh"
+        assert wrapper.exists()
+        assert os.access(wrapper, os.X_OK)
+        text = wrapper.read_text(encoding="utf-8")
+        assert "source .env" in text
+        assert "TAPPS_MCP_MEMORY_BRAIN_AUTH_TOKEN" in text
+        assert "TAPPS_BRAIN_AUTH_TOKEN" in text
+
+
 # ---------------------------------------------------------------------------
 # Config merging tests
 # ---------------------------------------------------------------------------
@@ -266,8 +292,11 @@ class TestGenerateConfig:
         config_path = project / ".cursor" / "mcp.json"
         assert config_path.exists()
         data = json.loads(config_path.read_text(encoding="utf-8"))
-        assert data["mcpServers"]["tapps-mcp"]["command"] == "tapps-mcp"
-        assert data["mcpServers"]["tapps-mcp"]["args"] == ["serve"]
+        assert data["mcpServers"]["tapps-mcp"]["command"] == _cursor_wrapper_path(project)
+        assert data["mcpServers"]["tapps-mcp"]["args"] == []
+        wrapper = project / ".cursor" / "bin" / "tapps-mcp-serve.sh"
+        assert wrapper.exists()
+        assert "source .env" in wrapper.read_text(encoding="utf-8")
 
     def test_generates_vscode_config(self, tmp_path):
         project = tmp_path / "project"
@@ -340,7 +369,7 @@ class TestGenerateConfig:
         ):
             _generate_config("cursor", project)
         data = json.loads((cursor_dir / "mcp.json").read_text(encoding="utf-8"))
-        assert data["mcpServers"]["tapps-mcp"]["command"] == "tapps-mcp"
+        assert data["mcpServers"]["tapps-mcp"]["command"] == _cursor_wrapper_path(project)
 
     def test_handles_invalid_json_in_existing_file(self, tmp_path):
         """Does not overwrite when existing file has invalid JSON."""
@@ -406,6 +435,21 @@ class TestCheckConfig:
     """Tests for --check mode verification."""
 
     def test_check_valid_config(self, tmp_path):
+        project = tmp_path / "project"
+        cursor_dir = project / ".cursor"
+        cursor_dir.mkdir(parents=True)
+        wrapper = cursor_dir / "bin" / "tapps-mcp-serve.sh"
+        wrapper.parent.mkdir(parents=True)
+        wrapper.write_text("#!/bin/bash\nexec tapps-mcp serve\n", encoding="utf-8")
+        config = {
+            "mcpServers": {
+                "tapps-mcp": {"command": str(wrapper.resolve()), "args": []},
+            },
+        }
+        (cursor_dir / "mcp.json").write_text(json.dumps(config), encoding="utf-8")
+        assert _check_config("cursor", project) is True
+
+    def test_check_valid_config_legacy_direct_launch(self, tmp_path):
         project = tmp_path / "project"
         cursor_dir = project / ".cursor"
         cursor_dir.mkdir(parents=True)
@@ -929,8 +973,8 @@ class TestEnvInConfig:
         _generate_config("cursor", project)
         data = json.loads((project / ".cursor" / "mcp.json").read_text(encoding="utf-8"))
         entry = data["mcpServers"]["tapps-mcp"]
-        assert entry["command"] == "tapps-mcp"
-        assert entry["args"] == ["serve"]
+        assert entry["command"] == _cursor_wrapper_path(project)
+        assert entry["args"] == []
         assert "env" in entry
 
     def test_claude_code_includes_brain_env_block(self, tmp_path):
@@ -1366,7 +1410,7 @@ class TestEpic80ConsumerInit:
             ok = _generate_config("cursor", project, force=False)
         assert ok is True
         data = json.loads((cursor_dir / "mcp.json").read_text(encoding="utf-8"))
-        assert data["mcpServers"]["tapps-mcp"]["command"] == "tapps-mcp"
+        assert data["mcpServers"]["tapps-mcp"]["command"] == _cursor_wrapper_path(project)
 
     def test_run_init_refuses_package_dir_without_flag(self, tmp_path):
         pkg = tmp_path / "packages" / "tapps-mcp"
@@ -1421,8 +1465,8 @@ class TestEpic80ConsumerInit:
         with patch("tapps_mcp.distribution.setup_generator.shutil.which", side_effect=_which):
             _generate_config("cursor", project, force=True)
         data = json.loads((project / ".cursor" / "mcp.json").read_text(encoding="utf-8"))
-        assert data["mcpServers"]["tapps-mcp"]["command"] == "tapps-mcp"
-        assert data["mcpServers"]["tapps-mcp"]["args"] == ["serve"]
+        assert data["mcpServers"]["tapps-mcp"]["command"] == _cursor_wrapper_path(project)
+        assert data["mcpServers"]["tapps-mcp"]["args"] == []
         assert data["mcpServers"]["docs-mcp"]["command"] == "docsmcp"
         assert data["mcpServers"]["docs-mcp"]["args"] == ["serve"]
 
@@ -1464,7 +1508,7 @@ class TestEpic80ConsumerInit:
         with patch("tapps_mcp.distribution.setup_generator.shutil.which", side_effect=_which):
             _generate_config("cursor", project, force=True, upgrade_mode=True)
         data = json.loads((project / ".cursor" / "mcp.json").read_text(encoding="utf-8"))
-        assert data["mcpServers"]["tapps-mcp"]["command"] == "tapps-mcp"
+        assert data["mcpServers"]["tapps-mcp"]["command"] == _cursor_wrapper_path(project)
         assert data["mcpServers"]["docs-mcp"]["command"] == "docsmcp"
 
 
@@ -1739,9 +1783,11 @@ class TestUvContextDetection:
         _generate_config("cursor", project, uv_launch=uv_launch, force=True)
         data = json.loads((project / ".cursor" / "mcp.json").read_text(encoding="utf-8"))
         entry = data["mcpServers"]["tapps-mcp"]
-        assert entry["command"] == "uv"
-        assert "--extra" in entry["args"]
-        assert "mcp" in entry["args"]
+        assert entry["command"] == _cursor_wrapper_path(project)
+        assert entry["args"] == []
+        script = (project / ".cursor" / "bin" / "tapps-mcp-serve.sh").read_text(encoding="utf-8")
+        assert "uv" in script
+        assert "--extra" in script
 
     def test_cli_init_has_uv_flags(self):
         runner = CliRunner()
