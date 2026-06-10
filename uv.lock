@@ -17,7 +17,7 @@ members = [
 dev = [
     { name = "anthropic", specifier = ">=0.40,<1" },
     { name = "mypy", specifier = ">=2.1.0,<3" },
-    { name = "nlt-report-studio", git = "https://github.com/wtthornton/ReportLab.git?tag=v0.1.4" },
+    { name = "nlt-report-studio", git = "https://github.com/wtthornton/ReportLab.git?tag=v0.1.5" },
     { name = "playwright", specifier = ">=1.58.0,<2" },
     { name = "pre-commit", specifier = ">=4.5.1,<5" },
     { name = "pytest", specifier = ">=9.0.3,<10" },
@@ -1352,8 +1352,8 @@ wheels = [
 
 [[package]]
 name = "nlt-report-studio"
-version = "0.1.4"
-source = { git = "https://github.com/wtthornton/ReportLab.git?tag=v0.1.4#e35dc46f526ee6610a4bc0ffcd74d18e6b42547d" }
+version = "0.1.5"
+source = { git = "https://github.com/wtthornton/ReportLab.git?tag=v0.1.5#943a235c1ead6074a991befba466774fe0f1c984" }
 dependencies = [
     { name = "pypdf" },
     { name = "pyyaml" },
