@@ -6,7 +6,7 @@ members = ["packages/*"]
 # HEAD rev; switch to tag = "v3.24.0" once released. See ADR-0013.
 tapps-brain = { git = "https://github.com/wtthornton/tapps-brain.git", rev = "0a3e173181d4b3179244add93e5fb18ce1336fc5" }
 # TAP-3445 / TAP-3487 — nlt-report-studio consumer reports (git tag pin)
-nlt-report-studio = { path = "../ReportLab", editable = true }
+nlt-report-studio = { git = "https://github.com/wtthornton/ReportLab.git", tag = "v0.1.4" }
 
 [tool.uv]
 dev-dependencies = [
