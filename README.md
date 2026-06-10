@@ -510,6 +510,10 @@ The MCP tool exposes a richer parameter surface than the CLI (which auto-fills s
 | `linear_enforce_cache_gate` | str \| null | `null` | Cache-first Linear-list mode: `"off"` / `"warn"` / `"block"`; default follows engagement level. |
 | `install_git_hooks` | bool \| null | `null` | Install `.githooks/pre-commit` + set `core.hooksPath`. |
 | `linear_sdlc` | bool | `false` | Generate Linear SDLC scaffolding (epic/story templates). |
+| `with_report_studio` | bool | `false` | Pin `nlt-report-studio` in `pyproject.toml` (git tag dep). |
+| `report_studio_tag` | str | `"v0.1.3"` | Git tag for `[tool.uv.sources]` when `with_report_studio` is true. |
+| `report_studio_scaffold` | str | `""` | Optional report name — runs `report-studio init` after pin when set. |
+| `report_studio_template` | str | `"architecture_theory"` | Template id for optional scaffold. |
 | `linear_issue_prefix` | str | `"TAP"` | Issue-key prefix used by SDLC scaffolding. |
 | `linear_team_id` | str | `""` | Linear team UUID to scope SDLC scaffolding. |
 | `linear_project_id` | str | `""` | Linear project UUID to scope SDLC scaffolding. |
