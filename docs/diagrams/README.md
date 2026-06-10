@@ -28,7 +28,7 @@ C4Context
     Person(Dev, "Developer", "Editing code, asking the agent for help")
 
     System(tapps_mcp, "TappsMCP", "Deterministic code quality MCP server (32 tools)")
-    System_Ext(docs_mcp, "DocsMCP", "Documentation MCP server (38 tools)")
+    System_Ext(docs_mcp, "DocsMCP", "Documentation MCP server (40 tools)")
     System_Ext(brain, "tapps-brain", "Postgres-backed cross-session memory service")
     System_Ext(ctx7, "Context7", "Live library docs API")
 
@@ -50,7 +50,7 @@ C4Container
 
     System_Boundary(monorepo, "tapps-mcp monorepo") {
         Container(tapps_mcp, "tapps-mcp", "Python / FastMCP", "32 tools — scoring, gates, security, lookup, memory")
-        Container(docs_mcp, "docs-mcp", "Python / FastMCP", "38 tools — generation + validation")
+        Container(docs_mcp, "docs-mcp", "Python / FastMCP", "40 tools — generation + validation")
         Container(tapps_core, "tapps-core", "Python library", "Shared infra: config, security, logging, knowledge, metrics, adaptive")
     }
 

@@ -98,11 +98,17 @@ Role-scoped presets (selected via `TAPPS_MCP_TOOL_PRESET=<name>` env var, Epic 7
 | `TOOL_PRESET_FRONTEND` | `tapps_session_start`, `tapps_quick_check`, `tapps_score_file`, `tapps_lookup_docs`, `tapps_quality_gate` | Frontend-focused agent |
 | `TOOL_PRESET_DEVELOPER` | `tapps_session_start`, `tapps_quick_check`, `tapps_validate_changed`, `tapps_quality_gate`, `tapps_checklist`, `tapps_score_file`, `tapps_security_scan`, `tapps_lookup_docs`, `tapps_memory`, `tapps_impact_analysis` | General developer agent |
 
-DocsMCP also exposes a core preset:
+DocsMCP role presets (40 tools total; 7 eager via `defer_loading`):
 
-| Preset | Members | Use case |
-|---|---|---|
-| `DOCS_TOOL_PRESET_CORE` | Selected via `DOCS_MCP_TOOL_PRESET=core` — see [`docs_mcp/server.py:DOCS_TOOL_PRESET_CORE`](../packages/docs-mcp/src/docs_mcp/server.py) for current members | Minimal docs-mcp surface (validation + index, no heavy generation) |
+| Preset | Env | Tools | Use case |
+|---|---|---|---|
+| `core` | `DOCS_MCP_TOOL_PRESET=core` | 6 | Bootstrap, drift, readme, completeness, links |
+| `planner` | `DOCS_MCP_TOOL_PRESET=planner` | 10 | Epic/story/prompt + Linear lint/validate/save/triage |
+| `release` | `DOCS_MCP_TOOL_PRESET=release` | 10 | Changelog, release notes/update, release_gate |
+| `auditor` | `DOCS_MCP_TOOL_PRESET=auditor` | 10 | project_scan + full check_* suite |
+| `full` | *(default)* | 40 | No restriction |
+
+Source: [`DOCS_TOOL_PRESET_*` in `docs_mcp/server.py`](../packages/docs-mcp/src/docs_mcp/server.py).
 
 Source of truth: [`packages/tapps-mcp/src/tapps_mcp/server.py`](../packages/tapps-mcp/src/tapps_mcp/server.py) (lines 233-340) and [`packages/docs-mcp/src/docs_mcp/server.py`](../packages/docs-mcp/src/docs_mcp/server.py).
 

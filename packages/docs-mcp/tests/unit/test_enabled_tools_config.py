@@ -59,6 +59,27 @@ class TestResolveAllowedTools:
         allowed = _resolve_allowed_tools(None, [], "full")
         assert allowed == ALL_DOCS_TOOL_NAMES
 
+    def test_preset_planner(self) -> None:
+        from docs_mcp.server import DOCS_TOOL_PRESET_PLANNER, _resolve_allowed_tools
+
+        allowed = _resolve_allowed_tools(None, [], "planner")
+        assert allowed == DOCS_TOOL_PRESET_PLANNER
+        assert len(allowed) == 10
+
+    def test_preset_release(self) -> None:
+        from docs_mcp.server import DOCS_TOOL_PRESET_RELEASE, _resolve_allowed_tools
+
+        allowed = _resolve_allowed_tools(None, [], "release")
+        assert allowed == DOCS_TOOL_PRESET_RELEASE
+        assert len(allowed) == 10
+
+    def test_preset_auditor(self) -> None:
+        from docs_mcp.server import DOCS_TOOL_PRESET_AUDITOR, _resolve_allowed_tools
+
+        allowed = _resolve_allowed_tools(None, [], "auditor")
+        assert allowed == DOCS_TOOL_PRESET_AUDITOR
+        assert len(allowed) == 10
+
     def test_enabled_tools_invalid_names_ignored(self) -> None:
         from docs_mcp.server import _resolve_allowed_tools
 
@@ -136,3 +157,15 @@ class TestToolPresetConstants:
         from docs_mcp.server import ALL_DOCS_TOOL_NAMES
 
         assert len(ALL_DOCS_TOOL_NAMES) == 40  # +docs_kg_query (TAP-1950)
+
+    def test_role_presets_are_subsets_of_all_tools(self) -> None:
+        from docs_mcp.server import (
+            ALL_DOCS_TOOL_NAMES,
+            DOCS_TOOL_PRESET_AUDITOR,
+            DOCS_TOOL_PRESET_PLANNER,
+            DOCS_TOOL_PRESET_RELEASE,
+        )
+
+        assert DOCS_TOOL_PRESET_PLANNER <= ALL_DOCS_TOOL_NAMES
+        assert DOCS_TOOL_PRESET_RELEASE <= ALL_DOCS_TOOL_NAMES
+        assert DOCS_TOOL_PRESET_AUDITOR <= ALL_DOCS_TOOL_NAMES

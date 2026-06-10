@@ -94,13 +94,13 @@ packages/
   tapps-core/     # Shared library (config, security, logging, knowledge)
                   #   memory/ is a re-export shim to tapps-brain
   tapps-mcp/      # Code quality MCP server (32 tools)
-  docs-mcp/       # Documentation MCP server (38 tools)
+  docs-mcp/       # Documentation MCP server (40 tools)
 ```
 
 **Dependency graph:**
 ```
 tapps-core (library)  <--  tapps-mcp (32 tools)
-                      <--  docs-mcp  (38 tools)
+                      <--  docs-mcp  (40 tools)
 ```
 
 ### Key Directories in tapps-mcp

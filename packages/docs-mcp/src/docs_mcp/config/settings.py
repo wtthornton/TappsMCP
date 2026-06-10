@@ -214,11 +214,15 @@ class DocsMCPSettings(BaseSettings):
             "Env: DOCS_MCP_DISABLED_TOOLS (comma-separated)."
         ),
     )
-    tool_preset: Literal["full", "core"] | None = Field(
+    tool_preset: Literal["full", "core", "planner", "release", "auditor"] | None = Field(
         default=None,
         description=(
-            "Predefined tool set: 'full' = all tools, 'core' = session_start, "
-            "project_scan, check_drift, generate_readme, check_completeness, check_links. "
+            "Predefined tool set: 'full' = all tools; 'core' = session_start, "
+            "project_scan, check_drift, generate_readme, check_completeness, check_links; "
+            "'planner' = epic/story/prompt + Linear issue lint/validate/triage; "
+            "'release' = changelog, release notes/update, release_gate, drift/links/freshness; "
+            "'auditor' = project_scan + check_drift/completeness/links/freshness/diataxis/"
+            "cross_refs/style + validate_epic. "
             "Used when enabled_tools is not set. Env: DOCS_MCP_TOOL_PRESET."
         ),
     )

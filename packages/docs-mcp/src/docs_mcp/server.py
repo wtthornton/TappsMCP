@@ -87,7 +87,7 @@ def _reset_tool_calls() -> None:
 # Tool curation (Epic 79.2): allowed tool names and presets
 # ---------------------------------------------------------------------------
 
-# Canonical list of all DocsMCP tools (32). Used for filtering.
+# Canonical list of all DocsMCP tools (40). Used for filtering.
 ALL_DOCS_TOOL_NAMES: frozenset[str] = frozenset(
     {
         "docs_session_start",
@@ -145,6 +145,60 @@ DOCS_TOOL_PRESET_CORE: frozenset[str] = frozenset(
     }
 )
 
+# Role presets: curated subsets for common workflows (mirrors TappsMCP role presets).
+DOCS_TOOL_PRESET_PLANNER: frozenset[str] = frozenset(
+    {
+        "docs_session_start",
+        "docs_project_scan",
+        "docs_generate_epic",
+        "docs_generate_story",
+        "docs_generate_prompt",
+        "docs_validate_epic",
+        "docs_lint_linear_issue",
+        "docs_validate_linear_issue",
+        "docs_save_linear_issue",
+        "docs_linear_triage",
+    }
+)
+
+DOCS_TOOL_PRESET_RELEASE: frozenset[str] = frozenset(
+    {
+        "docs_session_start",
+        "docs_git_summary",
+        "docs_generate_changelog",
+        "docs_generate_release_notes",
+        "docs_generate_release_update",
+        "docs_validate_release_update",
+        "docs_release_gate",
+        "docs_check_drift",
+        "docs_check_links",
+        "docs_check_freshness",
+    }
+)
+
+DOCS_TOOL_PRESET_AUDITOR: frozenset[str] = frozenset(
+    {
+        "docs_session_start",
+        "docs_project_scan",
+        "docs_check_drift",
+        "docs_check_completeness",
+        "docs_check_links",
+        "docs_check_freshness",
+        "docs_check_diataxis",
+        "docs_check_cross_refs",
+        "docs_check_style",
+        "docs_validate_epic",
+    }
+)
+
+_DOCS_TOOL_PRESETS: dict[str, frozenset[str]] = {
+    "core": DOCS_TOOL_PRESET_CORE,
+    "full": ALL_DOCS_TOOL_NAMES,
+    "planner": DOCS_TOOL_PRESET_PLANNER,
+    "release": DOCS_TOOL_PRESET_RELEASE,
+    "auditor": DOCS_TOOL_PRESET_AUDITOR,
+}
+
 
 def _resolve_allowed_tools(
     enabled_tools: list[str] | None,
@@ -166,10 +220,8 @@ def _resolve_allowed_tools(
                 invalid=sorted(invalid),
                 valid_count=len(allowed),
             )
-    elif tool_preset == "core":
-        allowed = set(DOCS_TOOL_PRESET_CORE)
-    elif tool_preset == "full":
-        allowed = set(ALL_DOCS_TOOL_NAMES)
+    elif tool_preset and tool_preset in _DOCS_TOOL_PRESETS:
+        allowed = set(_DOCS_TOOL_PRESETS[tool_preset])
     else:
         allowed = set(ALL_DOCS_TOOL_NAMES)
     allowed -= set(disabled_tools)

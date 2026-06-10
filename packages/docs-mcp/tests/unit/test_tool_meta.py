@@ -6,7 +6,7 @@ instead of persisting to disk as a file reference.
 
 TAP-1987: non-daily-driver tools declare meta["defer_loading"]=True so
 Claude Code only loads their schemas on-demand via Tool Search, keeping the
-eager catalog ≤ 6 tools.
+eager catalog ≤ 8 tools.
 """
 
 from __future__ import annotations
@@ -28,6 +28,7 @@ _DAILY_DRIVERS: frozenset[str] = frozenset(
         "docs_lint_linear_issue",
         "docs_generate_changelog",
         "docs_release_gate",
+        "docs_save_linear_issue",
     }
 )
 

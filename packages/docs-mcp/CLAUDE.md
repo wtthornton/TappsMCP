@@ -171,7 +171,7 @@ To add a new MCP tool:
 4. Use `error_response()` and `success_response()` for return values
 5. Add tests in `packages/docs-mcp/tests/unit/`
 
-## The 38 MCP tools
+## The 40 MCP tools
 
 | Category | Tool | Description |
 |---|---|---|
@@ -212,7 +212,9 @@ To add a new MCP tool:
 | Generation | `docs_generate_release_update` | Generate a structured release-update document |
 | Linear | `docs_lint_linear_issue` | Lint a Linear issue payload against the agent-issue template |
 | Linear | `docs_validate_linear_issue` | Validate a Linear issue payload (gates `agent_ready=true` for `save_issue`) |
+| Linear | `docs_save_linear_issue` | Pre-save gate sentinel (pairs with validate + Linear `save_issue`) |
 | Linear | `docs_linear_triage` | Batch-triage Linear issue payloads for quality scoring |
+| Knowledge graph | `docs_kg_query` | Brain KG query (`mode=neighbors` or `mode=explain`) |
 
 ## Code conventions
 
