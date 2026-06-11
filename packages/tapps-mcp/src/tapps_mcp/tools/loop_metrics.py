@@ -109,7 +109,27 @@ def should_auto_promote_cache_gate(
     return True, {**stats, "reason": "ready_to_promote"}
 
 
+def compute_gate_pass_rate_7d(project_root: Path) -> float | None:
+    """Return 7-day quality gate pass rate from execution metrics JSONL.
+
+    Uses tool-call rows where ``gate_passed`` is set. Returns ``None`` when
+    no gated calls were recorded in the window.
+    """
+    from datetime import UTC, datetime, timedelta
+
+    from tapps_core.metrics.execution_metrics import ToolCallMetricsCollector
+
+    metrics_dir = project_root / ".tapps-mcp" / "metrics"
+    if not metrics_dir.is_dir():
+        return None
+    since = datetime.now(tz=UTC) - timedelta(days=7)
+    collector = ToolCallMetricsCollector(metrics_dir)
+    summary = collector.get_summary(since=since)
+    return summary.gate_pass_rate
+
+
 __all__ = [
+    "compute_gate_pass_rate_7d",
     "compute_rolling_stats",
     "read_loop_metrics",
     "should_auto_promote_cache_gate",

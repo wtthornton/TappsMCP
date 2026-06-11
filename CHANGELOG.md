@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- **Metrics storage default** ([TAP-3572](https://linear.app/tappscodingagents/issue/TAP-3572)) — unset `TAPPS_METRICS_STORAGE` now defaults to `dual`; `dual` mode always writes local JSONL even when brain is healthy. New `tapps-mcp audit-fleet --period 1d` command aggregates usage across bootstrapped projects. Generated MCP configs pin `TAPPS_METRICS_STORAGE=dual` ([TAP-3576](https://linear.app/tappscodingagents/issue/TAP-3576)).
+- **Session handoff hardening** ([TAP-3573](https://linear.app/tappscodingagents/issue/TAP-3573), [TAP-3574](https://linear.app/tappscodingagents/issue/TAP-3574), [TAP-3575](https://linear.app/tappscodingagents/issue/TAP-3575), [TAP-3581](https://linear.app/tappscodingagents/issue/TAP-3581)) — `tapps doctor` lints `.tapps-mcp/session-handoff.md` (P0 required when Open has items). Handoff/continue skills enforce P0 gate, memory search, and Open→P0 fallback with aligned Cursor/Claude bodies.
+- **Pipeline compliance hints** ([TAP-3578](https://linear.app/tappscodingagents/issue/TAP-3578), [TAP-3577](https://linear.app/tappscodingagents/issue/TAP-3577), [TAP-3579](https://linear.app/tappscodingagents/issue/TAP-3579)) — SessionStart hooks and `tapps_session_start` surface prior-session `usage_gaps`. Doctor recommends `linear_enforce_cache_gate: block` when warn-mode violations exceed 20/24h, and `install_git_hooks: true` when high engagement meets <70% 7d gate pass rate. New CLI: `tapps-mcp usage-gaps-hint`.
+- **Dashboard observability** ([TAP-3582](https://linear.app/tappscodingagents/issue/TAP-3582), [TAP-3583](https://linear.app/tappscodingagents/issue/TAP-3583)) — `tapps_dashboard` adds `docs_metrics` (DocsMCP tool breakdown from JSONL/brain) and `session_funnel` (handoff freshness, session_start/checklist ratios). `tapps_stats` includes a `docs_tools` slice when docs calls are present. Funnel gaps surface in `recommendations`.
+
 ## [3.12.16] - 2026-06-09
 
 Patch: version stamp sync; republish global CLIs after 3.12.15 install drift.

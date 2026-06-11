@@ -1064,6 +1064,14 @@ class TestEnvInConfig:
         data = json.loads((project / ".cursor" / "mcp.json").read_text(encoding="utf-8"))
         assert data["mcpServers"]["tapps-mcp"]["env"]["TAPPS_BRAIN_PROFILE"] == "full"
 
+    def test_tapps_mcp_entry_pins_dual_metrics_storage(self, tmp_path):
+        """TAP-3572: generated MCP config pins TAPPS_METRICS_STORAGE=dual."""
+        project = tmp_path / "demo"
+        project.mkdir()
+        _generate_config("cursor", project)
+        data = json.loads((project / ".cursor" / "mcp.json").read_text(encoding="utf-8"))
+        assert data["mcpServers"]["tapps-mcp"]["env"]["TAPPS_METRICS_STORAGE"] == "dual"
+
     def test_docs_mcp_entry_pins_agent_brain_profile(self, tmp_path):
         """TAP-1935: the docs-mcp entry pins TAPPS_BRAIN_PROFILE=agent_brain."""
         project = tmp_path / "demo"
@@ -1098,6 +1106,7 @@ class TestEnvInConfig:
         _generate_config("cursor", project, force=True, upgrade_mode=True)
         env = json.loads(cfg.read_text(encoding="utf-8"))["mcpServers"]["tapps-mcp"]["env"]
         assert env["TAPPS_BRAIN_PROFILE"] == "full"
+        assert env["TAPPS_METRICS_STORAGE"] == "dual"
         assert env["MY_CUSTOM_KEY"] == "keep-me"  # human-added key preserved
 
     def test_brain_env_token_is_substitution_not_literal(self, tmp_path):

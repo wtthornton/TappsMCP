@@ -685,6 +685,22 @@ async def tapps_session_start(
     except Exception:
         _logger.debug("compaction_rehydration_session_start_failed", exc_info=True)
 
+    # TAP-3578: surface prior-session usage gaps from disk telemetry.
+    try:
+        from tapps_mcp.tools.usage import compute_gaps, format_session_start_gap_hint
+
+        gap_hint = format_session_start_gap_hint(settings.project_root)
+        usage = compute_gaps(settings.project_root, called_tools=set())
+        data["usage_gaps"] = {
+            "gaps": usage.get("gaps", []),
+            "recommendations": usage.get("recommendations", []),
+            "session_start_hint": gap_hint,
+            "rolling_gate_skip_rate": usage.get("rolling_stats", {}).get("gate_skip_rate", 0.0),
+            "rolling_loops": usage.get("rolling_stats", {}).get("loops", 0),
+        }
+    except Exception:
+        _logger.debug("usage_gaps_session_start_failed", exc_info=True)
+
     # TAP-1082: Hard-fail on tapps-brain auth probe 401/403 unless explicitly
     # tolerated. Audit (38 sessions, worst case 18 retries) shows agents do
     # not act on degraded:true buried inside memory_status — they retry, or

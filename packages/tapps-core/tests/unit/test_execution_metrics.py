@@ -12,6 +12,12 @@ from tapps_core.metrics.execution_metrics import (
 )
 
 
+@pytest.fixture(autouse=True)
+def _local_metrics_storage(monkeypatch):
+    """Keep collector query tests isolated from live brain telemetry."""
+    monkeypatch.setenv("TAPPS_METRICS_STORAGE", "local")
+
+
 @pytest.fixture
 def metrics_dir(tmp_path):
     d = tmp_path / "metrics"
@@ -186,8 +192,9 @@ class TestToolCallMetricsCollector:
 class TestBrainTelemetryDualWrite:
     @pytest.mark.asyncio
     async def test_record_call_emits_quality_metric_when_loop_running(
-        self, collector: ToolCallMetricsCollector
+        self, collector: ToolCallMetricsCollector, monkeypatch: pytest.MonkeyPatch
     ) -> None:
+        monkeypatch.setenv("TAPPS_METRICS_STORAGE", "dual")
         mock_bridge = MagicMock()
         mock_bridge.record_kg_event = AsyncMock(return_value={"recorded": True})
         mock_bridge.save = AsyncMock(return_value={"success": True})
@@ -225,8 +232,9 @@ class TestBrainTelemetryDualWrite:
         now = datetime.now(tz=UTC)
         collector.record("tapps_score_file", now, now + timedelta(milliseconds=5), score=90.0)
         assert list(metrics_dir.glob("tool_calls_*.jsonl")) == []
-        summary = collector.get_summary()
-        assert summary.total_calls == 1
+        recent = collector.get_recent(limit=10)
+        assert len(recent) == 1
+        assert recent[0].tool_name == "tapps_score_file"
 
     @pytest.mark.asyncio
     async def test_load_tool_call_metrics_from_brain_query_events(self):
@@ -305,7 +313,7 @@ class TestBrainTelemetryDualWrite:
         assert len(metrics) == 1
         assert metrics[0].call_id == "brain-read"
 
-    def test_dual_mode_skips_jsonl_write_when_brain_healthy(self, metrics_dir, monkeypatch):
+    def test_dual_mode_writes_jsonl_when_brain_healthy(self, metrics_dir, monkeypatch):
         monkeypatch.setenv("TAPPS_METRICS_STORAGE", "dual")
         collector = ToolCallMetricsCollector(metrics_dir)
         now = datetime.now(tz=UTC)
@@ -314,9 +322,9 @@ class TestBrainTelemetryDualWrite:
             return_value=True,
         ):
             collector.record("tapps_score_file", now, now + timedelta(milliseconds=5), score=90.0)
-        assert list(metrics_dir.glob("tool_calls_*.jsonl")) == []
+        assert list(metrics_dir.glob("tool_calls_*.jsonl"))
 
-    def test_default_mode_brain_when_bridge_healthy(self, monkeypatch):
+    def test_default_mode_dual_when_unset(self, monkeypatch):
         monkeypatch.delenv("TAPPS_METRICS_STORAGE", raising=False)
         from tapps_core.metrics.brain_telemetry import metrics_storage_mode
 
@@ -324,7 +332,7 @@ class TestBrainTelemetryDualWrite:
             "tapps_core.metrics.brain_telemetry.brain_metrics_bridge_available",
             return_value=True,
         ):
-            assert metrics_storage_mode() == "brain"
+            assert metrics_storage_mode() == "dual"
 
     def test_default_mode_dual_when_bridge_unhealthy(self, monkeypatch):
         monkeypatch.delenv("TAPPS_METRICS_STORAGE", raising=False)
@@ -336,8 +344,24 @@ class TestBrainTelemetryDualWrite:
         ):
             assert metrics_storage_mode() == "dual"
 
-    def test_default_brain_skips_disk_write(self, metrics_dir, monkeypatch):
+    def test_default_dual_writes_disk(self, metrics_dir, monkeypatch):
         monkeypatch.delenv("TAPPS_METRICS_STORAGE", raising=False)
+        collector = ToolCallMetricsCollector(metrics_dir)
+        now = datetime.now(tz=UTC)
+        with patch(
+            "tapps_core.metrics.brain_telemetry.brain_metrics_bridge_available",
+            return_value=True,
+        ):
+            collector.record(
+                "tapps_score_file",
+                now,
+                now + timedelta(milliseconds=5),
+                score=90.0,
+            )
+        assert list(metrics_dir.glob("tool_calls_*.jsonl"))
+
+    def test_brain_mode_skips_disk_write(self, metrics_dir, monkeypatch):
+        monkeypatch.setenv("TAPPS_METRICS_STORAGE", "brain")
         collector = ToolCallMetricsCollector(metrics_dir)
         now = datetime.now(tz=UTC)
         with patch(

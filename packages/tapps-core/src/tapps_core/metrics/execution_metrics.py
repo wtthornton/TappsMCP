@@ -98,7 +98,6 @@ class ToolCallMetricsCollector:
     def record_call(self, metric: ToolCallMetric) -> None:
         """Record a tool call metric to buffer and disk."""
         from tapps_core.metrics.brain_telemetry import (
-            brain_metrics_bridge_available,
             emit_quality_metric_event,
             metrics_storage_mode,
         )
@@ -106,9 +105,7 @@ class ToolCallMetricsCollector:
         with self._write_lock:
             self._buffer.append(metric)
             mode = metrics_storage_mode()
-            if mode == "local" or (
-                mode == "dual" and not brain_metrics_bridge_available()
-            ):
+            if mode in ("local", "dual"):
                 self._append_to_file(metric)
         emit_quality_metric_event(metric)
 

@@ -129,6 +129,7 @@ class TestSessionStartHookSentinel:
         assert 'if [ -f "$SENTINEL" ]' in script
         # Still emits the REQUIRED prompt on first fire for a session.
         assert "REQUIRED: Call tapps_session_start()" in script
+        assert "usage-gaps-hint" in script
 
     def test_hook_emits_prompt_on_first_fire_and_silences_on_resume(
         self, tmp_path: object

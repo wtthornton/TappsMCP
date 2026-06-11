@@ -469,6 +469,8 @@ def _build_server_entry(
         # tools on tapps-brain v3.20.0+). Operator-overridable knob — export
         # TAPPS_BRAIN_PROFILE=operator for a maintenance session.
         "TAPPS_BRAIN_PROFILE": BRAIN_PROFILE_SERVER,
+        # TAP-3572: dual-write keeps local JSONL for fleet audit even when brain is up.
+        "TAPPS_METRICS_STORAGE": "dual",
     }
     project_id = _derive_brain_project_id(project_root)
     if project_id:

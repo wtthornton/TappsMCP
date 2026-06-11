@@ -57,6 +57,12 @@ def _sanitize_param(value: str, max_len: int = 100) -> str:
 _PERIOD_DAYS: dict[str, int] = {"1d": 1, "7d": 7, "30d": 30}
 
 
+def _is_docs_stats_tool(tool_name: str) -> bool:
+    from tapps_core.metrics.dashboard import is_docs_tool
+
+    return is_docs_tool(tool_name)
+
+
 def _session_stats(
     hub: MetricsHub,
     tool_name: str | None,
@@ -143,9 +149,10 @@ async def tapps_dashboard(
             ``"30d"``, or ``"90d"``.
         sections: Sections to include. Default ``None`` returns all
             sections. Options: ``"summary"``, ``"tool_metrics"``,
-            ``"scoring_trends"``, ``"expert_metrics"``,
-            ``"cache_metrics"``, ``"quality_distribution"``,
-            ``"alerts"``, ``"business_metrics"``, ``"recommendations"``.
+            ``"docs_metrics"``, ``"session_funnel"``, ``"scoring_trends"``,
+            ``"expert_metrics"``, ``"cache_metrics"``,
+            ``"quality_distribution"``, ``"alerts"``,
+            ``"business_metrics"``, ``"recommendations"``.
     """
     from tapps_mcp.server import _get_metrics_hub, _record_call, _record_execution, _with_nudges
 
@@ -246,23 +253,29 @@ def tapps_stats(
 
     recommendations = _generate_stats_recommendations(summary, tool_breakdowns)
 
+    payload: dict[str, Any] = {
+        "period": period,
+        "total_calls": summary.total_calls,
+        "success_rate": summary.success_rate,
+        "avg_duration_ms": summary.avg_duration_ms,
+        "p95_duration_ms": summary.p95_duration_ms,
+        "gate_pass_rate": summary.gate_pass_rate,
+        "avg_score": summary.avg_score,
+        "tools": tool_breakdowns,
+        "recommendations": recommendations,
+    }
+    docs_tools = [t for t in tool_breakdowns if _is_docs_stats_tool(t.get("tool_name", ""))]
+    if docs_tools:
+        payload["docs_tools"] = docs_tools
+        payload["docs_tool_calls"] = sum(int(t.get("call_count", 0)) for t in docs_tools)
+
     elapsed_ms = (time.perf_counter_ns() - start) // 1_000_000
     _record_execution("tapps_stats", start)
 
     resp = success_response(
         "tapps_stats",
         elapsed_ms,
-        {
-            "period": period,
-            "total_calls": summary.total_calls,
-            "success_rate": summary.success_rate,
-            "avg_duration_ms": summary.avg_duration_ms,
-            "p95_duration_ms": summary.p95_duration_ms,
-            "gate_pass_rate": summary.gate_pass_rate,
-            "avg_score": summary.avg_score,
-            "tools": tool_breakdowns,
-            "recommendations": recommendations,
-        },
+        payload,
     )
     return _with_nudges("tapps_stats", resp)
 

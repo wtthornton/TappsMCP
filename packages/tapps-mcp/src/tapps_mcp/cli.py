@@ -337,6 +337,88 @@ def doctor(project_root: str, quick: bool) -> None:
         raise SystemExit(1)
 
 
+@main.command("usage-gaps-hint")
+@click.option(
+    "--project-root",
+    default=".",
+    help="Project root directory.",
+)
+def usage_gaps_hint_cmd(project_root: str) -> None:
+    """Print a one-line prior-session pipeline reminder for SessionStart hooks (TAP-3578)."""
+    from pathlib import Path
+
+    from tapps_mcp.tools.usage import format_session_start_gap_hint
+
+    hint = format_session_start_gap_hint(Path(project_root).resolve())
+    if hint:
+        click.echo(hint)
+
+
+@main.command("audit-fleet")
+@click.option(
+    "--period",
+    type=click.Choice(["1d", "7d", "30d"]),
+    default="1d",
+    show_default=True,
+    help="Trailing window for tool-call and pipeline metrics.",
+)
+@click.option(
+    "--roots",
+    default="",
+    help="Comma-separated project roots (default: TAPPS_FLEET_ROOTS or scan parent dir).",
+)
+@click.option(
+    "--scan-parent",
+    default=".",
+    help="When --roots is empty, scan immediate children of this directory.",
+)
+@click.option(
+    "--format",
+    "output_format",
+    type=click.Choice(["json", "markdown"]),
+    default="json",
+    show_default=True,
+    help="Output format.",
+)
+@click.option(
+    "--no-brain",
+    is_flag=True,
+    default=False,
+    help="Skip brain telemetry merge (local JSONL only).",
+)
+def audit_fleet_cmd(
+    period: str,
+    roots: str,
+    scan_parent: str,
+    output_format: str,
+    no_brain: bool,
+) -> None:
+    """Audit TAPPS usage across bootstrapped projects (local JSONL + brain merge).
+
+    Discovers projects via ``--roots``, ``TAPPS_FLEET_ROOTS``, or by scanning
+    ``--scan-parent`` for ``.tapps-mcp.yaml`` markers.
+    """
+    import json
+    from pathlib import Path
+
+    from tapps_mcp.tools.fleet_audit import format_fleet_audit_markdown, run_fleet_audit
+
+    explicit: list[Path] | None = None
+    if roots.strip():
+        explicit = [Path(p.strip()) for p in roots.split(",") if p.strip()]
+
+    report = run_fleet_audit(
+        period=period,
+        roots=explicit,
+        scan_parent=Path(scan_parent),
+        include_brain=not no_brain,
+    )
+    if output_format == "markdown":
+        click.echo(format_fleet_audit_markdown(report))
+    else:
+        click.echo(json.dumps(report, indent=2))
+
+
 @main.command("check-agents-md-stamp")
 @click.option(
     "--project-root",

@@ -29,6 +29,29 @@ from tapps_core.metrics.visualizer import AnalyticsVisualizer
 
 logger = structlog.get_logger(__name__)
 
+_DOCS_TOOL_PREFIX = "docs_"
+_DOCS_MCP_MARKER = "docs-mcp__"
+_HANDOFF_RELATIVE = Path(".tapps-mcp") / "session-handoff.md"
+_HANDOFF_STALE_DAYS = 7
+_FUNNEL_MIN_SESSION_STARTS = 3
+_CHECKLIST_RATIO_THRESHOLD = 0.5
+_HANDOFF_RATIO_THRESHOLD = 0.3
+
+
+def is_docs_tool(tool_name: str) -> bool:
+    """Return True when *tool_name* identifies a DocsMCP invocation."""
+    if tool_name.startswith(_DOCS_TOOL_PREFIX):
+        return True
+    return _DOCS_MCP_MARKER in tool_name
+
+
+def normalize_docs_tool_name(tool_name: str) -> str:
+    """Normalize MCP-prefixed DocsMCP tool names to ``docs_*`` form."""
+    if _DOCS_MCP_MARKER in tool_name:
+        idx = tool_name.find(_DOCS_MCP_MARKER)
+        return tool_name[idx + len(_DOCS_MCP_MARKER) :]
+    return tool_name
+
 
 class DashboardGenerator:
     """Generates metrics dashboards in multiple formats."""
@@ -83,6 +106,8 @@ class DashboardGenerator:
         all_sections = sections or [
             "summary",
             "tool_metrics",
+            "docs_metrics",
+            "session_funnel",
             "scoring_trends",
             "expert_metrics",
             "cache_metrics",
@@ -100,6 +125,8 @@ class DashboardGenerator:
         builders: dict[str, Any] = {
             "summary": lambda: self._build_summary(since=since),
             "tool_metrics": lambda: self._build_tool_metrics(since=since),
+            "docs_metrics": lambda: self._build_docs_metrics(since=since),
+            "session_funnel": lambda: self._build_session_funnel(since=since),
             "scoring_trends": lambda: self._build_scoring_trends(since=since),
             "expert_metrics": self._build_expert_metrics,
             "cache_metrics": self._build_cache_metrics,
@@ -109,7 +136,7 @@ class DashboardGenerator:
             "memory_metrics": self._build_memory_metrics,
             "alerts": self._build_alerts,
             "business_metrics": self._build_business_metrics,
-            "recommendations": self._build_recommendations,
+            "recommendations": lambda: self._build_recommendations(since=since),
         }
 
         for section in all_sections:
@@ -134,6 +161,8 @@ class DashboardGenerator:
 
         self._render_md_summary(json_data, lines)
         self._render_md_tool_metrics(json_data, lines)
+        self._render_md_docs_metrics(json_data, lines)
+        self._render_md_session_funnel(json_data, lines)
         self._render_md_alerts(json_data, lines)
         self._render_md_provider_stats(json_data, lines)
         self._render_md_coverage_metrics(json_data, lines)
@@ -166,6 +195,47 @@ class DashboardGenerator:
             chart = self._visualizer.create_bar_chart(chart_data, title="## Tool Usage")
             lines.append(chart)
             lines.append("")
+
+    def _render_md_docs_metrics(self, json_data: dict[str, Any], lines: list[str]) -> None:
+        """Append DocsMCP tool usage section lines to *lines*."""
+        if "docs_metrics" not in json_data:
+            return
+        docs = json_data["docs_metrics"]
+        if not docs.get("available"):
+            return
+        lines.append("## DocsMCP Tool Usage")
+        lines.append(f"- Total docs tool calls: {docs.get('total_calls', 0)}")
+        for tool in docs.get("tools", []):
+            if not isinstance(tool, dict):
+                continue
+            lines.append(
+                f"- **{tool.get('tool_name', '')}**: "
+                f"calls={tool.get('call_count', 0)}, "
+                f"success={tool.get('success_rate', 0):.0%}"
+            )
+        lines.append("")
+
+    def _render_md_session_funnel(self, json_data: dict[str, Any], lines: list[str]) -> None:
+        """Append continue-session funnel section lines to *lines*."""
+        if "session_funnel" not in json_data:
+            return
+        funnel = json_data["session_funnel"]
+        lines.append("## Session Handoff Funnel")
+        lines.append(f"- Session starts: {funnel.get('session_start_calls', 0)}")
+        lines.append(f"- Session ends (handoff proxy): {funnel.get('session_end_calls', 0)}")
+        lines.append(f"- Checklist completions: {funnel.get('checklist_calls', 0)}")
+        ratio = funnel.get("checklist_per_session_start")
+        if ratio is not None:
+            lines.append(f"- Checklist / session_start ratio: {ratio:.0%}")
+        handoff = funnel.get("handoff_file", {})
+        if handoff.get("exists"):
+            lines.append(
+                f"- Handoff file updated: {handoff.get('updated_at', 'unknown')} "
+                f"({handoff.get('age_days', '?')}d ago)"
+            )
+        else:
+            lines.append("- Handoff file: missing")
+        lines.append("")
 
     def _render_md_alerts(self, json_data: dict[str, Any], lines: list[str]) -> None:
         """Append active alerts section lines to *lines*."""
@@ -339,7 +409,103 @@ class DashboardGenerator:
                 "avg_score": b.avg_score,
             }
             for b in breakdowns
+            if not is_docs_tool(b.tool_name)
         ]
+
+    def _build_docs_metrics(
+        self,
+        *,
+        since: datetime | None = None,
+    ) -> dict[str, Any]:
+        """Per-tool DocsMCP breakdown from execution metrics (JSONL + brain merge)."""
+        metrics = self._execution.get_metrics(since=since)
+        docs_metrics = [m for m in metrics if is_docs_tool(m.tool_name)]
+        if not docs_metrics:
+            return {"available": False, "total_calls": 0, "tools": []}
+
+        by_tool: dict[str, list[Any]] = {}
+        for metric in docs_metrics:
+            name = normalize_docs_tool_name(metric.tool_name)
+            by_tool.setdefault(name, []).append(metric)
+
+        tools: list[dict[str, Any]] = []
+        for name, tool_rows in sorted(by_tool.items()):
+            summary = ToolCallMetricsCollector._compute_summary(tool_rows)
+            tools.append(
+                {
+                    "tool_name": name,
+                    "call_count": summary.total_calls,
+                    "success_rate": summary.success_rate,
+                    "avg_duration_ms": summary.avg_duration_ms,
+                    "p95_duration_ms": summary.p95_duration_ms,
+                }
+            )
+
+        return {
+            "available": True,
+            "total_calls": len(docs_metrics),
+            "tools": tools,
+        }
+
+    @staticmethod
+    def _handoff_file_status(project_root: Path) -> dict[str, Any]:
+        """Return handoff file freshness metadata for funnel reporting."""
+        handoff_path = project_root / _HANDOFF_RELATIVE
+        if not handoff_path.is_file():
+            return {"exists": False, "path": str(_HANDOFF_RELATIVE)}
+
+        from datetime import UTC, timedelta
+        from datetime import datetime as dt
+
+        mtime = dt.fromtimestamp(handoff_path.stat().st_mtime, tz=UTC)
+        age = dt.now(tz=UTC) - mtime
+        return {
+            "exists": True,
+            "path": str(_HANDOFF_RELATIVE),
+            "updated_at": mtime.isoformat(),
+            "age_days": round(age.total_seconds() / 86_400, 2),
+            "stale": age > timedelta(days=_HANDOFF_STALE_DAYS),
+        }
+
+    def _build_session_funnel(
+        self,
+        *,
+        since: datetime | None = None,
+    ) -> dict[str, Any]:
+        """Continue-session funnel: session_start/end/checklist ratios + handoff freshness."""
+        metrics = self._execution.get_metrics(since=since)
+        session_starts = sum(1 for m in metrics if m.tool_name == "tapps_session_start")
+        session_ends = sum(1 for m in metrics if m.tool_name == "tapps_session_end")
+        checklists = sum(1 for m in metrics if m.tool_name == "tapps_checklist")
+
+        checklist_ratio = (
+            round(checklists / session_starts, 4) if session_starts > 0 else None
+        )
+        handoff_ratio = round(session_ends / session_starts, 4) if session_starts > 0 else None
+
+        project_root = self._metrics_dir.parent.parent
+        handoff_file = self._handoff_file_status(project_root)
+
+        gaps: list[str] = []
+        if session_starts >= _FUNNEL_MIN_SESSION_STARTS:
+            if checklist_ratio is not None and checklist_ratio < _CHECKLIST_RATIO_THRESHOLD:
+                gaps.append("low_checklist_completion")
+            if handoff_ratio is not None and handoff_ratio < _HANDOFF_RATIO_THRESHOLD:
+                gaps.append("low_handoff_writes")
+        if session_starts > 0 and not handoff_file.get("exists"):
+            gaps.append("missing_handoff_file")
+        if handoff_file.get("stale"):
+            gaps.append("stale_handoff_file")
+
+        return {
+            "session_start_calls": session_starts,
+            "session_end_calls": session_ends,
+            "checklist_calls": checklists,
+            "checklist_per_session_start": checklist_ratio,
+            "handoff_per_session_start": handoff_ratio,
+            "handoff_file": handoff_file,
+            "gaps_detected": gaps,
+        }
 
     def _build_scoring_trends(
         self,
@@ -685,9 +851,13 @@ class DashboardGenerator:
     def _build_business_metrics(self) -> dict[str, Any]:
         return {"note": "Business metrics removed (EPIC-94)"}
 
-    def _build_recommendations(self) -> list[str]:
+    def _build_recommendations(
+        self,
+        *,
+        since: datetime | None = None,
+    ) -> list[str]:
         recommendations: list[str] = []
-        exec_summary = self._execution.get_summary()
+        exec_summary = self._execution.get_summary(since=since)
 
         if exec_summary.total_calls == 0:
             recommendations.append("Start using TappsMCP tools to begin collecting metrics.")
@@ -710,6 +880,31 @@ class DashboardGenerator:
             recommendations.append(
                 "RAG cache hit rate is low. Consider pre-warming the cache with common libraries."
             )
+
+        funnel = self._build_session_funnel(since=since)
+        for gap in funnel.get("gaps_detected", []):
+            if gap == "low_checklist_completion":
+                ratio = funnel.get("checklist_per_session_start")
+                pct = f"{ratio:.0%}" if ratio is not None else "low"
+                recommendations.append(
+                    f"Checklist completion rate is {pct} vs session starts — "
+                    "run tapps_checklist before declaring work complete."
+                )
+            elif gap == "low_handoff_writes":
+                recommendations.append(
+                    "Few tapps_session_end calls vs session starts — "
+                    "invoke /tapps-handoff-session before ending chats."
+                )
+            elif gap == "missing_handoff_file":
+                recommendations.append(
+                    "No `.tapps-mcp/session-handoff.md` — "
+                    "use /tapps-handoff-session so /tapps-continue-session can resume work."
+                )
+            elif gap == "stale_handoff_file":
+                recommendations.append(
+                    f"Handoff file is older than {_HANDOFF_STALE_DAYS} days — "
+                    "refresh via /tapps-handoff-session."
+                )
 
         if not recommendations:
             recommendations.append("All metrics look healthy. Keep up the good work!")

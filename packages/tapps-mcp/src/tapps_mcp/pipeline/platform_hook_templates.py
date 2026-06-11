@@ -63,6 +63,17 @@ fi
 echo "REQUIRED: Call tapps_session_start() NOW as your first action."
 echo "This initializes project context for all TappsMCP quality tools."
 echo "Tools called without session_start will have degraded accuracy."
+# TAP-3578: Prior-session pipeline gap reminder from disk telemetry.
+PROJECT="${TAPPS_PROJECT_ROOT:-${CLAUDE_PROJECT_DIR:-.}}"
+USAGE_HINT=""
+if command -v tapps-mcp >/dev/null 2>&1; then
+  USAGE_HINT=$(tapps-mcp usage-gaps-hint --project-root "$PROJECT" 2>/dev/null || true)
+elif command -v uv >/dev/null 2>&1 && [ -f "$PROJECT/pyproject.toml" ]; then
+  USAGE_HINT=$(cd "$PROJECT" && uv run tapps-mcp usage-gaps-hint 2>/dev/null || true)
+fi
+if [ -n "$USAGE_HINT" ]; then
+  echo "TappsMCP prior-session reminder: $USAGE_HINT"
+fi
 exit 0
 """,
     "tapps-session-compact.sh": """\
@@ -73,6 +84,13 @@ INPUT=$(cat)
 echo "[TappsMCP] Context was compacted — re-injecting TappsMCP awareness."
 echo "Remember: use tapps_quick_check after editing Python files."
 echo "Run tapps_validate_changed before declaring work complete."
+PROJECT="${TAPPS_PROJECT_ROOT:-${CLAUDE_PROJECT_DIR:-.}}"
+if command -v tapps-mcp >/dev/null 2>&1; then
+  USAGE_HINT=$(tapps-mcp usage-gaps-hint --project-root "$PROJECT" 2>/dev/null || true)
+  if [ -n "$USAGE_HINT" ]; then
+    echo "TappsMCP prior-session reminder: $USAGE_HINT"
+  fi
+fi
 exit 0
 """,
     "tapps-post-edit.sh": """\
@@ -703,6 +721,11 @@ $null = $input | Out-Null
 Write-Output "REQUIRED: Call tapps_session_start() NOW as your first action."
 Write-Output "This initializes project context for all TappsMCP quality tools."
 Write-Output "Tools called without session_start will have degraded accuracy."
+$proj = if ($env:TAPPS_PROJECT_ROOT) { $env:TAPPS_PROJECT_ROOT } elseif ($env:CLAUDE_PROJECT_DIR) { $env:CLAUDE_PROJECT_DIR } else { "." }
+if (Get-Command tapps-mcp -ErrorAction SilentlyContinue) {
+  $hint = & tapps-mcp usage-gaps-hint --project-root $proj 2>$null
+  if ($hint) { Write-Output "TappsMCP prior-session reminder: $hint" }
+}
 exit 0
 """,
     "tapps-session-compact.ps1": """\
@@ -712,6 +735,11 @@ $null = $input | Out-Null
 Write-Output "[TappsMCP] Context was compacted - re-injecting TappsMCP awareness."
 Write-Output "Remember: use tapps_quick_check after editing Python files."
 Write-Output "Run tapps_validate_changed before declaring work complete."
+$proj = if ($env:TAPPS_PROJECT_ROOT) { $env:TAPPS_PROJECT_ROOT } elseif ($env:CLAUDE_PROJECT_DIR) { $env:CLAUDE_PROJECT_DIR } else { "." }
+if (Get-Command tapps-mcp -ErrorAction SilentlyContinue) {
+  $hint = & tapps-mcp usage-gaps-hint --project-root $proj 2>$null
+  if ($hint) { Write-Output "TappsMCP prior-session reminder: $hint" }
+}
 exit 0
 """,
     "tapps-post-edit.ps1": """\

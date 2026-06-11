@@ -480,6 +480,32 @@ class TestSessionHandoffSkills:
         assert "tapps_session_start" in CURSOR_SKILLS["tapps-continue-session"]
         assert "session-handoff.md" in CLAUDE_SKILLS["tapps-continue-session"]
 
+    def test_handoff_requires_p0_gate(self) -> None:
+        for skills in (CLAUDE_SKILLS, CURSOR_SKILLS):
+            assert "P0 gate" in skills["tapps-handoff-session"]
+
+    def test_continue_has_memory_search_and_p0_fallback(self) -> None:
+        for skills in (CLAUDE_SKILLS, CURSOR_SKILLS):
+            content = skills["tapps-continue-session"]
+            assert "memory search" in content
+            assert "P0 fallback" in content
+
+    def test_continue_session_body_parity(self) -> None:
+        """Cursor and Claude continue-session share the same core steps (TAP-3581)."""
+        markers = (
+            "Load handoff (priority order)",
+            "P0 fallback",
+            "memory search",
+            "Emit continue block",
+            "Proceed on P0",
+            "linear-read",
+        )
+        claude_body = CLAUDE_SKILLS["tapps-continue-session"].split("---", 2)[-1]
+        cursor_body = CURSOR_SKILLS["tapps-continue-session"].split("---", 2)[-1]
+        for marker in markers:
+            assert marker in claude_body
+            assert marker in cursor_body
+
     def test_generated_handoff_and_continue_skills(self, tmp_path: Path) -> None:
         generate_skills(tmp_path, "cursor")
         assert (tmp_path / ".cursor" / "skills" / "tapps-handoff-session" / "SKILL.md").exists()

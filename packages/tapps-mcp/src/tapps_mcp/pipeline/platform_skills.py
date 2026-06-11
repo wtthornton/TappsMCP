@@ -15,6 +15,65 @@ if TYPE_CHECKING:
     from pathlib import Path
 
 # ---------------------------------------------------------------------------
+# Shared session-transfer bodies (TAP-3574/3575/3581)
+# ---------------------------------------------------------------------------
+
+_HANDOFF_MARKDOWN_SHAPE = """\
+```markdown
+# Session handoff
+**Updated:** <ISO-8601 UTC from date -u>
+**Git:** <short-sha or omit>
+**Linear P0:** <TAP-#### or none>
+
+## Done
+- ...
+
+## Open
+- ...
+
+## Next (P0)
+- ...
+
+## Blockers
+- ...
+
+## Verify
+- ...
+
+## Success criterion
+- ...
+```"""
+
+_HANDOFF_P0_GATE = """\
+**P0 gate.** Before writing the file: when **Open** has real items (not `none` / `- ...` placeholders), **Next (P0)** must name one concrete next action (prefer a Linear id). If P0 is missing, ask the user once — do not persist an incomplete handoff."""
+
+_HANDOFF_BRAIN_MIRROR = """\
+3. **Persist (brain mirror, best-effort).** The markdown file from step 2 is always canonical. `tapps_memory` is not an MCP tool (removed v3.12.0, TAP-1994) — use CLI only:
+
+   | Priority | When | How |
+   |----------|------|-----|
+   | 1 (CLI) | Brain HTTP reachable; shell has `TAPPS_MCP_MEMORY_BRAIN_HTTP_URL` + `TAPPS_MCP_MEMORY_BRAIN_AUTH_TOKEN` (or `TAPPS_BRAIN_AUTH_TOKEN` via direnv) | `uv run tapps-mcp memory save --key session-handoff --tier context --tags handoff,cross-session --value "<plain-text bullets>"` |
+   | 2 (skip) | Brain offline or auth missing | Skip silently — `.tapps-mcp/session-handoff.md` is enough |"""
+
+_CONTINUE_LOAD_AND_CONTEXT = """\
+2. **Load handoff (priority order).**
+   - Read `.tapps-mcp/session-handoff.md` if it exists — primary source.
+   - Else best-effort CLI (no `tapps_memory` MCP — removed v3.12.0): `uv run tapps-mcp memory get --key session-handoff` (brain offline or auth missing → skip).
+   - Optional supplements (only if present): `docs/NEXT_SESSION_PROMPT.md`, `docs/TAPPS_HANDOFF.md` (**Next:** section).
+   - **P0 fallback:** If **Next (P0)** is empty but **Open** has bullets, promote the first Open item as provisional P0 and flag it in the continue block.
+   - **Memory context:** Run `uv run tapps-mcp memory search --query "<P0 text or Linear id>"` when brain shell auth is available; skip silently otherwise."""
+
+_CONTINUE_EMIT_AND_PROCEED = """\
+4. **Emit continue block (~15 lines max).** Present:
+   - **P0** — next action + Linear link if available (note if promoted from Open)
+   - **Done / Open / Blockers** — compressed from handoff
+   - **Verify first** — commands from handoff
+   - **Success criterion**
+   - **Stale warning** if handoff **Updated** is >7 days old or missing
+
+5. **Proceed on P0.** Ask only if P0 is ambiguous; otherwise start using normal TAPPS workflow (`tapps_quick_check` after Python edits). Do **not** ask the user to re-paste prior context when handoff files exist."""
+
+# ---------------------------------------------------------------------------
 # Skills templates (Story 12.8)
 # ---------------------------------------------------------------------------
 
@@ -129,42 +188,16 @@ End the session with a durable handoff the next chat can load via `/tapps-contin
    - **Verify** — commands to run first in the next session
    - **Success criterion** — one line
 
+""" + _HANDOFF_P0_GATE + """
+
 2. **Persist (file is canonical).** Write or overwrite `.tapps-mcp/session-handoff.md` using this shape:
    - Set **Updated** to the real current UTC time: run `date -u +%Y-%m-%dT%H:%M:%SZ` and paste the output — never use a placeholder like `T00:00:00Z`.
    - Optionally add **Git:** `<short-sha>` when inside a git repo (`git rev-parse --short HEAD`).
    - Claude Code (Bash-only): `mkdir -p .tapps-mcp && cat > .tapps-mcp/session-handoff.md <<'EOF'` … `EOF`.
 
-```markdown
-# Session handoff
-**Updated:** <ISO-8601 UTC from date -u>
-**Git:** <short-sha or omit>
-**Linear P0:** <TAP-#### or none>
+""" + _HANDOFF_MARKDOWN_SHAPE + """
 
-## Done
-- ...
-
-## Open
-- ...
-
-## Next (P0)
-- ...
-
-## Blockers
-- ...
-
-## Verify
-- ...
-
-## Success criterion
-- ...
-```
-
-3. **Persist (brain mirror, best-effort).** The markdown file from step 2 is always canonical. `tapps_memory` is not an MCP tool (removed v3.12.0, TAP-1994) — use CLI only:
-
-   | Priority | When | How |
-   |----------|------|-----|
-   | 1 (CLI) | Brain HTTP reachable; shell has `TAPPS_MCP_MEMORY_BRAIN_HTTP_URL` + `TAPPS_MCP_MEMORY_BRAIN_AUTH_TOKEN` (or `TAPPS_BRAIN_AUTH_TOKEN` via direnv) | `uv run tapps-mcp memory save --key session-handoff --tier context --tags handoff,cross-session --value "<plain-text bullets>"` |
-   | 2 (skip) | Brain offline or auth missing | Skip silently — `.tapps-mcp/session-handoff.md` is enough |
+""" + _HANDOFF_BRAIN_MIRROR + """
 
 4. **Close lifecycle.** Best-effort session closure:
    - **Preferred:** `mcp__tapps-mcp__tapps_session_end()`
@@ -193,27 +226,13 @@ Start work in a fresh context window by assembling structured state — not a us
    - **Preferred:** Call `mcp__tapps-mcp__tapps_session_start()`. If `data.compaction_rehydration` is present, summarize it in one sentence.
    - **CLI fallback** (MCP unavailable): Run `uv run tapps-mcp doctor --quick` and read `.tapps-mcp.yaml` for project context (quality preset, brain URL, engagement). Proceed without blocking.
 
-2. **Load handoff (priority order).**
-   - Read `.tapps-mcp/session-handoff.md` if it exists — primary source.
-   - Else best-effort CLI (no `tapps_memory` MCP — removed v3.12.0): `uv run tapps-mcp memory get --key session-handoff` (brain offline or auth missing → skip).
-   - Optional supplements (only if present, do not require):
-     - `docs/NEXT_SESSION_PROMPT.md` — short user-maintained prompt
-     - `docs/TAPPS_HANDOFF.md` — scan for `**Next:**` or the latest stage section
+""" + _CONTINUE_LOAD_AND_CONTEXT + """
 
 3. **Linear context.**
    - If the user passed `TAP-####` (argument or in handoff **Linear P0**), call `mcp__plugin_linear_linear__get_issue(id=...)`.
    - For backlog/triage without a known id, invoke the `linear-read` skill instead of raw `list_issues` (do not call `list_issues` directly — cache gate).
 
-4. **Emit continue block (~15 lines max).** Present:
-   - **P0** — next action + Linear link if available
-   - **Done / Open / Blockers** — from handoff (compressed)
-   - **Verify first** — commands from handoff
-   - **Success criterion**
-   - **Stale warning** if handoff **Updated** is >7 days old
-
-5. **Confirm and proceed.** Ask only if P0 is ambiguous; otherwise start on P0 using normal TAPPS workflow (`tapps_quick_check` after Python edits, etc.).
-
-Do **not** ask the user to re-paste prior context when handoff files exist.
+""" + _CONTINUE_EMIT_AND_PROCEED + """
 """,
     "tapps-report": """\
 ---
@@ -1203,41 +1222,15 @@ End the session with a durable handoff the next chat loads via `tapps-continue-s
 
 1. **Draft handoff (5–10 bullets):** Done, Open, Next (P0), Blockers, Verify commands, Success criterion (one line).
 
+""" + _HANDOFF_P0_GATE + """
+
 2. **Persist (file is canonical).** Write or overwrite `.tapps-mcp/session-handoff.md`:
    - Set **Updated** to the real current UTC time: run `date -u +%Y-%m-%dT%H:%M:%SZ` and paste the output — never use a placeholder like `T00:00:00Z`.
    - Optionally add **Git:** `<short-sha>` when inside a git repo (`git rev-parse --short HEAD`).
 
-```markdown
-# Session handoff
-**Updated:** <ISO-8601 UTC from date -u>
-**Git:** <short-sha or omit>
-**Linear P0:** <TAP-#### or none>
+""" + _HANDOFF_MARKDOWN_SHAPE + """
 
-## Done
-- ...
-
-## Open
-- ...
-
-## Next (P0)
-- ...
-
-## Blockers
-- ...
-
-## Verify
-- ...
-
-## Success criterion
-- ...
-```
-
-3. **Persist (brain mirror, best-effort).** File from step 2 is canonical. `tapps_memory` is not an MCP tool (removed v3.12.0) — CLI only:
-
-   | Priority | When | How |
-   |----------|------|-----|
-   | 1 (CLI) | Brain HTTP + shell auth (`TAPPS_MCP_MEMORY_BRAIN_AUTH_TOKEN` or `TAPPS_BRAIN_AUTH_TOKEN`) | `uv run tapps-mcp memory save --key session-handoff --tier context --tags handoff,cross-session --value "<plain-text bullets>"` |
-   | 2 (skip) | Brain offline or auth missing | Skip silently — `.tapps-mcp/session-handoff.md` is enough |
+""" + _HANDOFF_BRAIN_MIRROR + """
 
 4. **Close lifecycle.** Best-effort session closure:
    - **Preferred:** `tapps_session_end()`
@@ -1265,13 +1258,13 @@ Start work in a fresh context by assembling structured state.
    - **Preferred:** Call `tapps_session_start()`. Note `compaction_rehydration` if present.
    - **CLI fallback** (MCP unavailable): Run `uv run tapps-mcp doctor --quick` and read `.tapps-mcp.yaml` for project context. Proceed without blocking.
 
-2. **Load handoff (priority):** Read `.tapps-mcp/session-handoff.md`; else CLI `uv run tapps-mcp memory get --key session-handoff` (no `tapps_memory` MCP). Optional: `docs/NEXT_SESSION_PROMPT.md`, `docs/TAPPS_HANDOFF.md` (**Next:** section).
+""" + _CONTINUE_LOAD_AND_CONTEXT + """
 
-3. **Linear:** `get_issue(id=...)` when user or handoff names `TAP-####`; else use `linear-read` for lists (not raw `list_issues`).
+3. **Linear context.**
+   - If the user passed `TAP-####` (argument or handoff **Linear P0**), call `get_issue(id=...)`.
+   - For backlog/triage without a known id, invoke the `linear-read` skill — do not call raw `list_issues` (cache gate).
 
-4. **Emit ~15-line continue block:** P0, Done/Open/Blockers (compressed), Verify first, Success criterion. Warn if handoff **Updated** >7 days old.
-
-5. Proceed on P0; do not ask for a re-paste when handoff exists.
+""" + _CONTINUE_EMIT_AND_PROCEED + """
 """,
     "tapps-report": """\
 ---
