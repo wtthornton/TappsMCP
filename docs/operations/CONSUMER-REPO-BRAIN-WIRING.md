@@ -288,6 +288,25 @@ add a project-specific block to `CLAUDE.md` or `.cursor/rules/`, keep it short:
 
 ---
 
+## High-traffic projects: Linear cache-gate block mode (TAP-3577)
+
+For repos with heavy `list_issues` usage (e.g. backlog triage bots), keep
+`linear_enforce_cache_gate: block` in `.tapps-mcp.yaml` so raw
+`mcp__plugin_linear_linear__list_issues` calls fail unless a matching
+`tapps_linear_snapshot_get` sentinel exists (<300s). Route agents through the
+`linear-read` skill.
+
+```yaml
+# .tapps-mcp.yaml excerpt — high-traffic consumer
+linear_enforce_cache_gate: block
+```
+
+After changing the mode, run `tapps-mcp upgrade --force` to rebake hook scripts.
+`tapps-mcp doctor` reports 24h cache-gate violations and recommends `block`
+when warn-mode misses exceed 20/day.
+
+---
+
 ## Deliverable (agent report template)
 
 Post a short report:

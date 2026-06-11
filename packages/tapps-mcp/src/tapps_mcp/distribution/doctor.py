@@ -1251,10 +1251,16 @@ def _handoff_skill_content_ok(skill_name: str, content: str) -> bool:
     if skill_name == "tapps-handoff-session":
         if "tapps_session_end" not in lowered:
             return False
+        if "p0 gate" not in lowered:
+            return False
         # Brain mirror must route through CLI, not removed MCP tool.
         return "tapps-mcp memory save" in lowered
     if skill_name == "tapps-continue-session":
-        return "tapps_session_start" in lowered
+        return (
+            "tapps_session_start" in lowered
+            and "memory search" in lowered
+            and "p0 fallback" in lowered
+        )
     return False
 
 
@@ -1296,6 +1302,152 @@ def check_session_handoff_skills(project_root: Path) -> CheckResult:
         "session handoff skills",
         True,
         f"tapps-handoff-session + tapps-continue-session present on: {hosts}",
+    )
+
+
+def check_session_handoff_schema(project_root: Path) -> CheckResult:
+    """Lint ``.tapps-mcp/session-handoff.md`` for P0/Open consistency (TAP-3573)."""
+    from tapps_mcp.tools.handoff_schema import handoff_path, load_and_lint_handoff
+
+    path = handoff_path(project_root)
+    if not path.is_file():
+        return CheckResult(
+            "session handoff schema",
+            True,
+            "No session-handoff.md (optional until handoff)",
+        )
+
+    _doc, lint = load_and_lint_handoff(project_root)
+    if not lint.ok:
+        return CheckResult(
+            "session handoff schema",
+            False,
+            "; ".join(lint.errors),
+            "Fix `.tapps-mcp/session-handoff.md` — add Next (P0) when Open has items, "
+            "or invoke `/tapps-handoff-session` with a complete handoff.",
+        )
+
+    if lint.warnings:
+        rel = path.name
+        try:
+            rel = str(path.relative_to(project_root.resolve()))
+        except ValueError:
+            pass
+        return CheckResult(
+            "session handoff schema",
+            True,
+            f"Handoff present with warnings: {'; '.join(lint.warnings)}",
+            rel,
+        )
+
+    return CheckResult(
+        "session handoff schema",
+        True,
+        "session-handoff.md schema OK",
+    )
+
+
+_CACHE_GATE_BLOCK_HINT_THRESHOLD = 20
+
+
+def check_cache_gate_block_hint(project_root: Path) -> CheckResult:
+    """Recommend ``linear_enforce_cache_gate: block`` on high-traffic projects (TAP-3577)."""
+    from tapps_core.config.settings import load_settings
+
+    try:
+        settings = load_settings(project_root=project_root)
+        resolved_mode = settings.linear_enforce_cache_gate_resolved()
+    except Exception:
+        resolved_mode = _detect_cache_gate_mode(project_root)
+
+    if resolved_mode == "block":
+        return CheckResult(
+            "Linear cache-gate promotion",
+            True,
+            "linear_enforce_cache_gate is block",
+        )
+
+    viol_24h = _count_cache_gate_violations_24h(project_root)
+    if resolved_mode == "warn" and viol_24h >= _CACHE_GATE_BLOCK_HINT_THRESHOLD:
+        return CheckResult(
+            "Linear cache-gate promotion",
+            True,
+            f"{viol_24h} cache-gate misses in 24h while mode=warn",
+            "Set linear_enforce_cache_gate: block in .tapps-mcp.yaml and run "
+            "tapps-mcp upgrade --force. Route multi-issue reads through the linear-read skill.",
+        )
+
+    if resolved_mode == "off" and viol_24h > 0:
+        return CheckResult(
+            "Linear cache-gate promotion",
+            True,
+            f"{viol_24h} raw list_issues gate misses logged while mode=off",
+            "Enable linear_enforce_cache_gate: warn (or block for high-traffic repos) "
+            "in .tapps-mcp.yaml, then tapps-mcp upgrade --force.",
+        )
+
+    return CheckResult(
+        "Linear cache-gate promotion",
+        True,
+        f"mode={resolved_mode}, {viol_24h} gate_miss violations in 24h",
+    )
+
+
+def check_install_git_hooks_hint(project_root: Path) -> CheckResult:
+    """Recommend ``install_git_hooks: true`` when high engagement + low gate pass (TAP-3579)."""
+    from tapps_core.config.settings import load_settings
+    from tapps_mcp.tools.loop_metrics import compute_gate_pass_rate_7d
+
+    try:
+        settings = load_settings(project_root=project_root)
+        if settings.install_git_hooks:
+            return CheckResult(
+                "Git pre-commit hook",
+                True,
+                "install_git_hooks is enabled",
+            )
+    except Exception:
+        settings = None
+
+    hook_path = project_root / ".githooks" / "pre-commit"
+    if hook_path.is_file():
+        return CheckResult(
+            "Git pre-commit hook",
+            True,
+            ".githooks/pre-commit present",
+        )
+
+    engagement = _read_engagement_level(project_root) or "medium"
+    if engagement != "high":
+        return CheckResult(
+            "Git pre-commit hook",
+            True,
+            f"optional at llm_engagement_level={engagement}",
+        )
+
+    gate_pass = compute_gate_pass_rate_7d(project_root)
+    if gate_pass is None:
+        return CheckResult(
+            "Git pre-commit hook",
+            True,
+            "insufficient 7d gate metrics for recommendation",
+        )
+
+    if gate_pass < 0.70:
+        pct = round(gate_pass * 100)
+        return CheckResult(
+            "Git pre-commit hook",
+            True,
+            f"7d gate pass rate {pct}% (<70%) at high engagement",
+            "Set install_git_hooks: true in .tapps-mcp.yaml and run tapps-mcp upgrade "
+            "to enforce validate-changed on git commit.",
+        )
+
+    pct = round(gate_pass * 100)
+    return CheckResult(
+        "Git pre-commit hook",
+        True,
+        f"7d gate pass rate {pct}% — install_git_hooks not required",
     )
 
 
@@ -3222,6 +3374,9 @@ def _collect_checks(root: Path, *, quick: bool = False) -> list[CheckResult]:
     checks.append(check_finish_task_skill(root))
     checks.append(check_tapps_memory_skill(root))
     checks.append(check_session_handoff_skills(root))
+    checks.append(check_session_handoff_schema(root))
+    checks.append(check_cache_gate_block_hint(root))
+    checks.append(check_install_git_hooks_hint(root))
     checks.append(check_continuous_learning_v2_skill(root))
     checks.append(check_pretooluse_matchers(root))
     checks.append(check_agents_md(root))

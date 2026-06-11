@@ -175,6 +175,42 @@ def compute_gaps(
     }
 
 
+def format_session_start_gap_hint(project_root: Path) -> str | None:
+    """One-line prior-session pipeline reminder for SessionStart hooks (TAP-3578).
+
+    Uses disk-only telemetry (loop-metrics + completion-gate violations) so hooks
+    and CLI invocations work without an active MCP ``CallTracker`` session.
+    """
+    violations = read_recent_violations(project_root, limit=20)
+    violation_tags: list[str] = []
+    for row in violations:
+        for reason in row.get("reasons", []):
+            if isinstance(reason, str):
+                violation_tags.append(reason.split(":", 1)[0])
+
+    report = compute_gaps(project_root, called_tools=set())
+    gaps = list(report.get("gaps", []))
+    recs = [r for r in report.get("recommendations", []) if "No gaps detected" not in r]
+
+    if "CHECKLIST_MISSING" in violation_tags and "checklist_skipped" not in gaps:
+        gaps.insert(0, "checklist_skipped")
+    if any(t.startswith("QUALITY_GATE_SKIP") for t in violation_tags):
+        if "edits_without_validation" not in gaps:
+            gaps.insert(0, "edits_without_validation")
+
+    if not gaps:
+        return None
+
+    if "CHECKLIST_MISSING" in violation_tags:
+        return (
+            "Last session ended without tapps_checklist after edits — run "
+            "tapps_validate_changed + tapps_checklist before declaring done."
+        )
+    if recs:
+        return f"{', '.join(gaps[:3])}: {recs[0]}"
+    return ", ".join(gaps[:3])
+
+
 def render_markdown(report: dict[str, Any]) -> str:
     """Render a compact markdown summary of a gap report."""
     lines: list[str] = ["## tapps_usage gap report"]
@@ -203,6 +239,7 @@ def render_markdown(report: dict[str, Any]) -> str:
 
 __all__ = [
     "compute_gaps",
+    "format_session_start_gap_hint",
     "read_recent_violations",
     "render_markdown",
 ]

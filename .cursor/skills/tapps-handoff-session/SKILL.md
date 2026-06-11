@@ -13,6 +13,8 @@ End the session with a durable handoff the next chat loads via `tapps-continue-s
 
 1. **Draft handoff (5–10 bullets):** Done, Open, Next (P0), Blockers, Verify commands, Success criterion (one line).
 
+**P0 gate.** Before writing the file: when **Open** has real items (not `none` / `- ...` placeholders), **Next (P0)** must name one concrete next action (prefer a Linear id). If P0 is missing, ask the user once — do not persist an incomplete handoff.
+
 2. **Persist (file is canonical).** Write or overwrite `.tapps-mcp/session-handoff.md`:
    - Set **Updated** to the real current UTC time: run `date -u +%Y-%m-%dT%H:%M:%SZ` and paste the output — never use a placeholder like `T00:00:00Z`.
    - Optionally add **Git:** `<short-sha>` when inside a git repo (`git rev-parse --short HEAD`).
@@ -42,11 +44,11 @@ End the session with a durable handoff the next chat loads via `tapps-continue-s
 - ...
 ```
 
-3. **Persist (brain mirror, best-effort).** File from step 2 is canonical. `tapps_memory` is not an MCP tool (removed v3.12.0) — CLI only:
+3. **Persist (brain mirror, best-effort).** The markdown file from step 2 is always canonical. `tapps_memory` is not an MCP tool (removed v3.12.0, TAP-1994) — use CLI only:
 
    | Priority | When | How |
    |----------|------|-----|
-   | 1 (CLI) | Brain HTTP + shell auth (`TAPPS_MCP_MEMORY_BRAIN_AUTH_TOKEN` or `TAPPS_BRAIN_AUTH_TOKEN`) | `uv run tapps-mcp memory save --key session-handoff --tier context --tags handoff,cross-session --value "<plain-text bullets>"` |
+   | 1 (CLI) | Brain HTTP reachable; shell has `TAPPS_MCP_MEMORY_BRAIN_HTTP_URL` + `TAPPS_MCP_MEMORY_BRAIN_AUTH_TOKEN` (or `TAPPS_BRAIN_AUTH_TOKEN` via direnv) | `uv run tapps-mcp memory save --key session-handoff --tier context --tags handoff,cross-session --value "<plain-text bullets>"` |
    | 2 (skip) | Brain offline or auth missing | Skip silently — `.tapps-mcp/session-handoff.md` is enough |
 
 4. **Close lifecycle.** Best-effort session closure:

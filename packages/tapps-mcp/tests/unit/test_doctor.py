@@ -1578,9 +1578,9 @@ class TestCheckSessionHandoffSkills:
         skill_dir.mkdir(parents=True, exist_ok=True)
         body = f"---\nname: {name}\n---\n"
         if name == "tapps-handoff-session":
-            body += "\nsession-handoff.md\ntapps_session_end\ntapps-mcp memory save\n" * 5
+            body += "\nsession-handoff.md\ntapps_session_end\ntapps-mcp memory save\np0 gate\n" * 5
         elif name == "tapps-continue-session":
-            body += "\nsession-handoff.md\ntapps_session_start\n" * 5
+            body += "\nsession-handoff.md\ntapps_session_start\nmemory search\np0 fallback\n" * 5
         (skill_dir / "SKILL.md").write_text(body, encoding="utf-8")
 
     def test_both_skills_on_claude_passes(self, tmp_path):
@@ -1645,6 +1645,106 @@ class TestCheckSessionHandoffSkills:
         self._write_skill(base, "tapps-continue-session")
         result = check_session_handoff_skills(tmp_path)
         assert result.ok is True
+
+
+class TestCheckSessionHandoffSchema:
+    def test_missing_handoff_passes(self, tmp_path):
+        from tapps_mcp.distribution.doctor import check_session_handoff_schema
+
+        result = check_session_handoff_schema(tmp_path)
+        assert result.ok is True
+        assert "optional" in result.message.lower()
+
+    def test_open_without_p0_fails(self, tmp_path):
+        from tapps_mcp.distribution.doctor import check_session_handoff_schema
+
+        path = tmp_path / ".tapps-mcp" / "session-handoff.md"
+        path.parent.mkdir(parents=True)
+        path.write_text(
+            "# Session handoff\n**Updated:** 2026-06-11T12:00:00Z\n\n"
+            "## Open\n- unfinished\n\n## Next (P0)\n- none\n",
+            encoding="utf-8",
+        )
+        result = check_session_handoff_schema(tmp_path)
+        assert result.ok is False
+        assert "p0" in result.message.lower()
+
+    def test_valid_handoff_passes(self, tmp_path):
+        from tapps_mcp.distribution.doctor import check_session_handoff_schema
+
+        path = tmp_path / ".tapps-mcp" / "session-handoff.md"
+        path.parent.mkdir(parents=True)
+        path.write_text(
+            "# Session handoff\n**Updated:** 2026-06-11T12:00:00Z\n\n"
+            "## Open\n- none\n\n## Next (P0)\n- ship wave 2\n",
+            encoding="utf-8",
+        )
+        result = check_session_handoff_schema(tmp_path)
+        assert result.ok is True
+
+
+class TestCheckCacheGateBlockHint:
+    def test_block_mode_ok(self, tmp_path):
+        from tapps_mcp.distribution.doctor import check_cache_gate_block_hint
+
+        (tmp_path / ".tapps-mcp.yaml").write_text(
+            "linear_enforce_cache_gate: block\n",
+            encoding="utf-8",
+        )
+        result = check_cache_gate_block_hint(tmp_path)
+        assert result.ok is True
+        assert "block" in result.message
+
+    def test_warn_high_violations_recommends_block(self, tmp_path):
+        import time
+
+        from tapps_mcp.distribution.doctor import check_cache_gate_block_hint
+
+        hooks = tmp_path / ".claude" / "hooks"
+        hooks.mkdir(parents=True)
+        (hooks / "tapps-pre-linear-list.sh").write_text('MODE="warn"\n', encoding="utf-8")
+        log = tmp_path / ".tapps-mcp" / ".cache-gate-violations.jsonl"
+        log.parent.mkdir(parents=True)
+        now = time.time()
+        lines = [
+            json.dumps({"ts": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(now)), "category": "gate_miss"})
+            for _ in range(25)
+        ]
+        log.write_text("\n".join(lines) + "\n", encoding="utf-8")
+        result = check_cache_gate_block_hint(tmp_path)
+        assert result.ok is True
+        assert "block" in (result.detail or "").lower()
+
+
+class TestCheckInstallGitHooksHint:
+    def test_high_engagement_low_pass_rate_hints(self, tmp_path):
+        from tapps_mcp.distribution.doctor import check_install_git_hooks_hint
+
+        (tmp_path / ".tapps-mcp.yaml").write_text(
+            "llm_engagement_level: high\ninstall_git_hooks: false\n",
+            encoding="utf-8",
+        )
+        metrics_dir = tmp_path / ".tapps-mcp" / "metrics"
+        metrics_dir.mkdir(parents=True)
+        metric = {
+            "call_id": "a",
+            "tool_name": "tapps_quality_gate",
+            "status": "success",
+            "duration_ms": 1.0,
+            "started_at": "2026-06-11T00:00:00+00:00",
+            "completed_at": "2026-06-11T00:00:01+00:00",
+            "gate_passed": False,
+        }
+        from datetime import date
+
+        day = date.today().isoformat()
+        (metrics_dir / f"tool_calls_{day}.jsonl").write_text(
+            json.dumps(metric) + "\n",
+            encoding="utf-8",
+        )
+        result = check_install_git_hooks_hint(tmp_path)
+        assert result.ok is True
+        assert "install_git_hooks" in (result.detail or "")
 
 
 class TestCheckContinuousLearningV2Skill:

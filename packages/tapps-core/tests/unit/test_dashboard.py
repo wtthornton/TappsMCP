@@ -4,7 +4,17 @@ from datetime import UTC, datetime, timedelta
 
 import pytest
 
-from tapps_core.metrics.dashboard import DashboardGenerator
+from tapps_core.metrics.dashboard import (
+    DashboardGenerator,
+    is_docs_tool,
+    normalize_docs_tool_name,
+)
+
+
+@pytest.fixture(autouse=True)
+def _local_metrics_storage(monkeypatch):
+    """Keep dashboard tests isolated from live brain telemetry."""
+    monkeypatch.setenv("TAPPS_METRICS_STORAGE", "local")
 
 
 @pytest.fixture
@@ -202,3 +212,116 @@ class TestDashboardGenerator:
         assert cov["files_scored"] >= 1
         assert cov["files_gated"] >= 1
         assert "tapps_score_file" in cov["core_tools_used"]
+
+
+class TestDocsMetrics:
+    def test_is_docs_tool(self) -> None:
+        assert is_docs_tool("docs_validate_linear_issue")
+        assert is_docs_tool("mcp__docs-mcp__docs_generate_story")
+        assert not is_docs_tool("tapps_session_start")
+
+    def test_normalize_docs_tool_name(self) -> None:
+        assert normalize_docs_tool_name("mcp__docs-mcp__docs_pdf") == "docs_pdf"
+        assert normalize_docs_tool_name("docs_check_drift") == "docs_check_drift"
+
+    def test_docs_metrics_aggregation(self, metrics_dir) -> None:
+        gen = DashboardGenerator(metrics_dir)
+        now = datetime.now(tz=UTC)
+        gen._execution.record(
+            "mcp__docs-mcp__docs_validate_linear_issue",
+            now,
+            now + timedelta(milliseconds=80),
+            status="success",
+        )
+        gen._execution.record(
+            "docs_generate_story",
+            now,
+            now + timedelta(milliseconds=120),
+            status="failed",
+            error_code="validation",
+        )
+        data = gen.generate_json_dashboard(sections=["docs_metrics"])
+        docs = data["docs_metrics"]
+        assert docs["available"] is True
+        assert docs["total_calls"] == 2
+        names = {t["tool_name"] for t in docs["tools"]}
+        assert names == {"docs_validate_linear_issue", "docs_generate_story"}
+        by_name = {t["tool_name"]: t for t in docs["tools"]}
+        assert by_name["docs_validate_linear_issue"]["success_rate"] == 1.0
+        assert by_name["docs_generate_story"]["success_rate"] == 0.0
+
+    def test_tool_metrics_excludes_docs_tools(self, metrics_dir) -> None:
+        gen = DashboardGenerator(metrics_dir)
+        now = datetime.now(tz=UTC)
+        gen._execution.record(
+            "docs_validate_linear_issue",
+            now,
+            now + timedelta(milliseconds=50),
+            status="success",
+        )
+        gen._execution.record(
+            "tapps_score_file",
+            now,
+            now + timedelta(milliseconds=50),
+            status="success",
+            score=90.0,
+        )
+        data = gen.generate_json_dashboard(sections=["tool_metrics"])
+        names = {t["tool_name"] for t in data["tool_metrics"]}
+        assert "docs_validate_linear_issue" not in names
+        assert "tapps_score_file" in names
+
+
+class TestSessionFunnel:
+    def test_session_funnel_ratios(self, metrics_dir) -> None:
+        gen = DashboardGenerator(metrics_dir)
+        now = datetime.now(tz=UTC)
+        for _ in range(4):
+            gen._execution.record(
+                "tapps_session_start",
+                now,
+                now + timedelta(milliseconds=10),
+                status="success",
+            )
+        gen._execution.record(
+            "tapps_session_end",
+            now,
+            now + timedelta(milliseconds=10),
+            status="success",
+        )
+        data = gen.generate_json_dashboard(sections=["session_funnel"])
+        funnel = data["session_funnel"]
+        assert funnel["session_start_calls"] == 4
+        assert funnel["session_end_calls"] == 1
+        assert funnel["checklist_calls"] == 0
+        assert funnel["handoff_per_session_start"] == 0.25
+        assert "low_handoff_writes" in funnel["gaps_detected"]
+
+    def test_handoff_file_freshness(self, metrics_dir) -> None:
+        project_root = metrics_dir.parent.parent
+        handoff_dir = project_root / ".tapps-mcp"
+        handoff_dir.mkdir(parents=True, exist_ok=True)
+        handoff_path = handoff_dir / "session-handoff.md"
+        handoff_path.write_text("# Handoff\n", encoding="utf-8")
+
+        gen = DashboardGenerator(metrics_dir)
+        data = gen.generate_json_dashboard(sections=["session_funnel"])
+        handoff = data["session_funnel"]["handoff_file"]
+        assert handoff["exists"] is True
+        assert handoff["stale"] is False
+        assert handoff["age_days"] >= 0
+
+    def test_funnel_recommendations(self, metrics_dir) -> None:
+        gen = DashboardGenerator(metrics_dir)
+        now = datetime.now(tz=UTC)
+        for _ in range(5):
+            gen._execution.record(
+                "tapps_session_start",
+                now,
+                now + timedelta(milliseconds=10),
+                status="success",
+            )
+        data = gen.generate_json_dashboard(sections=["recommendations"])
+        recs = data["recommendations"]
+        assert any("handoff" in r.lower() for r in recs)
+        assert any("checklist" in r.lower() for r in recs)

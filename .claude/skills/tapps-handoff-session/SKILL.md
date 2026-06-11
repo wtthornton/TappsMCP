@@ -22,6 +22,8 @@ End the session with a durable handoff the next chat can load via `/tapps-contin
    - **Verify** — commands to run first in the next session
    - **Success criterion** — one line
 
+**P0 gate.** Before writing the file: when **Open** has real items (not `none` / `- ...` placeholders), **Next (P0)** must name one concrete next action (prefer a Linear id). If P0 is missing, ask the user once — do not persist an incomplete handoff.
+
 2. **Persist (file is canonical).** Write or overwrite `.tapps-mcp/session-handoff.md` using this shape:
    - Set **Updated** to the real current UTC time: run `date -u +%Y-%m-%dT%H:%M:%SZ` and paste the output — never use a placeholder like `T00:00:00Z`.
    - Optionally add **Git:** `<short-sha>` when inside a git repo (`git rev-parse --short HEAD`).

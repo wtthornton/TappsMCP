@@ -20,21 +20,19 @@ Start work in a fresh context window by assembling structured state — not a us
 2. **Load handoff (priority order).**
    - Read `.tapps-mcp/session-handoff.md` if it exists — primary source.
    - Else best-effort CLI (no `tapps_memory` MCP — removed v3.12.0): `uv run tapps-mcp memory get --key session-handoff` (brain offline or auth missing → skip).
-   - Optional supplements (only if present, do not require):
-     - `docs/NEXT_SESSION_PROMPT.md` — short user-maintained prompt
-     - `docs/TAPPS_HANDOFF.md` — scan for `**Next:**` or the latest stage section
+   - Optional supplements (only if present): `docs/NEXT_SESSION_PROMPT.md`, `docs/TAPPS_HANDOFF.md` (**Next:** section).
+   - **P0 fallback:** If **Next (P0)** is empty but **Open** has bullets, promote the first Open item as provisional P0 and flag it in the continue block.
+   - **Memory context:** Run `uv run tapps-mcp memory search --query "<P0 text or Linear id>"` when brain shell auth is available; skip silently otherwise.
 
 3. **Linear context.**
    - If the user passed `TAP-####` (argument or in handoff **Linear P0**), call `mcp__plugin_linear_linear__get_issue(id=...)`.
    - For backlog/triage without a known id, invoke the `linear-read` skill instead of raw `list_issues` (do not call `list_issues` directly — cache gate).
 
 4. **Emit continue block (~15 lines max).** Present:
-   - **P0** — next action + Linear link if available
-   - **Done / Open / Blockers** — from handoff (compressed)
+   - **P0** — next action + Linear link if available (note if promoted from Open)
+   - **Done / Open / Blockers** — compressed from handoff
    - **Verify first** — commands from handoff
    - **Success criterion**
-   - **Stale warning** if handoff **Updated** is >7 days old
+   - **Stale warning** if handoff **Updated** is >7 days old or missing
 
-5. **Confirm and proceed.** Ask only if P0 is ambiguous; otherwise start on P0 using normal TAPPS workflow (`tapps_quick_check` after Python edits, etc.).
-
-Do **not** ask the user to re-paste prior context when handoff files exist.
+5. **Proceed on P0.** Ask only if P0 is ambiguous; otherwise start using normal TAPPS workflow (`tapps_quick_check` after Python edits). Do **not** ask the user to re-paste prior context when handoff files exist.

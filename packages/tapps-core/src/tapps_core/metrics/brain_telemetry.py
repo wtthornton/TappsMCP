@@ -31,17 +31,15 @@ _QUALITY_METRIC_EVENT = "quality_metric"
 def metrics_storage_mode() -> Literal["local", "dual", "brain"]:
     """Return metrics persistence mode.
 
-    When ``TAPPS_METRICS_STORAGE`` is unset: ``brain`` if the bridge passes a
-    health probe, else ``dual`` (JSONL write-fallback). Explicit env values
-    always win.
+    When ``TAPPS_METRICS_STORAGE`` is unset, defaults to ``dual`` (JSONL plus
+    best-effort brain telemetry). Explicit env values always win; invalid
+    values fall back to ``dual``.
     """
     raw = os.environ.get(_STORAGE_ENV, "").strip().lower()
     if raw in _VALID_STORAGE:
         return raw  # type: ignore[return-value]
     if raw:
         return "dual"
-    if brain_metrics_bridge_available():
-        return "brain"
     return "dual"
 
 

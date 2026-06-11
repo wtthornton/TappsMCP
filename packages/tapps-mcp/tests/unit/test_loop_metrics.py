@@ -9,6 +9,7 @@ from pathlib import Path
 import pytest
 
 from tapps_mcp.tools.loop_metrics import (
+    compute_gate_pass_rate_7d,
     compute_rolling_stats,
     read_loop_metrics,
     should_auto_promote_cache_gate,
@@ -97,3 +98,42 @@ class TestShouldAutoPromoteCacheGate:
         )
         assert promote is False
         assert telemetry["reason"] == "insufficient_loops"
+
+
+class TestComputeGatePassRate7d:
+    def test_returns_none_without_metrics(self, tmp_path: Path) -> None:
+        assert compute_gate_pass_rate_7d(tmp_path) is None
+
+    def test_computes_from_jsonl(self, tmp_path: Path, monkeypatch) -> None:
+        monkeypatch.setenv("TAPPS_METRICS_STORAGE", "local")
+        from datetime import date
+
+        metrics_dir = tmp_path / ".tapps-mcp" / "metrics"
+        metrics_dir.mkdir(parents=True)
+        day = date.today().isoformat()
+        rows = [
+            {
+                "call_id": "1",
+                "tool_name": "tapps_quality_gate",
+                "status": "success",
+                "duration_ms": 1.0,
+                "started_at": "2026-06-11T00:00:00+00:00",
+                "completed_at": "2026-06-11T00:00:01+00:00",
+                "gate_passed": True,
+            },
+            {
+                "call_id": "2",
+                "tool_name": "tapps_quality_gate",
+                "status": "success",
+                "duration_ms": 1.0,
+                "started_at": "2026-06-11T00:00:02+00:00",
+                "completed_at": "2026-06-11T00:00:03+00:00",
+                "gate_passed": False,
+            },
+        ]
+        (metrics_dir / f"tool_calls_{day}.jsonl").write_text(
+            "\n".join(json.dumps(r) for r in rows) + "\n",
+            encoding="utf-8",
+        )
+        rate = compute_gate_pass_rate_7d(tmp_path)
+        assert rate == 0.5
