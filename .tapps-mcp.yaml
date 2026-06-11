@@ -3,6 +3,7 @@ quality_preset: standard
 memory:
   brain_project_id: tapps-mcp
   brain_http_url: http://localhost:8080
+  brain_profile: full
 linear_enforce_gate: true
 thresholds:
   overall: 70
