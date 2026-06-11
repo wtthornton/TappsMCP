@@ -701,6 +701,10 @@ async def tapps_session_start(
     except Exception:
         _logger.debug("usage_gaps_session_start_failed", exc_info=True)
 
+    from tapps_mcp.tools.session_start_helpers import attach_cli_fallback
+
+    attach_cli_fallback(data)
+
     # TAP-1082: Hard-fail on tapps-brain auth probe 401/403 unless explicitly
     # tolerated. Audit (38 sessions, worst case 18 retries) shows agents do
     # not act on degraded:true buried inside memory_status — they retry, or

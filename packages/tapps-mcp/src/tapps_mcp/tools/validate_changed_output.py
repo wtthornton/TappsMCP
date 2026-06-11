@@ -124,7 +124,11 @@ def _resolve_security_depth(security_depth: str, include_security: bool, quick: 
     return (security_depth == "full") or (include_security and not quick)
 
 
-def _build_file_entry(r: dict[str, Any]) -> tuple[dict[str, Any], str]:
+def _build_file_entry(
+    r: dict[str, Any],
+    *,
+    near_miss_slots_remaining: int,
+) -> tuple[dict[str, Any], str, int]:
     """Build a single per-file entry and grep-friendly row."""
     file_path = r.get("file_path", r.get("file", "unknown"))
     file_name = Path(file_path).name if file_path != "unknown" else "unknown"
@@ -132,10 +136,11 @@ def _build_file_entry(r: dict[str, Any]) -> tuple[dict[str, Any], str]:
     score = r.get("score", r.get("overall_score", 0.0))
     security_issues = r.get("security_issues", 0)
     errors = r.get("errors", [])
+    lint_issues = r.get("lint_issues") or []
 
     status = "PASS" if gate_passed and not errors else "FAIL"
     security_status = "fail" if security_issues > 0 else "pass"
-    issue_count = len(errors) + security_issues
+    issue_count = len(errors) + security_issues + len(lint_issues)
 
     entry: dict[str, Any] = {
         "file": file_name,
@@ -156,17 +161,32 @@ def _build_file_entry(r: dict[str, Any]) -> tuple[dict[str, Any], str]:
     ]
     if issue_count > 0:
         row_parts.append(f"issues={issue_count}")
-    return entry, "  ".join(row_parts)
+
+    from tapps_mcp.tools.validate_changed_diagnostics import enrich_file_entry
+
+    remaining = enrich_file_entry(
+        entry,
+        row_parts,
+        r,
+        near_miss_slots_remaining=near_miss_slots_remaining,
+    )
+    return entry, "  ".join(row_parts), remaining
 
 
 def _build_per_file_results(
     results: list[dict[str, Any]],
 ) -> tuple[list[dict[str, Any]], list[str]]:
     """Build machine-readable per-file results and grep-friendly summary rows."""
+    from tapps_mcp.tools.validate_changed_diagnostics import _MAX_NEAR_MISS_FILES
+
     per_file: list[dict[str, Any]] = []
     rows: list[str] = []
+    near_miss_slots = _MAX_NEAR_MISS_FILES
     for r in results:
-        entry, row = _build_file_entry(r)
+        entry, row, near_miss_slots = _build_file_entry(
+            r,
+            near_miss_slots_remaining=near_miss_slots,
+        )
         per_file.append(entry)
         rows.append(row)
     return per_file, rows

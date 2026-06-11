@@ -801,6 +801,8 @@ _DOCS_COVERED: dict[str, tuple[str, str]] = {
     "typer": ("commands", "App, argument, option, callbacks"),
     "rich": ("console", "Console, Panel, Table, Progress, Markdown"),
     "jinja2": ("templates", "Environment, Template, filters, macros"),
+    "reportlab": ("canvas", "Canvas, Platypus, flowables, PDF generation"),
+    "pypdf": ("merging", "PdfReader, PdfWriter, pages, annotations"),
     "aiohttp": ("client", "ClientSession, request, streaming"),
     "celery": ("tasks", "Task, apply_async, beat schedule"),
     "redis": ("commands", "Pipeline, pubsub, async client"),
@@ -878,6 +880,16 @@ def _collect_raw_deps(project_root: Path, tomllib_mod: Any) -> list[str]:
     for dep in project_section.get("dependencies", []):
         raw_deps.append(_strip_version_specifier(dep))
 
+    for group_deps in project_section.get("optional-dependencies", {}).values():
+        if isinstance(group_deps, list):
+            for dep in group_deps:
+                raw_deps.append(_strip_version_specifier(str(dep)))
+
+    for group_deps in data.get("dependency-groups", {}).values():
+        if isinstance(group_deps, list):
+            for dep in group_deps:
+                raw_deps.append(_strip_version_specifier(str(dep)))
+
     # workspace members — scan their pyproject.tomls too (best-effort)
     ws_members = data.get("tool", {}).get("uv", {}).get("workspace", {}).get("members", [])
     for member_glob in ws_members:
@@ -934,6 +946,33 @@ def _build_search_first(project_root: Path) -> dict[str, Any] | None:
     if unknown:
         result["unknown_deps"] = sorted(unknown)
     return result
+
+
+# ---------------------------------------------------------------------------
+# CLI fallback map for MCP disconnect recovery (TAP-3587 / ReportLab feedback)
+# ---------------------------------------------------------------------------
+
+CLI_FALLBACK: dict[str, str] = {
+    "tapps_session_start": "tapps-mcp doctor --quick",
+    "tapps_quick_check": "tapps-mcp quick-check --file-path <path>",
+    "tapps_validate_changed": (
+        "tapps-mcp validate-changed [--file-paths a.py,b.py] [--quick|--full]"
+    ),
+    "tapps_doctor": "tapps-mcp doctor [--quick]",
+    "tapps_lookup_docs": "tapps-mcp lookup-docs --library <name> [--topic TOPIC]",
+    "tapps_memory": "tapps-mcp memory <list|save|get|search|delete>",
+}
+
+MCP_RECOVERY_HINT = (
+    "If MCP tools return 'Not connected' after a host reload, use cli_fallback "
+    "CLI commands from the project root or restart the host — see docs/TROUBLESHOOTING.md."
+)
+
+
+def attach_cli_fallback(data: dict[str, Any]) -> None:
+    """Attach CLI equivalents and mid-session MCP recovery hint to session_start data."""
+    data["cli_fallback"] = dict(CLI_FALLBACK)
+    data["mcp_recovery_hint"] = MCP_RECOVERY_HINT
 
 
 # ---------------------------------------------------------------------------

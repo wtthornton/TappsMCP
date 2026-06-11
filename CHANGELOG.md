@@ -14,6 +14,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Pipeline compliance hints** ([TAP-3578](https://linear.app/tappscodingagents/issue/TAP-3578), [TAP-3577](https://linear.app/tappscodingagents/issue/TAP-3577), [TAP-3579](https://linear.app/tappscodingagents/issue/TAP-3579)) — SessionStart hooks and `tapps_session_start` surface prior-session `usage_gaps`. Doctor recommends `linear_enforce_cache_gate: block` when warn-mode violations exceed 20/24h, and `install_git_hooks: true` when high engagement meets <70% 7d gate pass rate. New CLI: `tapps-mcp usage-gaps-hint`.
 - **Dashboard observability** ([TAP-3582](https://linear.app/tappscodingagents/issue/TAP-3582), [TAP-3583](https://linear.app/tappscodingagents/issue/TAP-3583)) — `tapps_dashboard` adds `docs_metrics` (DocsMCP tool breakdown from JSONL/brain) and `session_funnel` (handoff freshness, session_start/checklist ratios). `tapps_stats` includes a `docs_tools` slice when docs calls are present. Funnel gaps surface in `recommendations`.
 
+## [3.12.19] - 2026-06-11
+
+Patch: ReportLab consumer feedback — validate_changed diagnostics, CLI parity, session recovery hints ([TAP-3584](https://linear.app/tappscodingagents/issue/TAP-3584)).
+
+### Added
+
+- **`validate_changed_diagnostics`** — batch gate failures include top lint findings, `failure_reason`, and near-miss `improvement_hints` (scores 70–79, max 3 files).
+- **CLI `quick-check`** — `tapps-mcp quick-check --file-path PATH` mirrors `tapps_quick_check`.
+- **CLI `validate-changed --file-paths`** — explicit path list (alias `--paths`) for MCP fallback workflows.
+- **`session_start` `cli_fallback`** — MCP tool → CLI command map plus `mcp_recovery_hint` for mid-session disconnects.
+- **`validate_changed.judges` preset** — `.tapps-mcp.yaml` default judges merged into batch validation; report-studio projects get a PDF-audit hint when `nlt-report-studio` is pinned.
+- **Multi-file memory nudge** — when ≥5 `src/` files validate, response recommends `tapps_memory` or `/tapps-finish-task`.
+
+### Changed
+
+- **`search_first`** — scans optional-dependencies and dependency-groups; adds `reportlab` and `pypdf` Context7 coverage when pinned.
+
+### Documentation
+
+- **TROUBLESHOOTING.md** — CLI fallback table includes `quick-check`; YAML/brand config guidance via checklist-policy (not core batch validate).
+
 ## [3.12.16] - 2026-06-09
 
 Patch: version stamp sync; republish global CLIs after 3.12.15 install drift.

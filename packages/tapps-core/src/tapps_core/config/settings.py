@@ -745,6 +745,19 @@ def _extra_mode() -> Literal["ignore", "forbid"]:
     return "ignore"
 
 
+class ValidateChangedSettings(BaseModel):
+    """Defaults for ``tapps_validate_changed`` batch validation."""
+
+    judges: list[dict[str, Any]] = Field(
+        default_factory=list,
+        description=(
+            "Default post-gate judges merged when the MCP tool is called without "
+            "an explicit judges argument. Each entry: type (pytest|grep|exists), "
+            "target, optional expect, description, blocking (default False)."
+        ),
+    )
+
+
 class TappsMCPSettings(BaseSettings):
     """Root settings for TappsMCP server."""
 
@@ -906,6 +919,11 @@ class TappsMCPSettings(BaseSettings):
             "When True, the latest failed tool call does not satisfy checklist requirements. "
             "Env: TAPPS_MCP_CHECKLIST_REQUIRE_SUCCESS."
         ),
+    )
+
+    validate_changed: ValidateChangedSettings = Field(
+        default_factory=ValidateChangedSettings,
+        description="Batch validation defaults for tapps_validate_changed.",
     )
 
     # Upgrade skip list (Issue #86)

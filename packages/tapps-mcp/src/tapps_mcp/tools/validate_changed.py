@@ -367,6 +367,18 @@ def _attach_optional_payload(
         resp_data["files_remaining_paths"] = [str(p) for p in timeout_info.files_remaining]
         resp_data["auto_detect_budget_s"] = _host._AUTO_DETECT_BUDGET_S
 
+    from tapps_mcp.tools.validate_changed_diagnostics import (
+        build_multi_file_memory_hint,
+        count_src_paths,
+    )
+
+    src_count = count_src_paths(paths)
+    memory_hint = build_multi_file_memory_hint(src_count)
+    if memory_hint:
+        resp_data["multi_file_src_count"] = src_count
+        existing = list(resp_data.get("next_steps") or [])
+        resp_data["next_steps"] = [memory_hint, *existing][:5]
+
 
 async def _assemble_response(
     bc: _BatchContext,
@@ -551,6 +563,12 @@ async def tapps_validate_changed(
 
     settings = _host.load_settings()
     paths = _host._discover_changed_files(file_paths, base_ref, settings.project_root)
+
+    effective_judges: list[dict[str, Any]] | None = None
+    preset_judges = settings.validate_changed.judges
+    if preset_judges or judges:
+        effective_judges = [*preset_judges, *(judges or [])]
+
     if not paths:
         return _handle_no_changed_files(
             start,
@@ -571,7 +589,7 @@ async def tapps_validate_changed(
         security_depth=security_depth,
         include_impact=include_impact,
         correlation_id=correlation_id,
-        judges=judges,
+        judges=effective_judges,
         ctx=ctx,
         start=start,
         settings=settings,
@@ -580,6 +598,24 @@ async def tapps_validate_changed(
     task_results, timeout_info = await _run_with_progress(bc)
     outcome = _finalize_outcome(bc, task_results, timeout_info)
     resp = await _assemble_response(bc, outcome)
+
+    try:
+        from tapps_mcp.pipeline.report_studio.installer import check_report_studio
+
+        rs = check_report_studio(settings.project_root)
+        if rs.get("installed") and not effective_judges:
+            data = resp.get("data", {})
+            hint = (
+                "Report-studio detected: add validate_changed.judges in .tapps-mcp.yaml "
+                "or pass judges=[{type: pytest, target: tests/, description: PDF audit}] "
+                "to gate PDF quality after rebuild."
+            )
+            steps = list(data.get("next_steps") or [])
+            data["next_steps"] = [hint, *steps][:5]
+            data["report_studio"] = rs
+    except Exception:
+        _logger.debug("report_studio_hint_failed", exc_info=True)
+
     elapsed_ms = (time.perf_counter_ns() - bc.start) // 1_000_000
     _fire_validate_events(bc.paths, outcome, elapsed_ms)
     return resp

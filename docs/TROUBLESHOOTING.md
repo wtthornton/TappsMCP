@@ -28,10 +28,26 @@ When the MCP server is unavailable, use these CLI equivalents directly in the te
 | `tapps_memory` (import) | `tapps-mcp memory import-file --file PATH` |
 | `tapps_memory` (export) | `tapps-mcp memory export-file --file PATH` |
 | `tapps_lookup_docs` | `tapps-mcp lookup-docs --library LIB [--topic TOPIC] [--mode code\|info]` |
-| `tapps_validate_changed` | `tapps-mcp validate-changed [--quick\|--full]` |
+| `tapps_quick_check` | `tapps-mcp quick-check --file-path PATH [--preset standard\|strict\|framework]` |
+| `tapps_validate_changed` | `tapps-mcp validate-changed [--file-paths a.py,b.py] [--quick\|--full]` |
 | `tapps_doctor` | `tapps-mcp doctor [--quick]` |
 
 All CLI commands use `TAPPS_MCP_PROJECT_ROOT` (or the current directory) for project context.
+
+### YAML / template config changes (brand.yaml, templates)
+
+**Problem:** `tapps_validate_changed` only scores code files (`.py`, polyglot sources). Edits to `brand.yaml`, template YAML, or other config are invisible to the batch gate.
+
+**Recommended consumer pattern:** Use project checklist policy — not core batch validation:
+
+```yaml
+# .tapps-mcp/checklist-policy.yaml
+extra_recommended:
+  feature:
+    - tapps_validate_config
+```
+
+When you change YAML infra or brand files, call `tapps_validate_config(file_path='...', config_type='yaml')` explicitly. Domain-specific quality (PDF layout, hyperlinks) belongs in project tools (e.g. report-studio verify) via `validate_changed.judges` in `.tapps-mcp.yaml`, not generic YAML lint in tapps-mcp core.
 
 ### Verifying MCP server health
 

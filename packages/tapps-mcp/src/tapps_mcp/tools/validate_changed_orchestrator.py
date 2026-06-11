@@ -95,6 +95,9 @@ async def _validate_single_file(
             scorer = _get_scorer_for_file(path)
             if scorer is None:
                 file_result["errors"] = [f"Unsupported file type: {path.suffix}"]
+                from tapps_mcp.tools.validate_changed_diagnostics import finalize_file_diagnostics
+
+                finalize_file_diagnostics(file_result)
                 return file_result
 
             file_result["language"] = scorer.language
@@ -110,12 +113,25 @@ async def _validate_single_file(
             if gate.failures:
                 file_result["gate_failures"] = [f.model_dump() for f in gate.failures]
 
+            from tapps_mcp.tools.validate_changed_diagnostics import (
+                attach_improvement_hints,
+                attach_score_diagnostics,
+                finalize_file_diagnostics,
+            )
+
+            attach_score_diagnostics(file_result, score)
+            attach_improvement_hints(file_result, score)
+
             sec = await _run_security_scan(
                 path, score, scorer.language == "python", do_security_full, quick
             )
             file_result.update(sec)
+            finalize_file_diagnostics(file_result)
         except Exception as exc:
             file_result["errors"] = [str(exc)]
+            from tapps_mcp.tools.validate_changed_diagnostics import finalize_file_diagnostics
+
+            finalize_file_diagnostics(file_result)
         if tracker is not None:
             tracker.completed += 1
             tracker.last_file = path.name

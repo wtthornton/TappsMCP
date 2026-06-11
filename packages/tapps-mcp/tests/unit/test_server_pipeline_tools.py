@@ -1914,3 +1914,18 @@ class TestBuildSearchFirst:
         # fast-mcp → fast_mcp, not in covered; just assert no crash and unknown listed
         result = _build_search_first(tmp_path)
         assert result is not None
+
+    def test_optional_dependency_group_reportlab_covered(self, tmp_path: Path) -> None:
+        from tapps_mcp.server_pipeline_tools import _build_search_first
+
+        (tmp_path / "pyproject.toml").write_text(
+            '[project]\n'
+            'dependencies = []\n'
+            '[project.optional-dependencies]\n'
+            'reports = ["reportlab>=4", "pypdf>=4"]\n'
+        )
+        result = _build_search_first(tmp_path)
+        assert result is not None
+        libraries = [e["library"] for e in result["covered"]]
+        assert "reportlab" in libraries
+        assert "pypdf" in libraries
