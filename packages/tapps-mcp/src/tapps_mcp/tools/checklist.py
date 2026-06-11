@@ -107,13 +107,15 @@ TOOL_REASONS: dict[str, str] = {
     ),
     "tapps_lookup_docs": "Look up library docs before using an API to avoid hallucinated usage.",
     "tapps_validate_config": (
-        "Validate Dockerfile, docker-compose, or infra config against best practices."
+        "Validate Dockerfile, docker-compose, YAML manifests (config_type=yaml_manifest), "
+        "or other infra config against best practices."
     ),
     "tapps_checklist": (
         "Call before declaring work complete to verify no required steps were skipped."
     ),
     "tapps_validate_changed": (
-        "Batch-validate all changed Python files (score + gate; security when quick=False or security_depth='full') before declaring done."
+        "Batch-validate changed files (score + gate + optional blocking judges). "
+        "For document/PDF work use task_type=document and configure validate_changed.judges."
     ),
     "tapps_quick_check": (
         "Quick score + gate + security in one call. Minimum check after editing any Python file."
@@ -137,6 +139,9 @@ TOOL_REASONS: dict[str, str] = {
     "tapps_release_update": (
         "Generate and validate a release update document body from CHANGELOG or git log."
         " Call before posting a version release to Linear via the linear-release-update skill."
+    ),
+    "tapps_impact_analysis": (
+        "Map blast radius before editing layout modules; document work should rebuild outputs."
     ),
     "tapps_audit_close_coverage": (
         "Close an audit finding's brain coverage after a fix lands — updates the file's"
@@ -191,6 +196,11 @@ TASK_TOOL_MAP: dict[str, dict[str, list[str]]] = {
         "recommended": ["tapps_dependency_scan"],
         "optional": ["tapps_checklist"],
     },
+    "document": {
+        "required": ["tapps_validate_changed"],
+        "recommended": ["tapps_validate_config", "tapps_lookup_docs", "tapps_checklist"],
+        "optional": ["tapps_impact_analysis", "tapps_memory"],
+    },
 }
 
 # High engagement: more tools required (stricter)
@@ -240,6 +250,11 @@ TASK_TOOL_MAP_HIGH: dict[str, dict[str, list[str]]] = {
         "recommended": ["tapps_checklist", "tapps_security_scan"],
         "optional": [],
     },
+    "document": {
+        "required": ["tapps_validate_changed", "tapps_checklist"],
+        "recommended": ["tapps_validate_config", "tapps_lookup_docs", "tapps_quality_gate"],
+        "optional": ["tapps_impact_analysis", "tapps_memory"],
+    },
 }
 
 # Low engagement: fewer tools required (lighter)
@@ -279,6 +294,11 @@ TASK_TOOL_MAP_LOW: dict[str, dict[str, list[str]]] = {
         "recommended": ["tapps_dependency_scan"],
         "optional": ["tapps_checklist"],
     },
+    "document": {
+        "required": ["tapps_validate_changed"],
+        "recommended": ["tapps_validate_config", "tapps_lookup_docs"],
+        "optional": ["tapps_checklist", "tapps_impact_analysis"],
+    },
 }
 
 # Alias for medium (same as TASK_TOOL_MAP)
@@ -291,6 +311,14 @@ _ENGAGEMENT_TOOL_MAP: dict[str, dict[str, dict[str, list[str]]]] = {
 }
 
 KNOWN_TASK_TYPES: frozenset[str] = frozenset(TASK_TOOL_MAP.keys())
+
+TASK_TYPE_REASONS: dict[str, str] = {
+    "document": (
+        "Document/PDF/HTML output work: run validate_changed with blocking judges "
+        "(shell/pytest audit CLIs), validate_config for brand/template YAML manifests, "
+        "and rebuild shipped outputs after layout changes."
+    ),
+}
 
 # Primary tool -> checklist tool names satisfied by calling the primary (success only).
 _TOOL_EQUIVALENTS: dict[str, frozenset[str]] = {}
@@ -405,6 +433,10 @@ class ChecklistResult(BaseModel):
     )
     satisfied_optional_tools: list[str] = Field(
         default_factory=list, description="Optional tools satisfied (including equivalents)."
+    )
+    task_type_hint: str = Field(
+        default="",
+        description="When set, explains when to use this task_type (document, epic, etc.).",
     )
     complete: bool = Field(default=False, description="All required tools have been called.")
     total_calls: int = Field(default=0, description="Total tool calls this session.")
@@ -701,6 +733,7 @@ class CallTracker:
 
         return ChecklistResult(
             task_type=task_type,
+            task_type_hint=TASK_TYPE_REASONS.get(resolved_key, ""),
             resolved_policy_task_type=resolved_key,
             policy_fallback=policy_fallback,
             checklist_policy_version=policy_version,

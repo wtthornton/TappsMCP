@@ -28,6 +28,10 @@ class TestJudgeDefinition:
         jd = JudgeDefinition(type="pytest", target="tests/unit/")
         assert jd.type == "pytest"
 
+    def test_command_alias_normalises_to_shell(self) -> None:
+        jd = JudgeDefinition(type="command", target="true")
+        assert jd.type == "shell"
+
 
 class TestExistsJudge:
     @pytest.mark.asyncio
@@ -97,6 +101,55 @@ class TestPytestJudge:
             jd = JudgeDefinition(type="pytest", target="tests/")
             result = await run_judge(jd, cwd=tmp_path)
         assert result.result == "error"
+
+
+class TestShellJudge:
+    @pytest.mark.asyncio
+    async def test_successful_shell_returns_pass(self, tmp_path: Path) -> None:
+        mock_proc = MagicMock()
+        mock_proc.returncode = 0
+        mock_proc.communicate = AsyncMock(return_value=(b"", b""))
+
+        with patch("asyncio.create_subprocess_exec", return_value=mock_proc):
+            jd = JudgeDefinition(type="shell", target="true")
+            result = await run_judge(jd, cwd=tmp_path)
+        assert result.result == "pass"
+
+    @pytest.mark.asyncio
+    async def test_failing_shell_returns_fail(self, tmp_path: Path) -> None:
+        mock_proc = MagicMock()
+        mock_proc.returncode = 1
+        mock_proc.communicate = AsyncMock(return_value=(b"", b"failed"))
+
+        with patch("asyncio.create_subprocess_exec", return_value=mock_proc):
+            jd = JudgeDefinition(type="shell", target="false")
+            result = await run_judge(jd, cwd=tmp_path)
+        assert result.result == "fail"
+
+
+class TestWhenChanged:
+    @pytest.mark.asyncio
+    async def test_skipped_when_no_changed_paths_match(self, tmp_path: Path) -> None:
+        jd = JudgeDefinition(
+            type="exists",
+            target=str(tmp_path / "missing.txt"),
+            when_changed=["reports/**"],
+        )
+        result = await run_judge(jd, changed_paths=["src/foo.py"])
+        assert result.result == "skipped"
+
+    @pytest.mark.asyncio
+    async def test_runs_when_changed_path_matches(self, tmp_path: Path) -> None:
+        target = tmp_path / "reports" / "foo.py"
+        target.parent.mkdir(parents=True)
+        target.touch()
+        jd = JudgeDefinition(
+            type="exists",
+            target=str(target),
+            when_changed=["reports/**"],
+        )
+        result = await run_judge(jd, changed_paths=["reports/foo.py"])
+        assert result.result == "pass"
 
 
 class TestRunJudges:

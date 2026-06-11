@@ -36,6 +36,10 @@ class TestDetectConfigType:
         assert detect_config_type("README.md") is None
         assert detect_config_type("app.py") is None
 
+    def test_yaml_manifest_detected_by_path(self):
+        assert detect_config_type("brands/acme/brand.yaml") == "yaml_manifest"
+        assert detect_config_type("templates/report/template.yml") == "yaml_manifest"
+
 
 class TestValidateConfig:
     def test_auto_detect_dockerfile(self):

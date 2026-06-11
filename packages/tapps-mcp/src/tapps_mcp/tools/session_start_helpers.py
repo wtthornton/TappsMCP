@@ -803,6 +803,10 @@ _DOCS_COVERED: dict[str, tuple[str, str]] = {
     "jinja2": ("templates", "Environment, Template, filters, macros"),
     "reportlab": ("canvas", "Canvas, Platypus, flowables, PDF generation"),
     "pypdf": ("merging", "PdfReader, PdfWriter, pages, annotations"),
+    "document-quality": (
+        "pdf output",
+        "Thin pages, link annotations, PDF outlines/bookmarks, HTML-to-PDF pitfalls",
+    ),
     "aiohttp": ("client", "ClientSession, request, streaming"),
     "celery": ("tasks", "Task, apply_async, beat schedule"),
     "redis": ("commands", "Pipeline, pubsub, async client"),
@@ -939,6 +943,18 @@ def _build_search_first(project_root: Path) -> dict[str, Any] | None:
             covered.append({"library": norm, "topic": topic, "reason": reason})
         else:
             unknown.append(norm)
+
+    try:
+        from tapps_mcp.pipeline.document_judges import is_document_consumer
+
+        if is_document_consumer(project_root):
+            topic, reason = _DOCS_COVERED["document-quality"]
+            if not any(entry.get("library") == "document-quality" for entry in covered):
+                covered.append(
+                    {"library": "document-quality", "topic": topic, "reason": reason}
+                )
+    except Exception:
+        _logger.debug("search_first_document_quality_failed", exc_info=True)
 
     covered.sort(key=lambda x: x["library"])
 

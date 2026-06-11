@@ -54,8 +54,31 @@ class TestTaskToolMap:
         assert "tapps_quality_gate" in m["required"]
 
     def test_all_task_types_present(self):
-        expected = {"feature", "bugfix", "refactor", "security", "review", "epic", "release"}
+        expected = {
+            "feature",
+            "bugfix",
+            "refactor",
+            "security",
+            "review",
+            "epic",
+            "release",
+            "document",
+        }
         assert set(TASK_TOOL_MAP.keys()) == expected
+
+    def test_document_task(self):
+        m = TASK_TOOL_MAP["document"]
+        assert "tapps_validate_changed" in m["required"]
+        assert "tapps_validate_config" in m["recommended"]
+
+    def test_document_task_type_resolves_without_fallback(self):
+        from tapps_mcp.tools.checklist import CallTracker, TASK_TYPE_REASONS
+
+        CallTracker.reset()
+        result = CallTracker.evaluate("document", engagement_level="medium")
+        assert result.resolved_policy_task_type == "document"
+        assert result.policy_fallback is False
+        assert result.task_type_hint == TASK_TYPE_REASONS["document"]
 
     def test_epic_task(self):
         m = TASK_TOOL_MAP["epic"]

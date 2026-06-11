@@ -509,6 +509,14 @@ class CodeScorer(ScorerBase):
     def _score_test_coverage_category(self, file_path: Path) -> CategoryScore:
         """Test coverage category: heuristic based on test file existence."""
         w = self._weights
+        if self._is_narrative_path(file_path):
+            return CategoryScore(
+                name="test_coverage",
+                score=10.0,
+                weight=0.0,
+                details={"narrative_path": True, "stem": file_path.stem},
+                suggestions=[],
+            )
         coverage = self._coverage_heuristic(file_path)
         details: dict[str, object] = {"stem": file_path.stem}
         details["is_test_file"] = file_path.name.startswith("test_") or file_path.name.endswith(

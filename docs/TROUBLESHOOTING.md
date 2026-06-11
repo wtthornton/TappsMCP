@@ -47,7 +47,9 @@ extra_recommended:
     - tapps_validate_config
 ```
 
-When you change YAML infra or brand files, call `tapps_validate_config(file_path='...', config_type='yaml')` explicitly. Domain-specific quality (PDF layout, hyperlinks) belongs in project tools (e.g. report-studio verify) via `validate_changed.judges` in `.tapps-mcp.yaml`, not generic YAML lint in tapps-mcp core.
+When you change YAML brand/template manifests, call `tapps_validate_config(file_path='...', config_type='yaml_manifest')` after enabling `manifest_validation` in `.tapps-mcp.yaml`. Domain-specific quality (PDF layout, hyperlinks) belongs in consumer audit CLIs wired through `validate_changed.judges` (pytest/grep/shell) in `.tapps-mcp.yaml`, not generic code gates alone.
+
+Use checklist `task_type=document` (or `.tapps-mcp/checklist-policy.yaml` extras) so agents run `tapps_validate_changed` with judges plus `tapps_validate_config` for manifest YAML.
 
 ### Verifying MCP server health
 

@@ -20,6 +20,10 @@ CONFIG_PATTERNS: dict[str, list[re.Pattern[str]]] = {
         re.compile(r"^docker-compose(?:\..+)?\.ya?ml$", re.IGNORECASE),
         re.compile(r"^compose\.ya?ml$", re.IGNORECASE),
     ],
+    "yaml_manifest": [
+        re.compile(r"^brands/.+\.ya?ml$", re.IGNORECASE),
+        re.compile(r"^templates/.+\.ya?ml$", re.IGNORECASE),
+    ],
     "websocket": [re.compile(r"\.py$|\.ts$|\.js$", re.IGNORECASE)],
     "mqtt": [re.compile(r"\.py$|\.ts$|\.js$", re.IGNORECASE)],
     "influxdb": [re.compile(r"\.py$|\.ts$|\.js$", re.IGNORECASE)],
@@ -50,7 +54,9 @@ def detect_config_type(file_path: str, content: str | None = None) -> str | None
     Returns:
         Config type string (e.g., ``"dockerfile"``) or ``None`` if unknown.
     """
-    name = Path(file_path).name
+    path = Path(file_path)
+    name = path.name
+    path_str = path.as_posix()
 
     # MCP config detection - covers mcp.json, .mcp.json, .cursor/mcp.json, etc.
     if name.lower() in ("mcp.json", ".mcp.json"):
@@ -60,8 +66,9 @@ def detect_config_type(file_path: str, content: str | None = None) -> str | None
     for config_type, patterns in CONFIG_PATTERNS.items():
         if config_type in ("websocket", "mqtt", "influxdb"):
             continue  # These need content signatures
+        search_target = path_str if config_type == "yaml_manifest" else name
         for pattern in patterns:
-            if pattern.search(name):
+            if pattern.search(search_target):
                 return config_type
 
     # Content-based detection for code files
@@ -132,6 +139,30 @@ def validate_config(
         from tapps_mcp.validators.mcp_config import validate_mcp_config
 
         return validate_mcp_config(file_path, content)
+
+    if resolved_type == "yaml_manifest":
+        from tapps_core.config.settings import load_settings
+        from tapps_mcp.validators.yaml_manifest import validate_yaml_manifest
+
+        settings = load_settings()
+        manifest = settings.manifest_validation
+        if not manifest.enabled:
+            return ConfigValidationResult(
+                file_path=file_path,
+                config_type="yaml_manifest",
+                valid=True,
+                findings=[],
+                suggestions=[
+                    "Enable manifest_validation in .tapps-mcp.yaml to enforce manifest schema."
+                ],
+            )
+        return validate_yaml_manifest(
+            file_path,
+            content,
+            path_globs=manifest.path_globs,
+            required_keys=manifest.required_keys,
+            project_root=settings.project_root,
+        )
 
     return ConfigValidationResult(
         file_path=file_path,
