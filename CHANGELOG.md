@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [3.12.21] - 2026-06-11
+
+Patch: metrics default dual, session handoff hardening, pipeline compliance hints, dashboard observability (TAP-3572–3583).
+
 ### Changed
 
 - **Metrics storage default** ([TAP-3572](https://linear.app/tappscodingagents/issue/TAP-3572)) — unset `TAPPS_METRICS_STORAGE` now defaults to `dual`; `dual` mode always writes local JSONL even when brain is healthy. New `tapps-mcp audit-fleet --period 1d` command aggregates usage across bootstrapped projects. Generated MCP configs pin `TAPPS_METRICS_STORAGE=dual` ([TAP-3576](https://linear.app/tappscodingagents/issue/TAP-3576)).
