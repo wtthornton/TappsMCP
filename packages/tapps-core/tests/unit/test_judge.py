@@ -9,6 +9,7 @@ import pytest
 
 from tapps_core.metrics.judge import (
     JudgeDefinition,
+    _pytest_argv_candidates,
     run_judge,
     run_judges,
 )
@@ -79,10 +80,11 @@ class TestPytestJudge:
         mock_proc.returncode = 0
         mock_proc.communicate = AsyncMock(return_value=(b"", b""))
 
-        with patch("asyncio.create_subprocess_exec", return_value=mock_proc):
+        with patch("asyncio.create_subprocess_exec", return_value=mock_proc) as mock_exec:
             jd = JudgeDefinition(type="pytest", target="tests/unit/")
             result = await run_judge(jd, cwd=tmp_path)
         assert result.result == "pass"
+        assert mock_exec.call_args[0][0] == "uv"
 
     @pytest.mark.asyncio
     async def test_failing_tests_returns_fail(self, tmp_path: Path) -> None:
@@ -101,6 +103,65 @@ class TestPytestJudge:
             jd = JudgeDefinition(type="pytest", target="tests/")
             result = await run_judge(jd, cwd=tmp_path)
         assert result.result == "error"
+        assert "tried:" in result.message
+
+    @pytest.mark.asyncio
+    async def test_falls_back_to_python_when_uv_missing(self, tmp_path: Path) -> None:
+        mock_proc = MagicMock()
+        mock_proc.returncode = 0
+        mock_proc.communicate = AsyncMock(return_value=(b"", b""))
+        calls: list[list[str]] = []
+
+        async def _exec(*args: object, **kwargs: object) -> MagicMock:
+            calls.append([str(a) for a in args])
+            if args and args[0] == "uv":
+                raise FileNotFoundError("uv")
+            return mock_proc
+
+        with patch("asyncio.create_subprocess_exec", side_effect=_exec):
+            jd = JudgeDefinition(type="pytest", target="tests/unit/")
+            result = await run_judge(jd, cwd=tmp_path)
+        assert result.result == "pass"
+        assert calls[-1][0] == "python"
+
+    @pytest.mark.asyncio
+    async def test_command_override_skips_auto_resolution(self, tmp_path: Path) -> None:
+        mock_proc = MagicMock()
+        mock_proc.returncode = 0
+        mock_proc.communicate = AsyncMock(return_value=(b"", b""))
+
+        with patch("asyncio.create_subprocess_exec", return_value=mock_proc) as mock_exec:
+            jd = JudgeDefinition(
+                type="pytest",
+                target="tests/test_pdf_audit.py",
+                command="uv run pytest",
+            )
+            result = await run_judge(jd, cwd=tmp_path)
+        assert result.result == "pass"
+        assert mock_exec.call_args[0][:3] == ("uv", "run", "pytest")
+
+
+class TestPytestArgvCandidates:
+    def test_default_order_includes_uv_then_python(self, tmp_path: Path) -> None:
+        jd = JudgeDefinition(type="pytest", target="tests/")
+        argvs, labels = _pytest_argv_candidates(jd, tmp_path)
+        assert labels[0] == "uv run pytest"
+        assert labels[-1] == "python -m pytest"
+        assert argvs[0][:3] == ["uv", "run", "pytest"]
+
+    def test_command_override(self, tmp_path: Path) -> None:
+        jd = JudgeDefinition(type="pytest", target="tests/foo.py", command="uv run pytest")
+        argvs, labels = _pytest_argv_candidates(jd, tmp_path)
+        assert len(argvs) == 1
+        assert argvs[0] == ["uv", "run", "pytest", "tests/foo.py", "--tb=no", "-q"]
+
+    def test_venv_python_inserted_when_present(self, tmp_path: Path) -> None:
+        venv_bin = tmp_path / ".venv" / "bin"
+        venv_bin.mkdir(parents=True)
+        (venv_bin / "python").write_text("")
+        jd = JudgeDefinition(type="pytest", target="tests/")
+        _, labels = _pytest_argv_candidates(jd, tmp_path)
+        assert any("-m pytest" in label for label in labels)
 
 
 class TestShellJudge:

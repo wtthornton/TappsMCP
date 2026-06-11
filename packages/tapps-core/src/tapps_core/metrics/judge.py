@@ -63,6 +63,14 @@ class JudgeDefinition(BaseModel):
         le=3600,
         description="Timeout for shell/command judges (seconds).",
     )
+    command: str = Field(
+        default="",
+        description=(
+            "For pytest: optional command prefix override (e.g. 'uv run pytest'). "
+            "When set, skips auto-resolution. "
+            "For other types: unused."
+        ),
+    )
 
     @field_validator("type", mode="before")
     @classmethod
@@ -201,19 +209,63 @@ async def _run_grep_judge(jd: JudgeDefinition, label: str, cwd: Path) -> JudgeRe
         )
 
 
-async def _run_pytest_judge(jd: JudgeDefinition, label: str, cwd: Path) -> JudgeResult:
-    try:
-        proc = await asyncio.create_subprocess_exec(
-            "python",
-            "-m",
-            "pytest",
-            jd.target,
-            "--tb=no",
-            "-q",
-            stdout=asyncio.subprocess.PIPE,
-            stderr=asyncio.subprocess.PIPE,
-            cwd=str(cwd),
+def _project_venv_python(cwd: Path) -> Path | None:
+    for candidate in (cwd / ".venv" / "bin" / "python", cwd / ".venv" / "Scripts" / "python.exe"):
+        if candidate.is_file():
+            return candidate
+    return None
+
+
+def _pytest_argv_candidates(jd: JudgeDefinition, cwd: Path) -> tuple[list[list[str]], list[str]]:
+    """Return pytest argv lists to try and human-readable strategy labels."""
+    target = jd.target
+    flags = ["--tb=no", "-q"]
+
+    if jd.command.strip():
+        base = shlex.split(jd.command)
+        if target in jd.command:
+            return [base], [jd.command.strip()]
+        return [[*base, target, *flags]], [jd.command.strip()]
+
+    strategies: list[tuple[str, list[str]]] = [
+        ("uv run pytest", ["uv", "run", "pytest", target, *flags]),
+    ]
+    venv_python = _project_venv_python(cwd)
+    if venv_python is not None:
+        strategies.append(
+            (
+                f"{venv_python} -m pytest",
+                [str(venv_python), "-m", "pytest", target, *flags],
+            )
         )
+    strategies.append(("python -m pytest", ["python", "-m", "pytest", target, *flags]))
+    return [argv for _, argv in strategies], [name for name, _ in strategies]
+
+
+async def _run_pytest_judge(jd: JudgeDefinition, label: str, cwd: Path) -> JudgeResult:
+    argvs, strategy_labels = _pytest_argv_candidates(jd, cwd)
+    attempted: list[str] = []
+
+    for argv, strategy in zip(argvs, strategy_labels, strict=True):
+        attempted.append(strategy)
+        try:
+            proc = await asyncio.create_subprocess_exec(
+                *argv,
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE,
+                cwd=str(cwd),
+            )
+        except FileNotFoundError:
+            continue
+        except Exception as exc:
+            return JudgeResult(
+                judge=label,
+                type="pytest",
+                result="error",
+                message=f"Unexpected error running pytest ({strategy}): {exc}",
+                blocking=jd.blocking,
+            )
+
         try:
             _, stderr = await asyncio.wait_for(proc.communicate(), timeout=120)
         except TimeoutError:
@@ -222,7 +274,7 @@ async def _run_pytest_judge(jd: JudgeDefinition, label: str, cwd: Path) -> Judge
                 judge=label,
                 type="pytest",
                 result="error",
-                message=f"pytest timed out after 120s for target: {jd.target}",
+                message=f"pytest timed out after 120s ({strategy}) for target: {jd.target}",
                 blocking=jd.blocking,
             )
 
@@ -233,27 +285,23 @@ async def _run_pytest_judge(jd: JudgeDefinition, label: str, cwd: Path) -> Judge
             type="pytest",
             result="pass" if passed else "fail",
             message=(
-                f"pytest exit {proc.returncode} for {jd.target}"
+                f"pytest ({strategy}) exit {proc.returncode} for {jd.target}"
                 + (f": {err_hint}" if err_hint and not passed else "")
             ),
             blocking=jd.blocking,
         )
-    except FileNotFoundError:
-        return JudgeResult(
-            judge=label,
-            type="pytest",
-            result="error",
-            message="python -m pytest not found. Is pytest installed in this environment?",
-            blocking=jd.blocking,
-        )
-    except Exception as exc:
-        return JudgeResult(
-            judge=label,
-            type="pytest",
-            result="error",
-            message=f"Unexpected error running pytest: {exc}",
-            blocking=jd.blocking,
-        )
+
+    tried = ", ".join(attempted) if attempted else "none"
+    return JudgeResult(
+        judge=label,
+        type="pytest",
+        result="error",
+        message=(
+            f"pytest not found via any strategy (tried: {tried}). "
+            "Install pytest in the project venv or set judge command override."
+        ),
+        blocking=jd.blocking,
+    )
 
 
 async def _run_shell_judge(jd: JudgeDefinition, label: str, cwd: Path) -> JudgeResult:

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import fnmatch
+import shutil
 from pathlib import Path
 from typing import Any
 
@@ -26,6 +27,38 @@ def _find_build_script(project_root: Path) -> Path | None:
     if not candidates:
         candidates = sorted(project_root.glob("**/build*.mjs"))
     return candidates[0] if candidates else None
+
+
+_WHEN_CHANGED_DOC_PATHS = ["reports/**", "src/**", "brands/**", "templates/**"]
+
+
+def _report_studio_cli_prefix(project_root: Path) -> str | None:
+    """Return a shell prefix when report-studio CLI is likely available."""
+    if shutil.which("report-studio"):
+        return "report-studio"
+    pyproject = project_root / "pyproject.toml"
+    if pyproject.is_file():
+        text = pyproject.read_text(encoding="utf-8")
+        if "report-studio" in text or "nlt-report-studio" in text:
+            return "uv run report-studio"
+    if check_report_studio(project_root).get("installed"):
+        return "uv run report-studio"
+    return None
+
+
+def _find_reference_pdf(project_root: Path) -> Path | None:
+    """Return the first discoverable built PDF fixture for audit judges."""
+    patterns = (
+        "**/public/downloads/vol-*.pdf",
+        "**/public/downloads/*.pdf",
+        "**/downloads/vol-*.pdf",
+        "**/out/**/*.pdf",
+    )
+    for pattern in patterns:
+        matches = sorted(project_root.glob(pattern))
+        if matches:
+            return matches[0]
+    return None
 
 
 def _find_pdf_audit_test(project_root: Path) -> Path | None:
@@ -59,10 +92,7 @@ def discover_document_judge_preset(project_root: Path) -> list[dict[str, Any]]:
                 "blocking": True,
                 "when_changed": [
                     str(build_script.relative_to(root)),
-                    "reports/**",
-                    "src/**",
-                    "brands/**",
-                    "templates/**",
+                    *_WHEN_CHANGED_DOC_PATHS,
                 ],
             }
         )
@@ -76,11 +106,26 @@ def discover_document_judge_preset(project_root: Path) -> list[dict[str, Any]]:
                 "target": str(rel.parent if rel.name.startswith("test_") else rel),
                 "description": "PDF audit CLI contract tests",
                 "blocking": True,
-                "when_changed": ["reports/**", "src/**", "brands/**", "templates/**"],
+                "when_changed": list(_WHEN_CHANGED_DOC_PATHS),
             }
         )
         if rel.name == "test_pdf_audit.py":
             judges[-1]["target"] = str(rel)
+
+    cli_prefix = _report_studio_cli_prefix(root)
+    reference_pdf = _find_reference_pdf(root)
+    if cli_prefix is not None and reference_pdf is not None:
+        pdf_rel = reference_pdf.relative_to(root).as_posix()
+        judges.append(
+            {
+                "type": "shell",
+                "target": f"{cli_prefix} audit --profile reference {pdf_rel}",
+                "description": "Rendered PDF passes report-studio reference audit profile",
+                "blocking": True,
+                "when_changed": list(_WHEN_CHANGED_DOC_PATHS),
+                "timeout_s": 120,
+            }
+        )
 
     return judges
 
