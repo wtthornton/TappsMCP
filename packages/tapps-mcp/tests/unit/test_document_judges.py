@@ -38,6 +38,32 @@ class TestJudgePresetDiscovery:
         assert any(j["type"] == "grep" and "--audit" in j["expect"] for j in judges)
         assert all(j.get("blocking") is True for j in judges)
 
+    def test_discovers_shell_audit_when_pdf_and_report_studio(self, tmp_path: Path) -> None:
+        (tmp_path / "reports").mkdir()
+        (tmp_path / "pyproject.toml").write_text(
+            '[project]\ndependencies = ["nlt-report-studio>=0.1.3"]\n',
+            encoding="utf-8",
+        )
+        pdf = tmp_path / "apps" / "docs" / "public" / "downloads" / "vol-06-sample.pdf"
+        pdf.parent.mkdir(parents=True)
+        pdf.write_bytes(b"%PDF-1.4")
+
+        judges = discover_document_judge_preset(tmp_path)
+        shell = [j for j in judges if j["type"] == "shell"]
+        assert len(shell) == 1
+        assert "audit --profile reference" in shell[0]["target"]
+        assert "vol-06-sample.pdf" in shell[0]["target"]
+        assert shell[0]["when_changed"] == ["reports/**", "src/**", "brands/**", "templates/**"]
+
+    def test_skips_shell_audit_without_reference_pdf(self, tmp_path: Path) -> None:
+        (tmp_path / "reports").mkdir()
+        (tmp_path / "pyproject.toml").write_text(
+            '[project]\ndependencies = ["nlt-report-studio>=0.1.3"]\n',
+            encoding="utf-8",
+        )
+        judges = discover_document_judge_preset(tmp_path)
+        assert not any(j["type"] == "shell" for j in judges)
+
 
 class TestMergeDocumentJudges:
     def test_merges_when_empty(self, tmp_path: Path) -> None:
