@@ -387,19 +387,41 @@ class TestCursorHooksPlatformMigration:
         assert result["hooks_migrated"] == 0
         assert result["hooks_action"] == "skipped"
 
-    def test_unsupported_hook_keys_stripped_on_write(self, tmp_path):
-        """Existing hooks.json with unsupported hook key is stripped on write."""
+    def test_clv2_tool_hooks_preserved_on_write(self, tmp_path):
+        """continuous-learning-v2 preToolUse/postToolUse hooks must survive upgrade."""
         cursor_dir = tmp_path / ".cursor"
         cursor_dir.mkdir(parents=True)
         config = {
             "version": 1,
             "hooks": {
                 "beforeMCPExecution": [{"command": ".cursor/hooks/tapps-before-mcp.sh"}],
-                "postCompact": [{"command": "echo x"}],  # not in Cursor schema
+                "afterFileEdit": [{"command": ".cursor/hooks/tapps-after-edit.sh"}],
+                "preToolUse": [{"command": ".cursor/hooks/clv2-observe.sh pre"}],
+                "postToolUse": [{"command": ".cursor/hooks/clv2-observe.sh post"}],
+                "postToolUseFailure": [{"command": ".cursor/hooks/clv2-observe.sh post"}],
+            },
+        }
+        (cursor_dir / "hooks.json").write_text(json.dumps(config, indent=2), encoding="utf-8")
+        result = generate_cursor_hooks(tmp_path, force_windows=False)
+        data = json.loads((cursor_dir / "hooks.json").read_text())
+        for key in ("preToolUse", "postToolUse", "postToolUseFailure"):
+            assert key in data.get("hooks", {}), f"missing {key} after upgrade merge"
+        assert "clv2-observe.sh" in data["hooks"]["preToolUse"][0]["command"]
+        assert "preToolUse" in result.get("third_party_hook_keys", [])
+
+    def test_legacy_hook_keys_preserved_on_write(self, tmp_path):
+        """Unknown/legacy hook keys are kept (forward-compatible with Cursor schema)."""
+        cursor_dir = tmp_path / ".cursor"
+        cursor_dir.mkdir(parents=True)
+        config = {
+            "version": 1,
+            "hooks": {
+                "beforeMCPExecution": [{"command": ".cursor/hooks/tapps-before-mcp.sh"}],
+                "postCompact": [{"command": "echo x"}],
             },
         }
         (cursor_dir / "hooks.json").write_text(json.dumps(config, indent=2), encoding="utf-8")
         generate_cursor_hooks(tmp_path, force_windows=False)
         data = json.loads((cursor_dir / "hooks.json").read_text())
-        assert "postCompact" not in data.get("hooks", {})
+        assert "postCompact" in data.get("hooks", {})
         assert "beforeMCPExecution" in data.get("hooks", {})

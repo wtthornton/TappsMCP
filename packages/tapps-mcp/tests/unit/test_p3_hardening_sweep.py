@@ -109,6 +109,21 @@ class TestTap689RulesBackup:
         assert pq in targets
         assert cq in targets
 
+    def test_collect_targets_includes_cursor_hooks_json(self, tmp_path: Path) -> None:
+        from tapps_mcp.pipeline.upgrade import _collect_upgrade_targets
+
+        hooks_json = tmp_path / ".cursor" / "hooks.json"
+        hooks_json.parent.mkdir(parents=True)
+        hooks_json.write_text('{"version": 1, "hooks": {}}', encoding="utf-8")
+        hooks_dir = tmp_path / ".cursor" / "hooks"
+        hooks_dir.mkdir(parents=True)
+        (hooks_dir / "tapps-before-mcp.sh").write_text("#!/bin/sh\n", encoding="utf-8")
+
+        targets = _collect_upgrade_targets(tmp_path)
+
+        assert hooks_json in targets
+        assert hooks_dir / "tapps-before-mcp.sh" in targets
+
     def test_collect_targets_ok_when_rules_missing(self, tmp_path: Path) -> None:
         from tapps_mcp.pipeline.upgrade import _collect_upgrade_targets
 

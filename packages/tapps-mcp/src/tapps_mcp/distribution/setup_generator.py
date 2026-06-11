@@ -1205,6 +1205,22 @@ def _validate_config_file(config_path: Path, servers_key: str) -> str | None:
 # ---------------------------------------------------------------------------
 
 
+def _host_config_exists(host: str, project_root: Path, scope: str = "project") -> bool:
+    """Return True when the host's MCP config file exists in *project_root*."""
+    return _get_config_path(host, project_root, scope=scope).exists()
+
+
+def _filter_hosts_for_check(hosts: list[str], project_root: Path, scope: str = "project") -> list[str]:
+    """Limit ``init --check`` to hosts already configured in the project.
+
+    Cursor-only consumers should not fail because Claude Code or VS Code is
+    installed globally but not bootstrapped in this repo. When no host config
+    exists yet, fall back to checking every detected host.
+    """
+    configured = [h for h in hosts if _host_config_exists(h, project_root, scope=scope)]
+    return configured if configured else hosts
+
+
 def _configure_multiple_hosts(
     hosts: list[str],
     project_root: Path,
@@ -1222,8 +1238,9 @@ def _configure_multiple_hosts(
 
     Returns ``True`` if ALL hosts succeeded, ``False`` if any failed.
     """
+    hosts_to_run = _filter_hosts_for_check(hosts, project_root, scope=scope) if check else hosts
     all_ok = True
-    for host in hosts:
+    for host in hosts_to_run:
         click.echo("")
         click.echo(click.style(f"--- {host} ---", bold=True))
         if check:

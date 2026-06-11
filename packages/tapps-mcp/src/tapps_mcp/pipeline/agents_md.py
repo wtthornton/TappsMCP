@@ -220,9 +220,11 @@ def merge_agents_md(
     """Smart-merge existing AGENTS.md with the latest template.
 
     Returns ``(merged_content, changes_list)`` where *changes_list*
-    describes what was updated.
+    describes net updates (intermediate Karpathy excise steps are omitted
+    when body content is unchanged aside from the version stamp).
     """
     changes: list[str] = []
+    original_content = existing_content
 
     # TAP-1795: snapshot the existing stamp before any rewriting so we can
     # report whether the merge actually moved it.
@@ -311,6 +313,18 @@ def merge_agents_md(
         and "added_version_marker" not in changes
     ):
         changes.append("updated_version_marker")
+
+    # Report only net file delta: Karpathy excise/re-install and section
+    # rewrites that leave the body identical should not clutter upgrade output.
+    def _body_without_stamp(text: str) -> str:
+        return _VERSION_RE.sub("", text, count=1).strip()
+
+    if _body_without_stamp(original_content) == _body_without_stamp(merged):
+        changes = [
+            c
+            for c in changes
+            if c in ("updated_version_marker", "added_version_marker")
+        ]
 
     return merged, changes
 

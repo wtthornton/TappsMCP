@@ -1464,16 +1464,44 @@ exit 0
 
 PS1_PREFIX = "powershell -NoProfile -ExecutionPolicy Bypass -File "
 
-# Supported Cursor hooks.json event keys (schema: cursor-hooks/schema/hooks.schema.json).
-# Only these keys are valid under "hooks"; invalid keys can cause the file to be ignored.
+# Known Cursor hooks.json event keys (Cursor docs, 2026-03).
+# Used for doctor advisory warnings only — merge logic preserves ALL keys so
+# third-party hooks (e.g. continuous-learning-v2 clv2-observe) are never dropped.
+# Source: https://cursor.com/docs/hooks
 SUPPORTED_CURSOR_HOOK_KEYS: frozenset[str] = frozenset(
     {
+        # Agent session
+        "sessionStart",
+        "sessionEnd",
+        "preToolUse",
+        "postToolUse",
+        "postToolUseFailure",
+        "subagentStart",
+        "subagentStop",
         "beforeShellExecution",
+        "afterShellExecution",
+        "beforeMCPExecution",
+        "afterMCPExecution",
+        "beforeReadFile",
+        "afterFileEdit",
+        "beforeSubmitPrompt",
+        "preCompact",
+        "stop",
+        "afterAgentResponse",
+        "afterAgentThought",
+        # Tab (inline completions)
+        "beforeTabFileRead",
+        "afterTabFileEdit",
+        # App lifecycle
+        "workspaceOpen",
+    }
+)
+
+# Events TappsMCP owns in .cursor/hooks.json (add if missing; migrate platform).
+TAPPS_MANAGED_CURSOR_HOOK_KEYS: frozenset[str] = frozenset(
+    {
         "beforeMCPExecution",
         "afterFileEdit",
-        "beforeReadFile",
-        "beforeSubmitPrompt",
-        "stop",
     }
 )
 

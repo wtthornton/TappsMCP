@@ -152,3 +152,9 @@ After that, `.cursor/hooks/` will contain `tapps-before-mcp.ps1` and `tapps-afte
 **Doctor:** If you run `tapps-mcp doctor` on Windows and your hooks are still configured as `.sh`, the Hooks check will fail with a message telling you to run `tapps-mcp upgrade --host cursor`.
 
 **Workaround (if you cannot run upgrade):** Disable hooks by removing or clearing the `hooks` entries in `.cursor/hooks.json`, or add Bash to PATH (e.g. Git Bash) and change the command to `bash .cursor/hooks/tapps-before-mcp.sh` (and similarly for the other hook).
+
+## Cursor-only projects
+
+**Upgrade preserves third-party hooks:** Since v3.12.20, `tapps-mcp upgrade` merges Tapps-owned entries into `.cursor/hooks.json` without removing other valid keys (e.g. `preToolUse` / `postToolUse` from continuous-learning-v2). Back up `.cursor/hooks.json` before major upgrades anyway; rollback restores it from `.tapps-mcp/backups/<timestamp>/`.
+
+**Init check:** For Cursor-only repos, `tapps-mcp init --check --host auto` validates only hosts that already have MCP config (e.g. `.cursor/mcp.json`). You do not need Claude Code or VS Code configs on the machine. Prefer `tapps-mcp upgrade --host cursor` for Cursor-only scaffolding refresh.

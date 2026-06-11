@@ -692,8 +692,8 @@ class TestCheckHooks:
         assert ".cursor/hooks.json missing" in result.message
         assert "upgrade" in result.detail.lower()
 
-    def test_cursor_hooks_json_unsupported_key_fails(self, tmp_path):
-        """Cursor hooks.json with unsupported hook key fails check (Unix so .sh is valid)."""
+    def test_cursor_hooks_json_unknown_key_warns_not_fails(self, tmp_path):
+        """Non-catalog hook keys are allowed; doctor reports a soft pass with warning."""
         hooks_dir = tmp_path / ".cursor" / "hooks"
         hooks_dir.mkdir(parents=True)
         (hooks_dir / "tapps-before-mcp.sh").write_text("#!/bin/bash\n", encoding="utf-8")
@@ -705,6 +705,7 @@ class TestCheckHooks:
                     "hooks": {
                         "beforeMCPExecution": [{"command": ".cursor/hooks/tapps-before-mcp.sh"}],
                         "postCompact": [{"command": "echo x"}],
+                        "preToolUse": [{"command": ".cursor/hooks/clv2-observe.sh pre"}],
                     },
                 },
                 indent=2,
@@ -713,8 +714,8 @@ class TestCheckHooks:
         )
         with patch("tapps_mcp.distribution.doctor.sys.platform", "linux"):
             result = check_hooks(tmp_path)
-        assert result.ok is False
-        assert "postCompact" in result.message or "unsupported" in result.message.lower()
+        assert result.ok is True
+        assert "postCompact" in result.message or "non-catalog" in result.message
 
     def test_cursor_hooks_windows_sh_fails(self, tmp_path):
         """On Windows, Cursor hooks configured as .sh fail (open in editor instead of running)."""

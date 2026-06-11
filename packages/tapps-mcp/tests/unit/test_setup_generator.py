@@ -876,21 +876,35 @@ class TestConfigureMultipleHosts:
         # VS Code should still succeed
         assert (tmp_path / ".vscode" / "mcp.json").exists()
 
+    def test_check_mode_configured_hosts_only(self, tmp_path):
+        """Check mode validates only hosts with existing config (Cursor-only OK)."""
+        cursor_dir = tmp_path / ".cursor"
+        cursor_dir.mkdir()
+        config = {"mcpServers": {"tapps-mcp": {"command": "tapps-mcp", "args": ["serve"]}}}
+        (cursor_dir / "mcp.json").write_text(json.dumps(config), encoding="utf-8")
+        ok = _configure_multiple_hosts(
+            ["claude-code", "cursor", "vscode"],
+            tmp_path,
+            check=True,
+            rules=False,
+        )
+        assert ok is True
+
     def test_check_mode(self, tmp_path):
-        """Check mode verifies all hosts."""
+        """Check mode validates only configured hosts; missing optional hosts OK."""
         # Set up valid cursor config only
         cursor_dir = tmp_path / ".cursor"
         cursor_dir.mkdir()
         config = {"mcpServers": {"tapps-mcp": {"command": "tapps-mcp", "args": ["serve"]}}}
         (cursor_dir / "mcp.json").write_text(json.dumps(config), encoding="utf-8")
-        # vscode is missing → should return False
+        # vscode is missing but was not bootstrapped — should still pass
         ok = _configure_multiple_hosts(
             ["cursor", "vscode"],
             tmp_path,
             check=True,
             rules=False,
         )
-        assert ok is False
+        assert ok is True
 
     def test_generates_rules_when_enabled(self, tmp_path):
         """Rules are generated alongside config when rules=True."""

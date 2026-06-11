@@ -101,6 +101,9 @@ from tapps_mcp.pipeline.platform_hook_templates import (
     SUPPORTED_CURSOR_HOOK_KEYS as _SUPPORTED_CURSOR_HOOK_KEYS,
 )
 from tapps_mcp.pipeline.platform_hook_templates import (
+    TAPPS_MANAGED_CURSOR_HOOK_KEYS as _TAPPS_MANAGED_CURSOR_HOOK_KEYS,
+)
+from tapps_mcp.pipeline.platform_hook_templates import (
     _memory_auto_recall_script as _memory_auto_recall_script_fn,
 )
 from tapps_mcp.pipeline.platform_hook_templates import (
@@ -571,6 +574,90 @@ def generate_claude_hooks(
     }
 
 
+def _parse_cursor_hooks_file(hooks_file: Path) -> dict[str, Any]:
+    """Load ``.cursor/hooks.json`` or return an empty config dict."""
+    if not hooks_file.exists():
+        return {}
+    raw = hooks_file.read_text(encoding="utf-8")
+    return json.loads(raw) if raw.strip() else {}
+
+
+def _normalize_cursor_hooks_raw(config: dict[str, Any]) -> dict[str, list[dict[str, str]]]:
+    """Return the ``hooks`` object in Cursor's dict format, migrating legacy arrays."""
+    existing_hooks_raw = config.get("hooks", {})
+    if isinstance(existing_hooks_raw, list):
+        migrated: dict[str, list[dict[str, str]]] = {}
+        for entry in existing_hooks_raw:
+            if isinstance(entry, dict) and "event" in entry:
+                event = entry["event"]
+                cmd_obj = {k: v for k, v in entry.items() if k != "event"}
+                migrated.setdefault(event, []).append(cmd_obj)
+        return migrated
+    if isinstance(existing_hooks_raw, dict):
+        return existing_hooks_raw
+    return {}
+
+
+def merge_cursor_hooks_config(
+    existing_hooks: dict[str, list[dict[str, str]]],
+    hooks_config: dict[str, list[dict[str, str]]],
+    *,
+    win: bool,
+) -> tuple[dict[str, list[dict[str, str]]], dict[str, Any]]:
+    """Merge TappsMCP hook entries into existing Cursor hooks.
+
+    Preserves every pre-existing event key (third-party / skill hooks). Only
+    adds missing Tapps-owned events and migrates wrong-platform tapps commands.
+    """
+    merged = dict(existing_hooks)
+    merged.pop("stop", None)
+
+    hooks_added = 0
+    for event, entries in hooks_config.items():
+        if event not in merged:
+            merged[event] = list(entries)
+            hooks_added += 1
+
+    hooks_migrated = 0
+    for event, entries in merged.items():
+        for i, entry in enumerate(entries):
+            cmd = entry.get("command", "")
+            if _is_wrong_platform_command(cmd, win=win) and event in hooks_config:
+                merged[event][i] = hooks_config[event][0]
+                hooks_migrated += 1
+
+    third_party_keys = sorted(k for k in merged if k not in _TAPPS_MANAGED_CURSOR_HOOK_KEYS)
+    unknown_keys = sorted(k for k in merged if k not in _SUPPORTED_CURSOR_HOOK_KEYS)
+    stats: dict[str, Any] = {
+        "hooks_added": hooks_added,
+        "hooks_migrated": hooks_migrated,
+        "third_party_hook_keys": third_party_keys,
+        "unknown_hook_keys": unknown_keys,
+        "preserved_hook_keys": sorted(merged.keys()),
+    }
+    return merged, stats
+
+
+def preview_cursor_hooks_merge(
+    project_root: Path,
+    *,
+    force_windows: bool | None = None,
+) -> dict[str, Any]:
+    """Simulate hooks.json merge without writing (for upgrade dry-run)."""
+    win = force_windows if force_windows is not None else _is_windows()
+    hooks_config = _CURSOR_HOOKS_CONFIG_PS if win else _CURSOR_HOOKS_CONFIG
+    hooks_file = project_root / ".cursor" / "hooks.json"
+    config = _parse_cursor_hooks_file(hooks_file)
+    existing_hooks = _normalize_cursor_hooks_raw(config)
+    before_keys = set(existing_hooks.keys())
+    merged, stats = merge_cursor_hooks_config(existing_hooks, hooks_config, win=win)
+    after_keys = set(merged.keys())
+    removed_keys = sorted(before_keys - after_keys)
+    stats["removed_hook_keys"] = removed_keys
+    stats["would_remove_keys"] = removed_keys
+    return stats
+
+
 def generate_cursor_hooks(
     project_root: Path,
     *,
@@ -609,46 +696,16 @@ def generate_cursor_hooks(
 
     # Merge hooks config into .cursor/hooks.json
     hooks_file = project_root / ".cursor" / "hooks.json"
-    if hooks_file.exists():
-        raw = hooks_file.read_text(encoding="utf-8")
-        config: dict[str, Any] = json.loads(raw) if raw.strip() else {}
-    else:
-        config = {}
+    config = _parse_cursor_hooks_file(hooks_file)
 
-    # Migrate old array format to new object format
-    existing_hooks_raw = config.get("hooks", {})
-    if isinstance(existing_hooks_raw, list):
-        migrated: dict[str, list[dict[str, str]]] = {}
-        for entry in existing_hooks_raw:
-            if isinstance(entry, dict) and "event" in entry:
-                event = entry["event"]
-                cmd_obj = {k: v for k, v in entry.items() if k != "event"}
-                migrated.setdefault(event, []).append(cmd_obj)
-        existing_hooks_raw = migrated
+    existing_hooks = _normalize_cursor_hooks_raw(config)
+    existing_hooks, merge_stats = merge_cursor_hooks_config(
+        existing_hooks, hooks_config, win=win
+    )
+    hooks_added = merge_stats["hooks_added"]
+    hooks_migrated = merge_stats["hooks_migrated"]
 
-    existing_hooks: dict[str, list[dict[str, str]]] = existing_hooks_raw
-
-    # Remove stop hook; use CLI command tapps-mcp validate-changed instead.
-    existing_hooks.pop("stop", None)
-
-    hooks_added = 0
-    for event, entries in hooks_config.items():
-        if event not in existing_hooks:
-            existing_hooks[event] = list(entries)
-            hooks_added += 1
-
-    # Replace wrong-platform tapps commands in existing events
-    hooks_migrated = 0
-    for event, entries in existing_hooks.items():
-        for i, entry in enumerate(entries):
-            cmd = entry.get("command", "")
-            if _is_wrong_platform_command(cmd, win=win) and event in hooks_config:
-                # Replace with the correct-platform entry
-                existing_hooks[event][i] = hooks_config[event][0]
-                hooks_migrated += 1
-
-    # Only write hook keys supported by Cursor schema (invalid keys can break loading)
-    config["hooks"] = {k: v for k, v in existing_hooks.items() if k in _SUPPORTED_CURSOR_HOOK_KEYS}
+    config["hooks"] = existing_hooks
     config["version"] = 1
     hooks_file.parent.mkdir(parents=True, exist_ok=True)
     hooks_file.write_text(json.dumps(config, indent=2) + "\n", encoding="utf-8")
@@ -660,6 +717,10 @@ def generate_cursor_hooks(
         "hooks_action": action,
         "hooks_added": hooks_added,
         "hooks_migrated": hooks_migrated,
+        "third_party_hook_keys": merge_stats["third_party_hook_keys"],
+        "unknown_hook_keys": merge_stats["unknown_hook_keys"],
+        "preserved_hook_keys": merge_stats["preserved_hook_keys"],
+        "removed_hook_keys": [],
     }
 
 

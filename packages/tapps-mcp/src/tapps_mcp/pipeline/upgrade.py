@@ -1032,9 +1032,19 @@ def _upgrade_cursor_dry_run(
     managed_hooks = (
         frozenset(p.name for p in hooks_dir.glob("tapps-*")) if hooks_dir.is_dir() else frozenset()
     )
+    from tapps_mcp.pipeline.platform_hooks import preview_cursor_hooks_merge
+
+    hooks_preview = preview_cursor_hooks_merge(project_root)
+    hooks_note = "hooks.json entries merged — third-party keys preserved"
+    would_remove = hooks_preview.get("would_remove_keys") or []
+    if would_remove:
+        hooks_note = f"hooks.json would-remove-keys: {', '.join(would_remove)}"
     result["components"]["hooks"] = {
         "action": "would-write-managed-scripts",
-        "note": "hooks.json entries merged — existing entries preserved",
+        "note": hooks_note,
+        "preserved_hook_keys": hooks_preview.get("preserved_hook_keys", []),
+        "third_party_hook_keys": hooks_preview.get("third_party_hook_keys", []),
+        "would_remove_keys": would_remove,
         "preserved_files": _enumerate_preserved(hooks_dir, managed_hooks),
     }
 
@@ -1075,6 +1085,8 @@ def _upgrade_cursor_live(
     result["components"]["hooks"] = {
         "scripts_created": hooks_result.get("scripts_created", []),
         "hooks_added": hooks_result.get("hooks_added", 0),
+        "third_party_hook_keys": hooks_result.get("third_party_hook_keys", []),
+        "preserved_hook_keys": hooks_result.get("preserved_hook_keys", []),
     }
     result["components"]["agents"] = generate_subagent_definitions(
         project_root, "cursor", overwrite=True
@@ -1606,6 +1618,7 @@ def _collect_upgrade_targets(project_root: Path) -> list[Path]:
         project_root / ".cursor" / "rules" / "tapps-pipeline.md",
         project_root / ".mcp.json",
         project_root / ".cursor" / "mcp.json",
+        project_root / ".cursor" / "hooks.json",
         project_root / ".vscode" / "mcp.json",
         # Docker-related config files (Epic 46)
         project_root / ".tapps-mcp.yaml",
@@ -1614,6 +1627,11 @@ def _collect_upgrade_targets(project_root: Path) -> list[Path]:
     hooks_dir = project_root / ".claude" / "hooks"
     if hooks_dir.is_dir():
         for f in hooks_dir.iterdir():
+            if f.name.startswith("tapps-"):
+                targets.append(f)
+    cursor_hooks_dir = project_root / ".cursor" / "hooks"
+    if cursor_hooks_dir.is_dir():
+        for f in cursor_hooks_dir.iterdir():
             if f.name.startswith("tapps-"):
                 targets.append(f)
     # Skills

@@ -1678,6 +1678,7 @@ def _check_cursor_hooks_config(
         )
 
     format_errors: list[str] = []
+    hook_warnings: list[str] = []
     try:
         data = json.loads(cursor_hooks_json.read_text(encoding="utf-8"))
         if not isinstance(data.get("version"), (int, float)):
@@ -1688,10 +1689,11 @@ def _check_cursor_hooks_config(
             format_errors.append("'hooks' is not an object")
         else:
             hooks_obj = data.get("hooks", {})
-            invalid = [k for k in hooks_obj if k not in SUPPORTED_CURSOR_HOOK_KEYS]
-            if invalid:
-                format_errors.append(
-                    f"unsupported hook keys (Cursor may ignore file): {', '.join(sorted(invalid))}"
+            unknown = [k for k in hooks_obj if k not in SUPPORTED_CURSOR_HOOK_KEYS]
+            if unknown:
+                hook_warnings.append(
+                    "non-catalog hook keys (preserved by upgrade; verify against "
+                    f"Cursor docs): {', '.join(sorted(unknown))}"
                 )
     except (json.JSONDecodeError, OSError) as exc:
         format_errors.append(f"could not parse: {exc}")
@@ -1703,6 +1705,13 @@ def _check_cursor_hooks_config(
             f"TappsMCP hooks found for: {', '.join(found)}, "
             f"but .cursor/hooks.json has invalid format: {'; '.join(format_errors)}",
             "Run: tapps-mcp upgrade --host cursor or upgrade --force to write only supported hooks",
+        )
+
+    if hook_warnings:
+        return CheckResult(
+            "Hooks",
+            True,
+            f"TappsMCP hooks found for: {', '.join(found)} ({'; '.join(hook_warnings)})",
         )
 
     # On Windows, .sh hook commands open in the editor instead of running
@@ -1730,9 +1739,8 @@ def check_hooks(project_root: Path) -> CheckResult:
     """Check TappsMCP hooks: directory, session-start script, and config validity.
 
     For Claude Code, hook keys are validated in check_claude_settings.
-    For Cursor, requires .cursor/hooks.json when scripts exist and validates
-    that only supported hook event keys are present (unsupported keys can
-    cause the file to be ignored).
+    For Cursor, requires .cursor/hooks.json when scripts exist. Unknown hook
+    event keys outside the catalog are reported as warnings (never stripped).
     """
     claude_hooks = project_root / ".claude" / "hooks"
     cursor_hooks = project_root / ".cursor" / "hooks"

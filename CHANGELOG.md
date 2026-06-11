@@ -14,6 +14,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Pipeline compliance hints** ([TAP-3578](https://linear.app/tappscodingagents/issue/TAP-3578), [TAP-3577](https://linear.app/tappscodingagents/issue/TAP-3577), [TAP-3579](https://linear.app/tappscodingagents/issue/TAP-3579)) — SessionStart hooks and `tapps_session_start` surface prior-session `usage_gaps`. Doctor recommends `linear_enforce_cache_gate: block` when warn-mode violations exceed 20/24h, and `install_git_hooks: true` when high engagement meets <70% 7d gate pass rate. New CLI: `tapps-mcp usage-gaps-hint`.
 - **Dashboard observability** ([TAP-3582](https://linear.app/tappscodingagents/issue/TAP-3582), [TAP-3583](https://linear.app/tappscodingagents/issue/TAP-3583)) — `tapps_dashboard` adds `docs_metrics` (DocsMCP tool breakdown from JSONL/brain) and `session_funnel` (handoff freshness, session_start/checklist ratios). `tapps_stats` includes a `docs_tools` slice when docs calls are present. Funnel gaps surface in `recommendations`.
 
+## [3.12.20] - 2026-06-11
+
+Hotfix: Cursor hooks.json merge preserves third-party hooks; Cursor-only init check.
+
+### Fixed
+
+- **Cursor hooks data loss (ReportLab TAP-3584 follow-up)** — `tapps-mcp upgrade` no longer strips valid `.cursor/hooks.json` keys (`preToolUse`, `postToolUse`, `postToolUseFailure`, etc.). Merge only adds/updates Tapps-owned events; third-party hooks (e.g. continuous-learning-v2 `clv2-observe.sh`) are preserved. Expanded Cursor hook catalog; doctor warns on unknown keys instead of failing.
+- **`init --check --host auto` on Cursor-only projects** — validates only hosts with existing MCP config (`.cursor/mcp.json`, etc.) instead of every IDE installed on the machine.
+- **AGENTS.md upgrade noise** — `changes` list reflects net file delta; stamp-only upgrades no longer report Karpathy/preamble churn.
+
+### Changed
+
+- **Upgrade backup** — `.cursor/hooks.json` and `.cursor/hooks/tapps-*` scripts included in pre-upgrade backup targets.
+- **Upgrade dry-run** — Cursor hooks preview reports `preserved_hook_keys`, `third_party_hook_keys`, and `would_remove_keys` when applicable.
+
 ## [3.12.19] - 2026-06-11
 
 Patch: ReportLab consumer feedback — validate_changed diagnostics, CLI parity, session recovery hints ([TAP-3584](https://linear.app/tappscodingagents/issue/TAP-3584)).
