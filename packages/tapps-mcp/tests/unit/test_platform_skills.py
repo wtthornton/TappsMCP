@@ -394,9 +394,11 @@ class TestFinishTaskSkill:
         content = CLAUDE_SKILLS["tapps-finish-task"]
         assert "mcp__tapps-mcp__tapps_checklist" in content
 
-    def test_allowed_tools_includes_memory(self) -> None:
+    def test_finish_task_uses_cli_memory_save(self) -> None:
         content = CLAUDE_SKILLS["tapps-finish-task"]
-        assert "mcp__tapps-mcp__tapps_memory" in content
+        assert "mcp__tapps-mcp__tapps_memory" not in content
+        assert "tapps-mcp memory save" in content
+        assert "Bash" in _get_frontmatter(content)
 
     def test_body_references_three_required_steps(self) -> None:
         content = CLAUDE_SKILLS["tapps-finish-task"]
@@ -449,8 +451,26 @@ class TestSessionHandoffSkills:
             assert "doctor --quick" in content
             assert ".tapps-mcp.yaml" in content
 
-    def test_cursor_handoff_grants_memory_tool(self) -> None:
-        assert "tapps_memory" in CURSOR_SKILLS["tapps-handoff-session"]
+    def test_handoff_does_not_grant_removed_tapps_memory_mcp(self) -> None:
+        """TAP-1994 removed tapps_memory from MCP catalog; handoff uses CLI mirror."""
+        for skills in (CLAUDE_SKILLS, CURSOR_SKILLS):
+            content = skills["tapps-handoff-session"]
+            assert "mcp__tapps-mcp__tapps_memory" not in content
+            assert "tapps-mcp memory save" in content
+        fm = _get_frontmatter(CURSOR_SKILLS["tapps-handoff-session"])
+        assert "tapps_memory" not in fm
+
+    def test_memory_skill_routes_via_cli_not_mcp(self) -> None:
+        for skills in (CLAUDE_SKILLS, CURSOR_SKILLS):
+            content = skills["tapps-memory"]
+            assert "mcp__tapps-mcp__tapps_memory" not in content
+            assert "tapps-mcp memory" in content
+            assert "tapps_session_notes" in content
+        cursor_fm = _get_frontmatter(CURSOR_SKILLS["tapps-memory"])
+        assert "tapps_memory" not in cursor_fm
+        claude_fm = _get_frontmatter(CLAUDE_SKILLS["tapps-memory"])
+        assert "mcp__tapps-mcp__tapps_memory" not in claude_fm
+        assert "Bash" in claude_fm
 
     def test_cursor_ships_linear_release_update(self) -> None:
         assert "linear-release-update" in CURSOR_SKILLS

@@ -19,14 +19,14 @@ Start work in a fresh context window by assembling structured state — not a us
 
 2. **Load handoff (priority order).**
    - Read `.tapps-mcp/session-handoff.md` if it exists — primary source.
-   - Else best-effort: `uv run tapps-mcp memory get --key session-handoff` (brain offline → skip).
+   - Else best-effort CLI (no `tapps_memory` MCP — removed v3.12.0): `uv run tapps-mcp memory get --key session-handoff` (brain offline or auth missing → skip).
    - Optional supplements (only if present, do not require):
      - `docs/NEXT_SESSION_PROMPT.md` — short user-maintained prompt
      - `docs/TAPPS_HANDOFF.md` — scan for `**Next:**` or the latest stage section
 
 3. **Linear context.**
    - If the user passed `TAP-####` (argument or in handoff **Linear P0**), call `mcp__plugin_linear_linear__get_issue(id=...)`.
-   - For backlog/triage without a known id, invoke the `linear-read` skill instead of raw `list_issues`.
+   - For backlog/triage without a known id, invoke the `linear-read` skill instead of raw `list_issues` (do not call `list_issues` directly — cache gate).
 
 4. **Emit continue block (~15 lines max).** Present:
    - **P0** — next action + Linear link if available

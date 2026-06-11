@@ -7,7 +7,6 @@ description: >-
   off, save session state, or continue next time.
 mcp_tools:
   - tapps_session_end
-  - tapps_memory
 ---
 
 End the session with a durable handoff the next chat loads via `tapps-continue-session`.
@@ -43,17 +42,16 @@ End the session with a durable handoff the next chat loads via `tapps-continue-s
 - ...
 ```
 
-3. **Persist (brain, best-effort).** Priority order (file from step 2 is always canonical):
+3. **Persist (brain mirror, best-effort).** File from step 2 is canonical. `tapps_memory` is not an MCP tool (removed v3.12.0) — CLI only:
 
    | Priority | When | How |
    |----------|------|-----|
-   | 1 (preferred MCP) | `tapps_memory` MCP available | `tapps_memory(action="save", key="session-handoff", tier="context", tags="handoff,cross-session", value="<plain-text bullets>")` |
-   | 2 (CLI HTTP) | MCP unavailable; `TAPPS_MCP_MEMORY_BRAIN_HTTP_URL` + `TAPPS_MCP_MEMORY_BRAIN_AUTH_TOKEN` in shell | `uv run tapps-mcp memory save --key session-handoff --tier context --tags handoff,cross-session --value "<plain-text bullets>"` |
-   | 3 (skip) | Brain offline | Skip silently — the markdown file is enough |
+   | 1 (CLI) | Brain HTTP + shell auth (`TAPPS_MCP_MEMORY_BRAIN_AUTH_TOKEN` or `TAPPS_BRAIN_AUTH_TOKEN`) | `uv run tapps-mcp memory save --key session-handoff --tier context --tags handoff,cross-session --value "<plain-text bullets>"` |
+   | 2 (skip) | Brain offline or auth missing | Skip silently — `.tapps-mcp/session-handoff.md` is enough |
 
 4. **Close lifecycle.** Best-effort session closure:
    - **Preferred:** `tapps_session_end()`
-   - **CLI fallback** (MCP unavailable): `uv run tapps-mcp session-end` (requires same shell auth as step 3 row 2)
+   - **CLI fallback** (MCP unavailable): `uv run tapps-mcp session-end` (requires same shell auth as step 3 row 1)
    Do not fail the handoff if either degrades.
 
-5. **Report.** `Handoff: .tapps-mcp/session-handoff.md. Linear P0: <id|none>. session_end: ok|skipped. Next: tapps-continue-session`
+5. **Report.** `Handoff: .tapps-mcp/session-handoff.md. Linear P0: <id|none>. brain_mirror: ok|skipped. session_end: ok|skipped. Next: tapps-continue-session`

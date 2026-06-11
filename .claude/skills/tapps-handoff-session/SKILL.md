@@ -25,6 +25,7 @@ End the session with a durable handoff the next chat can load via `/tapps-contin
 2. **Persist (file is canonical).** Write or overwrite `.tapps-mcp/session-handoff.md` using this shape:
    - Set **Updated** to the real current UTC time: run `date -u +%Y-%m-%dT%H:%M:%SZ` and paste the output — never use a placeholder like `T00:00:00Z`.
    - Optionally add **Git:** `<short-sha>` when inside a git repo (`git rev-parse --short HEAD`).
+   - Claude Code (Bash-only): `mkdir -p .tapps-mcp && cat > .tapps-mcp/session-handoff.md <<'EOF'` … `EOF`.
 
 ```markdown
 # Session handoff
@@ -51,17 +52,16 @@ End the session with a durable handoff the next chat can load via `/tapps-contin
 - ...
 ```
 
-3. **Persist (brain, best-effort).** Priority order (file from step 2 is always canonical):
+3. **Persist (brain mirror, best-effort).** The markdown file from step 2 is always canonical. `tapps_memory` is not an MCP tool (removed v3.12.0, TAP-1994) — use CLI only:
 
    | Priority | When | How |
    |----------|------|-----|
-   | 1 (preferred MCP) | `tapps_memory` MCP available | `mcp__tapps-mcp__tapps_memory(action="save", key="session-handoff", tier="context", tags="handoff,cross-session", value="<plain-text bullets>")` |
-   | 2 (CLI HTTP) | MCP unavailable; `TAPPS_MCP_MEMORY_BRAIN_HTTP_URL` + `TAPPS_MCP_MEMORY_BRAIN_AUTH_TOKEN` in shell | `uv run tapps-mcp memory save --key session-handoff --tier context --tags handoff,cross-session --value "<plain-text bullets>"` |
-   | 3 (skip) | Brain offline | Skip silently — the markdown file is enough |
+   | 1 (CLI) | Brain HTTP reachable; shell has `TAPPS_MCP_MEMORY_BRAIN_HTTP_URL` + `TAPPS_MCP_MEMORY_BRAIN_AUTH_TOKEN` (or `TAPPS_BRAIN_AUTH_TOKEN` via direnv) | `uv run tapps-mcp memory save --key session-handoff --tier context --tags handoff,cross-session --value "<plain-text bullets>"` |
+   | 2 (skip) | Brain offline or auth missing | Skip silently — `.tapps-mcp/session-handoff.md` is enough |
 
 4. **Close lifecycle.** Best-effort session closure:
    - **Preferred:** `mcp__tapps-mcp__tapps_session_end()`
-   - **CLI fallback** (MCP unavailable): `uv run tapps-mcp session-end` (requires same shell auth as step 3 row 2)
+   - **CLI fallback** (MCP unavailable): `uv run tapps-mcp session-end` (requires same shell auth as step 3 row 1)
    Do not fail the handoff if either degrades.
 
-5. **Report.** One line: `Handoff written: .tapps-mcp/session-handoff.md. Linear P0: <id|none>. session_end: ok|skipped. Next session: invoke /tapps-continue-session`
+5. **Report.** One line: `Handoff written: .tapps-mcp/session-handoff.md. Linear P0: <id|none>. brain_mirror: ok|skipped. session_end: ok|skipped. Next session: invoke /tapps-continue-session`

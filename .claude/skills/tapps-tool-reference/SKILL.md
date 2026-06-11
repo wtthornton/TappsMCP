@@ -35,10 +35,12 @@ provide the full tool reference from this skill.
 | **tapps_lookup_docs** | Before writing code using an external library |
 
 ## Project & memory
-| Tool | When to use it |
+| Tool / path | When to use it |
 |------|----------------|
-| **tapps_memory** | Session start: search past decisions. Session end: save learnings |
-| **tapps_session_notes** | Key decisions during session - promote to memory for persistence |
+| **`tapps-mcp memory` CLI** | Save/search/get architectural or pattern decisions (`memory save`, `search`, `get`) |
+| **tapps_session_notes** | Session-local notes during the chat |
+| **tapps-handoff-session / tapps-continue-session** | Cross-chat transfer via `.tapps-mcp/session-handoff.md` |
+| **tapps_session_start** | `brain_bridge_health` before memory writes; hooks auto-recall |
 
 ## Validation & analysis
 | Tool | When to use it |

@@ -1491,12 +1491,17 @@ class TestCheckLinearIssueSkillCurrent:
 class TestCheckFinishTaskSkill:
     """check_finish_task_skill covers the composite tapps-finish-task skill."""
 
+    _BODY = (
+        "---\nname: tapps-finish-task\n---\n"
+        "tapps_validate_changed\ntapps_checklist\ntapps-mcp memory save\n" * 5
+    )
+
     def test_present_passes(self, tmp_path):
         from tapps_mcp.distribution.doctor import check_finish_task_skill
 
         skill_dir = tmp_path / ".claude" / "skills" / "tapps-finish-task"
         skill_dir.mkdir(parents=True)
-        (skill_dir / "SKILL.md").write_text("---\nname: tapps-finish-task\n---\n")
+        (skill_dir / "SKILL.md").write_text(self._BODY, encoding="utf-8")
         result = check_finish_task_skill(tmp_path)
         assert result.ok is True
 
@@ -1505,9 +1510,24 @@ class TestCheckFinishTaskSkill:
 
         skill_dir = tmp_path / ".cursor" / "skills" / "tapps-finish-task"
         skill_dir.mkdir(parents=True)
-        (skill_dir / "SKILL.md").write_text("---\nname: tapps-finish-task\n---\n")
+        (skill_dir / "SKILL.md").write_text(self._BODY, encoding="utf-8")
         result = check_finish_task_skill(tmp_path)
         assert result.ok is True
+
+    def test_stale_finish_task_with_tapps_memory_mcp_fails(self, tmp_path):
+        from tapps_mcp.distribution.doctor import check_finish_task_skill
+
+        skill_dir = tmp_path / ".cursor" / "skills" / "tapps-finish-task"
+        skill_dir.mkdir(parents=True)
+        (skill_dir / "SKILL.md").write_text(
+            "---\nname: tapps-finish-task\n---\n"
+            "tapps_validate_changed\ntapps_checklist\n"
+            "mcp__tapps-mcp__tapps_memory(action=save)\n" * 3,
+            encoding="utf-8",
+        )
+        result = check_finish_task_skill(tmp_path)
+        assert result.ok is False
+        assert "stale" in result.message.lower()
 
     def test_absent_fails_with_hint(self, tmp_path):
         from tapps_mcp.distribution.doctor import check_finish_task_skill
@@ -1518,6 +1538,38 @@ class TestCheckFinishTaskSkill:
         assert "upgrade" in result.detail
 
 
+class TestCheckTappsMemorySkill:
+    """check_tapps_memory_skill rejects stale tapps_memory MCP routing."""
+
+    _BODY = (
+        "---\nname: tapps-memory\n---\n"
+        "tapps-mcp memory save\ntapps_session_notes\n" * 5
+    )
+
+    def test_present_passes(self, tmp_path):
+        from tapps_mcp.distribution.doctor import check_tapps_memory_skill
+
+        skill_dir = tmp_path / ".cursor" / "skills" / "tapps-memory"
+        skill_dir.mkdir(parents=True)
+        (skill_dir / "SKILL.md").write_text(self._BODY, encoding="utf-8")
+        result = check_tapps_memory_skill(tmp_path)
+        assert result.ok is True
+
+    def test_stale_memory_skill_fails(self, tmp_path):
+        from tapps_mcp.distribution.doctor import check_tapps_memory_skill
+
+        skill_dir = tmp_path / ".cursor" / "skills" / "tapps-memory"
+        skill_dir.mkdir(parents=True)
+        (skill_dir / "SKILL.md").write_text(
+            "---\nname: tapps-memory\n---\n"
+            "mcp__tapps-mcp__tapps_memory(action=save)\n" * 5,
+            encoding="utf-8",
+        )
+        result = check_tapps_memory_skill(tmp_path)
+        assert result.ok is False
+        assert "stale" in result.message.lower()
+
+
 class TestCheckSessionHandoffSkills:
     """check_session_handoff_skills covers cross-chat transfer skills."""
 
@@ -1526,7 +1578,7 @@ class TestCheckSessionHandoffSkills:
         skill_dir.mkdir(parents=True, exist_ok=True)
         body = f"---\nname: {name}\n---\n"
         if name == "tapps-handoff-session":
-            body += "\nsession-handoff.md\ntapps_session_end\n" * 5
+            body += "\nsession-handoff.md\ntapps_session_end\ntapps-mcp memory save\n" * 5
         elif name == "tapps-continue-session":
             body += "\nsession-handoff.md\ntapps_session_start\n" * 5
         (skill_dir / "SKILL.md").write_text(body, encoding="utf-8")
@@ -1561,6 +1613,25 @@ class TestCheckSessionHandoffSkills:
         result = check_session_handoff_skills(tmp_path)
         assert result.ok is False
         assert "stale" in result.message.lower() or "stub" in result.message.lower()
+
+    def test_stale_handoff_with_tapps_memory_mcp_fails(self, tmp_path):
+        from tapps_mcp.distribution.doctor import check_session_handoff_skills
+
+        base = tmp_path / ".cursor" / "skills"
+        for name in ("tapps-handoff-session", "tapps-continue-session"):
+            skill_dir = base / name
+            skill_dir.mkdir(parents=True)
+            body = f"---\nname: {name}\n---\n"
+            body += "session-handoff.md\n"
+            if name == "tapps-handoff-session":
+                body += "tapps_session_end\n"
+                body += "mcp__tapps-mcp__tapps_memory(action=save)\n" * 3
+            else:
+                body += "tapps_session_start\n" * 5
+            (skill_dir / "SKILL.md").write_text(body, encoding="utf-8")
+        result = check_session_handoff_skills(tmp_path)
+        assert result.ok is False
+        assert "stale" in result.message.lower()
 
     def test_cursor_only_ignores_empty_claude_dir(self, tmp_path):
         from tapps_mcp.distribution.doctor import check_session_handoff_skills

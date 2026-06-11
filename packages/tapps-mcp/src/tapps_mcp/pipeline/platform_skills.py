@@ -88,7 +88,7 @@ name: tapps-finish-task
 user-invocable: true
 model: claude-haiku-4-5-20251001
 description: Run the end-of-task TAPPS pipeline in one shot — validate_changed, then checklist, then an optional memory save for anything architectural or patterned learned this session. The recommended final step before declaring work complete. Use when you have finished implementing a task and want to validate, run the checklist, and save learnings in one shot.
-allowed-tools: mcp__tapps-mcp__tapps_validate_changed mcp__tapps-mcp__tapps_checklist mcp__tapps-mcp__tapps_memory
+allowed-tools: mcp__tapps-mcp__tapps_validate_changed mcp__tapps-mcp__tapps_checklist Bash
 argument-hint: "[task_type: feature|bugfix|refactor|security|review]"
 ---
 
@@ -98,7 +98,7 @@ Close out the current task end-to-end. Run each step; do NOT skip one that faile
 
 2. **Verify the checklist.** Call `mcp__tapps-mcp__tapps_checklist(task_type=<feature|bugfix|refactor|security|review>)`. If the response has `complete: false`, the `missing_steps` list names required tools you skipped — address each (or explain why it does not apply) and re-run the checklist. Only proceed when `complete: true`.
 
-3. **Save learnings (conditional).** If this session produced a non-obvious architectural or pattern-level decision — a new convention, a subtle trade-off, a gotcha someone else would re-discover — call `mcp__tapps-mcp__tapps_memory(action="save", tier=<"architectural"|"pattern">, ...)` with a concise body. Skip this step for routine fixes, refactors where the code itself documents the decision, or trivial bugfixes.
+3. **Save learnings (conditional).** If this session produced a non-obvious architectural or pattern-level decision — a new convention, a subtle trade-off, a gotcha someone else would re-discover — run `uv run tapps-mcp memory save --key <slug> --tier <architectural|pattern> --value "<concise decision>"` (CLI via BrainBridge; `tapps_memory` MCP removed v3.12.0). Skip for routine fixes, refactors where the code documents the decision, or trivial bugfixes. Brain offline → skip silently.
 
 4. **Report.** Emit a one-line summary: `Files validated: N pass. Checklist: <task_type> complete. Memory saved: yes|no.` If any step failed or was skipped, say so explicitly.
 
@@ -132,6 +132,7 @@ End the session with a durable handoff the next chat can load via `/tapps-contin
 2. **Persist (file is canonical).** Write or overwrite `.tapps-mcp/session-handoff.md` using this shape:
    - Set **Updated** to the real current UTC time: run `date -u +%Y-%m-%dT%H:%M:%SZ` and paste the output — never use a placeholder like `T00:00:00Z`.
    - Optionally add **Git:** `<short-sha>` when inside a git repo (`git rev-parse --short HEAD`).
+   - Claude Code (Bash-only): `mkdir -p .tapps-mcp && cat > .tapps-mcp/session-handoff.md <<'EOF'` … `EOF`.
 
 ```markdown
 # Session handoff
@@ -158,20 +159,19 @@ End the session with a durable handoff the next chat can load via `/tapps-contin
 - ...
 ```
 
-3. **Persist (brain, best-effort).** Priority order (file from step 2 is always canonical):
+3. **Persist (brain mirror, best-effort).** The markdown file from step 2 is always canonical. `tapps_memory` is not an MCP tool (removed v3.12.0, TAP-1994) — use CLI only:
 
    | Priority | When | How |
    |----------|------|-----|
-   | 1 (preferred MCP) | `tapps_memory` MCP available | `mcp__tapps-mcp__tapps_memory(action="save", key="session-handoff", tier="context", tags="handoff,cross-session", value="<plain-text bullets>")` |
-   | 2 (CLI HTTP) | MCP unavailable; `TAPPS_MCP_MEMORY_BRAIN_HTTP_URL` + `TAPPS_MCP_MEMORY_BRAIN_AUTH_TOKEN` in shell | `uv run tapps-mcp memory save --key session-handoff --tier context --tags handoff,cross-session --value "<plain-text bullets>"` |
-   | 3 (skip) | Brain offline | Skip silently — the markdown file is enough |
+   | 1 (CLI) | Brain HTTP reachable; shell has `TAPPS_MCP_MEMORY_BRAIN_HTTP_URL` + `TAPPS_MCP_MEMORY_BRAIN_AUTH_TOKEN` (or `TAPPS_BRAIN_AUTH_TOKEN` via direnv) | `uv run tapps-mcp memory save --key session-handoff --tier context --tags handoff,cross-session --value "<plain-text bullets>"` |
+   | 2 (skip) | Brain offline or auth missing | Skip silently — `.tapps-mcp/session-handoff.md` is enough |
 
 4. **Close lifecycle.** Best-effort session closure:
    - **Preferred:** `mcp__tapps-mcp__tapps_session_end()`
-   - **CLI fallback** (MCP unavailable): `uv run tapps-mcp session-end` (requires same shell auth as step 3 row 2)
+   - **CLI fallback** (MCP unavailable): `uv run tapps-mcp session-end` (requires same shell auth as step 3 row 1)
    Do not fail the handoff if either degrades.
 
-5. **Report.** One line: `Handoff written: .tapps-mcp/session-handoff.md. Linear P0: <id|none>. session_end: ok|skipped. Next session: invoke /tapps-continue-session`
+5. **Report.** One line: `Handoff written: .tapps-mcp/session-handoff.md. Linear P0: <id|none>. brain_mirror: ok|skipped. session_end: ok|skipped. Next session: invoke /tapps-continue-session`
 """,
     "tapps-continue-session": """\
 ---
@@ -195,14 +195,14 @@ Start work in a fresh context window by assembling structured state — not a us
 
 2. **Load handoff (priority order).**
    - Read `.tapps-mcp/session-handoff.md` if it exists — primary source.
-   - Else best-effort: `uv run tapps-mcp memory get --key session-handoff` (brain offline → skip).
+   - Else best-effort CLI (no `tapps_memory` MCP — removed v3.12.0): `uv run tapps-mcp memory get --key session-handoff` (brain offline or auth missing → skip).
    - Optional supplements (only if present, do not require):
      - `docs/NEXT_SESSION_PROMPT.md` — short user-maintained prompt
      - `docs/TAPPS_HANDOFF.md` — scan for `**Next:**` or the latest stage section
 
 3. **Linear context.**
    - If the user passed `TAP-####` (argument or in handoff **Linear P0**), call `mcp__plugin_linear_linear__get_issue(id=...)`.
-   - For backlog/triage without a known id, invoke the `linear-read` skill instead of raw `list_issues`.
+   - For backlog/triage without a known id, invoke the `linear-read` skill instead of raw `list_issues` (do not call `list_issues` directly — cache gate).
 
 4. **Emit continue block (~15 lines max).** Present:
    - **P0** — next action + Linear link if available
@@ -317,23 +317,39 @@ name: tapps-memory
 user-invocable: true
 model: claude-sonnet-4-6
 description: >-
-  Manage shared project memory for cross-session knowledge persistence.
-  42 actions: save, search, federation, profiles, Hive, knowledge graph, batch ops, feedback, native session memory, and more.
-  Use when saving cross-session decisions, searching prior patterns, or managing the project knowledge store.
-allowed-tools: mcp__tapps-mcp__tapps_memory mcp__tapps-mcp__tapps_session_notes
-argument-hint: "[action] [key]"
+  Manage shared project memory via tapps-mcp CLI and session notes.
+  Use when saving cross-session decisions, searching prior patterns, or
+  checking brain bridge health. For chat handoffs use tapps-handoff-session.
+allowed-tools: mcp__tapps-mcp__tapps_session_start mcp__tapps-mcp__tapps_session_notes Bash
+argument-hint: "[save|search|get] [key]"
 ---
 
-Manage shared project memory using TappsMCP. **All calls route through `mcp__tapps-mcp__tapps_memory`** — never wire `tapps-brain` directly into `.mcp.json`. The bridge enforces profile filtering, tier rules, feedback-flywheel auto-emission, content-safety gating, and degraded-payload behaviour.
+`tapps_memory` is **not** an MCP tool (removed v3.12.0, TAP-1994). Consumer repos stay **bridge-only** — never add `tapps-brain` to `.mcp.json`.
+
+## Routing guide
+
+| Need | Path |
+|------|------|
+| Cross-chat handoff | `/tapps-handoff-session` then `/tapps-continue-session` (`.tapps-mcp/session-handoff.md` is canonical) |
+| Session-local notes | `mcp__tapps-mcp__tapps_session_notes(action="save", ...)` |
+| Save / recall / search brain | `uv run tapps-mcp memory <subcommand>` (CLI via BrainBridge) |
+| Brain health before writes | `mcp__tapps-mcp__tapps_session_start()` → `data.brain_bridge_health` |
+| Auto-recall at session start | Hooks run `tapps-mcp memory recall` — usually no manual step |
+
+## Shell auth (CLI memory)
+
+CLI reads brain auth from shell env (see `docs/operations/CONSUMER-REPO-BRAIN-WIRING.md`):
+- `TAPPS_MCP_MEMORY_BRAIN_AUTH_TOKEN` or `TAPPS_BRAIN_AUTH_TOKEN`
+- `TAPPS_MCP_MEMORY_BRAIN_HTTP_URL` or `.tapps-mcp.yaml` → `memory.brain_http_url`
 
 ## Decide: should I write to memory?
 
 ```
-Did the user teach a non-obvious rule?              → YES (feedback)
+Did the user teach a non-obvious rule?              → YES (save)
 Was a decision made WITH RATIONALE that isn't       → YES (architectural / pattern)
   obvious from the code or the PR body?
 Did a debug session reveal a subtle invariant?      → YES (pattern, tag: critical)
-Is this a TODO / next-step / "remember to do X"?    → NO (use TodoWrite)
+Is this a TODO / next-step / "remember to do X"?    → NO (use handoff skill or TodoWrite)
 Is this re-derivable by reading the repo?           → NO
 Does this duplicate a CHANGELOG / CLAUDE.md entry?  → NO
 ```
@@ -342,7 +358,7 @@ Does this duplicate a CHANGELOG / CLAUDE.md entry?  → NO
 
 - Code patterns / file paths / module layout — derivable by reading the repo
 - Git history, recent diffs, who-changed-what — `git log` / `git blame` are authoritative
-- Ephemeral task state, debug fix recipes — these belong in `TodoWrite` or the commit message
+- Ephemeral task state, debug fix recipes — use `tapps_session_notes` or the commit message
 - Anything with secrets, tokens, or PII
 
 ## Pick a tier (when saving)
@@ -354,36 +370,26 @@ Does this duplicate a CHANGELOG / CLAUDE.md entry?  → NO
 | `procedural` | 30d | Workflows, build/deploy commands, runbooks |
 | `context` | 14d | Session-scope facts; use sparingly |
 
-Tag important entries with `critical` or `security` for ranking boost.
+Tag important entries with `critical` or `security` via `--tags`.
 
-## Action surface (42 actions)
+## CLI commands (daily drivers)
 
-**Core CRUD:** save, save_bulk, get, list, delete
-**Search:** search (ranked BM25 with composite scoring)
-**Intelligence:** reinforce (reset decay), gc (archive stale), contradictions (detect stale claims), reseed
-**Consolidation:** consolidate (merge related entries with provenance), unconsolidate (undo)
-**Import/export:** import (JSON), export (JSON or Markdown)
-**Federation:** federate_register, federate_publish, federate_subscribe, federate_sync, federate_search, federate_status
-**Maintenance:** index_session (index session notes), validate (check store integrity), maintain (GC + consolidation + contradiction detection)
-**Security:** safety_check, verify_integrity | **Profiles:** profile_info, profile_list, profile_switch | **Diagnostics:** health
-**Hive / Agent Teams:** hive_status, hive_search, hive_propagate, agent_register
-**Knowledge graph (TAP-1630):** related, relations, neighbors, explain_connection
-**Batch ops (TAP-1631):** recall_many, reinforce_many
-**Feedback flywheel (TAP-1632):** rate (+ auto-emitted feedback_gap on search misses)
-**Native session memory (TAP-1633):** index_session, search_sessions, session_end
+```bash
+uv run tapps-mcp memory save --key my-decision --tier architectural --value "..." --tags critical
+uv run tapps-mcp memory get --key my-decision
+uv run tapps-mcp memory search --query "auth pattern" --json
+uv run tapps-mcp memory list --json
+uv run tapps-mcp memory export --file memories.json
+```
 
-Steps:
-1. Determine the action from the list above
-2. For saves, classify tier and scope (project/branch/session/shared) using the tables above
-3. Call `mcp__tapps-mcp__tapps_memory` with the action and parameters
-4. Display results with confidence scores, tiers, and composite relevance scores
-5. For consolidation, use `dry_run=True` first to preview merged entries
-6. For federation, register the project first, then publish shared-scope entries
+## Advanced surface
+
+Federation, hive, knowledge graph, and batch ops: see `docs/MEMORY_REFERENCE.md`. Ralph coordinator agents may call tapps-brain MCP tools directly; **consumer repo agents use CLI + docs**.
 
 ## See also
 
-- [TappsMCP `docs/MEMORY_REFERENCE.md`](https://github.com/wtthornton/TappsMCP/blob/master/docs/MEMORY_REFERENCE.md) — full action reference and brain-health diagnostics
-- [tapps-brain `llm-brain-guide.md`](https://github.com/wtthornton/tapps-brain/blob/main/docs/guides/llm-brain-guide.md) — canonical memory model (tiers, when to remember/recall/share, error envelopes)
+- `docs/MEMORY_REFERENCE.md` — full legacy action map and brain-health diagnostics
+- `docs/operations/CONSUMER-REPO-BRAIN-WIRING.md` — bridge-only checklist and shell auth
 """,
     "tapps-tool-reference": """\
 ---
@@ -423,10 +429,12 @@ provide the full tool reference from this skill.
 | **tapps_lookup_docs** | Before writing code using an external library |
 
 ## Project & memory
-| Tool | When to use it |
+| Tool / path | When to use it |
 |------|----------------|
-| **tapps_memory** | Session start: search past decisions. Session end: save learnings |
-| **tapps_session_notes** | Key decisions during session - promote to memory for persistence |
+| **`tapps-mcp memory` CLI** | Save/search/get architectural or pattern decisions (`memory save`, `search`, `get`) |
+| **tapps_session_notes** | Session-local notes during the chat |
+| **tapps-handoff-session / tapps-continue-session** | Cross-chat transfer via `.tapps-mcp/session-handoff.md` |
+| **tapps_session_start** | `brain_bridge_health` before memory writes; hooks auto-recall |
 
 ## Validation & analysis
 | Tool | When to use it |
@@ -1168,14 +1176,13 @@ description: >-
 mcp_tools:
   - tapps_validate_changed
   - tapps_checklist
-  - tapps_memory
 ---
 
 Close out the current task end-to-end. Run each step; do NOT skip one that failed — surface the failure and stop.
 
 1. **Validate changed files.** Identify files edited this session (git status, edit history). Call `tapps_validate_changed` with explicit `file_paths` (comma-separated). Never call without `file_paths`. If any file fails, list it with the top blocking issue and stop.
 2. **Verify the checklist.** Call `tapps_checklist(task_type=<feature|bugfix|refactor|security|review>)`. If `complete: false`, address each entry in `missing_steps` and re-run.
-3. **Save learnings (conditional).** If the session produced a non-obvious architectural or pattern-level decision, call `tapps_memory(action="save", tier=<"architectural"|"pattern">)`. Skip for routine fixes.
+3. **Save learnings (conditional).** If the session produced a non-obvious architectural or pattern-level decision, run `uv run tapps-mcp memory save --key <slug> --tier <architectural|pattern> --value "<decision>"` (no `tapps_memory` MCP). Skip for routine fixes. Brain offline → skip silently.
 4. **Report.** Emit a one-line summary: `Files validated: N pass. Checklist: <task_type> complete. Memory saved: yes|no.`
 
 5. **Transfer (optional).** If the user is ending the chat, invoke the `tapps-handoff-session` skill so the next session can run `tapps-continue-session`.
@@ -1190,7 +1197,6 @@ description: >-
   off, save session state, or continue next time.
 mcp_tools:
   - tapps_session_end
-  - tapps_memory
 ---
 
 End the session with a durable handoff the next chat loads via `tapps-continue-session`.
@@ -1226,20 +1232,19 @@ End the session with a durable handoff the next chat loads via `tapps-continue-s
 - ...
 ```
 
-3. **Persist (brain, best-effort).** Priority order (file from step 2 is always canonical):
+3. **Persist (brain mirror, best-effort).** File from step 2 is canonical. `tapps_memory` is not an MCP tool (removed v3.12.0) — CLI only:
 
    | Priority | When | How |
    |----------|------|-----|
-   | 1 (preferred MCP) | `tapps_memory` MCP available | `tapps_memory(action="save", key="session-handoff", tier="context", tags="handoff,cross-session", value="<plain-text bullets>")` |
-   | 2 (CLI HTTP) | MCP unavailable; `TAPPS_MCP_MEMORY_BRAIN_HTTP_URL` + `TAPPS_MCP_MEMORY_BRAIN_AUTH_TOKEN` in shell | `uv run tapps-mcp memory save --key session-handoff --tier context --tags handoff,cross-session --value "<plain-text bullets>"` |
-   | 3 (skip) | Brain offline | Skip silently — the markdown file is enough |
+   | 1 (CLI) | Brain HTTP + shell auth (`TAPPS_MCP_MEMORY_BRAIN_AUTH_TOKEN` or `TAPPS_BRAIN_AUTH_TOKEN`) | `uv run tapps-mcp memory save --key session-handoff --tier context --tags handoff,cross-session --value "<plain-text bullets>"` |
+   | 2 (skip) | Brain offline or auth missing | Skip silently — `.tapps-mcp/session-handoff.md` is enough |
 
 4. **Close lifecycle.** Best-effort session closure:
    - **Preferred:** `tapps_session_end()`
-   - **CLI fallback** (MCP unavailable): `uv run tapps-mcp session-end` (requires same shell auth as step 3 row 2)
+   - **CLI fallback** (MCP unavailable): `uv run tapps-mcp session-end` (requires same shell auth as step 3 row 1)
    Do not fail the handoff if either degrades.
 
-5. **Report.** `Handoff: .tapps-mcp/session-handoff.md. Linear P0: <id|none>. session_end: ok|skipped. Next: tapps-continue-session`
+5. **Report.** `Handoff: .tapps-mcp/session-handoff.md. Linear P0: <id|none>. brain_mirror: ok|skipped. session_end: ok|skipped. Next: tapps-continue-session`
 """,
     "tapps-continue-session": """\
 ---
@@ -1260,9 +1265,9 @@ Start work in a fresh context by assembling structured state.
    - **Preferred:** Call `tapps_session_start()`. Note `compaction_rehydration` if present.
    - **CLI fallback** (MCP unavailable): Run `uv run tapps-mcp doctor --quick` and read `.tapps-mcp.yaml` for project context. Proceed without blocking.
 
-2. **Load handoff (priority):** Read `.tapps-mcp/session-handoff.md`; else `uv run tapps-mcp memory get --key session-handoff`. Optional: `docs/NEXT_SESSION_PROMPT.md`, `docs/TAPPS_HANDOFF.md` (**Next:** section).
+2. **Load handoff (priority):** Read `.tapps-mcp/session-handoff.md`; else CLI `uv run tapps-mcp memory get --key session-handoff` (no `tapps_memory` MCP). Optional: `docs/NEXT_SESSION_PROMPT.md`, `docs/TAPPS_HANDOFF.md` (**Next:** section).
 
-3. **Linear:** `get_issue(id=...)` when user or handoff names `TAP-####`; else use `linear-read` for lists.
+3. **Linear:** `get_issue(id=...)` when user or handoff names `TAP-####`; else use `linear-read` for lists (not raw `list_issues`).
 
 4. **Emit ~15-line continue block:** P0, Done/Open/Blockers (compressed), Verify first, Success criterion. Warn if handoff **Updated** >7 days old.
 
@@ -1357,72 +1362,36 @@ Run a comprehensive security audit using TappsMCP:
 ---
 name: tapps-memory
 description: >-
-  Manage shared project memory for cross-session knowledge persistence.
-  42 actions: save, search, federation, profiles, Hive, knowledge graph, batch ops, feedback, native session memory, and more.
-  Use when saving cross-session decisions, searching prior patterns, or managing the project knowledge store.
+  Manage shared project memory via tapps-mcp CLI and session notes.
+  Use when saving cross-session decisions, searching prior patterns, or
+  checking brain bridge health. For chat handoffs use tapps-handoff-session.
 mcp_tools:
-  - tapps_memory
+  - tapps_session_start
   - tapps_session_notes
 ---
 
-Manage shared project memory using TappsMCP. **All calls route through `tapps_memory`** — never wire `tapps-brain` directly into `.mcp.json`. The bridge enforces profile filtering, tier rules, feedback-flywheel auto-emission, content-safety gating, and degraded-payload behaviour.
+`tapps_memory` is **not** an MCP tool (removed v3.12.0, TAP-1994). Consumer repos stay **bridge-only** — never add `tapps-brain` to `.mcp.json`.
 
-## Decide: should I write to memory?
+## Routing guide
 
-```
-Did the user teach a non-obvious rule?              → YES (feedback)
-Was a decision made WITH RATIONALE that isn't       → YES (architectural / pattern)
-  obvious from the code or the PR body?
-Did a debug session reveal a subtle invariant?      → YES (pattern, tag: critical)
-Is this a TODO / next-step / "remember to do X"?    → NO (use TodoWrite)
-Is this re-derivable by reading the repo?           → NO
-Does this duplicate a CHANGELOG / CLAUDE.md entry?  → NO
-```
+| Need | Path |
+|------|------|
+| Cross-chat handoff | `tapps-handoff-session` then `tapps-continue-session` |
+| Session-local notes | `tapps_session_notes(action="save", ...)` |
+| Save / recall / search brain | `uv run tapps-mcp memory <subcommand>` |
+| Brain health | `tapps_session_start()` → `brain_bridge_health` |
 
-## Do NOT save
+## CLI (daily drivers)
 
-- Code patterns / file paths / module layout — derivable by reading the repo
-- Git history, recent diffs, who-changed-what — `git log` / `git blame` are authoritative
-- Ephemeral task state, debug fix recipes — belong in TODOs or the commit message
-- Anything with secrets, tokens, or PII
+`memory save`, `get`, `search`, `list`, `export` — see skill body for examples. Shell auth: `TAPPS_BRAIN_AUTH_TOKEN` or `TAPPS_MCP_MEMORY_BRAIN_AUTH_TOKEN`.
 
-## Pick a tier (when saving)
+## Tiers
 
-| Tier | Half-life | What it's for |
-|---|---|---|
-| `architectural` | 180d | System decisions, tech-stack choices, infra contracts |
-| `pattern` | 60d | Coding conventions, API shapes, design patterns |
-| `procedural` | 30d | Workflows, build/deploy commands, runbooks |
-| `context` | 14d | Session-scope facts; use sparingly |
+`architectural` (180d), `pattern` (60d), `procedural` (30d), `context` (14d). Tag with `--tags critical,security` when warranted.
 
-Tag important entries with `critical` or `security` for ranking boost.
+## Advanced
 
-## Action surface (42 actions)
-
-**Core CRUD:** save, save_bulk, get, list, delete
-**Search:** search (ranked BM25 with composite scoring)
-**Intelligence:** reinforce, gc, contradictions, reseed
-**Consolidation:** consolidate (merge related entries), unconsolidate (undo)
-**Import/export:** import (JSON), export (JSON or Markdown)
-**Federation:** federate_register, federate_publish, federate_subscribe, federate_sync, federate_search, federate_status
-**Maintenance:** index_session (index session notes), validate (check store integrity), maintain (GC + consolidation + contradiction detection)
-**Security:** safety_check, verify_integrity | **Profiles:** profile_info, profile_list, profile_switch | **Diagnostics:** health
-**Hive / Agent Teams:** hive_status, hive_search, hive_propagate, agent_register
-**Knowledge graph (TAP-1630):** related, relations, neighbors, explain_connection
-**Batch ops (TAP-1631):** recall_many, reinforce_many
-**Feedback flywheel (TAP-1632):** rate (+ auto-emitted feedback_gap on search misses)
-**Native session memory (TAP-1633):** index_session, search_sessions, session_end
-
-Steps:
-1. Determine the action from the list above
-2. For saves, classify tier and scope (project/branch/session/shared) using the tables above
-3. Call `tapps_memory` with the action and parameters
-4. Display results with confidence scores and composite relevance scores
-
-## See also
-
-- [TappsMCP `docs/MEMORY_REFERENCE.md`](https://github.com/wtthornton/TappsMCP/blob/master/docs/MEMORY_REFERENCE.md) — full action reference and brain-health diagnostics
-- [tapps-brain `llm-brain-guide.md`](https://github.com/wtthornton/tapps-brain/blob/main/docs/guides/llm-brain-guide.md) — canonical memory model (tiers, when to remember/recall/share, error envelopes)
+Federation, hive, KG: `docs/MEMORY_REFERENCE.md`. Consumer agents use CLI; coordinator agents may use brain MCP directly.
 """,
     "tapps-tool-reference": """\
 ---
