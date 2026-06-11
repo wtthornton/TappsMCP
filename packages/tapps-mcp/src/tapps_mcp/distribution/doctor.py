@@ -3300,7 +3300,22 @@ def check_report_studio(project_root: Path) -> CheckResult:
                 "Not installed (run tapps_init with with_report_studio=True)",
             )
         count = probe.get("report_count", 0)
-        detail = f"Pinned in pyproject.toml ({count} report(s) under reports/)"
+        from tapps_core.config.settings import load_settings
+        from tapps_mcp.pipeline.document_judges import summarise_configured_judges
+
+        settings = load_settings(project_root=project_root)
+        judge_summary = summarise_configured_judges(settings.validate_changed.judges)
+        if judge_summary["configured"]:
+            detail = (
+                f"Pinned in pyproject.toml ({count} report(s)); "
+                f"judges configured ({judge_summary['blocking']} blocking, "
+                f"{judge_summary['advisory']} advisory)"
+            )
+        else:
+            detail = (
+                f"Pinned in pyproject.toml ({count} report(s)); "
+                "judges missing — run tapps_init/tapps_upgrade or add validate_changed.judges"
+            )
         return CheckResult("report_studio", True, detail)
     except Exception as exc:
         return CheckResult("report_studio", False, f"Check failed: {exc}")

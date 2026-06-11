@@ -75,6 +75,7 @@ PRESETS: dict[str, dict[str, float]] = {
     "standard": {"overall_min": 70.0, "security_min": 0.0, "maintainability_min": 0.0},
     "strict": {"overall_min": 80.0, "security_min": 8.0, "maintainability_min": 7.0},
     "framework": {"overall_min": 75.0, "security_min": 8.5, "maintainability_min": 7.5},
+    "report_authoring": {"overall_min": 70.0, "security_min": 0.0, "maintainability_min": 0.0},
 }
 
 
@@ -745,6 +746,23 @@ def _extra_mode() -> Literal["ignore", "forbid"]:
     return "ignore"
 
 
+class ManifestValidationSettings(BaseModel):
+    """Consumer YAML manifest validation for document repos."""
+
+    enabled: bool = Field(
+        default=False,
+        description="Enable YAML manifest validation for configured path globs.",
+    )
+    path_globs: list[str] = Field(
+        default_factory=lambda: ["brands/**/*.yaml", "brands/**/*.yml", "templates/**/*.yaml"],
+        description="Glob patterns for manifest YAML files relative to project root.",
+    )
+    required_keys: list[str] = Field(
+        default_factory=list,
+        description="Optional top-level keys every matched manifest must contain.",
+    )
+
+
 class ValidateChangedSettings(BaseModel):
     """Defaults for ``tapps_validate_changed`` batch validation."""
 
@@ -752,8 +770,9 @@ class ValidateChangedSettings(BaseModel):
         default_factory=list,
         description=(
             "Default post-gate judges merged when the MCP tool is called without "
-            "an explicit judges argument. Each entry: type (pytest|grep|exists), "
-            "target, optional expect, description, blocking (default False)."
+            "an explicit judges argument. Each entry: type (pytest|grep|exists|shell), "
+            "target, optional expect, description, blocking (default False), "
+            "optional when_changed globs, optional timeout_s for shell judges."
         ),
     )
 
@@ -813,7 +832,18 @@ class TappsMCPSettings(BaseSettings):
     )
     quality_preset: str = Field(
         default="standard",
-        description="Quality gate preset: standard, strict, or framework.",
+        description="Quality gate preset: standard, strict, framework, or report_authoring.",
+    )
+    narrative_path_globs: list[str] = Field(
+        default_factory=list,
+        description=(
+            "Path globs where test_coverage weight is zeroed (e.g. reports/**). "
+            "Defaults to reports/** when quality_preset is report_authoring."
+        ),
+    )
+    manifest_validation: ManifestValidationSettings = Field(
+        default_factory=ManifestValidationSettings,
+        description="Optional consumer YAML manifest validation settings.",
     )
     log_level: str = Field(
         default="INFO",

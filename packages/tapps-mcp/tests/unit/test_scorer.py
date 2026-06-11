@@ -1126,3 +1126,37 @@ class TestPerformanceCategoryScoring:
         # Without cap: 0.8+0.5+0.5+0.3+0.5+0.2+0.3 = 3.1 penalty
         # With cap: 3.0 penalty → score = 10.0 - 3.0 = 7.0
         assert cat.score >= 7.0
+
+
+class TestNarrativePathScoring:
+    def test_report_authoring_zeros_test_coverage_weight(self, tmp_path: Path) -> None:
+        from tapps_core.config.settings import load_settings
+
+        report_file = tmp_path / "reports" / "chapter.py"
+        report_file.parent.mkdir(parents=True)
+        report_file.write_text("def render() -> None:\n    pass\n", encoding="utf-8")
+
+        settings = load_settings(project_root=tmp_path)
+        settings.quality_preset = "report_authoring"
+        settings.project_root = tmp_path
+
+        scorer = CodeScorer(settings=settings)
+        cat = scorer._score_test_coverage_category(report_file)
+        assert cat.weight == 0.0
+        assert cat.details.get("narrative_path") is True
+
+    def test_src_path_keeps_test_coverage_weight(self, tmp_path: Path) -> None:
+        from tapps_core.config.settings import load_settings
+
+        src_file = tmp_path / "src" / "service.py"
+        src_file.parent.mkdir(parents=True)
+        src_file.write_text("def run() -> None:\n    pass\n", encoding="utf-8")
+
+        settings = load_settings(project_root=tmp_path)
+        settings.quality_preset = "report_authoring"
+        settings.project_root = tmp_path
+
+        scorer = CodeScorer(settings=settings)
+        cat = scorer._score_test_coverage_category(src_file)
+        assert cat.weight > 0.0
+        assert "narrative_path" not in cat.details

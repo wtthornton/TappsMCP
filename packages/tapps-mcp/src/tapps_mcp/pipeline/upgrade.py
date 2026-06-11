@@ -1925,6 +1925,27 @@ def upgrade_pipeline(
         result["errors"].append(f"linear_sdlc_refresh: {exc}")
         result["components"]["linear_sdlc_refresh"] = {"action": "error", "detail": str(exc)}
 
+    try:
+        from tapps_mcp.pipeline.document_judges import (
+            is_document_consumer,
+            merge_document_judges_into_yaml,
+        )
+
+        if is_document_consumer(project_root):
+            from tapps_mcp.pipeline.document_judges import merge_document_memory_profile
+
+            result["components"]["document_judges"] = merge_document_judges_into_yaml(
+                project_root,
+                dry_run=dry_run,
+            )
+            result["components"]["document_memory_profile"] = merge_document_memory_profile(
+                project_root,
+                dry_run=dry_run,
+            )
+    except Exception as exc:
+        result["errors"].append(f"document_judges: {exc}")
+        result["components"]["document_judges"] = {"action": "error", "detail": str(exc)}
+
     result["success"] = len(result["errors"]) == 0
     result["consumer_requirements"] = "docs/TAPPS_MCP_REQUIREMENTS.md"
 

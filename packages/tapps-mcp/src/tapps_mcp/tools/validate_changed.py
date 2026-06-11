@@ -38,7 +38,7 @@ import structlog
 from mcp.server.fastmcp import Context
 
 from tapps_core.knowledge.kg_keys import entity_spec
-from tapps_mcp.server_helpers import _get_brain_bridge, success_response
+from tapps_mcp.server_helpers import success_response
 
 _logger = structlog.get_logger(__name__)
 
@@ -72,6 +72,7 @@ from tapps_mcp.tools.validate_changed_output import (
     _handle_no_changed_files,
     _resolve_security_depth,
     _run_judges,
+    apply_judge_payload,
 )
 from tapps_mcp.tools.validation_progress import (
     _PROGRESS_HEARTBEAT_INTERVAL,
@@ -410,12 +411,30 @@ async def _assemble_response(
         correlation_id=bc.correlation_id,
         timeout_info=outcome.timeout_info,
     )
+    overall_passed = outcome.all_passed
     if bc.judges:
-        resp_data.update(await _run_judges(bc.judges, bc.settings.project_root))
+        changed_rel = [
+            str(p.relative_to(bc.settings.project_root))
+            if p.is_relative_to(bc.settings.project_root)
+            else str(p)
+            for p in bc.paths
+        ]
+        judge_payload = await _run_judges(
+            bc.judges,
+            bc.settings.project_root,
+            changed_paths=changed_rel,
+            base_ref=bc.base_ref,
+        )
+        summary = apply_judge_payload(resp_data, judge_payload, summary=summary)
+        overall_passed = bool(resp_data.get("all_gates_passed", overall_passed))
 
     resp = success_response("tapps_validate_changed", elapsed_ms, resp_data)
     _build_structured_validation_output(
-        outcome.results, outcome.all_passed, bc.security_depth, outcome.impact_data, resp
+        outcome.results,
+        overall_passed,
+        bc.security_depth,
+        outcome.impact_data,
+        resp,
     )
     resp = _with_nudges("tapps_validate_changed", resp)
     if outcome.timeout_info.timed_out:
@@ -545,7 +564,7 @@ async def tapps_validate_changed(
         correlation_id: Caller-provided ID echoed in the response for
             log correlation. Empty (default) omits the field.
         judges: Optional list of post-gate judges. Each dict has
-            ``type`` (``"pytest"``, ``"grep"``, ``"exists"``),
+            ``type`` (``"pytest"``, ``"grep"``, ``"exists"``, ``"shell"``),
             ``target`` (path or selector), ``expect`` (regex for
             ``grep``), ``description``, and ``blocking`` (default
             ``False``, advisory only). Use to layer task-specific

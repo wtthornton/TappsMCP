@@ -371,6 +371,15 @@ async def tapps_impact_analysis(
     elapsed_ms = (time.perf_counter_ns() - start) // 1_000_000
     _record_execution("tapps_impact_analysis", start, file_path=str(resolved))
 
+    recommendations = list(report.recommendations)
+    from tapps_mcp.pipeline.document_judges import is_document_layout_path
+
+    if is_document_layout_path(resolved, root):
+        recommendations.append(
+            "Document layout/template changed — rebuild shipped PDFs/HTML and run "
+            "validate_changed shell judge (e.g. consumer audit CLI) before declaring done."
+        )
+
     data: dict[str, Any] = {
         "changed_file": report.changed_file,
         "change_type": report.change_type,
@@ -379,7 +388,7 @@ async def tapps_impact_analysis(
         "direct_dependents": [d.model_dump() for d in report.direct_dependents],
         "transitive_dependents": [d.model_dump() for d in report.transitive_dependents],
         "test_files": [t.model_dump() for t in report.test_files],
-        "recommendations": report.recommendations,
+        "recommendations": recommendations,
     }
     data.update(mem_ctx)
 
@@ -400,7 +409,7 @@ async def tapps_impact_analysis(
             total_affected=report.total_affected,
             direct_dependents=[d.file_path for d in report.direct_dependents],
             test_files=[t.file_path for t in report.test_files],
-            recommendations=report.recommendations,
+            recommendations=recommendations,
             memory_context=mem_ctx.get("memory_context", []),
         )
         resp["structuredContent"] = structured.to_structured_content()

@@ -57,6 +57,24 @@ class ScorerBase(abc.ABC):
         self._settings = settings or load_settings()
         self._weights = weights or self._settings.scoring_weights
 
+    def _effective_narrative_globs(self) -> list[str]:
+        globs = list(self._settings.narrative_path_globs)
+        if not globs and self._settings.quality_preset == "report_authoring":
+            return ["reports/**"]
+        return globs
+
+    def _is_narrative_path(self, file_path: Path) -> bool:
+        globs = self._effective_narrative_globs()
+        if not globs:
+            return False
+        from tapps_mcp.pipeline.document_judges import path_matches_narrative_glob
+
+        return path_matches_narrative_glob(
+            file_path,
+            self._settings.project_root,
+            globs,
+        )
+
     # ------------------------------------------------------------------
     # Abstract properties (must be implemented by subclasses)
     # ------------------------------------------------------------------

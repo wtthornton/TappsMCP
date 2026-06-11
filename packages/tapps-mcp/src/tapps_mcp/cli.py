@@ -573,7 +573,7 @@ def validate_changed_cmd(quick: bool, file_paths: str, project_root: str) -> Non
             raise SystemExit(1)
         data = result.get("data", {})
         _echo_validate_changed_data(data)
-        if not data.get("all_gates_passed", False):
+        if not data.get("all_gates_passed", False) or not data.get("judges_passed", True):
             raise SystemExit(1)
 
     asyncio.run(_run())

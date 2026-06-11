@@ -959,6 +959,22 @@ def _setup_platform(cfg: BootstrapConfig, state: _BootstrapState) -> None:
                     content_return=state.content_return,
                 )
                 state.created.extend(state.result["report_studio"].get("files_written", []))
+            from tapps_mcp.pipeline.document_judges import (
+                is_document_consumer,
+                merge_document_judges_into_yaml,
+            )
+
+            if is_document_consumer(state.project_root):
+                state.result["document_judges"] = merge_document_judges_into_yaml(
+                    state.project_root,
+                    dry_run=state.dry_run,
+                )
+                from tapps_mcp.pipeline.document_judges import merge_document_memory_profile
+
+                state.result["document_memory_profile"] = merge_document_memory_profile(
+                    state.project_root,
+                    dry_run=state.dry_run,
+                )
             state.result["agents"] = generate_subagent_definitions(state.project_root, "claude")
             state.result["skills"] = generate_skills(
                 state.project_root, "claude", engagement_level=engagement

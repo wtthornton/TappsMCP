@@ -307,15 +307,79 @@ def _build_response_data(
     return resp_data
 
 
+def _build_judge_summary_rows(judge_results: list[dict[str, Any]]) -> list[str]:
+    """Build grep-friendly PASS/FAIL rows for post-gate judges."""
+    rows: list[str] = []
+    for item in judge_results:
+        outcome = str(item.get("result", "error"))
+        status = "PASS" if outcome == "pass" else "SKIP" if outcome == "skipped" else "FAIL"
+        label = str(item.get("judge", item.get("type", "judge")))
+        short = label if len(label) <= 40 else f"{label[:37]}..."
+        message = str(item.get("message", ""))
+        row = f"{status:<5}  judge:{short:<40}  {outcome}"
+        if message and status == "FAIL":
+            row = f"{row}  {message[:80]}"
+        rows.append(row)
+    return rows
+
+
+def _append_judge_summary(summary: str, judge_results: list[dict[str, Any]]) -> str:
+    """Append judge pass/fail counts to the human-readable summary."""
+    if not judge_results:
+        return summary
+    passed = sum(1 for r in judge_results if r.get("result") == "pass")
+    failed = sum(
+        1
+        for r in judge_results
+        if r.get("result") in {"fail", "error"} and r.get("blocking")
+    )
+    skipped = sum(1 for r in judge_results if r.get("result") == "skipped")
+    suffix = f" | judges: {passed} passed"
+    if failed:
+        suffix += f", {failed} blocking failed"
+    if skipped:
+        suffix += f", {skipped} skipped"
+    return f"{summary}{suffix}"
+
+
+def apply_judge_payload(
+    resp_data: dict[str, Any],
+    judge_payload: dict[str, Any],
+    *,
+    summary: str,
+) -> str:
+    """Fold judge results into response data and return updated summary."""
+    resp_data.update(judge_payload)
+    judge_results = list(judge_payload.get("judge_results") or [])
+    if judge_results:
+        resp_data["summary_rows"] = [
+            *list(resp_data.get("summary_rows") or []),
+            *_build_judge_summary_rows(judge_results),
+        ]
+        summary = _append_judge_summary(summary, judge_results)
+        resp_data["summary"] = summary
+    if not judge_payload.get("judges_passed", True):
+        resp_data["all_gates_passed"] = False
+    return summary
+
+
 async def _run_judges(
     judges: list[dict[str, Any]],
     project_root: Path,
+    *,
+    changed_paths: list[str] | None = None,
+    base_ref: str = "HEAD",
 ) -> dict[str, Any]:
-    """Invoke judges and return the judge-result payload (advisory by default)."""
+    """Invoke judges and return the judge-result payload."""
     try:
         from tapps_core.metrics.judge import run_judges
 
-        return await run_judges(judges, cwd=project_root)
+        return await run_judges(
+            judges,
+            cwd=project_root,
+            changed_paths=changed_paths,
+            base_ref=base_ref,
+        )
     except Exception:
         _logger.debug("judge_run_failed", exc_info=True)
         return {"judge_results": [], "judges_passed": False}
@@ -350,5 +414,8 @@ __all__ = [
     "_compute_impact_analysis",
     "_handle_no_changed_files",
     "_resolve_security_depth",
+    "apply_judge_payload",
+    "_append_judge_summary",
+    "_build_judge_summary_rows",
     "_run_judges",
 ]

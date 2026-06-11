@@ -1929,3 +1929,13 @@ class TestBuildSearchFirst:
         libraries = [e["library"] for e in result["covered"]]
         assert "reportlab" in libraries
         assert "pypdf" in libraries
+
+    def test_document_quality_added_for_document_consumer(self, tmp_path: Path) -> None:
+        from tapps_mcp.server_pipeline_tools import _build_search_first
+
+        (tmp_path / "reports").mkdir()
+        (tmp_path / "pyproject.toml").write_text("[project]\ndependencies = []\n")
+        result = _build_search_first(tmp_path)
+        assert result is not None
+        libraries = [e["library"] for e in result["covered"]]
+        assert "document-quality" in libraries

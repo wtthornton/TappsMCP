@@ -369,6 +369,7 @@ _VALID_CONFIG_TYPES: frozenset[str] = frozenset(
         "mqtt",
         "influxdb",
         "mcp",
+        "yaml_manifest",
     }
 )
 
@@ -1366,10 +1367,11 @@ async def tapps_checklist(
 
     Args:
         task_type: One of ``"feature"``, ``"bugfix"``, ``"refactor"``,
-            ``"security"``, ``"review"`` (default), or ``"epic"``. Each
-            type has its own required-tools matrix; e.g. ``security``
-            requires a security scan, ``epic`` requires the markdown
-            structural check.
+            ``"security"``, ``"review"`` (default), ``"document"``, or
+            ``"epic"``. Each type has its own required-tools matrix; e.g.
+            ``security`` requires a security scan, ``document`` requires
+            ``validate_changed`` with judges for PDF/HTML output work,
+            ``epic`` requires the markdown structural check.
         auto_run: When ``True``, the checklist runs any missing required
             tools itself (``tapps_validate_changed``, etc.) and
             re-evaluates rather than returning a fail. Default ``False``
