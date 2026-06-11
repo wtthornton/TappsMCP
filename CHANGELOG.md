@@ -7,9 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [3.12.22] - 2026-06-11
+
+Patch: document-output quality pipeline and MCP-environment judge reliability (EPIC-104–108, TAP-3591–3607, TAP-3635–3637).
+
 ### Added
 
 - **Document-output quality pipeline (EPIC-104–107, TAP-3591–3607)** — Blocking `validate_changed.judges` (`pytest`, `grep`, `exists`, `shell`) with `when_changed` globs fold into `all_gates_passed`; judge rows appear in `summary_rows` and CLI output. `tapps_init` / `tapps_upgrade` auto-merge discovered judge presets and optional `memory.profile: document-builder` for document consumers. New checklist `task_type=document`. `report_authoring` quality preset zeros `test_coverage` weight under `reports/**`. Pluggable `yaml_manifest` config validation via `manifest_validation` in `.tapps-mcp.yaml`. `search_first` injects `document-quality` lookup_docs topic; impact analysis nudges rebuild for layout paths.
+- **MCP-environment judge reliability (EPIC-108, TAP-3635–3637)** — Pytest judges resolve consumer venvs (`uv run pytest`, `.venv/bin/python -m pytest`, then `python -m pytest`) with optional `command` override. Document judge preset auto-discovers blocking shell `report-studio audit --profile reference` when a reference PDF fixture exists.
 
 ## [3.12.21] - 2026-06-11
 
