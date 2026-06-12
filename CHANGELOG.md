@@ -7,6 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [3.12.27] - 2026-06-12
+
+Patch: NLT five-server MCP split, cross-session handoff fidelity, and memory CLI polish.
+
+### Added
+
+- **EPIC-109 (TAP-3795)** — NLT MCP plugin five-server split: `nlt-code-quality`, `nlt-platform-admin`, and opt-in profiles; developer bundle default in `tapps_init`; doctor partial-enablement warnings.
+- **EPIC-110 (TAP-3790–3794)** — Cross-session handoff fidelity: `tapps-mcp handoff write`, MCP `tapps_handoff_save`, HTTP-safe `memory search`, brain mirror enrichment (`handoff_sections`, embedding strip), session_end flywheel queries from handoff P0.
+- **`memory save --memory-group`** — optional brain `memory_group` scope on CLI and `tapps_memory(action=save)`.
+
+### Changed
+
+- **Handoff/continue skills** — MCP `tapps_handoff_save` preferred; `memory recall --recall-key session-handoff` for continue-session.
+- **`tapps_memory` get/save** — handoff enrichment applied at dispatch layer (parity with CLI `memory get`/`save`).
+
 ## [3.12.26] - 2026-06-11
 
 Patch: fix MCP stdio startup — stop logging to stdout before JSON-RPC handshake.
