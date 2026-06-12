@@ -227,6 +227,13 @@ class MemoryAutoRecallSettings(BaseModel):
         ge=0,
         description="Skip recall if prompt/query shorter than N chars. Default: 50.",
     )
+    recall_keys: list[str] = Field(
+        default_factory=list,
+        description=(
+            "Memory keys always fetched on sessionStart/preCompact before semantic "
+            "search (e.g. architectural scope entries)."
+        ),
+    )
 
 
 class MemoryAutoCaptureSettings(BaseModel):

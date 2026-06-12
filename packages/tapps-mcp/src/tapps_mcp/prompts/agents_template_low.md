@@ -9,7 +9,7 @@ When the **TappsMCP** MCP server is configured, you can use its tools for code q
 ## Tapps Rules
 
 - Fix root causes — no workarounds.
-- Query tapps-mcp (`tapps_lookup_docs`, `tapps_memory`) when uncertain.
+- Query tapps-mcp (`tapps_lookup_docs`, `uv run tapps-mcp memory search`) when uncertain.
 - `tapps_lookup_docs` is a cached Context7 front — call it freely.
 - Delegate noisy reads/searches to subagents to protect context.
 - Write clean, efficient code; match existing style.
@@ -64,7 +64,7 @@ When the **TappsMCP** MCP server is configured, you can use its tools for code q
 ## Optional workflow (consider when useful)
 
 1. **Session start:** Consider calling `tapps_session_start` for server info and project context.
-2. **Record key decisions:** Optionally use `tapps_session_notes(action="save", ...)` for session-local notes. Use `tapps_memory(action="save", ...)` to persist findings across sessions.
+2. **Record key decisions:** Optionally use `tapps_session_notes(action="save", ...)` for session-local notes. Use `uv run tapps-mcp memory save` to persist findings across sessions.
 3. **Before using a library:** Consider calling `tapps_lookup_docs(library=...)` to avoid hallucinated APIs.
 4. **Before modifying a file's API:** Consider `tapps_impact_analysis(file_path=...)` to see what depends on it.
 5. **During edits:** Consider `tapps_quick_check(file_path=...)` or `tapps_score_file(file_path=..., quick=True)` after Python file edits.
@@ -117,9 +117,9 @@ You were deployed into THIS repo by `tapps_init` / `tapps_upgrade`. Stay in scop
 Your project may have two complementary memory systems:
 
 - **Claude Code auto memory** (`~/.claude/projects/<project>/memory/MEMORY.md`): Build commands, IDE preferences, personal workflow notes. Auto-managed.
-- **TappsMCP shared memory** (`tapps_memory` tool): Architecture decisions, quality patterns, cross-agent knowledge. **42 actions** (CRUD, search, intelligence, consolidation, import/export, federation, maintenance, security, profiles, hive, health, knowledge graph, batch ops, feedback, native session memory). See `docs/MEMORY_REFERENCE.md`.
+- **TappsMCP shared memory** (`tapps-mcp memory` CLI via BrainBridge; `tapps_memory` MCP removed TAP-1994): Architecture decisions, quality patterns, cross-agent knowledge. See `docs/MEMORY_REFERENCE.md` and `/tapps-memory` skill.
 
-OPTIONAL: Consider using `tapps_memory` for important architecture decisions.
+OPTIONAL: Consider `uv run tapps-mcp memory save|search` for important architecture decisions.
 
 **Tiers:** `architectural` (180-day), `pattern` (60-day), `procedural` (30-day), `context` (14-day). **Scopes:** `project` (default), `branch`, `session`. Cross-project sharing goes through federation actions, not a `scope=` value. Max 1500 entries per project. Configure `capture_prompt` and `write_rules` in `.tapps-mcp.yaml`.
 

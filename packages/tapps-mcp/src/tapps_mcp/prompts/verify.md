@@ -24,7 +24,7 @@ Final verification that all required quality steps were completed. The checklist
    - **Recommended** steps missing: complete if time allows, or note as accepted risk.
    - **Optional** steps missing: safe to skip.
 4. If you completed additional steps, re-run the checklist to confirm.
-5. Save key learnings to `tapps_memory(action="save", ...)` for cross-session persistence.
+5. Save key learnings to `uv run tapps-mcp memory save --key ... --tier ... --value "..."` for cross-session persistence.
 
 ## Task Type Guide
 

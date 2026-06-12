@@ -1023,36 +1023,16 @@ def _setup_platform(cfg: BootstrapConfig, state: _BootstrapState) -> None:
 
                 state.result["memory_capture"] = generate_memory_capture_hook(state.project_root)
             # Epic 65.4/65.6: Wire auto-recall and auto-capture hooks from config or explicit param
-            try:
-                from tapps_core.config.settings import load_settings
+            from tapps_mcp.pipeline.platform_hooks import wire_memory_hooks
 
-                settings = load_settings(project_root=state.project_root)
-                mh = settings.memory_hooks
-                if cfg.memory_auto_recall or mh.auto_recall.enabled:
-                    from tapps_mcp.pipeline.platform_hooks import (
-                        generate_memory_auto_recall_hook,
-                    )
-
-                    state.result["memory_auto_recall"] = generate_memory_auto_recall_hook(
-                        state.project_root,
-                        max_results=mh.auto_recall.max_results,
-                        min_score=mh.auto_recall.min_score,
-                        min_prompt_length=mh.auto_recall.min_prompt_length,
-                    )
-                if cfg.memory_auto_capture or mh.auto_capture.enabled:
-                    from tapps_mcp.pipeline.platform_hooks import (
-                        generate_memory_auto_capture_hook,
-                    )
-
-                    state.result["memory_auto_capture"] = generate_memory_auto_capture_hook(
-                        state.project_root
-                    )
-            except (AttributeError, ImportError, OSError) as exc:
-                import structlog
-
-                structlog.get_logger(__name__).warning(
-                    "memory_hooks_probe_failed", error=str(exc)
+            state.result.update(
+                wire_memory_hooks(
+                    state.project_root,
+                    platform="claude",
+                    memory_auto_recall=cfg.memory_auto_recall,
+                    memory_auto_capture=cfg.memory_auto_capture,
                 )
+            )
             state.result["copilot_instructions"] = generate_copilot_instructions(
                 state.project_root,
             )
@@ -1076,6 +1056,15 @@ def _setup_platform(cfg: BootstrapConfig, state: _BootstrapState) -> None:
 
             state.result["hooks"] = generate_cursor_hooks(
                 state.project_root, engagement_level=engagement
+            )
+            from tapps_mcp.pipeline.platform_hooks import wire_memory_hooks
+
+            state.result.update(
+                wire_memory_hooks(
+                    state.project_root,
+                    platform="cursor",
+                    memory_auto_recall=cfg.memory_auto_recall,
+                )
             )
             state.result["agents"] = generate_subagent_definitions(state.project_root, "cursor")
             state.result["skills"] = generate_skills(

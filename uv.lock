@@ -17,7 +17,6 @@ members = [
 dev = [
     { name = "anthropic", specifier = ">=0.40,<1" },
     { name = "mypy", specifier = ">=2.1.0,<3" },
-    { name = "nlt-report-studio", git = "https://github.com/wtthornton/ReportLab.git?tag=v0.1.5" },
     { name = "playwright", specifier = ">=1.58.0,<2" },
     { name = "pre-commit", specifier = ">=4.5.1,<5" },
     { name = "pytest", specifier = ">=9.0.3,<10" },
@@ -34,6 +33,7 @@ dev = [
     { name = "tree-sitter-typescript", specifier = ">=0.23.2,<1" },
     { name = "types-pyyaml", specifier = ">=6.0.12.20260518" },
 ]
+report-studio = [{ name = "nlt-report-studio", git = "https://github.com/wtthornton/ReportLab.git?tag=v0.1.5" }]
 
 [[package]]
 name = "annotated-types"
@@ -550,7 +550,7 @@ wheels = [
 
 [[package]]
 name = "docs-mcp"
-version = "3.12.22"
+version = "3.12.24"
 source = { editable = "packages/docs-mcp" }
 dependencies = [
     { name = "click" },
@@ -2752,7 +2752,7 @@ dependencies = [
 
 [[package]]
 name = "tapps-core"
-version = "3.12.22"
+version = "3.12.24"
 source = { editable = "packages/tapps-core" }
 dependencies = [
     { name = "httpx" },
@@ -2792,7 +2792,7 @@ provides-extras = ["vector", "reranker"]
 
 [[package]]
 name = "tapps-mcp"
-version = "3.12.22"
+version = "3.12.24"
 source = { editable = "packages/tapps-mcp" }
 dependencies = [
     { name = "anyio" },

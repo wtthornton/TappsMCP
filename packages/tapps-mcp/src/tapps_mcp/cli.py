@@ -989,7 +989,19 @@ def memory_get(key: str) -> None:
     type=float,
     help="Minimum confidence (0-1). Default: 0.3.",
 )
-def memory_recall(query: str, project_root: str, max_results: int, min_score: float) -> None:
+@click.option(
+    "--recall-key",
+    "recall_keys",
+    multiple=True,
+    help="Always include these keys before semantic search (repeatable).",
+)
+def memory_recall(
+    query: str,
+    project_root: str,
+    max_results: int,
+    min_score: float,
+    recall_keys: tuple[str, ...],
+) -> None:
     """Search memories via BrainBridge and output XML for auto-recall injection.
 
     Used by the memory_auto_recall hook (Epic 65.4 / TAP-414). Outputs
@@ -1015,23 +1027,37 @@ def memory_recall(query: str, project_root: str, max_results: int, min_score: fl
         # hides ``memory_search`` and silently returned no hits on v3.20.0+.
         bridge = create_brain_bridge(settings, default_profile=BRAIN_PROFILE_READONLY)
         if bridge is None:
-            return []
+            return [], []
         try:
-            return await bridge.search(query, limit=max_results)
+            pinned: list[dict[str, object]] = []
+            for key in recall_keys:
+                entry = await bridge.get(key)
+                if entry is not None:
+                    pinned.append(entry)
+            hits = await bridge.search(query, limit=max_results)
+            return pinned, hits
         finally:
             bridge.close()
 
     try:
-        hits = asyncio.run(_recall())
+        pinned, hits = asyncio.run(_recall())
     except Exception:
         import structlog
 
         structlog.get_logger(__name__).debug("memory_recall_failed", exc_info=True)
         sys.exit(0)
 
-    # Filter by min_score (entries' confidence) — bridge.search doesn't filter.
+    # Filter search hits by min_score — pinned keys are always included.
     filtered = [h for h in hits if float(h.get("confidence", h.get("score", 1.0))) >= min_score]
-    if not filtered:
+    seen_keys: set[str] = set()
+    merged: list[dict[str, object]] = []
+    for hit in pinned + filtered:
+        key = str(hit.get("key", ""))
+        if not key or key in seen_keys:
+            continue
+        seen_keys.add(key)
+        merged.append(hit)
+    if not merged:
         sys.exit(0)
 
     def _escape_xml_text(s: str) -> str:
@@ -1041,7 +1067,7 @@ def memory_recall(query: str, project_root: str, max_results: int, min_score: fl
         return _escape_xml_text(s).replace('"', "&quot;")
 
     parts: list[str] = []
-    for hit in filtered:
+    for hit in merged:
         key = str(hit.get("key", ""))
         tier = str(hit.get("tier", ""))
         value = str(hit.get("value", ""))

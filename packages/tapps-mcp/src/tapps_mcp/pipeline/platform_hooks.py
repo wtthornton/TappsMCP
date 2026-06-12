@@ -104,6 +104,18 @@ from tapps_mcp.pipeline.platform_hook_templates import (
     TAPPS_MANAGED_CURSOR_HOOK_KEYS as _TAPPS_MANAGED_CURSOR_HOOK_KEYS,
 )
 from tapps_mcp.pipeline.platform_hook_templates import (
+    CURSOR_MEMORY_AUTO_RECALL_HOOKS_CONFIG as _CURSOR_MEMORY_AUTO_RECALL_HOOKS_CONFIG,
+)
+from tapps_mcp.pipeline.platform_hook_templates import (
+    CURSOR_MEMORY_AUTO_RECALL_HOOKS_CONFIG_PS as _CURSOR_MEMORY_AUTO_RECALL_HOOKS_CONFIG_PS,
+)
+from tapps_mcp.pipeline.platform_hook_templates import (
+    _memory_auto_recall_script_cursor as _memory_auto_recall_script_cursor_fn,
+)
+from tapps_mcp.pipeline.platform_hook_templates import (
+    _memory_auto_recall_script_cursor_ps as _memory_auto_recall_script_cursor_ps_fn,
+)
+from tapps_mcp.pipeline.platform_hook_templates import (
     _memory_auto_recall_script as _memory_auto_recall_script_fn,
 )
 from tapps_mcp.pipeline.platform_hook_templates import (
@@ -813,28 +825,34 @@ def generate_memory_auto_recall_hook(
     max_results: int = 5,
     min_score: float = 0.3,
     min_prompt_length: int = 50,
+    recall_keys: list[str] | None = None,
+    platform: str = "claude",
 ) -> dict[str, Any]:
     """Generate the memory auto-recall hook (Epic 65.4).
 
-    Writes ``tapps-memory-auto-recall`` script into ``.claude/hooks/`` and
-    merges SessionStart and PreCompact entries into ``.claude/settings.json``.
-    Injects relevant memories before agent prompt.
+    Claude: writes into ``.claude/hooks/`` and merges SessionStart/PreCompact
+    entries into ``.claude/settings.json``.
+
+    Cursor: writes into ``.cursor/hooks/`` and merges sessionStart/preCompact
+    into ``.cursor/hooks.json``.
 
     Opt-in via ``memory_hooks.auto_recall.enabled`` in ``.tapps-mcp.yaml``.
-
-    Args:
-        project_root: Target project root directory.
-        force_windows: Override platform detection for testing.
-        max_results: Max memories to inject (1-10). Default: 5.
-        min_score: Minimum confidence filter (0-1). Default: 0.3.
-        min_prompt_length: Skip recall if query shorter than N chars. Default: 50.
-
-    Returns a summary dict with script_created, hooks_action, hooks_added.
     """
     win = force_windows if force_windows is not None else _is_windows()
     max_results = max(1, min(max_results, 10))
     min_score = max(0.0, min(min_score, 1.0))
     min_prompt_length = max(0, min_prompt_length)
+    keys = list(recall_keys or [])
+
+    if platform == "cursor":
+        return _generate_cursor_memory_auto_recall_hook(
+            project_root,
+            win=win,
+            max_results=max_results,
+            min_score=min_score,
+            min_prompt_length=min_prompt_length,
+            recall_keys=keys,
+        )
 
     if win:
         script_name = "tapps-memory-auto-recall.ps1"
@@ -842,6 +860,7 @@ def generate_memory_auto_recall_hook(
             max_results=max_results,
             min_score=min_score,
             min_prompt_length=min_prompt_length,
+            recall_keys=keys,
         )
         hooks_config = _MEMORY_AUTO_RECALL_HOOKS_CONFIG_PS
     else:
@@ -850,6 +869,7 @@ def generate_memory_auto_recall_hook(
             max_results=max_results,
             min_score=min_score,
             min_prompt_length=min_prompt_length,
+            recall_keys=keys,
         )
         hooks_config = _MEMORY_AUTO_RECALL_HOOKS_CONFIG
 
@@ -869,26 +889,7 @@ def generate_memory_auto_recall_hook(
         config = {}
 
     existing_hooks: dict[str, Any] = config.setdefault("hooks", {})
-    hooks_added = 0
-    for event, entries in hooks_config.items():
-        if event not in existing_hooks:
-            existing_hooks[event] = list(entries)
-            hooks_added += len(entries)
-        else:
-            existing_cmds: set[str] = set()
-            for me in existing_hooks[event]:
-                if isinstance(me, dict):
-                    for h in me.get("hooks", [me]):
-                        if isinstance(h, dict):
-                            existing_cmds.add(h.get("command", ""))
-            for entry in entries:
-                entry_cmds: set[str] = set()
-                for h in entry.get("hooks", [entry]):
-                    if isinstance(h, dict):
-                        entry_cmds.add(h.get("command", ""))
-                if not entry_cmds & existing_cmds:
-                    existing_hooks[event].append(entry)
-                    hooks_added += 1
+    hooks_added = _merge_claude_memory_hook_entries(existing_hooks, hooks_config)
 
     config["hooks"] = {
         k: v for k, v in config["hooks"].items() if k not in _INVALID_CLAUDE_HOOK_KEYS
@@ -900,7 +901,132 @@ def generate_memory_auto_recall_hook(
         "script_created": script_name,
         "hooks_action": "created" if hooks_added > 0 else "skipped",
         "hooks_added": hooks_added,
+        "platform": platform,
     }
+
+
+def _merge_claude_memory_hook_entries(
+    existing_hooks: dict[str, Any],
+    hooks_config: dict[str, list[dict[str, Any]]],
+) -> int:
+    """Merge memory hook entries into Claude settings without duplicating commands."""
+    hooks_added = 0
+    for event, entries in hooks_config.items():
+        if event not in existing_hooks:
+            existing_hooks[event] = list(entries)
+            hooks_added += len(entries)
+            continue
+        existing_cmds: set[str] = set()
+        for me in existing_hooks[event]:
+            if isinstance(me, dict):
+                for h in me.get("hooks", [me]):
+                    if isinstance(h, dict):
+                        existing_cmds.add(h.get("command", ""))
+        for entry in entries:
+            entry_cmds: set[str] = set()
+            for h in entry.get("hooks", [entry]):
+                if isinstance(h, dict):
+                    entry_cmds.add(h.get("command", ""))
+            if not entry_cmds & existing_cmds:
+                existing_hooks[event].append(entry)
+                hooks_added += 1
+    return hooks_added
+
+
+def _generate_cursor_memory_auto_recall_hook(
+    project_root: Path,
+    *,
+    win: bool,
+    max_results: int,
+    min_score: float,
+    min_prompt_length: int,
+    recall_keys: list[str],
+) -> dict[str, Any]:
+    """Write Cursor memory auto-recall script and merge hooks.json entries."""
+    if win:
+        script_name = "tapps-memory-auto-recall.ps1"
+        script_content = _memory_auto_recall_script_cursor_ps_fn(
+            max_results=max_results,
+            min_score=min_score,
+            min_prompt_length=min_prompt_length,
+            recall_keys=recall_keys,
+        )
+        hooks_config = _CURSOR_MEMORY_AUTO_RECALL_HOOKS_CONFIG_PS
+    else:
+        script_name = "tapps-memory-auto-recall.sh"
+        script_content = _memory_auto_recall_script_cursor_fn(
+            max_results=max_results,
+            min_score=min_score,
+            min_prompt_length=min_prompt_length,
+            recall_keys=recall_keys,
+        )
+        hooks_config = _CURSOR_MEMORY_AUTO_RECALL_HOOKS_CONFIG
+
+    hooks_dir = project_root / ".cursor" / "hooks"
+    hooks_dir.mkdir(parents=True, exist_ok=True)
+    script_path = hooks_dir / script_name
+    script_path.write_text(script_content, encoding="utf-8")
+    if not win:
+        script_path.chmod(script_path.stat().st_mode | stat.S_IXUSR | stat.S_IXGRP)
+
+    hooks_file = project_root / ".cursor" / "hooks.json"
+    config = _parse_cursor_hooks_file(hooks_file)
+    existing_hooks = _normalize_cursor_hooks_raw(config)
+    hooks_added = 0
+    for event, entries in hooks_config.items():
+        if event not in existing_hooks:
+            existing_hooks[event] = list(entries)
+            hooks_added += 1
+
+    config["hooks"] = existing_hooks
+    config["version"] = 1
+    hooks_file.parent.mkdir(parents=True, exist_ok=True)
+    hooks_file.write_text(json.dumps(config, indent=2) + "\n", encoding="utf-8")
+
+    return {
+        "script_created": script_name,
+        "hooks_action": "created" if hooks_added > 0 else "skipped",
+        "hooks_added": hooks_added,
+        "platform": "cursor",
+    }
+
+
+def wire_memory_hooks(
+    project_root: Path,
+    *,
+    platform: str,
+    memory_auto_recall: bool = False,
+    memory_auto_capture: bool = False,
+    force_windows: bool | None = None,
+) -> dict[str, Any]:
+    """Install memory auto-recall/capture hooks from ``memory_hooks`` settings."""
+    result: dict[str, Any] = {}
+    try:
+        from tapps_core.config.settings import load_settings
+
+        settings = load_settings(project_root=project_root)
+        mh = settings.memory_hooks
+        if memory_auto_recall or mh.auto_recall.enabled:
+            result["memory_auto_recall"] = generate_memory_auto_recall_hook(
+                project_root,
+                force_windows=force_windows,
+                max_results=mh.auto_recall.max_results,
+                min_score=mh.auto_recall.min_score,
+                min_prompt_length=mh.auto_recall.min_prompt_length,
+                recall_keys=list(mh.auto_recall.recall_keys),
+                platform=platform,
+            )
+        if platform == "claude" and (memory_auto_capture or mh.auto_capture.enabled):
+            result["memory_auto_capture"] = generate_memory_auto_capture_hook(
+                project_root,
+                force_windows=force_windows,
+            )
+    except (AttributeError, ImportError, OSError) as exc:
+        import structlog
+
+        structlog.get_logger(__name__).warning("memory_hooks_probe_failed", error=str(exc))
+        result["memory_hooks_error"] = str(exc)
+    return result
 
 
 def generate_memory_auto_capture_hook(

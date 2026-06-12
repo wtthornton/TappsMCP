@@ -13,8 +13,8 @@ For runtime troubleshooting, see [MEMORY_REFERENCE.md § brain-health-diagnostic
 
 - Consumer repo MCP config lists **tapps-mcp only** — NOT `tapps-brain` as a
   parallel MCP server in `.mcp.json` / `.cursor/mcp.json`.
-- Memory flows: agent → `tapps_memory` → tapps-mcp BrainBridge → tapps-brain HTTP
-  (`http://127.0.0.1:8080` or host URL).
+- Memory flows: agent → `tapps-mcp memory` CLI → tapps-mcp BrainBridge → tapps-brain HTTP
+  (`http://127.0.0.1:8080` or host URL). The `tapps_memory` MCP tool was removed (TAP-1994).
 - Brain credentials live on the **tapps-mcp env block**, not in agent hands.
 - Skill to use: `tapps-memory` (NOT `tapps-brain`).
 
@@ -252,10 +252,10 @@ Call `tapps_session_start()` and inspect `data.brain_bridge_health`:
 
 #### 3. Round-trip memory
 
-```
-tapps_memory(action="save", key="wiring-smoke-<project_id>",
-             value="Brain bridge smoke test", tier="context", scope="project")
-tapps_memory(action="search", query="wiring smoke")
+```bash
+uv run tapps-mcp memory save --key "wiring-smoke-<project_id>" \
+  --tier context --value "Brain bridge smoke test"
+uv run tapps-mcp memory search --query "wiring smoke"
 ```
 
 Second call must return the saved entry.
@@ -268,7 +268,7 @@ against the live stack.
 `tapps_init` already populates `AGENTS.md` with `tapps_memory` guidance. If you
 add a project-specific block to `CLAUDE.md` or `.cursor/rules/`, keep it short:
 
-- Use `tapps_memory` for cross-session project knowledge — not direct brain tools.
+- Use `uv run tapps-mcp memory` for cross-session project knowledge — not direct brain MCP tools.
 - `project_id = <project_id>`.
 - Link: [MEMORY_REFERENCE.md § brain-health-diagnostics](../MEMORY_REFERENCE.md#brain-health-diagnostics).
 

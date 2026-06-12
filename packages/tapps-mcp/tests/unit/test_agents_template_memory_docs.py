@@ -30,12 +30,12 @@ class TestMemorySystemsSection:
         assert "Consider" in content.split("## Memory systems")[1].split("##")[0]
 
     @pytest.mark.parametrize("level", ["high", "medium", "low"])
-    def test_template_mentions_both_memory_systems(self, level: str) -> None:
-        """Each template must mention both tapps_memory and MEMORY.md."""
+    def test_template_mentions_brain_cli_memory(self, level: str) -> None:
+        """Each template must document the bridge-only memory CLI (TAP-1994)."""
         content = load_agents_template(engagement_level=level)
         memory_section = content.split("## Memory systems")[1].split("##")[0]
-        assert "tapps_memory" in memory_section
-        assert "MEMORY.md" in memory_section
+        assert "tapps-mcp memory" in memory_section
+        assert "MEMORY.md" in memory_section or "MEMORY_REFERENCE" in memory_section
 
     @pytest.mark.parametrize("level", ["high", "medium", "low"])
     def test_template_documents_cross_session_handoff(self, level: str) -> None:

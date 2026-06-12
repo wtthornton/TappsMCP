@@ -7,6 +7,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [3.12.24] - 2026-06-11
+
+Patch: bridge-only memory scaffolding (TAP-1994), Cursor auto-recall hooks, and pinned `recall_keys`.
+
+### Added
+
+- **`memory_hooks.auto_recall.recall_keys`** — architectural scope keys always fetched before semantic search (e.g. consumer agent-scope entries).
+- **`tapps-mcp memory recall --recall-key`** — repeatable CLI flag; pinned keys merged into hook XML output.
+- **Cursor memory auto-recall** — `sessionStart` + `preCompact` hooks wired on `tapps_init` / `tapps_upgrade` (parity with Claude SessionStart/PreCompact).
+- **`wire_memory_hooks()`** — shared init/upgrade path for Claude and Cursor memory hook installation.
+
+### Changed
+
+- **Scaffolding (TAP-1994)** — AGENTS.md templates, platform rules, and CONSUMER-REPO-BRAIN-WIRING now document `uv run tapps-mcp memory …` CLI instead of removed `tapps_memory` MCP tool.
+
+### Fixed
+
+- **SessionStart auto-recall skip** — default fallback query no longer blocked by `min_prompt_length`; fresh sessions actually inject memory context.
+
 ## [3.12.23] - 2026-06-12
 
 Patch: document judge gate bypass fixes and CI guardrails hardening (TAP-3688–3691, PR #157).

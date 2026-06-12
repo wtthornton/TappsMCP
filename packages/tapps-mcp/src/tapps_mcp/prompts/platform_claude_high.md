@@ -8,7 +8,7 @@ Every tool response includes `next_steps` - follow them.
 These are the seven rules every agent in this project MUST follow. They override default behavior.
 
 1. **Fix root causes — never workarounds.** No `--no-verify`, no swallowed exceptions, no commented-out failing tests. If a check fails, diagnose and fix it. A solution that re-breaks next sprint is a regression, not a fix.
-2. **Query tapps-mcp before writing code when confidence is not 100%.** Use `tapps_lookup_docs` for library APIs and `tapps_memory(action="search")` for prior decisions and patterns. Guessing from training memory is the leading cause of hallucinated APIs and re-litigated decisions.
+2. **Query tapps-mcp before writing code when confidence is not 100%.** Use `tapps_lookup_docs` for library APIs and `uv run tapps-mcp memory search --query "..."` for prior decisions and patterns. Guessing from training memory is the leading cause of hallucinated APIs and re-litigated decisions.
 3. **`tapps_lookup_docs` is a Context7-backed local cache — call it freely.** Repeat lookups for the same library/topic are near-zero cost. There is no budget to conserve. If the real API surface would help, fetch it.
 4. **Protect the main context window — delegate to subagents.** Route searches, log scans, and exploratory file reads through `Explore` or `general-purpose`. They return summaries, not raw output. If a task would consume more than three file reads or any large tool result you will not reference again, spawn a subagent.
 5. **Write code a senior reviewer would accept on first pass.** Clear names, no dead branches, no commented-out code, no speculative abstractions. Match existing style. Every line MUST justify its presence.
@@ -76,11 +76,11 @@ This validates against security and operational best practices.
 
 Execute these stages IN ORDER for every code task:
 
-1. **Discover** - `tapps_session_start()`, then `tapps_memory(action="search")` to recall project context
+1. **Discover** - `tapps_session_start()`, then `uv run tapps-mcp memory search --query "..."` to recall project context
 2. **Research** - `tapps_lookup_docs()` for libraries and domain decisions
 3. **Develop** - `tapps_score_file(file_path, quick=True)` during edit-lint-fix loops
 4. **Validate** - `tapps_quick_check()` per file OR `tapps_validate_changed()` for batch
-5. **Verify** - `tapps_checklist(task_type)`, then `tapps_memory(action="save")` to persist learnings
+5. **Verify** - `tapps_checklist(task_type)`, then `uv run tapps-mcp memory save --key ... --tier ... --value "..."` to persist learnings
 
 ## Consequences of Skipping
 

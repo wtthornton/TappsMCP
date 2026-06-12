@@ -890,6 +890,12 @@ def _upgrade_claude_code_live(
             "linear_enforce_cache_gate": hooks_result.get("linear_enforce_cache_gate", "off"),
             "manifest_verification": _verify_hook_manifest(project_root),
         }
+        from tapps_mcp.pipeline.platform_hooks import wire_memory_hooks
+
+        result["components"]["memory_hooks"] = wire_memory_hooks(
+            project_root,
+            platform="claude",
+        )
 
     if _skipped("claude_agents", skip):
         result["components"]["agents"] = "skipped (upgrade_skip_files)"
@@ -1088,6 +1094,12 @@ def _upgrade_cursor_live(
         "third_party_hook_keys": hooks_result.get("third_party_hook_keys", []),
         "preserved_hook_keys": hooks_result.get("preserved_hook_keys", []),
     }
+    from tapps_mcp.pipeline.platform_hooks import wire_memory_hooks
+
+    result["components"]["memory_hooks"] = wire_memory_hooks(
+        project_root,
+        platform="cursor",
+    )
     result["components"]["agents"] = generate_subagent_definitions(
         project_root, "cursor", overwrite=True
     )

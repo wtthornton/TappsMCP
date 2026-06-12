@@ -56,11 +56,11 @@ Consider calling `tapps_validate_config(file_path)` when changing Dockerfile, do
 
 When following a full workflow:
 
-1. **Discover** - `tapps_session_start()`; optionally `tapps_memory(action="search")` for context
+1. **Discover** - `tapps_session_start()`; optionally `uv run tapps-mcp memory search --query "..."` for context
 2. **Research** - `tapps_lookup_docs()` for libraries and domain decisions
 3. **Develop** - `tapps_score_file(file_path, quick=True)` during edits
 4. **Validate** - `tapps_quick_check()` or `tapps_validate_changed()`
-5. **Verify** - `tapps_checklist(task_type)`; optionally `tapps_memory(action="save")` for findings
+5. **Verify** - `tapps_checklist(task_type)`; optionally `uv run tapps-mcp memory save --key ... --tier ... --value "..."` for findings
 
 ## Response Guidance
 

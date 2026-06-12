@@ -63,6 +63,22 @@ class TestMemoryAutoRecallHookTemplate:
                     cmd = h.get("command", "")
                     assert "tapps-memory-auto-recall" in cmd
 
+    def test_bash_script_skips_min_length_for_default_query(self) -> None:
+        script = _memory_auto_recall_script(min_prompt_length=50)
+        assert 'QUERY" != "$DEFAULT_QUERY"' in script
+
+    def test_bash_script_embeds_recall_keys(self) -> None:
+        script = _memory_auto_recall_script(recall_keys=["scope-key"])
+        assert "--recall-key scope-key" in script
+
+    def test_cursor_config_has_session_start_and_pre_compact(self) -> None:
+        from tapps_mcp.pipeline.platform_hook_templates import (
+            CURSOR_MEMORY_AUTO_RECALL_HOOKS_CONFIG,
+        )
+
+        assert "sessionStart" in CURSOR_MEMORY_AUTO_RECALL_HOOKS_CONFIG
+        assert "preCompact" in CURSOR_MEMORY_AUTO_RECALL_HOOKS_CONFIG
+
 
 # ---------------------------------------------------------------------------
 # generate_memory_auto_recall_hook() tests
@@ -99,6 +115,17 @@ class TestGenerateMemoryAutoRecallHook:
         result = generate_memory_auto_recall_hook(tmp_path, force_windows=False)
         assert result["hooks_added"] >= 1
         assert result["hooks_action"] in ("created", "skipped")
+
+    def test_creates_cursor_script_on_unix(self, tmp_path: Path) -> None:
+        result = generate_memory_auto_recall_hook(
+            tmp_path, force_windows=False, platform="cursor"
+        )
+        assert result["platform"] == "cursor"
+        script_path = tmp_path / ".cursor" / "hooks" / "tapps-memory-auto-recall.sh"
+        assert script_path.exists()
+        hooks = json.loads((tmp_path / ".cursor" / "hooks.json").read_text())
+        assert "sessionStart" in hooks["hooks"]
+        assert "preCompact" in hooks["hooks"]
 
     def test_custom_max_results_min_score_baked_in(self, tmp_path: Path) -> None:
         generate_memory_auto_recall_hook(

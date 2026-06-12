@@ -11,7 +11,7 @@ When the **TappsMCP** MCP server is configured, you **MUST** use its tools for c
 These are the seven rules every agent in this project MUST follow. They override default behavior.
 
 1. **Fix root causes — never workarounds.** No `--no-verify`, no swallowed exceptions, no commented-out failing tests. If a check fails, diagnose and fix it. A solution that re-breaks next sprint is a regression, not a fix.
-2. **Query tapps-mcp before writing code when confidence is not 100%.** Use `tapps_lookup_docs` for library APIs and `tapps_memory(action="search")` for prior decisions and patterns. Guessing from training memory is the leading cause of hallucinated APIs and re-litigated decisions.
+2. **Query tapps-mcp before writing code when confidence is not 100%.** Use `tapps_lookup_docs` for library APIs and `uv run tapps-mcp memory search --query "..."` for prior decisions. Guessing from training memory is the leading cause of hallucinated APIs and re-litigated decisions.
 3. **`tapps_lookup_docs` is a Context7-backed local cache — call it freely.** Repeat lookups for the same library/topic are near-zero cost. There is no budget to conserve. If the real API surface would help, fetch it.
 4. **Protect the main context window — delegate to subagents.** Route searches, log scans, and exploratory file reads through `Explore` or `general-purpose`. They return summaries, not raw output. If a task would consume more than three file reads or any large tool result you will not reference again, spawn a subagent.
 5. **Write code a senior reviewer would accept on first pass.** Clear names, no dead branches, no commented-out code, no speculative abstractions. Match existing style. Every line MUST justify its presence.
@@ -30,7 +30,7 @@ These are the seven rules every agent in this project MUST follow. They override
 | **tapps_checklist** | **Before declaring work complete** - reports missing required steps. Response carries an inline `usage_gaps` payload — you MUST read it before declaring done. |
 | **tapps_usage** | **REQUIRED on any session that touched code** - returns per-session gaps (`edits_without_validation`, `lookup_docs_underused`, etc.) and concrete `recommendations`. Same payload inlined as `usage_gaps` on every `tapps_checklist` response. |
 | **tapps_quality_gate** | Before declaring work complete - ensures file passes preset |
-| **tapps_memory** | **REQUIRED** - persistent cross-session knowledge (42 actions). Search at session start, save before end. See **Memory action reference** below. |
+| **Brain memory (CLI)** | **REQUIRED** - `uv run tapps-mcp memory search|get|save` for cross-session knowledge. Hooks auto-recall when enabled; pin scope keys in `memory_hooks.auto_recall.recall_keys`. See `/tapps-memory` skill. |
 
 **For full tool reference** (32 tools), invoke the **tapps-tool-reference** skill when asked about tools.
 
@@ -75,8 +75,8 @@ These are the seven rules every agent in this project MUST follow. They override
 ## REQUIRED workflow (MUST follow in order)
 
 1. **Session start (REQUIRED):** You MUST call `tapps_session_start` first. It returns server info and project context.
-2. **Check project memory (REQUIRED):** Call `tapps_memory(action="search", query="...")` or `tapps_memory(action="list")` to recall past decisions and project context.
-3. **Record key decisions:** Use `tapps_session_notes(action="save", ...)` for session-local notes. Use `tapps_memory(action="save", ...)` to persist decisions across sessions.
+2. **Check project memory (REQUIRED):** `uv run tapps-mcp memory search --query "..."` or `memory get --key <key>` for pinned scope; read `.tapps-mcp/session-handoff.md`.
+3. **Record key decisions:** Use `tapps_session_notes(action="save", ...)` for session-local notes. Use `uv run tapps-mcp memory save --key ... --tier ... --value "..."` to persist decisions across sessions.
 3. **Before using a library (BLOCKING):** You MUST call `tapps_lookup_docs(library=...)` before writing code that uses an external library.
 4. **Before modifying a file's API:** Call `tapps_impact_analysis(file_path=...)` to see what depends on it.
 5. **During edits (REQUIRED):** You MUST call `tapps_quick_check(file_path=...)` or `tapps_score_file(file_path=..., quick=True)` after each Python file edit.
@@ -137,9 +137,9 @@ You were deployed into THIS repo by `tapps_init` / `tapps_upgrade`. Stay in scop
 Your project may have two complementary memory systems:
 
 - **Claude Code auto memory** (`~/.claude/projects/<project>/memory/MEMORY.md`): Build commands, IDE preferences, personal workflow notes. Auto-managed by Claude Code.
-- **TappsMCP shared memory** (`tapps_memory` tool): Architecture decisions, quality patterns, expert findings, cross-agent knowledge. Structured with tiers, confidence decay, contradiction detection, consolidation, and federation.
+- **TappsMCP shared memory** (`tapps-mcp memory` CLI via BrainBridge; `tapps_memory` MCP removed TAP-1994): Architecture decisions, quality patterns, expert findings, cross-agent knowledge. Structured with tiers, confidence decay, contradiction detection, consolidation, and federation.
 
-REQUIRED: Use `tapps_memory` for all architecture decisions and quality patterns. Check memory at session start and save learnings before session end.
+REQUIRED: Use `uv run tapps-mcp memory save|get|search` for architecture decisions and quality patterns. Pin scope keys under `memory_hooks.auto_recall.recall_keys`.
 
 ### Memory action reference (42 actions)
 

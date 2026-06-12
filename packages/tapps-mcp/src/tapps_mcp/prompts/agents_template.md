@@ -44,7 +44,7 @@ You only see these tools when the host has started the TappsMCP server and attac
 | **tapps_validate_changed** | **Before declaring multi-file work complete** - auto-detects changed files via git diff and runs score + gate on each. **Default is quick mode** (ruff-only, under ~10s). Includes impact analysis by default. Pass `quick=false` for full validation. |
 | **tapps_lookup_docs** | **Before writing code** that uses an external library - use the returned docs to avoid hallucinated APIs. Also use for domain-specific guidance (e.g. security patterns, testing strategies). |
 | **tapps_validate_config** | When **adding or changing** Dockerfile, docker-compose, or infra config. |
-| **tapps_memory** | **At session start** - search or list past decisions with `tapps_memory(action="search", query="...")` or `tapps_memory(action="list")`. **Before session end** - save learnings with `tapps_memory(action="save", key="...", value="...", tier="...", tags=[...])`. Supports save, get, list, search, delete, reinforce, contradictions, gc, reseed, import, export. |
+| **Brain memory (CLI)** | At session start — `uv run tapps-mcp memory search --query "..."` or hooks auto-recall. Before session end — `uv run tapps-mcp memory save --key ... --tier ... --value "..."`. See `/tapps-memory` skill and `docs/MEMORY_REFERENCE.md`. |
 | **tapps_session_notes** | When you make a **key decision or discover a constraint** - save it so you can recall it later in a long session. Use `action="promote"` to promote a session note to persistent cross-session memory. |
 | **tapps_impact_analysis** | Before **modifying a file's public API** - shows what depends on it and what could break. |
 | **tapps_report** | After scoring/gating, when the user wants a **formatted quality summary** (Markdown, JSON, or HTML). |
@@ -82,7 +82,7 @@ You only see these tools when the host has started the TappsMCP server and attac
 
 **Lighter tapps_init options** (for timeout-prone MCP clients): Use `dry_run: true` to preview (~2-5s); use `verify_only: true` for a quick server/checker check (~1-3s); or set `warm_cache_from_tech_stack: false` and `warm_expert_rag_from_tech_stack: false` for a faster init without cache warming.
 
-**MCP config (default on):** `tapps_init` writes project-scoped `.mcp.json` / `.cursor/mcp.json` after bootstrap (`mcp_config=true`). Generation strips direct `tapps-brain` MCP entries (bridge-only; use `tapps_memory` only) and includes docs-mcp when detected. For brain HTTP wiring see [docs/operations/CONSUMER-REPO-BRAIN-WIRING.md](docs/operations/CONSUMER-REPO-BRAIN-WIRING.md).
+**MCP config (default on):** `tapps_init` writes project-scoped `.mcp.json` / `.cursor/mcp.json` after bootstrap (`mcp_config=true`). Generation strips direct `tapps-brain` MCP entries (bridge-only; use `tapps-mcp memory` CLI) and includes docs-mcp when detected. For brain HTTP wiring see [docs/operations/CONSUMER-REPO-BRAIN-WIRING.md](docs/operations/CONSUMER-REPO-BRAIN-WIRING.md).
 
 ---
 
@@ -116,8 +116,8 @@ Use this when writing project-specific tool priority docs or integrating TappsMC
 ## Recommended workflow
 
 1. **Session start:** Call `tapps_session_start` (returns server info and project context).
-2. **Check project memory:** Call `tapps_memory(action="search", query="...")` or `tapps_memory(action="list")` to recall past decisions and project context from previous sessions.
-3. **Record key decisions:** Use `tapps_session_notes(action="save", ...)` for session-local notes. Use `tapps_memory(action="save", ...)` to persist decisions across sessions.
+2. **Check project memory:** `uv run tapps-mcp memory search --query "..."` or read `.tapps-mcp/session-handoff.md`.
+3. **Record key decisions:** Use `tapps_session_notes(action="save", ...)` for session-local notes. Use `uv run tapps-mcp memory save` to persist decisions across sessions.
 4. **Before using a library:** Call `tapps_lookup_docs(library=...)` and use the returned content when implementing.
 5. **Before modifying a file's API:** Call `tapps_impact_analysis(file_path=...)` to see what depends on it.
 6. **During edits:** Call `tapps_quick_check(file_path=...)` or `tapps_score_file(file_path=..., quick=True)` after each change.
@@ -177,11 +177,13 @@ You were deployed into THIS repo by `tapps_init` / `tapps_upgrade`. Stay in scop
 Your project may have two complementary memory systems. Use the right one for each type of knowledge:
 
 - **Claude Code auto memory** (`~/.claude/projects/<project>/memory/MEMORY.md`): Session learnings, user preferences, build commands, IDE settings, debugging insights. Auto-managed by Claude Code across sessions.
-- **TappsMCP shared memory** (`tapps_memory` tool): Architecture decisions, quality patterns, expert consultation findings, cross-agent knowledge. Structured with tier classification (architectural/pattern/context), confidence scoring, decay, contradiction detection, and cross-session persistence.
+- **TappsMCP shared memory** (`tapps-mcp memory` CLI via BrainBridge; `tapps_memory` MCP removed TAP-1994): Architecture decisions, quality patterns, expert consultation findings, cross-agent knowledge.
 
 **When to use which:**
 - Build commands, IDE preferences, personal workflow notes --> auto memory
-- Architecture decisions, quality patterns, cross-agent knowledge --> `tapps_memory`
+- Architecture decisions, quality patterns, cross-agent knowledge --> `uv run tapps-mcp memory save|search`
+
+Use `uv run tapps-mcp memory` for architecture decisions and quality patterns.
 
 Use `tapps_memory` for architecture decisions and quality patterns.
 

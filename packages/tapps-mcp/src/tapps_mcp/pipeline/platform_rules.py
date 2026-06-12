@@ -28,7 +28,8 @@ This project uses the TAPPS MCP server for code quality enforcement.
 ## Session Start (REQUIRED)
 
 Call `tapps_session_start()` as the FIRST action in every session.
-Then call `tapps_memory(action="search", query="...")` to recall past decisions.
+Brain memory is bridge-only (TAP-1994): use `uv run tapps-mcp memory search --query "..."` or pinned keys in `.tapps-mcp.yaml` → `memory_hooks.auto_recall.recall_keys`. Hooks auto-inject on sessionStart/preCompact when enabled.
+Read `.tapps-mcp/session-handoff.md` when continuing work.
 
 ## After Editing Python Files (REQUIRED)
 

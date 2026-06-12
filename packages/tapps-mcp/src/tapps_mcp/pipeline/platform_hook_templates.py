@@ -6,6 +6,7 @@ mappings. Extracted from ``platform_generators.py`` to reduce file size.
 
 from __future__ import annotations
 
+import shlex
 from typing import Any
 
 # ---------------------------------------------------------------------------
@@ -1502,6 +1503,8 @@ TAPPS_MANAGED_CURSOR_HOOK_KEYS: frozenset[str] = frozenset(
     {
         "beforeMCPExecution",
         "afterFileEdit",
+        "sessionStart",
+        "preCompact",
     }
 )
 
@@ -1564,17 +1567,31 @@ MEMORY_AUTO_CAPTURE_HOOKS_CONFIG_PS: dict[str, list[dict[str, Any]]] = {
 # ---------------------------------------------------------------------------
 
 
+def _format_recall_key_cli_args(recall_keys: list[str] | None) -> str:
+    """Shell-safe ``--recall-key`` flags embedded in generated hook scripts."""
+    if not recall_keys:
+        return ""
+    return " ".join(
+        f"--recall-key {shlex.quote(k.strip())}" for k in recall_keys if k.strip()
+    )
+
+
 def _memory_auto_recall_script(
     max_results: int = 5,
     min_score: float = 0.3,
     min_prompt_length: int = 50,
+    recall_keys: list[str] | None = None,
+    *,
+    project_dir_expr: str = '${CLAUDE_PROJECT_DIR:-.}',
 ) -> str:
     """Return the bash script for memory auto-recall (Epic 65.4)."""
+    recall_key_args = _format_recall_key_cli_args(recall_keys)
     return f"""#!/usr/bin/env bash
 # TappsMCP Memory Auto-Recall (Epic 65.4)
 # Injects relevant memories before agent prompt. Runs on PreCompact, SessionStart.
 # Graceful fallback: no MemoryStore, MCP unavailable, empty results — exit 0.
 INPUT=$(cat)
+DEFAULT_QUERY="project context architecture"
 PY="import sys,json
 try:
     d=json.load(sys.stdin)
@@ -1584,24 +1601,24 @@ try:
         if ms:
             last=ms[-1] if isinstance(ms[-1],dict) else {{}}
             q=last.get('content',last.get('text',''))
-    if not q: q=d.get('context','') or 'project context architecture'
+    if not q: q=d.get('context','') or '$DEFAULT_QUERY'
     q=(q or '')[:500]
     print(q)
 except Exception:
-    print('project context architecture')
+    print('$DEFAULT_QUERY')
 "
 PYBIN=$(command -v python3 2>/dev/null || command -v python 2>/dev/null)
-QUERY=$(echo "$INPUT" | "$PYBIN" -c "$PY" 2>/dev/null || echo "project context architecture")
-if [ ${{#QUERY}} -lt {min_prompt_length} ]; then
+QUERY=$(echo "$INPUT" | "$PYBIN" -c "$PY" 2>/dev/null || echo "$DEFAULT_QUERY")
+if [ "$QUERY" != "$DEFAULT_QUERY" ] && [ ${{#QUERY}} -lt {min_prompt_length} ]; then
   exit 0
 fi
-PROJECT_DIR="${{CLAUDE_PROJECT_DIR:-.}}"
+PROJECT_DIR="{project_dir_expr}"
 TAPPS=$(command -v tapps-mcp 2>/dev/null)
 if [ -z "$TAPPS" ]; then
   exit 0
 fi
 OUT=$("$TAPPS" memory recall --query "$QUERY" --project-root "$PROJECT_DIR" \\
-  --max-results {max_results} --min-score {min_score} 2>/dev/null)
+  --max-results {max_results} --min-score {min_score}{f" {recall_key_args}" if recall_key_args else ""} 2>/dev/null)
 if [ -n "$OUT" ]; then
   echo "$OUT"
 fi
@@ -1613,20 +1630,28 @@ def _memory_auto_recall_script_ps(
     max_results: int = 5,
     min_score: float = 0.3,
     min_prompt_length: int = 50,
+    recall_keys: list[str] | None = None,
+    *,
+    project_dir_expr: str = '$env:CLAUDE_PROJECT_DIR',
 ) -> str:
     """Return the PowerShell script for memory auto-recall (Epic 65.4)."""
+    recall_key_args = _format_recall_key_cli_args(recall_keys)
+    ps_recall_keys = ""
+    if recall_key_args:
+        ps_recall_keys = " " + recall_key_args.replace("'", "''")
     return f"""# TappsMCP Memory Auto-Recall (Epic 65.4)
 # Injects relevant memories before agent prompt. Runs on PreCompact, SessionStart.
 # Graceful fallback: no MemoryStore, MCP unavailable, empty results — exit 0.
 $rawInput = @($input) -join "`n"
-$query = "project context architecture"
+$defaultQuery = "project context architecture"
+$query = $defaultQuery
 try {{
     $data = $rawInput | ConvertFrom-Json
     $query = if ($data.prompt) {{ $data.prompt }}
              elseif ($data.last_user_message) {{ $data.last_user_message }}
              elseif ($data.last_message) {{ $data.last_message }}
              elseif ($data.context) {{ $data.context }}
-             else {{ "project context architecture" }}
+             else {{ $defaultQuery }}
     if ($data.messages -and $data.messages.Count -gt 0) {{
         $last = $data.messages[-1]
         $c = if ($last.content) {{ $last.content }} elseif ($last.text) {{ $last.text }} else {{ "" }}
@@ -1634,10 +1659,10 @@ try {{
     }}
     $query = ($query -as [string] -or "").Substring(0, [Math]::Min(500, ($query -as [string]).Length))
 }} catch {{}}
-if ($query.Length -lt {min_prompt_length}) {{
+if ($query -ne $defaultQuery -and $query.Length -lt {min_prompt_length}) {{
     exit 0
 }}
-$projDir = $env:CLAUDE_PROJECT_DIR
+$projDir = {project_dir_expr}
 if (-not $projDir) {{ $projDir = "." }}
 $tapps = Get-Command tapps-mcp -ErrorAction SilentlyContinue
 if (-not $tapps) {{
@@ -1645,7 +1670,116 @@ if (-not $tapps) {{
 }}
 try {{
     $out = & tapps-mcp memory recall --query "$query" --project-root $projDir `
-        --max-results {max_results} --min-score {min_score} 2>$null
+        --max-results {max_results} --min-score {min_score}{ps_recall_keys} 2>$null
+    if ($out) {{ Write-Output $out }}
+}} catch {{}}
+exit 0
+"""
+
+
+def _memory_auto_recall_script_cursor(
+    max_results: int = 5,
+    min_score: float = 0.3,
+    min_prompt_length: int = 50,
+    recall_keys: list[str] | None = None,
+) -> str:
+    """Cursor sessionStart/preCompact hook — resolves project root from workspace_roots."""
+    recall_key_args = _format_recall_key_cli_args(recall_keys)
+    return f"""#!/usr/bin/env bash
+# TappsMCP Memory Auto-Recall (Cursor — Epic 65.4)
+# Injects relevant memories on sessionStart/preCompact. Graceful fallback: exit 0.
+INPUT=$(cat)
+DEFAULT_QUERY="project context architecture"
+PYBIN=$(command -v python3 2>/dev/null || command -v python 2>/dev/null)
+PY="import sys,json
+try:
+    d=json.load(sys.stdin)
+    q=d.get('prompt','') or d.get('last_user_message','') or d.get('last_message','')
+    if not q and 'messages' in d:
+        ms=d.get('messages',[])
+        if ms:
+            last=ms[-1] if isinstance(ms[-1],dict) else {{}}
+            q=last.get('content',last.get('text',''))
+    if not q: q=d.get('context','') or '$DEFAULT_QUERY'
+    q=(q or '')[:500]
+    print(q)
+except Exception:
+    print('$DEFAULT_QUERY')
+"
+QUERY=$(echo "$INPUT" | "$PYBIN" -c "$PY" 2>/dev/null || echo "$DEFAULT_QUERY")
+if [ "$QUERY" != "$DEFAULT_QUERY" ] && [ ${{#QUERY}} -lt {min_prompt_length} ]; then
+  exit 0
+fi
+PROJ_PY="import sys,json
+try:
+    d=json.load(sys.stdin)
+    roots=d.get('workspace_roots') or []
+    if roots:
+        print(roots[0])
+    elif d.get('cwd'):
+        print(d['cwd'])
+    else:
+        print('.')
+except Exception:
+    print('.')
+"
+PROJECT_DIR=$(echo "$INPUT" | "$PYBIN" -c "$PROJ_PY" 2>/dev/null || echo ".")
+TAPPS=$(command -v tapps-mcp 2>/dev/null)
+if [ -z "$TAPPS" ]; then
+  exit 0
+fi
+OUT=$("$TAPPS" memory recall --query "$QUERY" --project-root "$PROJECT_DIR" \\
+  --max-results {max_results} --min-score {min_score}{f" {recall_key_args}" if recall_key_args else ""} 2>/dev/null)
+if [ -n "$OUT" ]; then
+  echo "$OUT"
+fi
+exit 0
+"""
+
+
+def _memory_auto_recall_script_cursor_ps(
+    max_results: int = 5,
+    min_score: float = 0.3,
+    min_prompt_length: int = 50,
+    recall_keys: list[str] | None = None,
+) -> str:
+    """PowerShell Cursor memory auto-recall hook."""
+    recall_key_args = _format_recall_key_cli_args(recall_keys)
+    ps_recall_keys = f" {recall_key_args}" if recall_key_args else ""
+    return f"""# TappsMCP Memory Auto-Recall (Cursor — Epic 65.4)
+$rawInput = @($input) -join "`n"
+$defaultQuery = "project context architecture"
+$query = $defaultQuery
+$projDir = "."
+try {{
+    $data = $rawInput | ConvertFrom-Json
+    $query = if ($data.prompt) {{ $data.prompt }}
+             elseif ($data.last_user_message) {{ $data.last_user_message }}
+             elseif ($data.last_message) {{ $data.last_message }}
+             elseif ($data.context) {{ $data.context }}
+             else {{ $defaultQuery }}
+    if ($data.workspace_roots -and $data.workspace_roots.Count -gt 0) {{
+        $projDir = $data.workspace_roots[0]
+    }} elseif ($data.cwd) {{
+        $projDir = $data.cwd
+    }}
+    if ($data.messages -and $data.messages.Count -gt 0) {{
+        $last = $data.messages[-1]
+        $c = if ($last.content) {{ $last.content }} elseif ($last.text) {{ $last.text }} else {{ "" }}
+        if ($c) {{ $query = $c }}
+    }}
+    $query = ($query -as [string] -or "").Substring(0, [Math]::Min(500, ($query -as [string]).Length))
+}} catch {{}}
+if ($query -ne $defaultQuery -and $query.Length -lt {min_prompt_length}) {{
+    exit 0
+}}
+$tapps = Get-Command tapps-mcp -ErrorAction SilentlyContinue
+if (-not $tapps) {{
+    exit 0
+}}
+try {{
+    $out = & tapps-mcp memory recall --query "$query" --project-root $projDir `
+        --max-results {max_results} --min-score {min_score}{ps_recall_keys} 2>$null
     if ($out) {{ Write-Output $out }}
 }} catch {{}}
 exit 0
@@ -1724,6 +1858,20 @@ MEMORY_AUTO_RECALL_HOOKS_CONFIG_PS: dict[str, list[dict[str, Any]]] = {
                 },
             ],
         },
+    ],
+}
+
+CURSOR_MEMORY_AUTO_RECALL_HOOKS_CONFIG: dict[str, list[dict[str, str]]] = {
+    "sessionStart": [{"command": ".cursor/hooks/tapps-memory-auto-recall.sh"}],
+    "preCompact": [{"command": ".cursor/hooks/tapps-memory-auto-recall.sh"}],
+}
+
+CURSOR_MEMORY_AUTO_RECALL_HOOKS_CONFIG_PS: dict[str, list[dict[str, str]]] = {
+    "sessionStart": [
+        {"command": PS1_PREFIX + ".cursor/hooks/tapps-memory-auto-recall.ps1"},
+    ],
+    "preCompact": [
+        {"command": PS1_PREFIX + ".cursor/hooks/tapps-memory-auto-recall.ps1"},
     ],
 }
 
