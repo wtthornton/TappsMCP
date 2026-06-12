@@ -30,7 +30,6 @@ dev-dependencies = [
     # eval-descriptions harness --backend=api (Phase C). Lazy-imported by
     # scripts/eval-descriptions/run.py; not a runtime dep of any package.
     "anthropic>=0.40,<1",
-    "nlt-report-studio>=0.1.5,<0.2",
 ]
 
 [tool.ruff]
@@ -217,4 +216,7 @@ dev = [
     "mypy>=2.1.0,<3",
     "ruff>=0.15.16,<1",
     "types-PyYAML>=6.0.12.20260518",
+]
+report-studio = [
+    "nlt-report-studio>=0.1.5,<0.2",
 ]

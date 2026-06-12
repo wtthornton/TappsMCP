@@ -56,7 +56,7 @@ jobs:
           enable-cache: true
 
       - name: Sync workspace
-        run: uv sync --package tapps-core --package tapps-mcp --package docs-mcp --no-dev
+        run: uv sync --group dev
 
       - name: Run tool description budget test
-        run: uv run pytest packages/tapps-mcp/tests/integration/test_tool_descriptions.py -v
+        run: uv run --no-sync pytest packages/tapps-mcp/tests/integration/test_tool_descriptions.py -v
