@@ -7,6 +7,7 @@ settings files. Extracted from ``platform_generators.py`` to reduce file size.
 from __future__ import annotations
 
 import copy
+import hashlib
 import json
 import re
 import shutil
@@ -279,8 +280,16 @@ _HOOK_VERSION_MARKER_PREFIX = "# tapps-mcp-hook-version:"
 _HOOK_VERSION_MARKER_RE = re.compile(
     r"^\s*#\s*tapps-mcp-hook-version:\s*([\w.+-]+)", re.MULTILINE
 )
+_HOOK_CONTENT_SHA_RE = re.compile(
+    r"^\s*#\s*tapps-mcp-hook-content-sha:\s*([0-9a-f]{8})", re.MULTILINE
+)
 # Scan only the top of the file — the marker is always near the shebang.
 _HOOK_MARKER_SCAN_CHARS = 512
+
+
+def _hook_content_sha_for_template(content: str) -> str:
+    """Stable 8-char digest of hook body (pre-marker) for upgrade invalidation."""
+    return hashlib.sha256(content.encode()).hexdigest()[:8]
 
 
 def _inject_hook_version_marker(content: str, version: str) -> str:
@@ -291,9 +300,21 @@ def _inject_hook_version_marker(content: str, version: str) -> str:
     TAP-957: lets ``_hook_has_user_edits`` tell a TappsMCP-shipped script from
     a user-authored one and avoid clobbering on upgrade.
     """
+    content_sha = _hook_content_sha_for_template(content)
     if _HOOK_VERSION_MARKER_RE.search(content[:_HOOK_MARKER_SCAN_CHARS]):
-        return content
-    marker_line = f"{_HOOK_VERSION_MARKER_PREFIX} {version}\n"
+        # Refresh content-sha line when rewriting an already-marked template.
+        lines = content.splitlines(keepends=True)
+        out: list[str] = []
+        for line in lines:
+            if _HOOK_CONTENT_SHA_RE.match(line):
+                continue
+            out.append(line)
+        content = "".join(out)
+
+    marker_line = (
+        f"{_HOOK_VERSION_MARKER_PREFIX} {version}\n"
+        f"# tapps-mcp-hook-content-sha: {content_sha}\n"
+    )
     # Preserve shebang on line 1 if present; marker goes right after.
     lines = content.splitlines(keepends=True)
     if lines and lines[0].startswith("#!"):
@@ -326,12 +347,43 @@ def _hook_marker_version(path: Path) -> str | None:
     return match.group(1) if match else None
 
 
+def _hook_content_sha_on_disk(path: Path) -> str | None:
+    """Return the content-sha marker on disk, or None if absent."""
+    try:
+        head = path.read_text(encoding="utf-8")[:_HOOK_MARKER_SCAN_CHARS]
+    except (OSError, UnicodeDecodeError):
+        return None
+    match = _HOOK_CONTENT_SHA_RE.search(head)
+    return match.group(1) if match else None
+
+
 def _backup_hook_file(path: Path) -> Path:
     """Copy *path* to ``<path>.pre-upgrade.<unix-ts>`` and return the backup path."""
     ts = int(time.time())
     backup = path.with_name(f"{path.name}.pre-upgrade.{ts}")
     shutil.copy2(path, backup)
     return backup
+
+
+def _prune_hook_pre_upgrade_backups(hooks_dir: Path, *, keep: int = 2) -> list[str]:
+    """Drop stale ``*.pre-upgrade.<ts>`` copies after hook upgrades (TAP-3584 follow-up)."""
+    from collections import defaultdict
+
+    groups: dict[str, list[Path]] = defaultdict(list)
+    for path in hooks_dir.iterdir():
+        name = path.name
+        if ".pre-upgrade." not in name:
+            continue
+        base = name.split(".pre-upgrade.", 1)[0]
+        groups[base].append(path)
+
+    removed: list[str] = []
+    for paths in groups.values():
+        paths.sort(key=lambda p: p.stat().st_mtime, reverse=True)
+        for stale in paths[keep:]:
+            stale.unlink(missing_ok=True)
+            removed.append(stale.name)
+    return removed
 
 
 def _write_hook_scripts(
@@ -362,7 +414,9 @@ def _write_hook_scripts(
             # content updates landing in a release never reach consumer
             # projects unless the hook is in ``always_overwrite``.
             on_disk_version = _hook_marker_version(script_path)
-            if on_disk_version == _TAPPS_VERSION:
+            template_sha = _hook_content_sha_for_template(content)
+            on_disk_sha = _hook_content_sha_on_disk(script_path)
+            if on_disk_version == _TAPPS_VERSION and on_disk_sha == template_sha:
                 continue
             # No marker → user-authored, fall through to the user-edits path
             # below. Marker present but stale → back up before rewriting.
@@ -377,6 +431,7 @@ def _write_hook_scripts(
         if not win:
             script_path.chmod(script_path.stat().st_mode | stat.S_IXUSR | stat.S_IXGRP)
         created.append(name)
+    _prune_hook_pre_upgrade_backups(hooks_dir)
     return created
 
 

@@ -68,6 +68,30 @@ class TestCursorHooksScripts:
         content = (tmp_path / ".cursor" / "hooks" / "tapps-before-mcp.sh").read_text()
         assert "tapps_session_start" in content
         assert "REMINDER" in content
+        assert "tool_name" in content
+        assert "conversation_id" in content
+
+    def test_after_edit_uses_file_path(self, tmp_path):
+        """after-edit hook should read Cursor's file_path field."""
+        generate_cursor_hooks(tmp_path, force_windows=False)
+        content = (tmp_path / ".cursor" / "hooks" / "tapps-after-edit.sh").read_text()
+        assert "file_path" in content
+
+    def test_prunes_pre_upgrade_backups(self, tmp_path):
+        hooks_dir = tmp_path / ".cursor" / "hooks"
+        hooks_dir.mkdir(parents=True)
+        script = hooks_dir / "tapps-before-mcp.sh"
+        script.write_text("#!/usr/bin/env bash\n", encoding="utf-8")
+        for i in range(4):
+            (hooks_dir / f"tapps-before-mcp.sh.pre-upgrade.{1000 + i}").write_text(
+                f"backup {i}", encoding="utf-8"
+            )
+        from tapps_mcp.pipeline.platform_hooks import _prune_hook_pre_upgrade_backups
+
+        removed = _prune_hook_pre_upgrade_backups(hooks_dir, keep=2)
+        assert len(removed) == 2
+        remaining = list(hooks_dir.glob("tapps-before-mcp.sh.pre-upgrade.*"))
+        assert len(remaining) == 2
 
     def test_before_mcp_ps1_checks_session_start(self, tmp_path):
         """PowerShell before-mcp hook should remind about tapps_session_start."""
