@@ -1228,6 +1228,8 @@ class TappsMCPSettings(BaseSettings):
             "developer",
             "quality",
             "admin",
+            "nlt-code-quality",
+            "nlt-platform-admin",
         ]
         | None
     ) = Field(
@@ -1235,7 +1237,8 @@ class TappsMCPSettings(BaseSettings):
         description=(
             "Predefined tool set: 'full' = all tools, 'core' = Tier 1 (7 tools), "
             "'pipeline' = Tier 1 + Tier 2; 'reviewer'|'planner'|'frontend'|'developer' = role presets (Epic 79.5); "
-            "'quality' = coding session tools (TAP-485); 'admin' = setup/troubleshooting tools (TAP-485). "
+            "'quality' = coding session tools (TAP-485); 'admin' = setup/troubleshooting tools (TAP-485); "
+            "'nlt-code-quality'|'nlt-platform-admin' = Epic 109 NLT plugin server profiles. "
             "Used when enabled_tools is not set. Env: TAPPS_MCP_TOOL_PRESET."
         ),
     )

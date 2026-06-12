@@ -176,7 +176,19 @@ class TestToolCurationSettings:
     def test_tool_preset_values(self) -> None:
         from tapps_core.config.settings import TappsMCPSettings
 
-        for preset in ("full", "core", "pipeline", "reviewer", "planner", "frontend", "developer"):
+        for preset in (
+            "full",
+            "core",
+            "pipeline",
+            "reviewer",
+            "planner",
+            "frontend",
+            "developer",
+            "quality",
+            "admin",
+            "nlt-code-quality",
+            "nlt-platform-admin",
+        ):
             s = TappsMCPSettings(tool_preset=preset)
             assert s.tool_preset == preset
 
