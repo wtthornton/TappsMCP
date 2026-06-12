@@ -1054,10 +1054,21 @@ def run_server(
 ) -> None:
     """Start the DocsMCP MCP server."""
     from docs_mcp.config.settings import load_docs_settings
-    from tapps_core.common.logging import setup_logging
+    from tapps_core.common.logging import (
+        bootstrap_logging_from_env,
+        reconfigure_logging_if_needed,
+    )
 
+    bootstrap_level, bootstrap_json = bootstrap_logging_from_env(
+        level_env="DOCS_MCP_LOG_LEVEL",
+        json_env="DOCS_MCP_LOG_JSON",
+    )
     settings = load_docs_settings()
-    setup_logging(level=settings.log_level, json_output=settings.log_json)
+    reconfigure_logging_if_needed(
+        settings,
+        bootstrap_level=bootstrap_level,
+        bootstrap_json=bootstrap_json,
+    )
 
     logger.info(
         "docs_mcp_starting",

@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [3.12.26] - 2026-06-11
+
+Patch: fix MCP stdio startup — stop logging to stdout before JSON-RPC handshake.
+
+### Fixed
+
+- **MCP server crash in Cursor (all projects)** — `run_server()` now bootstraps structlog to stderr before `load_settings()`. Settings validators use stdlib `logging` instead of import-time structlog `PrintLogger`, which previously wrote `memory.project_id_auto_derived` lines to stdout and broke the MCP JSON-RPC stream.
+- **DocsMCP / combined server** — same bootstrap ordering applied to `docs_mcp.server.run_server` and `run_combined_server`.
+
 ## [3.12.25] - 2026-06-11
 
 Patch: remove retired `tapps_memory` MCP from checklist and pipeline policy (TAP-1994 follow-up).

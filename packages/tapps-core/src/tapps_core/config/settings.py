@@ -8,16 +8,16 @@ Precedence (highest to lowest):
 
 from __future__ import annotations
 
+import logging
 import os
 from pathlib import Path
 from typing import Any, Literal
 
-import structlog
 import yaml
 from pydantic import BaseModel, Field, SecretStr, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
-logger = structlog.get_logger(__name__)
+logger = logging.getLogger(__name__)
 
 
 class ScoringWeights(BaseSettings):
@@ -706,24 +706,24 @@ class MemorySettings(BaseSettings):
         pid = self.project_id.strip()
         if bpid and pid and bpid != pid:
             logger.warning(
-                "memory.project_id_disagreement",
-                brain_project_id=bpid,
-                project_id=pid,
-                resolution="prefer brain_project_id (more-specific name)",
+                "memory.project_id_disagreement brain_project_id=%s project_id=%s resolution=%s",
+                bpid,
+                pid,
+                "prefer brain_project_id (more-specific name)",
             )
         elif bpid and not pid:
             self.project_id = bpid
             logger.info(
-                "memory.project_id_auto_derived",
-                source="brain_project_id",
-                value=bpid,
+                "memory.project_id_auto_derived source=%s value=%s",
+                "brain_project_id",
+                bpid,
             )
         elif pid and not bpid:
             self.brain_project_id = pid
             logger.info(
-                "memory.brain_project_id_auto_derived",
-                source="project_id",
-                value=pid,
+                "memory.brain_project_id_auto_derived source=%s value=%s",
+                "project_id",
+                pid,
             )
         return self
 
@@ -1306,9 +1306,9 @@ class TappsMCPSettings(BaseSettings):
         self.memory.brain_project_id = slug
         self.memory.project_id = slug
         logger.info(
-            "memory.brain_project_id_auto_derived_from_root",
-            source_dir=str(self.project_root),
-            value=slug,
+            "memory.brain_project_id_auto_derived_from_root source_dir=%s value=%s",
+            self.project_root,
+            slug,
         )
         return self
 
@@ -1390,10 +1390,10 @@ def _load_yaml_config(project_root: Path) -> dict[str, Any]:
     except yaml.YAMLError as e:
         _last_yaml_load_error = {"path": str(config_path), "reason": str(e)}
         logger.warning(
-            "mcp_config_yaml_parse_error",
-            path=str(config_path),
-            reason=str(e),
-            hint=(
+            "mcp_config_yaml_parse_error path=%s reason=%s hint=%s",
+            config_path,
+            e,
+            (
                 "Settings fell back to defaults; gate flags and weights were not "
                 "applied. Fix the YAML and reload."
             ),
@@ -1402,9 +1402,9 @@ def _load_yaml_config(project_root: Path) -> dict[str, Any]:
     except OSError as e:
         _last_yaml_load_error = {"path": str(config_path), "reason": str(e)}
         logger.warning(
-            "mcp_config_read_failed",
-            path=str(config_path),
-            reason=str(e),
+            "mcp_config_read_failed path=%s reason=%s",
+            config_path,
+            e,
         )
         return {}
 

@@ -34,7 +34,10 @@ import structlog
 from mcp.server.fastmcp import FastMCP
 from mcp.types import ToolAnnotations
 
-from tapps_core.common.logging import setup_logging
+from tapps_core.common.logging import (
+    bootstrap_logging_from_env,
+    reconfigure_logging_if_needed,
+)
 from tapps_core.config.settings import load_settings
 from tapps_core.knowledge.kg_keys import entity_spec
 from tapps_mcp import __version__
@@ -1755,8 +1758,13 @@ def run_server(
     port: int = 8000,
 ) -> None:
     """Start the TappsMCP MCP server."""
+    bootstrap_level, bootstrap_json = bootstrap_logging_from_env()
     settings = load_settings()
-    setup_logging(level=settings.log_level, json_output=settings.log_json)
+    reconfigure_logging_if_needed(
+        settings,
+        bootstrap_level=bootstrap_level,
+        bootstrap_json=bootstrap_json,
+    )
 
     logger.info(
         "tapps_mcp_starting",

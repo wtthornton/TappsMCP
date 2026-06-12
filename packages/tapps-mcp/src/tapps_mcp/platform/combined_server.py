@@ -206,11 +206,19 @@ def run_combined_server(
     port: int = 8000,
 ) -> None:
     """Start the combined TappsPlatform MCP server."""
-    from tapps_core.common.logging import setup_logging
+    from tapps_core.common.logging import (
+        bootstrap_logging_from_env,
+        reconfigure_logging_if_needed,
+    )
     from tapps_core.config.settings import load_settings
 
+    bootstrap_level, bootstrap_json = bootstrap_logging_from_env()
     settings = load_settings()
-    setup_logging(level=settings.log_level, json_output=settings.log_json)
+    reconfigure_logging_if_needed(
+        settings,
+        bootstrap_level=bootstrap_level,
+        bootstrap_json=bootstrap_json,
+    )
 
     combined = create_combined_server()
 
