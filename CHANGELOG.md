@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [3.12.23] - 2026-06-12
+
+Patch: document judge gate bypass fixes and CI guardrails hardening (TAP-3688–3691, PR #157).
+
+### Fixed
+
+- **Document judge gate bypass (TAP-3688–3691, [#157](https://github.com/wtthornton/TappsMCP/pull/157))** — `tapps_validate_changed` now runs configured blocking judges when git diff has zero scorable files. `when_changed` resolves paths from full git diff instead of scorable-only paths. Grep judges strip whole-line `//` / `#` comments before matching (comment-only `--audit` no longer false-passes). Judge runner exceptions surface structured error results instead of empty payloads.
+- **CI guardrails** — `mcp-guardrails` tool-description job uses `uv sync --group dev` + `uv run --no-sync pytest` so private `nlt-report-studio` git deps are not fetched on every run. `nlt-report-studio` moved to optional `report-studio` dependency group.
+
+### Added
+
+- **Document consumer smoke tests** — Integration coverage for zero-scorable-file judge execution and comment-only grep false-pass rejection (`test_validate_changed_document_smoke.py`).
+
 ## [3.12.22] - 2026-06-11
 
 Patch: document-output quality pipeline and MCP-environment judge reliability (EPIC-104–108, TAP-3591–3607, TAP-3635–3637).
