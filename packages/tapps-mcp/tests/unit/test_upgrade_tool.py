@@ -229,6 +229,19 @@ class TestValidateConfigFileExePaths:
         path.write_text(json.dumps(config), encoding="utf-8")
         assert _validate_config_file(path, "mcpServers") is None
 
+    def test_accepts_nlt_cursor_wrapper(self, tmp_path: Path) -> None:
+        config = {
+            "mcpServers": {
+                "nlt-code-quality": {
+                    "command": "/repo/.cursor/bin/nlt-code-quality-serve.sh",
+                    "args": [],
+                }
+            }
+        }
+        path = tmp_path / "config.json"
+        path.write_text(json.dumps(config), encoding="utf-8")
+        assert _validate_config_file(path, "mcpServers") is None
+
     def test_rejects_wrong_command(self, tmp_path: Path) -> None:
         config = {"mcpServers": {"tapps-mcp": {"command": "python"}}}
         path = tmp_path / "config.json"
@@ -284,6 +297,20 @@ class TestDoctorValidateJsonConfigExePaths:
 
     def test_accepts_unix_path(self, tmp_path: Path) -> None:
         config = {"mcpServers": {"tapps-mcp": {"command": "/usr/local/bin/tapps-mcp"}}}
+        path = tmp_path / "config.json"
+        path.write_text(json.dumps(config), encoding="utf-8")
+        result = check_json_config(path, "mcpServers", "Test")
+        assert result.ok is True
+
+    def test_accepts_nlt_cursor_wrapper(self, tmp_path: Path) -> None:
+        config = {
+            "mcpServers": {
+                "nlt-code-quality": {
+                    "command": "/repo/.cursor/bin/nlt-code-quality-serve.sh",
+                    "args": [],
+                }
+            }
+        }
         path = tmp_path / "config.json"
         path.write_text(json.dumps(config), encoding="utf-8")
         result = check_json_config(path, "mcpServers", "Test")
