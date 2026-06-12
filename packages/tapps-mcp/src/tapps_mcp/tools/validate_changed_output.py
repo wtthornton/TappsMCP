@@ -225,7 +225,7 @@ def _no_changed_warnings(
     return warnings
 
 
-def _handle_no_changed_files(
+async def _handle_no_changed_files(
     start: int,
     settings: TappsMCPSettings,
     record_execution: Callable[..., object],
@@ -234,8 +234,9 @@ def _handle_no_changed_files(
     explicit_paths: bool = False,
     base_ref: str = "HEAD",
     correlation_id: str = "",
+    judges: list[dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
-    """Return early response when no changed Python files are found."""
+    """Return early response when no changed scorable files are found."""
     from tapps_mcp import server_pipeline_tools as _host
 
     elapsed_ms = (time.perf_counter_ns() - start) // 1_000_000
@@ -247,8 +248,6 @@ def _handle_no_changed_files(
     _host._background_tasks.add(task)
     task.add_done_callback(_host._background_tasks.discard)
 
-    _host._write_validate_ok_marker(settings.project_root)
-
     resp_data: dict[str, Any] = {
         "files_validated": 0,
         "all_gates_passed": True,
@@ -256,6 +255,19 @@ def _handle_no_changed_files(
         "results": [],
         "summary": "No changed scorable files found.",
     }
+
+    summary = resp_data["summary"]
+    if judges:
+        judge_payload = await _run_judges(
+            judges,
+            settings.project_root,
+            changed_paths=None,
+            base_ref=base_ref,
+        )
+        summary = apply_judge_payload(resp_data, judge_payload, summary=summary)
+
+    if resp_data.get("all_gates_passed", True):
+        _host._write_validate_ok_marker(settings.project_root)
 
     warnings = _no_changed_warnings(explicit_paths, base_ref)
     if explicit_paths:
@@ -380,9 +392,20 @@ async def _run_judges(
             changed_paths=changed_paths,
             base_ref=base_ref,
         )
-    except Exception:
+    except Exception as exc:
         _logger.debug("judge_run_failed", exc_info=True)
-        return {"judge_results": [], "judges_passed": False}
+        return {
+            "judge_results": [
+                {
+                    "judge": "judge runner",
+                    "type": "shell",
+                    "result": "error",
+                    "message": str(exc),
+                    "blocking": True,
+                }
+            ],
+            "judges_passed": False,
+        }
 
 
 def _append_timeout_hint(
