@@ -82,6 +82,7 @@ EXPECTED_ANNOTATIONS: dict[str, ToolAnnotations] = {
     # Side-effect, idempotent (7 tools)
     "tapps_session_start": _SIDE_EFFECT_IDEMPOTENT,
     "tapps_session_end": _SIDE_EFFECT_IDEMPOTENT,
+    "tapps_handoff_save": _SIDE_EFFECT_IDEMPOTENT,
     "tapps_init": _SIDE_EFFECT_IDEMPOTENT,
     "tapps_upgrade": _SIDE_EFFECT_IDEMPOTENT,
     "tapps_set_engagement_level": _SIDE_EFFECT_IDEMPOTENT,
@@ -183,9 +184,9 @@ class TestAnnotationCategories:
         # 5 idempotent + 1 non-idempotent (tapps_feedback) + linear-snapshot-put
         # + linear-snapshot-invalidate = 8 (TAP-1994: tapps_memory removed)
         # + 2 hive elevation tools (TAP-2014)
-        # + 1 tapps_audit_close_coverage (TAP-2798) = 11.
-        assert len(side_effect) == 11, (
-            f"Expected 11 side-effect tools, got {len(side_effect)}"
+        # + 1 tapps_audit_close_coverage (TAP-2798) + 1 tapps_handoff_save (TAP-3792) = 12.
+        assert len(side_effect) == 12, (
+            f"Expected 12 side-effect tools, got {len(side_effect)}"
         )
 
     def test_open_world_count(self) -> None:
@@ -210,8 +211,8 @@ class TestAnnotationCategories:
         # + 1 tapps_audit_campaign (TAP-2036) + 1 tapps_session_end (TAP-2005)
         # + 1 tapps_usage (v3.11.0) + 1 tapps_linear_list_issues (TAP-2010)
         # + 1 tapps_finding_to_story (TAP-2717)
-        # + 1 tapps_audit_close_coverage (TAP-2798) = 33
-        assert len(idempotent) == 33, (
+        # + 1 tapps_audit_close_coverage (TAP-2798) + 1 tapps_handoff_save (TAP-3792) = 34
+        assert len(idempotent) == 34, (
             f"Expected 33 idempotent tools, got {len(idempotent)}: {sorted(idempotent)}"
         )
 

@@ -494,6 +494,8 @@ class TestSessionHandoffSkills:
     def test_handoff_brain_mirror_uses_full_markdown(self) -> None:
         for skills in (CLAUDE_SKILLS, CURSOR_SKILLS):
             content = skills["tapps-handoff-session"]
+            assert "tapps_handoff_save" in content
+            assert "handoff write" in content
             assert "cat .tapps-mcp/session-handoff.md" in content
             assert "full markdown body" in content
 

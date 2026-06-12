@@ -19,6 +19,9 @@ TOOL_DESCRIPTIONS: dict[str, str] = {
     "tapps_session_end": (
         "End-of-session brain feedback loop: flush events and optional session summary."
     ),
+    "tapps_handoff_save": (
+        "Write session-handoff.md, mirror full markdown to brain, lint schema; optional session-end."
+    ),
     "tapps_score_file": (
         "Score one file across 7 quality categories (0-100) with per-category breakdown."
     ),

@@ -6,8 +6,10 @@ import re
 from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
+from typing import Any
 
 _HANDOFF_RELATIVE = Path(".tapps-mcp") / "session-handoff.md"
+SESSION_HANDOFF_MEMORY_KEY = "session-handoff"
 _UPDATED_RE = re.compile(r"^\*\*Updated:\*\*\s*(.+)$", re.IGNORECASE | re.MULTILINE)
 _LINEAR_P0_RE = re.compile(r"^\*\*Linear P0:\*\*\s*(.+)$", re.IGNORECASE | re.MULTILINE)
 _SECTION_RE = re.compile(r"^##\s+(.+)$", re.MULTILINE)
@@ -182,6 +184,23 @@ def lint_handoff(
     return result
 
 
+def handoff_sections_from_doc(doc: HandoffDocument) -> dict[str, Any]:
+    """Structured section pointers for brain mirror / memory get consumers."""
+    updated_at: str | None = None
+    if doc.updated is not None:
+        updated_at = doc.updated.astimezone(UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
+    return {
+        "updated_at": updated_at,
+        "linear_p0": doc.linear_p0,
+        "done": doc.done,
+        "open": doc.open_items,
+        "next_p0": doc.next_p0,
+        "blockers": doc.blockers,
+        "verify": doc.verify,
+        "success_criterion": doc.success_criterion,
+    }
+
+
 def load_and_lint_handoff(project_root: Path) -> tuple[HandoffDocument | None, HandoffLintResult]:
     """Load handoff file if present and lint it."""
     path = handoff_path(project_root)
@@ -195,7 +214,9 @@ def load_and_lint_handoff(project_root: Path) -> tuple[HandoffDocument | None, H
 __all__ = [
     "HandoffDocument",
     "HandoffLintResult",
+    "SESSION_HANDOFF_MEMORY_KEY",
     "handoff_path",
+    "handoff_sections_from_doc",
     "lint_handoff",
     "load_and_lint_handoff",
     "parse_handoff_markdown",

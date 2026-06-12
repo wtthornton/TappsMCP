@@ -360,9 +360,11 @@ class TestSessionBoundaryRoundTrip:
         data = result["data"]
         assert "session_search" in data
         assert data["session_start_iso"] == "2026-05-23T10:00:00+00:00"
-        mock_bridge.search_sessions.assert_awaited_once_with(
-            "2026-05-23T10:00:00+00:00", limit=10
-        )
+        mock_bridge.search_sessions.assert_awaited_once()
+        call_args = mock_bridge.search_sessions.await_args
+        assert call_args is not None
+        assert call_args.args[0]  # semantic or sentinel query
+        assert call_args.kwargs.get("limit", 10) == 10
 
 
 class TestCleanupLegacyLearningDir:

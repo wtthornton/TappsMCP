@@ -208,6 +208,7 @@ ALL_TOOL_NAMES: frozenset[str] = frozenset(
         "tapps_server_info",
         "tapps_session_start",
         "tapps_session_end",
+        "tapps_handoff_save",
         "tapps_score_file",
         "tapps_security_scan",
         "tapps_quality_gate",
@@ -357,6 +358,8 @@ TAPPS_TOOL_PRESET_ADMIN: frozenset[str] = frozenset(
         "tapps_pipeline",
         "tapps_decompose",
         "tapps_session_notes",
+        "tapps_handoff_save",
+        "tapps_session_end",
     }
 )
 
@@ -389,6 +392,7 @@ TOOL_PROFILE_NLT_PLATFORM_ADMIN: frozenset[str] = frozenset(
         "tapps_server_info",
         "tapps_set_engagement_level",
         "tapps_session_end",
+        "tapps_handoff_save",
         "tapps_session_notes",
         "tapps_pipeline",
         "tapps_decompose",
@@ -1780,6 +1784,7 @@ tapps_quick_check = _scoring.tapps_quick_check
 tapps_validate_changed = _pipeline.tapps_validate_changed
 tapps_session_start = _pipeline.tapps_session_start
 tapps_session_end = _pipeline.tapps_session_end
+tapps_handoff_save = _pipeline.tapps_handoff_save
 tapps_init = _pipeline.tapps_init
 tapps_dashboard = _metrics.tapps_dashboard
 tapps_stats = _metrics.tapps_stats

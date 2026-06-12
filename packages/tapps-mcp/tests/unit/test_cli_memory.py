@@ -140,6 +140,7 @@ class TestMemorySave:
         assert result.exit_code == 0
         data = json.loads(result.output)
         assert data["key"] == "test-key"
+        assert "memory_group_note" in data
         bridge.save.assert_awaited_once()
         bridge.close.assert_called_once()
 

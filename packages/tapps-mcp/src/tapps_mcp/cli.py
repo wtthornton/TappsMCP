@@ -341,19 +341,131 @@ def upgrade(
 
 
 @main.command("session-end")
-def session_end_cmd() -> None:
+@click.option(
+    "--project-root",
+    default=".",
+    type=click.Path(exists=True, file_okay=False, path_type=str),
+    help="Project root (for handoff-derived session_search query).",
+)
+def session_end_cmd(project_root: str) -> None:
     """Close the TAPPS session lifecycle (flywheel + session search).
 
     Best-effort mirror of ``tapps_session_end`` for hosts without MCP wiring.
     Always exits 0 — brain outages are reported in the output, not as errors.
     """
     import json
+    from pathlib import Path
 
     from tapps_mcp.tools.session_end_helpers import run_session_end_sync
 
-    data = run_session_end_sync()
+    root = _get_project_root() if project_root == "." else Path(project_root).resolve()
+    data = run_session_end_sync(project_root=root)
     click.echo(json.dumps(data, indent=2))
     # Best-effort: degrade gracefully when brain is offline (TAP-3174).
+
+
+# ---------------------------------------------------------------------------
+# Handoff CLI group (TAP-3792)
+# ---------------------------------------------------------------------------
+
+
+@main.group()
+def handoff() -> None:
+    """Cross-session handoff utilities."""
+
+
+@handoff.command("write")
+@click.option(
+    "--file",
+    "file_path",
+    type=click.Path(exists=True, dir_okay=False, path_type=str),
+    default=None,
+    help="Read handoff markdown from a file (else stdin when piped).",
+)
+@click.option(
+    "--project-root",
+    default=".",
+    type=click.Path(exists=True, file_okay=False, path_type=str),
+    help="Project root directory.",
+)
+@click.option(
+    "--no-brain-mirror",
+    is_flag=True,
+    help="Skip brain mirror (file only).",
+)
+@click.option(
+    "--session-end",
+    "with_session_end",
+    is_flag=True,
+    help="Also run session-end flywheel after write.",
+)
+@click.option(
+    "--allow-lint-warnings",
+    is_flag=True,
+    help="Allow advisory lint warnings (still fails on P0/Open errors).",
+)
+def handoff_write(
+    file_path: str | None,
+    project_root: str,
+    no_brain_mirror: bool,
+    with_session_end: bool,
+    allow_lint_warnings: bool,
+) -> None:
+    """Atomically write session handoff file, mirror to brain, and lint schema."""
+    import json
+    import sys
+    from pathlib import Path
+
+    from tapps_mcp.tools.handoff_write import HandoffWriteError, write_handoff_sync
+
+    root = _get_project_root() if project_root == "." else Path(project_root).resolve()
+    if file_path:
+        markdown = Path(file_path).read_text(encoding="utf-8")
+    elif not sys.stdin.isatty():
+        markdown = sys.stdin.read()
+    else:
+        click.echo("Provide --file or pipe handoff markdown on stdin.", err=True)
+        raise SystemExit(2)
+
+    if not markdown.strip():
+        click.echo("Handoff markdown is empty.", err=True)
+        raise SystemExit(2)
+
+    try:
+        result = write_handoff_sync(
+            root,
+            markdown,
+            mirror_brain=not no_brain_mirror,
+            run_session_end=with_session_end,
+            fail_on_lint_errors=True,
+        )
+    except HandoffWriteError as exc:
+        click.echo("Handoff schema lint failed:", err=True)
+        for err in exc.errors:
+            click.echo(f"  error: {err}", err=True)
+        for warn in exc.warnings:
+            click.echo(f"  warning: {warn}", err=True)
+        raise SystemExit(1) from exc
+
+    if not allow_lint_warnings and result.lint.warnings:
+        click.echo("Handoff lint warnings (use --allow-lint-warnings to persist anyway):", err=True)
+        for warn in result.lint.warnings:
+            click.echo(f"  warning: {warn}", err=True)
+        raise SystemExit(1)
+
+    payload = {
+        "file_path": result.file_path,
+        "linear_p0": result.doc.linear_p0,
+        "metadata": result.metadata,
+        "lint": {
+            "ok": result.lint.ok,
+            "errors": result.lint.errors,
+            "warnings": result.lint.warnings,
+        },
+        "brain_mirror": result.brain_mirror,
+        "session_end": result.session_end,
+    }
+    click.echo(json.dumps(payload, indent=2))
 
 
 @main.command()
@@ -989,7 +1101,10 @@ def memory_save(key: str, value: str, tier: str, tags: str) -> None:
     if isinstance(result, dict) and result.get("degraded") and not result.get("success", True):
         click.echo(f"Error: {result.get('reason', 'degraded')}", err=True)
         raise SystemExit(1)
-    click.echo(json.dumps(result, indent=2))
+    from tapps_mcp.tools.handoff_memory import enrich_memory_save_result
+
+    payload = enrich_memory_save_result(result) if isinstance(result, dict) else result
+    click.echo(json.dumps(payload, indent=2))
 
 
 @memory.command("get")
@@ -1019,7 +1134,10 @@ def memory_get(key: str) -> None:
     if entry is None:
         click.echo(f"Memory '{key}' not found.", err=True)
         raise SystemExit(1)
-    click.echo(json.dumps(entry, indent=2))
+    from tapps_mcp.tools.handoff_memory import enrich_memory_get_entry
+
+    payload = enrich_memory_get_entry(key, entry)
+    click.echo(json.dumps(payload, indent=2))
 
 
 @memory.command("recall")

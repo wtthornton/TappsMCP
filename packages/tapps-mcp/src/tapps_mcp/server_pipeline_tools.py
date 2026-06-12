@@ -221,6 +221,7 @@ __all__ = [
     "tapps_doctor",
     "tapps_init",
     "tapps_pipeline",
+    "tapps_handoff_save",
     "tapps_session_end",
     "tapps_session_start",
     "tapps_set_engagement_level",
@@ -1429,6 +1430,79 @@ async def tapps_pipeline(
     return success_response("tapps_pipeline", elapsed_ms, data)
 
 
+async def tapps_handoff_save(
+    markdown: str,
+    session_end: bool = False,
+    mirror_brain: bool = True,
+    allow_lint_warnings: bool = False,
+) -> dict[str, Any]:
+    """Atomically write session handoff file, mirror to brain, and lint schema.
+
+    Writes ``.tapps-mcp/session-handoff.md``, mirrors the full markdown body to
+    brain key ``session-handoff``, and runs TAP-3573 schema lint. Optionally
+    closes the session lifecycle when ``session_end`` is true.
+    """
+    from tapps_mcp.server import _record_call, _record_execution
+    from tapps_mcp.tools.handoff_write import HandoffWriteError, write_handoff
+
+    start = time.perf_counter_ns()
+    _record_call("tapps_handoff_save")
+
+    settings = load_settings()
+    root = Path(settings.project_root)
+
+    try:
+        result = await write_handoff(
+            root,
+            markdown,
+            mirror_brain=mirror_brain,
+            run_session_end=session_end,
+            session_start_iso=_session_state.session_start_iso,
+            fail_on_lint_errors=True,
+        )
+    except HandoffWriteError as exc:
+        elapsed_ms = (time.perf_counter_ns() - start) // 1_000_000
+        _record_execution("tapps_handoff_save", start)
+        return error_response(
+            "tapps_handoff_save",
+            elapsed_ms,
+            code="handoff_lint_failed",
+            message="; ".join(exc.errors),
+            data={"errors": exc.errors, "warnings": exc.warnings},
+        )
+
+    if not allow_lint_warnings and result.lint.warnings:
+        elapsed_ms = (time.perf_counter_ns() - start) // 1_000_000
+        _record_execution("tapps_handoff_save", start)
+        return error_response(
+            "tapps_handoff_save",
+            elapsed_ms,
+            code="handoff_lint_warnings",
+            message="Handoff has advisory lint warnings",
+            data={"warnings": result.lint.warnings},
+        )
+
+    elapsed_ms = (time.perf_counter_ns() - start) // 1_000_000
+    _record_execution("tapps_handoff_save", start)
+
+    from tapps_mcp.tools.handoff_schema import handoff_sections_from_doc
+
+    data = {
+        "file_path": result.file_path,
+        "linear_p0": result.doc.linear_p0,
+        "metadata": result.metadata,
+        "handoff_sections": handoff_sections_from_doc(result.doc),
+        "lint": {
+            "ok": result.lint.ok,
+            "errors": result.lint.errors,
+            "warnings": result.lint.warnings,
+        },
+        "brain_mirror": result.brain_mirror,
+        "session_end": result.session_end,
+    }
+    return success_response("tapps_handoff_save", elapsed_ms, data)
+
+
 async def tapps_session_end() -> dict[str, Any]:
     """Close the feedback loop by processing this session's brain events.
 
@@ -1447,7 +1521,13 @@ async def tapps_session_end() -> dict[str, Any]:
     start = time.perf_counter_ns()
     _record_call("tapps_session_end")
 
-    data = await run_session_end(_session_state.session_start_iso)
+    from tapps_core.config.settings import load_settings
+
+    settings = load_settings()
+    data = await run_session_end(
+        _session_state.session_start_iso,
+        project_root=settings.project_root,
+    )
 
     elapsed_ms = (time.perf_counter_ns() - start) // 1_000_000
     _record_execution("tapps_session_end", start)
@@ -1478,6 +1558,13 @@ def register(mcp_instance: FastMCP, allowed_tools: frozenset[str]) -> None:
         register_tool(
             mcp_instance,
             tapps_session_end,
+            annotations=_ANNOTATIONS_SIDE_EFFECT_IDEMPOTENT,
+            meta=_META_DEFERRED,
+        )
+    if "tapps_handoff_save" in allowed_tools:
+        register_tool(
+            mcp_instance,
+            tapps_handoff_save,
             annotations=_ANNOTATIONS_SIDE_EFFECT_IDEMPOTENT,
             meta=_META_DEFERRED,
         )
