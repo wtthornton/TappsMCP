@@ -14,6 +14,7 @@ from tapps_mcp.pipeline.init import (
     _CLAUDE_HIGH_ENGAGEMENT_PERMISSIONS,
     _CLAUDE_PERMISSION_ENTRIES,
     _CLAUDE_SETTINGS_SCHEMA,
+    _NLT_PERMISSION_ENTRIES,
     _bootstrap_claude_settings,
     generate_permission_settings,
 )
@@ -23,10 +24,12 @@ class TestGeneratePermissionSettings:
     """Tests for the generate_permission_settings function."""
 
     def test_default_permissions(self, tmp_path):
-        """Default (medium) engagement generates base MCP permissions only."""
+        """Default (medium) engagement generates legacy + NLT MCP permissions."""
         result = generate_permission_settings(tmp_path)
         allow = result["permissions"]["allow"]
         for entry in _CLAUDE_PERMISSION_ENTRIES:
+            assert entry in allow
+        for entry in _NLT_PERMISSION_ENTRIES:
             assert entry in allow
         for entry in _CLAUDE_HIGH_ENGAGEMENT_PERMISSIONS:
             assert entry not in allow
@@ -75,7 +78,9 @@ class TestGeneratePermissionSettings:
         result = generate_permission_settings(tmp_path)
         assert "permissions" in result
         assert "allow" in result["permissions"]
-        assert len(result["permissions"]["allow"]) == len(_CLAUDE_PERMISSION_ENTRIES)
+        assert len(result["permissions"]["allow"]) == len(_CLAUDE_PERMISSION_ENTRIES) + len(
+            _NLT_PERMISSION_ENTRIES
+        )
 
     def test_low_engagement_same_as_medium(self, tmp_path):
         """Low engagement produces the same base permissions as medium."""
@@ -126,7 +131,11 @@ class TestBootstrapClaudeSettingsEngagement:
         """Skips when all desired entries (including high) are present."""
         settings_dir = tmp_path / ".claude"
         settings_dir.mkdir()
-        all_entries = list(_CLAUDE_PERMISSION_ENTRIES) + list(_CLAUDE_HIGH_ENGAGEMENT_PERMISSIONS)
+        all_entries = (
+            list(_CLAUDE_PERMISSION_ENTRIES)
+            + list(_NLT_PERMISSION_ENTRIES)
+            + list(_CLAUDE_HIGH_ENGAGEMENT_PERMISSIONS)
+        )
         config = {
             "$schema": _CLAUDE_SETTINGS_SCHEMA,
             "enableAllProjectMcpServers": True,

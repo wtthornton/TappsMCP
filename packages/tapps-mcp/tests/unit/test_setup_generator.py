@@ -690,10 +690,12 @@ class TestCliInit:
             ],
         )
         assert result.exit_code == 0
-        data = json.loads((cursor_dir / "mcp.json").read_text(encoding="utf-8"))
+        from tapps_mcp.distribution.setup_generator import _load_mcp_config_json
+
+        data = _load_mcp_config_json(cursor_dir / "mcp.json")
         assert "tapps-brain" not in data["mcpServers"]
         assert "other-mcp" in data["mcpServers"]
-        assert "tapps-mcp" in data["mcpServers"]
+        assert "nlt-code-quality" in data["mcpServers"]
         assert "bridge-only" in result.output.lower() or "Removed direct" in result.output
 
     def test_init_vscode(self, tmp_path):

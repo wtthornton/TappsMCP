@@ -106,6 +106,8 @@ def maybe_write_mcp_config(
     platform: str,
     mcp_config: bool,
     dry_run: bool,
+    *,
+    mcp_bundle: str = "developer",
 ) -> None:
     """Write project-scoped MCP config (Epic 47.2; default on for ``tapps_init``).
 
@@ -132,11 +134,14 @@ def maybe_write_mcp_config(
         force=True,
         scope="project",
         with_docs_mcp=with_docs_mcp,
+        mcp_bundle=mcp_bundle,
+        use_nlt_plugin=True,
     )
     if config_ok:
         result["mcp_config_written"] = True
         result["mcp_config_scope"] = "project"
         result["mcp_config_with_docs_mcp"] = with_docs_mcp
+        result["mcp_config_bundle"] = mcp_bundle
         result["brain_mcp_stripped"] = True
 
 
@@ -186,6 +191,7 @@ def build_init_bootstrap_config(
     llm_engagement_level: str | None,
     scaffold_experts: bool,
     include_karpathy: bool,
+    mcp_bundle: str,
     settings: Any,
 ) -> Any:
     """Assemble the :class:`BootstrapConfig` used by :func:`bootstrap_pipeline`."""
@@ -226,6 +232,7 @@ def build_init_bootstrap_config(
         llm_engagement_level=llm_engagement_level or settings.llm_engagement_level,
         scaffold_experts=scaffold_experts,
         include_karpathy=include_karpathy,
+        mcp_bundle=mcp_bundle,
     )
 
 

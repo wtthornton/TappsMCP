@@ -191,12 +191,47 @@ DOCS_TOOL_PRESET_AUDITOR: frozenset[str] = frozenset(
     }
 )
 
+# Epic 109: NLT plugin ``nlt-project-docs`` server (27 tools, 6 eager).
+# Canonical spec: docs/architecture/nlt-mcp-plugin-spec.yaml
+DOCS_TOOL_PRESET_NLT_PROJECT_DOCS: frozenset[str] = frozenset(
+    {
+        "docs_session_start",
+        "docs_project_scan",
+        "docs_check_drift",
+        "docs_generate_readme",
+        "docs_check_completeness",
+        "docs_check_links",
+        "docs_config",
+        "docs_module_map",
+        "docs_api_surface",
+        "docs_git_summary",
+        "docs_generate_api",
+        "docs_generate_adr",
+        "docs_generate_onboarding",
+        "docs_generate_contributing",
+        "docs_generate_prd",
+        "docs_generate_diagram",
+        "docs_generate_architecture",
+        "docs_generate_llms_txt",
+        "docs_generate_frontmatter",
+        "docs_generate_interactive_diagrams",
+        "docs_generate_purpose",
+        "docs_generate_doc_index",
+        "docs_check_freshness",
+        "docs_check_diataxis",
+        "docs_check_cross_refs",
+        "docs_check_style",
+        "docs_kg_query",
+    }
+)
+
 _DOCS_TOOL_PRESETS: dict[str, frozenset[str]] = {
     "core": DOCS_TOOL_PRESET_CORE,
     "full": ALL_DOCS_TOOL_NAMES,
     "planner": DOCS_TOOL_PRESET_PLANNER,
     "release": DOCS_TOOL_PRESET_RELEASE,
     "auditor": DOCS_TOOL_PRESET_AUDITOR,
+    "nlt-project-docs": DOCS_TOOL_PRESET_NLT_PROJECT_DOCS,
 }
 
 

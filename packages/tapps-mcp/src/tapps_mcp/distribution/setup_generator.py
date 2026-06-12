@@ -19,6 +19,16 @@ import click
 from tapps_core.brain_bridge import BRAIN_PROFILE_FACADE, BRAIN_PROFILE_SERVER
 from tapps_core.common.logging import get_logger
 
+from tapps_mcp.distribution.nlt_mcp_config import (
+    NLT_SERVER_ORDER,
+    NLT_SERVER_SPECS,
+    _LEGACY_MCP_SERVER_IDS,
+    commented_servers_for_bundle,
+    enabled_servers_for_bundle,
+    list_nlt_server_ids_in_config,
+    normalize_mcp_bundle,
+)
+
 log = get_logger(__name__)
 
 # ---------------------------------------------------------------------------
@@ -42,6 +52,13 @@ _TAPPS_MCP_UV_ROOT_PLACEHOLDER = "<PATH_TO_TAPPS_MCP_MONOREPO_ROOT>"
 
 # TAP-3255: Cursor GUI launches may not expand ${VAR} in mcp.json — wrapper sources .env first.
 _CURSOR_MCP_WRAPPER_REL = Path(".cursor/bin/tapps-mcp-serve.sh")
+
+
+def _cursor_wrapper_rel(server_id: str = "tapps-mcp") -> Path:
+    """Return the Cursor wrapper script path for an MCP server entry."""
+    if server_id == "tapps-mcp":
+        return _CURSOR_MCP_WRAPPER_REL
+    return Path(f".cursor/bin/{server_id}-serve.sh")
 # Literal emitted in mcp.json env; wrapper treats this as "unset" when mapping tokens.
 _BRAIN_AUTH_TOKEN_ENV_PLACEHOLDER = "${TAPPS_BRAIN_AUTH_TOKEN}"  # noqa: S105
 
@@ -368,13 +385,15 @@ def _write_cursor_mcp_wrapper(
     project_root: Path,
     *,
     uv_launch: tuple[str, list[str]] | None = None,
+    wrapper_rel: Path | None = None,
 ) -> Path:
-    """Write ``.cursor/bin/tapps-mcp-serve.sh`` and return its absolute path."""
+    """Write a Cursor MCP wrapper script and return its absolute path."""
     if uv_launch is not None:
         command, args = uv_launch
     else:
         command, args = _resolve_tapps_mcp_launch()
-    wrapper_path = project_root / _CURSOR_MCP_WRAPPER_REL
+    rel = wrapper_rel or _CURSOR_MCP_WRAPPER_REL
+    wrapper_path = project_root / rel
     wrapper_path.parent.mkdir(parents=True, exist_ok=True)
     wrapper_path.write_text(
         _render_cursor_mcp_wrapper_script(command, args),
@@ -413,10 +432,15 @@ def _apply_cursor_launch_wrapper(
     project_root: Path,
     *,
     uv_launch: tuple[str, list[str]] | None = None,
+    server_id: str = "tapps-mcp",
 ) -> None:
-    """Point Cursor ``tapps-mcp`` MCP entry at the env-sourcing wrapper script."""
+    """Point Cursor MCP entry at the env-sourcing wrapper script."""
     command, args = _resolve_wrapper_launch(entry, project_root, uv_launch=uv_launch)
-    wrapper = _write_cursor_mcp_wrapper(project_root, uv_launch=(command, args))
+    wrapper = _write_cursor_mcp_wrapper(
+        project_root,
+        uv_launch=(command, args),
+        wrapper_rel=_cursor_wrapper_rel(server_id),
+    )
     entry["command"] = str(wrapper)
     entry["args"] = []
 
@@ -708,6 +732,273 @@ def _merge_docsmcp_entry(
 
 
 # ---------------------------------------------------------------------------
+# NLT MCP plugin (Epic 109)
+# ---------------------------------------------------------------------------
+
+
+def _strip_jsonc_comments(raw: str) -> str:
+    """Remove ``//`` line comments and trailing commas for JSONC mcp.json parsing."""
+    import re
+
+    lines: list[str] = []
+    for line in raw.splitlines():
+        stripped = line.strip()
+        if stripped.startswith("//"):
+            continue
+        if "//" in line:
+            in_string = False
+            escaped = False
+            cut = len(line)
+            for idx, ch in enumerate(line):
+                if escaped:
+                    escaped = False
+                    continue
+                if ch == "\\":
+                    escaped = True
+                    continue
+                if ch == '"':
+                    in_string = not in_string
+                    continue
+                if not in_string and line[idx : idx + 2] == "//":
+                    cut = idx
+                    break
+            line = line[:cut].rstrip()
+        lines.append(line)
+    text = "\n".join(lines)
+    return re.sub(r",(\s*[}\]])", r"\1", text)
+
+
+def _load_mcp_config_json(config_path: Path) -> dict[str, Any]:
+    """Load MCP JSON/JSONC from *config_path*; return ``{}`` on empty/missing."""
+    if not config_path.exists():
+        return {}
+    try:
+        raw = config_path.read_text(encoding="utf-8")
+    except OSError:
+        return {}
+    if not raw.strip():
+        return {}
+    try:
+        parsed = json.loads(_strip_jsonc_comments(raw))
+    except json.JSONDecodeError:
+        return {}
+    return parsed if isinstance(parsed, dict) else {}
+
+
+def _adapt_uv_launch_for_nlt(
+    uv_launch: tuple[str, list[str]],
+    serve_cmd: str,
+    serve_args: list[str],
+) -> tuple[str, list[str]]:
+    """Rewrite a consumer ``uv run … tapps-mcp serve`` launch for another NLT binary."""
+    command, args = uv_launch
+    new_args = list(args)
+    for legacy_tool in ("tapps-mcp", "docsmcp", "tapps-platform"):
+        if legacy_tool in new_args:
+            idx = new_args.index(legacy_tool)
+            new_args = [*new_args[:idx], serve_cmd, *serve_args]
+            return command, new_args
+    return command, [*new_args, serve_cmd, *serve_args]
+
+
+def _build_nlt_launch(
+    server_id: str,
+    uv_launch: tuple[str, list[str]] | None,
+) -> tuple[str, list[str]]:
+    """Return ``command`` + ``args`` to launch an NLT MCP server."""
+    spec = NLT_SERVER_SPECS[server_id]
+    serve_cmd = str(spec["serve_command"])
+    serve_args = [str(a) for a in spec["serve_args"]]
+
+    if uv_launch is not None:
+        return _adapt_uv_launch_for_nlt(uv_launch, serve_cmd, serve_args)
+
+    if getattr(sys, "frozen", False):
+        return sys.executable, serve_args
+
+    if shutil.which(serve_cmd) is not None:
+        return serve_cmd, serve_args
+
+    directory = _resolve_tapps_mcp_monorepo_root() or _TAPPS_MCP_UV_ROOT_PLACEHOLDER
+    return (
+        "uv",
+        ["run", "--directory", directory, serve_cmd, *serve_args],
+    )
+
+
+def _build_nlt_server_entry(
+    server_id: str,
+    host: str,
+    *,
+    uv_launch: tuple[str, list[str]] | None = None,
+    project_root: Path | None = None,
+    upgrade_mode: bool = False,
+    old_entry: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    """Build one NLT plugin server entry for MCP host config."""
+    spec = NLT_SERVER_SPECS[server_id]
+    launch = _build_nlt_launch(server_id, uv_launch)
+
+    if spec["env_kind"] == "docs":
+        entry = _build_docsmcp_server_entry(
+            host,
+            uv_launch=launch,
+            project_root=project_root,
+        )
+    else:
+        entry = _build_server_entry(
+            host,
+            uv_launch=launch,
+            project_root=project_root,
+        )
+
+    if isinstance(old_entry, dict):
+        binary_name = str(spec["serve_command"])
+        if _preserve_launch_on_upgrade(upgrade_mode, old_entry, binary_name=binary_name):
+            entry["command"] = old_entry["command"]
+            if "args" in old_entry:
+                entry["args"] = old_entry["args"]
+        old_env = old_entry.get("env")
+        new_env = entry.get("env") or {}
+        if isinstance(old_env, dict):
+            entry["env"] = {**old_env, **new_env}
+
+    return entry
+
+
+def _collect_legacy_tapps_env(old_servers: dict[str, Any]) -> dict[str, str]:
+    """Pull env vars from legacy ``tapps-mcp`` or primary NLT server for migration."""
+    merged: dict[str, str] = {}
+    for key in ("tapps-mcp", "nlt-code-quality", "nlt-platform-admin"):
+        entry = old_servers.get(key)
+        if not isinstance(entry, dict):
+            continue
+        env = entry.get("env")
+        if isinstance(env, dict):
+            merged.update({str(k): str(v) for k, v in env.items() if isinstance(v, str)})
+    return merged
+
+
+def _merge_nlt_config(
+    existing: dict[str, Any],
+    host: str,
+    *,
+    mcp_bundle: str = "developer",
+    upgrade_mode: bool = False,
+    uv_launch: tuple[str, list[str]] | None = None,
+    project_root: Path | None = None,
+) -> tuple[dict[str, Any], tuple[str, ...], tuple[str, ...]]:
+    """Merge NLT plugin server entries into *existing* config."""
+    bundle = normalize_mcp_bundle(mcp_bundle)
+    enabled = enabled_servers_for_bundle(bundle)
+    commented = commented_servers_for_bundle(bundle)
+    servers_key = _get_servers_key(host)
+    merged = dict(existing)
+    raw_servers = merged.get(servers_key)
+    old_servers: dict[str, Any] = raw_servers if isinstance(raw_servers, dict) else {}
+    legacy_env = _collect_legacy_tapps_env(old_servers)
+
+    preserved: dict[str, Any] = {
+        name: entry
+        for name, entry in old_servers.items()
+        if name not in NLT_SERVER_ORDER and name not in _LEGACY_MCP_SERVER_IDS
+    }
+
+    nlt_servers: dict[str, Any] = {}
+    for server_id in NLT_SERVER_ORDER:
+        old_entry = old_servers.get(server_id)
+        if not isinstance(old_entry, dict) and server_id == "nlt-code-quality":
+            legacy = old_servers.get("tapps-mcp")
+            old_entry = legacy if isinstance(legacy, dict) else None
+        entry = _build_nlt_server_entry(
+            server_id,
+            host,
+            uv_launch=uv_launch,
+            project_root=project_root,
+            upgrade_mode=upgrade_mode,
+            old_entry=old_entry if isinstance(old_entry, dict) else None,
+        )
+        if server_id == "nlt-code-quality" and legacy_env:
+            cur_env = entry.get("env")
+            if not isinstance(cur_env, dict):
+                cur_env = {}
+            entry["env"] = {**cur_env, **legacy_env}
+        nlt_servers[server_id] = entry
+
+    merged[servers_key] = {**preserved, **nlt_servers}
+    return merged, enabled, commented
+
+
+
+def _serialize_nlt_mcp_config(
+    merged: dict[str, Any],
+    host: str,
+    *,
+    enabled: tuple[str, ...],
+    commented: tuple[str, ...],
+) -> str:
+    """Serialize MCP config with commented opt-in NLT server blocks (JSONC)."""
+    servers_key = _get_servers_key(host)
+    servers = merged.get(servers_key)
+    if not isinstance(servers, dict):
+        servers = {}
+
+    enabled_servers: dict[str, Any] = {
+        sid: servers[sid] for sid in enabled if sid in servers and isinstance(servers[sid], dict)
+    }
+    for name, entry in servers.items():
+        if name in NLT_SERVER_ORDER or name in _LEGACY_MCP_SERVER_IDS:
+            continue
+        if isinstance(entry, dict):
+            enabled_servers[name] = entry
+
+    inner_parts: list[str] = []
+    if enabled_servers:
+        enabled_json = json.dumps(enabled_servers, indent=2)
+        enabled_body = enabled_json.strip()[1:-1].strip()
+        inner_parts.append(enabled_body)
+
+    comment_parts: list[str] = []
+    for server_id in commented:
+        entry = servers.get(server_id)
+        if not isinstance(entry, dict):
+            continue
+        spec = NLT_SERVER_SPECS[server_id]
+        header = (
+            f"// Opt-in: {spec['display_name']} — {spec['tagline']}\n"
+            f"// Uncomment the block below to enable this server."
+        )
+        block_json = json.dumps({server_id: entry}, indent=2)
+        commented_body = "\n".join(f"// {line}" for line in block_json.splitlines())
+        comment_parts.append(f"{header}\n{commented_body}")
+
+    inner_text = "\n\n".join([*inner_parts, *comment_parts])
+    lines: list[str] = ["{"]
+    for key, value in merged.items():
+        if key == servers_key:
+            continue
+        block = json.dumps({key: value}, indent=2).splitlines()
+        for line in block:
+            lines.append("  " + line.lstrip())
+        lines[-1] += ","
+
+    lines.append(f'  "{servers_key}": {{')
+    for line in inner_text.splitlines():
+        lines.append(f"    {line}" if line else "")
+    lines.append("  }")
+    lines.append("}")
+    lines.append("")
+    return "\n".join(lines)
+
+
+def _config_has_tapps_or_nlt(servers: dict[str, Any]) -> bool:
+    """Return True when TappsMCP (legacy or NLT) is already configured."""
+    if "tapps-mcp" in servers:
+        return True
+    return bool(list_nlt_server_ids_in_config(servers))
+
+
+# ---------------------------------------------------------------------------
 # Env migration (Issue #80.2) + secret detection (Issue #80.3)
 # ---------------------------------------------------------------------------
 
@@ -795,6 +1086,8 @@ def _load_existing_env_from_other_scope(
         return {}
     entry = servers.get("tapps-mcp")
     if not isinstance(entry, dict):
+        entry = servers.get("nlt-code-quality")
+    if not isinstance(entry, dict):
         return {}
     env = entry.get("env")
     if not isinstance(env, dict):
@@ -847,16 +1140,20 @@ def _generate_config(
     with_docs_mcp: bool = False,
     uv_launch: tuple[str, list[str]] | None = None,
     extra_env: dict[str, str] | None = None,
+    mcp_bundle: str = "developer",
+    use_nlt_plugin: bool = False,
 ) -> bool:
     """Generate (or merge) the MCP config for the given host.
 
     Args:
         host: Target host name.
         project_root: Project root directory.
-        force: If ``True``, overwrite any existing ``tapps-mcp`` entry without
+        force: If ``True``, overwrite any existing TappsMCP entry without
             prompting. Intended for non-interactive use (CI, scripts).
         scope: ``"project"`` (default) or ``"user"``. Only affects ``claude-code``.
-        with_docs_mcp: When ``True``, also write a ``docs-mcp`` server entry (Epic 80.7).
+        with_docs_mcp: Legacy monolith mode — also write ``docs-mcp`` (Epic 80.7).
+        mcp_bundle: NLT bundle name (``developer``, ``planning``, ``docs``, ``release``).
+        use_nlt_plugin: When ``True``, write NLT ``nlt-*`` server entries (``tapps_init`` default).
 
     Returns:
         ``True`` if configuration was successfully written, ``False`` if the
@@ -865,13 +1162,12 @@ def _generate_config(
     config_path = _get_config_path(host, project_root, scope=scope)
     servers_key = _get_servers_key(host)
     existing: dict[str, Any] = {}
+    nlt_enabled: tuple[str, ...] = ()
+    nlt_commented: tuple[str, ...] = ()
 
     if config_path.exists():
-        # Read existing config and merge
-        try:
-            raw = config_path.read_text(encoding="utf-8")
-            existing = json.loads(raw) if raw.strip() else {}
-        except json.JSONDecodeError:
+        existing = _load_mcp_config_json(config_path)
+        if existing == {} and config_path.read_text(encoding="utf-8").strip():
             click.echo(
                 click.style(
                     f"Invalid JSON in {config_path}.",
@@ -884,17 +1180,19 @@ def _generate_config(
             )
             return False
 
-        # Check if tapps-mcp already configured
-        if servers_key in existing and "tapps-mcp" in existing.get(servers_key, {}):
+        old_servers = existing.get(servers_key, {})
+        has_tapps = isinstance(old_servers, dict) and _config_has_tapps_or_nlt(old_servers)
+        if has_tapps:
+            label = "NLT TappsMCP" if use_nlt_plugin else "tapps-mcp"
             click.echo(
                 click.style(
-                    f"tapps-mcp is already configured in {config_path}",
+                    f"{label} is already configured in {config_path}",
                     fg="yellow",
                 )
             )
             if not force:
                 if sys.stdin.isatty():
-                    if not click.confirm("Overwrite the existing tapps-mcp entry?"):
+                    if not click.confirm(f"Overwrite the existing {label} entries?"):
                         click.echo("Aborted.")
                         return False
                 else:
@@ -903,7 +1201,7 @@ def _generate_config(
                         click.echo(
                             click.style(
                                 "Non-interactive session: skipping overwrite of existing "
-                                "tapps-mcp entry.",
+                                f"{label} entries.",
                                 fg="yellow",
                             )
                         )
@@ -913,9 +1211,28 @@ def _generate_config(
                         )
                         return True
 
-        merged = _merge_config(
-            existing,
+        if use_nlt_plugin:
+            merged, nlt_enabled, nlt_commented = _merge_nlt_config(
+                existing,
+                host,
+                mcp_bundle=mcp_bundle,
+                upgrade_mode=upgrade_mode,
+                uv_launch=uv_launch,
+                project_root=project_root,
+            )
+        else:
+            merged = _merge_config(
+                existing,
+                host,
+                upgrade_mode=upgrade_mode,
+                uv_launch=uv_launch,
+                project_root=project_root,
+            )
+    elif use_nlt_plugin:
+        merged, nlt_enabled, nlt_commented = _merge_nlt_config(
+            {},
             host,
+            mcp_bundle=mcp_bundle,
             upgrade_mode=upgrade_mode,
             uv_launch=uv_launch,
             project_root=project_root,
@@ -930,25 +1247,21 @@ def _generate_config(
             }
         }
 
-    include_docs_mcp = _should_include_docs_mcp(
+    include_docs_mcp = False if use_nlt_plugin else _should_include_docs_mcp(
         with_docs_mcp,
         existing=existing if config_path.exists() else None,
         servers_key=servers_key,
     )
 
-    # Issue #80.2: When creating a new config for claude-code, migrate env vars
-    # (e.g. CONTEXT7_API_KEY) from the *other* scope so the user doesn't silently
-    # lose them after re-scoping.
     migrated_env = _load_existing_env_from_other_scope(host, project_root, scope)
     if migrated_env:
         servers_key_m = _get_servers_key(host)
-        entry = merged[servers_key_m].get("tapps-mcp")
+        primary_key = "nlt-code-quality" if use_nlt_plugin else "tapps-mcp"
+        entry = merged.get(servers_key_m, {}).get(primary_key)
         if isinstance(entry, dict):
             cur_env = entry.get("env")
             if not isinstance(cur_env, dict):
                 cur_env = {}
-            # Keep scope-specific TAPPS_MCP_PROJECT_ROOT from the new entry;
-            # pull in any other keys from the old scope that are not already set.
             entry["env"] = {**migrated_env, **cur_env}
             other_path = _other_scope_config_path(host, project_root, scope)
             migrated_keys = sorted(k for k in migrated_env if k not in (cur_env or {}))
@@ -960,14 +1273,17 @@ def _generate_config(
                     )
                 )
 
-    # Issue #79: inject extra env vars (e.g. Context7 API key) into tapps-mcp entry.
     if extra_env:
-        tapps_entry = merged.get(servers_key, {}).get("tapps-mcp")
-        if isinstance(tapps_entry, dict):
-            env = tapps_entry.get("env")
-            if not isinstance(env, dict):
-                env = {}
-            tapps_entry["env"] = {**env, **extra_env}
+        servers_block = merged.get(servers_key, {})
+        if isinstance(servers_block, dict):
+            for env_key in ("tapps-mcp", "nlt-code-quality", "nlt-platform-admin"):
+                tapps_entry = servers_block.get(env_key)
+                if isinstance(tapps_entry, dict) and tapps_entry.get("env", {}).get("TAPPS_MCP_PROJECT_ROOT"):
+                    env = tapps_entry.get("env")
+                    if not isinstance(env, dict):
+                        env = {}
+                    tapps_entry["env"] = {**env, **extra_env}
+                    break
 
     if include_docs_mcp:
         _merge_docsmcp_entry(
@@ -985,32 +1301,71 @@ def _generate_config(
                 fg="cyan",
             )
         )
-        click.echo("  tapps-mcp entry would be added/updated. Run without --dry-run to apply.")
+        if use_nlt_plugin:
+            click.echo(
+                f"  NLT bundle '{normalize_mcp_bundle(mcp_bundle)}': "
+                f"enable {', '.join(nlt_enabled)}; "
+                f"comment {', '.join(nlt_commented)}."
+            )
+        else:
+            click.echo("  tapps-mcp entry would be added/updated. Run without --dry-run to apply.")
         if host == "cursor":
-            click.echo(f"  Would write Cursor wrapper: {project_root / _CURSOR_MCP_WRAPPER_REL}")
+            if use_nlt_plugin:
+                for sid in nlt_enabled:
+                    click.echo(f"  Would write Cursor wrapper: {project_root / _cursor_wrapper_rel(sid)}")
+            else:
+                click.echo(f"  Would write Cursor wrapper: {project_root / _CURSOR_MCP_WRAPPER_REL}")
         return True
 
     if host == "cursor":
-        tapps_entry = merged.get(servers_key, {}).get("tapps-mcp")
-        if isinstance(tapps_entry, dict):
-            _apply_cursor_launch_wrapper(
-                tapps_entry,
-                project_root,
-                uv_launch=uv_launch,
-            )
+        servers_block = merged.get(servers_key, {})
+        if isinstance(servers_block, dict):
+            if use_nlt_plugin:
+                for sid in nlt_enabled:
+                    entry = servers_block.get(sid)
+                    if isinstance(entry, dict):
+                        _apply_cursor_launch_wrapper(
+                            entry,
+                            project_root,
+                            uv_launch=uv_launch,
+                            server_id=sid,
+                        )
+            else:
+                tapps_entry = servers_block.get("tapps-mcp")
+                if isinstance(tapps_entry, dict):
+                    _apply_cursor_launch_wrapper(
+                        tapps_entry,
+                        project_root,
+                        uv_launch=uv_launch,
+                    )
 
-    # Ensure parent directory exists
     config_path.parent.mkdir(parents=True, exist_ok=True)
 
-    config_path.write_text(
-        json.dumps(merged, indent=2) + "\n",
-        encoding="utf-8",
-    )
+    if use_nlt_plugin:
+        config_text = _serialize_nlt_mcp_config(
+            merged,
+            host,
+            enabled=nlt_enabled,
+            commented=nlt_commented,
+        )
+        config_path.write_text(config_text, encoding="utf-8")
+    else:
+        config_path.write_text(
+            json.dumps(merged, indent=2) + "\n",
+            encoding="utf-8",
+        )
 
     click.echo(click.style(f"Configuration written to {config_path}", fg="green"))
+    if use_nlt_plugin:
+        click.echo(
+            click.style(
+                f"  NLT plugin: {len(nlt_enabled)} server(s) enabled "
+                f"({', '.join(nlt_enabled)}); "
+                f"{len(nlt_commented)} opt-in block(s) commented.",
+                fg="cyan",
+            )
+        )
 
-    # Issue #80.3: warn when plaintext secrets end up in the config file,
-    # and offer to append the project-scope file to .gitignore.
     _warn_plaintext_secrets(config_path, merged, host, project_root, scope)
 
     _print_next_steps(host, project_root=project_root)
@@ -1146,7 +1501,19 @@ def _check_config(host: str, project_root: Path, scope: str = "project") -> bool
             click.echo(f"  Run: tapps-mcp init --host {host}")
         return False
 
-    click.echo(click.style(f"tapps-mcp is correctly configured in {config_path}", fg="green"))
+    click.echo(click.style(f"TappsMCP is correctly configured in {config_path}", fg="green"))
+    servers_key = _get_servers_key(host)
+    data = _load_mcp_config_json(config_path)
+    servers = data.get(servers_key, {})
+    if isinstance(servers, dict):
+        nlt_ids = list_nlt_server_ids_in_config(servers)
+        if nlt_ids:
+            click.echo(
+                click.style(
+                    f"  NLT plugin: {len(nlt_ids)} enabled server(s): {', '.join(nlt_ids)}",
+                    fg="cyan",
+                )
+            )
     return True
 
 
@@ -1178,7 +1545,7 @@ def _validate_config_file(config_path: Path, servers_key: str) -> str | None:
 
     try:
         raw = config_path.read_text(encoding="utf-8")
-        data = json.loads(raw)
+        data = json.loads(_strip_jsonc_comments(raw))
     except json.JSONDecodeError:
         return f"Invalid JSON in {config_path}"
 
@@ -1186,17 +1553,26 @@ def _validate_config_file(config_path: Path, servers_key: str) -> str | None:
         return f"Invalid structure in {config_path}"
 
     servers = data.get(servers_key, {})
-    entry = servers.get("tapps-mcp") if isinstance(servers, dict) else None
+    if not isinstance(servers, dict):
+        return f"Invalid structure in {config_path}"
+
+    entry = servers.get("tapps-mcp")
     if not isinstance(entry, dict):
-        return f"tapps-mcp entry not found in {config_path} under '{servers_key}'"
+        entry = servers.get("nlt-code-quality")
+    if not isinstance(entry, dict):
+        return f"tapps-mcp / nlt-code-quality entry not found in {config_path} under '{servers_key}'"
 
     command = entry.get("command", "")
     args = entry.get("args", [])
+    if _is_valid_tapps_command(command, args if isinstance(args, list) else None):
+        return None
+    if isinstance(args, list) and any("--profile" in str(a) for a in args):
+        wrapper_name = Path(str(command).replace("\\", "/")).name.lower()
+        if wrapper_name.endswith("-serve.sh") or wrapper_name == "tapps-mcp-serve.sh":
+            return None
     return (
         f"Unexpected command in tapps-mcp config: '{command}'"
         f" (expected 'tapps-mcp', 'uv run tapps-mcp serve', or path to tapps-mcp.exe)"
-        if not _is_valid_tapps_command(command, args if isinstance(args, list) else None)
-        else None
     )
 
 
@@ -1233,6 +1609,8 @@ def _configure_multiple_hosts(
     with_docs_mcp: bool = False,
     uv_launch: tuple[str, list[str]] | None = None,
     extra_env: dict[str, str] | None = None,
+    mcp_bundle: str = "developer",
+    use_nlt_plugin: bool = False,
 ) -> bool:
     """Configure (or check) multiple hosts, reporting per-host results.
 
@@ -1255,6 +1633,8 @@ def _configure_multiple_hosts(
                 with_docs_mcp=with_docs_mcp,
                 uv_launch=uv_launch,
                 extra_env=extra_env,
+                mcp_bundle=mcp_bundle,
+                use_nlt_plugin=use_nlt_plugin,
             )
             if ok and rules and not dry_run:
                 _generate_rules(host, project_root)
@@ -1515,10 +1895,10 @@ def run_init(
     uv_extra: str | None = None,
     context7_api_key: str | None = None,
     overwrite_tech_stack: bool = False,
+    mcp_bundle: str = "developer",
+    use_nlt_plugin: bool = True,
 ) -> bool:
     """Run the init command logic.
-
-    Called from the CLI ``init`` command.
 
     Args:
         mcp_host: Target host or ``"auto"`` for detection.
@@ -1533,7 +1913,9 @@ def run_init(
         engagement_level: When set (high/medium/low), write to .tapps-mcp.yaml and
             use for platform rules. When ``None``, rules use medium or existing config.
         allow_package_init: Allow init when ``project_root`` is ``.../packages/tapps-mcp``.
-        with_docs_mcp: Also register the docs-mcp server (Epic 80.7).
+        with_docs_mcp: Legacy monolith — also register docs-mcp (ignored when NLT plugin is on).
+        mcp_bundle: NLT bundle (``developer``, ``planning``, ``docs``, ``release``).
+        use_nlt_plugin: Write NLT ``nlt-*`` servers (default). Set ``False`` for legacy monolith.
         context7_api_key: When set, write ``TAPPS_MCP_CONTEXT7_API_KEY`` into the
             MCP env block using ``${TAPPS_MCP_CONTEXT7_API_KEY}`` interpolation and
             print an export reminder (Issue #79).
@@ -1656,6 +2038,8 @@ def run_init(
             with_docs_mcp=with_docs_mcp,
             uv_launch=uv_launch,
             extra_env=extra_env,
+            mcp_bundle=mcp_bundle,
+            use_nlt_plugin=use_nlt_plugin,
         )
 
     if check:
@@ -1673,6 +2057,8 @@ def run_init(
         with_docs_mcp=with_docs_mcp,
         uv_launch=uv_launch,
         extra_env=extra_env,
+        mcp_bundle=mcp_bundle,
+        use_nlt_plugin=use_nlt_plugin,
     )
     if ok and rules and not dry_run:
         _generate_rules(mcp_host, root, engagement_level=engagement_level)

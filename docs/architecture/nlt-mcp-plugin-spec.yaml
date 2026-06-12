@@ -1,0 +1,360 @@
+# NLT MCP Plugin Specification (zero-duplication split)
+# Schema for tapps_init / tapps-mcp serve --profile / docsmcp serve --profile
+#
+# Research backing: docs/archive/planning/research/2026-NLT-MCP-PLUGIN-SPLIT-RESEARCH.md
+# Related: docs/architecture/tool-budget.md, TOOL-TIER-RANKING.md
+#
+# Design rules:
+#   - MCP server IDs use nlt-* prefix (tool names stay tapps_* / docs_*).
+#   - Each tool registers on exactly ONE server (zero duplication).
+#   - Cross-server workflows use skills + in-process Python imports, not duplicate registration.
+#   - Target ≤20 tools per server; ≤9 eager tools per server (defer_loading for the rest).
+#
+# CORE ASSUMPTION (load-bearing):
+#   Users enable 1–3 nlt-* servers per session, NOT all five at once.
+#   Token budgets, tool-selection accuracy, and doctor WARN thresholds are
+#   computed for PARTIAL enablement. The "full" bundle is escape hatch only.
+#   tapps_init MUST NOT enable all servers by default.
+
+schema_version: "1.0"
+
+# ---------------------------------------------------------------------------
+# Core assumption: partial enablement (not all servers at once)
+# ---------------------------------------------------------------------------
+core_assumption:
+  statement: |
+    A typical session enables one task bundle (1–3 servers). Enabling all five
+    simultaneously is unsupported as a default experience — it recreates monolith
+    context cost (~78 tools, ~29 eager, ~10K+ schema tokens) without the benefit
+    of the split.
+  expected_sessions:
+    daily_coding:
+      servers: [nlt-code-quality]
+      optional: [nlt-platform-admin] # disable after bootstrap to save ~2 eager tools
+      eager_tools_approx: 9
+    planning_linear:
+      servers: [nlt-code-quality, nlt-linear-issues]
+      eager_tools_approx: 16
+    docs_audit:
+      servers: [nlt-project-docs]
+      eager_tools_approx: 6
+    release_day:
+      servers: [nlt-release-ship, nlt-project-docs] # git_summary on project-docs
+      eager_tools_approx: 11
+    bootstrap_only:
+      servers: [nlt-platform-admin]
+      eager_tools_approx: 2
+  anti_pattern:
+    name: all_five_enabled
+    servers: all
+    tools: 78
+    eager_approx: 29
+    guidance: |
+      Avoid. Use only for power users or short diagnostic sessions. tapps_doctor
+      should WARN when >3 nlt-* servers are enabled or eager total exceeds 20.
+  init_defaults:
+    write_only_bundle: developer # 2 servers, ~11 eager — never "full" on fresh install
+    comment_disabled_servers: true # mcp.json entries for opt-in servers are commented out
+plugin_id: nlt-tapps-plugin
+plugin_display_name: "NLT Tapps Quality Plugin"
+plugin_version: "1.0.0"
+
+# ---------------------------------------------------------------------------
+# Research-aligned constraints (2026)
+# ---------------------------------------------------------------------------
+constraints:
+  max_tools_per_server: 20 # soft target; nlt-project-docs is 27 total / 6 eager — defer_loading required
+  max_eager_tools_per_server: 9
+  duplication_policy: zero # no tool name in more than one server profile
+  tool_name_prefixes: # unchanged; server ID provides namespace via host (mcp__nlt-code-quality__...)
+    tapps: tapps_
+    docs: docs_
+
+# ---------------------------------------------------------------------------
+# Default bundles (what tapps_init writes to .cursor/mcp.json by default)
+# ---------------------------------------------------------------------------
+default_bundles:
+  developer:
+    description: "Daily coding + bootstrap/doctor"
+    enabled_servers:
+      - nlt-code-quality
+      - nlt-platform-admin
+  planning:
+    description: "Developer bundle + Linear issue workflow"
+    enabled_servers:
+      - nlt-code-quality
+      - nlt-platform-admin
+      - nlt-linear-issues
+  full:
+    description: "ESCAPE HATCH ONLY — all five servers (~78 tools, ~29 eager). Not recommended for daily use."
+    enabled_servers:
+      - nlt-code-quality
+      - nlt-platform-admin
+      - nlt-linear-issues
+      - nlt-project-docs
+      - nlt-release-ship
+    warn_in_doctor: true
+
+# ---------------------------------------------------------------------------
+# MCP servers (5)
+# ---------------------------------------------------------------------------
+servers:
+  nlt-code-quality:
+    display_name: "Code Quality"
+    tagline: "Score, gate, and secure code while you edit."
+    package: tapps-mcp
+    serve_command: tapps-mcp
+    serve_args: ["serve", "--profile", "nlt-code-quality"]
+    default_enabled: true
+    tool_count: 15
+    eager_count: 9
+    skills:
+      - tapps-finish-task
+      - tapps-review-pipeline
+      - tapps-security
+      - tapps-research
+      - tapps-score
+      - tapps-gate
+      - tapps-validate
+    hooks:
+      - tapps-after-edit # Cursor: remind quick_check
+      - tapps-post-edit # Claude: remind quick_check
+    tools:
+      eager:
+        - tapps_session_start
+        - tapps_quick_check
+        - tapps_validate_changed
+        - tapps_quality_gate
+        - tapps_checklist
+        - tapps_lookup_docs
+        - tapps_score_file
+        - tapps_security_scan
+        - tapps_impact_analysis
+      deferred:
+        - tapps_usage
+        - tapps_validate_config
+        - tapps_dead_code
+        - tapps_dependency_graph
+        - tapps_report
+        - tapps_audit_campaign
+
+  nlt-linear-issues:
+    display_name: "Linear Issues"
+    tagline: "Create, lint, validate, and triage agent-ready Linear issues."
+    package: tapps-platform # cross-package profile; combines tapps + docs handlers
+    serve_command: tapps-platform
+    serve_args: ["serve", "--profile", "nlt-linear-issues"]
+    default_enabled: false
+    tool_count: 15
+    eager_count: 7
+    skills:
+      - linear-issue
+      - linear-read
+    hooks:
+      - tapps-pre-linear-write
+      - tapps-pre-linear-list
+      - tapps-post-linear-list
+      - tapps-post-linear-snapshot-get
+    tools:
+      eager:
+        - docs_generate_epic
+        - docs_generate_story
+        - docs_lint_linear_issue
+        - docs_validate_linear_issue
+        - docs_save_linear_issue
+        - tapps_linear_snapshot_get
+        - tapps_finding_to_story
+      deferred:
+        - docs_generate_prompt
+        - docs_linear_triage
+        - docs_validate_epic
+        - tapps_linear_snapshot_put
+        - tapps_linear_snapshot_invalidate
+        - tapps_linear_count
+        - tapps_linear_list_issues
+        - tapps_audit_close_coverage
+
+  nlt-project-docs:
+    display_name: "Project Docs"
+    tagline: "Generate and audit project documentation from the codebase."
+    package: docs-mcp
+    serve_command: docsmcp
+    serve_args: ["serve", "--profile", "nlt-project-docs"]
+    default_enabled: false
+    tool_count: 27
+    eager_count: 6
+    skills: []
+    hooks:
+      - tapps-post-docs-validate
+    tools:
+      eager:
+        - docs_session_start
+        - docs_project_scan
+        - docs_check_drift
+        - docs_generate_readme
+        - docs_check_completeness
+        - docs_check_links
+      deferred:
+        - docs_config
+        - docs_module_map
+        - docs_api_surface
+        - docs_git_summary
+        - docs_generate_api
+        - docs_generate_adr
+        - docs_generate_onboarding
+        - docs_generate_contributing
+        - docs_generate_prd
+        - docs_generate_diagram
+        - docs_generate_architecture
+        - docs_generate_llms_txt
+        - docs_generate_frontmatter
+        - docs_generate_interactive_diagrams
+        - docs_generate_purpose
+        - docs_generate_doc_index
+        - docs_check_freshness
+        - docs_check_diataxis
+        - docs_check_cross_refs
+        - docs_check_style
+        - docs_kg_query
+
+  nlt-release-ship:
+    display_name: "Release & Ship"
+    tagline: "Changelog, release notes, release gates, and pre-ship CVE checks."
+    package: tapps-platform
+    serve_command: tapps-platform
+    serve_args: ["serve", "--profile", "nlt-release-ship"]
+    default_enabled: false
+    tool_count: 7
+    eager_count: 5
+    skills:
+      - linear-release-update
+    hooks: []
+    tools:
+      eager:
+        - docs_generate_changelog
+        - docs_generate_release_update
+        - docs_validate_release_update
+        - docs_release_gate
+        - tapps_release_update
+      deferred:
+        - docs_generate_release_notes
+        - tapps_dependency_scan
+    notes: |
+      docs_git_summary lives on nlt-project-docs only; tapps_release_update calls
+      docs generators in-process. After posting a release doc, linear-release-update
+      skill calls tapps_linear_snapshot_invalidate on nlt-linear-issues if enabled.
+
+  nlt-platform-admin:
+    display_name: "Platform Admin"
+    tagline: "Bootstrap, upgrade, diagnose, and observe TappsMCP in your project."
+    package: tapps-mcp
+    serve_command: tapps-mcp
+    serve_args: ["serve", "--profile", "nlt-platform-admin"]
+    default_enabled: true
+    tool_count: 14
+    eager_count: 2
+    skills:
+      - tapps-init
+      - tapps-upgrade
+      - tapps-doctor
+      - tapps-engagement
+      - tapps-tool-reference
+    hooks:
+      - tapps-session-start
+      - tapps-stop
+      - tapps-task-completed
+      - tapps-user-prompt-submit
+    tools:
+      eager:
+        - tapps_doctor
+        - tapps_server_info
+      deferred:
+        - tapps_init
+        - tapps_upgrade
+        - tapps_set_engagement_level
+        - tapps_session_end
+        - tapps_session_notes
+        - tapps_pipeline
+        - tapps_decompose
+        - tapps_dashboard
+        - tapps_stats
+        - tapps_feedback
+        - brain_propose_hive_elevation
+        - brain_approve_hive_elevation
+
+# ---------------------------------------------------------------------------
+# Cross-server workflows (skills — NOT duplicate tool registration)
+# ---------------------------------------------------------------------------
+cross_server_workflows:
+  linear-release-update:
+    primary_server: nlt-release-ship
+    optional_servers:
+      - nlt-linear-issues # for tapps_linear_snapshot_invalidate after save_document
+    steps:
+      - tool: tapps_release_update
+        server: nlt-release-ship
+      - tool: docs_validate_release_update
+        server: nlt-release-ship
+        note: "Called in-process by tapps_release_update; agent may skip direct call"
+      - plugin: linear.save_document
+      - tool: tapps_linear_snapshot_invalidate
+        server: nlt-linear-issues
+        optional: true
+
+  linear-issue:
+    primary_server: nlt-linear-issues
+    requires_plugin: linear
+
+  tapps-finish-task:
+    primary_server: nlt-code-quality
+    cli_fallback:
+      - "tapps-mcp validate-changed --file-paths ..."
+      - "tapps-mcp memory save ..."
+
+# ---------------------------------------------------------------------------
+# Legacy compatibility (backward compat during migration)
+# ---------------------------------------------------------------------------
+legacy:
+  tapps-mcp:
+    maps_to_profile: full
+    serve_args: ["serve", "--profile", "full"]
+  docs-mcp:
+    maps_to_profile: full
+    serve_args: ["serve", "--profile", "full"]
+  tapps-platform:
+    maps_to_profile: full
+    serve_args: ["serve", "--profile", "full"]
+  deprecation_note: |
+    Monolithic servers remain available as --profile full for one release cycle.
+    tapps_init vNext writes nlt-* server entries from default_bundles.developer.
+
+# ---------------------------------------------------------------------------
+# tapps_init mcp.json template (fragment)
+# ---------------------------------------------------------------------------
+mcp_json_template:
+  mcpServers:
+    nlt-code-quality:
+      command: uv
+      args: ["run", "tapps-mcp", "serve", "--profile", "nlt-code-quality"]
+    nlt-platform-admin:
+      command: uv
+      args: ["run", "tapps-mcp", "serve", "--profile", "nlt-platform-admin"]
+    nlt-linear-issues:
+      command: uv
+      args: ["run", "tapps-platform", "serve", "--profile", "nlt-linear-issues"]
+    nlt-project-docs:
+      command: uv
+      args: ["run", "docsmcp", "serve", "--profile", "nlt-project-docs"]
+    nlt-release-ship:
+      command: uv
+      args: ["run", "tapps-platform", "serve", "--profile", "nlt-release-ship"]
+
+# ---------------------------------------------------------------------------
+# Verification (CI / tapps_doctor)
+# -------------------------------------------------------------------
+verification:
+  unique_tool_count: 78
+  total_registrations: 78
+  duplicate_tools: []
+  unassigned_tools: []
+  per_server_budget_ok: true # all servers <= max_tools_per_server

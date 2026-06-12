@@ -360,6 +360,51 @@ TAPPS_TOOL_PRESET_ADMIN: frozenset[str] = frozenset(
     }
 )
 
+# Epic 109 / NLT plugin profiles — see docs/architecture/nlt-mcp-plugin-spec.yaml
+TOOL_PROFILE_NLT_CODE_QUALITY: frozenset[str] = frozenset(
+    {
+        "tapps_session_start",
+        "tapps_quick_check",
+        "tapps_validate_changed",
+        "tapps_quality_gate",
+        "tapps_checklist",
+        "tapps_lookup_docs",
+        "tapps_score_file",
+        "tapps_security_scan",
+        "tapps_impact_analysis",
+        "tapps_usage",
+        "tapps_validate_config",
+        "tapps_dead_code",
+        "tapps_dependency_graph",
+        "tapps_report",
+        "tapps_audit_campaign",
+    }
+)
+
+TOOL_PROFILE_NLT_PLATFORM_ADMIN: frozenset[str] = frozenset(
+    {
+        "tapps_init",
+        "tapps_upgrade",
+        "tapps_doctor",
+        "tapps_server_info",
+        "tapps_set_engagement_level",
+        "tapps_session_end",
+        "tapps_session_notes",
+        "tapps_pipeline",
+        "tapps_decompose",
+        "tapps_dashboard",
+        "tapps_stats",
+        "tapps_feedback",
+        "brain_propose_hive_elevation",
+        "brain_approve_hive_elevation",
+    }
+)
+
+_NLT_TAPPS_TOOL_PRESETS: dict[str, frozenset[str]] = {
+    "nlt-code-quality": TOOL_PROFILE_NLT_CODE_QUALITY,
+    "nlt-platform-admin": TOOL_PROFILE_NLT_PLATFORM_ADMIN,
+}
+
 _FALLBACK_TOOL_LIST: list[str] = sorted(ALL_TOOL_NAMES)
 
 _SECURITY_SCAN_FINDING_LIMIT: int = 50
@@ -415,6 +460,8 @@ def _resolve_allowed_tools(settings: TappsMCPSettings) -> frozenset[str]:
         allowed = set(TAPPS_TOOL_PRESET_ADMIN)
     elif settings.tool_preset == "full":
         allowed = set(ALL_TOOL_NAMES)
+    elif settings.tool_preset in _NLT_TAPPS_TOOL_PRESETS:
+        allowed = set(_NLT_TAPPS_TOOL_PRESETS[settings.tool_preset])
     else:
         allowed = set(ALL_TOOL_NAMES)
     allowed -= set(settings.disabled_tools)

@@ -86,6 +86,7 @@ class BootstrapConfig:
     scaffold_experts: bool = False
     docs_automation: bool = True
     include_karpathy: bool = True
+    mcp_bundle: str = "developer"
 
     @classmethod
     def from_params(
@@ -1529,6 +1530,20 @@ def _replace_tapps_section(existing: str, new_tapps_content: str) -> str:
 # fallback (issue #3107), wildcard is the official syntax from v2.0.70+.
 _CLAUDE_PERMISSION_ENTRIES = ["mcp__tapps-mcp", "mcp__tapps-mcp__*"]
 
+# Epic 109 NLT plugin servers (added alongside legacy entries for one release).
+_NLT_PERMISSION_ENTRIES = [
+    "mcp__nlt-code-quality",
+    "mcp__nlt-code-quality__*",
+    "mcp__nlt-platform-admin",
+    "mcp__nlt-platform-admin__*",
+    "mcp__nlt-linear-issues",
+    "mcp__nlt-linear-issues__*",
+    "mcp__nlt-project-docs",
+    "mcp__nlt-project-docs__*",
+    "mcp__nlt-release-ship",
+    "mcp__nlt-release-ship__*",
+]
+
 # DocsMCP permission entries — added when DocsMCP is detected.
 _DOCSMCP_PERMISSION_ENTRIES = ["mcp__docs-mcp", "mcp__docs-mcp__*"]
 
@@ -1559,6 +1574,7 @@ def generate_permission_settings(
     existing_settings: dict[str, Any] | None = None,
     *,
     docsmcp_detected: bool = False,
+    use_nlt_plugin: bool = True,
 ) -> dict[str, Any]:
     """Generate ``.claude/settings.json`` content with permission rules.
 
@@ -1574,7 +1590,8 @@ def generate_permission_settings(
         engagement_level: ``"high"``, ``"medium"`` (default), or ``"low"``.
         existing_settings: Parsed contents of an existing ``settings.json``.
             ``None`` starts from an empty dict.
-        docsmcp_detected: When True, include DocsMCP permission entries.
+        docsmcp_detected: When True, include DocsMCP permission entries (legacy monolith).
+        use_nlt_plugin: When True (default), include Epic 109 ``nlt-*`` server entries.
 
     Returns:
         The merged settings dict ready to be serialised to JSON.
@@ -1599,7 +1616,9 @@ def generate_permission_settings(
     allow_list: list[str] = permissions.setdefault("allow", [])
 
     desired: list[str] = list(_CLAUDE_PERMISSION_ENTRIES)
-    if docsmcp_detected:
+    if use_nlt_plugin:
+        desired.extend(_NLT_PERMISSION_ENTRIES)
+    if docsmcp_detected and not use_nlt_plugin:
         desired.extend(_DOCSMCP_PERMISSION_ENTRIES)
         desired.extend(_PLATFORM_PERMISSION_ENTRIES)
     if engagement_level == "high":
@@ -1623,6 +1642,7 @@ def _bootstrap_claude_settings(
     engagement_level: str = "medium",
     *,
     docsmcp_detected: bool = False,
+    use_nlt_plugin: bool = True,
 ) -> str:
     """Create or update ``.claude/settings.json`` with permission entries.
 
@@ -1652,6 +1672,7 @@ def _bootstrap_claude_settings(
             project_root,
             engagement_level=engagement_level,
             docsmcp_detected=docsmcp_detected,
+            use_nlt_plugin=use_nlt_plugin,
         )
         settings_file.write_text(json.dumps(config, indent=2) + "\n", encoding="utf-8")
         return "created"
@@ -1668,6 +1689,7 @@ def _bootstrap_claude_settings(
         engagement_level=engagement_level,
         existing_settings=existing,
         docsmcp_detected=docsmcp_detected,
+        use_nlt_plugin=use_nlt_plugin,
     )
 
     if merged == existing:

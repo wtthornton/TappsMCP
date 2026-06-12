@@ -888,6 +888,7 @@ async def tapps_init(
     scaffold_experts: bool = False,
     include_karpathy: bool = True,
     mcp_config: bool = True,
+    mcp_bundle: str = "developer",
     output_mode: str = "auto",
     ctx: Context[Any, Any, Any] | None = None,
 ) -> dict[str, Any]:
@@ -992,6 +993,7 @@ async def tapps_init(
         llm_engagement_level=llm_engagement_level,
         scaffold_experts=scaffold_experts,
         include_karpathy=include_karpathy,
+        mcp_bundle=mcp_bundle,
         settings=settings,
     )
 
@@ -1005,7 +1007,9 @@ async def tapps_init(
     finally:
         _pih.restore_write_mode_env(prev_write_mode)
 
-    _pih.maybe_write_mcp_config(result, settings, platform, mcp_config, dry_run)
+    _pih.maybe_write_mcp_config(
+        result, settings, platform, mcp_config, dry_run, mcp_bundle=mcp_bundle
+    )
     await _pih.emit_init_progress(ctx, result)
 
     elapsed_ms = (time.perf_counter_ns() - start) // 1_000_000

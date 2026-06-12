@@ -56,12 +56,18 @@ def _mock_bridge(
     *,
     save_result: dict[str, object] | None = None,
     get_result: dict[str, object] | None = None,
+    search_result: list[dict[str, object]] | None = None,
 ) -> MagicMock:
     bridge = MagicMock()
     bridge.save = AsyncMock(
         return_value=save_result or {"key": "test-key", "value": "test value", "success": True}
     )
     bridge.get = AsyncMock(return_value=get_result)
+    bridge.search = AsyncMock(
+        return_value=search_result
+        if search_result is not None
+        else [{"key": "found-it", "tier": "pattern", "confidence": 0.8, "value": "hit"}]
+    )
     bridge.close = MagicMock()
     return bridge
 
@@ -207,48 +213,55 @@ class TestMemoryGet:
 
 
 class TestMemorySearch:
-    def test_search_with_results(self, runner: CliRunner) -> None:
-        entries = [_make_entry(key="found-it")]
+    def test_search_uses_bridge_when_available(self, runner: CliRunner) -> None:
+        bridge = _mock_bridge()
+        with (
+            patch("tapps_core.brain_bridge.create_brain_bridge", return_value=bridge),
+            patch(_STORE_PATCH) as store_ctor,
+        ):
+            result = runner.invoke(main, ["memory", "search", "--query", "test"])
+        assert result.exit_code == 0
+        assert "found-it" in result.output
+        bridge.search.assert_awaited_once_with("test", limit=10)
+        store_ctor.assert_not_called()
+
+    def test_search_falls_back_to_store_when_bridge_unavailable(self, runner: CliRunner) -> None:
+        entries = [_make_entry(key="local-hit")]
         store = _mock_store(entries)
         with (
+            patch("tapps_core.brain_bridge.create_brain_bridge", return_value=None),
             patch(_ROOT_PATCH, return_value=Path("/fake")),
             patch(_STORE_PATCH, return_value=store),
         ):
             result = runner.invoke(main, ["memory", "search", "--query", "test"])
         assert result.exit_code == 0
-        assert "found-it" in result.output
+        assert "local-hit" in result.output
+        store.search.assert_called_once_with("test")
 
     def test_search_no_results(self, runner: CliRunner) -> None:
-        store = _mock_store()
-        with (
-            patch(_ROOT_PATCH, return_value=Path("/fake")),
-            patch(_STORE_PATCH, return_value=store),
-        ):
+        bridge = _mock_bridge(search_result=[])
+        with patch("tapps_core.brain_bridge.create_brain_bridge", return_value=bridge):
             result = runner.invoke(main, ["memory", "search", "--query", "nothing"])
         assert result.exit_code == 0
         assert "No results found" in result.output
 
     def test_search_json_output(self, runner: CliRunner) -> None:
-        entries = [_make_entry()]
-        store = _mock_store(entries)
-        with (
-            patch(_ROOT_PATCH, return_value=Path("/fake")),
-            patch(_STORE_PATCH, return_value=store),
-        ):
+        bridge = _mock_bridge(
+            search_result=[{"key": "test-key", "tier": "pattern", "confidence": 0.8, "value": "x"}]
+        )
+        with patch("tapps_core.brain_bridge.create_brain_bridge", return_value=bridge):
             result = runner.invoke(main, ["memory", "search", "--query", "test", "--json"])
         assert result.exit_code == 0
         data = json.loads(result.output)
         assert isinstance(data, list)
+        assert data[0]["key"] == "test-key"
 
     def test_search_with_limit(self, runner: CliRunner) -> None:
-        entries = [_make_entry(key=f"key-{i}") for i in range(5)]
-        store = _mock_store(entries)
-        with (
-            patch(_ROOT_PATCH, return_value=Path("/fake")),
-            patch(_STORE_PATCH, return_value=store),
-        ):
+        bridge = _mock_bridge()
+        with patch("tapps_core.brain_bridge.create_brain_bridge", return_value=bridge):
             result = runner.invoke(main, ["memory", "search", "--query", "test", "--limit", "2"])
         assert result.exit_code == 0
+        bridge.search.assert_awaited_once_with("test", limit=2)
 
 
 class TestMemoryDelete:

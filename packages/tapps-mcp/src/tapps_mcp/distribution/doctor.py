@@ -175,32 +175,39 @@ def check_json_config(
 
 def _validate_json_config(config_path: Path, servers_key: str) -> str | None:
     """Return an error message if *config_path* is invalid, else ``None``."""
-    from tapps_mcp.distribution.setup_generator import _is_valid_tapps_command
+    from tapps_mcp.distribution.setup_generator import _is_valid_tapps_command, _load_mcp_config_json
 
     if not config_path.exists():
         return f"Not found: {config_path}"
 
-    try:
-        raw = config_path.read_text(encoding="utf-8")
-        data: dict[str, Any] = json.loads(raw) if raw.strip() else {}
-    except json.JSONDecodeError:
+    data = _load_mcp_config_json(config_path)
+    if not data and config_path.read_text(encoding="utf-8").strip():
         return f"Invalid JSON: {config_path}"
 
     if not isinstance(data, dict):
         return f"Invalid structure: {config_path}"
 
     servers = data.get(servers_key, {})
-    entry = servers.get("tapps-mcp") if isinstance(servers, dict) else None
+    if not isinstance(servers, dict):
+        return f"Invalid structure: {config_path}"
+
+    entry = servers.get("tapps-mcp")
     if not isinstance(entry, dict):
-        return f"tapps-mcp not in {config_path}"
+        entry = servers.get("nlt-code-quality")
+    if not isinstance(entry, dict):
+        return f"tapps-mcp / nlt-code-quality not in {config_path}"
 
     command = entry.get("command", "")
     args = entry.get("args", [])
+    if _is_valid_tapps_command(command, args if isinstance(args, list) else None):
+        return None
+    if isinstance(args, list) and any("--profile" in str(a) for a in args):
+        wrapper_name = Path(str(command).replace("\\", "/")).name.lower()
+        if wrapper_name.endswith("-serve.sh") or wrapper_name == "tapps-mcp-serve.sh":
+            return None
     return (
         f"Unexpected command: '{command}' (expected 'tapps-mcp', 'uv run tapps-mcp serve',"
         " or path to tapps-mcp.exe)"
-        if not _is_valid_tapps_command(command, args if isinstance(args, list) else None)
-        else None
     )
 
 
@@ -422,16 +429,30 @@ def check_mcp_client_config(
     ]
 
     found_in: list[str] = []
+    nlt_note = ""
     for path, servers_key, label in candidates:
         result = check_json_config(path, servers_key, label)
         if result.ok:
             found_in.append(label)
+            if not nlt_note and path.exists():
+                try:
+                    from tapps_mcp.distribution.nlt_mcp_config import list_nlt_server_ids_in_config
+                    from tapps_mcp.distribution.setup_generator import _load_mcp_config_json
+
+                    data = _load_mcp_config_json(path)
+                    servers = data.get(servers_key, {})
+                    if isinstance(servers, dict):
+                        nlt_ids = list_nlt_server_ids_in_config(servers)
+                        if nlt_ids:
+                            nlt_note = f"; NLT plugin: {len(nlt_ids)} enabled ({', '.join(nlt_ids)})"
+                except Exception:
+                    pass
 
     if found_in:
         return CheckResult(
             "MCP client config",
             True,
-            f"tapps-mcp registered in: {', '.join(found_in)}",
+            f"tapps-mcp registered in: {', '.join(found_in)}{nlt_note}",
         )
 
     snippet = (
@@ -2782,9 +2803,25 @@ def _detect_server_tool_count(server_name: str, server_cfg: dict[str, object]) -
     Returns ``None`` for servers that require a live connection to probe
     (e.g. HTTP or unknown stdio servers).
     """
+    from tapps_mcp.distribution.nlt_mcp_config import (
+        NLT_SERVER_EAGER_COUNTS,
+        is_nlt_server_id,
+        nlt_eager_count,
+    )
+
+    if is_nlt_server_id(server_name):
+        return nlt_eager_count(server_name)
+
     raw_args = server_cfg.get("args", [])
     args: list[str] = list(raw_args) if isinstance(raw_args, list) else []
     command: str = str(server_cfg.get("command", ""))
+
+    if "--profile" in args:
+        idx = args.index("--profile")
+        if idx + 1 < len(args):
+            profile = str(args[idx + 1])
+            if profile in NLT_SERVER_EAGER_COUNTS:
+                return NLT_SERVER_EAGER_COUNTS[profile]
 
     # tapps-mcp family: command is uv/uvx/python3, "tapps-mcp" and "serve" in args
     if "tapps-mcp" in args and "serve" in args:
@@ -2800,7 +2837,105 @@ def _detect_server_tool_count(server_name: str, server_cfg: dict[str, object]) -
     # docs-mcp family: "docsmcp" in args or command
     if "docsmcp" in args or "docsmcp" in command:
         return _DOCS_MCP_TOOL_COUNT
+    # tapps-platform NLT profiles (Epic 109)
+    if "tapps-platform" in args and "serve" in args and "--profile" in args:
+        idx = args.index("--profile")
+        if idx + 1 < len(args):
+            profile = str(args[idx + 1])
+            from tapps_mcp.distribution.nlt_mcp_config import NLT_SERVER_EAGER_COUNTS
+
+            if profile in NLT_SERVER_EAGER_COUNTS:
+                return NLT_SERVER_EAGER_COUNTS[profile]
     return None
+
+
+def _collect_project_mcp_servers(root: Path) -> dict[str, dict[str, object]]:
+    """Load enabled MCP server entries from project-scoped config files."""
+    from tapps_mcp.distribution.setup_generator import (
+        _get_config_path,
+        _get_servers_key,
+        _load_mcp_config_json,
+    )
+
+    merged: dict[str, dict[str, object]] = {}
+    for host in ("claude-code", "cursor", "vscode"):
+        path = _get_config_path(host, root)
+        if not path.exists():
+            continue
+        data = _load_mcp_config_json(path)
+        servers_key = _get_servers_key(host)
+        servers = data.get(servers_key)
+        if not isinstance(servers, dict):
+            continue
+        for name, entry in servers.items():
+            if isinstance(entry, dict):
+                merged[str(name)] = entry
+    return merged
+
+
+def check_nlt_partial_enablement(root: Path) -> CheckResult:
+    """Epic 109.5: WARN when too many ``nlt-*`` MCP servers or combined eager tools.
+
+    Reads ``.mcp.json``, ``.cursor/mcp.json``, and ``.vscode/mcp.json`` when
+    present. Targets partial enablement: ≤3 servers and ≤20 combined eager tools.
+    """
+    from tapps_mcp.distribution.nlt_mcp_config import (
+        NLT_MAX_COMBINED_EAGER,
+        NLT_MAX_ENABLED_SERVERS,
+        list_nlt_server_ids_in_config,
+        nlt_eager_count,
+        nlt_total_tool_count,
+    )
+
+    servers = _collect_project_mcp_servers(root)
+    nlt_ids = list_nlt_server_ids_in_config(servers)
+    if not nlt_ids:
+        return CheckResult(
+            "NLT partial enablement",
+            True,
+            "No nlt-* MCP servers configured (legacy monolith or not bootstrapped)",
+        )
+
+    lines: list[str] = []
+    combined_eager = 0
+    for server_id in nlt_ids:
+        eager = nlt_eager_count(server_id)
+        if eager is None:
+            detected = _detect_server_tool_count(server_id, servers[server_id])
+            eager = detected if detected is not None else 0
+        total = nlt_total_tool_count(server_id)
+        combined_eager += eager
+        total_label = str(total) if total is not None else "?"
+        lines.append(f"{server_id}: {eager} eager / {total_label} total")
+
+    warnings: list[str] = []
+    if len(nlt_ids) > NLT_MAX_ENABLED_SERVERS:
+        warnings.append(
+            f"{len(nlt_ids)} nlt-* servers enabled (recommended ≤{NLT_MAX_ENABLED_SERVERS})"
+        )
+    if combined_eager > NLT_MAX_COMBINED_EAGER:
+        warnings.append(
+            f"{combined_eager} combined eager tools (recommended ≤{NLT_MAX_COMBINED_EAGER})"
+        )
+
+    summary = (
+        f"{len(nlt_ids)} server(s); combined eager={combined_eager}; "
+        + "; ".join(lines)
+    )
+    if warnings:
+        return CheckResult(
+            "NLT partial enablement",
+            False,
+            f"WARN: {'; '.join(warnings)}. {summary}",
+            "Disable opt-in nlt-* servers you are not using, or switch to the "
+            "developer bundle (code-quality + platform-admin). See "
+            "docs/architecture/nlt-mcp-plugin-spec.yaml.",
+        )
+    return CheckResult(
+        "NLT partial enablement",
+        True,
+        f"Within partial-enablement targets. {summary}",
+    )
 
 
 def _read_tool_budget(root: Path) -> int:
@@ -2822,37 +2957,27 @@ def _read_tool_budget(root: Path) -> int:
 def check_mcp_tool_budget(root: Path) -> CheckResult:
     """TAP-2026/TAP-1989: WARN when a known MCP server exposes more eager tools than budget.
 
-    Reads ``.mcp.json`` at *root*, computes tool counts for recognized
-    tapps-family servers from their ``--mode`` flag, and compares against the
-    ``doctor_tool_budget_limit`` in ``.tapps-mcp.yaml`` (default 20).
+    Reads project MCP configs (``.mcp.json``, ``.cursor/mcp.json``, ``.vscode/mcp.json``),
+    computes tool counts for recognized tapps-family servers from their ``--mode`` or
+    ``--profile`` flag, and compares against the ``doctor_tool_budget_limit`` in
+    ``.tapps-mcp.yaml`` (default 20).
 
-    Only tapps-mcp / docs-mcp servers are probed; unknown or HTTP-only servers
+    Only tapps-mcp / docs-mcp / nlt-* servers are probed; unknown or HTTP-only servers
     are skipped (they require a live connection).
     """
-    mcp_json = root / ".mcp.json"
-    if not mcp_json.exists():
+    servers = _collect_project_mcp_servers(root)
+    if not servers:
         return CheckResult(
             "MCP tool budget",
             True,
-            "No .mcp.json found — skipping tool budget check",
+            "No project MCP config found — skipping tool budget check",
         )
-
-    try:
-        cfg = json.loads(mcp_json.read_text(encoding="utf-8"))
-    except Exception as exc:
-        return CheckResult("MCP tool budget", False, f".mcp.json parse error: {exc}")
-
-    servers: dict[str, object] = cfg.get("mcpServers", {})
-    if not isinstance(servers, dict) or not servers:
-        return CheckResult("MCP tool budget", True, "No servers in .mcp.json — nothing to check")
 
     budget = _read_tool_budget(root)
     lines: list[str] = []
     over_budget: list[str] = []
 
     for server_name, server_cfg in servers.items():
-        if not isinstance(server_cfg, dict):
-            continue
         count = _detect_server_tool_count(server_name, server_cfg)
         if count is None:
             continue
@@ -2865,7 +2990,7 @@ def check_mcp_tool_budget(root: Path) -> CheckResult:
         return CheckResult(
             "MCP tool budget",
             True,
-            f"No recognized tapps-family servers in .mcp.json (budget={budget})",
+            f"No recognized tapps-family servers in MCP config (budget={budget})",
         )
 
     summary = f"budget={budget}; " + ", ".join(lines)
@@ -2874,8 +2999,8 @@ def check_mcp_tool_budget(root: Path) -> CheckResult:
             "MCP tool budget",
             False,
             f"WARN: {', '.join(over_budget)} exceed eager-tool budget. {summary}",
-            "Reduce tool count with --mode quality/admin, or set "
-            "doctor_tool_budget_limit in .tapps-mcp.yaml.",
+            "Reduce tool count with --mode quality/admin, disable extra nlt-* servers, "
+            "or set doctor_tool_budget_limit in .tapps-mcp.yaml.",
         )
     return CheckResult("MCP tool budget", True, f"All servers within budget. {summary}")
 
@@ -2956,6 +3081,54 @@ def check_memory_pipeline_config(root: Path) -> CheckResult:
             f"Could not load settings ({exc})",
             "See docs/MEMORY_REFERENCE.md",
         )
+
+
+def check_memory_cli_http_mode(root: Path) -> CheckResult:
+    """Advise HTTP-only consumers which ``tapps-mcp memory`` subcommands need a local DSN.
+
+    ``save``, ``get``, ``recall``, and ``search`` route through BrainBridge when
+    ``memory.brain_http_url`` is set. ``list``, ``delete``, ``import-file``,
+    ``export-file``, and ``reseed`` still open a local :class:`MemoryStore` and
+    require ``TAPPS_BRAIN_DATABASE_URL`` (ADR-007).
+    """
+    import os
+
+    http_url = _brain_http_url_for_checks(root)
+    if not http_url:
+        return CheckResult(
+            "Memory CLI (HTTP mode)",
+            True,
+            "Not in HTTP-only mode (brain_http_url unset)",
+            "",
+        )
+
+    dsn = os.environ.get("TAPPS_BRAIN_DATABASE_URL", "").strip()
+    if not dsn:
+        try:
+            from tapps_core.config.settings import load_settings
+
+            settings = load_settings(project_root=root)
+            raw_dsn = getattr(settings.memory, "database_url", "")
+            dsn = str(raw_dsn or "").strip()
+        except Exception:
+            dsn = ""
+
+    if dsn:
+        return CheckResult(
+            "Memory CLI (HTTP mode)",
+            True,
+            "Brain HTTP + local DSN — all memory CLI subcommands available",
+            "",
+        )
+
+    return CheckResult(
+        "Memory CLI (HTTP mode)",
+        True,
+        "Brain HTTP without local DSN — save/get/recall/search use BrainBridge",
+        "list/delete/import/export/reseed still require TAPPS_BRAIN_DATABASE_URL. "
+        "Cross-session handoff: use `memory save/get/recall/search` or "
+        "`/tapps-handoff-session` + `/tapps-continue-session`.",
+    )
 
 
 def check_dual_memory_server(root: Path) -> CheckResult:
@@ -3381,6 +3554,7 @@ def _collect_checks(root: Path, *, quick: bool = False) -> list[CheckResult]:
     checks.append(check_vscode_config(root))
     checks.append(check_mcp_client_config(root))
     checks.append(check_mcp_tool_budget(root))
+    checks.append(check_nlt_partial_enablement(root))
     checks.append(check_mcp_config_unresolved_project_root(root))
     checks.append(check_brain_mcp_entry(root))
     checks.append(check_scope_recommendation(root))
@@ -3418,6 +3592,7 @@ def _collect_checks(root: Path, *, quick: bool = False) -> list[CheckResult]:
     checks.append(check_brain_version_delta(root))
     checks.append(check_session_sentinel(root))
     checks.append(check_memory_pipeline_config(root))
+    checks.append(check_memory_cli_http_mode(root))
     checks.append(check_dual_memory_server(root))
     checks.append(check_plaintext_secrets(root))
     checks.append(check_uv_path_mismatch(root))

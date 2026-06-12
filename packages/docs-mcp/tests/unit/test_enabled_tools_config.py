@@ -80,6 +80,13 @@ class TestResolveAllowedTools:
         assert allowed == DOCS_TOOL_PRESET_AUDITOR
         assert len(allowed) == 10
 
+    def test_preset_nlt_project_docs(self) -> None:
+        from docs_mcp.server import DOCS_TOOL_PRESET_NLT_PROJECT_DOCS, _resolve_allowed_tools
+
+        allowed = _resolve_allowed_tools(None, [], "nlt-project-docs")
+        assert allowed == DOCS_TOOL_PRESET_NLT_PROJECT_DOCS
+        assert len(allowed) == 27
+
     def test_enabled_tools_invalid_names_ignored(self) -> None:
         from docs_mcp.server import _resolve_allowed_tools
 

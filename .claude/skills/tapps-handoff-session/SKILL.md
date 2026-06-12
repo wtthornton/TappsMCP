@@ -7,7 +7,7 @@ description: >-
   lifecycle so the next chat can continue without a long paste. Use when
   ending a session, handing off to a fresh chat, or the user says hand
   off, save session state, or continue next time.
-allowed-tools: mcp__tapps-mcp__tapps_session_end Bash
+allowed-tools: mcp__nlt-platform-admin__tapps_session_end Bash
 argument-hint: "[optional Linear issue id e.g. TAP-1234]"
 disable-model-invocation: true
 ---
@@ -58,11 +58,11 @@ End the session with a durable handoff the next chat can load via `/tapps-contin
 
    | Priority | When | How |
    |----------|------|-----|
-   | 1 (CLI) | Brain HTTP reachable; shell has `TAPPS_MCP_MEMORY_BRAIN_HTTP_URL` + `TAPPS_MCP_MEMORY_BRAIN_AUTH_TOKEN` (or `TAPPS_BRAIN_AUTH_TOKEN` via direnv) | `uv run tapps-mcp memory save --key session-handoff --tier context --tags handoff,cross-session --value "<plain-text bullets>"` |
+   | 1 (CLI) | Brain HTTP reachable; shell has `TAPPS_MCP_MEMORY_BRAIN_HTTP_URL` + `TAPPS_MCP_MEMORY_BRAIN_AUTH_TOKEN` (or `TAPPS_BRAIN_AUTH_TOKEN` via direnv) | `uv run tapps-mcp memory save --key session-handoff --tier context --tags handoff,cross-session --value "$(cat .tapps-mcp/session-handoff.md)"` — mirror the **full markdown body**, not a one-line agent summary |
    | 2 (skip) | Brain offline or auth missing | Skip silently — `.tapps-mcp/session-handoff.md` is enough |
 
 4. **Close lifecycle.** Best-effort session closure:
-   - **Preferred:** `mcp__tapps-mcp__tapps_session_end()`
+   - **Preferred:** `mcp__nlt-platform-admin__tapps_session_end()`
    - **CLI fallback** (MCP unavailable): `uv run tapps-mcp session-end` (requires same shell auth as step 3 row 1)
    Do not fail the handoff if either degrades.
 

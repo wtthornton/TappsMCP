@@ -6,7 +6,7 @@ description: >-
   Manage shared project memory via tapps-mcp CLI and session notes.
   Use when saving cross-session decisions, searching prior patterns, or
   checking brain bridge health. For chat handoffs use tapps-handoff-session.
-allowed-tools: mcp__tapps-mcp__tapps_session_start mcp__tapps-mcp__tapps_session_notes Bash
+allowed-tools: mcp__nlt-code-quality__tapps_session_start mcp__nlt-platform-admin__tapps_session_notes Bash
 argument-hint: "[save|search|get] [key]"
 ---
 
@@ -17,9 +17,9 @@ argument-hint: "[save|search|get] [key]"
 | Need | Path |
 |------|------|
 | Cross-chat handoff | `/tapps-handoff-session` then `/tapps-continue-session` (`.tapps-mcp/session-handoff.md` is canonical) |
-| Session-local notes | `mcp__tapps-mcp__tapps_session_notes(action="save", ...)` |
+| Session-local notes | `mcp__nlt-platform-admin__tapps_session_notes(action="save", ...)` |
 | Save / recall / search brain | `uv run tapps-mcp memory <subcommand>` (CLI via BrainBridge) |
-| Brain health before writes | `mcp__tapps-mcp__tapps_session_start()` → `data.brain_bridge_health` |
+| Brain health before writes | `mcp__nlt-code-quality__tapps_session_start()` → `data.brain_bridge_health` |
 | Auto-recall at session start | Hooks run `tapps-mcp memory recall` — usually no manual step |
 
 ## Shell auth (CLI memory)

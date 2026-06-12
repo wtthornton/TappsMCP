@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 from pathlib import Path
 
 import click
@@ -52,8 +53,18 @@ def cli() -> None:
     type=int,
     help="Port to bind HTTP transport to.",
 )
-def serve(transport: str, host: str, port: int) -> None:
+@click.option(
+    "--profile",
+    "tool_profile",
+    type=click.Choice(["nlt-project-docs", "core", "planner", "release", "auditor", "full"]),
+    default=None,
+    help="Tool profile preset (Epic 109 NLT plugin). Overrides config when set.",
+)
+def serve(transport: str, host: str, port: int, tool_profile: str | None) -> None:
     """Start the DocsMCP MCP server."""
+    if tool_profile is not None:
+        os.environ["DOCS_MCP_TOOL_PRESET"] = tool_profile
+
     from docs_mcp.server import run_server
 
     run_server(transport=transport, host=host, port=port)

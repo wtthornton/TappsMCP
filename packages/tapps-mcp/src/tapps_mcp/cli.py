@@ -50,11 +50,42 @@ def main() -> None:
         "all (default, all tools — backward compatible)."
     ),
 )
-def serve(transport: str, host: str, port: int, mode: str) -> None:
+@click.option(
+    "--profile",
+    "tool_profile",
+    type=click.Choice(
+        [
+            "nlt-code-quality",
+            "nlt-platform-admin",
+            "core",
+            "pipeline",
+            "reviewer",
+            "planner",
+            "frontend",
+            "developer",
+            "quality",
+            "admin",
+            "full",
+        ]
+    ),
+    default=None,
+    help=(
+        "Tool profile preset (Epic 109 NLT plugin). Overrides --mode when set. "
+        "Use nlt-code-quality for daily coding (~15 tools)."
+    ),
+)
+def serve(
+    transport: str,
+    host: str,
+    port: int,
+    mode: str,
+    tool_profile: str | None,
+) -> None:
     """Start the TappsMCP MCP server."""
-    # Set TAPPS_MCP_TOOL_PRESET before importing server.py so _register_tool_modules()
-    # picks up the mode. Same pattern as docs-mcp --mode flag (TAP-485).
-    if mode != "all":
+    # Profile takes precedence over legacy --mode (TAP-485 / Epic 109).
+    if tool_profile is not None:
+        os.environ["TAPPS_MCP_TOOL_PRESET"] = tool_profile
+    elif mode != "all":
         os.environ["TAPPS_MCP_TOOL_PRESET"] = mode
 
     from tapps_mcp.server import run_server
@@ -127,7 +158,20 @@ def serve(transport: str, host: str, port: int, mode: str) -> None:
     "--with-docs-mcp",
     is_flag=True,
     default=False,
-    help="Also register the docs-mcp server in generated MCP JSON (Epic 80.7).",
+    help="Legacy monolith: also register docs-mcp (ignored with default NLT plugin).",
+)
+@click.option(
+    "--bundle",
+    "mcp_bundle",
+    type=click.Choice(["developer", "planning", "docs", "release"]),
+    default="developer",
+    help="NLT MCP plugin bundle to enable (default: developer = code-quality + platform-admin).",
+)
+@click.option(
+    "--legacy-monolith/--no-legacy-monolith",
+    "legacy_monolith",
+    default=False,
+    help="Write legacy tapps-mcp + docs-mcp entries instead of NLT nlt-* servers.",
 )
 @click.option(
     "--uv/--no-uv",
@@ -164,6 +208,8 @@ def init(
     overwrite_tech_stack: bool,
     allow_package_init: bool,
     with_docs_mcp: bool,
+    mcp_bundle: str,
+    legacy_monolith: bool,
     uv_flag: bool | None,
     uv_extra: str | None,
     with_context7: str | None,
@@ -214,6 +260,8 @@ def init(
         uv_extra=uv_extra,
         context7_api_key=context7_key,
         overwrite_tech_stack=overwrite_tech_stack,
+        mcp_bundle=mcp_bundle,
+        use_nlt_plugin=not legacy_monolith,
     )
     if not success:
         raise SystemExit(1)
@@ -1079,13 +1127,65 @@ def memory_recall(
     click.echo(xml)
 
 
+def _emit_memory_search_rows(
+    hits: list[dict[str, object]],
+    *,
+    as_json: bool,
+) -> None:
+    """Render memory search results from BrainBridge dict payloads."""
+    import json
+
+    if as_json:
+        click.echo(json.dumps(hits, indent=2))
+        return
+    if not hits:
+        click.echo("No results found.")
+        return
+    click.echo(f"{'Key':<30} {'Tier':<15} {'Confidence':<12} Value")
+    click.echo("-" * 80)
+    for hit in hits:
+        key = str(hit.get("key", ""))
+        tier = str(hit.get("tier", ""))
+        confidence = float(hit.get("confidence", hit.get("score", 0.0)))
+        value = str(hit.get("value", ""))
+        value_preview = value[:40].replace("\n", " ")
+        if len(value) > 40:
+            value_preview += "..."
+        click.echo(f"{key:<30} {tier:<15} {confidence:<12.2f} {value_preview}")
+
+
 @memory.command("search")
 @click.option("--query", required=True, help="Search query.")
 @click.option("--limit", default=10, type=int, help="Max results.")
 @click.option("--json", "as_json", is_flag=True, help="Output as JSON.")
 def memory_search(query: str, limit: int, as_json: bool) -> None:
-    """Search memories by full-text query."""
+    """Search memories via BrainBridge (HTTP or DSN) or local MemoryStore fallback."""
+    import asyncio
     import json
+
+    from tapps_core.brain_bridge import BRAIN_PROFILE_READONLY, create_brain_bridge
+    from tapps_core.config.settings import load_settings
+
+    limit = max(1, limit)
+
+    async def _search_bridge() -> list[dict[str, object]] | None:
+        settings = load_settings(project_root=_get_project_root())
+        bridge = create_brain_bridge(settings, default_profile=BRAIN_PROFILE_READONLY)
+        if bridge is None:
+            return None
+        try:
+            return await bridge.search(query, limit=limit)
+        finally:
+            bridge.close()
+
+    try:
+        bridge_hits = asyncio.run(_search_bridge())
+    except Exception:
+        bridge_hits = None
+
+    if bridge_hits is not None:
+        _emit_memory_search_rows(bridge_hits, as_json=as_json)
+        return
 
     from tapps_brain.store import MemoryStore
 

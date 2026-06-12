@@ -271,18 +271,25 @@ def _mcp_json_has_tapps_entry(project_root: Path, host: str) -> bool:
     """
     import json
 
-    from tapps_mcp.distribution.setup_generator import _get_config_path, _get_servers_key
+    from tapps_mcp.distribution.setup_generator import (
+        _get_config_path,
+        _get_servers_key,
+        _strip_jsonc_comments,
+    )
 
     def _has_entry(h: str) -> bool:
         path = _get_config_path(h, project_root)
         if not path.exists():
             return False
         try:
-            data = json.loads(path.read_text(encoding="utf-8"))
-        except (OSError, ValueError):
+            raw = path.read_text(encoding="utf-8")
+            data = json.loads(_strip_jsonc_comments(raw))
+        except (OSError, ValueError, json.JSONDecodeError):
             return False
         servers = data.get(_get_servers_key(h)) or {}
-        return isinstance(servers, dict) and "tapps-mcp" in servers
+        return isinstance(servers, dict) and (
+            "tapps-mcp" in servers or "nlt-code-quality" in servers
+        )
 
     return any(_has_entry(h) for h in _CONSENT_HOSTS)
 
@@ -515,6 +522,7 @@ def _upgrade_mcp_config(
                 upgrade_mode=True,
                 with_docs_mcp=include_docs_mcp,
                 uv_launch=uv_launch,
+                use_nlt_plugin=True,
             )
             result["components"]["mcp_config"] = (
                 "healed: rewrote ${workspaceFolder} to absolute project root (TAP-2199)"
@@ -537,6 +545,7 @@ def _upgrade_mcp_config(
             upgrade_mode=True,
             with_docs_mcp=include_docs_mcp,
             uv_launch=uv_launch,
+            use_nlt_plugin=True,
         )
         result["components"]["mcp_config"] = "regenerated"
     else:

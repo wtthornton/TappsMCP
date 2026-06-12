@@ -21,7 +21,7 @@ Start work in a fresh context by assembling structured state.
    - Else best-effort CLI (no `tapps_memory` MCP — removed v3.12.0): `uv run tapps-mcp memory get --key session-handoff` (brain offline or auth missing → skip).
    - Optional supplements (only if present): `docs/NEXT_SESSION_PROMPT.md`, `docs/TAPPS_HANDOFF.md` (**Next:** section).
    - **P0 fallback:** If **Next (P0)** is empty but **Open** has bullets, promote the first Open item as provisional P0 and flag it in the continue block.
-   - **Memory context:** Run `uv run tapps-mcp memory search --query "<P0 text or Linear id>"` when brain shell auth is available; skip silently otherwise.
+   - **Memory context (optional):** `uv run tapps-mcp memory recall --recall-key session-handoff --query "<P0 text or Linear id>"` pins the handoff mirror then adds semantic hits (HTTP-safe). Alternative: `uv run tapps-mcp memory search --query "..."`. Skip silently when brain auth is unavailable.
 
 3. **Linear context.**
    - If the user passed `TAP-####` (argument or handoff **Linear P0**), call `get_issue(id=...)`.

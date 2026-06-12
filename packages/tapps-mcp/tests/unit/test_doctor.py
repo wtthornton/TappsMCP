@@ -31,6 +31,7 @@ from tapps_mcp.distribution.doctor import (
     check_mcp_client_config,
     check_mcp_config_unresolved_project_root,
     check_mcp_tool_budget,
+    check_nlt_partial_enablement,
     check_plaintext_secrets,
     check_scope_recommendation,
     check_stale_exe_backups,
@@ -2036,6 +2037,40 @@ class TestBrainAuthTokenForDoctor:
         assert "memory save/get" in result.detail
 
 
+class TestMemoryCliHttpMode:
+    """Doctor advises HTTP-only consumers about memory CLI subcommand coverage."""
+
+    def test_skipped_when_not_http_mode(self, tmp_path) -> None:
+        from tapps_mcp.distribution.doctor import check_memory_cli_http_mode
+
+        result = check_memory_cli_http_mode(tmp_path)
+        assert result.ok is True
+        assert "Not in HTTP-only mode" in result.message
+
+    def test_warns_when_http_without_dsn(self, tmp_path, monkeypatch) -> None:
+        from tapps_mcp.distribution.doctor import check_memory_cli_http_mode
+
+        monkeypatch.setenv("TAPPS_MCP_MEMORY_BRAIN_HTTP_URL", "http://brain:8080")
+        monkeypatch.delenv("TAPPS_BRAIN_DATABASE_URL", raising=False)
+        (tmp_path / ".tapps-mcp.yaml").write_text(
+            "memory:\n  brain_http_url: http://brain:8080\n",
+            encoding="utf-8",
+        )
+        result = check_memory_cli_http_mode(tmp_path)
+        assert result.ok is True
+        assert "save/get/recall/search" in result.message
+        assert "TAPPS_BRAIN_DATABASE_URL" in result.detail
+
+    def test_ok_when_http_and_dsn(self, tmp_path, monkeypatch) -> None:
+        from tapps_mcp.distribution.doctor import check_memory_cli_http_mode
+
+        monkeypatch.setenv("TAPPS_MCP_MEMORY_BRAIN_HTTP_URL", "http://brain:8080")
+        monkeypatch.setenv("TAPPS_BRAIN_DATABASE_URL", "postgresql://local/brain")
+        result = check_memory_cli_http_mode(tmp_path)
+        assert result.ok is True
+        assert "all memory CLI subcommands" in result.message
+
+
 class TestBrainVersionFloor:
     """Doctor enforces the hard brain version floor."""
 
@@ -2205,10 +2240,10 @@ class TestCheckMcpToolBudget:
         (tmp_path / ".mcp.json").write_text(_json.dumps({"mcpServers": servers}))
 
     def test_skips_when_no_mcp_json(self, tmp_path) -> None:  # type: ignore[no-untyped-def]
-        """Passes silently when .mcp.json is absent."""
+        """Passes silently when no MCP config is present."""
         result = check_mcp_tool_budget(tmp_path)
         assert result.ok is True
-        assert "No .mcp.json" in result.message
+        assert "No project MCP config" in result.message
 
     def test_ok_within_default_budget(self, tmp_path) -> None:  # type: ignore[no-untyped-def]
         """tapps-quality (9 eager tools: 8 from TAP-1986 + tapps_usage added in v3.11.0) is within default budget of 20."""
@@ -2257,6 +2292,92 @@ class TestCheckMcpToolBudget:
         result = check_mcp_tool_budget(tmp_path)
         assert result.ok is True
         assert "No recognized" in result.message
+
+
+class TestCheckNltPartialEnablement:
+    """Epic 109.5: partial-enablement WARN thresholds for nlt-* MCP servers."""
+
+    def _cursor_mcp_json(self, tmp_path, servers: dict) -> None:
+        cursor_dir = tmp_path / ".cursor"
+        cursor_dir.mkdir(parents=True, exist_ok=True)
+        cursor_dir.joinpath("mcp.json").write_text(
+            json.dumps({"mcpServers": servers}),
+            encoding="utf-8",
+        )
+
+    def test_skips_when_no_nlt_servers(self, tmp_path) -> None:  # type: ignore[no-untyped-def]
+        self._cursor_mcp_json(tmp_path, {"tapps-mcp": {"command": "tapps-mcp", "args": ["serve"]}})
+        result = check_nlt_partial_enablement(tmp_path)
+        assert result.ok is True
+        assert "No nlt-*" in result.message
+
+    def test_developer_bundle_within_targets(self, tmp_path) -> None:  # type: ignore[no-untyped-def]
+        self._cursor_mcp_json(
+            tmp_path,
+            {
+                "nlt-code-quality": {"command": "tapps-mcp", "args": ["serve", "--profile", "nlt-code-quality"]},
+                "nlt-platform-admin": {
+                    "command": "tapps-mcp",
+                    "args": ["serve", "--profile", "nlt-platform-admin"],
+                },
+            },
+        )
+        result = check_nlt_partial_enablement(tmp_path)
+        assert result.ok is True
+        assert "combined eager=11" in result.message
+        assert "nlt-code-quality: 9 eager / 15 total" in result.message
+        assert "nlt-platform-admin: 2 eager / 14 total" in result.message
+
+    def test_warns_when_more_than_three_servers(self, tmp_path) -> None:  # type: ignore[no-untyped-def]
+        self._cursor_mcp_json(
+            tmp_path,
+            {
+                "nlt-code-quality": {"command": "tapps-mcp", "args": ["serve", "--profile", "nlt-code-quality"]},
+                "nlt-platform-admin": {
+                    "command": "tapps-mcp",
+                    "args": ["serve", "--profile", "nlt-platform-admin"],
+                },
+                "nlt-linear-issues": {
+                    "command": "tapps-platform",
+                    "args": ["serve", "--profile", "nlt-linear-issues"],
+                },
+                "nlt-project-docs": {
+                    "command": "docsmcp",
+                    "args": ["serve", "--profile", "nlt-project-docs"],
+                },
+            },
+        )
+        result = check_nlt_partial_enablement(tmp_path)
+        assert result.ok is False
+        assert "4 nlt-* servers enabled" in result.message
+
+    def test_warns_when_combined_eager_exceeds_twenty(self, tmp_path) -> None:  # type: ignore[no-untyped-def]
+        self._cursor_mcp_json(
+            tmp_path,
+            {
+                "nlt-code-quality": {"command": "tapps-mcp", "args": ["serve", "--profile", "nlt-code-quality"]},
+                "nlt-platform-admin": {
+                    "command": "tapps-mcp",
+                    "args": ["serve", "--profile", "nlt-platform-admin"],
+                },
+                "nlt-linear-issues": {
+                    "command": "tapps-platform",
+                    "args": ["serve", "--profile", "nlt-linear-issues"],
+                },
+                "nlt-project-docs": {
+                    "command": "docsmcp",
+                    "args": ["serve", "--profile", "nlt-project-docs"],
+                },
+                "nlt-release-ship": {
+                    "command": "tapps-platform",
+                    "args": ["serve", "--profile", "nlt-release-ship"],
+                },
+            },
+        )
+        result = check_nlt_partial_enablement(tmp_path)
+        assert result.ok is False
+        assert "29 combined eager tools" in result.message
+        assert "5 nlt-* servers enabled" in result.message
 
 
 _SAMPLE_PROBE_METRICS = """\

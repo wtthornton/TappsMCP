@@ -28,7 +28,7 @@ class TestClaudeSkills:
         generate_skills(tmp_path, "claude")
         content = (tmp_path / ".claude" / "skills" / "tapps-score" / "SKILL.md").read_text()
         assert "tools:" in content
-        assert "mcp__tapps-mcp__tapps_score_file" in content
+        assert "mcp__nlt-code-quality__tapps_score_file" in content
 
     def test_score_skill_has_name(self, tmp_path):
         generate_skills(tmp_path, "claude")
@@ -38,18 +38,18 @@ class TestClaudeSkills:
     def test_score_skill_body_references_mcp_tools(self, tmp_path):
         generate_skills(tmp_path, "claude")
         content = (tmp_path / ".claude" / "skills" / "tapps-score" / "SKILL.md").read_text()
-        assert "mcp__tapps-mcp__tapps_score_file" in content
-        assert "mcp__tapps-mcp__tapps_quick_check" in content
+        assert "mcp__nlt-code-quality__tapps_score_file" in content
+        assert "mcp__nlt-code-quality__tapps_quick_check" in content
 
     def test_gate_skill_references_quality_gate(self, tmp_path):
         generate_skills(tmp_path, "claude")
         content = (tmp_path / ".claude" / "skills" / "tapps-gate" / "SKILL.md").read_text()
-        assert "mcp__tapps-mcp__tapps_quality_gate" in content
+        assert "mcp__nlt-code-quality__tapps_quality_gate" in content
 
     def test_validate_skill_references_validate_changed(self, tmp_path):
         generate_skills(tmp_path, "claude")
         content = (tmp_path / ".claude" / "skills" / "tapps-validate" / "SKILL.md").read_text()
-        assert "mcp__tapps-mcp__tapps_validate_changed" in content
+        assert "mcp__nlt-code-quality__tapps_validate_changed" in content
 
     def test_all_skills_have_frontmatter(self, tmp_path):
         generate_skills(tmp_path, "claude")
@@ -72,8 +72,8 @@ class TestClaudeSkills:
         generate_skills(tmp_path, "claude")
         base = tmp_path / ".claude" / "skills"
         content = (base / "tapps-review-pipeline" / "SKILL.md").read_text()
-        assert "mcp__tapps-mcp__tapps_validate_changed" in content
-        assert "mcp__tapps-mcp__tapps_checklist" in content
+        assert "mcp__nlt-code-quality__tapps_validate_changed" in content
+        assert "mcp__nlt-code-quality__tapps_checklist" in content
         assert "tapps-review-fixer" in content
 
     def test_research_skill_references_tools(self, tmp_path):
@@ -81,22 +81,22 @@ class TestClaudeSkills:
         base = tmp_path / ".claude" / "skills"
         content = (base / "tapps-research" / "SKILL.md").read_text()
         # tapps_research/tapps_consult_expert removed in EPIC-94; replaced by tapps_lookup_docs
-        assert "mcp__tapps-mcp__tapps_lookup_docs" in content
+        assert "mcp__nlt-code-quality__tapps_lookup_docs" in content
 
     def test_security_skill_references_tools(self, tmp_path):
         generate_skills(tmp_path, "claude")
         base = tmp_path / ".claude" / "skills"
         content = (base / "tapps-security" / "SKILL.md").read_text()
-        assert "mcp__tapps-mcp__tapps_security_scan" in content
-        assert "mcp__tapps-mcp__tapps_dependency_scan" in content
+        assert "mcp__nlt-code-quality__tapps_security_scan" in content
+        assert "mcp__nlt-release-ship__tapps_dependency_scan" in content
         # tapps_consult_expert removed in EPIC-94
 
     def test_memory_skill_references_tools(self, tmp_path):
         generate_skills(tmp_path, "claude")
         base = tmp_path / ".claude" / "skills"
         content = (base / "tapps-memory" / "SKILL.md").read_text()
-        assert "mcp__tapps-mcp__tapps_memory" in content
-        assert "mcp__tapps-mcp__tapps_session_notes" in content
+        assert "mcp__nlt-code-quality__tapps_session_start" in content
+        assert "mcp__nlt-platform-admin__tapps_session_notes" in content
 
 
 class TestCursorSkills:

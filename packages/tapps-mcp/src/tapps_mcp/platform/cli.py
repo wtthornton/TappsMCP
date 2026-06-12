@@ -51,11 +51,27 @@ def cli() -> None:
 @click.option("--transport", default="stdio", type=click.Choice(["stdio", "http"]))
 @click.option("--host", default="127.0.0.1")
 @click.option("--port", default=8000, type=int)
-def serve(transport: str, host: str, port: int) -> None:
+@click.option(
+    "--profile",
+    "tool_profile",
+    type=click.Choice(["nlt-linear-issues", "nlt-release-ship"]),
+    default=None,
+    help=(
+        "NLT cross-package profile (Epic 109). "
+        "nlt-linear-issues (~15 tools) or nlt-release-ship (~7 tools). "
+        "Omit for legacy full combined server."
+    ),
+)
+def serve(transport: str, host: str, port: int, tool_profile: str | None) -> None:
     """Start the combined TappsPlatform server (TappsMCP + DocsMCP)."""
     from tapps_mcp.platform.combined_server import run_combined_server
 
-    run_combined_server(transport=transport, host=host, port=port)
+    run_combined_server(
+        transport=transport,
+        host=host,
+        port=port,
+        profile=tool_profile,
+    )
 
 
 @cli.command("serve-tapps")

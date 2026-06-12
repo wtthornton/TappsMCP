@@ -196,9 +196,13 @@ ralph_mode = '$RALPH_MODE' == 'true'
 gate_tools={'tapps_quick_check','tapps_validate_changed','tapps_quality_gate',
             'mcp__tapps-mcp__tapps_quick_check','mcp__tapps-mcp__tapps_validate_changed',
             'mcp__tapps-mcp__tapps_quality_gate','mcp__tapps-quality__tapps_quick_check',
-            'mcp__tapps-quality__tapps_validate_changed','mcp__tapps-quality__tapps_quality_gate'}
-checklist_tools={'tapps_checklist','mcp__tapps-mcp__tapps_checklist','mcp__tapps-quality__tapps_checklist'}
-lookup_tools={'tapps_lookup_docs','mcp__tapps-mcp__tapps_lookup_docs','mcp__tapps-quality__tapps_lookup_docs'}
+            'mcp__tapps-quality__tapps_validate_changed','mcp__tapps-quality__tapps_quality_gate',
+            'mcp__nlt-code-quality__tapps_quick_check','mcp__nlt-code-quality__tapps_validate_changed',
+            'mcp__nlt-code-quality__tapps_quality_gate'}
+checklist_tools={'tapps_checklist','mcp__tapps-mcp__tapps_checklist','mcp__tapps-quality__tapps_checklist',
+                 'mcp__nlt-code-quality__tapps_checklist'}
+lookup_tools={'tapps_lookup_docs','mcp__tapps-mcp__tapps_lookup_docs','mcp__tapps-quality__tapps_lookup_docs',
+              'mcp__nlt-code-quality__tapps_lookup_docs'}
 edit_tools={'Edit','Write','MultiEdit','NotebookEdit'}
 mcp_calls=0
 gate_called=False
@@ -1965,7 +1969,7 @@ except Exception:
 TOOL=$(echo "$PARSED" | sed -n '1p')
 READY=$(echo "$PARSED" | sed -n '2p')
 case "$TOOL" in
-  mcp__docs-mcp__docs_validate_linear_issue|docs_validate_linear_issue) ;;
+  mcp__docs-mcp__docs_validate_linear_issue|mcp__nlt-linear-issues__docs_validate_linear_issue|docs_validate_linear_issue) ;;
   *) exit 0 ;;
 esac
 if [ "$READY" != "1" ]; then
@@ -2086,6 +2090,15 @@ LINEAR_GATE_HOOKS_CONFIG: dict[str, list[dict[str, Any]]] = {
                 },
             ],
         },
+        {
+            "matcher": "mcp__nlt-linear-issues__docs_validate_linear_issue",
+            "hooks": [
+                {
+                    "type": "command",
+                    "command": ".claude/hooks/tapps-post-docs-validate.sh",
+                },
+            ],
+        },
     ],
 }
 
@@ -2115,7 +2128,7 @@ try {
     if ($d.tool_name) { $tool = [string]$d.tool_name }
     elseif ($d.toolName) { $tool = [string]$d.toolName }
 } catch {}
-if ($tool -eq 'mcp__docs-mcp__docs_validate_linear_issue' -or $tool -eq 'docs_validate_linear_issue') {
+if ($tool -eq 'mcp__docs-mcp__docs_validate_linear_issue' -or $tool -eq 'mcp__nlt-linear-issues__docs_validate_linear_issue' -or $tool -eq 'docs_validate_linear_issue') {
     $root = if ($env:CLAUDE_PROJECT_DIR) { $env:CLAUDE_PROJECT_DIR } else { $PWD.Path }
     $dir = Join-Path $root '.tapps-mcp'
     if (-not (Test-Path $dir)) {
@@ -2222,6 +2235,18 @@ LINEAR_GATE_HOOKS_CONFIG_PS: dict[str, list[dict[str, Any]]] = {
     "PostToolUse": [
         {
             "matcher": "mcp__docs-mcp__docs_validate_linear_issue",
+            "hooks": [
+                {
+                    "type": "command",
+                    "command": (
+                        "powershell -NoProfile -ExecutionPolicy Bypass"
+                        " -File .claude/hooks/tapps-post-docs-validate.ps1"
+                    ),
+                },
+            ],
+        },
+        {
+            "matcher": "mcp__nlt-linear-issues__docs_validate_linear_issue",
             "hooks": [
                 {
                     "type": "command",
@@ -2341,7 +2366,7 @@ TOOL=$(echo "$PARSED" | sed -n '1p')
 KEY=$(echo "$PARSED" | sed -n '2p')
 ALIASES=$(echo "$PARSED" | sed -n '5p')
 case "$TOOL" in
-  mcp__tapps-mcp__tapps_linear_snapshot_get|tapps_linear_snapshot_get) ;;
+  mcp__tapps-mcp__tapps_linear_snapshot_get|mcp__nlt-linear-issues__tapps_linear_snapshot_get|tapps_linear_snapshot_get) ;;
   *) exit 0 ;;
 esac
 if [ -z "$KEY" ]; then
@@ -2604,6 +2629,15 @@ LINEAR_CACHE_GATE_HOOKS_CONFIG: dict[str, list[dict[str, Any]]] = {
             ],
         },
         {
+            "matcher": "mcp__nlt-linear-issues__tapps_linear_snapshot_get",
+            "hooks": [
+                {
+                    "type": "command",
+                    "command": ".claude/hooks/tapps-post-linear-snapshot-get.sh",
+                },
+            ],
+        },
+        {
             "matcher": "mcp__plugin_linear_linear__list_issues",
             "hooks": [
                 {
@@ -2663,7 +2697,7 @@ try {
     if ($d.tool_name) { $tool = [string]$d.tool_name }
     elseif ($d.toolName) { $tool = [string]$d.toolName }
 } catch { exit 0 }
-if ($tool -ne 'mcp__tapps-mcp__tapps_linear_snapshot_get' -and $tool -ne 'tapps_linear_snapshot_get') {
+if ($tool -ne 'mcp__tapps-mcp__tapps_linear_snapshot_get' -and $tool -ne 'mcp__nlt-linear-issues__tapps_linear_snapshot_get' -and $tool -ne 'tapps_linear_snapshot_get') {
     exit 0
 }
 """
@@ -2749,6 +2783,18 @@ LINEAR_CACHE_GATE_HOOKS_CONFIG_PS: dict[str, list[dict[str, Any]]] = {
     "PostToolUse": [
         {
             "matcher": "mcp__tapps-mcp__tapps_linear_snapshot_get",
+            "hooks": [
+                {
+                    "type": "command",
+                    "command": (
+                        "powershell -NoProfile -ExecutionPolicy Bypass"
+                        " -File .claude/hooks/tapps-post-linear-snapshot-get.ps1"
+                    ),
+                },
+            ],
+        },
+        {
+            "matcher": "mcp__nlt-linear-issues__tapps_linear_snapshot_get",
             "hooks": [
                 {
                     "type": "command",

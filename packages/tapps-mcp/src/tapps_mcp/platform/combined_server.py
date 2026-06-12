@@ -40,10 +40,14 @@ def _copy_tools(
     source_tools: dict[str, Any],
     target_tools: dict[str, Any],
     source_name: str,
+    *,
+    allowed: frozenset[str] | None = None,
 ) -> list[str]:
     """Copy tools from source to target, returning list of collision names."""
     collisions: list[str] = []
     for name, tool in source_tools.items():
+        if allowed is not None and name not in allowed:
+            continue
         if name in target_tools:
             collisions.append(name)
             logger.warning(
@@ -71,8 +75,11 @@ def _copy_prompts(source: dict[str, Any], target: dict[str, Any]) -> None:
             target[name] = prompt
 
 
-def create_combined_server() -> FastMCP:
+def create_combined_server(profile: str | None = None) -> FastMCP:
     """Create a combined FastMCP server with tools from both TappsMCP and DocsMCP.
+
+    When *profile* is set (Epic 109 NLT plugin), only tools in that cross-package
+    profile are registered. When ``None``, all tools from both servers are copied.
 
     If ``docs-mcp`` is not installed, returns TappsMCP-only with a warning.
 
@@ -81,18 +88,27 @@ def create_combined_server() -> FastMCP:
 
     Raises:
         RuntimeError: If tool name collisions are detected.
+        ValueError: If *profile* is not a known platform NLT profile.
     """
     from mcp.server.fastmcp import FastMCP
 
+    from tapps_mcp.platform.nlt_profiles import resolve_platform_allowed_tools
     from tapps_mcp.server import mcp as tapps_server
+
+    allowed = resolve_platform_allowed_tools(profile)
 
     combined = FastMCP("TappsPlatform")
 
     # Copy TappsMCP tools
     for name, tool in tapps_server._tool_manager._tools.items():
+        if allowed is not None and name not in allowed:
+            continue
         combined._tool_manager._tools[name] = tool
 
-    # Copy TappsMCP resources and prompts
+    tapps_tool_count = len(combined._tool_manager._tools)
+    docs_tool_count = 0
+
+    # Copy TappsMCP resources and prompts (unchanged by profile)
     _copy_resources(
         tapps_server._resource_manager._resources,
         combined._resource_manager._resources,
@@ -101,9 +117,6 @@ def create_combined_server() -> FastMCP:
         tapps_server._prompt_manager._prompts,
         combined._prompt_manager._prompts,
     )
-
-    tapps_tool_count = len(tapps_server._tool_manager._tools)
-    docs_tool_count = 0
 
     # Graceful degradation: skip DocsMCP if not installed
     if not _DOCS_MCP_AVAILABLE or docs_server is None:
@@ -116,6 +129,7 @@ def create_combined_server() -> FastMCP:
             docs_server._tool_manager._tools,
             combined._tool_manager._tools,
             source_name="docs_mcp",
+            allowed=allowed,
         )
         if collisions:
             msg = f"Tool name collisions detected: {', '.join(collisions)}"
@@ -129,7 +143,11 @@ def create_combined_server() -> FastMCP:
             docs_server._prompt_manager._prompts,
             combined._prompt_manager._prompts,
         )
-        docs_tool_count = len(docs_server._tool_manager._tools)
+        docs_tool_count = sum(
+            1
+            for name in combined._tool_manager._tools
+            if name.startswith("docs_")
+        )
 
     total_tools = len(combined._tool_manager._tools)
     total_resources = len(combined._resource_manager._resources)
@@ -143,6 +161,7 @@ def create_combined_server() -> FastMCP:
         total_resources=total_resources,
         total_prompts=total_prompts,
         docs_available=_DOCS_MCP_AVAILABLE,
+        profile=profile,
     )
 
     return combined
@@ -204,6 +223,8 @@ def run_combined_server(
     transport: str = "stdio",
     host: str = "127.0.0.1",
     port: int = 8000,
+    *,
+    profile: str | None = None,
 ) -> None:
     """Start the combined TappsPlatform MCP server."""
     from tapps_core.common.logging import (
@@ -220,12 +241,13 @@ def run_combined_server(
         bootstrap_json=bootstrap_json,
     )
 
-    combined = create_combined_server()
+    combined = create_combined_server(profile=profile)
 
     logger.info(
         "tapps_platform_starting",
         transport=transport,
         project_root=str(settings.project_root),
+        profile=profile,
     )
 
     if transport == "stdio":

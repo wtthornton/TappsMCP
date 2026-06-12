@@ -40,6 +40,7 @@ class TestCacheGateConfig:
     def test_posttooluse_matches_snapshot_get(self) -> None:
         matchers = [e["matcher"] for e in LINEAR_CACHE_GATE_HOOKS_CONFIG["PostToolUse"]]
         assert "mcp__tapps-mcp__tapps_linear_snapshot_get" in matchers
+        assert "mcp__nlt-linear-issues__tapps_linear_snapshot_get" in matchers
 
     def test_scripts_map_has_both(self) -> None:
         assert "tapps-pre-linear-list.sh" in LINEAR_CACHE_GATE_SCRIPTS

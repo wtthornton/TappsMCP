@@ -222,8 +222,8 @@ For moving work between fresh chats (not just compaction recovery):
 
 | Mechanism | Path / tool | Role |
 |-----------|-------------|------|
-| **Handoff skill** | `/tapps-handoff-session` | Writes `.tapps-mcp/session-handoff.md`, optional `tapps-mcp memory save --key session-handoff`, calls `tapps_session_end`. |
-| **Continue skill** | `/tapps-continue-session` | Calls `tapps_session_start`, reads handoff file (then brain mirror), optional Linear `TAP-####`. |
+| **Handoff skill** | `/tapps-handoff-session` | Writes `.tapps-mcp/session-handoff.md`, mirrors full markdown to brain via `memory save --key session-handoff`, calls `tapps_session_end`. |
+| **Continue skill** | `/tapps-continue-session` | Calls `tapps_session_start`, reads handoff file (then `memory get --key session-handoff`), optional `memory recall --recall-key session-handoff` or `memory search`, optional Linear `TAP-####`. |
 | **Pipeline template** | `docs/TAPPS_HANDOFF.md` | Longer pipeline-stage narrative from `tapps_init`; optional supplement, not the default continue path. |
 
 `tapps doctor` verifies both skills are deployed under `.claude/skills/` and/or `.cursor/skills/`. `tapps_init` records `session_handoff_skills` in its result after skill generation.

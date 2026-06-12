@@ -309,7 +309,7 @@ class TestLinearIssueSkillUpdated:
         assert "mcp__plugin_linear_linear__save_issue" in CLAUDE_SKILLS["linear-issue"]
 
     def test_linear_issue_has_docs_generate_epic(self) -> None:
-        assert "mcp__docs-mcp__docs_generate_epic" in CLAUDE_SKILLS["linear-issue"]
+        assert "mcp__nlt-linear-issues__docs_generate_epic" in CLAUDE_SKILLS["linear-issue"]
 
     def test_linear_issue_description_is_mandatory(self) -> None:
         content = CLAUDE_SKILLS["linear-issue"]
@@ -344,8 +344,8 @@ class TestLinearReadSkill:
 
     def test_claude_allowed_tools_include_snapshot_and_list(self) -> None:
         content = CLAUDE_SKILLS["linear-read"]
-        assert "mcp__tapps-mcp__tapps_linear_snapshot_get" in content
-        assert "mcp__tapps-mcp__tapps_linear_snapshot_put" in content
+        assert "mcp__nlt-linear-issues__tapps_linear_snapshot_get" in content
+        assert "mcp__nlt-linear-issues__tapps_linear_snapshot_put" in content
         assert "mcp__plugin_linear_linear__list_issues" in content
         assert "mcp__plugin_linear_linear__get_issue" in content
 
@@ -374,7 +374,7 @@ class TestLinearReadSkill:
         target = tmp_path / ".claude" / "skills" / "linear-read" / "SKILL.md"
         assert target.exists()
         content = target.read_text(encoding="utf-8")
-        assert "mcp__tapps-mcp__tapps_linear_snapshot_get" in content
+        assert "mcp__nlt-linear-issues__tapps_linear_snapshot_get" in content
 
 
 class TestFinishTaskSkill:
@@ -388,11 +388,11 @@ class TestFinishTaskSkill:
 
     def test_allowed_tools_includes_validate_changed(self) -> None:
         content = CLAUDE_SKILLS["tapps-finish-task"]
-        assert "mcp__tapps-mcp__tapps_validate_changed" in content
+        assert "mcp__nlt-code-quality__tapps_validate_changed" in content
 
     def test_allowed_tools_includes_checklist(self) -> None:
         content = CLAUDE_SKILLS["tapps-finish-task"]
-        assert "mcp__tapps-mcp__tapps_checklist" in content
+        assert "mcp__nlt-code-quality__tapps_checklist" in content
 
     def test_finish_task_uses_cli_memory_save(self) -> None:
         content = CLAUDE_SKILLS["tapps-finish-task"]
@@ -484,18 +484,25 @@ class TestSessionHandoffSkills:
         for skills in (CLAUDE_SKILLS, CURSOR_SKILLS):
             assert "P0 gate" in skills["tapps-handoff-session"]
 
-    def test_continue_has_memory_search_and_p0_fallback(self) -> None:
+    def test_continue_has_memory_recall_and_p0_fallback(self) -> None:
         for skills in (CLAUDE_SKILLS, CURSOR_SKILLS):
             content = skills["tapps-continue-session"]
+            assert "memory recall" in content
             assert "memory search" in content
             assert "P0 fallback" in content
+
+    def test_handoff_brain_mirror_uses_full_markdown(self) -> None:
+        for skills in (CLAUDE_SKILLS, CURSOR_SKILLS):
+            content = skills["tapps-handoff-session"]
+            assert "cat .tapps-mcp/session-handoff.md" in content
+            assert "full markdown body" in content
 
     def test_continue_session_body_parity(self) -> None:
         """Cursor and Claude continue-session share the same core steps (TAP-3581)."""
         markers = (
             "Load handoff (priority order)",
             "P0 fallback",
-            "memory search",
+            "memory recall",
             "Emit continue block",
             "Proceed on P0",
             "linear-read",

@@ -142,6 +142,37 @@ class TestResolveAllowedTools:
         assert allowed == TOOL_PRESET_CORE - frozenset({"tapps_checklist"})
         assert "tapps_checklist" not in allowed
 
+    def test_preset_nlt_code_quality(self) -> None:
+        from tapps_mcp.server import TOOL_PROFILE_NLT_CODE_QUALITY, _resolve_allowed_tools
+
+        settings = MagicMock()
+        settings.enabled_tools = None
+        settings.disabled_tools = []
+        settings.tool_preset = "nlt-code-quality"
+        allowed = _resolve_allowed_tools(settings)
+        assert allowed == TOOL_PROFILE_NLT_CODE_QUALITY
+        assert len(allowed) == 15
+
+    def test_preset_nlt_platform_admin(self) -> None:
+        from tapps_mcp.server import TOOL_PROFILE_NLT_PLATFORM_ADMIN, _resolve_allowed_tools
+
+        settings = MagicMock()
+        settings.enabled_tools = None
+        settings.disabled_tools = []
+        settings.tool_preset = "nlt-platform-admin"
+        allowed = _resolve_allowed_tools(settings)
+        assert allowed == TOOL_PROFILE_NLT_PLATFORM_ADMIN
+        assert len(allowed) == 14
+
+    def test_nlt_profiles_disjoint(self) -> None:
+        from tapps_mcp.server import (
+            TOOL_PROFILE_NLT_CODE_QUALITY,
+            TOOL_PROFILE_NLT_PLATFORM_ADMIN,
+        )
+
+        overlap = TOOL_PROFILE_NLT_CODE_QUALITY & TOOL_PROFILE_NLT_PLATFORM_ADMIN
+        assert overlap == frozenset()
+
 
 class TestConditionalRegistration:
     """Test that register() only registers tools in allowed_tools."""
