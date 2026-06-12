@@ -130,6 +130,29 @@ uv run docsmcp serve
 python examples/combined_server.py
 ```
 
+### Cursor MCP in this dev repo (dogfood global install)
+
+This repo **dogfoods the consumer path**: Cursor talks to globally installed CLIs, not `uv run` from the workspace.
+
+1. **Install globals** (once, or after package changes):
+
+   ```bash
+   uv tool install --reinstall --from packages/tapps-mcp tapps-mcp
+   uv tool install --reinstall --from packages/docs-mcp docs-mcp
+   ```
+
+2. **Generate NLT MCP config** (developer bundle: code-quality + platform-admin):
+
+   ```bash
+   tapps-mcp init --host cursor --force --allow-package-init --no-uv
+   ```
+
+   Writes gitignored `.cursor/mcp.json` and tracked `.cursor/bin/nlt-*-serve.sh` wrappers that `exec` global `tapps-mcp serve --profile nlt-*`.
+
+3. **Reload MCP** in Cursor after reinstall or config changes.
+
+4. **Optional servers** — uncomment blocks in `.cursor/mcp.json` when needed: `nlt-project-docs` (docs tools), `nlt-linear-issues`, `nlt-release-ship`.
+
 ### Running Tests
 
 ```bash
