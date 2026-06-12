@@ -1,7 +1,7 @@
 # Epic 110: Cross-session handoff fidelity (TAP-3573 follow-up)
 
 <!-- docsmcp:start:metadata -->
-**Status:** Proposed
+**Status:** Shipped (master `9963cee`)
 **Priority:** High
 **Estimated LOE:** M (2–3 weeks phased)
 
@@ -87,6 +87,8 @@ Store handoff section pointers in memory entry metadata; `memory get` surfaces l
 
 <!-- docsmcp:start:refs -->
 ## Refs
+
+Linear: TAP-3790 (shipped `9963cee`)
 
 - TAP-3573 (session-handoff schema lint)
 - `packages/tapps-mcp/src/tapps_mcp/tools/handoff_schema.py`

@@ -223,7 +223,8 @@ For moving work between fresh chats (not just compaction recovery):
 | Mechanism | Path / tool | Role |
 |-----------|-------------|------|
 | **Handoff skill** | `/tapps-handoff-session` | Writes `.tapps-mcp/session-handoff.md`; prefer `tapps-mcp handoff write` or MCP `tapps_handoff_save` (lint + brain mirror + optional session-end). |
-| **Handoff recall** | `memory get --key session-handoff` | Returns `handoff_sections` (Done/Open/P0) without embedding vector; `memory save` notes when `memory_group` is null. |
+| **Handoff recall** | `memory get --key session-handoff` | Returns `handoff_sections` (Done/Open/P0) without embedding vector. Same enrichment applies to MCP `tapps_memory(action="get")`. |
+| **Memory groups** | `memory save --memory-group insights` | Optional brain `memory_group` scope; CLI/MCP save omit `memory_group_note` when set. |
 | **Continue skill** | `/tapps-continue-session` | Calls `tapps_session_start`, reads handoff file (then `memory get --key session-handoff`), optional `memory recall --recall-key session-handoff` or `memory search`, optional Linear `TAP-####`. |
 | **Pipeline template** | `docs/TAPPS_HANDOFF.md` | Longer pipeline-stage narrative from `tapps_init`; optional supplement, not the default continue path. |
 

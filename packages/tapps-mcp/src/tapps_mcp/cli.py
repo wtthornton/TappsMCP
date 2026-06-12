@@ -1069,7 +1069,13 @@ def memory_list(tier: str | None, scope: str | None, as_json: bool) -> None:
     default="pattern",
 )
 @click.option("--tags", default="", help="Comma-separated tags.")
-def memory_save(key: str, value: str, tier: str, tags: str) -> None:
+@click.option(
+    "--memory-group",
+    "memory_group",
+    default=None,
+    help="Brain memory_group scope (e.g. insights for validate_changed recall).",
+)
+def memory_save(key: str, value: str, tier: str, tags: str, memory_group: str | None) -> None:
     """Save a memory entry via BrainBridge (HTTP or in-process DSN)."""
     import asyncio
     import json
@@ -1080,8 +1086,13 @@ def memory_save(key: str, value: str, tier: str, tags: str) -> None:
         bridge = _create_cli_brain_bridge()
         if bridge is None:
             raise RuntimeError("bridge_unavailable")
+        save_kwargs: dict[str, object] = {}
+        if memory_group:
+            save_kwargs["memory_group"] = memory_group
         try:
-            result = await bridge.save(key=key, value=value, tier=tier, tags=tag_list)
+            result = await bridge.save(
+                key=key, value=value, tier=tier, tags=tag_list, **save_kwargs
+            )
             return result if isinstance(result, dict) else {"key": key, "success": True}
         finally:
             bridge.close()

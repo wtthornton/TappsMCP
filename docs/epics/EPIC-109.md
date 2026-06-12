@@ -1,7 +1,7 @@
 # Epic 109: NLT MCP Plugin — five-server split with partial enablement
 
 <!-- docsmcp:start:metadata -->
-**Status:** Proposed
+**Status:** Shipped (master `f05c1e0`)
 **Priority:** High
 **Estimated LOE:** L (4–5 weeks total; phased v1.0–v1.2)
 
@@ -101,6 +101,8 @@ Update `linear-issue`, `linear-read`, `tapps-finish-task`, linear gate hooks to 
 ## Refs
 
 - `docs/architecture/nlt-mcp-plugin-spec.yaml`
+Linear: TAP-3795 (shipped `f05c1e0`)
+
 - `docs/archive/planning/research/2026-NLT-MCP-PLUGIN-SPLIT-RESEARCH.md`
 - `docs/architecture/tool-budget.md`
 - Epic 79 (tool presets), TAP-1986/1987 (defer_loading)

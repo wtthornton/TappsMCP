@@ -144,6 +144,35 @@ class TestMemorySave:
         bridge.save.assert_awaited_once()
         bridge.close.assert_called_once()
 
+    def test_save_with_memory_group(self, runner: CliRunner) -> None:
+        bridge = _mock_bridge(
+            save_result={"key": "insight-1", "success": True, "memory_group": "insights"}
+        )
+        with patch(_BRIDGE_PATCH, return_value=bridge):
+            result = runner.invoke(
+                main,
+                [
+                    "memory",
+                    "save",
+                    "--key",
+                    "insight-1",
+                    "--value",
+                    "pattern",
+                    "--memory-group",
+                    "insights",
+                ],
+            )
+        assert result.exit_code == 0
+        bridge.save.assert_awaited_once_with(
+            key="insight-1",
+            value="pattern",
+            tier="pattern",
+            tags=[],
+            memory_group="insights",
+        )
+        data = json.loads(result.output)
+        assert "memory_group_note" not in data
+
     def test_save_with_tags(self, runner: CliRunner) -> None:
         bridge = _mock_bridge()
         with patch(_BRIDGE_PATCH, return_value=bridge):

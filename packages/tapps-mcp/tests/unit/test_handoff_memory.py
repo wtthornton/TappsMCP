@@ -5,7 +5,9 @@ from __future__ import annotations
 import json
 
 from tapps_mcp.tools.handoff_memory import (
+    enrich_memory_get_action_result,
     enrich_memory_get_entry,
+    enrich_memory_save_action_result,
     enrich_memory_save_result,
 )
 from tapps_mcp.tools.handoff_schema import handoff_sections_from_doc, parse_handoff_markdown
@@ -77,3 +79,21 @@ class TestHandoffMemoryEnrichment:
     def test_save_skips_note_when_group_set(self) -> None:
         out = enrich_memory_save_result({"key": "x", "memory_group": "insights"})
         assert "memory_group_note" not in out
+
+    def test_get_action_result_enriches_entry(self) -> None:
+        payload = enrich_memory_get_action_result(
+            "session-handoff",
+            {
+                "action": "get",
+                "found": True,
+                "entry": {"key": "session-handoff", "value": _VALID, "embedding": [1.0]},
+            },
+        )
+        assert "embedding" not in payload["entry"]
+        assert payload["entry"]["handoff_sections"]["linear_p0"] == "TAP-3790"
+
+    def test_save_action_result_enriches_entry(self) -> None:
+        payload = enrich_memory_save_action_result(
+            {"action": "save", "entry": {"key": "x", "memory_group": None}}
+        )
+        assert "memory_group_note" in payload["entry"]

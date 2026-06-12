@@ -52,14 +52,37 @@ def enrich_memory_get_entry(key: str, entry: dict[str, Any]) -> dict[str, Any]:
 
 
 def enrich_memory_save_result(result: dict[str, Any]) -> dict[str, Any]:
-    """Clarify null memory_group in CLI save JSON output."""
+    """Clarify null memory_group in CLI/MCP save JSON output."""
     out = dict(result)
     if out.get("memory_group") is None and "memory_group_note" not in out:
         out["memory_group_note"] = _MEMORY_GROUP_NOTE
     return out
 
 
+def enrich_memory_get_action_result(key: str, result: dict[str, Any]) -> dict[str, Any]:
+    """Apply get enrichment to tapps_memory action=get payloads."""
+    if not result.get("found"):
+        return result
+    entry = result.get("entry")
+    if not isinstance(entry, dict):
+        return result
+    out = dict(result)
+    out["entry"] = enrich_memory_get_entry(key, entry)
+    return out
+
+
+def enrich_memory_save_action_result(result: dict[str, Any]) -> dict[str, Any]:
+    """Apply save enrichment to tapps_memory action=save payloads."""
+    out = dict(result)
+    entry = out.get("entry")
+    if isinstance(entry, dict):
+        out["entry"] = enrich_memory_save_result(entry)
+    return out
+
+
 __all__ = [
+    "enrich_memory_get_action_result",
     "enrich_memory_get_entry",
+    "enrich_memory_save_action_result",
     "enrich_memory_save_result",
 ]

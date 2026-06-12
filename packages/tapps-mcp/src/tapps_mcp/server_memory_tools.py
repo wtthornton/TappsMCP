@@ -32,12 +32,15 @@ from tapps_mcp.server_helpers import (
     initial_session_hive_status,
     success_response,
 )
+from tapps_mcp.tools.handoff_memory import (
+    enrich_memory_get_action_result,
+    enrich_memory_save_action_result,
+)
 
 if TYPE_CHECKING:
     from collections.abc import Callable
 
     from mcp.server.fastmcp import FastMCP
-
     from tapps_brain.models import MemoryEntry
     from tapps_brain.store import MemoryStore
 
@@ -508,6 +511,7 @@ class _Params:
     # Feedback flywheel (TAP-1632)
     rating: str = ""
     details_json: str = ""
+    memory_group: str = ""
 
 
 # ---------------------------------------------------------------------------
@@ -554,6 +558,7 @@ async def tapps_memory(
     max_hops: int = 0,
     rating: str = "",
     details_json: str = "",
+    memory_group: str = "",
 ) -> dict[str, Any]:
     """[DEPRECATED 2026-Q3 — use mcp__tapps-brain__* tools directly]
     Cross-session memory store: saves, recalls, searches, and maintains
@@ -859,6 +864,7 @@ async def tapps_memory(
         max_hops=max_hops,
         rating=rating,
         details_json=details_json,
+        memory_group=memory_group,
     )
 
     try:
@@ -912,6 +918,10 @@ async def tapps_memory(
         )
 
     elapsed = int((time.perf_counter() - t0) * 1000)
+    if action == "get" and isinstance(result_data, dict):
+        result_data = enrich_memory_get_action_result(params.key, result_data)
+    elif action == "save" and isinstance(result_data, dict):
+        result_data = enrich_memory_save_action_result(result_data)
     return success_response("tapps_memory", elapsed, result_data)
 
 
@@ -1010,6 +1020,7 @@ def _handle_save(store: MemoryStore, p: _Params) -> dict[str, Any]:
             pass  # Safety module not available; proceed without check
 
     supersede_old_key: str | None = None
+    group_kwargs = {"memory_group": p.memory_group} if p.memory_group else {}
     use_supersede = (
         settings.memory.enabled
         and settings.memory.auto_supersede_architectural
@@ -1051,6 +1062,7 @@ def _handle_save(store: MemoryStore, p: _Params) -> dict[str, Any]:
                 tags=p.tag_list,
                 branch=p.branch or None,
                 confidence=p.confidence,
+                **group_kwargs,
             )
     else:
         result = store.save(
@@ -1063,6 +1075,7 @@ def _handle_save(store: MemoryStore, p: _Params) -> dict[str, Any]:
             tags=p.tag_list,
             branch=p.branch or None,
             confidence=p.confidence,
+            **group_kwargs,
         )
 
     if isinstance(result, dict):
@@ -1463,8 +1476,9 @@ async def _handle_contradictions(store: MemoryStore, _p: _Params) -> dict[str, A
 
 def _handle_reseed(store: MemoryStore, _p: _Params) -> dict[str, Any]:
     """Re-seed memory from project profile (auto-seeded entries only)."""
-    from tapps_core.config.settings import load_settings
     from tapps_brain.seeding import reseed_from_profile
+
+    from tapps_core.config.settings import load_settings
     from tapps_mcp.project.profiler import detect_project_profile
 
     settings = load_settings()
@@ -1487,8 +1501,9 @@ def _handle_import(store: MemoryStore, p: _Params) -> dict[str, Any]:
             "message": "file_path is required for import.",
         }
 
-    from tapps_core.config.settings import load_settings
     from tapps_brain.io import import_memories
+
+    from tapps_core.config.settings import load_settings
     from tapps_core.security.path_validator import PathValidator
 
     settings = load_settings()
@@ -1553,12 +1568,13 @@ def _handle_export(store: MemoryStore, p: _Params) -> dict[str, Any]:
     import json as json_mod
     from datetime import UTC, datetime
 
+    from tapps_brain.io import export_to_markdown
+
     from tapps_core.common.file_operations import (
         AgentInstructions,
         FileManifest,
         FileOperation,
     )
-    from tapps_brain.io import export_to_markdown
 
     snapshot = store.snapshot()
     entries = snapshot.entries
@@ -1908,10 +1924,11 @@ def _find_entries_by_query(
     limit: int,
 ) -> list[MemoryEntry] | dict[str, Any]:
     """Find entries by query for consolidation."""
-    from tapps_core.config.settings import load_settings
     from tapps_brain.reranker import get_reranker
     from tapps_brain.retrieval import MemoryRetriever
     from tapps_brain.similarity import find_consolidation_groups
+
+    from tapps_core.config.settings import load_settings
 
     settings = load_settings()
     rr = settings.memory.reranker
@@ -2142,8 +2159,9 @@ async def _handle_session_end_consolidate(store: MemoryStore, p: _Params) -> dic
 
 def _handle_federate_register(store: MemoryStore, params: _Params) -> dict[str, Any]:
     """Register this project in the federation hub."""
-    from tapps_core.config.settings import load_settings
     from tapps_brain.federation import register_project
+
+    from tapps_core.config.settings import load_settings
 
     settings = load_settings()
     pid = params.project_id or settings.project_root.name.lower().replace(" ", "-")
@@ -2165,8 +2183,9 @@ def _handle_federate_register(store: MemoryStore, params: _Params) -> dict[str, 
 
 def _handle_federate_publish(store: MemoryStore, params: _Params) -> dict[str, Any]:
     """Publish shared-scope memories to the federation hub."""
-    from tapps_core.config.settings import load_settings
     from tapps_brain.federation import FederatedStore, sync_to_hub
+
+    from tapps_core.config.settings import load_settings
 
     settings = load_settings()
     pid = params.project_id or settings.project_root.name.lower().replace(" ", "-")
@@ -2193,8 +2212,9 @@ def _handle_federate_publish(store: MemoryStore, params: _Params) -> dict[str, A
 
 def _handle_federate_subscribe(store: MemoryStore, params: _Params) -> dict[str, Any]:
     """Subscribe to memories from other projects."""
-    from tapps_core.config.settings import load_settings
     from tapps_brain.federation import add_subscription
+
+    from tapps_core.config.settings import load_settings
 
     settings = load_settings()
     pid = params.project_id or settings.project_root.name.lower().replace(" ", "-")
@@ -2220,8 +2240,9 @@ def _handle_federate_subscribe(store: MemoryStore, params: _Params) -> dict[str,
 
 def _handle_federate_sync(store: MemoryStore, params: _Params) -> dict[str, Any]:
     """Pull subscribed memories from the federation hub."""
-    from tapps_core.config.settings import load_settings
     from tapps_brain.federation import FederatedStore, sync_from_hub
+
+    from tapps_core.config.settings import load_settings
 
     settings = load_settings()
     pid = params.project_id or settings.project_root.name.lower().replace(" ", "-")
@@ -2245,8 +2266,9 @@ def _handle_federate_sync(store: MemoryStore, params: _Params) -> dict[str, Any]
 
 def _handle_federate_search(store: MemoryStore, params: _Params) -> dict[str, Any]:
     """Search across local and federated memories."""
-    from tapps_core.config.settings import load_settings
     from tapps_brain.federation import FederatedStore, federated_search
+
+    from tapps_core.config.settings import load_settings
 
     if not params.query:
         return {
@@ -3472,16 +3494,21 @@ async def _http_handle_save(p: _Params) -> dict[str, Any]:
     if not p.value:
         return {"error": "missing_value", "message": "Value is required for save."}
     bridge = _require_bridge()
+    save_kwargs: dict[str, Any] = {
+        "source": p.source,
+        "source_agent": p.source_agent,
+        "branch": p.branch or None,
+        "confidence": p.confidence,
+    }
+    if p.memory_group:
+        save_kwargs["memory_group"] = p.memory_group
     entry = await bridge.save(
         key=p.key,
         value=p.value,
         tier=p.tier,
         scope=p.scope,
         tags=p.tag_list or None,
-        source=p.source,
-        source_agent=p.source_agent,
-        branch=p.branch or None,
-        confidence=p.confidence,
+        **save_kwargs,
     )
     return {
         "action": "save",
@@ -3735,10 +3762,11 @@ _HTTP_BRIDGE_DISPATCH: dict[str, Any] = {
 
 async def _handle_validate(store: MemoryStore, params: _Params) -> dict[str, Any]:
     """Validate memory entries against authoritative documentation."""
+    from tapps_brain.doc_validation import MemoryDocValidator
+
     from tapps_core.config.settings import load_settings
     from tapps_core.knowledge.cache import KBCache
     from tapps_core.knowledge.lookup import LookupEngine
-    from tapps_brain.doc_validation import MemoryDocValidator
 
     settings = load_settings()
     _cache = KBCache(settings.project_root / ".tapps-mcp-cache")
@@ -3907,9 +3935,10 @@ def _ranked_search(
     include_sources: bool = False,
 ) -> dict[str, Any]:
     """Execute ranked BM25 search via MemoryRetriever (hybrid + reranker when enabled)."""
-    from tapps_core.config.settings import load_settings
     from tapps_brain.reranker import get_reranker
     from tapps_brain.retrieval import MemoryRetriever
+
+    from tapps_core.config.settings import load_settings
 
     settings = load_settings()
     rr = settings.memory.reranker
@@ -4165,7 +4194,7 @@ async def brain_propose_hive_elevation(
                 entities=[entity_spec("memory_key", memory_key)],
                 payload_data={"proposal_id": proposal_id, "justification": justification},
             )
-        except Exception as exc:  # noqa: BLE001
+        except Exception as exc:
             logger.debug("hive_propose.kg_event_failed", error=str(exc))
 
     elapsed = int((time.monotonic() - start) * 1000)
@@ -4247,7 +4276,7 @@ async def brain_approve_hive_elevation(
                 entities=[entity_spec("memory_key", memory_key)],
                 payload_data={"proposal_id": proposal_id},
             )
-        except Exception as exc:  # noqa: BLE001
+        except Exception as exc:
             logger.debug("hive_approve.kg_event_failed", error=str(exc))
 
     elapsed = int((time.monotonic() - start) * 1000)
@@ -4273,6 +4302,7 @@ async def brain_approve_hive_elevation(
 # Registration
 # ---------------------------------------------------------------------------
 
+
 def register(mcp_instance: FastMCP, allowed_tools: frozenset[str]) -> None:
     """Register memory tools on the shared *mcp_instance*.
 
@@ -4284,8 +4314,9 @@ def register(mcp_instance: FastMCP, allowed_tools: frozenset[str]) -> None:
     TAP-2014: brain_propose_hive_elevation and brain_approve_hive_elevation
     registered here (deferred — not daily drivers).
     """
-    from tapps_mcp.mcp_register import register_tool
     from mcp.types import ToolAnnotations
+
+    from tapps_mcp.mcp_register import register_tool
 
     _ann_write = ToolAnnotations(
         readOnlyHint=False,
