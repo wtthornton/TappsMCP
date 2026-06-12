@@ -27,7 +27,7 @@ extra_required:
     - tapps_dependency_scan
 extra_recommended:
   review:
-    - tapps_memory
+    - tapps_validate_changed
 ```
 
 ## Strict task types

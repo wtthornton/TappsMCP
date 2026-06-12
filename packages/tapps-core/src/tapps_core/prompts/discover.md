@@ -7,7 +7,7 @@ Understand the TappsMCP server capabilities and the project's tech stack before 
 ## Allowed Tools
 
 - `tapps_session_start` - Combines server info and project context in a single call: server version, available tools, installed checkers, configuration, tech stack, CI, test frameworks, and quality recommendations.
-- `tapps_memory` - Recall relevant memories from previous sessions for the current task.
+- **`tapps-mcp memory` CLI** - Recall or save cross-session brain memory (`uv run tapps-mcp memory search|get|save`; hooks auto-recall when enabled). Not an MCP tool (TAP-1994).
 
 ## Constraints
 

@@ -185,7 +185,7 @@ Your project may have two complementary memory systems. Use the right one for ea
 
 Use `uv run tapps-mcp memory` for architecture decisions and quality patterns.
 
-Use `tapps_memory` for architecture decisions and quality patterns.
+Use `uv run tapps-mcp memory` for architecture decisions and quality patterns.
 
 **Cross-session handoff:** for tokens/IDs/payloads, prefer `/tapps-handoff-session` at chat end and `/tapps-continue-session` at chat start — they read/write `.tapps-mcp/session-handoff.md` (canonical) with an optional brain mirror (`tapps-mcp memory save --key session-handoff`). For ad-hoc key/value payloads, use `tapps-mcp memory save/get` or brain recall directly. Cross-agent: `hive_propagate`; cross-project: federation actions.
 

@@ -133,8 +133,9 @@ def build_multi_file_memory_hint(src_file_count: int) -> str | None:
         return None
     return (
         f"Multi-file engine work ({src_file_count} files under src/ validated): "
-        "consider tapps_memory(action='save', tier='pattern') for conventions learned "
-        "this session, or invoke /tapps-finish-task to bundle validation + memory save."
+        "consider `uv run tapps-mcp memory save --key <slug> --tier pattern --value \"...\"` "
+        "for conventions learned this session, or invoke /tapps-finish-task to bundle "
+        "validation + optional memory save."
     )
 
 

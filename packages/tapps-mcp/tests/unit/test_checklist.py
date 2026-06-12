@@ -66,6 +66,20 @@ class TestTaskToolMap:
         }
         assert set(TASK_TOOL_MAP.keys()) == expected
 
+    def test_retired_tapps_memory_not_in_any_bucket(self) -> None:
+        """TAP-1994: tapps_memory MCP removed — checklist must not recommend it."""
+        for level_name, level_map in (
+            ("medium", TASK_TOOL_MAP),
+            ("high", TASK_TOOL_MAP_HIGH),
+            ("low", TASK_TOOL_MAP_LOW),
+        ):
+            for task_type, spec in level_map.items():
+                for bucket in ("required", "recommended", "optional"):
+                    tools = spec.get(bucket, [])
+                    assert "tapps_memory" not in tools, (
+                        f"tapps_memory still in {level_name}/{task_type}/{bucket}"
+                    )
+
     def test_document_task(self):
         m = TASK_TOOL_MAP["document"]
         assert "tapps_validate_changed" in m["required"]

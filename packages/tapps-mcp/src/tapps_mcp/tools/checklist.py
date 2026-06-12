@@ -157,23 +157,23 @@ TOOL_REASONS: dict[str, str] = {
 TASK_TOOL_MAP: dict[str, dict[str, list[str]]] = {
     "feature": {
         "required": ["tapps_score_file", "tapps_quality_gate"],
-        "recommended": ["tapps_security_scan", "tapps_memory"],
+        "recommended": ["tapps_security_scan"],
         "optional": ["tapps_checklist"],
     },
     "bugfix": {
         "required": ["tapps_score_file"],
         "recommended": ["tapps_quality_gate", "tapps_security_scan"],
-        "optional": ["tapps_checklist", "tapps_memory"],
+        "optional": ["tapps_checklist"],
     },
     "refactor": {
         "required": ["tapps_score_file", "tapps_quality_gate"],
-        "recommended": ["tapps_dead_code", "tapps_dependency_graph", "tapps_memory"],
+        "recommended": ["tapps_dead_code", "tapps_dependency_graph"],
         "optional": ["tapps_security_scan", "tapps_checklist"],
     },
     "security": {
         "required": ["tapps_security_scan", "tapps_quality_gate"],
         "recommended": ["tapps_score_file", "tapps_dependency_scan"],
-        "optional": ["tapps_checklist", "tapps_memory"],
+        "optional": ["tapps_checklist"],
     },
     "review": {
         "required": ["tapps_score_file", "tapps_security_scan", "tapps_quality_gate"],
@@ -183,7 +183,6 @@ TASK_TOOL_MAP: dict[str, dict[str, list[str]]] = {
             "tapps_dependency_graph",
             "tapps_audit_campaign",
             "tapps_audit_close_coverage",
-            "tapps_memory",
         ],
     },
     "epic": {
@@ -199,7 +198,7 @@ TASK_TOOL_MAP: dict[str, dict[str, list[str]]] = {
     "document": {
         "required": ["tapps_validate_changed"],
         "recommended": ["tapps_validate_config", "tapps_lookup_docs", "tapps_checklist"],
-        "optional": ["tapps_impact_analysis", "tapps_memory"],
+        "optional": ["tapps_impact_analysis"],
     },
 }
 
@@ -253,7 +252,7 @@ TASK_TOOL_MAP_HIGH: dict[str, dict[str, list[str]]] = {
     "document": {
         "required": ["tapps_validate_changed", "tapps_checklist"],
         "recommended": ["tapps_validate_config", "tapps_lookup_docs", "tapps_quality_gate"],
-        "optional": ["tapps_impact_analysis", "tapps_memory"],
+        "optional": ["tapps_impact_analysis"],
     },
 }
 

@@ -2,9 +2,9 @@
 
 Verifies:
 - default.yaml includes memory config
-- Pipeline stage tools include tapps_memory
-- AGENTS.md templates reference tapps_memory
-- Platform rule templates reference tapps_memory
+- Pipeline stage tools no longer list retired tapps_memory MCP (TAP-1994)
+- AGENTS.md templates document tapps-mcp memory CLI
+- Platform rule templates document bridge-only memory path
 """
 
 from __future__ import annotations
@@ -61,15 +61,17 @@ class TestDefaultYamlMemoryConfig:
 
 
 class TestPipelineStageTools:
-    """Verify tapps_memory is in the correct pipeline stages."""
+    """Verify retired tapps_memory MCP is absent from pipeline stage tool lists."""
 
-    def test_discover_stage_includes_memory(self) -> None:
+    def test_discover_stage_excludes_retired_memory_mcp(self) -> None:
         tools = STAGE_TOOLS[PipelineStage.DISCOVER]
-        assert "tapps_memory" in tools
+        assert "tapps_session_start" in tools
+        assert "tapps_memory" not in tools
 
-    def test_verify_stage_includes_memory(self) -> None:
+    def test_verify_stage_excludes_retired_memory_mcp(self) -> None:
         tools = STAGE_TOOLS[PipelineStage.VERIFY]
-        assert "tapps_memory" in tools
+        assert "tapps_checklist" in tools
+        assert "tapps_memory" not in tools
 
     def test_other_stages_unchanged(self) -> None:
         assert "tapps_memory" not in STAGE_TOOLS[PipelineStage.RESEARCH]
@@ -78,19 +80,19 @@ class TestPipelineStageTools:
 
 
 class TestAgentsTemplatesMemory:
-    """Verify AGENTS.md templates reference tapps_memory."""
+    """Verify AGENTS.md templates document bridge-only memory CLI."""
 
-    def test_high_template_has_memory_tool(self) -> None:
+    def test_high_template_has_memory_cli(self) -> None:
         content = load_agents_template("high")
-        assert "tapps_memory" in content
+        assert "tapps-mcp memory" in content
 
-    def test_medium_template_has_memory_tool(self) -> None:
+    def test_medium_template_has_memory_cli(self) -> None:
         content = load_agents_template("medium")
-        assert "tapps_memory" in content
+        assert "tapps-mcp memory" in content
 
-    def test_low_template_has_memory_tool(self) -> None:
+    def test_low_template_has_memory_cli(self) -> None:
         content = load_agents_template("low")
-        assert "tapps_memory" in content
+        assert "tapps-mcp memory" in content
 
     def test_high_template_required_language(self) -> None:
         content = load_agents_template("high")
@@ -106,36 +108,36 @@ class TestAgentsTemplatesMemory:
 
 
 class TestPlatformRulesMemory:
-    """Verify platform rule templates reference tapps_memory."""
+    """Verify platform rule templates document bridge-only memory path."""
 
-    def test_claude_default_has_memory(self) -> None:
+    def test_claude_default_has_memory_cli(self) -> None:
         content = load_platform_rules("claude")
-        assert "tapps_memory" in content
+        assert "tapps-mcp memory" in content or "memory search" in content
 
-    def test_claude_high_has_memory(self) -> None:
+    def test_claude_high_has_memory_cli(self) -> None:
         content = load_platform_rules("claude", engagement_level="high")
-        assert "tapps_memory" in content
+        assert "tapps-mcp memory" in content or "memory search" in content
 
-    def test_claude_medium_has_memory(self) -> None:
+    def test_claude_medium_has_memory_cli(self) -> None:
         content = load_platform_rules("claude", engagement_level="medium")
-        assert "tapps_memory" in content
+        assert "tapps-mcp memory" in content or "memory search" in content
 
-    def test_claude_low_has_memory(self) -> None:
+    def test_claude_low_has_memory_cli(self) -> None:
         content = load_platform_rules("claude", engagement_level="low")
-        assert "tapps_memory" in content
+        assert "tapps-mcp memory" in content or "memory search" in content
 
-    def test_cursor_default_has_memory(self) -> None:
+    def test_cursor_default_has_memory_cli(self) -> None:
         content = load_platform_rules("cursor")
-        assert "tapps_memory" in content
+        assert "tapps-mcp memory" in content or "memory search" in content
 
-    def test_cursor_high_has_memory(self) -> None:
+    def test_cursor_high_has_memory_cli(self) -> None:
         content = load_platform_rules("cursor", engagement_level="high")
-        assert "tapps_memory" in content
+        assert "tapps-mcp memory" in content or "memory search" in content
 
-    def test_cursor_medium_has_memory(self) -> None:
+    def test_cursor_medium_has_memory_cli(self) -> None:
         content = load_platform_rules("cursor", engagement_level="medium")
-        assert "tapps_memory" in content
+        assert "tapps-mcp memory" in content or "memory search" in content
 
-    def test_cursor_low_has_memory(self) -> None:
+    def test_cursor_low_has_memory_cli(self) -> None:
         content = load_platform_rules("cursor", engagement_level="low")
-        assert "tapps_memory" in content
+        assert "tapps-mcp memory" in content or "memory search" in content

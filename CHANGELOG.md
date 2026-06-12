@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [3.12.25] - 2026-06-11
+
+Patch: remove retired `tapps_memory` MCP from checklist and pipeline policy (TAP-1994 follow-up).
+
+### Changed
+
+- **Checklist task maps** — `tapps_memory` removed from required/recommended/optional buckets at all engagement levels; memory persistence is via `tapps-mcp memory` CLI and `/tapps-finish-task`, not an MCP tool call.
+- **Pipeline stage tools** — `STAGE_TOOLS` discover/verify no longer list `tapps_memory`; overview/discover/verify prompts document CLI + hooks instead.
+- **validate_changed diagnostics** — multi-file memory hint points at `uv run tapps-mcp memory save` instead of `tapps_memory(action=save)`.
+
 ## [3.12.24] - 2026-06-11
 
 Patch: bridge-only memory scaffolding (TAP-1994), Cursor auto-recall hooks, and pinned `recall_keys`.

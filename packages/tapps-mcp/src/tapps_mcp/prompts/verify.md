@@ -7,7 +7,7 @@ Final verification that all required quality steps were completed. The checklist
 ## Allowed Tools
 
 - `tapps_checklist` - Reports which tools were called and which required/recommended steps are missing for this task type.
-- `tapps_memory` - Save key learnings and decisions for cross-session persistence.
+- **`tapps-mcp memory` CLI** - Save key learnings for cross-session persistence (`uv run tapps-mcp memory save …`; not an MCP tool — TAP-1994).
 
 ## Constraints
 

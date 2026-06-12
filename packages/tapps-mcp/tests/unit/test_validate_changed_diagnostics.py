@@ -163,5 +163,5 @@ class TestMultiFileMemoryHint:
 
         hint = build_multi_file_memory_hint(5)
         assert hint is not None
-        assert "tapps_memory" in hint
+        assert "tapps-mcp memory" in hint
         assert build_multi_file_memory_hint(4) is None

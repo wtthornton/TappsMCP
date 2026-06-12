@@ -33,7 +33,6 @@ STAGE_TOOLS: dict[PipelineStage, list[str]] = {
     PipelineStage.DISCOVER: [
         "tapps_server_info",
         "tapps_session_start",
-        "tapps_memory",
     ],
     PipelineStage.RESEARCH: ["tapps_lookup_docs"],
     PipelineStage.DEVELOP: ["tapps_score_file"],
@@ -45,5 +44,5 @@ STAGE_TOOLS: dict[PipelineStage, list[str]] = {
         "tapps_validate_changed",
         "tapps_quick_check",
     ],
-    PipelineStage.VERIFY: ["tapps_checklist", "tapps_memory"],
+    PipelineStage.VERIFY: ["tapps_checklist"],
 }
