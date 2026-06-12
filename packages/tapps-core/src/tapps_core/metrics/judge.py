@@ -175,6 +175,29 @@ async def _run_exists_judge(jd: JudgeDefinition, label: str, cwd: Path) -> Judge
     )
 
 
+def _grep_searchable_text(text: str) -> str:
+    """Return file text with whole-line comments stripped for grep judges."""
+    lines: list[str] = []
+    in_block = False
+    for raw_line in text.splitlines():
+        line = raw_line
+        stripped = line.strip()
+        if in_block:
+            if "*/" in stripped:
+                in_block = False
+            continue
+        if stripped.startswith("/*"):
+            if "*/" not in stripped:
+                in_block = True
+            continue
+        if stripped.startswith("//") or stripped.startswith("#"):
+            continue
+        if "//" in line:
+            line = line[: line.index("//")]
+        lines.append(line)
+    return "\n".join(lines)
+
+
 async def _run_grep_judge(jd: JudgeDefinition, label: str, cwd: Path) -> JudgeResult:
     file_path = Path(jd.target)
     if not file_path.is_absolute():
@@ -188,7 +211,7 @@ async def _run_grep_judge(jd: JudgeDefinition, label: str, cwd: Path) -> JudgeRe
             blocking=jd.blocking,
         )
     try:
-        text = file_path.read_text(encoding="utf-8", errors="replace")
+        text = _grep_searchable_text(file_path.read_text(encoding="utf-8", errors="replace"))
         matched = bool(re.search(jd.expect, text, re.MULTILINE))
         return JudgeResult(
             judge=label,

@@ -72,6 +72,22 @@ class TestGrepJudge:
         result = await run_judge(jd)
         assert result.result == "fail"
 
+    @pytest.mark.asyncio
+    async def test_whole_line_comment_does_not_match(self, tmp_path: Path) -> None:
+        f = tmp_path / "build.mjs"
+        f.write_text("// --audit\n")
+        jd = JudgeDefinition(type="grep", target=str(f), expect=r"--audit")
+        result = await run_judge(jd)
+        assert result.result == "fail"
+
+    @pytest.mark.asyncio
+    async def test_executable_line_matches(self, tmp_path: Path) -> None:
+        f = tmp_path / "build.mjs"
+        f.write_text("await exec('node build.mjs --audit');\n")
+        jd = JudgeDefinition(type="grep", target=str(f), expect=r"--audit")
+        result = await run_judge(jd)
+        assert result.result == "pass"
+
 
 class TestPytestJudge:
     @pytest.mark.asyncio

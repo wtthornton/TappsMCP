@@ -2,9 +2,17 @@
 
 from __future__ import annotations
 
+from pathlib import Path
+from unittest.mock import AsyncMock, patch
+
+import pytest
+
+from tapps_core.config.settings import TappsMCPSettings
 from tapps_mcp.tools.validate_changed_output import (
     _append_judge_summary,
     _build_judge_summary_rows,
+    _handle_no_changed_files,
+    _run_judges,
     apply_judge_payload,
 )
 
@@ -70,3 +78,103 @@ class TestApplyJudgePayload:
             security_depth="basic",
         )
         assert structured.overall_passed is False
+
+
+class TestHandleNoChangedFilesWithJudges:
+    @pytest.mark.asyncio
+    async def test_runs_judges_when_configured(self, tmp_path: Path) -> None:
+        judges = [{"type": "exists", "target": "missing.txt", "blocking": True}]
+        judge_payload = {
+            "judges_passed": False,
+            "judge_results": [
+                {"judge": "exists", "result": "fail", "blocking": True, "message": "Missing"}
+            ],
+        }
+        with (
+            patch(
+                "tapps_mcp.tools.validate_changed_output._run_judges",
+                AsyncMock(return_value=judge_payload),
+            ) as mock_run,
+            patch("tapps_mcp.server_pipeline_tools._write_validate_ok_marker") as mock_marker,
+        ):
+            resp = await _handle_no_changed_files(
+                0,
+                TappsMCPSettings(project_root=tmp_path),
+                lambda *_a, **_k: None,
+                lambda _tool, resp: resp,
+                judges=judges,
+            )
+
+        mock_run.assert_awaited_once()
+        assert resp["data"]["all_gates_passed"] is False
+        mock_marker.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_writes_marker_when_judges_pass(self, tmp_path: Path) -> None:
+        judges = [{"type": "exists", "target": "x"}]
+        with (
+            patch(
+                "tapps_mcp.tools.validate_changed_output._run_judges",
+                AsyncMock(
+                    return_value={
+                        "judges_passed": True,
+                        "judge_results": [{"judge": "exists", "result": "pass"}],
+                    }
+                ),
+            ),
+            patch("tapps_mcp.server_pipeline_tools._write_validate_ok_marker") as mock_marker,
+        ):
+            await _handle_no_changed_files(
+                0,
+                TappsMCPSettings(project_root=tmp_path),
+                lambda *_a, **_k: None,
+                lambda _tool, resp: resp,
+                judges=judges,
+            )
+
+        mock_marker.assert_called_once_with(tmp_path)
+
+
+class TestRunJudgesExceptionPayload:
+    @pytest.mark.asyncio
+    async def test_exception_surfaces_error_result(self, tmp_path: Path) -> None:
+        with patch(
+            "tapps_core.metrics.judge.run_judges",
+            AsyncMock(side_effect=RuntimeError("judge boom")),
+        ):
+            payload = await _run_judges([{"type": "exists", "target": "x"}], tmp_path)
+
+        assert payload["judges_passed"] is False
+        assert len(payload["judge_results"]) == 1
+        assert payload["judge_results"][0]["result"] == "error"
+        assert "judge boom" in payload["judge_results"][0]["message"]
+
+
+class TestRunJudgesGitDiffWhenChanged:
+    @pytest.mark.asyncio
+    async def test_uses_git_diff_for_when_changed(self, tmp_path: Path) -> None:
+        from tapps_core.metrics.judge import run_judges
+
+        target = tmp_path / "brands" / "acme.yaml"
+        target.parent.mkdir(parents=True)
+        target.touch()
+
+        with patch(
+            "tapps_core.metrics.judge._git_changed_paths",
+            return_value=["brands/acme.yaml"],
+        ):
+            result = await run_judges(
+                [
+                    {
+                        "type": "exists",
+                        "target": str(target),
+                        "when_changed": ["brands/**"],
+                        "blocking": True,
+                    }
+                ],
+                cwd=tmp_path,
+                changed_paths=None,
+                base_ref="HEAD",
+            )
+
+        assert result["judge_results"][0]["result"] == "pass"

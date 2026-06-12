@@ -413,16 +413,10 @@ async def _assemble_response(
     )
     overall_passed = outcome.all_passed
     if bc.judges:
-        changed_rel = [
-            str(p.relative_to(bc.settings.project_root))
-            if p.is_relative_to(bc.settings.project_root)
-            else str(p)
-            for p in bc.paths
-        ]
         judge_payload = await _run_judges(
             bc.judges,
             bc.settings.project_root,
-            changed_paths=changed_rel,
+            changed_paths=None,
             base_ref=bc.base_ref,
         )
         summary = apply_judge_payload(resp_data, judge_payload, summary=summary)
@@ -589,7 +583,7 @@ async def tapps_validate_changed(
         effective_judges = [*preset_judges, *(judges or [])]
 
     if not paths:
-        return _handle_no_changed_files(
+        return await _handle_no_changed_files(
             start,
             settings,
             _record_execution,
@@ -597,6 +591,7 @@ async def tapps_validate_changed(
             explicit_paths=bool(file_paths.strip()),
             base_ref=base_ref,
             correlation_id=correlation_id,
+            judges=effective_judges,
         )
 
     bc = _prepare_batch_context(
