@@ -1,5 +1,7 @@
 llm_engagement_level: medium
 quality_preset: standard
+linear_team: TAP
+linear_project: TappsMCP Platform
 memory:
   brain_project_id: tapps-mcp
   brain_http_url: http://localhost:8080
