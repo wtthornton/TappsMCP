@@ -1148,6 +1148,17 @@ class TestEnvInConfig:
         env = data["mcpServers"]["tapps-mcp"]["env"]
         assert env["TAPPS_MCP_CONTEXT7_API_KEY"] == "${TAPPS_MCP_CONTEXT7_API_KEY}"
 
+    def test_docs_via_brain_omits_context7_from_mcp_env(self, tmp_path, monkeypatch):
+        """ADR-0014: consumer MCP env drops Context7 when docs_via_brain is enabled."""
+        monkeypatch.setenv("TAPPS_MCP_DOCS_VIA_BRAIN", "1")
+        project = tmp_path / "project"
+        project.mkdir()
+        _generate_config("cursor", project)
+        data = json.loads((project / ".cursor" / "mcp.json").read_text(encoding="utf-8"))
+        env = data["mcpServers"]["tapps-mcp"]["env"]
+        assert "TAPPS_MCP_CONTEXT7_API_KEY" not in env
+        assert env.get("TAPPS_MCP_DOCS_VIA_BRAIN") == "1"
+
     def test_context7_key_value_is_substitution_not_literal(self, tmp_path):
         """The Context7 API key must never be written as a literal value."""
         project = tmp_path / "demo"

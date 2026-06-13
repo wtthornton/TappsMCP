@@ -4,9 +4,20 @@ Maintenance window (~30 minutes) for ADR-0014 big-bang cutover.
 
 ## Prerequisites
 
-- tapps-brain release with `docs_lookup` / `docs_warm` deployed
+- tapps-brain **3.24.0+** with `docs_lookup` / `docs_warm` deployed (ADR-0015)
 - `CONTEXT7_API_KEY` set on **brain** service (`docker/.env` or host env)
-- `TAPPS_MCP_DOCS_VIA_BRAIN=1` (default) on consumer machines
+- `TAPPS_MCP_DOCS_VIA_BRAIN=1` on consumer machines (set via `docs_via_brain: true`
+  in `.tapps-mcp.yaml` or fleet `upgrade-fleet --strip-context7-env`)
+
+## Timeline (~30 minutes)
+
+| Phase | Duration | Action |
+|-------|----------|--------|
+| Deploy brain | ~10 min | `make dev-deploy`; verify `docs_lookup` in tools/list |
+| Import caches | ~5 min | `tapps-brain docs import-dir` or fleet `--import-legacy-doc-cache` |
+| Upgrade consumers | ~5 min | `tapps-mcp upgrade --force`; reload MCP host |
+| Verify | ~5 min | `tapps-mcp doctor`; `lookup-docs` smoke test |
+| Rollback buffer | ~5 min | Keep previous brain image + `TAPPS_MCP_DOCS_VIA_BRAIN=0` handy |
 
 ## Steps
 

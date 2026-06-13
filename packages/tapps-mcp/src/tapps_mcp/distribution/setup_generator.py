@@ -486,7 +486,6 @@ def _build_server_entry(
         "TAPPS_MCP_PROJECT_ROOT": project_root_value,
         "TAPPS_MCP_MEMORY_BRAIN_HTTP_URL": "http://localhost:8080",
         "TAPPS_MCP_MEMORY_BRAIN_AUTH_TOKEN": _BRAIN_AUTH_TOKEN_ENV_PLACEHOLDER,
-        "TAPPS_MCP_CONTEXT7_API_KEY": "${TAPPS_MCP_CONTEXT7_API_KEY}",
         # ADR-0012: the tapps-mcp server backs the full tapps_memory facade,
         # which exercises the whole read+write+hive+KG+feedback surface — so it
         # needs the ``full`` profile, not ``coder`` (which gates ~18 of those
@@ -496,6 +495,13 @@ def _build_server_entry(
         # TAP-3572: dual-write keeps local JSONL for fleet audit even when brain is up.
         "TAPPS_METRICS_STORAGE": "dual",
     }
+    from tapps_core.knowledge.brain_docs import (
+        apply_docs_via_brain_mcp_env,
+        docs_via_brain_enabled,
+    )
+    if not docs_via_brain_enabled():
+        env["TAPPS_MCP_CONTEXT7_API_KEY"] = "${TAPPS_MCP_CONTEXT7_API_KEY}"
+    env = apply_docs_via_brain_mcp_env(env)
     project_id = _derive_brain_project_id(project_root)
     if project_id:
         env["TAPPS_MCP_MEMORY_BRAIN_PROJECT_ID"] = project_id
@@ -699,7 +705,10 @@ def _merge_config(
         new_env = new_entry.get("env") or {}
         if isinstance(old_env, dict):
             # Epic 80.5: keep unrelated env keys (e.g. API keys) when merging/replacing
-            new_entry["env"] = {**old_env, **new_env}
+            merged_env = {**old_env, **new_env}
+            from tapps_core.knowledge.brain_docs import apply_docs_via_brain_mcp_env
+
+            new_entry["env"] = apply_docs_via_brain_mcp_env(merged_env)
 
     merged[servers_key]["tapps-mcp"] = new_entry
 
@@ -861,7 +870,10 @@ def _build_nlt_server_entry(
         old_env = old_entry.get("env")
         new_env = entry.get("env") or {}
         if isinstance(old_env, dict):
-            entry["env"] = {**old_env, **new_env}
+            merged_env = {**old_env, **new_env}
+            from tapps_core.knowledge.brain_docs import apply_docs_via_brain_mcp_env
+
+            entry["env"] = apply_docs_via_brain_mcp_env(merged_env)
 
     return entry
 
@@ -2003,13 +2015,9 @@ def run_init(
     # Issue #79: build extra_env dict for Context7 key (uses ${VAR} interpolation
     # so the literal key is never written to the config file).
     extra_env: dict[str, str] | None = None
-    docs_via_brain = os.environ.get("TAPPS_MCP_DOCS_VIA_BRAIN", "").lower() in (
-        "1",
-        "true",
-        "yes",
-        "on",
-    )
-    if context7_api_key and not docs_via_brain:
+    from tapps_core.knowledge.brain_docs import docs_via_brain_enabled
+
+    if context7_api_key and not docs_via_brain_enabled():
         extra_env = {"TAPPS_MCP_CONTEXT7_API_KEY": "${TAPPS_MCP_CONTEXT7_API_KEY}"}
         click.echo(
             click.style(

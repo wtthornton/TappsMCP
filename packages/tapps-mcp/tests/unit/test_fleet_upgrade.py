@@ -2,7 +2,10 @@
 
 from __future__ import annotations
 
+import os
 from pathlib import Path
+
+import pytest
 
 from tapps_mcp.distribution.nlt_mcp_config import needs_legacy_nlt_migration
 from tapps_mcp.tools.fleet_upgrade import (
@@ -55,6 +58,32 @@ class TestFleetUpgradeHelpers:
         assert result.upgrade_ok is True
         assert result.init_ok is True
         assert any("[dry-run]" in msg for msg in result.messages)
+
+    def test_strip_context7_env_sets_docs_via_brain_during_init(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        root = tmp_path / "consumer"
+        root.mkdir()
+        (root / ".tapps-mcp.yaml").write_text("quality_preset: standard\n")
+        monkeypatch.delenv("TAPPS_MCP_DOCS_VIA_BRAIN", raising=False)
+        calls: list[list[str]] = []
+
+        def _capture(args: list[str], *, cwd: Path, dry_run: bool, command_prefix: str = "tapps-mcp"):
+            calls.append(list(args))
+            return True, "[dry-run] ok"
+
+        monkeypatch.setattr(
+            "tapps_mcp.tools.fleet_upgrade._run_cli",
+            _capture,
+        )
+        upgrade_project_root(
+            root,
+            dry_run=True,
+            run_doctor=False,
+            strip_context7_env=True,
+        )
+        assert os.environ.get("TAPPS_MCP_DOCS_VIA_BRAIN") is None
+        assert any("init" in args for args in calls)
 
     def test_format_markdown(self) -> None:
         report = {

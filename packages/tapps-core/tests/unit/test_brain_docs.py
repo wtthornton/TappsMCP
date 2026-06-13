@@ -5,9 +5,13 @@ from __future__ import annotations
 import os
 from unittest.mock import AsyncMock, MagicMock
 
+from pathlib import Path
+
 import pytest
 
 from tapps_core.knowledge.brain_docs import (
+    apply_docs_via_brain_mcp_env,
+    brain_docs_warm_marker_path,
     docs_via_brain_enabled,
     lookup_result_from_brain_payload,
     lookup_via_brain,
@@ -63,3 +67,20 @@ async def test_warm_via_brain_empty() -> None:
     bridge = MagicMock()
     result = await warm_via_brain(bridge, [])
     assert result == {"warmed": 0, "libraries": []}
+
+
+def test_apply_docs_via_brain_mcp_env_strips_context7() -> None:
+    os.environ["TAPPS_MCP_DOCS_VIA_BRAIN"] = "1"
+    try:
+        env = apply_docs_via_brain_mcp_env(
+            {"TAPPS_MCP_CONTEXT7_API_KEY": "${TAPPS_MCP_CONTEXT7_API_KEY}", "KEEP": "1"},
+        )
+        assert "TAPPS_MCP_CONTEXT7_API_KEY" not in env
+        assert env["TAPPS_MCP_DOCS_VIA_BRAIN"] == "1"
+        assert env["KEEP"] == "1"
+    finally:
+        os.environ.pop("TAPPS_MCP_DOCS_VIA_BRAIN", None)
+
+
+def test_brain_docs_warm_marker_path(tmp_path: Path) -> None:
+    assert brain_docs_warm_marker_path(tmp_path) == tmp_path / ".tapps-mcp" / ".brain-docs-warm-marker"

@@ -6,11 +6,11 @@ migration) and optionally refreshes MCP host config via ``init --force``.
 
 from __future__ import annotations
 
+import os
 import subprocess
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Literal
-import os
 
 from tapps_mcp.tools.fleet_audit import discover_project_roots
 
@@ -138,16 +138,24 @@ def upgrade_project_root(
             mcp_bundle,
             "--no-rules",
         ]
+        prev_docs_via_brain = os.environ.get("TAPPS_MCP_DOCS_VIA_BRAIN")
         if strip_context7_env:
             os.environ["TAPPS_MCP_DOCS_VIA_BRAIN"] = "1"
-        if force:
-            init_args.append("--force")
-        if uv_mode == "off":
-            init_args.append("--no-uv")
-        elif uv_mode == "on":
-            init_args.append("--uv")
+        try:
+            if force:
+                init_args.append("--force")
+            if uv_mode == "off":
+                init_args.append("--no-uv")
+            elif uv_mode == "on":
+                init_args.append("--uv")
 
-        init_ok, init_out = _run_cli(init_args, cwd=root, dry_run=dry_run)
+            init_ok, init_out = _run_cli(init_args, cwd=root, dry_run=dry_run)
+        finally:
+            if strip_context7_env:
+                if prev_docs_via_brain is None:
+                    os.environ.pop("TAPPS_MCP_DOCS_VIA_BRAIN", None)
+                else:
+                    os.environ["TAPPS_MCP_DOCS_VIA_BRAIN"] = prev_docs_via_brain
         result.init_ok = init_ok
         if init_out:
             result.messages.append(init_out[-2000:])

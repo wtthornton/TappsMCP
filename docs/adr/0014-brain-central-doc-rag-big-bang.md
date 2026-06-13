@@ -4,7 +4,7 @@ Date: 2026-06-13
 
 ## Status
 
-Proposed
+Accepted (2026-06-13; consumer wiring TAP-3867–3870, brain prerequisite TAP-3865/3866)
 
 ## Context
 
@@ -60,8 +60,9 @@ No expert personas, no FAISS per project, no new agent-facing tool names on brai
    (no local cache).
 5. **Doctor** — fail if `.tapps-mcp-cache/` contains doc entries post-cutover;
    warn if `TAPPS_MCP_CONTEXT7_API_KEY` still set on consumer MCP env.
-6. **Version floor** — bump to brain release that ships `docs_lookup` (new ADR
-   supersedes [0013](0013-pin-tapps-brain-version-floor-at-3240.md) when tagged).
+6. **Version floor** — [0015](0015-require-tapps-brain-docs-lookup-at-3240.md) amends
+   [0013](0013-pin-tapps-brain-version-floor-at-3240.md): floor stays 3.24.0 but deployed
+   brain must expose ``docs_lookup`` / ``docs_warm``.
 
 ### Consumer cutover (maintenance window, ~30 min)
 
@@ -75,7 +76,8 @@ tapps-mcp upgrade --force --host auto
 ```
 
 Fleet: extend `tapps-mcp upgrade-fleet` with `--import-legacy-doc-cache` +
-`--strip-context7-env`.
+`--strip-context7-env`. Operator runbook:
+[brain-doc-rag-cutover-runbook.md](../operations/brain-doc-rag-cutover-runbook.md).
 
 ### Explicitly out of scope (this bang)
 

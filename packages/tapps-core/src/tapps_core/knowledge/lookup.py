@@ -181,9 +181,11 @@ class LookupEngine:
         start = time.monotonic()
         lib_clean = library.strip().lower()
 
+        from tapps_core.knowledge.brain_docs import docs_via_brain_enabled
+
         if self._settings is not None:
             from tapps_core.brain_bridge import BRAIN_PROFILE_SERVER, create_brain_bridge
-            from tapps_core.knowledge.brain_docs import docs_via_brain_enabled, lookup_via_brain
+            from tapps_core.knowledge.brain_docs import lookup_via_brain
 
             if docs_via_brain_enabled(self._settings):
                 bridge = create_brain_bridge(self._settings, default_profile=BRAIN_PROFILE_SERVER)
@@ -198,17 +200,25 @@ class LookupEngine:
                     if brain_result is not None:
                         return brain_result
 
-        # 1. Exact cache hit
-        cache_result = self._check_exact_cache(lib_clean, topic, mode, start)
-        if cache_result is not None:
-            return cache_result
+        use_local_doc_cache = (
+            self._settings is None
+            or not docs_via_brain_enabled(self._settings)
+        )
 
-        # 2. Fuzzy match against cached libraries
-        cached_entries = self._cache.list_entries()
-        known_libs = list({e.library for e in cached_entries})
-        fuzzy_result = self._check_fuzzy_cache(lib_clean, topic, known_libs, start)
-        if fuzzy_result is not None:
-            return fuzzy_result
+        # 1. Exact cache hit (skipped when docs_via_brain routes through brain only)
+        if use_local_doc_cache:
+            cache_result = self._check_exact_cache(lib_clean, topic, mode, start)
+            if cache_result is not None:
+                return cache_result
+
+            # 2. Fuzzy match against cached libraries
+            cached_entries = self._cache.list_entries()
+            known_libs = list({e.library for e in cached_entries})
+            fuzzy_result = self._check_fuzzy_cache(lib_clean, topic, known_libs, start)
+            if fuzzy_result is not None:
+                return fuzzy_result
+        else:
+            known_libs: list[str] = []
 
         # 2b. Custom doc sources (take priority over providers)
         custom_result = await self._check_custom_doc_source(lib_clean, topic, start)

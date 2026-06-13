@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import os
 import time
+from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 import structlog
@@ -18,6 +19,22 @@ logger = structlog.get_logger(__name__)
 
 _TRUTHY = frozenset({"1", "true", "yes", "on"})
 _FALSY = frozenset({"0", "false", "no", "off"})
+_BRAIN_DOCS_WARM_MARKER = ".brain-docs-warm-marker"
+
+
+def brain_docs_warm_marker_path(project_root: Path) -> Path:
+    """Return the throttle marker path for brain ``docs_warm`` (ADR-0014)."""
+    return project_root / ".tapps-mcp" / _BRAIN_DOCS_WARM_MARKER
+
+
+def apply_docs_via_brain_mcp_env(env: dict[str, str]) -> dict[str, str]:
+    """Strip consumer Context7 and enable brain doc routing in MCP env blocks."""
+    if not docs_via_brain_enabled():
+        return env
+    updated = dict(env)
+    updated.pop("TAPPS_MCP_CONTEXT7_API_KEY", None)
+    updated["TAPPS_MCP_DOCS_VIA_BRAIN"] = "1"
+    return updated
 
 
 def docs_via_brain_enabled(settings: TappsMCPSettings | None = None) -> bool:

@@ -515,3 +515,49 @@ class TestTocWarningInLookup:
         assert result.success is True
         assert result.warning is not None
         assert "table-of-contents" in result.warning
+
+
+class TestLookupDocsViaBrain:
+    @pytest.fixture
+    def cache(self, tmp_path):
+        c = KBCache(cache_dir=tmp_path / "cache")
+        c.put(CacheEntry(library="fastapi", topic="overview", content="# local cached"))
+        return c
+
+    @pytest.mark.asyncio
+    async def test_brain_result_skips_local_cache(self, cache, monkeypatch):
+        from unittest.mock import MagicMock
+
+        from tapps_core.config.settings import TappsMCPSettings
+        from tapps_core.knowledge.models import LookupResult
+
+        settings = TappsMCPSettings(docs_via_brain=True)
+        monkeypatch.setenv("TAPPS_MCP_DOCS_VIA_BRAIN", "1")
+
+        brain_result = LookupResult(
+            success=True,
+            content="# brain docs",
+            source="brain",
+            library="fastapi",
+            topic="overview",
+            cache_hit=True,
+        )
+
+        async def _fake_lookup_via_brain(bridge, library, topic, **kwargs):
+            return brain_result
+
+        def _fake_create(*args, **kwargs):
+            return MagicMock()
+
+        monkeypatch.setattr("tapps_core.brain_bridge.create_brain_bridge", _fake_create)
+        monkeypatch.setattr(
+            "tapps_core.knowledge.brain_docs.lookup_via_brain",
+            _fake_lookup_via_brain,
+        )
+
+        engine = LookupEngine(cache, settings=settings)
+        result = await engine.lookup("fastapi", "overview")
+        await engine.close()
+
+        assert result.content == "# brain docs"
+        assert result.source == "brain"

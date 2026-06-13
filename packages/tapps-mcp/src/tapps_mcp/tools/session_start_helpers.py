@@ -487,10 +487,14 @@ async def _maybe_validate_memories(
     try:
         from tapps_brain.doc_validation import MemoryDocValidator
 
+        from tapps_core.knowledge.brain_docs import docs_via_brain_enabled
         from tapps_core.knowledge.cache import KBCache
         from tapps_core.knowledge.lookup import LookupEngine
 
-        _cache = KBCache(settings.project_root / ".tapps-mcp-cache")
+        cache_dir = settings.project_root / ".tapps-mcp-cache"
+        if docs_via_brain_enabled(settings):
+            cache_dir.mkdir(parents=True, exist_ok=True)
+        _cache = KBCache(cache_dir)
         lookup = LookupEngine(_cache, settings=settings)
         validator = MemoryDocValidator(lookup)  # type: ignore[arg-type]  # LookupEngine has extra kwargs vs LookupEngineLike Protocol
 
@@ -1011,7 +1015,19 @@ def _schedule_lookup_docs_warm(
     if not covered:
         return {"scheduled": False, "skipped": "no_covered_libraries"}
 
-    flag = project_root / ".tapps-mcp-cache" / _CACHE_WARM_FLAG_NAME
+    from tapps_core.config.settings import load_settings as _ls
+    from tapps_core.knowledge.brain_docs import (
+        brain_docs_warm_marker_path,
+        docs_via_brain_enabled,
+    )
+
+    settings = _ls(project_root=project_root)
+    via_brain = docs_via_brain_enabled(settings)
+    flag = (
+        brain_docs_warm_marker_path(project_root)
+        if via_brain
+        else project_root / ".tapps-mcp-cache" / _CACHE_WARM_FLAG_NAME
+    )
     try:
         if flag.exists():
             age = time.time() - flag.stat().st_mtime
@@ -1020,6 +1036,7 @@ def _schedule_lookup_docs_warm(
                     "scheduled": False,
                     "skipped": "warmed_within_24h",
                     "age_seconds": int(age),
+                    "via_brain": via_brain,
                 }
     except Exception:
         _logger.debug("cache_warm_flag_stat_failed", exc_info=True)
@@ -1029,12 +1046,11 @@ def _schedule_lookup_docs_warm(
     async def _runner() -> None:
         try:
             from tapps_core.brain_bridge import BRAIN_PROFILE_SERVER, create_brain_bridge
-            from tapps_core.config.settings import load_settings as _ls
-            from tapps_core.knowledge.brain_docs import docs_via_brain_enabled, warm_via_brain
+            from tapps_core.knowledge.brain_docs import warm_via_brain
             from tapps_core.knowledge.cache import KBCache
             from tapps_core.knowledge.warming import warm_cache
 
-            s = _ls()
+            s = _ls(project_root=project_root)
             if docs_via_brain_enabled(s):
                 bridge = create_brain_bridge(s, default_profile=BRAIN_PROFILE_SERVER)
                 if bridge is not None:
@@ -1046,6 +1062,7 @@ def _schedule_lookup_docs_warm(
                         except Exception:
                             _logger.debug("cache_warm_flag_write_failed", exc_info=True)
                         return
+                return
             api_key = getattr(s, "context7_api_key", None)
             if not api_key or not api_key.get_secret_value():
                 return
@@ -1074,6 +1091,7 @@ def _schedule_lookup_docs_warm(
             "scheduled": True,
             "libraries": libraries,
             "count": len(libraries),
+            "via_brain": via_brain,
         }
     except RuntimeError:
         return {"scheduled": False, "skipped": "no_running_loop"}
