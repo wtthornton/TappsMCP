@@ -29,7 +29,7 @@ volume in this repository. Specifically:
 
 - `.tapps-mcp/metrics/` contains a single JSONL file (`tool_calls_2026-02-10.jsonl`, 778 entries)
   tracking **tapps-mcp** tool calls only — not Linear plugin calls.
-- `.ralph/logs/` contains Claude session logs from 2026-03-22 only; no `list_issues` references.
+- Claude session logs from 2026-03-22 only; no `list_issues` references.
 - No `.tapps-mcp/.cache-gate-violations.jsonl` or `.tapps-mcp/.bypass-log.jsonl` exists
   (the PreToolUse enforcement hook in TAP-1224 was merged 2026-05-02, so any gate violations
   postdate this repo's history window).

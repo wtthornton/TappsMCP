@@ -68,7 +68,7 @@ class DigestFinding:
 class DigestTicket:
     """Rendered title + body for a P2/P3 finding-bundle (audit-digest) issue.
 
-    The ``not-implementable`` label signals to Ralph and other consumers that
+    The ``not-implementable`` label signals to consumers that
     this ticket is a read-only digest of low-severity observations, not an
     individually actionable fix story.
     """
@@ -148,7 +148,7 @@ def _render_body(
     sections: list[str] = []
 
     sections.append(
-        "<!-- ralph: audit-readonly -->\n\n"
+        "<!-- audit-readonly -->\n\n"
         "## What\n\n"
         f"Read-only quality audit of the {chunk.size} files listed in `## Where`. "
         "Score every file, then file any findings as **new** Linear issues "
@@ -228,7 +228,7 @@ def _render_body(
         "- **Do not** run formatters, `ruff --fix`, or any auto-fixer\n"
         "- After findings are filed, set this ticket to **Done** in Linear "
         "(`save_issue(id=<this-ticket-id>, state=\"Done\")`) with a summary "
-        "comment. **Do NOT leave it In Progress** — that causes Ralph to "
+        "comment. **Do NOT leave it In Progress** — that causes agents to "
         "re-select and re-run the session on the next campaign loop, filing "
         "duplicate digest issues. The `audit-readonly` label on this ticket "
         "signals the contract to compatible runners.\n"

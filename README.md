@@ -30,7 +30,7 @@ Two MCP servers — **TappsMCP** (code quality) and **DocsMCP** (documentation) 
 
 - **Quality-pipeline usage uplift** — closes the gap between the recommended pipeline and what the agent actually runs. Four pieces:
   - **`tapps_usage` (new tool)** — per-session gap report. Returns `gaps` (e.g. `edits_without_validation`, `lookup_docs_underused`) and `recommendations` (specific next calls). Also inlined as `usage_gaps` on every `tapps_checklist` response.
-  - **Stop-hook warn-mode telemetry** — `tapps-stop.sh` now writes `.tapps-mcp/.completion-gate-violations.jsonl` on EVERY project (not just Ralph) when source files were edited without `tapps_validate_changed` + `tapps_checklist`. Warn mode only — no blocks. Telemetry feeds `tapps_usage`.
+  - **Stop-hook warn-mode telemetry** — `tapps-stop.sh` now writes `.tapps-mcp/.completion-gate-violations.jsonl` on every project when source files were edited without `tapps_validate_changed` + `tapps_checklist`. Warn mode only — no blocks. Telemetry feeds `tapps_usage`.
   - **`next_steps` enrichment** — top-traffic tools template `{file_path}` into suggested calls so the agent gets ready-to-paste signatures like `tapps_security_scan(file_path='/path/to/X.py')` instead of empty `tapps_security_scan()`.
   - **`tapps-upgrade` (new shipped skill)** — orchestrates `uv tool install --reinstall` + MCP restart + `tapps-mcp upgrade` + doctor + checklist. Deployed to consumers via `tapps_init` / `tapps_upgrade`.
 - **Wrapper skills deprecated** — `tapps-score`, `tapps-gate`, `tapps-validate`, `tapps-report` carry DEPRECATED notices pointing at their direct MCP tool or `/tapps-finish-task`. Scheduled removal in v3.12.0.

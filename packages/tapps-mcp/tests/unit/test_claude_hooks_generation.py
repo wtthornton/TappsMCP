@@ -92,22 +92,11 @@ class TestClaudeHooksScripts:
             assert "command -v python3" in content, f"{name} should probe python3"
             assert "command -v python" in content, f"{name} should fall back to python"
 
-    def test_post_edit_grep_use_is_dedup_only(self, tmp_path):
-        """Post-edit hook may use `grep -Fxq` for the .ralph/.edits_this_loop
-        dedup check (TAP-1330) — that's the only sanctioned grep call. Reject
-        any other grep usage so we don't accidentally reintroduce a broader
-        external-tool dependency that breaks on minimal Windows environments.
-        """
+    def test_post_edit_has_no_grep_dependency(self, tmp_path):
+        """Post-edit hook should not depend on grep (portable across minimal shells)."""
         generate_claude_hooks(tmp_path, force_windows=False)
         content = (tmp_path / ".claude" / "hooks" / "tapps-post-edit.sh").read_text()
-        sanitized = "\n".join(
-            line for line in content.splitlines() if "grep -Fxq" not in line
-        )
-        assert "grep" not in sanitized, (
-            "post-edit hook contains a grep call other than the TAP-1330 "
-            "loop-dedup `grep -Fxq`. If the new usage is intentional, update "
-            "this test to whitelist it explicitly."
-        )
+        assert "grep" not in content
 
     def test_session_start_script_has_required_directive(self, tmp_path):
         """Session-start hook should use directive language."""
@@ -676,7 +665,7 @@ class TestClaudeHooksPlatformMigration:
 
         Before the 2.10.1 fix, the upgrade pipeline filtered .claude/settings.json
         hooks by an allowlist, wiping any key TappsMCP hadn't yet catalogued
-        (e.g. ralph's StopFailure).  The filter is now an exclusion list
+        (e.g. a consumer's StopFailure).  The filter is now an exclusion list
         targeting only PostCompact.
         """
         claude_dir = tmp_path / ".claude"
@@ -690,7 +679,7 @@ class TestClaudeHooksPlatformMigration:
                         "hooks": [
                             {
                                 "type": "command",
-                                "command": "bash .ralph/hooks/on-stop-failure.sh",
+                                "command": "bash .claude/hooks/custom-stop-failure.sh",
                             }
                         ],
                     }

@@ -118,7 +118,7 @@ _AGENTS_MD_OPT_OUT_SENTINEL = "<!-- tapps:agents-md-disabled -->"
 
 # TAP-1332: Canonical hook manifest. Every project upgraded with tapps_upgrade
 # must end up with this exact set of `tapps-*` hook scripts under
-# `.claude/hooks/`. Drift between projects (AgentForge vs ralph-claude-code on
+# `.claude/hooks/`. Drift between projects (AgentForge vs external consumers on
 # the same TappsMCP version) was caused by silent opt-in install paths; this
 # manifest is authoritative for verification reporting.
 _CANONICAL_HOOK_MANIFEST: frozenset[str] = frozenset({

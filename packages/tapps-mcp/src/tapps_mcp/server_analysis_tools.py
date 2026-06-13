@@ -1161,7 +1161,7 @@ async def tapps_audit_campaign(
     Linear epic id into every session body before filing the children.
     Call ``mode="fix_plan"`` after a campaign has been planned to generate
     a companion fix epic + child fix stories (one per audit session cluster)
-    that Ralph can implement. Fix stories carry ``agent_ready=True`` by
+    that autonomous agents can implement. Fix stories carry ``agent_ready=True`` by
     construction and are tracked under ``fix:campaign:<id>`` in brain,
     distinct from the audit spec at ``audit:campaign:<id>``.
 
@@ -1640,7 +1640,7 @@ async def tapps_finding_to_story(
             "Call docs_validate_linear_issue(title, body) to confirm agent_ready=true.",
             "Then call save_issue(title, description=body, parent_id=parent_id, "
             "labels=data['labels']) — pass labels so the audit-fix tag lands on "
-            "the Linear issue and Ralph can select it.",
+            "the Linear issue and agents can select it.",
         ]
     else:
         next_steps = [
@@ -1669,7 +1669,7 @@ async def tapps_audit_close_coverage(
 ) -> dict[str, Any]:
     """Close an audit finding by updating its brain coverage record (TAP-2722).
 
-    Wraps the internal ``close_coverage`` helper so Ralph's audit-fix loop can
+    Wraps the internal ``close_coverage`` helper so the audit-fix loop can
     record a landed fix without importing tapps-mcp internals. Records *new_sha*
     as the entry's ``fix_sha`` and links the fix/finding tickets into the
     coverage → finding → fix chain. It deliberately leaves ``audited_sha``

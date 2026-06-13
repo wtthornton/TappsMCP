@@ -111,7 +111,7 @@ class TestBuildCampaignSpec:
         for session in spec.sessions:
             assert session.title.startswith("audit: ")
             assert len(session.title) <= 80
-            assert session.body.startswith("<!-- ralph: audit-readonly -->")
+            assert session.body.startswith("<!-- audit-readonly -->")
             assert "## What" in session.body[:500]
             assert _EPIC_REF_PLACEHOLDER in session.body
             assert "abc1234" in session.body
@@ -244,7 +244,7 @@ class TestMCPHandler:
         assert data["sessions"]
         for session in data["sessions"]:
             assert session["title"].startswith("audit: ")
-            assert session["body"].startswith("<!-- ralph: audit-readonly -->")
+            assert session["body"].startswith("<!-- audit-readonly -->")
             assert "## What" in session["body"][:500]
             assert session["labels"] == ["audit-readonly"]
         # persisted_to_brain key is present (value may be True or False

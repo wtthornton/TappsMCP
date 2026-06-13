@@ -62,7 +62,7 @@ Consumer trust and support load depend on first-run success; broken hooks and wr
 | 80.9 | [Doctor: project-only MCP](EPIC-80/story-80.9-doctor-project-only-mcp.md) |
 | 80.10 | [Regression tests](EPIC-80/story-80.10-regression-tests-init-hooks-noninteractive.md) |
 
-**Source feedback:** `C:\cursor\ralph\tapps-mcp-init-consumer-feedback.md` (2026-03-24).
+**Source feedback:** external consumer init feedback (2026-03-24).
 
 <!-- docsmcp:start:stories -->
 ## Stories
@@ -222,7 +222,7 @@ Tests from consumer appendix: dry-run paths hook files TTY.
 <!-- docsmcp:start:technical-notes -->
 ## Technical Notes
 
-- Source feedback: C:\cursor\ralph\tapps-mcp-init-consumer-feedback.md
+- Source feedback: external consumer init feedback document
 - Root cause cited: platform_hooks._filter_scripts script_event_map missing tapps-post-validate and tapps-post-report
 - **Shipped (2026-03-24):** `platform_hooks.py` script_event_map; `setup_generator.py` (uv fallback, env merge, non-TTY overwrite, `--with-docs-mcp`, `is_tapps_mcp_package_layout`); `doctor.py` (`check_claude_hook_scripts`, project-only Claude user check); `init.py` TECH_STACK callout; CLI `--allow-package-init` / `--with-docs-mcp`; README + `docs/TROUBLESHOOTING.md`; tests in `test_setup_generator.py`, `test_doctor.py`, `test_claude_hooks_generation.py`, etc.
 

@@ -163,9 +163,9 @@ def serve(
 @click.option(
     "--bundle",
     "mcp_bundle",
-    type=click.Choice(["developer", "planning", "docs", "release", "full"]),
+    type=click.Choice(["developer", "minimal", "planning", "docs", "release", "full"]),
     default="developer",
-    help="NLT MCP plugin bundle to enable (default: developer = nlt-build only).",
+    help="NLT MCP plugin bundle to enable (default: developer = build + memory + linear).",
 )
 @click.option(
     "--legacy-monolith/--no-legacy-monolith",
@@ -322,7 +322,7 @@ def upgrade(
     relied on older default flags (memory pipeline, hooks). See docs/UPGRADE_FOR_CONSUMERS.md.
 
     v3.11.0 surfaces: refreshed `tapps-stop.sh` (warn-mode completion-gate telemetry on every
-    project, not just Ralph), new `tapps-upgrade` skill in `.claude/skills/` and `.cursor/skills/`,
+    project), new `tapps-upgrade` skill in `.claude/skills/` and `.cursor/skills/`,
     and DEPRECATED notices on wrapper skills (tapps-score, tapps-gate, tapps-validate, tapps-report)
     scheduled for removal in v3.12.0.
     """
@@ -597,10 +597,10 @@ def audit_fleet_cmd(
 @click.option(
     "--bundle",
     "mcp_bundle",
-    type=click.Choice(["developer", "planning", "docs", "release", "full"]),
+    type=click.Choice(["developer", "minimal", "planning", "docs", "release", "full"]),
     default="developer",
     show_default=True,
-    help="NLT MCP bundle to write per project (full = all five nlt-* servers).",
+    help="NLT MCP bundle to write per project (developer = build+memory+linear; minimal = build-only).",
 )
 @click.option(
     "--uv-mode",

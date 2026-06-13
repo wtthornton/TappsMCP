@@ -988,7 +988,7 @@ class TappsMCPSettings(BaseSettings):
         ),
     )
 
-    # Upgrade opt-outs for publisher/non-greenfield consumers (Ralph feedback)
+    # Upgrade opt-outs for publisher/non-greenfield consumers
     upgrade_create_agents_md: bool = Field(
         default=True,
         description=(

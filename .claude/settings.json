@@ -57,16 +57,6 @@
             "command": "bash .claude/hooks/tapps-session-compact.sh"
           }
         ]
-      },
-      {
-        "matcher": "startup",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "bash .ralph/hooks/on-session-start.sh",
-            "statusMessage": "Injecting Ralph loop context..."
-          }
-        ]
       }
     ],
     "PreToolUse": [
@@ -76,36 +66,6 @@
           {
             "type": "command",
             "command": "bash .claude/hooks/tapps-pre-tooluse.sh"
-          }
-        ]
-      },
-      {
-        "matcher": "Bash",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "bash .ralph/hooks/validate-command.sh",
-            "statusMessage": "Validating command..."
-          }
-        ]
-      },
-      {
-        "matcher": "Edit|Write",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "bash .ralph/hooks/protect-ralph-files.sh",
-            "statusMessage": "Checking file protection..."
-          }
-        ]
-      },
-      {
-        "matcher": "Edit\\",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "Write",
-            "statusMessage": "bash .ralph/hooks/protect-ralph-files.sh|Checking file protection..."
           }
         ]
       },
@@ -221,15 +181,6 @@
             "command": "bash .claude/hooks/tapps-memory-capture.sh"
           }
         ]
-      },
-      {
-        "hooks": [
-          {
-            "type": "command",
-            "command": "bash .ralph/hooks/on-stop.sh",
-            "statusMessage": "Analyzing Ralph response..."
-          }
-        ]
       }
     ],
     "TaskCompleted": [
@@ -238,15 +189,6 @@
           {
             "type": "command",
             "command": "bash .claude/hooks/tapps-task-completed.sh"
-          }
-        ]
-      },
-      {
-        "hooks": [
-          {
-            "type": "command",
-            "command": "bash .ralph/hooks/on-task-completed.sh",
-            "statusMessage": "Validating task completion..."
           }
         ]
       }
@@ -277,37 +219,6 @@
           {
             "type": "command",
             "command": "bash .claude/hooks/tapps-subagent-stop.sh"
-          }
-        ]
-      },
-      {
-        "hooks": [
-          {
-            "type": "command",
-            "command": "bash .ralph/hooks/on-subagent-done.sh"
-          }
-        ]
-      }
-    ],
-    "TeammateIdle": [
-      {
-        "hooks": [
-          {
-            "type": "command",
-            "command": "bash .ralph/hooks/on-teammate-idle.sh",
-            "statusMessage": "Checking teammate work queue..."
-          }
-        ]
-      }
-    ],
-    "StopFailure": [
-      {
-        "matcher": "rate_limit\\",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "server_error",
-            "statusMessage": "bash .ralph/hooks/on-stop-failure.sh|Handling API error..."
           }
         ]
       }

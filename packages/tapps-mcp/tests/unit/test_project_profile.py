@@ -374,8 +374,8 @@ class TestDetectProjectType:
         ptype, conf, reason = detect_project_type(tmp_path)
         assert ptype != "cli-tool" or conf < 0.3
 
-    def test_ralph_like_structure_cli_tool(self, tmp_path: Path) -> None:
-        """Ralph-like: 85% bash, install.sh, bin/ dir, Makefile, some .md files."""
+    def test_bash_cli_tool_structure(self, tmp_path: Path) -> None:
+        """Bash-first CLI: 85% shell, install.sh, bin/ dir, Makefile, some .md files."""
         # Shell scripts (majority)
         for i in range(10):
             (tmp_path / f"module{i}.sh").write_text("#!/bin/bash\necho run\n", encoding="utf-8")
@@ -383,14 +383,14 @@ class TestDetectProjectType:
         (tmp_path / "Makefile").write_text("install:\n\t./install.sh\n", encoding="utf-8")
         bin_dir = tmp_path / "bin"
         bin_dir.mkdir()
-        (bin_dir / "ralph").write_text("#!/bin/bash\n", encoding="utf-8")
-        (bin_dir / "ralph-init").write_text("#!/bin/bash\n", encoding="utf-8")
+        (bin_dir / "mycli").write_text("#!/bin/bash\n", encoding="utf-8")
+        (bin_dir / "mycli-init").write_text("#!/bin/bash\n", encoding="utf-8")
         # Some docs (should not cause misclassification)
         docs_dir = tmp_path / "docs"
         docs_dir.mkdir()
         for i in range(5):
             (docs_dir / f"doc{i}.md").write_text(f"# Doc {i}\n", encoding="utf-8")
-        (tmp_path / "README.md").write_text("# Ralph\n", encoding="utf-8")
+        (tmp_path / "README.md").write_text("# My CLI\n", encoding="utf-8")
         ptype, conf, reason = detect_project_type(tmp_path)
         assert ptype == "cli-tool"
         assert conf > 0.7

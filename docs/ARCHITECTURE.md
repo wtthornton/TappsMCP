@@ -240,7 +240,7 @@ Both gates emit bypass entries to `.tapps-mcp/.bypass-log.jsonl` and warn-mode v
 
 `tapps-stop.sh` fires at end-of-turn. It always scans the session transcript when present and writes per-Stop telemetry to `.tapps-mcp/loop-metrics.jsonl`. When source files (`*.py`, `*.ts`, `*.tsx`, `*.js`, `*.jsx`, `*.go`, `*.rs`) were edited without a call to `tapps_validate_changed` / `tapps_quick_check` / `tapps_quality_gate` AND `tapps_checklist`, it appends a violation row to `.tapps-mcp/.completion-gate-violations.jsonl` (warn-mode — no block, no exit-2).
 
-The scan path runs for **every project** (Ralph and non-Ralph). The Ralph-only path layered on top still overrides `status.json EXIT_SIGNAL=true → false`, logs to `.ralph/logs/on-stop.log`, and appends to `.ralph/PROMPT.md`. The trailing reminder to stderr now fires only when violations are detected (was unconditional pre-v3.11.0).
+The scan path runs for **every project**. The trailing reminder to stderr now fires only when violations are detected (was unconditional pre-v3.11.0).
 
 The `tapps_usage` tool ([packages/tapps-mcp/src/tapps_mcp/tools/usage.py](../packages/tapps-mcp/src/tapps_mcp/tools/usage.py)) reads the violations log alongside `loop-metrics.jsonl` and the in-process `CallTracker` to produce a per-session gap report, surfaced both standalone and inline as `usage_gaps` on every `tapps_checklist` response.
 

@@ -537,7 +537,7 @@ async def tapps_linear_count(
 
     Call this from automation that needs project pulse ("how many open
     issues?") without burning a Linear API call or requiring
-    ``LINEAR_API_KEY`` — e.g., Ralph's WS3.3 credential-free loop. For
+    ``LINEAR_API_KEY`` — e.g., credential-free loop consumers. For
     full issue listing use ``tapps_linear_snapshot_get`` (also
     cache-only) or the ``linear-read`` skill. Snapshots populated by
     the ``linear-read`` skill are reused; if none exists for

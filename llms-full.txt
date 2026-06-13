@@ -86,7 +86,6 @@
 .hadolint.yaml
 .mcp.json
 .pre-commit-config.yaml
-.ralphrc
 .tapps-mcp.yaml
 AGENTS.md
 CHANGELOG.md

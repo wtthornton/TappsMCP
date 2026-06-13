@@ -220,7 +220,6 @@
 ## Planning
 
 - [TappsMCP Platform — Backlog Plan (Obsolete — see Linear)](TAPPS_BACKLOG_PLAN.md) — This file is no longer maintained. The 49-issue plan generated on 2026-04-21 *(updated 2026-05-05)*
-- [TappsMCP feedback — Ralph PLANOPT epic review session](archive/feedback/FEEDBACK_2026-03-24_ralph-planopt-review.md) — **Date:** 2026-03-24 *(updated 2026-04-05)*
 - [Research: Are All Open DocsMCP Epics Really Needed?](archive/planning/DOCSMCP_OPEN_EPICS_RESEARCH.md) — **Date:** 2026-03-02 *(updated 2026-04-05)*
 - [DocsMCP - Product Requirements Document](archive/planning/DOCSMCP_PRD.md) — **Version:** 1.0.0 *(updated 2026-04-05)*
 - [Epic 65: Memory 2026 Best Practices Implementation Plan](archive/planning/EPIC-65-MEMORY-2026-BEST-PRACTICES.md) — **Status:** Proposed *(updated 2026-04-05)*
@@ -412,6 +411,5 @@
 - [Init and Upgrade — Feature List](INIT_AND_UPGRADE_FEATURE_LIST.md) — This document lists what each init-related process does. The codebase has **two init flows** plus **upgrade commands*... *(updated 2026-05-12)*
 - [tapps-brain v2.1.0 — Tag Required](TAPPS_BRAIN_V2.1_TAG.md) — **Date:** 2026-04-07 *(updated 2026-04-07)*
 - [Upgrading TappsMCP — Guide for Consuming Projects](UPGRADE_FOR_CONSUMERS.md) — When you **install or upgrade** TappsMCP in a project that uses it for quality checks, doc lookup, and experts, you m... *(updated 2026-05-12)*
-- [Task List: Ralph Feedback on tapps-mcp upgrade](archive/feedback/TAPPS_RALPH_FEEDBACK_TASKS.md) — External feedback from the Ralph project (a bash-first, non-greenfield publisher *(updated 2026-04-20)*
 - [Changelog](../packages/docs-mcp/docs/CHANGELOG_GENERATED.md) — All notable changes to this project will be documented in this file. *(updated 2026-04-13)*
 - [Changelog](../plugin/cursor/CHANGELOG.md) — - Initial release of TappsMCP Quality Tools for Cursor *(updated 2026-04-05)*

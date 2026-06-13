@@ -405,7 +405,7 @@ uv run tapps-mcp memory export --file memories.json
 
 ## Advanced surface
 
-Federation, hive, knowledge graph, and batch ops: see `docs/MEMORY_REFERENCE.md`. Ralph coordinator agents may call tapps-brain MCP tools directly; **consumer repo agents use CLI + docs**.
+Federation, hive, knowledge graph, and batch ops: see `docs/MEMORY_REFERENCE.md`. **Consumer repo agents use CLI + docs**.
 
 ## See also
 

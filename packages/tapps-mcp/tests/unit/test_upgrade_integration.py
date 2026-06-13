@@ -333,7 +333,7 @@ class TestUpgradeDryRun:
     def test_dry_run_preserves_custom_agents(self, tmp_path: Path) -> None:
         """Dry run lists non-tapps custom agents under ``preserved_files``.
 
-        Confirms Ralph-style custom agents (e.g. ``ralph.md``) are reported
+        Confirms custom agents (e.g. ``custom-agent.md``) are reported
         as safe from the upgrade, not flagged for regeneration.
         """
         from tapps_mcp.pipeline.upgrade import upgrade_pipeline
@@ -341,8 +341,8 @@ class TestUpgradeDryRun:
         _setup_claude_project(tmp_path)
         agents_dir = tmp_path / ".claude" / "agents"
         agents_dir.mkdir(parents=True, exist_ok=True)
-        (agents_dir / "ralph.md").write_text("custom ralph agent\n", encoding="utf-8")
-        (agents_dir / "ralph-architect.md").write_text("custom\n", encoding="utf-8")
+        (agents_dir / "custom-agent.md").write_text("custom agent\n", encoding="utf-8")
+        (agents_dir / "custom-architect.md").write_text("custom\n", encoding="utf-8")
 
         result = upgrade_pipeline(tmp_path, platform="claude", dry_run=True)
         components = result["components"]["platforms"][0]["components"]
@@ -350,8 +350,8 @@ class TestUpgradeDryRun:
         agents = components["agents"]
         assert isinstance(agents, dict)
         assert agents["action"] == "would-write-managed-files"
-        assert "ralph.md" in agents["preserved_files"]
-        assert "ralph-architect.md" in agents["preserved_files"]
+        assert "custom-agent.md" in agents["preserved_files"]
+        assert "custom-architect.md" in agents["preserved_files"]
         assert all(name.startswith("tapps-") for name in agents["managed_files"])
 
     def test_dry_run_preserves_custom_skills(self, tmp_path: Path) -> None:
@@ -360,8 +360,8 @@ class TestUpgradeDryRun:
 
         _setup_claude_project(tmp_path)
         skills_dir = tmp_path / ".claude" / "skills"
-        (skills_dir / "ralph-custom").mkdir(parents=True, exist_ok=True)
-        (skills_dir / "ralph-custom" / "SKILL.md").write_text("x\n", encoding="utf-8")
+        (skills_dir / "custom-skill").mkdir(parents=True, exist_ok=True)
+        (skills_dir / "custom-skill" / "SKILL.md").write_text("x\n", encoding="utf-8")
 
         result = upgrade_pipeline(tmp_path, platform="claude", dry_run=True)
         components = result["components"]["platforms"][0]["components"]
@@ -369,7 +369,7 @@ class TestUpgradeDryRun:
         skills = components["skills"]
         assert isinstance(skills, dict)
         assert skills["action"] == "would-write-managed-skills"
-        assert "ralph-custom" in skills["preserved_skills"]
+        assert "custom-skill" in skills["preserved_skills"]
         assert "tapps-score" in skills["managed_skills"]
 
     def test_dry_run_hooks_signals_merge_not_overwrite(self, tmp_path: Path) -> None:
@@ -416,17 +416,17 @@ class TestUpgradeDryRun:
         _setup_claude_project(tmp_path)
         agents_dir = tmp_path / ".claude" / "agents"
         agents_dir.mkdir(parents=True, exist_ok=True)
-        (agents_dir / "ralph.md").write_text("x", encoding="utf-8")
+        (agents_dir / "custom-agent.md").write_text("x", encoding="utf-8")
         skills_dir = tmp_path / ".claude" / "skills"
-        (skills_dir / "ralph-quickfix").mkdir(parents=True, exist_ok=True)
-        (skills_dir / "ralph-quickfix" / "SKILL.md").write_text("x", encoding="utf-8")
+        (skills_dir / "custom-quickfix").mkdir(parents=True, exist_ok=True)
+        (skills_dir / "custom-quickfix" / "SKILL.md").write_text("x", encoding="utf-8")
 
         result = upgrade_pipeline(tmp_path, platform="claude", dry_run=True)
 
         summary = result["dry_run_summary"]
         preserved = summary["preserved_files"]
-        assert any("ralph.md" in p for p in preserved)
-        assert any("ralph-quickfix" in p for p in preserved)
+        assert any("custom-agent.md" in p for p in preserved)
+        assert any("custom-quickfix" in p for p in preserved)
         assert summary["preserved_file_count"] >= 2
 
     def test_dry_run_preserves_custom_ci_workflows(self, tmp_path: Path) -> None:

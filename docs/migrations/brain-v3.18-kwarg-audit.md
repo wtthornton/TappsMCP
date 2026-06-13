@@ -2,7 +2,7 @@
 
 **Date:** 2026-05-23  
 **Status:** ✅ Migration already complete — zero offenders found  
-**Auditor:** Ralph (TAP-1977)
+**Auditor:** TAP-1977 review
 
 ## Background
 

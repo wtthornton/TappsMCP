@@ -306,7 +306,7 @@ def render_fix_epic(
         "The companion audit campaign identified quality issues across this scope. "
         "This fix epic converts those sessions into implementable work items "
         "with clean file anchors, acceptance criteria, and `audit-fix` labels "
-        "for Ralph to select.\n\n"
+        "for agents to select.\n\n"
         "## Acceptance Criteria\n\n"
         f"{accept_lines}\n"
         "- [ ] All fix stories have `tapps_quick_check` reporting no new findings\n"

@@ -205,7 +205,7 @@ echo "[pre-push] Tier 1 passed." >&2
 # After each push to master/main, extract any TAP ticket IDs referenced in
 # the newly pushed commits (via feat(TAP-####) or fix(TAP-####) convention)
 # and write one JSONL line per ticket to .tapps-mcp/.pending-linear-close.jsonl.
-# The next Ralph loop's coordinator step reads this file and closes the tickets
+# The next autonomous loop coordinator step reads this file and closes the tickets
 # automatically, recovering from API-error resets that interrupted post-push
 # Linear status updates.
 PENDING_CLOSE_LOG="$PUSH_LOG_DIR/.pending-linear-close.jsonl"

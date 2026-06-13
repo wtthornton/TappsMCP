@@ -1,4 +1,4 @@
-"""Tests for the Ralph-feedback upgrade opt-outs and gates.
+"""Tests for consumer-feedback upgrade opt-outs and gates.
 
 Covers behavior added in response to external feedback from a bash-first,
 publisher-style consumer:

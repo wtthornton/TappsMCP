@@ -612,7 +612,7 @@ async def tapps_session_start(
 
     # TAP-1928: file-based sentinel short-circuit for sub-agent reuse.
     # Distinct from the in-process _SESSION_START_CACHE (TAP-1379): the sentinel
-    # persists across MCP server restarts so Ralph sub-agents (fresh processes)
+    # persists across MCP server restarts so sub-agents (fresh processes)
     # skip redundant checker / brain-health / memory-GC phases when the primary
     # agent bootstrapped within the last hour.  force=True bypasses both caches.
     if not force:

@@ -374,7 +374,7 @@ def _make_chunk():  # type: ignore[return]
 
 
 class TestRenderSessionTicketDoneInstruction:
-    """Verify the session ticket body instructs Ralph to set state=Done (TAP-2785)."""
+    """Verify the session ticket body instructs agents to set state=Done (TAP-2785)."""
 
     def setup_method(self) -> None:
         chunk = _make_chunk()

@@ -7,14 +7,12 @@
 # completeness / freshness / cross-ref / drift scores reflect the
 # user-facing documentation surface, not backups and caches.
 completeness_exclude:
-  - ".ralph/**"
   - ".tapps-mcp/backups/**"
   - ".tapps-mcp-cache/**"
   - ".claude/agent-memory/**"
   - "docs/archive/**"
 
 freshness_exclude:
-  - ".ralph/**"
   - ".tapps-mcp/backups/**"
   - ".tapps-mcp-cache/**"
   - ".claude/agent-memory/**"
@@ -28,7 +26,6 @@ freshness_exclude:
 cross_ref_exclude:
   - "packages/*/src/**/prompts/**"
   - "docs/archive/**"
-  - ".ralph/**"
   - ".tapps-mcp/backups/**"
 
 # Drift checker — suppress noisy module-level constants and migration

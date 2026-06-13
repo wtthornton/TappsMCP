@@ -85,7 +85,7 @@ class FindingStory:
         priority: Linear priority value (TAP-2720). Mapped from severity:
             P0→1 (Urgent), P1→2 (High), P2/P3→3 (Normal).
         labels: Linear labels to apply when filing the issue.
-            Defaults to ``("audit-fix",)`` so Ralph selects it as an
+            Defaults to ``("audit-fix",)`` so agents select it as an
             implementable fix story and skips ``audit-digest`` digests.
     """
 

@@ -130,22 +130,6 @@ memory:
 health` row (gap / rating counts from `flywheel_report` plus
 `diagnostics_report` health_score).
 
-### Ralph coordinator flow (TAP-1887)
-
-The `.claude/agents/ralph-coordinator.md` agent calls tapps-brain directly
-(now that `tapps_memory` is off the MCP catalog):
-
-| Coordinator step | Brain MCP tool | Equivalent legacy `tapps_memory` action |
-|------------------|----------------|----------------------------------------|
-| Cold-start brief | `memory_recall_many` with `queries=[...]` (≤5 strings) | `recall_many` via `entries` JSON array |
-| Graph follow-up on a known key | `memory_find_related` with `key=` | `related` |
-| Task-boundary debrief | `feedback_rate` with `entry_key=` + `rating=` | `rate` |
-
-One `memory_recall_many` call per brief replaces the prior cap of three
-singleton `brain_recall` calls. The coordinator rates each
-`prior_learnings` entry it relied on via `feedback_rate` at debrief time
-so the feedback flywheel receives explicit signals.
-
 ## Security (Epic M1)
 
 | Action | Parameters | Description |

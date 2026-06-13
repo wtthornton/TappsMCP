@@ -27,7 +27,7 @@ The **`linear-standards.md` rule** also gains a new `### Reads (TAP-1224)` enfor
 After upgrading to a release that includes [ADR-0016](adr/0016-needs-based-nlt-mcp-taxonomy.md):
 
 1. Run `tapps-mcp upgrade --host auto --force` to refresh `.cursor/mcp.json` / `.mcp.json`.
-2. Default **developer** bundle is now **`nlt-build` only** (~9 eager tools). Enable `nlt-memory` when you need MCP recall/save; enable `nlt-setup` briefly for bootstrap/doctor.
+2. Default **developer** bundle is **`nlt-build` + `nlt-memory` + `nlt-linear-issues`** (~18 eager tools). Use `--bundle minimal` on init/upgrade-fleet for build-only (~9 eager). Enable `nlt-setup` briefly for bootstrap/doctor.
 3. Update skill `allowed-tools` prefixes: `mcp__nlt-build__*`, `mcp__nlt-memory__*`, `mcp__nlt-setup__*`. Legacy `nlt-code-quality` / `nlt-platform-admin` profile aliases work for one release.
 4. Session handoff / `tapps_session_notes` moved to **Memory** server — enable `nlt-memory` or use `tapps-mcp memory` CLI.
 
@@ -71,9 +71,9 @@ This updates AGENTS.md (smart merge), platform rules, the four `tapps-*` subagen
     "managed_file_count": 17,
     "preserved_file_count": 6,
     "preserved_files": [
-      "claude-code:agents/ralph.md",
-      "claude-code:agents/ralph-architect.md",
-      "claude-code:skills/ralph-quickfix"
+      "claude-code:agents/custom-agent.md",
+      "claude-code:agents/custom-architect.md",
+      "claude-code:skills/custom-quickfix"
     ],
     "skipped_components": [],
     "review_recommended_for": []

@@ -87,7 +87,6 @@ def _windows_shim(subcommand: list[str]) -> str:
 #
 #   tapps-brain-health — poll tapps-brain /health every 30s for drift.
 #   quality-gate-watch — tail tapps-mcp validate-changed output aggregator.
-#   ralph-live-tail    — tail .ralph/live.log when ralph is running.
 
 _MONITORS_CONFIG: dict[str, Any] = {
     "monitors": [
@@ -110,15 +109,6 @@ _MONITORS_CONFIG: dict[str, Any] = {
             "description": (
                 "Aggregates recent tapps_quality_gate failures and emits one-line "
                 "notifications when a new failure appears."
-            ),
-        },
-        {
-            "name": "ralph-live-tail",
-            "when": "always",
-            "command": 'tail -F .ralph/live.log 2>/dev/null || true',
-            "description": (
-                "Tails .ralph/live.log when the Ralph loop is running. Harmless "
-                "no-op when the file is absent."
             ),
         },
     ],
@@ -261,7 +251,7 @@ def generate_claude_plugin_bundle(
 
     When ``monitors_enabled`` is True (TAP-960), an opt-in
     ``monitors/monitors.json`` is emitted to stream TappsMCP-relevant logs
-    (tapps-brain health, quality-gate failures, .ralph/live.log tail) into
+    (tapps-brain health, quality-gate failures) into
     the session as Claude Code notifications. Off by default; callers driving
     this from ``.tapps-mcp.yaml`` (``monitors.enabled: true``) should pass
     the resolved value.
@@ -1198,7 +1188,7 @@ def generate_claude_linear_standards_rule(
 # These three rules existed in tapps-mcp's own .claude/rules/ from the
 # 2026 control-files audit but were never wired through the
 # init/upgrade pipeline, so consumer fleets (AgentForge, NLTlabsPE,
-# ralph-claude-code) were missing them. TAP-978 ships them through
+# external consumer projects) were missing them. TAP-978 ships them through
 # dedicated generators with skip tokens and doctor checks, mirroring
 # the pattern used for python_quality_rule / pipeline_rule.
 #

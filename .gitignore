@@ -75,26 +75,6 @@ mcp-registry/
 arch-report*.png
 architecture-report*.png
 
-# LOCK-1: Instance lock file (auto-released by flock)
-.ralph/.ralph.lock
-
-# Transient ralph per-loop state + local upgrade backups
-.ralph/.files_modified_this_loop
-.ralph/.last_completed_files
-.ralph/.ralph_run_id
-.ralph/.upgrade-backups/
-.ralph/.circuit_breaker_state
-.ralph/.import_graph.json
-.ralph/.import_graph.json.stale
-.ralph/.linear_next_issue
-.ralph/.call_count
-.ralph/live.log
-.ralph/logs/
-.ralph/metrics/
-.ralph/status.json
-.ralph/upgrade.log
-.ralphrc.bak.*
-
 # Agent worktrees spawned by the Agent tool (full git clones — never commit)
 .claude/worktrees/
 
@@ -104,22 +84,9 @@ packages/*/packages/
 
 # tapps_upgrade timestamped backups (local rollback only; never commit)
 *.pre-upgrade.*
-.ralph/.edits_this_loop
 
 # TAP-1712: temp / legacy session artifacts
 .mcp.json.backup-*
-.ralphrc.legacy-*
-.ralph/.audit.jsonl
-.ralph/.token_count
-
-# Ralph managed entries
-.ralph/*
-!.ralph/PROMPT.md
-!.ralph/AGENT.md
-!.ralph/fix_plan.md
-!.ralph/hooks/
-!.ralph/hooks/**
-!.ralph/.gitkeep
 *.log
 *.tmp
 .temp/
@@ -129,11 +96,5 @@ target/
 .claude/settings.local.json
 .claude/agent-memory/
 .claude/agent-memory-local/
-.ralph_backup_*
-
-# Ralph managed entries
-.ralph-brief.json
-.ralphrc.local
-
 # Third-party skill clones (separate git repos, contains node_modules)
 .claude/skills/linear/

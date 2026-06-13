@@ -212,7 +212,7 @@ class TestPluginMonitors:
         data = json.loads(path.read_text())
         assert "monitors" in data
         names = {m["name"] for m in data["monitors"]}
-        assert {"tapps-brain-health", "quality-gate-watch", "ralph-live-tail"} <= names
+        assert {"tapps-brain-health", "quality-gate-watch"} <= names
 
     def test_monitor_shape(self, tmp_path):
         generate_claude_plugin_bundle(tmp_path, monitors_enabled=True)
