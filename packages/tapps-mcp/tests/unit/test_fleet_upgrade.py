@@ -85,6 +85,38 @@ class TestFleetUpgradeHelpers:
         assert os.environ.get("TAPPS_MCP_DOCS_VIA_BRAIN") is None
         assert any("init" in args for args in calls)
 
+    def test_import_legacy_doc_cache_invokes_brain_cli(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        root = tmp_path / "consumer"
+        root.mkdir()
+        (root / ".tapps-mcp.yaml").write_text("quality_preset: standard\n")
+        cache_dir = root / ".tapps-mcp-cache" / "pytest"
+        cache_dir.mkdir(parents=True)
+        calls: list[tuple[list[str], str]] = []
+
+        def _capture(
+            args: list[str],
+            *,
+            cwd: Path,
+            dry_run: bool,
+            command_prefix: str = "tapps-mcp",
+        ):
+            calls.append((list(args), command_prefix))
+            return True, "[dry-run] ok"
+
+        monkeypatch.setattr(
+            "tapps_mcp.tools.fleet_upgrade._run_cli",
+            _capture,
+        )
+        upgrade_project_root(
+            root,
+            dry_run=True,
+            run_doctor=False,
+            import_legacy_doc_cache=True,
+        )
+        assert any(prefix == "tapps-brain" and "import-dir" in args for args, prefix in calls)
+
     def test_format_markdown(self) -> None:
         report = {
             "bundle": "developer",

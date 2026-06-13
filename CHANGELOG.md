@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **ADR-0014 consumer wiring (TAP-3867–3870)** — Brain-central doc RAG cutover helpers: `docs_via_brain` routing in `LookupEngine` and session-start warm, doctor checks for legacy doc cache and consumer Context7 env, `upgrade-fleet --import-legacy-doc-cache` / `--strip-context7-env`, and `check_brain_docs_tools` probe when `docs_via_brain` is enabled.
+
+### Changed
+
+- **`tapps_lookup_docs` docstring** — Documents brain-central vs local cache behavior (ADR-0014).
+
 ## [3.12.27] - 2026-06-12
 
 Patch: NLT five-server MCP split, cross-session handoff fidelity, and memory CLI polish.

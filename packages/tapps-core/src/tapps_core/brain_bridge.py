@@ -2994,6 +2994,74 @@ class HttpBrainBridge(BrainBridge):
             "detail": detail,
         }
 
+    def docs_tools_probe(self) -> dict[str, Any]:
+        """Probe ``docs_lookup`` on the brain HTTP MCP endpoint (ADR-0014).
+
+        Used by ``tapps-mcp doctor`` when ``docs_via_brain`` is enabled.
+        Returns the same shape as :meth:`auth_probe` (``ok``, ``gated``, …).
+        """
+        init_payload = {
+            "jsonrpc": "2.0",
+            "id": 1,
+            "method": "initialize",
+            "params": {
+                "protocolVersion": "2025-11-25",
+                "capabilities": {},
+                "clientInfo": {"name": "tapps-mcp", "version": "http-bridge"},
+            },
+        }
+        try:
+            init_response = httpx.post(
+                f"{self._http_url}/mcp/",
+                json=init_payload,
+                headers={**self._http_headers, **_MCP_ACCEPT_HEADERS},
+                timeout=_BRAIN_HEALTH_TIMEOUT_SECONDS,
+                follow_redirects=True,
+            )
+        except Exception as exc:
+            return {"ok": False, "error": f"probe_failed: {exc}"}
+        if init_response.status_code in (401, 403):
+            return {
+                "ok": False,
+                "http_status": init_response.status_code,
+                "detail": init_response.text[:200] if init_response.text else "",
+            }
+        session_id = init_response.headers.get("mcp-session-id", "")
+
+        probe_headers = {**self._http_headers, **_MCP_ACCEPT_HEADERS}
+        if session_id:
+            probe_headers["Mcp-Session-Id"] = session_id
+        payload = {
+            "jsonrpc": "2.0",
+            "id": 2,
+            "method": "tools/call",
+            "params": {
+                "name": "docs_lookup",
+                "arguments": {"library": "structlog", "topic": "overview", "mode": "code"},
+            },
+        }
+        try:
+            response = httpx.post(
+                f"{self._http_url}/mcp/",
+                json=payload,
+                headers=probe_headers,
+                timeout=_BRAIN_HEALTH_TIMEOUT_SECONDS,
+                follow_redirects=True,
+            )
+        except Exception as exc:
+            return {"ok": False, "error": f"probe_failed: {exc}"}
+        if response.status_code == 200:
+            parsed = self._parse_probe_body(response)
+            if parsed.get("gated"):
+                parsed["tool"] = parsed.get("tool") or "docs_lookup"
+            return parsed
+        detail = response.text[:200] if response.text else ""
+        return {
+            "ok": False,
+            "http_status": response.status_code,
+            "detail": detail,
+        }
+
     @staticmethod
     def _parse_probe_body(response: httpx.Response) -> dict[str, Any]:
         """Classify a 200 ``tools/call`` probe response from its JSON-RPC body.

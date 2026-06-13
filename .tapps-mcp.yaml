@@ -1,5 +1,6 @@
 llm_engagement_level: medium
 quality_preset: standard
+docs_via_brain: true
 linear_team: TAP
 linear_project: TappsMCP Platform
 memory:

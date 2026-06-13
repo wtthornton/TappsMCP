@@ -1055,7 +1055,7 @@ async def tapps_lookup_docs(
     mode: str = "code",
 ) -> dict[str, Any]:
     """Fetches current documentation and code examples for an external
-    library or framework via Context7, served from a local cache.
+    library or framework.
 
     Call this before writing code that uses an external library API to
     avoid hallucinated signatures. Skip it for the Python standard
@@ -1063,9 +1063,11 @@ async def tapps_lookup_docs(
     session. Repeat calls are cache-hits at near-zero cost; do not call
     more than five times for the same library in a single task.
 
-    Backed by Context7 with a circuit-breaker fallback to the bundled
-    llms.txt provider; cache is per-project at ``.tapps-mcp-cache/``
-    (24h default TTL, library-specific overrides).
+    When ``docs_via_brain`` is enabled (``TAPPS_MCP_DOCS_VIA_BRAIN=1`` or
+    ``docs_via_brain: true`` in ``.tapps-mcp.yaml``), lookups delegate to
+    tapps-brain ``docs_lookup`` (shared fleet cache, ADR-0014). Otherwise
+    docs are served from per-project ``.tapps-mcp-cache/`` via Context7
+    with a circuit-breaker fallback to the bundled llms.txt provider.
 
     Args:
         library: Official library name with proper punctuation

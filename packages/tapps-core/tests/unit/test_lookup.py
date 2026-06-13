@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import time
 from unittest.mock import AsyncMock
 
 import pytest
@@ -561,3 +562,24 @@ class TestLookupDocsViaBrain:
 
         assert result.content == "# brain docs"
         assert result.source == "brain"
+
+    def test_cache_and_return_skips_write_when_docs_via_brain(self, cache, monkeypatch):
+        from unittest.mock import MagicMock
+
+        from tapps_core.config.settings import TappsMCPSettings
+
+        settings = TappsMCPSettings(docs_via_brain=True)
+        monkeypatch.setenv("TAPPS_MCP_DOCS_VIA_BRAIN", "1")
+        cache.put = MagicMock()  # type: ignore[method-assign]
+        engine = LookupEngine(cache, settings=settings)
+        result = engine._cache_and_return(
+            "pytest",
+            "fixtures",
+            "# docs",
+            "api",
+            None,
+            time.monotonic(),
+        )
+        cache.put.assert_not_called()
+        assert result.success is True
+        assert result.content == "# docs"

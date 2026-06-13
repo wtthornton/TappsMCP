@@ -3603,6 +3603,95 @@ def _mcp_configs_set_context7(root: Path) -> list[str]:
     return hits
 
 
+def _run_docs_tools_probe(http_url: str, settings: Any) -> dict[str, Any] | None:
+    """Run a synchronous ``docs_lookup`` probe for ADR-0014 doctor checks."""
+    try:
+        from tapps_core.brain_bridge import BRAIN_PROFILE_SERVER, HttpBrainBridge
+    except Exception:
+        return None
+    try:
+        headers = _doctor_brain_headers(settings)
+        headers.setdefault("X-Brain-Profile", BRAIN_PROFILE_SERVER)
+        bridge = HttpBrainBridge(http_url, headers)
+        result = bridge.docs_tools_probe()
+    except Exception:
+        return None
+    return result if isinstance(result, dict) else None
+
+
+def check_brain_docs_tools(root: Path) -> CheckResult:
+    """ADR-0014: verify brain exposes ``docs_lookup`` when ``docs_via_brain`` is on."""
+    from tapps_core.config.settings import load_settings
+    from tapps_core.knowledge.brain_docs import docs_via_brain_enabled
+
+    try:
+        settings = load_settings(project_root=root)
+    except Exception:
+        return CheckResult(
+            "brain_docs_tools",
+            True,
+            "Skipped (could not load settings)",
+        )
+
+    if not docs_via_brain_enabled(settings):
+        return CheckResult(
+            "brain_docs_tools",
+            True,
+            "Skipped (docs_via_brain disabled)",
+        )
+
+    http_url = _brain_http_url_for_checks(root)
+    if not http_url:
+        return CheckResult(
+            "brain_docs_tools",
+            False,
+            "docs_via_brain requires HTTP brain (memory.brain_http_url unset)",
+            "Set memory.brain_http_url in .tapps-mcp.yaml and deploy brain 3.24.0+ "
+            "with docs_lookup (ADR-0015).",
+        )
+
+    probe = _run_docs_tools_probe(http_url, settings)
+    if probe is None:
+        return CheckResult(
+            "brain_docs_tools",
+            False,
+            "Could not probe brain docs_lookup",
+            "Check brain reachability and TAPPS_MCP_MEMORY_BRAIN_AUTH_TOKEN.",
+        )
+
+    if probe.get("ok"):
+        return CheckResult(
+            "brain_docs_tools",
+            True,
+            f"brain docs_lookup probe ok ({http_url})",
+        )
+
+    if probe.get("gated"):
+        tool = probe.get("tool") or "docs_lookup"
+        profile = probe.get("profile") or "<unset>"
+        suggested = probe.get("suggested_profile")
+        hint = (
+            f"Set memory.brain_profile to {suggested!r} (or TAPPS_BRAIN_PROFILE)."
+            if suggested
+            else "Use brain profile ``full`` so docs_lookup is exposed."
+        )
+        return CheckResult(
+            "brain_docs_tools",
+            False,
+            f"Profile {profile!r} hides {tool!r}",
+            hint,
+        )
+
+    detail = probe.get("detail") or probe.get("error") or "probe failed"
+    return CheckResult(
+        "brain_docs_tools",
+        False,
+        f"brain docs_lookup unavailable: {detail}",
+        "Upgrade tapps-brain to 3.24.0+ with docs_lookup (ADR-0015); see "
+        "docs/operations/brain-doc-rag-cutover-runbook.md.",
+    )
+
+
 def check_consumer_context7_env(root: Path) -> CheckResult:
     """ADR-0014: warn when consumer MCP configs still carry Context7 after cutover."""
     from tapps_core.config.settings import load_settings
@@ -3702,6 +3791,7 @@ def _collect_checks(root: Path, *, quick: bool = False) -> list[CheckResult]:
     checks.append(check_linear_sdlc(root))
     checks.append(check_report_studio(root))
     checks.append(check_legacy_doc_cache(root))
+    checks.append(check_brain_docs_tools(root))
     checks.append(check_consumer_context7_env(root))
     if quick:
         checks.append(
