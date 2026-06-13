@@ -2003,7 +2003,13 @@ def run_init(
     # Issue #79: build extra_env dict for Context7 key (uses ${VAR} interpolation
     # so the literal key is never written to the config file).
     extra_env: dict[str, str] | None = None
-    if context7_api_key:
+    docs_via_brain = os.environ.get("TAPPS_MCP_DOCS_VIA_BRAIN", "").lower() in (
+        "1",
+        "true",
+        "yes",
+        "on",
+    )
+    if context7_api_key and not docs_via_brain:
         extra_env = {"TAPPS_MCP_CONTEXT7_API_KEY": "${TAPPS_MCP_CONTEXT7_API_KEY}"}
         click.echo(
             click.style(

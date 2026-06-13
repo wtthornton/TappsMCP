@@ -866,6 +866,13 @@ class TappsMCPSettings(BaseSettings):
         default=None,
         description="Context7 API key (optional).",
     )
+    docs_via_brain: bool = Field(
+        default=False,
+        description=(
+            "Route library doc lookup and warm through tapps-brain HTTP "
+            "(docs_lookup / docs_warm). Env TAPPS_MCP_DOCS_VIA_BRAIN overrides."
+        ),
+    )
     linear_cache_ttl_open_seconds: int = Field(
         default=300,
         ge=0,

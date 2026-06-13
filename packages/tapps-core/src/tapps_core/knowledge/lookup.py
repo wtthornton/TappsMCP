@@ -181,6 +181,23 @@ class LookupEngine:
         start = time.monotonic()
         lib_clean = library.strip().lower()
 
+        if self._settings is not None:
+            from tapps_core.brain_bridge import BRAIN_PROFILE_SERVER, create_brain_bridge
+            from tapps_core.knowledge.brain_docs import docs_via_brain_enabled, lookup_via_brain
+
+            if docs_via_brain_enabled(self._settings):
+                bridge = create_brain_bridge(self._settings, default_profile=BRAIN_PROFILE_SERVER)
+                if bridge is not None:
+                    brain_result = await lookup_via_brain(
+                        bridge,
+                        lib_clean,
+                        topic,
+                        mode=mode,
+                        start=start,
+                    )
+                    if brain_result is not None:
+                        return brain_result
+
         # 1. Exact cache hit
         cache_result = self._check_exact_cache(lib_clean, topic, mode, start)
         if cache_result is not None:
@@ -455,15 +472,18 @@ class LookupEngine:
         start: float,
     ) -> LookupResult:
         """Store content in cache and build the final success result."""
-        self._cache.put(
-            CacheEntry(
-                library=lib_clean,
-                topic=topic,
-                content=safe_content,
-                token_count=len(safe_content) // 4,  # rough estimate
-                provider_source=provider_source,
+        from tapps_core.knowledge.brain_docs import docs_via_brain_enabled
+
+        if not (self._settings and docs_via_brain_enabled(self._settings)):
+            self._cache.put(
+                CacheEntry(
+                    library=lib_clean,
+                    topic=topic,
+                    content=safe_content,
+                    token_count=len(safe_content) // 4,  # rough estimate
+                    provider_source=provider_source,
+                )
             )
-        )
         elapsed = (time.monotonic() - start) * 1000
         return LookupResult(
             success=True,

@@ -712,6 +712,19 @@ class BrainBridge:
 
         return "\n".join(lines) if lines else None
 
+    async def docs_lookup(
+        self,
+        library: str,
+        topic: str = "overview",
+        mode: str = "code",
+    ) -> dict[str, Any]:
+        """In-process bridge does not host doc RAG — use HTTP transport."""
+        raise BrainBridgeUnavailable("docs_lookup requires HTTP brain bridge")
+
+    async def docs_warm(self, libraries: list[str]) -> dict[str, Any]:
+        """In-process bridge does not host doc RAG — use HTTP transport."""
+        raise BrainBridgeUnavailable("docs_warm requires HTTP brain bridge")
+
     async def hive_search(
         self,
         query: str,
@@ -1878,6 +1891,24 @@ class HttpBrainBridge(BrainBridge):
             text = result.get("text") or result.get("content")
             return str(text) if text else None
         return None
+
+    async def docs_lookup(
+        self,
+        library: str,
+        topic: str = "overview",
+        mode: str = "code",
+    ) -> dict[str, Any]:
+        """Fetch library docs from brain ``docs_lookup`` (ADR-0014)."""
+        result = await self._http_mcp_call(
+            "docs_lookup",
+            {"library": library, "topic": topic, "mode": mode},
+        )
+        return result if isinstance(result, dict) else {"content": str(result)}
+
+    async def docs_warm(self, libraries: list[str]) -> dict[str, Any]:
+        """Batch-warm library docs via brain ``docs_warm`` (ADR-0014)."""
+        result = await self._http_mcp_call("docs_warm", {"libraries": libraries})
+        return result if isinstance(result, dict) else {"warmed": result}
 
     # -------------------------------------------------------------------------
     # Knowledge graph (TAP-1630)

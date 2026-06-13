@@ -1003,11 +1003,10 @@ def _schedule_lookup_docs_warm(
     project_root: Path,
     covered: list[dict[str, str]],
 ) -> dict[str, Any]:
-    """Fire-and-forget warm of the lookup_docs cache for top covered libraries.
+    """Fire-and-forget warm of library docs for session_start covered libraries.
 
-    Runs once per (CACHE_WARM_TTL) day on session_start. Skips when no
-    Context7 API key is configured. Returns a structured status dict so the
-    session_start response can surface what happened without blocking.
+    Routes through tapps-brain ``docs_warm`` when ``docs_via_brain`` is enabled;
+    otherwise uses the legacy per-repo KBCache warm (TAP-1331).
     """
     if not covered:
         return {"scheduled": False, "skipped": "no_covered_libraries"}
@@ -1029,11 +1028,24 @@ def _schedule_lookup_docs_warm(
 
     async def _runner() -> None:
         try:
+            from tapps_core.brain_bridge import BRAIN_PROFILE_SERVER, create_brain_bridge
             from tapps_core.config.settings import load_settings as _ls
+            from tapps_core.knowledge.brain_docs import docs_via_brain_enabled, warm_via_brain
             from tapps_core.knowledge.cache import KBCache
             from tapps_core.knowledge.warming import warm_cache
 
             s = _ls()
+            if docs_via_brain_enabled(s):
+                bridge = create_brain_bridge(s, default_profile=BRAIN_PROFILE_SERVER)
+                if bridge is not None:
+                    warmed = await warm_via_brain(bridge, libraries)
+                    if warmed is not None:
+                        try:
+                            flag.parent.mkdir(parents=True, exist_ok=True)
+                            flag.write_text(str(int(time.time())))
+                        except Exception:
+                            _logger.debug("cache_warm_flag_write_failed", exc_info=True)
+                        return
             api_key = getattr(s, "context7_api_key", None)
             if not api_key or not api_key.get_secret_value():
                 return
@@ -1056,10 +1068,12 @@ def _schedule_lookup_docs_warm(
     try:
         loop = asyncio.get_running_loop()
         task = loop.create_task(_runner())
-        # Keep a reference so the task isn't GC'd before completion (RUF006).
-        # Background fire-and-forget; we don't await.
         _BACKGROUND_TASKS.add(task)
         task.add_done_callback(_BACKGROUND_TASKS.discard)
-        return {"scheduled": True, "libraries": libraries, "count": len(libraries)}
+        return {
+            "scheduled": True,
+            "libraries": libraries,
+            "count": len(libraries),
+        }
     except RuntimeError:
         return {"scheduled": False, "skipped": "no_running_loop"}

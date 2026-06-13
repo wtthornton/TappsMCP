@@ -3537,6 +3537,109 @@ def check_linear_sdlc(project_root: Path) -> CheckResult:
         )
 
 
+def check_legacy_doc_cache(root: Path) -> CheckResult:
+    """ADR-0014: fail when per-repo doc cache subtrees remain after brain cutover."""
+    from tapps_core.config.settings import load_settings
+    from tapps_core.knowledge.brain_docs import docs_via_brain_enabled
+    from tapps_core.knowledge.cache import KBCache
+
+    try:
+        settings = load_settings(project_root=root)
+    except Exception:
+        return CheckResult(
+            "legacy_doc_cache",
+            True,
+            "Skipped (could not load settings)",
+        )
+
+    if not docs_via_brain_enabled(settings):
+        return CheckResult(
+            "legacy_doc_cache",
+            True,
+            "Skipped (docs_via_brain disabled)",
+        )
+
+    cache_dir = root / ".tapps-mcp-cache"
+    count = KBCache(cache_dir).doc_library_dir_count()
+    if count == 0:
+        return CheckResult(
+            "legacy_doc_cache",
+            True,
+            "No legacy doc library subtrees under .tapps-mcp-cache/",
+        )
+    return CheckResult(
+        "legacy_doc_cache",
+        False,
+        f"{count} legacy doc library dir(s) under .tapps-mcp-cache/",
+        "Run tapps-brain docs import-dir .tapps-mcp-cache then remove doc subtrees.",
+    )
+
+
+def _mcp_configs_set_context7(root: Path) -> list[str]:
+    """Return MCP config paths that still set TAPPS_MCP_CONTEXT7_API_KEY."""
+    hits: list[str] = []
+    candidates = (
+        root / ".mcp.json",
+        root / ".cursor" / "mcp.json",
+        root / ".vscode" / "mcp.json",
+    )
+    for path in candidates:
+        if not path.is_file():
+            continue
+        try:
+            data = json.loads(path.read_text(encoding="utf-8"))
+        except Exception:
+            continue
+        servers = data.get("mcpServers") or data.get("servers") or {}
+        if not isinstance(servers, dict):
+            continue
+        for spec in servers.values():
+            if not isinstance(spec, dict):
+                continue
+            env = spec.get("env") or {}
+            if isinstance(env, dict) and env.get("TAPPS_MCP_CONTEXT7_API_KEY"):
+                hits.append(str(path.relative_to(root)))
+                break
+    return hits
+
+
+def check_consumer_context7_env(root: Path) -> CheckResult:
+    """ADR-0014: warn when consumer MCP configs still carry Context7 after cutover."""
+    from tapps_core.config.settings import load_settings
+    from tapps_core.knowledge.brain_docs import docs_via_brain_enabled
+
+    try:
+        settings = load_settings(project_root=root)
+    except Exception:
+        return CheckResult(
+            "consumer_context7_env",
+            True,
+            "Skipped (could not load settings)",
+        )
+
+    if not docs_via_brain_enabled(settings):
+        return CheckResult(
+            "consumer_context7_env",
+            True,
+            "Skipped (docs_via_brain disabled)",
+        )
+
+    hits = _mcp_configs_set_context7(root)
+    if not hits:
+        return CheckResult(
+            "consumer_context7_env",
+            True,
+            "No consumer TAPPS_MCP_CONTEXT7_API_KEY in MCP configs",
+        )
+    preview = ", ".join(hits[:3])
+    return CheckResult(
+        "consumer_context7_env",
+        True,
+        f"Context7 still in MCP env ({preview}) — remove after brain cutover",
+        "Re-run tapps-mcp init --force or upgrade-fleet --strip-context7-env.",
+    )
+
+
 def _collect_checks(root: Path, *, quick: bool = False) -> list[CheckResult]:
     """Collect all diagnostic checks for the given project root.
 
@@ -3598,6 +3701,8 @@ def _collect_checks(root: Path, *, quick: bool = False) -> list[CheckResult]:
     checks.append(check_uv_path_mismatch(root))
     checks.append(check_linear_sdlc(root))
     checks.append(check_report_studio(root))
+    checks.append(check_legacy_doc_cache(root))
+    checks.append(check_consumer_context7_env(root))
     if quick:
         checks.append(
             CheckResult(

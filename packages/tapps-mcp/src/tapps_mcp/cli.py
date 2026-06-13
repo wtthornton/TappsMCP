@@ -3,12 +3,9 @@
 from __future__ import annotations
 
 import os
-from typing import TYPE_CHECKING
+from pathlib import Path
 
 import click
-
-if TYPE_CHECKING:
-    from pathlib import Path
 
 from tapps_mcp import __version__
 
@@ -163,7 +160,7 @@ def serve(
 @click.option(
     "--bundle",
     "mcp_bundle",
-    type=click.Choice(["developer", "planning", "docs", "release"]),
+    type=click.Choice(["developer", "planning", "docs", "release", "full"]),
     default="developer",
     help="NLT MCP plugin bundle to enable (default: developer = code-quality + platform-admin).",
 )
@@ -577,6 +574,164 @@ def audit_fleet_cmd(
         click.echo(format_fleet_audit_markdown(report))
     else:
         click.echo(json.dumps(report, indent=2))
+
+
+@main.command("upgrade-fleet")
+@click.option(
+    "--roots",
+    default="",
+    help=(
+        "Comma-separated project roots. Default: TAPPS_FLEET_ROOTS, scan parent, "
+        "or maintainer list (AgentForge, NLTlabsPE, ReportLab, tapps-mcp, ~/NewCompanyIdeas)."
+    ),
+)
+@click.option(
+    "--scan-parent",
+    default=str(Path.home() / "code"),
+    show_default=True,
+    help="When --roots is empty, scan immediate children for .tapps-mcp.yaml.",
+)
+@click.option(
+    "--bundle",
+    "mcp_bundle",
+    type=click.Choice(["developer", "planning", "docs", "release", "full"]),
+    default="developer",
+    show_default=True,
+    help="NLT MCP bundle to write per project (full = all five nlt-* servers).",
+)
+@click.option(
+    "--uv-mode",
+    type=click.Choice(["auto", "on", "off"]),
+    default="off",
+    show_default=True,
+    help="MCP launch form: global binaries (off), uv run (on), or auto-detect.",
+)
+@click.option(
+    "--host",
+    "mcp_host",
+    type=click.Choice(["claude-code", "cursor", "vscode", "auto"]),
+    default="auto",
+    show_default=True,
+    help="MCP host config to refresh.",
+)
+@click.option(
+    "--reinstall-clis",
+    is_flag=True,
+    default=False,
+    help="Reinstall global tapps-mcp + docs-mcp from --tapps-checkout first.",
+)
+@click.option(
+    "--tapps-checkout",
+    default=".",
+    show_default=True,
+    help="Path to tapps-mcp monorepo when using --reinstall-clis.",
+)
+@click.option(
+    "--skip-mcp-refresh",
+    is_flag=True,
+    default=False,
+    help="Run upgrade only; skip init MCP bundle refresh.",
+)
+@click.option(
+    "--skip-doctor",
+    is_flag=True,
+    default=False,
+    help="Skip per-project doctor --quick after upgrade.",
+)
+@click.option(
+    "--dry-run",
+    is_flag=True,
+    default=False,
+    help="Print planned commands without executing.",
+)
+@click.option(
+    "--force/--no-force",
+    default=True,
+    show_default=True,
+    help="Overwrite generated files (recommended for fleet migrations).",
+)
+@click.option(
+    "--import-legacy-doc-cache",
+    is_flag=True,
+    default=False,
+    help="Import .tapps-mcp-cache into tapps-brain before MCP refresh (ADR-0014).",
+)
+@click.option(
+    "--strip-context7-env",
+    is_flag=True,
+    default=False,
+    help="Regenerate MCP config without consumer Context7 key (ADR-0014).",
+)
+@click.option(
+    "--format",
+    "output_format",
+    type=click.Choice(["json", "markdown"]),
+    default="markdown",
+    show_default=True,
+    help="Output format.",
+)
+def upgrade_fleet_cmd(
+    roots: str,
+    scan_parent: str,
+    mcp_bundle: str,
+    uv_mode: str,
+    mcp_host: str,
+    reinstall_clis: bool,
+    tapps_checkout: str,
+    skip_mcp_refresh: bool,
+    skip_doctor: bool,
+    dry_run: bool,
+    force: bool,
+    import_legacy_doc_cache: bool,
+    strip_context7_env: bool,
+    output_format: str,
+) -> None:
+    """Upgrade TAPPS scaffolding + NLT MCP config across bootstrapped projects.
+
+    Discovers repos via ``--roots``, ``TAPPS_FLEET_ROOTS``, ``--scan-parent``,
+    or the maintainer default list. Migrates legacy ``tapps-mcp`` + ``docs-mcp``
+    monolith entries to NLT ``nlt-*`` servers on ``upgrade --force``.
+
+    Set fleet roots once::
+
+        export TAPPS_FLEET_ROOTS=\\
+          ~/code/AgentForge,~/code/NLTlabsPE,~/code/ReportLab,~/code/tapps-mcp
+
+    Then::
+
+        tapps-mcp upgrade-fleet --reinstall-clis --bundle full --uv-mode off
+    """
+    import json
+    from pathlib import Path
+
+    from tapps_mcp.tools.fleet_upgrade import format_fleet_upgrade_markdown, run_fleet_upgrade
+
+    explicit: list[Path] | None = None
+    if roots.strip():
+        explicit = [Path(p.strip()) for p in roots.split(",") if p.strip()]
+
+    report = run_fleet_upgrade(
+        roots=explicit,
+        scan_parent=Path(scan_parent),
+        force=force,
+        dry_run=dry_run,
+        mcp_host=mcp_host,
+        mcp_bundle=mcp_bundle,
+        refresh_mcp=not skip_mcp_refresh,
+        uv_mode=uv_mode,  # type: ignore[arg-type]
+        run_doctor=not skip_doctor,
+        reinstall_clis=reinstall_clis,
+        tapps_checkout=Path(tapps_checkout),
+        import_legacy_doc_cache=import_legacy_doc_cache,
+        strip_context7_env=strip_context7_env,
+    )
+    if output_format == "markdown":
+        click.echo(format_fleet_upgrade_markdown(report))
+    else:
+        click.echo(json.dumps(report, indent=2))
+
+    if report["summary"]["failed"]:
+        raise SystemExit(1)
 
 
 @main.command("check-agents-md-stamp")

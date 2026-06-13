@@ -142,6 +142,71 @@ A normal `tapps_init` run (without overwrite flags) will:
 | Get latest AGENTS.md and workflow | `tapps_init(overwrite_agents_md=True)` |
 | Get latest platform rules | `tapps_init(overwrite_platform_rules=True, platform="cursor")` or `platform="claude"` |
 | Refresh MCP config | `tapps-mcp init --force` |
+| Upgrade many repos at once | `tapps-mcp upgrade-fleet` or `./scripts/fleet-upgrade.sh` (see below) |
+
+---
+
+## 7. Fleet upgrade (multiple consumer repos)
+
+When you maintain several TAPPS-bootstrapped projects (AgentForge, NLTlabsPE, ReportLab, etc.), use **fleet upgrade** instead of repeating the steps per repo.
+
+### One-time setup
+
+```bash
+export TAPPS_FLEET_ROOTS=\
+$HOME/code/AgentForge,\
+$HOME/code/NLTlabsPE,\
+$HOME/code/ReportLab,\
+$HOME/code/tapps-mcp
+```
+
+Omit `TAPPS_FLEET_ROOTS` to scan `~/code` for any directory containing `.tapps-mcp.yaml`.
+
+### Upgrade everything
+
+From the tapps-mcp checkout:
+
+```bash
+# Preview
+./scripts/fleet-upgrade.sh --dry-run
+
+# Apply: reinstall global CLIs + upgrade scaffolding + migrate MCP to NLT
+TAPPS_FLEET_BUNDLE=full ./scripts/fleet-upgrade.sh
+```
+
+Or directly:
+
+```bash
+tapps-mcp upgrade-fleet \
+  --reinstall-clis \
+  --tapps-checkout ~/code/tapps-mcp \
+  --roots "$TAPPS_FLEET_ROOTS" \
+  --bundle full \
+  --uv-mode off
+```
+
+### What it does per project
+
+1. **`tapps-mcp upgrade --force`** — refreshes AGENTS.md, hooks, agents, skills, rules; migrates legacy `tapps-mcp` + `docs-mcp` entries to NLT `nlt-*` servers when present.
+2. **`tapps-mcp init --force --no-rules`** — writes the chosen NLT bundle into `.cursor/mcp.json` / `.mcp.json` / `.vscode/mcp.json` and Cursor wrapper scripts.
+3. **`tapps-mcp doctor --quick`** — sanity check (non-blocking in the report).
+
+### Bundle choices
+
+| Bundle | Servers enabled |
+|--------|-----------------|
+| `developer` (default) | code-quality + platform-admin |
+| `planning` | + linear-issues |
+| `docs` | + project-docs |
+| `release` | + release-ship |
+| `full` | all five (power-user / maintainer repos) |
+
+After fleet upgrade, **reload MCP** in each IDE session.
+
+**Note:** `NewCompanyIdeas` was not found under `~/code` on this machine — add its path to `TAPPS_FLEET_ROOTS` when you have the checkout.
+
+---
+
 | Refresh caches and TECH_STACK | `tapps_init()` (default) |
 | Verify upgrade | `tapps-mcp doctor` (includes memory pipeline summary) |
 | Rollback if upgrade causes issues | `tapps-mcp rollback` (restores from automatic pre-upgrade backup) |

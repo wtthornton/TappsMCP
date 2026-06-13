@@ -7,7 +7,7 @@ from __future__ import annotations
 
 from typing import Any, Final, Literal
 
-NltBundle = Literal["developer", "planning", "docs", "release"]
+NltBundle = Literal["developer", "planning", "docs", "release", "full"]
 
 NLT_SERVER_ORDER: Final[tuple[str, ...]] = (
     "nlt-code-quality",
@@ -60,6 +60,7 @@ NLT_BUNDLES: Final[dict[NltBundle, tuple[str, ...]]] = {
     "planning": ("nlt-code-quality", "nlt-platform-admin", "nlt-linear-issues"),
     "docs": ("nlt-code-quality", "nlt-platform-admin", "nlt-project-docs"),
     "release": ("nlt-code-quality", "nlt-platform-admin", "nlt-release-ship"),
+    "full": NLT_SERVER_ORDER,
 }
 
 # Eager / total tool counts per spec (Epic 109.5 doctor thresholds).
@@ -108,6 +109,15 @@ def is_nlt_server_id(server_id: str) -> bool:
 def list_nlt_server_ids_in_config(servers: dict[str, Any]) -> list[str]:
     """Return enabled ``nlt-*`` server IDs present in an MCP servers dict."""
     return [sid for sid in NLT_SERVER_ORDER if sid in servers and isinstance(servers[sid], dict)]
+
+
+def needs_legacy_nlt_migration(servers: dict[str, Any]) -> bool:
+    """Return True when legacy monolith entries exist but no ``nlt-*`` servers."""
+    if not isinstance(servers, dict):
+        return False
+    has_legacy = bool(_LEGACY_MCP_SERVER_IDS & set(servers.keys()))
+    has_nlt = bool(list_nlt_server_ids_in_config(servers))
+    return has_legacy and not has_nlt
 
 
 def nlt_eager_count(server_id: str) -> int | None:

@@ -23,7 +23,13 @@ from tapps_mcp.distribution.setup_generator import (
 class TestNltBundles:
     def test_default_bundle_is_developer(self) -> None:
         assert normalize_mcp_bundle(None) == "developer"
-        assert normalize_mcp_bundle("full") == "developer"
+        assert normalize_mcp_bundle("bogus") == "developer"
+
+    def test_full_bundle_enables_all_servers(self) -> None:
+        assert normalize_mcp_bundle("full") == "full"
+        enabled = enabled_servers_for_bundle("full")
+        assert len(enabled) == 5
+        assert commented_servers_for_bundle("full") == ()
 
     def test_developer_enables_two_servers(self) -> None:
         enabled = enabled_servers_for_bundle("developer")

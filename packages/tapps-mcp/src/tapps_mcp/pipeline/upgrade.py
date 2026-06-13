@@ -477,6 +477,7 @@ def _upgrade_mcp_config(
     """
     import json
 
+    from tapps_mcp.distribution.nlt_mcp_config import needs_legacy_nlt_migration
     from tapps_mcp.distribution.setup_generator import (
         _build_uv_run_tapps_launch,
         _generate_config,
@@ -508,6 +509,9 @@ def _upgrade_mcp_config(
     error = _validate_config_file(config_path, servers_key)
     already_opted_in = _mcp_json_has_tapps_entry(project_root, host)
     needs_heal = _mcp_json_has_unresolved_workspacefolder(project_root, host)
+    raw_servers = existing.get(servers_key)
+    servers_dict = raw_servers if isinstance(raw_servers, dict) else {}
+    needs_nlt_migration = needs_legacy_nlt_migration(servers_dict)
     if needs_heal and already_opted_in:
         if dry_run:
             result["components"]["mcp_config"] = (
@@ -526,6 +530,24 @@ def _upgrade_mcp_config(
             )
             result["components"]["mcp_config"] = (
                 "healed: rewrote ${workspaceFolder} to absolute project root (TAP-2199)"
+            )
+    elif needs_nlt_migration and already_opted_in and force:
+        if dry_run:
+            result["components"]["mcp_config"] = (
+                "needs-migration: legacy tapps-mcp/docs-mcp → NLT nlt-* servers"
+            )
+        else:
+            _generate_config(
+                host,
+                project_root,
+                force=True,
+                upgrade_mode=True,
+                with_docs_mcp=include_docs_mcp,
+                uv_launch=uv_launch,
+                use_nlt_plugin=True,
+            )
+            result["components"]["mcp_config"] = (
+                "migrated: legacy monolith → NLT plugin (nlt-code-quality + nlt-platform-admin)"
             )
     elif error is None:
         result["components"]["mcp_config"] = "ok"

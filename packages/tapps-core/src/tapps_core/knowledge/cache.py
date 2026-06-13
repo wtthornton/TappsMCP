@@ -214,6 +214,18 @@ class KBCache:
                 removed = True
         return removed
 
+    def doc_library_dir_count(self) -> int:
+        """Count library subdirs that contain doc cache ``*.meta.json`` sidecars."""
+        if not self.cache_dir.exists():
+            return 0
+        count = 0
+        for lib_dir in self.cache_dir.iterdir():
+            if not lib_dir.is_dir():
+                continue
+            if any(lib_dir.glob("*.meta.json")):
+                count += 1
+        return count
+
     def list_entries(self) -> list[CacheEntry]:
         """List all cache entries (metadata only, no content)."""
         entries: list[CacheEntry] = []

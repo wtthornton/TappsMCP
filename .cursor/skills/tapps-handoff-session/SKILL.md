@@ -48,9 +48,10 @@ End the session with a durable handoff the next chat loads via `tapps-continue-s
 
    | Priority | When | How |
    |----------|------|-----|
-   | 1 (atomic) | Preferred when shell auth available | `uv run tapps-mcp handoff write --file .tapps-mcp/session-handoff.md` (lint + full-body brain mirror + optional `--session-end`) |
-   | 2 (manual) | Brain HTTP reachable; atomic command unavailable | `uv run tapps-mcp memory save --key session-handoff --tier context --tags handoff,cross-session --value "$(cat .tapps-mcp/session-handoff.md)"` — mirror the **full markdown body**, not a one-line agent summary |
-   | 3 (skip) | Brain offline or auth missing | Skip silently — `.tapps-mcp/session-handoff.md` is enough |
+   | 1 (MCP) | TappsMCP tools available | `tapps_handoff_save(markdown=...)` with full handoff body; set `session_end=true` to close the flywheel |
+   | 2 (CLI atomic) | Shell auth available; no MCP write | `uv run tapps-mcp handoff write --file .tapps-mcp/session-handoff.md` (lint + full-body brain mirror + optional `--session-end`) |
+   | 3 (manual) | Brain HTTP reachable; atomic paths unavailable | `uv run tapps-mcp memory save --key session-handoff --tier context --tags handoff,cross-session --value "$(cat .tapps-mcp/session-handoff.md)"` — mirror the **full markdown body**, not a one-line agent summary |
+   | 4 (skip) | Brain offline or auth missing | Skip silently — `.tapps-mcp/session-handoff.md` is enough |
 
 4. **Close lifecycle.** Best-effort session closure:
    - **Preferred:** `tapps_session_end()`
