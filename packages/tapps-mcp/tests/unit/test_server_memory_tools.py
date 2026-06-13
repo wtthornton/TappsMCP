@@ -215,22 +215,29 @@ class TestLifecycleActions:
 
 
 class TestMcpCatalogRemoval:
-    """TAP-1994 (Phase 3): tapps_memory must NOT appear in the MCP tool catalog."""
+    """TAP-1994 / ADR-0016: tapps_memory only on nlt-memory profile."""
 
-    def test_tapps_memory_not_in_mcp_tool_catalog(self) -> None:
-        """tapps_memory must be absent from the live MCP tool registry after Phase 3."""
-        from tapps_mcp.server import mcp
+    def test_tapps_memory_not_on_default_server(self) -> None:
+        from tapps_mcp.server import _resolve_allowed_tools
 
-        tools = mcp._tool_manager._tools
-        assert "tapps_memory" not in tools, (
-            "tapps_memory is still registered as an MCP tool — "
-            "TAP-1994 requires it to be removed from the catalog"
-        )
+        settings = MagicMock()
+        settings.enabled_tools = None
+        settings.disabled_tools = []
+        settings.tool_preset = "nlt-build"
+        allowed = _resolve_allowed_tools(settings)
+        assert "tapps_memory" not in allowed
 
-    def test_tapps_memory_not_in_all_tool_names(self) -> None:
-        """ALL_TOOL_NAMES must not include tapps_memory after Phase 3."""
+    def test_tapps_memory_on_nlt_memory_profile(self) -> None:
+        from tapps_mcp.server import _resolve_allowed_tools
+
+        settings = MagicMock()
+        settings.enabled_tools = None
+        settings.disabled_tools = []
+        settings.tool_preset = "nlt-memory"
+        allowed = _resolve_allowed_tools(settings)
+        assert "tapps_memory" in allowed
+
+    def test_tapps_memory_in_all_tool_names(self) -> None:
         from tapps_mcp.server import ALL_TOOL_NAMES
 
-        assert "tapps_memory" not in ALL_TOOL_NAMES, (
-            "tapps_memory still listed in ALL_TOOL_NAMES — remove it (TAP-1994)"
-        )
+        assert "tapps_memory" in ALL_TOOL_NAMES

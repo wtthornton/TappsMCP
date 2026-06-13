@@ -1532,6 +1532,12 @@ _CLAUDE_PERMISSION_ENTRIES = ["mcp__tapps-mcp", "mcp__tapps-mcp__*"]
 
 # Epic 109 NLT plugin servers (added alongside legacy entries for one release).
 _NLT_PERMISSION_ENTRIES = [
+    "mcp__nlt-build",
+    "mcp__nlt-build__*",
+    "mcp__nlt-memory",
+    "mcp__nlt-memory__*",
+    "mcp__nlt-setup",
+    "mcp__nlt-setup__*",
     "mcp__nlt-code-quality",
     "mcp__nlt-code-quality__*",
     "mcp__nlt-platform-admin",

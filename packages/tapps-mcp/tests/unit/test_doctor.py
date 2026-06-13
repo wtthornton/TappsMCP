@@ -2315,27 +2315,22 @@ class TestCheckNltPartialEnablement:
         self._cursor_mcp_json(
             tmp_path,
             {
-                "nlt-code-quality": {"command": "tapps-mcp", "args": ["serve", "--profile", "nlt-code-quality"]},
-                "nlt-platform-admin": {
-                    "command": "tapps-mcp",
-                    "args": ["serve", "--profile", "nlt-platform-admin"],
-                },
+                "nlt-build": {"command": "tapps-mcp", "args": ["serve", "--profile", "nlt-build"]},
             },
         )
         result = check_nlt_partial_enablement(tmp_path)
         assert result.ok is True
-        assert "combined eager=11" in result.message
-        assert "nlt-code-quality: 9 eager / 15 total" in result.message
-        assert "nlt-platform-admin: 2 eager / 14 total" in result.message
+        assert "combined eager=9" in result.message
+        assert "nlt-build: 9 eager / 16 total" in result.message
 
     def test_warns_when_more_than_three_servers(self, tmp_path) -> None:  # type: ignore[no-untyped-def]
         self._cursor_mcp_json(
             tmp_path,
             {
-                "nlt-code-quality": {"command": "tapps-mcp", "args": ["serve", "--profile", "nlt-code-quality"]},
-                "nlt-platform-admin": {
+                "nlt-build": {"command": "tapps-mcp", "args": ["serve", "--profile", "nlt-build"]},
+                "nlt-setup": {
                     "command": "tapps-mcp",
-                    "args": ["serve", "--profile", "nlt-platform-admin"],
+                    "args": ["serve", "--profile", "nlt-setup"],
                 },
                 "nlt-linear-issues": {
                     "command": "tapps-platform",
@@ -2355,10 +2350,10 @@ class TestCheckNltPartialEnablement:
         self._cursor_mcp_json(
             tmp_path,
             {
-                "nlt-code-quality": {"command": "tapps-mcp", "args": ["serve", "--profile", "nlt-code-quality"]},
-                "nlt-platform-admin": {
+                "nlt-build": {"command": "tapps-mcp", "args": ["serve", "--profile", "nlt-build"]},
+                "nlt-setup": {
                     "command": "tapps-mcp",
-                    "args": ["serve", "--profile", "nlt-platform-admin"],
+                    "args": ["serve", "--profile", "nlt-setup"],
                 },
                 "nlt-linear-issues": {
                     "command": "tapps-platform",

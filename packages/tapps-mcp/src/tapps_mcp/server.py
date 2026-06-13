@@ -248,6 +248,8 @@ ALL_TOOL_NAMES: frozenset[str] = frozenset(
         "tapps_finding_to_story",
         # TAP-2798: close audit coverage after a fix lands (audit-fix loop)
         "tapps_audit_close_coverage",
+        # TAP-3895: slim tapps_memory facade on nlt-memory profile only
+        "tapps_memory",
     }
 )
 
@@ -363,8 +365,8 @@ TAPPS_TOOL_PRESET_ADMIN: frozenset[str] = frozenset(
     }
 )
 
-# Epic 109 / NLT plugin profiles — see docs/architecture/nlt-mcp-plugin-spec.yaml
-TOOL_PROFILE_NLT_CODE_QUALITY: frozenset[str] = frozenset(
+# Epic 109 / ADR-0016 NLT plugin profiles — see docs/architecture/nlt-mcp-plugin-spec.yaml
+TOOL_PROFILE_NLT_BUILD: frozenset[str] = frozenset(
     {
         "tapps_session_start",
         "tapps_quick_check",
@@ -379,32 +381,41 @@ TOOL_PROFILE_NLT_CODE_QUALITY: frozenset[str] = frozenset(
         "tapps_validate_config",
         "tapps_dead_code",
         "tapps_dependency_graph",
+        "tapps_dependency_scan",
         "tapps_report",
         "tapps_audit_campaign",
     }
 )
 
-TOOL_PROFILE_NLT_PLATFORM_ADMIN: frozenset[str] = frozenset(
+TOOL_PROFILE_NLT_MEMORY: frozenset[str] = frozenset(
+    {
+        "tapps_memory",
+        "tapps_session_notes",
+        "tapps_session_end",
+        "tapps_handoff_save",
+    }
+)
+
+TOOL_PROFILE_NLT_SETUP: frozenset[str] = frozenset(
     {
         "tapps_init",
         "tapps_upgrade",
         "tapps_doctor",
         "tapps_server_info",
         "tapps_set_engagement_level",
-        "tapps_session_end",
-        "tapps_handoff_save",
-        "tapps_session_notes",
         "tapps_pipeline",
-        "tapps_decompose",
-        "tapps_dashboard",
         "tapps_stats",
-        "tapps_feedback",
-        "brain_propose_hive_elevation",
-        "brain_approve_hive_elevation",
     }
 )
 
+# Legacy Epic 109 names — aliases for one release (ADR-0016)
+TOOL_PROFILE_NLT_CODE_QUALITY: frozenset[str] = TOOL_PROFILE_NLT_BUILD
+TOOL_PROFILE_NLT_PLATFORM_ADMIN: frozenset[str] = TOOL_PROFILE_NLT_SETUP
+
 _NLT_TAPPS_TOOL_PRESETS: dict[str, frozenset[str]] = {
+    "nlt-build": TOOL_PROFILE_NLT_BUILD,
+    "nlt-memory": TOOL_PROFILE_NLT_MEMORY,
+    "nlt-setup": TOOL_PROFILE_NLT_SETUP,
     "nlt-code-quality": TOOL_PROFILE_NLT_CODE_QUALITY,
     "nlt-platform-admin": TOOL_PROFILE_NLT_PLATFORM_ADMIN,
 }

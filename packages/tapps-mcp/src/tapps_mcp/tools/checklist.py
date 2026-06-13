@@ -439,6 +439,10 @@ class ChecklistResult(BaseModel):
     )
     complete: bool = Field(default=False, description="All required tools have been called.")
     total_calls: int = Field(default=0, description="Total tool calls this session.")
+    server_unavailable_tools: list[str] = Field(
+        default_factory=list,
+        description="Required tools downgraded because their NLT server is disabled.",
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -726,6 +730,46 @@ class CallTracker:
         missing_required = [t for t in required if t not in effective]
         missing_recommended = [t for t in recommended if t not in effective]
         missing_optional = [t for t in optional if t not in effective]
+
+        server_unavailable: list[str] = []
+        if project_root is not None:
+            from tapps_mcp.distribution.nlt_mcp_config import (
+                NLT_TOOL_SERVER,
+                _load_enabled_mcp_servers,
+                list_nlt_server_ids_in_config,
+                tool_unavailable_reason,
+                tools_on_enabled_nlt_servers,
+            )
+
+            available = tools_on_enabled_nlt_servers(project_root)
+            try:
+                enabled_servers = frozenset(list_nlt_server_ids_in_config(_load_enabled_mcp_servers(project_root)))
+            except Exception:
+                enabled_servers = frozenset({"nlt-build"})
+
+            adjusted_required: list[str] = []
+            for tool in missing_required:
+                if tool in NLT_TOOL_SERVER and tool not in available:
+                    server_unavailable.append(tool)
+                    if tool not in missing_optional:
+                        missing_optional.append(tool)
+                else:
+                    adjusted_required.append(tool)
+            missing_required = adjusted_required
+
+            if server_unavailable:
+                extra_hints = [
+                    ChecklistHint(
+                        tool=t,
+                        reason=tool_unavailable_reason(t, enabled_servers) or f"{t} requires another NLT server",
+                    )
+                    for t in server_unavailable
+                ]
+                missing_optional_hints_extra = extra_hints
+            else:
+                missing_optional_hints_extra = []
+        else:
+            missing_optional_hints_extra = []
         sat_req = [t for t in required if t in effective]
         sat_rec = [t for t in recommended if t in effective]
         sat_opt = [t for t in optional if t in effective]
@@ -742,7 +786,8 @@ class CallTracker:
             missing_optional=missing_optional,
             missing_required_hints=_build_hints(missing_required),
             missing_recommended_hints=_build_hints(missing_recommended),
-            missing_optional_hints=_build_hints(missing_optional),
+            missing_optional_hints=_build_hints(missing_optional) + missing_optional_hints_extra,
+            server_unavailable_tools=server_unavailable,
             required_tool_names=list(required),
             satisfied_required_tools=sat_req,
             recommended_tool_names=list(recommended),

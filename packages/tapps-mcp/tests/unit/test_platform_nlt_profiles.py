@@ -13,8 +13,9 @@ from tapps_mcp.platform.nlt_profiles import (
 )
 from tapps_mcp.server import (
     ALL_TOOL_NAMES,
-    TOOL_PROFILE_NLT_CODE_QUALITY,
-    TOOL_PROFILE_NLT_PLATFORM_ADMIN,
+    TOOL_PROFILE_NLT_BUILD,
+    TOOL_PROFILE_NLT_MEMORY,
+    TOOL_PROFILE_NLT_SETUP,
 )
 
 pytestmark = pytest.mark.skipif(
@@ -27,8 +28,8 @@ class TestPlatformNltProfileDefinitions:
     def test_linear_issues_has_fifteen_tools(self) -> None:
         assert len(TOOL_PROFILE_NLT_LINEAR_ISSUES) == 15
 
-    def test_release_ship_has_seven_tools(self) -> None:
-        assert len(TOOL_PROFILE_NLT_RELEASE_SHIP) == 7
+    def test_release_ship_has_six_tools(self) -> None:
+        assert len(TOOL_PROFILE_NLT_RELEASE_SHIP) == 6
 
     def test_all_tapps_tools_exist(self) -> None:
         tapps_names = {n for n in TOOL_PROFILE_NLT_LINEAR_ISSUES if n.startswith("tapps_")}
@@ -42,17 +43,17 @@ class TestPlatformNltProfileDefinitions:
         docs_names |= {n for n in TOOL_PROFILE_NLT_RELEASE_SHIP if n.startswith("docs_")}
         assert docs_names <= ALL_DOCS_TOOL_NAMES
 
-    def test_profiles_disjoint_from_code_quality_and_admin(self) -> None:
-        other = TOOL_PROFILE_NLT_CODE_QUALITY | TOOL_PROFILE_NLT_PLATFORM_ADMIN
-        assert TOOL_PROFILE_NLT_LINEAR_ISSUES.isdisjoint(other)
-        assert TOOL_PROFILE_NLT_RELEASE_SHIP.isdisjoint(other)
+    def test_profiles_disjoint_from_build_memory_setup(self) -> None:
+        tapps = TOOL_PROFILE_NLT_BUILD | TOOL_PROFILE_NLT_MEMORY | TOOL_PROFILE_NLT_SETUP
+        assert TOOL_PROFILE_NLT_LINEAR_ISSUES.isdisjoint(tapps)
+        assert TOOL_PROFILE_NLT_RELEASE_SHIP.isdisjoint(tapps)
 
     def test_linear_and_release_disjoint(self) -> None:
         assert TOOL_PROFILE_NLT_LINEAR_ISSUES.isdisjoint(TOOL_PROFILE_NLT_RELEASE_SHIP)
 
     def test_unknown_profile_raises(self) -> None:
         with pytest.raises(ValueError, match="Unknown tapps-platform profile"):
-            resolve_platform_allowed_tools("nlt-code-quality")
+            resolve_platform_allowed_tools("nlt-build")
 
 
 class TestCreateCombinedServerProfiles:
@@ -62,11 +63,11 @@ class TestCreateCombinedServerProfiles:
         assert names == set(TOOL_PROFILE_NLT_LINEAR_ISSUES)
         assert len(names) == 15
 
-    def test_release_ship_registers_seven_tools(self) -> None:
+    def test_release_ship_registers_six_tools(self) -> None:
         combined = create_combined_server(profile="nlt-release-ship")
         names = set(combined._tool_manager._tools.keys())
         assert names == set(TOOL_PROFILE_NLT_RELEASE_SHIP)
-        assert len(names) == 7
+        assert len(names) == 6
 
     def test_full_mode_registers_more_than_nlt_profiles(self) -> None:
         combined = create_combined_server(profile=None)

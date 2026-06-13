@@ -193,9 +193,9 @@ def _validate_json_config(config_path: Path, servers_key: str) -> str | None:
 
     entry = servers.get("tapps-mcp")
     if not isinstance(entry, dict):
-        entry = servers.get("nlt-code-quality")
-    if not isinstance(entry, dict):
-        return f"tapps-mcp / nlt-code-quality not in {config_path}"
+        entry = servers.get("nlt-build") or servers.get("nlt-code-quality")
+        if not isinstance(entry, dict):
+            return f"tapps-mcp / nlt-build not in {config_path}"
 
     command = entry.get("command", "")
     args = entry.get("args", [])
@@ -2928,7 +2928,7 @@ def check_nlt_partial_enablement(root: Path) -> CheckResult:
             False,
             f"WARN: {'; '.join(warnings)}. {summary}",
             "Disable opt-in nlt-* servers you are not using, or switch to the "
-            "developer bundle (code-quality + platform-admin). See "
+            "developer bundle (nlt-build only). See "
             "docs/architecture/nlt-mcp-plugin-spec.yaml.",
         )
     return CheckResult(

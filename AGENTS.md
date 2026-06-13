@@ -35,6 +35,23 @@ Seven rules every agent in this project should follow.
 
 ---
 
+## NLT MCP session modes (ADR-0016)
+
+Enable **1–3** `nlt-*` servers per session — not all six at once. Default after `tapps_init` is **Build only**.
+
+| Mode | Enable these MCP servers | When |
+|------|--------------------------|------|
+| **Build only** | `nlt-build` | Daily coding (score, gate, validate, lookup) |
+| **Build + Memory** | `nlt-build`, `nlt-memory` | Need `tapps_memory` search/save or session handoff |
+| **Build + Plan** | `nlt-build`, `nlt-linear-issues` | Linear backlog / issue workflow |
+| **Build + Docs** | `nlt-build`, `nlt-project-docs` | Doc generation / drift audit |
+| **Build + Release** | `nlt-build`, `nlt-release-ship` | Release notes / ship gate |
+| **Setup** | `nlt-setup` (short session) | Bootstrap, upgrade, doctor only |
+
+Legacy server IDs `nlt-code-quality` / `nlt-platform-admin` map to `nlt-build` / `nlt-setup` for one release.
+
+---
+
 ## When to use each tool
 
 | Tool | When to use it |
@@ -271,7 +288,7 @@ For direct stdio connections you can expose only a subset of tools to keep the a
 
 - **enabled_tools** (allow list): when non-empty, only these tools are exposed. Comma-separated in env: `TAPPS_MCP_ENABLED_TOOLS=tapps_session_start,tapps_quick_check,tapps_checklist`.
 - **disabled_tools** (deny list): tools to exclude from the full set. Applied when `enabled_tools` is not set. Env: `TAPPS_MCP_DISABLED_TOOLS`.
-- **tool_preset**: `full` (all tools), `core` (7 Tier-1 tools), `pipeline` (Tier 1 + Tier 2), or role presets: `reviewer`, `planner`, `frontend`, `developer` (Epic 79.5). Env: `TAPPS_MCP_TOOL_PRESET=core`.
+- **tool_preset**: `full` (all tools), `core` (7 Tier-1 tools), `pipeline` (Tier 1 + Tier 2), or role presets: `reviewer`, `planner`, `frontend`, `developer` (Epic 79.5). NLT profiles: `nlt-build`, `nlt-memory`, `nlt-setup` (legacy: `nlt-code-quality`, `nlt-platform-admin`). Env: `TAPPS_MCP_TOOL_PRESET=nlt-build`.
 
 Empty or missing = all 32 tools (default, backward compatible). Invalid tool names in `enabled_tools` are ignored and logged. Recommended subsets by task/role and Docker tool filtering: see `docs/archive/planning/TOOL-SUBSETS-AND-DOCKER-FILTERING.md`.
 

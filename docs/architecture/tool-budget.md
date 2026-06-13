@@ -15,6 +15,20 @@ descriptions, reducing effective context for actual work.
 `tapps_doctor` probes each known tapps-family server and emits a `WARN` line when any
 server's eager tool count exceeds the budget.
 
+## Three graph types (ADR-0016)
+
+Agents often conflate three different “graphs”:
+
+| Concept | Tools | Scope |
+|---------|-------|-------|
+| **Import / impact graph** | `tapps_impact_analysis`, `tapps_dead_code` | Python AST import graph in the repo |
+| **Package CVE graph** | `tapps_dependency_scan`, `tapps_dependency_graph` | Installed packages + CVE overlay (Build, deferred) |
+| **Brain knowledge graph** | `tapps_memory(action="related")` on `nlt-memory` | Cross-session entities in tapps-brain |
+
+Polyglot scoring (TypeScript, Go, Rust) does **not** imply polyglot import graphs — import analysis remains Python-only on Build.
+
+---
+
 ## Known server tool counts
 
 Post TAP-1986/TAP-1987: non-daily-driver tools carry `defer_loading=True` and are loaded

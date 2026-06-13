@@ -1939,3 +1939,17 @@ class TestBuildSearchFirst:
         assert result is not None
         libraries = [e["library"] for e in result["covered"]]
         assert "document-quality" in libraries
+
+
+class TestBuildRepoOrientation:
+    def test_returns_package_roots_for_src_layout(self, tmp_path: Path) -> None:
+        from tapps_mcp.tools.session_start_helpers import _build_repo_orientation
+
+        (tmp_path / "src" / "my_pkg").mkdir(parents=True)
+        (tmp_path / "src" / "my_pkg" / "__init__.py").write_text("")
+        (tmp_path / "pyproject.toml").write_text("[project]\nname = 'demo'\n")
+
+        result = _build_repo_orientation(tmp_path)
+        assert result is not None
+        assert "src" in result.get("package_roots", [])
+        assert "my_pkg" in result.get("top_modules", [])

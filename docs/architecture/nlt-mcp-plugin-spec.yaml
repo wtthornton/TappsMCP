@@ -29,20 +29,29 @@ core_assumption:
     of the split.
   expected_sessions:
     daily_coding:
-      servers: [nlt-code-quality]
-      optional: [nlt-platform-admin] # disable after bootstrap to save ~2 eager tools
+      servers: [nlt-build]
+      optional: [nlt-memory, nlt-setup]
       eager_tools_approx: 9
+    coding_with_memory:
+      servers: [nlt-build, nlt-memory]
+      eager_tools_approx: 11
     planning_linear:
-      servers: [nlt-code-quality, nlt-linear-issues]
+      servers: [nlt-build, nlt-linear-issues]
       eager_tools_approx: 16
     docs_audit:
       servers: [nlt-project-docs]
       eager_tools_approx: 6
     release_day:
-      servers: [nlt-release-ship, nlt-project-docs] # git_summary on project-docs
+      servers: [nlt-release-ship, nlt-project-docs]
       eager_tools_approx: 11
+    security_pass:
+      servers: [nlt-build]
+      eager_tools_approx: 9
+    audit_campaign:
+      servers: [nlt-build, nlt-linear-issues]
+      eager_tools_approx: 16
     bootstrap_only:
-      servers: [nlt-platform-admin]
+      servers: [nlt-setup]
       eager_tools_approx: 2
   anti_pattern:
     name: all_five_enabled
@@ -53,7 +62,7 @@ core_assumption:
       Avoid. Use only for power users or short diagnostic sessions. tapps_doctor
       should WARN when >3 nlt-* servers are enabled or eager total exceeds 20.
   init_defaults:
-    write_only_bundle: developer # 2 servers, ~11 eager — never "full" on fresh install
+    write_only_bundle: developer # 1 server (nlt-build), ~9 eager — never "full" on fresh install
     comment_disabled_servers: true # mcp.json entries for opt-in servers are commented out
 plugin_id: nlt-tapps-plugin
 plugin_display_name: "NLT Tapps Quality Plugin"
@@ -75,38 +84,62 @@ constraints:
 # ---------------------------------------------------------------------------
 default_bundles:
   developer:
-    description: "Daily coding + bootstrap/doctor"
+    description: "Daily coding (Build only)"
     enabled_servers:
-      - nlt-code-quality
-      - nlt-platform-admin
+      - nlt-build
+  memory:
+    description: "Coding + recall/save/handoff"
+    enabled_servers:
+      - nlt-build
+      - nlt-memory
   planning:
     description: "Developer bundle + Linear issue workflow"
     enabled_servers:
-      - nlt-code-quality
-      - nlt-platform-admin
+      - nlt-build
+      - nlt-linear-issues
+  docs:
+    description: "Coding + project documentation"
+    enabled_servers:
+      - nlt-build
+      - nlt-project-docs
+  release:
+    description: "Coding + release ship tools"
+    enabled_servers:
+      - nlt-build
+      - nlt-release-ship
+  security:
+    description: "Security scan + CVE check on Build"
+    enabled_servers:
+      - nlt-build
+  audit:
+    description: "Audit campaign + Linear close loop"
+    enabled_servers:
+      - nlt-build
       - nlt-linear-issues
   full:
-    description: "ESCAPE HATCH ONLY — all five servers (~78 tools, ~29 eager). Not recommended for daily use."
+    description: "ESCAPE HATCH ONLY — all six servers. Not recommended for daily use."
     enabled_servers:
-      - nlt-code-quality
-      - nlt-platform-admin
+      - nlt-build
+      - nlt-memory
+      - nlt-setup
       - nlt-linear-issues
       - nlt-project-docs
       - nlt-release-ship
     warn_in_doctor: true
 
 # ---------------------------------------------------------------------------
-# MCP servers (5)
+# MCP servers (6 — ADR-0016)
 # ---------------------------------------------------------------------------
 servers:
-  nlt-code-quality:
-    display_name: "Code Quality"
+  nlt-build:
+    display_name: "Build"
     tagline: "Score, gate, and secure code while you edit."
     package: tapps-mcp
     serve_command: tapps-mcp
-    serve_args: ["serve", "--profile", "nlt-code-quality"]
+    serve_args: ["serve", "--profile", "nlt-build"]
+    legacy_profile_alias: nlt-code-quality
     default_enabled: true
-    tool_count: 15
+    tool_count: 16
     eager_count: 9
     skills:
       - tapps-finish-task
@@ -135,8 +168,33 @@ servers:
         - tapps_validate_config
         - tapps_dead_code
         - tapps_dependency_graph
+        - tapps_dependency_scan
         - tapps_report
         - tapps_audit_campaign
+
+  nlt-memory:
+    display_name: "Memory"
+    tagline: "Recall, save, and session continuity via tapps-brain."
+    package: tapps-mcp
+    serve_command: tapps-mcp
+    serve_args: ["serve", "--profile", "nlt-memory"]
+    default_enabled: false
+    tool_count: 4
+    eager_count: 2
+    skills:
+      - tapps-memory
+      - tapps-handoff-session
+    hooks: []
+    tools:
+      eager:
+        - tapps_memory
+        - tapps_session_notes
+      deferred:
+        - tapps_session_end
+        - tapps_handoff_save
+    notes: |
+      tapps_memory exposes search, save, get, health, related only (TAP-3895).
+      Full 42-action catalog remains CLI-only (TAP-1994).
 
   nlt-linear-issues:
     display_name: "Linear Issues"
@@ -224,7 +282,7 @@ servers:
     serve_command: tapps-platform
     serve_args: ["serve", "--profile", "nlt-release-ship"]
     default_enabled: false
-    tool_count: 7
+    tool_count: 6
     eager_count: 5
     skills:
       - linear-release-update
@@ -238,20 +296,19 @@ servers:
         - tapps_release_update
       deferred:
         - docs_generate_release_notes
-        - tapps_dependency_scan
     notes: |
-      docs_git_summary lives on nlt-project-docs only; tapps_release_update calls
-      docs generators in-process. After posting a release doc, linear-release-update
-      skill calls tapps_linear_snapshot_invalidate on nlt-linear-issues if enabled.
+      CVE scanning (`tapps_dependency_scan`) lives on nlt-build (deferred). Release
+      ship covers changelog, release gate, and Linear release-update workflow.
 
-  nlt-platform-admin:
-    display_name: "Platform Admin"
+  nlt-setup:
+    display_name: "Setup"
     tagline: "Bootstrap, upgrade, diagnose, and observe TappsMCP in your project."
     package: tapps-mcp
     serve_command: tapps-mcp
-    serve_args: ["serve", "--profile", "nlt-platform-admin"]
-    default_enabled: true
-    tool_count: 14
+    serve_args: ["serve", "--profile", "nlt-setup"]
+    legacy_profile_alias: nlt-platform-admin
+    default_enabled: false
+    tool_count: 7
     eager_count: 2
     skills:
       - tapps-init
@@ -272,15 +329,8 @@ servers:
         - tapps_init
         - tapps_upgrade
         - tapps_set_engagement_level
-        - tapps_session_end
-        - tapps_session_notes
         - tapps_pipeline
-        - tapps_decompose
-        - tapps_dashboard
         - tapps_stats
-        - tapps_feedback
-        - brain_propose_hive_elevation
-        - brain_approve_hive_elevation
 
 # ---------------------------------------------------------------------------
 # Cross-server workflows (skills — NOT duplicate tool registration)
@@ -306,7 +356,9 @@ cross_server_workflows:
     requires_plugin: linear
 
   tapps-finish-task:
-    primary_server: nlt-code-quality
+    primary_server: nlt-build
+    optional_servers:
+      - nlt-memory
     cli_fallback:
       - "tapps-mcp validate-changed --file-paths ..."
       - "tapps-mcp memory save ..."
@@ -333,12 +385,15 @@ legacy:
 # ---------------------------------------------------------------------------
 mcp_json_template:
   mcpServers:
-    nlt-code-quality:
+    nlt-build:
       command: uv
-      args: ["run", "tapps-mcp", "serve", "--profile", "nlt-code-quality"]
-    nlt-platform-admin:
+      args: ["run", "tapps-mcp", "serve", "--profile", "nlt-build"]
+    nlt-memory:
       command: uv
-      args: ["run", "tapps-mcp", "serve", "--profile", "nlt-platform-admin"]
+      args: ["run", "tapps-mcp", "serve", "--profile", "nlt-memory"]
+    nlt-setup:
+      command: uv
+      args: ["run", "tapps-mcp", "serve", "--profile", "nlt-setup"]
     nlt-linear-issues:
       command: uv
       args: ["run", "tapps-platform", "serve", "--profile", "nlt-linear-issues"]

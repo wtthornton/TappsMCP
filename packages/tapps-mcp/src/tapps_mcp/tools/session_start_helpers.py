@@ -968,6 +968,69 @@ def _build_search_first(project_root: Path) -> dict[str, Any] | None:
     return result
 
 
+def _build_repo_orientation(project_root: Path) -> dict[str, Any] | None:
+    """Lite repo layout hints for session_start (TAP-3898 / ADR-0016).
+
+    Surfaces package roots and top-level modules without requiring docs-mcp.
+    """
+    if not project_root.is_dir():
+        return None
+
+    orientation: dict[str, Any] = {"project_root": str(project_root)}
+    package_roots: list[str] = []
+    top_modules: list[str] = []
+    workspace_members: list[str] = []
+
+    pyproject = project_root / "pyproject.toml"
+    tomllib_mod = _load_tomllib()
+    if pyproject.exists() and tomllib_mod is not None:
+        try:
+            with pyproject.open("rb") as fh:
+                data = tomllib_mod.load(fh)
+            project = data.get("project", {})
+            packages = project.get("packages", [])
+            for pkg in packages:
+                if isinstance(pkg, dict) and pkg.get("include"):
+                    package_roots.append(str(pkg["include"]))
+            ws = data.get("tool", {}).get("uv", {}).get("workspace", {})
+            members = ws.get("members", [])
+            if isinstance(members, list):
+                workspace_members = [str(m) for m in members[:12]]
+        except (OSError, tomllib_mod.TOMLDecodeError):
+            _logger.debug("repo_orientation_pyproject_failed", exc_info=True)
+
+    for candidate in (
+        project_root / "src",
+        project_root / "packages",
+        project_root / "lib",
+    ):
+        if not candidate.is_dir():
+            continue
+        rel = candidate.relative_to(project_root).as_posix()
+        if rel not in package_roots:
+            package_roots.append(rel)
+        try:
+            for child in sorted(candidate.iterdir())[:8]:
+                if child.is_dir() and (child / "__init__.py").exists():
+                    top_modules.append(child.name)
+                elif child.suffix == ".py" and child.name != "__init__.py":
+                    top_modules.append(child.stem)
+        except OSError:
+            pass
+
+    if package_roots:
+        orientation["package_roots"] = sorted(set(package_roots))[:8]
+    if top_modules:
+        orientation["top_modules"] = sorted(set(top_modules))[:10]
+    if workspace_members:
+        orientation["workspace_members"] = workspace_members
+        orientation["monorepo"] = True
+
+    if len(orientation) <= 1:
+        return None
+    return orientation
+
+
 # ---------------------------------------------------------------------------
 # CLI fallback map for MCP disconnect recovery (TAP-3587 / ReportLab feedback)
 # ---------------------------------------------------------------------------

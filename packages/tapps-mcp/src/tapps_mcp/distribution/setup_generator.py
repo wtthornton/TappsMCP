@@ -881,7 +881,7 @@ def _build_nlt_server_entry(
 def _collect_legacy_tapps_env(old_servers: dict[str, Any]) -> dict[str, str]:
     """Pull env vars from legacy ``tapps-mcp`` or primary NLT server for migration."""
     merged: dict[str, str] = {}
-    for key in ("tapps-mcp", "nlt-code-quality", "nlt-platform-admin"):
+    for key in ("tapps-mcp", "nlt-build", "nlt-code-quality", "nlt-setup", "nlt-platform-admin"):
         entry = old_servers.get(key)
         if not isinstance(entry, dict):
             continue
@@ -919,9 +919,17 @@ def _merge_nlt_config(
     nlt_servers: dict[str, Any] = {}
     for server_id in NLT_SERVER_ORDER:
         old_entry = old_servers.get(server_id)
-        if not isinstance(old_entry, dict) and server_id == "nlt-code-quality":
-            legacy = old_servers.get("tapps-mcp")
-            old_entry = legacy if isinstance(legacy, dict) else None
+        if not isinstance(old_entry, dict):
+            for legacy_id, canonical in (
+                ("nlt-code-quality", "nlt-build"),
+                ("nlt-platform-admin", "nlt-setup"),
+                ("tapps-mcp", "nlt-build"),
+            ):
+                if server_id == canonical:
+                    legacy_entry = old_servers.get(legacy_id)
+                    if isinstance(legacy_entry, dict):
+                        old_entry = legacy_entry
+                        break
         entry = _build_nlt_server_entry(
             server_id,
             host,
@@ -930,7 +938,7 @@ def _merge_nlt_config(
             upgrade_mode=upgrade_mode,
             old_entry=old_entry if isinstance(old_entry, dict) else None,
         )
-        if server_id == "nlt-code-quality" and legacy_env:
+        if server_id == "nlt-build" and legacy_env:
             cur_env = entry.get("env")
             if not isinstance(cur_env, dict):
                 cur_env = {}
@@ -1098,7 +1106,7 @@ def _load_existing_env_from_other_scope(
         return {}
     entry = servers.get("tapps-mcp")
     if not isinstance(entry, dict):
-        entry = servers.get("nlt-code-quality")
+        entry = servers.get("nlt-build") or servers.get("nlt-code-quality")
     if not isinstance(entry, dict):
         return {}
     env = entry.get("env")
@@ -1268,7 +1276,7 @@ def _generate_config(
     migrated_env = _load_existing_env_from_other_scope(host, project_root, scope)
     if migrated_env:
         servers_key_m = _get_servers_key(host)
-        primary_key = "nlt-code-quality" if use_nlt_plugin else "tapps-mcp"
+        primary_key = "nlt-build" if use_nlt_plugin else "tapps-mcp"
         entry = merged.get(servers_key_m, {}).get(primary_key)
         if isinstance(entry, dict):
             cur_env = entry.get("env")
@@ -1288,7 +1296,7 @@ def _generate_config(
     if extra_env:
         servers_block = merged.get(servers_key, {})
         if isinstance(servers_block, dict):
-            for env_key in ("tapps-mcp", "nlt-code-quality", "nlt-platform-admin"):
+            for env_key in ("tapps-mcp", "nlt-build", "nlt-code-quality", "nlt-setup", "nlt-platform-admin"):
                 tapps_entry = servers_block.get(env_key)
                 if isinstance(tapps_entry, dict) and tapps_entry.get("env", {}).get("TAPPS_MCP_PROJECT_ROOT"):
                     env = tapps_entry.get("env")
@@ -1570,9 +1578,9 @@ def _validate_config_file(config_path: Path, servers_key: str) -> str | None:
 
     entry = servers.get("tapps-mcp")
     if not isinstance(entry, dict):
-        entry = servers.get("nlt-code-quality")
+        entry = servers.get("nlt-build") or servers.get("nlt-code-quality")
     if not isinstance(entry, dict):
-        return f"tapps-mcp / nlt-code-quality entry not found in {config_path} under '{servers_key}'"
+        return f"tapps-mcp / nlt-build entry not found in {config_path} under '{servers_key}'"
 
     command = entry.get("command", "")
     args = entry.get("args", [])

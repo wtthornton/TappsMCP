@@ -22,6 +22,17 @@ The **`linear-standards.md` rule** also gains a new `### Reads (TAP-1224)` enfor
 
 ---
 
+## ADR-0016: NLT server rename (Build / Memory / Setup)
+
+After upgrading to a release that includes [ADR-0016](adr/0016-needs-based-nlt-mcp-taxonomy.md):
+
+1. Run `tapps-mcp upgrade --host auto --force` to refresh `.cursor/mcp.json` / `.mcp.json`.
+2. Default **developer** bundle is now **`nlt-build` only** (~9 eager tools). Enable `nlt-memory` when you need MCP recall/save; enable `nlt-setup` briefly for bootstrap/doctor.
+3. Update skill `allowed-tools` prefixes: `mcp__nlt-build__*`, `mcp__nlt-memory__*`, `mcp__nlt-setup__*`. Legacy `nlt-code-quality` / `nlt-platform-admin` profile aliases work for one release.
+4. Session handoff / `tapps_session_notes` moved to **Memory** server — enable `nlt-memory` or use `tapps-mcp memory` CLI.
+
+---
+
 ## 1. Upgrade the package
 
 TappsMCP is not published to PyPI — pull the latest checkout and reinstall:

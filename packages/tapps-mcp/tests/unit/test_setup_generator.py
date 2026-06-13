@@ -695,7 +695,7 @@ class TestCliInit:
         data = _load_mcp_config_json(cursor_dir / "mcp.json")
         assert "tapps-brain" not in data["mcpServers"]
         assert "other-mcp" in data["mcpServers"]
-        assert "nlt-code-quality" in data["mcpServers"]
+        assert "nlt-build" in data["mcpServers"]
         assert "bridge-only" in result.output.lower() or "Removed direct" in result.output
 
     def test_init_vscode(self, tmp_path):

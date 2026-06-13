@@ -36,7 +36,6 @@ TOOL_PROFILE_NLT_RELEASE_SHIP: Final[frozenset[str]] = frozenset(
         "docs_release_gate",
         "docs_generate_release_notes",
         "tapps_release_update",
-        "tapps_dependency_scan",
     }
 )
 

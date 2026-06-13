@@ -201,14 +201,27 @@ _HTTP_BRIDGE_FALLBACK_ACTIONS = {
     "save_bulk",
 }
 
-# TAP-1993: Phase 2 — only these two actions actually dispatch; all others
-# return a structured refused envelope pointing to the brain tool directly.
+# TAP-3895: bounded actions when tapps_memory is registered on nlt-memory profile.
+NLT_MEMORY_SLIM_ACTIONS: frozenset[str] = frozenset(
+    {
+        "search",
+        "save",
+        "get",
+        "health",
+        "related",
+    }
+)
+
+# TAP-1993: Phase 2 — lifecycle actions dispatch on all profiles; slim memory
+# re-enables search/save/get/health/related on nlt-memory (ADR-0016).
 _LIFECYCLE_ACTIONS: frozenset[str] = frozenset(
     {
         "session_start_capture",
         "session_end_consolidate",
     }
 )
+
+_MCP_MEMORY_MODE: str = "off"  # "off" | "slim" — set in register()
 
 # Maps each non-lifecycle tapps_memory action to its direct brain replacement.
 # Used to build the refused-envelope `use` field so agents can self-correct.
@@ -787,24 +800,35 @@ async def tapps_memory(
     except Exception:
         pass  # never block tapps_memory for telemetry
 
-    # TAP-1993: Phase 2 — non-lifecycle actions are fully redirected to direct
-    # brain tools. Return a machine-readable refused envelope so agents can
-    # self-correct without parsing a human error message.
+    # TAP-1993: Phase 2 — non-lifecycle actions redirect to brain unless nlt-memory
+    # slim mode re-enabled them (ADR-0016 / TAP-3895).
     if action not in _LIFECYCLE_ACTIONS:
-        brain_tool = _REFUSED_BRAIN_TOOL.get(action, "mcp__tapps-brain__brain_recall")
-        return success_response(
-            "tapps_memory",
-            0,
-            {
-                "refused": True,
-                "use": brain_tool,
-                "action": action,
-                "hint": (
-                    f"tapps_memory(action='{action}') has been retired. "
-                    f"Call {brain_tool} directly instead."
+        if _MCP_MEMORY_MODE == "slim" and action in NLT_MEMORY_SLIM_ACTIONS:
+            pass  # fall through to dispatch below
+        elif _MCP_MEMORY_MODE == "slim":
+            return error_response(
+                "tapps_memory",
+                "action_not_on_nlt_memory",
+                (
+                    f"Action '{action}' is not on the nlt-memory slim profile. "
+                    f"Allowed: {', '.join(sorted(NLT_MEMORY_SLIM_ACTIONS))}"
                 ),
-            },
-        )
+            )
+        else:
+            brain_tool = _REFUSED_BRAIN_TOOL.get(action, "mcp__tapps-brain__brain_recall")
+            return success_response(
+                "tapps_memory",
+                0,
+                {
+                    "refused": True,
+                    "use": brain_tool,
+                    "action": action,
+                    "hint": (
+                        f"tapps_memory(action='{action}') has been retired. "
+                        f"Call {brain_tool} directly instead."
+                    ),
+                },
+            )
 
     try:
         store = _get_memory_store()
@@ -4306,14 +4330,11 @@ async def brain_approve_hive_elevation(
 def register(mcp_instance: FastMCP, allowed_tools: frozenset[str]) -> None:
     """Register memory tools on the shared *mcp_instance*.
 
-    TAP-1994 (Phase 3): tapps_memory removed from MCP catalog. Session-lifecycle
-    helpers (_handle_session_start_capture, _handle_session_end_consolidate) remain
-    as internal functions called from tapps_session_start / tapps_session_end via
-    call_memory_index_session_start in tools/session_start_helpers.py.
-
-    TAP-2014: brain_propose_hive_elevation and brain_approve_hive_elevation
-    registered here (deferred — not daily drivers).
+    TAP-1994 (Phase 3): tapps_memory removed from default MCP catalog.
+    TAP-3895 (ADR-0016): tapps_memory returns on ``nlt-memory`` with slim actions.
     """
+    global _MCP_MEMORY_MODE
+
     from mcp.types import ToolAnnotations
 
     from tapps_mcp.mcp_register import register_tool
@@ -4324,7 +4345,25 @@ def register(mcp_instance: FastMCP, allowed_tools: frozenset[str]) -> None:
         idempotentHint=False,
         openWorldHint=False,
     )
+    _ann_read = ToolAnnotations(
+        readOnlyHint=True,
+        destructiveHint=False,
+        idempotentHint=True,
+        openWorldHint=False,
+    )
     _meta_deferred: dict[str, Any] = {"defer_loading": True}
+    _meta_eager: dict[str, Any] = {}
+
+    if "tapps_memory" in allowed_tools:
+        _MCP_MEMORY_MODE = "slim"
+        register_tool(
+            mcp_instance,
+            tapps_memory,
+            annotations=_ann_read,
+            meta=_meta_eager,
+        )
+    else:
+        _MCP_MEMORY_MODE = "off"
 
     if "brain_propose_hive_elevation" in allowed_tools:
         register_tool(

@@ -49,6 +49,9 @@ TOOL_DESCRIPTIONS: dict[str, str] = {
     "tapps_session_notes": (
         "Save or recall short-lived session notes in the local KV store."
     ),
+    "tapps_memory": (
+        "Slim brain memory on nlt-memory: search, save, get, health, related (not full 42-action catalog)."
+    ),
     "tapps_impact_analysis": (
         "Map import blast radius before changing a file's public API."
     ),

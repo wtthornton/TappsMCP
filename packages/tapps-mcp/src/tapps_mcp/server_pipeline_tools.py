@@ -674,6 +674,15 @@ async def tapps_session_start(
         except Exception:
             data["cache_warm"] = {"scheduled": False, "skipped": "exception"}
 
+    try:
+        from tapps_mcp.tools.session_start_helpers import _build_repo_orientation
+
+        repo_orientation = _build_repo_orientation(settings.project_root)
+        if repo_orientation is not None:
+            data["repo_orientation"] = repo_orientation
+    except Exception:
+        _logger.debug("repo_orientation_session_start_failed", exc_info=True)
+
     # TAP-2017: Detect and surface compaction rehydration data when the
     # PreCompact hook indexed the prior session in brain.  Best-effort —
     # a missing marker or brain outage must not block session start.

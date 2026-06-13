@@ -86,17 +86,17 @@ name: tapps-score
 user-invocable: true
 model: claude-haiku-4-5-20251001
 description: Score a Python file across 7 quality categories and display a structured report. Use when reviewing a Python file's quality scores before a code review or pull request.
-allowed-tools: mcp__nlt-code-quality__tapps_score_file mcp__nlt-code-quality__tapps_quick_check
+allowed-tools: mcp__nlt-build__tapps_score_file mcp__nlt-build__tapps_quick_check
 argument-hint: "[file-path]"
 disable-model-invocation: true
 ---
 
-> **DEPRECATED (v3.11.0+):** This skill wraps a single MCP tool and adds no orchestration. Call `mcp__nlt-code-quality__tapps_quick_check(file_path=...)` directly, or invoke `/tapps-finish-task` for end-of-task orchestration. Scheduled for removal in v3.12.0.
+> **DEPRECATED (v3.11.0+):** This skill wraps a single MCP tool and adds no orchestration. Call `mcp__nlt-build__tapps_quick_check(file_path=...)` directly, or invoke `/tapps-finish-task` for end-of-task orchestration. Scheduled for removal in v3.12.0.
 
 Score the specified Python file using TappsMCP:
 
-1. Call `mcp__nlt-code-quality__tapps_quick_check` with the file path to get an instant score
-2. If the score is below 80, call `mcp__nlt-code-quality__tapps_score_file` for the full breakdown
+1. Call `mcp__nlt-build__tapps_quick_check` with the file path to get an instant score
+2. If the score is below 80, call `mcp__nlt-build__tapps_score_file` for the full breakdown
 3. Present the results in a table: category, score (0-100), top issue per category
 4. Highlight any category scoring below 70 as a priority fix
 5. Suggest the single highest-impact change the developer can make
@@ -107,16 +107,16 @@ name: tapps-gate
 user-invocable: true
 model: claude-haiku-4-5-20251001
 description: Run a quality gate check and report pass/fail with blocking issues. Use when checking if a Python file passes the quality threshold before declaring a task complete.
-allowed-tools: mcp__nlt-code-quality__tapps_quality_gate
+allowed-tools: mcp__nlt-build__tapps_quality_gate
 argument-hint: "[file-path]"
 disable-model-invocation: true
 ---
 
-> **DEPRECATED (v3.11.0+):** This skill wraps a single MCP tool and adds no orchestration. Call `mcp__nlt-code-quality__tapps_quality_gate(file_path=...)` directly, or invoke `/tapps-finish-task` for end-of-task orchestration. Scheduled for removal in v3.12.0.
+> **DEPRECATED (v3.11.0+):** This skill wraps a single MCP tool and adds no orchestration. Call `mcp__nlt-build__tapps_quality_gate(file_path=...)` directly, or invoke `/tapps-finish-task` for end-of-task orchestration. Scheduled for removal in v3.12.0.
 
 Run a quality gate check using TappsMCP:
 
-1. Call `mcp__nlt-code-quality__tapps_quality_gate` with the current project
+1. Call `mcp__nlt-build__tapps_quality_gate` with the current project
 2. Display the overall pass/fail result clearly
 3. List each failing criterion with its actual vs. required value
 4. If the gate fails, list the minimum changes required to pass
@@ -128,16 +128,16 @@ name: tapps-validate
 user-invocable: true
 model: claude-haiku-4-5-20251001
 description: Validate all changed files meet quality thresholds before declaring work complete. Use when you have finished editing Python files and want to batch-validate all changed files against the quality gate.
-allowed-tools: mcp__nlt-code-quality__tapps_validate_changed
+allowed-tools: mcp__nlt-build__tapps_validate_changed
 disable-model-invocation: true
 ---
 
-> **DEPRECATED (v3.11.0+):** This skill wraps a single MCP tool and adds no orchestration. Call `mcp__nlt-code-quality__tapps_validate_changed(file_paths="...")` directly, or invoke `/tapps-finish-task` which bundles validate + checklist + memory save. Scheduled for removal in v3.12.0.
+> **DEPRECATED (v3.11.0+):** This skill wraps a single MCP tool and adds no orchestration. Call `mcp__nlt-build__tapps_validate_changed(file_paths="...")` directly, or invoke `/tapps-finish-task` which bundles validate + checklist + memory save. Scheduled for removal in v3.12.0.
 
 Validate changed files using TappsMCP:
 
 1. Identify the Python files you changed in this session (from git status or your edit history)
-2. Call `mcp__nlt-code-quality__tapps_validate_changed` with explicit `file_paths` (comma-separated) scoped to only those files. **Never call without `file_paths`** - auto-detect scans all git-changed files and can be very slow in large repos. Default is quick mode; only use `quick=false` as a last resort (pre-release, security audit).
+2. Call `mcp__nlt-build__tapps_validate_changed` with explicit `file_paths` (comma-separated) scoped to only those files. **Never call without `file_paths`** - auto-detect scans all git-changed files and can be very slow in large repos. Default is quick mode; only use `quick=false` as a last resort (pre-release, security audit).
 3. Display each file with its score and pass/fail status
 4. If any file fails, list it with the top issue preventing it from passing
 5. Confirm explicitly when all changed files pass before declaring work done
@@ -149,15 +149,15 @@ name: tapps-finish-task
 user-invocable: true
 model: claude-haiku-4-5-20251001
 description: Run the end-of-task TAPPS pipeline in one shot — validate_changed, then checklist, then an optional memory save for anything architectural or patterned learned this session. The recommended final step before declaring work complete. Use when you have finished implementing a task and want to validate, run the checklist, and save learnings in one shot.
-allowed-tools: mcp__nlt-code-quality__tapps_validate_changed mcp__nlt-code-quality__tapps_checklist Bash
+allowed-tools: mcp__nlt-build__tapps_validate_changed mcp__nlt-build__tapps_checklist Bash
 argument-hint: "[task_type: feature|bugfix|refactor|security|review]"
 ---
 
 Close out the current task end-to-end. Run each step; do NOT skip one that failed — surface the failure and stop.
 
-1. **Validate changed files.** Identify the files you edited this session (git status, your edit history). Call `mcp__nlt-code-quality__tapps_validate_changed` with explicit `file_paths` (comma-separated) scoped to those files. **Never call without `file_paths`.** Default is quick mode. If any file fails, list it with the top blocking issue and stop — the task is not complete. Do not proceed to step 2 until all changed files pass.
+1. **Validate changed files.** Identify the files you edited this session (git status, your edit history). Call `mcp__nlt-build__tapps_validate_changed` with explicit `file_paths` (comma-separated) scoped to those files. **Never call without `file_paths`.** Default is quick mode. If any file fails, list it with the top blocking issue and stop — the task is not complete. Do not proceed to step 2 until all changed files pass.
 
-2. **Verify the checklist.** Call `mcp__nlt-code-quality__tapps_checklist(task_type=<feature|bugfix|refactor|security|review>)`. If the response has `complete: false`, the `missing_steps` list names required tools you skipped — address each (or explain why it does not apply) and re-run the checklist. Only proceed when `complete: true`.
+2. **Verify the checklist.** Call `mcp__nlt-build__tapps_checklist(task_type=<feature|bugfix|refactor|security|review>)`. If the response has `complete: false`, the `missing_steps` list names required tools you skipped — address each (or explain why it does not apply) and re-run the checklist. Only proceed when `complete: true`.
 
 3. **Save learnings (conditional).** If this session produced a non-obvious architectural or pattern-level decision — a new convention, a subtle trade-off, a gotcha someone else would re-discover — run `uv run tapps-mcp memory save --key <slug> --tier <architectural|pattern> --value "<concise decision>"` (CLI via BrainBridge; `tapps_memory` MCP removed v3.12.0). Skip for routine fixes, refactors where the code documents the decision, or trivial bugfixes. Brain offline → skip silently.
 
@@ -175,7 +175,7 @@ description: >-
   lifecycle so the next chat can continue without a long paste. Use when
   ending a session, handing off to a fresh chat, or the user says hand
   off, save session state, or continue next time.
-allowed-tools: mcp__nlt-platform-admin__tapps_session_end Bash
+allowed-tools: mcp__nlt-memory__tapps_session_end Bash
 argument-hint: "[optional Linear issue id e.g. TAP-1234]"
 disable-model-invocation: true
 ---
@@ -202,7 +202,7 @@ End the session with a durable handoff the next chat can load via `/tapps-contin
 """ + _HANDOFF_BRAIN_MIRROR + """
 
 4. **Close lifecycle.** Best-effort session closure:
-   - **Preferred:** `mcp__nlt-platform-admin__tapps_session_end()`
+   - **Preferred:** `mcp__nlt-memory__tapps_session_end()`
    - **CLI fallback** (MCP unavailable): `uv run tapps-mcp session-end` (requires same shell auth as step 3 row 1)
    Do not fail the handoff if either degrades.
 
@@ -218,14 +218,14 @@ description: >-
   optional Linear context, and TAPPS session start — without pasting a long
   manifesto. Use when the user says continue, pick up where we left off, resume,
   or start a new session on an existing task (optional TAP-#### argument).
-allowed-tools: mcp__nlt-code-quality__tapps_session_start mcp__plugin_linear_linear__get_issue Bash Read
+allowed-tools: mcp__nlt-build__tapps_session_start mcp__plugin_linear_linear__get_issue Bash Read
 argument-hint: "[optional Linear issue id e.g. TAP-1234]"
 ---
 
 Start work in a fresh context window by assembling structured state — not a user paste.
 
 1. **Session bootstrap.**
-   - **Preferred:** Call `mcp__nlt-code-quality__tapps_session_start()`. If `data.compaction_rehydration` is present, summarize it in one sentence.
+   - **Preferred:** Call `mcp__nlt-build__tapps_session_start()`. If `data.compaction_rehydration` is present, summarize it in one sentence.
    - **CLI fallback** (MCP unavailable): Run `uv run tapps-mcp doctor --quick` and read `.tapps-mcp.yaml` for project context (quality preset, brain URL, engagement). Proceed without blocking.
 
 """ + _CONTINUE_LOAD_AND_CONTEXT + """
@@ -245,16 +245,16 @@ description: >-
   Generate a quality report across Python files in the project.
   Scores multiple files and presents an aggregate summary. Use when you
   want an aggregate quality overview across multiple Python files.
-allowed-tools: mcp__nlt-code-quality__tapps_report
+allowed-tools: mcp__nlt-build__tapps_report
 argument-hint: "[file-path or empty for project-wide]"
 disable-model-invocation: true
 ---
 
-> **DEPRECATED (v3.11.0+):** This skill wraps a single MCP tool and adds no orchestration. Call `mcp__nlt-code-quality__tapps_report(file_paths=...)` directly. Scheduled for removal in v3.12.0.
+> **DEPRECATED (v3.11.0+):** This skill wraps a single MCP tool and adds no orchestration. Call `mcp__nlt-build__tapps_report(file_paths=...)` directly. Scheduled for removal in v3.12.0.
 
 Generate a quality report using TappsMCP:
 
-1. Call `mcp__nlt-code-quality__tapps_report` with an optional file path
+1. Call `mcp__nlt-build__tapps_report` with an optional file path
 2. If no file path, a project-wide report scores up to 20 files
 3. Present results in a table: file | score | pass/fail | top issue
 4. Highlight any files scoring below the quality gate threshold
@@ -270,22 +270,22 @@ description: >-
   Spawns tapps-review-fixer agents in worktrees for parallel processing. Use when
   you have multiple changed Python files that need parallel review, scoring, and
   quality gate fixing before declaring work complete.
-allowed-tools: mcp__nlt-code-quality__tapps_validate_changed mcp__nlt-code-quality__tapps_checklist
+allowed-tools: mcp__nlt-build__tapps_validate_changed mcp__nlt-build__tapps_checklist
 context: fork
 agent: general-purpose
 ---
 
 Run a parallel review-fix-validate pipeline on changed Python files:
 
-1. Call `mcp__nlt-code-quality__tapps_session_start` if not already called
+1. Call `mcp__nlt-build__tapps_session_start` if not already called
 2. Determine scope: detect changed Python files via git diff or accept a file list
 3. For each file (or batch of files), spawn a `tapps-review-fixer` agent in a worktree:
    - Use the Task tool with `subagent_type: "general-purpose"` and `isolation: "worktree"`
    - Pass the file path and instructions to score, fix, and gate the file
 4. Wait for all agents to complete and collect their results
 5. Merge any worktree changes back (review diffs before accepting)
-6. Call `mcp__nlt-code-quality__tapps_validate_changed` with explicit `file_paths` to verify all files pass
-7. Call `mcp__nlt-code-quality__tapps_checklist(task_type="review")` for final verification
+6. Call `mcp__nlt-build__tapps_validate_changed` with explicit `file_paths` to verify all files pass
+7. Call `mcp__nlt-build__tapps_checklist(task_type="review")` for final verification
 8. Present a summary table: file | before score | after score | gate | fixes applied
 """,
     "tapps-research": """\
@@ -296,7 +296,7 @@ description: >-
   Look up library documentation and research best practices
   for the technologies used in this project. Use when writing code that uses
   an external library or when you need API reference or version-specific guidance.
-allowed-tools: mcp__nlt-code-quality__tapps_lookup_docs
+allowed-tools: mcp__nlt-build__tapps_lookup_docs
 argument-hint: "[library] [topic]"
 context: fork
 model: claude-sonnet-4-6
@@ -304,8 +304,8 @@ model: claude-sonnet-4-6
 
 Look up library documentation using TappsMCP:
 
-1. Call `mcp__nlt-code-quality__tapps_lookup_docs` with the library name and topic
-2. If coverage is incomplete, call `mcp__nlt-code-quality__tapps_lookup_docs` with a more specific topic
+1. Call `mcp__nlt-build__tapps_lookup_docs` with the library name and topic
+2. If coverage is incomplete, call `mcp__nlt-build__tapps_lookup_docs` with a more specific topic
 3. Synthesize findings into a clear, actionable answer with code examples
 4. Include API signatures and usage patterns from the documentation
 5. Suggest follow-up lookups if additional coverage is needed
@@ -320,15 +320,15 @@ description: >-
   and dependency CVE checks. Use when reviewing security-sensitive changes,
   before a security audit, or before a production release.
 allowed-tools: >-
-  mcp__nlt-code-quality__tapps_security_scan
-  mcp__nlt-release-ship__tapps_dependency_scan
+  mcp__nlt-build__tapps_security_scan
+  mcp__nlt-build__tapps_dependency_scan
 argument-hint: "[file-path]"
 ---
 
 Run a comprehensive security audit using TappsMCP:
 
-1. Call `mcp__nlt-code-quality__tapps_security_scan` on the target file to detect vulnerabilities
-2. Call `mcp__nlt-release-ship__tapps_dependency_scan` to check for known CVEs in dependencies
+1. Call `mcp__nlt-build__tapps_security_scan` on the target file to detect vulnerabilities
+2. Call `mcp__nlt-build__tapps_dependency_scan` to check for known CVEs in dependencies
 3. Group all findings by severity (critical, high, medium, low)
 4. Suggest a prioritized fix order starting with the highest-severity issues
 """,
@@ -341,7 +341,7 @@ description: >-
   Manage shared project memory via tapps-mcp CLI and session notes.
   Use when saving cross-session decisions, searching prior patterns, or
   checking brain bridge health. For chat handoffs use tapps-handoff-session.
-allowed-tools: mcp__nlt-code-quality__tapps_session_start mcp__nlt-platform-admin__tapps_session_notes Bash
+allowed-tools: mcp__nlt-build__tapps_session_start mcp__nlt-memory__tapps_session_notes Bash
 argument-hint: "[save|search|get] [key]"
 ---
 
@@ -352,9 +352,9 @@ argument-hint: "[save|search|get] [key]"
 | Need | Path |
 |------|------|
 | Cross-chat handoff | `/tapps-handoff-session` then `/tapps-continue-session` (`.tapps-mcp/session-handoff.md` is canonical) |
-| Session-local notes | `mcp__nlt-platform-admin__tapps_session_notes(action="save", ...)` |
+| Session-local notes | `mcp__nlt-memory__tapps_session_notes(action="save", ...)` |
 | Save / recall / search brain | `uv run tapps-mcp memory <subcommand>` (CLI via BrainBridge) |
-| Brain health before writes | `mcp__nlt-code-quality__tapps_session_start()` → `data.brain_bridge_health` |
+| Brain health before writes | `mcp__nlt-build__tapps_session_start()` → `data.brain_bridge_health` |
 | Auto-recall at session start | Hooks run `tapps-mcp memory recall` — usually no manual step |
 
 ## Shell auth (CLI memory)
@@ -421,7 +421,7 @@ description: >-
   Look up when to use each TappsMCP tool. Full tool reference with per-tool
   guidance for session start, scoring, validation, checklist, docs, experts, and more.
   Use when you need guidance on which TappsMCP tool to call for a given situation.
-allowed-tools: mcp__nlt-platform-admin__tapps_server_info
+allowed-tools: mcp__nlt-setup__tapps_server_info
 argument-hint: "[tool-name or 'all']"
 ---
 
@@ -486,19 +486,19 @@ description: >-
   Bootstrap TappsMCP in a project. Creates AGENTS.md, TECH_STACK.md,
   platform rules, hooks, agents, skills, and MCP config. Use when setting
   up TappsMCP in a new or existing project for the first time.
-allowed-tools: mcp__nlt-platform-admin__tapps_init mcp__nlt-platform-admin__tapps_doctor
+allowed-tools: mcp__nlt-setup__tapps_init mcp__nlt-setup__tapps_doctor
 argument-hint: "[project-root]"
 ---
 
 Bootstrap TappsMCP in a new or existing project:
 
-1. Call `mcp__nlt-platform-admin__tapps_init` to run the full bootstrap pipeline (`mcp_config` defaults true)
+1. Call `mcp__nlt-setup__tapps_init` to run the full bootstrap pipeline (`mcp_config` defaults true)
 2. Check the response for `content_return: true` — if present, the server could not
    write files directly (Docker / read-only mount).  Apply the files from
    `file_manifest.files[]` using the Write tool.  See `/tapps-apply-files` for details.
 3. If files were written directly, review the created files (AGENTS.md, TECH_STACK.md, platform rules, hooks, MCP config)
 4. Confirm MCP config lists tapps-mcp only (no direct tapps-brain entry — bridge-only)
-5. If any issues are reported, call `mcp__nlt-platform-admin__tapps_doctor` to diagnose
+5. If any issues are reported, call `mcp__nlt-setup__tapps_doctor` to diagnose
 6. Verify that `.claude/settings.json` has MCP tool auto-approval rules
 7. For shared-brain HTTP wiring, see docs/operations/CONSUMER-REPO-BRAIN-WIRING.md
 8. Confirm the project is ready for the TappsMCP quality workflow
@@ -519,7 +519,7 @@ description: >-
   via `tapps-mcp upgrade` (dry-run preview + timestamped backup), and
   verifies via doctor + checklist. Use when a new tapps-mcp or docs-mcp
   version is available and the project scaffolding needs to be refreshed.
-allowed-tools: Bash mcp__nlt-code-quality__tapps_session_start mcp__nlt-platform-admin__tapps_doctor mcp__nlt-code-quality__tapps_checklist
+allowed-tools: Bash mcp__nlt-build__tapps_session_start mcp__nlt-setup__tapps_doctor mcp__nlt-build__tapps_checklist
 argument-hint: "[--from-checkout <path> | --from-tag vX.Y.Z]"
 ---
 
@@ -539,10 +539,10 @@ Upgrade tapps-mcp / docs-mcp end-to-end. The user's request to upgrade is standi
 
 1. **Reinstall global CLIs.** Run both `uv tool install --reinstall ...` commands. Verify: `uv tool list | grep -E '(tapps-mcp|docs-mcp)'` — both must show the same version.
 2. **Restart MCP servers.** The running processes still hold old code. Tell the user to exit/reopen (or `/mcp` reconnect), then re-invoke this skill. Stop here on the first invocation.
-3. **Verify new version is live.** Call `mcp__nlt-code-quality__tapps_session_start(force=true)`. Confirm `server.version` matches target and `diagnostics.install_drift.drift_detected == false`. If drift persists, the server wasn't restarted — go back to step 2.
+3. **Verify new version is live.** Call `mcp__nlt-build__tapps_session_start(force=true)`. Confirm `server.version` matches target and `diagnostics.install_drift.drift_detected == false`. If drift persists, the server wasn't restarted — go back to step 2.
 4. **Dry-run the scaffolding refresh.** Run `tapps-mcp upgrade --dry-run`. Review the diff for AGENTS.md, CLAUDE.md, .claude/hooks/, .claude/rules/, .claude/agents/, .claude/skills/, .mcp.json. The smart-merge preserves customizations in non-canonical sections; canonical sections are replaced wholesale. Pause if a customized canonical section will be overwritten.
 5. **Apply the upgrade.** Run `tapps-mcp upgrade` (writes timestamped backup to `.tapps-mcp/backups/<ts>/`).
-6. **Verify.** Run `tapps-mcp doctor` AND `mcp__nlt-code-quality__tapps_checklist(task_type="upgrade")`. Surface any problems — do not declare done on a failure.
+6. **Verify.** Run `tapps-mcp doctor` AND `mcp__nlt-build__tapps_checklist(task_type="upgrade")`. Surface any problems — do not declare done on a failure.
 7. **Report.** One-line summary: `Upgraded: tapps-mcp X.Y.Z, docs-mcp X.Y.Z. Scaffolding: N files. Doctor: OK. Checklist: complete. Backup: .tapps-mcp/backups/<ts>/`.
 
 **Rollback (only if step 5/6 broke something):** `tapps-mcp rollback` restores from the most recent backup. Do NOT roll back "to be safe" after a clean run.
@@ -563,14 +563,14 @@ description: >-
   Change the TappsMCP enforcement intensity (high, medium, or low).
   Controls which quality tools are mandatory vs optional. Use when you want
   to switch between strict, balanced, or advisory enforcement modes.
-allowed-tools: mcp__nlt-platform-admin__tapps_set_engagement_level
+allowed-tools: mcp__nlt-setup__tapps_set_engagement_level
 argument-hint: "[high|medium|low]"
 disable-model-invocation: true
 ---
 
 Set the TappsMCP LLM engagement level:
 
-1. Call `mcp__nlt-platform-admin__tapps_set_engagement_level` with the desired level
+1. Call `mcp__nlt-setup__tapps_set_engagement_level` with the desired level
 2. **high** - All quality tools are mandatory; checklist enforces strict compliance
 3. **medium** - Balanced enforcement; core tools required, advanced tools recommended
 4. **low** - Optional guidance; quality tools are suggestions, not requirements

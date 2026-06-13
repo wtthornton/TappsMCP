@@ -388,11 +388,11 @@ class TestFinishTaskSkill:
 
     def test_allowed_tools_includes_validate_changed(self) -> None:
         content = CLAUDE_SKILLS["tapps-finish-task"]
-        assert "mcp__nlt-code-quality__tapps_validate_changed" in content
+        assert "mcp__nlt-build__tapps_validate_changed" in content
 
     def test_allowed_tools_includes_checklist(self) -> None:
         content = CLAUDE_SKILLS["tapps-finish-task"]
-        assert "mcp__nlt-code-quality__tapps_checklist" in content
+        assert "mcp__nlt-build__tapps_checklist" in content
 
     def test_finish_task_uses_cli_memory_save(self) -> None:
         content = CLAUDE_SKILLS["tapps-finish-task"]

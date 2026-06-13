@@ -28,18 +28,17 @@ class TestNltBundles:
     def test_full_bundle_enables_all_servers(self) -> None:
         assert normalize_mcp_bundle("full") == "full"
         enabled = enabled_servers_for_bundle("full")
-        assert len(enabled) == 5
+        assert len(enabled) == 6
         assert commented_servers_for_bundle("full") == ()
 
-    def test_developer_enables_two_servers(self) -> None:
+    def test_developer_enables_build_only(self) -> None:
         enabled = enabled_servers_for_bundle("developer")
-        assert enabled == ("nlt-code-quality", "nlt-platform-admin")
-        assert len(commented_servers_for_bundle("developer")) == 3
+        assert enabled == ("nlt-build",)
+        assert len(commented_servers_for_bundle("developer")) == 5
 
     def test_planning_adds_linear(self) -> None:
         enabled = enabled_servers_for_bundle("planning")
-        assert "nlt-linear-issues" in enabled
-        assert len(enabled) == 3
+        assert enabled == ("nlt-build", "nlt-linear-issues")
 
     def test_docs_bundle(self) -> None:
         enabled = enabled_servers_for_bundle("docs")
@@ -61,18 +60,20 @@ class TestNltMcpJsonGeneration:
         config_path = tmp_path / ".cursor" / "mcp.json"
         assert config_path.exists()
         raw = config_path.read_text(encoding="utf-8")
-        assert "nlt-code-quality" in raw
-        assert "nlt-platform-admin" in raw
+        assert "nlt-build" in raw
+        assert "nlt-setup" in raw
         assert "// Opt-in:" in raw
+        assert "nlt-memory" in raw
         assert "nlt-linear-issues" in raw
 
         data = _load_mcp_config_json(config_path)
         servers = data["mcpServers"]
-        assert "nlt-code-quality" in servers
-        assert "nlt-platform-admin" in servers
+        assert "nlt-build" in servers
+        assert "nlt-setup" not in servers
+        assert "nlt-memory" not in servers
         assert "tapps-mcp" not in servers
-        assert servers["nlt-code-quality"]["args"] == []
-        assert str(servers["nlt-code-quality"]["command"]).endswith("nlt-code-quality-serve.sh")
+        assert servers["nlt-build"]["args"] == []
+        assert str(servers["nlt-build"]["command"]).endswith("nlt-build-serve.sh")
 
     def test_planning_bundle_enables_linear(self, tmp_path: Path) -> None:
         with patch(
@@ -100,7 +101,7 @@ class TestNltMcpJsonGeneration:
         assert ok is True
         data = json.loads((tmp_path / ".cursor" / "mcp.json").read_text(encoding="utf-8"))
         assert "tapps-mcp" in data["mcpServers"]
-        assert "nlt-code-quality" not in data["mcpServers"]
+        assert "nlt-build" not in data["mcpServers"]
 
     def test_jsonc_roundtrip(self, tmp_path: Path) -> None:
         merged, enabled, commented = _merge_nlt_config({}, "cursor", mcp_bundle="developer")
@@ -112,7 +113,7 @@ class TestNltMcpJsonGeneration:
         )
         stripped = _strip_jsonc_comments(text)
         parsed = json.loads(stripped)
-        assert "nlt-code-quality" in parsed["mcpServers"]
+        assert "nlt-build" in parsed["mcpServers"]
 
     def test_migrates_legacy_tapps_env(self, tmp_path: Path) -> None:
         existing = {
@@ -130,5 +131,5 @@ class TestNltMcpJsonGeneration:
             mcp_bundle="developer",
             project_root=tmp_path,
         )
-        env = merged["mcpServers"]["nlt-code-quality"]["env"]
+        env = merged["mcpServers"]["nlt-build"]["env"]
         assert env["TAPPS_MCP_CONTEXT7_API_KEY"] == "keep-me"

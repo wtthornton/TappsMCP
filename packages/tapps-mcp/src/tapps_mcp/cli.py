@@ -52,6 +52,9 @@ def main() -> None:
     "tool_profile",
     type=click.Choice(
         [
+            "nlt-build",
+            "nlt-memory",
+            "nlt-setup",
             "nlt-code-quality",
             "nlt-platform-admin",
             "core",
@@ -67,8 +70,8 @@ def main() -> None:
     ),
     default=None,
     help=(
-        "Tool profile preset (Epic 109 NLT plugin). Overrides --mode when set. "
-        "Use nlt-code-quality for daily coding (~15 tools)."
+        "Tool profile preset (Epic 109 / ADR-0016). Overrides --mode when set. "
+        "Use nlt-build for daily coding (~16 tools, 9 eager)."
     ),
 )
 def serve(
@@ -162,7 +165,7 @@ def serve(
     "mcp_bundle",
     type=click.Choice(["developer", "planning", "docs", "release", "full"]),
     default="developer",
-    help="NLT MCP plugin bundle to enable (default: developer = code-quality + platform-admin).",
+    help="NLT MCP plugin bundle to enable (default: developer = nlt-build only).",
 )
 @click.option(
     "--legacy-monolith/--no-legacy-monolith",
