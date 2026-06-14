@@ -23,3 +23,16 @@ security:
 experts:
   auto_generate: true
 cache_max_mb: 100
+validate_changed:
+  judges:
+  - type: grep
+    target: .claude/skills/linear/node_modules/graphql/utilities/buildASTSchema.mjs
+    expect: --audit
+    description: Site prebuild runs document build with post-build audit
+    blocking: true
+    when_changed:
+    - .claude/skills/linear/node_modules/graphql/utilities/buildASTSchema.mjs
+    - reports/**
+    - src/**
+    - brands/**
+    - templates/**

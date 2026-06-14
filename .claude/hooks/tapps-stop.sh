@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# tapps-mcp-hook-version: 3.12.27
+# tapps-mcp-hook-version: 3.12.28
+# tapps-mcp-hook-content-sha: 18cfa7f8
 # TappsMCP Stop hook — TAP-1326 / TAP-1327
 # Phase 1 (always when transcript exists): scan tool calls, write loop-metrics.jsonl
 #   + write .tapps-mcp/.completion-gate-violations.jsonl when files were edited
@@ -30,9 +31,13 @@ project_dir='$PROJECT_DIR'
 gate_tools={'tapps_quick_check','tapps_validate_changed','tapps_quality_gate',
             'mcp__tapps-mcp__tapps_quick_check','mcp__tapps-mcp__tapps_validate_changed',
             'mcp__tapps-mcp__tapps_quality_gate','mcp__tapps-quality__tapps_quick_check',
-            'mcp__tapps-quality__tapps_validate_changed','mcp__tapps-quality__tapps_quality_gate'}
-checklist_tools={'tapps_checklist','mcp__tapps-mcp__tapps_checklist','mcp__tapps-quality__tapps_checklist'}
-lookup_tools={'tapps_lookup_docs','mcp__tapps-mcp__tapps_lookup_docs','mcp__tapps-quality__tapps_lookup_docs'}
+            'mcp__tapps-quality__tapps_validate_changed','mcp__tapps-quality__tapps_quality_gate',
+            'mcp__nlt-build__tapps_quick_check','mcp__nlt-build__tapps_validate_changed',
+            'mcp__nlt-build__tapps_quality_gate'}
+checklist_tools={'tapps_checklist','mcp__tapps-mcp__tapps_checklist','mcp__tapps-quality__tapps_checklist',
+                 'mcp__nlt-build__tapps_checklist'}
+lookup_tools={'tapps_lookup_docs','mcp__tapps-mcp__tapps_lookup_docs','mcp__tapps-quality__tapps_lookup_docs',
+              'mcp__nlt-build__tapps_lookup_docs'}
 edit_tools={'Edit','Write','MultiEdit','NotebookEdit'}
 mcp_calls=0
 gate_called=False
@@ -68,8 +73,10 @@ gate_skipped=[]
 if needs_gate and not gate_called:
     miss.append('QUALITY_GATE_SKIP:'+','.join(edits[:8]))
     gate_skipped=edits
+# CHECKLIST_MISSING fires only when files were edited (was unconditional pre-uplift).
 if needs_gate and not checklist_called:
     miss.append('CHECKLIST_MISSING')
+# TAP-1333: append per-loop telemetry (rotates at 10 MB). ALWAYS write.
 metrics_dir=os.path.join(project_dir,'.tapps-mcp')
 try:
     os.makedirs(metrics_dir,exist_ok=True)
@@ -88,6 +95,7 @@ try:
         }) + '\n')
 except Exception:
     pass
+# Warn-mode completion-gate violation log (only on miss). Mirrors .cache-gate-violations.jsonl.
 if miss:
     try:
         violations_path=os.path.join(metrics_dir,'.completion-gate-violations.jsonl')
@@ -140,6 +148,7 @@ except Exception:
 " 2>/dev/null)
   [ -n "$REPORT_SUMMARY" ] && echo "$REPORT_SUMMARY"
 fi
+# Phase 2: conditional reminder — only when this turn's scan flagged violations.
 if [ -n "$GATE_REPORT" ]; then
   echo "TappsMCP completion-gate (warn): $GATE_REPORT" >&2
   echo "Reminder: run /tapps-finish-task (or tapps_validate_changed + tapps_checklist manually) before declaring complete." >&2

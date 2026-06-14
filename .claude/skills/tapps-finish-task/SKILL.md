@@ -3,15 +3,15 @@ name: tapps-finish-task
 user-invocable: true
 model: claude-haiku-4-5-20251001
 description: Run the end-of-task TAPPS pipeline in one shot — validate_changed, then checklist, then an optional memory save for anything architectural or patterned learned this session. The recommended final step before declaring work complete. Use when you have finished implementing a task and want to validate, run the checklist, and save learnings in one shot.
-allowed-tools: mcp__nlt-code-quality__tapps_validate_changed mcp__nlt-code-quality__tapps_checklist Bash
+allowed-tools: mcp__nlt-build__tapps_validate_changed mcp__nlt-build__tapps_checklist Bash
 argument-hint: "[task_type: feature|bugfix|refactor|security|review]"
 ---
 
 Close out the current task end-to-end. Run each step; do NOT skip one that failed — surface the failure and stop.
 
-1. **Validate changed files.** Identify the files you edited this session (git status, your edit history). Call `mcp__nlt-code-quality__tapps_validate_changed` with explicit `file_paths` (comma-separated) scoped to those files. **Never call without `file_paths`.** Default is quick mode. If any file fails, list it with the top blocking issue and stop — the task is not complete. Do not proceed to step 2 until all changed files pass.
+1. **Validate changed files.** Identify the files you edited this session (git status, your edit history). Call `mcp__nlt-build__tapps_validate_changed` with explicit `file_paths` (comma-separated) scoped to those files. **Never call without `file_paths`.** Default is quick mode. If any file fails, list it with the top blocking issue and stop — the task is not complete. Do not proceed to step 2 until all changed files pass.
 
-2. **Verify the checklist.** Call `mcp__nlt-code-quality__tapps_checklist(task_type=<feature|bugfix|refactor|security|review>)`. If the response has `complete: false`, the `missing_steps` list names required tools you skipped — address each (or explain why it does not apply) and re-run the checklist. Only proceed when `complete: true`.
+2. **Verify the checklist.** Call `mcp__nlt-build__tapps_checklist(task_type=<feature|bugfix|refactor|security|review>)`. If the response has `complete: false`, the `missing_steps` list names required tools you skipped — address each (or explain why it does not apply) and re-run the checklist. Only proceed when `complete: true`.
 
 3. **Save learnings (conditional).** If this session produced a non-obvious architectural or pattern-level decision — a new convention, a subtle trade-off, a gotcha someone else would re-discover — run `uv run tapps-mcp memory save --key <slug> --tier <architectural|pattern> --value "<concise decision>"` (CLI via BrainBridge; `tapps_memory` MCP removed v3.12.0). Skip for routine fixes, refactors where the code documents the decision, or trivial bugfixes. Brain offline → skip silently.
 
