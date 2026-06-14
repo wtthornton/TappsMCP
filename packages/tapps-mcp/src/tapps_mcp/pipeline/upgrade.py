@@ -492,13 +492,11 @@ def _upgrade_mcp_config(
     servers_key = _get_servers_key(host)
     existing: dict[str, object] = {}
     if config_path.exists():
-        try:
-            raw = config_path.read_text(encoding="utf-8")
-            parsed = json.loads(raw) if raw.strip() else {}
-            if isinstance(parsed, dict):
-                existing = parsed
-        except json.JSONDecodeError:
-            existing = {}
+        from tapps_mcp.distribution.setup_generator import _load_mcp_config_json
+
+        parsed = _load_mcp_config_json(config_path)
+        if isinstance(parsed, dict):
+            existing = parsed
     include_docs_mcp = _should_include_docs_mcp(
         False,
         existing=existing,

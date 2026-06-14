@@ -1032,6 +1032,129 @@ def _build_repo_orientation(project_root: Path) -> dict[str, Any] | None:
 
 
 # ---------------------------------------------------------------------------
+# TAP-3929: recommended slash-command workflows at session start
+# ---------------------------------------------------------------------------
+
+_WORKFLOW_ONE_LINERS: dict[str, str] = {
+    "tapps-finish-task": (
+        "Validate changed files, run checklist, optionally save learnings before declaring done."
+    ),
+    "tapps-review-pipeline": (
+        "Parallel review-fix-validate pipeline across multiple changed Python files."
+    ),
+    "linear-read": (
+        "Cache-first Linear list reads — use for backlog/triage instead of raw list_issues."
+    ),
+    "tapps-handoff-session": "Write structured session handoff before ending the chat.",
+    "tapps-continue-session": "Bootstrap a new chat from the last session handoff.",
+    "tapps-memory": "Search or save cross-session architectural decisions and patterns.",
+    "linear-issue": "Create, lint, and validate Linear issues/epics before save.",
+}
+
+_BUNDLE_WORKFLOW_KEYS: dict[str, tuple[str, ...]] = {
+    "developer": (
+        "tapps-finish-task",
+        "tapps-review-pipeline",
+        "linear-read",
+        "tapps-handoff-session",
+    ),
+    "memory": (
+        "tapps-finish-task",
+        "tapps-handoff-session",
+        "tapps-continue-session",
+        "tapps-memory",
+    ),
+    "planning": ("tapps-finish-task", "linear-read", "linear-issue"),
+    "docs": ("tapps-finish-task",),
+    "release": ("tapps-finish-task",),
+    "security": ("tapps-finish-task",),
+    "audit": ("tapps-finish-task", "linear-read"),
+    "full": (
+        "tapps-finish-task",
+        "tapps-review-pipeline",
+        "linear-read",
+        "tapps-handoff-session",
+    ),
+}
+
+_LOW_ENGAGEMENT_WORKFLOWS: frozenset[str] = frozenset(
+    {"tapps-finish-task", "tapps-review-pipeline"}
+)
+
+
+def _infer_mcp_bundle(project_root: Path) -> str:
+    """Best-effort bundle name from YAML or enabled NLT MCP servers."""
+    from tapps_mcp.distribution.nlt_mcp_config import (
+        NLT_BUNDLES,
+        _load_enabled_mcp_servers,
+        list_nlt_server_ids_in_config,
+        normalize_mcp_bundle,
+    )
+
+    config_path = project_root / ".tapps-mcp.yaml"
+    if config_path.exists():
+        try:
+            import yaml
+
+            raw = config_path.read_text(encoding="utf-8-sig")
+            data = yaml.safe_load(raw) if raw.strip() else {}
+            bundle = (data or {}).get("mcp_bundle")
+            if isinstance(bundle, str):
+                return normalize_mcp_bundle(bundle)
+        except Exception:
+            _logger.debug("infer_mcp_bundle_yaml_failed", exc_info=True)
+
+    try:
+        servers = _load_enabled_mcp_servers(project_root)
+        enabled = frozenset(list_nlt_server_ids_in_config(servers))
+    except Exception:
+        return "developer"
+
+    if not enabled:
+        return "developer"
+    for bundle_name, server_ids in NLT_BUNDLES.items():
+        if frozenset(server_ids) == enabled:
+            return bundle_name
+    return "developer"
+
+
+def build_recommended_workflows(
+    project_root: Path,
+    *,
+    engagement_level: str,
+    mcp_bundle: str | None = None,
+) -> dict[str, Any]:
+    """Surface deployed slash skills for the active engagement level and NLT bundle."""
+    from tapps_mcp.distribution.nlt_mcp_config import normalize_mcp_bundle
+
+    bundle = (
+        normalize_mcp_bundle(mcp_bundle)
+        if mcp_bundle is not None
+        else _infer_mcp_bundle(project_root)
+    )
+    keys = _BUNDLE_WORKFLOW_KEYS.get(bundle, _BUNDLE_WORKFLOW_KEYS["developer"])
+    if engagement_level == "low":
+        keys = tuple(skill for skill in keys if skill in _LOW_ENGAGEMENT_WORKFLOWS)
+
+    workflows: list[dict[str, str]] = []
+    for skill in keys:
+        one_liner = _WORKFLOW_ONE_LINERS.get(skill, "")
+        workflows.append(
+            {
+                "skill": skill,
+                "slash": f"/{skill}",
+                "when": one_liner,
+            }
+        )
+
+    return {
+        "engagement_level": engagement_level,
+        "mcp_bundle": bundle,
+        "workflows": workflows,
+    }
+
+
+# ---------------------------------------------------------------------------
 # CLI fallback map for MCP disconnect recovery (TAP-3587 / ReportLab feedback)
 # ---------------------------------------------------------------------------
 

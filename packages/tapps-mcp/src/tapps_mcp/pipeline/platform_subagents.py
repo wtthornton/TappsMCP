@@ -54,8 +54,7 @@ maxTurns: 20
 permissionMode: acceptEdits
 memory: project
 skills:
-  - tapps-score
-  - tapps-gate
+  - tapps-finish-task
 mcpServers:
   tapps-mcp: {}
 ---
@@ -134,9 +133,8 @@ permissionMode: acceptEdits
 memory: project
 isolation: worktree
 skills:
-  - tapps-score
-  - tapps-gate
-  - tapps-validate
+  - tapps-review-pipeline
+  - tapps-finish-task
 mcpServers:
   tapps-mcp: {}
 ---

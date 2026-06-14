@@ -10,26 +10,26 @@ nlt-report-studio = { git = "https://github.com/wtthornton/ReportLab.git", tag =
 
 [tool.uv]
 dev-dependencies = [
-    "pytest>=9.0.3,<10",
+    "pytest>=9.1.0,<10",
     "pytest-asyncio>=1.4.0,<2",
     "pytest-cov>=7.1.0,<8",
     "pytest-timeout>=2.4.0,<3",
-    "pytest-xdist>=3.5.0,<4",
-    "pytest-randomly>=3.16.0,<4",
+    "pytest-xdist>=3.8.0,<4",
+    "pytest-randomly>=4.1.0,<5",
     "mypy>=2.1.0,<3",
-    "ruff>=0.15.16,<1",
-    "pre-commit>=4.5.1,<5",
+    "ruff>=0.15.17,<1",
+    "pre-commit>=4.6.0,<5",
     "types-PyYAML>=6.0.12.20260518",
-    "playwright>=1.58.0,<2",
+    "playwright>=1.60.0,<2",
     # tree-sitter for docs-mcp multi-language extraction tests
-    "tree-sitter>=0.24.0,<1",
+    "tree-sitter>=0.25.2,<1",
     "tree-sitter-typescript>=0.23.2,<1",
-    "tree-sitter-go>=0.23.4,<1",
-    "tree-sitter-rust>=0.23.2,<1",
+    "tree-sitter-go>=0.25.0,<1",
+    "tree-sitter-rust>=0.24.2,<1",
     "tree-sitter-java>=0.23.5,<1",
     # eval-descriptions harness --backend=api (Phase C). Lazy-imported by
     # scripts/eval-descriptions/run.py; not a runtime dep of any package.
-    "anthropic>=0.40,<1",
+    "anthropic>=0.109.1,<1",
 ]
 
 [tool.ruff]

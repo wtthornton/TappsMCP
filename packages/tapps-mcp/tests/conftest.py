@@ -405,6 +405,11 @@ def _inject_in_memory_private_backend(monkeypatch: pytest.MonkeyPatch) -> Iterat
 
     from tapps_brain import store as _store_mod
 
+    if not os.environ.get("TAPPS_BRAIN_TEST_NO_INMEMORY_BACKEND"):
+        monkeypatch.delenv("TAPPS_BRAIN_DATABASE_URL", raising=False)
+        monkeypatch.delenv("TAPPS_BRAIN_HIVE_DSN", raising=False)
+        monkeypatch.delenv("TAPPS_BRAIN_PROJECT", raising=False)
+
     _original_init = _store_mod.MemoryStore.__init__
 
     def _patched_init(self: Any, *args: Any, **kwargs: Any) -> None:
@@ -432,24 +437,41 @@ def _inject_in_memory_private_backend(monkeypatch: pytest.MonkeyPatch) -> Iterat
 
 
 @pytest.fixture(autouse=True)
-def _reset_caches() -> Generator[None, None, None]:
-    """Reset all module-level singletons after each test.
+def _reset_mcp_memory_mode() -> Generator[None, None, None]:
+    """Reset tapps_memory slim/off routing before and after each test.
 
-    Caches populate normally during each test and are cleared in teardown,
-    ensuring test isolation.  See module docstring for the full registry.
+    Importing ``tapps_mcp.server`` registers ``tapps_memory`` and sets
+    ``_MCP_MEMORY_MODE = "slim"`` at collection time; without this reset,
+    refused-envelope tests see slim dispatch instead.
     """
-    yield
+    import tapps_mcp.server_memory_tools as _smt
 
-    # -- tapps-core caches --
+    _smt._MCP_MEMORY_MODE = "off"
+    yield
+    _smt._MCP_MEMORY_MODE = "off"
+
+
+@pytest.fixture()
+def no_session_sentinel(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Bypass the on-disk session sentinel so tests get full session_start payloads."""
+    from tapps_mcp.server_pipeline_tools import _reset_session_start_cache
+    from tapps_mcp.tools import session_start_core as ssc
+
+    monkeypatch.setattr(ssc, "read_session_sentinel", lambda *_a, **_k: None)
+    _reset_session_start_cache()
+
+
+def _clear_test_singleton_caches() -> None:
+    """Reset module-level singletons (see module docstring for registry)."""
     from tapps_core.config.feature_flags import feature_flags
     from tapps_core.config.settings import _reset_settings_cache
 
     _reset_settings_cache()
     feature_flags.reset()
 
-    # -- tapps-mcp caches --
     from tapps_mcp.quick_check_recurring import _reset_recurring_quick_check_state
     from tapps_mcp.server_helpers import (
+        _reset_brain_bridge_cache,
         _reset_hive_store_cache,
         _reset_lookup_engine_cache,
         _reset_memory_store_cache,
@@ -467,6 +489,7 @@ def _reset_caches() -> Generator[None, None, None]:
     _reset_scorer_cache()
     _reset_lookup_engine_cache()
     _reset_memory_store_cache()
+    _reset_brain_bridge_cache()
     _reset_hive_store_cache()
     _reset_session_state()
     _reset_tools_cache()
@@ -476,10 +499,14 @@ def _reset_caches() -> Generator[None, None, None]:
     clear_dependency_cache()
     _reset_recurring_quick_check_state()
 
-    # content_hash_cache is a module-level OrderedDict; must be cleared so
-    # a cached result for "x = 1\n" (or any other small file) from one test
-    # cannot produce a spurious cache hit in a later test that uses the same
-    # file content with a different preset or expectation.
     from tapps_mcp.tools.content_hash_cache import clear as _clear_content_cache
 
     _clear_content_cache()
+
+
+@pytest.fixture(autouse=True)
+def _reset_caches() -> Generator[None, None, None]:
+    """Reset module-level singletons before and after each test."""
+    _clear_test_singleton_caches()
+    yield
+    _clear_test_singleton_caches()

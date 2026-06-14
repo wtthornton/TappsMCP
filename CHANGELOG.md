@@ -9,13 +9,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-- **ADR-0014 consumer wiring (TAP-3867–3870)** — Brain-central doc RAG cutover helpers: `docs_via_brain` routing in `LookupEngine` and session-start warm, doctor checks for legacy doc cache and consumer Context7 env, `upgrade-fleet --import-legacy-doc-cache` / `--strip-context7-env`, and `check_brain_docs_tools` probe when `docs_via_brain` is enabled.
+- **ADR-0014 consumer wiring (TAP-3867–3870)** — Brain-central doc RAG cutover helpers: `docs_via_brain` routing in `LookupEngine` and session-start warm, doctor checks for legacy doc cache and consumer Context7 env, `upgrade-fleet --import-legacy-doc-cache` / `--strip-context7-env`, and `check_brain_docs_tools` probe when `docs_via_brain` is enabled. ADR-0014/0015 accepted; fleet cutover runbook at `docs/operations/brain-doc-rag-cutover-runbook.md`.
 
 ### Changed
 
-- **Developer default NLT bundle (TAP-3916 / TAP-3924)** — `developer` bundle now enables `nlt-build`, `nlt-memory`, and `nlt-linear-issues` (~18 eager). New `minimal` bundle is build-only for token-tight sessions. `tapps_init` and `upgrade-fleet` default unchanged (`developer`); use `--bundle minimal` for the old single-server default.
+- **Developer default NLT bundle (TAP-3916 / TAP-3924 / TAP-3925)** — `developer` bundle now enables `nlt-build`, `nlt-memory`, and `nlt-linear-issues` (~18 eager). `setup_generator` / `upgrade-fleet` write all three as active MCP entries; setup/docs/release remain commented opt-in. New `minimal` bundle is build-only for token-tight sessions.
+- **DocsMCP execution metrics (TAP-3917)** — `success_response` / `error_response` record `docs_*` tool calls to `.tapps-mcp/metrics/tool_calls_*.jsonl` with brain dual-write via `ToolCallMetricsCollector`.
+- **Cursor loop-metrics stop hook (TAP-3918, TAP-3927)** — `tapps-stop.sh` / `.ps1` in `.cursor/hooks/` call `tapps-mcp loop-metrics-record`; shared transcript parser records `skills_used` alongside `tools_used`.
+- **Cursor stop completion gate (TAP-3921, TAP-3922)** — stop hook writes `.completion-gate-violations.jsonl`, surfaces `compute_gaps` followup via `followup_message`, and shares NLT MCP tool-prefix matching via `pipeline_tool_sets.py`. Configurable with `cursor_stop_completion_gate` in `.tapps-mcp.yaml` (`off` / `warn` / `block`).
+- **Fleet tool usage (TAP-3919, TAP-3920, TAP-3932)** — `tapps-mcp tool-usage-fleet` CLI, per-project `top_tools` in `audit-fleet`, and skill-utilization section from loop-metrics.
+- **EPIC-111 dependency floors (TAP-3933–3940)** — Raised workspace pins across tapps-mcp, tapps-core, and docs-mcp: mcp 1.27.2, pydantic 2.13.4, structlog 26.1, cryptography 49.x floor, ruff 0.15.17, pytest 9.1, tree-sitter 0.25.2, hatchling 1.30.1, cohere 7.0.4 (reranker extra), and aligned dev/test toolchain. `uv.lock` refreshed; pylint 4.x deferred (perflint cap). tapps-brain stays at git rev `d893fc1` per ADR-0015 until `v3.24.0` tag ships.
 
 - **`tapps_lookup_docs` docstring** — Documents brain-central vs local cache behavior (ADR-0014).
+
+### Fixed
+
+- **NLT upgrade heal circular reference (TAP-2199)** — `_merge_nlt_config` no longer shadows the outer `merged` config dict when merging legacy `tapps-mcp` env vars; fixes `Circular reference detected` during `${workspaceFolder}` self-heal upgrades.
+- **Domain weight brain parse (tapps-core)** — `_parse_snapshot` is a static method again; brain profile payloads with embedded `domain` keys no longer raise duplicate-kwarg errors. Unit tests isolate from live brain profile KV and metrics dual-read.
 
 ## [3.12.27] - 2026-06-12
 

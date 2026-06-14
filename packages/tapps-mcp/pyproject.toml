@@ -1,5 +1,5 @@
 [build-system]
-requires = ["hatchling>=1.28,<2"]
+requires = ["hatchling>=1.30.1,<2"]
 build-backend = "hatchling.build"
 
 [project]
@@ -26,67 +26,67 @@ classifiers = [
 dependencies = [
     "tapps-core>=1.0.0",
     "docs-mcp>=0.1.0",
-    "mcp[cli]>=1.26.0,<2",
-    "pydantic>=2.12.5,<3",
-    "pydantic-settings>=2.13.1,<3",
-    "structlog>=25.5.0,<26",
+    "mcp[cli]>=1.27.2,<2",
+    "pydantic>=2.13.4,<3",
+    "pydantic-settings>=2.14.1,<3",
+    "structlog>=26.1.0,<27",
     "pyyaml>=6.0.3,<7",
-    "click>=8.3.1,<9",
-    "anyio>=4.12.1,<5",
+    "click>=8.4.1,<9",
+    "anyio>=4.13.0,<5",
     "httpx>=0.28.1,<1",
-    "filelock>=3.24.3,<4",
+    "filelock>=3.29.4,<4",
     "bandit>=1.8",
     "defusedxml>=0.7.1,<1",
     "radon>=6.0",
     "vulture>=2.14",
     "pylint>=3.3",
     "perflint>=0.8",
-    "pip-audit>=2.8",
+    "pip-audit>=2.10.1",
     # Security floors for transitive CVEs (TAP-608). Remove once the
     # parents (mcp, pip-audit, bandit, pytest) bump their pins past these.
-    "cryptography>=46.0.7,<47",        # CVE-2026-26007, -34073, -39892 via mcp[cli]->pyjwt[crypto]
+    "cryptography>=49.0.0,<50",        # CVE-2026-26007, -34073, -39892 via mcp[cli]->pyjwt[crypto]
     "pygments>=2.20.0,<3",             # CVE-2026-4539 via bandit->rich, pytest
-    "pyjwt>=2.12.0,<3",                # CVE-2026-32597 via mcp[cli]
-    "python-multipart>=0.0.27,<1",     # CVE-2026-40347, CVE-2026-42561 via mcp[cli]
-    "requests>=2.33.0,<3",             # CVE-2026-25645 via pip-audit->cachecontrol
+    "pyjwt>=2.13.0,<3",                # CVE-2026-32597 via mcp[cli]
+    "python-multipart>=0.0.32,<1",     # CVE-2026-40347, CVE-2026-42561 via mcp[cli]
+    "requests>=2.34.2,<3",             # CVE-2026-25645 via pip-audit->cachecontrol
     "urllib3>=2.7.0,<3",               # CVE-2026-44431, CVE-2026-44432 via pip-audit->requests
     "python-dotenv>=1.2.2,<2",         # CVE-2026-28684 via mcp[cli]->pydantic-settings
-    "pip>=26.1",                        # CVE-2026-3219, CVE-2026-6357 via pip-audit->pip-api
+    "pip>=26.1.2",                      # CVE-2026-3219, CVE-2026-6357 via pip-audit->pip-api
 ]
 
 [project.optional-dependencies]
 dev = [
-    "pytest>=9.0.2,<10",
-    "pytest-asyncio>=1.3.0,<2",
-    "pytest-cov>=7.0.0,<8",
+    "pytest>=9.1.0,<10",
+    "pytest-asyncio>=1.4.0,<2",
+    "pytest-cov>=7.1.0,<8",
     "pytest-timeout>=2.4.0,<3",
-    "mypy>=2.0.0,<3",
-    "ruff>=0.15.2,<1",
-    "pre-commit>=4.5.1,<5",
+    "mypy>=2.1.0,<3",
+    "ruff>=0.15.17,<1",
+    "pre-commit>=4.6.0,<5",
     "types-PyYAML>=6.0.12",
-    "playwright>=1.58.0,<2",
+    "playwright>=1.60.0,<2",
 ]
 perf = [
     # pylint and perflint are now base dependencies
 ]
 rag = [
-    "faiss-cpu>=1.13.2,<2",
-    "sentence-transformers>=5.2.3,<6",
-    "numpy>=2.4.2,<3",
+    "faiss-cpu>=1.14.3,<2",
+    "sentence-transformers>=5.5.1,<6",
+    "numpy>=2.4.6,<3",
 ]
 vector = [
-    "faiss-cpu>=1.13.2,<2",
-    "sentence-transformers>=5.2.3,<6",
-    "numpy>=2.4.2,<3",
+    "faiss-cpu>=1.14.3,<2",
+    "sentence-transformers>=5.5.1,<6",
+    "numpy>=2.4.6,<3",
 ]
 pip-audit = [
     # pip-audit is now a base dependency
 ]
 treesitter = [
-    "tree-sitter>=0.24.0,<1",
+    "tree-sitter>=0.25.2,<1",
     "tree-sitter-typescript>=0.23.2,<1",
-    "tree-sitter-go>=0.23.4,<1",
-    "tree-sitter-rust>=0.23.2,<1",
+    "tree-sitter-go>=0.25.0,<1",
+    "tree-sitter-rust>=0.24.2,<1",
 ]
 
 [project.scripts]

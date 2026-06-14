@@ -28,8 +28,32 @@ After upgrading to a release that includes [ADR-0016](adr/0016-needs-based-nlt-m
 
 1. Run `tapps-mcp upgrade --host auto --force` to refresh `.cursor/mcp.json` / `.mcp.json`.
 2. Default **developer** bundle is **`nlt-build` + `nlt-memory` + `nlt-linear-issues`** (~18 eager tools). Use `--bundle minimal` on init/upgrade-fleet for build-only (~9 eager). Enable `nlt-setup` briefly for bootstrap/doctor.
-3. Update skill `allowed-tools` prefixes: `mcp__nlt-build__*`, `mcp__nlt-memory__*`, `mcp__nlt-setup__*`. Legacy `nlt-code-quality` / `nlt-platform-admin` profile aliases work for one release.
-4. Session handoff / `tapps_session_notes` moved to **Memory** server — enable `nlt-memory` or use `tapps-mcp memory` CLI.
+3. Re-run `tapps-mcp init --host auto --force` or `tapps-mcp upgrade-fleet --bundle developer` so `.cursor/mcp.json` / `.mcp.json` picks up all three active servers (TAP-3925).
+4. Update skill `allowed-tools` prefixes: `mcp__nlt-build__*`, `mcp__nlt-memory__*`, `mcp__nlt-setup__*`. Legacy `nlt-code-quality` / `nlt-platform-admin` profile aliases work for one release.
+5. Session handoff / `tapps_session_notes` moved to **Memory** server — enable `nlt-memory` or use `tapps-mcp memory` CLI.
+
+---
+
+## ADR-0014: Brain-central doc RAG cutover
+
+When enabling library docs via tapps-brain ([ADR-0014](adr/0014-brain-central-doc-rag-big-bang.md),
+[ADR-0015](adr/0015-require-tapps-brain-docs-lookup-at-3240.md)):
+
+1. Deploy tapps-brain **3.24.0+** with `docs_lookup` / `docs_warm` and `CONTEXT7_API_KEY` on the brain host.
+2. Set `docs_via_brain: true` in `.tapps-mcp.yaml` (or `TAPPS_MCP_DOCS_VIA_BRAIN=1`).
+3. Import legacy per-repo caches, then upgrade consumers:
+
+   ```bash
+   tapps-brain docs import-dir .tapps-mcp-cache          # per repo
+   tapps-mcp upgrade-fleet --import-legacy-doc-cache --strip-context7-env --force
+   tapps-mcp upgrade --force --host auto
+   ```
+
+4. Remove `TAPPS_MCP_CONTEXT7_API_KEY` from MCP env blocks and shell profiles.
+5. Verify: `tapps-mcp doctor` (legacy doc cache + brain docs probe) and `tapps-mcp lookup-docs --library pytest --topic fixtures`.
+
+Full **~30 minute maintenance window** steps:
+[operations/brain-doc-rag-cutover-runbook.md](operations/brain-doc-rag-cutover-runbook.md).
 
 ---
 

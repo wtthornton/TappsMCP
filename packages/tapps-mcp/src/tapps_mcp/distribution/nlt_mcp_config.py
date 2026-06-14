@@ -10,6 +10,7 @@ from typing import Any, Final, Literal
 
 NltBundle = Literal[
     "developer",
+    "minimal",
     "memory",
     "planning",
     "docs",
@@ -80,7 +81,8 @@ NLT_SERVER_SPECS: Final[dict[str, dict[str, Any]]] = {
 }
 
 NLT_BUNDLES: Final[dict[NltBundle, tuple[str, ...]]] = {
-    "developer": ("nlt-build",),
+    "developer": ("nlt-build", "nlt-memory", "nlt-linear-issues"),
+    "minimal": ("nlt-build",),
     "memory": ("nlt-build", "nlt-memory"),
     "planning": ("nlt-build", "nlt-linear-issues"),
     "docs": ("nlt-build", "nlt-project-docs"),

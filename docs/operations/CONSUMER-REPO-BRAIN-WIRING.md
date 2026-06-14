@@ -6,6 +6,8 @@ tapps-brain directly).
 
 For host-level brain deployment, see [TAPPS-BRAIN-LOCAL-SETUP.md](TAPPS-BRAIN-LOCAL-SETUP.md).
 For runtime troubleshooting, see [MEMORY_REFERENCE.md § brain-health-diagnostics](../MEMORY_REFERENCE.md#brain-health-diagnostics).
+For the ADR-0014 fleet doc-RAG cutover (~30 min maintenance window), see
+[brain-doc-rag-cutover-runbook.md](brain-doc-rag-cutover-runbook.md).
 
 ---
 
@@ -36,6 +38,8 @@ For runtime troubleshooting, see [MEMORY_REFERENCE.md § brain-health-diagnostic
 
    - `brain_version` must be **≥ 3.24.0** (floor per
      [ADR-0013](../adr/0013-pin-tapps-brain-version-floor-at-3240.md),
+     amended by [ADR-0015](../adr/0015-require-tapps-brain-docs-lookup-at-3240.md)
+     when `docs_via_brain` is enabled,
      `packages/tapps-core/pyproject.toml`, and `_BRAIN_VERSION_FLOOR` in
      `brain_bridge.py`).
    - The hard floor is enforced at bridge startup, in

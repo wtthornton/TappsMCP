@@ -641,6 +641,55 @@ class TestRunInit:
         assert "not found" in captured.out
 
 
+class TestDeveloperBundleMcpConfig:
+    """TAP-3925: developer bundle writes three active NLT MCP servers."""
+
+    def test_generate_mcp_json_developer_three_active(self, tmp_path: Path) -> None:
+        with patch(
+            "tapps_mcp.distribution.setup_generator.shutil.which",
+            return_value="/bin/tapps-mcp",
+        ):
+            ok = _generate_config(
+                "cursor",
+                tmp_path,
+                force=True,
+                mcp_bundle="developer",
+                use_nlt_plugin=True,
+            )
+        assert ok is True
+        from tapps_mcp.distribution.setup_generator import _load_mcp_config_json
+
+        data = _load_mcp_config_json(tmp_path / ".cursor" / "mcp.json")
+        servers = data["mcpServers"]
+        assert set(servers.keys()) >= {
+            "nlt-build",
+            "nlt-memory",
+            "nlt-linear-issues",
+        }
+        assert "nlt-setup" not in servers
+        assert "nlt-project-docs" not in servers
+        assert "nlt-release-ship" not in servers
+
+    def test_generate_mcp_json_minimal_build_only(self, tmp_path: Path) -> None:
+        with patch(
+            "tapps_mcp.distribution.setup_generator.shutil.which",
+            return_value="/bin/tapps-mcp",
+        ):
+            ok = _generate_config(
+                "cursor",
+                tmp_path,
+                force=True,
+                mcp_bundle="minimal",
+                use_nlt_plugin=True,
+            )
+        assert ok is True
+        from tapps_mcp.distribution.setup_generator import _load_mcp_config_json
+
+        data = _load_mcp_config_json(tmp_path / ".cursor" / "mcp.json")
+        servers = data["mcpServers"]
+        assert list(servers.keys()) == ["nlt-build"]
+
+
 # ---------------------------------------------------------------------------
 # CLI integration tests (Click CliRunner)
 # ---------------------------------------------------------------------------
@@ -696,6 +745,8 @@ class TestCliInit:
         assert "tapps-brain" not in data["mcpServers"]
         assert "other-mcp" in data["mcpServers"]
         assert "nlt-build" in data["mcpServers"]
+        assert "nlt-memory" in data["mcpServers"]
+        assert "nlt-linear-issues" in data["mcpServers"]
         assert "bridge-only" in result.output.lower() or "Removed direct" in result.output
 
     def test_init_vscode(self, tmp_path):

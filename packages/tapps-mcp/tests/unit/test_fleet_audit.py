@@ -16,6 +16,7 @@ from tapps_mcp.tools.fleet_audit import (
     merge_metrics,
     parse_period,
     run_fleet_audit,
+    run_tool_usage_fleet,
 )
 
 
@@ -114,7 +115,39 @@ class TestFleetAuditProject:
         assert report["metrics"]["total_calls"] == 2
         assert report["metrics"]["local_jsonl_rows"] == 2
         assert report["metrics"]["session_start_lookup_ratio"] == 1.0
+        assert report["top_tools"][0]["name"] == "tapps_session_start"
         assert report["handoff"]["exists"] is False
+
+    def test_run_tool_usage_fleet_leaderboard(self, tmp_path: Path) -> None:
+        project = tmp_path / "demo"
+        project.mkdir()
+        (project / ".tapps-mcp.yaml").write_text("quality_preset: standard\n")
+        metrics_dir = project / ".tapps-mcp" / "metrics"
+        _write_metric(metrics_dir, _sample_metric(call_id="a", tool="docs_generate_epic"))
+        _write_metric(metrics_dir, _sample_metric(call_id="b", tool="tapps_session_start"))
+
+        report = run_tool_usage_fleet(period="1d", roots=[project], include_brain=False)
+        assert report["fleet_top_tools"][0]["name"] == "docs_generate_epic"
+        assert report["projects"][0]["top_tools"][0]["count"] == 1
+
+    def test_format_markdown_includes_top_tools_and_skills(self, tmp_path: Path) -> None:
+        project = tmp_path / "demo"
+        project.mkdir()
+        (project / ".tapps-mcp.yaml").write_text("quality_preset: standard\n")
+        metrics_dir = project / ".tapps-mcp" / "metrics"
+        _write_metric(metrics_dir, _sample_metric())
+        loop_metrics = project / ".tapps-mcp" / "loop-metrics.jsonl"
+        loop_metrics.parent.mkdir(parents=True, exist_ok=True)
+        loop_metrics.write_text(
+            json.dumps({"ts": int(__import__("time").time()), "skills_used": ["tapps-finish-task"]})
+            + "\n",
+            encoding="utf-8",
+        )
+        report = run_fleet_audit(period="1d", roots=[project], include_brain=False)
+        md = format_fleet_audit_markdown(report)
+        assert "Fleet top tools" in md
+        assert "Skill utilization" in md
+        assert "tapps-finish-task" in md
 
     def test_run_fleet_audit_shape(self, tmp_path: Path) -> None:
         project = tmp_path / "demo"

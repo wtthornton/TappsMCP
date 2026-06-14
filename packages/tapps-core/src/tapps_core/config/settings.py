@@ -1069,6 +1069,18 @@ class TappsMCPSettings(BaseSettings):
         ),
     )
 
+    # Cursor stop completion gate (TAP-3921) — warn-mode telemetry + optional followup
+    cursor_stop_completion_gate: Literal["off", "warn", "block"] | None = Field(
+        default=None,
+        description=(
+            "Cursor stop hook completion gate. 'off' records loop-metrics only. "
+            "'warn' appends .completion-gate-violations.jsonl and emits a mild "
+            "followup_message when pipeline gaps are detected. 'block' uses a "
+            "stronger followup_message (Cursor cannot exit-2). When unset, "
+            "defaults from llm_engagement_level: high=block, medium=warn, low=off."
+        ),
+    )
+
     # Release update config (TAP-1112, TAP-1114)
     linear_team: str = Field(
         default="",
@@ -1298,6 +1310,16 @@ class TappsMCPSettings(BaseSettings):
         if "linear_enforce_cache_gate" in self.model_fields_set:
             return self.linear_enforce_cache_gate
         if self.llm_engagement_level in ("high", "medium"):
+            return "warn"
+        return "off"
+
+    def cursor_stop_completion_gate_resolved(self) -> Literal["off", "warn", "block"]:
+        """Resolve Cursor stop completion gate with engagement-aware default (TAP-3921)."""
+        if self.cursor_stop_completion_gate is not None:
+            return self.cursor_stop_completion_gate
+        if self.llm_engagement_level == "high":
+            return "block"
+        if self.llm_engagement_level == "medium":
             return "warn"
         return "off"
 

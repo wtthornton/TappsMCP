@@ -9,9 +9,14 @@ from pathlib import Path
 import pytest
 
 from tapps_mcp.tools.loop_metrics import (
+    aggregate_skills_used,
+    append_loop_metrics_row,
     compute_gate_pass_rate_7d,
     compute_rolling_stats,
+    extract_skill_name,
+    parse_transcript_loop_metrics,
     read_loop_metrics,
+    record_loop_metrics_from_hook_payload,
     should_auto_promote_cache_gate,
 )
 
@@ -137,3 +142,94 @@ class TestComputeGatePassRate7d:
         )
         rate = compute_gate_pass_rate_7d(tmp_path)
         assert rate == 0.5
+
+
+class TestTranscriptParsing:
+    def test_extract_skill_from_skill_tool(self) -> None:
+        assert extract_skill_name("Skill", {"skill": "tapps-finish-task"}) == "tapps-finish-task"
+
+    def test_extract_skill_from_skill_md_read(self) -> None:
+        path = "/repo/.cursor/skills/linear-read/SKILL.md"
+        assert extract_skill_name("Read", {"path": path}) == "linear-read"
+
+    def test_parse_transcript_row_shape(self, tmp_path: Path) -> None:
+        transcript = tmp_path / "session.jsonl"
+        transcript.write_text(
+            json.dumps(
+                {
+                    "message": {
+                        "content": [
+                            {
+                                "type": "tool_use",
+                                "name": "Skill",
+                                "input": {"skill": "tapps-finish-task"},
+                            },
+                            {
+                                "type": "tool_use",
+                                "name": "mcp__nlt-build__tapps_quick_check",
+                                "input": {"file_path": "src/main.py"},
+                            },
+                            {
+                                "type": "tool_use",
+                                "name": "Edit",
+                                "input": {"file_path": "src/main.py"},
+                            },
+                        ]
+                    }
+                }
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+        row = parse_transcript_loop_metrics(transcript)
+        assert row["skills_used"] == ["tapps-finish-task"]
+        assert row["mcp_calls"] == 1
+        assert "src/main.py" in row["files_edited"]
+        assert row["violations"] == ["CHECKLIST_MISSING"]
+
+    def test_record_from_cursor_payload(self, tmp_path: Path) -> None:
+        transcript = tmp_path / "agent-transcripts" / "abc.jsonl"
+        transcript.parent.mkdir(parents=True)
+        transcript.write_text(
+            json.dumps(
+                {
+                    "message": {
+                        "content": [
+                            {
+                                "type": "tool_use",
+                                "name": "mcp__nlt-build__tapps_session_start",
+                                "input": {},
+                            }
+                        ]
+                    }
+                }
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+        payload = {
+            "workspace_roots": [str(tmp_path)],
+            "transcript_path": str(transcript),
+        }
+        result = record_loop_metrics_from_hook_payload(payload)
+        assert result["recorded"] is True
+        rows = read_loop_metrics(tmp_path)
+        assert len(rows) == 1
+        assert rows[0]["mcp_calls"] == 1
+
+
+class TestAggregateSkillsUsed:
+    def test_top_skills_from_loop_metrics(self, tmp_path: Path) -> None:
+        metrics = tmp_path / ".tapps-mcp" / "loop-metrics.jsonl"
+        now = int(time.time())
+        _write_metrics(
+            metrics,
+            [
+                {"ts": now, "skills_used": ["tapps-finish-task", "linear-read"]},
+                {"ts": now - 10, "skills_used": ["tapps-finish-task"]},
+            ],
+        )
+        stats = aggregate_skills_used(tmp_path, window_days=7)
+        assert stats["loops"] == 2
+        assert stats["top_skills"][0]["name"] == "tapps-finish-task"
+        assert stats["skill_orchestrated_closes"] == 2

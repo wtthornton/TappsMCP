@@ -677,7 +677,6 @@ def merge_cursor_hooks_config(
     adds missing Tapps-owned events and migrates wrong-platform tapps commands.
     """
     merged = dict(existing_hooks)
-    merged.pop("stop", None)
 
     hooks_added = 0
     for event, entries in hooks_config.items():
@@ -753,13 +752,6 @@ def generate_cursor_hooks(
 
     scripts_created = _write_hook_scripts(hooks_dir, script_templates, engagement_level, win)
     scripts_removed = _cleanup_wrong_platform_scripts(hooks_dir, win)
-
-    # Remove deprecated stop hook scripts (validation is via tapps-mcp validate-changed)
-    for name in ("tapps-stop.ps1", "tapps-stop.sh"):
-        path = hooks_dir / name
-        if path.exists():
-            path.unlink()
-            scripts_removed.append(name)
 
     # Merge hooks config into .cursor/hooks.json
     hooks_file = project_root / ".cursor" / "hooks.json"

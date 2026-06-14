@@ -197,15 +197,15 @@ claude plugin install tapps-mcp
 
 - **MCP Server**: `tapps-mcp serve` with 12+ quality tools
 - **Agents**: tapps-reviewer, tapps-researcher, tapps-validator
-- **Skills**: `/tapps-score`, `/tapps-gate`, `/tapps-validate`
+- **Skills**: `/tapps-finish-task`, `/tapps-review-pipeline`, `/linear-read`
 - **Hooks**: Session start, post-edit reminders, stop gate
 
 ## Usage
 
 Once installed, the TappsMCP tools are available in every
-session. Use `/tapps-score` to score a file, `/tapps-gate` to
-run quality gates, and `/tapps-validate` before declaring
-work complete.
+session. Use `/tapps-finish-task` before declaring work complete,
+`/tapps-review-pipeline` for multi-file review, and direct MCP tools
+(`tapps_quick_check`, `tapps_validate_changed`) during edit loops.
 """
 
 _CURSOR_PLUGIN_README = """\
@@ -223,7 +223,7 @@ Cursor plugin.
 
 - **MCP Server**: `tapps-mcp serve` with 12+ quality tools
 - **Agents**: tapps-reviewer, tapps-researcher, tapps-validator
-- **Skills**: `@tapps-score`, `@tapps-gate`, `@tapps-validate`
+- **Skills**: `@tapps-finish-task`, `@tapps-review-pipeline`, `@linear-read`
 - **Hooks**: Before MCP, after edit reminders, stop prompt
 - **Rules**: Pipeline (always), Python quality (auto-attach),
   Expert consultation (agent-requested)
@@ -231,9 +231,9 @@ Cursor plugin.
 ## Usage
 
 Once installed, the TappsMCP tools are available in every
-session. Use `@tapps-score` to score a file, `@tapps-gate` to
-run quality gates, and `@tapps-validate` before declaring
-work complete.
+session. Use `@tapps-finish-task` before declaring work complete,
+`@tapps-review-pipeline` for multi-file review, and direct MCP tools
+(`tapps_quick_check`, `tapps_validate_changed`) during edit loops.
 """
 
 

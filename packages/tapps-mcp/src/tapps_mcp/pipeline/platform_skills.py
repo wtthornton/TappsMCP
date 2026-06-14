@@ -75,74 +75,16 @@ _CONTINUE_EMIT_AND_PROCEED = """\
 
 5. **Proceed on P0.** Ask only if P0 is ambiguous; otherwise start using normal TAPPS workflow (`tapps_quick_check` after Python edits). Do **not** ask the user to re-paste prior context when handoff files exist."""
 
+# Skills removed in v3.12.0 (TAP-3930) — wrapper skills with no orchestration value.
+DEPRECATED_TAPPS_SKILLS: frozenset[str] = frozenset(
+    {"tapps-score", "tapps-gate", "tapps-validate", "tapps-report"}
+)
+
 # ---------------------------------------------------------------------------
 # Skills templates (Story 12.8)
 # ---------------------------------------------------------------------------
 
 CLAUDE_SKILLS: dict[str, str] = {
-    "tapps-score": """\
----
-name: tapps-score
-user-invocable: true
-model: claude-haiku-4-5-20251001
-description: Score a Python file across 7 quality categories and display a structured report. Use when reviewing a Python file's quality scores before a code review or pull request.
-allowed-tools: mcp__nlt-build__tapps_score_file mcp__nlt-build__tapps_quick_check
-argument-hint: "[file-path]"
-disable-model-invocation: true
----
-
-> **DEPRECATED (v3.11.0+):** This skill wraps a single MCP tool and adds no orchestration. Call `mcp__nlt-build__tapps_quick_check(file_path=...)` directly, or invoke `/tapps-finish-task` for end-of-task orchestration. Scheduled for removal in v3.12.0.
-
-Score the specified Python file using TappsMCP:
-
-1. Call `mcp__nlt-build__tapps_quick_check` with the file path to get an instant score
-2. If the score is below 80, call `mcp__nlt-build__tapps_score_file` for the full breakdown
-3. Present the results in a table: category, score (0-100), top issue per category
-4. Highlight any category scoring below 70 as a priority fix
-5. Suggest the single highest-impact change the developer can make
-""",
-    "tapps-gate": """\
----
-name: tapps-gate
-user-invocable: true
-model: claude-haiku-4-5-20251001
-description: Run a quality gate check and report pass/fail with blocking issues. Use when checking if a Python file passes the quality threshold before declaring a task complete.
-allowed-tools: mcp__nlt-build__tapps_quality_gate
-argument-hint: "[file-path]"
-disable-model-invocation: true
----
-
-> **DEPRECATED (v3.11.0+):** This skill wraps a single MCP tool and adds no orchestration. Call `mcp__nlt-build__tapps_quality_gate(file_path=...)` directly, or invoke `/tapps-finish-task` for end-of-task orchestration. Scheduled for removal in v3.12.0.
-
-Run a quality gate check using TappsMCP:
-
-1. Call `mcp__nlt-build__tapps_quality_gate` with the current project
-2. Display the overall pass/fail result clearly
-3. List each failing criterion with its actual vs. required value
-4. If the gate fails, list the minimum changes required to pass
-5. Do not declare work complete if the gate has not passed
-""",
-    "tapps-validate": """\
----
-name: tapps-validate
-user-invocable: true
-model: claude-haiku-4-5-20251001
-description: Validate all changed files meet quality thresholds before declaring work complete. Use when you have finished editing Python files and want to batch-validate all changed files against the quality gate.
-allowed-tools: mcp__nlt-build__tapps_validate_changed
-disable-model-invocation: true
----
-
-> **DEPRECATED (v3.11.0+):** This skill wraps a single MCP tool and adds no orchestration. Call `mcp__nlt-build__tapps_validate_changed(file_paths="...")` directly, or invoke `/tapps-finish-task` which bundles validate + checklist + memory save. Scheduled for removal in v3.12.0.
-
-Validate changed files using TappsMCP:
-
-1. Identify the Python files you changed in this session (from git status or your edit history)
-2. Call `mcp__nlt-build__tapps_validate_changed` with explicit `file_paths` (comma-separated) scoped to only those files. **Never call without `file_paths`** - auto-detect scans all git-changed files and can be very slow in large repos. Default is quick mode; only use `quick=false` as a last resort (pre-release, security audit).
-3. Display each file with its score and pass/fail status
-4. If any file fails, list it with the top issue preventing it from passing
-5. Confirm explicitly when all changed files pass before declaring work done
-6. If any files fail, do NOT mark the task as complete
-""",
     "tapps-finish-task": """\
 ---
 name: tapps-finish-task
@@ -235,30 +177,6 @@ Start work in a fresh context window by assembling structured state — not a us
    - For backlog/triage without a known id, invoke the `linear-read` skill instead of raw `list_issues` (do not call `list_issues` directly — cache gate).
 
 """ + _CONTINUE_EMIT_AND_PROCEED + """
-""",
-    "tapps-report": """\
----
-name: tapps-report
-user-invocable: true
-model: claude-haiku-4-5-20251001
-description: >-
-  Generate a quality report across Python files in the project.
-  Scores multiple files and presents an aggregate summary. Use when you
-  want an aggregate quality overview across multiple Python files.
-allowed-tools: mcp__nlt-build__tapps_report
-argument-hint: "[file-path or empty for project-wide]"
-disable-model-invocation: true
----
-
-> **DEPRECATED (v3.11.0+):** This skill wraps a single MCP tool and adds no orchestration. Call `mcp__nlt-build__tapps_report(file_paths=...)` directly. Scheduled for removal in v3.12.0.
-
-Generate a quality report using TappsMCP:
-
-1. Call `mcp__nlt-build__tapps_report` with an optional file path
-2. If no file path, a project-wide report scores up to 20 files
-3. Present results in a table: file | score | pass/fail | top issue
-4. Highlight any files scoring below the quality gate threshold
-5. Suggest priority fixes for the lowest-scoring files
 """,
     "tapps-review-pipeline": """\
 ---
@@ -1130,62 +1048,6 @@ Post a structured Linear project update document when a new version is released.
 }
 
 CURSOR_SKILLS: dict[str, str] = {
-    "tapps-score": """\
----
-name: tapps-score
-description: Score a Python file across 7 quality categories and display a structured report. Use when reviewing a Python file's quality scores before a code review or pull request.
-mcp_tools:
-  - tapps_score_file
-  - tapps_quick_check
----
-
-> **DEPRECATED (v3.11.0+):** Wraps a single MCP tool with no orchestration. Call `tapps_quick_check` directly or invoke the `tapps-finish-task` skill. Scheduled for removal in v3.12.0.
-
-Score the specified Python file using TappsMCP:
-
-1. Call `tapps_quick_check` with the file path to get an instant score
-2. If the score is below 80, call `tapps_score_file` for the full 7-category breakdown
-3. Present the results in a table: category, score (0-100), top issue per category
-4. Highlight any category scoring below 70 as a priority fix
-5. Suggest the single highest-impact change the developer can make
-""",
-    "tapps-gate": """\
----
-name: tapps-gate
-description: Run a quality gate check and report pass/fail with blocking issues. Use when checking if a Python file passes the quality threshold before declaring a task complete.
-mcp_tools:
-  - tapps_quality_gate
----
-
-> **DEPRECATED (v3.11.0+):** Wraps a single MCP tool with no orchestration. Call `tapps_quality_gate` directly or invoke the `tapps-finish-task` skill. Scheduled for removal in v3.12.0.
-
-Run a quality gate check using TappsMCP:
-
-1. Call `tapps_quality_gate` with the current project
-2. Display the overall pass/fail result clearly
-3. List each failing criterion with its actual vs. required value
-4. If the gate fails, list the minimum changes required to pass
-5. Do not declare work complete if the gate has not passed
-""",
-    "tapps-validate": """\
----
-name: tapps-validate
-description: Validate all changed files meet quality thresholds before declaring work complete. Use when you have finished editing Python files and want to batch-validate all changed files against the quality gate.
-mcp_tools:
-  - tapps_validate_changed
----
-
-> **DEPRECATED (v3.11.0+):** Wraps a single MCP tool with no orchestration. Call `tapps_validate_changed` directly or invoke the `tapps-finish-task` skill (bundles validate + checklist + memory save). Scheduled for removal in v3.12.0.
-
-Validate changed files using TappsMCP:
-
-1. Identify the Python files you changed in this session (from git status or your edit history)
-2. Call `tapps_validate_changed` with explicit `file_paths` (comma-separated) scoped to only those files. **Never call without `file_paths`** - auto-detect scans all git-changed files and can be very slow in large repos. Default is quick mode; only use `quick=false` as a last resort (pre-release, security audit).
-3. Display each file with its score and pass/fail status
-4. If any file fails, list it with the top issue preventing it from passing
-5. Confirm explicitly when all changed files pass before declaring work done
-6. If any files fail, do NOT mark the task as complete
-""",
     "tapps-finish-task": """\
 ---
 name: tapps-finish-task
@@ -1267,27 +1129,6 @@ Start work in a fresh context by assembling structured state.
    - For backlog/triage without a known id, invoke the `linear-read` skill — do not call raw `list_issues` (cache gate).
 
 """ + _CONTINUE_EMIT_AND_PROCEED + """
-""",
-    "tapps-report": """\
----
-name: tapps-report
-description: >-
-  Generate a quality report across Python files in the project.
-  Scores multiple files and presents an aggregate summary. Use when you
-  want an aggregate quality overview across multiple Python files.
-mcp_tools:
-  - tapps_report
----
-
-> **DEPRECATED (v3.11.0+):** Wraps a single MCP tool with no orchestration. Call `tapps_report` directly. Scheduled for removal in v3.12.0.
-
-Generate a quality report using TappsMCP:
-
-1. Call `tapps_report` with an optional file path
-2. If no file path, a project-wide report scores up to 20 files
-3. Present results in a table: file | score | pass/fail | top issue
-4. Highlight any files scoring below the quality gate threshold
-5. Suggest priority fixes for the lowest-scoring files
 """,
     "tapps-review-pipeline": """\
 ---
@@ -1751,7 +1592,7 @@ def generate_skills(
 ) -> dict[str, Any]:
     """Generate SKILL.md files for the given platform.
 
-    Creates 12 skill directories with ``SKILL.md`` in
+    Creates skill directories with ``SKILL.md`` in
     ``.claude/skills/`` or ``.cursor/skills/`` depending on the platform.
     Existing files are skipped to preserve user customizations unless
     *overwrite* is ``True`` (used by the upgrade path to refresh

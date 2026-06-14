@@ -17,7 +17,8 @@ def project_root(tmp_path):
 
 
 @pytest.fixture
-def hub(project_root):
+def hub(project_root, monkeypatch: pytest.MonkeyPatch):
+    monkeypatch.setenv("TAPPS_METRICS_STORAGE", "local")
     return MetricsHub(project_root)
 
 

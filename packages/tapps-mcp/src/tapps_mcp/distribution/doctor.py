@@ -372,9 +372,12 @@ def strip_brain_mcp_entries(
         if not config_path.exists():
             continue
         try:
-            raw = config_path.read_text(encoding="utf-8-sig")
-            data = json.loads(raw) if raw.strip() else {}
-        except (OSError, json.JSONDecodeError):
+            from tapps_mcp.distribution.setup_generator import _load_mcp_config_json
+
+            data = _load_mcp_config_json(config_path)
+        except OSError:
+            continue
+        if not data:
             continue
         if not isinstance(data, dict):
             continue

@@ -45,6 +45,51 @@ class TestToolCallTracking:
         assert len(_tool_calls) == 0
 
 
+class TestExecutionMetrics:
+    def test_success_response_writes_docs_metric_jsonl(self, tmp_path) -> None:
+        from docs_mcp.config.settings import DocsMCPSettings
+        from docs_mcp.server_helpers import (
+            _reset_metrics_collector,
+            _reset_settings_cache,
+            success_response,
+        )
+
+        _reset_settings_cache()
+        _reset_metrics_collector()
+        import docs_mcp.server_helpers as sh
+
+        sh._settings = DocsMCPSettings(project_root=tmp_path)
+
+        success_response("docs_project_scan", 12, {"ok": True})
+
+        jsonl_files = list((tmp_path / ".tapps-mcp" / "metrics").glob("tool_calls_*.jsonl"))
+        assert len(jsonl_files) == 1
+        line = jsonl_files[0].read_text(encoding="utf-8").strip()
+        assert '"tool_name": "docs_project_scan"' in line
+        assert '"status": "success"' in line
+
+    def test_error_response_writes_failed_metric_when_timed(self, tmp_path) -> None:
+        from docs_mcp.config.settings import DocsMCPSettings
+        from docs_mcp.server_helpers import (
+            _reset_metrics_collector,
+            _reset_settings_cache,
+            error_response,
+        )
+
+        _reset_settings_cache()
+        _reset_metrics_collector()
+        import docs_mcp.server_helpers as sh
+
+        sh._settings = DocsMCPSettings(project_root=tmp_path)
+
+        error_response("docs_config", "BAD", "nope", elapsed_ms=5)
+
+        jsonl_files = list((tmp_path / ".tapps-mcp" / "metrics").glob("tool_calls_*.jsonl"))
+        assert len(jsonl_files) == 1
+        assert '"tool_name": "docs_config"' in jsonl_files[0].read_text(encoding="utf-8")
+        assert '"status": "failed"' in jsonl_files[0].read_text(encoding="utf-8")
+
+
 class TestHelperFunctions:
     @pytest.mark.parametrize(
         "dirname,expected",

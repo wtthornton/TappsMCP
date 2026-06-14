@@ -57,6 +57,10 @@ def _make_mock_settings(tmp_path: Path) -> MagicMock:
 
 
 class TestTappsSessionStart:
+    @pytest.fixture(autouse=True)
+    def _no_session_sentinel(self, no_session_sentinel: None) -> None:
+        """Ensure full session_start payloads (not on-disk sentinel cache)."""
+
     def setup_method(self) -> None:
         from tapps_mcp.server_pipeline_tools import _reset_session_start_cache
 
@@ -214,7 +218,7 @@ class TestTappsSessionStart:
                 return_value=_ok_auth_probe,
             ),
         ):
-            result = await tapps_session_start()
+            result = await tapps_session_start(force=True)
 
         _reset_brain_bridge_cache()  # clean up singleton after test
 
@@ -261,7 +265,7 @@ class TestTappsSessionStart:
             ),
             patch("httpx.get", return_value=mock_health_response),
         ):
-            result = await tapps_session_start()
+            result = await tapps_session_start(force=True)
 
         _reset_brain_bridge_cache()
 
@@ -326,7 +330,7 @@ class TestTappsSessionStart:
                 return_value=gated_probe,
             ),
         ):
-            result = await tapps_session_start()
+            result = await tapps_session_start(force=True)
 
         _reset_brain_bridge_cache()
 
@@ -1536,6 +1540,10 @@ class TestStartProgressReporting:
 class TestMaybeAutoGC:
     """Tests for _maybe_auto_gc and its integration in tapps_session_start."""
 
+    @pytest.fixture(autouse=True)
+    def _no_session_sentinel(self, no_session_sentinel: None) -> None:
+        """Bypass on-disk sentinel for session_start integration checks."""
+
     def setup_method(self) -> None:
         from tapps_mcp.server_pipeline_tools import _reset_session_gc_flag
 
@@ -1618,7 +1626,7 @@ class TestMaybeAutoGC:
         assert result["ran"] is True
 
     @pytest.mark.asyncio
-    async def test_session_start_defers_gc_to_background(self) -> None:
+    async def test_session_start_defers_gc_to_background(self, tmp_path: Path) -> None:
         """tapps_session_start defers memory_gc to background task (Epic 68.2)."""
         from tapps_mcp.server_pipeline_tools import tapps_session_start
 
@@ -1630,6 +1638,7 @@ class TestMaybeAutoGC:
         mock_store.count.return_value = 450
 
         mock_settings = MagicMock()
+        mock_settings.project_root = tmp_path
         mock_settings.memory.enabled = True
         mock_settings.memory.gc_enabled = True
         mock_settings.memory.max_memories = 500
@@ -1637,6 +1646,18 @@ class TestMaybeAutoGC:
         mock_settings.business_experts_enabled = False
 
         with (
+            patch(
+                "tapps_mcp.server._server_info_async",
+                new_callable=AsyncMock,
+                return_value=MagicMock(
+                    to_dict=lambda: {"name": "TappsMCP", "version": "test"},
+                ),
+            ),
+            patch(
+                "tapps_mcp.server.detect_installed_tools_async",
+                new_callable=AsyncMock,
+                return_value={},
+            ),
             patch(
                 "tapps_mcp.server_pipeline_tools.load_settings",
                 return_value=mock_settings,
@@ -1646,7 +1667,7 @@ class TestMaybeAutoGC:
                 return_value=mock_store,
             ),
         ):
-            result = await tapps_session_start()
+            result = await tapps_session_start(force=True)
 
         data = result["data"]
         # GC, consolidation, doc validation, and session capture are now
@@ -1659,6 +1680,10 @@ class TestMaybeAutoGC:
 
 class TestSessionStartProjectRoot:
     """Tests for project_root top-level field in session_start (Story 89.2)."""
+
+    @pytest.fixture(autouse=True)
+    def _no_session_sentinel(self, no_session_sentinel: None) -> None:
+        """Bypass on-disk sentinel so project_root assertions see full payloads."""
 
     @pytest.mark.asyncio
     async def test_session_start_full_includes_project_root(self) -> None:
@@ -1680,7 +1705,7 @@ class TestSessionStartProjectRoot:
                 return_value=mock_settings,
             ),
         ):
-            result = await tapps_session_start()
+            result = await tapps_session_start(force=True)
 
         data = result["data"]
         assert "project_root" in data

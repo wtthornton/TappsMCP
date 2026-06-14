@@ -53,13 +53,12 @@ class TestPluginStructure:
 
     def test_skills_exist(self, tmp_path):
         generate_claude_plugin_bundle(tmp_path)
-        assert (tmp_path / "skills" / "tapps-score" / "SKILL.md").exists()
-        assert (tmp_path / "skills" / "tapps-gate" / "SKILL.md").exists()
-        assert (tmp_path / "skills" / "tapps-validate" / "SKILL.md").exists()
+        assert (tmp_path / "skills" / "tapps-finish-task" / "SKILL.md").exists()
         assert (tmp_path / "skills" / "tapps-review-pipeline" / "SKILL.md").exists()
         assert (tmp_path / "skills" / "tapps-research" / "SKILL.md").exists()
         assert (tmp_path / "skills" / "tapps-security" / "SKILL.md").exists()
         assert (tmp_path / "skills" / "tapps-memory" / "SKILL.md").exists()
+        assert not (tmp_path / "skills" / "tapps-score" / "SKILL.md").exists()
 
     def test_hooks_json_exists(self, tmp_path):
         generate_claude_plugin_bundle(tmp_path)

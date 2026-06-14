@@ -132,7 +132,7 @@ def _mock_tool_detection() -> Generator[None, None, None]:
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.usefixtures("_mock_tool_detection")
+@pytest.mark.usefixtures("_mock_tool_detection", "no_session_sentinel")
 class TestTappsSessionStart:
     """Tests for the tapps_session_start composite tool (async).
 

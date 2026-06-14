@@ -31,10 +31,15 @@ class TestNltBundles:
         assert len(enabled) == 6
         assert commented_servers_for_bundle("full") == ()
 
-    def test_developer_enables_build_only(self) -> None:
+    def test_developer_enables_build_memory_linear(self) -> None:
         enabled = enabled_servers_for_bundle("developer")
+        assert enabled == ("nlt-build", "nlt-memory", "nlt-linear-issues")
+        assert len(commented_servers_for_bundle("developer")) == 3
+
+    def test_minimal_enables_build_only(self) -> None:
+        enabled = enabled_servers_for_bundle("minimal")
         assert enabled == ("nlt-build",)
-        assert len(commented_servers_for_bundle("developer")) == 5
+        assert len(commented_servers_for_bundle("minimal")) == 5
 
     def test_planning_adds_linear(self) -> None:
         enabled = enabled_servers_for_bundle("planning")
@@ -69,8 +74,10 @@ class TestNltMcpJsonGeneration:
         data = _load_mcp_config_json(config_path)
         servers = data["mcpServers"]
         assert "nlt-build" in servers
+        assert "nlt-memory" in servers
+        assert "nlt-linear-issues" in servers
         assert "nlt-setup" not in servers
-        assert "nlt-memory" not in servers
+        assert "nlt-project-docs" not in servers
         assert "tapps-mcp" not in servers
         assert servers["nlt-build"]["args"] == []
         assert str(servers["nlt-build"]["command"]).endswith("nlt-build-serve.sh")
@@ -114,6 +121,8 @@ class TestNltMcpJsonGeneration:
         stripped = _strip_jsonc_comments(text)
         parsed = json.loads(stripped)
         assert "nlt-build" in parsed["mcpServers"]
+        assert "nlt-memory" in parsed["mcpServers"]
+        assert "nlt-linear-issues" in parsed["mcpServers"]
 
     def test_migrates_legacy_tapps_env(self, tmp_path: Path) -> None:
         existing = {

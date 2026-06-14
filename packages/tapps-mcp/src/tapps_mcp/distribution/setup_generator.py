@@ -942,7 +942,13 @@ def _merge_nlt_config(
             cur_env = entry.get("env")
             if not isinstance(cur_env, dict):
                 cur_env = {}
-            entry["env"] = {**cur_env, **legacy_env}
+            merged_env = {**cur_env, **legacy_env}
+            # TAP-2199: absolute roots from _build_nlt_server_entry beat legacy
+            # ``${workspaceFolder}``; other legacy keys (API keys, etc.) survive.
+            for key in ("TAPPS_MCP_PROJECT_ROOT", "DOCS_MCP_PROJECT_ROOT"):
+                if key in cur_env:
+                    merged_env[key] = cur_env[key]
+            entry["env"] = merged_env
         nlt_servers[server_id] = entry
 
     merged[servers_key] = {**preserved, **nlt_servers}
@@ -1934,7 +1940,7 @@ def run_init(
             use for platform rules. When ``None``, rules use medium or existing config.
         allow_package_init: Allow init when ``project_root`` is ``.../packages/tapps-mcp``.
         with_docs_mcp: Legacy monolith — also register docs-mcp (ignored when NLT plugin is on).
-        mcp_bundle: NLT bundle (``developer``, ``planning``, ``docs``, ``release``).
+        mcp_bundle: NLT bundle (``developer``, ``minimal``, ``planning``, ``docs``, ``release``).
         use_nlt_plugin: Write NLT ``nlt-*`` servers (default). Set ``False`` for legacy monolith.
         context7_api_key: When set, write ``TAPPS_MCP_CONTEXT7_API_KEY`` into the
             MCP env block using ``${TAPPS_MCP_CONTEXT7_API_KEY}`` interpolation and

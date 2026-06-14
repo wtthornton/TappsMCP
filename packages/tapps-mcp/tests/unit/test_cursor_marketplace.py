@@ -117,7 +117,7 @@ class TestPluginFiles:
         assert "cursor://install-plugin" in content
 
     def test_skills_exist(self):
-        for skill in ["tapps-score", "tapps-gate", "tapps-validate"]:
+        for skill in ["tapps-finish-task", "tapps-review-pipeline", "linear-read"]:
             assert (_PLUGIN_DIR / "skills" / skill / "SKILL.md").exists(), f"Missing skill: {skill}"
 
     def test_mcp_json_exists(self):

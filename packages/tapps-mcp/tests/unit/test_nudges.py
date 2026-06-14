@@ -229,6 +229,27 @@ class TestComputeNextSteps:
         steps = compute_next_steps("tapps_checklist", {"complete": True})
         assert not any("tapps_validate_changed" in s and "WARNING" in s for s in steps)
 
+    def test_validate_changed_nudges_finish_task(self) -> None:
+        CallTracker.record("tapps_session_start")
+        CallTracker.record("tapps_validate_changed")
+        steps = compute_next_steps("tapps_validate_changed")
+        assert any("tapps-finish-task" in s for s in steps)
+
+    def test_validate_changed_nudges_review_pipeline_for_many_files(self) -> None:
+        CallTracker.record("tapps_session_start")
+        CallTracker.record("tapps_validate_changed")
+        steps = compute_next_steps(
+            "tapps_validate_changed",
+            {"changed_python_file_count": 4},
+        )
+        assert any("review-pipeline" in s for s in steps)
+
+    def test_quick_check_still_nudges_checklist(self) -> None:
+        CallTracker.record("tapps_session_start")
+        CallTracker.record("tapps_quick_check")
+        steps = compute_next_steps("tapps_quick_check", {"gate_passed": True})
+        assert any("tapps_checklist" in s for s in steps)
+
     # Note: tapps_consult_expert and tapps_research were removed in EPIC-94.
     # Tests for those nudge rules have been removed.
 
@@ -258,12 +279,19 @@ class TestComputeSuggestedWorkflow:
         assert len(result) >= 2
         assert any("review-pipeline" in s for s in result)
 
-    def test_session_start_with_two_files_triggers(self) -> None:
+    def test_session_start_with_three_files_triggers(self) -> None:
+        result = compute_suggested_workflow(
+            "tapps_session_start",
+            {"changed_python_file_count": 3},
+        )
+        assert result is not None
+
+    def test_session_start_with_two_files_returns_none(self) -> None:
         result = compute_suggested_workflow(
             "tapps_session_start",
             {"changed_python_file_count": 2},
         )
-        assert result is not None
+        assert result is None
 
     def test_session_start_with_one_file_returns_none(self) -> None:
         result = compute_suggested_workflow(

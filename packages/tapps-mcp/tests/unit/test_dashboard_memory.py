@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from pathlib import Path
-from unittest.mock import MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
@@ -208,6 +208,7 @@ class TestDashboardMemoryMetrics:
 
 
 @pytest.mark.asyncio()
+@pytest.mark.usefixtures("no_session_sentinel")
 class TestSessionStartEnrichedMemory:
     """Tests for enriched memory_status in tapps_session_start (Story 55.3)."""
 
@@ -240,6 +241,7 @@ class TestSessionStartEnrichedMemory:
         mock_store.count.return_value = 3
 
         mock_settings = MagicMock()
+        mock_settings.project_root = Path("/fake/project")
         mock_settings.memory.enabled = True
         mock_settings.memory.gc_enabled = False
         mock_settings.memory.max_memories = 1500
@@ -247,6 +249,18 @@ class TestSessionStartEnrichedMemory:
         mock_settings.business_experts_enabled = False
 
         with (
+            patch(
+                "tapps_mcp.server._server_info_async",
+                new_callable=AsyncMock,
+                return_value=MagicMock(
+                    to_dict=lambda: {"name": "TappsMCP", "version": "test"},
+                ),
+            ),
+            patch(
+                "tapps_mcp.server.detect_installed_tools_async",
+                new_callable=AsyncMock,
+                return_value={},
+            ),
             patch(
                 "tapps_mcp.server_pipeline_tools.load_settings",
                 return_value=mock_settings,
@@ -267,7 +281,7 @@ class TestSessionStartEnrichedMemory:
                 return_value=None,
             ),
         ):
-            result = await tapps_session_start()
+            result = await tapps_session_start(force=True)
 
         data = result["data"]
         mem = data["memory_status"]
@@ -344,7 +358,7 @@ class TestSessionStartEnrichedMemory:
                 return_value=None,
             ),
         ):
-            result = await tapps_session_start()
+            result = await tapps_session_start(force=True)
 
         mem = result["data"]["memory_status"]
         assert mem["enabled"] is True

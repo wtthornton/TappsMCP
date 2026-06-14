@@ -50,8 +50,7 @@ class TestClaudeAgents:
         generate_subagent_definitions(tmp_path, "claude")
         content = (tmp_path / ".claude" / "agents" / "tapps-reviewer.md").read_text()
         assert "skills:" in content
-        assert "  - tapps-score" in content
-        assert "  - tapps-gate" in content
+        assert "  - tapps-finish-task" in content
 
     def test_reviewer_has_mcp_servers(self, tmp_path):
         generate_subagent_definitions(tmp_path, "claude")
@@ -166,9 +165,8 @@ class TestClaudeAgents:
         generate_subagent_definitions(tmp_path, "claude")
         content = (tmp_path / ".claude" / "agents" / "tapps-review-fixer.md").read_text()
         assert "skills:" in content
-        assert "  - tapps-score" in content
-        assert "  - tapps-gate" in content
-        assert "  - tapps-validate" in content
+        assert "  - tapps-review-pipeline" in content
+        assert "  - tapps-finish-task" in content
 
     def test_review_fixer_has_mcp_servers(self, tmp_path):
         generate_subagent_definitions(tmp_path, "claude")

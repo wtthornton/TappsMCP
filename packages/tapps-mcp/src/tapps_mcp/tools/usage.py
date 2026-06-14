@@ -20,16 +20,25 @@ from __future__ import annotations
 import json
 import time
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 
 from tapps_mcp.tools.loop_metrics import compute_rolling_stats, read_loop_metrics
+from tapps_mcp.tools.pipeline_tool_sets import (
+    GATE_SHORT_NAMES,
+    matches_pipeline_tool,
+)
 
 _VIOLATIONS_NAME = ".completion-gate-violations.jsonl"
-_GATE_TOOLS = frozenset({"tapps_quick_check", "tapps_validate_changed", "tapps_quality_gate"})
 _CHECKLIST_TOOL = "tapps_checklist"
 _LOOKUP_TOOL = "tapps_lookup_docs"
 _IMPACT_TOOL = "tapps_impact_analysis"
 _SESSION_INIT_TOOL = "tapps_session_start"
+_PRIORITY_GAPS: tuple[str, ...] = (
+    "edits_without_validation",
+    "checklist_skipped",
+    "lookup_docs_underused",
+    "library_uses_without_lookup_docs",
+)
 
 
 def _violations_path(project_root: Path) -> Path:
@@ -117,7 +126,7 @@ def compute_gaps(
 
     edited_recent = [p for r in rows[-10:] for p in r.get("files_edited", [])]
     has_recent_edits = bool(edited_recent)
-    used_gate = bool(called.intersection(_GATE_TOOLS))
+    used_gate = any(matches_pipeline_tool(name, GATE_SHORT_NAMES) for name in called)
     if has_recent_edits and not used_gate:
         gaps.append("edits_without_validation")
         sample = ",".join(edited_recent[:3])
@@ -211,6 +220,40 @@ def format_session_start_gap_hint(project_root: Path) -> str | None:
     return ", ".join(gaps[:3])
 
 
+def format_stop_gap_followup(
+    project_root: Path,
+    *,
+    called_tools: set[str],
+    mode: Literal["off", "warn", "block"],
+    fresh_violations: list[str] | None = None,
+) -> str | None:
+    """Build Cursor stop-hook followup_message from ``compute_gaps`` (TAP-3921)."""
+    if mode == "off":
+        return None
+
+    report = compute_gaps(project_root, called_tools=called_tools)
+    gaps = list(report.get("gaps", []))
+    if fresh_violations:
+        if any("QUALITY_GATE_SKIP" in reason for reason in fresh_violations):
+            if "edits_without_validation" not in gaps:
+                gaps.insert(0, "edits_without_validation")
+        if "CHECKLIST_MISSING" in fresh_violations and "checklist_skipped" not in gaps:
+            gaps.insert(0, "checklist_skipped")
+
+    if not gaps:
+        return None
+
+    ordered = [g for key in _PRIORITY_GAPS for g in gaps if g == key]
+    ordered.extend(g for g in gaps if g not in ordered)
+    headline = ", ".join(ordered[:3])
+    recs = [r for r in report.get("recommendations", []) if "No gaps detected" not in r]
+    body = recs[0] if recs else "Run /tapps-finish-task before declaring done."
+
+    if mode == "block":
+        return f"BLOCKED — pipeline gaps ({headline}). {body}"
+    return f"TappsMCP pipeline gaps ({headline}). {body}"
+
+
 def render_markdown(report: dict[str, Any]) -> str:
     """Render a compact markdown summary of a gap report."""
     lines: list[str] = ["## tapps_usage gap report"]
@@ -240,6 +283,7 @@ def render_markdown(report: dict[str, Any]) -> str:
 __all__ = [
     "compute_gaps",
     "format_session_start_gap_hint",
+    "format_stop_gap_followup",
     "read_recent_violations",
     "render_markdown",
 ]

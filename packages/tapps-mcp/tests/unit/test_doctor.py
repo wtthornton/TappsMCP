@@ -144,7 +144,7 @@ class TestCheckJsonConfig:
         path.write_text(json.dumps(config), encoding="utf-8")
         result = check_json_config(path, "mcpServers", "Test")
         assert result.ok is False
-        assert "tapps-mcp not in" in result.message
+        assert "tapps-mcp / nlt-build not in" in result.message
 
     def test_wrong_command(self, tmp_path):
         config = {"mcpServers": {"tapps-mcp": {"command": "wrong"}}}

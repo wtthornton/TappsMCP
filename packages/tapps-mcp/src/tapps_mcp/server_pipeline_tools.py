@@ -711,6 +711,17 @@ async def tapps_session_start(
     except Exception:
         _logger.debug("usage_gaps_session_start_failed", exc_info=True)
 
+    # TAP-3929: slash-command workflow catalog for the active bundle + engagement.
+    try:
+        from tapps_mcp.tools.session_start_helpers import build_recommended_workflows
+
+        data["recommended_workflows"] = build_recommended_workflows(
+            settings.project_root,
+            engagement_level=settings.llm_engagement_level,
+        )
+    except Exception:
+        _logger.debug("recommended_workflows_session_start_failed", exc_info=True)
+
     from tapps_mcp.tools.session_start_helpers import attach_cli_fallback
 
     attach_cli_fallback(data)

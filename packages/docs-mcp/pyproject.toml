@@ -1,5 +1,5 @@
 [build-system]
-requires = ["hatchling>=1.28,<2"]
+requires = ["hatchling>=1.30.1,<2"]
 build-backend = "hatchling.build"
 
 [project]
@@ -26,30 +26,30 @@ classifiers = [
 ]
 dependencies = [
     "tapps-core>=1.0.0",
-    "mcp[cli]>=1.26.0,<2",
-    "click>=8.3.1,<9",
+    "mcp[cli]>=1.27.2,<2",
+    "click>=8.4.1,<9",
     "jinja2>=3.1.6,<4",
     "gitpython>=3.1.49,<4",
-    "pydantic>=2.12.5,<3",
-    "structlog>=25.5.0,<26",
+    "pydantic>=2.13.4,<3",
+    "structlog>=26.1.0,<27",
     "pyyaml>=6.0.3,<7",
     # Security floors for transitive CVEs via mcp[cli] (TAP-608).
-    "cryptography>=46.0.7,<47",        # CVE-2026-26007, -34073, -39892
-    "pyjwt>=2.12.0,<3",                # CVE-2026-32597
-    "python-multipart>=0.0.27,<1",     # CVE-2026-40347, CVE-2026-42561
+    "cryptography>=49.0.0,<50",        # CVE-2026-26007, -34073, -39892
+    "pyjwt>=2.13.0,<3",                # CVE-2026-32597
+    "python-multipart>=0.0.32,<1",     # CVE-2026-40347, CVE-2026-42561
     "python-dotenv>=1.2.2,<2",         # CVE-2026-28684 via pydantic-settings
 ]
 
 [project.optional-dependencies]
 treesitter = [
-    "tree-sitter>=0.24.0,<1",
+    "tree-sitter>=0.25.2,<1",
     "tree-sitter-typescript>=0.23.2,<1",
-    "tree-sitter-go>=0.23.4,<1",
-    "tree-sitter-rust>=0.23.2,<1",
+    "tree-sitter-go>=0.25.0,<1",
+    "tree-sitter-rust>=0.24.2,<1",
     "tree-sitter-java>=0.23.5,<1",
 ]
 agents = [
-    "sentence-transformers>=5.2.3,<6",
+    "sentence-transformers>=5.5.1,<6",
 ]
 
 [tool.uv.sources]

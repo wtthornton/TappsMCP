@@ -53,17 +53,19 @@ Documented in `docs/architecture/nlt-mcp-plugin-spec.yaml`:
 
 | Bundle | Enabled servers | Use case |
 |--------|-----------------|----------|
-| `developer` | `nlt-build` | Daily implementation (default after init) |
-| `memory` | `nlt-build`, `nlt-memory` | Coding + recall/save/handoff |
-| `planning` | `nlt-build`, `nlt-linear-issues` | Backlog / issue workflow |
+| `developer` | `nlt-build`, `nlt-memory`, `nlt-linear-issues` | Daily implementation (default after init; ~18 eager) |
+| `minimal` | `nlt-build` | Token-tight coding (build-only; ~9 eager) |
+| `memory` | `nlt-build`, `nlt-memory` | Coding + recall/save/handoff (no Linear) |
+| `planning` | `nlt-build`, `nlt-linear-issues` | Backlog / issue workflow (no Memory MCP) |
 | `docs` | `nlt-build`, `nlt-project-docs` | Documentation pass |
 | `release` | `nlt-build`, `nlt-release-ship` | Ship day |
 | `security` | `nlt-build` | File + CVE scan (`dependency_scan` deferred on Build) |
 | `audit` | `nlt-build`, `nlt-linear-issues` | Audit campaign + finding→story |
 | `full` | all six | Escape hatch; doctor WARN |
 
-`tapps_init` writes the **`developer`** bundle: `nlt-build` only. All other servers
-(including `nlt-setup` and `nlt-memory`) are commented opt-in blocks in `mcp.json`.
+`tapps_init` writes the **`developer`** bundle: `nlt-build`, `nlt-memory`, and
+`nlt-linear-issues`. Use `--bundle minimal` for build-only. `nlt-setup`, docs, and
+release servers remain commented opt-in blocks in `mcp.json`.
 
 ### Zero-duplication rules
 
@@ -89,7 +91,8 @@ tapps-platform profile boundaries for Linear/Release.
 
 ### Positive
 
-- Default coding sessions load ~9 eager tools (Build only), not ~11 with Setup.
+- Default coding sessions load ~18 eager tools (Build + Memory + Linear), within the
+  doctor partial-enablement budget; use `minimal` for ~9 eager build-only.
 - Memory recall/save is a deliberate opt-in (`nlt-memory`) without restoring MCP bloat.
 - Setup is clearly bootstrap/diagnostics, not a junk drawer for session tools.
 - Checklist `complete=true` is achievable on partial server enablement.

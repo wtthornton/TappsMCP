@@ -579,6 +579,90 @@ def audit_fleet_cmd(
         click.echo(json.dumps(report, indent=2))
 
 
+@main.command("loop-metrics-record")
+def loop_metrics_record_cmd() -> None:
+    """Record loop-metrics from Cursor/Claude stop-hook stdin (TAP-3918)."""
+    import json
+    import sys
+
+    from tapps_mcp.tools.loop_metrics import record_loop_metrics_from_hook_payload
+
+    try:
+        payload = json.load(sys.stdin)
+    except json.JSONDecodeError:
+        sys.exit(0)
+    if not isinstance(payload, dict):
+        sys.exit(0)
+    result = record_loop_metrics_from_hook_payload(payload)
+    followup = result.get("followup_message")
+    if followup:
+        click.echo(json.dumps({"followup_message": followup}))
+
+
+@main.command("tool-usage-fleet")
+@click.option(
+    "--period",
+    type=click.Choice(["1d", "7d", "30d"]),
+    default="1d",
+    show_default=True,
+    help="Trailing window for tool-call metrics.",
+)
+@click.option(
+    "--roots",
+    default="",
+    help="Comma-separated project roots (default: TAPPS_FLEET_ROOTS or scan parent dir).",
+)
+@click.option(
+    "--scan-parent",
+    default=".",
+    help="When --roots is empty, scan immediate children of this directory.",
+)
+@click.option(
+    "--format",
+    "output_format",
+    type=click.Choice(["json", "markdown"]),
+    default="json",
+    show_default=True,
+    help="Output format.",
+)
+@click.option(
+    "--no-brain",
+    is_flag=True,
+    default=False,
+    help="Skip brain telemetry merge (local JSONL only).",
+)
+def tool_usage_fleet_cmd(
+    period: str,
+    roots: str,
+    scan_parent: str,
+    output_format: str,
+    no_brain: bool,
+) -> None:
+    """Per-tool fleet usage leaderboard (TAP-3919)."""
+    import json
+    from pathlib import Path
+
+    from tapps_mcp.tools.fleet_audit import (
+        format_tool_usage_fleet_markdown,
+        run_tool_usage_fleet,
+    )
+
+    explicit: list[Path] | None = None
+    if roots.strip():
+        explicit = [Path(p.strip()) for p in roots.split(",") if p.strip()]
+
+    report = run_tool_usage_fleet(
+        period=period,
+        roots=explicit,
+        scan_parent=Path(scan_parent),
+        include_brain=not no_brain,
+    )
+    if output_format == "markdown":
+        click.echo(format_tool_usage_fleet_markdown(report))
+    else:
+        click.echo(json.dumps(report, indent=2))
+
+
 @main.command("upgrade-fleet")
 @click.option(
     "--roots",

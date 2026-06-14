@@ -112,10 +112,6 @@ async def test_successful_call_still_records_success_only() -> None:
     records, fake_record = _record_call_capture()
 
     fake_store = MagicMock()
-    sync_result = {"entries": [], "total": 0}
-
-    def _handler(_store: object, _params: object) -> dict[str, object]:
-        return sync_result
 
     with (
         patch("tapps_mcp.server_memory_tools._record_call", fake_record),
@@ -128,12 +124,12 @@ async def test_successful_call_still_records_success_only() -> None:
             return_value=fake_store,
         ),
         patch.dict(
-            server_memory_tools._DISPATCH,
-            {"list": _handler},
+            server_memory_tools._ASYNC_DISPATCH,
+            {"session_start_capture": AsyncMock(return_value={"indexed": True})},
             clear=False,
         ),
     ):
-        resp = await server_memory_tools.tapps_memory(action="list")
+        resp = await server_memory_tools.tapps_memory(action="session_start_capture")
 
     assert resp["success"] is True
     assert records == [True], (

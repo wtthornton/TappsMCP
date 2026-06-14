@@ -37,11 +37,12 @@ Seven rules every agent in this project should follow.
 
 ## NLT MCP session modes (ADR-0016)
 
-Enable **1–3** `nlt-*` servers per session — not all six at once. Default after `tapps_init` is **Build only**.
+Enable **1–3** `nlt-*` servers per session — not all six at once. Default after `tapps_init` is **Build + Memory + Linear** (`developer` bundle, ~18 eager tools). Use `--bundle minimal` for build-only.
 
 | Mode | Enable these MCP servers | When |
 |------|--------------------------|------|
-| **Build only** | `nlt-build` | Daily coding (score, gate, validate, lookup) |
+| **Developer (default)** | `nlt-build`, `nlt-memory`, `nlt-linear-issues` | Daily coding + recall + backlog |
+| **Build only** | `nlt-build` | Token-tight sessions (`--bundle minimal`) |
 | **Build + Memory** | `nlt-build`, `nlt-memory` | Need `tapps_memory` search/save or session handoff |
 | **Build + Plan** | `nlt-build`, `nlt-linear-issues` | Linear backlog / issue workflow |
 | **Build + Docs** | `nlt-build`, `nlt-project-docs` | Doc generation / drift audit |

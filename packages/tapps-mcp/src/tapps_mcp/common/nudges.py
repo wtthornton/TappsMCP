@@ -135,9 +135,19 @@ _TOOL_NUDGES: dict[str, list[NudgeRule]] = {
     ],
     "tapps_validate_changed": [
         (
+            lambda called, ctx: (
+                "tapps_checklist" not in called
+                and (ctx or {}).get("changed_python_file_count", 0) >= _PIPELINE_REVIEW_MIN_FILES
+            ),
+            "NEXT: Three or more Python files changed — run /tapps-review-pipeline "
+            "for parallel review-fix-validate, then /tapps-finish-task to close out.",
+            _IMPACT_HIGH,
+        ),
+        (
             lambda called, _ctx: "tapps_checklist" not in called,
-            "NEXT: Call tapps_checklist() as the final verification step.",
-            _IMPACT_MEDIUM,
+            "NEXT: Invoke /tapps-finish-task to run tapps_checklist and close out, "
+            "or call tapps_checklist(task_type='feature') directly.",
+            _IMPACT_HIGH,
         ),
     ],
     "tapps_checklist": [
@@ -258,7 +268,8 @@ def compute_next_steps(
 # Each rule: (condition(ctx) -> bool, ordered step list)
 _WorkflowRule = tuple[Any, list[str]]  # (callable, list[str])
 
-_WORKFLOW_MIN_CHANGED_FILES = 2  # trigger review pipeline when > 1 changed file
+_PIPELINE_REVIEW_MIN_FILES = 3  # TAP-3931: nudge review-pipeline at 3+ changed files
+_WORKFLOW_MIN_CHANGED_FILES = 3
 _WORKFLOW_LOW_SCORE_THRESHOLD = 70  # trigger fix-rescore loop below this score
 
 _WORKFLOW_RULES: dict[str, list[_WorkflowRule]] = {

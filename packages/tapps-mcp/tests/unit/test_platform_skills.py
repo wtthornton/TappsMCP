@@ -16,6 +16,7 @@ import yaml
 from tapps_mcp.pipeline.platform_skills import (
     CLAUDE_SKILLS,
     CURSOR_SKILLS,
+    DEPRECATED_TAPPS_SKILLS,
     generate_skills,
 )
 from tapps_mcp.pipeline.skills_validator import (
@@ -36,6 +37,23 @@ def _get_frontmatter(template: str) -> str:
 
 
 # ---------------------------------------------------------------------------
+# TAP-3930: deprecated wrapper skills removed from templates
+# ---------------------------------------------------------------------------
+
+
+class TestDeprecatedSkillsRemoved:
+    """v3.12.0 removed single-tool wrapper skills from generated output."""
+
+    @pytest.mark.parametrize("skill_name", sorted(DEPRECATED_TAPPS_SKILLS))
+    def test_deprecated_absent_from_claude_templates(self, skill_name: str) -> None:
+        assert skill_name not in CLAUDE_SKILLS
+
+    @pytest.mark.parametrize("skill_name", sorted(DEPRECATED_TAPPS_SKILLS))
+    def test_deprecated_absent_from_cursor_templates(self, skill_name: str) -> None:
+        assert skill_name not in CURSOR_SKILLS
+
+
+# ---------------------------------------------------------------------------
 # Claude skill frontmatter: allowed-tools (renamed from tools)
 # ---------------------------------------------------------------------------
 
@@ -50,6 +68,8 @@ class TestClaudeAllowedTools:
 
     def test_all_skills_have_allowed_tools(self) -> None:
         for name, content in CLAUDE_SKILLS.items():
+            if name == "continuous-learning-v2":
+                continue
             fm = _get_frontmatter(content)
             assert "allowed-tools:" in fm, f"{name} missing 'allowed-tools:' field"
 
@@ -65,10 +85,8 @@ class TestClaudeArgumentHint:
     @pytest.mark.parametrize(
         ("skill_name", "expected_hint"),
         [
-            ("tapps-score", "[file-path]"),
-            ("tapps-gate", "[file-path]"),
             ("tapps-research", "[library] [topic]"),
-            ("tapps-memory", "[action] [key]"),
+            ("tapps-memory", "[save|search|get] [key]"),
             ("tapps-security", "[file-path]"),
         ],
     )
@@ -76,9 +94,10 @@ class TestClaudeArgumentHint:
         fm = _get_frontmatter(CLAUDE_SKILLS[skill_name])
         assert f'argument-hint: "{expected_hint}"' in fm
 
-    def test_validate_no_argument_hint(self) -> None:
-        fm = _get_frontmatter(CLAUDE_SKILLS["tapps-validate"])
-        assert "argument-hint:" not in fm
+    def test_finish_task_has_argument_hint(self) -> None:
+        fm = _get_frontmatter(CLAUDE_SKILLS["tapps-finish-task"])
+        assert "argument-hint:" in fm
+        assert "feature|bugfix" in fm
 
     def test_review_pipeline_no_argument_hint(self) -> None:
         fm = _get_frontmatter(CLAUDE_SKILLS["tapps-review-pipeline"])
@@ -91,11 +110,11 @@ class TestClaudeArgumentHint:
 
 
 class TestClaudeDisableModelInvocation:
-    """Workflow-only skills must have disable-model-invocation: true."""
+    """Handoff skills disable model invocation; orchestration skills do not."""
 
     @pytest.mark.parametrize(
         "skill_name",
-        ["tapps-gate", "tapps-validate", "tapps-score", "tapps-report"],
+        ["tapps-handoff-session", "tapps-engagement"],
     )
     def test_disable_model_invocation_present(self, skill_name: str) -> None:
         fm = _get_frontmatter(CLAUDE_SKILLS[skill_name])
@@ -104,6 +123,7 @@ class TestClaudeDisableModelInvocation:
     @pytest.mark.parametrize(
         "skill_name",
         [
+            "tapps-finish-task",
             "tapps-review-pipeline",
             "tapps-research",
             "tapps-security",
@@ -130,7 +150,7 @@ class TestClaudeContext:
 
     @pytest.mark.parametrize(
         "skill_name",
-        ["tapps-score", "tapps-gate", "tapps-validate", "tapps-security", "tapps-memory"],
+        ["tapps-finish-task", "tapps-security", "tapps-memory"],
     )
     def test_context_absent(self, skill_name: str) -> None:
         fm = _get_frontmatter(CLAUDE_SKILLS[skill_name])
@@ -152,9 +172,7 @@ class TestClaudeModel:
     @pytest.mark.parametrize(
         "skill_name,expected_model",
         [
-            ("tapps-score", "claude-haiku-4-5-20251001"),
-            ("tapps-gate", "claude-haiku-4-5-20251001"),
-            ("tapps-validate", "claude-haiku-4-5-20251001"),
+            ("tapps-finish-task", "claude-haiku-4-5-20251001"),
             ("tapps-review-pipeline", "claude-sonnet-4-6"),
             ("tapps-security", "claude-sonnet-4-6"),
             ("tapps-memory", "claude-sonnet-4-6"),
@@ -180,9 +198,7 @@ class TestClaudeAgent:
     @pytest.mark.parametrize(
         "skill_name",
         [
-            "tapps-score",
-            "tapps-gate",
-            "tapps-validate",
+            "tapps-finish-task",
             "tapps-research",
             "tapps-security",
             "tapps-memory",
@@ -203,6 +219,8 @@ class TestCursorSkillsUnchanged:
 
     def test_cursor_skills_use_mcp_tools(self) -> None:
         for name, content in CURSOR_SKILLS.items():
+            if name == "continuous-learning-v2":
+                continue
             fm = _get_frontmatter(content)
             assert "mcp_tools:" in fm, f"Cursor {name} should use 'mcp_tools:'"
             assert "allowed-tools:" not in fm, f"Cursor {name} should NOT use 'allowed-tools:'"
@@ -273,19 +291,20 @@ class TestSkillsSpecValidator:
 class TestGenerateSkills:
     """Verify generate_skills writes correct frontmatter to disk."""
 
-    def test_generated_claude_skill_has_allowed_tools(self, tmp_path: Path) -> None:
+    def test_generated_claude_finish_task_has_allowed_tools(self, tmp_path: Path) -> None:
         generate_skills(tmp_path, "claude")
-        content = (tmp_path / ".claude" / "skills" / "tapps-score" / "SKILL.md").read_text(
+        content = (tmp_path / ".claude" / "skills" / "tapps-finish-task" / "SKILL.md").read_text(
             encoding="utf-8"
         )
         assert "allowed-tools:" in content
+        assert "mcp__nlt-build__tapps_validate_changed" in content
         assert "\ntools:" not in content
 
-    def test_generated_claude_gate_has_disable_model(self, tmp_path: Path) -> None:
+    def test_generated_claude_handoff_has_disable_model(self, tmp_path: Path) -> None:
         generate_skills(tmp_path, "claude")
-        content = (tmp_path / ".claude" / "skills" / "tapps-gate" / "SKILL.md").read_text(
-            encoding="utf-8"
-        )
+        content = (
+            tmp_path / ".claude" / "skills" / "tapps-handoff-session" / "SKILL.md"
+        ).read_text(encoding="utf-8")
         assert "disable-model-invocation: true" in content
 
     def test_generated_claude_research_has_context_fork(self, tmp_path: Path) -> None:

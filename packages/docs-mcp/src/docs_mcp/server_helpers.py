@@ -64,6 +64,57 @@ def _reset_settings_cache() -> None:
     _settings = None
 
 
+_metrics_collector: Any | None = None
+
+
+def _reset_metrics_collector() -> None:
+    """Reset the execution metrics collector singleton (for testing)."""
+    global _metrics_collector
+    _metrics_collector = None
+
+
+def _get_execution_collector() -> Any:
+    """Return the shared :class:`ToolCallMetricsCollector` for this project."""
+    global _metrics_collector
+    if _metrics_collector is None:
+        from tapps_core.metrics.execution_metrics import ToolCallMetricsCollector
+
+        settings = _get_settings()
+        metrics_dir = Path(settings.project_root) / ".tapps-mcp" / "metrics"
+        _metrics_collector = ToolCallMetricsCollector(metrics_dir)
+    return _metrics_collector
+
+
+def _record_execution_metric(
+    tool_name: str,
+    elapsed_ms: int,
+    *,
+    success: bool = True,
+    degraded: bool = False,
+    error_code: str | None = None,
+) -> None:
+    """Record a DocsMCP tool call to fleet execution JSONL + brain dual-write."""
+    if elapsed_ms <= 0 or not tool_name:
+        return
+    try:
+        from datetime import UTC, datetime, timedelta
+
+        collector = _get_execution_collector()
+        now = datetime.now(tz=UTC)
+        started = now - timedelta(milliseconds=elapsed_ms)
+        collector.record(
+            tool_name=tool_name,
+            started_at=started,
+            completed_at=now,
+            status="success" if success else "failed",
+            error_code=error_code,
+            degraded=degraded,
+            session_id="",
+        )
+    except Exception:
+        _logger.debug("docs_execution_metric_failed", tool=tool_name, exc_info=True)
+
+
 # ---------------------------------------------------------------------------
 # tapps-brain bridge accessor (shared by the brain-backed tools).
 # ---------------------------------------------------------------------------
@@ -98,6 +149,7 @@ def error_response(
     code: str,
     message: str,
     *,
+    elapsed_ms: int = 0,
     extra: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Build a standard error response envelope.
@@ -111,10 +163,11 @@ def error_response(
     error: dict[str, Any] = {"code": code, "message": message}
     if extra:
         error.update(extra)
+    _record_execution_metric(tool_name, elapsed_ms, success=False, error_code=code)
     return {
         "tool": tool_name,
         "success": False,
-        "elapsed_ms": 0,
+        "elapsed_ms": elapsed_ms,
         "error": error,
     }
 
@@ -149,6 +202,14 @@ def success_response(
     }
     if degraded is not _SENTINEL:
         result["degraded"] = degraded
+
+    degraded_flag = bool(degraded) if degraded is not _SENTINEL else False
+    _record_execution_metric(
+        tool_name,
+        elapsed_ms,
+        success=True,
+        degraded=degraded_flag,
+    )
     return result
 
 

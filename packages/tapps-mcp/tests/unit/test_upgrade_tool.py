@@ -163,7 +163,11 @@ class TestMergeConfigUpgradeMode:
                 },
             },
         }
-        result = _merge_config(existing, "cursor", upgrade_mode=True)
+        with patch(
+            "tapps_mcp.distribution.setup_generator.shutil.which",
+            return_value=None,
+        ):
+            result = _merge_config(existing, "cursor", upgrade_mode=True)
         entry = result["mcpServers"]["tapps-mcp"]
         assert entry["command"] == r"C:\custom\tapps-mcp.exe"
         assert entry["args"] == ["serve"]
@@ -204,7 +208,11 @@ class TestMergeConfigUpgradeMode:
                 },
             },
         }
-        result = _merge_config(existing, "cursor", upgrade_mode=True)
+        with patch(
+            "tapps_mcp.distribution.setup_generator.shutil.which",
+            return_value=None,
+        ):
+            result = _merge_config(existing, "cursor", upgrade_mode=True)
         entry = result["mcpServers"]["tapps-mcp"]
         assert entry["args"] == ["serve", "--port", "9000"]
 

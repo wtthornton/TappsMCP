@@ -66,12 +66,12 @@ class TestUpgradeSkills:
 
         _setup_claude_project(tmp_path)
         skills_dir = tmp_path / ".claude" / "skills"
-        _create_old_style_skill(skills_dir, "tapps-score")
+        _create_old_style_skill(skills_dir, "tapps-finish-task")
 
         result = upgrade_pipeline(tmp_path, platform="claude")
         assert result["success"] is True
 
-        skill_content = (skills_dir / "tapps-score" / "SKILL.md").read_text(encoding="utf-8")
+        skill_content = (skills_dir / "tapps-finish-task" / "SKILL.md").read_text(encoding="utf-8")
         assert "allowed-tools:" in skill_content
         assert "\ntools:" not in skill_content
 
@@ -81,11 +81,11 @@ class TestUpgradeSkills:
 
         _setup_claude_project(tmp_path)
         skills_dir = tmp_path / ".claude" / "skills"
-        _create_old_style_skill(skills_dir, "tapps-score")
+        _create_old_style_skill(skills_dir, "tapps-security")
 
         upgrade_pipeline(tmp_path, platform="claude")
 
-        skill_content = (skills_dir / "tapps-score" / "SKILL.md").read_text(encoding="utf-8")
+        skill_content = (skills_dir / "tapps-security" / "SKILL.md").read_text(encoding="utf-8")
         assert "argument-hint:" in skill_content
 
     def test_skills_updated_list_populated(self, tmp_path: Path) -> None:
@@ -94,16 +94,16 @@ class TestUpgradeSkills:
 
         _setup_claude_project(tmp_path)
         skills_dir = tmp_path / ".claude" / "skills"
-        _create_old_style_skill(skills_dir, "tapps-score")
-        _create_old_style_skill(skills_dir, "tapps-gate")
+        _create_old_style_skill(skills_dir, "tapps-finish-task")
+        _create_old_style_skill(skills_dir, "tapps-review-pipeline")
 
         result = upgrade_pipeline(tmp_path, platform="claude")
         platforms = result["components"]["platforms"]
         assert len(platforms) > 0
         claude_result = platforms[0]
         skills_info = claude_result["components"]["skills"]
-        assert "tapps-score" in skills_info["updated"]
-        assert "tapps-gate" in skills_info["updated"]
+        assert "tapps-finish-task" in skills_info["updated"]
+        assert "tapps-review-pipeline" in skills_info["updated"]
 
     def test_new_skills_created_during_upgrade(self, tmp_path: Path) -> None:
         """Skills that don't exist yet get created during upgrade."""
@@ -370,7 +370,7 @@ class TestUpgradeDryRun:
         assert isinstance(skills, dict)
         assert skills["action"] == "would-write-managed-skills"
         assert "custom-skill" in skills["preserved_skills"]
-        assert "tapps-score" in skills["managed_skills"]
+        assert "tapps-finish-task" in skills["managed_skills"]
 
     def test_dry_run_hooks_signals_merge_not_overwrite(self, tmp_path: Path) -> None:
         """Dry run hooks entry documents the additive merge behavior."""
@@ -598,7 +598,7 @@ class TestUpgradeEndToEnd:
         agents_dir = tmp_path / ".claude" / "agents"
         agents_dir.mkdir(parents=True, exist_ok=True)
 
-        for skill_name in ["tapps-score", "tapps-gate", "tapps-validate"]:
+        for skill_name in ["tapps-finish-task", "tapps-review-pipeline", "tapps-handoff-session"]:
             _create_old_style_skill(skills_dir, skill_name)
         for agent_name in ["tapps-reviewer.md", "tapps-researcher.md", "tapps-validator.md"]:
             _create_old_style_agent(agents_dir, agent_name)
@@ -608,7 +608,7 @@ class TestUpgradeEndToEnd:
         assert result["success"] is True
 
         # Verify skills corrected
-        for skill_name in ["tapps-score", "tapps-gate", "tapps-validate"]:
+        for skill_name in ["tapps-finish-task", "tapps-review-pipeline", "tapps-handoff-session"]:
             content = (skills_dir / skill_name / "SKILL.md").read_text(encoding="utf-8")
             assert "allowed-tools:" in content or "mcp_tools:" in content
             assert content.startswith("---\n") or content.startswith("*Engagement")
@@ -695,18 +695,24 @@ class TestUpgradeWorkspaceFolderSelfHeal:
 
     def test_live_upgrade_rewrites_broken_env(self, tmp_path: Path) -> None:
         """A live upgrade rewrites the env block to the resolved project path."""
+        from unittest.mock import MagicMock, patch
+
         from tapps_mcp.pipeline.upgrade import upgrade_pipeline
 
         _setup_cursor_project(tmp_path)
         self._write_broken_cursor_config(tmp_path)
 
-        result = upgrade_pipeline(tmp_path, platform="cursor")
+        no_drift = MagicMock(drift_detected=False)
+        with patch("tapps_mcp.diagnostics.check_install_drift", return_value=no_drift):
+            result = upgrade_pipeline(tmp_path, platform="cursor")
         platforms = result["components"]["platforms"]
         mcp_config = platforms[0]["components"]["mcp_config"]
         assert "healed" in str(mcp_config)
 
-        data = json.loads((tmp_path / ".cursor" / "mcp.json").read_text(encoding="utf-8"))
-        env = data["mcpServers"]["tapps-mcp"]["env"]
+        from tapps_mcp.distribution.setup_generator import _load_mcp_config_json
+
+        data = _load_mcp_config_json(tmp_path / ".cursor" / "mcp.json")
+        env = data["mcpServers"]["nlt-build"]["env"]
         assert env["TAPPS_MCP_PROJECT_ROOT"] == str(tmp_path.resolve())
         assert "${" not in env["TAPPS_MCP_PROJECT_ROOT"]
         assert env["CUSTOM_KEY"] == "preserve-me"
@@ -1001,6 +1007,8 @@ class TestUpgradeBrainMcpStrip:
         result = upgrade_pipeline(tmp_path, platform="claude")
         strip_result = result["components"]["brain_mcp_strip"]
         assert ".mcp.json" in strip_result["stripped"]
-        updated = json.loads((tmp_path / ".mcp.json").read_text(encoding="utf-8"))
+        from tapps_mcp.distribution.setup_generator import _load_mcp_config_json
+
+        updated = _load_mcp_config_json(tmp_path / ".mcp.json")
         assert "tapps-brain-mcp" not in updated["mcpServers"]
-        assert "tapps-mcp" in updated["mcpServers"]
+        assert "nlt-build" in updated["mcpServers"]

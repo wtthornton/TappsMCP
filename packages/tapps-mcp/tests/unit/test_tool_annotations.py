@@ -169,9 +169,9 @@ class TestAnnotationCategories:
         # 18 closed-world + 2 open-world + 1 linear-snapshot-get + 1 release-update
         # + 1 tapps_linear_count (TAP-1847) + 1 tapps_audit_campaign (TAP-2036)
         # + 1 tapps_usage (v3.11.0) + 1 tapps_linear_list_issues (TAP-2010)
-        # + 1 tapps_finding_to_story (TAP-2717) = 27
-        assert len(read_only) == 27, (
-            f"Expected 27 read-only tools, got {len(read_only)}"
+        # + 1 tapps_finding_to_story (TAP-2717) + 1 tapps_memory (TAP-3895) = 28
+        assert len(read_only) == 28, (
+            f"Expected 28 read-only tools, got {len(read_only)}"
         )
 
     def test_side_effect_count(self) -> None:
@@ -211,18 +211,20 @@ class TestAnnotationCategories:
         # + 1 tapps_audit_campaign (TAP-2036) + 1 tapps_session_end (TAP-2005)
         # + 1 tapps_usage (v3.11.0) + 1 tapps_linear_list_issues (TAP-2010)
         # + 1 tapps_finding_to_story (TAP-2717)
-        # + 1 tapps_audit_close_coverage (TAP-2798) + 1 tapps_handoff_save (TAP-3792) = 34
-        assert len(idempotent) == 34, (
-            f"Expected 33 idempotent tools, got {len(idempotent)}: {sorted(idempotent)}"
+        # + 1 tapps_audit_close_coverage (TAP-2798) + 1 tapps_handoff_save (TAP-3792)
+        # + 1 tapps_memory (TAP-3895) = 35
+        assert len(idempotent) == 35, (
+            f"Expected 35 idempotent tools, got {len(idempotent)}: {sorted(idempotent)}"
         )
 
 
 class TestDeferLoading:
-    """TAP-1986: verify eager/deferred split keeps the eager catalog ≤ 9 tools.
+    """TAP-1986: verify eager/deferred split keeps the eager catalog ≤ 10 tools.
 
     v3.11.0 added tapps_usage as the 9th eager tool — it is intentionally
     not deferred because it is part of the end-of-task pipeline alongside
-    tapps_checklist. See server_metrics_tools.register().
+    tapps_checklist. TAP-3895 (nlt-memory) adds tapps_memory as a 10th eager
+    tool on the full dev server registration path.
     """
 
     # Daily-driver tools — must be EAGER (no defer_loading).
@@ -236,9 +238,11 @@ class TestDeferLoading:
             "tapps_lookup_docs",
             "tapps_checklist",
             "tapps_impact_analysis",
+            "tapps_usage",
+            "tapps_memory",
         }
     )
-    _EAGER_BUDGET = 9
+    _EAGER_BUDGET = 10
 
     def test_eager_tool_count_within_budget(self) -> None:
         """Eager tool count must be ≤ _EAGER_BUDGET (currently 9)."""

@@ -764,7 +764,16 @@ class DomainWeightStore:
 
         return self._parse_snapshot(data)
 
-    def _parse_snapshot(self, data: dict[str, Any]) -> DomainWeightsSnapshot:
+    @staticmethod
+    def _entry_from_raw(domain: str, entry_data: Any) -> DomainWeightEntry:
+        if isinstance(entry_data, dict):
+            kwargs = dict(entry_data)
+            kwargs.pop("domain", None)
+            return DomainWeightEntry(domain=domain, **kwargs)
+        return DomainWeightEntry(domain=domain, weight=float(entry_data))
+
+    @staticmethod
+    def _parse_snapshot(data: dict[str, Any]) -> DomainWeightsSnapshot:
         """Parse raw dict into a DomainWeightsSnapshot with migration support."""
         # Handle schema migrations
         version = data.get("version", 1)
@@ -774,19 +783,12 @@ class DomainWeightStore:
         # Parse technical weights
         technical: dict[str, DomainWeightEntry] = {}
         for domain, entry_data in data.get("technical", {}).items():
-            if isinstance(entry_data, dict):
-                technical[domain] = DomainWeightEntry(domain=domain, **entry_data)
-            else:
-                # Legacy: just a weight value
-                technical[domain] = DomainWeightEntry(domain=domain, weight=float(entry_data))
+            technical[domain] = DomainWeightStore._entry_from_raw(domain, entry_data)
 
         # Parse business weights
         business: dict[str, DomainWeightEntry] = {}
         for domain, entry_data in data.get("business", {}).items():
-            if isinstance(entry_data, dict):
-                business[domain] = DomainWeightEntry(domain=domain, **entry_data)
-            else:
-                business[domain] = DomainWeightEntry(domain=domain, weight=float(entry_data))
+            business[domain] = DomainWeightStore._entry_from_raw(domain, entry_data)
 
         return DomainWeightsSnapshot(
             technical=technical,

@@ -186,6 +186,15 @@ class TestSaveJsonAtomic:
 class TestDomainWeightStore:
     """Tests for DomainWeightStore business domain weight persistence."""
 
+    @pytest.fixture(autouse=True)
+    def _local_weights_only(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """Unit tests exercise tmp_path YAML/JSON — not live brain profile KV."""
+        monkeypatch.setattr(
+            DomainWeightStore,
+            "_get_brain_bridge",
+            staticmethod(lambda: None),
+        )
+
     @pytest.fixture()
     def store(self, tmp_path: Path) -> DomainWeightStore:
         return DomainWeightStore(tmp_path)
@@ -422,6 +431,10 @@ class TestDomainWeightStore:
         assert entry is not None
         assert entry.weight == 1.5
         assert entry.samples == 10
+
+
+class TestDomainWeightStoreBrain:
+    """Brain profile KV paths — keep bridge mocks, no local-only autouse."""
 
     def test_brain_profile_round_trip(self, tmp_path: Path):
         stored: dict[str, str] = {}

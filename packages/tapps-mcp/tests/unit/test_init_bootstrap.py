@@ -43,7 +43,7 @@ class TestBootstrapClaudeSettings:
 
         # File should be unchanged
         data = json.loads((settings_dir / "settings.json").read_text(encoding="utf-8"))
-        assert data["permissions"]["allow"] == ["mcp__tapps-mcp", "mcp__tapps-mcp__*"]
+        assert data["permissions"]["allow"] == config["permissions"]["allow"]
 
     def test_appends_to_existing_allow_list(self, tmp_path):
         """Appends both entries to existing allow list without removing existing ones."""

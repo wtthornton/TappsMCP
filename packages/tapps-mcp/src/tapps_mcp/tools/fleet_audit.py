@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import json
 import os
+from collections import Counter
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
@@ -17,11 +18,60 @@ from tapps_core.metrics.brain_telemetry import (
     sync_load_tool_call_metrics_from_brain,
 )
 from tapps_core.metrics.execution_metrics import ToolCallMetric, ToolCallMetricsCollector
-from tapps_mcp.tools.loop_metrics import compute_rolling_stats
+from tapps_mcp.tools.loop_metrics import aggregate_skills_used, compute_rolling_stats
 
 _PERIOD_DAYS: dict[str, int] = {"1d": 1, "7d": 7, "30d": 30}
 _BOOTSTRAP_MARKER = ".tapps-mcp.yaml"
 _HANDOFF_PATH = Path(".tapps-mcp") / "session-handoff.md"
+
+
+def _top_tools(metrics: list[ToolCallMetric], *, limit: int = 10) -> list[dict[str, Any]]:
+    counts: Counter[str] = Counter(m.tool_name for m in metrics if m.tool_name)
+    return [{"name": name, "count": count} for name, count in counts.most_common(limit)]
+
+
+def _aggregate_fleet_top_tools(
+    projects: list[dict[str, Any]],
+    *,
+    limit: int = 10,
+) -> list[dict[str, Any]]:
+    counts: Counter[str] = Counter()
+    for project in projects:
+        for entry in project.get("top_tools", []):
+            counts[str(entry.get("name", ""))] += int(entry.get("count", 0))
+    return [
+        {"name": name, "count": count}
+        for name, count in counts.most_common(limit)
+        if name
+    ]
+
+
+def _aggregate_fleet_skills(
+    projects: list[dict[str, Any]],
+    *,
+    limit: int = 10,
+) -> dict[str, Any]:
+    skill_counts: Counter[str] = Counter()
+    finish_total = 0
+    direct_total = 0
+    loops = 0
+    for project in projects:
+        skills = project.get("pipeline", {}).get("skills", {})
+        loops += int(skills.get("loops", 0))
+        finish_total += int(skills.get("skill_orchestrated_closes", 0))
+        direct_total += int(skills.get("direct_mcp_validate_loops", 0))
+        for entry in skills.get("top_skills", []):
+            skill_counts[str(entry.get("name", ""))] += int(entry.get("count", 0))
+    return {
+        "loops": loops,
+        "top_skills": [
+            {"name": name, "count": count}
+            for name, count in skill_counts.most_common(limit)
+            if name
+        ],
+        "skill_orchestrated_closes": finish_total,
+        "direct_mcp_validate_loops": direct_total,
+    }
 
 
 def parse_period(period: str) -> int:
@@ -145,12 +195,14 @@ def _metric_in_window(
 
 def _pipeline_compliance(project_root: Path, *, window_days: int) -> dict[str, Any]:
     stats = compute_rolling_stats(project_root, window_days=window_days)
+    skills = aggregate_skills_used(project_root, window_days=window_days)
     rows_total = stats.get("loops", 0)
     return {
         "loop_samples": rows_total,
         "gate_skip_rate": stats.get("gate_skip_rate", 0.0),
         "lookup_docs_to_edit_ratio": stats.get("lookup_docs_to_edit_ratio", 0.0),
         "mcp_call_ratio": stats.get("mcp_call_ratio", 0.0),
+        "skills": skills,
     }
 
 
@@ -194,6 +246,7 @@ def audit_project_root(
     return {
         "project_root": str(root),
         "bootstrapped": True,
+        "top_tools": _top_tools(metrics),
         "metrics": {
             "total_calls": summary.total_calls,
             "local_jsonl_rows": len(local),
@@ -242,6 +295,8 @@ def run_fleet_audit(
         "generated_at": datetime.now(tz=UTC).isoformat(),
         "project_count": len(projects),
         "total_tool_calls": totals,
+        "fleet_top_tools": _aggregate_fleet_top_tools(projects),
+        "fleet_skills": _aggregate_fleet_skills(projects),
         "projects": projects,
     }
 
@@ -270,16 +325,113 @@ def format_fleet_audit_markdown(report: dict[str, Any]) -> str:
         lines.append(
             f"| {name} | {metrics.get('total_calls', 0)} | {gate_str} | {ratio_str} | {handoff} |"
         )
+
+    fleet_tools = report.get("fleet_top_tools") or []
+    if fleet_tools:
+        lines.extend(["", "## Fleet top tools", ""])
+        for entry in fleet_tools[:10]:
+            lines.append(f"- `{entry.get('name', '?')}`: {entry.get('count', 0)}")
+
+    for project in report.get("projects", []):
+        top_tools = project.get("top_tools") or []
+        if not top_tools:
+            continue
+        name = Path(project.get("project_root", "?")).name
+        lines.extend(["", f"### Top tools — {name}", ""])
+        for entry in top_tools[:10]:
+            lines.append(f"- `{entry.get('name', '?')}`: {entry.get('count', 0)}")
+
+    fleet_skills = report.get("fleet_skills") or {}
+    if fleet_skills.get("top_skills"):
+        lines.extend(
+            [
+                "",
+                "## Skill utilization (loop-metrics)",
+                "",
+                f"- **Loops sampled:** {fleet_skills.get('loops', 0)}",
+                (
+                    "- **Skill-orchestrated closes:** "
+                    f"{fleet_skills.get('skill_orchestrated_closes', 0)}"
+                ),
+                (
+                    "- **Direct MCP validate/checklist loops:** "
+                    f"{fleet_skills.get('direct_mcp_validate_loops', 0)}"
+                ),
+                "",
+            ]
+        )
+        for entry in fleet_skills.get("top_skills", [])[:10]:
+            lines.append(f"- `{entry.get('name', '?')}`: {entry.get('count', 0)}")
+
     return "\n".join(lines) + "\n"
+
+
+def format_tool_usage_fleet_markdown(report: dict[str, Any]) -> str:
+    """Render per-tool usage leaderboard as Markdown."""
+    lines = [
+        "# TAPPS fleet tool usage",
+        "",
+        f"- **Period:** {report.get('period', '?')}",
+        f"- **Projects:** {report.get('project_count', 0)}",
+        f"- **Total tool calls:** {report.get('total_tool_calls', 0)}",
+        "",
+        "## Fleet leaderboard",
+        "",
+    ]
+    for entry in report.get("fleet_top_tools", []):
+        lines.append(f"- `{entry.get('name', '?')}`: {entry.get('count', 0)}")
+    for project in report.get("projects", []):
+        top_tools = project.get("top_tools") or []
+        if not top_tools:
+            continue
+        name = Path(project.get("project_root", "?")).name
+        lines.extend(["", f"## {name}", ""])
+        for entry in top_tools:
+            lines.append(f"- `{entry.get('name', '?')}`: {entry.get('count', 0)}")
+    return "\n".join(lines) + "\n"
+
+
+def run_tool_usage_fleet(
+    *,
+    period: str = "1d",
+    roots: list[Path] | None = None,
+    scan_parent: Path | None = None,
+    include_brain: bool = True,
+) -> dict[str, Any]:
+    """Fleet per-tool leaderboard (TAP-3919) — thin wrapper over audit data."""
+    report = run_fleet_audit(
+        period=period,
+        roots=roots,
+        scan_parent=scan_parent,
+        include_brain=include_brain,
+    )
+    return {
+        "period": report.get("period"),
+        "since": report.get("since"),
+        "generated_at": report.get("generated_at"),
+        "project_count": report.get("project_count"),
+        "total_tool_calls": report.get("total_tool_calls"),
+        "fleet_top_tools": report.get("fleet_top_tools", []),
+        "projects": [
+            {
+                "project_root": p.get("project_root"),
+                "total_calls": p.get("metrics", {}).get("total_calls", 0),
+                "top_tools": p.get("top_tools", []),
+            }
+            for p in report.get("projects", [])
+        ],
+    }
 
 
 __all__ = [
     "audit_project_root",
     "discover_project_roots",
     "format_fleet_audit_markdown",
+    "format_tool_usage_fleet_markdown",
     "load_jsonl_metrics",
     "merge_metrics",
     "parse_period",
     "period_cutoff",
     "run_fleet_audit",
+    "run_tool_usage_fleet",
 ]

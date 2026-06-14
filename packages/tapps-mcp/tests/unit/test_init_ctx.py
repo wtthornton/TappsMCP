@@ -61,6 +61,7 @@ class TestInitCtxInfo:
                 create_runlog=False,
                 warm_cache_from_tech_stack=False,
                 warm_expert_rag_from_tech_stack=False,
+                mcp_config=False,
                 ctx=ctx,
             )
 
@@ -111,6 +112,7 @@ class TestInitCtxInfo:
                 create_runlog=False,
                 warm_cache_from_tech_stack=False,
                 warm_expert_rag_from_tech_stack=False,
+                mcp_config=False,
                 ctx=None,
             )
 
@@ -167,6 +169,7 @@ class TestInitCtxInfo:
                 create_runlog=False,
                 warm_cache_from_tech_stack=False,
                 warm_expert_rag_from_tech_stack=False,
+                mcp_config=False,
                 ctx=ctx,
             )
 
@@ -224,6 +227,7 @@ class TestInitCtxInfo:
                 create_runlog=False,
                 warm_cache_from_tech_stack=False,
                 warm_expert_rag_from_tech_stack=False,
+                mcp_config=False,
                 ctx=ctx,
             )
 

@@ -109,6 +109,10 @@ only supported transport for consumers (in-process doc path removed with cache).
 
 ## Success criteria
 
+Consumer wiring (TAP-3867–3870) is complete; fleet operators verify the items below
+during the maintenance window per
+[brain-doc-rag-cutover-runbook.md](../operations/brain-doc-rag-cutover-runbook.md).
+
 - [ ] Two repos on same library+topic share one brain hit (no local doc files)
 - [ ] `tapps_lookup_docs` p95 cache-hit latency ≤ prior disk cache (brain PG)
 - [ ] Fleet doctor green: no doc subtrees under `.tapps-mcp-cache/`

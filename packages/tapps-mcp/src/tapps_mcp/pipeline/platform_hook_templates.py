@@ -1358,6 +1358,22 @@ echo "File edited: $FILE"
 echo "Consider running tapps_quick_check to verify quality."
 exit 0
 """,
+    "tapps-stop.sh": """\
+#!/usr/bin/env bash
+# TappsMCP Cursor stop hook — TAP-3918 loop-metrics + optional followup (TAP-3921)
+# Resolves project root from workspace_roots; transcript from agent-transcripts/.
+# Requires tapps-mcp on PATH. See docs/TROUBLESHOOTING.md#cursor-stop-hook-env.
+INPUT=$(cat)
+TAPPS=$(command -v tapps-mcp 2>/dev/null)
+if [ -z "$TAPPS" ]; then
+  exit 0
+fi
+OUT=$(echo "$INPUT" | "$TAPPS" loop-metrics-record 2>/dev/null)
+if [ -n "$OUT" ]; then
+  echo "$OUT"
+fi
+exit 0
+""",
 }
 
 # ---------------------------------------------------------------------------
@@ -1405,6 +1421,17 @@ Write-Output "File edited: $file"
 Write-Output "Consider running tapps_quick_check to verify quality."
 exit 0
 """,
+    "tapps-stop.ps1": """\
+# TappsMCP Cursor stop hook — TAP-3918 loop-metrics + optional followup
+$rawInput = @($input) -join "`n"
+$tapps = Get-Command tapps-mcp -ErrorAction SilentlyContinue
+if (-not $tapps) { exit 0 }
+try {
+    $out = $rawInput | & tapps-mcp loop-metrics-record 2>$null
+    if ($out) { Write-Output $out }
+} catch {}
+exit 0
+""",
 }
 
 PS1_PREFIX = "powershell -NoProfile -ExecutionPolicy Bypass -File "
@@ -1449,12 +1476,14 @@ TAPPS_MANAGED_CURSOR_HOOK_KEYS: frozenset[str] = frozenset(
         "afterFileEdit",
         "sessionStart",
         "preCompact",
+        "stop",
     }
 )
 
 CURSOR_HOOKS_CONFIG: dict[str, list[dict[str, str]]] = {
     "beforeMCPExecution": [{"command": ".cursor/hooks/tapps-before-mcp.sh"}],
     "afterFileEdit": [{"command": ".cursor/hooks/tapps-after-edit.sh"}],
+    "stop": [{"command": ".cursor/hooks/tapps-stop.sh"}],
 }
 
 CURSOR_HOOKS_CONFIG_PS: dict[str, list[dict[str, str]]] = {
@@ -1463,6 +1492,9 @@ CURSOR_HOOKS_CONFIG_PS: dict[str, list[dict[str, str]]] = {
     ],
     "afterFileEdit": [
         {"command": PS1_PREFIX + ".cursor/hooks/tapps-after-edit.ps1"},
+    ],
+    "stop": [
+        {"command": PS1_PREFIX + ".cursor/hooks/tapps-stop.ps1"},
     ],
 }
 
