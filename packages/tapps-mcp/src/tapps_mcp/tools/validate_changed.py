@@ -430,7 +430,15 @@ async def _assemble_response(
         outcome.impact_data,
         resp,
     )
-    resp = _with_nudges("tapps_validate_changed", resp)
+    resp = _with_nudges(
+        "tapps_validate_changed",
+        resp,
+        {
+            "changed_python_file_count": sum(
+                1 for path in bc.paths if path.suffix in {".py", ".pyi"}
+            ),
+        },
+    )
     if outcome.timeout_info.timed_out:
         _append_timeout_hint(resp, outcome.timeout_info.files_remaining)
     return resp
@@ -511,6 +519,7 @@ async def tapps_validate_changed(
     include_impact: bool = True,
     correlation_id: str = "",
     judges: list[dict[str, Any]] | None = None,
+    project_root: str = "",
     ctx: Context[Any, Any, Any] | None = None,
 ) -> dict[str, Any]:
     """Runs the per-file quality gate across multiple changed files in one
@@ -563,6 +572,10 @@ async def tapps_validate_changed(
             ``grep``), ``description``, and ``blocking`` (default
             ``False``, advisory only). Use to layer task-specific
             assertions on top of the standard gate.
+        project_root: Override the project root. Empty (default) uses
+            the server-configured root. Set when validating files in a
+            sibling repo from a long-lived MCP host; ``file_paths`` must
+            then be relative to this root.
         ctx: MCP context handle, injected by the host for progress
             notifications during long-running batch validation. Do
             not pass manually.
@@ -570,12 +583,29 @@ async def tapps_validate_changed(
     # Late imports through the host module so tests can patch these names.
     from tapps_mcp import server_pipeline_tools as _host
     from tapps_mcp.server import _record_call, _record_execution, _with_nudges
+    from tapps_mcp.tools.project_paths import resolve_effective_project_root
 
     start = time.perf_counter_ns()
     _record_call("tapps_validate_changed")
 
     settings = _host.load_settings()
-    paths = _host._discover_changed_files(file_paths, base_ref, settings.project_root)
+    root_result = resolve_effective_project_root(settings.project_root, project_root)
+    if root_result.error_code:
+        return _host.error_response(
+            "tapps_validate_changed",
+            root_result.error_code,
+            root_result.error_message or "",
+        )
+    cross_repo = bool(project_root.strip())
+    if cross_repo:
+        settings = settings.model_copy(update={"project_root": root_result.root})
+
+    paths = _host._discover_changed_files(
+        file_paths,
+        base_ref,
+        settings.project_root,
+        cross_repo_root=root_result.root if cross_repo else None,
+    )
 
     effective_judges: list[dict[str, Any]] | None = None
     preset_judges = settings.validate_changed.judges
@@ -592,6 +622,7 @@ async def tapps_validate_changed(
             base_ref=base_ref,
             correlation_id=correlation_id,
             judges=effective_judges,
+            project_root_override=cross_repo,
         )
 
     bc = _prepare_batch_context(

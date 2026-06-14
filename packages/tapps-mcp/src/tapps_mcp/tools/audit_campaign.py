@@ -29,6 +29,7 @@ from tapps_mcp.tools.audit_session_template import (
     render_session_ticket,
 )
 from tapps_mcp.tools.finding_to_story import finding_to_story
+from tapps_mcp.tools.project_paths import infer_monorepo_graph_root, resolve_path_under_root
 
 _DEFAULT_CATEGORIES: list[str] = ["quality", "security", "dead_code"]
 _EPIC_REF_PLACEHOLDER: str = "<campaign-epic>"
@@ -142,8 +143,19 @@ def build_campaign_spec(
         campaign_id: Explicit campaign id. Empty = auto-generate.
     """
     project_root = project_root.resolve()
-    scope = (scope or project_root).resolve()
-    graph_root = (graph_root or project_root).resolve()
+    if scope is None:
+        scope_path = project_root
+    elif scope.is_absolute():
+        scope_path = scope.resolve()
+    else:
+        scope_path = resolve_path_under_root(str(scope), project_root)
+
+    if graph_root is None:
+        graph_root_path = infer_monorepo_graph_root(project_root, scope_path) or project_root
+    elif graph_root.is_absolute():
+        graph_root_path = graph_root.resolve()
+    else:
+        graph_root_path = resolve_path_under_root(str(graph_root), project_root)
     cats = list(categories) if categories else list(_DEFAULT_CATEGORIES)
     unknown = sorted(set(cats) - VALID_CATEGORIES)
     if unknown:
@@ -152,14 +164,14 @@ def build_campaign_spec(
 
     plan = chunk_scope(
         project_root,
-        scope,
-        graph_root=graph_root,
+        scope_path,
+        graph_root=graph_root_path,
         min_size=min_size,
         target_size=chunk_size,
         max_size=max_size,
     )
 
-    campaign_id = campaign_id or _build_campaign_id(scope, commit_sha)
+    campaign_id = campaign_id or _build_campaign_id(scope_path, commit_sha)
 
     file_line_counts = _count_lines_for_files(plan.chunks, project_root)
 
@@ -188,7 +200,7 @@ def build_campaign_spec(
         )
 
     epic_title, epic_body = render_campaign_epic(
-        scope=_rel_or_str(scope, project_root),
+        scope=_rel_or_str(scope_path, project_root),
         campaign_id=campaign_id,
         commit_sha=commit_sha or "uncommitted",
         categories=cats,
@@ -200,8 +212,8 @@ def build_campaign_spec(
     return CampaignSpec(
         campaign_id=campaign_id,
         project_root=str(project_root),
-        scope=str(scope),
-        graph_root=str(graph_root),
+        scope=_rel_or_str(scope_path, project_root),
+        graph_root=_rel_or_str(graph_root_path, project_root),
         commit_sha=commit_sha,
         categories=cats,
         team=team,

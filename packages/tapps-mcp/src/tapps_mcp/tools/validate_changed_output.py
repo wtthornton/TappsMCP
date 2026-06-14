@@ -235,6 +235,7 @@ async def _handle_no_changed_files(
     base_ref: str = "HEAD",
     correlation_id: str = "",
     judges: list[dict[str, Any]] | None = None,
+    project_root_override: bool = False,
 ) -> dict[str, Any]:
     """Return early response when no changed scorable files are found."""
     from tapps_mcp import server_pipeline_tools as _host
@@ -271,16 +272,28 @@ async def _handle_no_changed_files(
 
     warnings = _no_changed_warnings(explicit_paths, base_ref)
     if explicit_paths:
-        resp_data["path_hint"] = (
-            "Explicit paths provided but none validated. "
-            "If using Docker, check TAPPS_MCP_PROJECT_ROOT / "
-            "TAPPS_MCP_HOST_PROJECT_ROOT for path mapping."
-        )
-        resp_data["next_steps"] = [
-            "FALLBACK: Use tapps_quick_check on individual files when paths don't map.",
-            "Check that file paths are relative to server's project_root"
-            " or use TAPPS_MCP_HOST_PROJECT_ROOT.",
-        ]
+        if project_root_override:
+            resp_data["path_hint"] = (
+                "Explicit paths provided but none validated under the "
+                "project_root override. Paths must be repo-relative to "
+                "project_root, not the MCP host workspace."
+            )
+            resp_data["next_steps"] = [
+                "FALLBACK: Use tapps_quick_check on individual files with the same project_root.",
+                f"Example: tapps_validate_changed(file_paths=\"packages/foo/src/bar.py\", "
+                f"project_root=\"{settings.project_root}\")",
+            ]
+        else:
+            resp_data["path_hint"] = (
+                "Explicit paths provided but none validated. "
+                "If using Docker, check TAPPS_MCP_PROJECT_ROOT / "
+                "TAPPS_MCP_HOST_PROJECT_ROOT for path mapping."
+            )
+            resp_data["next_steps"] = [
+                "FALLBACK: Use tapps_quick_check on individual files when paths don't map.",
+                "Check that file paths are relative to server's project_root"
+                " or use TAPPS_MCP_HOST_PROJECT_ROOT.",
+            ]
 
     if warnings:
         resp_data["warnings"] = warnings

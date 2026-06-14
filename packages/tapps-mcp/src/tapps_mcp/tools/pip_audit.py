@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import pathlib
 import shutil
 from dataclasses import dataclass, field
 
@@ -161,6 +162,20 @@ def _parse_pip_audit_json(raw: str) -> DependencyAuditResult:
     )
 
 
+def _auto_scan_args(root: pathlib.Path) -> tuple[list[str], str]:
+    if (root / "requirements.txt").is_file():
+        return (["-r", "requirements.txt"], "requirements")
+    if (root / "pyproject.toml").is_file():
+        return (["-r", "pyproject.toml"], "pyproject")
+    if (root / "uv.lock").is_file():
+        return (["-r", "uv.lock"], "uv.lock")
+    venv_py = root / ".venv" / "bin" / "python"
+    venv_py_win = root / ".venv" / "Scripts" / "python.exe"
+    if venv_py.is_file() or venv_py_win.is_file():
+        return (["--local"], "local-venv")
+    return (["--skip-editable"], "environment")
+
+
 def _build_pip_audit_args(
     source: str,
     project_root: str,
@@ -189,12 +204,10 @@ def _build_pip_audit_args(
         base_args.extend(["-r", "pyproject.toml"])
         resolved_source = "pyproject"
     elif source in ("auto", "environment"):
-        import pathlib
-
-        root = pathlib.Path(project_root) if project_root else pathlib.Path.cwd()
-        if source == "auto" and (root / "requirements.txt").exists():
-            base_args.extend(["-r", "requirements.txt"])
-            resolved_source = "requirements"
+        root = pathlib.Path(project_root).resolve() if project_root else pathlib.Path.cwd()
+        if source == "auto":
+            extra, resolved_source = _auto_scan_args(root)
+            base_args.extend(extra)
         else:
             # Environment scan: skip editable installs (workspace members, local
             # packages) — they have no PyPI hash and cause pip-audit to error in

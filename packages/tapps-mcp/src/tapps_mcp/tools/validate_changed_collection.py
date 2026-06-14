@@ -48,6 +48,8 @@ def _discover_changed_files(
     file_paths: str,
     base_ref: str,
     project_root: Path,
+    *,
+    cross_repo_root: Path | None = None,
 ) -> list[Path]:
     """Resolve the list of scorable files to validate.
 
@@ -55,12 +57,17 @@ def _discover_changed_files(
     validate each path. Otherwise, auto-detect changed scorable files
     via ``git diff``.
 
+    When *cross_repo_root* is set (explicit ``project_root`` override on
+    the MCP tool), paths resolve under that root instead of the host
+    ``settings.project_root`` / ``TAPPS_MCP_HOST_PROJECT_ROOT`` mapping.
+
     Supports: Python (.py, .pyi), TypeScript/JavaScript (.ts, .tsx,
     .js, .jsx, .mjs, .cjs), Go (.go), and Rust (.rs) files.
     """
     from tapps_mcp.server import _validate_file_path
     from tapps_mcp.server_helpers import _is_scorable_file
     from tapps_mcp.tools.batch_validator import detect_changed_scorable_files
+    from tapps_mcp.tools.project_paths import validate_read_path_under_root
 
     paths: list[Path] = []
     if file_paths.strip():
@@ -70,8 +77,12 @@ def _discover_changed_files(
                 continue
             if not _is_scorable_file(cleaned_fp):
                 continue
-            with contextlib.suppress(ValueError, FileNotFoundError):
-                paths.append(_validate_file_path(cleaned_fp))
+            if cross_repo_root is not None:
+                with contextlib.suppress(ValueError, FileNotFoundError):
+                    paths.append(validate_read_path_under_root(cleaned_fp, cross_repo_root))
+            else:
+                with contextlib.suppress(ValueError, FileNotFoundError):
+                    paths.append(_validate_file_path(cleaned_fp))
     else:
         paths = detect_changed_scorable_files(project_root, base_ref)
     return paths

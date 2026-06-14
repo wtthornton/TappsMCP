@@ -1191,6 +1191,31 @@ def _memory_skill_content_ok(skill_name: str, content: str) -> bool:
     return False
 
 
+def check_deprecated_wrapper_skills(project_root: Path) -> CheckResult:
+    """Warn when v3.12.0-removed wrapper skills are still deployed (TAP-3930)."""
+    from tapps_mcp.pipeline.platform_skills import DEPRECATED_TAPPS_SKILLS
+
+    found: list[str] = []
+    for host_label, base in _tapps_skill_bases(project_root):
+        for skill_name in DEPRECATED_TAPPS_SKILLS:
+            if (base / skill_name / "SKILL.md").is_file():
+                found.append(f"{host_label}/{skill_name}")
+    if found:
+        return CheckResult(
+            "Deprecated wrapper skills",
+            False,
+            f"Still deployed: {', '.join(sorted(found))}",
+            "Run: tapps-mcp upgrade --force — v3.12.0 removed tapps-score, "
+            "tapps-gate, tapps-validate, and tapps-report. Use /tapps-finish-task "
+            "and direct MCP tools instead.",
+        )
+    return CheckResult(
+        "Deprecated wrapper skills",
+        True,
+        "No deprecated wrapper skills on disk",
+    )
+
+
 def check_finish_task_skill(project_root: Path) -> CheckResult:
     """Check the ``tapps-finish-task`` composite skill is deployed (TAP-977).
 
@@ -1369,6 +1394,91 @@ def check_session_handoff_schema(project_root: Path) -> CheckResult:
 
 
 _CACHE_GATE_BLOCK_HINT_THRESHOLD = 20
+_PIPELINE_ENFORCE_SKIP_THRESHOLD = 0.30
+_PIPELINE_ENFORCE_MIN_LOOPS = 7
+
+
+def check_pipeline_enforce_recommendations(project_root: Path) -> CheckResult:
+    """Recommend git hooks / cache-gate block from 7d loop-metrics (TAP-3923)."""
+    from tapps_core.config.settings import load_settings
+    from tapps_mcp.tools.loop_metrics import (
+        _PROMOTE_WINDOW_DAYS,
+        compute_rolling_stats,
+        should_auto_promote_cache_gate,
+    )
+
+    stats = compute_rolling_stats(project_root, window_days=_PROMOTE_WINDOW_DAYS)
+    skip_rate = float(stats.get("gate_skip_rate", 0.0))
+    loops = int(stats.get("loops", 0))
+    skip_pct = int(round(skip_rate * 100))
+    message = f"7d gate_skip_rate={skip_pct}% ({loops} loops in loop-metrics)"
+
+    engagement = _read_engagement_level(project_root) or "medium"
+    settings = None
+    try:
+        settings = load_settings(project_root=project_root)
+        engagement = settings.llm_engagement_level
+    except Exception:
+        pass
+
+    yaml_snippets: list[str] = []
+    hints: list[str] = []
+
+    if (
+        loops >= _PIPELINE_ENFORCE_MIN_LOOPS
+        and skip_rate >= _PIPELINE_ENFORCE_SKIP_THRESHOLD
+        and engagement in ("medium", "high")
+    ):
+        install_hooks = bool(getattr(settings, "install_git_hooks", False)) if settings else False
+        hook_path = project_root / ".githooks" / "pre-commit"
+        if not install_hooks and not hook_path.is_file():
+            yaml_snippets.append("install_git_hooks: true")
+            hints.append(
+                f"Chronic gate skips ({skip_pct}% ≥ {_PIPELINE_ENFORCE_SKIP_THRESHOLD:.0%}) "
+                f"at {engagement} engagement — enforce validate-changed on commit"
+            )
+
+    cache_mode = _detect_cache_gate_mode(project_root)
+    if settings is not None:
+        cache_mode = settings.linear_enforce_cache_gate_resolved()
+
+    viol_24h = _count_cache_gate_violations_24h(project_root)
+    if cache_mode != "block":
+        if viol_24h >= _CACHE_GATE_BLOCK_HINT_THRESHOLD:
+            yaml_snippets.append("linear_enforce_cache_gate: block")
+            hints.append(
+                f"{viol_24h} Linear cache-gate misses in 24h while mode={cache_mode}"
+            )
+        elif settings is not None and settings.linear_enforce_cache_gate_auto_promote:
+            promote, _telemetry = should_auto_promote_cache_gate(
+                project_root,
+                current_mode=cache_mode,
+                auto_promote_enabled=True,
+            )
+            if promote:
+                yaml_snippets.append("linear_enforce_cache_gate: block")
+                hints.append(
+                    "TAP-1333 auto-promote criteria met (stable pipeline, low skip rate)"
+                )
+
+    detail_parts = list(hints)
+    if yaml_snippets:
+        detail_parts.append(
+            "Suggested .tapps-mcp.yaml:\n" + "\n".join(yaml_snippets)
+        )
+    detail = "\n".join(detail_parts)
+
+    suffix = (
+        f"; {len(yaml_snippets)} enforcement snippet(s)"
+        if yaml_snippets
+        else "; no enforcement changes suggested"
+    )
+    return CheckResult(
+        "Pipeline enforcement recommendations",
+        True,
+        message + suffix,
+        detail,
+    )
 
 
 def check_cache_gate_block_hint(project_root: Path) -> CheckResult:
@@ -2873,6 +2983,21 @@ def _collect_project_mcp_servers(root: Path) -> dict[str, dict[str, object]]:
     return merged
 
 
+def _nlt_partial_enablement_remediation() -> str:
+    """Actionable doctor hint when too many nlt-* servers are enabled (EPIC-112)."""
+    from tapps_mcp.distribution.nlt_mcp_config import enabled_servers_for_bundle
+
+    developer = ", ".join(enabled_servers_for_bundle("developer"))
+    minimal = ", ".join(enabled_servers_for_bundle("minimal"))
+    return (
+        f"Disable opt-in nlt-* servers you are not using. Recommended developer "
+        f"bundle ({developer}) stays within the ≤3-server budget; use minimal "
+        f"({minimal}) for build-only sessions. Re-run: "
+        "tapps-mcp init --host auto --bundle developer --force --no-uv. "
+        "See docs/architecture/nlt-mcp-plugin-spec.yaml."
+    )
+
+
 def check_nlt_partial_enablement(root: Path) -> CheckResult:
     """Epic 109.5: WARN when too many ``nlt-*`` MCP servers or combined eager tools.
 
@@ -2927,9 +3052,7 @@ def check_nlt_partial_enablement(root: Path) -> CheckResult:
             "NLT partial enablement",
             False,
             f"WARN: {'; '.join(warnings)}. {summary}",
-            "Disable opt-in nlt-* servers you are not using, or switch to the "
-            "developer bundle (nlt-build only). See "
-            "docs/architecture/nlt-mcp-plugin-spec.yaml.",
+            _nlt_partial_enablement_remediation(),
         )
     return CheckResult(
         "NLT partial enablement",
@@ -3761,11 +3884,13 @@ def _collect_checks(root: Path, *, quick: bool = False) -> list[CheckResult]:
     checks.append(check_config_files_rule(root))
     checks.append(check_linear_issue_skill_current(root))
     checks.append(check_finish_task_skill(root))
+    checks.append(check_deprecated_wrapper_skills(root))
     checks.append(check_tapps_memory_skill(root))
     checks.append(check_session_handoff_skills(root))
     checks.append(check_session_handoff_schema(root))
     checks.append(check_cache_gate_block_hint(root))
     checks.append(check_install_git_hooks_hint(root))
+    checks.append(check_pipeline_enforce_recommendations(root))
     checks.append(check_continuous_learning_v2_skill(root))
     checks.append(check_pretooluse_matchers(root))
     checks.append(check_agents_md(root))

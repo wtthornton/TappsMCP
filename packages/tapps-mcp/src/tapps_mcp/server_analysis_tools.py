@@ -33,6 +33,11 @@ from tapps_mcp.server_helpers import (
     error_response,
     success_response,
 )
+from tapps_mcp.tools.project_paths import (
+    resolve_effective_project_root,
+    resolve_path_under_root,
+    validate_read_path_under_root,
+)
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -329,22 +334,18 @@ async def tapps_impact_analysis(
     _record_call("tapps_impact_analysis")
 
     settings = load_settings()
-    root = settings.project_root
+    root_result = resolve_effective_project_root(settings.project_root, project_root)
+    if root_result.error_code:
+        return error_response(
+            "tapps_impact_analysis",
+            root_result.error_code,
+            root_result.error_message or "",
+        )
+    root = root_result.root
 
     if project_root:
-        custom = _Path(project_root).resolve()
-        if not custom.is_dir():
-            return error_response(
-                "tapps_impact_analysis",
-                "invalid_project_root",
-                f"project_root is not an existing directory: {custom}",
-            )
-        root = custom
         try:
-            from tapps_core.security.path_validator import PathValidator
-
-            validator = PathValidator(root)
-            resolved = validator.validate_read_path(file_path.strip())
+            resolved = validate_read_path_under_root(file_path, root)
         except (ValueError, FileNotFoundError) as exc:
             return error_response("tapps_impact_analysis", "path_denied", str(exc))
     else:
@@ -495,6 +496,8 @@ async def tapps_report(
     file_path: str = "",
     report_format: str = "json",
     max_files: int = 20,
+    project_root: str = "",
+    scope: str = "",
     ctx: Context[Any, Any, Any] | None = None,
 ) -> dict[str, Any]:
     """Generates a quality report (single-file or project-wide), combining
@@ -518,6 +521,11 @@ async def tapps_report(
         max_files: Maximum files to include in a project-wide report
             (default ``20``). Capped at 100 to prevent runaway scans
             on monorepos.
+        project_root: Override the project root. Empty (default) uses
+            the server-configured root. Set when reporting on a sibling
+            repo from a long-lived MCP host.
+        scope: Subdirectory under ``project_root`` for project-wide
+            reports. Empty (default) scans the whole root.
         ctx: MCP context handle for progress notifications during
             long project-wide scans. Injected by the host.
     """
@@ -529,6 +537,16 @@ async def tapps_report(
     from tapps_mcp.server_helpers import _get_scorer
 
     settings = load_settings()
+    root_result = resolve_effective_project_root(settings.project_root, project_root)
+    if root_result.error_code:
+        return error_response(
+            "tapps_report",
+            root_result.error_code,
+            root_result.error_message or "",
+        )
+    root = root_result.root
+    cross_repo = bool(project_root.strip())
+
     scorer = _get_scorer()
     score_results: list[Any] = []
     gate_results: list[Any] = []
@@ -536,7 +554,10 @@ async def tapps_report(
 
     if file_path:
         try:
-            resolved = _validate_file_path_lazy(file_path)
+            if cross_repo:
+                resolved = validate_read_path_under_root(file_path, root)
+            else:
+                resolved = _validate_file_path_lazy(file_path)
         except (ValueError, FileNotFoundError) as exc:
             return error_response("tapps_report", "path_denied", str(exc))
         try:
@@ -552,13 +573,18 @@ async def tapps_report(
     else:
         from tapps_core.common.utils import should_skip_path
 
+        try:
+            scan_root = resolve_path_under_root(scope, root) if scope.strip() else root
+        except ValueError as exc:
+            return error_response("tapps_report", "path_denied", str(exc))
+
         # should_skip_path excludes .venv*, node_modules, dist,
         # build, __pycache__, and other generated directories.
-        py_files = sorted(_Path(settings.project_root).rglob("*.py"))
+        py_files = sorted(scan_root.rglob("*.py"))
         py_files = [f for f in py_files if not should_skip_path(f)][: max(1, max_files)]
 
         tracker = _ReportProgressTracker(total=len(py_files))
-        tracker.init_sidecar(settings.project_root)
+        tracker.init_sidecar(root)
 
         # Bound concurrent scorers (see _REPORT_MAX_CONCURRENCY) so a project-wide
         # scan does not fork hundreds of subprocesses at once.
@@ -664,6 +690,7 @@ async def tapps_dead_code(
     file_path: str = "",
     min_confidence: int = 80,
     scope: str = "file",
+    project_root: str = "",
     ctx: Context[Any, Any, Any] | None = None,
 ) -> dict[str, Any]:
     """[Preview] Reports unused Python code (functions, classes, imports, variables)
@@ -687,6 +714,8 @@ async def tapps_dead_code(
             ``"project"`` (all ``.py`` files under the project root),
             or ``"changed"`` (git-changed ``.py`` files only — fastest
             way to spot dead code introduced by the current task).
+        project_root: Override the project root. Empty (default) uses
+            the server-configured root.
         ctx: MCP context handle for progress notifications during
             project-wide scans. Injected by the host.
     """
@@ -728,6 +757,15 @@ async def tapps_dead_code(
         )
 
     settings = load_settings()
+    root_result = resolve_effective_project_root(settings.project_root, project_root)
+    if root_result.error_code:
+        return error_response(
+            "tapps_dead_code",
+            root_result.error_code,
+            root_result.error_message or "",
+        )
+    root = root_result.root
+    cross_repo = bool(project_root.strip())
 
     if scope == "file":
         if not file_path:
@@ -737,7 +775,10 @@ async def tapps_dead_code(
                 "file_path is required when scope='file'",
             )
         try:
-            resolved = _validate_file_path_lazy(file_path)
+            if cross_repo:
+                resolved = validate_read_path_under_root(file_path, root)
+            else:
+                resolved = _validate_file_path_lazy(file_path)
         except (ValueError, FileNotFoundError) as exc:
             return error_response("tapps_dead_code", "path_denied", str(exc))
 
@@ -751,11 +792,11 @@ async def tapps_dead_code(
         files_scanned = 1
         display_path = str(resolved)
     else:
-        project_root = settings.project_root
+        scan_root = root
         if scope == "project":
-            file_list = collect_python_files(project_root)
+            file_list = collect_python_files(scan_root)
         else:
-            file_list = collect_changed_python_files(project_root)
+            file_list = collect_changed_python_files(scan_root)
 
         await emit_ctx_info(ctx, f"Scanning {len(file_list)} files for dead code...")
 
@@ -783,13 +824,13 @@ async def tapps_dead_code(
             file_list,
             min_confidence=min_confidence,
             whitelist_patterns=settings.dead_code_whitelist_patterns,
-            cwd=str(project_root),
+            cwd=str(scan_root),
             timeout=120,
         )
         findings = result.findings
         files_scanned = result.files_scanned
         degraded = result.degraded
-        display_path = str(project_root)
+        display_path = str(scan_root)
 
     # Group by type
     by_type: dict[str, list[dict[str, Any]]] = {}
@@ -1224,18 +1265,20 @@ async def tapps_audit_campaign(
     from tapps_mcp.tools.audit_campaign import build_campaign_spec
 
     settings = load_settings()
-    root = settings.project_root
-    if project_root:
-        custom = _Path(project_root).resolve()
-        if not custom.is_dir():
-            return error_response(
-                "tapps_audit_campaign",
-                "invalid_project_root",
-                f"project_root is not an existing directory: {custom}",
-            )
-        root = custom
+    root_result = resolve_effective_project_root(settings.project_root, project_root)
+    if root_result.error_code:
+        return error_response(
+            "tapps_audit_campaign",
+            root_result.error_code,
+            root_result.error_message or "",
+        )
+    root = root_result.root
 
-    scope_path = _Path(scope).resolve() if scope else root
+    try:
+        scope_path = resolve_path_under_root(scope, root) if scope else root
+    except ValueError as exc:
+        return error_response("tapps_audit_campaign", "path_denied", str(exc))
+
     if not scope_path.is_dir():
         return error_response(
             "tapps_audit_campaign",
@@ -1243,13 +1286,18 @@ async def tapps_audit_campaign(
             f"scope is not an existing directory: {scope_path}",
         )
 
-    graph_root_path = _Path(graph_root).resolve() if graph_root else None
-    if graph_root_path is not None and not graph_root_path.is_dir():
-        return error_response(
-            "tapps_audit_campaign",
-            "invalid_graph_root",
-            f"graph_root is not an existing directory: {graph_root_path}",
-        )
+    graph_root_path: _Path | None = None
+    if graph_root:
+        try:
+            graph_root_path = resolve_path_under_root(graph_root, root)
+        except ValueError as exc:
+            return error_response("tapps_audit_campaign", "path_denied", str(exc))
+        if not graph_root_path.is_dir():
+            return error_response(
+                "tapps_audit_campaign",
+                "invalid_graph_root",
+                f"graph_root is not an existing directory: {graph_root_path}",
+            )
 
     cats = [c.strip() for c in categories.split(",") if c.strip()]
     commit_sha = await _resolve_git_short_sha(root)

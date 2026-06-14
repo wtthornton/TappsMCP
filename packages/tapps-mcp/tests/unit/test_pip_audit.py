@@ -337,6 +337,27 @@ class TestBuildPipAuditArgs:
         assert source == "requirements"
         assert "--skip-editable" not in args
 
+    def test_auto_with_pyproject_no_skip_editable(self, tmp_path: Path) -> None:
+        (tmp_path / "pyproject.toml").write_text("[project]\nname='demo'\n", encoding="utf-8")
+        args, source = _build_pip_audit_args("auto", str(tmp_path))
+        assert source == "pyproject"
+        assert "--skip-editable" not in args
+        assert "pyproject.toml" in args
+
+    def test_auto_with_uv_lock(self, tmp_path: Path) -> None:
+        (tmp_path / "uv.lock").write_text('version = 1\n', encoding="utf-8")
+        args, source = _build_pip_audit_args("auto", str(tmp_path))
+        assert source == "uv.lock"
+        assert "uv.lock" in args
+
+    def test_auto_with_local_venv(self, tmp_path: Path) -> None:
+        venv_bin = tmp_path / ".venv" / "bin"
+        venv_bin.mkdir(parents=True)
+        (venv_bin / "python").write_text("", encoding="utf-8")
+        args, source = _build_pip_audit_args("auto", str(tmp_path))
+        assert source == "local-venv"
+        assert "--local" in args
+
     def test_pyproject_source_no_skip_editable(self, tmp_path: Path) -> None:
         args, source = _build_pip_audit_args("pyproject", str(tmp_path))
         assert source == "pyproject"

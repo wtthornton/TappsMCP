@@ -1749,6 +1749,80 @@ class TestCheckInstallGitHooksHint:
         assert "install_git_hooks" in (result.detail or "")
 
 
+class TestCheckDeprecatedWrapperSkills:
+    def test_ok_when_deprecated_absent(self, tmp_path):
+        from tapps_mcp.distribution.doctor import check_deprecated_wrapper_skills
+        from tapps_mcp.pipeline.platform_skills import generate_skills
+
+        generate_skills(tmp_path, "cursor")
+        result = check_deprecated_wrapper_skills(tmp_path)
+        assert result.ok is True
+
+    def test_fails_when_deprecated_present(self, tmp_path):
+        from tapps_mcp.distribution.doctor import check_deprecated_wrapper_skills
+
+        skill_dir = tmp_path / ".cursor" / "skills" / "tapps-score"
+        skill_dir.mkdir(parents=True)
+        (skill_dir / "SKILL.md").write_text("---\nname: tapps-score\n---\n", encoding="utf-8")
+        result = check_deprecated_wrapper_skills(tmp_path)
+        assert result.ok is False
+        assert "tapps-score" in result.message
+
+
+class TestCheckPipelineEnforceRecommendations:
+    def test_reports_skip_rate_and_git_hooks_snippet(self, tmp_path):
+        import time
+
+        from tapps_mcp.distribution.doctor import check_pipeline_enforce_recommendations
+
+        (tmp_path / ".tapps-mcp.yaml").write_text(
+            "llm_engagement_level: medium\ninstall_git_hooks: false\n",
+            encoding="utf-8",
+        )
+        now = int(time.time())
+        metrics = tmp_path / ".tapps-mcp" / "loop-metrics.jsonl"
+        metrics.parent.mkdir(parents=True)
+        rows = []
+        for offset in range(8):
+            rows.append(
+                json.dumps(
+                    {
+                        "ts": now - offset * 100,
+                        "mcp_calls": 1,
+                        "files_edited": True,
+                        "gate_skipped_files": offset < 4,
+                    }
+                )
+            )
+        metrics.write_text("\n".join(rows) + "\n", encoding="utf-8")
+
+        result = check_pipeline_enforce_recommendations(tmp_path)
+        assert result.ok is True
+        assert "gate_skip_rate=50%" in result.message
+        assert "install_git_hooks: true" in (result.detail or "")
+
+    def test_cache_gate_violations_recommend_block(self, tmp_path):
+        import time
+
+        from tapps_mcp.distribution.doctor import check_pipeline_enforce_recommendations
+
+        hooks = tmp_path / ".claude" / "hooks"
+        hooks.mkdir(parents=True)
+        (hooks / "tapps-pre-linear-list.sh").write_text('MODE="warn"\n', encoding="utf-8")
+        log = tmp_path / ".tapps-mcp" / ".cache-gate-violations.jsonl"
+        log.parent.mkdir(parents=True)
+        now = time.time()
+        lines = [
+            json.dumps({"ts": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(now)), "category": "gate_miss"})
+            for _ in range(22)
+        ]
+        log.write_text("\n".join(lines) + "\n", encoding="utf-8")
+
+        result = check_pipeline_enforce_recommendations(tmp_path)
+        assert result.ok is True
+        assert "linear_enforce_cache_gate: block" in (result.detail or "")
+
+
 class TestCheckContinuousLearningV2Skill:
     def test_cursor_host_passes(self, tmp_path):
         from tapps_mcp.distribution.doctor import check_continuous_learning_v2_skill
@@ -2316,12 +2390,22 @@ class TestCheckNltPartialEnablement:
             tmp_path,
             {
                 "nlt-build": {"command": "tapps-mcp", "args": ["serve", "--profile", "nlt-build"]},
+                "nlt-memory": {
+                    "command": "tapps-mcp",
+                    "args": ["serve", "--profile", "nlt-memory"],
+                },
+                "nlt-linear-issues": {
+                    "command": "tapps-platform",
+                    "args": ["serve", "--profile", "nlt-linear-issues"],
+                },
             },
         )
         result = check_nlt_partial_enablement(tmp_path)
         assert result.ok is True
-        assert "combined eager=9" in result.message
+        assert "combined eager=18" in result.message
         assert "nlt-build: 9 eager / 16 total" in result.message
+        assert "nlt-memory: 2 eager / 4 total" in result.message
+        assert "nlt-linear-issues: 7 eager / 15 total" in result.message
 
     def test_warns_when_more_than_three_servers(self, tmp_path) -> None:  # type: ignore[no-untyped-def]
         self._cursor_mcp_json(
@@ -2373,6 +2457,8 @@ class TestCheckNltPartialEnablement:
         assert result.ok is False
         assert "29 combined eager tools" in result.message
         assert "5 nlt-* servers enabled" in result.message
+        assert "developer bundle" in (result.detail or "").lower()
+        assert "tapps-mcp init" in (result.detail or "")
 
 
 _SAMPLE_PROBE_METRICS = """\
