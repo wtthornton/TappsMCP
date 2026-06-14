@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [3.12.28] - 2026-06-14
+
+Patch: Platform observability, EPIC-111 dependency floors, NLT developer bundle, and test isolation fixes.
+
 ### Added
 
 - **ADR-0014 consumer wiring (TAP-3867–3870)** — Brain-central doc RAG cutover helpers: `docs_via_brain` routing in `LookupEngine` and session-start warm, doctor checks for legacy doc cache and consumer Context7 env, `upgrade-fleet --import-legacy-doc-cache` / `--strip-context7-env`, and `check_brain_docs_tools` probe when `docs_via_brain` is enabled. ADR-0014/0015 accepted; fleet cutover runbook at `docs/operations/brain-doc-rag-cutover-runbook.md`.
