@@ -939,7 +939,7 @@ Best results come with these tools installed; the server degrades gracefully wit
 | vulture | Dead code detection | `pip install vulture` or `uv add vulture` |
 | pip-audit | Dependency vulnerability scanning | `pip install pip-audit` or `uv add pip-audit` |
 
-Memory retrieval is handled by tapps-brain (Postgres-backed). See the [tapps-brain repo](https://github.com/wtthornton/tapps-brain) for the authoritative retrieval description and any optional search extensions.
+Memory retrieval runs through tapps-brain (Postgres-backed). See the [tapps-brain repo](https://github.com/wtthornton/tapps-brain) for the authoritative retrieval description and any optional search extensions.
 
 ---
 
