@@ -1,0 +1,51 @@
+# TappsMCP quality gate for tapps-mcp dev repo (EPIC-113 / TAP-4022).
+# Validates changed Python files on pull requests via the same pipeline agents use locally.
+name: TappsMCP Quality Gate
+
+on:
+  pull_request:
+    branches: [main, master]
+    paths:
+      - "packages/**/*.py"
+      - "packages/**/pyproject.toml"
+      - "pyproject.toml"
+      - ".tapps-mcp.yaml"
+      - ".github/workflows/tapps-quality.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: tapps-quality-${{ github.head_ref || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  quality:
+    name: validate-changed (quick)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@v7
+        with:
+          enable-cache: true
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+
+      - name: Install workspace
+        run: uv sync --all-packages --group dev
+
+      - name: Run TappsMCP quality gate on changed Python files
+        env:
+          TAPPS_MCP_PROJECT_ROOT: ${{ github.workspace }}
+        run: uv run tapps-mcp validate-changed --quick

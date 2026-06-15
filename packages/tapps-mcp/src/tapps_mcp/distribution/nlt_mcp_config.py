@@ -119,7 +119,12 @@ NLT_SERVER_TOTAL_COUNTS: Final[dict[str, int]] = {
 NLT_MAX_ENABLED_SERVERS: Final[int] = 3
 NLT_MAX_COMBINED_EAGER: Final[int] = 20
 
-_LEGACY_MCP_SERVER_IDS: Final[frozenset[str]] = frozenset({"tapps-mcp", "docs-mcp"})
+_LEGACY_MCP_SERVER_IDS: Final[frozenset[str]] = frozenset({
+    "tapps-mcp",
+    "docs-mcp",
+    "nlt-code-quality",
+    "nlt-platform-admin",
+})
 
 # Tool → owning NLT server (for server-aware checklist — TAP-3899).
 NLT_TOOL_SERVER: Final[dict[str, str]] = {
@@ -169,14 +174,25 @@ def normalize_mcp_bundle(bundle: str | None) -> NltBundle:
 
 
 def enabled_servers_for_bundle(bundle: NltBundle) -> tuple[str, ...]:
-    """Servers written as active MCP entries for *bundle*."""
+    """Recommended servers for a task bundle (doctor hints, session guidance)."""
     return NLT_BUNDLES[bundle]
 
 
+def mcp_config_servers_for_bundle(bundle: NltBundle) -> tuple[str, ...]:
+    """Servers written as active MCP entries for host config files.
+
+    All six ``nlt-*`` servers are emitted so Cursor/VS Code users can toggle
+    them in the MCP UI. *bundle* selects the recommended subset for messaging
+    only — not which entries appear in ``mcp.json``.
+    """
+    _ = bundle
+    return NLT_SERVER_ORDER
+
+
 def commented_servers_for_bundle(bundle: NltBundle) -> tuple[str, ...]:
-    """Servers emitted as commented opt-in blocks for *bundle*."""
-    enabled = set(enabled_servers_for_bundle(bundle))
-    return tuple(sid for sid in NLT_SERVER_ORDER if sid not in enabled)
+    """No commented opt-in blocks — every server is a real toggleable entry."""
+    _ = bundle
+    return ()
 
 
 def is_nlt_server_id(server_id: str) -> bool:

@@ -1,5 +1,6 @@
 llm_engagement_level: medium
 quality_preset: standard
+install_git_hooks: true
 docs_via_brain: true
 linear_team: TAP
 linear_project: TappsMCP Platform
@@ -23,16 +24,3 @@ security:
 experts:
   auto_generate: true
 cache_max_mb: 100
-validate_changed:
-  judges:
-  - type: grep
-    target: .claude/skills/linear/node_modules/graphql/utilities/buildASTSchema.mjs
-    expect: --audit
-    description: Site prebuild runs document build with post-build audit
-    blocking: true
-    when_changed:
-    - .claude/skills/linear/node_modules/graphql/utilities/buildASTSchema.mjs
-    - reports/**
-    - src/**
-    - brands/**
-    - templates/**

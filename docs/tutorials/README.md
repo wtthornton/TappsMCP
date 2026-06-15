@@ -1,12 +1,14 @@
 # Tutorials
 
-Three short, copy-paste runnable walkthroughs for the most-asked starter tasks. Each ends with explicit verification steps so you know it worked.
+Five short, copy-paste runnable walkthroughs for the most-asked starter tasks. Each ends with explicit verification steps so you know it worked.
 
 | # | Tutorial | Time | What you'll do |
 |---|---|---|---|
 | 01 | [Add a new MCP tool to tapps-mcp](01-add-an-mcp-tool.md) | ~15 min | Wire a new `@mcp.tool()` end-to-end: handler, `_record_call`, checklist registration, AGENTS.md row, unit test. |
 | 02 | [Run the quality pipeline against a fresh Python project](02-quality-pipeline-walkthrough.md) | ~10 min | Bootstrap with `tapps_init`, write a deliberately bad function, watch `tapps_quick_check` flag it, fix it, batch-validate, finish with the checklist. |
 | 03 | [Wire tapps-brain into a Claude Code session](03-wire-tapps-brain.md) | ~20 min | Stand up the brain Docker service, set `TAPPS_BRAIN_AUTH_TOKEN`, save a memory in one session, recall it in the next. |
+| 04 | [NLT MCP session modes](04-nlt-mcp-session-modes.md) | ~10 min | Enable the right 1–3 NLT servers (Build / Memory / Linear / Docs) without loading all six. |
+| 05 | [Documentation refresh workflow](05-docs-refresh-workflow.md) | ~2 hr | Full DocsMCP-driven doc refresh: drift, links, API regen, CI gate. |
 
 ## Diataxis: why tutorials, not how-tos
 
@@ -17,5 +19,7 @@ For task-specific reference (the "I know what I want, just remind me how") see [
 ## Suggested order
 
 1. **02** first if you've never used the tool — it's the shortest path to seeing the pipeline work.
-2. **01** next if you're going to extend tapps-mcp itself (vs. just consume it).
-3. **03** when you want cross-session memory. Optional — tapps-mcp works without it.
+2. **04** if you need to configure NLT MCP servers in Cursor (Build / Memory / Docs).
+3. **01** next if you're going to extend tapps-mcp itself (vs. just consume it).
+4. **03** when you want cross-session memory. Optional — tapps-mcp works without it.
+5. **05** when refreshing project documentation with DocsMCP.

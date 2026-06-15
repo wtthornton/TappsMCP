@@ -32,9 +32,11 @@
 - `pyproject.toml`
 - `Dockerfile`
 - `docker-compose.yml`
+- `.docsmcp.yaml`
 - `.hadolint.yaml`
 - `.pre-commit-config.yaml`
 - `.tapps-mcp.yaml`
+- `docker-compose.dev.yml`
 
 ## Documentation Map
 
@@ -46,6 +48,7 @@
 - `README.md`
 - `SECURITY.md`
 - `TECH_STACK.md`
+- `llms-full.txt`
 - `llms.txt`
 - `docs/ARCHITECTURE.md`
 - `docs/CHECKLIST.md`
@@ -58,29 +61,29 @@
 - `docs/INIT_AND_UPGRADE_FEATURE_LIST.md`
 - `docs/MEMORY_REFERENCE.md`
 - `docs/ONBOARDING.md`
+- `docs/PURPOSE.md`
+- `docs/SKILL_AUTHORING.md`
+- `docs/SPRINT_BOARD.md`
 - `docs/STYLE_GUIDE.md`
 - `docs/TAP-967-measurement.md`
 - `docs/TAPPS_BACKLOG_PLAN.md`
 - `docs/TAPPS_BRAIN_V2.1_TAG.md`
 - `docs/TROUBLESHOOTING.md`
-- `docs/UPGRADE_FOR_CONSUMERS.md`
-- `docs/adr/0001-in-process-agentbrain-via-brainbridge.md`
-- `docs/adr/0002-pin-tapps-brain-version-floor-at-372.md`
-- `docs/adr/0003-no-pypi-or-npm-publish-global-install-from-local-checkout.md`
-- `docs/adr/0004-deterministic-tools-only-contract.md`
-- ... and 269 more
+- `docs/UPGRADE-PROMPT.md`
+- ... and 347 more
 
 ## API Summary
 
-- Packages: 53
-- Modules: 799
-- Public API symbols: 3605
+- Packages: 55
+- Modules: 869
+- Public API symbols: 4198
 
 ## Project Structure
 
 ```
 .coverage
 .dockerignore
+.docsmcp.yaml
 .git-blame-ignore-revs
 .gitignore
 .hadolint.yaml
@@ -99,14 +102,14 @@ MagicMock/
 README.md
 SECURITY.md
 TECH_STACK.md
+docker/
+docker-compose.dev.yml
 docker-compose.yml
 docker-mcp/
 docs/
 docsmcp.spec
 examples/
+llms-full.txt
 llms.txt
-npm/
-npm-docs-mcp/
-packages/
-... and 8 more
+... and 12 more
 ```

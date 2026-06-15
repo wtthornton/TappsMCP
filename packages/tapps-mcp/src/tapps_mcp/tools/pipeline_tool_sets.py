@@ -7,9 +7,11 @@ transcript tool calls count as pipeline compliance.
 
 from __future__ import annotations
 
-from typing import Final
+from typing import Any, Final
 
 from tapps_mcp.distribution.nlt_mcp_config import LEGACY_NLT_SERVER_IDS, NLT_SERVER_ORDER
+
+_CALLMCPTOOL_NAME = "CallMcpTool"
 
 GATE_SHORT_NAMES: Final[frozenset[str]] = frozenset(
     {"tapps_quick_check", "tapps_validate_changed", "tapps_quality_gate"}
@@ -41,6 +43,32 @@ MCP_SERVER_PREFIXES: Final[frozenset[str]] = frozenset(
         *LEGACY_NLT_SERVER_IDS.keys(),
     }
 )
+
+
+def resolve_callmcptool_tool_name(tool_input: dict[str, Any]) -> str | None:
+    """Return ``toolName`` from a Cursor ``CallMcpTool`` envelope when present."""
+    for key in ("toolName", "tool_name"):
+        raw = tool_input.get(key)
+        if isinstance(raw, str) and raw.strip():
+            return raw.strip()
+    return None
+
+
+def is_tapps_mcp_server(server: str) -> bool:
+    """True when *server* looks like a TappsMCP or NLT MCP host identifier."""
+    lowered = server.lower()
+    if lowered in MCP_SERVER_PREFIXES:
+        return True
+    return any(marker in lowered for marker in MCP_SERVER_PREFIXES)
+
+
+def resolve_transcript_tool_name(name: str, tool_input: dict[str, Any]) -> str:
+    """Map Cursor ``CallMcpTool`` to the inner ``tapps_*`` tool name when present."""
+    if name == _CALLMCPTOOL_NAME:
+        inner = resolve_callmcptool_tool_name(tool_input)
+        if inner:
+            return inner
+    return name
 
 
 def matches_pipeline_tool(name: str, short_names: frozenset[str]) -> bool:
@@ -78,5 +106,8 @@ __all__ = [
     "is_checklist_tool",
     "is_gate_tool",
     "is_lookup_tool",
+    "is_tapps_mcp_server",
     "matches_pipeline_tool",
+    "resolve_callmcptool_tool_name",
+    "resolve_transcript_tool_name",
 ]

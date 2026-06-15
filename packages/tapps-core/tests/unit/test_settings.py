@@ -186,6 +186,9 @@ class TestToolCurationSettings:
             "developer",
             "quality",
             "admin",
+            "nlt-build",
+            "nlt-memory",
+            "nlt-setup",
             "nlt-code-quality",
             "nlt-platform-admin",
         ):

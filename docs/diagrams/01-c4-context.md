@@ -15,5 +15,3 @@ C4Context
     UpdateElementStyle(tapps_mcp, $bgColor="#14B8A6", $fontColor="#fff", $borderColor="#333")
     UpdateElementStyle(User, $bgColor="#F5A9D0", $fontColor="#000", $borderColor="#333")
 ```
-
-See [README.md](README.md) for a richer hand-curated context that includes Context7, tapps-brain, and DocsMCP.

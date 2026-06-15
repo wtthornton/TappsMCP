@@ -10,7 +10,6 @@ import pytest
 
 from tapps_mcp.tools.loop_metrics import (
     aggregate_skills_used,
-    append_loop_metrics_row,
     compute_gate_pass_rate_7d,
     compute_rolling_stats,
     extract_skill_name,
@@ -186,6 +185,105 @@ class TestTranscriptParsing:
         assert row["mcp_calls"] == 1
         assert "src/main.py" in row["files_edited"]
         assert row["violations"] == ["CHECKLIST_MISSING"]
+
+    def test_callmcptool_unwraps_pipeline_tools(self, tmp_path: Path) -> None:
+        transcript = tmp_path / "session.jsonl"
+        transcript.write_text(
+            json.dumps(
+                {
+                    "message": {
+                        "content": [
+                            {
+                                "type": "tool_use",
+                                "name": "CallMcpTool",
+                                "input": {
+                                    "server": "project-0-tapps-mcp-nlt-code-quality",
+                                    "toolName": "tapps_validate_changed",
+                                    "arguments": {"file_paths": "src/main.py"},
+                                },
+                            },
+                            {
+                                "type": "tool_use",
+                                "name": "CallMcpTool",
+                                "input": {
+                                    "server": "project-0-tapps-mcp-nlt-code-quality",
+                                    "toolName": "tapps_checklist",
+                                    "arguments": {"task_type": "feature"},
+                                },
+                            },
+                            {
+                                "type": "tool_use",
+                                "name": "Edit",
+                                "input": {"file_path": "src/main.py"},
+                            },
+                        ]
+                    }
+                }
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+        row = parse_transcript_loop_metrics(transcript, project_root=tmp_path)
+        assert row["violations"] == []
+        assert row["checklist_called"] is True
+        assert "tapps_validate_changed" in row["tools_used"]
+        assert "tapps_checklist" in row["tools_used"]
+        assert "CallMcpTool" not in row["tools_used"]
+        assert row["mcp_calls"] == 2
+
+    def test_tmp_edits_excluded_from_gate(self, tmp_path: Path) -> None:
+        transcript = tmp_path / "session.jsonl"
+        pkg_file = tmp_path / "packages" / "mod.py"
+        pkg_file.parent.mkdir(parents=True)
+        transcript.write_text(
+            json.dumps(
+                {
+                    "message": {
+                        "content": [
+                            {
+                                "type": "tool_use",
+                                "name": "Write",
+                                "input": {"path": "/tmp/scratch.py", "contents": "x"},
+                            },
+                            {
+                                "type": "tool_use",
+                                "name": "Edit",
+                                "input": {"file_path": str(pkg_file)},
+                            },
+                        ]
+                    }
+                }
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+        row = parse_transcript_loop_metrics(transcript, project_root=tmp_path)
+        assert "/tmp/scratch.py" not in row["files_edited"]
+        assert str(pkg_file) in row["files_edited"]
+        assert any("QUALITY_GATE_SKIP" in v for v in row["violations"])
+
+    def test_out_of_project_edits_excluded(self, tmp_path: Path) -> None:
+        transcript = tmp_path / "session.jsonl"
+        transcript.write_text(
+            json.dumps(
+                {
+                    "message": {
+                        "content": [
+                            {
+                                "type": "tool_use",
+                                "name": "Write",
+                                "input": {"path": "/other/repo/file.py", "contents": "x"},
+                            }
+                        ]
+                    }
+                }
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+        row = parse_transcript_loop_metrics(transcript, project_root=tmp_path)
+        assert row["files_edited"] == []
+        assert row["violations"] == []
 
     def test_record_from_cursor_payload(self, tmp_path: Path) -> None:
         transcript = tmp_path / "agent-transcripts" / "abc.jsonl"

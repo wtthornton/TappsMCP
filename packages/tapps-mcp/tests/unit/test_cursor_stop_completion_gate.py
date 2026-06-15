@@ -77,6 +77,46 @@ class TestCursorStopCompletionGate:
         row = parse_transcript_loop_metrics(transcript)
         assert row["violations"] == []
 
+    def test_callmcptool_gate_tool_prevents_violation(self, tmp_path: Path) -> None:
+        transcript = tmp_path / "session.jsonl"
+        transcript.write_text(
+            json.dumps(
+                {
+                    "message": {
+                        "content": [
+                            {
+                                "type": "tool_use",
+                                "name": "CallMcpTool",
+                                "input": {
+                                    "server": "project-0-tapps-mcp-nlt-code-quality",
+                                    "toolName": "tapps_quick_check",
+                                    "arguments": {"file_path": "src/main.py"},
+                                },
+                            },
+                            {
+                                "type": "tool_use",
+                                "name": "CallMcpTool",
+                                "input": {
+                                    "server": "project-0-tapps-mcp-nlt-code-quality",
+                                    "toolName": "tapps_checklist",
+                                    "arguments": {"task_type": "feature"},
+                                },
+                            },
+                            {
+                                "type": "tool_use",
+                                "name": "Edit",
+                                "input": {"file_path": "src/main.py"},
+                            },
+                        ]
+                    }
+                }
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+        row = parse_transcript_loop_metrics(transcript, project_root=tmp_path)
+        assert row["violations"] == []
+
     def test_format_stop_gap_followup_block_mode(self, tmp_path: Path) -> None:
         metrics = tmp_path / ".tapps-mcp" / "loop-metrics.jsonl"
         metrics.parent.mkdir(parents=True)

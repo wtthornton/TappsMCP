@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<title>tapps-mcp Diagrams</title>
+<title>Smoke</title>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <style>* { margin: 0; padding: 0; box-sizing: border-box; }
@@ -71,7 +71,7 @@ body {
 </head>
 <body>
 <div class="header">
-<h1>tapps-mcp Diagrams</h1>
+<h1>Smoke</h1>
 <p>Generated from tapps-mcp</p>
 </div>
 <div class="controls">
@@ -81,15 +81,11 @@ body {
 <span style="margin-left: 1rem; color: #666;">Toggle:</span>
 <button class="toggle-btn active" data-target="diagram-0">Dependency Graph</button>
 <button class="toggle-btn active" data-target="diagram-1">Module Map</button>
-<button class="toggle-btn active" data-target="diagram-2">C4 System Context</button>
-<button class="toggle-btn active" data-target="diagram-3">C4 Container</button>
 </div>
 <div class="toc">
 <h3>Diagrams</h3>
 <a href="#diagram-0">Dependency Graph</a>
 <a href="#diagram-1">Module Map</a>
-<a href="#diagram-2">C4 System Context</a>
-<a href="#diagram-3">C4 Container</a>
 </div>
 <div class="diagram-section" id="diagram-0">
 <h2>Dependency Graph</h2>
@@ -302,56 +298,6 @@ graph TD
     classDef business fill:#14B8A6,stroke:#333,color:#fff
     classDef data fill:#9333EA,stroke:#333,color:#fff
     classDef infra fill:#6B7280,stroke:#333,color:#fff
-
-</pre>
-</div>
-</div>
-<div class="diagram-section" id="diagram-2">
-<h2>C4 System Context</h2>
-<div class="diagram-wrapper">
-<pre class="mermaid">
-C4Context
-    title System Context diagram for tapps-mcp
-
-    System(tapps_mcp, &quot;tapps-mcp&quot;, &quot;Software system&quot;)
-
-    Person(User, &quot;User&quot;, &quot;Primary system user&quot;)
-
-    Rel(User, tapps_mcp, &quot;Uses&quot;)
-
-    UpdateElementStyle(tapps_mcp, $bgColor=&quot;#14B8A6&quot;, $fontColor=&quot;#fff&quot;, $borderColor=&quot;#333&quot;)
-    UpdateElementStyle(User, $bgColor=&quot;#F5A9D0&quot;, $fontColor=&quot;#000&quot;, $borderColor=&quot;#333&quot;)
-
-
-</pre>
-</div>
-</div>
-<div class="diagram-section" id="diagram-3">
-<h2>C4 Container</h2>
-<div class="diagram-wrapper">
-<pre class="mermaid">
-C4Container
-    title Container diagram for tapps-mcp
-
-    System_Boundary(tapps_mcp, &quot;tapps-mcp&quot;) {
-        Container(docs_mcp, &quot;docs-mcp&quot;, &quot;Python&quot;, &quot;MCP server for automated documentation generation, validation, and maintenance&quot;)
-        Container(tapps_core, &quot;tapps-core&quot;, &quot;Python&quot;, &quot;Shared infrastructure library for Tapps platform (config, security, logging, knowledge, memory, metrics)&quot;)
-        Container(tapps_mcp, &quot;tapps-mcp&quot;, &quot;Python&quot;, &quot;MCP server providing deterministic code quality tools for AI coding assistants&quot;)
-        Container(Docker, &quot;Docker&quot;, &quot;Docker&quot;, &quot;Container runtime&quot;)
-        Container(DockerCompose, &quot;DockerCompose&quot;, &quot;Docker Compose&quot;, &quot;Service orchestration&quot;)
-    }
-
-    Rel(docs_mcp, tapps_core, &quot;Uses&quot;)
-    Rel(docs_mcp, tapps_mcp, &quot;Uses&quot;)
-    Rel(docs_mcp, Docker, &quot;Uses&quot;)
-    Rel(docs_mcp, DockerCompose, &quot;Uses&quot;)
-
-    UpdateElementStyle(docs_mcp, $bgColor=&quot;#6B7280&quot;, $fontColor=&quot;#fff&quot;, $borderColor=&quot;#333&quot;)
-    UpdateElementStyle(tapps_core, $bgColor=&quot;#14B8A6&quot;, $fontColor=&quot;#fff&quot;, $borderColor=&quot;#333&quot;)
-    UpdateElementStyle(tapps_mcp, $bgColor=&quot;#6B7280&quot;, $fontColor=&quot;#fff&quot;, $borderColor=&quot;#333&quot;)
-    UpdateElementStyle(Docker, $bgColor=&quot;#6B7280&quot;, $fontColor=&quot;#fff&quot;, $borderColor=&quot;#333&quot;)
-    UpdateElementStyle(DockerCompose, $bgColor=&quot;#6B7280&quot;, $fontColor=&quot;#fff&quot;, $borderColor=&quot;#333&quot;)
-
 
 </pre>
 </div>

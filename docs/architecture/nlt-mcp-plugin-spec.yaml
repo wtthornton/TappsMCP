@@ -62,8 +62,9 @@ core_assumption:
       Avoid. Use only for power users or short diagnostic sessions. tapps_doctor
       should WARN when >3 nlt-* servers are enabled or eager total exceeds 20.
   init_defaults:
-    write_only_bundle: developer # 3 servers (build+memory+linear), ~18 eager — never "full" on fresh install
-    comment_disabled_servers: true # mcp.json entries for opt-in servers are commented out
+    write_all_servers: true # all six nlt-* entries in mcp.json for IDE toggles
+    recommended_bundle: developer # enable build+memory+linear in Cursor UI (~18 eager)
+    comment_disabled_servers: false # deprecated — use real entries + IDE toggles
 plugin_id: nlt-tapps-plugin
 plugin_display_name: "NLT Tapps Quality Plugin"
 plugin_version: "1.0.0"

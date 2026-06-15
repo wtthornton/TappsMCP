@@ -10,6 +10,7 @@ This module parses transcripts, records rows, and produces rolling stats for
 from __future__ import annotations
 
 import json
+import tempfile
 import time
 from collections import Counter
 from pathlib import Path
@@ -21,6 +22,8 @@ from tapps_mcp.tools.pipeline_tool_sets import (
     is_checklist_tool,
     is_gate_tool,
     is_lookup_tool,
+    is_tapps_mcp_server,
+    resolve_transcript_tool_name,
 )
 
 _METRICS_NAME = "loop-metrics.jsonl"
@@ -92,7 +95,110 @@ def _iter_transcript_tool_blocks(transcript_path: Path) -> list[tuple[str, dict[
     return blocks
 
 
-def parse_transcript_loop_metrics(transcript_path: Path | None) -> dict[str, Any]:
+def is_scoped_gate_edit(path_str: str, project_root: Path | None) -> bool:
+    """True when *path_str* is in-scope for gate-required edit telemetry."""
+    if not path_str:
+        return False
+    if project_root is not None:
+        try:
+            path = Path(path_str)
+            resolved = path.resolve() if path.is_absolute() else (project_root / path).resolve()
+            resolved.relative_to(project_root.resolve())
+            return True
+        except (ValueError, OSError):
+            pass
+    normalized = path_str.replace("\\", "/")
+    tmp_root = Path(tempfile.gettempdir()).resolve().as_posix()
+    if normalized == tmp_root or normalized.startswith(f"{tmp_root}/"):
+        return False
+    return project_root is None
+
+
+def _edit_counts_for_gate(path_str: str, project_root: Path | None) -> bool:
+    return is_scoped_gate_edit(path_str, project_root)
+
+
+def scoped_source_edits(paths: list[str], project_root: Path) -> list[str]:
+    """In-project source paths that count toward gate-required edit telemetry."""
+    seen: set[str] = set()
+    scoped: list[str] = []
+    for path in paths:
+        if path in seen:
+            continue
+        if not is_scoped_gate_edit(path, project_root):
+            continue
+        if not str(path).endswith(SOURCE_FILE_SUFFIXES):
+            continue
+        seen.add(path)
+        scoped.append(path)
+    return scoped
+
+
+def _legacy_cursor_unparsed_callmcptool(row: dict[str, Any]) -> bool:
+    """Pre-TAP-4017 Cursor rows: ``CallMcpTool`` without unwrapped ``tapps_*`` names."""
+    tools = [str(t) for t in row.get("tools_used") or []]
+    if "CallMcpTool" not in tools:
+        return False
+    return not any(t.startswith("tapps_") or t.startswith("mcp__") for t in tools)
+
+
+def is_reliable_edit_loop_row(row: dict[str, Any], project_root: Path) -> bool:
+    """False for legacy unparsed Cursor rows or loops with no in-scope source edits."""
+    if _legacy_cursor_unparsed_callmcptool(row):
+        return False
+    files = row.get("files_edited") or []
+    return bool(scoped_source_edits([p for p in files if isinstance(p, str)], project_root))
+
+
+def loop_row_gate_skipped(row: dict[str, Any], project_root: Path) -> bool:
+    """True when a reliable edit loop lacks gate/checklist compliance signals."""
+    if not is_reliable_edit_loop_row(row, project_root):
+        return False
+    if row.get("checklist_called"):
+        return False
+    for tool in row.get("tools_used") or []:
+        if is_gate_tool(str(tool)):
+            return False
+    scoped_skipped = scoped_source_edits(
+        [p for p in row.get("gate_skipped_files") or [] if isinstance(p, str)],
+        project_root,
+    )
+    if scoped_skipped:
+        return True
+    scoped_edited = scoped_source_edits(
+        [p for p in row.get("files_edited") or [] if isinstance(p, str)],
+        project_root,
+    )
+    return bool(scoped_edited)
+
+
+def _mcp_call_from_tool_use(name: str, tool_input: dict[str, Any], resolved_name: str) -> bool:
+    if name.startswith("mcp__"):
+        return True
+    if name != "CallMcpTool":
+        return False
+    server = str(tool_input.get("server") or "")
+    return is_tapps_mcp_server(server) or resolved_name.startswith("tapps_")
+
+
+def _edit_path_from_tool_use(
+    name: str,
+    tool_input: dict[str, Any],
+    project_root: Path | None,
+) -> str | None:
+    if name not in EDIT_TOOL_NAMES:
+        return None
+    fp = tool_input.get("file_path") or tool_input.get("path") or ""
+    if not isinstance(fp, str) or not fp or not _edit_counts_for_gate(fp, project_root):
+        return None
+    return fp
+
+
+def parse_transcript_loop_metrics(
+    transcript_path: Path | None,
+    *,
+    project_root: Path | None = None,
+) -> dict[str, Any]:
     """Build a loop-metrics row dict from a session transcript path."""
     mcp_calls = 0
     gate_called = False
@@ -104,19 +210,19 @@ def parse_transcript_loop_metrics(transcript_path: Path | None) -> dict[str, Any
 
     if transcript_path is not None and transcript_path.is_file():
         for name, tool_input in _iter_transcript_tool_blocks(transcript_path):
-            tools_used.add(name)
-            if name.startswith("mcp__"):
+            resolved_name = resolve_transcript_tool_name(name, tool_input)
+            tools_used.add(resolved_name)
+            if _mcp_call_from_tool_use(name, tool_input, resolved_name):
                 mcp_calls += 1
-            if is_gate_tool(name):
+            if is_gate_tool(resolved_name):
                 gate_called = True
-            if is_checklist_tool(name):
+            if is_checklist_tool(resolved_name):
                 checklist_called = True
-            if is_lookup_tool(name):
+            if is_lookup_tool(resolved_name):
                 lookup_called = True
-            if name in EDIT_TOOL_NAMES:
-                fp = tool_input.get("file_path") or tool_input.get("path") or ""
-                if isinstance(fp, str) and fp:
-                    edited_from_transcript.append(fp)
+            edit_path = _edit_path_from_tool_use(name, tool_input, project_root)
+            if edit_path is not None:
+                edited_from_transcript.append(edit_path)
             skill = extract_skill_name(name, tool_input)
             if skill:
                 skills_used.add(skill)
@@ -250,12 +356,11 @@ def resolve_transcript_from_payload(
 def record_loop_metrics_from_hook_payload(payload: dict[str, Any]) -> dict[str, Any]:
     """Record loop-metrics from a Cursor/Claude stop-hook stdin payload."""
     from tapps_core.config.settings import load_settings
-
     from tapps_mcp.tools.usage import compute_gaps, format_stop_gap_followup
 
     project_root = resolve_project_root_from_payload(payload)
     transcript = resolve_transcript_from_payload(payload, project_root)
-    row = parse_transcript_loop_metrics(transcript)
+    row = parse_transcript_loop_metrics(transcript, project_root=project_root)
     append_loop_metrics_row(project_root, row)
     violations = list(row.get("violations") or [])
     if violations:
@@ -385,6 +490,47 @@ def compute_rolling_stats(
     }
 
 
+_RECENT_EDIT_LOOPS_FOR_GAPS = 10
+
+
+def compute_recent_edit_loop_stats(
+    project_root: Path,
+    *,
+    window_days: int = _PROMOTE_WINDOW_DAYS,
+    last_edit_loops: int = _RECENT_EDIT_LOOPS_FOR_GAPS,
+) -> dict[str, Any]:
+    """Gate-skip and lookup ratios over the most recent edit loops (TAP-4017).
+
+    Unlike ``compute_rolling_stats``, this ignores no-edit loops so compliant
+    sessions improve gap warnings without waiting for the full 7-day window
+    to roll off stale false-positive rows.
+    """
+    cutoff = int(time.time()) - window_days * _DAY_SECONDS
+    rows = [r for r in read_loop_metrics(project_root) if int(r.get("ts", 0)) >= cutoff]
+    edit_rows = [r for r in rows if is_reliable_edit_loop_row(r, project_root)]
+    recent = edit_rows[-last_edit_loops:]
+    loops = len(recent)
+    if loops == 0:
+        return {
+            "loops": 0,
+            "gate_skip_rate": 0.0,
+            "lookup_docs_to_edit_ratio": 0.0,
+            "window_days": window_days,
+            "last_edit_loops": last_edit_loops,
+            "window_start_ts": cutoff,
+        }
+    skipped_loops = sum(1 for r in recent if loop_row_gate_skipped(r, project_root))
+    lookup_loops = sum(1 for r in recent if r.get("lookup_docs_called"))
+    return {
+        "loops": loops,
+        "gate_skip_rate": skipped_loops / loops,
+        "lookup_docs_to_edit_ratio": lookup_loops / loops,
+        "window_days": window_days,
+        "last_edit_loops": last_edit_loops,
+        "window_start_ts": cutoff,
+    }
+
+
 def should_auto_promote_cache_gate(
     project_root: Path,
     *,
@@ -433,13 +579,18 @@ __all__ = [
     "append_completion_gate_violations",
     "append_loop_metrics_row",
     "compute_gate_pass_rate_7d",
+    "compute_recent_edit_loop_stats",
     "compute_rolling_stats",
     "extract_skill_name",
+    "is_reliable_edit_loop_row",
+    "is_scoped_gate_edit",
+    "loop_row_gate_skipped",
     "parse_transcript_loop_metrics",
     "read_loop_metrics",
     "record_loop_metrics_from_hook_payload",
     "resolve_cursor_transcript_path",
     "resolve_project_root_from_payload",
     "resolve_transcript_from_payload",
+    "scoped_source_edits",
     "should_auto_promote_cache_gate",
 ]

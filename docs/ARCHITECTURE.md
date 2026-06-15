@@ -37,21 +37,39 @@ The MCP server is split across ten files (server.py + 9 modules) sharing the sam
 - **`server_resources.py`** -- MCP resources (knowledge, config) and prompts (pipeline, workflow)
 - **`server_helpers.py`** -- Shared utilities: `emit_ctx_info()`, response builders, singleton caches
 
-## Mode-scoped server registration (TAP-1084)
+## NLT MCP server registration (ADR-0016)
 
-`tapps-mcp` exposes its 32 tools through a single binary registered three times in `.mcp.json` under different names, each scoped to a tool preset. The MCP client sees these as three "servers"; under the hood it's one `FastMCP("TappsMCP")` instance whose `_register_tool_modules()` filters by the `TAPPS_MCP_TOOL_PRESET` env var that the CLI sets from `--mode`.
+`tapps-mcp` exposes tools through **needs-based NLT profiles** — enable 1–3 servers per session, not all six. Legacy `--profile nlt-code-quality` maps to **Build**; `nlt-platform-admin` maps to **Setup** for one release.
+
+| MCP server ID | CLI profile | Eager tools (approx) | Purpose |
+|---|---|---|---|
+| `nlt-build` | Build | 9 | Score, gate, validate, docs lookup, impact graph |
+| `nlt-memory` | Memory | 2 | Slim `tapps_memory` + session handoff |
+| `nlt-setup` | Setup | 2 | init, upgrade, doctor, engagement |
+| `nlt-linear-issues` | (situational) | — | Linear cache-first reads / writes |
+| `nlt-project-docs` | (situational) | — | Doc generation and drift audit |
+| `nlt-release-ship` | (situational) | — | Release notes / ship gate |
+
+**Default bundle after `tapps_init`:** `developer` = `nlt-build` + `nlt-memory` + `nlt-linear-issues` (~18 eager tools). Use `--bundle minimal` for build-only.
+
+**Key contract:** identical tool names on enabled servers refer to identical implementations — the NLT split is about **which tools the client sees**, not different handler code. Prefer `mcp__nlt-build__tapps_*` in generated skills when Build is always enabled.
+
+The same pattern applies to `docs-mcp` situational servers. See [docs/adr/0016-needs-based-nlt-mcp-taxonomy.md](adr/0016-needs-based-nlt-mcp-taxonomy.md) and [docs/architecture/tool-budget.md](architecture/tool-budget.md).
+
+## Legacy mode-scoped registration (pre-ADR-0016)
+
+Prior to ADR-0016, tapps-mcp registered `tapps-quality` and `tapps-admin` aliases. Consumers on v3.12.28+ should migrate MCP config via `tapps-mcp upgrade --host auto`. Old server IDs remain as one-release aliases in serve scripts.
+
+<details>
+<summary>Historical tapps-quality / tapps-admin table (superseded)</summary>
 
 | `.mcp.json` name | CLI invocation | Preset | Tool count | Purpose |
 |---|---|---|---|---|
-| `tapps-mcp` | `serve` (default `--mode all`) | full | 32 | Canonical entry — all tools registered (includes Linear cache + release-update) |
-| `tapps-quality` | `serve --mode quality` | `TAPPS_TOOL_PRESET_QUALITY` | 15 | Coding-session tools (scoring, gate, quick_check, validate_changed, security, memory, lookup_docs, dead_code, impact_analysis, validate_config, dependency_scan, dependency_graph, audit_campaign); reduces tool-list overhead during edit-loop work |
-| `tapps-admin` | `serve --mode admin` | `TAPPS_TOOL_PRESET_ADMIN` | 12 | Setup/troubleshooting tools (init, upgrade, doctor, server_info, set_engagement_level, dashboard, stats, feedback, report, pipeline, decompose, session_notes) |
+| `tapps-mcp` | `serve` (default) | full | 32 | All tools |
+| `tapps-quality` | `serve --mode quality` | quality | 15 | Coding-session subset |
+| `tapps-admin` | `serve --mode admin` | admin | 12 | Setup/troubleshooting subset |
 
-**Key contract**: identical tool names across servers refer to identical implementations — there is no semantic split between `mcp__tapps-mcp__tapps_lookup_docs` and `mcp__tapps-quality__tapps_lookup_docs`. The mode pattern is purely about which tools the client sees in its tool list, not what those tools do. Calling either name routes to the same handler.
-
-**For agent prompts**: prefer the canonical `mcp__tapps-mcp__*` prefix in hardcoded prompts to maximize portability — projects that register only `tapps-mcp` (and not the scoped aliases) will still resolve those calls. Hooks and skills installed by `tapps_init` follow this convention.
-
-The same pattern applies to `docs-mcp` (`--mode check` / `--mode gen`) registered under `docs-mcp-check` / `docs-mcp-gen` aliases.
+</details>
 
 ## Module map (tapps-mcp)
 

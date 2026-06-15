@@ -1483,24 +1483,26 @@ async def tapps_handoff_save(
     except HandoffWriteError as exc:
         elapsed_ms = (time.perf_counter_ns() - start) // 1_000_000
         _record_execution("tapps_handoff_save", start)
-        return error_response(
+        resp = error_response(
             "tapps_handoff_save",
-            elapsed_ms,
-            code="handoff_lint_failed",
-            message="; ".join(exc.errors),
-            data={"errors": exc.errors, "warnings": exc.warnings},
+            "handoff_lint_failed",
+            "; ".join(exc.errors),
+            extra={"errors": exc.errors, "warnings": exc.warnings},
         )
+        resp["elapsed_ms"] = elapsed_ms
+        return resp
 
     if not allow_lint_warnings and result.lint.warnings:
         elapsed_ms = (time.perf_counter_ns() - start) // 1_000_000
         _record_execution("tapps_handoff_save", start)
-        return error_response(
+        resp = error_response(
             "tapps_handoff_save",
-            elapsed_ms,
-            code="handoff_lint_warnings",
-            message="Handoff has advisory lint warnings",
-            data={"warnings": result.lint.warnings},
+            "handoff_lint_warnings",
+            "Handoff has advisory lint warnings",
+            extra={"warnings": result.lint.warnings},
         )
+        resp["elapsed_ms"] = elapsed_ms
+        return resp
 
     elapsed_ms = (time.perf_counter_ns() - start) // 1_000_000
     _record_execution("tapps_handoff_save", start)

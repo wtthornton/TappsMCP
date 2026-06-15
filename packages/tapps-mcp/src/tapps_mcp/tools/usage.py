@@ -22,9 +22,16 @@ import time
 from pathlib import Path
 from typing import Any, Literal
 
-from tapps_mcp.tools.loop_metrics import compute_rolling_stats, read_loop_metrics
+from tapps_mcp.tools.loop_metrics import (
+    compute_recent_edit_loop_stats,
+    compute_rolling_stats,
+    is_scoped_gate_edit,
+    read_loop_metrics,
+)
 from tapps_mcp.tools.pipeline_tool_sets import (
     GATE_SHORT_NAMES,
+    LOOKUP_SHORT_NAMES,
+    SOURCE_FILE_SUFFIXES,
     matches_pipeline_tool,
 )
 
@@ -88,6 +95,43 @@ def _normalize(names: set[str]) -> set[str]:
     return {_strip_mcp_prefix(n) for n in names}
 
 
+def _scoped_source_edits(paths: list[str], project_root: Path) -> list[str]:
+    seen: set[str] = set()
+    scoped: list[str] = []
+    for path in paths:
+        if path in seen:
+            continue
+        if not is_scoped_gate_edit(path, project_root):
+            continue
+        if not str(path).endswith(SOURCE_FILE_SUFFIXES):
+            continue
+        seen.add(path)
+        scoped.append(path)
+    return scoped
+
+
+def _telemetry_used_gate(rows: list[dict[str, Any]]) -> bool:
+    for row in reversed(rows[-5:]):
+        for tool in row.get("tools_used") or []:
+            if matches_pipeline_tool(str(tool), GATE_SHORT_NAMES):
+                return True
+    return False
+
+
+def _telemetry_used_checklist(rows: list[dict[str, Any]]) -> bool:
+    return any(bool(row.get("checklist_called")) for row in rows[-5:])
+
+
+def _telemetry_used_lookup(rows: list[dict[str, Any]]) -> bool:
+    for row in reversed(rows[-5:]):
+        if row.get("lookup_docs_called"):
+            return True
+        for tool in row.get("tools_used") or []:
+            if matches_pipeline_tool(str(tool), LOOKUP_SHORT_NAMES):
+                return True
+    return False
+
+
 def compute_gaps(
     project_root: Path,
     *,
@@ -112,6 +156,9 @@ def compute_gaps(
 
     rows = read_loop_metrics(project_root, limit=50)
     rolling = compute_rolling_stats(project_root, window_days=rolling_window_days)
+    recent_edits = compute_recent_edit_loop_stats(
+        project_root, window_days=rolling_window_days
+    )
     violations = read_recent_violations(project_root, limit=5)
 
     gaps: list[str] = []
@@ -124,18 +171,24 @@ def compute_gaps(
             "matrix and project context are stale otherwise."
         )
 
-    edited_recent = [p for r in rows[-10:] for p in r.get("files_edited", [])]
+    edited_recent = _scoped_source_edits(
+        [p for r in rows[-10:] for p in r.get("files_edited", []) if isinstance(p, str)],
+        project_root,
+    )
     has_recent_edits = bool(edited_recent)
-    used_gate = any(matches_pipeline_tool(name, GATE_SHORT_NAMES) for name in called)
+    used_gate = any(matches_pipeline_tool(name, GATE_SHORT_NAMES) for name in called) or (
+        _telemetry_used_gate(rows)
+    )
     if has_recent_edits and not used_gate:
         gaps.append("edits_without_validation")
         sample = ",".join(edited_recent[:3])
         recs.append(
             f"Files were edited (e.g. {sample}) but no quality gate was run. "
-            f"Call tapps_validate_changed(file_paths=\"{sample}\") before declaring done."
+            f'Call tapps_validate_changed(file_paths="{sample}") before declaring done.'
         )
 
-    if has_recent_edits and _CHECKLIST_TOOL not in called:
+    used_checklist = _CHECKLIST_TOOL in called or _telemetry_used_checklist(rows)
+    if has_recent_edits and not used_checklist:
         gaps.append("checklist_skipped")
         recs.append(
             "tapps_checklist was not called this session. Invoke "
@@ -143,17 +196,18 @@ def compute_gaps(
             "before declaring done."
         )
 
-    if rolling.get("loops", 0) >= 3:
-        skip_rate = rolling.get("gate_skip_rate", 0.0)
+    recent_edit_loops = int(recent_edits.get("loops", 0))
+    if recent_edit_loops >= 3:
+        skip_rate = float(recent_edits.get("gate_skip_rate", 0.0))
         if skip_rate >= 0.5:
             gaps.append("recurring_validation_skips")
             pct = int(round(skip_rate * 100))
             recs.append(
                 f"Quality gate has been skipped on {pct}% of recent edit loops "
-                f"({rolling['loops']} loops, last {rolling_window_days}d). "
+                f"({recent_edit_loops} loops, last {rolling_window_days}d). "
                 "Consider raising engagement to high so tapps-task-completed.sh blocks instead of warns."
             )
-        lookup_ratio = rolling.get("lookup_docs_to_edit_ratio", 0.0)
+        lookup_ratio = float(recent_edits.get("lookup_docs_to_edit_ratio", 0.0))
         if lookup_ratio < 0.2 and any(r.get("files_edited") for r in rows):
             gaps.append("lookup_docs_underused")
             recs.append(
@@ -161,7 +215,8 @@ def compute_gaps(
                 "any external library API to avoid hallucinated calls."
             )
 
-    if _LOOKUP_TOOL not in called and has_recent_edits:
+    used_lookup = _LOOKUP_TOOL in called or _telemetry_used_lookup(rows)
+    if not used_lookup and has_recent_edits:
         if "lookup_docs_underused" not in gaps:
             gaps.append("library_uses_without_lookup_docs")
             recs.append(
@@ -178,6 +233,7 @@ def compute_gaps(
         "called_tools_count": len(called),
         "edited_files_recent": edited_recent[:20],
         "rolling_stats": rolling,
+        "recent_edit_stats": recent_edits,
         "recent_violations": violations,
         "recommendations": recs,
         "generated_ts": int(time.time()),

@@ -186,6 +186,36 @@ class TestTappsHandoffSaveMcp:
             "Implement handoff write CLI"
         ]
 
+    @pytest.mark.asyncio
+    async def test_mcp_handoff_save_lint_failure_returns_structured_error(
+        self, tmp_path: Path
+    ) -> None:
+        from tapps_mcp import server_pipeline_tools as spt
+
+        with (
+            patch("tapps_mcp.server_pipeline_tools.load_settings") as mock_settings,
+            patch(
+                "tapps_mcp.tools.handoff_write.write_handoff",
+                new_callable=AsyncMock,
+            ) as mock_write,
+            patch("tapps_mcp.server._record_call"),
+            patch("tapps_mcp.server._record_execution"),
+        ):
+            mock_settings.return_value.project_root = tmp_path
+            mock_write.side_effect = HandoffWriteError(
+                ["Next (P0) is missing or empty when Open has items"],
+                [],
+            )
+            result = await spt.tapps_handoff_save(_INVALID_HANDOFF)
+
+        assert result["success"] is False
+        assert result["elapsed_ms"] >= 0
+        assert result["error"]["code"] == "handoff_lint_failed"
+        assert "Next (P0)" in result["error"]["message"]
+        assert result["error"]["errors"] == [
+            "Next (P0) is missing or empty when Open has items"
+        ]
+
 
 class TestSessionSearchQuery:
     def test_prefers_handoff_p0_over_iso(self, tmp_path: Path) -> None:

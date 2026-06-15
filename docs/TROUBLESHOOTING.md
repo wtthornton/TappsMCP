@@ -160,3 +160,32 @@ After that, `.cursor/hooks/` will contain `tapps-before-mcp.ps1` and `tapps-afte
 **Upgrade preserves third-party hooks:** Since v3.12.20, `tapps-mcp upgrade` merges Tapps-owned entries into `.cursor/hooks.json` without removing other valid keys (e.g. `preToolUse` / `postToolUse` from continuous-learning-v2). Back up `.cursor/hooks.json` before major upgrades anyway; rollback restores it from `.tapps-mcp/backups/<timestamp>/`.
 
 **Init check:** For Cursor-only repos, `tapps-mcp init --check --host auto` validates only hosts that already have MCP config (e.g. `.cursor/mcp.json`). You do not need Claude Code or VS Code configs on the machine. Prefer `tapps-mcp upgrade --host cursor` for Cursor-only scaffolding refresh.
+
+## NLT MCP servers and tool visibility
+
+**Problem:** Expected tools (`tapps_memory`, `docs_*`, `tapps_init`) missing from the tool list.
+
+**Cause:** ADR-0016 splits tools across NLT servers. Only enabled servers expose their tool subset. Memory tools require `nlt-memory`; doc tools require `nlt-project-docs`; setup tools require `nlt-setup`.
+
+**Fix:**
+
+1. Open `.cursor/mcp.json` and enable the bundle you need (default: `nlt-build`, `nlt-memory`, `nlt-linear-issues`).
+2. Reload Cursor (`Developer: Reload Window`).
+3. Run `tapps-mcp doctor --quick` — check NLT bundle and tool-budget rows.
+
+See [ADR-0016](adr/0016-needs-based-nlt-mcp-taxonomy.md) and [tutorial: NLT session modes](tutorials/04-nlt-mcp-session-modes.md).
+
+## Cursor agent transcripts and loop metrics
+
+**Problem:** Stop-hook telemetry (`loop-metrics.jsonl`) shows gate skips or missing pipeline calls despite agent behavior looking correct.
+
+**Cause:** Cursor wraps MCP calls as `CallMcpTool` with nested JSON; older parsers only matched bare tool names. Cursor transcript paths differ from Claude Code.
+
+**Fix:** Ensure tapps-mcp ≥ 3.12.28 (TAP-4017 unwraps `CallMcpTool`). Run `tapps_doctor(quick=True)` and inspect loop-metrics / completion-gate sections. See [TAP-4016](https://linear.app/tappscodingagents/issue/TAP-4016) and child stories in Linear.
+
+**Dev repo note:** This repository uses `.cursor/bin/nlt-*-serve.sh` scripts that `exec` global `tapps-mcp serve --profile nlt-*` binaries. After editing `packages/tapps-mcp`, reinstall globals and reload MCP:
+
+```bash
+uv tool install --reinstall --from packages/tapps-mcp tapps-mcp
+uv tool install --reinstall --from packages/docs-mcp docsmcp
+```

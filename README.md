@@ -1,26 +1,4 @@
-<div align="center">
-
-# Tapps Platform
-
-**A quality and documentation toolset for AI coding assistants.**
-
-Two MCP servers — **TappsMCP** (code quality) and **DocsMCP** (documentation) — that give LLMs and AI-powered IDEs **70 deterministic tools** for scoring, security scanning, quality gates, documentation lookup, doc generation, config validation, and shared memory.
-
-[![CI](https://github.com/wtthornton/TappsMCP/actions/workflows/ci.yml/badge.svg)](https://github.com/wtthornton/TappsMCP/actions/workflows/ci.yml)
-[![Python 3.12+](https://img.shields.io/badge/python-3.12+-blue.svg)](https://www.python.org/downloads/)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![MCP Protocol](https://img.shields.io/badge/MCP-2025--11--25-green.svg)](https://modelcontextprotocol.io/)
-[![Tests](https://img.shields.io/badge/tests-6%2C900%2B_passing-brightgreen.svg)](#development)
-[![Tools](https://img.shields.io/badge/MCP_tools-68-blue.svg)](#tools-reference)
-[![Version](https://img.shields.io/badge/version-3.12.16-informational.svg)](#)
-
-**Supported clients:** Claude Code · Cursor · VS Code (Copilot) · Claude Desktop · any MCP host
-
-[Quick Start](#quick-start) · [Install](#install) · [Tools Reference](#tools-reference) · [Architecture](#architecture) · [Docs](#docs-and-roadmap)
-
-</div>
-
----
+# tapps-mcp
 
 ## Overview
 
@@ -193,7 +171,6 @@ TappsMCP scoring tools detect language from file extension and route to the appr
 
 ```bash
 uv sync --extra treesitter
-# or: pip install tree-sitter tree-sitter-typescript tree-sitter-go tree-sitter-rust
 ```
 
 When tree-sitter is not installed, scorers fall back to regex-based analysis with `degraded: true`.
@@ -276,7 +253,6 @@ After [installing](#install), set up TappsMCP in your project and connect your A
 
 ```bash
 tapps-mcp init                    # detects Claude Code, Cursor, VS Code
-# or: tapps-mcp init --host cursor   # target a specific client
 ```
 
 **Windows / monorepo checkout:** run init against your **app** root, not the `packages/tapps-mcp` folder. Example:
@@ -289,8 +265,6 @@ uv --directory C:\path\to\tapps-mcp run tapps-mcp init --project-root C:\path\to
 
 ```bash
 tapps-mcp serve                           # stdio (local clients)
-# or: uv run tapps-mcp serve             # if installed from source with uv
-# or: tapps-mcp serve --transport http    # HTTP (remote / container)
 ```
 
 **3. Verify:**
@@ -909,10 +883,8 @@ Memory data lives under `{project_root}/.tapps-mcp/memory/`. Add `.tapps-mcp/` t
 Two opt-in PreToolUse hooks steer Linear traffic through TappsMCP's structured tool flows. Configured in `.tapps-mcp.yaml`; both engage by default at `medium` / `high` engagement.
 
 ```yaml
-# Writes — TAP-981. Block raw save_issue without a recent docs_validate_linear_issue.
 linear_enforce_gate: true              # bool; default on at medium/high, off at low
 
-# Reads — TAP-1224. Cache-first read gate for list_issues.
 linear_enforce_cache_gate: warn        # off | warn | block; default warn at medium/high, off at low
 ```
 
@@ -996,12 +968,10 @@ Pre-built multi-arch images are published on every release:
 docker pull ghcr.io/wtthornton/tapps-mcp:latest
 docker pull ghcr.io/wtthornton/docs-mcp:latest
 
-# Run TappsMCP (stdio, mount current dir)
 docker run -v $(pwd):/workspace ghcr.io/wtthornton/tapps-mcp:latest           # Linux / macOS
 docker run -v %cd%:/workspace ghcr.io/wtthornton/tapps-mcp:latest             # Windows (cmd)
 docker run -v ${PWD}:/workspace ghcr.io/wtthornton/tapps-mcp:latest           # Windows (PowerShell)
 
-# Run with HTTP transport
 docker run -p 8000:8000 -v $(pwd):/workspace ghcr.io/wtthornton/tapps-mcp:latest tapps-mcp serve --transport http --host 0.0.0.0 --port 8000
 ```
 
@@ -1128,25 +1098,19 @@ For the full architecture reference, see [docs/ARCHITECTURE.md](docs/ARCHITECTUR
 This is a **uv workspace monorepo** with four packages. All commands run from the **repository root**.
 
 ```bash
-# Install all packages (tapps-core, tapps-mcp, docs-mcp)
 uv sync --all-packages
 
-# Run tests per package (recommended - avoids conftest collisions)
 uv run pytest packages/tapps-core/tests/ -v      # tapps-core (960+ tests)
 uv run pytest packages/tapps-mcp/tests/ -v        # tapps-mcp (3,790+ tests)
 uv run pytest packages/docs-mcp/tests/ -v         # docs-mcp  (2,170+ tests)
 
-# Run a single test file
 uv run pytest packages/tapps-mcp/tests/unit/test_scorer.py -v
 
-# Coverage
 uv run pytest packages/tapps-mcp/tests/ --cov=tapps_mcp --cov-report=term-missing
 
-# Type checking
 uv run mypy --strict packages/tapps-mcp/src/tapps_mcp/
 uv run mypy --strict packages/tapps-core/src/tapps_core/
 
-# Linting
 uv run ruff check packages/*/src/
 uv run ruff format --check packages/*/src/
 ```
@@ -1359,7 +1323,6 @@ adr_format: madr                      # madr | nygard
 diagram_format: mermaid               # mermaid | plantuml | d2
 git_log_limit: 500                    # Max git commits to analyze
 
-# Tool filtering (optional)
 tool_preset: full                     # full (all 38 DocsMCP tools) | core (subset)
 enabled_tools: []                     # Allow list — when non-empty, only these tools are exposed
 disabled_tools: []                    # Deny list — excluded from the exposed set
@@ -1412,3 +1375,22 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for development setup, coding standards, 
 
 MIT - see [LICENSE](LICENSE).
 
+<!-- docsmcp:start:installation -->
+
+<!-- docsmcp:start:installation -->
+
+<!-- docsmcp:start:installation -->
+## Installation
+
+```bash
+uv sync  # or: pip install tapps-mcp
+```
+<!-- docsmcp:end:installation -->
+
+<!-- docsmcp:start:usage -->
+## Usage
+
+```python
+import tapps_mcp
+```
+<!-- docsmcp:end:usage -->

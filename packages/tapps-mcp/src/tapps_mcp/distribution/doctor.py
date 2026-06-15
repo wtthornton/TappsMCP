@@ -2993,10 +2993,10 @@ def _nlt_partial_enablement_remediation() -> str:
     developer = ", ".join(enabled_servers_for_bundle("developer"))
     minimal = ", ".join(enabled_servers_for_bundle("minimal"))
     return (
-        f"Disable opt-in nlt-* servers you are not using. Recommended developer "
-        f"bundle ({developer}) stays within the ≤3-server budget; use minimal "
-        f"({minimal}) for build-only sessions. Re-run: "
-        "tapps-mcp init --host auto --bundle developer --force --no-uv. "
+        f"Disable unused nlt-* servers in your IDE MCP settings (all six are "
+        f"written to mcp.json for toggling). Recommended developer bundle "
+        f"({developer}) stays within the ≤3-server budget; use minimal "
+        f"({minimal}) for build-only sessions. "
         "See docs/architecture/nlt-mcp-plugin-spec.yaml."
     )
 

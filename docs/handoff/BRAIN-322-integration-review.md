@@ -45,7 +45,7 @@ memory_status: {enabled:false, degraded:true}
 The server singleton bridge that backs the `tapps_memory` tool (42 actions) is created with
 `default_profile="coder"`:
 
-- [server_helpers.py:155](packages/tapps-mcp/src/tapps_mcp/server_helpers.py#L155) — `create_brain_bridge(settings, default_profile="coder")`
+- [server_helpers.py:155](../../packages/tapps-mcp/src/tapps_mcp/server_helpers.py#L155) — `create_brain_bridge(settings, default_profile="coder")`
 
 `coder` (18 tools) exposes only the `brain_*` facade + session hooks + KG reads:
 `brain_recall, brain_remember, brain_forget, brain_learn_success/failure, brain_status,
@@ -54,13 +54,13 @@ memory_reinforce, feedback_rate, feedback_gap, hive_search, memory_find_related,
 brain_get_neighbors, brain_explain_connection, brain_record_events_batch`.
 
 But `HttpBrainBridge` calls the **low-level** surface (`_BRIDGE_USED_TOOLS`,
-[brain_bridge.py:301](packages/tapps-core/src/tapps_core/brain_bridge.py#L301)). Tools the
+[brain_bridge.py:301](../../packages/tapps-core/src/tapps_core/brain_bridge.py#L301)). Tools the
 bridge invokes that `coder` does **not** expose (→ `ToolNotInProfileError` / `-32601` on first
 call against 3.22.0):
 
 | Bridge method | Brain tool called | In `coder`? |
 |---|---|---|
-| `save()` | `memory_save` ([2533](packages/tapps-core/src/tapps_core/brain_bridge.py#L2533)) | ❌ |
+| `save()` | `memory_save` ([2533](../../packages/tapps-core/src/tapps_core/brain_bridge.py#L2533)) | ❌ |
 | `get()` | `memory_get` | ❌ |
 | `delete()` | `memory_delete` | ❌ |
 | `search()` | `memory_search` | ❌ |
@@ -68,9 +68,9 @@ call against 3.22.0):
 | `recall_for_prompt()` | `memory_recall` | ❌ (`coder` has `brain_recall`, not `memory_recall`) |
 | `supersede()` | `memory_supersede` | ❌ |
 | `hive_status()` | `hive_status` | ❌ (degraded live) |
-| `hive_propagate()` | `hive_propagate` | ❌ — and it's elevation-guard-wired at [server_helpers.py:163](packages/tapps-mcp/src/tapps_mcp/server_helpers.py#L163) |
+| `hive_propagate()` | `hive_propagate` | ❌ — and it's elevation-guard-wired at [server_helpers.py:163](../../packages/tapps-mcp/src/tapps_mcp/server_helpers.py#L163) |
 | `agent_register()` | `agent_register` | ❌ |
-| `record_kg_event()` | `brain_record_event` (singular) ([2122](packages/tapps-core/src/tapps_core/brain_bridge.py#L2122)) | ❌ (`coder` has only `brain_record_events_batch`) |
+| `record_kg_event()` | `brain_record_event` (singular) ([2122](../../packages/tapps-core/src/tapps_core/brain_bridge.py#L2122)) | ❌ (`coder` has only `brain_record_events_batch`) |
 | `save_many/recall_many/reinforce_many()` | `memory_*_many` | ❌ |
 | `flywheel_report/process()` | `flywheel_*` | ❌ |
 | `diagnostics_report()` | `diagnostics_report` | ❌ (operator-only) |
@@ -81,8 +81,8 @@ In `coder`, exposed: `brain_recall`, `brain_remember`, `memory_reinforce`,
 `brain_record_events_batch`. Everything else the facade offers is gated.
 
 **Why it was masked.** The hook-path bridges (auto-recall/capture) use only the coder subset,
-so they work — [auto_capture.py:98](packages/tapps-mcp/src/tapps_mcp/memory/auto_capture.py#L98),
-[compact_index.py:47](packages/tapps-mcp/src/tapps_mcp/memory/compact_index.py#L47). `coder`
+so they work — [auto_capture.py:98](../../packages/tapps-mcp/src/tapps_mcp/memory/auto_capture.py#L98),
+[compact_index.py:47](../../packages/tapps-mcp/src/tapps_mcp/memory/compact_index.py#L47). `coder`
 is correct *for those*. The bug is that the **server** bridge backing the full `tapps_memory`
 tool shares the same narrow profile. (This repo also has memory hooks disabled, so the breakage
 isn't felt here — but every consuming project that enables `tapps_memory` writes/reads against a
@@ -99,23 +99,23 @@ Give the **runtime server bridge** a profile that matches `_BRIDGE_USED_TOOLS`:
   the bridge preflight-reject, so the bridge calls them directly with no gating.
 - **`operator`** if `diagnostics_report`, `gc` (`maintenance_gc`), and `consolidate` must run live
   rather than degrade — those three are operator-only. The CLI admin path already uses `operator`
-  ([cli.py:1036](packages/tapps-mcp/src/tapps_mcp/cli.py#L1036)); the server does not.
+  ([cli.py:1036](../../packages/tapps-mcp/src/tapps_mcp/cli.py#L1036)); the server does not.
 - **Do not** leave the server on `coder` — that profile is for embedded `brain_*`-facade consumers
   (like docs-mcp), not the full-fidelity `tapps_memory` gateway.
 
-Change [server_helpers.py:155](packages/tapps-mcp/src/tapps_mcp/server_helpers.py#L155) (and the
-non-admin CLI path [cli.py:795](packages/tapps-mcp/src/tapps_mcp/cli.py#L795)) from `"coder"` to
+Change [server_helpers.py:155](../../packages/tapps-mcp/src/tapps_mcp/server_helpers.py#L155) (and the
+non-admin CLI path [cli.py:795](../../packages/tapps-mcp/src/tapps_mcp/cli.py#L795)) from `"coder"` to
 `"full"` (or `"operator"`). Keep `auto_capture` / `compact_index` on `coder` — they're correct.
 Consumers can still override via `memory.brain_profile` in `.tapps-mcp.yaml`
-([brain_auth.py:89](packages/tapps-core/src/tapps_core/brain_auth.py#L89)).
+([brain_auth.py:89](../../packages/tapps-core/src/tapps_core/brain_auth.py#L89)).
 
 ---
 
 ## Finding 2 — `doctor` remediation hint misattributes a real `coder` gate as benign  [MEDIUM]
 
-[doctor.py:1718 `check_brain_profile`](packages/tapps-mcp/src/tapps_mcp/distribution/doctor.py#L1718)
+[doctor.py:1718 `check_brain_profile`](../../packages/tapps-mcp/src/tapps_mcp/distribution/doctor.py#L1718)
 correctly computes `gated_used = _BRIDGE_USED_TOOLS - exposed`, but its failure hint
-([doctor.py:1808](packages/tapps-mcp/src/tapps_mcp/distribution/doctor.py#L1808)) says the
+([doctor.py:1808](../../packages/tapps-mcp/src/tapps_mcp/distribution/doctor.py#L1808)) says the
 mismatch is *"expected for the 'full'/'operator' profiles — deferred tools remain callable."*
 That is true for `full`/`operator` but **false for `coder`/`reviewer`/`agent_brain`/`seeder`**,
 where the tools are genuinely absent from the profile and `tools/call` rejects them.
@@ -130,14 +130,14 @@ Otherwise → "genuine gate: these calls will raise `ToolNotInProfileError`; swi
 
 ## Finding 3 — `record_kg_event` uses the singular tool + legacy `payload_json`  [LOW]
 
-[brain_bridge.py:2122](packages/tapps-core/src/tapps_core/brain_bridge.py#L2122) calls
+[brain_bridge.py:2122](../../packages/tapps-core/src/tapps_core/brain_bridge.py#L2122) calls
 `brain_record_event` (singular) with `{"payload_json": json.dumps(...)}`.
 
 - Singular `brain_record_event` is **not** in `coder` (only `brain_record_events_batch` is) —
   folds into Finding 1; resolved by the profile fix.
 - `payload_json` is the **legacy alias**. Brain 3.20 moved to native list/dict shapes
   (`entities`, `edges`, `payload` passed directly). The alias still works
-  ([tapps_brain/mcp_server/tools_kg.py:94](../../../tapps-brain/src/tapps_brain/mcp_server/tools_kg.py#L94)
+  ([`tools_kg.py`](https://github.com/wtthornton/tapps-brain/blob/main/src/tapps_brain/mcp_server/tools_kg.py#L94)
   — *"native `payload` wins; when only `payload_json` is provided, emit…"*), so this is
   deprecated-but-functional, not broken. Migrate to native shapes before the alias is dropped.
 
@@ -157,7 +157,7 @@ All present in the running 3.22.0, none wired into tapps-mcp:
 3. **`brain_audit_consumers(project_id, since)`** (3.20) — "declared but silent" agents. Useful in
    `tapps doctor` to flag a registered-but-unused brain consumer.
 4. **`/v1/tools/list` ETag + `Cache-Control` + 304** (3.20) — the bridge's warm-cache probe
-   ([doctor.py:1772](packages/tapps-mcp/src/tapps_mcp/distribution/doctor.py#L1772)) could send
+   ([doctor.py:1772](../../packages/tapps-mcp/src/tapps_mcp/distribution/doctor.py#L1772)) could send
    `If-None-Match` to short-circuit catalog refetches.
 5. **`/v1/experience:batch`** (256 KB body, 100 events/txn, 3.19) + `brain_record_events_batch`
    (already in `coder`) — prefer batch KG ingestion over the per-event `record_kg_event` loop when

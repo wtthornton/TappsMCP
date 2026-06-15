@@ -25,6 +25,7 @@ from tapps_mcp.distribution.nlt_mcp_config import (
     _LEGACY_MCP_SERVER_IDS,
     commented_servers_for_bundle,
     enabled_servers_for_bundle,
+    mcp_config_servers_for_bundle,
     list_nlt_server_ids_in_config,
     normalize_mcp_bundle,
 )
@@ -902,7 +903,7 @@ def _merge_nlt_config(
 ) -> tuple[dict[str, Any], tuple[str, ...], tuple[str, ...]]:
     """Merge NLT plugin server entries into *existing* config."""
     bundle = normalize_mcp_bundle(mcp_bundle)
-    enabled = enabled_servers_for_bundle(bundle)
+    enabled = mcp_config_servers_for_bundle(bundle)
     commented = commented_servers_for_bundle(bundle)
     servers_key = _get_servers_key(host)
     merged = dict(existing)
@@ -1328,16 +1329,19 @@ def _generate_config(
             )
         )
         if use_nlt_plugin:
+            recommended = enabled_servers_for_bundle(normalize_mcp_bundle(mcp_bundle))
             click.echo(
                 f"  NLT bundle '{normalize_mcp_bundle(mcp_bundle)}': "
-                f"enable {', '.join(nlt_enabled)}; "
-                f"comment {', '.join(nlt_commented)}."
+                f"write all {len(nlt_enabled)} server(s) to MCP config; "
+                f"recommended active: {', '.join(recommended)}."
             )
         else:
             click.echo("  tapps-mcp entry would be added/updated. Run without --dry-run to apply.")
         if host == "cursor":
             if use_nlt_plugin:
-                for sid in nlt_enabled:
+                from tapps_mcp.distribution.nlt_mcp_config import NLT_SERVER_ORDER
+
+                for sid in NLT_SERVER_ORDER:
                     click.echo(f"  Would write Cursor wrapper: {project_root / _cursor_wrapper_rel(sid)}")
             else:
                 click.echo(f"  Would write Cursor wrapper: {project_root / _CURSOR_MCP_WRAPPER_REL}")
@@ -1347,7 +1351,9 @@ def _generate_config(
         servers_block = merged.get(servers_key, {})
         if isinstance(servers_block, dict):
             if use_nlt_plugin:
-                for sid in nlt_enabled:
+                from tapps_mcp.distribution.nlt_mcp_config import NLT_SERVER_ORDER
+
+                for sid in NLT_SERVER_ORDER:
                     entry = servers_block.get(sid)
                     if isinstance(entry, dict):
                         _apply_cursor_launch_wrapper(
@@ -1383,11 +1389,12 @@ def _generate_config(
 
     click.echo(click.style(f"Configuration written to {config_path}", fg="green"))
     if use_nlt_plugin:
+        recommended = enabled_servers_for_bundle(normalize_mcp_bundle(mcp_bundle))
         click.echo(
             click.style(
-                f"  NLT plugin: {len(nlt_enabled)} server(s) enabled "
-                f"({', '.join(nlt_enabled)}); "
-                f"{len(nlt_commented)} opt-in block(s) commented.",
+                f"  NLT plugin: {len(nlt_enabled)} server(s) in MCP config "
+                f"({', '.join(nlt_enabled)}). "
+                f"Toggle in your IDE; recommended active: {', '.join(recommended)}.",
                 fg="cyan",
             )
         )
@@ -1637,6 +1644,7 @@ def _configure_multiple_hosts(
     extra_env: dict[str, str] | None = None,
     mcp_bundle: str = "developer",
     use_nlt_plugin: bool = False,
+    engagement_level: str | None = None,
 ) -> bool:
     """Configure (or check) multiple hosts, reporting per-host results.
 
@@ -1663,9 +1671,9 @@ def _configure_multiple_hosts(
                 use_nlt_plugin=use_nlt_plugin,
             )
             if ok and rules and not dry_run:
-                _generate_rules(host, project_root)
+                _generate_rules(host, project_root, engagement_level=engagement_level)
             elif ok and rules and dry_run:
-                _preview_rules(host, project_root)
+                _preview_rules(host, project_root, engagement_level=engagement_level)
         if not ok:
             all_ok = False
     return all_ok
@@ -2055,6 +2063,8 @@ def run_init(
             click.echo("  Supported hosts: claude-code, cursor, vscode")
             return True
         click.echo(f"Detected MCP host(s): {', '.join(hosts)}")
+        if engagement_level is not None and not dry_run and not check:
+            _write_engagement_level_to_yaml(root, engagement_level)
         return _configure_multiple_hosts(
             hosts,
             root,
@@ -2068,6 +2078,7 @@ def run_init(
             extra_env=extra_env,
             mcp_bundle=mcp_bundle,
             use_nlt_plugin=use_nlt_plugin,
+            engagement_level=engagement_level,
         )
 
     if check:
