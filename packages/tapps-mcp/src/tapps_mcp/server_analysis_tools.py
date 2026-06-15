@@ -442,7 +442,15 @@ async def tapps_impact_analysis(
     except Exception:
         logger.debug("structured_output_failed: tapps_impact_analysis", exc_info=True)
 
-    return _with_nudges("tapps_impact_analysis", resp)
+    return _with_nudges(
+        "tapps_impact_analysis",
+        resp,
+        {
+            "granularity": symbol_granularity,
+            "has_symbol": bool(symbol.strip()),
+            "file_path": str(resolved),
+        },
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -505,7 +513,11 @@ async def tapps_call_graph(
     )
 
     elapsed_ms = (time.perf_counter_ns() - start) // 1_000_000
-    _record_execution("tapps_call_graph", start, symbol=symbol, query=mode)
+    _record_execution(
+        "tapps_call_graph",
+        start,
+        degraded=bool(result.get("degraded")),
+    )
     resp = success_response("tapps_call_graph", elapsed_ms, result)
     return _with_nudges("tapps_call_graph", resp)
 
@@ -570,7 +582,12 @@ async def tapps_diff_impact(
 
     data = analyze_diff_impact(resolved, root)
     elapsed_ms = (time.perf_counter_ns() - start) // 1_000_000
-    _record_execution("tapps_diff_impact", start, file_count=len(resolved))
+    _record_execution(
+        "tapps_diff_impact",
+        start,
+        file_path=",".join(str(p) for p in resolved),
+        degraded=bool(data.get("degraded")),
+    )
     resp = success_response("tapps_diff_impact", elapsed_ms, data)
     return _with_nudges("tapps_diff_impact", resp)
 

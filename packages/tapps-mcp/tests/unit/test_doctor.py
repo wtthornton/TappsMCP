@@ -1367,6 +1367,20 @@ class TestCheckAgentsMdStampMatchesPackage:
         assert __version__ in result.message
         assert "upgrade" in result.detail
 
+    def test_wrong_stamp_with_skip_files_points_to_bump_stamps(self, tmp_path):
+        from tapps_mcp.distribution.doctor import check_agents_md_stamp_matches_package
+
+        (tmp_path / ".tapps-mcp.yaml").write_text(
+            "upgrade_skip_files:\n  - AGENTS.md\n", encoding="utf-8"
+        )
+        (tmp_path / "AGENTS.md").write_text(
+            "<!-- tapps-agents-version: 0.0.1 -->\n# AGENTS\n"
+        )
+        result = check_agents_md_stamp_matches_package(tmp_path)
+        assert result.ok is False
+        assert "upgrade_skip_files" in result.message
+        assert "bump-stamps" in result.detail
+
     def test_missing_stamp_fails(self, tmp_path):
         from tapps_mcp.distribution.doctor import check_agents_md_stamp_matches_package
 
@@ -2019,8 +2033,8 @@ class TestFetchExposedToolsRest:
         from unittest.mock import MagicMock
 
         from tapps_mcp.distribution.doctor import (
-            _ProfileProbeFallbackError,
             _fetch_exposed_tools_rest,
+            _ProfileProbeFallbackError,
         )
 
         response = self._mock_response(404)
@@ -2515,7 +2529,7 @@ class TestCheckNltPartialEnablement:
         assert "nlt-memory: 2 eager / 4 total" in result.message
         assert "nlt-linear-issues: 7 eager / 15 total" in result.message
 
-    def test_all_six_servers_in_config_passes(self, tmp_path) -> None:  # type: ignore[no-untyped-def]
+    def test_all_six_servers_in_config_passes_when_inferred_full(self, tmp_path) -> None:  # type: ignore[no-untyped-def]
         self._cursor_mcp_json(
             tmp_path,
             {
@@ -2543,9 +2557,40 @@ class TestCheckNltPartialEnablement:
             },
         )
         result = check_nlt_partial_enablement(tmp_path)
-        assert result.ok is False
-        assert "all six nlt-* servers enabled" in result.message
-        assert "nlt-build, nlt-memory, nlt-linear-issues" in result.message
+        assert result.ok is True
+        assert "Intentional full bundle" in result.message
+
+    def test_all_six_servers_passes_when_mcp_bundle_full(self, tmp_path) -> None:  # type: ignore[no-untyped-def]
+        self._cursor_mcp_json(
+            tmp_path,
+            {
+                "nlt-build": {"command": "tapps-mcp", "args": ["serve", "--profile", "nlt-build"]},
+                "nlt-memory": {
+                    "command": "tapps-mcp",
+                    "args": ["serve", "--profile", "nlt-memory"],
+                },
+                "nlt-setup": {
+                    "command": "tapps-mcp",
+                    "args": ["serve", "--profile", "nlt-setup"],
+                },
+                "nlt-linear-issues": {
+                    "command": "tapps-platform",
+                    "args": ["serve", "--profile", "nlt-linear-issues"],
+                },
+                "nlt-project-docs": {
+                    "command": "docsmcp",
+                    "args": ["serve", "--profile", "nlt-project-docs"],
+                },
+                "nlt-release-ship": {
+                    "command": "tapps-platform",
+                    "args": ["serve", "--profile", "nlt-release-ship"],
+                },
+            },
+        )
+        (tmp_path / ".tapps-mcp.yaml").write_text("mcp_bundle: full\n", encoding="utf-8")
+        result = check_nlt_partial_enablement(tmp_path)
+        assert result.ok is True
+        assert "Intentional full bundle" in result.message
 
     def test_warns_when_more_than_three_servers(self, tmp_path) -> None:  # type: ignore[no-untyped-def]
         self._cursor_mcp_json(
@@ -2806,7 +2851,16 @@ class TestCheckCallGraph:
         self._nlt_mcp_json(tmp_path)
         result = check_call_graph_tools_profile(tmp_path)
         assert result.ok is True
-        assert "registered" in result.message
+        assert "nlt-build" in result.message
+
+    def test_tools_pass_despite_yaml_developer_preset(self, tmp_path: Path) -> None:
+        from tapps_mcp.distribution.doctor import check_call_graph_tools_profile
+
+        self._nlt_mcp_json(tmp_path)
+        (tmp_path / ".tapps-mcp.yaml").write_text("tool_preset: developer\n")
+        result = check_call_graph_tools_profile(tmp_path)
+        assert result.ok is True
+        assert "nlt-build" in result.message
 
     def test_tools_fail_when_stripped(self, tmp_path: Path) -> None:
         from tapps_mcp.distribution.doctor import check_call_graph_tools_profile
@@ -2844,6 +2898,7 @@ class TestCheckCallGraph:
         result = check_call_graph_index_cache(tmp_path, quick=True)
         assert result.ok is True
         assert "Cache present" in result.message
+        assert "fresh" in result.message
 
 
 class TestMcpOperatorSecrets:

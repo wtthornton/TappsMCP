@@ -91,3 +91,34 @@ def index_from_dict(raw: dict[str, object]) -> CallGraphIndex:
         fingerprint=str(raw.get("fingerprint", "")),
         version=int(raw.get("version", INDEX_VERSION)),
     )
+
+
+def summarize_call_graph_cache(project_root: Path) -> dict[str, object] | None:
+    """Lightweight call-graph cache status for session_start and doctor."""
+    cached = load_call_graph_index(project_root)
+    if cached is None:
+        return None
+
+    cache_path = project_root / CALL_GRAPH_CACHE_REL
+    current_fp = index_fingerprint(project_root, None, "")
+    stale = cached.fingerprint != current_fp
+    edge_count = len(cached.edges)
+    gap_count = len(cached.resolution_gaps)
+
+    age_hours: float | None = None
+    try:
+        import time
+
+        age_hours = round((time.time() - cache_path.stat().st_mtime) / 3600, 1)
+    except OSError:
+        pass
+
+    return {
+        "ready": not stale,
+        "stale": stale,
+        "symbols": len(cached.symbols),
+        "edges": edge_count,
+        "resolution_gaps": gap_count,
+        "gap_rate": round(gap_count / max(edge_count, 1), 3),
+        "age_hours": age_hours,
+    }

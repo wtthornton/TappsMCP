@@ -27,9 +27,10 @@ If unspecified, ask once.
 2. Restart MCP servers (exit + reopen Cursor, or reconnect). Stop on first invocation; resume after restart.
 3. `tapps_session_start(force=true)`. Confirm `server.version` matches and `install_drift.drift_detected == false`.
 4. `tapps-mcp upgrade --dry-run`. Review diff for AGENTS.md, hooks, rules, skills, .mcp.json. Pause if a customized canonical section will be overwritten.
-5. `tapps-mcp upgrade` (writes timestamped backup to `.tapps-mcp/backups/<ts>/`).
-6. `tapps-mcp doctor` AND `tapps_checklist(task_type="upgrade")`. Stop on failure.
-7. One-line summary: versions, files refreshed, doctor + checklist status, backup path.
+5. `tapps-mcp upgrade` (writes timestamped backup to `.tapps-mcp/backups/<ts>/`). When `AGENTS.md` / `CLAUDE.md` are in `upgrade_skip_files`, stamps are bumped automatically; use `tapps-mcp bump-stamps` if doctor still reports mismatch.
+6. **Maintainer full bundle:** set `mcp_bundle: full` in `.tapps-mcp.yaml` so upgrade preserves all six NLT servers (avoids a separate `init --bundle full`).
+7. `tapps-mcp doctor` AND `tapps_checklist(task_type="upgrade")`. Stop on failure.
+8. One-line summary: versions, files refreshed, doctor + checklist status, backup path.
 
 **Rollback:** `tapps-mcp rollback` (only if step 5/6 reveals a regression).
 

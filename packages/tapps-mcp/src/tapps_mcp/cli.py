@@ -1145,6 +1145,84 @@ def validate_skills_cmd(skills_path: str, platform: str) -> None:
     click.echo("All skills passed spec validation.")
 
 
+@main.command("cleanup-hook-backups")
+@click.option(
+    "--project-root",
+    default=".",
+    help="Project root directory.",
+)
+@click.option(
+    "--dry-run",
+    is_flag=True,
+    help="List sidecars and stale storage copies without deleting.",
+)
+def cleanup_hook_backups(project_root: str, dry_run: bool) -> None:
+    """Remove legacy hook ``*.pre-upgrade.*`` sidecars from ``.claude/hooks`` and ``.cursor/hooks``.
+
+    Also prunes excess copies under ``.tapps-mcp/hook-backups/`` (keeps two per hook).
+    Runs automatically at the end of ``tapps-mcp upgrade``; use this for one-off cleanup.
+    """
+    from pathlib import Path
+
+    from tapps_mcp.pipeline.platform_hooks import cleanup_legacy_hook_sidecars
+
+    root = Path(project_root).resolve()
+    report = cleanup_legacy_hook_sidecars(root, dry_run=dry_run)
+    sidecars = report["removed_sidecar_count"]
+    pruned = report["pruned_storage_count"]
+    prefix = "Would remove" if dry_run else "Removed"
+    click.echo(
+        f"{prefix} {sidecars} legacy sidecar(s), "
+        f"{'would prune' if dry_run else 'pruned'} {pruned} excess storage backup(s)."
+    )
+    for rel, names in report.get("removed_sidecars", {}).items():
+        if names:
+            click.echo(f"  {rel}: {len(names)} sidecar(s)")
+    for rel, names in report.get("pruned_storage", {}).items():
+        if names:
+            click.echo(f"  {rel}: {len(names)} stale storage copy(ies)")
+
+
+@main.command("bump-stamps")
+@click.option(
+    "--project-root",
+    default=".",
+    help="Project root directory.",
+)
+@click.option(
+    "--dry-run",
+    is_flag=True,
+    help="Show stamp changes without writing files.",
+)
+def bump_stamps(project_root: str, dry_run: bool) -> None:
+    """Bump AGENTS.md / CLAUDE.md version stamps to the installed package version.
+
+    Use when those files are in ``upgrade_skip_files`` and doctor reports a
+    stamp mismatch. Does not merge template content — stamps only.
+    """
+    from pathlib import Path
+
+    from tapps_mcp import __version__
+    from tapps_mcp.pipeline.version_stamps import bump_stamp_if_stale
+
+    root = Path(project_root).resolve()
+    targets = (
+        (root / "AGENTS.md", "tapps-agents-version"),
+        (root / "CLAUDE.md", "tapps-claude-version"),
+    )
+    changed = 0
+    for path, key in targets:
+        result = bump_stamp_if_stale(path, key, __version__, dry_run=dry_run)
+        action = result.get("action", "unknown")
+        if action in {"bumped-stamp", "would-bump-stamp"}:
+            changed += 1
+        click.echo(f"{path.name}: {action} {result}")
+    if changed == 0:
+        click.echo("No stamps needed updating.")
+    elif dry_run:
+        click.echo(f"Would update {changed} stamp(s). Re-run without --dry-run to apply.")
+
+
 @main.command()
 @click.option(
     "--project-root",

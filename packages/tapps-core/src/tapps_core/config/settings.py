@@ -984,7 +984,20 @@ class TappsMCPSettings(BaseSettings):
             "Example: ['CLAUDE.md', '.claude/rules/tapps-pipeline.md']. "
             "To protect custom files outside this token set, rely on the "
             "dry-run's 'preserved_files' list — upgrade only writes managed "
-            "(typically tapps-*) filenames by default."
+            "(typically tapps-*) filenames by default. "
+            "When AGENTS.md or CLAUDE.md is listed, upgrade still bumps the "
+            "version stamp to match the installed package."
+        ),
+    )
+
+    mcp_bundle: str | None = Field(
+        default=None,
+        description=(
+            "NLT MCP bundle for init/upgrade MCP config regeneration: "
+            "developer (default), minimal, planning, docs, release, or full. "
+            "When unset, inferred from enabled nlt-* servers in host MCP configs. "
+            "Set to full for maintainer repos that intentionally enable all six "
+            "NLT servers (AgentForge, tapps-mcp dev checkout)."
         ),
     )
 

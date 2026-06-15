@@ -69,6 +69,14 @@ _TOOL_NUDGES: dict[str, list[NudgeRule]] = {
     ],
     "tapps_session_start": [
         (
+            lambda called, ctx: (
+                (ctx or {}).get("call_graph_ready") is True and "tapps_call_graph" not in called
+            ),
+            "NEXT: Call graph is ready — use tapps_call_graph(symbol='...', query='callers') "
+            "before function-level refactors.",
+            _IMPACT_MEDIUM,
+        ),
+        (
             lambda called, _ctx: "tapps_lookup_docs" not in called,
             "NEXT: Call tapps_lookup_docs() for any external libraries you will use.",
             _IMPACT_LOW,
@@ -131,6 +139,32 @@ _TOOL_NUDGES: dict[str, list[NudgeRule]] = {
             ),
             "NEXT: Write your code, then call tapps_score_file() or tapps_quick_check().",
             _IMPACT_LOW,
+        ),
+    ],
+    "tapps_impact_analysis": [
+        (
+            lambda called, ctx: (
+                not (ctx or {}).get("has_symbol")
+                and (ctx or {}).get("granularity", "module") == "module"
+                and "tapps_call_graph" not in called
+            ),
+            "NEXT: Refactoring a function? Call tapps_call_graph(symbol='...', query='callers') "
+            "for caller/callee chains.",
+            _IMPACT_MEDIUM,
+        ),
+    ],
+    "tapps_call_graph": [
+        (
+            lambda called, _ctx: "tapps_diff_impact" not in called,
+            "NEXT: After edits, call tapps_diff_impact(file_paths='...') for ranked affected tests.",
+            _IMPACT_MEDIUM,
+        ),
+    ],
+    "tapps_diff_impact": [
+        (
+            lambda called, _ctx: "tapps_validate_changed" not in called,
+            "NEXT: Call tapps_validate_changed(file_paths='...') to gate changed files.",
+            _IMPACT_HIGH,
         ),
     ],
     "tapps_validate_changed": [

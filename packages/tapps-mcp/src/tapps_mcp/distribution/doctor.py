@@ -23,6 +23,33 @@ from tapps_mcp.pipeline.platform_hook_templates import (
 log = get_logger(__name__)
 
 
+def _upgrade_skip_tokens(project_root: Path) -> frozenset[str]:
+    """Return configured ``upgrade_skip_files`` tokens for *project_root*."""
+    try:
+        from tapps_core.config.settings import load_settings
+
+        return frozenset(load_settings(project_root=project_root).upgrade_skip_files)
+    except Exception:
+        log.debug("upgrade_skip_tokens_load_failed", exc_info=True)
+        return frozenset()
+
+
+def _resolved_mcp_bundle(project_root: Path) -> str:
+    """Bundle from ``.tapps-mcp.yaml`` or inference from MCP config."""
+    from tapps_mcp.distribution.nlt_mcp_config import normalize_mcp_bundle
+    from tapps_mcp.tools.session_start_helpers import _infer_mcp_bundle
+
+    try:
+        from tapps_core.config.settings import load_settings
+
+        settings = load_settings(project_root=project_root)
+        if settings.mcp_bundle is not None:
+            return normalize_mcp_bundle(settings.mcp_bundle)
+    except Exception:
+        log.debug("resolved_mcp_bundle_settings_failed", exc_info=True)
+    return normalize_mcp_bundle(_infer_mcp_bundle(project_root))
+
+
 # ---------------------------------------------------------------------------
 # Diagnostic check result
 # ---------------------------------------------------------------------------
@@ -717,6 +744,13 @@ def check_claude_md_stamp(project_root: Path) -> CheckResult:
             "Run `uv run tapps-mcp upgrade` to add the stamp and refresh canonical sections",
         )
     if validation.existing_version != __version__:
+        if "CLAUDE.md" in _upgrade_skip_tokens(project_root):
+            return CheckResult(
+                "CLAUDE.md stamp",
+                False,
+                f"stamp {existing} != package {__version__} (upgrade_skip_files)",
+                "Run `tapps-mcp bump-stamps` or `tapps-mcp upgrade` (stamp-only bump when skipped)",
+            )
         return CheckResult(
             "CLAUDE.md stamp",
             False,
@@ -767,6 +801,13 @@ def check_agents_md_stamp_matches_package(project_root: Path) -> CheckResult:
             "AGENTS.md stamp",
             True,
             f"stamp {existing} matches package {__version__}",
+        )
+    if "AGENTS.md" in _upgrade_skip_tokens(project_root):
+        return CheckResult(
+            "AGENTS.md stamp",
+            False,
+            f"stamp {existing} != package {__version__} (upgrade_skip_files)",
+            "Run `tapps-mcp bump-stamps` or `tapps-mcp upgrade` (stamp-only bump when skipped)",
         )
     return CheckResult(
         "AGENTS.md stamp",
@@ -3108,13 +3149,24 @@ def _project_uses_nlt_build(servers: dict[str, dict[str, object]]) -> bool:
     return False
 
 
+def _resolve_nlt_build_allowed_tools(settings: Any) -> frozenset[str]:
+    """Tools exposed by the nlt-build MCP server (ignores host process preset)."""
+    from tapps_mcp.server import ALL_TOOL_NAMES, TOOL_PROFILE_NLT_BUILD
+
+    if settings.enabled_tools:
+        allowed = set(settings.enabled_tools) & ALL_TOOL_NAMES
+    else:
+        allowed = set(TOOL_PROFILE_NLT_BUILD)
+    allowed -= set(settings.disabled_tools)
+    return frozenset(allowed)
+
+
 def check_call_graph_tools_profile(root: Path) -> CheckResult:
     """Epic 114: WARN when call-graph MCP tools are stripped or package is too old."""
     from packaging.version import Version
 
     from tapps_core.config.settings import load_settings
     from tapps_mcp import __version__
-    from tapps_mcp.server import _resolve_allowed_tools
 
     servers = _collect_project_mcp_servers(root)
     if not _project_uses_nlt_build(servers):
@@ -3144,26 +3196,30 @@ def check_call_graph_tools_profile(root: Path) -> CheckResult:
             f"Skipped (could not load settings: {exc})",
         )
 
-    allowed = _resolve_allowed_tools(settings)
+    allowed = _resolve_nlt_build_allowed_tools(settings)
     missing = _CALL_GRAPH_TOOLS - allowed
     if missing:
         return CheckResult(
             "Call graph tools",
             False,
-            f"Stripped from resolved tool profile: {', '.join(sorted(missing))}",
-            "Widen enabled_tools / tool_preset or remove from disabled_tools in .tapps-mcp.yaml",
+            f"Stripped from nlt-build profile: {', '.join(sorted(missing))}",
+            "Remove from disabled_tools or widen enabled_tools in .tapps-mcp.yaml",
         )
 
     return CheckResult(
         "Call graph tools",
         True,
-        "tapps_call_graph and tapps_diff_impact registered in resolved nlt-build profile",
+        "tapps_call_graph and tapps_diff_impact registered on nlt-build",
     )
 
 
 def check_call_graph_index_cache(root: Path, *, quick: bool = False) -> CheckResult:
     """Epic 114: informational call-graph cache status (never fails on missing cache)."""
-    from tapps_mcp.project.call_graph_cache import index_fingerprint, load_call_graph_index
+    from tapps_mcp.project.call_graph_cache import (
+        index_fingerprint,
+        load_call_graph_index,
+        summarize_call_graph_cache,
+    )
     from tapps_mcp.project.call_graph_types import CALL_GRAPH_CACHE_REL
 
     cache_path = root / CALL_GRAPH_CACHE_REL
@@ -3183,20 +3239,29 @@ def check_call_graph_index_cache(root: Path, *, quick: bool = False) -> CheckRes
             str(cache_path),
         )
 
-    if not quick:
+    summary = summarize_call_graph_cache(root)
+    parts = [
+        f"Cache present ({len(cached.symbols)} symbols, {len(cached.edges)} edges)",
+    ]
+    if summary is not None:
+        if summary.get("stale"):
+            parts.append("stale — rebuild via tapps_call_graph(force_rebuild=true)")
+        else:
+            parts.append("fresh")
+        gap_count = int(summary.get("resolution_gaps", 0))
+        if gap_count:
+            parts.append(f"{gap_count} resolution gaps")
+    elif not quick:
         current_fp = index_fingerprint(root, None, "")
         if cached.fingerprint != current_fp:
-            return CheckResult(
-                "Call graph index",
-                True,
-                "Cache stale (fingerprint mismatch); rebuild via tapps_call_graph(force_rebuild=true)",
-                str(cache_path),
-            )
+            parts.append("stale — rebuild via tapps_call_graph(force_rebuild=true)")
+        else:
+            parts.append("fresh")
 
     return CheckResult(
         "Call graph index",
         True,
-        f"Cache present ({len(cached.symbols)} symbols, {len(cached.edges)} edges)",
+        "; ".join(parts),
         str(cache_path),
     )
 
@@ -3283,6 +3348,16 @@ def check_nlt_partial_enablement(root: Path) -> CheckResult:
         + "; ".join(lines)
     )
     if set(nlt_ids) == set(NLT_SERVER_ORDER):
+        bundle = _resolved_mcp_bundle(root)
+        if bundle == "full":
+            return CheckResult(
+                "NLT partial enablement",
+                True,
+                (
+                    f"Intentional full bundle (mcp_bundle=full): all six nlt-* servers "
+                    f"enabled. {summary}"
+                ),
+            )
         return CheckResult(
             "NLT partial enablement",
             False,

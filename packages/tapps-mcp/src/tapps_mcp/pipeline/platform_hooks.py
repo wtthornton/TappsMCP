@@ -14,7 +14,8 @@ import shutil
 import stat
 import sys
 import time
-from typing import TYPE_CHECKING, Any
+from pathlib import Path
+from typing import Any
 
 from tapps_mcp import __version__ as _TAPPS_VERSION
 from tapps_mcp.pipeline.platform_hook_templates import (
@@ -128,9 +129,6 @@ from tapps_mcp.pipeline.platform_hook_templates import (
 from tapps_mcp.pipeline.platform_hook_templates import (
     render_cache_gate_scripts as _render_cache_gate_scripts,
 )
-
-if TYPE_CHECKING:
-    from pathlib import Path
 
 
 def _is_windows() -> bool:
@@ -360,20 +358,42 @@ def _hook_content_sha_on_disk(path: Path) -> str | None:
     return match.group(1) if match else None
 
 
-def _backup_hook_file(path: Path) -> Path:
-    """Copy *path* to ``<path>.pre-upgrade.<unix-ts>`` and return the backup path."""
+def _project_root_from_hooks_dir(hooks_dir: Path) -> Path:
+    """Return the repo root for ``.claude/hooks`` or ``.cursor/hooks``."""
+    if hooks_dir.parent.name in (".claude", ".cursor"):
+        return hooks_dir.parent.parent
+    return hooks_dir.parent
+
+
+def _hook_backup_storage_dir(project_root: Path, hooks_dir: Path) -> Path:
+    """Directory for pre-upgrade hook copies (outside the live hooks folder)."""
+    try:
+        rel = hooks_dir.relative_to(project_root)
+    except ValueError:
+        rel = Path("hooks")
+    return project_root / ".tapps-mcp" / "hook-backups" / rel
+
+
+def _backup_hook_file(path: Path, *, project_root: Path | None = None) -> Path:
+    """Copy *path* to ``.tapps-mcp/hook-backups/.../<name>.pre-upgrade.<ts>``."""
     ts = int(time.time())
-    backup = path.with_name(f"{path.name}.pre-upgrade.{ts}")
+    root = project_root or _project_root_from_hooks_dir(path.parent)
+    backup_dir = _hook_backup_storage_dir(root, path.parent)
+    backup_dir.mkdir(parents=True, exist_ok=True)
+    backup = backup_dir / f"{path.name}.pre-upgrade.{ts}"
     shutil.copy2(path, backup)
     return backup
 
 
-def _prune_hook_pre_upgrade_backups(hooks_dir: Path, *, keep: int = 2) -> list[str]:
+def _prune_hook_pre_upgrade_backups(storage_dir: Path, *, keep: int = 2) -> list[str]:
     """Drop stale ``*.pre-upgrade.<ts>`` copies after hook upgrades (TAP-3584 follow-up)."""
     from collections import defaultdict
 
+    if not storage_dir.is_dir():
+        return []
+
     groups: dict[str, list[Path]] = defaultdict(list)
-    for path in hooks_dir.iterdir():
+    for path in storage_dir.iterdir():
         name = path.name
         if ".pre-upgrade." not in name:
             continue
@@ -387,6 +407,100 @@ def _prune_hook_pre_upgrade_backups(hooks_dir: Path, *, keep: int = 2) -> list[s
             stale.unlink(missing_ok=True)
             removed.append(stale.name)
     return removed
+
+
+def _prune_legacy_co_located_hook_backups(hooks_dir: Path) -> list[str]:
+    """Remove legacy ``*.pre-upgrade.*`` sidecars still sitting in the hooks dir."""
+    removed: list[str] = []
+    for stale in hooks_dir.glob("*.pre-upgrade.*"):
+        stale.unlink(missing_ok=True)
+        removed.append(stale.name)
+    return removed
+
+
+def _list_stale_pre_upgrade_backups(storage_dir: Path, *, keep: int = 2) -> list[str]:
+    """Return backup filenames that ``_prune_hook_pre_upgrade_backups`` would delete."""
+    from collections import defaultdict
+
+    if not storage_dir.is_dir():
+        return []
+    groups: dict[str, list[Path]] = defaultdict(list)
+    for path in storage_dir.iterdir():
+        name = path.name
+        if ".pre-upgrade." not in name:
+            continue
+        base = name.split(".pre-upgrade.", 1)[0]
+        groups[base].append(path)
+
+    stale_names: list[str] = []
+    for paths in groups.values():
+        paths.sort(key=lambda p: p.stat().st_mtime, reverse=True)
+        for stale in paths[keep:]:
+            stale_names.append(stale.name)
+    return stale_names
+
+
+def cleanup_legacy_hook_sidecars(
+    project_root: Path,
+    *,
+    dry_run: bool = False,
+    prune_storage_keep: int = 2,
+) -> dict[str, Any]:
+    """Remove co-located ``*.pre-upgrade.*`` sidecars from hook directories.
+
+    Before TAP-3584 follow-up, hook backups lived beside live scripts
+    (``tapps-stop.sh.pre-upgrade.<ts>``). New backups go under
+    ``.tapps-mcp/hook-backups/``. This helper deletes the legacy sidecars and
+    prunes excess copies in the new storage tree.
+
+    Safe to run standalone via ``tapps-mcp cleanup-hook-backups`` or during
+    ``tapps_upgrade``.
+    """
+    hook_dirs = (
+        project_root / ".claude" / "hooks",
+        project_root / ".cursor" / "hooks",
+    )
+    removed_sidecars: dict[str, list[str]] = {}
+    for hooks_dir in hook_dirs:
+        if not hooks_dir.is_dir():
+            continue
+        rel = str(hooks_dir.relative_to(project_root))
+        sidecars = sorted(p.name for p in hooks_dir.glob("*.pre-upgrade.*"))
+        if not sidecars:
+            continue
+        if dry_run:
+            removed_sidecars[rel] = sidecars
+        else:
+            removed_sidecars[rel] = _prune_legacy_co_located_hook_backups(hooks_dir)
+
+    storage_root = project_root / ".tapps-mcp" / "hook-backups"
+    pruned_storage: dict[str, list[str]] = {}
+    if storage_root.is_dir():
+        for storage_dir in storage_root.rglob("*"):
+            if not storage_dir.is_dir():
+                continue
+            stale = _list_stale_pre_upgrade_backups(storage_dir, keep=prune_storage_keep)
+            if not stale:
+                continue
+            rel = str(storage_dir.relative_to(project_root))
+            if dry_run:
+                pruned_storage[rel] = stale
+            else:
+                pruned_storage[rel] = _prune_hook_pre_upgrade_backups(
+                    storage_dir,
+                    keep=prune_storage_keep,
+                )
+
+    total_sidecars = sum(len(v) for v in removed_sidecars.values())
+    total_pruned = sum(len(v) for v in pruned_storage.values())
+    action = "dry-run" if dry_run else "cleaned"
+    return {
+        "action": action,
+        "removed_sidecars": removed_sidecars,
+        "pruned_storage": pruned_storage,
+        "removed_sidecar_count": total_sidecars,
+        "pruned_storage_count": total_pruned,
+    }
 
 
 def _write_hook_scripts(
@@ -408,6 +522,8 @@ def _write_hook_scripts(
         "tapps-task-completed.ps1",
         "tapps-task-completed.sh",
     }
+    project_root = _project_root_from_hooks_dir(hooks_dir)
+    backup_dir = _hook_backup_storage_dir(project_root, hooks_dir)
     created: list[str] = []
     for name, content in script_templates.items():
         script_path = hooks_dir / name
@@ -424,17 +540,18 @@ def _write_hook_scripts(
             # No marker → user-authored, fall through to the user-edits path
             # below. Marker present but stale → back up before rewriting.
             if on_disk_version is not None:
-                _backup_hook_file(script_path)
+                _backup_hook_file(script_path, project_root=project_root)
         # If an existing file lacks the marker, preserve user edits first.
         if script_path.exists() and _hook_has_user_edits(script_path):
-            _backup_hook_file(script_path)
+            _backup_hook_file(script_path, project_root=project_root)
         text = _hook_content_for_engagement(content, engagement_level)
         text = _inject_hook_version_marker(text, _TAPPS_VERSION)
         script_path.write_text(text, encoding="utf-8")
         if not win:
             script_path.chmod(script_path.stat().st_mode | stat.S_IXUSR | stat.S_IXGRP)
         created.append(name)
-    _prune_hook_pre_upgrade_backups(hooks_dir)
+    _prune_hook_pre_upgrade_backups(backup_dir)
+    _prune_legacy_co_located_hook_backups(hooks_dir)
     return created
 
 

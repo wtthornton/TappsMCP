@@ -250,6 +250,17 @@ class TestComputeNextSteps:
         steps = compute_next_steps("tapps_quick_check", {"gate_passed": True})
         assert any("tapps_checklist" in s for s in steps)
 
+    def test_impact_analysis_suggests_call_graph_for_module_scope(self) -> None:
+        steps = compute_next_steps(
+            "tapps_impact_analysis",
+            {"has_symbol": False, "granularity": "module"},
+        )
+        assert any("tapps_call_graph" in s for s in steps)
+
+    def test_session_start_suggests_call_graph_when_ready(self) -> None:
+        steps = compute_next_steps("tapps_session_start", {"call_graph_ready": True})
+        assert any("tapps_call_graph" in s for s in steps)
+
     # Note: tapps_consult_expert and tapps_research were removed in EPIC-94.
     # Tests for those nudge rules have been removed.
 

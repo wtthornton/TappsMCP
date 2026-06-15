@@ -124,6 +124,19 @@ class TestTap689RulesBackup:
         assert hooks_json in targets
         assert hooks_dir / "tapps-before-mcp.sh" in targets
 
+    def test_collect_targets_excludes_pre_upgrade_sidecars(self, tmp_path: Path) -> None:
+        from tapps_mcp.pipeline.upgrade import _collect_upgrade_targets
+
+        hooks_dir = tmp_path / ".claude" / "hooks"
+        hooks_dir.mkdir(parents=True)
+        (hooks_dir / "tapps-stop.sh").write_text("#!/bin/sh\n", encoding="utf-8")
+        (hooks_dir / "tapps-stop.sh.pre-upgrade.123456").write_text("old\n", encoding="utf-8")
+
+        targets = _collect_upgrade_targets(tmp_path)
+
+        assert hooks_dir / "tapps-stop.sh" in targets
+        assert hooks_dir / "tapps-stop.sh.pre-upgrade.123456" not in targets
+
     def test_collect_targets_ok_when_rules_missing(self, tmp_path: Path) -> None:
         from tapps_mcp.pipeline.upgrade import _collect_upgrade_targets
 

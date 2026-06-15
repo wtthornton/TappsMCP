@@ -7,6 +7,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [3.12.32] - 2026-06-15
+
+Patch: upgrade pipeline hardening after AgentForge dogfood — hook sidecars, stamp bump, mcp_bundle, and call-graph nudges.
+
+### Added
+
+- **`version_stamps.py`** — shared AGENTS.md / CLAUDE.md stamp helpers for upgrade and CLI.
+- **CLI** — `tapps-mcp bump-stamps` and `tapps-mcp cleanup-hook-backups` for skip-listed stamp refresh and legacy hook sidecar removal.
+- **`mcp_bundle` setting** — `.tapps-mcp.yaml` can pin `full` so upgrade preserves all six NLT servers without a separate `init --bundle full`.
+- **Call-graph nudges** — session_start, impact_analysis, call_graph, and diff_impact pipeline hints when the index is ready.
+- **`summarize_call_graph_cache()`** — lightweight cache status for session_start / doctor.
+
+### Changed
+
+- **Upgrade** — excludes `.pre-upgrade.*` hook sidecars from backup/collect; dedupes backups within 60s; bumps stamps on skip-listed AGENTS/CLAUDE; runs hook sidecar cleanup at end; passes `mcp_bundle` to MCP config generation.
+- **Hook backups** — co-located sidecars moved to `.tapps-mcp/hook-backups/`; legacy sidecars cleaned on upgrade.
+- **Doctor** — stamp remediation points to `bump-stamps` when files are in `upgrade_skip_files`; NLT full-bundle check passes when `mcp_bundle: full` or all six servers are configured.
+
 ## [3.12.31] - 2026-06-15
 
 Patch: Epic 114 call-graph visibility in doctor and platform upgrade templates.

@@ -95,6 +95,26 @@ class BackupManager:
         )
         return backup_dir
 
+    def find_recent_backup(self, *, max_age_seconds: int = 60) -> Path | None:
+        """Return the newest backup dir if created within *max_age_seconds*, else None."""
+        if not self._backups_dir.is_dir():
+            return None
+        now = time.time()
+        candidates: list[tuple[float, Path]] = []
+        for entry in self._backups_dir.iterdir():
+            if not entry.is_dir():
+                continue
+            manifest = entry / "manifest.json"
+            if not manifest.exists():
+                continue
+            age = now - manifest.stat().st_mtime
+            if age <= max_age_seconds:
+                candidates.append((manifest.stat().st_mtime, entry))
+        if not candidates:
+            return None
+        candidates.sort(key=lambda item: item[0], reverse=True)
+        return candidates[0][1]
+
     # ------------------------------------------------------------------
     # List
     # ------------------------------------------------------------------

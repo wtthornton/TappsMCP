@@ -71,6 +71,7 @@ so consumers can audit exactly which paths would change:
 
 from __future__ import annotations
 
+import re
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
@@ -462,6 +463,7 @@ def _upgrade_mcp_config(
     force: bool,
     dry_run: bool,
     skip: set[str],
+    mcp_bundle: str = "developer",
 ) -> None:
     """Populate result["components"]["mcp_config"] for one host.
 
@@ -475,8 +477,6 @@ def _upgrade_mcp_config(
     overlays the new (absolute) env values over the broken ones, so user
     customizations on other keys survive.
     """
-    import json
-
     from tapps_mcp.distribution.nlt_mcp_config import needs_legacy_nlt_migration
     from tapps_mcp.distribution.setup_generator import (
         _build_uv_run_tapps_launch,
@@ -525,6 +525,7 @@ def _upgrade_mcp_config(
                 with_docs_mcp=include_docs_mcp,
                 uv_launch=uv_launch,
                 use_nlt_plugin=True,
+                mcp_bundle=mcp_bundle,
             )
             result["components"]["mcp_config"] = (
                 "healed: rewrote ${workspaceFolder} to absolute project root (TAP-2199)"
@@ -543,6 +544,7 @@ def _upgrade_mcp_config(
                 with_docs_mcp=include_docs_mcp,
                 uv_launch=uv_launch,
                 use_nlt_plugin=True,
+                mcp_bundle=mcp_bundle,
             )
             result["components"]["mcp_config"] = (
                 "migrated: legacy monolith → NLT plugin (nlt-code-quality + nlt-platform-admin)"
@@ -566,6 +568,7 @@ def _upgrade_mcp_config(
             with_docs_mcp=include_docs_mcp,
             uv_launch=uv_launch,
             use_nlt_plugin=True,
+            mcp_bundle=mcp_bundle,
         )
         result["components"]["mcp_config"] = "regenerated"
     else:
@@ -1149,6 +1152,7 @@ def _upgrade_platform(
     destructive_guard: bool = False,
     linear_enforce_gate: bool = False,
     linear_enforce_cache_gate: str = "off",
+    mcp_bundle: str = "developer",
 ) -> dict[str, Any]:
     """Upgrade platform-specific files for a single host.
 
@@ -1181,7 +1185,15 @@ def _upgrade_platform(
     if _skipped("mcp_config", _skip):
         result["components"]["mcp_config"] = "skipped (upgrade_skip_files)"
     else:
-        _upgrade_mcp_config(host, project_root, result, force=force, dry_run=dry_run, skip=_skip)
+        _upgrade_mcp_config(
+            host,
+            project_root,
+            result,
+            force=force,
+            dry_run=dry_run,
+            skip=_skip,
+            mcp_bundle=mcp_bundle,
+        )
 
     if mcp_only:
         # Still run settings merge — it's the other half of the "just wire the MCP server in".
@@ -1649,6 +1661,41 @@ def _run_github_artifacts(project_root: Path, result: dict[str, Any]) -> None:
         result["errors"].append(f"Governance: {exc}")
 
 
+def _is_managed_hook_filename(name: str) -> bool:
+    """True for live tapps hook scripts, not co-located ``.pre-upgrade.*`` sidecars."""
+    if ".pre-upgrade." in name:
+        return False
+    return bool(re.match(r"^tapps-[a-z0-9-]+\.(sh|ps1)$", name))
+
+
+def _bump_skipped_version_stamps(
+    project_root: Path,
+    skip_files: set[str],
+    *,
+    dry_run: bool,
+) -> dict[str, Any]:
+    """Refresh version markers on skip-listed AGENTS.md / CLAUDE.md only."""
+    from tapps_mcp import __version__
+    from tapps_mcp.pipeline.version_stamps import bump_stamp_if_stale
+
+    results: dict[str, Any] = {}
+    if "AGENTS.md" in skip_files:
+        results["AGENTS.md"] = bump_stamp_if_stale(
+            project_root / "AGENTS.md",
+            "tapps-agents-version",
+            __version__,
+            dry_run=dry_run,
+        )
+    if "CLAUDE.md" in skip_files:
+        results["CLAUDE.md"] = bump_stamp_if_stale(
+            project_root / "CLAUDE.md",
+            "tapps-claude-version",
+            __version__,
+            dry_run=dry_run,
+        )
+    return results
+
+
 def _collect_upgrade_targets(project_root: Path) -> list[Path]:
     """Collect files that upgrade_pipeline will overwrite."""
     targets: list[Path] = []
@@ -1668,12 +1715,12 @@ def _collect_upgrade_targets(project_root: Path) -> list[Path]:
     hooks_dir = project_root / ".claude" / "hooks"
     if hooks_dir.is_dir():
         for f in hooks_dir.iterdir():
-            if f.name.startswith("tapps-"):
+            if f.is_file() and _is_managed_hook_filename(f.name):
                 targets.append(f)
     cursor_hooks_dir = project_root / ".cursor" / "hooks"
     if cursor_hooks_dir.is_dir():
         for f in cursor_hooks_dir.iterdir():
-            if f.name.startswith("tapps-"):
+            if f.is_file() and _is_managed_hook_filename(f.name):
                 targets.append(f)
     # Skills
     skills_dir = project_root / ".claude" / "skills"
@@ -1799,12 +1846,16 @@ def upgrade_pipeline(
             mgr = BackupManager(project_root)
             backup_targets = _collect_upgrade_targets(project_root)
             if backup_targets:
-                backup_dir = mgr.create_backup(
-                    backup_targets,
-                    reason="pre-upgrade backup",
-                    version=__version__,
-                )
-                result["backup"] = str(backup_dir)
+                recent = mgr.find_recent_backup(max_age_seconds=60)
+                if recent is not None:
+                    result["backup"] = f"reused: {recent} (deduped within 60s)"
+                else:
+                    backup_dir = mgr.create_backup(
+                        backup_targets,
+                        reason="pre-upgrade backup",
+                        version=__version__,
+                    )
+                    result["backup"] = str(backup_dir)
                 mgr.cleanup_old_backups(keep=5)
             else:
                 result["backup"] = "skipped (no targets)"
@@ -1825,6 +1876,16 @@ def upgrade_pipeline(
 
     settings = load_settings(project_root=project_root)
 
+    from tapps_mcp.distribution.nlt_mcp_config import normalize_mcp_bundle
+    from tapps_mcp.tools.session_start_helpers import _infer_mcp_bundle
+
+    mcp_bundle = normalize_mcp_bundle(
+        settings.mcp_bundle
+        if settings.mcp_bundle is not None
+        else _infer_mcp_bundle(project_root)
+    )
+    result["mcp_bundle"] = mcp_bundle
+
     # Load skip list from settings (Issue #86)
     skip_files: set[str] = set(settings.upgrade_skip_files)
     if skip_files:
@@ -1832,6 +1893,10 @@ def upgrade_pipeline(
         unknown = sorted(skip_files - _ALL_SKIP_TOKENS)
         if unknown:
             result["unknown_skip_tokens"] = unknown
+
+    stamp_results = _bump_skipped_version_stamps(project_root, skip_files, dry_run=dry_run)
+    if stamp_results:
+        result["components"]["version_stamps"] = stamp_results
 
     # AGENTS.md (platform-independent) — merge-first, with sentinel / config
     # opt-out for greenfield creation only.
@@ -1912,6 +1977,7 @@ def upgrade_pipeline(
                 destructive_guard=settings.destructive_guard,
                 linear_enforce_gate=settings.linear_enforce_gate_resolved(),
                 linear_enforce_cache_gate=settings.linear_enforce_cache_gate_resolved(),
+                mcp_bundle=mcp_bundle,
             )
             platform_results.append(host_result)
         except Exception as exc:
@@ -1986,6 +2052,14 @@ def upgrade_pipeline(
     except Exception as exc:
         result["errors"].append(f"document_judges: {exc}")
         result["components"]["document_judges"] = {"action": "error", "detail": str(exc)}
+
+    if not dry_run and not mcp_only:
+        from tapps_mcp.pipeline.platform_hooks import cleanup_legacy_hook_sidecars
+
+        result["components"]["hook_sidecar_cleanup"] = cleanup_legacy_hook_sidecars(
+            project_root,
+            dry_run=False,
+        )
 
     result["success"] = len(result["errors"]) == 0
     result["consumer_requirements"] = "docs/TAPPS_MCP_REQUIREMENTS.md"

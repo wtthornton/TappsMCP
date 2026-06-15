@@ -691,6 +691,16 @@ async def tapps_session_start(
     except Exception:
         _logger.debug("repo_orientation_session_start_failed", exc_info=True)
 
+    # Epic 114: surface call-graph cache readiness for symbol-level refactors.
+    try:
+        from tapps_mcp.project.call_graph_cache import summarize_call_graph_cache
+
+        call_graph = summarize_call_graph_cache(Path(settings.project_root))
+        if call_graph is not None:
+            data["call_graph"] = call_graph
+    except Exception:
+        _logger.debug("call_graph_session_start_failed", exc_info=True)
+
     # TAP-2017: Detect and surface compaction rehydration data when the
     # PreCompact hook indexed the prior session in brain.  Best-effort —
     # a missing marker or brain outage must not block session start.
@@ -776,7 +786,12 @@ async def tapps_session_start(
     # can skip the full bootstrap for up to SENTINEL_TTL_S seconds.
     _ssc.write_session_sentinel(settings.project_root)
 
-    resp = _with_nudges("tapps_session_start", resp, {})
+    nudge_ctx: dict[str, Any] = {}
+    call_graph_block = data.get("call_graph")
+    if isinstance(call_graph_block, dict) and call_graph_block.get("ready"):
+        nudge_ctx["call_graph_ready"] = True
+
+    resp = _with_nudges("tapps_session_start", resp, nudge_ctx)
     if degraded_warning:
         _prepend_next_step(resp, degraded_warning)
     # TAP-1379: memoize the full response so subsequent same-process calls

@@ -190,9 +190,11 @@ class TestClaudeHooksConfig:
 
         # Second call — should back up the user-edited version.
         generate_claude_hooks(tmp_path, force_windows=False)
-        backups = list(hooks_dir.glob("tapps-stop.sh.pre-upgrade.*"))
+        backup_dir = tmp_path / ".tapps-mcp" / "hook-backups" / ".claude" / "hooks"
+        backups = list(backup_dir.glob("tapps-stop.sh.pre-upgrade.*"))
         assert len(backups) == 1, f"Expected exactly one backup, got {backups}"
         assert "custom user logic" in backups[0].read_text()
+        assert list(hooks_dir.glob("tapps-stop.sh.pre-upgrade.*")) == []
 
     def test_shipped_hook_is_not_backed_up(self, tmp_path):
         """TAP-957: files carrying the marker are treated as shipped content
