@@ -297,13 +297,11 @@ def _detect_command_path() -> str:
 
 
 def _derive_brain_project_id(project_root: Path | None) -> str:
-    """TAP-1336: Derive a default ``X-Project-Id`` slug from the project dir name.
+    """TAP-1336: Derive ``X-Project-Id`` slug for MCP env blocks.
 
-    Uses the same :func:`tapps_core.config.settings._slugify_project_root`
-    helper as runtime ``TappsMCPSettings`` so init-time MCP env and session-time
-    ``X-Project-Id`` never disagree. Returns ``""`` for unusable paths or
-    generic directory names (``tmp``, ``code``, …) — operators must set
-    ``TAPPS_MCP_MEMORY_BRAIN_PROJECT_ID`` explicitly.
+    Prefers ``memory.brain_project_id`` from ``.tapps-mcp.yaml`` when set so
+    init/upgrade does not overwrite an explicit registration slug with the
+    directory name. Falls back to :func:`tapps_core.config.settings._slugify_project_root`.
     """
     if project_root is None:
         return ""
@@ -311,6 +309,15 @@ def _derive_brain_project_id(project_root: Path | None) -> str:
         resolved = Path(project_root).resolve()
     except (OSError, RuntimeError):
         return ""
+    try:
+        from tapps_core.config.settings import load_settings
+
+        settings = load_settings(project_root=resolved)
+        explicit = (settings.memory.brain_project_id or "").strip()
+        if explicit:
+            return explicit
+    except Exception:
+        pass
     from tapps_core.config.settings import _slugify_project_root
 
     return _slugify_project_root(resolved)
@@ -964,8 +971,13 @@ def _merge_nlt_config(
                 cur_env = {}
             merged_env = {**cur_env, **legacy_env}
             # TAP-2199: absolute roots from _build_nlt_server_entry beat legacy
-            # ``${workspaceFolder}``; other legacy keys (API keys, etc.) survive.
-            for key in ("TAPPS_MCP_PROJECT_ROOT", "DOCS_MCP_PROJECT_ROOT"):
+            # ``${workspaceFolder}``; explicit brain project id from yaml beats
+            # stale legacy env from prior init runs.
+            for key in (
+                "TAPPS_MCP_PROJECT_ROOT",
+                "DOCS_MCP_PROJECT_ROOT",
+                "TAPPS_MCP_MEMORY_BRAIN_PROJECT_ID",
+            ):
                 if key in cur_env:
                     merged_env[key] = cur_env[key]
             entry["env"] = merged_env

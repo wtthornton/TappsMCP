@@ -181,12 +181,11 @@ def enabled_servers_for_bundle(bundle: NltBundle) -> tuple[str, ...]:
 def mcp_config_servers_for_bundle(bundle: NltBundle) -> tuple[str, ...]:
     """Servers written as active MCP entries for host config files.
 
-    All six ``nlt-*`` servers are emitted so Cursor/VS Code users can toggle
-    them in the MCP UI. *bundle* selects the recommended subset for messaging
-    only — not which entries appear in ``mcp.json``.
+    Matches the selected bundle so ``--bundle developer`` emits three servers
+    (build + memory + linear) and stays within the NLT tool-budget guidance.
+    Use ``--bundle full`` when you want all six toggleable entries.
     """
-    _ = bundle
-    return NLT_SERVER_ORDER
+    return NLT_BUNDLES[bundle]
 
 
 def commented_servers_for_bundle(bundle: NltBundle) -> tuple[str, ...]:

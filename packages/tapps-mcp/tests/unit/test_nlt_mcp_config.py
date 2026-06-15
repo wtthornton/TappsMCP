@@ -37,13 +37,13 @@ class TestNltBundles:
         enabled = enabled_servers_for_bundle("developer")
         assert enabled == ("nlt-build", "nlt-memory", "nlt-linear-issues")
         assert commented_servers_for_bundle("developer") == ()
-        assert mcp_config_servers_for_bundle("developer") == NLT_SERVER_ORDER
+        assert mcp_config_servers_for_bundle("developer") == enabled
 
     def test_minimal_enables_build_only(self) -> None:
         enabled = enabled_servers_for_bundle("minimal")
         assert enabled == ("nlt-build",)
         assert commented_servers_for_bundle("minimal") == ()
-        assert len(mcp_config_servers_for_bundle("minimal")) == 6
+        assert mcp_config_servers_for_bundle("minimal") == enabled
 
     def test_planning_adds_linear(self) -> None:
         enabled = enabled_servers_for_bundle("planning")
@@ -70,18 +70,21 @@ class TestNltMcpJsonGeneration:
         assert config_path.exists()
         raw = config_path.read_text(encoding="utf-8")
         assert "nlt-build" in raw
-        assert "nlt-setup" in raw
+        assert "nlt-setup" not in raw
         assert "// Opt-in:" not in raw
         assert "nlt-memory" in raw
         assert "nlt-linear-issues" in raw
 
         data = _load_mcp_config_json(config_path)
         servers = data["mcpServers"]
-        assert set(servers.keys()) >= set(NLT_SERVER_ORDER)
+        assert set(servers.keys()) == {
+            "nlt-build",
+            "nlt-memory",
+            "nlt-linear-issues",
+        }
         assert "tapps-mcp" not in servers
         assert servers["nlt-build"]["args"] == []
         assert str(servers["nlt-build"]["command"]).endswith("nlt-build-serve.sh")
-        assert str(servers["nlt-setup"]["command"]).endswith("nlt-setup-serve.sh")
 
     def test_planning_bundle_enables_linear(self, tmp_path: Path) -> None:
         with patch(
@@ -93,7 +96,7 @@ class TestNltMcpJsonGeneration:
         data = _load_mcp_config_json(tmp_path / ".cursor" / "mcp.json")
         servers = data["mcpServers"]
         assert "nlt-linear-issues" in servers
-        assert "nlt-project-docs" in servers
+        assert "nlt-project-docs" not in servers
 
     def test_legacy_monolith_mode(self, tmp_path: Path) -> None:
         with patch(
@@ -121,7 +124,11 @@ class TestNltMcpJsonGeneration:
         )
         stripped = _strip_jsonc_comments(text)
         parsed = json.loads(stripped)
-        assert set(parsed["mcpServers"].keys()) >= set(NLT_SERVER_ORDER)
+        assert set(parsed["mcpServers"].keys()) == {
+            "nlt-build",
+            "nlt-memory",
+            "nlt-linear-issues",
+        }
 
     def test_migrates_legacy_tapps_env(self, tmp_path: Path) -> None:
         existing = {
