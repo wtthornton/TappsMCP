@@ -4,16 +4,18 @@
 
 **Tapps Platform** ships two MCP servers for AI-assisted development: **TappsMCP** (code quality, security, shared memory) and **DocsMCP** (documentation generation and maintenance). Together they expose **70 tools** with structured, deterministic outputs suitable for Claude Code, Cursor, VS Code, and any MCP host.
 
+### What's new in v3.12
+
+- **Needs-based NLT MCP taxonomy** ([ADR-0016](docs/adr/0016-needs-based-nlt-mcp-taxonomy.md)) — enable 1–3 MCP servers per session instead of loading all tools. Default **developer bundle**: `nlt-build` + `nlt-memory` + `nlt-linear-issues` (~18 eager tools). Legacy IDs `nlt-code-quality` / `nlt-platform-admin` map to `nlt-build` / `nlt-setup` for one release. See [docs/tutorials/04-nlt-mcp-session-modes.md](docs/tutorials/04-nlt-mcp-session-modes.md).
+- **Brain-central doc RAG** ([ADR-0014](docs/adr/0014-brain-central-doc-rag-big-bang.md)) — `tapps_lookup_docs` routes through tapps-brain when `docs_via_brain` is enabled; fleet cutover runbook at [docs/operations/brain-doc-rag-cutover-runbook.md](docs/operations/brain-doc-rag-cutover-runbook.md).
+- **Cross-session handoff** — `/tapps-handoff-session` writes `.tapps-mcp/session-handoff.md`; `/tapps-continue-session` bootstraps the next chat. Memory persistence via `uv run tapps-mcp memory` CLI (BrainBridge); `tapps_memory` MCP tool removed in v3.12.0.
+- **Cursor loop observability** — stop hook records loop metrics, completion-gate violations (`.tapps-mcp/.completion-gate-violations.jsonl`), and `tapps_usage` gap reports inlined on `tapps_checklist`.
+- **Docs quality CI** — `.github/workflows/docs-quality.yml` runs `scripts/docs-quality-gate.py` on PRs touching tier-1 docs. Refresh workflow: [docs/tutorials/05-docs-refresh-workflow.md](docs/tutorials/05-docs-refresh-workflow.md).
+- **Wrapper skills removed** — `tapps-score`, `tapps-gate`, `tapps-validate`, `tapps-report` deleted; use direct MCP tools or `/tapps-finish-task`.
+
 ### What's new in v3.11
 
-- **Quality-pipeline usage uplift** — closes the gap between the recommended pipeline and what the agent actually runs. Four pieces:
-  - **`tapps_usage` (new tool)** — per-session gap report. Returns `gaps` (e.g. `edits_without_validation`, `lookup_docs_underused`) and `recommendations` (specific next calls). Also inlined as `usage_gaps` on every `tapps_checklist` response.
-  - **Stop-hook warn-mode telemetry** — `tapps-stop.sh` now writes `.tapps-mcp/.completion-gate-violations.jsonl` on every project when source files were edited without `tapps_validate_changed` + `tapps_checklist`. Warn mode only — no blocks. Telemetry feeds `tapps_usage`.
-  - **`next_steps` enrichment** — top-traffic tools template `{file_path}` into suggested calls so the agent gets ready-to-paste signatures like `tapps_security_scan(file_path='/path/to/X.py')` instead of empty `tapps_security_scan()`.
-  - **`tapps-upgrade` (new shipped skill)** — orchestrates `uv tool install --reinstall` + MCP restart + `tapps-mcp upgrade` + doctor + checklist. Deployed to consumers via `tapps_init` / `tapps_upgrade`.
-- **Wrapper skills deprecated** — `tapps-score`, `tapps-gate`, `tapps-validate`, `tapps-report` carry DEPRECATED notices pointing at their direct MCP tool or `/tapps-finish-task`. Scheduled removal in v3.12.0.
-- **Session transfer skills** — `/tapps-handoff-session` writes `.tapps-mcp/session-handoff.md` + `tapps_session_end`; `/tapps-continue-session` bootstraps the next chat from that file (optional `TAP-####`). `tapps doctor` checks both skills are deployed.
-- **Profile-aware skill filtering** — DEFERRED. Design still pending (skills are deploy-time, not runtime); will land in a future release.
+- **Quality-pipeline usage uplift** — `tapps_usage` gap reports, stop-hook telemetry, `next_steps` enrichment, and the `tapps-upgrade` skill shipped to consumers via `tapps_init` / `tapps_upgrade`.
 
 ### What's new in v3.10
 
@@ -51,7 +53,7 @@ tapps-brain (standalone)  <──  tapps-core (shared infra)  <──  tapps-mcp
 - **70 deterministic MCP tools** (32 TappsMCP + 38 DocsMCP) — no LLM calls in the tool chain; same input always produces same output
 - **Multi-language code scoring** - Python, TypeScript/JavaScript, Go, Rust across 7 categories (complexity, security, maintainability, test coverage, performance, structure, devex)
 - **Documentation lookup** via Context7 and LlmsTxt providers with local caching
-- **Persistent shared memory** via [tapps-brain](https://github.com/wtthornton/tapps-brain) — project decisions survive across sessions. TappsMCP accesses the Dockerized brain service over HTTP and exposes it through `tapps_memory` (42 actions, including a knowledge graph, batch ops, and feedback flywheel added in tapps-brain 3.17). Retrieval, decay, consolidation, and federation internals are documented in the [tapps-brain repo](https://github.com/wtthornton/tapps-brain).
+- **Persistent shared memory** via [tapps-brain](https://github.com/wtthornton/tapps-brain) — project decisions survive across sessions. TappsMCP accesses the Dockerized brain service over HTTP via BrainBridge; use `uv run tapps-mcp memory` (42 actions) or enable `nlt-memory` for MCP-exposed recall/save/handoff tools. Retrieval, decay, consolidation, and federation internals are documented in the [tapps-brain repo](https://github.com/wtthornton/tapps-brain).
 - **Unified feature flags** - optional dependency detection (faiss, numpy, radon) with graceful degradation
 - **Platform generation** - auto-generates hooks, agents, skills, and rules for Claude Code, Cursor, and VS Code
 - **Self-bootstrapping** - `tapps_init` sets up quality infrastructure in any project with one call

@@ -19,13 +19,19 @@ cd tapps-mcp
 ## Development Setup
 
 ```bash
-# Create a virtual environment
-python -m venv .venv
-source .venv/bin/activate  # or .venv\Scripts\activate on Windows
-
-# Install in development mode
-pip install -e '.[dev]'
+# Install workspace (recommended)
+uv sync --all-packages --group dev
 ```
+
+## Documentation
+
+Tier-1 docs live under `docs/` and root files (`README.md`, `AGENTS.md`, `CONTRIBUTING.md`, `llms.txt`). When you change documentation, run the docs quality gate before opening a PR:
+
+```bash
+uv run python scripts/docs-quality-gate.py
+```
+
+For a full refresh workflow (API regen, index, drift checks), see [docs/tutorials/05-docs-refresh-workflow.md](docs/tutorials/05-docs-refresh-workflow.md).
 
 ## Coding Standards
 
@@ -52,7 +58,7 @@ pytest -v
 
 When adding new features, please include appropriate tests.
 
-CI runs automatically on pull requests (workflows: brain-contract, codeql-analysis, mcp-guardrails).
+CI runs automatically on pull requests (workflows: brain-contract, codeql-analysis, mcp-guardrails, docs-quality, tapps-quality).
 
 ## Submitting Changes
 
