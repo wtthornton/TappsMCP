@@ -3010,6 +3010,8 @@ def check_nlt_partial_enablement(root: Path) -> CheckResult:
     from tapps_mcp.distribution.nlt_mcp_config import (
         NLT_MAX_COMBINED_EAGER,
         NLT_MAX_ENABLED_SERVERS,
+        NLT_SERVER_ORDER,
+        enabled_servers_for_bundle,
         list_nlt_server_ids_in_config,
         nlt_eager_count,
         nlt_total_tool_count,
@@ -3036,6 +3038,22 @@ def check_nlt_partial_enablement(root: Path) -> CheckResult:
         total_label = str(total) if total is not None else "?"
         lines.append(f"{server_id}: {eager} eager / {total_label} total")
 
+    summary = (
+        f"{len(nlt_ids)} server(s); combined eager={combined_eager}; "
+        + "; ".join(lines)
+    )
+    recommended = ", ".join(enabled_servers_for_bundle("developer"))
+    if set(nlt_ids) == set(NLT_SERVER_ORDER):
+        return CheckResult(
+            "NLT partial enablement",
+            True,
+            (
+                f"All six nlt-* servers in MCP config (toggle in IDE). "
+                f"Recommended active: {recommended}. {summary}"
+            ),
+            _nlt_partial_enablement_remediation(),
+        )
+
     warnings: list[str] = []
     if len(nlt_ids) > NLT_MAX_ENABLED_SERVERS:
         warnings.append(
@@ -3046,10 +3064,6 @@ def check_nlt_partial_enablement(root: Path) -> CheckResult:
             f"{combined_eager} combined eager tools (recommended ≤{NLT_MAX_COMBINED_EAGER})"
         )
 
-    summary = (
-        f"{len(nlt_ids)} server(s); combined eager={combined_eager}; "
-        + "; ".join(lines)
-    )
     if warnings:
         return CheckResult(
             "NLT partial enablement",

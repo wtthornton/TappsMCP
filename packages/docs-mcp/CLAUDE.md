@@ -147,7 +147,7 @@ All generator tools use `finalize_output()` from `server_helpers.py` for a consi
 | **2 — Inline** | Read-only + content < 20K chars | Return `content` directly in the response |
 | **3 — Manifest** | Read-only + content >= 20K chars | Return `FileManifest` via `build_generator_manifest()` |
 
-All generators auto-compute a default `output_path` when the caller omits it (e.g. `CHANGELOG.md`, `docs/api/reference.md`, `docs/epics/EPIC-{number}.md`). `docs_generate_diagram` is exempt (returns inline diagram code).
+All generators auto-compute a default `output_path` when the caller omits it (e.g. `CHANGELOG.md`, `docs/api/reference.md`, `linear/epic/EPIC-{number}.md` for epics — metadata only unless `write_to_disk=true`). `docs_generate_diagram` is exempt (returns inline diagram code).
 
 ### Configuration
 

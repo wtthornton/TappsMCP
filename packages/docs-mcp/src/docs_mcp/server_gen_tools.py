@@ -1241,9 +1241,9 @@ async def docs_generate_epic(
             motivation, 3 story stubs, acceptance criteria, and priority are
             filled in automatically. Explicit parameters always override
             quick-start defaults. Style defaults to "auto" in quick-start mode.
-        output_path: File path to write the epic (relative to project root).
-            When empty, defaults to ``docs/epics/EPIC-{number}.md`` (or a
-            slug-derived path when ``number`` is unset).
+        output_path: Virtual or filesystem path label (relative to project root).
+            When empty, defaults to ``linear/epic/EPIC-{number}.md`` (metadata
+            only unless ``write_to_disk=True``; slug-derived when ``number`` unset).
         write_to_disk: When False (the default, TAP-1413), the epic body is
             returned inline (or via FileManifest for large bodies) and no
             file is written. Linear is the canonical store for epics, so
@@ -1344,10 +1344,10 @@ async def docs_generate_epic(
     if output_path.strip():
         target = output_path.strip()
     elif number:
-        target = f"docs/epics/EPIC-{number}.md"
+        target = f"linear/epic/EPIC-{number}.md"
     else:
         slug = safe_slug(title) or "untitled"
-        target = f"docs/epics/EPIC-{slug}.md"
+        target = f"linear/epic/EPIC-{slug}.md"
 
     # Three-tier output: write-first / inline / manifest.
     # TAP-1413: default write_to_disk=False — Linear is canonical for epics,
@@ -1381,9 +1381,10 @@ async def docs_generate_epic(
         elapsed_ms,
         data,
         next_steps=[
-            "Review the generated epic and fill in placeholder sections.",
+            "Use data.content as the epic body — validate with docs_validate_linear_issue, "
+            "then save via docs_save_linear_issue → save_issue (Linear is canonical).",
             "Use docs_generate_story to expand individual story stubs into full documents.",
-            "Human-written sections (without docsmcp markers) will be preserved on re-generation.",
+            "Do not write local epic markdown unless write_to_disk=true.",
         ],
     )
 
@@ -1456,17 +1457,16 @@ async def docs_generate_story(
         criteria_format: Acceptance criteria format - "checkbox" or "gherkin".
         style: Story style - "standard" or "comprehensive".
         inherit_context: When True, skip project metadata in story (inherit from epic).
-        epic_path: Relative path to parent epic file for cross-referencing.
+        epic_path: Parent epic reference for cross-linking (e.g. ``TAP-####`` or
+            a relative path when ``write_to_disk=true``).
         auto_populate: Enrich from project analyzers (ModuleMap, Metadata).
         quick_start: When True, infer defaults from the title alone -- role, want,
             so_that, points, size, tasks, and acceptance criteria are filled in
             automatically. Explicit parameters always override quick-start defaults.
-        output_path: File path to write the story (relative to project root).
+        output_path: Virtual or filesystem path label (relative to project root).
             When empty, defaults to
-            ``docs/epics/stories/STORY-{epic}.{story}.md`` (or a slug-derived
-            path when numbers are unset). When set with ``epic_path``, the
-            epic link is rewritten relative to this file (e.g.
-            ``../EPIC-99.md`` for stories in a subdirectory).
+            ``linear/story/STORY-{epic}.{story}.md`` (metadata only unless
+            ``write_to_disk=True``; slug-derived when numbers are unset).
         write_to_disk: When False (the default, TAP-1413), the story body is
             returned inline (or via FileManifest for large bodies) and no
             file is written. Linear is the canonical store for stories, so
@@ -1580,10 +1580,10 @@ async def docs_generate_story(
     if output_path.strip():
         target = output_path.strip()
     elif epic_number and story_number:
-        target = f"docs/epics/stories/STORY-{epic_number}.{story_number}.md"
+        target = f"linear/story/STORY-{epic_number}.{story_number}.md"
     else:
         slug = safe_slug(title) or "untitled"
-        target = f"docs/epics/stories/STORY-{slug}.md"
+        target = f"linear/story/STORY-{slug}.md"
 
     # Three-tier output: write-first / inline / manifest.
     # TAP-1413: default write_to_disk=False — Linear is canonical for stories,
@@ -1619,9 +1619,10 @@ async def docs_generate_story(
         elapsed_ms,
         data,
         next_steps=[
-            "Review the generated story and fill in placeholder sections.",
-            "Use docs_generate_epic to create the parent epic if not yet created.",
-            "Human-written sections (without docsmcp markers) will be preserved on re-generation.",
+            "Use data.content as the story description — validate with "
+            "docs_validate_linear_issue, then save via docs_save_linear_issue → save_issue.",
+            "Use docs_generate_epic to create the parent epic in Linear if not yet filed.",
+            "Do not write local story markdown unless write_to_disk=true.",
         ],
     )
 

@@ -124,9 +124,9 @@ class TestGenerateEpicDefaultsToNoDiskWrite:
 
         assert result["success"] is True
         op = result["data"]["output_path"]
-        # Path = "docs/epics/EPIC-<slug>.md" — exactly three segments.
+        # Path = "linear/epic/EPIC-<slug>.md" — exactly three segments.
         parts = op.split("/")
-        assert parts[:2] == ["docs", "epics"]
+        assert parts[:2] == ["linear", "epic"]
         assert len(parts) == 3, f"unexpected subdirectory in path: {op}"
         assert parts[2].startswith("EPIC-")
         assert parts[2].endswith(".md")
@@ -200,10 +200,10 @@ class TestGenerateStoryDefaultsToNoDiskWrite:
         assert result["success"] is True
         op = result["data"]["output_path"]
         parts = op.split("/")
-        assert parts[:3] == ["docs", "epics", "stories"]
+        assert parts[:2] == ["linear", "story"]
         # No subdirectory smuggled in via the title's "/" character.
-        assert len(parts) == 4, f"unexpected subdirectory in path: {op}"
-        assert parts[3].startswith("STORY-")
-        slug_segment = parts[3][len("STORY-") : -len(".md")]
+        assert len(parts) == 3, f"unexpected subdirectory in path: {op}"
+        assert parts[2].startswith("STORY-")
+        slug_segment = parts[2][len("STORY-") : -len(".md")]
         for forbidden in (":", ";", "/"):
             assert forbidden not in slug_segment, slug_segment

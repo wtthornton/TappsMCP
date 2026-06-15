@@ -2409,6 +2409,38 @@ class TestCheckNltPartialEnablement:
         assert "nlt-memory: 2 eager / 4 total" in result.message
         assert "nlt-linear-issues: 7 eager / 15 total" in result.message
 
+    def test_all_six_servers_in_config_passes(self, tmp_path) -> None:  # type: ignore[no-untyped-def]
+        self._cursor_mcp_json(
+            tmp_path,
+            {
+                "nlt-build": {"command": "tapps-mcp", "args": ["serve", "--profile", "nlt-build"]},
+                "nlt-memory": {
+                    "command": "tapps-mcp",
+                    "args": ["serve", "--profile", "nlt-memory"],
+                },
+                "nlt-setup": {
+                    "command": "tapps-mcp",
+                    "args": ["serve", "--profile", "nlt-setup"],
+                },
+                "nlt-linear-issues": {
+                    "command": "tapps-platform",
+                    "args": ["serve", "--profile", "nlt-linear-issues"],
+                },
+                "nlt-project-docs": {
+                    "command": "docsmcp",
+                    "args": ["serve", "--profile", "nlt-project-docs"],
+                },
+                "nlt-release-ship": {
+                    "command": "tapps-platform",
+                    "args": ["serve", "--profile", "nlt-release-ship"],
+                },
+            },
+        )
+        result = check_nlt_partial_enablement(tmp_path)
+        assert result.ok is True
+        assert "All six nlt-* servers" in result.message
+        assert "nlt-build, nlt-memory, nlt-linear-issues" in result.message
+
     def test_warns_when_more_than_three_servers(self, tmp_path) -> None:  # type: ignore[no-untyped-def]
         self._cursor_mcp_json(
             tmp_path,

@@ -1449,10 +1449,10 @@ async def tapps_checklist(
             commit-message context).
         commit_sha: Git SHA to embed in the report. Empty (default)
             auto-detects ``HEAD``.
-        epic_file_path: Path to a ``docs/epics/EPIC-N.md`` file. When
-            set, the checklist runs epic-template structural
+        epic_file_path: Optional path to a local ``EPIC-N.md`` file (legacy).
+            When set, the checklist runs epic-template structural
             validation in addition to tool-coverage checks. Pair with
-            ``task_type='epic'``.
+            ``task_type='epic'``. Prefer Linear (TAP-####) as the epic source of record.
         reset_checklist_session: Rotate the session id and start a
             fresh checklist window before evaluating. Use only from
             long-lived server processes that span multiple tasks.
