@@ -129,6 +129,7 @@
 - [Archived smoke-test artifacts](archive/smoke/README.md) — DocsMCP generator smoke outputs moved here during the 2026-06 documentation refresh. *(updated 2026-06-15)*
 - [TappsMCP Diagrams](diagrams/README.md) — Auto-generated from source by `docs-mcp`. All diagrams render natively on GitHub. *(updated 2026-06-10)*
 - [Consumer repo: verify tapps-mcp ↔ tapps-brain wiring](operations/CONSUMER-REPO-BRAIN-WIRING.md) — Operator and agent checklist for wiring a **new LLM coding repo** to the shared *(updated 2026-06-14)*
+- [Operator secrets (`~/.tapps-operator.env`)](operations/OPERATOR-SECRETS.md) — One machine-wide file for Context7 + brain bearer; per-repo `.env` holds project-owned keys only *(updated 2026-06-15)*
 - [tapps-brain: Local and Multi-Project Setup](operations/TAPPS-BRAIN-LOCAL-SETUP.md) — This guide explains how to connect tapps-mcp to tapps-brain for persistent memory. *(updated 2026-06-09)*
 - [TappsMCP Epics](planning/epics/README.md) — Epics are tracked in Linear under the **TappsMCP Platform** project (team `TappsCodingAgents`, prefix `TAP-`). Per th... *(updated 2026-05-02)*
 - [Tutorials](tutorials/README.md) — Five short, copy-paste runnable walkthroughs for the most-asked starter tasks. Each ends with explicit verification s... *(updated 2026-06-15)*

@@ -238,7 +238,9 @@ tapps-mcp upgrade-fleet \
 
 After fleet upgrade, **reload MCP** in each IDE session.
 
-**Note:** `NewCompanyIdeas` was not found under `~/code` on this machine — add its path to `TAPPS_FLEET_ROOTS` when you have the checkout.
+**Note:** `NewCompanyIdeas` lives at `~/NewCompanyIdeas` (not under `~/code`) — include it in `--roots` when upgrading.
+
+**Operator secrets:** create `~/.tapps-operator.env` once per machine (see [OPERATOR-SECRETS.md](operations/OPERATOR-SECRETS.md)). Fleet `init` regenerates serve wrappers that source it; optional `.envrc` snippet in each consumer repo helps CLI `doctor` match GUI MCP.
 
 ---
 
