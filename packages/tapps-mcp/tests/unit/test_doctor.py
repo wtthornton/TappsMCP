@@ -2,6 +2,7 @@
 
 import json
 import sys
+from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -1719,9 +1720,10 @@ class TestCheckCacheGateBlockHint:
 
 
 class TestCheckInstallGitHooksHint:
-    def test_high_engagement_low_pass_rate_hints(self, tmp_path):
+    def test_high_engagement_low_pass_rate_hints(self, tmp_path, monkeypatch):
         from tapps_mcp.distribution.doctor import check_install_git_hooks_hint
 
+        monkeypatch.setenv("TAPPS_METRICS_STORAGE", "local")
         (tmp_path / ".tapps-mcp.yaml").write_text(
             "llm_engagement_level: high\ninstall_git_hooks: false\n",
             encoding="utf-8",
@@ -2636,3 +2638,68 @@ class TestCheckBrainProfileGateVsDeferral:
         assert result.ok is True
         assert "deferred" in result.message
         assert "server default" in result.message
+
+
+class TestMcpOperatorSecrets:
+    """Doctor warns when GUI MCP cannot resolve operator secrets."""
+
+    def _write_mcp_json(self, root: Path) -> None:
+        (root / ".cursor").mkdir(parents=True, exist_ok=True)
+        (root / ".cursor" / "mcp.json").write_text(
+            json.dumps(
+                {
+                    "mcpServers": {
+                        "nlt-build": {
+                            "env": {
+                                "TAPPS_MCP_CONTEXT7_API_KEY": "${TAPPS_MCP_CONTEXT7_API_KEY}",
+                                "TAPPS_MCP_MEMORY_BRAIN_AUTH_TOKEN": "${TAPPS_BRAIN_AUTH_TOKEN}",
+                                "TAPPS_MCP_MEMORY_BRAIN_HTTP_URL": "http://localhost:8080",
+                            }
+                        }
+                    }
+                }
+            ),
+            encoding="utf-8",
+        )
+
+    def test_passes_when_operator_env_present(self, tmp_path, monkeypatch) -> None:
+        from tapps_mcp.distribution.doctor import check_mcp_operator_secrets
+
+        monkeypatch.delenv("TAPPS_MCP_CONTEXT7_API_KEY", raising=False)
+        monkeypatch.delenv("TAPPS_BRAIN_AUTH_TOKEN", raising=False)
+        self._write_mcp_json(tmp_path)
+        operator_env = Path.home() / ".tapps-operator.env"
+        backup = operator_env.read_text(encoding="utf-8") if operator_env.is_file() else None
+        try:
+            operator_env.write_text(
+                "TAPPS_MCP_CONTEXT7_API_KEY=ctx7-test\nTAPPS_BRAIN_AUTH_TOKEN=tb-test\n",
+                encoding="utf-8",
+            )
+            result = check_mcp_operator_secrets(tmp_path)
+        finally:
+            if backup is None:
+                operator_env.unlink(missing_ok=True)
+            else:
+                operator_env.write_text(backup, encoding="utf-8")
+        assert result.ok is True
+        assert "operator" in result.message.lower()
+
+    def test_fails_when_secrets_missing(self, tmp_path, monkeypatch) -> None:
+        from tapps_mcp.distribution.doctor import check_mcp_operator_secrets
+
+        monkeypatch.delenv("TAPPS_MCP_CONTEXT7_API_KEY", raising=False)
+        monkeypatch.delenv("CONTEXT7_API_KEY", raising=False)
+        monkeypatch.delenv("TAPPS_BRAIN_AUTH_TOKEN", raising=False)
+        monkeypatch.delenv("TAPPS_MCP_MEMORY_BRAIN_AUTH_TOKEN", raising=False)
+        self._write_mcp_json(tmp_path)
+        operator_env = Path.home() / ".tapps-operator.env"
+        backup = operator_env.read_text(encoding="utf-8") if operator_env.is_file() else None
+        try:
+            operator_env.unlink(missing_ok=True)
+            result = check_mcp_operator_secrets(tmp_path)
+        finally:
+            if backup is not None:
+                operator_env.write_text(backup, encoding="utf-8")
+        assert result.ok is False
+        assert "TAPPS_MCP_CONTEXT7_API_KEY" in result.message
+        assert "OPERATOR-SECRETS" in (result.detail or "")
