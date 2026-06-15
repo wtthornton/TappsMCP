@@ -71,8 +71,9 @@ Tier-1 narrative docs only — skip auto-generated `docs/api/*` and `CHANGELOG.m
 Configure `.docsmcp.yaml` (repo root):
 
 ```yaml
-style_heading: title          # match Title Case section headings
-style_auto_detect_terms: true # allow Python identifiers in prose
+style_heading: title
+style_auto_detect_terms: true
+style_enabled_rules: [passive_voice, jargon, sentence_length]  # skip heading/tense noise
 style_custom_terms: [TappsMCP, DocsMCP, BrainBridge, nlt-build, ...]
 ```
 

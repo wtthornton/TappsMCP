@@ -34,8 +34,13 @@ drift_ignore_patterns: "defaults"
 
 # Style checker — tier-1 docs use Title Case headings (see docs/STYLE_GUIDE.md).
 # Auto-detect Python identifiers as allowed terms to cut jargon false positives.
+# Focus on prose quality; skip heading/tense rules (mixed doc types produce noise).
 style_heading: title
 style_auto_detect_terms: true
+style_enabled_rules:
+  - passive_voice
+  - jargon
+  - sentence_length
 style_custom_terms:
   - BrainBridge
   - Diataxis

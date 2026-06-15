@@ -7,7 +7,7 @@
 ### What's new in v3.12
 
 - **Needs-based NLT MCP taxonomy** ([ADR-0016](docs/adr/0016-needs-based-nlt-mcp-taxonomy.md)) — enable 1–3 MCP servers per session instead of loading all tools. Default **developer bundle**: `nlt-build` + `nlt-memory` + `nlt-linear-issues` (~18 eager tools). Legacy IDs `nlt-code-quality` / `nlt-platform-admin` map to `nlt-build` / `nlt-setup` for one release. See [docs/tutorials/04-nlt-mcp-session-modes.md](docs/tutorials/04-nlt-mcp-session-modes.md).
-- **Brain-central doc RAG** ([ADR-0014](docs/adr/0014-brain-central-doc-rag-big-bang.md)) — `tapps_lookup_docs` routes through tapps-brain when `docs_via_brain` is enabled; fleet cutover runbook at [docs/operations/brain-doc-rag-cutover-runbook.md](docs/operations/brain-doc-rag-cutover-runbook.md).
+- **Brain-central doc RAG** ([ADR-0014](docs/adr/0014-brain-central-doc-rag-big-bang.md)) — `tapps_lookup_docs` routes through tapps-brain when you enable `docs_via_brain`; fleet cutover runbook at [docs/operations/brain-doc-rag-cutover-runbook.md](docs/operations/brain-doc-rag-cutover-runbook.md).
 - **Cross-session handoff** — `/tapps-handoff-session` writes `.tapps-mcp/session-handoff.md`; `/tapps-continue-session` bootstraps the next chat. Memory persistence via `uv run tapps-mcp memory` CLI (BrainBridge); `tapps_memory` MCP tool removed in v3.12.0.
 - **Cursor loop observability** — stop hook records loop metrics, completion-gate violations (`.tapps-mcp/.completion-gate-violations.jsonl`), and `tapps_usage` gap reports inlined on `tapps_checklist`.
 - **Docs quality CI** — `.github/workflows/docs-quality.yml` runs `scripts/docs-quality-gate.py` on PRs touching tier-1 docs. Refresh workflow: [docs/tutorials/05-docs-refresh-workflow.md](docs/tutorials/05-docs-refresh-workflow.md).
@@ -53,7 +53,7 @@ tapps-brain (standalone)  <──  tapps-core (shared infra)  <──  tapps-mcp
 - **70 deterministic MCP tools** (32 TappsMCP + 38 DocsMCP) — no LLM calls in the tool chain; same input always produces same output
 - **Multi-language code scoring** - Python, TypeScript/JavaScript, Go, Rust across 7 categories (complexity, security, maintainability, test coverage, performance, structure, devex)
 - **Documentation lookup** via Context7 and LlmsTxt providers with local caching
-- **Persistent shared memory** via [tapps-brain](https://github.com/wtthornton/tapps-brain) — project decisions survive across sessions. TappsMCP accesses the Dockerized brain service over HTTP via BrainBridge; use `uv run tapps-mcp memory` (42 actions) or enable `nlt-memory` for MCP-exposed recall/save/handoff tools. Retrieval, decay, consolidation, and federation internals are documented in the [tapps-brain repo](https://github.com/wtthornton/tapps-brain).
+- **Persistent shared memory** via [tapps-brain](https://github.com/wtthornton/tapps-brain) — project decisions survive across sessions. TappsMCP accesses the Dockerized brain service over HTTP via BrainBridge; use `uv run tapps-mcp memory` (42 actions) or enable `nlt-memory` for MCP-exposed recall/save/handoff tools. See the [tapps-brain repo](https://github.com/wtthornton/tapps-brain) for retrieval, decay, consolidation, and federation internals.
 - **Unified feature flags** - optional dependency detection (faiss, numpy, radon) with graceful degradation
 - **Platform generation** - auto-generates hooks, agents, skills, and rules for Claude Code, Cursor, and VS Code
 - **Self-bootstrapping** - `tapps_init` sets up quality infrastructure in any project with one call
@@ -108,7 +108,7 @@ The platform exposes **68 MCP tools** (30 TappsMCP + 38 DocsMCP) plus workflow p
 | **Structured outputs** | Machine-parseable JSON (`structuredContent`) for 6 tools: `tapps_score_file`, `tapps_quality_gate`, `tapps_quick_check`, `tapps_security_scan`, `tapps_validate_changed`, `tapps_validate_config`. |
 | **Dead code detection** | Vulture-based unused functions, classes, imports, variables with confidence scoring; integrated into maintainability/structure. |
 | **Circular dependency detection** | AST import graph, cycle detection, coupling metrics (Ca/Ce/instability). |
-| **Session checklist** | Track which tools were called; required vs recommended by task type (feature, bugfix, refactor, security, review). **LLM engagement level** (high/medium/low) adjusts required tools and wording. |
+| **Session checklist** | Track tool calls this session; required vs recommended by task type (feature, bugfix, refactor, security, review). **LLM engagement level** (high/medium/low) adjusts required tools and wording. |
 | **Adaptive learning** | Scoring weights and expert voting adapt from usage. Adaptive domain detection routes queries based on learned feedback when enabled. Query expansion with ~120 synonym pairs improves domain detection recall. |
 
 ### Security & dependencies
@@ -213,7 +213,7 @@ uv tool install --reinstall -e packages/tapps-mcp
 uv tool install --reinstall -e packages/docs-mcp
 ```
 
-Then run `tapps-mcp upgrade` inside a consuming project to refresh AGENTS.md, platform rules, hooks, and permissions. A backup is created automatically before overwriting — use `tapps-mcp rollback` if needed. See [CHANGELOG.md](CHANGELOG.md) for changes and [docs/UPGRADE_FOR_CONSUMERS.md](docs/UPGRADE_FOR_CONSUMERS.md) for the full upgrade guide. For driving the upgrade from inside a consuming project's Claude Code session, paste the self-contained prompt in [docs/UPGRADE-PROMPT.md](docs/UPGRADE-PROMPT.md).
+Then run `tapps-mcp upgrade` inside a consuming project to refresh AGENTS.md, platform rules, hooks, and permissions. The upgrade creates a timestamped backup before overwriting — use `tapps-mcp rollback` if needed. See [CHANGELOG.md](CHANGELOG.md) for changes and [docs/UPGRADE_FOR_CONSUMERS.md](docs/UPGRADE_FOR_CONSUMERS.md) for the full upgrade guide. For driving the upgrade from inside a consuming project's Claude Code session, paste the self-contained prompt in [docs/UPGRADE-PROMPT.md](docs/UPGRADE-PROMPT.md).
 
 ### Install from source (workspace dev)
 
@@ -366,17 +366,17 @@ Restart Claude Desktop after changing the config.
 
 ### For AI assistants
 
-When TappsMCP is connected, call **`tapps_session_start`** at session start (server info + memory status). Use **`tapps_memory`** to recall and save project decisions across sessions. Use **`tapps_quick_check`** after editing files; before declaring work complete, run **`tapps_validate_changed`** and **`tapps_checklist`**. Use **`tapps_lookup_docs`** before writing code that uses an external library. See **[AGENTS.md](AGENTS.md)** for when to use each tool and the full workflow.
+With TappsMCP connected, call **`tapps_session_start`** at session start (server info + memory status). Use **`uv run tapps-mcp memory`** or enable **`nlt-memory`** to recall and save project decisions across sessions. Use **`tapps_quick_check`** after editing files; before declaring work complete, run **`tapps_validate_changed`** and **`tapps_checklist`**. Use **`tapps_lookup_docs`** before writing code that uses an external library. See **[AGENTS.md](AGENTS.md)** for when to use each tool and the full workflow.
 
 ### Suggested workflow for the AI
 
 1. Call **`tapps_session_start`** at session start (server info + memory status).
-2. Use **`tapps_memory search`** to recall relevant project context and past decisions.
+2. Run **`uv run tapps-mcp memory search`** (or **`nlt-memory`** tools) to recall relevant project context and past decisions.
 3. Use **`tapps_quick_check`** (or `tapps_score_file` with `quick: true`) during edit-lint-fix loops.
 4. Use **`tapps_lookup_docs`** before writing code that uses an external library API.
 5. Use **`tapps_validate_changed`** before marking work complete (validates all changed files).
-6. Use **`tapps_memory save`** to persist important decisions and learnings for future sessions.
-7. Call **`tapps_checklist`** to ensure no required steps were skipped.
+6. Run **`uv run tapps-mcp memory save`** to persist important decisions and learnings for future sessions.
+7. Call **`tapps_checklist`** to confirm the session did not skip required steps.
 
 ---
 
@@ -428,7 +428,7 @@ TappsMCP includes CLI commands to set up, diagnose, and run the server. All comm
 | `--engagement-level high \| medium \| low` | LLM engagement level for AGENTS.md and rules. **high** = MUST/REQUIRED language; **low** = optional (default: medium). |
 | `--force` | Overwrite existing config without prompting. |
 | `--check` | Verify only; no writes. Returns pass/fail for each generated file. |
-| `--dry-run` | Preview what would be created without writing any files. |
+| `--dry-run` | Preview what init would create without writing any files. |
 | `--rules` / `--no-rules` | Generate platform rule files (default: yes). |
 | `--project-root PATH` | Project root (default: current dir). |
 | `--overwrite-tech-stack` | Overwrite existing TECH_STACK.md (default: skip if present). |
@@ -465,7 +465,7 @@ The MCP tool exposes a richer parameter surface than the CLI (which auto-fills s
 |-----------|------|---------|---------|
 | `platform` | str | `""` | Target platform: `"claude"`, `"cursor"`, `"vscode"`, or `""` for auto-detect. |
 | `dry_run` | bool | `false` | Preview without writing. |
-| `verify_only` | bool | `false` | Check which external checkers are installed without bootstrapping. |
+| `verify_only` | bool | `false` | Check which external checkers the project has installed without bootstrapping. |
 | `verify_server` | bool | `true` | Sanity-check the MCP server can start before declaring success. |
 | `minimal` | bool | `false` | Minimal init: MCP config + AGENTS.md only (faster, ~5-15s vs 10-35s). |
 | `mcp_config` | bool | `true` | After bootstrap, write project-scoped MCP config (`.mcp.json`, `.cursor/mcp.json`, etc.); strips direct `tapps-brain` entries; includes docs-mcp when detected. Pass `false` to skip. |
@@ -524,9 +524,9 @@ tapps-mcp upgrade --dry-run --json | jq '.dry_run_summary.verdict'  # "safe-to-r
 tapps-mcp upgrade --dry-run --json | jq '.dry_run_summary.preserved_files'
 ```
 
-**What it updates:** AGENTS.md (via smart-merge), platform rules, the four `tapps-*` subagents, the `tapps-*` + `linear-issue` skills, `tapps-*` hook scripts, and `.claude/settings.json` permissions. Custom agents, skills, and hooks with names outside that set are preserved. `settings.json` hooks are merged by matcher — existing entries stay. Custom command paths (e.g. PyInstaller exe) in `.mcp.json` are also preserved.
+**What it updates:** AGENTS.md (via smart-merge), platform rules, the four `tapps-*` subagents, the `tapps-*` + `linear-issue` skills, `tapps-*` hook scripts, and `.claude/settings.json` permissions. The upgrade preserves custom agents, skills, and hooks with names outside that set. It merges `settings.json` hooks by matcher — existing entries stay. Custom command paths (e.g. PyInstaller exe) in `.mcp.json` also stay.
 
-A **backup** is automatically created before overwriting files (stored in `.tapps-mcp/backups/`). Use `tapps-mcp rollback` to restore from the latest backup if an upgrade causes issues.
+The upgrade creates a **backup** before overwriting files (stored in `.tapps-mcp/backups/`). Use `tapps-mcp rollback` to restore from the latest backup if an upgrade causes issues.
 
 **From within an AI session (MCP tool):**
 
@@ -536,7 +536,7 @@ tapps_upgrade()                             # Apply updates
 tapps_upgrade(platform="claude", force=true) # Force-update Claude Code files
 ```
 
-The `dry_run=true` response includes a top-level `dry_run_summary` with a `verdict` (`"safe-to-run"` when only `tapps-*` files would be written, `"review-recommended"` when `CLAUDE.md` or `settings.json` merge needs inspection), counts, and the full list of custom files that would be preserved. Per-component `agents` / `skills` / `hooks` entries are dicts listing `managed_files` (to be written) and `preserved_files` (untouched) so you can audit exactly what would change before running live.
+The `dry_run=true` response includes a top-level `dry_run_summary` with a `verdict` (`"safe-to-run"` when the upgrade would touch only `tapps-*` files, `"review-recommended"` when `CLAUDE.md` or `settings.json` merge needs inspection), counts, and the full list of custom files the upgrade would preserve. Per-component `agents` / `skills` / `hooks` entries are dicts listing `managed_files` (files the upgrade would write) and `preserved_files` (untouched) so you can audit exactly what would change before running live.
 
 ### `tapps-mcp build-plugin`
 
@@ -561,7 +561,7 @@ tapps-mcp rollback --backup-id 2026-03-02-153000  # restore specific backup
 tapps-mcp rollback --dry-run                  # preview without restoring
 ```
 
-Backups are stored in `.tapps-mcp/backups/` and auto-cleaned (keeping the 5 most recent).
+The upgrade stores backups in `.tapps-mcp/backups/` and auto-cleans them (keeping the 5 most recent).
 
 ### `tapps-mcp doctor`
 
@@ -593,9 +593,9 @@ Quick index:
 | **tapps_validate_config** | Validate Dockerfile, docker-compose, or infra configs. |
 | **tapps_consult_expert** | **Deprecated (EPIC-94)** — returns structured deprecation error with alternatives. |
 | **tapps_research** | **Deprecated (EPIC-94)** — returns structured deprecation error with alternatives. |
-| **tapps_checklist** | See which tools were called this session and what is still missing. |
+| **tapps_checklist** | See which tools this session invoked and what is still missing. |
 | **tapps_session_notes** | Save and retrieve key decisions and constraints across the session. Promotable to shared memory. |
-| **tapps_memory** | Shared memory — **42 actions**: CRUD (`save`, `save_bulk`, `get`, `list`, `delete`), `search`, intelligence (`reinforce`, `gc`, `contradictions`, `reseed`), consolidation, import/export, federation (6), maintenance (`validate`, `maintain`), security (`safety_check`, `verify_integrity`), profiles (3), `health`, Hive/Agent Teams (`hive_status`, `hive_search`, `hive_propagate`, `agent_register`), knowledge graph (`related`, `relations`, `neighbors`, `explain_connection`), batch ops (`recall_many`, `reinforce_many`), feedback (`rate`), native session memory (`index_session`, `search_sessions`, `session_end`). See [MEMORY_REFERENCE.md](docs/MEMORY_REFERENCE.md). |
+| **tapps_memory** | **Removed in v3.12.0** — use `uv run tapps-mcp memory` CLI or enable **`nlt-memory`**. Full action list: [MEMORY_REFERENCE.md](docs/MEMORY_REFERENCE.md). |
 | **tapps_impact_analysis** | Analyze the impact of changes on the codebase (imports, dependents). |
 | **tapps_report** | Generate a quality report (JSON, Markdown, or HTML) for scored files. |
 | **tapps_dashboard** | View metrics dashboard with execution stats, expert performance, and trends. |
@@ -712,17 +712,19 @@ Quick index:
 
 ### tapps_session_notes
 
-**What it does:** Persists key decisions, constraints, and context across a session. Supports **save** (store a note with category and optional tags), **get** (retrieve notes, optionally filtered by category), **list**, **clear**, and **promote** (copy a note to persistent shared memory via `tapps_memory`). Notes survive within a server session and are stored in `.tapps-mcp/session/`. Responses include a `migration_hint` suggesting `tapps_memory` for cross-session persistence.
+**What it does:** Persists key decisions, constraints, and context across a session. Supports **save** (store a note with category and optional tags), **get** (retrieve notes, optionally filtered by category), **list**, **clear**, and **promote** (copy a note to persistent shared memory via `uv run tapps-mcp memory save`). Notes survive within a server session in `.tapps-mcp/session/`. Responses include a `migration_hint` pointing at the memory CLI for cross-session persistence.
 
-**Why use it:** In long sessions, the AI may forget decisions made earlier. Session notes let the AI save constraints ("user wants sync-only, no async") and retrieve them later so earlier context is not lost. Use `promote` to persist important notes to shared memory so they survive across sessions. For new projects, prefer `tapps_memory` directly for persistent storage.
+**Why use it:** In long sessions, the AI may forget decisions made earlier. Session notes let the AI save constraints ("user wants sync-only, no async") and retrieve them later so earlier context is not lost. Use `promote` to persist important notes to shared memory so they survive across sessions. For new projects, prefer `uv run tapps-mcp memory` directly for persistent storage.
 
 ---
 
-### tapps_memory
+### Memory (CLI / nlt-memory)
 
-**What it does:** Persistent, project-scoped shared memory. TappsMCP is a client of the [tapps-brain](https://github.com/wtthornton/tapps-brain) service (Docker + Postgres, HTTP at `localhost:8080`); `tapps_memory` exposes a stable 42-action surface on top of `BrainBridge`. Tiers: **architectural**, **pattern**, **procedural**, **context** with configurable half-lives. Actions (single tool, `action=` dispatch): CRUD (**save**, **save_bulk**, **get**, **list**, **delete**), **search**, **reinforce**, **gc**, **contradictions**, **reseed**, **consolidate** / **unconsolidate**, **import** / **export**, six **federate_***, **validate**, **maintain**, **safety_check**, **verify_integrity**, **profile_info** / **profile_list** / **profile_switch**, **health**, Hive / Agent Teams (**hive_status**, **hive_search**, **hive_propagate**, **agent_register**), knowledge graph (**related**, **relations**, **neighbors**, **explain_connection**), batch ops (**recall_many**, **reinforce_many**), feedback flywheel (**rate**), and native session memory (**index_session**, **search_sessions**, **session_end**). Shipped defaults also enable expert/research auto-save, recurring `tapps_quick_check` procedural memory, **tapps_impact_analysis** `memory_context`, and **memory_hooks** auto-recall/auto-capture — all overridable in `.tapps-mcp.yaml`. Per-project cap is set by tapps-brain's `TAPPS_BRAIN_MAX_ENTRIES` (auto-evicts at cap). Retrieval, decay, consolidation, supersede semantics, and federation internals are documented in the [tapps-brain repo](https://github.com/wtthornton/tapps-brain) — treat that as the source of truth. TappsMCP-side action list: [docs/MEMORY_REFERENCE.md](docs/MEMORY_REFERENCE.md).
+**Removed MCP tool:** `tapps_memory` left the MCP surface in v3.12.0. Use **`uv run tapps-mcp memory`** or enable **`nlt-memory`** for recall/save/handoff tools.
 
-**Why use it:** Agents start every session without project context unless you persist it. Shared memory holds decisions, patterns, and workflows across sessions, with decay and contradiction checks to reduce stale answers. Expert and research tools can pull in relevant memories automatically when enabled.
+**What it does:** Persistent, project-scoped shared memory via [tapps-brain](https://github.com/wtthornton/tapps-brain) (Docker + Postgres, HTTP at `localhost:8080`) and **BrainBridge**. The CLI exposes **42 actions** (CRUD, search, federation, knowledge graph, batch ops, feedback, session memory, and more). Tiers: **architectural**, **pattern**, **procedural**, **context** with configurable half-lives. Shipped defaults also enable expert/research auto-save, recurring `tapps_quick_check` procedural memory, **tapps_impact_analysis** `memory_context`, and **memory_hooks** auto-recall/auto-capture — all overridable in `.tapps-mcp.yaml`. See [docs/MEMORY_REFERENCE.md](docs/MEMORY_REFERENCE.md) for the action list and [tapps-brain](https://github.com/wtthornton/tapps-brain) for storage internals.
+
+**Why use it:** Agents start every session without project context unless you persist it. Shared memory holds decisions, patterns, and workflows across sessions, with decay and contradiction checks to reduce stale answers.
 
 ---
 
@@ -744,11 +746,11 @@ Quick index:
 
 ### tapps_upgrade
 
-**What it does:** Validates and refreshes TappsMCP-generated files in a project after upgrading the server. Detects the platform (Claude Code, Cursor, or both) from existing config files and upgrades AGENTS.md (via smart-merge), platform rules, the four `tapps-*` subagents, the `tapps-*` + `linear-issue` skills, `tapps-*` hook scripts, and `settings.json` permissions. Files outside that managed set — consumer-authored agents, skills, hooks, and custom command paths in `.mcp.json` — are preserved. `settings.json` hook entries are merged by matcher. Accepts optional `platform`, `force`, and `dry_run` parameters.
+**What it does:** Validates and refreshes TappsMCP-generated files in a project after upgrading the server. Detects the platform (Claude Code, Cursor, or both) from existing config files and upgrades AGENTS.md (via smart-merge), platform rules, the four `tapps-*` subagents, the `tapps-*` + `linear-issue` skills, `tapps-*` hook scripts, and `settings.json` permissions. The upgrade preserves files outside that managed set — consumer-authored agents, skills, hooks, and custom command paths in `.mcp.json`. It merges `settings.json` hook entries by matcher. Accepts optional `platform`, `force`, and `dry_run` parameters.
 
-**Why use it:** After upgrading TappsMCP (`pip install -U tapps-mcp`), generated files may be outdated — missing new tools, stale hook scripts, or old AGENTS.md sections. Call `tapps_upgrade(dry_run=true)` to preview what would change, then `tapps_upgrade()` to apply updates. A backup is automatically created before overwriting (stored in `.tapps-mcp/backups/`). This is the MCP-tool equivalent of the `tapps-mcp upgrade` CLI command, usable from within an AI session without dropping to a terminal.
+**Why use it:** After upgrading TappsMCP (`pip install -U tapps-mcp`), generated files may be outdated — missing new tools, stale hook scripts, or old AGENTS.md sections. Call `tapps_upgrade(dry_run=true)` to preview what would change, then `tapps_upgrade()` to apply updates. The upgrade creates a timestamped backup before overwriting (stored in `.tapps-mcp/backups/`). This is the MCP-tool equivalent of the `tapps-mcp upgrade` CLI command, usable from within an AI session without dropping to a terminal.
 
-**Dry-run response shape:** Returns per-component dicts under `components.platforms[].components.{agents,skills,hooks}` with `action`, `managed_files` / `managed_skills` (tapps-* files that would be written), and `preserved_files` / `preserved_skills` (consumer-custom files that stay untouched). A top-level `dry_run_summary` provides a `verdict` (`"safe-to-run"` or `"review-recommended"`), aggregate counts, `preserved_files` across all hosts, and `review_recommended_for` listing components that merge into user-editable files (`CLAUDE.md`, `settings.json`). Agents can branch on the verdict without parsing per-component details.
+**Dry-run response shape:** Returns per-component dicts under `components.platforms[].components.{agents,skills,hooks}` with `action`, `managed_files` / `managed_skills` (tapps-* files the upgrade would write), and `preserved_files` / `preserved_skills` (consumer-custom files that stay untouched). A top-level `dry_run_summary` provides a `verdict` (`"safe-to-run"` or `"review-recommended"`), aggregate counts, `preserved_files` across all hosts, and `review_recommended_for` listing components that merge into user-editable files (`CLAUDE.md`, `settings.json`). Agents can branch on the verdict without parsing per-component details.
 
 ---
 
@@ -983,7 +985,7 @@ See [docs/DOCKER_MCP_TOOLKIT.md](docs/DOCKER_MCP_TOOLKIT.md) for Docker image di
 
 ## Bootstrapping TappsMCP in your project
 
-Once TappsMCP is installed and your AI client is connected, use the `tapps_init` MCP tool to bootstrap quality infrastructure in your project:
+Once you install TappsMCP and connect your AI client, use the `tapps_init` MCP tool to bootstrap quality infrastructure in your project:
 
 ```
 tapps_init(platform="claude")      # or platform="cursor"
@@ -1033,7 +1035,7 @@ tapps-mcp upgrade --dry-run                 # 2. Preview what would change
 tapps-mcp upgrade                           # 3. Apply updates
 ```
 
-A **backup** is automatically created before overwriting files. Use `tapps-mcp rollback` to restore if needed:
+The upgrade creates a **backup** before overwriting files. Use `tapps-mcp rollback` to restore if needed:
 
 ```bash
 tapps-mcp rollback --list                   # List available backups
@@ -1078,7 +1080,7 @@ tapps-mcp      docs-mcp
 
 ### Memory subsystem
 
-The memory system is implemented by tapps-brain and exposed via **42 actions** on the `tapps_memory` MCP tool (see [docs/MEMORY_REFERENCE.md](docs/MEMORY_REFERENCE.md)):
+The memory system lives in tapps-brain and exposes **42 actions** through **`uv run tapps-mcp memory`** or the **`nlt-memory`** MCP profile (see [docs/MEMORY_REFERENCE.md](docs/MEMORY_REFERENCE.md)):
 
 | Tier | Half-life | Use for |
 |------|-----------|---------|

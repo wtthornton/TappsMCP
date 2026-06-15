@@ -8,7 +8,7 @@ When you **install or upgrade** TappsMCP in a project that uses it for quality c
 
 Upgrading to v3.8.x **enables a new opt-in PreToolUse hook by default at `medium` / `high` engagement**:
 
-- **Linear cache-first read gate (TAP-1224)** — `tapps_upgrade` deploys two new scripts (`tapps-pre-linear-list.sh`, `tapps-post-linear-snapshot-get.sh`) and switches on `linear_enforce_cache_gate: warn` for `medium` / `high` engagement consumers. **Warn mode is non-blocking** — calls are allowed through but each violation lands in `.tapps-mcp/.cache-gate-violations.jsonl` for telemetry. Block mode (`linear_enforce_cache_gate: block` in `.tapps-mcp.yaml`) is opt-in once you've reviewed the warn-mode log.
+- **Linear cache-first read gate (TAP-1224)** — `tapps_upgrade` deploys two new scripts (`tapps-pre-linear-list.sh`, `tapps-post-linear-snapshot-get.sh`) and switches on `linear_enforce_cache_gate: warn` for `medium` / `high` engagement consumers. **Warn mode is non-blocking** — it allows calls through but logs each violation to `.tapps-mcp/.cache-gate-violations.jsonl` for telemetry. Block mode (`linear_enforce_cache_gate: block` in `.tapps-mcp.yaml`) is opt-in once you've reviewed the warn-mode log.
 
 To **stay on `off`** through the upgrade, set the flag in `.tapps-mcp.yaml` **before** running `tapps_upgrade`:
 
@@ -81,7 +81,7 @@ tapps-mcp upgrade --dry-run                 # preview what would change (text su
 tapps-mcp upgrade --dry-run --json          # preview as JSON (pipe to jq for scripting)
 ```
 
-This updates AGENTS.md (smart merge), platform rules, the four `tapps-*` subagents, the `tapps-*` + `linear-issue` skills, `tapps-*` hook scripts, and `.claude/settings.json` permissions. **Files outside that managed set are preserved** — consumer-authored agents, skills, or hooks with other names are never touched. `settings.json` hook entries are merged by matcher, so hand-wired hooks stay.
+This updates AGENTS.md (smart merge), platform rules, the four `tapps-*` subagents, the `tapps-*` + `linear-issue` skills, `tapps-*` hook scripts, and `.claude/settings.json` permissions. **Files outside that managed set stay preserved** — consumer-authored agents, skills, or hooks with other names never change. The upgrade merges `settings.json` hook entries by matcher, so hand-wired hooks stay.
 
 ### Reading the dry-run output
 
@@ -106,9 +106,9 @@ This updates AGENTS.md (smart merge), platform rules, the four `tapps-*` subagen
 ```
 
 - `verdict: "safe-to-run"` → only tapps-managed files change; consumer-custom files appear in `preserved_files`. Run live with confidence.
-- `verdict: "review-recommended"` → the upgrade merges into a user-editable file (`CLAUDE.md` H1-section replace, or `settings.json` hook-matcher merge). Inspect diffs before running live. The specific components are listed in `review_recommended_for`.
+- `verdict: "review-recommended"` → the upgrade merges into a user-editable file (`CLAUDE.md` H1-section replace, or `settings.json` hook-matcher merge). Inspect diffs before running live. `review_recommended_for` lists the specific components.
 
-Per-component details live under `components.platforms[].components.{agents,skills,hooks}` as dicts with `managed_files`/`managed_skills` (what would be written) and `preserved_files`/`preserved_skills` (what stays). Use these for a full audit; the top-level summary for a quick decision.
+Per-component details live under `components.platforms[].components.{agents,skills,hooks}` as dicts with `managed_files`/`managed_skills` (files the upgrade would write) and `preserved_files`/`preserved_skills` (files that stay). Use these for a full audit; the top-level summary for a quick decision.
 
 ---
 
@@ -249,6 +249,6 @@ After fleet upgrade, **reload MCP** in each IDE session.
 | Rollback if upgrade causes issues | `tapps-mcp rollback` (restores from automatic pre-upgrade backup) |
 | List available backups | `tapps-mcp rollback --list` |
 
-Backups are stored in `.tapps-mcp/backups/` with the 5 most recent kept automatically. Each backup includes a `manifest.json` listing all files that were overwritten.
+The upgrade stores backups in `.tapps-mcp/backups/` and keeps the 5 most recent automatically. Each backup includes a `manifest.json` listing all files the upgrade overwrote.
 
 See [INIT_AND_UPGRADE_FEATURE_LIST.md](INIT_AND_UPGRADE_FEATURE_LIST.md) for the full init and upgrade behavior.
