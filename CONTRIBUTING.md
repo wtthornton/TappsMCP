@@ -4,7 +4,7 @@ Thank you for your interest in contributing to tapps-mcp! This guide will help y
 
 ## Code of Conduct
 
-This project has a [Code of Conduct](CODE_OF_CONDUCT.md). By participating, you are expected to uphold it.
+This project has a [Code of Conduct](CODE_OF_CONDUCT.md). By participating, uphold it.
 
 ## Getting Started
 
@@ -42,7 +42,7 @@ ruff check .
 ruff format --check .
 ```
 
-Type checking is enforced with mypy:
+Run mypy for strict type checking:
 
 ```bash
 mypy .

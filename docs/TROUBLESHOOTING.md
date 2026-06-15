@@ -4,7 +4,7 @@
 
 **Problem:** When the MCP host (Claude Code, Cursor, VS Code) restarts or reloads, the MCP server connection is lost. All `tapps_*` tools become unavailable for the rest of the session.
 
-**Root cause:** This is a known limitation of the MCP protocol. MCP servers are started as child processes by the host, and reconnection after a host restart is not currently supported within an active session.
+**Root cause:** This is a known limitation of the MCP protocol. The host starts MCP servers as child processes, and reconnection after a host restart is not currently supported within an active session.
 
 ### Recovery steps
 
@@ -81,7 +81,7 @@ Doctor prints **Memory pipeline (effective config)** — a read-only summary of 
 
 **Root cause:** Claude Code spawns a new MCP server process per session but never terminates old ones. Over several sessions, these accumulate and become a resource leak.
 
-**Solution:** The `.claude/hooks/tapps-session-start.sh` hook automatically kills tapps-mcp and docsmcp processes older than 2 hours on session startup. This is enabled by default when you run `tapps_init`. The cleanup uses `ps -eo pid,etimes,cmd` and `awk` to find processes matching the `serve` command and terminates them with `kill`.
+**Solution:** The `.claude/hooks/tapps-session-start.sh` hook kills tapps-mcp and docsmcp processes older than 2 hours on session startup. Runs by default after `tapps_init`. The cleanup uses `ps -eo pid,etimes,cmd` and `awk` to find processes matching the `serve` command and terminates them with `kill`.
 
 **Manual cleanup:** If you have accumulated processes, clean them up manually:
 

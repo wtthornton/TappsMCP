@@ -2,7 +2,7 @@
 
 **Time:** ~10 min (after [tutorial 03](03-wire-tapps-brain.md) brain wiring). **Outcome:** Save a project decision, recall it in a new chat, and know when to use CLI vs `nlt-memory` MCP.
 
-Since v3.12.0 the standalone `tapps_memory` MCP tool was removed ([migration table](../migrations/tapps-memory-deprecation.md)). Memory still works through **BrainBridge** — either the `tapps-mcp memory` CLI or the **`nlt-memory`** MCP profile (`tapps-mcp memory search`, `tapps-mcp memory save`, handoff tools).
+Since v3.12.0 removed the standalone `tapps_memory` MCP tool ([migration table](../migrations/tapps-memory-deprecation.md)), use **BrainBridge** instead — either the `tapps-mcp memory` CLI or the **`nlt-memory`** MCP profile (`tapps-mcp memory search`, `tapps-mcp memory save`, handoff tools).
 
 ## Prerequisites
 

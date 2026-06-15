@@ -31,3 +31,23 @@ cross_ref_exclude:
 # Drift checker — suppress noisy module-level constants and migration
 # internals that don't belong in user-facing prose.
 drift_ignore_patterns: "defaults"
+
+# Style checker — tier-1 docs use Title Case headings (see docs/STYLE_GUIDE.md).
+# Auto-detect Python identifiers as allowed terms to cut jargon false positives.
+style_heading: title
+style_auto_detect_terms: true
+style_custom_terms:
+  - BrainBridge
+  - Diataxis
+  - DocsMCP
+  - FastMCP
+  - MCP
+  - NLT
+  - TappsMCP
+  - tapps-brain
+  - tapps-core
+  - tapps-mcp
+  - nlt-build
+  - nlt-memory
+  - nlt-project-docs
+  - nlt-setup

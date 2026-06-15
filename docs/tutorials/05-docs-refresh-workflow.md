@@ -58,11 +58,35 @@ Update `docs/ARCHITECTURE.md` narrative for NLT profiles (don't rely on HTML alo
 
 ## Phase 5 — CI gate
 
-Add `.github/workflows/docs-quality.yml`:
+`.github/workflows/docs-quality.yml` runs:
 
 ```yaml
 - run: uv run python scripts/docs-quality-gate.py
 ```
+
+## Phase 6 — Style pass (optional, not CI-gated)
+
+Tier-1 narrative docs only — skip auto-generated `docs/api/*` and `CHANGELOG.md`.
+
+Configure `.docsmcp.yaml` (repo root):
+
+```yaml
+style_heading: title          # match Title Case section headings
+style_auto_detect_terms: true # allow Python identifiers in prose
+style_custom_terms: [TappsMCP, DocsMCP, BrainBridge, nlt-build, ...]
+```
+
+Run on a scoped file list:
+
+```text
+docs_check_style(
+  files="docs/PURPOSE.md,docs/ONBOARDING.md,docs/TROUBLESHOOTING.md,CONTRIBUTING.md,README.md",
+  heading_style="title",
+  summary_only=true
+)
+```
+
+Prioritize **passive voice** and **sentence length** fixes; `tense_consistency` warnings are expected in mixed tutorial/how-to docs. Regenerate package READMEs with `docs_generate_readme(merge=true)` when badges drift (see `packages/docs-mcp/docs/README.md`).
 
 ## Verification checklist
 
