@@ -4,6 +4,8 @@ Given a changed file, builds an import graph and identifies:
 - Direct dependents (files that import the changed file)
 - Transitive dependents (files that import direct dependents)
 - Test files that should be re-run
+
+Symbol-level caller/callee analysis lives in ``call_graph.py`` (ADR-0017).
 """
 
 from __future__ import annotations
