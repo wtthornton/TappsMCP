@@ -146,7 +146,7 @@ servers:
     serve_args: ["serve", "--profile", "nlt-build"]
     legacy_profile_alias: nlt-code-quality
     default_enabled: true
-    tool_count: 16
+    tool_count: 18
     eager_count: 9
     skills:
       - tapps-finish-task

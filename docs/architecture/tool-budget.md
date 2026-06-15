@@ -22,7 +22,7 @@ Agents often conflate different “graphs”:
 | Concept | Tools | Scope |
 |---------|-------|-------|
 | **Import / impact graph** | `tapps_impact_analysis`, `tapps_dead_code` | Python AST **module** import graph in the repo |
-| **Call graph** | `tapps_call_graph` (Epic 114 Tier B+), symbol blast on `tapps_impact_analysis` | Python AST **function/method** `CALLS` edges |
+| **Call graph** | `tapps_call_graph`, symbol blast on `tapps_impact_analysis`, `tapps_diff_impact` | Python AST **function/method** `CALLS` edges + TESTS linkage |
 | **Package CVE graph** | `tapps_dependency_scan`, `tapps_dependency_graph` | Installed packages + CVE overlay (Build, deferred) |
 | **Brain knowledge graph** | `tapps_memory(action="related")` on `nlt-memory` | Cross-session entities in tapps-brain |
 
@@ -41,7 +41,7 @@ Eager tools: `tapps_session_start`, `tapps_validate_changed`, `tapps_score_file`
 
 | Server | Mode | Eager tools | Deferred tools | Total |
 |---|---|---|---|---|
-| `tapps-mcp` | full (no `--mode`) | 9 | 26 | 35 |
+| `tapps-mcp` | full (no `--mode`) | 9 | 28 | 37 |
 | `tapps-quality` | `--mode quality` | 9 | 6 | 15 |
 | `tapps-admin` | `--mode admin` | 1 | 12 | 13 |
 | `docs-mcp` | — | 7 | 33 | 40 |
@@ -64,7 +64,7 @@ Set `doctor_tool_budget_limit` in `.tapps-mcp.yaml`:
 doctor_tool_budget_limit: 30
 ```
 
-If you intentionally run tapps-mcp in full mode (32 tools) and accept the context cost,
+If you intentionally run tapps-mcp in full mode (34 tools) and accept the context cost,
 raise the budget to 35 to silence the WARN. If you want a stricter check, lower it to 15
 to enforce quality-preset-level discipline.
 

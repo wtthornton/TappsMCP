@@ -41,12 +41,11 @@ Implementation order: **A → B → C**; stretch is post-epic.
 | Tool | Profile | When to use |
 |------|---------|-------------|
 | `tapps_impact_analysis` | `nlt-build` (existing) | **Module/file** blast radius: direct + transitive importers, heuristic test overlap |
-| `tapps_call_graph` | `nlt-build` (new, deferred until Tier B) | **Symbol-level** callers, callees, bounded call chains for one qualified name |
-| `tapps_diff_impact` | `nlt-build` (new, deferred until Tier C) | Changed symbols → affected tests via `TESTS` edges |
+| `tapps_call_graph` | `nlt-build` (deferred) | **Symbol-level** callers, callees, bounded call chains for one qualified name |
+| `tapps_diff_impact` | `nlt-build` (deferred) | Changed Python files → ranked affected tests via `TESTS` edges |
 
 `tool_descriptions.py` and `tapps_checklist` `refactor` task type treat
-`tapps_impact_analysis` as **recommended** today; `tapps_call_graph` becomes
-**recommended** once Tier B ships (optional until then).
+`tapps_impact_analysis` and `tapps_call_graph` as **recommended** for refactors.
 
 ### Token budget for chains
 

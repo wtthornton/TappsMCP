@@ -43,7 +43,7 @@ See [CHANGELOG.md](CHANGELOG.md) for the full history.
 Install is from the local checkout (`uv tool install -e packages/tapps-mcp`); the packages are not published to PyPI. See [Install](#install).
 
 ```
-tapps-brain (standalone)  <──  tapps-core (shared infra)  <──  tapps-mcp (32 tools)
+tapps-brain (standalone)  <──  tapps-core (shared infra)  <──  tapps-mcp (34 tools)
                                                           <──  docs-mcp  (38 tools)
                                                                       = 70 MCP tools
 ```
@@ -1069,7 +1069,7 @@ tapps-core (shared infrastructure)
     ^              ^
     |              |
 tapps-mcp      docs-mcp
-(32 tools)     (38 tools)
+(34 tools)     (38 tools)
 ```
 
 **[tapps-brain](https://github.com/wtthornton/tapps-brain)** is the standalone memory service extracted from tapps-core. It runs as a Dockerized Postgres-backed service that TappsMCP clients reach over HTTP at `localhost:8080`. Storage engine, retrieval (BM25 + boosts), time-based decay, contradiction detection, consolidation, federation, and GC internals all live in the [tapps-brain repo](https://github.com/wtthornton/tapps-brain) and its README/CHANGELOG — refer there for the authoritative description so this page doesn't drift. tapps-brain has its own release cycle and test suite.
@@ -1201,7 +1201,7 @@ packages/
 │       ├── metrics/                   # Collector, dashboard, alerts, trends, OTel export
 │       └── adaptive/                  # Adaptive scoring, expert voting, weight distribution
 │
-├── tapps-mcp/                         # Code quality MCP server (32 tools)
+├── tapps-mcp/                         # Code quality MCP server (34 tools)
 │   └── src/tapps_mcp/
 │       ├── server.py, cli.py          # Entry points and MCP server
 │       ├── server_*.py                # Tool modules (scoring, pipeline, metrics, memory, analysis)

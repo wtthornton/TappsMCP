@@ -7,6 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [3.12.30] - 2026-06-15
+
+Patch: Epic 114 function-level call graph — `tapps_call_graph`, `tapps_diff_impact`, symbol blast radius, and validate_changed affected tests.
+
+### Added
+
+- **Epic 114 / TAP-4050–4055** — `call_graph_queries.py`: callers, callees, token-budgeted chains; `test_linker.py` TDAD-style TESTS edges; `diff_impact.py` ranked affected tests; symbol-level blast radius on `tapps_impact_analysis` (`granularity`, `symbol`).
+- **MCP tools** — `tapps_call_graph` and `tapps_diff_impact` on `nlt-build` (deferred); `validate_changed` optional `affected_tests` block when `include_impact=true` (TAP-4054).
+
+### Changed
+
+- **ADR-0017** — Tier B/C call graph tools shipped; `tapps_checklist` refactor task recommends `tapps_call_graph` alongside `tapps_impact_analysis`.
+- **Tool inventory** — Full tapps-mcp surface is 34 MCP tools (+2 vs 3.12.29); `nlt-build` profile lists 18 tools (9 eager, 9 deferred).
+
 ## [3.12.29] - 2026-06-15
 
 Patch: EPIC-113 Cursor loop metrics, dev-repo dogfood, tier-1 docs refresh, and CI quality workflow.

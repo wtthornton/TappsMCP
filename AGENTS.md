@@ -31,7 +31,7 @@ Seven rules every agent in this project should follow.
 | **tapps_checklist** | **Before declaring work complete** - reports missing required steps |
 | **tapps_quality_gate** | Before declaring work complete - ensures file passes preset |
 
-**For full tool reference** (32 tools with per-tool guidance), invoke the **tapps-tool-reference** skill when the user asks "what tools does TappsMCP have?", "when do I use tapps_score_file?", etc.
+**For full tool reference** (34 tools with per-tool guidance), invoke the **tapps-tool-reference** skill when the user asks "what tools does TappsMCP have?", "when do I use tapps_score_file?", etc.
 
 ---
 
@@ -60,12 +60,11 @@ Four graph concepts — do not conflate them:
 | Concept | Tool(s) | Granularity | When |
 |---------|---------|-------------|------|
 | **Import / file impact** | `tapps_impact_analysis`, `tapps_dependency_graph` | Module / file | Before changing a file's public API or deleting a module |
-| **Call graph** (Epic 114) | `tapps_call_graph` (Tier B+), symbol mode on `tapps_impact_analysis` | Function / method | Before refactoring a specific function — callers, callees, bounded chains |
+| **Call graph** (Epic 114) | `tapps_call_graph`, symbol mode on `tapps_impact_analysis`, `tapps_diff_impact` | Function / method | Before refactoring a function — callers, callees, bounded chains, affected tests |
 | **Package CVE** | `tapps_dependency_scan` | Installed packages | Before releases |
 | **Brain KG** | `tapps_memory(action="related")` on `nlt-memory` | Cross-session entities | Architecture recall |
 
-**Today:** use `tapps_impact_analysis` for module-level blast radius (Python import graph).
-**After Epic 114 Tier B:** add `tapps_call_graph` for symbol-level who-calls-whom instead of grep.
+**Call graph (Epic 114):** use `tapps_call_graph` for symbol-level who-calls-whom; `tapps_impact_analysis(symbol=..., granularity="symbol"|"both")` for blast radius; `tapps_diff_impact` for git-changed → affected tests. Module-level import graph remains `tapps_impact_analysis` without `symbol`.
 See [ADR-0017](docs/adr/0017-function-level-call-graph-python-first.md).
 
 ---
@@ -77,7 +76,9 @@ See [ADR-0017](docs/adr/0017-function-level-call-graph-python-first.md).
 | **tapps_score_file** | When editing/reviewing a code file. Use `quick=True` during edit loops. |
 | **tapps_lookup_docs** | **Before writing code** that uses an external library - prevents hallucinated APIs |
 | **tapps_security_scan** | Security-sensitive changes or before security review |
-| **tapps_impact_analysis** | Before modifying a file's public API (module-level importers). Pass `project_root` for external projects. Symbol-level callers: `tapps_call_graph` when Epic 114 Tier B ships. |
+| **tapps_impact_analysis** | Before modifying a file's public API (module-level importers). Pass `symbol` + `granularity="symbol"` or `"both"` for function-level blast radius; `tapps_call_graph` for caller/callee chains. |
+| **tapps_call_graph** | Before refactoring a function — deterministic callers, callees, token-budgeted chains (Epic 114 / ADR-0017). |
+| **tapps_diff_impact** | After editing Python files — ranked affected tests via TESTS edges + call graph (Epic 114). |
 | **tapps_validate_config** | When adding/changing Dockerfile, docker-compose, infra config |
 | **tapps_memory** | Session start: search past decisions. Session end: save learnings. See [docs/MEMORY_REFERENCE.md](docs/MEMORY_REFERENCE.md) |
 | **tapps_session_notes** | Key decisions during session - promote to memory for persistence |
@@ -115,7 +116,7 @@ See [ADR-0017](docs/adr/0017-function-level-call-graph-python-first.md).
 2. **Check project memory:** Consider calling `tapps_memory(action="search", query="...")` to recall past decisions and project context.
 3. **Record key decisions:** Use `tapps_session_notes(action="save", ...)` for session-local notes. Use `tapps_memory(action="save", ...)` to persist decisions across sessions.
 3. **Before using a library:** Call `tapps_lookup_docs(library=...)` and use the returned content when implementing.
-4. **Before modifying a file's API:** Call `tapps_impact_analysis(file_path=...)` for module-level dependents. For a specific function refactor, use `tapps_call_graph` once Epic 114 ships (ADR-0017).
+4. **Before modifying a file's API:** Call `tapps_impact_analysis(file_path=...)` for module-level dependents. For a specific function refactor, use `tapps_call_graph` or `tapps_impact_analysis` with `symbol` + `granularity` (ADR-0017).
 5. **During edits:** Call `tapps_quick_check(file_path=...)` or `tapps_score_file(file_path=..., quick=True)` after each change.
 6. **Before declaring work complete:**
    - Recommended: invoke the `/tapps-finish-task` skill — bundles `tapps_validate_changed` + `tapps_checklist` + an optional memory save and reports a one-line summary.
@@ -308,7 +309,7 @@ For direct stdio connections you can expose only a subset of tools to keep the a
 - **disabled_tools** (deny list): tools to exclude from the full set. Applied when `enabled_tools` is not set. Env: `TAPPS_MCP_DISABLED_TOOLS`.
 - **tool_preset**: `full` (all tools), `core` (7 Tier-1 tools), `pipeline` (Tier 1 + Tier 2), or role presets: `reviewer`, `planner`, `frontend`, `developer` (Epic 79.5). NLT profiles: `nlt-build`, `nlt-memory`, `nlt-setup` (legacy: `nlt-code-quality`, `nlt-platform-admin`). Env: `TAPPS_MCP_TOOL_PRESET=nlt-build`.
 
-Empty or missing = all 32 tools (default, backward compatible). Invalid tool names in `enabled_tools` are ignored and logged. Recommended subsets by task/role and Docker tool filtering: see `docs/archive/planning/TOOL-SUBSETS-AND-DOCKER-FILTERING.md`.
+Empty or missing = all 34 tools (default, backward compatible). Invalid tool names in `enabled_tools` are ignored and logged. Recommended subsets by task/role and Docker tool filtering: see `docs/archive/planning/TOOL-SUBSETS-AND-DOCKER-FILTERING.md`.
 
 ---
 ## tapps_session_start vs tapps_init

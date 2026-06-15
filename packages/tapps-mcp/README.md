@@ -2,7 +2,7 @@
 
 <!-- mcp-name: io.github.wtthornton/tapps-mcp -->
 
-MCP server providing deterministic code-quality tools for AI coding assistants. Scores Python (full) plus TypeScript / JavaScript / Go / Rust files across seven categories, runs security scans, enforces quality gates, looks up library docs, validates configs, and persists cross-session knowledge through [tapps-brain](https://github.com/wtthornton/tapps-brain). All tools are deterministic — same input, same output — so they slot cleanly into agent loops without LLM-in-the-loop variance.
+MCP server providing deterministic code-quality tools for AI coding assistants. Scores Python (full) plus TypeScript / JavaScript / Go / Rust files across seven categories, runs security scans, enforces quality gates, looks up library docs, validates configs, and persists cross-session knowledge through [tapps-brain](https://github.com/wtthornton/tapps-brain). Includes Epic 114 call-graph tools (`tapps_call_graph`, `tapps_diff_impact`) and symbol-level `tapps_impact_analysis`. All tools are deterministic — same input, same output — so they slot cleanly into agent loops without LLM-in-the-loop variance.
 
 Part of the [TappsMCP Platform](https://github.com/wtthornton/TappsMCP). Pairs with [docs-mcp](../docs-mcp) (documentation tooling) and [tapps-core](../tapps-core) (shared infrastructure).
 
@@ -34,7 +34,7 @@ For a minimal build-only session, enable `nlt-build` alone (~9 eager tools).
 
 ## Top 5 MCP tools
 
-The most-used handlers in a typical agent session — see [AGENTS.md](../../AGENTS.md) for the full 32-tool reference.
+The most-used handlers in a typical agent session — see [AGENTS.md](../../AGENTS.md) for the full 34-tool reference.
 
 1. `tapps_session_start` — initialise project context, load memory, surface server info.
 2. `tapps_quick_check(file_path)` — score + quality gate + security scan in one call after every Python edit.
