@@ -2458,7 +2458,8 @@ class TestCheckNltPartialEnablement:
         assert "29 combined eager tools" in result.message
         assert "5 nlt-* servers enabled" in result.message
         assert "developer bundle" in (result.detail or "").lower()
-        assert "tapps-mcp init" in (result.detail or "")
+        assert "mcp.json" in (result.detail or "")
+        assert "Disable unused nlt-* servers" in (result.detail or "")
 
 
 _SAMPLE_PROBE_METRICS = """\
