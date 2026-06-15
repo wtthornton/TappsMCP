@@ -39,8 +39,8 @@ class TestDetectCommandPath:
             result = _detect_command_path()
         assert result == r"C:\Users\test\.local\bin\tapps-mcp.exe"
 
-    def test_on_path_returns_bare_name(self) -> None:
-        """When tapps-mcp is on PATH, returns 'tapps-mcp'."""
+    def test_on_path_returns_absolute_path(self) -> None:
+        """When tapps-mcp is on PATH, returns the resolved absolute path."""
         with (
             patch.object(sys, "frozen", False, create=True),
             patch(
@@ -49,7 +49,7 @@ class TestDetectCommandPath:
             ),
         ):
             result = _detect_command_path()
-        assert result == "tapps-mcp"
+        assert result == "/usr/bin/tapps-mcp"
 
     def test_fallback_returns_bare_name(self) -> None:
         """When neither frozen nor on PATH, uses uv-run template (Epic 80.5)."""
@@ -187,16 +187,24 @@ class TestMergeConfigUpgradeMode:
                 },
             },
         }
-        result = _merge_config(existing, "cursor", upgrade_mode=False)
+        with patch(
+            "tapps_mcp.distribution.setup_generator.shutil.which",
+            return_value="/usr/bin/tapps-mcp",
+        ):
+            result = _merge_config(existing, "cursor", upgrade_mode=False)
         entry = result["mcpServers"]["tapps-mcp"]
-        assert entry["command"] == "tapps-mcp"
+        assert entry["command"] == "/usr/bin/tapps-mcp"
 
     def test_upgrade_mode_no_existing_entry(self) -> None:
         """upgrade_mode=True with no existing entry uses detected path."""
         existing = {"mcpServers": {}}
-        result = _merge_config(existing, "cursor", upgrade_mode=True)
+        with patch(
+            "tapps_mcp.distribution.setup_generator.shutil.which",
+            return_value="/usr/bin/tapps-mcp",
+        ):
+            result = _merge_config(existing, "cursor", upgrade_mode=True)
         entry = result["mcpServers"]["tapps-mcp"]
-        assert entry["command"] == "tapps-mcp"
+        assert entry["command"] == "/usr/bin/tapps-mcp"
 
     def test_upgrade_mode_preserves_custom_args(self) -> None:
         """upgrade_mode=True preserves custom args too."""

@@ -9,6 +9,83 @@ from __future__ import annotations
 import shlex
 from typing import Any
 
+
+def _mcp_zombie_cleanup_bash(
+    *,
+    reap_nlt_duplicates: bool = False,
+    reap_all_nlt_profiles: bool = False,
+) -> str:
+    """ADR-0005 bash block: reap stale MCP ``serve`` processes (shared by hooks).
+
+    * ``reap_nlt_duplicates`` — per ``nlt-*`` profile, kill older PIDs (safe on preCompact).
+    * ``reap_all_nlt_profiles`` — kill every ``serve --profile nlt-*`` child (sessionStart only).
+    """
+    nlt_dup_block = ""
+    if reap_nlt_duplicates:
+        nlt_dup_block = """
+    NLT_DUP_PIDS=$(ps -eo pid,etimes,cmd 2>/dev/null | \\
+        awk '/serve --profile nlt-/ {
+            pid=$1; age=$2;
+            if (match($0, /serve --profile (nlt-[a-z-]+)/, m)) {
+                prof=m[1];
+                if (!(prof in keeper)) {
+                    keeper[prof]=pid; youngest[prof]=age; dups[prof]="";
+                } else if (age < youngest[prof]) {
+                    dups[prof]=dups[prof] " " keeper[prof];
+                    keeper[prof]=pid; youngest[prof]=age;
+                } else {
+                    dups[prof]=dups[prof] " " pid;
+                }
+            }
+        }
+        END {
+            for (p in dups) {
+                gsub(/^ /, "", dups[p]);
+                if (dups[p] != "") print dups[p];
+            }
+        }')"""
+    nlt_all_block = ""
+    if reap_all_nlt_profiles:
+        nlt_all_block = """
+    NLT_ALL_PIDS=$(ps -eo pid,cmd 2>/dev/null | \\
+        awk '/serve --profile nlt-/ {print $1}')"""
+    merge_parts: list[str] = ['"$OLD_PIDS"', '"$VENV_PIDS"']
+    if reap_nlt_duplicates:
+        merge_parts.append('"$NLT_DUP_PIDS"')
+    if reap_all_nlt_profiles:
+        merge_parts.append('"$NLT_ALL_PIDS"')
+    merge_echo_lines = "\n".join(f"    echo {part}" for part in merge_parts)
+    return f"""\
+# ADR-0005: Kill stale MCP server processes to prevent zombie accumulation.
+# Also reap project-.venv launches (missing httpx/httpcore) that break nlt-memory.
+# DO NOT REMOVE — see docs/adr/0005-mcp-server-zombie-cleanup-hook-on-session-start.md
+if command -v ps &>/dev/null && command -v awk &>/dev/null; then
+    OLD_PIDS=$(ps -eo pid,etimes,cmd 2>/dev/null | \\
+        awk '$2 > 7200 && /tapps-mcp|docsmcp|tapps-platform/ && /serve/ {{print $1}}')
+    VENV_PIDS=$(ps -eo pid,cmd 2>/dev/null | \\
+        awk '/\\.venv\\/bin\\/(tapps-mcp|docsmcp|tapps-platform)/ && /serve/ {{print $1}}'){nlt_dup_block}{nlt_all_block}
+    ZOMBIE_PIDS=$({{
+{merge_echo_lines}
+    }} | sort -u | grep -E '^[0-9]+$' || true)
+    if [ -n "$ZOMBIE_PIDS" ]; then
+        echo "[TappsMCP] Reaping stale MCP serve PIDs: $ZOMBIE_PIDS" >&2
+        echo "$ZOMBIE_PIDS" | xargs kill 2>/dev/null || true
+    fi
+fi
+"""
+
+
+def _mcp_zombie_cleanup_standalone_script(*, reap_all_nlt_profiles: bool = True) -> str:
+    """Cursor sessionStart hook: full MCP zombie cleanup before memory recall."""
+    return f"""#!/usr/bin/env bash
+# TappsMCP MCP zombie cleanup (Cursor sessionStart — ADR-0005 extension)
+# Reaps orphaned nlt-* serve children after Reload Window so Cursor spawns a clean fleet.
+set -euo pipefail
+{_mcp_zombie_cleanup_bash(reap_nlt_duplicates=True, reap_all_nlt_profiles=reap_all_nlt_profiles)}
+exit 0
+"""
+
+
 # ---------------------------------------------------------------------------
 # Claude Code hook script templates (Story 12.5)
 # ---------------------------------------------------------------------------
@@ -37,14 +114,9 @@ fi
 # accumulation. Claude Code spawns a new tapps-mcp/docsmcp process per session
 # but does not consistently reap old children — after several sessions this
 # becomes a significant resource and Postgres connection leak.
-# DO NOT REMOVE — see docs/adr/0005-mcp-server-zombie-cleanup-hook-on-session-start.md
-if command -v ps &>/dev/null && command -v awk &>/dev/null; then
-    OLD_PIDS=$(ps -eo pid,etimes,cmd 2>/dev/null | \\
-        awk '$2 > 7200 && /tapps-mcp|docsmcp/ && /serve/ {print $1}')
-    if [ -n "$OLD_PIDS" ]; then
-        echo "$OLD_PIDS" | xargs kill 2>/dev/null || true
-    fi
-fi
+""" + _mcp_zombie_cleanup_bash(
+    reap_nlt_duplicates=True, reap_all_nlt_profiles=True
+) + """\
 # TAP-1927: Pre-warm the brain tools-list cache so _negotiate_profile_locked
 # can skip the live MCP tools/list round-trip on the first bridge call.
 # Runs in the background (does not block session start) and is best-effort
@@ -1326,6 +1398,7 @@ INPUT=$(cat)
 PY="import sys,json; d=json.load(sys.stdin); print(d.get('tool_name') or d.get('tool') or 'unknown')"
 PYBIN=$(command -v python3 2>/dev/null || command -v python 2>/dev/null)
 TOOL=$(echo "$INPUT" | "$PYBIN" -c "$PY" 2>/dev/null)
+AGENT_MSG=""
 case "$TOOL" in
   tapps_*)
     SID=$(printf '%s' "$INPUT" | sed -n 's/.*"conversation_id"[[:space:]]*:[[:space:]]*"\\([^"]*\\)".*/\\1/p' | head -n1)
@@ -1339,11 +1412,16 @@ case "$TOOL" in
       mkdir -p "$SENTINEL_DIR" 2>/dev/null || true
       : > "$SENTINEL" 2>/dev/null || true
     elif [ ! -f "$SENTINEL" ]; then
-      echo "REMINDER: Call tapps_session_start() first for best results."
+      AGENT_MSG="REMINDER: Call tapps_session_start() first for best results."
     fi
     ;;
 esac
 echo "[TappsMCP] MCP tool invoked: $TOOL" >&2
+if [ -n "${AGENT_MSG:-}" ]; then
+  "$PYBIN" -c 'import json,sys; print(json.dumps({"permission":"allow","agent_message":sys.argv[1]}))' "$AGENT_MSG"
+else
+  printf '%s\\n' '{"permission":"allow"}'
+fi
 exit 0
 """,
     "tapps-after-edit.sh": """\
@@ -1395,11 +1473,19 @@ try {
 }
 if ($tool -match '^tapps_') {
     $sentinel = "$env:TEMP\\.tapps-session-started-$PID"
+    $agentMsg = $null
     if ($tool -eq 'tapps_session_start') {
         $null = New-Item -ItemType File -Path $sentinel -Force
     } elseif (-not (Test-Path $sentinel)) {
-        Write-Output "REMINDER: Call tapps_session_start() first for best results."
+        $agentMsg = "REMINDER: Call tapps_session_start() first for best results."
     }
+    if ($agentMsg) {
+        @{ permission = "allow"; agent_message = $agentMsg } | ConvertTo-Json -Compress
+    } else {
+        '{"permission":"allow"}'
+    }
+} else {
+    '{"permission":"allow"}'
 }
 Write-Host "[TappsMCP] MCP tool invoked: $tool" -ForegroundColor Cyan
 exit 0
@@ -1664,7 +1750,7 @@ def _memory_auto_recall_script_cursor(
     return f"""#!/usr/bin/env bash
 # TappsMCP Memory Auto-Recall (Cursor — Epic 65.4)
 # Injects relevant memories on sessionStart/preCompact. Graceful fallback: exit 0.
-INPUT=$(cat)
+{_mcp_zombie_cleanup_bash(reap_nlt_duplicates=True)}INPUT=$(cat)
 DEFAULT_QUERY="project context architecture"
 PYBIN=$(command -v python3 2>/dev/null || command -v python 2>/dev/null)
 PY="import sys,json
@@ -1837,13 +1923,19 @@ MEMORY_AUTO_RECALL_HOOKS_CONFIG_PS: dict[str, list[dict[str, Any]]] = {
     ],
 }
 
+CURSOR_MCP_ZOMBIE_CLEANUP_SCRIPT = "tapps-mcp-zombie-cleanup.sh"
+
 CURSOR_MEMORY_AUTO_RECALL_HOOKS_CONFIG: dict[str, list[dict[str, str]]] = {
-    "sessionStart": [{"command": ".cursor/hooks/tapps-memory-auto-recall.sh"}],
+    "sessionStart": [
+        {"command": ".cursor/hooks/tapps-mcp-zombie-cleanup.sh"},
+        {"command": ".cursor/hooks/tapps-memory-auto-recall.sh"},
+    ],
     "preCompact": [{"command": ".cursor/hooks/tapps-memory-auto-recall.sh"}],
 }
 
 CURSOR_MEMORY_AUTO_RECALL_HOOKS_CONFIG_PS: dict[str, list[dict[str, str]]] = {
     "sessionStart": [
+        {"command": PS1_PREFIX + ".cursor/hooks/tapps-mcp-zombie-cleanup.ps1"},
         {"command": PS1_PREFIX + ".cursor/hooks/tapps-memory-auto-recall.ps1"},
     ],
     "preCompact": [

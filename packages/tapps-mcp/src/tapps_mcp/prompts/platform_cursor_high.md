@@ -58,9 +58,11 @@ This returns RAG-backed expert guidance with confidence scores.
 
 ### Refactoring or Deleting Files (REQUIRED)
 
-You MUST call `tapps_impact_analysis(file_path)` before refactoring or deleting any file.
-This maps the blast radius via import graph analysis.
-Skipping this risks breaking downstream dependents.
+For **module/file** blast radius: `tapps_impact_analysis(file_path)` (import graph).
+For **function/method** refactors: `tapps_call_graph(symbol, query=callers|callees|chain|all)` or
+`tapps_impact_analysis` with `symbol` and `granularity="symbol"|"both"` (Epic 114 / ADR-0017).
+For **git-changed** batches: `tapps_diff_impact`; `tapps_validate_changed(include_impact=true)` adds `affected_tests`.
+Skipping this risks breaking downstream dependents and missing test coverage.
 
 ### Infrastructure Config Changes (REQUIRED)
 
@@ -103,6 +105,7 @@ Execute these stages IN ORDER for every code task:
 | `tapps_checklist` | No verification that process was followed |
 | `tapps_lookup_docs` | Hallucinated APIs and uninformed domain decisions |
 | `tapps_impact_analysis` | Refactoring breaks unknown dependents |
+| `tapps_call_graph` | Function refactors break unknown callers |
 | `tapps_dead_code` | Unused code accumulates, bloating the codebase |
 | `tapps_dependency_scan` | Vulnerable dependencies shipped to production |
 | `tapps_dependency_graph` | Circular imports cause runtime crashes |

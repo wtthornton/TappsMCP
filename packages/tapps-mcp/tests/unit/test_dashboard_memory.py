@@ -74,10 +74,14 @@ class TestDashboardMemoryMetrics:
         """Verify alert fires when memory capacity > 80%."""
         from tapps_brain.store import MemoryStore
 
-        store = MemoryStore(tmp_path / "mem_alert")
-        # Save enough entries to exceed 80% of a small max_memories
-        for i in range(45):
-            store.save(key=f"k{i}", value=f"v{i}")
+        # Skip real embeddings — 45 encode() calls flake under xdist torch contention.
+        def _no_embed(_self: MemoryStore, _key: str, _value: str, entry: object) -> object:
+            return entry
+
+        with patch.object(MemoryStore, "_embed_entry", _no_embed):
+            store = MemoryStore(tmp_path / "mem_alert")
+            for i in range(45):
+                store.save(key=f"k{i}", value=f"v{i}")
 
         gen = DashboardGenerator(metrics_dir, memory_store=store)
 

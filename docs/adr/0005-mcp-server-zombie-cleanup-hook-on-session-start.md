@@ -21,3 +21,10 @@ Claude Code spawns a fresh MCP server subprocess (one tapps-mcp + one docs-mcp) 
 **Negative:** A user with a deliberately-long single session (>2 hours) who opens a second Claude Code window will have their original MCP server killed at the second window's startup. Acceptable in practice: MCP servers are stateless across sessions.
 
 **Operational note:** The cleanup block is load-bearing — do not remove from the hook template.
+
+**NLT full-bundle extension (v3.12.32+):** Cursor `sessionStart` also runs
+`.cursor/hooks/tapps-mcp-zombie-cleanup.sh`, which kills every orphaned
+`serve --profile nlt-*` child before memory auto-recall. This addresses Reload
+Window churn when all six NLT servers are enabled (dev-repo escape hatch).
+`preCompact` only reaps duplicate PIDs per profile so active MCP connections
+stay alive during compaction.

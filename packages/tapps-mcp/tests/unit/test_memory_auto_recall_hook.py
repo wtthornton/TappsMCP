@@ -13,6 +13,7 @@ from tapps_mcp.pipeline.platform_hook_templates import (
     MEMORY_AUTO_RECALL_HOOKS_CONFIG,
     MEMORY_AUTO_RECALL_HOOKS_CONFIG_PS,
     _memory_auto_recall_script,
+    _memory_auto_recall_script_cursor,
     _memory_auto_recall_script_ps,
 )
 from tapps_mcp.pipeline.platform_hooks import generate_memory_auto_recall_hook
@@ -79,6 +80,47 @@ class TestMemoryAutoRecallHookTemplate:
         assert "sessionStart" in CURSOR_MEMORY_AUTO_RECALL_HOOKS_CONFIG
         assert "preCompact" in CURSOR_MEMORY_AUTO_RECALL_HOOKS_CONFIG
 
+    def test_cursor_script_reaps_venv_mcp_zombies(self) -> None:
+        script = _memory_auto_recall_script_cursor()
+        assert "VENV_PIDS" in script
+        assert r"\.venv\/bin\/(tapps-mcp|docsmcp|tapps-platform)" in script
+        assert "NLT_DUP_PIDS" in script
+        assert "ADR-0005" in script
+        assert "NLT_ALL_PIDS" not in script
+
+    def test_cursor_zombie_cleanup_standalone_reaps_all_nlt(self) -> None:
+        from tapps_mcp.pipeline.platform_hook_templates import (
+            _mcp_zombie_cleanup_standalone_script,
+        )
+
+        script = _mcp_zombie_cleanup_standalone_script()
+        assert "NLT_ALL_PIDS" in script
+        assert "serve --profile nlt-" in script
+        assert "exit 0" in script
+
+    def test_cursor_session_start_hooks_include_zombie_cleanup(self) -> None:
+        from tapps_mcp.pipeline.platform_hook_templates import (
+            CURSOR_MEMORY_AUTO_RECALL_HOOKS_CONFIG,
+        )
+
+        session_cmds = [
+            e["command"] for e in CURSOR_MEMORY_AUTO_RECALL_HOOKS_CONFIG["sessionStart"]
+        ]
+        assert session_cmds[0] == ".cursor/hooks/tapps-mcp-zombie-cleanup.sh"
+        assert ".cursor/hooks/tapps-memory-auto-recall.sh" in session_cmds
+
+    def test_ensure_cursor_session_start_order_puts_zombie_first(self) -> None:
+        from tapps_mcp.pipeline.platform_hooks import _ensure_cursor_session_start_order
+
+        hooks = {
+            "sessionStart": [
+                {"command": ".cursor/hooks/tapps-memory-auto-recall.sh"},
+                {"command": ".cursor/hooks/tapps-mcp-zombie-cleanup.sh"},
+            ]
+        }
+        assert _ensure_cursor_session_start_order(hooks) is True
+        assert hooks["sessionStart"][0]["command"] == ".cursor/hooks/tapps-mcp-zombie-cleanup.sh"
+
 
 # ---------------------------------------------------------------------------
 # generate_memory_auto_recall_hook() tests
@@ -122,10 +164,15 @@ class TestGenerateMemoryAutoRecallHook:
         )
         assert result["platform"] == "cursor"
         script_path = tmp_path / ".cursor" / "hooks" / "tapps-memory-auto-recall.sh"
+        zombie_path = tmp_path / ".cursor" / "hooks" / "tapps-mcp-zombie-cleanup.sh"
         assert script_path.exists()
+        assert zombie_path.exists()
         hooks = json.loads((tmp_path / ".cursor" / "hooks.json").read_text())
         assert "sessionStart" in hooks["hooks"]
         assert "preCompact" in hooks["hooks"]
+        session_cmds = [e["command"] for e in hooks["hooks"]["sessionStart"]]
+        assert ".cursor/hooks/tapps-mcp-zombie-cleanup.sh" in session_cmds
+        assert ".cursor/hooks/tapps-memory-auto-recall.sh" in session_cmds
 
     def test_custom_max_results_min_score_baked_in(self, tmp_path: Path) -> None:
         generate_memory_auto_recall_hook(

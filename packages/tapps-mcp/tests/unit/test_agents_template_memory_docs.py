@@ -139,3 +139,17 @@ class TestMemorySystemsSection:
         handoff_section = content.split("Cross-session handoff")[1].split("\n")[0]
         assert "tapps-handoff-session" in handoff_section
         assert "tapps-continue-session" in handoff_section
+
+    @pytest.mark.parametrize("platform", ["claude", "cursor"])
+    @pytest.mark.parametrize("level", ["high", "medium", "low"])
+    def test_platform_rules_document_call_graph(
+        self, platform: str, level: str
+    ) -> None:
+        """Platform rules must mention Epic 114 call-graph tools (ADR-0017)."""
+        content = load_platform_rules(platform=platform, engagement_level=level)
+        assert "tapps_call_graph" in content, (
+            f"platform_{platform}_{level}.md missing tapps_call_graph guidance"
+        )
+        assert "tapps_diff_impact" in content or "include_impact" in content, (
+            f"platform_{platform}_{level}.md missing diff-impact guidance"
+        )

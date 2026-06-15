@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [3.12.31] - 2026-06-15
+
+Patch: Epic 114 call-graph visibility in doctor and platform upgrade templates.
+
+### Added
+
+- **Doctor** — `check_call_graph_tools_profile` (nlt-build must expose `tapps_call_graph` + `tapps_diff_impact`; version floor 3.12.30) and `check_call_graph_index_cache` (informational cache status / stale fingerprint hint).
+
+### Changed
+
+- **Platform rules** — All `platform_*.md` templates (cursor + claude, high/medium/low) document `tapps_call_graph`, symbol `tapps_impact_analysis`, and `tapps_diff_impact` / `validate_changed(include_impact=true)` (ADR-0017). Refreshed via `tapps-mcp upgrade`.
+
 ## [3.12.30] - 2026-06-15
 
 Patch: Epic 114 function-level call graph — `tapps_call_graph`, `tapps_diff_impact`, symbol blast radius, and validate_changed affected tests.

@@ -15,6 +15,7 @@ import sys
 import pytest
 
 from tapps_mcp.pipeline.platform_generators import generate_claude_hooks
+from tapps_mcp.pipeline.platform_hook_templates import CLAUDE_HOOK_SCRIPTS
 
 
 class TestClaudeHooksScripts:
@@ -111,6 +112,12 @@ class TestClaudeHooksScripts:
         content = (tmp_path / ".claude" / "hooks" / "tapps-session-start.ps1").read_text()
         assert "REQUIRED" in content
         assert "tapps_session_start" in content
+
+    def test_session_start_reaps_all_nlt_profiles(self) -> None:
+        """Claude sessionStart should reap orphaned nlt-* MCP children (ADR-0005)."""
+        content = CLAUDE_HOOK_SCRIPTS["tapps-session-start.sh"]
+        assert "NLT_ALL_PIDS" in content
+        assert "serve --profile nlt-" in content
 
 
 class TestClaudeHooksConfig:

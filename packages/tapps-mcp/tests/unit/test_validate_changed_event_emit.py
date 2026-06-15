@@ -35,6 +35,7 @@ def _make_outcome(
         all_passed=all_passed,
         total_sec=total_sec,
         impact_data=None,
+        affected_tests_data=None,
         timeout_info=_TimedOutInfo(timed_out=False, files_remaining=[]),
     )
 

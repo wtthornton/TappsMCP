@@ -111,6 +111,9 @@ from tapps_mcp.pipeline.platform_hook_templates import (
     CURSOR_MEMORY_AUTO_RECALL_HOOKS_CONFIG_PS as _CURSOR_MEMORY_AUTO_RECALL_HOOKS_CONFIG_PS,
 )
 from tapps_mcp.pipeline.platform_hook_templates import (
+    _mcp_zombie_cleanup_standalone_script as _mcp_zombie_cleanup_standalone_script_fn,
+)
+from tapps_mcp.pipeline.platform_hook_templates import (
     _memory_auto_recall_script_cursor as _memory_auto_recall_script_cursor_fn,
 )
 from tapps_mcp.pipeline.platform_hook_templates import (
@@ -980,6 +983,67 @@ def _merge_claude_memory_hook_entries(
     return hooks_added
 
 
+def _merge_cursor_hook_command_entries(
+    existing_hooks: dict[str, list[dict[str, str]]],
+    hooks_config: dict[str, list[dict[str, str]]],
+) -> int:
+    """Append Tapps hook commands per event without duplicating command paths."""
+    hooks_added = 0
+    for event, entries in hooks_config.items():
+        if event not in existing_hooks:
+            existing_hooks[event] = list(entries)
+            hooks_added += len(entries)
+            continue
+        existing_cmds = {
+            entry.get("command", "")
+            for entry in existing_hooks[event]
+            if isinstance(entry, dict)
+        }
+        for entry in entries:
+            cmd = entry.get("command", "")
+            if cmd and cmd not in existing_cmds:
+                existing_hooks[event].append(entry)
+                existing_cmds.add(cmd)
+                hooks_added += 1
+    return hooks_added
+
+
+def _ensure_cursor_session_start_order(
+    existing_hooks: dict[str, list[dict[str, str]]],
+) -> bool:
+    """Put MCP zombie cleanup before memory auto-recall on Cursor sessionStart."""
+    entries = existing_hooks.get("sessionStart")
+    if not isinstance(entries, list) or not entries:
+        return False
+    zombie_cmd = ".cursor/hooks/tapps-mcp-zombie-cleanup.sh"
+    recall_cmd = ".cursor/hooks/tapps-memory-auto-recall.sh"
+    zombie_entry: dict[str, str] | None = None
+    recall_entry: dict[str, str] | None = None
+    others: list[dict[str, str]] = []
+    for entry in entries:
+        if not isinstance(entry, dict):
+            continue
+        cmd = entry.get("command", "")
+        if cmd == zombie_cmd:
+            zombie_entry = entry
+        elif cmd == recall_cmd:
+            recall_entry = entry
+        else:
+            others.append(entry)
+    if zombie_entry is None and recall_entry is None:
+        return False
+    ordered: list[dict[str, str]] = []
+    if zombie_entry is not None:
+        ordered.append(zombie_entry)
+    if recall_entry is not None:
+        ordered.append(recall_entry)
+    ordered.extend(others)
+    if ordered == entries:
+        return False
+    existing_hooks["sessionStart"] = ordered
+    return True
+
+
 def _generate_cursor_memory_auto_recall_hook(
     project_root: Path,
     *,
@@ -990,6 +1054,7 @@ def _generate_cursor_memory_auto_recall_hook(
     recall_keys: list[str],
 ) -> dict[str, Any]:
     """Write Cursor memory auto-recall script and merge hooks.json entries."""
+    zombie_script_name = "tapps-mcp-zombie-cleanup.ps1" if win else "tapps-mcp-zombie-cleanup.sh"
     if win:
         script_name = "tapps-memory-auto-recall.ps1"
         script_content = _memory_auto_recall_script_cursor_ps_fn(
@@ -998,6 +1063,7 @@ def _generate_cursor_memory_auto_recall_hook(
             min_prompt_length=min_prompt_length,
             recall_keys=recall_keys,
         )
+        zombie_script_content = "# TappsMCP MCP zombie cleanup (Windows stub — run upgrade on Windows)\nexit 0\n"
         hooks_config = _CURSOR_MEMORY_AUTO_RECALL_HOOKS_CONFIG_PS
     else:
         script_name = "tapps-memory-auto-recall.sh"
@@ -1007,23 +1073,24 @@ def _generate_cursor_memory_auto_recall_hook(
             min_prompt_length=min_prompt_length,
             recall_keys=recall_keys,
         )
+        zombie_script_content = _mcp_zombie_cleanup_standalone_script_fn()
         hooks_config = _CURSOR_MEMORY_AUTO_RECALL_HOOKS_CONFIG
 
     hooks_dir = project_root / ".cursor" / "hooks"
     hooks_dir.mkdir(parents=True, exist_ok=True)
+    zombie_script_path = hooks_dir / zombie_script_name
+    zombie_script_path.write_text(zombie_script_content, encoding="utf-8")
     script_path = hooks_dir / script_name
     script_path.write_text(script_content, encoding="utf-8")
     if not win:
+        zombie_script_path.chmod(zombie_script_path.stat().st_mode | stat.S_IXUSR | stat.S_IXGRP)
         script_path.chmod(script_path.stat().st_mode | stat.S_IXUSR | stat.S_IXGRP)
 
     hooks_file = project_root / ".cursor" / "hooks.json"
     config = _parse_cursor_hooks_file(hooks_file)
     existing_hooks = _normalize_cursor_hooks_raw(config)
-    hooks_added = 0
-    for event, entries in hooks_config.items():
-        if event not in existing_hooks:
-            existing_hooks[event] = list(entries)
-            hooks_added += 1
+    hooks_added = _merge_cursor_hook_command_entries(existing_hooks, hooks_config)
+    hooks_reordered = _ensure_cursor_session_start_order(existing_hooks)
 
     config["hooks"] = existing_hooks
     config["version"] = 1
@@ -1032,8 +1099,11 @@ def _generate_cursor_memory_auto_recall_hook(
 
     return {
         "script_created": script_name,
-        "hooks_action": "created" if hooks_added > 0 else "skipped",
+        "zombie_cleanup_script_created": zombie_script_name,
+        "scripts_refreshed": [zombie_script_name, script_name],
+        "hooks_action": "created" if hooks_added > 0 or hooks_reordered else "refreshed",
         "hooks_added": hooks_added,
+        "hooks_reordered": hooks_reordered,
         "platform": "cursor",
     }
 

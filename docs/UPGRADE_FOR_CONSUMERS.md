@@ -83,6 +83,8 @@ tapps-mcp upgrade --dry-run --json          # preview as JSON (pipe to jq for sc
 
 This updates AGENTS.md (smart merge), platform rules, the four `tapps-*` subagents, the `tapps-*` + `linear-issue` skills, `tapps-*` hook scripts, and `.claude/settings.json` permissions. **Files outside that managed set stay preserved** — consumer-authored agents, skills, or hooks with other names never change. The upgrade merges `settings.json` hook entries by matcher, so hand-wired hooks stay.
 
+**v3.12.31+:** `tapps-mcp upgrade` also refreshes platform rules with Epic 114 call-graph guidance (`tapps_call_graph`, symbol `tapps_impact_analysis`, `tapps_diff_impact`). Run `tapps-mcp doctor --quick` after upgrade — it reports **Call graph tools** (profile + version floor) and **Call graph index** (cache status).
+
 ### Reading the dry-run output
 
 `tapps-mcp upgrade --dry-run` (or `tapps_upgrade(dry_run=true)` from MCP) returns a top-level `dry_run_summary` you can read first to decide whether to proceed:

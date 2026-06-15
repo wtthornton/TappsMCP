@@ -230,6 +230,7 @@ class TestCursorMcpWrapper:
         assert "TAPPS_BRAIN_AUTH_TOKEN" in text
         assert "${TAPPS_BRAIN_AUTH_TOKEN}" in text  # placeholder treated as unset
         assert "set +u" in text  # .env may reference unset vars
+        assert ".local/bin" in text  # PATH export for GUI-launched Cursor
 
     def test_parse_cursor_wrapper_launch_extracts_exec_line(self, tmp_path: Path) -> None:
         wrapper = tmp_path / "tapps-mcp-serve.sh"
@@ -279,10 +280,14 @@ class TestMergeConfig:
     """Tests for merging tapps-mcp into existing configs."""
 
     def test_merge_into_empty(self):
-        result = _merge_config({}, "cursor")
+        with patch(
+            "tapps_mcp.distribution.setup_generator.shutil.which",
+            return_value="/bin/tapps-mcp",
+        ):
+            result = _merge_config({}, "cursor")
         assert "mcpServers" in result
         assert "tapps-mcp" in result["mcpServers"]
-        assert result["mcpServers"]["tapps-mcp"]["command"] == "tapps-mcp"
+        assert result["mcpServers"]["tapps-mcp"]["command"] == "/bin/tapps-mcp"
 
     def test_merge_preserves_existing_servers(self):
         existing = {
@@ -308,8 +313,12 @@ class TestMergeConfig:
                 "tapps-mcp": {"command": "old-command", "args": ["old"]},
             },
         }
-        result = _merge_config(existing, "cursor")
-        assert result["mcpServers"]["tapps-mcp"]["command"] == "tapps-mcp"
+        with patch(
+            "tapps_mcp.distribution.setup_generator.shutil.which",
+            return_value="/bin/tapps-mcp",
+        ):
+            result = _merge_config(existing, "cursor")
+        assert result["mcpServers"]["tapps-mcp"]["command"] == "/bin/tapps-mcp"
         assert result["mcpServers"]["tapps-mcp"]["args"] == ["serve"]
 
     def test_merge_vscode_uses_servers_key(self):
@@ -344,19 +353,29 @@ class TestGenerateConfig:
     def test_generates_vscode_config(self, tmp_path):
         project = tmp_path / "project"
         project.mkdir()
-        _generate_config("vscode", project)
+        with patch(
+            "tapps_mcp.distribution.setup_generator.shutil.which",
+            return_value="/bin/tapps-mcp",
+        ):
+            _generate_config("vscode", project)
         config_path = project / ".vscode" / "mcp.json"
         assert config_path.exists()
         data = json.loads(config_path.read_text(encoding="utf-8"))
-        assert data["servers"]["tapps-mcp"]["command"] == "tapps-mcp"
+        assert data["servers"]["tapps-mcp"]["command"] == "/bin/tapps-mcp"
 
     def test_generates_claude_code_config(self, tmp_path):
-        with patch("tapps_mcp.distribution.setup_generator.Path.home", return_value=tmp_path):
+        with (
+            patch("tapps_mcp.distribution.setup_generator.Path.home", return_value=tmp_path),
+            patch(
+                "tapps_mcp.distribution.setup_generator.shutil.which",
+                return_value="/bin/tapps-mcp",
+            ),
+        ):
             _generate_config("claude-code", tmp_path / "project", scope="user")
         config_path = tmp_path / ".claude.json"
         assert config_path.exists()
         data = json.loads(config_path.read_text(encoding="utf-8"))
-        assert data["mcpServers"]["tapps-mcp"]["command"] == "tapps-mcp"
+        assert data["mcpServers"]["tapps-mcp"]["command"] == "/bin/tapps-mcp"
 
     def test_creates_parent_directories(self, tmp_path):
         project = tmp_path / "deep" / "nested" / "project"
@@ -451,11 +470,15 @@ class TestGenerateConfig:
         """Project scope writes .mcp.json in project root."""
         project = tmp_path / "project"
         project.mkdir()
-        _generate_config("claude-code", project, scope="project")
+        with patch(
+            "tapps_mcp.distribution.setup_generator.shutil.which",
+            return_value="/bin/tapps-mcp",
+        ):
+            _generate_config("claude-code", project, scope="project")
         config_path = project / ".mcp.json"
         assert config_path.exists()
         data = json.loads(config_path.read_text(encoding="utf-8"))
-        assert data["mcpServers"]["tapps-mcp"]["command"] == "tapps-mcp"
+        assert data["mcpServers"]["tapps-mcp"]["command"] == "/bin/tapps-mcp"
 
     def test_claude_code_project_scope_merges_existing(self, tmp_path):
         """Project scope merges with existing .mcp.json."""
@@ -1594,7 +1617,7 @@ class TestEpic80ConsumerInit:
         data = json.loads((project / ".cursor" / "mcp.json").read_text(encoding="utf-8"))
         assert data["mcpServers"]["tapps-mcp"]["command"] == _cursor_wrapper_path(project)
         assert data["mcpServers"]["tapps-mcp"]["args"] == []
-        assert data["mcpServers"]["docs-mcp"]["command"] == "docsmcp"
+        assert data["mcpServers"]["docs-mcp"]["command"] == "/bin/docsmcp"
         assert data["mcpServers"]["docs-mcp"]["args"] == ["serve"]
 
     def test_should_include_docs_mcp_when_binary_on_path(self) -> None:
@@ -1636,7 +1659,7 @@ class TestEpic80ConsumerInit:
             _generate_config("cursor", project, force=True, upgrade_mode=True)
         data = json.loads((project / ".cursor" / "mcp.json").read_text(encoding="utf-8"))
         assert data["mcpServers"]["tapps-mcp"]["command"] == _cursor_wrapper_path(project)
-        assert data["mcpServers"]["docs-mcp"]["command"] == "docsmcp"
+        assert data["mcpServers"]["docs-mcp"]["command"] == "/bin/docsmcp"
 
 
 # ---------------------------------------------------------------------------

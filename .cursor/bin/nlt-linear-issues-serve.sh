@@ -5,6 +5,8 @@
 set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 cd "$ROOT"
+# Cursor GUI often omits ~/.local/bin (uv tool install shims) from PATH.
+export PATH="${HOME}/.local/bin:${PATH}"
 _operator_env="${HOME}/.tapps-operator.env"
 if [[ -f "$_operator_env" ]]; then
   set +u
@@ -31,4 +33,5 @@ fi
 if [[ -z "${TAPPS_MCP_CONTEXT7_API_KEY:-}" && -n "${CONTEXT7_API_KEY:-}" ]]; then
   export TAPPS_MCP_CONTEXT7_API_KEY="$CONTEXT7_API_KEY"
 fi
-exec tapps-platform serve --profile nlt-linear-issues "$@"
+echo "[TappsMCP] Launching MCP server: /home/wtthornton/.local/bin/tapps-platform serve --profile nlt-linear-issues" >&2
+exec /home/wtthornton/.local/bin/tapps-platform serve --profile nlt-linear-issues "$@"

@@ -71,7 +71,8 @@ class TestPlatformRules:
     # value-bearing content is being added — the caps exist to keep the
     # context-window cost visible, not to be silently bumped.
     _CLAUDE_RULES_TOKEN_BUDGET = 1400
-    _CURSOR_RULES_TOKEN_BUDGET = 1750
+    # Epic 114 / ADR-0017: call-graph tool lines in platform_cursor.md add ~45 tokens.
+    _CURSOR_RULES_TOKEN_BUDGET = 1800
 
     def test_claude_rules_under_token_budget(self):
         from tapps_mcp.prompts.prompt_loader import load_platform_rules

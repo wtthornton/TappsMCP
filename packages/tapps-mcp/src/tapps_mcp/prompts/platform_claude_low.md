@@ -40,7 +40,9 @@ Consider calling `tapps_lookup_docs(library, topic)` for domain-specific guidanc
 
 ### Refactoring or Deleting Files
 
-Consider calling `tapps_impact_analysis(file_path)` before refactoring or deleting to see dependents.
+Consider `tapps_impact_analysis(file_path)` for file-level dependents;
+`tapps_call_graph(symbol=...)` for function-level callers/callees;
+`tapps_diff_impact` or `tapps_validate_changed(include_impact=true)` for affected tests.
 
 ### Infrastructure Config Changes
 

@@ -18,15 +18,14 @@ import click
 
 from tapps_core.brain_bridge import BRAIN_PROFILE_FACADE, BRAIN_PROFILE_SERVER
 from tapps_core.common.logging import get_logger
-
 from tapps_mcp.distribution.nlt_mcp_config import (
+    _LEGACY_MCP_SERVER_IDS,
     NLT_SERVER_ORDER,
     NLT_SERVER_SPECS,
-    _LEGACY_MCP_SERVER_IDS,
     commented_servers_for_bundle,
     enabled_servers_for_bundle,
-    mcp_config_servers_for_bundle,
     list_nlt_server_ids_in_config,
+    mcp_config_servers_for_bundle,
     normalize_mcp_bundle,
 )
 
@@ -109,15 +108,17 @@ def _resolve_tapps_mcp_launch() -> tuple[str, list[str]]:
 
     Resolution order:
     1. PyInstaller frozen exe: ``sys.executable`` + ``["serve"]``.
-    2. ``tapps-mcp`` on PATH: ``"tapps-mcp"`` + ``["serve"]``.
+    2. ``tapps-mcp`` on PATH: absolute path + ``["serve"]`` (GUI MCP hosts
+       often omit ``~/.local/bin`` from PATH — wrappers also export it).
     3. Monorepo checkout: ``uv run --directory <monorepo-root> tapps-mcp serve``
        when the installed ``tapps_mcp`` package lives inside a monorepo layout.
     4. Fallback: ``uv run --directory <placeholder> tapps-mcp serve``.
     """
     if getattr(sys, "frozen", False):
         return sys.executable, ["serve"]
-    if shutil.which("tapps-mcp") is not None:
-        return "tapps-mcp", ["serve"]
+    resolved = shutil.which("tapps-mcp")
+    if resolved is not None:
+        return resolved, ["serve"]
     directory = _resolve_tapps_mcp_monorepo_root() or _TAPPS_MCP_UV_ROOT_PLACEHOLDER
     return (
         "uv",
@@ -133,8 +134,9 @@ def _resolve_tapps_mcp_launch() -> tuple[str, list[str]]:
 
 def _resolve_docsmcp_launch() -> tuple[str, list[str]]:
     """Return command + args to launch DocsMCP (``docsmcp serve``)."""
-    if shutil.which("docsmcp") is not None:
-        return "docsmcp", ["serve"]
+    resolved = shutil.which("docsmcp")
+    if resolved is not None:
+        return resolved, ["serve"]
     directory = _resolve_tapps_mcp_monorepo_root() or _TAPPS_MCP_UV_ROOT_PLACEHOLDER
     return (
         "uv",
@@ -378,6 +380,8 @@ def _render_cursor_mcp_wrapper_script(command: str, args: list[str]) -> str:
 set -euo pipefail
 ROOT="$(cd "$(dirname "${{BASH_SOURCE[0]}}")/../.." && pwd)"
 cd "$ROOT"
+# Cursor GUI often omits ~/.local/bin (uv tool install shims) from PATH.
+export PATH="${{HOME}}/.local/bin:${{PATH}}"
 _operator_env="${{HOME}}/{_OPERATOR_ENV_REL.name}"
 if [[ -f "$_operator_env" ]]; then
   set +u
@@ -404,6 +408,7 @@ fi
 if [[ -z "${{TAPPS_MCP_CONTEXT7_API_KEY:-}}" && -n "${{CONTEXT7_API_KEY:-}}" ]]; then
   export TAPPS_MCP_CONTEXT7_API_KEY="$CONTEXT7_API_KEY"
 fi
+echo "[TappsMCP] Launching MCP server: {launch}" >&2
 exec {launch} "$@"
 """
 
@@ -852,8 +857,9 @@ def _build_nlt_launch(
     if getattr(sys, "frozen", False):
         return sys.executable, serve_args
 
-    if shutil.which(serve_cmd) is not None:
-        return serve_cmd, serve_args
+    resolved = shutil.which(serve_cmd)
+    if resolved is not None:
+        return resolved, serve_args
 
     directory = _resolve_tapps_mcp_monorepo_root() or _TAPPS_MCP_UV_ROOT_PLACEHOLDER
     return (
@@ -2196,9 +2202,13 @@ def _format_upgrade_result(result: dict[str, Any], *, dry_run: bool = False) -> 
         components = platform.get("components", {})
         for key, value in components.items():
             if isinstance(value, dict):
-                created = value.get("scripts_created") or value.get("created") or []
+                created = value.get("scripts_created") or value.get("scripts_refreshed") or []
                 if created:
                     click.echo(click.style(f"  Generated {key}: {', '.join(created)}", fg="green"))
+                elif value.get("hooks_action") == "refreshed":
+                    refreshed = value.get("scripts_refreshed") or []
+                    label = ", ".join(refreshed) if refreshed else key
+                    click.echo(click.style(f"  Refreshed {key}: {label}", fg="green"))
                 else:
                     click.echo(f"  {key.capitalize()} already up to date (skipped)")
             elif isinstance(value, str):

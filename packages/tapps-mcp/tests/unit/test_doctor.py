@@ -26,6 +26,7 @@ from tapps_mcp.distribution.doctor import (
     check_claude_md,
     check_claude_settings,
     check_cursor_config,
+    check_cursor_mcp_zombie_cleanup,
     check_cursor_rules,
     check_hooks,
     check_json_config,
@@ -666,6 +667,62 @@ class TestCheckHooks:
         result = check_hooks(tmp_path)
         assert result.ok is False
         assert "session-start hook missing" in result.message
+
+    def test_cursor_zombie_cleanup_passes_when_wired(self, tmp_path):
+        """Cursor sessionStart with zombie cleanup before recall passes doctor."""
+        hooks_dir = tmp_path / ".cursor" / "hooks"
+        hooks_dir.mkdir(parents=True)
+        (hooks_dir / "tapps-before-mcp.sh").write_text("#!/bin/bash\n", encoding="utf-8")
+        (hooks_dir / "tapps-mcp-zombie-cleanup.sh").write_text("#!/bin/bash\n", encoding="utf-8")
+        (hooks_dir / "tapps-memory-auto-recall.sh").write_text("#!/bin/bash\n", encoding="utf-8")
+        (tmp_path / ".cursor" / "hooks.json").write_text(
+            json.dumps(
+                {
+                    "version": 1,
+                    "hooks": {
+                        "beforeMCPExecution": [{"command": ".cursor/hooks/tapps-before-mcp.sh"}],
+                        "sessionStart": [
+                            {"command": ".cursor/hooks/tapps-mcp-zombie-cleanup.sh"},
+                            {"command": ".cursor/hooks/tapps-memory-auto-recall.sh"},
+                        ],
+                    },
+                },
+                indent=2,
+            ),
+            encoding="utf-8",
+        )
+        with patch("tapps_mcp.distribution.doctor.sys.platform", "linux"):
+            hooks_result = check_hooks(tmp_path)
+            zombie_result = check_cursor_mcp_zombie_cleanup(tmp_path)
+        assert hooks_result.ok is True
+        assert "MCP zombie cleanup on sessionStart" in hooks_result.message
+        assert zombie_result.ok is True
+
+    def test_cursor_zombie_cleanup_fails_when_missing_script(self, tmp_path):
+        """Missing zombie cleanup script fails when memory auto-recall is wired."""
+        hooks_dir = tmp_path / ".cursor" / "hooks"
+        hooks_dir.mkdir(parents=True)
+        (hooks_dir / "tapps-before-mcp.sh").write_text("#!/bin/bash\n", encoding="utf-8")
+        (hooks_dir / "tapps-memory-auto-recall.sh").write_text("#!/bin/bash\n", encoding="utf-8")
+        (tmp_path / ".cursor" / "hooks.json").write_text(
+            json.dumps(
+                {
+                    "version": 1,
+                    "hooks": {
+                        "beforeMCPExecution": [{"command": ".cursor/hooks/tapps-before-mcp.sh"}],
+                        "sessionStart": [
+                            {"command": ".cursor/hooks/tapps-memory-auto-recall.sh"},
+                        ],
+                    },
+                },
+                indent=2,
+            ),
+            encoding="utf-8",
+        )
+        with patch("tapps_mcp.distribution.doctor.sys.platform", "linux"):
+            result = check_cursor_mcp_zombie_cleanup(tmp_path)
+        assert result.ok is False
+        assert "missing" in result.message.lower()
 
     def test_hooks_dir_exists_but_no_tapps_files(self, tmp_path):
         """Hooks directory exists but has no tapps-* files fails."""
@@ -2719,6 +2776,74 @@ class TestCheckBrainProfileGateVsDeferral:
         assert result.ok is True
         assert "deferred" in result.message
         assert "server default" in result.message
+
+
+# ---------------------------------------------------------------------------
+# Epic 114: call graph doctor checks
+# ---------------------------------------------------------------------------
+
+
+class TestCheckCallGraph:
+    """Call graph tools profile and index cache doctor rows."""
+
+    def _nlt_mcp_json(self, tmp_path: Path) -> None:
+        (tmp_path / ".mcp.json").write_text(
+            json.dumps(
+                {"mcpServers": {"nlt-build": {"command": "nlt-build-serve.sh", "args": []}}}
+            )
+        )
+
+    def test_tools_skipped_without_nlt_build(self, tmp_path: Path) -> None:
+        from tapps_mcp.distribution.doctor import check_call_graph_tools_profile
+
+        result = check_call_graph_tools_profile(tmp_path)
+        assert result.ok is True
+        assert "skipped" in result.message.lower()
+
+    def test_tools_pass_when_in_profile(self, tmp_path: Path) -> None:
+        from tapps_mcp.distribution.doctor import check_call_graph_tools_profile
+
+        self._nlt_mcp_json(tmp_path)
+        result = check_call_graph_tools_profile(tmp_path)
+        assert result.ok is True
+        assert "registered" in result.message
+
+    def test_tools_fail_when_stripped(self, tmp_path: Path) -> None:
+        from tapps_mcp.distribution.doctor import check_call_graph_tools_profile
+
+        self._nlt_mcp_json(tmp_path)
+        (tmp_path / ".tapps-mcp.yaml").write_text(
+            "disabled_tools:\n  - tapps_call_graph\n  - tapps_diff_impact\n"
+        )
+        result = check_call_graph_tools_profile(tmp_path)
+        assert result.ok is False
+        assert "tapps_call_graph" in result.message
+
+    def test_tools_fail_on_old_package_version(self, tmp_path: Path) -> None:
+        from tapps_mcp.distribution.doctor import check_call_graph_tools_profile
+
+        self._nlt_mcp_json(tmp_path)
+        with patch("tapps_mcp.__version__", "3.12.29"):
+            result = check_call_graph_tools_profile(tmp_path)
+        assert result.ok is False
+        assert "3.12.30" in result.message
+
+    def test_index_missing_is_ok(self, tmp_path: Path) -> None:
+        from tapps_mcp.distribution.doctor import check_call_graph_index_cache
+
+        result = check_call_graph_index_cache(tmp_path)
+        assert result.ok is True
+        assert "No cache yet" in result.message
+
+    def test_index_present_quick_mode(self, tmp_path: Path) -> None:
+        from tapps_mcp.distribution.doctor import check_call_graph_index_cache
+        from tapps_mcp.project.call_graph import build_call_graph_index
+
+        (tmp_path / "mod.py").write_text("def f():\n    pass\n")
+        build_call_graph_index(tmp_path, force_rebuild=True)
+        result = check_call_graph_index_cache(tmp_path, quick=True)
+        assert result.ok is True
+        assert "Cache present" in result.message
 
 
 class TestMcpOperatorSecrets:

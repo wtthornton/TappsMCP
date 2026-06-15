@@ -70,6 +70,26 @@ class TestCursorHooksScripts:
         assert "REMINDER" in content
         assert "tool_name" in content
         assert "conversation_id" in content
+        assert '"permission":"allow"' in content.replace(" ", "")
+
+    def test_before_mcp_emits_valid_json(self, tmp_path):
+        """before-mcp hook must return JSON for Cursor beforeMCPExecution."""
+        generate_cursor_hooks(tmp_path, force_windows=False)
+        script = tmp_path / ".cursor" / "hooks" / "tapps-before-mcp.sh"
+        script.chmod(script.stat().st_mode | 0o111)
+        import json
+        import subprocess
+
+        proc = subprocess.run(
+            [str(script)],
+            input='{"tool_name":"tapps_doctor"}',
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        assert proc.returncode == 0
+        payload = json.loads(proc.stdout.strip())
+        assert payload["permission"] == "allow"
 
     def test_after_edit_uses_file_path(self, tmp_path):
         """after-edit hook should read Cursor's file_path field."""

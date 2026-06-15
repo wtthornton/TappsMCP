@@ -87,7 +87,10 @@ Doctor prints **Memory pipeline (effective config)** — a read-only summary of 
 
 ```bash
 # Find old tapps-mcp processes
-ps aux | grep "tapps-mcp serve"
+ps aux | grep "serve --profile nlt-"
+
+# Kill all NLT MCP children before Reload Window (full-bundle dev repos)
+pkill -f 'serve --profile nlt-' 2>/dev/null || true
 
 # Kill a specific PID
 kill -9 <pid>
@@ -95,7 +98,10 @@ kill -9 <pid>
 # Kill all tapps-mcp processes (use with caution)
 pkill -f "tapps-mcp serve"
 pkill -f "docsmcp serve"
+pkill -f "tapps-platform serve"
 ```
+
+**Cursor sessionStart hook (v3.12.32+):** `.cursor/hooks/tapps-mcp-zombie-cleanup.sh` runs before memory auto-recall on every session start. It kills orphaned `serve --profile nlt-*` children left by prior Reload Window cycles so Cursor spawns a clean six-server fleet. `preCompact` only reaps duplicate PIDs per profile (never active singletons).
 
 If hook cleanup is not running, check:
 1. `.claude/hooks/tapps-session-start.sh` exists and is executable (`chmod +x`)
@@ -174,6 +180,44 @@ After that, `.cursor/hooks/` will contain `tapps-before-mcp.ps1` and `tapps-afte
 3. Run `tapps-mcp doctor --quick` — check NLT bundle and tool-budget rows.
 
 See [ADR-0016](adr/0016-needs-based-nlt-mcp-taxonomy.md) and [tutorial: NLT session modes](tutorials/04-nlt-mcp-session-modes.md).
+
+## Six NLT servers errored in Cursor (full bundle)
+
+**Problem:** After `Developer: Reload Window`, several NLT servers show **errored** or **Not connected** in Settings → MCP — commonly `nlt-setup`, `nlt-project-docs`, `nlt-release-ship`, and sometimes `nlt-linear-issues` / `nlt-build`. CLI smoke tests of `.cursor/bin/nlt-*-serve.sh` still succeed.
+
+**Cause:** Cursor spawns all enabled stdio servers in parallel on reload. Orphan `serve --profile nlt-*` children from prior reloads compete for the same profiles; slow cold-starts (`tapps-platform`, `docsmcp` ~8s each) can fail the handshake. Once latched **errored**, Cursor does not auto-retry until you reload or toggle the server.
+
+**Fix (copy/paste recovery):**
+
+```bash
+# 1. Kill every orphaned NLT MCP child
+pkill -f 'serve --profile nlt-' 2>/dev/null || true
+sleep 2
+pgrep -af 'serve --profile nlt-' || echo "all clear"
+
+# 2. Cursor: Developer → Reload Window — wait 30–60s for cold starts
+
+# 3. Settings → MCP — toggle OFF → ON any server still red
+
+# 4. Per-server smoke test (one tool each)
+#    nlt-build: tapps_session_start
+#    nlt-memory: tapps_memory(action="health")
+#    nlt-setup: tapps_doctor(quick=true)
+#    nlt-linear-issues: tapps_linear_count
+#    nlt-project-docs: docs_session_start
+#    nlt-release-ship: tapps_release_update(version="…")
+```
+
+**Prevention:** Keep `tapps-mcp upgrade --host cursor` current so `sessionStart` runs `.cursor/hooks/tapps-mcp-zombie-cleanup.sh` before memory auto-recall. For daily coding in consumer repos, prefer the **developer** bundle (3 servers); this dev repo intentionally uses `--bundle full` (doctor NLT WARN is expected). See [FLEET-MAINTENANCE.md](operations/FLEET-MAINTENANCE.md).
+
+**After editing `packages/tapps-mcp` or `packages/docs-mcp`:**
+
+```bash
+uv tool install --reinstall --from packages/tapps-mcp tapps-mcp
+uv tool install --reinstall --from packages/docs-mcp docsmcp
+tapps-mcp init --host cursor --force --allow-package-init --no-uv --bundle full
+# Then Reload Window
+```
 
 ## Cursor agent transcripts and loop metrics {#cursor-vs-claude-transcript-parsing}
 

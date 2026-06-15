@@ -1847,6 +1847,62 @@ def check_claude_settings(project_root: Path) -> CheckResult:
     )
 
 
+def _check_cursor_mcp_zombie_cleanup(project_root: Path) -> CheckResult | None:
+    """Verify Cursor sessionStart runs MCP zombie cleanup before memory auto-recall."""
+    hooks_json = project_root / ".cursor" / "hooks.json"
+    if not hooks_json.exists():
+        return None
+    try:
+        data = json.loads(hooks_json.read_text(encoding="utf-8"))
+    except (json.JSONDecodeError, OSError):
+        return None
+    hooks_obj = data.get("hooks")
+    if not isinstance(hooks_obj, dict):
+        return None
+    session_entries = hooks_obj.get("sessionStart")
+    if not isinstance(session_entries, list) or not session_entries:
+        return None
+    recall_cmd = ".cursor/hooks/tapps-memory-auto-recall.sh"
+    zombie_cmd = ".cursor/hooks/tapps-mcp-zombie-cleanup.sh"
+    has_recall = any(
+        isinstance(e, dict) and e.get("command") == recall_cmd for e in session_entries
+    )
+    if not has_recall:
+        return None
+    zombie_path = project_root / ".cursor" / "hooks" / "tapps-mcp-zombie-cleanup.sh"
+    if not zombie_path.exists():
+        return CheckResult(
+            "MCP zombie cleanup hook",
+            False,
+            "sessionStart uses memory auto-recall but tapps-mcp-zombie-cleanup.sh is missing",
+            "Run: tapps-mcp upgrade --host cursor --force",
+        )
+    cmds = [
+        e.get("command", "")
+        for e in session_entries
+        if isinstance(e, dict)
+    ]
+    if zombie_cmd not in cmds:
+        return CheckResult(
+            "MCP zombie cleanup hook",
+            False,
+            "sessionStart missing tapps-mcp-zombie-cleanup.sh entry in .cursor/hooks.json",
+            "Run: tapps-mcp upgrade --host cursor --force",
+        )
+    if cmds.index(zombie_cmd) > cmds.index(recall_cmd):
+        return CheckResult(
+            "MCP zombie cleanup hook",
+            False,
+            "sessionStart order wrong: zombie cleanup must run before memory auto-recall",
+            "Run: tapps-mcp upgrade --host cursor --force",
+        )
+    return CheckResult(
+        "MCP zombie cleanup hook",
+        True,
+        "sessionStart runs zombie cleanup before memory auto-recall",
+    )
+
+
 def _check_cursor_hooks_config(
     project_root: Path,
     found: list[str],
@@ -1898,6 +1954,10 @@ def _check_cursor_hooks_config(
             f"TappsMCP hooks found for: {', '.join(found)} ({'; '.join(hook_warnings)})",
         )
 
+    zombie_result = _check_cursor_mcp_zombie_cleanup(project_root)
+    if zombie_result is not None and not zombie_result.ok:
+        return zombie_result
+
     # On Windows, .sh hook commands open in the editor instead of running
     if sys.platform == "win32":
         hooks_obj = data.get("hooks", {})
@@ -1917,6 +1977,18 @@ def _check_cursor_hooks_config(
                         "Run: tapps-mcp upgrade --host cursor (or uv run tapps-mcp upgrade --host cursor)",
                     )
     return None
+
+
+def check_cursor_mcp_zombie_cleanup(project_root: Path) -> CheckResult:
+    """Epic 109 / ADR-0005: Cursor sessionStart zombie cleanup before memory recall."""
+    result = _check_cursor_mcp_zombie_cleanup(project_root)
+    if result is not None:
+        return result
+    return CheckResult(
+        "MCP zombie cleanup hook",
+        True,
+        "Not applicable (memory auto-recall not wired on sessionStart)",
+    )
 
 
 def check_hooks(project_root: Path) -> CheckResult:
@@ -1962,16 +2034,19 @@ def check_hooks(project_root: Path) -> CheckResult:
             "Run: tapps-mcp upgrade --force (or upgrade --host cursor)",
         )
 
-    # Validate cursor hooks config if present
+    zombie_note = ""
     if "Cursor" in found:
         cursor_result = _check_cursor_hooks_config(project_root, found)
         if cursor_result is not None:
             return cursor_result
+        zombie_result = _check_cursor_mcp_zombie_cleanup(project_root)
+        if zombie_result is not None and zombie_result.ok:
+            zombie_note = "; MCP zombie cleanup on sessionStart"
 
     return CheckResult(
         "Hooks",
         True,
-        f"TappsMCP hooks found for: {', '.join(found)} (including session-start)",
+        f"TappsMCP hooks found for: {', '.join(found)} (including session-start){zombie_note}",
     )
 
 
@@ -3010,6 +3085,120 @@ def _detect_server_tool_count(server_name: str, server_cfg: dict[str, object]) -
             if profile in NLT_SERVER_EAGER_COUNTS:
                 return NLT_SERVER_EAGER_COUNTS[profile]
     return None
+
+
+_CALL_GRAPH_TOOLS: frozenset[str] = frozenset({"tapps_call_graph", "tapps_diff_impact"})
+_CALL_GRAPH_MIN_VERSION: str = "3.12.30"
+
+
+def _project_uses_nlt_build(servers: dict[str, dict[str, object]]) -> bool:
+    """True when MCP config enables nlt-build (or legacy nlt-code-quality)."""
+    if "nlt-build" in servers or "nlt-code-quality" in servers:
+        return True
+    for _name, cfg in servers.items():
+        raw_args = cfg.get("args", [])
+        args: list[str] = list(raw_args) if isinstance(raw_args, list) else []
+        if "--profile" in args:
+            idx = args.index("--profile")
+            if idx + 1 < len(args) and str(args[idx + 1]) in {"nlt-build", "nlt-code-quality"}:
+                return True
+        command = str(cfg.get("command", ""))
+        if "nlt-build-serve" in command or "nlt-code-quality-serve" in command:
+            return True
+    return False
+
+
+def check_call_graph_tools_profile(root: Path) -> CheckResult:
+    """Epic 114: WARN when call-graph MCP tools are stripped or package is too old."""
+    from packaging.version import Version
+
+    from tapps_core.config.settings import load_settings
+    from tapps_mcp import __version__
+    from tapps_mcp.server import _resolve_allowed_tools
+
+    servers = _collect_project_mcp_servers(root)
+    if not _project_uses_nlt_build(servers):
+        return CheckResult(
+            "Call graph tools",
+            True,
+            "No nlt-build MCP server configured (skipped)",
+        )
+
+    if Version(__version__) < Version(_CALL_GRAPH_MIN_VERSION):
+        return CheckResult(
+            "Call graph tools",
+            False,
+            (
+                f"tapps-mcp {__version__} < {_CALL_GRAPH_MIN_VERSION} — "
+                "call graph unavailable; reinstall globals and reload MCP"
+            ),
+            "uv tool install --reinstall --from <checkout>/packages/tapps-mcp tapps-mcp",
+        )
+
+    try:
+        settings = load_settings(project_root=root)
+    except Exception as exc:
+        return CheckResult(
+            "Call graph tools",
+            True,
+            f"Skipped (could not load settings: {exc})",
+        )
+
+    allowed = _resolve_allowed_tools(settings)
+    missing = _CALL_GRAPH_TOOLS - allowed
+    if missing:
+        return CheckResult(
+            "Call graph tools",
+            False,
+            f"Stripped from resolved tool profile: {', '.join(sorted(missing))}",
+            "Widen enabled_tools / tool_preset or remove from disabled_tools in .tapps-mcp.yaml",
+        )
+
+    return CheckResult(
+        "Call graph tools",
+        True,
+        "tapps_call_graph and tapps_diff_impact registered in resolved nlt-build profile",
+    )
+
+
+def check_call_graph_index_cache(root: Path, *, quick: bool = False) -> CheckResult:
+    """Epic 114: informational call-graph cache status (never fails on missing cache)."""
+    from tapps_mcp.project.call_graph_cache import index_fingerprint, load_call_graph_index
+    from tapps_mcp.project.call_graph_types import CALL_GRAPH_CACHE_REL
+
+    cache_path = root / CALL_GRAPH_CACHE_REL
+    if not cache_path.is_file():
+        return CheckResult(
+            "Call graph index",
+            True,
+            "No cache yet (normal until first tapps_call_graph or tapps_diff_impact call)",
+        )
+
+    cached = load_call_graph_index(root)
+    if cached is None:
+        return CheckResult(
+            "Call graph index",
+            True,
+            "Cache file unreadable — will rebuild on next graph tool call",
+            str(cache_path),
+        )
+
+    if not quick:
+        current_fp = index_fingerprint(root, None, "")
+        if cached.fingerprint != current_fp:
+            return CheckResult(
+                "Call graph index",
+                True,
+                "Cache stale (fingerprint mismatch); rebuild via tapps_call_graph(force_rebuild=true)",
+                str(cache_path),
+            )
+
+    return CheckResult(
+        "Call graph index",
+        True,
+        f"Cache present ({len(cached.symbols)} symbols, {len(cached.edges)} edges)",
+        str(cache_path),
+    )
 
 
 def _collect_project_mcp_servers(root: Path) -> dict[str, dict[str, object]]:
@@ -4051,6 +4240,8 @@ def _collect_checks(root: Path, *, quick: bool = False) -> list[CheckResult]:
     checks.append(check_vscode_config(root))
     checks.append(check_mcp_client_config(root))
     checks.append(check_mcp_tool_budget(root))
+    checks.append(check_call_graph_tools_profile(root))
+    checks.append(check_call_graph_index_cache(root, quick=quick))
     checks.append(check_nlt_partial_enablement(root))
     checks.append(check_mcp_config_unresolved_project_root(root))
     checks.append(check_brain_mcp_entry(root))
@@ -4082,6 +4273,7 @@ def _collect_checks(root: Path, *, quick: bool = False) -> list[CheckResult]:
     checks.append(check_claude_settings(root))
     checks.append(check_claude_hook_scripts(root))
     checks.append(check_hooks(root))
+    checks.append(check_cursor_mcp_zombie_cleanup(root))
     checks.append(check_stale_exe_backups())
     checks.append(check_tapps_brain())
     checks.append(check_brain_http_auth(root))

@@ -51,7 +51,9 @@ You should call `tapps_lookup_docs(library, topic)` when you need domain-specifi
 ### Refactoring or Deleting Files
 
 You should call `tapps_impact_analysis(file_path)` before refactoring or deleting any file.
-This maps the blast radius via import graph analysis.
+For **function/method** refactors use `tapps_call_graph(symbol=...)` or `tapps_impact_analysis` with
+`symbol` and `granularity="symbol"|"both"`. For changed files use `tapps_diff_impact` or
+`tapps_validate_changed(include_impact=true)` for ranked `affected_tests` (Epic 114 / ADR-0017).
 
 ### Infrastructure Config Changes
 

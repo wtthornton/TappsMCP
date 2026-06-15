@@ -12,6 +12,9 @@
     ],
     "sessionStart": [
       {
+        "command": ".cursor/hooks/tapps-mcp-zombie-cleanup.sh"
+      },
+      {
         "command": ".cursor/hooks/tapps-memory-auto-recall.sh"
       }
     ],
