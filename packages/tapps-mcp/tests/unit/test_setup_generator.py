@@ -662,13 +662,10 @@ class TestDeveloperBundleMcpConfig:
 
         data = _load_mcp_config_json(tmp_path / ".cursor" / "mcp.json")
         servers = data["mcpServers"]
-        assert set(servers.keys()) >= {
+        assert set(servers.keys()) == {
             "nlt-build",
             "nlt-memory",
             "nlt-linear-issues",
-            "nlt-setup",
-            "nlt-project-docs",
-            "nlt-release-ship",
         }
 
     def test_generate_mcp_json_minimal_build_only(self, tmp_path: Path) -> None:
@@ -688,8 +685,7 @@ class TestDeveloperBundleMcpConfig:
 
         data = _load_mcp_config_json(tmp_path / ".cursor" / "mcp.json")
         servers = data["mcpServers"]
-        assert len(servers) == 6
-        assert "nlt-build" in servers
+        assert set(servers.keys()) == {"nlt-build"}
 
 
 # ---------------------------------------------------------------------------
