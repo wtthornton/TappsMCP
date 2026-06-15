@@ -7,7 +7,7 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT"
 
 # Override with your fleet, e.g.:
-# export TAPPS_FLEET_ROOTS="$HOME/code/AgentForge,$HOME/code/NLTlabsPE,$HOME/code/ReportLab,$HOME/code/tapps-mcp"
+# export TAPPS_FLEET_ROOTS="$HOME/code/tapps-mcp,$HOME/code/AgentForge,$HOME/NewCompanyIdeas"
 : "${TAPPS_FLEET_ROOTS:=}"
 
 BUNDLE="${TAPPS_FLEET_BUNDLE:-developer}"

@@ -165,6 +165,7 @@
 - [Agent Teams Feature Gate Audit (TAP-2021)](features/agent-teams.md) — Audit of every `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS` gate in tapps-mcp. *(updated 2026-05-27)*
 - [Agent-facing Linear issues — conventions](linear/AGENT_ISSUES.md) — Durable policy for how Linear issues are written, labeled, and nested in the *(updated 2026-05-02)*
 - [Brain-central doc RAG — fleet cutover runbook](operations/brain-doc-rag-cutover-runbook.md) — Maintenance window (~30 minutes) for ADR-0014 big-bang cutover. *(updated 2026-06-14)*
+- [Fleet maintenance — multi-repo upgrade and audit](operations/FLEET-MAINTENANCE.md) — Upgrade tapps-mcp, AgentForge, and NewCompanyIdeas together; all six NLT MCP servers + audit-fleet. *(updated 2026-06-15)*
 ## Other
 
 - [Troubleshooting](TROUBLESHOOTING.md) — **Problem:** When the MCP host (Claude Code, Cursor, VS Code) restarts or reloads, the MCP server connection is lost.... *(updated 2026-06-15)*

@@ -189,13 +189,14 @@ When you maintain several TAPPS-bootstrapped projects (AgentForge, NLTlabsPE, Re
 
 ```bash
 export TAPPS_FLEET_ROOTS=\
+$HOME/code/tapps-mcp,\
 $HOME/code/AgentForge,\
-$HOME/code/NLTlabsPE,\
-$HOME/code/ReportLab,\
-$HOME/code/tapps-mcp
+$HOME/NewCompanyIdeas
 ```
 
-Omit `TAPPS_FLEET_ROOTS` to scan `~/code` for any directory containing `.tapps-mcp.yaml`.
+Add other bootstrapped repos as needed (`NLTlabsPE`, `ReportLab`, etc.). Omit `TAPPS_FLEET_ROOTS` to scan `~/code` for any directory containing `.tapps-mcp.yaml`.
+
+Maintainer runbook (upgrade + audit + Cursor reload): [operations/FLEET-MAINTENANCE.md](operations/FLEET-MAINTENANCE.md).
 
 ### Upgrade everything
 
@@ -228,17 +229,27 @@ tapps-mcp upgrade-fleet \
 
 ### Bundle choices
 
-| Bundle | Servers enabled |
-|--------|-----------------|
-| `developer` (default) | code-quality + platform-admin |
-| `planning` | + linear-issues |
-| `docs` | + project-docs |
-| `release` | + release-ship |
-| `full` | all five (power-user / maintainer repos) |
+| Bundle | Servers enabled in host MCP config |
+|--------|-------------------------------------|
+| `developer` (default) | `nlt-build`, `nlt-memory`, `nlt-linear-issues` |
+| `minimal` | `nlt-build` only |
+| `memory` | `nlt-build`, `nlt-memory` |
+| `planning` | `nlt-build`, `nlt-linear-issues` |
+| `docs` | `nlt-build`, `nlt-project-docs` |
+| `release` | `nlt-build`, `nlt-release-ship` |
+| `full` | all six NLT servers (power-user / maintainer repos) |
 
-After fleet upgrade, **reload MCP** in each IDE session.
+After fleet upgrade, **reload MCP** in each IDE session. With `--bundle full`, `tapps-mcp doctor` reports an **NLT partial enablement WARN** — that is expected when all six servers are active.
 
-**Note:** `NewCompanyIdeas` lives at `~/NewCompanyIdeas` (not under `~/code`) — include it in `--roots` when upgrading.
+### Fleet audit
+
+```bash
+uv run tapps-mcp audit-fleet --roots "$TAPPS_FLEET_ROOTS"
+```
+
+Emits JSON: per-project tool-call counts, gate pass rates, top skills, and handoff freshness (default window: 24h). Pair with `doctor --quick` per repo after upgrade.
+
+**Note:** `NewCompanyIdeas` lives at `~/NewCompanyIdeas` (not under `~/code`) — include it in `--roots` when upgrading. Custom MCP servers (e.g. `agentforge` on NewCompanyIdeas) are preserved.
 
 **Operator secrets:** create `~/.tapps-operator.env` once per machine (see [OPERATOR-SECRETS.md](operations/OPERATOR-SECRETS.md)). Fleet `init` regenerates serve wrappers that source it; optional `.envrc` snippet in each consumer repo helps CLI `doctor` match GUI MCP.
 
