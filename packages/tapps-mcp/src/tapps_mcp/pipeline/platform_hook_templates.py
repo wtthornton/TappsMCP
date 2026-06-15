@@ -29,16 +29,18 @@ def _mcp_zombie_cleanup_bash(
     NLT_DUP_PIDS=$(ps -eo pid,etimes,cmd 2>/dev/null | \\
         awk '/serve --profile nlt-/ {
             pid=$1; age=$2;
-            if (match($0, /serve --profile (nlt-[a-z-]+)/, m)) {
-                prof=m[1];
-                if (!(prof in keeper)) {
-                    keeper[prof]=pid; youngest[prof]=age; dups[prof]="";
-                } else if (age < youngest[prof]) {
-                    dups[prof]=dups[prof] " " keeper[prof];
-                    keeper[prof]=pid; youngest[prof]=age;
-                } else {
-                    dups[prof]=dups[prof] " " pid;
-                }
+            rest=$0;
+            sub(/^.*serve --profile /, "", rest);
+            sub(/ .*$/, "", rest);
+            prof=rest;
+            if (prof == "") next;
+            if (!(prof in keeper)) {
+                keeper[prof]=pid; youngest[prof]=age; dups[prof]="";
+            } else if (age < youngest[prof]) {
+                dups[prof]=dups[prof] " " keeper[prof];
+                keeper[prof]=pid; youngest[prof]=age;
+            } else {
+                dups[prof]=dups[prof] " " pid;
             }
         }
         END {
@@ -46,7 +48,7 @@ def _mcp_zombie_cleanup_bash(
                 gsub(/^ /, "", dups[p]);
                 if (dups[p] != "") print dups[p];
             }
-        }')"""
+        }') || NLT_DUP_PIDS="""
     nlt_stale_block = ""
     if reap_stale_nlt_profiles:
         nlt_stale_block = f"""

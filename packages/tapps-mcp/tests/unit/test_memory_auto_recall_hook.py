@@ -97,9 +97,20 @@ class TestMemoryAutoRecallHookTemplate:
         script = _mcp_zombie_cleanup_standalone_script()
         assert "NLT_STALE_PIDS" in script
         assert "NLT_ALL_PIDS" not in script
+        assert "match($0" not in script
         assert "$2 > 45" in script
         assert "serve --profile nlt-" in script
         assert "exit 0" in script
+
+    def test_cursor_zombie_cleanup_runs_under_mawk(self) -> None:
+        import subprocess
+
+        from tapps_mcp.pipeline.platform_hook_templates import (
+            _mcp_zombie_cleanup_standalone_script,
+        )
+
+        script = _mcp_zombie_cleanup_standalone_script()
+        subprocess.run(["bash", "-c", script], check=True, timeout=10)
 
     def test_cursor_session_start_hooks_include_zombie_cleanup(self) -> None:
         from tapps_mcp.pipeline.platform_hook_templates import (

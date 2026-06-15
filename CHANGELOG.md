@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [3.12.35] - 2026-06-15
+
+Patch: fix zombie cleanup hook on mawk (Ubuntu default awk).
+
+### Fixed
+
+- **Zombie cleanup awk** — duplicate-profile detection no longer uses gawk-only `match(..., arr)` syntax; sessionStart hook runs cleanly on mawk and no longer breaks MCP server startup.
+
 ## [3.12.34] - 2026-06-15
 
 Patch: fix Cursor MCP errors from sessionStart killing live nlt-* servers.
