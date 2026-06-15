@@ -116,7 +116,7 @@
 ## Getting Started
 
 - [TappsMCP checklist (`tapps_checklist`)](CHECKLIST.md) — The checklist tracks **which MCP tools were invoked** in the current **checklist session** and compares that to **tas... *(updated 2026-06-12)*
-- [GitHub Setup Guide](GITHUB_SETUP_GUIDE.md) — <!-- tapps-generated: v3.12.28 --> *(updated 2026-06-14)*
+- [GitHub Setup Guide](GITHUB_SETUP_GUIDE.md) — <!-- tapps-generated: v3.12.29 --> *(updated 2026-06-15)*
 - [3. No PyPI or npm publish — global install from local checkout](adr/0003-no-pypi-or-npm-publish-global-install-from-local-checkout.md) — Date: 2026-05-02 *(updated 2026-05-12)*
 - [Architecture Decision Records](adr/README.md) — Architectural decisions for tapps-mcp / tapps-core / docs-mcp / tapps-brain. Each ADR follows the MADR template (Cont... *(updated 2026-06-15)*
 - [Archived Documentation](archive/README.md) — This directory contains documentation that was archived on 2026-03-12 to reduce noise for LLMs and developers. These ... *(updated 2026-04-05)*

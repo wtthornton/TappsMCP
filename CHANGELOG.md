@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [3.12.29] - 2026-06-15
+
+Patch: EPIC-113 Cursor loop metrics, dev-repo dogfood, tier-1 docs refresh, and CI quality workflow.
+
 ### Added
 
 - **EPIC-113 / TAP-4017–4019** — Cursor `CallMcpTool` unwrapping in `loop_metrics` transcript parsing; project-scoped edit detection (excludes `/tmp` scratch paths); legacy unparsed Cursor rows excluded from `recurring_validation_skips` gap math; `compute_recent_edit_loop_stats` for last-10 edit-loop window in `usage.py`.
@@ -15,6 +19,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 
 - **Dev repo dogfood (EPIC-113)** — `.cursor/mcp.json` and `.mcp.json` trimmed to developer NLT bundle (`nlt-build`, `nlt-memory`, `nlt-linear-issues`); deprecated wrapper skills removed; `install_git_hooks: true`; `.cursor/rules/tapps-pipeline.mdc` mandates `/tapps-finish-task` before session end.
+- **Tier-1 docs refresh** — Architecture, INDEX cross-refs, memory tutorial, docs-mcp README, and README active-voice/style pass for v3.12.
 
 ### Fixed
 
