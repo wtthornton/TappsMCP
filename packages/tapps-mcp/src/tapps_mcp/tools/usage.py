@@ -251,6 +251,9 @@ def compute_gaps(
         project_root,
     )
     has_recent_edits = bool(edited_recent)
+    uncached_libs_in_edits = (
+        _lookup_gap_libraries(project_root, edited_recent) if has_recent_edits else []
+    )
     used_gate = any(matches_pipeline_tool(name, GATE_SHORT_NAMES) for name in called) or (
         _telemetry_used_gate(rows)
     )
@@ -283,7 +286,7 @@ def compute_gaps(
                 "Consider raising engagement to high so tapps-task-completed.sh blocks instead of warns."
             )
         lookup_ratio = float(recent_edits.get("lookup_docs_to_edit_ratio", 0.0))
-        if lookup_ratio < 0.2 and any(r.get("files_edited") for r in rows):
+        if lookup_ratio < 0.2 and uncached_libs_in_edits:
             gaps.append("lookup_docs_underused")
             recs.append(
                 "tapps_lookup_docs was rarely called before edits. Use it for "
@@ -293,7 +296,7 @@ def compute_gaps(
     used_lookup = _LOOKUP_TOOL in called or _telemetry_used_lookup(rows)
     libraries_without_lookup: list[str] = []
     if not used_lookup and has_recent_edits and "lookup_docs_underused" not in gaps:
-        libraries_without_lookup = _lookup_gap_libraries(project_root, edited_recent)
+        libraries_without_lookup = uncached_libs_in_edits
         py_edits = [p for p in edited_recent if str(p).endswith((".py", ".pyi"))]
         non_py_edits = [p for p in edited_recent if not str(p).endswith((".py", ".pyi"))]
         should_gap = bool(libraries_without_lookup) or bool(non_py_edits and not py_edits)

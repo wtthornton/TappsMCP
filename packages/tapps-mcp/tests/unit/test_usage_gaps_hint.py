@@ -13,6 +13,77 @@ from tapps_mcp.tools.usage import (
 )
 
 
+class TestLookupDocsUnderused:
+    def _write_edit_loops(
+        self,
+        metrics_dir: Path,
+        *,
+        rel_path: str,
+        loops: int,
+        lookup_docs_called: bool = False,
+    ) -> None:
+        now = int(time.time())
+        rows = []
+        for i in range(loops):
+            rows.append(
+                {
+                    "ts": now - i,
+                    "files_edited": [rel_path],
+                    "gate_skipped_files": [],
+                    "lookup_docs_called": lookup_docs_called,
+                    "checklist_called": True,
+                    "tools_used": ["tapps_validate_changed", "tapps_checklist"],
+                }
+            )
+        (metrics_dir / "loop-metrics.jsonl").write_text(
+            "\n".join(json.dumps(r) for r in rows) + "\n",
+            encoding="utf-8",
+        )
+
+    def test_suppressed_for_workspace_only_edits(self, tmp_path: Path) -> None:
+        """Internal monorepo edits should not trigger ratio-only lookup nagging."""
+        pkg = tmp_path / "packages" / "tapps-mcp" / "src" / "tapps_mcp"
+        pkg.mkdir(parents=True)
+        mod = pkg / "upgrade.py"
+        mod.write_text(
+            "from tapps_mcp.pipeline.platform_hooks import cleanup_legacy_hook_sidecars\n"
+            "import re\n",
+            encoding="utf-8",
+        )
+        (tmp_path / "pyproject.toml").write_text(
+            '[project]\nname = "tapps-mcp"\n\n[tool.uv.workspace]\nmembers = ["packages/*"]\n',
+            encoding="utf-8",
+        )
+        (tmp_path / "packages" / "tapps-mcp" / "pyproject.toml").write_text(
+            '[project]\nname = "tapps-mcp"\n',
+            encoding="utf-8",
+        )
+        metrics_dir = tmp_path / ".tapps-mcp"
+        metrics_dir.mkdir(parents=True)
+        rel = str(mod.relative_to(tmp_path))
+        self._write_edit_loops(metrics_dir, rel_path=rel, loops=4)
+        report = compute_gaps(
+            tmp_path,
+            called_tools={"tapps_session_start", "tapps_validate_changed", "tapps_checklist"},
+        )
+        assert "lookup_docs_underused" not in report["gaps"]
+
+    def test_fires_when_uncached_external_libs_and_low_ratio(self, tmp_path: Path) -> None:
+        src_dir = tmp_path / "src"
+        src_dir.mkdir()
+        mod = src_dir / "api.py"
+        mod.write_text("import fastapi\n", encoding="utf-8")
+        metrics_dir = tmp_path / ".tapps-mcp"
+        metrics_dir.mkdir(parents=True)
+        rel = str(mod.relative_to(tmp_path))
+        self._write_edit_loops(metrics_dir, rel_path=rel, loops=4)
+        report = compute_gaps(
+            tmp_path,
+            called_tools={"tapps_session_start", "tapps_validate_changed", "tapps_checklist"},
+        )
+        assert "lookup_docs_underused" in report["gaps"]
+
+
 class TestLibraryUsesWithoutLookupDocs:
     def test_lists_uncached_libraries_from_edited_files(self, tmp_path: Path) -> None:
         src_dir = tmp_path / "packages" / "app" / "src" / "app"

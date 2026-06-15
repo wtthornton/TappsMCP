@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [3.12.33] - 2026-06-15
+
+Patch: suppress false-positive `lookup_docs_underused` on internal-only edit sessions.
+
+### Changed
+
+- **`tapps_usage` / SessionStart gap hint** — `lookup_docs_underused` now requires uncached external libraries in recent edits, not just a low lookup-to-edit ratio. Workspace-only and cached-doc sessions no longer nag.
+
 ## [3.12.32] - 2026-06-15
 
 Patch: upgrade pipeline hardening after AgentForge dogfood — hook sidecars, stamp bump, mcp_bundle, and call-graph nudges.
