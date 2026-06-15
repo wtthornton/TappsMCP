@@ -22,10 +22,15 @@ Claude Code spawns a fresh MCP server subprocess (one tapps-mcp + one docs-mcp) 
 
 **Operational note:** The cleanup block is load-bearing — do not remove from the hook template.
 
-**NLT full-bundle extension (v3.12.32+):** Cursor `sessionStart` also runs
-`.cursor/hooks/tapps-mcp-zombie-cleanup.sh`, which kills stale (45s+) orphaned
-`serve --profile nlt-*` children and duplicate PIDs per profile before memory
-auto-recall. This addresses Reload Window churn when all six NLT servers are
-enabled (dev-repo escape hatch) without killing freshly spawned Cursor MCP
-servers. `preCompact` only reaps duplicate PIDs per profile so active MCP
-connections stay alive during compaction.
+**NLT full-bundle extension (v3.12.32+):** Cursor `sessionStart` runs
+`.cursor/hooks/tapps-mcp-zombie-cleanup.sh` before memory auto-recall.
+
+**Cursor multi-window (v3.12.36+):** With 2–5 Cursor windows on one host, each
+window spawns its own stdio MCP children. Profile-global duplicate/stale reaping
+(one ``nlt-build`` winner per machine) kills live servers in other windows.
+Cursor hooks therefore reap **orphans only** — ``serve`` processes whose parent
+PID is dead (Reload Window / crash). Claude Code hooks keep the original 2-hour
++ duplicate policy (single-window assumption per ADR consequences).
+
+`preCompact` uses the same orphan-only Cursor policy so compaction in one window
+does not disturb MCP servers in another.

@@ -16,12 +16,14 @@ def _mcp_zombie_cleanup_bash(
     reap_stale_nlt_profiles: bool = False,
     stale_nlt_min_age_seconds: int = 45,
 ) -> str:
-    """ADR-0005 bash block: reap stale MCP ``serve`` processes (shared by hooks).
+    """ADR-0005 bash block: reap stale MCP ``serve`` processes (Claude Code hooks).
 
-    * ``reap_nlt_duplicates`` — per ``nlt-*`` profile, kill older PIDs (safe on preCompact).
+    * ``reap_nlt_duplicates`` — per ``nlt-*`` profile, kill older PIDs.
     * ``reap_stale_nlt_profiles`` — kill ``serve --profile nlt-*`` children older than
-      ``stale_nlt_min_age_seconds`` (sessionStart only). Avoids killing freshly spawned
-      Cursor MCP servers while still reaping Reload Window orphans.
+      ``stale_nlt_min_age_seconds``.
+
+    **Cursor** uses :func:`_mcp_zombie_cleanup_cursor_bash` instead — duplicate/stale
+    reaping is unsafe with multiple Cursor windows on one host.
     """
     nlt_dup_block = ""
     if reap_nlt_duplicates:
@@ -80,13 +82,41 @@ fi
 """
 
 
+def _mcp_zombie_cleanup_cursor_bash() -> str:
+    """ADR-0005 Cursor variant: orphan-only reap (multi-window safe).
+
+    With 2–5 Cursor windows × six NLT stdio servers, profile-global duplicate/stale
+    reaping kills live MCP children in *other* windows. Only reap ``serve`` processes
+    whose parent PID is dead (Reload Window / crash orphans).
+    """
+    return """\
+# ADR-0005 (Cursor multi-window): reap MCP serve processes whose parent died only.
+# DO NOT add profile-global duplicate/stale reaping here — unsafe with N Cursor windows.
+# See docs/adr/0005-mcp-server-zombie-cleanup-hook-on-session-start.md
+if command -v ps &>/dev/null; then
+    ORPHAN_PIDS=$(ps -eo pid=,ppid=,cmd= 2>/dev/null | while read -r pid ppid cmd_rest; do
+        if printf '%s' "$cmd_rest" | grep -qE 'serve --profile nlt-|/(tapps-mcp|docsmcp|tapps-platform)( |$).*serve'; then
+            if [ "$ppid" = "1" ] || ! kill -0 "$ppid" 2>/dev/null; then
+                echo "$pid"
+            fi
+        fi
+    done | sort -u | grep -E '^[0-9]+$' || true)
+    if [ -n "$ORPHAN_PIDS" ]; then
+        echo "[TappsMCP] Reaping orphaned MCP serve PIDs: $ORPHAN_PIDS" >&2
+        echo "$ORPHAN_PIDS" | xargs kill 2>/dev/null || true
+    fi
+fi
+"""
+
+
 def _mcp_zombie_cleanup_standalone_script(*, reap_stale_nlt_profiles: bool = True) -> str:
-    """Cursor sessionStart hook: full MCP zombie cleanup before memory recall."""
+    """Cursor sessionStart hook: orphan-only MCP cleanup before memory recall."""
+    _ = reap_stale_nlt_profiles  # legacy param; Cursor never uses profile-global stale reap
     return f"""#!/usr/bin/env bash
 # TappsMCP MCP zombie cleanup (Cursor sessionStart — ADR-0005 extension)
-# Reaps orphaned nlt-* serve children after Reload Window so Cursor spawns a clean fleet.
+# Reaps orphaned nlt-* serve children (parent died). Safe with multiple Cursor windows.
 set -euo pipefail
-{_mcp_zombie_cleanup_bash(reap_nlt_duplicates=True, reap_stale_nlt_profiles=reap_stale_nlt_profiles)}
+{_mcp_zombie_cleanup_cursor_bash()}
 exit 0
 """
 
@@ -1755,7 +1785,7 @@ def _memory_auto_recall_script_cursor(
     return f"""#!/usr/bin/env bash
 # TappsMCP Memory Auto-Recall (Cursor — Epic 65.4)
 # Injects relevant memories on sessionStart/preCompact. Graceful fallback: exit 0.
-{_mcp_zombie_cleanup_bash(reap_nlt_duplicates=True)}INPUT=$(cat)
+{_mcp_zombie_cleanup_cursor_bash()}INPUT=$(cat)
 DEFAULT_QUERY="project context architecture"
 PYBIN=$(command -v python3 2>/dev/null || command -v python 2>/dev/null)
 PY="import sys,json

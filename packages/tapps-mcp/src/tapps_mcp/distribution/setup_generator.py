@@ -70,6 +70,23 @@ def operator_env_path() -> Path:
     return Path.home() / _OPERATOR_ENV_REL
 
 
+def _resolve_global_cli(command: str) -> str | None:
+    """Prefer ``uv tool install`` shims over venv PATH when both exist.
+
+    ``uv run tapps-mcp init`` prepends the project ``.venv/bin`` to PATH, so a
+    plain :func:`shutil.which` returns the workspace copy instead of the global
+    CLI consumers actually run from Cursor wrappers (``~/.local/bin``).
+    """
+    which_result = shutil.which(command)
+    shim = Path.home() / ".local" / "bin" / command
+    if which_result is not None:
+        which_path = Path(which_result)
+        if ".venv" in which_path.parts and shim.is_file():
+            return str(shim.resolve())
+        return which_result
+    return None
+
+
 def _resolve_tapps_mcp_monorepo_root() -> str | None:
     """Best-effort lookup of the tapps-mcp monorepo root on disk (Issue #79 sub).
 
@@ -116,7 +133,7 @@ def _resolve_tapps_mcp_launch() -> tuple[str, list[str]]:
     """
     if getattr(sys, "frozen", False):
         return sys.executable, ["serve"]
-    resolved = shutil.which("tapps-mcp")
+    resolved = _resolve_global_cli("tapps-mcp")
     if resolved is not None:
         return resolved, ["serve"]
     directory = _resolve_tapps_mcp_monorepo_root() or _TAPPS_MCP_UV_ROOT_PLACEHOLDER
@@ -134,7 +151,7 @@ def _resolve_tapps_mcp_launch() -> tuple[str, list[str]]:
 
 def _resolve_docsmcp_launch() -> tuple[str, list[str]]:
     """Return command + args to launch DocsMCP (``docsmcp serve``)."""
-    resolved = shutil.which("docsmcp")
+    resolved = _resolve_global_cli("docsmcp")
     if resolved is not None:
         return resolved, ["serve"]
     directory = _resolve_tapps_mcp_monorepo_root() or _TAPPS_MCP_UV_ROOT_PLACEHOLDER
@@ -264,7 +281,7 @@ def _should_use_uv_launch(
     if uv_mode == "off":
         return False, None, None
     # Global ``uv tool install`` CLIs take precedence over workspace uv run.
-    if uv_mode != "on" and shutil.which("tapps-mcp") is not None:
+    if uv_mode != "on" and _resolve_global_cli("tapps-mcp") is not None:
         return False, None, None
     ctx = _detect_uv_context(project_root)
     if uv_mode == "on":
@@ -370,6 +387,31 @@ def _parse_cursor_wrapper_launch(wrapper_path: Path) -> tuple[str, list[str]] | 
     return None
 
 
+def _nlt_profile_from_serve_args(args: list[str]) -> str | None:
+    """Return ``nlt-*`` profile name when *args* includes ``serve --profile``."""
+    for idx, arg in enumerate(args):
+        if arg == "--profile" and idx + 1 < len(args):
+            profile = args[idx + 1]
+            if profile.startswith("nlt-"):
+                return profile
+    return None
+
+
+def _render_profile_stale_reap_bash(profile: str, *, min_age_seconds: int = 45) -> str:
+    """Bash block: kill stale ``serve --profile`` orphans for one NLT profile (mawk-safe)."""
+    return f"""
+# ADR-0005: reap stale orphans for this profile before exec (Cursor fleet hardening).
+if command -v ps &>/dev/null && command -v awk &>/dev/null; then
+  _STALE_PIDS=$(ps -eo pid,etimes,cmd 2>/dev/null | \\
+    awk '$2 > {min_age_seconds} && /serve --profile {profile}/ {{print $1}}' || true)
+  if [[ -n "${{_STALE_PIDS:-}}" ]]; then
+    echo "[TappsMCP] Reaping stale serve PIDs for {profile}: $_STALE_PIDS" >&2
+    echo "$_STALE_PIDS" | xargs kill 2>/dev/null || true
+  fi
+fi
+"""
+
+
 def _render_cursor_mcp_wrapper_script(command: str, args: list[str]) -> str:
     """Shell script that sources operator + project env then execs tapps-mcp (TAP-3255)."""
     launch = " ".join([shlex.quote(command), *[shlex.quote(a) for a in args]])
@@ -467,7 +509,10 @@ def _apply_cursor_launch_wrapper(
     server_id: str = "tapps-mcp",
 ) -> None:
     """Point Cursor MCP entry at the env-sourcing wrapper script."""
-    command, args = _resolve_wrapper_launch(entry, project_root, uv_launch=uv_launch)
+    if server_id.startswith("nlt-"):
+        command, args = _build_nlt_launch(server_id, uv_launch)
+    else:
+        command, args = _resolve_wrapper_launch(entry, project_root, uv_launch=uv_launch)
     wrapper = _write_cursor_mcp_wrapper(
         project_root,
         uv_launch=(command, args),
@@ -857,7 +902,7 @@ def _build_nlt_launch(
     if getattr(sys, "frozen", False):
         return sys.executable, serve_args
 
-    resolved = shutil.which(serve_cmd)
+    resolved = _resolve_global_cli(serve_cmd)
     if resolved is not None:
         return resolved, serve_args
 

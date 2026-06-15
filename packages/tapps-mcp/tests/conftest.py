@@ -437,6 +437,23 @@ def _inject_in_memory_private_backend(monkeypatch: pytest.MonkeyPatch) -> Iterat
 
 
 @pytest.fixture(autouse=True)
+def _skip_real_memory_embeddings(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Skip BGE ``encode()`` in MemoryStore unit tests.
+
+    Real embedding calls flake under pytest-xdist torch/CPU contention and can
+    exceed the 60s timeout when auto-consolidation chains multiple saves.
+    """
+    from typing import Any
+
+    from tapps_brain.store import MemoryStore
+
+    def _no_embed(_self: MemoryStore, _key: str, _value: str, entry: Any) -> Any:
+        return entry
+
+    monkeypatch.setattr(MemoryStore, "_embed_entry", _no_embed)
+
+
+@pytest.fixture(autouse=True)
 def _reset_mcp_memory_mode() -> Generator[None, None, None]:
     """Reset tapps_memory slim/off routing before and after each test.
 

@@ -7,6 +7,7 @@ from pathlib import Path
 from unittest.mock import patch
 
 from tapps_mcp.distribution.nlt_mcp_config import (
+    bundle_matches_mcp_config,
     commented_servers_for_bundle,
     enabled_servers_for_bundle,
     mcp_config_servers_for_bundle,
@@ -57,6 +58,17 @@ class TestNltBundles:
     def test_release_bundle(self) -> None:
         enabled = enabled_servers_for_bundle("release")
         assert "nlt-release-ship" in enabled
+
+    def test_bundle_matches_mcp_config(self) -> None:
+        dev_servers = {
+            "nlt-build": {"command": "x"},
+            "nlt-memory": {"command": "x"},
+            "nlt-linear-issues": {"command": "x"},
+        }
+        full_servers = {sid: {"command": "x"} for sid in mcp_config_servers_for_bundle("full")}
+        assert bundle_matches_mcp_config(dev_servers, "developer") is True
+        assert bundle_matches_mcp_config(full_servers, "full") is True
+        assert bundle_matches_mcp_config(full_servers, "developer") is False
 
 
 class TestNltMcpJsonGeneration:

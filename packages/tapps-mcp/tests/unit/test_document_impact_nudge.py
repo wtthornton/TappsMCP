@@ -53,7 +53,7 @@ async def test_impact_analysis_adds_rebuild_nudge_for_layout_path(
         "tapps_mcp.server_analysis_tools.build_impact_memory_context",
         lambda *_a, **_k: {},
     )
-    monkeypatch.setattr("tapps_mcp.server_analysis_tools._with_nudges", lambda _t, r: r)
+    monkeypatch.setattr("tapps_mcp.server_analysis_tools._with_nudges", lambda *_a, **_k: _a[1])
     monkeypatch.setattr("tapps_mcp.server_analysis_tools._record_call", lambda *_a, **_k: None)
     monkeypatch.setattr("tapps_mcp.server_analysis_tools._record_execution", lambda *_a, **_k: None)
 
@@ -94,7 +94,7 @@ async def test_impact_analysis_no_rebuild_nudge_for_src_path(
         "tapps_mcp.server_analysis_tools.build_impact_memory_context",
         lambda *_a, **_k: {},
     )
-    monkeypatch.setattr("tapps_mcp.server_analysis_tools._with_nudges", lambda _t, r: r)
+    monkeypatch.setattr("tapps_mcp.server_analysis_tools._with_nudges", lambda *_a, **_k: _a[1])
     monkeypatch.setattr("tapps_mcp.server_analysis_tools._record_call", lambda *_a, **_k: None)
     monkeypatch.setattr("tapps_mcp.server_analysis_tools._record_execution", lambda *_a, **_k: None)
 

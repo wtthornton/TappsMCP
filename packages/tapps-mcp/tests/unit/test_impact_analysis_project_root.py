@@ -29,7 +29,7 @@ def _patch_helpers(monkeypatch: pytest.MonkeyPatch) -> None:
     """Patch recording and nudge helpers so tests don't need full server state."""
     monkeypatch.setattr("tapps_mcp.server_analysis_tools._record_call", lambda *_a, **_k: None)
     monkeypatch.setattr("tapps_mcp.server_analysis_tools._record_execution", lambda *_a, **_k: None)
-    monkeypatch.setattr("tapps_mcp.server_analysis_tools._with_nudges", lambda _t, r: r)
+    monkeypatch.setattr("tapps_mcp.server_analysis_tools._with_nudges", lambda *_a, **_k: _a[1])
     monkeypatch.setattr(
         "tapps_mcp.server_analysis_tools.build_impact_memory_context",
         lambda *_a, **_k: {"memory_context": [], "memory_context_enrichment": "skipped"},

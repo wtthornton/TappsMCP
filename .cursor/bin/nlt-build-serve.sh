@@ -33,5 +33,5 @@ fi
 if [[ -z "${TAPPS_MCP_CONTEXT7_API_KEY:-}" && -n "${CONTEXT7_API_KEY:-}" ]]; then
   export TAPPS_MCP_CONTEXT7_API_KEY="$CONTEXT7_API_KEY"
 fi
-echo "[TappsMCP] Launching MCP server: /home/wtthornton/.local/bin/tapps-mcp serve --profile nlt-build" >&2
-exec /home/wtthornton/.local/bin/tapps-mcp serve --profile nlt-build "$@"
+echo "[TappsMCP] Launching MCP server: /home/wtthornton/.local/share/uv/tools/tapps-mcp/bin/tapps-mcp serve --profile nlt-build" >&2
+exec /home/wtthornton/.local/share/uv/tools/tapps-mcp/bin/tapps-mcp serve --profile nlt-build "$@"

@@ -103,6 +103,14 @@ class TestHelpers:
         )
         assert _mcp_json_has_tapps_entry(tmp_path, "claude-code") is True
 
+    def test_mcp_json_has_tapps_entry_nlt_servers(self, tmp_path: Path) -> None:
+        (tmp_path / ".cursor" / "mcp.json").parent.mkdir(parents=True)
+        (tmp_path / ".cursor" / "mcp.json").write_text(
+            json.dumps({"mcpServers": {"nlt-build": {"command": "tapps-mcp", "args": ["serve"]}}}),
+            encoding="utf-8",
+        )
+        assert _mcp_json_has_tapps_entry(tmp_path, "cursor") is True
+
     def test_mcp_json_has_tapps_entry_corrupt(self, tmp_path: Path) -> None:
         (tmp_path / ".mcp.json").write_text("{not json", encoding="utf-8")
         assert _mcp_json_has_tapps_entry(tmp_path, "claude-code") is False
@@ -239,9 +247,12 @@ class TestMcpConsentGate:
         # "ok" (validator accepted it) or "regenerated" (validator rejected it);
         # either is fine as long as we did NOT hit the consent-skip branch.
         assert claude["components"]["mcp_config"] != "skipped (upgrade_skip_files)"
-        assert claude["components"]["mcp_config"] in ("ok", "regenerated") or (
-            isinstance(claude["components"]["mcp_config"], dict)
-            and "skipped" not in claude["components"]["mcp_config"]["action"]
+        mcp_result = claude["components"]["mcp_config"]
+        assert mcp_result in ("ok", "regenerated") or (
+            isinstance(mcp_result, str) and mcp_result.startswith("synced:")
+        ) or (
+            isinstance(mcp_result, dict)
+            and "skipped" not in mcp_result["action"]
         )
 
     def test_force_overrides_consent_gate(self, tmp_path: Path) -> None:

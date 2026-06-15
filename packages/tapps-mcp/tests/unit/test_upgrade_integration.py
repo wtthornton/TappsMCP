@@ -723,22 +723,69 @@ class TestUpgradeWorkspaceFolderSelfHeal:
 
         _setup_cursor_project(tmp_path)
         cursor_dir = tmp_path / ".cursor"
-        good = {
-            "mcpServers": {
-                "tapps-mcp": {
-                    "type": "stdio",
-                    "command": "tapps-mcp",
-                    "args": ["serve"],
-                    "env": {"TAPPS_MCP_PROJECT_ROOT": str(tmp_path.resolve())},
-                },
-            },
+        good_servers = {
+            sid: {
+                "type": "stdio",
+                "command": f".cursor/bin/{sid}-serve.sh",
+                "args": [],
+            }
+            for sid in ("nlt-build", "nlt-memory", "nlt-linear-issues")
         }
-        (cursor_dir / "mcp.json").write_text(json.dumps(good), encoding="utf-8")
+        (cursor_dir / "mcp.json").write_text(
+            json.dumps({"mcpServers": good_servers}),
+            encoding="utf-8",
+        )
+        (tmp_path / ".tapps-mcp.yaml").write_text("mcp_bundle: developer\n", encoding="utf-8")
 
         result = upgrade_pipeline(tmp_path, platform="cursor")
         platforms = result["components"]["platforms"]
         mcp_config = platforms[0]["components"]["mcp_config"]
         assert mcp_config == "ok"
+
+    def test_bundle_mismatch_syncs_mcp_config(self, tmp_path: Path) -> None:
+        """Changing mcp_bundle in settings rewrites enabled servers on upgrade."""
+        from unittest.mock import MagicMock, patch
+
+        from tapps_mcp.distribution.setup_generator import _load_mcp_config_json
+        from tapps_mcp.pipeline.upgrade import upgrade_pipeline
+
+        _setup_cursor_project(tmp_path)
+        full_servers = {
+            sid: {
+                "type": "stdio",
+                "command": f".cursor/bin/{sid}-serve.sh",
+                "args": [],
+            }
+            for sid in (
+                "nlt-build",
+                "nlt-memory",
+                "nlt-setup",
+                "nlt-linear-issues",
+                "nlt-project-docs",
+                "nlt-release-ship",
+            )
+        }
+        (tmp_path / ".cursor" / "mcp.json").write_text(
+            json.dumps({"mcpServers": full_servers}),
+            encoding="utf-8",
+        )
+        (tmp_path / ".tapps-mcp.yaml").write_text("mcp_bundle: developer\n", encoding="utf-8")
+
+        no_drift = MagicMock(drift_detected=False)
+        with patch("tapps_mcp.diagnostics.check_install_drift", return_value=no_drift):
+            result = upgrade_pipeline(tmp_path, platform="cursor")
+        mcp_config = result["components"]["platforms"][0]["components"]["mcp_config"]
+        assert "synced" in str(mcp_config)
+        assert "developer" in str(mcp_config)
+
+        raw = (tmp_path / ".cursor" / "mcp.json").read_text(encoding="utf-8")
+        assert '"nlt-build"' in raw
+        assert '"nlt-memory"' in raw
+        assert '"nlt-linear-issues"' in raw
+        assert "// Opt-in:" in raw
+        data = _load_mcp_config_json(tmp_path / ".cursor" / "mcp.json")
+        enabled = set(data["mcpServers"].keys())
+        assert enabled == {"nlt-build", "nlt-memory", "nlt-linear-issues"}
 
 
 # ---------------------------------------------------------------------------

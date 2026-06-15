@@ -288,9 +288,13 @@ def _mcp_json_has_tapps_entry(project_root: Path, host: str) -> bool:
         except (OSError, ValueError, json.JSONDecodeError):
             return False
         servers = data.get(_get_servers_key(h)) or {}
-        return isinstance(servers, dict) and (
-            "tapps-mcp" in servers or "nlt-code-quality" in servers
-        )
+        if not isinstance(servers, dict):
+            return False
+        if "tapps-mcp" in servers:
+            return True
+        from tapps_mcp.distribution.nlt_mcp_config import list_nlt_server_ids_in_config
+
+        return bool(list_nlt_server_ids_in_config(servers))
 
     return any(_has_entry(h) for h in _CONSENT_HOSTS)
 
@@ -477,7 +481,11 @@ def _upgrade_mcp_config(
     overlays the new (absolute) env values over the broken ones, so user
     customizations on other keys survive.
     """
-    from tapps_mcp.distribution.nlt_mcp_config import needs_legacy_nlt_migration
+    from tapps_mcp.distribution.nlt_mcp_config import (
+        bundle_matches_mcp_config,
+        needs_legacy_nlt_migration,
+        normalize_mcp_bundle,
+    )
     from tapps_mcp.distribution.setup_generator import (
         _build_uv_run_tapps_launch,
         _generate_config,
@@ -510,6 +518,10 @@ def _upgrade_mcp_config(
     raw_servers = existing.get(servers_key)
     servers_dict = raw_servers if isinstance(raw_servers, dict) else {}
     needs_nlt_migration = needs_legacy_nlt_migration(servers_dict)
+    normalized_bundle = normalize_mcp_bundle(mcp_bundle)
+    bundle_mismatch = already_opted_in and not bundle_matches_mcp_config(
+        servers_dict, normalized_bundle
+    )
     if needs_heal and already_opted_in:
         if dry_run:
             result["components"]["mcp_config"] = (
@@ -548,6 +560,25 @@ def _upgrade_mcp_config(
             )
             result["components"]["mcp_config"] = (
                 "migrated: legacy monolith → NLT plugin (nlt-code-quality + nlt-platform-admin)"
+            )
+    elif bundle_mismatch and already_opted_in:
+        if dry_run:
+            result["components"]["mcp_config"] = (
+                f"needs-bundle-sync: enabled servers != mcp_bundle={normalized_bundle!r}"
+            )
+        else:
+            _generate_config(
+                host,
+                project_root,
+                force=True,
+                upgrade_mode=True,
+                with_docs_mcp=include_docs_mcp,
+                uv_launch=uv_launch,
+                use_nlt_plugin=True,
+                mcp_bundle=mcp_bundle,
+            )
+            result["components"]["mcp_config"] = (
+                f"synced: rewrote MCP config for mcp_bundle={normalized_bundle!r}"
             )
     elif error is None:
         result["components"]["mcp_config"] = "ok"

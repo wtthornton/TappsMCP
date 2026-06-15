@@ -27,6 +27,7 @@ from tapps_mcp.distribution.setup_generator import (
     _merge_config,
     _parse_cursor_wrapper_launch,
     _render_cursor_mcp_wrapper_script,
+    _nlt_profile_from_serve_args,
     _should_include_docs_mcp,
     _should_use_uv_launch,
     _value_is_plaintext_secret,
@@ -231,6 +232,54 @@ class TestCursorMcpWrapper:
         assert "${TAPPS_BRAIN_AUTH_TOKEN}" in text  # placeholder treated as unset
         assert "set +u" in text  # .env may reference unset vars
         assert ".local/bin" in text  # PATH export for GUI-launched Cursor
+
+    def test_nlt_profile_from_serve_args(self) -> None:
+        assert _nlt_profile_from_serve_args(["serve", "--profile", "nlt-build"]) == "nlt-build"
+        assert _nlt_profile_from_serve_args(["serve"]) is None
+
+    def test_cursor_wrapper_reaps_stale_profile_before_exec(self) -> None:
+        """Wrappers do not profile-global reap (unsafe with multiple Cursor windows)."""
+        script = _render_cursor_mcp_wrapper_script(
+            "/home/user/.local/bin/tapps-mcp",
+            ["serve", "--profile", "nlt-build"],
+        )
+        assert "serve --profile nlt-build" in script
+        assert "Reaping stale serve PIDs" not in script
+
+    def test_cursor_wrapper_without_nlt_profile_skips_reap(self) -> None:
+        script = _render_cursor_mcp_wrapper_script(
+            "uv",
+            ["run", "--extra", "mcp", "--no-sync", "tapps-mcp", "serve"],
+        )
+        assert "Reaping stale serve PIDs" not in script
+
+    def test_nlt_wrapper_regenerates_global_launch_not_stale_venv(self, tmp_path: Path, monkeypatch) -> None:
+        """Re-init must not recycle a stale .venv path embedded in an old NLT wrapper."""
+        from tapps_mcp.distribution.setup_generator import (
+            _apply_cursor_launch_wrapper,
+            _parse_cursor_wrapper_launch,
+        )
+
+        project = tmp_path / "proj"
+        (project / ".cursor" / "bin").mkdir(parents=True)
+        stale = project / ".cursor" / "bin" / "nlt-build-serve.sh"
+        stale.write_text(
+            _render_cursor_mcp_wrapper_script(
+                str(project / ".venv" / "bin" / "tapps-mcp"),
+                ["serve", "--profile", "nlt-build"],
+            ),
+            encoding="utf-8",
+        )
+        monkeypatch.setattr(
+            "tapps_mcp.distribution.setup_generator.shutil.which",
+            lambda name: "/home/user/.local/bin/tapps-mcp" if name == "tapps-mcp" else None,
+        )
+        entry: dict[str, object] = {"command": str(stale), "args": []}
+        _apply_cursor_launch_wrapper(entry, project, server_id="nlt-build")
+        parsed = _parse_cursor_wrapper_launch(stale)
+        assert parsed is not None
+        assert parsed[0] == "/home/user/.local/bin/tapps-mcp"
+        assert ".venv" not in parsed[0]
 
     def test_parse_cursor_wrapper_launch_extracts_exec_line(self, tmp_path: Path) -> None:
         wrapper = tmp_path / "tapps-mcp-serve.sh"

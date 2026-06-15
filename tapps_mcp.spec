@@ -233,6 +233,7 @@ a = Analysis(
         "tapps_mcp.pipeline.handoff",
         "tapps_mcp.pipeline.init",
         "tapps_mcp.pipeline.upgrade",
+        "tapps_mcp.pipeline.version_stamps",
         "tapps_mcp.pipeline.agents_md",
         "tapps_mcp.pipeline.claude_md",
         "tapps_mcp.pipeline.karpathy_block",

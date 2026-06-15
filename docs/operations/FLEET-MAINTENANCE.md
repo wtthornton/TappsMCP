@@ -41,7 +41,9 @@ $HOME/NewCompanyIdeas
 | Bundle | Enabled in `.cursor/mcp.json` | When |
 |--------|-------------------------------|------|
 | `developer` (default) | 3 — build, memory, linear-issues | Daily coding; doctor NLT **PASS** |
-| `full` | All 6 | Maintainer / power-user; doctor NLT **WARN** (expected) |
+| `full` | All 6 | Maintainer fleet upgrade / power-user; doctor NLT **WARN** if >3 enabled |
+
+The **tapps-mcp dev repo** uses `mcp_bundle: developer` in `.tapps-mcp.yaml` for stable Cursor MCP. Run `TAPPS_FLEET_BUNDLE=full ./scripts/fleet-upgrade.sh` when you need all six servers across the maintainer fleet.
 
 Custom non-NLT entries (e.g. NewCompanyIdeas `agentforge`) are **preserved** during `init` / fleet upgrade.
 
@@ -81,7 +83,7 @@ done
 
 | Project | MCP (Cursor) | Doctor notes |
 |---------|--------------|--------------|
-| tapps-mcp | 6 NLT | WARN: all six enabled (acceptable for dev repo) |
+| tapps-mcp | 3 NLT (developer) | PASS: build + memory + linear-issues |
 | AgentForge | 6 NLT | Same WARN; AGENTS/CLAUDE stamps **3.12.28** until manually bumped (`upgrade_skip_files`) |
 | NewCompanyIdeas | 6 NLT + agentforge | Same WARN; stamps at 3.12.29 |
 

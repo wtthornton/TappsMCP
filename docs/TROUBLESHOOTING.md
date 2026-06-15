@@ -185,15 +185,17 @@ See [ADR-0016](adr/0016-needs-based-nlt-mcp-taxonomy.md) and [tutorial: NLT sess
 
 **Problem:** After `Developer: Reload Window`, several NLT servers show **errored** or **Not connected** in Settings → MCP — commonly `nlt-setup`, `nlt-project-docs`, `nlt-release-ship`, and sometimes `nlt-linear-issues` / `nlt-build`. CLI smoke tests of `.cursor/bin/nlt-*-serve.sh` still succeed.
 
-**Cause:** Cursor spawns all enabled stdio servers in parallel on reload. Orphan `serve --profile nlt-*` children from prior reloads compete for the same profiles; slow cold-starts (`tapps-platform`, `docsmcp` ~8s each) can fail the handshake. Once latched **errored**, Cursor does not auto-retry until you reload or toggle the server.
+**Cause:** Cursor spawns all enabled stdio servers in parallel on reload. With **multiple Cursor windows** on one machine, each window owns its own six-server fleet — but older cleanup logic assumed **one global winner per profile** and killed live servers in other windows (duplicate reap, 45s stale reap, blanket `.venv` kill). Reload/compaction in window A could break MCP in windows B–E.
 
 **Fix (copy/paste recovery):**
 
 ```bash
-# 1. Kill every orphaned NLT MCP child
-pkill -f 'serve --profile nlt-' 2>/dev/null || true
-sleep 2
-pgrep -af 'serve --profile nlt-' || echo "all clear"
+# 1. Kill only true orphans (parent dead) — safe across windows
+ps -eo pid=,ppid=,cmd= | while read -r pid ppid rest; do
+  case "$rest" in *serve*--profile*nlt-*|*tapps-mcp*serve*|*docsmcp*serve*)
+    [ "$ppid" = "1" ] || ! kill -0 "$ppid" 2>/dev/null && echo "$pid"
+  ;; esac
+done | xargs -r kill 2>/dev/null || true
 
 # 2. Cursor: Developer → Reload Window — wait 30–60s for cold starts
 
@@ -208,7 +210,18 @@ pgrep -af 'serve --profile nlt-' || echo "all clear"
 #    nlt-release-ship: tapps_release_update(version="…")
 ```
 
-**Prevention:** Keep `tapps-mcp upgrade --host cursor` current so `sessionStart` runs `.cursor/hooks/tapps-mcp-zombie-cleanup.sh` before memory auto-recall. For daily coding in consumer repos, prefer the **developer** bundle (3 servers); this dev repo intentionally uses `--bundle full` (doctor NLT WARN is expected). See [FLEET-MAINTENANCE.md](operations/FLEET-MAINTENANCE.md).
+**Multi-window policy (2–5 Cursor windows):**
+
+| Approach | Servers per box | When |
+|----------|-----------------|------|
+| **Orphan-only cleanup** (v3.12.36+ hooks) | 6 × N windows | Required — never profile-global `pkill` |
+| **`developer` bundle** | 3 × N windows | Daily coding across many windows/repos |
+| **`full` bundle** | 6 × N windows | Maintainer / power-user; expect ~30 processes with 5 windows |
+| **Host HTTP fleet** (future) | 6 total shared | Best for full bundle + many windows — see below |
+
+**Prevention:** Run `tapps-mcp upgrade --host cursor` so hooks use orphan-only reap (not duplicate/stale per profile). Avoid `pkill -f 'serve --profile nlt-'` during normal use — that kills every window's fleet.
+
+**Host-level shared fleet (roadmap):** Run six long-lived `tapps-mcp serve --transport http` processes once (systemd/user service) and point all Cursor windows at SSE URLs — one process set serves every window. Not yet the default stdio layout; track as fleet hardening follow-up.
 
 **After editing `packages/tapps-mcp` or `packages/docs-mcp`:**
 

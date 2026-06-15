@@ -82,9 +82,10 @@ class TestMemoryAutoRecallHookTemplate:
 
     def test_cursor_script_reaps_venv_mcp_zombies(self) -> None:
         script = _memory_auto_recall_script_cursor()
-        assert "VENV_PIDS" in script
-        assert r"\.venv\/bin\/(tapps-mcp|docsmcp|tapps-platform)" in script
-        assert "NLT_DUP_PIDS" in script
+        assert "ORPHAN_PIDS" in script
+        assert "Reaping orphaned MCP serve PIDs" in script
+        assert "VENV_PIDS" not in script
+        assert "NLT_DUP_PIDS" not in script
         assert "ADR-0005" in script
         assert "NLT_STALE_PIDS" not in script
         assert "NLT_ALL_PIDS" not in script
@@ -95,10 +96,12 @@ class TestMemoryAutoRecallHookTemplate:
         )
 
         script = _mcp_zombie_cleanup_standalone_script()
-        assert "NLT_STALE_PIDS" in script
+        assert "ORPHAN_PIDS" in script
+        assert "Reaping orphaned MCP serve PIDs" in script
+        assert "NLT_STALE_PIDS" not in script
+        assert "NLT_DUP_PIDS" not in script
         assert "NLT_ALL_PIDS" not in script
         assert "match($0" not in script
-        assert "$2 > 45" in script
         assert "serve --profile nlt-" in script
         assert "exit 0" in script
 

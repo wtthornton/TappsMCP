@@ -214,6 +214,15 @@ def list_nlt_server_ids_in_config(servers: dict[str, Any]) -> list[str]:
     return found
 
 
+def bundle_matches_mcp_config(servers: dict[str, Any], bundle: NltBundle) -> bool:
+    """Return True when enabled ``nlt-*`` servers match *bundle* (ADR-0016)."""
+    if not isinstance(servers, dict):
+        return False
+    enabled_on_disk = frozenset(list_nlt_server_ids_in_config(servers))
+    expected = frozenset(mcp_config_servers_for_bundle(bundle))
+    return enabled_on_disk == expected
+
+
 def needs_legacy_nlt_migration(servers: dict[str, Any]) -> bool:
     """Return True when legacy monolith entries exist but no ``nlt-*`` servers."""
     if not isinstance(servers, dict):

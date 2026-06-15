@@ -1,43 +1,20 @@
 #!/usr/bin/env bash
 # TappsMCP Memory Auto-Recall (Cursor — Epic 65.4)
 # Injects relevant memories on sessionStart/preCompact. Graceful fallback: exit 0.
-# ADR-0005: Kill stale MCP server processes to prevent zombie accumulation.
-# Also reap project-.venv launches (missing httpx/httpcore) that break nlt-memory.
-# DO NOT REMOVE — see docs/adr/0005-mcp-server-zombie-cleanup-hook-on-session-start.md
-if command -v ps &>/dev/null && command -v awk &>/dev/null; then
-    OLD_PIDS=$(ps -eo pid,etimes,cmd 2>/dev/null | \
-        awk '$2 > 7200 && /tapps-mcp|docsmcp|tapps-platform/ && /serve/ {print $1}')
-    VENV_PIDS=$(ps -eo pid,cmd 2>/dev/null | \
-        awk '/\.venv\/bin\/(tapps-mcp|docsmcp|tapps-platform)/ && /serve/ {print $1}')
-    NLT_DUP_PIDS=$(ps -eo pid,etimes,cmd 2>/dev/null | \
-        awk '/serve --profile nlt-/ {
-            pid=$1; age=$2;
-            if (match($0, /serve --profile (nlt-[a-z-]+)/, m)) {
-                prof=m[1];
-                if (!(prof in keeper)) {
-                    keeper[prof]=pid; youngest[prof]=age; dups[prof]="";
-                } else if (age < youngest[prof]) {
-                    dups[prof]=dups[prof] " " keeper[prof];
-                    keeper[prof]=pid; youngest[prof]=age;
-                } else {
-                    dups[prof]=dups[prof] " " pid;
-                }
-            }
-        }
-        END {
-            for (p in dups) {
-                gsub(/^ /, "", dups[p]);
-                if (dups[p] != "") print dups[p];
-            }
-        }')
-    ZOMBIE_PIDS=$({
-    echo "$OLD_PIDS"
-    echo "$VENV_PIDS"
-    echo "$NLT_DUP_PIDS"
-    } | sort -u | grep -E '^[0-9]+$' || true)
-    if [ -n "$ZOMBIE_PIDS" ]; then
-        echo "[TappsMCP] Reaping stale MCP serve PIDs: $ZOMBIE_PIDS" >&2
-        echo "$ZOMBIE_PIDS" | xargs kill 2>/dev/null || true
+# ADR-0005 (Cursor multi-window): reap MCP serve processes whose parent died only.
+# DO NOT add profile-global duplicate/stale reaping here — unsafe with N Cursor windows.
+# See docs/adr/0005-mcp-server-zombie-cleanup-hook-on-session-start.md
+if command -v ps &>/dev/null; then
+    ORPHAN_PIDS=$(ps -eo pid=,ppid=,cmd= 2>/dev/null | while read -r pid ppid cmd_rest; do
+        if printf '%s' "$cmd_rest" | grep -qE 'serve --profile nlt-|/(tapps-mcp|docsmcp|tapps-platform)( |$).*serve'; then
+            if [ "$ppid" = "1" ] || ! kill -0 "$ppid" 2>/dev/null; then
+                echo "$pid"
+            fi
+        fi
+    done | sort -u | grep -E '^[0-9]+$' || true)
+    if [ -n "$ORPHAN_PIDS" ]; then
+        echo "[TappsMCP] Reaping orphaned MCP serve PIDs: $ORPHAN_PIDS" >&2
+        echo "$ORPHAN_PIDS" | xargs kill 2>/dev/null || true
     fi
 fi
 INPUT=$(cat)
@@ -81,7 +58,7 @@ if [ -z "$TAPPS" ]; then
   exit 0
 fi
 OUT=$("$TAPPS" memory recall --query "$QUERY" --project-root "$PROJECT_DIR" \
-  --max-results 5 --min-score 0.3 2>/dev/null)
+  --max-results 5 --min-score 0.3 --recall-key tapps-mcp-nlt-bundle-preference --recall-key tapps-mcp-nlt-memory-httpcore-fix 2>/dev/null)
 if [ -n "$OUT" ]; then
   echo "$OUT"
 fi

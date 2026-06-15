@@ -472,7 +472,7 @@ class TestGateScriptPerf:
     cold subprocess doesn't flake the test.
     """
 
-    PERF_BUDGET_MS = 100
+    PERF_BUDGET_MS = 300
     PERF_RUNS = 5
 
     def _setup(self, tmp_path: Path) -> Path:

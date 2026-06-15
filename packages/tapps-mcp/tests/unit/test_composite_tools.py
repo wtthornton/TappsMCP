@@ -193,23 +193,21 @@ class TestTappsValidateChanged:
     """Tests for the tapps_validate_changed batch tool."""
 
     @pytest.mark.asyncio
-    @patch("tapps_mcp.server._validate_file_path")
-    @patch("tapps_mcp.server.load_settings")
+    @patch("tapps_mcp.server_pipeline_tools._discover_changed_files", return_value=[])
+    @patch("tapps_mcp.server_pipeline_tools.load_settings")
     async def test_no_files_returns_empty(
         self,
         mock_settings: MagicMock,
-        mock_validate: MagicMock,
+        _mock_discover: MagicMock,
+        tmp_path: Path,
     ) -> None:
         from tapps_mcp.server import tapps_validate_changed
 
-        mock_settings.return_value.project_root = Path("/fake")
+        mock_settings.return_value.project_root = tmp_path
         mock_settings.return_value.tool_timeout = 30
+        mock_settings.return_value.validate_changed.judges = []
 
-        with patch(
-            "tapps_mcp.tools.batch_validator.detect_changed_scorable_files",
-            return_value=[],
-        ):
-            result = await tapps_validate_changed()
+        result = await tapps_validate_changed()
 
         assert result["success"] is True
         assert result["data"]["files_validated"] == 0
@@ -217,7 +215,7 @@ class TestTappsValidateChanged:
 
     @pytest.mark.asyncio
     @patch("tapps_mcp.server._validate_file_path")
-    @patch("tapps_mcp.server.load_settings")
+    @patch("tapps_mcp.server_pipeline_tools.load_settings")
     async def test_explicit_file_paths(
         self,
         mock_settings: MagicMock,
