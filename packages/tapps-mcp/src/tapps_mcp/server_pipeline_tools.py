@@ -35,6 +35,7 @@ from mcp.types import ToolAnnotations
 
 from tapps_core.config.settings import load_settings
 from tapps_mcp.common.output_schemas import TappsSessionStartResponse
+from tapps_mcp.mcp_register import register_tool
 from tapps_mcp.server_helpers import (
     collect_session_hive_status,
     emit_ctx_info,
@@ -42,7 +43,6 @@ from tapps_mcp.server_helpers import (
     initial_session_hive_status,
     success_response,
 )
-from tapps_mcp.mcp_register import register_tool
 
 # ---------------------------------------------------------------------------
 # Re-exports from split modules (backward compatibility for tests)
@@ -145,6 +145,9 @@ from tapps_mcp.tools.validate_changed_output import (
     _build_validation_summary as _build_validation_summary,
 )
 from tapps_mcp.tools.validate_changed_output import (
+    _compute_affected_tests as _compute_affected_tests,
+)
+from tapps_mcp.tools.validate_changed_output import (
     _compute_impact_analysis as _compute_impact_analysis,
 )
 from tapps_mcp.tools.validate_changed_output import (
@@ -152,6 +155,9 @@ from tapps_mcp.tools.validate_changed_output import (
 )
 from tapps_mcp.tools.validate_changed_output import (
     _resolve_security_depth as _resolve_security_depth,
+)
+from tapps_mcp.tools.validate_changed_output import (
+    attach_affected_tests as attach_affected_tests,
 )
 
 if TYPE_CHECKING:
@@ -181,6 +187,7 @@ __all__ = [
     "_collect_memory_status",
     "_collect_results",
     "_compute_impact_analysis",
+    "_compute_affected_tests",
     "_current_docs_provider",
     "_decompose_task",
     "_discover_changed_files",
@@ -227,6 +234,7 @@ __all__ = [
     "tapps_set_engagement_level",
     "tapps_upgrade",
     "tapps_validate_changed",
+    "attach_affected_tests",
 ]
 
 _logger = structlog.get_logger(__name__)

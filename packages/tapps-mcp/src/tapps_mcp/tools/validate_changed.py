@@ -73,6 +73,7 @@ from tapps_mcp.tools.validate_changed_output import (
     _resolve_security_depth,
     _run_judges,
     apply_judge_payload,
+    attach_affected_tests,
 )
 from tapps_mcp.tools.validation_progress import (
     _PROGRESS_HEARTBEAT_INTERVAL,
@@ -210,6 +211,7 @@ class _BatchOutcome:
     all_passed: bool
     total_sec: int
     impact_data: dict[str, Any] | None
+    affected_tests_data: dict[str, Any] | None
     timeout_info: _TimedOutInfo
 
 
@@ -329,6 +331,11 @@ def _finalize_outcome(
         if bc.include_impact and bc.paths
         else None
     )
+    affected_tests_data = (
+        _host._compute_affected_tests(bc.paths, bc.settings.project_root)
+        if bc.include_impact and bc.paths
+        else None
+    )
 
     if not all_passed:
         _record_call("tapps_validate_changed", success=False)
@@ -340,6 +347,7 @@ def _finalize_outcome(
         all_passed=all_passed,
         total_sec=total_sec,
         impact_data=impact_data,
+        affected_tests_data=affected_tests_data,
         timeout_info=timeout_info,
     )
 
@@ -404,6 +412,7 @@ async def _assemble_response(
         summary,
         outcome.impact_data,
     )
+    attach_affected_tests(resp_data, outcome.affected_tests_data)
     _attach_optional_payload(
         resp_data,
         paths=bc.paths,

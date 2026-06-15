@@ -6,7 +6,109 @@ import json
 import time
 from pathlib import Path
 
-from tapps_mcp.tools.usage import compute_gaps, format_session_start_gap_hint
+from tapps_mcp.tools.usage import (
+    compute_gaps,
+    format_session_start_gap_hint,
+    format_stop_gap_followup,
+)
+
+
+class TestLibraryUsesWithoutLookupDocs:
+    def test_lists_uncached_libraries_from_edited_files(self, tmp_path: Path) -> None:
+        src_dir = tmp_path / "packages" / "app" / "src" / "app"
+        src_dir.mkdir(parents=True)
+        mod = src_dir / "service.py"
+        mod.write_text(
+            "import fastapi\nfrom pydantic import BaseModel\n",
+            encoding="utf-8",
+        )
+        metrics_dir = tmp_path / ".tapps-mcp"
+        metrics_dir.mkdir(parents=True)
+        rel = str(mod.relative_to(tmp_path))
+        (metrics_dir / "loop-metrics.jsonl").write_text(
+            json.dumps(
+                {
+                    "ts": int(time.time()),
+                    "files_edited": [rel],
+                    "gate_skipped_files": [],
+                    "lookup_docs_called": False,
+                    "checklist_called": True,
+                    "tools_used": ["tapps_validate_changed", "tapps_checklist"],
+                }
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+        report = compute_gaps(
+            tmp_path,
+            called_tools={"tapps_session_start", "tapps_validate_changed", "tapps_checklist"},
+        )
+        assert "library_uses_without_lookup_docs" in report["gaps"]
+        assert "fastapi" in report["libraries_without_lookup"]
+        assert "pydantic" in report["libraries_without_lookup"]
+        assert any("fastapi" in rec for rec in report["recommendations"])
+
+    def test_suppresses_gap_for_test_only_pytest_edits(self, tmp_path: Path) -> None:
+        tests_dir = tmp_path / "tests"
+        tests_dir.mkdir()
+        test_file = tests_dir / "test_foo.py"
+        test_file.write_text(
+            "import pytest\nfrom unittest.mock import AsyncMock\n",
+            encoding="utf-8",
+        )
+        metrics_dir = tmp_path / ".tapps-mcp"
+        metrics_dir.mkdir(parents=True)
+        rel = str(test_file.relative_to(tmp_path))
+        (metrics_dir / "loop-metrics.jsonl").write_text(
+            json.dumps(
+                {
+                    "ts": int(time.time()),
+                    "files_edited": [rel],
+                    "gate_skipped_files": [],
+                    "lookup_docs_called": False,
+                    "checklist_called": True,
+                    "tools_used": ["tapps_validate_changed", "tapps_checklist"],
+                }
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+        report = compute_gaps(
+            tmp_path,
+            called_tools={"tapps_session_start", "tapps_validate_changed", "tapps_checklist"},
+        )
+        assert "library_uses_without_lookup_docs" not in report["gaps"]
+
+    def test_stop_followup_names_libraries(self, tmp_path: Path) -> None:
+        src_dir = tmp_path / "src"
+        src_dir.mkdir()
+        mod = src_dir / "api.py"
+        mod.write_text("import httpx\n", encoding="utf-8")
+        metrics_dir = tmp_path / ".tapps-mcp"
+        metrics_dir.mkdir(parents=True)
+        rel = str(mod.relative_to(tmp_path))
+        (metrics_dir / "loop-metrics.jsonl").write_text(
+            json.dumps(
+                {
+                    "ts": int(time.time()),
+                    "files_edited": [rel],
+                    "gate_skipped_files": [],
+                    "lookup_docs_called": False,
+                    "checklist_called": True,
+                    "tools_used": ["tapps_validate_changed", "tapps_checklist"],
+                }
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+        followup = format_stop_gap_followup(
+            tmp_path,
+            called_tools={"tapps_validate_changed", "tapps_checklist"},
+            mode="warn",
+        )
+        assert followup is not None
+        assert "httpx" in followup
+        assert "library_uses_without_lookup_docs" in followup
 
 
 class TestComputeGapsScopedEdits:

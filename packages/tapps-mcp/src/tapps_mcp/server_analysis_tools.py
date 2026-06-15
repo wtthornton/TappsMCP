@@ -1,7 +1,8 @@
 """Analysis and inspection tool handlers for TappsMCP.
 
 Contains: tapps_report, tapps_dead_code, tapps_dependency_scan,
-tapps_dependency_graph, tapps_session_notes, tapps_impact_analysis.
+tapps_dependency_graph, tapps_session_notes, tapps_impact_analysis,
+tapps_call_graph, tapps_diff_impact.
 
 Functions are defined at module level (importable for tests) and
 registered on the ``mcp`` instance via :func:`register`.
@@ -307,7 +308,11 @@ async def tapps_session_notes(action: str, key: str = "", value: str = "") -> di
 
 
 async def tapps_impact_analysis(
-    file_path: str, change_type: str = "modified", project_root: str = ""
+    file_path: str,
+    change_type: str = "modified",
+    project_root: str = "",
+    symbol: str = "",
+    granularity: str = "module",
 ) -> dict[str, Any]:
     """Maps the blast radius of a file change: direct importers, transitive
     dependents, and overlapping test coverage, with a severity verdict
@@ -319,6 +324,9 @@ async def tapps_impact_analysis(
     full suite must run. Skip for new files (``change_type="added"``
     returns trivial), pure test files, and one-off scripts.
 
+    Pass ``symbol`` with ``granularity="symbol"`` or ``"both"`` for
+    function-level caller/callee blast radius (Epic 114 / ADR-0017).
+
     Args:
         file_path: Path to the file being changed. Must be inside the
             project root. Returns ``error.code=path_denied`` for
@@ -329,6 +337,9 @@ async def tapps_impact_analysis(
         project_root: Override the project root. Default is empty (use
             server-configured root). Set this when analyzing a sibling
             repo from a long-lived server.
+        symbol: Optional qualified or short function/method name for
+            symbol-level analysis via the call graph.
+        granularity: ``"module"`` (default), ``"symbol"``, or ``"both"``.
     """
     start = time.perf_counter_ns()
     _record_call("tapps_impact_analysis")
@@ -354,10 +365,15 @@ async def tapps_impact_analysis(
         except (ValueError, FileNotFoundError) as exc:
             return error_response("tapps_impact_analysis", "path_denied", str(exc))
 
-    from tapps_mcp.project.impact_analyzer import analyze_impact
+    from tapps_mcp.project.impact_analyzer import analyze_impact, analyze_symbol_impact
 
     report = analyze_impact(resolved, root, change_type)
     mem_ctx = build_impact_memory_context(resolved, root, settings)
+
+    symbol_granularity = granularity.strip().lower() or "module"
+    symbol_block: dict[str, object] | None = None
+    if symbol.strip() and symbol_granularity in {"symbol", "both"}:
+        symbol_block = analyze_symbol_impact(symbol.strip(), root)
 
     # TAP-2007: write procedural refactor-sequence memory on completion.
     from tapps_mcp.tools.procedural_patterns import fire_refactor_sequence
@@ -391,6 +407,15 @@ async def tapps_impact_analysis(
         "test_files": [t.model_dump() for t in report.test_files],
         "recommendations": recommendations,
     }
+    if symbol_block is not None:
+        data["symbol"] = symbol.strip()
+        data["granularity"] = symbol_granularity
+        data["symbol_impact"] = symbol_block
+        if symbol_block.get("recommendations"):
+            for rec in symbol_block["recommendations"]:
+                if isinstance(rec, str) and rec not in recommendations:
+                    recommendations.append(rec)
+        data["recommendations"] = recommendations
     data.update(mem_ctx)
 
     resp = success_response(
@@ -418,6 +443,136 @@ async def tapps_impact_analysis(
         logger.debug("structured_output_failed: tapps_impact_analysis", exc_info=True)
 
     return _with_nudges("tapps_impact_analysis", resp)
+
+
+# ---------------------------------------------------------------------------
+# tapps_call_graph (Epic 114 Tier B)
+# ---------------------------------------------------------------------------
+
+
+async def tapps_call_graph(
+    symbol: str,
+    query: str = "all",
+    project_root: str = "",
+    max_depth: int = 5,
+    token_budget: int = 4000,
+    force_rebuild: bool = False,
+) -> dict[str, Any]:
+    """Query function-level callers, callees, or call chains for one symbol.
+
+    Deterministic Python AST call graph (ADR-0017). Use before refactoring a
+    function to replace grep-based caller discovery.
+
+    Args:
+        symbol: Qualified or short function/method name.
+        query: ``callers``, ``callees``, ``chain``, or ``all`` (default).
+        project_root: Optional project root override.
+        max_depth: Max expansion depth for graph traversal.
+        token_budget: Approximate token cap for serialized graph payload.
+        force_rebuild: Rebuild ``.tapps-mcp/call-graph-index.json`` cache.
+    """
+    start = time.perf_counter_ns()
+    _record_call("tapps_call_graph")
+
+    settings = load_settings()
+    root_result = resolve_effective_project_root(settings.project_root, project_root)
+    if root_result.error_code:
+        return error_response(
+            "tapps_call_graph",
+            root_result.error_code,
+            root_result.error_message or "",
+        )
+    root = root_result.root
+
+    mode = query.strip().lower() or "all"
+    if mode not in {"callers", "callees", "chain", "all"}:
+        return error_response(
+            "tapps_call_graph",
+            "invalid_query",
+            "query must be callers, callees, chain, or all",
+        )
+
+    from tapps_mcp.project.call_graph import build_call_graph_index
+    from tapps_mcp.project.call_graph_queries import query_call_graph
+
+    index = build_call_graph_index(root, force_rebuild=force_rebuild)
+    result = query_call_graph(
+        index,
+        symbol,
+        mode=mode,  # type: ignore[arg-type]
+        max_depth=max(1, max_depth),
+        token_budget=max(256, token_budget),
+    )
+
+    elapsed_ms = (time.perf_counter_ns() - start) // 1_000_000
+    _record_execution("tapps_call_graph", start, symbol=symbol, query=mode)
+    resp = success_response("tapps_call_graph", elapsed_ms, result)
+    return _with_nudges("tapps_call_graph", resp)
+
+
+# ---------------------------------------------------------------------------
+# tapps_diff_impact (Epic 114 Tier C)
+# ---------------------------------------------------------------------------
+
+
+async def tapps_diff_impact(
+    file_paths: str,
+    project_root: str = "",
+    force_rebuild: bool = False,
+) -> dict[str, Any]:
+    """Rank affected tests for changed Python files using TESTS edges.
+
+    Combines TDAD-style test linkage, call-graph callers in tests, and
+    module-level import impact heuristics.
+
+    Args:
+        file_paths: Comma-separated paths to changed Python files.
+        project_root: Optional project root override.
+        force_rebuild: Rebuild call graph index before analysis.
+    """
+    start = time.perf_counter_ns()
+    _record_call("tapps_diff_impact")
+
+    settings = load_settings()
+    root_result = resolve_effective_project_root(settings.project_root, project_root)
+    if root_result.error_code:
+        return error_response(
+            "tapps_diff_impact",
+            root_result.error_code,
+            root_result.error_message or "",
+        )
+    root = root_result.root
+
+    raw_paths = [p.strip() for p in file_paths.split(",") if p.strip()]
+    if not raw_paths:
+        return error_response(
+            "tapps_diff_impact",
+            "missing_file_paths",
+            "file_paths is required (comma-separated)",
+        )
+
+    resolved: list[_Path] = []
+    for fp in raw_paths:
+        try:
+            if project_root:
+                resolved.append(validate_read_path_under_root(fp, root))
+            else:
+                resolved.append(_validate_file_path_lazy(fp))
+        except (ValueError, FileNotFoundError) as exc:
+            return error_response("tapps_diff_impact", "path_denied", str(exc))
+
+    if force_rebuild:
+        from tapps_mcp.project.call_graph import build_call_graph_index
+
+        build_call_graph_index(root, force_rebuild=True)
+
+    from tapps_mcp.project.diff_impact import analyze_diff_impact
+
+    data = analyze_diff_impact(resolved, root)
+    elapsed_ms = (time.perf_counter_ns() - start) // 1_000_000
+    _record_execution("tapps_diff_impact", start, file_count=len(resolved))
+    resp = success_response("tapps_diff_impact", elapsed_ms, data)
+    return _with_nudges("tapps_diff_impact", resp)
 
 
 # ---------------------------------------------------------------------------
@@ -1842,6 +1997,20 @@ def register(mcp_instance: FastMCP, allowed_tools: frozenset[str]) -> None:
             tapps_impact_analysis,
             annotations=_ANNOTATIONS_READ_ONLY,
             meta=_META_LARGE_OUTPUT_100K,
+        )
+    if "tapps_call_graph" in allowed_tools:
+        register_tool(
+            mcp_instance,
+            tapps_call_graph,
+            annotations=_ANNOTATIONS_READ_ONLY,
+            meta=_META_LARGE_OUTPUT_100K_D,
+        )
+    if "tapps_diff_impact" in allowed_tools:
+        register_tool(
+            mcp_instance,
+            tapps_diff_impact,
+            annotations=_ANNOTATIONS_READ_ONLY,
+            meta=_META_DEFERRED,
         )
     if "tapps_report" in allowed_tools:
         register_tool(

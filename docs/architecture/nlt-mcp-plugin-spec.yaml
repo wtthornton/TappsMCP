@@ -178,6 +178,8 @@ servers:
         - tapps_dependency_scan
         - tapps_report
         - tapps_audit_campaign
+        - tapps_call_graph
+        - tapps_diff_impact
 
   nlt-memory:
     display_name: "Memory"

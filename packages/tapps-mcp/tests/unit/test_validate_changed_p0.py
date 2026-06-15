@@ -180,6 +180,55 @@ class TestValidateChangedP0:
         mock_analyze.assert_called_once()
 
     @pytest.mark.asyncio
+    async def test_include_impact_returns_affected_tests(self, tmp_path: Path) -> None:
+        """include_impact=True should attach affected_tests from diff impact (TAP-4054)."""
+        from tapps_mcp.server_pipeline_tools import tapps_validate_changed
+
+        src = tmp_path / "app" / "core.py"
+        src.parent.mkdir(parents=True)
+        src.write_text("def compute():\n    return 42\n", encoding="utf-8")
+        test_file = tmp_path / "tests" / "test_core.py"
+        test_file.parent.mkdir(parents=True)
+        test_file.write_text(
+            "from app.core import compute\n\ndef test_compute():\n    assert compute() == 42\n",
+            encoding="utf-8",
+        )
+
+        scorer = _mock_scorer()
+        mock_gate = MagicMock(passed=True, failures=[])
+        mock_report = _mock_impact_report(str(src), severity="low")
+
+        with (
+            patch("tapps_mcp.server_pipeline_tools.load_settings") as mock_settings,
+            patch("tapps_mcp.server._validate_file_path", side_effect=Path),
+            patch("tapps_mcp.scoring.scorer.CodeScorer", return_value=scorer),
+            patch("tapps_mcp.gates.evaluator.evaluate_gate", return_value=mock_gate),
+            patch(
+                "tapps_mcp.project.impact_analyzer.build_import_graph",
+                return_value={},
+            ),
+            patch(
+                "tapps_mcp.project.impact_analyzer.analyze_impact",
+                return_value=mock_report,
+            ),
+        ):
+            mock_settings.return_value.project_root = tmp_path
+            mock_settings.return_value.tool_timeout = 30
+            mock_settings.return_value.dependency_scan_enabled = False
+
+            result = await tapps_validate_changed(
+                file_paths=str(src),
+                quick=True,
+                include_impact=True,
+            )
+
+        assert result["success"] is True
+        affected = result["data"].get("affected_tests")
+        assert affected is not None
+        assert affected.get("total_affected_tests", 0) >= 1
+        assert affected["affected_tests"][0]["test_file"]
+
+    @pytest.mark.asyncio
     async def test_include_impact_false_no_summary(self, tmp_path: Path) -> None:
         """include_impact=False should NOT include impact_summary."""
         from tapps_mcp.server_pipeline_tools import tapps_validate_changed

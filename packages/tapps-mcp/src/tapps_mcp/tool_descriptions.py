@@ -55,6 +55,12 @@ TOOL_DESCRIPTIONS: dict[str, str] = {
     "tapps_impact_analysis": (
         "Module-level import blast radius before API changes (symbol callers: tapps_call_graph, ADR-0017)."
     ),
+    "tapps_call_graph": (
+        "Function-level callers, callees, and token-budgeted call chains for one Python symbol."
+    ),
+    "tapps_diff_impact": (
+        "Rank affected tests for changed Python files via TESTS edges and import impact."
+    ),
     "tapps_report": (
         "Generate a quality report for one file or the whole project (JSON/Markdown/HTML)."
     ),

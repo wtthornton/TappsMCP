@@ -314,3 +314,51 @@ def _recommendations(
     if total > _SEVERITY_HIGH:
         recs.append("Consider incremental rollout due to wide blast radius.")
     return recs
+
+
+def analyze_symbol_impact(
+    symbol: str,
+    project_root: Path,
+    *,
+    max_depth: int = 3,
+    token_budget: int = 4000,
+) -> dict[str, object]:
+    """Symbol-level blast radius via function call graph (TAP-4051)."""
+    from tapps_mcp.project.call_graph import build_call_graph_index
+    from tapps_mcp.project.call_graph_queries import query_call_graph
+
+    index = build_call_graph_index(project_root)
+    query = query_call_graph(
+        index,
+        symbol,
+        mode="all",
+        max_depth=max_depth,
+        token_budget=token_budget,
+    )
+    if not query.get("found"):
+        return {
+            **query,
+            "severity": "low",
+            "recommendations": [f"Symbol {symbol!r} not found in call graph index."],
+        }
+
+    caller_count = len(query.get("callers", []))
+    callee_count = len(query.get("callees", []))
+    total = caller_count + callee_count
+    severity = _assess_severity(total, "modified")
+    recs: list[str] = []
+    if caller_count:
+        recs.append(f"{caller_count} direct/indirect caller edge(s) — review before changing signature.")
+    if callee_count:
+        recs.append(f"{callee_count} callee edge(s) — changing behavior may affect downstream calls.")
+    if query.get("resolution_gaps"):
+        recs.append("Unresolved static calls exist; see resolution_gaps (degraded mode).")
+    if query.get("truncated"):
+        recs.append("Graph output truncated at token budget; narrow symbol or reduce max_depth.")
+
+    return {
+        **query,
+        "severity": severity,
+        "total_affected": total,
+        "recommendations": recs,
+    }

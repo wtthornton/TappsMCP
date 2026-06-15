@@ -201,7 +201,7 @@ def _validate_file_path(file_path: str) -> Path:
 # Constants extracted to avoid duplication
 # ---------------------------------------------------------------------------
 
-# Canonical list of all TappsMCP tools (38).
+# Canonical list of all TappsMCP tools (42).
 # Used for filtering and fallback.
 ALL_TOOL_NAMES: frozenset[str] = frozenset(
     {
@@ -219,6 +219,8 @@ ALL_TOOL_NAMES: frozenset[str] = frozenset(
         "tapps_checklist",
         "tapps_session_notes",
         "tapps_impact_analysis",
+        "tapps_call_graph",
+        "tapps_diff_impact",
         "tapps_report",
         "tapps_init",
         "tapps_upgrade",
@@ -377,6 +379,8 @@ TOOL_PROFILE_NLT_BUILD: frozenset[str] = frozenset(
         "tapps_score_file",
         "tapps_security_scan",
         "tapps_impact_analysis",
+        "tapps_call_graph",
+        "tapps_diff_impact",
         "tapps_usage",
         "tapps_validate_config",
         "tapps_dead_code",
@@ -1604,6 +1608,7 @@ async def tapps_checklist(
             resp_data["usage_gaps"] = {
                 "gaps": usage.get("gaps", []),
                 "recommendations": usage.get("recommendations", []),
+                "libraries_without_lookup": usage.get("libraries_without_lookup", []),
                 "rolling_gate_skip_rate": usage.get("rolling_stats", {}).get(
                     "gate_skip_rate", 0.0
                 ),
@@ -1804,6 +1809,8 @@ tapps_stats = _metrics.tapps_stats
 tapps_feedback = _metrics.tapps_feedback
 tapps_session_notes = _analysis.tapps_session_notes
 tapps_impact_analysis = _analysis.tapps_impact_analysis
+tapps_call_graph = _analysis.tapps_call_graph
+tapps_diff_impact = _analysis.tapps_diff_impact
 tapps_report = _analysis.tapps_report
 tapps_dead_code = _analysis.tapps_dead_code
 tapps_dependency_scan = _analysis.tapps_dependency_scan

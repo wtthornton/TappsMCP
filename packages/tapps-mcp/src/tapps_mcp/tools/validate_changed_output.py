@@ -81,6 +81,37 @@ def _compute_impact_analysis(
         return {"error": "impact analysis failed"}
 
 
+def _compute_affected_tests(
+    paths: list[Path],
+    project_root: Path,
+    *,
+    limit: int = 20,
+) -> dict[str, Any] | None:
+    """Rank tests affected by changed Python source files (Epic 114 / TAP-4054)."""
+    from tapps_mcp.project.diff_impact import DEFAULT_AFFECTED_TESTS_LIMIT, analyze_diff_impact
+    from tapps_mcp.project.impact_analyzer import _is_test_file
+
+    py_sources = [
+        p
+        for p in paths
+        if p.suffix in {".py", ".pyi"} and p.exists() and not _is_test_file(p)
+    ]
+    if not py_sources:
+        return None
+    cap = max(1, limit if limit > 0 else DEFAULT_AFFECTED_TESTS_LIMIT)
+    try:
+        data = analyze_diff_impact(py_sources, project_root, max_tests=cap)
+        return {
+            "total_affected_tests": data.get("total_affected_tests", 0),
+            "affected_tests": list(data.get("affected_tests", [])),
+            "max_tests": data.get("max_tests", cap),
+            "degraded": bool(data.get("degraded")),
+        }
+    except Exception:
+        _logger.debug("affected_tests_analysis_failed", exc_info=True)
+        return {"error": "affected tests analysis failed"}
+
+
 def _build_structured_validation_output(
     results: list[dict[str, Any]],
     all_passed: bool,
@@ -334,6 +365,15 @@ def _build_response_data(
     return resp_data
 
 
+def attach_affected_tests(
+    resp_data: dict[str, Any],
+    affected_tests_data: dict[str, Any] | None,
+) -> None:
+    """Add optional affected_tests block when diff-impact ranking is available."""
+    if affected_tests_data is not None:
+        resp_data["affected_tests"] = affected_tests_data
+
+
 def _build_judge_summary_rows(judge_results: list[dict[str, Any]]) -> list[str]:
     """Build grep-friendly PASS/FAIL rows for post-gate judges."""
     rows: list[str] = []
@@ -443,17 +483,19 @@ def _append_timeout_hint(
 
 __all__ = [
     "_SEVERITY_RANK",
+    "_append_judge_summary",
     "_append_timeout_hint",
     "_build_file_entry",
+    "_build_judge_summary_rows",
     "_build_per_file_results",
     "_build_response_data",
     "_build_structured_validation_output",
     "_build_validation_summary",
     "_compute_impact_analysis",
+    "_compute_affected_tests",
     "_handle_no_changed_files",
     "_resolve_security_depth",
-    "apply_judge_payload",
-    "_append_judge_summary",
-    "_build_judge_summary_rows",
     "_run_judges",
+    "apply_judge_payload",
+    "attach_affected_tests",
 ]

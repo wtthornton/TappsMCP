@@ -106,13 +106,13 @@ NLT_SERVER_EAGER_COUNTS: Final[dict[str, int]] = {
 }
 
 NLT_SERVER_TOTAL_COUNTS: Final[dict[str, int]] = {
-    "nlt-build": 16,
+    "nlt-build": 18,
     "nlt-memory": 4,
     "nlt-setup": 7,
     "nlt-linear-issues": 15,
     "nlt-project-docs": 27,
     "nlt-release-ship": 6,
-    "nlt-code-quality": 16,
+    "nlt-code-quality": 18,
     "nlt-platform-admin": 7,
 }
 
@@ -137,6 +137,8 @@ NLT_TOOL_SERVER: Final[dict[str, str]] = {
     "tapps_score_file": "nlt-build",
     "tapps_security_scan": "nlt-build",
     "tapps_impact_analysis": "nlt-build",
+    "tapps_call_graph": "nlt-build",
+    "tapps_diff_impact": "nlt-build",
     "tapps_usage": "nlt-build",
     "tapps_validate_config": "nlt-build",
     "tapps_dead_code": "nlt-build",

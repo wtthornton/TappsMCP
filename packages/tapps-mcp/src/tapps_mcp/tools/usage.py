@@ -66,9 +66,9 @@ def read_recent_violations(project_root: Path, *, limit: int = 10) -> list[dict[
                     continue
                 try:
                     rows.append(json.loads(line))
-                except Exception:  # noqa: BLE001
+                except Exception:
                     continue
-    except Exception:  # noqa: BLE001
+    except Exception:
         return []
     return rows[-limit:]
 
@@ -79,7 +79,7 @@ def _session_called_tools() -> set[str]:
         from tapps_mcp.tools.checklist import CallTracker
 
         return CallTracker.get_called_tools()
-    except Exception:  # noqa: BLE001
+    except Exception:
         return set()
 
 
@@ -130,6 +130,81 @@ def _telemetry_used_lookup(rows: list[dict[str, Any]]) -> bool:
             if matches_pipeline_tool(str(tool), LOOKUP_SHORT_NAMES):
                 return True
     return False
+
+
+def _resolve_edited_path(raw: str, project_root: Path) -> Path | None:
+    """Resolve a telemetry file path to an on-disk path under *project_root*."""
+    path = Path(raw)
+    if path.is_file():
+        return path
+    candidate = project_root / raw
+    if candidate.is_file():
+        return candidate
+    if path.is_absolute():
+        try:
+            rel = path.relative_to(project_root)
+            under = project_root / rel
+            if under.is_file():
+                return under
+        except ValueError:
+            pass
+    return None
+
+
+def _lookup_gap_libraries(project_root: Path, edited_paths: list[str]) -> list[str]:
+    """External libraries in edited Python files that lack cached docs.
+
+    Returns an empty list when edits are test-only stdlib/skip-module imports
+    (nothing worth a ``tapps_lookup_docs`` call). Non-Python edits are ignored
+    here — callers fall back to a generic recommendation.
+    """
+    try:
+        from tapps_mcp.knowledge.cache import KBCache
+        from tapps_mcp.knowledge.import_analyzer import (
+            extract_external_imports,
+            find_uncached_libraries,
+        )
+    except ImportError:
+        return []
+
+    py_paths = [p for p in edited_paths if str(p).endswith((".py", ".pyi"))]
+    if not py_paths:
+        return []
+
+    external: set[str] = set()
+    for raw in py_paths:
+        resolved = _resolve_edited_path(raw, project_root)
+        if resolved is None:
+            continue
+        external.update(extract_external_imports(resolved, project_root))
+
+    if not external:
+        return []
+
+    try:
+        cache = KBCache(project_root / ".tapps-mcp-cache")
+        return find_uncached_libraries(sorted(external), cache)
+    except Exception:  # noqa: BLE001
+        return sorted(external)
+
+
+def _lookup_gap_recommendation(libraries: list[str], *, generic: bool) -> str:
+    if libraries:
+        sample = ", ".join(libraries[:8])
+        suffix = (
+            f' Call tapps_lookup_docs(library="{libraries[0]}", topic="<api>") '
+            "for each (retrospective lookups clear this gap)."
+        )
+        return (
+            f"No tapps_lookup_docs this session; edited files reference: {sample}.{suffix}"
+        )
+    if generic:
+        return (
+            "No tapps_lookup_docs calls this session despite recent edits. "
+            "Call it before using any external library API "
+            "(retrospective lookups clear this gap)."
+        )
+    return ""
 
 
 def compute_gaps(
@@ -216,13 +291,20 @@ def compute_gaps(
             )
 
     used_lookup = _LOOKUP_TOOL in called or _telemetry_used_lookup(rows)
-    if not used_lookup and has_recent_edits:
-        if "lookup_docs_underused" not in gaps:
+    libraries_without_lookup: list[str] = []
+    if not used_lookup and has_recent_edits and "lookup_docs_underused" not in gaps:
+        libraries_without_lookup = _lookup_gap_libraries(project_root, edited_recent)
+        py_edits = [p for p in edited_recent if str(p).endswith((".py", ".pyi"))]
+        non_py_edits = [p for p in edited_recent if not str(p).endswith((".py", ".pyi"))]
+        should_gap = bool(libraries_without_lookup) or bool(non_py_edits and not py_edits)
+        if should_gap:
             gaps.append("library_uses_without_lookup_docs")
-            recs.append(
-                "No tapps_lookup_docs calls this session despite recent edits. "
-                "Call it before using any external library API."
+            rec = _lookup_gap_recommendation(
+                libraries_without_lookup,
+                generic=bool(non_py_edits and not py_edits),
             )
+            if rec:
+                recs.append(rec)
 
     if not gaps:
         recs.append("No gaps detected. Pipeline coverage looks healthy.")
@@ -232,6 +314,7 @@ def compute_gaps(
         "called_tools": sorted(called),
         "called_tools_count": len(called),
         "edited_files_recent": edited_recent[:20],
+        "libraries_without_lookup": libraries_without_lookup,
         "rolling_stats": rolling,
         "recent_edit_stats": recent_edits,
         "recent_violations": violations,
@@ -304,6 +387,27 @@ def format_stop_gap_followup(
     headline = ", ".join(ordered[:3])
     recs = [r for r in report.get("recommendations", []) if "No gaps detected" not in r]
     body = recs[0] if recs else "Run /tapps-finish-task before declaring done."
+    if ordered and ordered[0] == "library_uses_without_lookup_docs":
+        libs = report.get("libraries_without_lookup") or []
+        if libs:
+            body = _lookup_gap_recommendation(libs, generic=False)
+        else:
+            for rec in recs:
+                if "tapps_lookup_docs" in rec:
+                    body = rec
+                    break
+    elif ordered and recs:
+        gap_to_keyword = {
+            "edits_without_validation": "quality gate",
+            "checklist_skipped": "tapps_checklist",
+            "lookup_docs_underused": "tapps_lookup_docs",
+        }
+        keyword = gap_to_keyword.get(ordered[0])
+        if keyword:
+            for rec in recs:
+                if keyword in rec:
+                    body = rec
+                    break
 
     if mode == "block":
         return f"BLOCKED — pipeline gaps ({headline}). {body}"
@@ -326,6 +430,9 @@ def render_markdown(report: dict[str, Any]) -> str:
     gaps = report.get("gaps", [])
     if gaps:
         lines.append(f"- **Gaps detected ({len(gaps)}):** " + ", ".join(gaps))
+        libs = report.get("libraries_without_lookup") or []
+        if libs:
+            lines.append(f"- **Libraries without lookup:** {', '.join(libs[:12])}")
     else:
         lines.append("- **Gaps detected:** none")
     if report.get("recommendations"):

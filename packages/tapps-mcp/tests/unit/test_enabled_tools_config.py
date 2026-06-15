@@ -151,7 +151,7 @@ class TestResolveAllowedTools:
         settings.tool_preset = "nlt-build"
         allowed = _resolve_allowed_tools(settings)
         assert allowed == TOOL_PROFILE_NLT_BUILD
-        assert len(allowed) == 16
+        assert len(allowed) == 18
         assert "tapps_dependency_scan" in allowed
 
     def test_preset_nlt_memory(self) -> None:
@@ -285,5 +285,6 @@ class TestToolPresetConstants:
         # + 1 tapps_session_end (TAP-2005) + 1 tapps_usage (v3.11.0)
         # -1 tapps_memory (TAP-1994) + 2 hive elevation tools (TAP-2014)
         # + 1 tapps_linear_list_issues (TAP-2010) + 1 tapps_finding_to_story (TAP-2717)
-        # + 1 tapps_audit_close_coverage (TAP-2798) + 1 tapps_handoff_save (TAP-3792) = 39.
-        assert len(ALL_TOOL_NAMES) == 40
+        # + 1 tapps_audit_close_coverage (TAP-2798) + 1 tapps_handoff_save (TAP-3792)
+        # + 2 Epic 114 tools (tapps_call_graph, tapps_diff_impact) = 42.
+        assert len(ALL_TOOL_NAMES) == 42
