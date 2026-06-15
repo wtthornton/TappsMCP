@@ -8,19 +8,27 @@ For the deep per-package module trees, see [docs/api/tapps-mcp.md](../api/tapps-
 graph TD
     subgraph tapps_mcp["tapps-mcp"]
         scripts_build_epic_stories_py["build_epic_stories (1F)"]:::presentation
-        scripts_bump_versions_py["bump-versions (15F)"]:::infra
+        scripts_bump_versions_py["bump-versions (16F)"]:::infra
+        scripts_check_tool_budget_py["check-tool-budget (5F)"]:::infra
         examples_combined_server_py["combined_server (1F)"]:::presentation
-        scripts_eval_descriptions_compare_py["compare (9F)"]:::infra
+        scripts_eval_descriptions_compare_py["compare (12F)"]:::infra
+        scripts_docs_quality_gate_py["docs-quality-gate (1F)"]:::infra
         scripts_generate_tools_json_py["generate-tools-json (2F)"]:::business
         subgraph tests_integration["integration/"]
             tests_integration_test_combined_server_py["test_combined_server (6F, 8C)"]:::infra
         end
         examples_platform_cli_py["platform_cli"]:::presentation
         scripts_eval_descriptions_report_py["report (3F)"]:::infra
-        scripts_eval_descriptions_run_py["run (5F, 1C)"]:::infra
+        subgraph reports["reports/"]
+            subgraph reports_tapps_architecture["tapps_architecture/"]
+                reports_tapps_architecture_story_py["story (2F)"]:::infra
+            end
+        end
+        scripts_eval_descriptions_run_py["run (14F, 1C)"]:::infra
         scripts_run_docsmcp_py["run_docsmcp"]:::infra
         scripts_run_tapps_mcp_py["run_tapps_mcp"]:::infra
         scripts_tapps_mcp_console_py["tapps_mcp_console"]:::infra
+        tests_reports_test_tapps_architecture_py["test_tapps_architecture (2F)"]:::infra
         subgraph packages_docs_mcp_tests["tests/"]
         end
         subgraph packages_tapps_core_tests["tests/"]

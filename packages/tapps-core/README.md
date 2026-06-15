@@ -27,8 +27,8 @@ from tapps_core.knowledge.lookup import lookup_docs
 | `config/` | Pydantic v2 + YAML + env-var settings (`TappsMCPSettings`, `MemorySettings`). Includes the engagement-aware Linear gate flags `linear_enforce_gate` (TAP-981, write gate) and `linear_enforce_cache_gate` (TAP-1224, cache-first read gate; `off`/`warn`/`block`). |
 | `security/` | Path validation, IO guardrails, secret scanning, governance. |
 | `common/` | Exceptions, structured logging (structlog), shared models, utilities. |
-| `knowledge/` | Context7 / LlmsTxt doc lookup, cache, fuzzy matching, RAG safety. |
-| `memory/` | Re-export shims that delegate to [tapps-brain](https://github.com/wtthornton/tapps-brain) (`store`, `decay`, `retrieval`, …). The one exception is `injection.py`, a bridge adapter that translates `MemorySettings` into tapps-brain's `InjectionConfig`. |
+| `knowledge/` | Context7 / LlmsTxt doc lookup, cache, fuzzy matching, RAG safety (`docs_via_brain` routing per ADR-0014). |
+| `brain_bridge.py` | `BrainBridge` adapter — in-process or HTTP access to tapps-brain. Replaces the removed `tapps_core.memory.*` shims (TAP-1995). |
 | `metrics/` | Collector, dashboard, alerts, trends, OpenTelemetry export. |
 | `adaptive/` | Adaptive scoring weights, expert voting, weight distribution. |
 | `prompts/` | Workflow prompt templates. |
@@ -44,13 +44,15 @@ The four most-used entry points by tapps-mcp and docs-mcp:
 
 ## Memory subsystem
 
-The memory package is a re-export shim. New code should import from `tapps_brain` directly; the shim exists for backwards compatibility:
+Memory persistence lives in [tapps-brain](https://github.com/wtthornton/tapps-brain). tapps-mcp and tapps-core access it through `BrainBridge` (`tapps_core.brain_bridge`):
 
 ```python
-from tapps_brain.store import MemoryStore
+from tapps_core.brain_bridge import BrainBridge
 ```
 
-See the [tapps-brain repo](https://github.com/wtthornton/tapps-brain) for storage internals (Postgres in Docker, HTTP service at `localhost:8080`), retrieval, and operational docs — that is the source of truth for memory behaviour.
+Consumer-facing surface: `uv run tapps-mcp memory …` CLI or `nlt-memory` MCP profile — not a standalone `tapps_memory` MCP tool (removed v3.12.0).
+
+See the [tapps-brain repo](https://github.com/wtthornton/tapps-brain) for storage internals (Postgres in Docker, HTTP at `localhost:8080`), retrieval, and operational docs.
 
 ## Documentation
 

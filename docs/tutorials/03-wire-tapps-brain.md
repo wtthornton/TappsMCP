@@ -67,25 +67,28 @@ Look for:
 
 If the doctor flags `brain_auth_failed`, your token didn't propagate to the MCP server's environment. Restart your terminal and Claude Code so the new `TAPPS_BRAIN_AUTH_TOKEN` reaches the spawned MCP subprocess.
 
-## Step 5 — Save a memory from the agent
+## Step 5 — Save a memory
 
-Open Claude Code in any project and ask it to call:
+From the project root (CLI — works in every session):
 
+```bash
+uv run tapps-mcp memory save \
+  --key tutorial-fact \
+  --tier context \
+  --value "The brain test value is 42."
 ```
-tapps_memory(action="save", key="tutorial-fact", value="The brain test value is 42.", tier="context", scope="project")
-```
 
-The response should include `success: true`, an entry id, and an `expires_at` timestamp 14 days out (the default for the `context` tier).
+The JSON output should include `success: true` and an `expires_at` timestamp 14 days out (default for the `context` tier).
+
+Alternatively, enable **`nlt-memory`** in MCP config and ask the agent to save via the memory MCP tools (see [tutorial 06](06-first-memory-session.md)). The standalone `tapps_memory` MCP tool was removed in v3.12.0.
 
 ## Step 6 — Recall it from a new session
 
-Quit Claude Code, reopen it on the same project, and ask:
-
-```
-tapps_memory(action="search", query="brain test value")
+```bash
+uv run tapps-mcp memory search --query "brain test value"
 ```
 
-You should see the entry from Step 5 in `data.results`. Cross-session persistence is working.
+You should see the entry from Step 5 in the results. Cross-session persistence is working.
 
 ## Step 7 — Inspect the storage directly
 
@@ -109,7 +112,7 @@ You've confirmed:
 
 ## What you learned
 
-tapps-brain is **storage behind `tapps_memory`**, not a separate MCP server you configure. Agents call `tapps_memory(...)` only; tapps-mcp routes through `BrainBridge` to tapps-brain (in-process per [ADR-0001](../adr/0001-in-process-agentbrain-via-brainbridge.md), or HTTP when `memory.brain_http_url` is set). **Do not** add a direct `tapps-brain` entry to `.mcp.json` / `.cursor/mcp.json` — `tapps_init` and `tapps_upgrade` strip stray entries (bridge-only, TAP-1888).
+tapps-brain is **storage behind BrainBridge**, not a separate MCP server you configure. Use `uv run tapps-mcp memory …` or enable **`nlt-memory`** for MCP-exposed recall/save/handoff; tapps-mcp routes through `BrainBridge` to tapps-brain (in-process per [ADR-0001](../adr/0001-in-process-agentbrain-via-brainbridge.md), or HTTP when `memory.brain_http_url` is set). **Do not** add a direct `tapps-brain` entry to `.mcp.json` / `.cursor/mcp.json` — `tapps_init` and `tapps_upgrade` strip stray entries (bridge-only, TAP-1888).
 
 The four pieces that have to line up: brain HTTP service running (or in-process DSN), `tapps-brain` Python package importable, auth token in the MCP subprocess env, and `.mcp.json` listing **tapps-mcp only**. Miss any one and `tapps doctor` calls it out. Running brain must be **≥ 3.24.0** ([ADR-0013](../adr/0013-pin-tapps-brain-version-floor-at-3240.md)).
 

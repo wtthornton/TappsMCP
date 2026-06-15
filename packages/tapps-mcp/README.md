@@ -28,23 +28,13 @@ tapps-mcp doctor                        # diagnose config + memory
 tapps-mcp init                          # bootstrap in a consuming project
 ```
 
-Wire it into Claude Code via `.mcp.json`:
+Wire it into Cursor or Claude Code via the **developer NLT bundle** (`nlt-build` + `nlt-memory` + `nlt-linear-issues`). After `tapps-mcp init --host auto`, `.cursor/mcp.json` lists three servers — not a monolithic `tapps-mcp` entry. See [ADR-0016](../../docs/adr/0016-needs-based-nlt-mcp-taxonomy.md).
 
-```json
-{
-  "mcpServers": {
-    "tapps-mcp": {
-      "command": "uv",
-      "args": ["run", "tapps-mcp", "serve"],
-      "env": { "TAPPS_MCP_PROJECT_ROOT": "." }
-    }
-  }
-}
-```
+For a minimal build-only session, enable `nlt-build` alone (~9 eager tools).
 
 ## Top 5 MCP tools
 
-The most-used handlers in a typical agent session — see [AGENTS.md](../../AGENTS.md) for the full 30-tool reference.
+The most-used handlers in a typical agent session — see [AGENTS.md](../../AGENTS.md) for the full 32-tool reference.
 
 1. `tapps_session_start` — initialise project context, load memory, surface server info.
 2. `tapps_quick_check(file_path)` — score + quality gate + security scan in one call after every Python edit.

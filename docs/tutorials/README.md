@@ -1,6 +1,6 @@
 # Tutorials
 
-Five short, copy-paste runnable walkthroughs for the most-asked starter tasks. Each ends with explicit verification steps so you know it worked.
+Six short, copy-paste runnable walkthroughs for the most-asked starter tasks. Each ends with explicit verification steps so you know it worked.
 
 | # | Tutorial | Time | What you'll do |
 |---|---|---|---|
@@ -9,6 +9,7 @@ Five short, copy-paste runnable walkthroughs for the most-asked starter tasks. E
 | 03 | [Wire tapps-brain into a Claude Code session](03-wire-tapps-brain.md) | ~20 min | Stand up the brain Docker service, set `TAPPS_BRAIN_AUTH_TOKEN`, save a memory in one session, recall it in the next. |
 | 04 | [NLT MCP session modes](04-nlt-mcp-session-modes.md) | ~10 min | Enable the right 1–3 NLT servers (Build / Memory / Linear / Docs) without loading all six. |
 | 05 | [Documentation refresh workflow](05-docs-refresh-workflow.md) | ~2 hr | Full DocsMCP-driven doc refresh: drift, links, API regen, CI gate. |
+| 06 | [Your first memory save and recall](06-first-memory-session.md) | ~10 min | Save and search via `tapps-mcp memory` CLI and `nlt-memory` MCP (post–v3.12.0). |
 
 ## Diataxis: why tutorials, not how-tos
 
@@ -21,5 +22,5 @@ For task-specific reference (the "I know what I want, just remind me how") see [
 1. **02** first if you've never used the tool — it's the shortest path to seeing the pipeline work.
 2. **04** if you need to configure NLT MCP servers in Cursor (Build / Memory / Docs).
 3. **01** next if you're going to extend tapps-mcp itself (vs. just consume it).
-4. **03** when you want cross-session memory. Optional — tapps-mcp works without it.
+4. **03** + **06** when you want cross-session memory. Optional — tapps-mcp works without it.
 5. **05** when refreshing project documentation with DocsMCP.
