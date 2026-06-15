@@ -113,10 +113,12 @@ class TestClaudeHooksScripts:
         assert "REQUIRED" in content
         assert "tapps_session_start" in content
 
-    def test_session_start_reaps_all_nlt_profiles(self) -> None:
-        """Claude sessionStart should reap orphaned nlt-* MCP children (ADR-0005)."""
+    def test_session_start_reaps_stale_nlt_profiles(self) -> None:
+        """Claude sessionStart should reap stale nlt-* MCP children (ADR-0005)."""
         content = CLAUDE_HOOK_SCRIPTS["tapps-session-start.sh"]
-        assert "NLT_ALL_PIDS" in content
+        assert "NLT_STALE_PIDS" in content
+        assert "NLT_ALL_PIDS" not in content
+        assert "$2 > 45" in content
         assert "serve --profile nlt-" in content
 
 

@@ -30,7 +30,7 @@ if [ -z "$TAPPS" ]; then
   exit 0
 fi
 OUT=$("$TAPPS" memory recall --query "$QUERY" --project-root "$PROJECT_DIR" \
-  --max-results 5 --min-score 0.3 2>/dev/null)
+  --max-results 5 --min-score 0.3 --recall-key tapps-mcp-nlt-bundle-preference --recall-key tapps-mcp-nlt-memory-httpcore-fix 2>/dev/null)
 if [ -n "$OUT" ]; then
   echo "$OUT"
 fi

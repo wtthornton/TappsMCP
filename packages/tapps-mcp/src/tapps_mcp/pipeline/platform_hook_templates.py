@@ -13,12 +13,15 @@ from typing import Any
 def _mcp_zombie_cleanup_bash(
     *,
     reap_nlt_duplicates: bool = False,
-    reap_all_nlt_profiles: bool = False,
+    reap_stale_nlt_profiles: bool = False,
+    stale_nlt_min_age_seconds: int = 45,
 ) -> str:
     """ADR-0005 bash block: reap stale MCP ``serve`` processes (shared by hooks).
 
     * ``reap_nlt_duplicates`` — per ``nlt-*`` profile, kill older PIDs (safe on preCompact).
-    * ``reap_all_nlt_profiles`` — kill every ``serve --profile nlt-*`` child (sessionStart only).
+    * ``reap_stale_nlt_profiles`` — kill ``serve --profile nlt-*`` children older than
+      ``stale_nlt_min_age_seconds`` (sessionStart only). Avoids killing freshly spawned
+      Cursor MCP servers while still reaping Reload Window orphans.
     """
     nlt_dup_block = ""
     if reap_nlt_duplicates:
@@ -44,16 +47,16 @@ def _mcp_zombie_cleanup_bash(
                 if (dups[p] != "") print dups[p];
             }
         }')"""
-    nlt_all_block = ""
-    if reap_all_nlt_profiles:
-        nlt_all_block = """
-    NLT_ALL_PIDS=$(ps -eo pid,cmd 2>/dev/null | \\
-        awk '/serve --profile nlt-/ {print $1}')"""
+    nlt_stale_block = ""
+    if reap_stale_nlt_profiles:
+        nlt_stale_block = f"""
+    NLT_STALE_PIDS=$(ps -eo pid,etimes,cmd 2>/dev/null | \\
+        awk '$2 > {stale_nlt_min_age_seconds} && /serve --profile nlt-/ {{print $1}}')"""
     merge_parts: list[str] = ['"$OLD_PIDS"', '"$VENV_PIDS"']
     if reap_nlt_duplicates:
         merge_parts.append('"$NLT_DUP_PIDS"')
-    if reap_all_nlt_profiles:
-        merge_parts.append('"$NLT_ALL_PIDS"')
+    if reap_stale_nlt_profiles:
+        merge_parts.append('"$NLT_STALE_PIDS"')
     merge_echo_lines = "\n".join(f"    echo {part}" for part in merge_parts)
     return f"""\
 # ADR-0005: Kill stale MCP server processes to prevent zombie accumulation.
@@ -63,7 +66,7 @@ if command -v ps &>/dev/null && command -v awk &>/dev/null; then
     OLD_PIDS=$(ps -eo pid,etimes,cmd 2>/dev/null | \\
         awk '$2 > 7200 && /tapps-mcp|docsmcp|tapps-platform/ && /serve/ {{print $1}}')
     VENV_PIDS=$(ps -eo pid,cmd 2>/dev/null | \\
-        awk '/\\.venv\\/bin\\/(tapps-mcp|docsmcp|tapps-platform)/ && /serve/ {{print $1}}'){nlt_dup_block}{nlt_all_block}
+        awk '/\\.venv\\/bin\\/(tapps-mcp|docsmcp|tapps-platform)/ && /serve/ {{print $1}}'){nlt_dup_block}{nlt_stale_block}
     ZOMBIE_PIDS=$({{
 {merge_echo_lines}
     }} | sort -u | grep -E '^[0-9]+$' || true)
@@ -75,13 +78,13 @@ fi
 """
 
 
-def _mcp_zombie_cleanup_standalone_script(*, reap_all_nlt_profiles: bool = True) -> str:
+def _mcp_zombie_cleanup_standalone_script(*, reap_stale_nlt_profiles: bool = True) -> str:
     """Cursor sessionStart hook: full MCP zombie cleanup before memory recall."""
     return f"""#!/usr/bin/env bash
 # TappsMCP MCP zombie cleanup (Cursor sessionStart — ADR-0005 extension)
 # Reaps orphaned nlt-* serve children after Reload Window so Cursor spawns a clean fleet.
 set -euo pipefail
-{_mcp_zombie_cleanup_bash(reap_nlt_duplicates=True, reap_all_nlt_profiles=reap_all_nlt_profiles)}
+{_mcp_zombie_cleanup_bash(reap_nlt_duplicates=True, reap_stale_nlt_profiles=reap_stale_nlt_profiles)}
 exit 0
 """
 
@@ -115,7 +118,7 @@ fi
 # but does not consistently reap old children — after several sessions this
 # becomes a significant resource and Postgres connection leak.
 """ + _mcp_zombie_cleanup_bash(
-    reap_nlt_duplicates=True, reap_all_nlt_profiles=True
+    reap_nlt_duplicates=True, reap_stale_nlt_profiles=True
 ) + """\
 # TAP-1927: Pre-warm the brain tools-list cache so _negotiate_profile_locked
 # can skip the live MCP tools/list round-trip on the first bridge call.

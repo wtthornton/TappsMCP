@@ -23,8 +23,9 @@ Claude Code spawns a fresh MCP server subprocess (one tapps-mcp + one docs-mcp) 
 **Operational note:** The cleanup block is load-bearing — do not remove from the hook template.
 
 **NLT full-bundle extension (v3.12.32+):** Cursor `sessionStart` also runs
-`.cursor/hooks/tapps-mcp-zombie-cleanup.sh`, which kills every orphaned
-`serve --profile nlt-*` child before memory auto-recall. This addresses Reload
-Window churn when all six NLT servers are enabled (dev-repo escape hatch).
-`preCompact` only reaps duplicate PIDs per profile so active MCP connections
-stay alive during compaction.
+`.cursor/hooks/tapps-mcp-zombie-cleanup.sh`, which kills stale (45s+) orphaned
+`serve --profile nlt-*` children and duplicate PIDs per profile before memory
+auto-recall. This addresses Reload Window churn when all six NLT servers are
+enabled (dev-repo escape hatch) without killing freshly spawned Cursor MCP
+servers. `preCompact` only reaps duplicate PIDs per profile so active MCP
+connections stay alive during compaction.

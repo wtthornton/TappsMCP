@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [3.12.34] - 2026-06-15
+
+Patch: fix Cursor MCP errors from sessionStart killing live nlt-* servers.
+
+### Fixed
+
+- **Zombie cleanup hook** — sessionStart now reaps only **stale** (45s+) `nlt-*` serve processes and duplicates, not freshly spawned Cursor MCP servers. Fixes `nlt-build` / `nlt-setup` error state after Reload Window.
+
 ## [3.12.33] - 2026-06-15
 
 Patch: suppress false-positive `lookup_docs_underused` on internal-only edit sessions.

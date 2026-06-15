@@ -86,15 +86,18 @@ class TestMemoryAutoRecallHookTemplate:
         assert r"\.venv\/bin\/(tapps-mcp|docsmcp|tapps-platform)" in script
         assert "NLT_DUP_PIDS" in script
         assert "ADR-0005" in script
+        assert "NLT_STALE_PIDS" not in script
         assert "NLT_ALL_PIDS" not in script
 
-    def test_cursor_zombie_cleanup_standalone_reaps_all_nlt(self) -> None:
+    def test_cursor_zombie_cleanup_standalone_reaps_stale_nlt(self) -> None:
         from tapps_mcp.pipeline.platform_hook_templates import (
             _mcp_zombie_cleanup_standalone_script,
         )
 
         script = _mcp_zombie_cleanup_standalone_script()
-        assert "NLT_ALL_PIDS" in script
+        assert "NLT_STALE_PIDS" in script
+        assert "NLT_ALL_PIDS" not in script
+        assert "$2 > 45" in script
         assert "serve --profile nlt-" in script
         assert "exit 0" in script
 

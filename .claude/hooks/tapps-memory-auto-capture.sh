@@ -1,6 +1,4 @@
 #!/usr/bin/env bash
-# tapps-mcp-hook-version: 3.12.31
-# tapps-mcp-hook-content-sha: 39ffd63f
 # TappsMCP Stop hook - Auto-Capture (Epic 65.5)
 # Extracts durable facts from context and saves via tapps_memory save_bulk.
 # Runs tapps-mcp auto-capture with stdin; configurable max_facts, min_context.

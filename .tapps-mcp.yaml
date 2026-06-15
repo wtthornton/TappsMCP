@@ -8,8 +8,8 @@ linear_project: TappsMCP Platform
 memory_hooks:
   auto_recall:
     recall_keys:
-      - tapps-mcp-nlt-bundle-preference
-      - tapps-mcp-nlt-memory-httpcore-fix
+    - tapps-mcp-nlt-bundle-preference
+    - tapps-mcp-nlt-memory-httpcore-fix
 memory:
   brain_project_id: tapps-mcp
   brain_http_url: http://localhost:8080

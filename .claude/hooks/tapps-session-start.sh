@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# tapps-mcp-hook-version: 3.12.31
-# tapps-mcp-hook-content-sha: c8984131
+# tapps-mcp-hook-version: 3.12.33
+# tapps-mcp-hook-content-sha: 7a5ce1d3
 # TappsMCP SessionStart hook (startup/resume)
 # Directs the agent to call tapps_session_start as the first MCP action.
 # TAP-1379: Short-circuits on subsequent fires within the same Claude session
@@ -51,13 +51,13 @@ if command -v ps &>/dev/null && command -v awk &>/dev/null; then
                 if (dups[p] != "") print dups[p];
             }
         }')
-    NLT_ALL_PIDS=$(ps -eo pid,cmd 2>/dev/null | \
-        awk '/serve --profile nlt-/ {print $1}')
+    NLT_STALE_PIDS=$(ps -eo pid,etimes,cmd 2>/dev/null | \
+        awk '$2 > 45 && /serve --profile nlt-/ {print $1}')
     ZOMBIE_PIDS=$({
     echo "$OLD_PIDS"
     echo "$VENV_PIDS"
     echo "$NLT_DUP_PIDS"
-    echo "$NLT_ALL_PIDS"
+    echo "$NLT_STALE_PIDS"
     } | sort -u | grep -E '^[0-9]+$' || true)
     if [ -n "$ZOMBIE_PIDS" ]; then
         echo "[TappsMCP] Reaping stale MCP serve PIDs: $ZOMBIE_PIDS" >&2
