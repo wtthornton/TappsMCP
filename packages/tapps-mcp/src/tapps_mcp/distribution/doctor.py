@@ -3729,6 +3729,120 @@ def _mcp_configs_set_context7(root: Path) -> list[str]:
     return hits
 
 
+def _env_file_sets_key(path: Path, key: str) -> bool:
+    """Return True when *path* defines *key* with a non-empty, non-placeholder value."""
+    if not path.is_file():
+        return False
+    try:
+        for raw_line in path.read_text(encoding="utf-8").splitlines():
+            line = raw_line.strip()
+            if not line or line.startswith("#") or "=" not in line:
+                continue
+            name, _, value = line.partition("=")
+            if name.strip() != key:
+                continue
+            val = value.strip().strip("'\"")
+            if val and not _is_unsubstituted_placeholder(val):
+                return True
+    except OSError:
+        return False
+    return False
+
+
+def _operator_secret_available(key: str, *, project_root: Path) -> bool:
+    """True when *key* is set in the current process or operator/project env files."""
+    import os
+
+    raw = os.environ.get(key, "").strip()
+    if raw and not _is_unsubstituted_placeholder(raw):
+        return True
+    operator_env = Path.home() / ".tapps-operator.env"
+    if _env_file_sets_key(operator_env, key):
+        return True
+    return _env_file_sets_key(project_root / ".env", key)
+
+
+def _mcp_configs_reference_brain_auth(root: Path) -> bool:
+    """Return True when any MCP config env block references brain bearer tokens."""
+    candidates = (
+        root / ".mcp.json",
+        root / ".cursor" / "mcp.json",
+        root / ".vscode" / "mcp.json",
+    )
+    for path in candidates:
+        if not path.is_file():
+            continue
+        try:
+            data = json.loads(path.read_text(encoding="utf-8"))
+        except Exception:
+            continue
+        servers = data.get("mcpServers") or data.get("servers") or {}
+        if not isinstance(servers, dict):
+            continue
+        for spec in servers.values():
+            if not isinstance(spec, dict):
+                continue
+            env = spec.get("env") or {}
+            if isinstance(env, dict) and (
+                env.get("TAPPS_MCP_MEMORY_BRAIN_AUTH_TOKEN")
+                or env.get("TAPPS_BRAIN_AUTH_TOKEN")
+            ):
+                return True
+    return False
+
+
+def check_mcp_operator_secrets(root: Path) -> CheckResult:
+    """Warn when MCP configs reference operator secrets that GUI subprocesses cannot resolve.
+
+    Cursor GUI launches often do not expand ``${VAR}`` in ``mcp.json``. Serve wrappers
+    source ``~/.tapps-operator.env`` then project ``.env`` (TAP-3255). This check fails
+    when configs still reference Context7 or brain auth but none of process env, operator
+    env, or project ``.env`` provides the value.
+    """
+    from tapps_core.config.settings import load_settings
+    from tapps_core.knowledge.brain_docs import docs_via_brain_enabled
+
+    try:
+        settings = load_settings(project_root=root)
+    except Exception:
+        return CheckResult(
+            "mcp_operator_secrets",
+            True,
+            "Skipped (could not load settings)",
+        )
+
+    missing: list[str] = []
+    if _mcp_configs_set_context7(root) and not docs_via_brain_enabled(settings):
+        if not _operator_secret_available("TAPPS_MCP_CONTEXT7_API_KEY", project_root=root):
+            if not _operator_secret_available("CONTEXT7_API_KEY", project_root=root):
+                missing.append("TAPPS_MCP_CONTEXT7_API_KEY")
+
+    brain_configured = bool(_brain_http_url_for_checks(root)) or _mcp_configs_reference_brain_auth(
+        root
+    )
+    if brain_configured:
+        if not _operator_secret_available("TAPPS_MCP_MEMORY_BRAIN_AUTH_TOKEN", project_root=root):
+            if not _operator_secret_available("TAPPS_BRAIN_AUTH_TOKEN", project_root=root):
+                missing.append("TAPPS_BRAIN_AUTH_TOKEN")
+
+    if not missing:
+        operator_env = Path.home() / ".tapps-operator.env"
+        if operator_env.is_file():
+            msg = "Operator secrets available (~/.tapps-operator.env or project .env)"
+        else:
+            msg = "Operator secrets available (shell env or project .env)"
+        return CheckResult("mcp_operator_secrets", True, msg)
+
+    keys = ", ".join(missing)
+    return CheckResult(
+        "mcp_operator_secrets",
+        False,
+        f"MCP configs reference {keys} but GUI subprocess cannot resolve them",
+        "Create ~/.tapps-operator.env (see docs/operations/OPERATOR-SECRETS.md), "
+        "re-run tapps-mcp upgrade --host cursor --force, reload MCP.",
+    )
+
+
 def _run_docs_tools_probe(http_url: str, settings: Any) -> dict[str, Any] | None:
     """Run a synchronous ``docs_lookup`` probe for ADR-0014 doctor checks."""
     try:
@@ -3920,6 +4034,7 @@ def _collect_checks(root: Path, *, quick: bool = False) -> list[CheckResult]:
     checks.append(check_report_studio(root))
     checks.append(check_legacy_doc_cache(root))
     checks.append(check_brain_docs_tools(root))
+    checks.append(check_mcp_operator_secrets(root))
     checks.append(check_consumer_context7_env(root))
     if quick:
         checks.append(

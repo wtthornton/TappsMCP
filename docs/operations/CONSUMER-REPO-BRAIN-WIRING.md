@@ -103,7 +103,24 @@ different CLI shape (`tapps-brain project register --name X --slug X`).
 
 ### C. Consumer repo secrets (gitignored)
 
-Create `.env` (`chmod 600`, add to `.gitignore` **before** first commit):
+**Preferred (multi-repo workstation):** put **shared** operator secrets in
+`~/.tapps-operator.env` once — Context7 key, brain bearer token, brain URL.
+See [OPERATOR-SECRETS.md](OPERATOR-SECRETS.md). Cursor serve wrappers source
+that file before project `.env`.
+
+**Per-repo `.env`** (`chmod 600`, gitignored) holds **project-owned** keys only
+(AgentForge, Reddit, YouTube, etc.) plus optional overrides:
+
+```bash
+# Example: repo-owned AgentForge key (NOT the brain token)
+AGENTFORGE_API_KEY=<issued for this project>
+
+# Optional overrides when not using ~/.tapps-operator.env:
+# TAPPS_BRAIN_AUTH_TOKEN=<same token as brain container>
+# TAPPS_MCP_CONTEXT7_API_KEY=<Context7 API key>
+```
+
+Legacy single-repo layout (all secrets in project `.env`):
 
 ```bash
 # Shared name used by .mcp.json ${TAPPS_BRAIN_AUTH_TOKEN} substitution
@@ -115,8 +132,8 @@ TAPPS_MCP_MEMORY_BRAIN_AUTH_TOKEN=<same token>
 TAPPS_MCP_MEMORY_BRAIN_PROJECT_ID=<project_id>
 ```
 
-Enable direnv (`echo 'dotenv' > .envrc && direnv allow .`) so MCP subprocesses
-and terminal `tapps-mcp doctor` inherit the token.
+Enable direnv (`.envrc` sourcing `~/.tapps-operator.env` then `.env`) so CLI
+`tapps-mcp doctor` inherits the same values as GUI MCP.
 
 ### Brain auth token resolution (shared precedence)
 

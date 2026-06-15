@@ -225,6 +225,7 @@ class TestCursorMcpWrapper:
         assert os.access(wrapper, os.X_OK)
         text = wrapper.read_text(encoding="utf-8")
         assert "source .env" in text
+        assert ".tapps-operator.env" in text
         assert "TAPPS_MCP_MEMORY_BRAIN_AUTH_TOKEN" in text
         assert "TAPPS_BRAIN_AUTH_TOKEN" in text
         assert "${TAPPS_BRAIN_AUTH_TOKEN}" in text  # placeholder treated as unset
