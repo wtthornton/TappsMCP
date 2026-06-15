@@ -223,10 +223,7 @@ Four agent definitions per platform in `.claude/agents/` or `.cursor/agents/`:
 
 ### Skills (auto-generated)
 
-Thirteen core tapps-* SKILL.md files per platform in `.claude/skills/` or `.cursor/skills/` (plus linear-* and optional continuous-learning-v2):
-- **tapps-score** - Score a Python file across 7 quality categories
-- **tapps-gate** - Run a quality gate check and report pass/fail
-- **tapps-validate** - Validate all changed files before declaring work complete
+Sixteen core tapps-* SKILL.md files per platform in `.claude/skills/` or `.cursor/skills/` (plus linear-* and optional continuous-learning-v2):
 - **tapps-finish-task** - End-of-task pipeline: validate_changed + checklist + optional memory save
 - **tapps-handoff-session** - Write `.tapps-mcp/session-handoff.md` and call `tapps_session_end` before ending a chat
 - **tapps-continue-session** - Bootstrap a fresh chat from the last handoff + optional Linear issue
@@ -234,14 +231,13 @@ Thirteen core tapps-* SKILL.md files per platform in `.claude/skills/` or `.curs
 - **tapps-research** - Look up library documentation and research best practices
 - **tapps-security** - Run a comprehensive security audit with vulnerability scanning
 - **tapps-memory** - Manage shared project memory (42 actions, cross-session)
-- **tapps-report** - Generate quality reports across changed Python files
 - **tapps-tool-reference** - Full per-tool reference and when-to-use guidance
 - **tapps-init** - Bootstrap TappsMCP scaffolding in a project
 - **tapps-upgrade** - Reinstall global CLIs from latest source, restart MCP, run `tapps-mcp upgrade` + doctor + checklist
 - **tapps-engagement** - Switch enforcement intensity (high/medium/low)
 - **tapps-apply-files** - Apply content-return file operations (Docker fallback)
 
-> **DEPRECATED (removal in v3.12.0):** `tapps-score`, `tapps-gate`, `tapps-validate`, `tapps-report` are thin wrappers around single MCP tools. Prefer the direct tool calls or `/tapps-finish-task` for the end-of-task bundle.
+> **Removed in v3.12.0:** `tapps-score`, `tapps-gate`, `tapps-validate`, and `tapps-report` wrapper skills were deleted. Prefer direct MCP tool calls or `/tapps-finish-task` for the end-of-task bundle.
 
 ### Agent Teams (opt-in, Claude Code only)
 

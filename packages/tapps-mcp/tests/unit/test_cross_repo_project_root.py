@@ -102,3 +102,31 @@ class TestValidateChangedCrossRepo:
         )
         assert len(paths) == 1
         assert paths[0] == target_file.resolve()
+
+    @pytest.mark.asyncio()
+    async def test_validate_changed_mcp_cross_repo_zero_files_path_hint(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        host_root = tmp_path / "host"
+        target_root = tmp_path / "target"
+        host_root.mkdir()
+        target_root.mkdir()
+
+        from tapps_core.config.settings import TappsMCPSettings
+        from tapps_mcp.server_pipeline_tools import tapps_validate_changed
+
+        monkeypatch.chdir(host_root)
+        settings = TappsMCPSettings(project_root=host_root)
+        monkeypatch.setattr(
+            "tapps_mcp.server_pipeline_tools.load_settings",
+            lambda: settings,
+        )
+
+        result = await tapps_validate_changed(
+            file_paths="packages/host-only/missing.py",
+            project_root=str(target_root),
+        )
+
+        assert result["success"] is True
+        assert result["data"]["files_validated"] == 0
+        assert "TAPPS_MCP_HOST_PROJECT_ROOT" in result["data"]["path_hint"]

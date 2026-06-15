@@ -53,7 +53,7 @@ TOOL_DESCRIPTIONS: dict[str, str] = {
         "Slim brain memory on nlt-memory: search, save, get, health, related (not full 42-action catalog)."
     ),
     "tapps_impact_analysis": (
-        "Map import blast radius before changing a file's public API."
+        "Module-level import blast radius before API changes (symbol callers: tapps_call_graph, ADR-0017)."
     ),
     "tapps_report": (
         "Generate a quality report for one file or the whole project (JSON/Markdown/HTML)."

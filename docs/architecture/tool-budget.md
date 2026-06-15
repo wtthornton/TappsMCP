@@ -15,13 +15,14 @@ descriptions, reducing effective context for actual work.
 `tapps_doctor` probes each known tapps-family server and emits a `WARN` line when any
 server's eager tool count exceeds the budget.
 
-## Three graph types (ADR-0016)
+## Four graph types (ADR-0016, ADR-0017)
 
-Agents often conflate three different “graphs”:
+Agents often conflate different “graphs”:
 
 | Concept | Tools | Scope |
 |---------|-------|-------|
-| **Import / impact graph** | `tapps_impact_analysis`, `tapps_dead_code` | Python AST import graph in the repo |
+| **Import / impact graph** | `tapps_impact_analysis`, `tapps_dead_code` | Python AST **module** import graph in the repo |
+| **Call graph** | `tapps_call_graph` (Epic 114 Tier B+), symbol blast on `tapps_impact_analysis` | Python AST **function/method** `CALLS` edges |
 | **Package CVE graph** | `tapps_dependency_scan`, `tapps_dependency_graph` | Installed packages + CVE overlay (Build, deferred) |
 | **Brain knowledge graph** | `tapps_memory(action="related")` on `nlt-memory` | Cross-session entities in tapps-brain |
 

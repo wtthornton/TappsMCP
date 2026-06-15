@@ -53,6 +53,23 @@ Legacy server IDs `nlt-code-quality` / `nlt-platform-admin` map to `nlt-build` /
 
 ---
 
+## Graph tools: import impact vs call graph (ADR-0016, ADR-0017)
+
+Four graph concepts — do not conflate them:
+
+| Concept | Tool(s) | Granularity | When |
+|---------|---------|-------------|------|
+| **Import / file impact** | `tapps_impact_analysis`, `tapps_dependency_graph` | Module / file | Before changing a file's public API or deleting a module |
+| **Call graph** (Epic 114) | `tapps_call_graph` (Tier B+), symbol mode on `tapps_impact_analysis` | Function / method | Before refactoring a specific function — callers, callees, bounded chains |
+| **Package CVE** | `tapps_dependency_scan` | Installed packages | Before releases |
+| **Brain KG** | `tapps_memory(action="related")` on `nlt-memory` | Cross-session entities | Architecture recall |
+
+**Today:** use `tapps_impact_analysis` for module-level blast radius (Python import graph).
+**After Epic 114 Tier B:** add `tapps_call_graph` for symbol-level who-calls-whom instead of grep.
+See [ADR-0017](docs/adr/0017-function-level-call-graph-python-first.md).
+
+---
+
 ## When to use each tool
 
 | Tool | When to use it |
@@ -60,7 +77,7 @@ Legacy server IDs `nlt-code-quality` / `nlt-platform-admin` map to `nlt-build` /
 | **tapps_score_file** | When editing/reviewing a code file. Use `quick=True` during edit loops. |
 | **tapps_lookup_docs** | **Before writing code** that uses an external library - prevents hallucinated APIs |
 | **tapps_security_scan** | Security-sensitive changes or before security review |
-| **tapps_impact_analysis** | Before modifying a file's public API. Pass `project_root` for external projects. |
+| **tapps_impact_analysis** | Before modifying a file's public API (module-level importers). Pass `project_root` for external projects. Symbol-level callers: `tapps_call_graph` when Epic 114 Tier B ships. |
 | **tapps_validate_config** | When adding/changing Dockerfile, docker-compose, infra config |
 | **tapps_memory** | Session start: search past decisions. Session end: save learnings. See [docs/MEMORY_REFERENCE.md](docs/MEMORY_REFERENCE.md) |
 | **tapps_session_notes** | Key decisions during session - promote to memory for persistence |
@@ -98,7 +115,7 @@ Legacy server IDs `nlt-code-quality` / `nlt-platform-admin` map to `nlt-build` /
 2. **Check project memory:** Consider calling `tapps_memory(action="search", query="...")` to recall past decisions and project context.
 3. **Record key decisions:** Use `tapps_session_notes(action="save", ...)` for session-local notes. Use `tapps_memory(action="save", ...)` to persist decisions across sessions.
 3. **Before using a library:** Call `tapps_lookup_docs(library=...)` and use the returned content when implementing.
-4. **Before modifying a file's API:** Call `tapps_impact_analysis(file_path=...)` to see what depends on it.
+4. **Before modifying a file's API:** Call `tapps_impact_analysis(file_path=...)` for module-level dependents. For a specific function refactor, use `tapps_call_graph` once Epic 114 ships (ADR-0017).
 5. **During edits:** Call `tapps_quick_check(file_path=...)` or `tapps_score_file(file_path=..., quick=True)` after each change.
 6. **Before declaring work complete:**
    - Recommended: invoke the `/tapps-finish-task` skill — bundles `tapps_validate_changed` + `tapps_checklist` + an optional memory save and reports a one-line summary.
@@ -164,7 +181,7 @@ The checklist uses this to decide which tools are required vs recommended vs opt
 
 **Subagents:** tapps-reviewer (sonnet), tapps-researcher (haiku), tapps-validator (sonnet), tapps-review-fixer (sonnet + worktree).
 
-**Skills:** tapps-score, tapps-gate, tapps-validate, tapps-finish-task, tapps-handoff-session, tapps-continue-session, tapps-review-pipeline, tapps-research, tapps-security, tapps-memory, tapps-tool-reference, tapps-init, tapps-engagement, tapps-report.
+**Skills:** tapps-finish-task, tapps-handoff-session, tapps-continue-session, tapps-review-pipeline, tapps-research, tapps-security, tapps-memory, tapps-tool-reference, tapps-init, tapps-engagement, tapps-upgrade, tapps-apply-files.
 
 ## Agent ecosystem (using TappsMCP with other agent libraries)
 
@@ -356,10 +373,7 @@ Four agent definitions per platform in `.claude/agents/` or `.cursor/agents/`:
 
 ### Skills (auto-generated)
 
-Thirteen core tapps-* SKILL.md files per platform in `.claude/skills/` or `.cursor/skills/` (plus linear-* and optional continuous-learning-v2):
-- **tapps-score** - Score a Python file across 7 quality categories
-- **tapps-gate** - Run a quality gate check and report pass/fail
-- **tapps-validate** - Validate all changed files before declaring work complete
+Sixteen core tapps-* SKILL.md files per platform in `.claude/skills/` or `.cursor/skills/` (plus linear-* and optional continuous-learning-v2):
 - **tapps-finish-task** - End-of-task pipeline: validate_changed + checklist + optional memory save
 - **tapps-handoff-session** - Write `.tapps-mcp/session-handoff.md` and call `tapps_session_end` before ending a chat
 - **tapps-continue-session** - Bootstrap a fresh chat from the last handoff + optional Linear issue
@@ -367,11 +381,13 @@ Thirteen core tapps-* SKILL.md files per platform in `.claude/skills/` or `.curs
 - **tapps-research** - Look up library documentation and research best practices
 - **tapps-security** - Run a comprehensive security audit with vulnerability scanning
 - **tapps-memory** - Manage shared project memory (42 actions, cross-session)
-- **tapps-report** - Generate quality reports across changed Python files
 - **tapps-tool-reference** - Full per-tool reference and when-to-use guidance
 - **tapps-init** - Bootstrap TappsMCP scaffolding in a project
+- **tapps-upgrade** - Upgrade tapps-mcp / docs-mcp in a consuming project
 - **tapps-engagement** - Switch enforcement intensity (high/medium/low)
 - **tapps-apply-files** - Apply content-return file operations (Docker fallback)
+
+> **Removed in v3.12.0:** `tapps-score`, `tapps-gate`, `tapps-validate`, and `tapps-report` wrapper skills were deleted. Prefer direct MCP tool calls or `/tapps-finish-task`.
 
 ### Agent Teams (opt-in, Claude Code only)
 

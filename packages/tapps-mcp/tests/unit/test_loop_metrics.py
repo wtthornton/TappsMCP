@@ -58,6 +58,7 @@ class TestComputeRollingStats:
     def test_aggregates_recent_rows(self, tmp_path: Path) -> None:
         now = int(time.time())
         metrics = tmp_path / ".tapps-mcp" / "loop-metrics.jsonl"
+        src = str(tmp_path / "packages" / "mod.py")
         _write_metrics(
             metrics,
             [
@@ -65,17 +66,18 @@ class TestComputeRollingStats:
                     "ts": now - 100,
                     "mcp_calls": 4,
                     "tools_used": ["a"],
-                    "files_edited": True,
-                    "gate_skipped_files": True,
+                    "files_edited": [src],
+                    "gate_skipped_files": [src],
                     "lookup_docs_called": True,
                 },
                 {
                     "ts": now - 200,
                     "mcp_calls": 2,
-                    "tools_used": [],
-                    "files_edited": True,
-                    "gate_skipped_files": False,
+                    "tools_used": ["tapps_validate_changed", "tapps_checklist"],
+                    "files_edited": [src],
+                    "gate_skipped_files": [],
                     "lookup_docs_called": False,
+                    "checklist_called": True,
                 },
             ],
         )
@@ -83,6 +85,36 @@ class TestComputeRollingStats:
         assert stats["loops"] == 2
         assert stats["gate_skip_rate"] == pytest.approx(0.5)
         assert stats["lookup_docs_to_edit_ratio"] == pytest.approx(0.5)
+
+    def test_excludes_legacy_unparsed_callmcptool_rows(self, tmp_path: Path) -> None:
+        now = int(time.time())
+        metrics = tmp_path / ".tapps-mcp" / "loop-metrics.jsonl"
+        pkg = tmp_path / "packages" / "mod.py"
+        pkg.parent.mkdir(parents=True)
+        pkg.write_text("x = 1\n", encoding="utf-8")
+        _write_metrics(
+            metrics,
+            [
+                {
+                    "ts": now - 100,
+                    "mcp_calls": 0,
+                    "tools_used": ["CallMcpTool", "Write"],
+                    "files_edited": [str(pkg), "/tmp/snippet.py"],
+                    "gate_skipped_files": [str(pkg), "/tmp/snippet.py"],
+                    "lookup_docs_called": False,
+                },
+                {
+                    "ts": now - 200,
+                    "mcp_calls": 2,
+                    "tools_used": ["tapps_validate_changed", "tapps_checklist"],
+                    "files_edited": [str(pkg)],
+                    "gate_skipped_files": [],
+                    "lookup_docs_called": True,
+                },
+            ],
+        )
+        stats = compute_rolling_stats(tmp_path, window_days=7)
+        assert stats["gate_skip_rate"] == pytest.approx(0.0)
 
 
 class TestShouldAutoPromoteCacheGate:

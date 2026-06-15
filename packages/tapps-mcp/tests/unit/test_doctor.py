@@ -1786,13 +1786,18 @@ class TestCheckPipelineEnforceRecommendations:
         metrics.parent.mkdir(parents=True)
         rows = []
         for offset in range(8):
+            compliant = offset >= 4
             rows.append(
                 json.dumps(
                     {
                         "ts": now - offset * 100,
                         "mcp_calls": 1,
-                        "files_edited": True,
-                        "gate_skipped_files": offset < 4,
+                        "tools_used": (
+                            ["tapps_validate_changed"] if compliant else ["Edit"]
+                        ),
+                        "files_edited": ["packages/tapps-mcp/src/tapps_mcp/foo.py"],
+                        "checklist_called": compliant,
+                        "gate_skipped_files": [],
                     }
                 )
             )
@@ -1823,6 +1828,50 @@ class TestCheckPipelineEnforceRecommendations:
         result = check_pipeline_enforce_recommendations(tmp_path)
         assert result.ok is True
         assert "linear_enforce_cache_gate: block" in (result.detail or "")
+
+
+class TestCheckCursorLoopMetricsTelemetry:
+    def test_warns_when_callmcptool_without_resolved_gate(self, tmp_path):
+        import time
+
+        from tapps_mcp.distribution.doctor import check_cursor_loop_metrics_telemetry
+
+        metrics = tmp_path / ".tapps-mcp" / "loop-metrics.jsonl"
+        metrics.parent.mkdir(parents=True)
+        now = int(time.time())
+        rows = [
+            {
+                "ts": now - 100,
+                "tools_used": ["CallMcpTool", "Write"],
+                "files_edited": ["src/a.py"],
+                "gate_skipped_files": ["src/a.py"],
+            }
+        ]
+        metrics.write_text("\n".join(json.dumps(r) for r in rows) + "\n", encoding="utf-8")
+        result = check_cursor_loop_metrics_telemetry(tmp_path)
+        assert result.ok is False
+        assert "callmcptool_unwrap=active" in result.message
+        assert "CallMcpTool" in (result.detail or "")
+
+    def test_passes_when_gate_tools_resolved(self, tmp_path):
+        import time
+
+        from tapps_mcp.distribution.doctor import check_cursor_loop_metrics_telemetry
+
+        metrics = tmp_path / ".tapps-mcp" / "loop-metrics.jsonl"
+        metrics.parent.mkdir(parents=True)
+        now = int(time.time())
+        rows = [
+            {
+                "ts": now - 100,
+                "tools_used": ["tapps_validate_changed", "tapps_checklist"],
+                "files_edited": ["src/a.py"],
+            }
+        ]
+        metrics.write_text("\n".join(json.dumps(r) for r in rows) + "\n", encoding="utf-8")
+        result = check_cursor_loop_metrics_telemetry(tmp_path)
+        assert result.ok is True
+        assert "callmcptool_unwrap=active" in result.message
 
 
 class TestCheckContinuousLearningV2Skill:
@@ -2437,8 +2486,8 @@ class TestCheckNltPartialEnablement:
             },
         )
         result = check_nlt_partial_enablement(tmp_path)
-        assert result.ok is True
-        assert "All six nlt-* servers" in result.message
+        assert result.ok is False
+        assert "all six nlt-* servers enabled" in result.message
         assert "nlt-build, nlt-memory, nlt-linear-issues" in result.message
 
     def test_warns_when_more_than_three_servers(self, tmp_path) -> None:  # type: ignore[no-untyped-def]
@@ -2493,7 +2542,7 @@ class TestCheckNltPartialEnablement:
         assert "5 nlt-* servers enabled" in result.message
         assert "developer bundle" in (result.detail or "").lower()
         assert "mcp.json" in (result.detail or "")
-        assert "Disable unused nlt-* servers" in (result.detail or "")
+        assert "recommended bundle" in (result.detail or "").lower()
 
 
 _SAMPLE_PROBE_METRICS = """\

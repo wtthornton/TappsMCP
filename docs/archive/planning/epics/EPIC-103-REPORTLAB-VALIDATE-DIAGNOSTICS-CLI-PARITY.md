@@ -1,7 +1,7 @@
 # ReportLab Consumer Feedback — Validate Diagnostics & CLI Parity
 
 <!-- docsmcp:start:metadata -->
-**Status:** Proposed
+**Status:** Deferred (partial delivery via TAP-3585 / TAP-3964)
 **Priority:** P1
 **Estimated LOE:** 2-3 weeks
 **Dependencies:** Epic 74 (complete), Epic 53 (complete)
@@ -34,7 +34,7 @@ ReportLab session feedback (grade B+): Tapps blocked real lint defects and confi
 <!-- docsmcp:start:acceptance-criteria -->
 ## Acceptance Criteria
 
-- [ ] - validate_changed gate failures include top 3 lint/security findings per file
+- [x] - validate_changed gate failures include top 3 lint/security findings per file
 - CLI exposes quick-check and validate-changed --file-paths matching MCP contract
 - session_start surfaces cli_fallback map and mid-session MCP recovery hint
 - Optional report-studio judges preset documented and/or wired via .tapps-mcp.yaml

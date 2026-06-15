@@ -276,7 +276,9 @@ async def _handle_no_changed_files(
             resp_data["path_hint"] = (
                 "Explicit paths provided but none validated under the "
                 "project_root override. Paths must be repo-relative to "
-                "project_root, not the MCP host workspace."
+                "project_root, not the MCP host workspace. When the MCP host "
+                "maps consumer repo paths, set TAPPS_MCP_HOST_PROJECT_ROOT on "
+                "the server."
             )
             resp_data["next_steps"] = [
                 "FALLBACK: Use tapps_quick_check on individual files with the same project_root.",

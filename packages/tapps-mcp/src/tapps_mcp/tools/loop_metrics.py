@@ -146,7 +146,12 @@ def is_reliable_edit_loop_row(row: dict[str, Any], project_root: Path) -> bool:
     """False for legacy unparsed Cursor rows or loops with no in-scope source edits."""
     if _legacy_cursor_unparsed_callmcptool(row):
         return False
-    files = row.get("files_edited") or []
+    files_raw = row.get("files_edited")
+    if not files_raw:
+        return False
+    if isinstance(files_raw, bool):
+        return False
+    files = files_raw if isinstance(files_raw, list) else []
     return bool(scoped_source_edits([p for p in files if isinstance(p, str)], project_root))
 
 
@@ -477,9 +482,12 @@ def compute_rolling_stats(
         }
     total_calls = sum(int(r.get("mcp_calls", 0)) + len(r.get("tools_used", [])) for r in rows)
     mcp_calls = sum(int(r.get("mcp_calls", 0)) for r in rows)
-    edit_loops = sum(1 for r in rows if r.get("files_edited"))
-    skipped_loops = sum(1 for r in rows if r.get("gate_skipped_files"))
-    lookup_loops = sum(1 for r in rows if r.get("lookup_docs_called"))
+    reliable_edit_rows = [r for r in rows if is_reliable_edit_loop_row(r, project_root)]
+    edit_loops = len(reliable_edit_rows)
+    skipped_loops = sum(
+        1 for r in reliable_edit_rows if loop_row_gate_skipped(r, project_root)
+    )
+    lookup_loops = sum(1 for r in reliable_edit_rows if r.get("lookup_docs_called"))
     return {
         "loops": loops,
         "mcp_call_ratio": (mcp_calls / total_calls) if total_calls else 0.0,

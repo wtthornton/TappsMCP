@@ -179,20 +179,16 @@ def enabled_servers_for_bundle(bundle: NltBundle) -> tuple[str, ...]:
 
 
 def mcp_config_servers_for_bundle(bundle: NltBundle) -> tuple[str, ...]:
-    """Servers written as active MCP entries for host config files.
-
-    All six ``nlt-*`` servers are emitted so Cursor/Claude users can toggle them
-    in the MCP UI. *bundle* selects the recommended subset for init messaging
-    and doctor hints — not which entries appear in ``mcp.json``.
-    """
-    _ = bundle
-    return NLT_SERVER_ORDER
+    """Servers written as active MCP entries for host config files."""
+    return enabled_servers_for_bundle(bundle)
 
 
 def commented_servers_for_bundle(bundle: NltBundle) -> tuple[str, ...]:
-    """No commented opt-in blocks — every server is a real toggleable entry."""
-    _ = bundle
-    return ()
+    """Servers emitted as commented opt-in blocks in mcp.json (ADR-0016)."""
+    if bundle == "full":
+        return ()
+    enabled = set(enabled_servers_for_bundle(bundle))
+    return tuple(sid for sid in NLT_SERVER_ORDER if sid not in enabled)
 
 
 def is_nlt_server_id(server_id: str) -> bool:

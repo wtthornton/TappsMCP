@@ -24,6 +24,7 @@ CLAUDE.md and per-package CLAUDE.md files point at ADRs by number rather than em
 | [0014](0014-brain-central-doc-rag-big-bang.md) | Brain-central doc RAG (big-bang cutover) | Accepted |
 | [0015](0015-require-tapps-brain-docs-lookup-at-3240.md) | Require tapps-brain docs_lookup at 3.24.0+ | Accepted |
 | [0016](0016-needs-based-nlt-mcp-taxonomy.md) | Needs-based NLT MCP taxonomy (Build / Memory / Setup) | Accepted |
+| [0017](0017-function-level-call-graph-python-first.md) | Function-level call graph (Python-first) | Accepted |
 
 ## Adding a new ADR
 

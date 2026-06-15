@@ -59,6 +59,31 @@ class TestBuildPerFileResultsDiagnostics:
         assert "top=F401" in rows[0]
         assert "reason=lint_blocker" in rows[0]
 
+    def test_gate_fail_includes_security_top_findings(self) -> None:
+        results = [
+            {
+                "file_path": "/workspace/auth.py",
+                "gate_passed": False,
+                "overall_score": 55.0,
+                "security_issues": 1,
+                "errors": [],
+                "security_issue_details": [
+                    {
+                        "code": "B101",
+                        "message": "assert_used",
+                        "line": 12,
+                        "severity": "low",
+                    }
+                ],
+                "failure_reason": "gate_threshold",
+            },
+        ]
+        per_file, rows = _build_per_file_results(results)
+
+        assert per_file[0]["top_findings"][0]["code"] == "B101"
+        assert per_file[0]["top_findings"][0]["kind"] == "security"
+        assert "top=B101" in rows[0]
+
     def test_passing_file_unchanged(self) -> None:
         results = [
             {

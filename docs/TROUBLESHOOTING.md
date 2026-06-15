@@ -175,13 +175,13 @@ After that, `.cursor/hooks/` will contain `tapps-before-mcp.ps1` and `tapps-afte
 
 See [ADR-0016](adr/0016-needs-based-nlt-mcp-taxonomy.md) and [tutorial: NLT session modes](tutorials/04-nlt-mcp-session-modes.md).
 
-## Cursor agent transcripts and loop metrics
+## Cursor agent transcripts and loop metrics {#cursor-vs-claude-transcript-parsing}
 
 **Problem:** Stop-hook telemetry (`loop-metrics.jsonl`) shows gate skips or missing pipeline calls despite agent behavior looking correct.
 
 **Cause:** Cursor wraps MCP calls as `CallMcpTool` with nested JSON; older parsers only matched bare tool names. Cursor transcript paths differ from Claude Code.
 
-**Fix:** Ensure tapps-mcp ≥ 3.12.28 (TAP-4017 unwraps `CallMcpTool`). Run `tapps_doctor(quick=True)` and inspect loop-metrics / completion-gate sections. See [TAP-4016](https://linear.app/tappscodingagents/issue/TAP-4016) and child stories in Linear.
+**Fix:** Ensure tapps-mcp ≥ 3.12.28 (TAP-4017 unwraps `CallMcpTool`). Run `tapps_doctor(quick=True)` and inspect loop-metrics / completion-gate sections. Retest checklist: [docs/operations/DOGFOOD-RETEST.md](operations/DOGFOOD-RETEST.md). See [TAP-4016](https://linear.app/tappscodingagents/issue/TAP-4016) and child stories in Linear.
 
 **Dev repo note:** This repository uses `.cursor/bin/nlt-*-serve.sh` scripts that `exec` global `tapps-mcp serve --profile nlt-*` binaries. After editing `packages/tapps-mcp`, reinstall globals and reload MCP:
 

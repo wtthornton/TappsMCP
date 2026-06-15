@@ -141,7 +141,7 @@ TOOL_REASONS: dict[str, str] = {
         " Call before posting a version release to Linear via the linear-release-update skill."
     ),
     "tapps_impact_analysis": (
-        "Map blast radius before editing layout modules; document work should rebuild outputs."
+        "Map module-level import blast radius before API or layout changes."
     ),
     "tapps_audit_close_coverage": (
         "Close an audit finding's brain coverage after a fix lands — updates the file's"
@@ -167,7 +167,7 @@ TASK_TOOL_MAP: dict[str, dict[str, list[str]]] = {
     },
     "refactor": {
         "required": ["tapps_score_file", "tapps_quality_gate"],
-        "recommended": ["tapps_dead_code", "tapps_dependency_graph"],
+        "recommended": ["tapps_dead_code", "tapps_dependency_graph", "tapps_impact_analysis"],
         "optional": ["tapps_security_scan", "tapps_checklist"],
     },
     "security": {
@@ -216,7 +216,12 @@ TASK_TOOL_MAP_HIGH: dict[str, dict[str, list[str]]] = {
     },
     "refactor": {
         "required": ["tapps_score_file", "tapps_quality_gate", "tapps_dead_code"],
-        "recommended": ["tapps_dependency_graph", "tapps_security_scan", "tapps_checklist"],
+        "recommended": [
+            "tapps_dependency_graph",
+            "tapps_impact_analysis",
+            "tapps_security_scan",
+            "tapps_checklist",
+        ],
         "optional": [],
     },
     "security": {

@@ -1484,6 +1484,56 @@ def check_pipeline_enforce_recommendations(project_root: Path) -> CheckResult:
     )
 
 
+def check_cursor_loop_metrics_telemetry(project_root: Path) -> CheckResult:
+    """Report Cursor CallMcpTool transcript trustworthiness (TAP-4025)."""
+    import time
+
+    from tapps_mcp.tools.loop_metrics import (
+        _DAY_SECONDS,
+        _PROMOTE_WINDOW_DAYS,
+        _legacy_cursor_unparsed_callmcptool,
+        is_gate_tool,
+        read_loop_metrics,
+    )
+
+    cutoff = int(time.time()) - _PROMOTE_WINDOW_DAYS * _DAY_SECONDS
+    rows = [r for r in read_loop_metrics(project_root) if int(r.get("ts", 0)) >= cutoff]
+    legacy_unparsed = sum(1 for r in rows if _legacy_cursor_unparsed_callmcptool(r))
+    callmcptool_rows = sum(
+        1
+        for r in rows
+        if "CallMcpTool" in [str(t) for t in (r.get("tools_used") or [])]
+    )
+    resolved_gate_rows = 0
+    for row in rows:
+        tools = [str(t) for t in row.get("tools_used") or []]
+        if any(is_gate_tool(t) for t in tools):
+            resolved_gate_rows += 1
+
+    parts = [f"7d loops={len(rows)}", "callmcptool_unwrap=active"]
+    if legacy_unparsed:
+        parts.append(f"legacy_unparsed_callmcptool={legacy_unparsed}")
+    detail_parts: list[str] = []
+    if legacy_unparsed:
+        detail_parts.append(
+            f"{legacy_unparsed} pre-TAP-4017 Cursor rows excluded from rolling "
+            "gate_skip_rate (is_reliable_edit_loop_row filter)."
+        )
+    if callmcptool_rows > 0 and resolved_gate_rows == 0:
+        detail_parts.append(
+            f"{callmcptool_rows} loop-metrics rows contain CallMcpTool but zero "
+            "resolved tapps_* gate/checklist calls — gate_skip_rate may be inflated. "
+            "See docs/TROUBLESHOOTING.md#cursor-vs-claude-transcript-parsing."
+        )
+    ok = not (callmcptool_rows > 0 and resolved_gate_rows == 0)
+    return CheckResult(
+        "Cursor loop-metrics telemetry",
+        ok,
+        "; ".join(parts),
+        "\n".join(detail_parts) if detail_parts else None,
+    )
+
+
 def check_cache_gate_block_hint(project_root: Path) -> CheckResult:
     """Recommend ``linear_enforce_cache_gate: block`` on high-traffic projects (TAP-3577)."""
     from tapps_core.config.settings import load_settings
@@ -2993,10 +3043,11 @@ def _nlt_partial_enablement_remediation() -> str:
     developer = ", ".join(enabled_servers_for_bundle("developer"))
     minimal = ", ".join(enabled_servers_for_bundle("minimal"))
     return (
-        f"Disable unused nlt-* servers in your IDE MCP settings (all six are "
-        f"written to mcp.json for toggling). Recommended developer bundle "
-        f"({developer}) stays within the ≤3-server budget; use minimal "
-        f"({minimal}) for build-only sessions. "
+        f"Enable only the recommended bundle in your IDE MCP settings. "
+        f"Developer bundle ({developer}) stays within the ≤3-server budget; "
+        f"use minimal ({minimal}) for build-only sessions. "
+        "Run: tapps-mcp init --host cursor --force --allow-package-init --no-uv "
+        "to regenerate mcp.json with commented opt-in servers. "
         "See docs/architecture/nlt-mcp-plugin-spec.yaml."
     )
 
@@ -3042,14 +3093,14 @@ def check_nlt_partial_enablement(root: Path) -> CheckResult:
         f"{len(nlt_ids)} server(s); combined eager={combined_eager}; "
         + "; ".join(lines)
     )
-    recommended = ", ".join(enabled_servers_for_bundle("developer"))
     if set(nlt_ids) == set(NLT_SERVER_ORDER):
         return CheckResult(
             "NLT partial enablement",
-            True,
+            False,
             (
-                f"All six nlt-* servers in MCP config (toggle in IDE). "
-                f"Recommended active: {recommended}. {summary}"
+                f"WARN: all six nlt-* servers enabled in MCP config. "
+                f"Recommended active: {', '.join(enabled_servers_for_bundle('developer'))}. "
+                f"{summary}"
             ),
             _nlt_partial_enablement_remediation(),
         )
@@ -4022,6 +4073,7 @@ def _collect_checks(root: Path, *, quick: bool = False) -> list[CheckResult]:
     checks.append(check_cache_gate_block_hint(root))
     checks.append(check_install_git_hooks_hint(root))
     checks.append(check_pipeline_enforce_recommendations(root))
+    checks.append(check_cursor_loop_metrics_telemetry(root))
     checks.append(check_continuous_learning_v2_skill(root))
     checks.append(check_pretooluse_matchers(root))
     checks.append(check_agents_md(root))

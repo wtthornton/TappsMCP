@@ -48,9 +48,14 @@ def collect_improvement_hints(score: ScoreResult, *, max_hints: int = _MAX_IMPRO
 
 
 def attach_score_diagnostics(file_result: dict[str, Any], score: ScoreResult) -> None:
-    """Attach truncated lint excerpts from the score result."""
+    """Attach truncated lint and security excerpts from the score result."""
     if score.lint_issues:
         file_result["lint_issues"] = serialize_issues(score.lint_issues, limit=_TOP_FINDINGS_LIMIT)
+    if score.security_issues:
+        file_result["security_issue_details"] = serialize_issues(
+            score.security_issues,
+            limit=_TOP_FINDINGS_LIMIT,
+        )
 
 
 def derive_failure_reason(file_result: dict[str, Any]) -> FailureReason | None:
@@ -80,21 +85,39 @@ def derive_failure_reason(file_result: dict[str, Any]) -> FailureReason | None:
     return None
 
 
-def build_top_findings(file_result: dict[str, Any]) -> list[dict[str, Any]]:
-    """Return up to three lint findings for summary display."""
-    findings: list[dict[str, Any]] = []
-    for issue in file_result.get("lint_issues") or []:
+def _append_issue_findings(
+    findings: list[dict[str, Any]],
+    issues: list[Any],
+    *,
+    kind: str,
+) -> None:
+    for issue in issues:
         if not isinstance(issue, dict):
             continue
         entry: dict[str, Any] = {
+            "kind": kind,
             "code": issue.get("code", ""),
             "message": issue.get("message", ""),
         }
         if issue.get("line") is not None:
             entry["line"] = issue["line"]
+        if issue.get("severity"):
+            entry["severity"] = issue["severity"]
         findings.append(entry)
         if len(findings) >= _TOP_FINDINGS_LIMIT:
-            break
+            return
+
+
+def build_top_findings(file_result: dict[str, Any]) -> list[dict[str, Any]]:
+    """Return up to three lint/security findings for summary display."""
+    findings: list[dict[str, Any]] = []
+    _append_issue_findings(findings, file_result.get("lint_issues") or [], kind="lint")
+    if len(findings) < _TOP_FINDINGS_LIMIT:
+        _append_issue_findings(
+            findings,
+            file_result.get("security_issue_details") or [],
+            kind="security",
+        )
     return findings
 
 
