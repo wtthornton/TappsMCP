@@ -1137,6 +1137,22 @@ async def tapps_lookup_docs(
         error_code=err_code,
     )
 
+    if result.success:
+        try:
+            from tapps_core.config.settings import load_settings
+            from tapps_mcp.tools.lookup_telemetry import record_lookup_event
+
+            settings = load_settings()
+            record_lookup_event(
+                settings.project_root,
+                library=library,
+                topic=topic,
+                source="mcp",
+                resolved_library=result.library if result.library != library else None,
+            )
+        except Exception:
+            logger.debug("lookup_telemetry_record_failed", exc_info=True)
+
     return _with_nudges("tapps_lookup_docs", response)
 
 

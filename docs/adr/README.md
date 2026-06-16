@@ -28,6 +28,7 @@ CLAUDE.md and per-package CLAUDE.md files point at ADRs by number rather than em
 | [0018](0018-deploy-all-six-nlt-mcp-servers-by-default.md) | Deploy all six NLT MCP servers by default (full bundle) | Accepted |
 | [0019](0019-blue-green-dev-monorepo-mcp-deploy.md) | Blue/green dev-monorepo MCP deploy | Accepted (default superseded by [0020](0020-global-uv-tool-default-blue-green-opt-in.md)) |
 | [0020](0020-global-uv-tool-default-blue-green-opt-in.md) | Global uv-tool default; blue/green deploy opt-in | Accepted |
+| [0021](0021-usage-gap-doc-lookup-telemetry-and-import-cache-aliases.md) | Usage-gap doc lookup: import/cache aliases + cross-channel telemetry | Accepted |
 
 ## Adding a new ADR
 

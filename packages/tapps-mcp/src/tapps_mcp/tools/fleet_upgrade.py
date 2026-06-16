@@ -322,6 +322,8 @@ def format_fleet_upgrade_markdown(report: dict[str, Any]) -> str:
         lines.append("## CLI reinstall")
         lines.append("")
         for name, info in report["reinstall_clis"].items():
+            if not isinstance(info, dict):
+                continue
             mark = "ok" if info.get("ok") else "failed"
             lines.append(f"- **{name}**: {mark}")
     return "\n".join(lines)

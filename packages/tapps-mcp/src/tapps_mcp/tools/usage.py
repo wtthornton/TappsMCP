@@ -122,13 +122,21 @@ def _telemetry_used_checklist(rows: list[dict[str, Any]]) -> bool:
     return any(bool(row.get("checklist_called")) for row in rows[-5:])
 
 
-def _telemetry_used_lookup(rows: list[dict[str, Any]]) -> bool:
+def _telemetry_used_lookup(rows: list[dict[str, Any]], project_root: Path | None = None) -> bool:
     for row in reversed(rows[-5:]):
         if row.get("lookup_docs_called"):
             return True
         for tool in row.get("tools_used") or []:
             if matches_pipeline_tool(str(tool), LOOKUP_SHORT_NAMES):
                 return True
+    if project_root is not None:
+        try:
+            from tapps_mcp.tools.lookup_telemetry import lookup_recorded_recently
+
+            if lookup_recorded_recently(project_root):
+                return True
+        except Exception:
+            pass
     return False
 
 
@@ -293,7 +301,7 @@ def compute_gaps(
                 "any external library API to avoid hallucinated calls."
             )
 
-    used_lookup = _LOOKUP_TOOL in called or _telemetry_used_lookup(rows)
+    used_lookup = _LOOKUP_TOOL in called or _telemetry_used_lookup(rows, project_root)
     libraries_without_lookup: list[str] = []
     if not used_lookup and has_recent_edits and "lookup_docs_underused" not in gaps:
         libraries_without_lookup = uncached_libs_in_edits

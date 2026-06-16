@@ -1923,6 +1923,16 @@ def lookup_docs_cmd(library: str, topic: str, mode: str, raw: bool) -> None:
         click.echo("---")
         click.echo(content)
 
+        from tapps_mcp.tools.lookup_telemetry import record_lookup_event
+
+        record_lookup_event(
+            settings.project_root,
+            library=result.library or library,
+            topic=result.topic or topic,
+            source="cli",
+            resolved_library=result.library if result.library != library else None,
+        )
+
     asyncio.run(_run())
 
 

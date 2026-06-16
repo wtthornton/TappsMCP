@@ -9,7 +9,10 @@ from tapps_core.knowledge.import_analyzer import (
     _detect_project_package,
     extract_external_imports,
     find_uncached_libraries,
+    is_library_cached,
 )
+from tapps_core.knowledge.cache import KBCache
+from tapps_core.knowledge.models import CacheEntry
 
 
 class TestExtractExternalImports:
@@ -121,6 +124,19 @@ class TestFindUncachedLibraries:
         cache = MagicMock()
         result = find_uncached_libraries([], cache)
         assert result == []
+
+    def test_yaml_import_resolves_pyyaml_cache(self, tmp_path: Path) -> None:
+        cache = KBCache(cache_dir=tmp_path / "cache")
+        cache.put(CacheEntry(library="pyyaml", topic="overview", content="# PyYAML"))
+
+        assert is_library_cached("yaml", cache) is True
+        assert find_uncached_libraries(["yaml"], cache) == []
+
+    def test_import_name_still_uncached_without_alias(self, tmp_path: Path) -> None:
+        cache = KBCache(cache_dir=tmp_path / "cache")
+        cache.put(CacheEntry(library="fastapi", topic="overview", content="# FastAPI"))
+
+        assert find_uncached_libraries(["httpx"], cache) == ["httpx"]
 
 
 class TestDetectProjectPackage:

@@ -17,7 +17,33 @@ import structlog
 if TYPE_CHECKING:
     from tapps_core.knowledge.cache import KBCache
 
+from tapps_core.knowledge.fuzzy_matcher import fuzzy_match_library, resolve_alias
+
 logger = structlog.get_logger(__name__)
+
+# Import top-level module name → cache directory names (PyPI / Context7 ids).
+# Order matters: first hit in ``is_library_cached`` wins.
+IMPORT_MODULE_ALIASES: dict[str, tuple[str, ...]] = {
+    "yaml": ("pyyaml", "yaml"),
+    "cv2": ("opencv-python", "opencv", "cv2"),
+    "pil": ("pillow", "pil"),
+    "sklearn": ("scikit-learn", "sklearn"),
+    "bs4": ("beautifulsoup4", "bs4"),
+    "jwt": ("pyjwt", "jwt"),
+    "dateutil": ("python-dateutil", "dateutil"),
+    "dotenv": ("python-dotenv", "dotenv"),
+    "attr": ("attrs", "attr"),
+    "gi": ("pygobject", "gi"),
+    "wx": ("wxpython", "wx"),
+    "serial": ("pyserial", "serial"),
+    "usb": ("pyusb", "usb"),
+    "magic": ("python-magic", "magic"),
+    "skimage": ("scikit-image", "skimage"),
+    "np": ("numpy", "np"),
+    "pd": ("pandas", "pd"),
+}
+
+_FUZZY_CACHE_MATCH_THRESHOLD = 0.85
 
 # Python stdlib top-level module names (available since 3.10)
 _STDLIB_MODULES: frozenset[str] = frozenset(sys.stdlib_module_names)
@@ -96,6 +122,64 @@ def extract_external_imports(
     return external
 
 
+def _cache_key_candidates(import_name: str) -> list[str]:
+    """Return ordered cache keys to probe for an import top-level module name."""
+    name = import_name.lower().strip()
+    candidates: list[str] = [name]
+    aliases = IMPORT_MODULE_ALIASES.get(name)
+    if aliases:
+        candidates.extend(aliases)
+    resolved = resolve_alias(name)
+    if resolved.lower() not in {c.lower() for c in candidates}:
+        candidates.append(resolved)
+    # Preserve order, dedupe case-insensitively
+    seen: set[str] = set()
+    unique: list[str] = []
+    for candidate in candidates:
+        key = candidate.lower()
+        if key in seen:
+            continue
+        seen.add(key)
+        unique.append(candidate)
+    return unique
+
+
+def is_library_cached(
+    import_name: str,
+    cache: KBCache,
+    *,
+    known_libs: list[str] | None = None,
+) -> bool:
+    """Return True when documentation for *import_name* exists in *cache*.
+
+    Checks direct keys, import→PyPI aliases, ``resolve_alias``, then fuzzy
+    match against libraries already present in the cache directory.
+    """
+    for candidate in _cache_key_candidates(import_name):
+        if cache.has(candidate):
+            return True
+
+    libs = known_libs
+    if libs is None:
+        try:
+            libs = list({entry.library for entry in cache.list_entries()})
+        except Exception:
+            logger.debug("cache_list_entries_failed", exc_info=True)
+            libs = []
+    if not libs:
+        return False
+
+    matches = fuzzy_match_library(
+        import_name,
+        libs,
+        threshold=_FUZZY_CACHE_MATCH_THRESHOLD,
+        max_results=1,
+    )
+    if not matches:
+        return False
+    return cache.has(matches[0].library)
+
+
 def find_uncached_libraries(
     external_imports: list[str],
     cache: KBCache,
@@ -109,11 +193,7 @@ def find_uncached_libraries(
     Returns:
         List of module names with no cached documentation.
     """
-    uncached: list[str] = []
-    for lib in external_imports:
-        if not cache.has(lib):
-            uncached.append(lib)
-    return uncached
+    return [lib for lib in external_imports if not is_library_cached(lib, cache)]
 
 
 def _detect_workspace_packages(project_root: Path) -> frozenset[str]:

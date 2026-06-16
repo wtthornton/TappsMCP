@@ -181,6 +181,74 @@ class TestLibraryUsesWithoutLookupDocs:
         assert "httpx" in followup
         assert "library_uses_without_lookup_docs" in followup
 
+    def test_suppressed_when_import_cached_under_pypi_name(self, tmp_path: Path) -> None:
+        src_dir = tmp_path / "src"
+        src_dir.mkdir()
+        mod = src_dir / "config_loader.py"
+        mod.write_text("import yaml\n", encoding="utf-8")
+        cache_dir = tmp_path / ".tapps-mcp-cache" / "pyyaml"
+        cache_dir.mkdir(parents=True)
+        (cache_dir / "overview.md").write_text("# PyYAML\n", encoding="utf-8")
+        (cache_dir / "overview.meta.json").write_text(
+            json.dumps({"library": "pyyaml", "topic": "overview", "cached_at": int(time.time())}),
+            encoding="utf-8",
+        )
+        metrics_dir = tmp_path / ".tapps-mcp"
+        metrics_dir.mkdir(parents=True)
+        rel = str(mod.relative_to(tmp_path))
+        (metrics_dir / "loop-metrics.jsonl").write_text(
+            json.dumps(
+                {
+                    "ts": int(time.time()),
+                    "files_edited": [rel],
+                    "gate_skipped_files": [],
+                    "lookup_docs_called": False,
+                    "checklist_called": True,
+                    "tools_used": ["tapps_validate_changed", "tapps_checklist"],
+                }
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+        report = compute_gaps(
+            tmp_path,
+            called_tools={"tapps_session_start", "tapps_validate_changed", "tapps_checklist"},
+        )
+        assert "library_uses_without_lookup_docs" not in report["gaps"]
+
+    def test_cli_lookup_event_clears_gap_for_session_start(self, tmp_path: Path) -> None:
+        src_dir = tmp_path / "src"
+        src_dir.mkdir()
+        mod = src_dir / "api.py"
+        mod.write_text("import httpx\n", encoding="utf-8")
+        metrics_dir = tmp_path / ".tapps-mcp"
+        metrics_dir.mkdir(parents=True)
+        rel = str(mod.relative_to(tmp_path))
+        (metrics_dir / "loop-metrics.jsonl").write_text(
+            json.dumps(
+                {
+                    "ts": int(time.time()),
+                    "files_edited": [rel],
+                    "gate_skipped_files": [],
+                    "lookup_docs_called": False,
+                    "checklist_called": True,
+                    "tools_used": ["tapps_validate_changed", "tapps_checklist"],
+                }
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+        from tapps_mcp.tools.lookup_telemetry import record_lookup_event
+
+        record_lookup_event(
+            tmp_path,
+            library="httpx",
+            topic="client",
+            source="cli",
+        )
+        report = compute_gaps(tmp_path, called_tools=set())
+        assert "library_uses_without_lookup_docs" not in report["gaps"]
+
 
 class TestComputeGapsScopedEdits:
     def test_tmp_scratch_excluded_from_edits_without_validation(self, tmp_path: Path) -> None:
