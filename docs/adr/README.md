@@ -26,6 +26,7 @@ CLAUDE.md and per-package CLAUDE.md files point at ADRs by number rather than em
 | [0016](0016-needs-based-nlt-mcp-taxonomy.md) | Needs-based NLT MCP taxonomy (Build / Memory / Setup) | Accepted (default bundle superseded by [0018](0018-deploy-all-six-nlt-mcp-servers-by-default.md)) |
 | [0017](0017-function-level-call-graph-python-first.md) | Function-level call graph (Python-first) | Accepted |
 | [0018](0018-deploy-all-six-nlt-mcp-servers-by-default.md) | Deploy all six NLT MCP servers by default (full bundle) | Accepted |
+| [0019](0019-blue-green-dev-monorepo-mcp-deploy.md) | Blue/green dev-monorepo MCP deploy | Accepted |
 
 ## Adding a new ADR
 

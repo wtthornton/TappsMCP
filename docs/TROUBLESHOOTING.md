@@ -223,14 +223,15 @@ done | xargs -r kill 2>/dev/null || true
 
 **Host-level shared fleet (roadmap):** Run six long-lived `tapps-mcp serve --transport http` processes once (systemd/user service) and point all Cursor windows at SSE URLs — one process set serves every window. Not yet the default stdio layout; track as fleet hardening follow-up.
 
-**After editing `packages/tapps-mcp` or `packages/docs-mcp`:**
+**After editing `packages/tapps-mcp` or `packages/docs-mcp` (dev monorepo):**
 
 ```bash
-uv tool install --reinstall --from packages/tapps-mcp tapps-mcp
-uv tool install --reinstall --from packages/docs-mcp docsmcp
+tapps-mcp deploy-local
 tapps-mcp init --host cursor --force --allow-package-init --no-uv --bundle full
-# Then Reload Window
+# Then Reload Window / refresh MCP
 ```
+
+Use `--skip-gate` only in emergencies (deploy waits for pytest quiescence by default). See [ADR-0019](adr/0019-blue-green-dev-monorepo-mcp-deploy.md).
 
 ## Cursor agent transcripts and loop metrics {#cursor-vs-claude-transcript-parsing}
 
@@ -240,12 +241,9 @@ tapps-mcp init --host cursor --force --allow-package-init --no-uv --bundle full
 
 **Fix:** Ensure tapps-mcp ≥ 3.12.28 (TAP-4017 unwraps `CallMcpTool`). Run `tapps_doctor(quick=True)` and inspect loop-metrics / completion-gate sections. Retest checklist: [docs/operations/DOGFOOD-RETEST.md](operations/DOGFOOD-RETEST.md). See [TAP-4016](https://linear.app/tappscodingagents/issue/TAP-4016) and child stories in Linear.
 
-**Dev repo note:** This repository's `.cursor/bin/nlt-*-serve.sh` scripts `exec` the **deployed global** `~/.local/bin/{tapps-mcp,tapps-platform,docsmcp} serve --profile nlt-*` binaries — intentionally, NOT the workspace `.venv` or `uv run`. Source changes therefore go live only on an explicit deploy. After editing `packages/tapps-mcp` (or `docs-mcp`), reinstall globals and reload MCP:
+**Dev repo note:** `.cursor/bin/nlt-*-serve.sh` prefer `~/.tapps-mcp/current/bin/{tapps-mcp,tapps-platform,docsmcp}` when blue/green is configured ([ADR-0019](adr/0019-blue-green-dev-monorepo-mcp-deploy.md)), else legacy global shims. **Do not** point wrappers at `.venv` or `uv run`. After source edits:
 
 ```bash
-uv tool install --reinstall --from packages/tapps-mcp tapps-mcp
-uv tool install --reinstall --from packages/docs-mcp docs-mcp
-# then reload MCP in Cursor (Developer: Reload Window / Settings → MCP refresh)
+tapps-mcp deploy-local
+# then reload MCP in Cursor
 ```
-
-**Do not "fix" this by pointing the wrappers at `.venv/bin` or `uv run --directory`.** The dev repo constantly runs pytest/`uv` against its workspace `.venv`; launching the MCP fleet from that same env lets test/build churn crash live servers, which makes Cursor flap **error↔good** on a 5-minute relaunch backoff. The isolated `uv tool` env stays up. The `tapps-mcp init` generator emits the global form for the dev monorepo (`_resolve_dev_monorepo_launch`); see [operations/FLEET-MAINTENANCE.md](operations/FLEET-MAINTENANCE.md#global-cli-policy-epic-116).

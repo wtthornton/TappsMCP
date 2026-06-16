@@ -187,8 +187,58 @@ def check_docsmcp_binary_version_mismatch() -> CheckResult:
     )
 
 
+def check_blue_green_deploy() -> CheckResult:
+    """Verify dev-monorepo blue/green MCP deploy layout when present."""
+    from tapps_mcp.distribution.blue_green import (
+        CURRENT_LINK,
+        RELEASES_DIR,
+        blue_green_status,
+        current_release_path,
+    )
+
+    current = current_release_path()
+    if current is None and not RELEASES_DIR.is_dir():
+        return CheckResult(
+            "Blue/green MCP deploy",
+            True,
+            "Not configured (legacy uv tool install or fresh checkout)",
+            "Run tapps-mcp deploy-local from the tapps-mcp checkout to enable zero-downtime deploys.",
+        )
+
+    status = blue_green_status()
+    if current is None:
+        return CheckResult(
+            "Blue/green MCP deploy",
+            False,
+            f"Releases present ({len(status.get('releases') or [])}) but current symlink missing",
+            f"Run tapps-mcp deploy-local or recreate {CURRENT_LINK}",
+        )
+
+    manifest = status.get("manifest") or {}
+    version = manifest.get("version", "unknown")
+    short_sha = manifest.get("short_sha", "unknown")
+    detail = f"current={current.name} ({version}-{short_sha}), releases={len(status.get('releases') or [])}"
+    if status.get("deploy_lock_held"):
+        detail += "; deploy lock held"
+    return CheckResult(
+        "Blue/green MCP deploy",
+        True,
+        detail,
+    )
+
+
 def check_global_local_install() -> CheckResult:
     """TAP-4099: warn when global CLIs were installed from a local checkout path."""
+    from tapps_mcp.distribution.blue_green import current_release_path
+
+    if current_release_path() is not None:
+        return CheckResult(
+            "Global CLI install source",
+            True,
+            "Blue/green current release active (~/.tapps-mcp/current)",
+            "Deploy updates via tapps-mcp deploy-local; running servers stay pinned until MCP reload.",
+        )
+
     from tapps_mcp.diagnostics import check_install_drift
 
     drift = check_install_drift()
@@ -207,8 +257,8 @@ def check_global_local_install() -> CheckResult:
         f"WARN: {names} installed from local checkout ({sources})",
         drift.remediation_hint
         or (
-            "Pin consumer globals to release tags; dev monorepo deploys via explicit "
-            "uv tool install --reinstall --from packages/... then MCP reload."
+            "Pin consumer globals to release tags; dev monorepo deploys via "
+            "tapps-mcp deploy-local (blue/green) then MCP reload."
         ),
     )
 
@@ -4338,6 +4388,7 @@ def _collect_checks(root: Path, *, quick: bool = False) -> list[CheckResult]:
     checks.append(check_binary_on_path())
     checks.append(check_binary_version_mismatch())
     checks.append(check_docsmcp_binary_version_mismatch())
+    checks.append(check_blue_green_deploy())
     checks.append(check_global_local_install())
     checks.append(check_claude_code_user(project_root=root))
     checks.append(check_claude_code_project(root))

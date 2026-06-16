@@ -66,7 +66,7 @@ class TestCheckInstallDriftDrifted:
                 result = check_install_drift()
 
         assert result.drift_detected is True
-        assert "uv tool install -e --reinstall" in result.remediation_hint
+        assert "deploy-local" in result.remediation_hint
         assert len(result.entries) == 1
         entry = result.entries[0]
         assert entry.binary == "tapps-mcp"

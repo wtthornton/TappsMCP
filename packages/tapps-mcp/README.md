@@ -17,7 +17,7 @@ uv sync --all-packages
 uv tool install -e packages/tapps-mcp
 ```
 
-Upgrade later with `git pull && uv tool install --reinstall packages/tapps-mcp`.
+**Dev monorepo:** after `git pull`, run `tapps-mcp deploy-local` then reload MCP ([ADR-0019](../../docs/adr/0019-blue-green-dev-monorepo-mcp-deploy.md)). Consumer repos: `uv tool install --reinstall` from a release tag.
 
 ## Quick start
 

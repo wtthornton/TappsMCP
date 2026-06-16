@@ -6,6 +6,7 @@ migration) and optionally refreshes MCP host config via ``init --force``.
 
 from __future__ import annotations
 
+import json
 import os
 import subprocess
 from dataclasses import dataclass, field
@@ -247,28 +248,28 @@ def run_fleet_upgrade(
 
 
 def _reinstall_global_clis(checkout: Path) -> dict[str, Any]:
-    """Reinstall tapps-mcp + docs-mcp global CLIs from a checkout."""
-    specs = (
-        ("tapps-mcp", checkout / "packages" / "tapps-mcp", "tapps-mcp"),
-        ("docs-mcp", checkout / "packages" / "docs-mcp", "docs-mcp"),
-    )
-    results: dict[str, Any] = {}
-    for label, pkg, tool_name in specs:
-        if not pkg.is_dir():
-            results[label] = {"ok": False, "error": f"missing {pkg}"}
-            continue
-        proc = subprocess.run(
-            ["uv", "tool", "install", "--reinstall", "--from", str(pkg), tool_name],
-            capture_output=True,
-            text=True,
-            check=False,
-        )
-        results[label] = {
-            "ok": proc.returncode == 0,
-            "binary": "docsmcp" if label == "docs-mcp" else "tapps-mcp",
-            "output": (proc.stdout or proc.stderr or "").strip()[-500:],
-        }
-    return results
+    """Blue/green deploy tapps-mcp + docs-mcp from a checkout (zero-downtime flip)."""
+    from tapps_mcp.distribution.blue_green import deploy_blue_green
+
+    deploy = deploy_blue_green(checkout)
+    ok = bool(deploy.get("ok"))
+    summary = json.dumps(
+        {
+            "release": deploy.get("release"),
+            "current": deploy.get("current"),
+            "smoke_test": (deploy.get("smoke_test") or {}).get("versions"),
+        },
+        sort_keys=True,
+    )[-500:]
+    shared = {"ok": ok, "output": summary}
+    if not ok:
+        err = deploy.get("quiescence_gate") or deploy.get("build") or deploy.get("smoke_test") or deploy
+        shared["error"] = json.dumps(err, default=str)[-500:]
+    return {
+        "blue_green": deploy,
+        "tapps-mcp": {**shared, "binary": "tapps-mcp"},
+        "docs-mcp": {**shared, "binary": "docsmcp"},
+    }
 
 
 def format_fleet_upgrade_markdown(report: dict[str, Any]) -> str:

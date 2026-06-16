@@ -33,7 +33,7 @@ if [[ "$DRY_RUN" == "1" ]]; then
   ARGS+=(--dry-run)
 fi
 
-echo "==> Fleet upgrade (bundle=$BUNDLE, reinstall_clis=$REINSTALL)"
+echo "==> Fleet upgrade (bundle=$BUNDLE, reinstall_clis=$REINSTALL — blue/green when reinstalling)"
 if [[ -n "$TAPPS_FLEET_ROOTS" ]]; then
   ARGS+=(--roots "$TAPPS_FLEET_ROOTS")
   echo "    roots: $TAPPS_FLEET_ROOTS"
@@ -45,4 +45,4 @@ fi
 uv run tapps-mcp "${ARGS[@]}"
 
 echo ""
-echo "Reload MCP in Cursor / Claude Code for each upgraded project."
+echo "Reload MCP in Cursor / Claude Code after deploy-local or fleet reinstall."

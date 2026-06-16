@@ -663,6 +663,77 @@ def tool_usage_fleet_cmd(
         click.echo(json.dumps(report, indent=2))
 
 
+@main.command("deploy-local")
+@click.option(
+    "--tapps-checkout",
+    default=".",
+    show_default=True,
+    help="Path to tapps-mcp monorepo checkout.",
+)
+@click.option(
+    "--dry-run",
+    is_flag=True,
+    default=False,
+    help="Print planned release path and flip without executing.",
+)
+@click.option(
+    "--skip-gate",
+    is_flag=True,
+    default=False,
+    help="Skip quiescence gate (pytest-in-checkout check).",
+)
+@click.option(
+    "--force-build",
+    is_flag=True,
+    default=False,
+    help="Rebuild release even when the version-sha directory already exists.",
+)
+@click.option(
+    "--keep-releases",
+    default=3,
+    show_default=True,
+    type=int,
+    help="Number of release dirs to retain after GC.",
+)
+@click.option(
+    "--skip-doctor-smoke",
+    is_flag=True,
+    default=False,
+    help="Skip doctor --quick during smoke test.",
+)
+def deploy_local_cmd(
+    tapps_checkout: str,
+    dry_run: bool,
+    skip_gate: bool,
+    force_build: bool,
+    keep_releases: int,
+    skip_doctor_smoke: bool,
+) -> None:
+    """Blue/green deploy dev-monorepo MCP CLIs to ~/.tapps-mcp/current.
+
+    Builds an immutable release venv, smoke-tests it, atomically flips the
+    ``current`` symlink, and GCs old releases. Running MCP servers stay pinned
+    to their release dir; reload MCP in Cursor to pick up the new build.
+    """
+    import json
+    from pathlib import Path
+
+    from tapps_mcp.distribution.blue_green import deploy_blue_green
+
+    checkout = Path(tapps_checkout).resolve()
+    report = deploy_blue_green(
+        checkout,
+        skip_gate=skip_gate,
+        dry_run=dry_run,
+        force_build=force_build,
+        keep_releases=keep_releases,
+        run_doctor_smoke=not skip_doctor_smoke,
+    )
+    click.echo(json.dumps(report, indent=2))
+    if not report.get("ok"):
+        raise SystemExit(1)
+
+
 @main.command("upgrade-fleet")
 @click.option(
     "--roots",
@@ -705,7 +776,7 @@ def tool_usage_fleet_cmd(
     "--reinstall-clis",
     is_flag=True,
     default=False,
-    help="Reinstall global tapps-mcp + docs-mcp from --tapps-checkout first.",
+    help="Blue/green deploy tapps-mcp + docs-mcp to ~/.tapps-mcp/current from --tapps-checkout first.",
 )
 @click.option(
     "--tapps-checkout",

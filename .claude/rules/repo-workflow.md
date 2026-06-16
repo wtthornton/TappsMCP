@@ -87,11 +87,11 @@ canonical-but-not-listed, add it to `EXPECTED_SECTIONS`.
 
 ## Do not publish tapps-mcp to PyPI / npm
 
-tapps-mcp, tapps-core, docs-mcp, and any npm wrappers are **installed globally from the local checkout** (`uv tool install -e packages/tapps-mcp` or `uv tool install --reinstall <local path>`). No PyPI / npm distribution pipeline is in use.
+tapps-mcp, tapps-core, docs-mcp, and any npm wrappers are **installed globally from the local checkout**. The dev monorepo uses **blue/green deploy** (`tapps-mcp deploy-local` or `upgrade-fleet --reinstall-clis`): immutable release venvs under `~/.tapps-mcp/releases/` with an atomic flip of `~/.tapps-mcp/current`. Running MCP servers stay pinned to their release; reload MCP in Cursor to pick up a new build. Consumer repos may still use `uv tool install` pinned to release tags. No PyPI / npm distribution pipeline is in use.
 
 - When releasing a new version, stop after `git push` + `git tag` + `gh release create`.
 - Do not suggest `uv publish`, `twine upload`, `npm publish`, or check for publish CI workflows.
-- If the user asks how to pick up a new version on their global CLI, point them at reinstalling from the local path — not at any registry.
+- If the user asks how to pick up a new version on the **dev monorepo** global CLI, point them at `tapps-mcp deploy-local` (waits for quiescence, zero-downtime flip) — not `uv tool install --reinstall`, which mutates the live install in place.
 
 ## How to apply
 

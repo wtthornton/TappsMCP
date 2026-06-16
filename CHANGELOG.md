@@ -7,13 +7,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [3.12.36] - 2026-06-16
+
+Patch: blue/green zero-downtime deploy for the dev-monorepo shared MCP install (ADR-0019).
+
+### Added
+
+- **`tapps-mcp deploy-local`** — builds an immutable release venv under `~/.tapps-mcp/releases/<version>-<sha>/`, smoke-tests, atomically flips `~/.tapps-mcp/current`, GCs old releases. Deploy lock + quiescence gate (blocks while pytest runs in checkout).
+- **Doctor `Blue/green MCP deploy`** check — reports `current` release and deploy-lock state.
+- **Wrapper runtime resolution** — `.cursor/bin/nlt-*-serve.sh` prefer `~/.tapps-mcp/current/bin/*` when present.
+
 ### Changed
 
-- **Deployment default bundle is now `full` (ADR-0018)** — `tapps_init` / `tapps_upgrade` and the `--bundle` flags default to `full` (all six `nlt-*` servers) instead of `developer`. `normalize_mcp_bundle` and `_infer_mcp_bundle` fall back to `full` via the new `DEFAULT_NLT_BUNDLE` constant. Explicit `mcp_bundle` in `.tapps-mcp.yaml` and existing on-disk server sets are still honored; opt down with `--bundle developer|minimal`. Supersedes ADR-0016 on the default bundle only.
+- **`upgrade-fleet --reinstall-clis`** — uses blue/green flip instead of in-place `uv tool install --reinstall` (dev monorepo).
+- **Install drift / global CLI doctor** — probes `current/bin` when blue/green is active; remediation points at `deploy-local`.
 
 ## [3.12.35] - 2026-06-15
 
 Patch: fix zombie cleanup hook on mawk (Ubuntu default awk).
+
+### Changed
+
+- **Deployment default bundle is now `full` (ADR-0018)** — `tapps_init` / `tapps_upgrade` and the `--bundle` flags default to `full` (all six `nlt-*` servers) instead of `developer`. Opt down with `--bundle developer|minimal`.
 
 ### Fixed
 

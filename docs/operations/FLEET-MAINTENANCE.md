@@ -91,12 +91,12 @@ uv tool install --reinstall "docs-mcp @ git+https://github.com/wtthornton/tapps-
 
 | Context | MCP launch | Why |
 |---------|------------|-----|
-| **tapps-mcp dev monorepo** | Global `~/.local/bin/tapps-mcp` via `.cursor/bin/nlt-*-serve.sh` (falls back to `uv run --directory` only before the first deploy) | The dev repo constantly runs pytest/uv against its workspace `.venv`; launching the MCP fleet from that same env (via `uv run` or `.venv/bin`) let test/build churn crash live servers — Cursor flapped error↔good on a 5-min backoff. The isolated `uv tool` env stays up. **Source edits go live only on deploy:** `uv tool install --reinstall --from packages/tapps-mcp tapps-mcp` (+ docs-mcp) then reload MCP. |
+| **tapps-mcp dev monorepo** | `~/.tapps-mcp/current/bin/*` via `.cursor/bin/nlt-*-serve.sh` (blue/green; legacy global shim fallback) | Many agents share one install. In-place `uv tool install --reinstall` mutates live servers mid-session. **Deploy:** `tapps-mcp deploy-local` or `upgrade-fleet --reinstall-clis` — builds `~/.tapps-mcp/releases/<version>-<sha>/`, flips `current`, reload MCP. See [ADR-0019](../adr/0019-blue-green-dev-monorepo-mcp-deploy.md). |
 | **Consumer repos** | Global `~/.local/bin/tapps-mcp` via `.cursor/bin/nlt-*-serve.sh` | Stable, tagged CLIs across the fleet |
 
 `tapps-mcp doctor` warns when globals were installed from a local path (`Global CLI install source`). **AgentForge daily work:** set `mcp_bundle: developer` in `.tapps-mcp.yaml` (build + memory + linear-issues only) to reduce token load; use `full` when you need docs-mcp or release-ship. The tapps-mcp dev repo uses `full` by default ([ADR-0018](../adr/0018-deploy-all-six-nlt-mcp-servers-by-default.md)).
 
-After `uv tool install --reinstall --from packages/...` during local dev, rerun fleet upgrade with tagged installs before touching consumer workspaces.
+After `tapps-mcp deploy-local` during dev-monorepo work, rerun fleet upgrade with tagged installs before touching consumer workspaces.
 
 ---
 

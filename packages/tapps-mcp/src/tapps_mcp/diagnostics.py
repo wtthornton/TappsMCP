@@ -81,6 +81,22 @@ def check_knowledge_base() -> KnowledgeBaseDiagnostic:
     )
 
 
+def _probe_binary_at_path(binary_path: str) -> tuple[str, str]:
+    """Return (path, version) for an explicit binary path."""
+    try:
+        result = subprocess.run(
+            [binary_path, "--version"],
+            capture_output=True,
+            text=True,
+            timeout=5,
+        )
+    except (OSError, subprocess.TimeoutExpired):
+        return binary_path, ""
+    if result.returncode != 0 or not (result.stdout or result.stderr).strip():
+        return binary_path, ""
+    return binary_path, (result.stdout or result.stderr).strip().split()[-1]
+
+
 def _probe_binary_version(binary_name: str) -> tuple[str, str]:
     """Return (resolved_path, reported_version) or ('', '') if unavailable.
 
@@ -143,18 +159,14 @@ def _is_local_uv_tool_install(binary_path: str) -> tuple[bool, str]:
 
 
 def check_install_drift() -> InstallDriftDiagnostic:
-    """TAP-2129: detect drift between in-process package versions and the
-    ``uv tool`` global install on PATH.
+    """TAP-2129: detect drift between in-process package versions and deployed CLIs.
 
-    When ``uv tool install`` ships a copy (non-editable), the global binary
-    can lag the local checkout silently. This check compares each binary's
-    ``--version`` against the source ``__version__`` and reports drift.
-
-    Skipped silently when neither binary is found on PATH (e.g. dev running
-    purely from the project venv). Never raises.
+    When the dev-monorepo blue/green ``~/.tapps-mcp/current`` layout is active,
+    probes ``current/bin/*`` instead of the legacy ``uv tool install`` shims.
     """
     from docs_mcp import __version__ as docs_mcp_version
     from tapps_mcp import __version__ as tapps_mcp_version
+    from tapps_mcp.distribution.blue_green import resolve_blue_green_binary
 
     targets = [
         ("tapps-mcp", tapps_mcp_version),
@@ -162,11 +174,17 @@ def check_install_drift() -> InstallDriftDiagnostic:
     ]
     entries: list[InstallDriftEntry] = []
     for binary, source_version in targets:
-        binary_path, binary_version = _probe_binary_version(binary)
+        blue_green_path = resolve_blue_green_binary(binary)
+        if blue_green_path:
+            binary_path, binary_version = _probe_binary_at_path(blue_green_path)
+            install_source = str(Path(blue_green_path).resolve().parents[1])
+            from_local = True
+        else:
+            binary_path, binary_version = _probe_binary_version(binary)
+            from_local, install_source = _is_local_uv_tool_install(binary_path)
         if not binary_path:
             continue
         drifted = bool(binary_version) and binary_version != source_version
-        from_local, install_source = _is_local_uv_tool_install(binary_path)
         entries.append(
             InstallDriftEntry(
                 binary=binary,
@@ -183,16 +201,12 @@ def check_install_drift() -> InstallDriftDiagnostic:
     local_install_warning = any(e.from_local_source for e in entries)
     hint = ""
     if drift_detected:
-        hint = (
-            "Refresh global tools: uv tool install -e --reinstall "
-            "<path-to-tapps-mcp>/packages/tapps-mcp "
-            "(and the same for packages/docs-mcp)"
-        )
-    elif local_install_warning:
+        hint = "Run tapps-mcp deploy-local from the tapps-mcp checkout to refresh ~/.tapps-mcp/current."
+    elif local_install_warning and not resolve_blue_green_binary("tapps-mcp"):
         hint = (
             "Global CLIs installed from a local checkout — consumer repos share this binary. "
-            "Pin fleet globals to release tags; dev monorepo deploys via explicit "
-            "uv tool install --reinstall --from packages/... then MCP reload."
+            "Pin fleet globals to release tags; dev monorepo deploys via "
+            "tapps-mcp deploy-local (blue/green flip) then MCP reload."
         )
     return InstallDriftDiagnostic(
         drift_detected=drift_detected,
