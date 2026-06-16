@@ -413,8 +413,9 @@ class TestDispatchMode:
                 self.store: dict[str, dict[str, Any]] = {}
 
             async def save(self, **kwargs: Any) -> dict[str, Any]:
-                self.store[kwargs["key"]] = {"value": kwargs["value"]}
-                return self.store[kwargs["key"]]
+                entry = {"key": kwargs["key"], "value": kwargs["value"], "status": "saved"}
+                self.store[kwargs["key"]] = entry
+                return entry
 
             async def get(self, key: str) -> dict[str, Any] | None:
                 return self.store.get(key)
@@ -499,8 +500,9 @@ class TestFixPlanMode:
                 self.store: dict[str, dict[str, Any]] = {}
 
             async def save(self, **kwargs: Any) -> dict[str, Any]:
-                self.store[kwargs["key"]] = {"value": kwargs["value"]}
-                return self.store[kwargs["key"]]
+                entry = {"key": kwargs["key"], "value": kwargs["value"], "status": "saved"}
+                self.store[kwargs["key"]] = entry
+                return entry
 
             async def get(self, key: str) -> dict[str, Any] | None:
                 return self.store.get(key)
@@ -561,10 +563,12 @@ class TestFixPlanMode:
             assert isinstance(story["priority"], int)
             assert story["priority"] in {1, 2, 3, 4}  # valid Linear priority range
 
-        # Fix plan is stored under a distinct brain key (fix:campaign:)
-        # while audit plan lives under audit:campaign:
-        audit_key = f"audit:campaign:{campaign_id}"
-        fix_key = f"fix:campaign:{campaign_id}"
+        # Fix plan is stored under a distinct brain key (fix.campaign.)
+        # while audit plan lives under audit.campaign.
+        from tapps_mcp.tools.audit_manifest import campaign_key, fix_campaign_key
+
+        audit_key = campaign_key(campaign_id)
+        fix_key = fix_campaign_key(campaign_id)
         assert audit_key in bridge.store
         assert fix_key in bridge.store
         assert audit_key != fix_key

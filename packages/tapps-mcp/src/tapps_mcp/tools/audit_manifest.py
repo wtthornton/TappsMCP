@@ -2,20 +2,26 @@
 
 Two record types are stored via :class:`BrainBridge`:
 
-- Per-file coverage records at key ``audit:coverage:<rel_path>`` — tier
+- Per-file coverage records at key ``audit.coverage.<encoded_path>`` — tier
   ``pattern`` (60d) — what was audited, when, and what was found.
-- Campaign spec records at key ``audit:campaign:<campaign_id>`` — tier
+  Paths are encoded for tapps-brain slug rules (``[a-z0-9][a-z0-9._-]{0,127}``):
+  lowercase, ``/`` → ``--`` between segments, ``.`` → ``_d`` (and escapes for
+  literal ``_d`` / ``--`` within a segment). Use :func:`coverage_key` /
+  :func:`rel_path_from_coverage_key` — never hand-build keys.
+- Campaign spec records at key ``audit.campaign.<campaign_id>`` — tier
   ``procedural`` (30d) — the planning output so dispatch can pick up
   where plan left off.
+- Fix-plan specs at key ``fix.campaign.<campaign_id>`` (TAP-2718).
 
 Reads return ``None`` for missing keys; writes return ``False`` when the
-bridge is unavailable (degraded mode — caller decides whether to fall back
-or surface the degradation).
+bridge is unavailable or the brain rejects the save (degraded mode — caller
+decides whether to fall back or surface the degradation).
 """
 
 from __future__ import annotations
 
 import json
+import re
 from dataclasses import asdict, dataclass, field
 from datetime import UTC, datetime, timedelta
 from typing import Any
@@ -24,11 +30,13 @@ import structlog
 
 logger = structlog.get_logger(__name__)
 
-_COVERAGE_KEY_PREFIX = "audit:coverage:"
-_CAMPAIGN_KEY_PREFIX = "audit:campaign:"
-# Fix-plan specs are stored under a distinct prefix so audit and fix coverage
-# can be tracked, queried, and expired independently (TAP-2718).
-_FIX_CAMPAIGN_KEY_PREFIX = "fix:campaign:"
+# Matches tapps-brain MemoryEntry key validation (models._KEY_SLUG_PATTERN).
+_BRAIN_KEY_SLUG_RE = re.compile(r"^[a-z0-9][a-z0-9._-]{0,127}$")
+_MAX_BRAIN_KEY_LEN = 128
+
+_COVERAGE_KEY_PREFIX = "audit.coverage."
+_CAMPAIGN_KEY_PREFIX = "audit.campaign."
+_FIX_CAMPAIGN_KEY_PREFIX = "fix.campaign."
 _COVERAGE_TIER = "pattern"
 _CAMPAIGN_TIER = "procedural"
 _SOURCE_AGENT = "tapps-audit-campaign"
@@ -62,17 +70,72 @@ class CoverageEntry:
     fix_sha: str = ""
 
 
+# Path segments are joined with ``--`` (valid in brain slugs). Within a segment,
+# ``.`` → ``_d``, literal ``_d`` → ``__d__``, literal ``--`` → ``__dash__``.
+_SEGMENT_SEP = "--"
+
+
+def _encode_path_segment(segment: str) -> str:
+    """Encode one path segment for use inside a brain slug key."""
+    return segment.replace("--", "__dash__").replace("_d", "__d__").replace(".", "_d")
+
+
+def _decode_path_segment(encoded: str) -> str:
+    """Decode one path segment from a brain slug key suffix."""
+    return encoded.replace("__dash__", "--").replace("__d__", "_d").replace("_d", ".")
+
+
+def _normalize_rel_path(rel_path: str) -> str:
+    normalized = rel_path.replace("\\", "/").strip("/")
+    if not normalized:
+        msg = "rel_path must not be empty"
+        raise ValueError(msg)
+    return normalized.lower()
+
+
+def _assert_brain_slug(key: str) -> None:
+    if len(key) > _MAX_BRAIN_KEY_LEN or not _BRAIN_KEY_SLUG_RE.match(key):
+        msg = f"brain key is not a valid slug ({len(key)} chars): {key!r}"
+        raise ValueError(msg)
+
+
 def coverage_key(rel_path: str) -> str:
-    return f"{_COVERAGE_KEY_PREFIX}{rel_path}"
+    """Return the brain slug key for a repo-relative file path."""
+    normalized = _normalize_rel_path(rel_path)
+    encoded = _SEGMENT_SEP.join(_encode_path_segment(part) for part in normalized.split("/"))
+    key = f"{_COVERAGE_KEY_PREFIX}{encoded}"
+    _assert_brain_slug(key)
+    return key
+
+
+def rel_path_from_coverage_key(key: str) -> str | None:
+    """Decode a coverage brain key back to a repo-relative path, or ``None``."""
+    if not key.startswith(_COVERAGE_KEY_PREFIX):
+        return None
+    suffix = key[len(_COVERAGE_KEY_PREFIX) :]
+    if not suffix:
+        return None
+    return "/".join(_decode_path_segment(part) for part in suffix.split(_SEGMENT_SEP))
 
 
 def campaign_key(campaign_id: str) -> str:
-    return f"{_CAMPAIGN_KEY_PREFIX}{campaign_id}"
+    """Return the brain slug key for an audit campaign spec."""
+    if not campaign_id:
+        msg = "campaign_id must not be empty"
+        raise ValueError(msg)
+    key = f"{_CAMPAIGN_KEY_PREFIX}{campaign_id.lower()}"
+    _assert_brain_slug(key)
+    return key
 
 
 def fix_campaign_key(campaign_id: str) -> str:
     """Brain key for a fix-plan spec — distinct from the audit campaign key."""
-    return f"{_FIX_CAMPAIGN_KEY_PREFIX}{campaign_id}"
+    if not campaign_id:
+        msg = "campaign_id must not be empty"
+        raise ValueError(msg)
+    key = f"{_FIX_CAMPAIGN_KEY_PREFIX}{campaign_id.lower()}"
+    _assert_brain_slug(key)
+    return key
 
 
 def now_iso() -> str:
@@ -95,6 +158,56 @@ def is_fresh(
     except ValueError:
         return False
     return datetime.now(tz=UTC) - audited_at <= timedelta(days=max_age_days)
+
+
+def _bridge_save_ok(result: Any) -> bool:
+    """True when :meth:`BrainBridge.save` persisted an entry successfully."""
+    if not isinstance(result, dict):
+        return False
+    if result.get("error"):
+        return False
+    if result.get("degraded"):
+        return False
+    if result.get("success") is False:
+        return False
+    if result.get("status") == "saved":
+        return True
+    return bool(result.get("key")) and "value" in result
+
+
+async def _save_via_bridge(
+    bridge: Any,
+    *,
+    key: str,
+    value: str,
+    tier: str,
+    tags: list[str],
+    failure_event: str,
+    **log_ctx: Any,
+) -> bool:
+    try:
+        result = await bridge.save(
+            key=key,
+            value=value,
+            tier=tier,
+            scope="project",
+            source="agent",
+            source_agent=_SOURCE_AGENT,
+            tags=tags,
+        )
+    except Exception as exc:  # degraded-mode catch-all
+        logger.debug(failure_event, key=key, error=str(exc), **log_ctx)
+        return False
+    if _bridge_save_ok(result):
+        return True
+    logger.warning(
+        f"{failure_event}_rejected",
+        key=key,
+        error=result.get("error") if isinstance(result, dict) else None,
+        message=result.get("message") if isinstance(result, dict) else None,
+        **log_ctx,
+    )
+    return False
 
 
 async def read_coverage_for(
@@ -132,24 +245,15 @@ async def write_coverage(entry: CoverageEntry) -> bool:
         )
         return False
     payload = json.dumps(_serialize_coverage(entry))
-    try:
-        await bridge.save(
-            key=coverage_key(entry.rel_path),
-            value=payload,
-            tier=_COVERAGE_TIER,
-            scope="project",
-            source="agent",
-            source_agent=_SOURCE_AGENT,
-            tags=["audit", "coverage", entry.campaign_id],
-        )
-    except Exception as exc:  # degraded-mode catch-all
-        logger.debug(
-            "audit_manifest_write_failed",
-            key=coverage_key(entry.rel_path),
-            error=str(exc),
-        )
-        return False
-    return True
+    return await _save_via_bridge(
+        bridge,
+        key=coverage_key(entry.rel_path),
+        value=payload,
+        tier=_COVERAGE_TIER,
+        tags=["audit", "coverage", entry.campaign_id],
+        failure_event="audit_manifest_write_failed",
+        rel_path=entry.rel_path,
+    )
 
 
 async def close_coverage(
@@ -211,24 +315,15 @@ async def save_campaign_spec(campaign_id: str, spec_dict: dict[str, Any]) -> boo
             campaign_id=campaign_id,
         )
         return False
-    try:
-        await bridge.save(
-            key=campaign_key(campaign_id),
-            value=json.dumps(spec_dict),
-            tier=_CAMPAIGN_TIER,
-            scope="project",
-            source="agent",
-            source_agent=_SOURCE_AGENT,
-            tags=["audit", "campaign", campaign_id],
-        )
-    except Exception as exc:  # degraded-mode catch-all
-        logger.debug(
-            "audit_manifest_save_campaign_failed",
-            campaign_id=campaign_id,
-            error=str(exc),
-        )
-        return False
-    return True
+    return await _save_via_bridge(
+        bridge,
+        key=campaign_key(campaign_id),
+        value=json.dumps(spec_dict),
+        tier=_CAMPAIGN_TIER,
+        tags=["audit", "campaign", campaign_id],
+        failure_event="audit_manifest_save_campaign_failed",
+        campaign_id=campaign_id,
+    )
 
 
 async def load_campaign_spec(campaign_id: str) -> dict[str, Any] | None:
@@ -266,9 +361,9 @@ async def load_campaign_spec(campaign_id: str) -> dict[str, Any] | None:
 
 
 async def save_fix_plan_spec(campaign_id: str, spec_dict: dict[str, Any]) -> bool:
-    """Persist a fix-plan spec under ``fix:campaign:<campaign_id>``.
+    """Persist a fix-plan spec under ``fix.campaign.<campaign_id>``.
 
-    Stored separately from the audit campaign spec (``audit:campaign:<id>``)
+    Stored separately from the audit campaign spec (``audit.campaign.<id>``)
     so that audit coverage and fix coverage can be tracked, queried, and
     expired independently (TAP-2718).
 
@@ -283,24 +378,15 @@ async def save_fix_plan_spec(campaign_id: str, spec_dict: dict[str, Any]) -> boo
             campaign_id=campaign_id,
         )
         return False
-    try:
-        await bridge.save(
-            key=fix_campaign_key(campaign_id),
-            value=json.dumps(spec_dict),
-            tier=_CAMPAIGN_TIER,
-            scope="project",
-            source="agent",
-            source_agent=_SOURCE_AGENT,
-            tags=["audit", "fix", "campaign", campaign_id],
-        )
-    except Exception as exc:  # degraded-mode catch-all (BLE001 not enabled in ruff)
-        logger.debug(
-            "audit_manifest_save_fix_plan_failed",
-            campaign_id=campaign_id,
-            error=str(exc),
-        )
-        return False
-    return True
+    return await _save_via_bridge(
+        bridge,
+        key=fix_campaign_key(campaign_id),
+        value=json.dumps(spec_dict),
+        tier=_CAMPAIGN_TIER,
+        tags=["audit", "fix", "campaign", campaign_id],
+        failure_event="audit_manifest_save_fix_plan_failed",
+        campaign_id=campaign_id,
+    )
 
 
 async def load_fix_plan_spec(campaign_id: str) -> dict[str, Any] | None:
@@ -365,9 +451,7 @@ def _serialize_coverage(entry: CoverageEntry) -> dict[str, Any]:
     return data
 
 
-def _deserialize_coverage(
-    rel_path: str, payload: dict[str, Any]
-) -> CoverageEntry | None:
+def _deserialize_coverage(rel_path: str, payload: dict[str, Any]) -> CoverageEntry | None:
     try:
         findings_raw = payload.get("findings") or {}
         findings = FindingCounts(

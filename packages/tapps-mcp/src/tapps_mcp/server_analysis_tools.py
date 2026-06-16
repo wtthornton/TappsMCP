@@ -1375,8 +1375,8 @@ async def tapps_audit_campaign(
     Call ``mode="fix_plan"`` after a campaign has been planned to generate
     a companion fix epic + child fix stories (one per audit session cluster)
     that autonomous agents can implement. Fix stories carry ``agent_ready=True`` by
-    construction and are tracked under ``fix:campaign:<id>`` in brain,
-    distinct from the audit spec at ``audit:campaign:<id>``.
+    construction and are tracked under ``fix.campaign.<id>`` in brain,
+    distinct from the audit spec at ``audit.campaign.<id>``.
 
     Use ``categories`` to focus the audit; ``"quality,security,
     dead_code"`` is the default well-balanced bundle.
@@ -1607,7 +1607,7 @@ async def _handle_fix_plan_mode(
     :func:`~tapps_mcp.tools.audit_campaign.build_fix_plan_spec`. Stories
     are guaranteed ``agent_ready=True`` by construction (no iterative
     validator loop required). The fix plan is persisted under the distinct
-    brain key ``fix:campaign:<campaign_id>`` so audit and fix coverage
+    brain key ``fix.campaign.<campaign_id>`` so audit and fix coverage
     remain independently trackable (TAP-2718).
     """
     from tapps_mcp.tools.audit_campaign import build_fix_plan_spec
@@ -1682,7 +1682,7 @@ async def _handle_fix_plan_mode(
 
 
 async def _persist_fix_plan_spec(campaign_id: str, spec_dict: dict[str, Any]) -> bool:
-    """Save the rendered fix-plan spec to brain under ``fix:campaign:<id>``."""
+    """Save the rendered fix-plan spec to brain under ``fix.campaign.<id>``."""
     from tapps_mcp.tools.audit_manifest import save_fix_plan_spec
 
     try:

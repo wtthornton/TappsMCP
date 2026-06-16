@@ -239,7 +239,8 @@ def _render_body(
         f"- Parent epic: {epic_ref}\n"
         f"- Campaign id: `{campaign_id}`\n"
         f"- Cohesion rationale: {chunk.rationale}\n"
-        "- Coverage manifest: brain memory keys `audit:coverage:<file>`"
+        "- Coverage manifest: brain memory keys `audit.coverage.<file>` "
+        "(via `coverage_key(rel_path)` — slug-safe encoding)"
     )
 
     return "\n\n".join(sections) + "\n"
@@ -457,7 +458,8 @@ def render_campaign_epic(
         "tapps-mcp tools to run, what counts as a finding, how to file it) "
         "and any findings land as new Linear issues parented to the session "
         "ticket. Coverage is tracked in brain memory under "
-        f"`audit:coverage:<file>` keys so re-runs are idempotent.\n\n"
+        f"`audit.coverage.<file>` keys (from `coverage_key()`) so re-runs are "
+        "idempotent.\n\n"
         "## Goal\n\n"
         f"Complete all {session_count} child session ticket(s) listed in "
         "`## Acceptance Criteria` and update the coverage manifest. "
