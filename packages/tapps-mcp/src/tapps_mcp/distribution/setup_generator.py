@@ -652,8 +652,10 @@ def is_tapps_mcp_package_layout(project_root: Path) -> bool:
 def is_tapps_mcp_dev_monorepo(project_root: Path) -> bool:
     """Return True when *project_root* is the tapps-mcp workspace checkout (Epic 116 / TAP-4100).
 
-    Dev monorepo MCP wrappers must use ``uv run`` from the checkout — not the shared
-    global ``uv tool install`` binary that consumer repos (AgentForge, etc.) depend on.
+    Dev monorepo MCP wrappers launch from the checkout's own ``.venv`` (editable
+    install → live source) — not the shared global ``uv tool install`` binary that
+    consumer repos (AgentForge, etc.) depend on. See ``_resolve_dev_monorepo_uv_launch``
+    for why a direct ``.venv/bin`` exec is preferred over ``uv run``.
     """
     root = project_root.resolve()
     return (
@@ -668,9 +670,28 @@ def _resolve_dev_monorepo_uv_launch(
     serve_args: list[str],
     project_root: Path,
 ) -> tuple[str, list[str]]:
-    """Launch command for dev-monorepo MCP wrappers (always ``uv run`` from checkout)."""
-    directory = str(project_root.resolve())
-    return ("uv", ["run", "--directory", directory, serve_cmd, *serve_args])
+    """Launch command for dev-monorepo MCP wrappers.
+
+    Prefer the checkout's own ``.venv`` console script via a single ``exec``
+    (TAP-4100 follow-up): the workspace ``.venv`` is an editable install, so the
+    binary still runs **live source**, but without the intermediate ``uv run``
+    parent process. ``uv run`` re-checks/holds the project environment lock on
+    every launch; with six servers across several Cursor windows (and the local
+    NLT systemd fleet running concurrent ``uv`` operations) that extra process
+    layer destabilized the fleet — Cursor saw the transport drop and flapped
+    error↔good. A direct ``.venv/bin/<binary>`` exec is one process per server,
+    holds no uv lock, and is still isolated from the shared global
+    ``uv tool install`` binary that consumer repos depend on.
+
+    Falls back to ``uv run --directory`` when the venv binary is not present yet
+    (fresh checkout before ``uv sync``).
+    """
+    root = project_root.resolve()
+    for bindir in ("bin", "Scripts"):
+        venv_bin = root / ".venv" / bindir / serve_cmd
+        if venv_bin.is_file():
+            return (str(venv_bin), serve_args)
+    return ("uv", ["run", "--directory", str(root), serve_cmd, *serve_args])
 
 
 # ---------------------------------------------------------------------------
@@ -944,8 +965,6 @@ def _build_nlt_launch(
     serve_args = [str(a) for a in spec["serve_args"]]
 
     if project_root is not None and is_tapps_mcp_dev_monorepo(project_root):
-        if uv_launch is not None:
-            return _adapt_uv_launch_for_nlt(uv_launch, serve_cmd, serve_args)
         return _resolve_dev_monorepo_uv_launch(serve_cmd, serve_args, project_root)
 
     if uv_launch is not None:
