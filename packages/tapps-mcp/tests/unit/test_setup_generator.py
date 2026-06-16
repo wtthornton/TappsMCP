@@ -1528,17 +1528,31 @@ class TestEpic80ConsumerInit:
         assert is_tapps_mcp_dev_monorepo(root) is True
         assert is_tapps_mcp_dev_monorepo(tmp_path / "consumer-app") is False
 
-    def test_dev_monorepo_nlt_launch_prefers_global_binary(self, tmp_path, monkeypatch) -> None:
-        """The dev wrapper execs the deployed global binary, not the workspace .venv.
-
-        Launching from the isolated ``uv tool install`` env keeps the servers up
-        while pytest/uv churn the workspace ``.venv``; source edits reach the
-        servers only on an explicit deploy (reinstall + reload).
-        """
+    def test_dev_monorepo_nlt_launch_prefers_blue_green_binary(self, tmp_path, monkeypatch) -> None:
+        """When blue/green current exists, dev wrappers exec that release binary."""
         root = tmp_path / "tapps-mcp"
         (root / "packages" / "tapps-mcp" / "src" / "tapps_mcp").mkdir(parents=True)
         (root / "packages" / "docs-mcp").mkdir(parents=True)
         (root / "pyproject.toml").write_text("[project]\nname='tapps-mcp'\n", encoding="utf-8")
+        monkeypatch.setattr(
+            "tapps_mcp.distribution.blue_green.resolve_blue_green_binary",
+            lambda name: f"/home/user/.tapps-mcp/current/bin/{name}",
+        )
+        command, args = _build_nlt_launch("nlt-build", None, project_root=root)
+        assert command == "/home/user/.tapps-mcp/current/bin/tapps-mcp"
+        assert args[:2] == ["serve", "--profile"]
+        assert "nlt-build" in args
+
+    def test_dev_monorepo_nlt_launch_prefers_global_binary(self, tmp_path, monkeypatch) -> None:
+        """Without blue/green, the dev wrapper execs the deployed global binary."""
+        root = tmp_path / "tapps-mcp"
+        (root / "packages" / "tapps-mcp" / "src" / "tapps_mcp").mkdir(parents=True)
+        (root / "packages" / "docs-mcp").mkdir(parents=True)
+        (root / "pyproject.toml").write_text("[project]\nname='tapps-mcp'\n", encoding="utf-8")
+        monkeypatch.setattr(
+            "tapps_mcp.distribution.blue_green.resolve_blue_green_binary",
+            lambda _name: None,
+        )
         monkeypatch.setattr(
             "tapps_mcp.distribution.setup_generator.shutil.which",
             lambda name: "/home/user/.local/bin/tapps-mcp" if name == "tapps-mcp" else None,
@@ -1555,6 +1569,10 @@ class TestEpic80ConsumerInit:
         (root / "packages" / "tapps-mcp" / "src" / "tapps_mcp").mkdir(parents=True)
         (root / "packages" / "docs-mcp").mkdir(parents=True)
         (root / "pyproject.toml").write_text("[project]\nname='tapps-mcp'\n", encoding="utf-8")
+        monkeypatch.setattr(
+            "tapps_mcp.distribution.blue_green.resolve_blue_green_binary",
+            lambda _name: None,
+        )
         monkeypatch.setattr(
             "tapps_mcp.distribution.setup_generator.shutil.which",
             lambda name: None,

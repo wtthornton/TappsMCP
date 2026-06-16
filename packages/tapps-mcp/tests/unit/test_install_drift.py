@@ -30,6 +30,15 @@ def _mock_completed(stdout: str, returncode: int = 0) -> subprocess.CompletedPro
     return subprocess.CompletedProcess(args=["mock"], returncode=returncode, stdout=stdout, stderr="")
 
 
+@pytest.fixture(autouse=True)
+def _disable_blue_green_binary_probe(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Tests mock PATH/global installs; isolate from live ~/.tapps-mcp/current."""
+    monkeypatch.setattr(
+        "tapps_mcp.distribution.blue_green.resolve_blue_green_binary",
+        lambda _name: None,
+    )
+
+
 class TestCheckInstallDriftMatched:
     """Branch 1: both binaries on PATH at the same version as the source."""
 
