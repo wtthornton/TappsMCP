@@ -91,7 +91,7 @@ uv tool install --reinstall "docs-mcp @ git+https://github.com/wtthornton/tapps-
 
 | Context | MCP launch | Why |
 |---------|------------|-----|
-| **tapps-mcp dev monorepo** | `<checkout>/.venv/bin/tapps-mcp serve --profile nlt-*` (direct `exec`; falls back to `uv run --directory` before first `uv sync`) | Editable `.venv` runs live source without mutating the global binary AgentForge uses. A direct `exec` is one process per server and holds no uv env lock — `uv run` added an intermediate parent that destabilized the six-server fleet (Cursor error↔good flapping) under multi-window + NLT systemd churn. |
+| **tapps-mcp dev monorepo** | Global `~/.local/bin/tapps-mcp` via `.cursor/bin/nlt-*-serve.sh` (falls back to `uv run --directory` only before the first deploy) | The dev repo constantly runs pytest/uv against its workspace `.venv`; launching the MCP fleet from that same env (via `uv run` or `.venv/bin`) let test/build churn crash live servers — Cursor flapped error↔good on a 5-min backoff. The isolated `uv tool` env stays up. **Source edits go live only on deploy:** `uv tool install --reinstall --from packages/tapps-mcp tapps-mcp` (+ docs-mcp) then reload MCP. |
 | **Consumer repos** | Global `~/.local/bin/tapps-mcp` via `.cursor/bin/nlt-*-serve.sh` | Stable, tagged CLIs across the fleet |
 
 `tapps-mcp doctor` warns when globals were installed from a local path (`Global CLI install source`). AgentForge may use `mcp_bundle: developer` to opt down to three servers; tapps-mcp dev repo uses `full` by default ([ADR-0018](../adr/0018-deploy-all-six-nlt-mcp-servers-by-default.md)).

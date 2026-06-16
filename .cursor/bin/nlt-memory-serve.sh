@@ -33,5 +33,5 @@ fi
 if [[ -z "${TAPPS_MCP_CONTEXT7_API_KEY:-}" && -n "${CONTEXT7_API_KEY:-}" ]]; then
   export TAPPS_MCP_CONTEXT7_API_KEY="$CONTEXT7_API_KEY"
 fi
-echo "[TappsMCP] Launching MCP server: /home/wtthornton/code/tapps-mcp/.venv/bin/tapps-mcp serve --profile nlt-memory" >&2
-exec /home/wtthornton/code/tapps-mcp/.venv/bin/tapps-mcp serve --profile nlt-memory "$@"
+echo "[TappsMCP] Launching MCP server: /home/wtthornton/.local/bin/tapps-mcp serve --profile nlt-memory" >&2
+exec /home/wtthornton/.local/bin/tapps-mcp serve --profile nlt-memory "$@"

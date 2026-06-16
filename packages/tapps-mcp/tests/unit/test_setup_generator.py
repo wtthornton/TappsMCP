@@ -1528,32 +1528,37 @@ class TestEpic80ConsumerInit:
         assert is_tapps_mcp_dev_monorepo(root) is True
         assert is_tapps_mcp_dev_monorepo(tmp_path / "consumer-app") is False
 
-    def test_dev_monorepo_nlt_launch_prefers_venv_bin(self, tmp_path, monkeypatch) -> None:
-        """With a synced .venv, the wrapper execs the checkout binary directly.
+    def test_dev_monorepo_nlt_launch_prefers_global_binary(self, tmp_path, monkeypatch) -> None:
+        """The dev wrapper execs the deployed global binary, not the workspace .venv.
 
-        A single ``exec`` of the editable .venv console script runs live source
-        without the ``uv run`` parent process that destabilized the six-server
-        fleet (Cursor error↔good flapping).
+        Launching from the isolated ``uv tool install`` env keeps the servers up
+        while pytest/uv churn the workspace ``.venv``; source edits reach the
+        servers only on an explicit deploy (reinstall + reload).
         """
         root = tmp_path / "tapps-mcp"
         (root / "packages" / "tapps-mcp" / "src" / "tapps_mcp").mkdir(parents=True)
         (root / "packages" / "docs-mcp").mkdir(parents=True)
         (root / "pyproject.toml").write_text("[project]\nname='tapps-mcp'\n", encoding="utf-8")
-        venv_bin = root / ".venv" / "bin"
-        venv_bin.mkdir(parents=True)
-        (venv_bin / "tapps-mcp").write_text("#!/bin/sh\n", encoding="utf-8")
+        monkeypatch.setattr(
+            "tapps_mcp.distribution.setup_generator.shutil.which",
+            lambda name: "/home/user/.local/bin/tapps-mcp" if name == "tapps-mcp" else None,
+        )
         command, args = _build_nlt_launch("nlt-build", None, project_root=root)
-        assert command == str((venv_bin / "tapps-mcp").resolve())
+        assert command == "/home/user/.local/bin/tapps-mcp"
         assert args[:2] == ["serve", "--profile"]
         assert "nlt-build" in args
         assert "uv" not in command
 
-    def test_dev_monorepo_nlt_launch_falls_back_to_uv_run(self, tmp_path) -> None:
-        """Without a synced .venv (fresh checkout), fall back to ``uv run``."""
+    def test_dev_monorepo_nlt_launch_falls_back_to_uv_run(self, tmp_path, monkeypatch) -> None:
+        """Without a global CLI (fresh checkout pre-deploy), fall back to ``uv run``."""
         root = tmp_path / "tapps-mcp"
         (root / "packages" / "tapps-mcp" / "src" / "tapps_mcp").mkdir(parents=True)
         (root / "packages" / "docs-mcp").mkdir(parents=True)
         (root / "pyproject.toml").write_text("[project]\nname='tapps-mcp'\n", encoding="utf-8")
+        monkeypatch.setattr(
+            "tapps_mcp.distribution.setup_generator.shutil.which",
+            lambda name: None,
+        )
         command, args = _build_nlt_launch("nlt-build", None, project_root=root)
         assert command == "uv"
         assert args[:3] == ["run", "--directory", str(root.resolve())]
