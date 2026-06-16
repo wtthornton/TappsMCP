@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [3.12.37] - 2026-06-16
+
+Patch: audit coverage manifest brain key fix; smoke-only pre-push; deploy-local orphan reap.
+
+### Fixed
+
+- **Audit coverage manifest keys** — `write_coverage()` / campaign keys now use brain-slug-safe dot notation (`audit.coverage.*`, `audit.campaign.*`, `fix.campaign.*`) and reject failed `memory_save` responses instead of returning success silently.
+- **Pre-push gate** — git push runs serial `scripts/prepush-smoke.sh` only (~15 tests, no xdist). Full regression is explicit via `scripts/run-regression.sh`. Removed background tier-2 suite that could starve live Cursor MCP servers during push.
+
+### Changed
+
+- **MCP orphan reap** — moved from Cursor `sessionStart` to `deploy-local` only (`mcp_zombie_reap` before blue/green flip). SessionStart must not kill MCP children; reap uses orphan-only criteria (dead parent / `ppid=1`).
+
 ## [3.12.36] - 2026-06-16
 
 Patch: blue/green zero-downtime deploy for the dev-monorepo shared MCP install (ADR-0019).

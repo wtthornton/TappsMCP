@@ -1,4 +1,4 @@
-<!-- tapps-claude-version: 3.12.36 -->
+<!-- tapps-claude-version: 3.12.37 -->
 # CLAUDE.md
 
 This file provides guidance to Claude Code when working with code in this repository.
