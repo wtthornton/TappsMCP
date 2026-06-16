@@ -30,8 +30,8 @@ def _parent_alive(ppid: int) -> bool:
         return True
 
 
-def find_orphan_mcp_serve_pids() -> list[int]:
-    """Return PIDs of MCP serve processes whose parent is dead."""
+def _iter_mcp_serve_processes() -> list[tuple[int, int, str]]:
+    """Return ``(pid, ppid, cmd)`` for every MCP ``serve`` process."""
     try:
         proc = subprocess.run(
             ["ps", "-eo", "pid=", "ppid=", "cmd="],
@@ -44,7 +44,7 @@ def find_orphan_mcp_serve_pids() -> list[int]:
     if proc.returncode != 0:
         return []
 
-    orphans: set[int] = set()
+    rows: list[tuple[int, int, str]] = []
     for line in proc.stdout.splitlines():
         line = line.strip()
         if not line:
@@ -60,9 +60,30 @@ def find_orphan_mcp_serve_pids() -> list[int]:
         cmd = parts[2]
         if not _SERVE_CMD.search(cmd):
             continue
+        rows.append((pid, ppid, cmd))
+    return rows
+
+
+def find_orphan_mcp_serve_pids() -> list[int]:
+    """Return PIDs of MCP serve processes whose parent is dead."""
+    orphans: list[int] = []
+    for pid, ppid, _cmd in _iter_mcp_serve_processes():
         if ppid == 1 or not _parent_alive(ppid):
-            orphans.add(pid)
+            orphans.append(pid)
     return sorted(orphans)
+
+
+def find_live_mcp_serve_pids() -> list[int]:
+    """Return PIDs of MCP serve processes still attached to a live parent (e.g. Cursor).
+
+    In-place ``uv tool install --reinstall`` replaces the global tool venv and
+    breaks these processes — fleet/CLI reinstall must use blue/green instead.
+    """
+    live: list[int] = []
+    for pid, ppid, _cmd in _iter_mcp_serve_processes():
+        if ppid > 1 and _parent_alive(ppid):
+            live.append(pid)
+    return sorted(live)
 
 
 def reap_orphan_mcp_serves(*, dry_run: bool = False) -> dict[str, Any]:

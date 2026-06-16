@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# tapps-mcp-hook-version: 3.12.39
+# tapps-mcp-hook-version: 3.12.40
 # tapps-mcp-hook-content-sha: 8ac3fe5f
 # TappsMCP afterFileEdit hook (fire-and-forget) — TAP-1330 import parity
 # Detects external imports requiring tapps_lookup_docs. Advisory only.

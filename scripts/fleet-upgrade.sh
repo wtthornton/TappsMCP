@@ -27,13 +27,13 @@ ARGS=(
   --host auto
 )
 if [[ "$REINSTALL" == "1" ]]; then
-  ARGS+=(--reinstall-clis)
+  ARGS+=(--reinstall-clis --blue-green-deploy)
 fi
 if [[ "$DRY_RUN" == "1" ]]; then
   ARGS+=(--dry-run)
 fi
 
-echo "==> Fleet upgrade (bundle=$BUNDLE, reinstall_clis=$REINSTALL — blue/green when reinstalling)"
+echo "==> Fleet upgrade (bundle=$BUNDLE, reinstall_clis=$REINSTALL — blue/green deploy when reinstalling)"
 if [[ -n "$TAPPS_FLEET_ROOTS" ]]; then
   ARGS+=(--roots "$TAPPS_FLEET_ROOTS")
   echo "    roots: $TAPPS_FLEET_ROOTS"
@@ -45,4 +45,4 @@ fi
 uv run tapps-mcp "${ARGS[@]}"
 
 echo ""
-echo "Reload MCP in Cursor / Claude Code after deploy-local or fleet reinstall."
+echo "Reload MCP in Cursor when you want new server code; live servers are not killed by blue/green deploy."

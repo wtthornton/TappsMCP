@@ -193,6 +193,7 @@ def run_fleet_upgrade(
     run_doctor: bool = True,
     reinstall_clis: bool = False,
     blue_green_deploy: bool = False,
+    force_inplace_cli_reinstall: bool = False,
     tapps_checkout: Path | None = None,
     import_legacy_doc_cache: bool = False,
     strip_context7_env: bool = False,
@@ -203,7 +204,11 @@ def run_fleet_upgrade(
 
     if reinstall_clis and not dry_run:
         checkout = (tapps_checkout or Path.cwd()).resolve()
-        cli_reinstall = _reinstall_global_clis(checkout, use_blue_green=blue_green_deploy)
+        cli_reinstall = _reinstall_global_clis(
+            checkout,
+            use_blue_green=blue_green_deploy,
+            force_inplace=force_inplace_cli_reinstall,
+        )
 
     project_results: list[FleetUpgradeProjectResult] = []
     for root in resolved:
@@ -248,8 +253,37 @@ def run_fleet_upgrade(
     }
 
 
-def _reinstall_global_clis(checkout: Path, *, use_blue_green: bool = False) -> dict[str, Any]:
-    """Reinstall global tapps-mcp + docs-mcp from *checkout*."""
+def _reinstall_global_clis(
+    checkout: Path,
+    *,
+    use_blue_green: bool = False,
+    force_inplace: bool = False,
+) -> dict[str, Any]:
+    """Reinstall global tapps-mcp + docs-mcp from *checkout*.
+
+    In-place ``uv tool install --reinstall`` mutates ``~/.local/share/uv/tools/*``
+    under live MCP stdio servers and kills them. When live servers are detected,
+    auto-promote to blue/green ``deploy-local`` unless *force_inplace* is set.
+    """
+    from tapps_mcp.distribution.mcp_zombie_reap import find_live_mcp_serve_pids
+
+    live_pids = find_live_mcp_serve_pids()
+    strategy = "blue_green" if use_blue_green else "inplace"
+    auto_promoted = False
+    if live_pids and not use_blue_green:
+        if force_inplace:
+            strategy = "inplace_forced"
+        else:
+            use_blue_green = True
+            strategy = "blue_green_auto"
+            auto_promoted = True
+
+    meta: dict[str, Any] = {
+        "live_mcp_pids": live_pids,
+        "strategy": strategy,
+        "auto_promoted": auto_promoted,
+    }
+
     if use_blue_green:
         from tapps_mcp.distribution.blue_green import deploy_blue_green
 
@@ -268,12 +302,13 @@ def _reinstall_global_clis(checkout: Path, *, use_blue_green: bool = False) -> d
             err = deploy.get("quiescence_gate") or deploy.get("build") or deploy.get("smoke_test") or deploy
             shared["error"] = json.dumps(err, default=str)[-500:]
         return {
+            **meta,
             "blue_green": deploy,
             "tapps-mcp": {**shared, "binary": "tapps-mcp"},
             "docs-mcp": {**shared, "binary": "docsmcp"},
         }
 
-    results: dict[str, Any] = {}
+    results: dict[str, Any] = {**meta}
     for package, binary in (
         ("packages/tapps-mcp", "tapps-mcp"),
         ("packages/docs-mcp", "docsmcp"),
@@ -321,8 +356,30 @@ def format_fleet_upgrade_markdown(report: dict[str, Any]) -> str:
     if report.get("reinstall_clis"):
         lines.append("## CLI reinstall")
         lines.append("")
+        reinstall = report["reinstall_clis"]
+        if isinstance(reinstall, dict):
+            strategy = reinstall.get("strategy")
+            live = reinstall.get("live_mcp_pids") or []
+            if strategy:
+                lines.append(f"- Strategy: `{strategy}`")
+            if live:
+                lines.append(
+                    f"- Live MCP servers during reinstall: {len(live)} "
+                    "(blue/green avoids killing them; reload MCP to pick up new code)"
+                )
+            if reinstall.get("auto_promoted"):
+                lines.append(
+                    "- Auto-promoted to blue/green because in-place reinstall "
+                    "would kill live MCP stdio servers"
+                )
         for name, info in report["reinstall_clis"].items():
-            if not isinstance(info, dict):
+            if not isinstance(info, dict) or name in {
+                "live_mcp_pids",
+                "strategy",
+                "auto_promoted",
+                "ok",
+                "blue_green",
+            }:
                 continue
             mark = "ok" if info.get("ok") else "failed"
             lines.append(f"- **{name}**: {mark}")

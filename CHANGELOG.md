@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [3.12.41] - 2026-06-16
+
+Patch: fleet CLI reinstall no longer kills live Cursor MCP servers.
+
+### Fixed
+
+- **Live MCP stdio survival (fleet reinstall)** — `upgrade-fleet --reinstall-clis` detected live `serve --profile nlt-*` processes and ran in-place `uv tool install --reinstall`, which replaced the global tool venv under running servers and killed all six NLT servers at once. When live servers are present, reinstall now auto-promotes to `deploy-local` (blue/green) unless `--force-inplace-cli-reinstall` is set.
+
+### Changed
+
+- **Cursor MCP wrappers** — prefer `~/.tapps-mcp/current/bin/*` when the blue/green release symlink exists so deploy flips do not mutate the path live processes execute from.
+- **`scripts/fleet-upgrade.sh`** — passes `--blue-green-deploy` with `--reinstall-clis` by default.
+
 ## [3.12.40] - 2026-06-16
 
 Patch: agent hint contract SSOT, Linear-first planning docs, fleet-ready release.

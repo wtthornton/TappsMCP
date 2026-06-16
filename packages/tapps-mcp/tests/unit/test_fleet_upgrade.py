@@ -5,10 +5,13 @@ from __future__ import annotations
 import os
 from pathlib import Path
 
+from unittest.mock import patch
+
 import pytest
 
 from tapps_mcp.distribution.nlt_mcp_config import needs_legacy_nlt_migration
 from tapps_mcp.tools.fleet_upgrade import (
+    _reinstall_global_clis,
     format_fleet_upgrade_markdown,
     resolve_fleet_roots,
     upgrade_project_root,
@@ -136,3 +139,45 @@ class TestFleetUpgradeHelpers:
         md = format_fleet_upgrade_markdown(report)
         assert "AgentForge" in md
         assert "developer" in md
+
+    def test_reinstall_auto_promotes_when_live_mcp(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setattr(
+            "tapps_mcp.distribution.mcp_zombie_reap.find_live_mcp_serve_pids",
+            lambda: [4242],
+        )
+        deploy_called: list[bool] = []
+
+        def _fake_deploy(checkout: Path) -> dict[str, object]:
+            deploy_called.append(True)
+            return {"ok": True, "release": "3.12.40-deadbeef", "current": str(checkout)}
+
+        monkeypatch.setattr(
+            "tapps_mcp.distribution.blue_green.deploy_blue_green",
+            _fake_deploy,
+        )
+        result = _reinstall_global_clis(tmp_path, use_blue_green=False)
+        assert deploy_called == [True]
+        assert result["strategy"] == "blue_green_auto"
+        assert result["auto_promoted"] is True
+        assert result["live_mcp_pids"] == [4242]
+
+    def test_reinstall_inplace_when_forced_despite_live_mcp(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        monkeypatch.setattr(
+            "tapps_mcp.distribution.mcp_zombie_reap.find_live_mcp_serve_pids",
+            lambda: [4242],
+        )
+        proc = type("P", (), {"returncode": 0, "stdout": "ok", "stderr": ""})()
+        with patch(
+            "tapps_mcp.tools.fleet_upgrade.subprocess.run",
+            return_value=proc,
+        ) as run_mock:
+            result = _reinstall_global_clis(
+                tmp_path,
+                use_blue_green=False,
+                force_inplace=True,
+            )
+        assert run_mock.called
+        assert result["strategy"] == "inplace_forced"
+        assert result["ok"] is True

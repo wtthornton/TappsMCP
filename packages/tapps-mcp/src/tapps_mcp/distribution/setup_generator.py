@@ -71,12 +71,22 @@ def operator_env_path() -> Path:
 
 
 def _resolve_global_cli(command: str) -> str | None:
-    """Prefer ``uv tool install`` shims over venv PATH when both exist.
+    """Resolve the MCP server binary for Cursor wrapper scripts.
+
+    Prefers an immutable blue/green release (``~/.tapps-mcp/current/bin/*``)
+    when present so ``deploy-local`` can flip without killing live stdio servers.
+    Falls back to ``uv tool install`` shims (``~/.local/bin``).
 
     ``uv run tapps-mcp init`` prepends the project ``.venv/bin`` to PATH, so a
     plain :func:`shutil.which` returns the workspace copy instead of the global
     CLI consumers actually run from Cursor wrappers (``~/.local/bin``).
     """
+    from tapps_mcp.distribution.blue_green import CURRENT_LINK
+
+    current_bin = CURRENT_LINK / "bin" / command
+    if current_bin.is_file():
+        return str(current_bin.resolve())
+
     which_result = shutil.which(command)
     shim = Path.home() / ".local" / "bin" / command
     if which_result is not None:
