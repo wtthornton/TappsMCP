@@ -221,6 +221,8 @@ a = Analysis(
         "tapps_mcp.prompts",
         "tapps_mcp.prompts.prompt_loader",
         "tapps_mcp.distribution",
+        "tapps_mcp.distribution.blue_green",
+        "tapps_mcp.distribution.blue_green_proc",
         "tapps_mcp.distribution.setup_generator",
         "tapps_mcp.distribution.doctor",
         "tapps_mcp.distribution.exe_manager",
