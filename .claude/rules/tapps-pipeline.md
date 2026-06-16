@@ -18,6 +18,13 @@ Recommended order for every code task:
 4. **Validate** - `tapps_quick_check()` per file OR `tapps_validate_changed()` for batch
 5. **Verify** - `tapps_checklist(task_type)`, consider `uv run tapps-mcp memory save --key ... --tier ... --value "..."` for learnings
 
+## Refactoring
+
+Call `tapps_impact_analysis(file_path)` before refactoring or deleting any file.
+For **function/method** refactors use `tapps_call_graph(symbol=...)` or `tapps_impact_analysis` with
+`symbol` and `granularity="symbol"|"both"`. For changed files use `tapps_diff_impact` or
+`tapps_validate_changed(include_impact=true)` for ranked `affected_tests` (Epic 114 / ADR-0017).
+
 ## Consequences of Skipping
 
 | Skipped Tool | Consequence |
@@ -29,6 +36,7 @@ Recommended order for every code task:
 | `tapps_security_scan` | Vulnerabilities may ship to production |
 | `tapps_checklist` | No verification that process was followed |
 | `tapps_impact_analysis` | Refactoring may break unknown dependents |
+| `tapps_call_graph` | Function refactors may break unknown callers |
 | `tapps_dead_code` | Unused code may accumulate |
 | `tapps_dependency_scan` | Vulnerable dependencies may ship |
 | `tapps_dependency_graph` | Circular imports may cause runtime crashes |

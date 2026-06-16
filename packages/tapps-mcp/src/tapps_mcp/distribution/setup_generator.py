@@ -2254,6 +2254,21 @@ def _format_upgrade_result(result: dict[str, Any], *, dry_run: bool = False) -> 
                     refreshed = value.get("scripts_refreshed") or []
                     label = ", ".join(refreshed) if refreshed else key
                     click.echo(click.style(f"  Refreshed {key}: {label}", fg="green"))
+                elif value.get("action") in {"created", "updated"}:
+                    rel = value.get("file", key)
+                    click.echo(
+                        click.style(
+                            f"  {key}: {value['action']} ({rel})",
+                            fg="green",
+                        )
+                    )
+                elif value.get("action"):
+                    click.echo(
+                        click.style(
+                            f"  {key}: {value['action']}",
+                            fg="yellow",
+                        )
+                    )
                 else:
                     click.echo(f"  {key.capitalize()} already up to date (skipped)")
             elif isinstance(value, str):
