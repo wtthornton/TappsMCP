@@ -250,7 +250,7 @@ def _deploy_under_lock(
         report["ok"] = False
         return report
 
-    smoke = smoke_test_release(release, project_root=checkout if run_doctor_smoke else None)
+    smoke = smoke_test_release(release, project_root=None)
     report["smoke_test"] = smoke
     if not smoke.get("ok"):
         report["ok"] = False
@@ -261,6 +261,13 @@ def _deploy_under_lock(
     if not flip.get("ok"):
         report["ok"] = False
         return report
+
+    if run_doctor_smoke:
+        post_flip = smoke_test_release(release, project_root=checkout)
+        report["post_flip_smoke"] = post_flip
+        if not post_flip.get("ok"):
+            report["ok"] = False
+            return report
 
     report["gc"] = gc_releases(keep=keep_releases, protect=release.path)
     report["ok"] = True

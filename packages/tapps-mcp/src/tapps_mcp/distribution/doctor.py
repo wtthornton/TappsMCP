@@ -206,6 +206,13 @@ def check_blue_green_deploy() -> CheckResult:
         )
 
     status = blue_green_status()
+    if current is None and RELEASES_DIR.is_dir() and any(RELEASES_DIR.iterdir()):
+        return CheckResult(
+            "Blue/green MCP deploy",
+            True,
+            "Release built; awaiting first flip (current symlink not yet set)",
+        )
+
     if current is None:
         return CheckResult(
             "Blue/green MCP deploy",
