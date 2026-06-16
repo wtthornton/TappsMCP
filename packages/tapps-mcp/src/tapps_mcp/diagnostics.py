@@ -191,7 +191,8 @@ def check_install_drift() -> InstallDriftDiagnostic:
     elif local_install_warning:
         hint = (
             "Global CLIs installed from a local checkout — consumer repos share this binary. "
-            "Pin fleet globals to release tags; dev monorepo should use uv run in MCP wrappers."
+            "Pin fleet globals to release tags; dev monorepo deploys via explicit "
+            "uv tool install --reinstall --from packages/... then MCP reload."
         )
     return InstallDriftDiagnostic(
         drift_detected=drift_detected,

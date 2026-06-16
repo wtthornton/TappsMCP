@@ -20,7 +20,7 @@ def caller():
 """,
         encoding="utf-8",
     )
-    symbols, edges, gaps = analyze_file(src, "pkg.mod", tmp_path)
+    symbols, edges, gaps = analyze_file(src, "pkg.mod", tmp_path)[:3]
     names = {s.qualified_name for s in symbols}
     assert "pkg.mod.helper" in names
     assert "pkg.mod.caller" in names

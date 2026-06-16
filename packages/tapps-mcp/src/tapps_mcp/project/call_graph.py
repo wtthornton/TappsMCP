@@ -8,15 +8,17 @@ import structlog
 
 from tapps_mcp.project.call_graph_analyze import analyze_file
 from tapps_mcp.project.call_graph_cache import (
-    index_fingerprint,
+    fingerprint_settings,
     load_call_graph_index,
     save_call_graph_index,
 )
+from tapps_mcp.project.call_graph_fingerprint import compute_index_fingerprint
 from tapps_mcp.project.call_graph_types import (
     CALL_GRAPH_CACHE_REL,
     INDEX_VERSION,
     CallEdge,
     CallGraphIndex,
+    ParseFailure,
     ResolutionGap,
     SymbolRecord,
 )
@@ -44,7 +46,12 @@ def build_call_graph_index(
     force_rebuild: bool = False,
 ) -> CallGraphIndex:
     """Walk ``.py`` files, extract symbols and static CALLS edges."""
-    fingerprint = index_fingerprint(project_root, exclude_patterns, top_level_package)
+    fp = fingerprint_settings(
+        project_root,
+        exclude_patterns=exclude_patterns,
+        top_level_package=top_level_package,
+    )
+    fingerprint = compute_index_fingerprint(fp, index_version=INDEX_VERSION)
     if not force_rebuild:
         cached = load_call_graph_index(project_root)
         if cached is not None and cached.version == INDEX_VERSION and cached.fingerprint == fingerprint:
@@ -63,6 +70,7 @@ def build_call_graph_index(
     symbols: list[SymbolRecord] = []
     edges: list[CallEdge] = []
     gaps: list[ResolutionGap] = []
+    parse_failures: list[ParseFailure] = []
 
     for py_file in sorted(project_root.rglob("*.py")):
         if _should_skip(py_file, excludes) or py_file.name.endswith("_pb2.py"):
@@ -70,19 +78,24 @@ def build_call_graph_index(
         module = _file_to_module(py_file, project_root, top_level_package)
         if not module:
             continue
-        file_symbols, file_edges, file_gaps = analyze_file(py_file, module, project_root)
+        file_symbols, file_edges, file_gaps, file_failures = analyze_file(
+            py_file, module, project_root
+        )
         symbols.extend(file_symbols)
         edges.extend(file_edges)
         gaps.extend(file_gaps)
+        parse_failures.extend(file_failures)
 
     symbols.sort(key=lambda s: (s.qualified_name, s.file_path, s.line))
     edges.sort(key=lambda e: (e.caller, e.line, e.callee_expr))
     gaps.sort(key=lambda g: (g.caller, g.line, g.expr))
+    parse_failures.sort(key=lambda p: (p.file_path, p.line))
 
     index = CallGraphIndex(
         symbols=symbols,
         edges=edges,
         resolution_gaps=gaps,
+        parse_failures=parse_failures,
         project_root=str(project_root),
         fingerprint=fingerprint,
     )

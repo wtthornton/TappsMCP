@@ -11,7 +11,7 @@ See also [UPGRADE_FOR_CONSUMERS.md](../UPGRADE_FOR_CONSUMERS.md) §7 for the gen
 | Project | Path | Brain project id | Notes |
 |---------|------|------------------|-------|
 | tapps-mcp | `~/code/tapps-mcp` | `tapps-mcp` | Dev repo — `--bundle full` is normal |
-| AgentForge | `~/code/AgentForge` | `agentforge` | `AGENTS.md` / `CLAUDE.md` in `upgrade_skip_files` — bump version stamps manually |
+| AgentForge | `~/code/AgentForge` | `agentforge` | `upgrade_skip_files` on AGENTS/CLAUDE; use **`mcp_bundle: developer`** for daily work |
 | NewCompanyIdeas | `~/NewCompanyIdeas` | `nlt-ideas-scout` | Extra **`agentforge`** MCP server preserved on upgrade |
 
 ```bash
@@ -94,7 +94,7 @@ uv tool install --reinstall "docs-mcp @ git+https://github.com/wtthornton/tapps-
 | **tapps-mcp dev monorepo** | Global `~/.local/bin/tapps-mcp` via `.cursor/bin/nlt-*-serve.sh` (falls back to `uv run --directory` only before the first deploy) | The dev repo constantly runs pytest/uv against its workspace `.venv`; launching the MCP fleet from that same env (via `uv run` or `.venv/bin`) let test/build churn crash live servers — Cursor flapped error↔good on a 5-min backoff. The isolated `uv tool` env stays up. **Source edits go live only on deploy:** `uv tool install --reinstall --from packages/tapps-mcp tapps-mcp` (+ docs-mcp) then reload MCP. |
 | **Consumer repos** | Global `~/.local/bin/tapps-mcp` via `.cursor/bin/nlt-*-serve.sh` | Stable, tagged CLIs across the fleet |
 
-`tapps-mcp doctor` warns when globals were installed from a local path (`Global CLI install source`). AgentForge may use `mcp_bundle: developer` to opt down to three servers; tapps-mcp dev repo uses `full` by default ([ADR-0018](../adr/0018-deploy-all-six-nlt-mcp-servers-by-default.md)).
+`tapps-mcp doctor` warns when globals were installed from a local path (`Global CLI install source`). **AgentForge daily work:** set `mcp_bundle: developer` in `.tapps-mcp.yaml` (build + memory + linear-issues only) to reduce token load; use `full` when you need docs-mcp or release-ship. The tapps-mcp dev repo uses `full` by default ([ADR-0018](../adr/0018-deploy-all-six-nlt-mcp-servers-by-default.md)).
 
 After `uv tool install --reinstall --from packages/...` during local dev, rerun fleet upgrade with tagged installs before touching consumer workspaces.
 

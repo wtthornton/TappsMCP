@@ -176,7 +176,88 @@ def mystery(obj):
         assert len(index.resolution_gaps) == 1
         gap = index.resolution_gaps[0]
         assert gap.caller == "demo.dynamic.mystery"
-        assert gap.reason == "unresolved_static_call"
+        assert gap.reason == "dynamic_dispatch"
+
+
+class TestCallGraphParseFailures:
+    def test_syntax_error_recorded_in_index(self, tmp_path: Path) -> None:
+        path = _write_pkg(
+            tmp_path,
+            "demo/broken.py",
+            """
+def ok():
+    pass
+
+""",
+        )
+        path.write_text("def broken(\n", encoding="utf-8")
+        index = build_call_graph_index(tmp_path, force_rebuild=True)
+        assert len(index.parse_failures) == 1
+        assert index.parse_failures[0].reason == "syntax_error"
+
+
+class TestCallGraphHofAndRoutes:
+    def test_lambda_callback_calls_tracked(self, tmp_path: Path) -> None:
+        _write_pkg(
+            tmp_path,
+            "demo/lambda_use.py",
+            """
+def helper():
+    return 1
+
+def runner(items):
+    return list(map(lambda x: helper(), items))
+""",
+        )
+        index = build_call_graph_index(tmp_path, force_rebuild=True)
+        lambda_callers = [e.caller for e in index.edges if "lambda" in e.caller]
+        assert any("lambda" in c for c in lambda_callers)
+
+    def test_click_decorator_route_edge(self, tmp_path: Path) -> None:
+        _write_pkg(
+            tmp_path,
+            "demo/cli.py",
+            """
+import click
+
+@click.command()
+def greet():
+    click.echo("hi")
+""",
+        )
+        index = build_call_graph_index(tmp_path, force_rebuild=True)
+        route_edges = [e for e in index.edges if e.caller.startswith("route:")]
+        assert route_edges
+        assert any(e.callee.endswith(".greet") for e in route_edges)
+
+
+class TestExportTestMap:
+    def test_writes_test_map_txt(self, tmp_path: Path) -> None:
+        _write_pkg(
+            tmp_path,
+            "demo/target.py",
+            """
+def target():
+    return 1
+""",
+        )
+        _write_pkg(
+            tmp_path,
+            "tests/test_target.py",
+            """
+from demo.target import target
+
+def test_target():
+    assert target() == 1
+""",
+        )
+        from tapps_mcp.project.diff_impact import export_test_map
+
+        out = export_test_map(tmp_path, force_rebuild=True)
+        assert out.name == "test_map.txt"
+        text = out.read_text(encoding="utf-8")
+        assert "demo.target.target" in text
+        assert "tests/test_target.py" in text
 
 
 class TestCallGraphCache:

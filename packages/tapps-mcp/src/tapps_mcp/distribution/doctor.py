@@ -206,7 +206,10 @@ def check_global_local_install() -> CheckResult:
         True,
         f"WARN: {names} installed from local checkout ({sources})",
         drift.remediation_hint
-        or "Pin consumer globals to release tags; dev monorepo uses uv run in MCP wrappers.",
+        or (
+            "Pin consumer globals to release tags; dev monorepo deploys via explicit "
+            "uv tool install --reinstall --from packages/... then MCP reload."
+        ),
     )
 
 
@@ -3241,7 +3244,6 @@ def check_call_graph_tools_profile(root: Path) -> CheckResult:
 def check_call_graph_index_cache(root: Path, *, quick: bool = False) -> CheckResult:
     """Epic 114: informational call-graph cache status (never fails on missing cache)."""
     from tapps_mcp.project.call_graph_cache import (
-        index_fingerprint,
         load_call_graph_index,
         summarize_call_graph_cache,
     )
@@ -3275,13 +3277,15 @@ def check_call_graph_index_cache(root: Path, *, quick: bool = False) -> CheckRes
             parts.append("fresh")
         gap_count = int(summary.get("resolution_gaps", 0))
         if gap_count:
-            parts.append(f"{gap_count} resolution gaps")
-    elif not quick:
-        current_fp = index_fingerprint(root, None, "")
-        if cached.fingerprint != current_fp:
-            parts.append("stale — rebuild via tapps_call_graph(force_rebuild=true)")
-        else:
-            parts.append("fresh")
+            gap_reasons = summary.get("gap_reasons")
+            if isinstance(gap_reasons, dict) and gap_reasons:
+                reason_bits = ", ".join(f"{k}={v}" for k, v in gap_reasons.items())
+                parts.append(f"{gap_count} resolution gaps ({reason_bits})")
+            else:
+                parts.append(f"{gap_count} resolution gaps")
+        parse_failures = int(summary.get("parse_failures", 0))
+        if parse_failures:
+            parts.append(f"{parse_failures} parse failure(s)")
 
     return CheckResult(
         "Call graph index",

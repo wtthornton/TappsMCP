@@ -98,7 +98,7 @@ def analyze_diff_impact(
 
     ordered = sorted(ranked.values(), key=lambda r: (-r.score, r.test_file))
     cap = max(1, max_tests)
-    degraded = bool(index.resolution_gaps)
+    degraded = bool(index.resolution_gaps or index.parse_failures)
     return {
         "changed_files": [str(p) for p in changed_files],
         "affected_tests": [asdict(r) for r in ordered[:cap]],
@@ -106,4 +106,27 @@ def analyze_diff_impact(
         "tests_edges_used": len(test_edges),
         "max_tests": cap,
         "degraded": degraded,
+        "parse_failures": len(index.parse_failures),
     }
+
+
+def export_test_map(
+    project_root: Path,
+    output_path: Path | None = None,
+    *,
+    force_rebuild: bool = False,
+) -> Path:
+    """Write TDAD-style static test_map.txt from TESTS edges (TAP-4095)."""
+    index = build_call_graph_index(project_root, force_rebuild=force_rebuild)
+    test_edges = build_test_edges(index, project_root=project_root)
+    target = output_path or (project_root / "test_map.txt")
+    lines = [
+        "# TappsMCP test_map — code symbol -> test file (TDAD static artifact)",
+        f"# project: {project_root}",
+        f"# tests_edges: {len(test_edges)}",
+        "",
+    ]
+    for edge in sorted(test_edges, key=lambda e: (e.code_symbol, e.test_file)):
+        lines.append(f"{edge.code_symbol}\t{edge.test_file}\t{edge.test_symbol}")
+    target.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    return target

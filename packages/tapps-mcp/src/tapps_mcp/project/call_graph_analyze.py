@@ -14,7 +14,25 @@ from tapps_mcp.project.call_graph_resolve import (
     resolve_name,
     unparse_expr,
 )
-from tapps_mcp.project.call_graph_types import CallEdge, ResolutionGap, SymbolKind, SymbolRecord
+from tapps_mcp.project.call_graph_types import (
+    CallEdge,
+    ParseFailure,
+    ResolutionGap,
+    SymbolKind,
+    SymbolRecord,
+)
+
+_FRAMEWORK_DECORATOR_SUFFIXES = (
+    ".get",
+    ".post",
+    ".put",
+    ".patch",
+    ".delete",
+    ".route",
+    ".tool",
+    ".command",
+    ".group",
+)
 
 
 @dataclass
@@ -33,13 +51,21 @@ def analyze_file(
     file_path: Path,
     module: str,
     project_root: Path,
-) -> tuple[list[SymbolRecord], list[CallEdge], list[ResolutionGap]]:
+) -> tuple[list[SymbolRecord], list[CallEdge], list[ResolutionGap], list[ParseFailure]]:
+    rel_path = str(file_path.relative_to(project_root))
     try:
-        tree = ast.parse(file_path.read_text(encoding="utf-8"), filename=str(file_path))
-    except (SyntaxError, UnicodeDecodeError, OSError):
-        return [], [], []
+        source = file_path.read_text(encoding="utf-8")
+    except OSError as exc:
+        return [], [], [], [ParseFailure(rel_path, 0, f"io_error:{exc.__class__.__name__}")]
 
-    idx = FileIndex(module=module, rel_path=str(file_path.relative_to(project_root)))
+    try:
+        tree = ast.parse(source, filename=str(file_path))
+    except SyntaxError as exc:
+        return [], [], [], [ParseFailure(rel_path, exc.lineno or 0, "syntax_error")]
+    except UnicodeDecodeError:
+        return [], [], [], [ParseFailure(rel_path, 0, "decode_error")]
+
+    idx = FileIndex(module=module, rel_path=rel_path)
     _load_imports(idx, tree)
     for node in tree.body:
         if isinstance(node, ast.ClassDef):
@@ -51,7 +77,8 @@ def analyze_file(
             _scan_class_calls(idx, node, [])
         elif isinstance(node, ast.FunctionDef | ast.AsyncFunctionDef):
             _scan_function_calls(idx, node, qualify(idx, node.name, []), [])
-    return idx.symbols, idx.edges, idx.gaps
+            _scan_framework_routes(idx, node, qualify(idx, node.name, []))
+    return idx.symbols, idx.edges, idx.gaps, []
 
 
 def _load_imports(idx: FileIndex, tree: ast.Module) -> None:
@@ -101,6 +128,7 @@ def _scan_class_calls(idx: FileIndex, node: ast.ClassDef, outer: list[str]) -> N
         elif isinstance(item, ast.FunctionDef | ast.AsyncFunctionDef):
             caller = qualify(idx, item.name, stack[:-1], class_name=stack[-1])
             _scan_function_calls(idx, item, caller, stack)
+            _scan_framework_routes(idx, item, caller)
 
 
 def _scan_function_calls(
@@ -111,10 +139,40 @@ def _scan_function_calls(
 ) -> None:
     bindings = local_bindings(idx, node, class_stack)
     collector = _CallSiteCollector(
-        on_call=lambda call_node: _record_call(idx, call_node, caller, class_stack, bindings)
+        on_call=lambda call_node, active_caller: _record_call(
+            idx, call_node, active_caller, class_stack, bindings
+        ),
+        caller=caller,
     )
     for stmt in node.body:
+        if isinstance(stmt, ast.FunctionDef | ast.AsyncFunctionDef):
+            nested = f"{caller}.{stmt.name}"
+            idx.symbols.append(
+                SymbolRecord(nested, idx.module, idx.rel_path, stmt.lineno, "function")
+            )
+            _scan_function_calls(idx, stmt, nested, class_stack)
+            _scan_framework_routes(idx, stmt, nested)
         collector.visit(stmt)
+
+
+def _scan_framework_routes(
+    idx: FileIndex,
+    node: ast.FunctionDef | ast.AsyncFunctionDef,
+    handler: str,
+) -> None:
+    """Bounded FastAPI/Click/MCP route entry edges (TAP-4094)."""
+    for dec in node.decorator_list:
+        expr = unparse_expr(dec)
+        lowered = expr.lower()
+        if not any(token in lowered for token in _FRAMEWORK_DECORATOR_SUFFIXES):
+            continue
+        if not any(
+            hint in lowered
+            for hint in ("click", "router", "app.", "mcp", "fastapi", "route", "command", "tool")
+        ):
+            continue
+        route_caller = f"route:{idx.module}:{expr}"
+        idx.edges.append(CallEdge(route_caller, handler, expr, node.lineno, True))
 
 
 def _record_call(
@@ -126,21 +184,34 @@ def _record_call(
 ) -> None:
     expr = unparse_expr(call_node.func)
     callee: str | None
+    reason = "unresolved_static_call"
     if isinstance(call_node.func, ast.Name):
         callee = resolve_name(idx, call_node.func.id, class_stack, bindings)
     elif isinstance(call_node.func, ast.Attribute):
         callee = resolve_attribute(idx, call_node.func, class_stack, bindings)
+        if callee is None and call_node.func.attr in {"apply", "map", "filter", "reduce"}:
+            reason = "framework_hof"
     else:
         callee = None
+        if isinstance(call_node.func, ast.Lambda):
+            reason = "callback_opaque"
+        else:
+            reason = "dynamic_dispatch"
     if callee is None:
-        idx.gaps.append(ResolutionGap(caller, expr, call_node.lineno, "unresolved_static_call"))
+        idx.gaps.append(ResolutionGap(caller, expr, call_node.lineno, reason))
         return
     idx.edges.append(CallEdge(caller, callee, expr, call_node.lineno, True))
 
 
 class _CallSiteCollector(ast.NodeVisitor):
-    def __init__(self, *, on_call: Callable[[ast.Call], None]) -> None:
+    def __init__(
+        self,
+        *,
+        on_call: Callable[[ast.Call, str], None],
+        caller: str,
+    ) -> None:
         self._on_call = on_call
+        self._caller = caller
         self._stack: list[ast.AST] = []
 
     def visit(self, node: ast.AST) -> None:
@@ -153,5 +224,10 @@ class _CallSiteCollector(ast.NodeVisitor):
         if isinstance(parent, ast.Call) and parent.func is node:
             self.generic_visit(node)
             return
-        self._on_call(node)
+        self._on_call(node, self._caller)
         self.generic_visit(node)
+
+    def visit_Lambda(self, node: ast.Lambda) -> None:
+        lambda_caller = f"{self._caller}:lambda:{node.lineno}"
+        inner = _CallSiteCollector(on_call=self._on_call, caller=lambda_caller)
+        inner.visit(node.body)

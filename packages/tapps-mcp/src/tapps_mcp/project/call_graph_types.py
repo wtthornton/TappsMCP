@@ -6,8 +6,19 @@ from dataclasses import dataclass, field
 from typing import Literal
 
 CALL_GRAPH_CACHE_REL = ".tapps-mcp/call-graph-index.json"
-INDEX_VERSION = 1
+INDEX_VERSION = 2
 SymbolKind = Literal["function", "method"]
+
+# Stable taxonomy for resolution gaps (TAP-4092).
+ResolutionGapReason = Literal[
+    "unresolved_static_call",
+    "dynamic_dispatch",
+    "callback_opaque",
+    "import_unresolved",
+    "framework_hof",
+]
+
+PARSE_FAILURE_REASON = Literal["syntax_error", "decode_error", "io_error"]
 
 
 @dataclass
@@ -33,7 +44,14 @@ class ResolutionGap:
     caller: str
     expr: str
     line: int
-    reason: str
+    reason: ResolutionGapReason | str
+
+
+@dataclass
+class ParseFailure:
+    file_path: str
+    line: int
+    reason: PARSE_FAILURE_REASON | str
 
 
 @dataclass
@@ -41,6 +59,7 @@ class CallGraphIndex:
     symbols: list[SymbolRecord] = field(default_factory=list)
     edges: list[CallEdge] = field(default_factory=list)
     resolution_gaps: list[ResolutionGap] = field(default_factory=list)
+    parse_failures: list[ParseFailure] = field(default_factory=list)
     project_root: str = ""
     fingerprint: str = ""
     version: int = INDEX_VERSION

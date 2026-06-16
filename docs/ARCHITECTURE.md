@@ -278,6 +278,23 @@ The `tapps_doctor` tool/CLI command runs configuration and connectivity checks:
 - **Config scope**: Warns when tapps-mcp is in user-scoped `~/.claude.json`
 - **Completion-gate hook** (v3.11.0+): `.claude/hooks/tapps-stop.sh` presence; warns when missing because warn-mode telemetry to `.completion-gate-violations.jsonl` is inactive without it
 - **Usage gaps** (v3.11.0+): pulls the latest gap report from `tapps_usage` (gap count, top recommendation) so triage surfaces "what did the agent miss?" without a separate call
+- **Call graph index** (v3.12.31+): cache status, `gap_rate`, `gap_reasons`, parse failure count — see [CALL_GRAPH.md](CALL_GRAPH.md)
+
+## Function-level call graph (Epic 114)
+
+Deterministic Python AST indexer under `packages/tapps-mcp/src/tapps_mcp/project/`:
+
+| Module | Role |
+|--------|------|
+| `call_graph.py` | Index build orchestration |
+| `call_graph_analyze.py` | Per-file AST walk (CALLS edges, route decorators) |
+| `call_graph_cache.py` | Disk cache + session_start summary |
+| `call_graph_fingerprint.py` | Git-aware / mtime fingerprint (TAP-4077/4078) |
+| `call_graph_queries.py` | Callers, callees, token-budgeted chains |
+| `test_linker.py` | TDAD-style TESTS edges |
+| `diff_impact.py` | Changed files → affected tests + `export_test_map()` |
+
+MCP tools: `tapps_call_graph`, `tapps_diff_impact`; symbol mode on `tapps_impact_analysis`. Consumer guide: [CALL_GRAPH.md](CALL_GRAPH.md); scope: [ADR-0017](adr/0017-function-level-call-graph-python-first.md).
 
 ## Agent Gateway pattern (TAP-2008, 2026)
 
