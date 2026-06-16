@@ -110,13 +110,11 @@ fi
 
 
 def _mcp_zombie_cleanup_standalone_script(*, reap_stale_nlt_profiles: bool = True) -> str:
-    """Cursor sessionStart hook: orphan-only MCP cleanup before memory recall."""
-    _ = reap_stale_nlt_profiles  # legacy param; Cursor never uses profile-global stale reap
-    return f"""#!/usr/bin/env bash
-# TappsMCP MCP zombie cleanup (Cursor sessionStart — ADR-0005 extension)
-# Reaps orphaned nlt-* serve children (parent died). Safe with multiple Cursor windows.
-set -euo pipefail
-{_mcp_zombie_cleanup_cursor_bash()}
+    """Legacy Cursor sessionStart hook — deprecated; reap runs on deploy-local only."""
+    _ = reap_stale_nlt_profiles
+    return """#!/usr/bin/env bash
+# DEPRECATED: MCP orphan reap moved to deploy-local (scripts/reap-orphan-mcp-serves.sh).
+# Kept as no-op so stale hooks.json entries do not fail if this script is invoked.
 exit 0
 """
 
@@ -1877,7 +1875,7 @@ def _memory_auto_recall_script_cursor(
     return f"""#!/usr/bin/env bash
 # TappsMCP Memory Auto-Recall (Cursor — Epic 65.4)
 # Injects relevant memories on sessionStart/preCompact. Graceful fallback: exit 0.
-{_mcp_zombie_cleanup_cursor_bash()}INPUT=$(cat)
+INPUT=$(cat)
 DEFAULT_QUERY="project context architecture"
 PYBIN=$(command -v python3 2>/dev/null || command -v python 2>/dev/null)
 PY="import sys,json
@@ -2054,7 +2052,6 @@ CURSOR_MCP_ZOMBIE_CLEANUP_SCRIPT = "tapps-mcp-zombie-cleanup.sh"
 
 CURSOR_MEMORY_AUTO_RECALL_HOOKS_CONFIG: dict[str, list[dict[str, str]]] = {
     "sessionStart": [
-        {"command": ".cursor/hooks/tapps-mcp-zombie-cleanup.sh"},
         {"command": ".cursor/hooks/tapps-memory-auto-recall.sh"},
     ],
     "preCompact": [{"command": ".cursor/hooks/tapps-memory-auto-recall.sh"}],
@@ -2062,7 +2059,6 @@ CURSOR_MEMORY_AUTO_RECALL_HOOKS_CONFIG: dict[str, list[dict[str, str]]] = {
 
 CURSOR_MEMORY_AUTO_RECALL_HOOKS_CONFIG_PS: dict[str, list[dict[str, str]]] = {
     "sessionStart": [
-        {"command": PS1_PREFIX + ".cursor/hooks/tapps-mcp-zombie-cleanup.ps1"},
         {"command": PS1_PREFIX + ".cursor/hooks/tapps-memory-auto-recall.ps1"},
     ],
     "preCompact": [

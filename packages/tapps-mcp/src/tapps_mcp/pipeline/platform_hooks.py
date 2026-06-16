@@ -106,6 +106,9 @@ from tapps_mcp.pipeline.platform_hook_templates import (
     TAPPS_MANAGED_CURSOR_HOOK_KEYS as _TAPPS_MANAGED_CURSOR_HOOK_KEYS,
 )
 from tapps_mcp.pipeline.platform_hook_templates import (
+    PS1_PREFIX,
+)
+from tapps_mcp.pipeline.platform_hook_templates import (
     CURSOR_MEMORY_AUTO_RECALL_HOOKS_CONFIG as _CURSOR_MEMORY_AUTO_RECALL_HOOKS_CONFIG,
 )
 from tapps_mcp.pipeline.platform_hook_templates import (
@@ -1125,40 +1128,33 @@ def _merge_cursor_hook_command_entries(
     return hooks_added
 
 
-def _ensure_cursor_session_start_order(
+def _strip_cursor_zombie_cleanup_hooks(
     existing_hooks: dict[str, list[dict[str, str]]],
 ) -> bool:
-    """Put MCP zombie cleanup before memory auto-recall on Cursor sessionStart."""
+    """Remove deprecated sessionStart zombie cleanup (deploy-local only now)."""
     entries = existing_hooks.get("sessionStart")
     if not isinstance(entries, list) or not entries:
         return False
-    zombie_cmd = ".cursor/hooks/tapps-mcp-zombie-cleanup.sh"
-    recall_cmd = ".cursor/hooks/tapps-memory-auto-recall.sh"
-    zombie_entry: dict[str, str] | None = None
-    recall_entry: dict[str, str] | None = None
-    others: list[dict[str, str]] = []
-    for entry in entries:
-        if not isinstance(entry, dict):
-            continue
-        cmd = entry.get("command", "")
-        if cmd == zombie_cmd:
-            zombie_entry = entry
-        elif cmd == recall_cmd:
-            recall_entry = entry
-        else:
-            others.append(entry)
-    if zombie_entry is None and recall_entry is None:
+    zombie_cmds = {
+        ".cursor/hooks/tapps-mcp-zombie-cleanup.sh",
+        PS1_PREFIX + ".cursor/hooks/tapps-mcp-zombie-cleanup.ps1",
+    }
+    filtered = [
+        entry
+        for entry in entries
+        if isinstance(entry, dict) and entry.get("command", "") not in zombie_cmds
+    ]
+    if filtered == entries:
         return False
-    ordered: list[dict[str, str]] = []
-    if zombie_entry is not None:
-        ordered.append(zombie_entry)
-    if recall_entry is not None:
-        ordered.append(recall_entry)
-    ordered.extend(others)
-    if ordered == entries:
-        return False
-    existing_hooks["sessionStart"] = ordered
+    existing_hooks["sessionStart"] = filtered
     return True
+
+
+def _ensure_cursor_session_start_order(
+    existing_hooks: dict[str, list[dict[str, str]]],
+) -> bool:
+    """Strip legacy zombie cleanup from sessionStart; recall-only is correct."""
+    return _strip_cursor_zombie_cleanup_hooks(existing_hooks)
 
 
 def _generate_cursor_memory_auto_recall_hook(

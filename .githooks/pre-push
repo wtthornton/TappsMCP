@@ -1,42 +1,32 @@
 #!/usr/bin/env bash
-# .githooks/pre-push — two-tier test gate (TAP-2453)
+# .githooks/pre-push — smoke test gate (TAP-2453, revised)
 #
 # Why this exists
 # ---------------
 # This repo's workflow is "commit directly to master, no feature branches, no
 # PRs" (see .claude/rules/repo-workflow.md). That convention only stays safe
-# if something local enforces a green test baseline before push — without it,
+# if something local enforces a green baseline before push — without it,
 # CI goes red, real regressions hide in noise, and the "is my change safe"
 # bar drifts to "did I break MORE tests" instead of "tests pass."
 #
-# Two-tier model (TAP-2453)
-# -------------------------
-# TIER 1 — Fast gate (synchronous, target <60s):
-#   Runs tests for only the packages that changed in commits being pushed.
-#   Blocks the push on red. Most pushes finish the gate in <30s.
+# Smoke gate (default on push)
+# ----------------------------
+# Runs scripts/prepush-smoke.sh — a small curated serial pytest suite (<30s).
+# Does NOT run the full regression suite and does NOT use pytest-xdist (-n auto),
+# which can starve live Cursor MCP servers during push.
 #
-# TIER 2 — Full suite (detached background):
-#   After tier 1 passes, the full non-slow suite runs in the background
-#   (nohup + disown) and appends a JSON summary line to
-#   .tapps-mcp/.push-test-log. Surface background failures via
-#   `tapps-mcp doctor` or by reading the log directly.
-#
-# IMPORTANT: the fast-tier package scope must mirror what CI runs
-# (.github/workflows/non-slow-tests.yml). If CI tests more than the fast
-# tier does, CI will catch regressions that the local hook lets through.
+# Full regression (explicit opt-in)
+# ---------------------------------
+#   scripts/run-regression.sh
 #
 # Bypass
 # ------
-# For genuine emergencies (e.g. shipping a doc-only fix while master is
-# already red for unrelated reasons), set TAPPS_SKIP_PREPUSH=1. Each bypass
-# is logged to .tapps-mcp/.bypass-log.jsonl with timestamp and current
-# commit, so the pattern of bypasses can be audited later.
+# For genuine emergencies, set TAPPS_SKIP_PREPUSH=1. Each bypass is logged to
+# .tapps-mcp/.bypass-log.jsonl with timestamp and current commit.
 #
 # Install
 # -------
-# Run scripts/install-git-hooks.sh once per fresh clone. The script
-# configures core.hooksPath = .githooks (project-scoped) so this file is
-# picked up automatically. No symlinks; no per-developer .git/hooks/ edits.
+# Run scripts/install-git-hooks.sh once per fresh clone.
 
 set -e
 # TAP-1784: pipefail so pytest ... | tail exit code is pytest's, not tail's.
@@ -45,8 +35,6 @@ set -o pipefail
 remote="$1"
 url="$2"
 
-# Read the refs being pushed from stdin (git's pre-push protocol).
-# Format: <local_ref> <local_sha> <remote_ref> <remote_sha>
 gating_master=0
 local_sha=""
 remote_sha=""
@@ -67,7 +55,6 @@ fi
 PUSH_LOG_DIR=".tapps-mcp"
 mkdir -p "$PUSH_LOG_DIR" 2>/dev/null || true
 
-# --- Bypass ---
 if [[ -n "${TAPPS_SKIP_PREPUSH:-}" ]]; then
   ts="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
   sha="$(git rev-parse HEAD)"
@@ -78,10 +65,6 @@ if [[ -n "${TAPPS_SKIP_PREPUSH:-}" ]]; then
   exit 0
 fi
 
-# --- Version parity check ---
-# tapps-mcp, docs-mcp, and tapps-core must share the same version, and
-# derived files (AGENTS.md stamp, npm/package.json, the canonical hook
-# manifest) must match. Delegated to scripts/bump-versions.py --check.
 if ! python3 scripts/bump-versions.py --check >&2; then
   echo "" >&2
   echo "[pre-push] VERSION DRIFT detected. Push blocked." >&2
@@ -92,13 +75,6 @@ if ! python3 scripts/bump-versions.py --check >&2; then
   exit 1
 fi
 
-# --- tapps-brain version floor check (TAP-1923) ---
-# Refuse the push if the tapps-brain floor in packages/tapps-core/pyproject.toml
-# drops below 3.18.0. This prevents silent regression of the alias-removal
-# guard documented in ADR-0010 and CLAUDE.md.
-#
-# The check is intentionally lightweight: one grep + sort -V, no subprocess.
-# Override the TOML path via TAPPS_CORE_PYPROJECT (used by integration tests).
 _CORE_PYPROJECT="${TAPPS_CORE_PYPROJECT:-packages/tapps-core/pyproject.toml}"
 _REQUIRED_BRAIN_FLOOR="3.18.0"
 if [[ -f "$_CORE_PYPROJECT" ]]; then
@@ -106,8 +82,6 @@ if [[ -f "$_CORE_PYPROJECT" ]]; then
   if [[ -n "$_BRAIN_LINE" ]]; then
     _BRAIN_FLOOR=$(echo "$_BRAIN_LINE" | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -1)
     if [[ -n "$_BRAIN_FLOOR" ]]; then
-      # sort -V puts the smaller version first; if the required floor comes out
-      # first the current floor is >= required. Any other outcome is a regression.
       _SORT_FIRST=$(printf '%s\n%s\n' "$_BRAIN_FLOOR" "$_REQUIRED_BRAIN_FLOOR" | sort -V | head -1)
       if [[ "$_SORT_FIRST" != "$_REQUIRED_BRAIN_FLOOR" ]]; then
         echo "[pre-push] BRAIN FLOOR REGRESSION: tapps-brain>=${_BRAIN_FLOOR} is below the required floor ${_REQUIRED_BRAIN_FLOOR}." >&2
@@ -120,13 +94,6 @@ if [[ -f "$_CORE_PYPROJECT" ]]; then
   fi
 fi
 
-# --- Static lints (migrated from GitHub Actions to cut CI spend) ---
-#
-# Replaces hive-write-lint.yml and tool-budget-lint.yml. Both are fast,
-# deterministic, and need no remote state, so they belong in the local gate.
-
-# Hive-write annotations: every hive_push / hive_propagate / agent_scope="hive"
-# must have "# hive-approved: TAP-XXXX" on the same or preceding line.
 _HIVE_VIOLATIONS=0
 while IFS=: read -r _hf _hln _; do
   [[ -z "$_hf" ]] && continue
@@ -145,7 +112,6 @@ if [[ "$_HIVE_VIOLATIONS" -gt 0 ]]; then
   exit 1
 fi
 
-# Tool-budget: new @mcp.tool() registrations must touch docs/architecture/tool-budget.md.
 if ! python3 scripts/check-tool-budget.py \
     --diff-range "HEAD~1..HEAD" \
     --commit-msg "$(git log -1 --format='%B')" >&2; then
@@ -154,60 +120,22 @@ if ! python3 scripts/check-tool-budget.py \
   exit 1
 fi
 
-# --- Tier 1: fast gate — scope to changed packages ---
-#
-# Determine which packages changed in the commits being pushed. Diff
-# between the remote tip and what we're pushing; fall back to HEAD~1..HEAD
-# for first-push (remote_sha all-zeros) or other edge cases.
-NULL_SHA="0000000000000000000000000000000000000000"
-if [[ "$remote_sha" == "$NULL_SHA" || -z "$remote_sha" ]]; then
-  CHANGED_FILES="$(git diff --name-only HEAD~1 HEAD 2>/dev/null || git show --name-only --format='' HEAD 2>/dev/null || echo "")"
-else
-  CHANGED_FILES="$(git diff --name-only "$remote_sha" "${local_sha:-HEAD}" 2>/dev/null || git diff --name-only HEAD~1 HEAD 2>/dev/null || echo "")"
-fi
-
-FAST_TEST_PATHS=()
-echo "$CHANGED_FILES" | grep -q "^packages/tapps-mcp/"  && FAST_TEST_PATHS+=("packages/tapps-mcp/tests/")
-echo "$CHANGED_FILES" | grep -q "^packages/tapps-core/" && FAST_TEST_PATHS+=("packages/tapps-core/tests/")
-echo "$CHANGED_FILES" | grep -q "^packages/docs-mcp/"   && FAST_TEST_PATHS+=("packages/docs-mcp/tests/")
-
-# Fallback: if only root-level files changed (scripts/, .githooks/, etc.)
-# run the tapps-mcp core suite as the minimum sanity check.
-if [[ ${#FAST_TEST_PATHS[@]} -eq 0 ]]; then
-  FAST_TEST_PATHS=("packages/tapps-mcp/tests/")
-fi
-
-echo "[pre-push] Tier 1 (fast gate): ${FAST_TEST_PATHS[*]}" >&2
+# --- Smoke gate ---
+echo "[pre-push] Smoke gate: scripts/prepush-smoke.sh (full regression: scripts/run-regression.sh)" >&2
 echo "[pre-push] Bypass: TAPPS_SKIP_PREPUSH=1 git push" >&2
 
-# Run each package separately to avoid conftest.py collision when multiple
-# packages change in the same push (ImportPathMismatchError on tests.conftest).
-TIER1_FAILED=0
-for _TIER1_PATH in "${FAST_TEST_PATHS[@]}"; do
-  echo "[pre-push] Running: uv run pytest $_TIER1_PATH -m 'not slow' -q --tb=line --timeout=60 -n auto --maxfail=3" >&2
-  if ! uv run pytest "$_TIER1_PATH" -m "not slow" -q --tb=line --timeout=60 -n auto --maxfail=3 2>&1 | tail -25; then
-    TIER1_FAILED=1
-    echo "" >&2
-    echo "[pre-push] FAST GATE FAILED on $_TIER1_PATH. Push blocked." >&2
-  fi
-done
-
-if [[ "$TIER1_FAILED" -ne 0 ]]; then
-  echo "[pre-push] Investigate: uv run pytest ${FAST_TEST_PATHS[*]} -m 'not slow' -v" >&2
+if ! scripts/prepush-smoke.sh 2>&1 | tail -25; then
+  echo "" >&2
+  echo "[pre-push] SMOKE GATE FAILED. Push blocked." >&2
+  echo "[pre-push] Investigate: scripts/prepush-smoke.sh" >&2
+  echo "[pre-push] Full suite:  scripts/run-regression.sh" >&2
   echo "[pre-push] Bypass:      TAPPS_SKIP_PREPUSH=1 git push" >&2
   exit 1
 fi
 
-echo "[pre-push] Tier 1 passed." >&2
+echo "[pre-push] Smoke gate passed." >&2
 
-# --- Pending-close sentinel (TAP-2467) ---
-#
-# After each push to master/main, extract any TAP ticket IDs referenced in
-# the newly pushed commits (via feat(TAP-####) or fix(TAP-####) convention)
-# and write one JSONL line per ticket to .tapps-mcp/.pending-linear-close.jsonl.
-# The next autonomous loop coordinator step reads this file and closes the tickets
-# automatically, recovering from API-error resets that interrupted post-push
-# Linear status updates.
+NULL_SHA="0000000000000000000000000000000000000000"
 PENDING_CLOSE_LOG="$PUSH_LOG_DIR/.pending-linear-close.jsonl"
 PUSH_TS="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 if [[ -n "$remote_sha" && "$remote_sha" != "$NULL_SHA" ]]; then
@@ -215,7 +143,6 @@ if [[ -n "$remote_sha" && "$remote_sha" != "$NULL_SHA" ]]; then
 else
   _commit_range="HEAD~1..HEAD"
 fi
-# Extract TAP IDs from commit messages (feat(TAP-####) or fix(TAP-####) patterns)
 TAP_IDS=$(git log "$_commit_range" --format='%s' 2>/dev/null \
   | grep -oE '(feat|fix)\(TAP-[0-9]+\)' \
   | grep -oE 'TAP-[0-9]+' \
@@ -230,34 +157,5 @@ if [[ -n "$TAP_IDS" ]]; then
   echo "[pre-push] Pending-close sentinels written for: $TAP_IDS → $PENDING_CLOSE_LOG" >&2
 fi
 
-# --- Tier 2: full suite in background ---
-#
-# Detach a comprehensive run (all three packages, not-slow) so regressions
-# in untouched packages still surface — just after the push, not blocking it.
-# Results are appended to .tapps-mcp/.push-test-log as JSONL.
-COMMIT_SHA="$(git rev-parse HEAD)"
-PUSH_TEST_LOG="$PUSH_LOG_DIR/.push-test-log"
-BG_STDOUT="$PUSH_LOG_DIR/.bg-test-stdout.log"
-
-nohup bash -c "
-  START_TS=\$(date -u +%Y-%m-%dT%H:%M:%SZ)
-  PASSED=0; FAILED=0; STATUS=PASS
-  for PKG in packages/tapps-mcp packages/tapps-core packages/docs-mcp; do
-    if uv run pytest \"\$PKG/tests/\" -m 'not slow' -q --tb=no --timeout=60 >> '$BG_STDOUT' 2>&1; then
-      PASSED=\$((PASSED + 1))
-    else
-      FAILED=\$((FAILED + 1))
-      STATUS=FAIL
-    fi
-  done
-  END_TS=\$(date -u +%Y-%m-%dT%H:%M:%SZ)
-  printf '{\"ts\":\"%s\",\"end_ts\":\"%s\",\"commit\":\"%s\",\"status\":\"%s\",\"packages_passed\":%d,\"packages_failed\":%d}\n' \
-    \"\$START_TS\" \"\$END_TS\" \"$COMMIT_SHA\" \"\$STATUS\" \"\$PASSED\" \"\$FAILED\" \
-    >> '$PUSH_TEST_LOG'
-" > /dev/null 2>&1 &
-disown "$!"
-
-echo "[pre-push] Tier 2 (full suite) launched in background. Results → $PUSH_TEST_LOG" >&2
-echo "[pre-push] Check: tail -5 $PUSH_TEST_LOG   OR   uv run tapps-mcp doctor" >&2
 echo "[pre-push] OK — push proceeding." >&2
 exit 0

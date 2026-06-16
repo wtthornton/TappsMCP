@@ -668,8 +668,36 @@ class TestCheckHooks:
         assert result.ok is False
         assert "session-start hook missing" in result.message
 
-    def test_cursor_zombie_cleanup_passes_when_wired(self, tmp_path):
-        """Cursor sessionStart with zombie cleanup before recall passes doctor."""
+    def test_cursor_zombie_cleanup_passes_when_recall_only(self, tmp_path):
+        """Cursor sessionStart with recall only (no zombie hook) passes doctor."""
+        hooks_dir = tmp_path / ".cursor" / "hooks"
+        hooks_dir.mkdir(parents=True)
+        (hooks_dir / "tapps-before-mcp.sh").write_text("#!/bin/bash\n", encoding="utf-8")
+        (hooks_dir / "tapps-memory-auto-recall.sh").write_text("#!/bin/bash\n", encoding="utf-8")
+        (tmp_path / ".cursor" / "hooks.json").write_text(
+            json.dumps(
+                {
+                    "version": 1,
+                    "hooks": {
+                        "beforeMCPExecution": [{"command": ".cursor/hooks/tapps-before-mcp.sh"}],
+                        "sessionStart": [
+                            {"command": ".cursor/hooks/tapps-memory-auto-recall.sh"},
+                        ],
+                    },
+                },
+                indent=2,
+            ),
+            encoding="utf-8",
+        )
+        with patch("tapps_mcp.distribution.doctor.sys.platform", "linux"):
+            hooks_result = check_hooks(tmp_path)
+            zombie_result = check_cursor_mcp_zombie_cleanup(tmp_path)
+        assert hooks_result.ok is True
+        assert "deploy-local" in hooks_result.message
+        assert zombie_result.ok is True
+
+    def test_cursor_zombie_cleanup_fails_when_stale_session_start_hook(self, tmp_path):
+        """Stale sessionStart zombie cleanup entry fails doctor."""
         hooks_dir = tmp_path / ".cursor" / "hooks"
         hooks_dir.mkdir(parents=True)
         (hooks_dir / "tapps-before-mcp.sh").write_text("#!/bin/bash\n", encoding="utf-8")
@@ -692,37 +720,9 @@ class TestCheckHooks:
             encoding="utf-8",
         )
         with patch("tapps_mcp.distribution.doctor.sys.platform", "linux"):
-            hooks_result = check_hooks(tmp_path)
-            zombie_result = check_cursor_mcp_zombie_cleanup(tmp_path)
-        assert hooks_result.ok is True
-        assert "MCP zombie cleanup on sessionStart" in hooks_result.message
-        assert zombie_result.ok is True
-
-    def test_cursor_zombie_cleanup_fails_when_missing_script(self, tmp_path):
-        """Missing zombie cleanup script fails when memory auto-recall is wired."""
-        hooks_dir = tmp_path / ".cursor" / "hooks"
-        hooks_dir.mkdir(parents=True)
-        (hooks_dir / "tapps-before-mcp.sh").write_text("#!/bin/bash\n", encoding="utf-8")
-        (hooks_dir / "tapps-memory-auto-recall.sh").write_text("#!/bin/bash\n", encoding="utf-8")
-        (tmp_path / ".cursor" / "hooks.json").write_text(
-            json.dumps(
-                {
-                    "version": 1,
-                    "hooks": {
-                        "beforeMCPExecution": [{"command": ".cursor/hooks/tapps-before-mcp.sh"}],
-                        "sessionStart": [
-                            {"command": ".cursor/hooks/tapps-memory-auto-recall.sh"},
-                        ],
-                    },
-                },
-                indent=2,
-            ),
-            encoding="utf-8",
-        )
-        with patch("tapps_mcp.distribution.doctor.sys.platform", "linux"):
             result = check_cursor_mcp_zombie_cleanup(tmp_path)
         assert result.ok is False
-        assert "missing" in result.message.lower()
+        assert "deploy-local" in result.message
 
     def test_hooks_dir_exists_but_no_tapps_files(self, tmp_path):
         """Hooks directory exists but has no tapps-* files fails."""

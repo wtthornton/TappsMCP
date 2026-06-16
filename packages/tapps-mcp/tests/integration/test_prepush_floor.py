@@ -26,7 +26,7 @@ import pytest
 _HOOK_PATH = Path(__file__).parents[4] / ".githooks" / "pre-push"
 _REQUIRED_FLOOR = "3.18.0"
 _FLOOR_SECTION_START = "# --- tapps-brain version floor check"
-_FLOOR_SECTION_END = "# --- Tier 1: fast gate"
+_FLOOR_SECTION_END = "# --- Smoke gate ---"
 
 
 def _extract_floor_section(hook_text: str) -> str:

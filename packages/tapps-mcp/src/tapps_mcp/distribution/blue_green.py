@@ -256,6 +256,14 @@ def _deploy_under_lock(
         report["ok"] = False
         return report
 
+    from tapps_mcp.distribution.mcp_zombie_reap import reap_orphan_mcp_serves
+
+    zombie_reap = reap_orphan_mcp_serves()
+    report["mcp_zombie_reap"] = zombie_reap
+    if not zombie_reap.get("ok"):
+        report["ok"] = False
+        return report
+
     flip = flip_current(release)
     report["flip"] = flip
     if not flip.get("ok"):

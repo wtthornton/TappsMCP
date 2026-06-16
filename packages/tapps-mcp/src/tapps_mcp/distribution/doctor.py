@@ -1974,7 +1974,7 @@ def check_claude_settings(project_root: Path) -> CheckResult:
 
 
 def _check_cursor_mcp_zombie_cleanup(project_root: Path) -> CheckResult | None:
-    """Verify Cursor sessionStart runs MCP zombie cleanup before memory auto-recall."""
+    """Verify Cursor sessionStart does NOT run MCP zombie cleanup (deploy-local only)."""
     hooks_json = project_root / ".cursor" / "hooks.json"
     if not hooks_json.exists():
         return None
@@ -1988,44 +1988,32 @@ def _check_cursor_mcp_zombie_cleanup(project_root: Path) -> CheckResult | None:
     session_entries = hooks_obj.get("sessionStart")
     if not isinstance(session_entries, list) or not session_entries:
         return None
+    zombie_cmds = {
+        ".cursor/hooks/tapps-mcp-zombie-cleanup.sh",
+        "powershell -NoProfile -ExecutionPolicy Bypass -File .cursor/hooks/tapps-mcp-zombie-cleanup.ps1",
+    }
+    stale = [
+        e.get("command", "")
+        for e in session_entries
+        if isinstance(e, dict) and e.get("command", "") in zombie_cmds
+    ]
+    if stale:
+        return CheckResult(
+            "MCP zombie cleanup hook",
+            False,
+            "sessionStart must not run zombie cleanup — reap runs on deploy-local only",
+            "Run: tapps-mcp upgrade --host cursor --force",
+        )
     recall_cmd = ".cursor/hooks/tapps-memory-auto-recall.sh"
-    zombie_cmd = ".cursor/hooks/tapps-mcp-zombie-cleanup.sh"
     has_recall = any(
         isinstance(e, dict) and e.get("command") == recall_cmd for e in session_entries
     )
     if not has_recall:
         return None
-    zombie_path = project_root / ".cursor" / "hooks" / "tapps-mcp-zombie-cleanup.sh"
-    if not zombie_path.exists():
-        return CheckResult(
-            "MCP zombie cleanup hook",
-            False,
-            "sessionStart uses memory auto-recall but tapps-mcp-zombie-cleanup.sh is missing",
-            "Run: tapps-mcp upgrade --host cursor --force",
-        )
-    cmds = [
-        e.get("command", "")
-        for e in session_entries
-        if isinstance(e, dict)
-    ]
-    if zombie_cmd not in cmds:
-        return CheckResult(
-            "MCP zombie cleanup hook",
-            False,
-            "sessionStart missing tapps-mcp-zombie-cleanup.sh entry in .cursor/hooks.json",
-            "Run: tapps-mcp upgrade --host cursor --force",
-        )
-    if cmds.index(zombie_cmd) > cmds.index(recall_cmd):
-        return CheckResult(
-            "MCP zombie cleanup hook",
-            False,
-            "sessionStart order wrong: zombie cleanup must run before memory auto-recall",
-            "Run: tapps-mcp upgrade --host cursor --force",
-        )
     return CheckResult(
         "MCP zombie cleanup hook",
         True,
-        "sessionStart runs zombie cleanup before memory auto-recall",
+        "sessionStart correctly omits zombie cleanup (reap on deploy-local)",
     )
 
 
@@ -2106,7 +2094,7 @@ def _check_cursor_hooks_config(
 
 
 def check_cursor_mcp_zombie_cleanup(project_root: Path) -> CheckResult:
-    """Epic 109 / ADR-0005: Cursor sessionStart zombie cleanup before memory recall."""
+    """Epic 109 / ADR-0005: sessionStart must not run zombie cleanup (deploy-local only)."""
     result = _check_cursor_mcp_zombie_cleanup(project_root)
     if result is not None:
         return result
@@ -2167,7 +2155,7 @@ def check_hooks(project_root: Path) -> CheckResult:
             return cursor_result
         zombie_result = _check_cursor_mcp_zombie_cleanup(project_root)
         if zombie_result is not None and zombie_result.ok:
-            zombie_note = "; MCP zombie cleanup on sessionStart"
+            zombie_note = "; MCP zombie reap on deploy-local (not sessionStart)"
 
     return CheckResult(
         "Hooks",

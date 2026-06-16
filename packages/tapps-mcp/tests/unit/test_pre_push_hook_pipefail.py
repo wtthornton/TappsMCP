@@ -32,9 +32,15 @@ def test_hook_references_story(hook_source: str) -> None:
     assert "TAP-1784" in hook_source
 
 
-def test_hook_pipes_pytest_through_tail(hook_source: str) -> None:
-    """If this pattern changes, the pipefail fix may no longer be necessary."""
-    assert "pytest" in hook_source
+def test_hook_delegates_to_smoke_script(hook_source: str) -> None:
+    """Pre-push must call the curated smoke script, not a full package suite."""
+    assert "prepush-smoke.sh" in hook_source
+    assert "run-regression.sh" in hook_source
+
+
+def test_hook_pipes_smoke_through_tail(hook_source: str) -> None:
+    """Pipefail applies to the smoke gate pipeline."""
+    assert "prepush-smoke.sh" in hook_source
     assert "| tail" in hook_source
 
 

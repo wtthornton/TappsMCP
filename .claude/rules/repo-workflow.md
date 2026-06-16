@@ -9,12 +9,14 @@ For tapps-mcp, commit code changes directly to `master`. Solo-dev workflow on a 
 - Run local validation (tests, quality gate) and `git commit` + `git push` to `master`.
 - Do not propose "open a PR for X" or branch-and-PR flows in plans or recommendations.
 
-The pre-push test gate (`.githooks/pre-push`) enforces a green non-slow unit
-suite before any push to master. Run `scripts/install-git-hooks.sh` once per
-fresh clone to activate it (sets `core.hooksPath=.githooks`). For genuine
+The pre-push test gate (`.githooks/pre-push`) runs a **smoke suite only**
+(`scripts/prepush-smoke.sh`) before any push to master — serial pytest, no
+xdist, target <30s. Full regression is explicit opt-in:
+`scripts/run-regression.sh`. Run `scripts/install-git-hooks.sh` once per
+fresh clone to activate the hook (sets `core.hooksPath=.githooks`). For genuine
 emergencies, bypass with `TAPPS_SKIP_PREPUSH=1 git push` — bypasses are
 logged to `.tapps-mcp/.bypass-log.jsonl`. Do not bypass for routine work; if
-the suite is red, fix it or pause.
+the smoke gate fails, fix it or run the full regression script locally first.
 
 The pre-push hook also enforces a **tapps-brain version floor** (TAP-1923):
 it reads the `tapps-brain>=X.Y.Z` line from `packages/tapps-core/pyproject.toml`

@@ -22,15 +22,16 @@ Claude Code spawns a fresh MCP server subprocess (one tapps-mcp + one docs-mcp) 
 
 **Operational note:** The cleanup block is load-bearing — do not remove from the hook template.
 
-**NLT full-bundle extension (v3.12.32+):** Cursor `sessionStart` runs
-`.cursor/hooks/tapps-mcp-zombie-cleanup.sh` before memory auto-recall.
+**NLT full-bundle extension (v3.12.32+, superseded v3.12.37+):** Cursor
+`sessionStart` previously ran `.cursor/hooks/tapps-mcp-zombie-cleanup.sh`
+before memory auto-recall. **Superseded:** orphan reap now runs only on
+`deploy-local` / `scripts/reap-orphan-mcp-serves.sh` (before the blue/green
+flip). SessionStart must not kill MCP children — that starved live Cursor
+windows during git push smoke tests and was unsafe with multiple windows.
 
 **Cursor multi-window (v3.12.36+):** With 2–5 Cursor windows on one host, each
 window spawns its own stdio MCP children. Profile-global duplicate/stale reaping
 (one ``nlt-build`` winner per machine) kills live servers in other windows.
-Cursor hooks therefore reap **orphans only** — ``serve`` processes whose parent
-PID is dead (Reload Window / crash). Claude Code hooks keep the original 2-hour
+Deploy-local orphan reap uses the same orphan-only policy — ``serve`` processes
+whose parent PID is dead. Claude Code hooks keep the original 2-hour
 + duplicate policy (single-window assumption per ADR consequences).
-
-`preCompact` uses the same orphan-only Cursor policy so compaction in one window
-does not disturb MCP servers in another.
