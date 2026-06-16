@@ -48,12 +48,19 @@ class TestFlipCurrent:
         assert bg.current_release_path() == release.resolve()
         assert bg.CURRENT_LINK.is_symlink()
 
-    def test_resolve_blue_green_binary(self, bg_home: Path) -> None:
+    def test_resolve_blue_green_binary(self, bg_home: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setattr(bg, "blue_green_enabled", lambda: True)
         release = _make_release(bg_home / "releases", "3.12.35-deadbeef")
         ref = bg.ReleaseRef(version="3.12.35", short_sha="deadbeef", path=release)
         bg.flip_current(ref)
         resolved = bg.resolve_blue_green_binary("tapps-mcp")
         assert resolved == str((release / "bin" / "tapps-mcp").resolve())
+
+    def test_resolve_blue_green_binary_disabled_by_default(self, bg_home: Path) -> None:
+        release = _make_release(bg_home / "releases", "3.12.35-deadbeef")
+        ref = bg.ReleaseRef(version="3.12.35", short_sha="deadbeef", path=release)
+        bg.flip_current(ref)
+        assert bg.resolve_blue_green_binary("tapps-mcp") is None
 
 
 class TestGcReleases:

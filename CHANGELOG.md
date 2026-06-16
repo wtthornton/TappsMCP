@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- **Global uv-tool default (ADR-0020)** — Blue/green `~/.tapps-mcp/current` launches are opt-in via `TAPPS_MCP_USE_BLUE_GREEN=1`. Cursor wrappers and drift probes default to `~/.local/bin` shims. `upgrade-fleet --reinstall-clis` uses `uv tool install` by default; add `--blue-green-deploy` for `deploy-local`.
+
 ## [3.12.39] - 2026-06-16
 
 Patch: context-aware install-drift remediation and call-graph cache invalidation on upgrade.

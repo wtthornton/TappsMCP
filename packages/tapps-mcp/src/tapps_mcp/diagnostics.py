@@ -253,7 +253,7 @@ def check_install_drift() -> InstallDriftDiagnostic:
     """
     from docs_mcp import __version__ as docs_mcp_version
     from tapps_mcp import __version__ as tapps_mcp_version
-    from tapps_mcp.distribution.blue_green import resolve_blue_green_binary
+    from tapps_mcp.distribution.blue_green import blue_green_enabled, resolve_blue_green_binary
 
     targets = [
         ("tapps-mcp", tapps_mcp_version),
@@ -286,7 +286,7 @@ def check_install_drift() -> InstallDriftDiagnostic:
 
     drift_detected = any(e.drifted for e in entries)
     local_install_warning = any(e.from_local_source for e in entries)
-    uses_blue_green = resolve_blue_green_binary("tapps-mcp") is not None
+    uses_blue_green = blue_green_enabled() and resolve_blue_green_binary("tapps-mcp") is not None
     hint = ""
     if drift_detected:
         hint = install_drift_remediation_hint(entries, uses_blue_green=uses_blue_green)

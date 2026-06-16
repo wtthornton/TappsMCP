@@ -776,7 +776,13 @@ def deploy_local_cmd(
     "--reinstall-clis",
     is_flag=True,
     default=False,
-    help="Blue/green deploy tapps-mcp + docs-mcp to ~/.tapps-mcp/current from --tapps-checkout first.",
+    help="Reinstall global tapps-mcp + docs-mcp from --tapps-checkout (uv tool install).",
+)
+@click.option(
+    "--blue-green-deploy",
+    is_flag=True,
+    default=False,
+    help="With --reinstall-clis, use tapps-mcp deploy-local instead of uv tool install.",
 )
 @click.option(
     "--tapps-checkout",
@@ -835,6 +841,7 @@ def upgrade_fleet_cmd(
     uv_mode: str,
     mcp_host: str,
     reinstall_clis: bool,
+    blue_green_deploy: bool,
     tapps_checkout: str,
     skip_mcp_refresh: bool,
     skip_doctor: bool,
@@ -858,6 +865,8 @@ def upgrade_fleet_cmd(
     Then::
 
         tapps-mcp upgrade-fleet --reinstall-clis --bundle full --uv-mode off
+
+    Opt into blue/green zero-downtime deploy (ADR-0019) with ``--blue-green-deploy``.
     """
     import json
     from pathlib import Path
@@ -879,6 +888,7 @@ def upgrade_fleet_cmd(
         uv_mode=uv_mode,  # type: ignore[arg-type]
         run_doctor=not skip_doctor,
         reinstall_clis=reinstall_clis,
+        blue_green_deploy=blue_green_deploy,
         tapps_checkout=Path(tapps_checkout),
         import_legacy_doc_cache=import_legacy_doc_cache,
         strip_context7_env=strip_context7_env,

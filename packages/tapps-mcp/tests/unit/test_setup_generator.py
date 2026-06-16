@@ -1535,6 +1535,10 @@ class TestEpic80ConsumerInit:
         (root / "packages" / "docs-mcp").mkdir(parents=True)
         (root / "pyproject.toml").write_text("[project]\nname='tapps-mcp'\n", encoding="utf-8")
         monkeypatch.setattr(
+            "tapps_mcp.distribution.blue_green.blue_green_enabled",
+            lambda: True,
+        )
+        monkeypatch.setattr(
             "tapps_mcp.distribution.blue_green.resolve_blue_green_binary",
             lambda name: f"/home/user/.tapps-mcp/current/bin/{name}",
         )

@@ -8,6 +8,7 @@ their release dir (inode-held); only new launches pick up the flipped ``current`
 from __future__ import annotations
 
 import json
+import os
 import shutil
 import subprocess
 import sys
@@ -62,8 +63,20 @@ def current_release_path() -> Path | None:
     return resolved if resolved.is_dir() else None
 
 
+def blue_green_enabled() -> bool:
+    """Return True when blue/green ``current`` launches are explicitly opted in.
+
+    Default is **off** (global ``uv tool install`` shims). Set
+    ``TAPPS_MCP_USE_BLUE_GREEN=1`` for ``deploy-local`` / zero-downtime dev deploys.
+    """
+    raw = os.environ.get("TAPPS_MCP_USE_BLUE_GREEN", "").strip().lower()
+    return raw in {"1", "true", "yes", "on"}
+
+
 def resolve_blue_green_binary(command: str) -> str | None:
-    """Return ``~/.tapps-mcp/current/bin/<command>`` when present."""
+    """Return ``~/.tapps-mcp/current/bin/<command>`` when enabled and present."""
+    if not blue_green_enabled():
+        return None
     candidate = CURRENT_LINK / "bin" / command
     if candidate.is_file():
         return str(candidate.resolve())

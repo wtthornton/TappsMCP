@@ -192,6 +192,7 @@ def run_fleet_upgrade(
     uv_mode: UvMode = "auto",
     run_doctor: bool = True,
     reinstall_clis: bool = False,
+    blue_green_deploy: bool = False,
     tapps_checkout: Path | None = None,
     import_legacy_doc_cache: bool = False,
     strip_context7_env: bool = False,
@@ -202,7 +203,7 @@ def run_fleet_upgrade(
 
     if reinstall_clis and not dry_run:
         checkout = (tapps_checkout or Path.cwd()).resolve()
-        cli_reinstall = _reinstall_global_clis(checkout)
+        cli_reinstall = _reinstall_global_clis(checkout, use_blue_green=blue_green_deploy)
 
     project_results: list[FleetUpgradeProjectResult] = []
     for root in resolved:
@@ -247,29 +248,48 @@ def run_fleet_upgrade(
     }
 
 
-def _reinstall_global_clis(checkout: Path) -> dict[str, Any]:
-    """Blue/green deploy tapps-mcp + docs-mcp from a checkout (zero-downtime flip)."""
-    from tapps_mcp.distribution.blue_green import deploy_blue_green
+def _reinstall_global_clis(checkout: Path, *, use_blue_green: bool = False) -> dict[str, Any]:
+    """Reinstall global tapps-mcp + docs-mcp from *checkout*."""
+    if use_blue_green:
+        from tapps_mcp.distribution.blue_green import deploy_blue_green
 
-    deploy = deploy_blue_green(checkout)
-    ok = bool(deploy.get("ok"))
-    summary = json.dumps(
-        {
-            "release": deploy.get("release"),
-            "current": deploy.get("current"),
-            "smoke_test": (deploy.get("smoke_test") or {}).get("versions"),
-        },
-        sort_keys=True,
-    )[-500:]
-    shared = {"ok": ok, "output": summary}
-    if not ok:
-        err = deploy.get("quiescence_gate") or deploy.get("build") or deploy.get("smoke_test") or deploy
-        shared["error"] = json.dumps(err, default=str)[-500:]
-    return {
-        "blue_green": deploy,
-        "tapps-mcp": {**shared, "binary": "tapps-mcp"},
-        "docs-mcp": {**shared, "binary": "docsmcp"},
-    }
+        deploy = deploy_blue_green(checkout)
+        ok = bool(deploy.get("ok"))
+        summary = json.dumps(
+            {
+                "release": deploy.get("release"),
+                "current": deploy.get("current"),
+                "smoke_test": (deploy.get("smoke_test") or {}).get("versions"),
+            },
+            sort_keys=True,
+        )[-500:]
+        shared = {"ok": ok, "output": summary}
+        if not ok:
+            err = deploy.get("quiescence_gate") or deploy.get("build") or deploy.get("smoke_test") or deploy
+            shared["error"] = json.dumps(err, default=str)[-500:]
+        return {
+            "blue_green": deploy,
+            "tapps-mcp": {**shared, "binary": "tapps-mcp"},
+            "docs-mcp": {**shared, "binary": "docsmcp"},
+        }
+
+    results: dict[str, Any] = {}
+    for package, binary in (
+        ("packages/tapps-mcp", "tapps-mcp"),
+        ("packages/docs-mcp", "docsmcp"),
+    ):
+        proc = subprocess.run(
+            ["uv", "tool", "install", "-e", "--reinstall", str(checkout / package)],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        output = ((proc.stdout or "") + (proc.stderr or "")).strip()[-500:]
+        results[binary] = {"ok": proc.returncode == 0, "output": output, "binary": binary}
+    results["ok"] = all(
+        info.get("ok") for key, info in results.items() if key in {"tapps-mcp", "docsmcp"}
+    )
+    return results
 
 
 def format_fleet_upgrade_markdown(report: dict[str, Any]) -> str:
