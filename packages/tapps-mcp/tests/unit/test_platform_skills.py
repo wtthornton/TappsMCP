@@ -413,6 +413,21 @@ class TestFinishTaskSkill:
         content = CLAUDE_SKILLS["tapps-finish-task"]
         assert "mcp__nlt-build__tapps_checklist" in content
 
+    def test_allowed_tools_includes_lookup_docs(self) -> None:
+        content = CLAUDE_SKILLS["tapps-finish-task"]
+        assert "mcp__nlt-build__tapps_lookup_docs" in content
+
+    def test_cursor_mcp_tools_includes_lookup_docs(self) -> None:
+        content = CURSOR_SKILLS["tapps-finish-task"]
+        assert "tapps_lookup_docs" in content
+
+    def test_finish_task_clears_doc_lookup_gaps(self) -> None:
+        for content in (CLAUDE_SKILLS["tapps-finish-task"], CURSOR_SKILLS["tapps-finish-task"]):
+            assert "library_uses_without_lookup_docs" in content
+            assert "libraries_without_lookup" in content
+            assert "usage_gaps" in content
+            assert "Doc gaps:" in content
+
     def test_finish_task_uses_cli_memory_save(self) -> None:
         content = CLAUDE_SKILLS["tapps-finish-task"]
         assert "mcp__tapps-mcp__tapps_memory" not in content

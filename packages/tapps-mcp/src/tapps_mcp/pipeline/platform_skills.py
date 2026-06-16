@@ -104,6 +104,16 @@ DEPRECATED_TAPPS_SKILLS: frozenset[str] = frozenset(
     {"tapps-score", "tapps-gate", "tapps-validate", "tapps-report"}
 )
 
+_FINISH_TASK_CHECKLIST_AND_DOC_GAPS_CURSOR = """\
+2. **Verify the checklist.** Call `tapps_checklist(task_type=<feature|bugfix|refactor|security|review>)`. Read the inline **`usage_gaps`** block — not only `complete` / `missing_steps`. If `complete: false`, address each entry in `missing_steps` and re-run.
+
+3. **Clear doc-lookup gaps.** When `usage_gaps.gaps` includes `library_uses_without_lookup_docs` or `libraries_without_lookup` is non-empty, call `tapps_lookup_docs(library=<name>, topic=<relevant-api>)` for **each** listed library (retrospective lookups clear this gap). Re-run `tapps_checklist` until `usage_gaps.gaps` is empty **and** `complete: true`. Prefer lookup **before** writing in future sessions."""
+
+_FINISH_TASK_CHECKLIST_AND_DOC_GAPS_CLAUDE = """\
+2. **Verify the checklist.** Call `mcp__nlt-build__tapps_checklist(task_type=<feature|bugfix|refactor|security|review>)`. Read the inline **`usage_gaps`** block — not only `complete` / `missing_steps`. If `complete: false`, address each entry in `missing_steps` and re-run.
+
+3. **Clear doc-lookup gaps.** When `usage_gaps.gaps` includes `library_uses_without_lookup_docs` or `libraries_without_lookup` is non-empty, call `mcp__nlt-build__tapps_lookup_docs(library=<name>, topic=<relevant-api>)` for **each** listed library (retrospective lookups clear this gap). Re-run `mcp__nlt-build__tapps_checklist` until `usage_gaps.gaps` is empty **and** `complete: true`. Prefer lookup **before** writing in future sessions."""
+
 # ---------------------------------------------------------------------------
 # Skills templates (Story 12.8)
 # ---------------------------------------------------------------------------
@@ -115,7 +125,7 @@ name: tapps-finish-task
 user-invocable: true
 model: claude-haiku-4-5-20251001
 description: Run the end-of-task TAPPS pipeline in one shot — validate_changed, then checklist, then an optional memory save for anything architectural or patterned learned this session. The recommended final step before declaring work complete. Use when you have finished implementing a task and want to validate, run the checklist, and save learnings in one shot.
-allowed-tools: mcp__nlt-build__tapps_validate_changed mcp__nlt-build__tapps_checklist Bash
+allowed-tools: mcp__nlt-build__tapps_validate_changed mcp__nlt-build__tapps_checklist mcp__nlt-build__tapps_lookup_docs Bash
 argument-hint: "[task_type: feature|bugfix|refactor|security|review]"
 ---
 
@@ -123,13 +133,13 @@ Close out the current task end-to-end. Run each step; do NOT skip one that faile
 
 1. **Validate changed files.** Identify the files you edited this session (git status, your edit history). Call `mcp__nlt-build__tapps_validate_changed` with explicit `file_paths` (comma-separated) scoped to those files. **Never call without `file_paths`.** Default is quick mode. If any file fails, list it with the top blocking issue and stop — the task is not complete. Do not proceed to step 2 until all changed files pass.
 
-2. **Verify the checklist.** Call `mcp__nlt-build__tapps_checklist(task_type=<feature|bugfix|refactor|security|review>)`. If the response has `complete: false`, the `missing_steps` list names required tools you skipped — address each (or explain why it does not apply) and re-run the checklist. Only proceed when `complete: true`.
+""" + _FINISH_TASK_CHECKLIST_AND_DOC_GAPS_CLAUDE + """
 
-3. **Save learnings (conditional).** If this session produced a non-obvious architectural or pattern-level decision — a new convention, a subtle trade-off, a gotcha someone else would re-discover — run `uv run tapps-mcp memory save --key <slug> --tier <architectural|pattern> --value "<concise decision>"` (CLI via BrainBridge; `tapps_memory` MCP removed v3.12.0). Skip for routine fixes, refactors where the code documents the decision, or trivial bugfixes. Brain offline → skip silently.
+4. **Save learnings (conditional).** If this session produced a non-obvious architectural or pattern-level decision — a new convention, a subtle trade-off, a gotcha someone else would re-discover — run `uv run tapps-mcp memory save --key <slug> --tier <architectural|pattern> --value "<concise decision>"` (CLI via BrainBridge; `tapps_memory` MCP removed v3.12.0). Skip for routine fixes, refactors where the code documents the decision, or trivial bugfixes. Brain offline → skip silently.
 
-4. **Report.** Emit a one-line summary: `Files validated: N pass. Checklist: <task_type> complete. Memory saved: yes|no.` If any step failed or was skipped, say so explicitly.
+5. **Report.** Emit a one-line summary: `Files validated: N pass. Checklist: <task_type> complete. Doc gaps: cleared|none. Memory saved: yes|no.` If any step failed or was skipped, say so explicitly.
 
-5. **Transfer (optional).** If the user is ending the chat and wants the next session to pick up cleanly, invoke `/tapps-handoff-session` instead of pasting a long prompt.
+6. **Transfer (optional).** If the user is ending the chat and wants the next session to pick up cleanly, invoke `/tapps-handoff-session` instead of pasting a long prompt.
 """,
     "tapps-handoff-session": """\
 ---
@@ -1076,16 +1086,19 @@ description: >-
 mcp_tools:
   - tapps_validate_changed
   - tapps_checklist
+  - tapps_lookup_docs
 ---
 
 Close out the current task end-to-end. Run each step; do NOT skip one that failed — surface the failure and stop.
 
 1. **Validate changed files.** Identify files edited this session (git status, edit history). Call `tapps_validate_changed` with explicit `file_paths` (comma-separated). Never call without `file_paths`. If any file fails, list it with the top blocking issue and stop.
-2. **Verify the checklist.** Call `tapps_checklist(task_type=<feature|bugfix|refactor|security|review>)`. If `complete: false`, address each entry in `missing_steps` and re-run.
-3. **Save learnings (conditional).** If the session produced a non-obvious architectural or pattern-level decision, run `uv run tapps-mcp memory save --key <slug> --tier <architectural|pattern> --value "<decision>"` (no `tapps_memory` MCP). Skip for routine fixes. Brain offline → skip silently.
-4. **Report.** Emit a one-line summary: `Files validated: N pass. Checklist: <task_type> complete. Memory saved: yes|no.`
 
-5. **Transfer (optional).** If the user is ending the chat, invoke the `tapps-handoff-session` skill so the next session can run `tapps-continue-session`.
+""" + _FINISH_TASK_CHECKLIST_AND_DOC_GAPS_CURSOR + """
+
+4. **Save learnings (conditional).** If the session produced a non-obvious architectural or pattern-level decision, run `uv run tapps-mcp memory save --key <slug> --tier <architectural|pattern> --value "<decision>"` (no `tapps_memory` MCP). Skip for routine fixes. Brain offline → skip silently.
+5. **Report.** Emit a one-line summary: `Files validated: N pass. Checklist: <task_type> complete. Doc gaps: cleared|none. Memory saved: yes|no.`
+
+6. **Transfer (optional).** If the user is ending the chat, invoke the `tapps-handoff-session` skill so the next session can run `tapps-continue-session`.
 """,
     "tapps-handoff-session": """\
 ---

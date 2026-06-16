@@ -96,6 +96,14 @@ class TestCursorHooksScripts:
         generate_cursor_hooks(tmp_path, force_windows=False)
         content = (tmp_path / ".cursor" / "hooks" / "tapps-after-edit.sh").read_text()
         assert "file_path" in content
+        assert "tapps_lookup_docs" in content
+        assert "TAP-1330" in content
+
+    def test_after_edit_import_parse_reads_disk(self, tmp_path):
+        generate_cursor_hooks(tmp_path, force_windows=False)
+        content = (tmp_path / ".cursor" / "hooks" / "tapps-after-edit.sh").read_text()
+        assert "TAPPS_HOOK_INPUT" in content
+        assert "read_text" in content
 
     def test_prunes_pre_upgrade_backups(self, tmp_path):
         backup_dir = tmp_path / ".tapps-mcp" / "hook-backups" / ".cursor" / "hooks"
@@ -271,17 +279,19 @@ class TestCursorHooksScriptsWindows:
             content = script.read_text()
             assert not content.startswith("#!"), f"{script.name} has unexpected shebang"
 
-    def test_after_edit_uses_convert_from_json(self, tmp_path):
+    def test_after_edit_uses_python_import_parser(self, tmp_path):
         generate_cursor_hooks(tmp_path, force_windows=True)
         content = (tmp_path / ".cursor" / "hooks" / "tapps-after-edit.ps1").read_text()
-        assert "ConvertFrom-Json" in content
+        assert "TAPPS_HOOK_INPUT" in content
+        assert "tapps_lookup_docs" in content
 
     def test_after_edit_supports_both_payloads(self, tmp_path):
-        """PS1 after-edit hook should handle both Cursor (file) and Claude (tool_input) payloads."""
+        """PS1 after-edit hook parses Cursor and Claude-style file paths via Python."""
         generate_cursor_hooks(tmp_path, force_windows=True)
         content = (tmp_path / ".cursor" / "hooks" / "tapps-after-edit.ps1").read_text()
-        assert "data.file" in content
-        assert "tool_input.file_path" in content
+        assert "TAPPS_HOOK_INPUT" in content
+        assert "tapps_lookup_docs" in content
+        assert "TAP-1330" in content
 
     def test_result_dict(self, tmp_path):
         result = generate_cursor_hooks(tmp_path, force_windows=True)
