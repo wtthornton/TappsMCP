@@ -32,7 +32,7 @@ These are the seven rules every agent in this project MUST follow. They override
 | **tapps_quality_gate** | Before declaring work complete - ensures file passes preset |
 | **Brain memory (CLI)** | **REQUIRED** - `uv run tapps-mcp memory search|get|save` for cross-session knowledge. Hooks auto-recall when enabled; pin scope keys in `memory_hooks.auto_recall.recall_keys`. See `/tapps-memory` skill. |
 
-**For full tool reference** (32 tools), invoke the **tapps-tool-reference** skill when asked about tools.
+**For full tool reference** ({{TAPPS_MCP_TOOL_COUNT}} tools), invoke the **tapps-tool-reference** skill when asked about tools.
 
 ---
 
@@ -137,7 +137,7 @@ You were deployed into THIS repo by `tapps_init` / `tapps_upgrade`. Stay in scop
 Your project may have two complementary memory systems:
 
 - **Claude Code auto memory** (`~/.claude/projects/<project>/memory/MEMORY.md`): Build commands, IDE preferences, personal workflow notes. Auto-managed by Claude Code.
-- **TappsMCP shared memory** (`tapps-mcp memory` CLI via BrainBridge; `tapps_memory` MCP removed TAP-1994): Architecture decisions, quality patterns, expert findings, cross-agent knowledge. Structured with tiers, confidence decay, contradiction detection, consolidation, and federation.
+- {{MEMORY_SYSTEMS_BULLET}}
 
 REQUIRED: Use `uv run tapps-mcp memory save|get|search` for architecture decisions and quality patterns. Pin scope keys under `memory_hooks.auto_recall.recall_keys`.
 

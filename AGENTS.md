@@ -32,7 +32,7 @@ Seven rules every agent in this project should follow.
 | **tapps_usage** | When you want to see what you missed this session - per-session `gaps` + concrete `recommendations`. Inlined as `usage_gaps` on every `tapps_checklist` response. |
 | **tapps_quality_gate** | Before declaring work complete - ensures file passes preset |
 
-**For full tool reference** (32 tools with per-tool guidance), invoke the **tapps-tool-reference** skill when the user asks "what tools does TappsMCP have?", "when do I use tapps_score_file?", etc.
+**For full tool reference** (42 tools with per-tool guidance), invoke the **tapps-tool-reference** skill when the user asks "what tools does TappsMCP have?", "when do I use tapps_score_file?", etc.
 
 ---
 
@@ -143,19 +143,15 @@ You can also invoke the `tapps-review-fixer` agent directly on individual files 
 
 ---
 
-## Generating epic, story, or prompt artifacts (DocsMCP)
+## Linear epics and stories (DocsMCP)
 
-When creating or updating **epic**, **story**, or **prompt** planning artifacts (e.g. in `docs/archive/planning/epics/`), use a consistent structure and the right tools. All three artifact types share a **Common schema** (Identity, **Purpose & Intent** (required), Goal, Success, Context, Steps, Out of scope, Expert enrichment). See [LLM-ARTIFACT-STRUCTURE-COMMON-EPIC-STORY-PROMPT.md](docs/archive/planning/LLM-ARTIFACT-STRUCTURE-COMMON-EPIC-STORY-PROMPT.md) and [LLM-ARTIFACT-COMMON-SCHEMA.md](docs/archive/planning/LLM-ARTIFACT-COMMON-SCHEMA.md).
+**Linear is the backlog.** Do not commit epic or story markdown to this repo. Use the `linear-issue` skill:
 
-**Recommended TappsMCP/DocsMCP calls:**
+- **docs_generate_epic** / **docs_generate_story** — structured bodies (inline by default; `write_to_disk=false`).
+- **docs_validate_linear_issue** — must return `agent_ready: true` before `save_issue`.
+- **docs_generate_prompt** — optional LLM-facing prompt artifacts when needed.
 
-- **tapps_session_start** — returns project root, installed checkers, docs provider, and pipeline stage info (use this for context/technical notes instead of the removed `tapps_project_profile`).
-- **docs_generate_epic** — primary epic generator (EpicConfig); use for parent epics.
-- **docs_generate_story** — primary story generator (StoryConfig); use for child stories.
-- **docs_generate_prompt** — prompt artifact generator (PromptConfig); use for LLM-facing prompt docs.
-- **docs_validate_linear_issue** — when the epic/story will become a Linear issue, run this before save so only agent-ready payloads go live.
-
-Provide **purpose_and_intent** for epic and story when calling the generators so the required "Purpose & Intent" section is populated.
+Provide **purpose_and_intent** for epics and stories so the required Purpose & Intent section is populated.
 
 ## Deprecated tools
 
@@ -197,16 +193,18 @@ TappsMCP creates **4 quality-focused subagents** (tapps-reviewer, tapps-research
 - **Recommended install order:** (1) Configure MCP (tapps-mcp). (2) Run `tapps_init` to get TappsMCP rules, agents, and skills. (3) Optionally run agency-agents `./scripts/install.sh --tool claude-code` or `--tool cursor`.
 - **Paths:** **Cursor** — agency-agents writes to `.cursor/rules/`; TappsMCP writes to `.cursor/agents/` and `.cursor/rules/` (no conflict). **Claude** — both can use the agents dir (project `.claude/agents/` or user `~/.claude/agents/`).
 
-For details, see [2026-AGENTS-RESEARCH-CLAUDE-CURSOR-AGENCY-AGENTS.md](docs/archive/planning/research/2026-AGENTS-RESEARCH-CLAUDE-CURSOR-AGENCY-AGENTS.md). Optional: for more specialized agents (e.g. Frontend Developer, Reality Checker), see [agency-agents](https://github.com/msitarzewski/agency-agents) and run their install script for your platform.
+Optional: for more specialized agents (e.g. Frontend Developer, Reality Checker), see [agency-agents](https://github.com/msitarzewski/agency-agents) and run their install script for your platform.
 
 ## Memory systems
 
 Your project may have two complementary memory systems:
 
 - **Claude Code auto memory** (`~/.claude/projects/<project>/memory/MEMORY.md`): Build commands, IDE preferences, personal workflow notes. Auto-managed.
-- **TappsMCP shared memory** (`tapps-mcp memory` CLI via BrainBridge; `tapps_memory` MCP removed TAP-1994): Architecture decisions, quality patterns, expert findings, cross-agent knowledge. Structured with tiers, confidence decay, contradiction detection, consolidation, and federation.
+- **TappsMCP shared memory** — **`uv run tapps-mcp memory`** CLI via BrainBridge (default; do not add direct `tapps-brain` to `.mcp.json`). When **`nlt-memory`** is enabled, `tapps_memory` MCP on that server is a slim facade (TAP-3895). Architecture decisions, quality patterns, cross-agent knowledge. See [docs/MEMORY_REFERENCE.md](docs/MEMORY_REFERENCE.md) and `/tapps-memory` skill.
 
 RECOMMENDED: Use `uv run tapps-mcp memory save|get|search` for architecture decisions and quality patterns. Pin always-on scope keys under `memory_hooks.auto_recall.recall_keys` in `.tapps-mcp.yaml`.
+
+**Access:** Prefer `uv run tapps-mcp memory <subcommand>` (CLI). With `nlt-memory` enabled, `tapps_memory(action=...)` on that server exposes the same actions (TAP-3895). Not on default `nlt-build` alone (TAP-1994).
 
 ### Memory actions (42 total)
 
@@ -315,7 +313,7 @@ For direct stdio connections you can expose only a subset of tools to keep the a
 - **disabled_tools** (deny list): tools to exclude from the full set. Applied when `enabled_tools` is not set. Env: `TAPPS_MCP_DISABLED_TOOLS`.
 - **tool_preset**: `full` (all tools), `core` (7 Tier-1 tools), `pipeline` (Tier 1 + Tier 2), or role presets: `reviewer`, `planner`, `frontend`, `developer` (Epic 79.5). NLT profiles: `nlt-build`, `nlt-memory`, `nlt-setup` (legacy: `nlt-code-quality`, `nlt-platform-admin`). Env: `TAPPS_MCP_TOOL_PRESET=nlt-build`.
 
-Empty or missing = all 34 tools (default, backward compatible). Invalid tool names in `enabled_tools` are ignored and logged. Recommended subsets by task/role and Docker tool filtering: see `docs/archive/planning/TOOL-SUBSETS-AND-DOCKER-FILTERING.md`.
+Empty or missing = all 42 tools (default, backward compatible). Invalid tool names in `enabled_tools` are ignored and logged. Recommended subsets by task/role and Docker tool filtering: see [docs/architecture/tool-budget.md](docs/architecture/tool-budget.md).
 
 ---
 ## tapps_session_start vs tapps_init

@@ -1617,7 +1617,7 @@ class TestCheckTappsMemorySkill:
 
     _BODY = (
         "---\nname: tapps-memory\n---\n"
-        "tapps-mcp memory save\ntapps_session_notes\n" * 5
+        "tapps-mcp memory save\ntapps_session_notes\nnlt-memory TAP-3895\n" * 5
     )
 
     def test_present_passes(self, tmp_path):

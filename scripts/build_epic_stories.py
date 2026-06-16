@@ -1,15 +1,8 @@
 #!/usr/bin/env python3
-"""Use docs-mcp generators to build an epic and its story documents.
+"""Deprecated: epic/story markdown in-repo. Use Linear + the linear-issue skill.
 
-Run from repo root:
-  uv run python scripts/build_epic_stories.py
-
-Writes:
-  - docs/planning/epics/EPIC-69-EXPERT-PERSONAS.md (epic with story stubs)
-  - docs/planning/epics/EPIC-69/story-69.1-*.md, story-69.2-*.md, story-69.3-*.md
-
-You can edit the EPIC_NUMBER, TITLE, and story list below to generate
-a different epic. Requires docs-mcp and tapps-core (uv sync --all-packages).
+Historical helper that wrote files under docs/planning/epics/. Kept for
+generator smoke tests only — do not run for new work.
 """
 
 from __future__ import annotations

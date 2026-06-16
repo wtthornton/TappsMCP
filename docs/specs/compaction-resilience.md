@@ -146,6 +146,5 @@ With this pattern in place, the 12 failure classes from Issue #54393 are address
 - [ARCHITECTURE.md — Memory Architecture section](../ARCHITECTURE.md#memory-architecture)
 - [MEMORY_REFERENCE.md](../MEMORY_REFERENCE.md)
 - [ADR-0001: In-process AgentBrain via BrainBridge](../adr/0001-in-process-agentbrain-via-brainbridge.md)
-- [EPIC-65.4: Auto-recall hook](../archive/planning/epics/EPIC-65.4-AUTO-RECALL-HOOK.md)
-- [EPIC-65.5: Auto-capture hook](../archive/planning/epics/EPIC-65.5-AUTO-CAPTURE-HOOK.md)
+- [MEMORY_REFERENCE.md — memory hooks](../MEMORY_REFERENCE.md#memory-hooks-auto-recall-and-auto-capture)
 - Anthropic Issue #54393: `github.com/anthropics/claude-code/issues/54393`

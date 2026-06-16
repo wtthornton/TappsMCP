@@ -1310,7 +1310,9 @@ def _memory_skill_content_ok(skill_name: str, content: str) -> bool:
     if "mcp__tapps-mcp__tapps_memory" in lowered:
         return False
     if skill_name == "tapps-memory":
-        return "tapps-mcp memory" in lowered and "tapps_session_notes" in lowered
+        has_cli = "tapps-mcp memory" in lowered
+        has_facade = "nlt-memory" in lowered or "tap-3895" in lowered
+        return has_cli and has_facade and "tapps_session_notes" in lowered
     if skill_name == "tapps-finish-task":
         if "tapps_validate_changed" not in lowered or "tapps_checklist" not in lowered:
             return False
@@ -1400,7 +1402,7 @@ def check_tapps_memory_skill(project_root: Path) -> CheckResult:
         return CheckResult(
             "tapps-memory skill",
             False,
-            f"Stale skill (still references tapps_memory MCP): {', '.join(stale)}",
+            f"Stale skill (missing CLI bridge or nlt-memory facade): {', '.join(stale)}",
             "Run: tapps-mcp upgrade --force",
         )
     hosts = ", ".join(host for host, _ in _tapps_skill_bases(project_root))

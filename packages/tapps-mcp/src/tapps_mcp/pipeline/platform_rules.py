@@ -12,11 +12,16 @@ from typing import TYPE_CHECKING, Any
 if TYPE_CHECKING:
     from pathlib import Path
 
+from tapps_mcp.pipeline.agent_contract import (
+    MEMORY_RECALL_SESSION_START,
+    MEMORY_SYSTEMS_BULLET,
+)
+
 # ---------------------------------------------------------------------------
 # Cursor rule types (Story 12.11)
 # ---------------------------------------------------------------------------
 
-_CURSOR_RULE_PIPELINE = """\
+_CURSOR_RULE_PIPELINE = f"""\
 ---
 alwaysApply: true
 ---
@@ -28,7 +33,7 @@ This project uses the TAPPS MCP server for code quality enforcement.
 ## Session Start (REQUIRED)
 
 Call `tapps_session_start()` as the FIRST action in every session.
-Brain memory is bridge-only (TAP-1994): use `uv run tapps-mcp memory search --query "..."` or pinned keys in `.tapps-mcp.yaml` → `memory_hooks.auto_recall.recall_keys`. Hooks auto-inject on sessionStart/preCompact when enabled.
+{MEMORY_RECALL_SESSION_START}
 Read `.tapps-mcp/session-handoff.md` when continuing work.
 
 ## After Editing Python Files (REQUIRED)
@@ -37,6 +42,7 @@ Call `tapps_quick_check(file_path)` after editing any Python file.
 
 ## Before Declaring Work Complete (BLOCKING)
 
+Invoke `/tapps-finish-task` (or run `tapps_validate_changed` then `tapps_checklist` sequentially) before ending any session with code edits.
 Call `tapps_validate_changed(file_paths="file1.py,file2.py")` with explicit paths to batch-validate changed files. **Never call without `file_paths`** - auto-detect scans all git-changed files and can be very slow. Default is quick mode; only use `quick=false` as a last resort.
 The quality gate MUST pass before work is declared complete.
 Call `tapps_checklist(task_type)` as the FINAL verification step.
@@ -141,7 +147,7 @@ CURSOR_RULE_TEMPLATES: dict[str, str] = {
 }
 
 
-def generate_cursor_rules(project_root: Path) -> dict[str, Any]:
+def generate_cursor_rules(project_root: Path, *, overwrite: bool = False) -> dict[str, Any]:
     """Generate three Cursor rule files with different rule types.
 
     Creates ``.cursor/rules/`` with:
@@ -149,29 +155,34 @@ def generate_cursor_rules(project_root: Path) -> dict[str, Any]:
     - ``tapps-python-quality.mdc`` (autoAttach via globs)
     - ``tapps-expert-consultation.mdc`` (agentRequested via description)
 
-    Returns a summary dict with ``created`` and ``skipped`` lists.
+    Returns a summary dict with ``created``, ``updated``, and ``skipped`` lists.
     """
     rules_dir = project_root / ".cursor" / "rules"
     rules_dir.mkdir(parents=True, exist_ok=True)
 
     created: list[str] = []
+    updated: list[str] = []
     skipped: list[str] = []
     for name, content in CURSOR_RULE_TEMPLATES.items():
         target = rules_dir / name
-        if target.exists():
+        if target.exists() and not overwrite:
             skipped.append(name)
+            continue
+        existed = target.exists()
+        target.write_text(content, encoding="utf-8")
+        if existed:
+            updated.append(name)
         else:
-            target.write_text(content, encoding="utf-8")
             created.append(name)
 
-    return {"created": created, "skipped": skipped}
+    return {"created": created, "updated": updated, "skipped": skipped}
 
 
 # ---------------------------------------------------------------------------
 # VS Code / Copilot Instructions (Story 12.13)
 # ---------------------------------------------------------------------------
 
-_COPILOT_INSTRUCTIONS = """\
+_COPILOT_INSTRUCTIONS = f"""\
 # TappsMCP Quality Tools
 
 This project uses TappsMCP for code quality analysis. When TappsMCP is
@@ -182,23 +193,30 @@ following tools to maintain code quality throughout development.
 
 - `tapps_session_start` - Initialize a TappsMCP session at the start of
   each work session. Call this first.
+{MEMORY_RECALL_SESSION_START}
 - `tapps_quick_check` - Run a quick quality check on a single file after
   editing. Returns score and top issues.
 - `tapps_quality_gate` - Run a pass/fail quality gate against a configurable
   preset (development, staging, or production).
 - `tapps_validate_changed` - Validate all changed files against the quality
-  gate. Call this before declaring work complete.
+  gate. Call this before declaring work complete (pass explicit `file_paths`).
 - `tapps_lookup_docs` - Look up library documentation and API references
   for external libraries and frameworks.
 - `tapps_score_file` - Get a detailed 7-category quality score for any file.
 
+## Memory
+
+{MEMORY_SYSTEMS_BULLET}
+
 ## Workflow
 
 1. Start a session: call `tapps_session_start`
-2. After editing Python files: call `tapps_quick_check` on changed files
-3. Before creating a PR or declaring work complete: call
-   `tapps_validate_changed`
-4. For library documentation: call `tapps_lookup_docs` with the
+2. Recall context: `uv run tapps-mcp memory search --query "..."` or read
+   `.tapps-mcp/session-handoff.md`
+3. After editing Python files: call `tapps_quick_check` on changed files
+4. Before creating a PR or declaring work complete: invoke `/tapps-finish-task`
+   or call `tapps_validate_changed` then `tapps_checklist`
+5. For library documentation: call `tapps_lookup_docs` with the
    library name and topic
 
 ## Quality Scoring Categories

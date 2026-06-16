@@ -9,6 +9,14 @@ from __future__ import annotations
 import shlex
 from typing import Any
 
+from tapps_mcp.pipeline.agent_contract import (
+    SUBAGENT_START_INTRO,
+    SUBAGENT_START_TOOLS_LINE,
+    POST_EDIT_IMPORT_LOOKUP_BASH,
+    POST_EDIT_QUICK_CHECK_BASH,
+    STOP_FINISH_REMINDER,
+)
+
 
 def _mcp_zombie_cleanup_bash(
     *,
@@ -85,7 +93,7 @@ fi
 def _mcp_zombie_cleanup_cursor_bash() -> str:
     """ADR-0005 Cursor variant: orphan-only reap (multi-window safe).
 
-    With 2–5 Cursor windows × six NLT stdio servers, profile-global duplicate/stale
+    With 2-5 Cursor windows x six NLT stdio servers, profile-global duplicate/stale
     reaping kills live MCP children in *other* windows. Only reap ``serve`` processes
     whose parent PID is dead (Reload Window / crash orphans).
     """
@@ -199,7 +207,8 @@ if command -v tapps-mcp >/dev/null 2>&1; then
 fi
 exit 0
 """,
-    "tapps-post-edit.sh": """\
+    "tapps-post-edit.sh": (
+        """\
 #!/usr/bin/env bash
 # TappsMCP PostToolUse hook (Edit/Write) — TAP-1326 / TAP-1330
 # Detects new external imports requiring tapps_lookup_docs. Advisory only;
@@ -231,15 +240,18 @@ FILE=$(echo "$PARSED" | sed -n '1p')
 LIBS=$(echo "$PARSED" | sed -n '2p')
 case "$FILE" in
   *.py|*.pyi|*.ts|*.tsx|*.js|*.jsx|*.go|*.rs)
-    echo "Edited: $FILE — run tapps_quick_check before declaring complete." >&2
-    if [ -n "$LIBS" ]; then
-      echo "New imports detected ($LIBS) — call tapps_lookup_docs(library=...) before declaring complete (TAP-1330)." >&2
-    fi
+"""
+        + f'    echo "{POST_EDIT_QUICK_CHECK_BASH}" >&2\n'
+        + "    if [ -n \"$LIBS\" ]; then\n"
+        + f'      echo "{POST_EDIT_IMPORT_LOOKUP_BASH}" >&2\n'
+        + """    fi
     ;;
 esac
 exit 0
-""",
-    "tapps-stop.sh": """\
+"""
+    ),
+    "tapps-stop.sh": (
+        """\
 #!/usr/bin/env bash
 # TappsMCP Stop hook — TAP-1326 / TAP-1327
 # Phase 1 (always when transcript exists): scan tool calls, write loop-metrics.jsonl
@@ -392,10 +404,12 @@ fi
 # Phase 2: conditional reminder — only when this turn's scan flagged violations.
 if [ -n "$GATE_REPORT" ]; then
   echo "TappsMCP completion-gate (warn): $GATE_REPORT" >&2
-  echo "Reminder: run /tapps-finish-task (or tapps_validate_changed + tapps_checklist manually) before declaring complete." >&2
-fi
+"""
+        + f'  echo "{STOP_FINISH_REMINDER}" >&2\n'
+        + """fi
 exit 0
-""",
+"""
+    ),
     "tapps-user-prompt-submit.sh": """\
 #!/usr/bin/env bash
 # TappsMCP UserPromptSubmit hook (TAP-975 / TAP-2000)
@@ -572,15 +586,18 @@ fi
 echo "[TappsMCP] Pre-compact session indexed for rehydration."
 exit 0
 """,
-    "tapps-subagent-start.sh": """\
+    "tapps-subagent-start.sh": (
+        """\
 #!/usr/bin/env bash
 # TappsMCP SubagentStart hook
 # Injects TappsMCP awareness into spawned subagents.
 INPUT=$(cat)
-echo "[TappsMCP] This project uses TappsMCP for code quality."
-echo "MCP tools: tapps_quick_check, tapps_score_file, tapps_validate_changed, tapps_memory."
-exit 0
-""",
+"""
+        + f'echo "{SUBAGENT_START_INTRO}"\n'
+        + f'echo "{SUBAGENT_START_TOOLS_LINE}"\n'
+        + """exit 0
+"""
+    ),
     "tapps-subagent-stop.sh": """\
 #!/usr/bin/env bash
 # TappsMCP SubagentStop hook (Epic 36.1)
@@ -993,14 +1010,17 @@ if (Get-Command tapps-mcp -ErrorAction SilentlyContinue) {
 Write-Output "[TappsMCP] Pre-compact session indexed for rehydration."
 exit 0
 """,
-    "tapps-subagent-start.ps1": """\
+    "tapps-subagent-start.ps1": (
+        """\
 # TappsMCP SubagentStart hook
 # Injects TappsMCP awareness into spawned subagents.
 $null = $input | Out-Null
-Write-Output "[TappsMCP] This project uses TappsMCP for code quality."
-Write-Output "MCP tools: tapps_quick_check, tapps_score_file, tapps_validate_changed, tapps_memory."
-exit 0
-""",
+"""
+        + f'Write-Output "{SUBAGENT_START_INTRO}"\n'
+        + f'Write-Output "{SUBAGENT_START_TOOLS_LINE}"\n'
+        + """exit 0
+"""
+    ),
     "tapps-subagent-stop.ps1": """\
 # TappsMCP SubagentStop hook (Epic 36.1)
 # Advises on quality validation when subagent modified Python files.
@@ -1496,10 +1516,10 @@ if ($py) {{
 }}
 switch -Regex ($file) {{
     '\\.(py|pyi|ts|tsx|js|jsx|go|rs)$' {{
-        Write-Output "Edited: $file — run tapps_quick_check before declaring complete."
+        Write-Output "{POST_EDIT_QUICK_CHECK_BASH.replace('$FILE', '$file')}"
         if ($libs) {{
             [Console]::Error.WriteLine(
-                "Imports detected ($libs) — call tapps_lookup_docs(library=...) before writing more code (TAP-1330)."
+                "{POST_EDIT_IMPORT_LOOKUP_BASH.replace('$LIBS', '$libs')}"
             )
         }}
     }}
@@ -1549,24 +1569,28 @@ else
 fi
 exit 0
 """,
-    "tapps-after-edit.sh": """\
+    "tapps-after-edit.sh": (
+        """\
 #!/usr/bin/env bash
 # TappsMCP afterFileEdit hook (fire-and-forget) — TAP-1330 import parity
 # Detects external imports requiring tapps_lookup_docs. Advisory only.
 INPUT=$(cat)
 PYBIN=$(command -v python3 2>/dev/null || command -v python 2>/dev/null)
 PARSED=$(TAPPS_HOOK_INPUT="$INPUT" "$PYBIN" - <<'PYEOF' 2>/dev/null
-""" + _CURSOR_AFTER_EDIT_IMPORT_PARSE_PY + """\
+"""
+        + _CURSOR_AFTER_EDIT_IMPORT_PARSE_PY
+        + """\
 PYEOF
 )
 FILE=$(echo "$PARSED" | sed -n '1p')
 LIBS=$(echo "$PARSED" | sed -n '2p')
 case "$FILE" in
   *.py|*.pyi|*.ts|*.tsx|*.js|*.jsx|*.go|*.rs)
-    echo "Edited: $FILE — run tapps_quick_check before declaring complete."
-    if [ -n "$LIBS" ]; then
-      echo "Imports detected ($LIBS) — call tapps_lookup_docs(library=...) before writing more code (TAP-1330)." >&2
-    fi
+"""
+        + f'    echo "{POST_EDIT_QUICK_CHECK_BASH}" >&2\n'
+        + "    if [ -n \"$LIBS\" ]; then\n"
+        + f'      echo "{POST_EDIT_IMPORT_LOOKUP_BASH}" >&2\n'
+        + """    fi
     ;;
   *)
     if [ -n "$FILE" ] && [ "$FILE" != "unknown" ]; then
@@ -1576,7 +1600,8 @@ case "$FILE" in
     ;;
 esac
 exit 0
-""",
+"""
+    ),
     "tapps-stop.sh": """\
 #!/usr/bin/env bash
 # TappsMCP Cursor stop hook — TAP-3918 loop-metrics + optional followup (TAP-3921)

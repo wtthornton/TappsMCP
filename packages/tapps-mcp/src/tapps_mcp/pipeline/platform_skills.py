@@ -11,6 +11,8 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
 
+from tapps_mcp.pipeline.agent_contract import finish_task_checklist_and_doc_gaps
+
 if TYPE_CHECKING:
     from pathlib import Path
 
@@ -104,15 +106,9 @@ DEPRECATED_TAPPS_SKILLS: frozenset[str] = frozenset(
     {"tapps-score", "tapps-gate", "tapps-validate", "tapps-report"}
 )
 
-_FINISH_TASK_CHECKLIST_AND_DOC_GAPS_CURSOR = """\
-2. **Verify the checklist.** Call `tapps_checklist(task_type=<feature|bugfix|refactor|security|review>)`. Read the inline **`usage_gaps`** block — not only `complete` / `missing_steps`. If `complete: false`, address each entry in `missing_steps` and re-run.
+_FINISH_TASK_CHECKLIST_AND_DOC_GAPS_CURSOR = finish_task_checklist_and_doc_gaps(claude_nlt_prefix=False)
 
-3. **Clear doc-lookup gaps.** When `usage_gaps.gaps` includes `library_uses_without_lookup_docs` or `libraries_without_lookup` is non-empty, call `tapps_lookup_docs(library=<name>, topic=<relevant-api>)` for **each** listed library (retrospective lookups clear this gap). Re-run `tapps_checklist` until `usage_gaps.gaps` is empty **and** `complete: true`. Prefer lookup **before** writing in future sessions."""
-
-_FINISH_TASK_CHECKLIST_AND_DOC_GAPS_CLAUDE = """\
-2. **Verify the checklist.** Call `mcp__nlt-build__tapps_checklist(task_type=<feature|bugfix|refactor|security|review>)`. Read the inline **`usage_gaps`** block — not only `complete` / `missing_steps`. If `complete: false`, address each entry in `missing_steps` and re-run.
-
-3. **Clear doc-lookup gaps.** When `usage_gaps.gaps` includes `library_uses_without_lookup_docs` or `libraries_without_lookup` is non-empty, call `mcp__nlt-build__tapps_lookup_docs(library=<name>, topic=<relevant-api>)` for **each** listed library (retrospective lookups clear this gap). Re-run `mcp__nlt-build__tapps_checklist` until `usage_gaps.gaps` is empty **and** `complete: true`. Prefer lookup **before** writing in future sessions."""
+_FINISH_TASK_CHECKLIST_AND_DOC_GAPS_CLAUDE = finish_task_checklist_and_doc_gaps(claude_nlt_prefix=True)
 
 # ---------------------------------------------------------------------------
 # Skills templates (Story 12.8)
@@ -135,7 +131,7 @@ Close out the current task end-to-end. Run each step; do NOT skip one that faile
 
 """ + _FINISH_TASK_CHECKLIST_AND_DOC_GAPS_CLAUDE + """
 
-4. **Save learnings (conditional).** If this session produced a non-obvious architectural or pattern-level decision — a new convention, a subtle trade-off, a gotcha someone else would re-discover — run `uv run tapps-mcp memory save --key <slug> --tier <architectural|pattern> --value "<concise decision>"` (CLI via BrainBridge; `tapps_memory` MCP removed v3.12.0). Skip for routine fixes, refactors where the code documents the decision, or trivial bugfixes. Brain offline → skip silently.
+4. **Save learnings (conditional).** If this session produced a non-obvious architectural or pattern-level decision — a new convention, a subtle trade-off, a gotcha someone else would re-discover — run `uv run tapps-mcp memory save --key <slug> --tier <architectural|pattern> --value "<concise decision>"` (CLI via BrainBridge). Skip for routine fixes, refactors where the code documents the decision, or trivial bugfixes. Brain offline → skip silently.
 
 5. **Report.** Emit a one-line summary: `Files validated: N pass. Checklist: <task_type> complete. Doc gaps: cleared|none. Memory saved: yes|no.` If any step failed or was skipped, say so explicitly.
 
@@ -290,7 +286,7 @@ allowed-tools: mcp__nlt-build__tapps_session_start mcp__nlt-memory__tapps_sessio
 argument-hint: "[save|search|get] [key]"
 ---
 
-`tapps_memory` is **not** an MCP tool (removed v3.12.0, TAP-1994). Consumer repos stay **bridge-only** — never add `tapps-brain` to `.mcp.json`.
+`tapps_memory` on the **`nlt-memory`** MCP server is a slim facade (TAP-3895). Default consumer path is **`uv run tapps-mcp memory`** (bridge-only — never add direct `tapps-brain` to `.mcp.json`).
 
 ## Routing guide
 
@@ -1095,7 +1091,7 @@ Close out the current task end-to-end. Run each step; do NOT skip one that faile
 
 """ + _FINISH_TASK_CHECKLIST_AND_DOC_GAPS_CURSOR + """
 
-4. **Save learnings (conditional).** If the session produced a non-obvious architectural or pattern-level decision, run `uv run tapps-mcp memory save --key <slug> --tier <architectural|pattern> --value "<decision>"` (no `tapps_memory` MCP). Skip for routine fixes. Brain offline → skip silently.
+4. **Save learnings (conditional).** If the session produced a non-obvious architectural or pattern-level decision, run `uv run tapps-mcp memory save --key <slug> --tier <architectural|pattern> --value "<decision>"` (CLI via BrainBridge). Skip for routine fixes. Brain offline → skip silently.
 5. **Report.** Emit a one-line summary: `Files validated: N pass. Checklist: <task_type> complete. Doc gaps: cleared|none. Memory saved: yes|no.`
 
 6. **Transfer (optional).** If the user is ending the chat, invoke the `tapps-handoff-session` skill so the next session can run `tapps-continue-session`.
@@ -1230,7 +1226,7 @@ mcp_tools:
   - tapps_session_notes
 ---
 
-`tapps_memory` is **not** an MCP tool (removed v3.12.0, TAP-1994). Consumer repos stay **bridge-only** — never add `tapps-brain` to `.mcp.json`.
+`tapps_memory` on the **`nlt-memory`** MCP server is a slim facade (TAP-3895). Default consumer path is **`uv run tapps-mcp memory`** (bridge-only — never add direct `tapps-brain` to `.mcp.json`).
 
 ## Routing guide
 

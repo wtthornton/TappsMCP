@@ -3216,7 +3216,7 @@ tools cannot write files directly.  Instead they return a `[`FileManifest`](#fil
 containing the file contents and agent instructions so the AI client (Claude
 Code, Cursor, etc.) can apply the writes using its own native capabilities.
 
-See Epic 87 for the full design: docs/planning/epics/EPIC-87-*.md
+See ADR-0016 and docs/architecture/tool-budget.md for the content-return design.
 
 ## Classes
 

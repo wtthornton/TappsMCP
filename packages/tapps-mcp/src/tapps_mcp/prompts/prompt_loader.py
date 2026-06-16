@@ -75,7 +75,10 @@ def load_agents_template(engagement_level: str = "medium") -> str:
         )
         raise ValueError(msg)
     content = _read_resource(f"agents_template_{engagement_level}.md")
-    return f"<!-- tapps-agents-version: {__version__} -->\n{content}"
+    from tapps_mcp.pipeline.agent_contract import render_agents_template
+
+    rendered = render_agents_template(content)
+    return f"<!-- tapps-agents-version: {__version__} -->\n{rendered}"
 
 
 def load_karpathy_guidelines() -> str:

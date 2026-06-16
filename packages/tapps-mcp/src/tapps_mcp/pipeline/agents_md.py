@@ -345,6 +345,7 @@ def update_agents_md(
     template_content: str,
     *,
     overwrite: bool = False,
+    force_merge: bool = False,
 ) -> tuple[str, dict[str, Any]]:
     """Update an existing AGENTS.md.
 
@@ -364,7 +365,7 @@ def update_agents_md(
         detail["changes"] = ["full_overwrite"]
         return "overwritten", detail
 
-    if validation.is_up_to_date:
+    if validation.is_up_to_date and not force_merge:
         detail["changes"] = []
         return "validated", detail
 

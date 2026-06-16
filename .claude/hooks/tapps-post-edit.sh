@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # tapps-mcp-hook-version: 3.12.39
-# tapps-mcp-hook-content-sha: 6e7392d0
+# tapps-mcp-hook-content-sha: 192f834b
 # TappsMCP PostToolUse hook (Edit/Write) — TAP-1326 / TAP-1330
 # Detects new external imports requiring tapps_lookup_docs. Advisory only;
 # the Stop hook enforces the completion gate.
@@ -31,9 +31,9 @@ FILE=$(echo "$PARSED" | sed -n '1p')
 LIBS=$(echo "$PARSED" | sed -n '2p')
 case "$FILE" in
   *.py|*.pyi|*.ts|*.tsx|*.js|*.jsx|*.go|*.rs)
-    echo "Edited: $FILE — run tapps_quick_check before declaring complete." >&2
+    echo "Edited: $FILE — run tapps_quick_check after this edit." >&2
     if [ -n "$LIBS" ]; then
-      echo "New imports detected ($LIBS) — call tapps_lookup_docs(library=...) before declaring complete (TAP-1330)." >&2
+      echo "Imports detected ($LIBS) — call tapps_lookup_docs(library=..., topic=...) before using those APIs in this session (TAP-1330)." >&2
     fi
     ;;
 esac

@@ -34,6 +34,12 @@ from tapps_mcp.tools.pipeline_tool_sets import (
     SOURCE_FILE_SUFFIXES,
     matches_pipeline_tool,
 )
+from tapps_mcp.pipeline.agent_contract import (
+    CHECKLIST_SKIPPED_REC,
+    SESSION_START_CHECKLIST_GAP_HINT,
+    STOP_GAP_FOLLOWUP_DEFAULT,
+    lookup_gap_recommendation,
+)
 
 _VIOLATIONS_NAME = ".completion-gate-violations.jsonl"
 _CHECKLIST_TOOL = "tapps_checklist"
@@ -197,22 +203,7 @@ def _lookup_gap_libraries(project_root: Path, edited_paths: list[str]) -> list[s
 
 
 def _lookup_gap_recommendation(libraries: list[str], *, generic: bool) -> str:
-    if libraries:
-        sample = ", ".join(libraries[:8])
-        suffix = (
-            f' Call tapps_lookup_docs(library="{libraries[0]}", topic="<api>") '
-            "for each (retrospective lookups clear this gap)."
-        )
-        return (
-            f"No tapps_lookup_docs this session; edited files reference: {sample}.{suffix}"
-        )
-    if generic:
-        return (
-            "No tapps_lookup_docs calls this session despite recent edits. "
-            "Call it before using any external library API "
-            "(retrospective lookups clear this gap)."
-        )
-    return ""
+    return lookup_gap_recommendation(libraries, generic=generic)
 
 
 def compute_gaps(
@@ -276,11 +267,7 @@ def compute_gaps(
     used_checklist = _CHECKLIST_TOOL in called or _telemetry_used_checklist(rows)
     if has_recent_edits and not used_checklist:
         gaps.append("checklist_skipped")
-        recs.append(
-            "tapps_checklist was not called this session. Invoke "
-            "/tapps-finish-task or tapps_checklist(task_type=<feature|bugfix|refactor|security>) "
-            "before declaring done."
-        )
+        recs.append(CHECKLIST_SKIPPED_REC)
 
     recent_edit_loops = int(recent_edits.get("loops", 0))
     if recent_edit_loops >= 3:
@@ -361,10 +348,7 @@ def format_session_start_gap_hint(project_root: Path) -> str | None:
         return None
 
     if "CHECKLIST_MISSING" in violation_tags:
-        return (
-            "Last session ended without tapps_checklist after edits — run "
-            "tapps_validate_changed + tapps_checklist before declaring done."
-        )
+        return SESSION_START_CHECKLIST_GAP_HINT
     if recs:
         return f"{', '.join(gaps[:3])}: {recs[0]}"
     return ", ".join(gaps[:3])
@@ -397,7 +381,7 @@ def format_stop_gap_followup(
     ordered.extend(g for g in gaps if g not in ordered)
     headline = ", ".join(ordered[:3])
     recs = [r for r in report.get("recommendations", []) if "No gaps detected" not in r]
-    body = recs[0] if recs else "Run /tapps-finish-task before declaring done."
+    body = recs[0] if recs else STOP_GAP_FOLLOWUP_DEFAULT
     if ordered and ordered[0] == "library_uses_without_lookup_docs":
         libs = report.get("libraries_without_lookup") or []
         if libs:

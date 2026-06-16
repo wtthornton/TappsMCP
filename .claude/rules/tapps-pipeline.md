@@ -8,6 +8,14 @@ paths:
 ---
 # TAPPS Pipeline Details
 
+## Session start & memory
+
+Call `tapps_session_start()` first. Brain memory is bridge-only: use `uv run tapps-mcp memory search --query "..."` or pinned keys in `.tapps-mcp.yaml` → `memory_hooks.auto_recall.recall_keys`. When `nlt-memory` is enabled, `tapps_memory` MCP is a slim facade on that server.
+
+## Validation semantics
+
+`tapps_quick_check` = per-file during edits. `tapps_validate_changed` = batch before done. Stop-hook telemetry counts either as gate activity; /tapps-finish-task requires validate_changed for the edited set.
+
 ## 5-Stage Pipeline
 
 Recommended order for every code task:

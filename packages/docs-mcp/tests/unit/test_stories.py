@@ -170,19 +170,19 @@ class TestStoryGeneratorSections:
 
     def test_markdown_relative_link_epic_from_nested_story(self) -> None:
         rel = markdown_relative_link(
-            "docs/archive/planning/epics/EPIC-80-PARENT.md",
-            "docs/archive/planning/epics/EPIC-80/story-80.1.md",
+            "docs/planning/epics/EPIC-80-PARENT.md",
+            "docs/planning/epics/EPIC-80/story-80.1.md",
         )
         assert rel == "../EPIC-80-PARENT.md"
 
     def test_epic_path_rewritten_when_output_path_set(self) -> None:
         config = _make_config(
-            epic_path="docs/archive/planning/epics/EPIC-80-PARENT.md",
+            epic_path="docs/planning/epics/EPIC-80-PARENT.md",
             inherit_context=True,
         )
         content = self.gen.generate(
             config,
-            output_path="docs/archive/planning/epics/EPIC-80/story-80.1.md",
+            output_path="docs/planning/epics/EPIC-80/story-80.1.md",
         )
         assert "../EPIC-80-PARENT.md" in content
         assert "See [Epic 23](../EPIC-80-PARENT.md)" in content

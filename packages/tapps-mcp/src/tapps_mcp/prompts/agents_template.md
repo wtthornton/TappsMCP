@@ -6,7 +6,7 @@ When the **TappsMCP** MCP server is configured in your host (Claude Code, Cursor
 
 ## What TappsMCP is
 
-TappsMCP is an MCP server that provides a comprehensive quality toolset for your project. It exposes 32 tools for:
+TappsMCP is an MCP server that provides a comprehensive quality toolset for your project. It exposes {{TAPPS_MCP_TOOL_COUNT}} tools for:
 
 - **Scoring** Python files (0-100 across 7 categories: complexity, security, maintainability, test coverage, performance, structure, devex)
 - **Security scanning** (Bandit + secret detection with redacted context)
@@ -41,7 +41,7 @@ You only see these tools when the host has started the TappsMCP server and attac
 | **tapps_quick_check** | **After editing any Python file** - quick score + gate + basic security in one fast call. |
 | **tapps_security_scan** | When the change is **security-sensitive** or before a security-focused review. |
 | **tapps_quality_gate** | **Before declaring work complete** - ensures the file passes the configured quality preset. Do not consider work done until this passes (or the user accepts the risk). |
-| **tapps_validate_changed** | **Before declaring multi-file work complete** - auto-detects changed files via git diff and runs score + gate on each. **Default is quick mode** (ruff-only, under ~10s). Includes impact analysis by default. Pass `quick=false` for full validation. |
+| **`tapps_validate_changed`** | **Before declaring multi-file work complete** — pass explicit `file_paths` (comma-separated). **Never call without `file_paths`** in large repos. Default is quick mode; only use `quick=false` as a last resort. Includes impact analysis by default. |
 | **tapps_lookup_docs** | **Before writing code** that uses an external library - use the returned docs to avoid hallucinated APIs. Also use for domain-specific guidance (e.g. security patterns, testing strategies). |
 | **tapps_validate_config** | When **adding or changing** Dockerfile, docker-compose, or infra config. |
 | **Brain memory (CLI)** | At session start — `uv run tapps-mcp memory search --query "..."` or hooks auto-recall. Before session end — `uv run tapps-mcp memory save --key ... --tier ... --value "..."`. See `/tapps-memory` skill and `docs/MEMORY_REFERENCE.md`. |
@@ -122,7 +122,7 @@ Use this when writing project-specific tool priority docs or integrating TappsMC
 5. **Before modifying a file's API:** Call `tapps_impact_analysis(file_path=...)` to see what depends on it.
 6. **During edits:** Call `tapps_quick_check(file_path=...)` or `tapps_score_file(file_path=..., quick=True)` after each change.
 7. **Before declaring work complete:**
-   - Call `tapps_validate_changed()` to score + gate on all changed files (default quick mode). Pass `security_depth='full'` or `quick=false` to include security scan.
+   - Call `tapps_validate_changed(file_paths="file1.py,file2.py")` to score + gate changed files (default quick mode). Pass `security_depth='full'` or `quick=false` to include security scan.
    - Call `tapps_checklist(task_type=...)` and, if `complete` is false, call the missing required tools (use `missing_required_hints` for reasons). The response also carries an inline `usage_gaps` block — review it for any per-session gaps (skipped doc lookups, unvalidated edits) before declaring done.
    - Optionally call `tapps_report(format="markdown")` to generate a quality summary.
 
@@ -177,7 +177,7 @@ You were deployed into THIS repo by `tapps_init` / `tapps_upgrade`. Stay in scop
 Your project may have two complementary memory systems. Use the right one for each type of knowledge:
 
 - **Claude Code auto memory** (`~/.claude/projects/<project>/memory/MEMORY.md`): Session learnings, user preferences, build commands, IDE settings, debugging insights. Auto-managed by Claude Code across sessions.
-- **TappsMCP shared memory** (`tapps-mcp memory` CLI via BrainBridge; `tapps_memory` MCP removed TAP-1994): Architecture decisions, quality patterns, expert consultation findings, cross-agent knowledge.
+- {{MEMORY_SYSTEMS_BULLET}}
 
 **When to use which:**
 - Build commands, IDE preferences, personal workflow notes --> auto memory

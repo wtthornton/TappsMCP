@@ -1,7 +1,7 @@
 # NLT MCP Plugin Specification (zero-duplication split)
 # Schema for tapps_init / tapps-mcp serve --profile / docsmcp serve --profile
 #
-# Research backing: docs/archive/planning/research/2026-NLT-MCP-PLUGIN-SPLIT-RESEARCH.md
+# Research backing: Linear TAP-3889 / ADR-0016
 # Related: docs/architecture/tool-budget.md, TOOL-TIER-RANKING.md
 #
 # Design rules:

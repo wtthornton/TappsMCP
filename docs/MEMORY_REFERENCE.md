@@ -1,6 +1,16 @@
 # TappsMCP Memory Reference
 
-Complete reference for the `tapps_memory` tool’s **42 actions** (single MCP tool, action dispatch via `action=`). Includes nine actions added by TAP-1628 in tapps-brain 3.17 — knowledge graph (`related`, `relations`, `neighbors`, `explain_connection`), batch ops (`recall_many`, `reinforce_many`), feedback flywheel (`rate`), and native session memory (`search_sessions`, `session_end`).
+Complete reference for TappsMCP **shared brain memory** — **42 actions** when accessed via CLI or the `nlt-memory` MCP facade (TAP-3895).
+
+## How to access memory (CLI vs MCP)
+
+| Path | When |
+|------|------|
+| **`uv run tapps-mcp memory …`** | **Default** for consumer repos — BrainBridge CLI; works without enabling `nlt-memory` |
+| **`tapps_memory(action=…)` on `nlt-memory`** | Slim MCP facade when that server is in the bundle (TAP-3895) — same action set |
+| Direct `tapps-brain` MCP in `.mcp.json` | **Do not** add — bridge-only wiring ([CONSUMER-REPO-BRAIN-WIRING.md](operations/CONSUMER-REPO-BRAIN-WIRING.md)) |
+
+Do not use legacy `mcp__tapps-mcp__tapps_memory` routing (removed from default build server in TAP-1994). See [ADR-0022](adr/0022-agent-hint-contract-lookup-and-validation-semantics.md) for the agent-facing contract.
 
 **Pipeline defaults (POC-oriented):** shipped `default.yaml` enables `memory.auto_save_quality`, `memory.track_recurring_quick_check`, `memory.auto_supersede_architectural`, `memory.enrich_impact_analysis`, and `memory_hooks.auto_recall` / `auto_capture`. Override in `.tapps-mcp.yaml` to turn features off.
 

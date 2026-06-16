@@ -157,11 +157,18 @@ applyTo: "tests/**"
 - Mark slow tests (> 5 seconds) with `@pytest.mark.slow`
 """
 
+from tapps_mcp.pipeline.agent_contract import (
+    MEMORY_RECALL_SESSION_START,
+    MEMORY_SYSTEMS_BULLET,
+)
+
 # ---------------------------------------------------------------------------
 # Enhanced Copilot Instructions (.github/copilot-instructions.md)
 # ---------------------------------------------------------------------------
 
-_ENHANCED_COPILOT_INSTRUCTIONS = """\
+
+def _enhanced_copilot_instructions_body() -> str:
+    return f"""\
 # Copilot Instructions
 
 This project uses **TappsMCP** (Code Quality MCP Server) for automated
@@ -172,6 +179,8 @@ the pipeline below.
 
 ### Stage 1: Discover
 - Run `tapps_session_start` at the beginning of each session to initialize context
+- {MEMORY_RECALL_SESSION_START}
+- Recall prior decisions: `uv run tapps-mcp memory search --query "..."` or read `.tapps-mcp/session-handoff.md`
 
 ### Stage 2: Research
 - Use `tapps_lookup_docs` to verify library API signatures
@@ -190,6 +199,10 @@ the pipeline below.
 ### Stage 5: Verify
 - Run `tapps_quality_gate` for pass/fail verdict
 - Run `tapps_checklist` to confirm all steps were completed
+
+## Memory
+
+{MEMORY_SYSTEMS_BULLET}
 
 ## Code Standards
 
@@ -327,6 +340,7 @@ def generate_enhanced_copilot_instructions(
     project_root: Path,
     *,
     upgrade_mode: bool = False,
+    force: bool = False,
 ) -> dict[str, Any]:
     """Generate enhanced ``.github/copilot-instructions.md``.
 
@@ -347,11 +361,11 @@ def generate_enhanced_copilot_instructions(
 
     github_dir.mkdir(parents=True, exist_ok=True)
     existing_version = _check_version_marker(target)
-    if existing_version == __version__:
+    if existing_version == __version__ and not force:
         return {"file": rel, "action": "up-to-date"}
 
     action = "updated" if target.exists() else "created"
-    target.write_text(_add_version_marker(_ENHANCED_COPILOT_INSTRUCTIONS), encoding="utf-8")
+    target.write_text(_add_version_marker(_enhanced_copilot_instructions_body()), encoding="utf-8")
     return {"file": rel, "action": action}
 
 
@@ -359,6 +373,7 @@ def generate_all_copilot_config(
     project_root: Path,
     *,
     upgrade_mode: bool = False,
+    force: bool = False,
 ) -> dict[str, Any]:
     """Generate all Copilot agent configuration files.
 
@@ -373,7 +388,7 @@ def generate_all_copilot_config(
         project_root, upgrade_mode=upgrade_mode
     )
     results["copilot_instructions"] = generate_enhanced_copilot_instructions(
-        project_root, upgrade_mode=upgrade_mode
+        project_root, upgrade_mode=upgrade_mode, force=force
     )
 
     copilot_action = results["copilot_instructions"]["action"]

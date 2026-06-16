@@ -122,4 +122,4 @@ tapps-platform profile boundaries for Linear/Release.
 - [nlt-mcp-plugin-spec.yaml](../architecture/nlt-mcp-plugin-spec.yaml)
 - [TAP-3889](https://linear.app/tappscodingagents/issue/TAP-3889) parent epic
 - [TAP-1994](https://linear.app/tappscodingagents/issue/TAP-1994) memory MCP removal
-- Epic 109 research: `docs/archive/planning/research/2026-NLT-MCP-PLUGIN-SPLIT-RESEARCH.md`
+- Epic 109 research: [TAP-3889](https://linear.app/tappscodingagents/issue/TAP-3889) (NLT MCP plugin split)

@@ -28,6 +28,10 @@ from tapps_mcp.pipeline.platform_hook_templates import (
 from tapps_mcp.pipeline.platform_rules import (
     CURSOR_RULE_TEMPLATES,
 )
+from tapps_mcp.pipeline.agent_contract import (
+    MEMORY_RECALL_SESSION_START,
+    VALIDATION_QUICK_VS_BATCH,
+)
 from tapps_mcp.pipeline.platform_skills import CLAUDE_SKILLS, CURSOR_SKILLS
 from tapps_mcp.pipeline.platform_subagents import CLAUDE_AGENTS, CURSOR_AGENTS
 
@@ -992,7 +996,8 @@ def generate_claude_pipeline_rule(
     target = rules_dir / "tapps-pipeline.md"
     existed = target.exists()
 
-    content = """\
+    content = (
+        f"""\
 ---
 paths:
   - "**/*.py"
@@ -1003,6 +1008,16 @@ paths:
 ---
 # TAPPS Pipeline Details
 
+## Session start & memory
+
+Call `tapps_session_start()` first. {MEMORY_RECALL_SESSION_START}
+
+## Validation semantics
+
+{VALIDATION_QUICK_VS_BATCH}
+
+"""
+        + """\
 ## 5-Stage Pipeline
 
 Recommended order for every code task:
@@ -1054,6 +1069,7 @@ consider designating one teammate as a **quality watchdog**. To enable Agent Tea
 
 TappsMCP can run in CI. Use `TAPPS_MCP_PROJECT_ROOT` and `tapps-mcp validate-changed --preset staging`, or Claude Code headless mode with `tapps_validate_changed`.
 """
+    )
 
     target.write_text(content, encoding="utf-8")
     action = "updated" if existed else "created"

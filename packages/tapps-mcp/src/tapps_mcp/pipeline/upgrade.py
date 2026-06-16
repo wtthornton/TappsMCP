@@ -322,6 +322,7 @@ def _upgrade_agents_md(
     *,
     dry_run: bool = False,
     create_agents_md: bool = True,
+    force_merge: bool = False,
 ) -> dict[str, Any]:
     """Validate and update AGENTS.md to the latest template.
 
@@ -358,19 +359,21 @@ def _upgrade_agents_md(
         return {"action": "created"}
 
     validation = AgentsValidation(agents_path.read_text(encoding="utf-8"))
-    if validation.is_up_to_date:
-        return {"action": "up-to-date"}
+    if validation.is_up_to_date and not force_merge:
+        return {"action": "up-to-date", "detail": validation.to_dict()}
 
     issues: list[str] = []
     if validation.sections_missing:
         issues.append(f"missing sections: {', '.join(validation.sections_missing)}")
     if validation.tools_missing:
         issues.append(f"missing tools: {', '.join(validation.tools_missing)}")
-    detail = "; ".join(issues) or "version mismatch"
+    detail = "; ".join(issues) or ("force merge" if force_merge else "version mismatch")
 
     if dry_run:
         return {"action": "needs-update", "detail": detail}
-    action, merge_detail = update_agents_md(agents_path, template_content)
+    action, merge_detail = update_agents_md(
+        agents_path, template_content, force_merge=force_merge
+    )
     return {"action": action, "detail": merge_detail or detail}
 
 
@@ -1167,7 +1170,7 @@ def _upgrade_cursor_live(
         project_root, "cursor", overwrite=True
     )
     result["components"]["skills"] = generate_skills(project_root, "cursor", overwrite=True)
-    result["components"]["cursor_rule_types"] = generate_cursor_rules(project_root)
+    result["components"]["cursor_rule_types"] = generate_cursor_rules(project_root, overwrite=force)
 
 
 def _upgrade_platform(
@@ -1659,7 +1662,7 @@ def _dry_run_github_artifacts(project_root: Path, result: dict[str, Any]) -> Non
     result["components"]["governance"] = {"action": "would-regenerate"}
 
 
-def _run_github_artifacts(project_root: Path, result: dict[str, Any]) -> None:
+def _run_github_artifacts(project_root: Path, result: dict[str, Any], *, force: bool = False) -> None:
     """Run GitHub-hosted artifact generators (CI, Copilot, templates, governance).
 
     Each generator is called independently; failures are recorded in
@@ -1679,7 +1682,7 @@ def _run_github_artifacts(project_root: Path, result: dict[str, Any]) -> None:
         from tapps_mcp.pipeline.github_copilot import generate_all_copilot_config
 
         result["components"]["github_copilot"] = generate_all_copilot_config(
-            project_root, upgrade_mode=True
+            project_root, upgrade_mode=True, force=force
         )
     except Exception as exc:
         log.exception("copilot_config_failed")
@@ -1945,6 +1948,7 @@ def upgrade_pipeline(
                 project_root,
                 dry_run=dry_run,
                 create_agents_md=settings.upgrade_create_agents_md,
+                force_merge=force,
             )
             result["components"]["agents_md"] = agents_result
         except Exception as exc:
@@ -2048,7 +2052,7 @@ def upgrade_pipeline(
         for component in ("ci_workflows", "github_copilot", "github_templates", "governance"):
             result["components"][component] = {"action": "skipped (mcp_only)"}
     elif not dry_run:
-        _run_github_artifacts(project_root, result)
+        _run_github_artifacts(project_root, result, force=force)
     else:
         _dry_run_github_artifacts(project_root, result)
 

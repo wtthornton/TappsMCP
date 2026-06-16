@@ -29,7 +29,7 @@ When the **TappsMCP** MCP server is configured, you can use its tools for code q
 | **tapps_usage** | Optional: see what you missed this session - per-session `gaps` + `recommendations`. Also inlined as `usage_gaps` on every `tapps_checklist` response. |
 | **tapps_quality_gate** | Before declaring work complete - ensures file passes preset |
 
-**For full tool reference** (32 tools), invoke the **tapps-tool-reference** skill when asked about tools.
+**For full tool reference** ({{TAPPS_MCP_TOOL_COUNT}} tools), invoke the **tapps-tool-reference** skill when asked about tools.
 
 ---
 
@@ -117,7 +117,7 @@ You were deployed into THIS repo by `tapps_init` / `tapps_upgrade`. Stay in scop
 Your project may have two complementary memory systems:
 
 - **Claude Code auto memory** (`~/.claude/projects/<project>/memory/MEMORY.md`): Build commands, IDE preferences, personal workflow notes. Auto-managed.
-- **TappsMCP shared memory** (`tapps-mcp memory` CLI via BrainBridge; `tapps_memory` MCP removed TAP-1994): Architecture decisions, quality patterns, cross-agent knowledge. See `docs/MEMORY_REFERENCE.md` and `/tapps-memory` skill.
+- {{MEMORY_SYSTEMS_BULLET}}
 
 OPTIONAL: Consider `uv run tapps-mcp memory save|search` for important architecture decisions.
 

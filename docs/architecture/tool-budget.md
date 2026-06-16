@@ -64,7 +64,7 @@ Set `doctor_tool_budget_limit` in `.tapps-mcp.yaml`:
 doctor_tool_budget_limit: 30
 ```
 
-If you intentionally run tapps-mcp in full mode (34 tools) and accept the context cost,
+If you intentionally run tapps-mcp in full mode (42 tools) and accept the context cost,
 raise the budget to 35 to silence the WARN. If you want a stricter check, lower it to 15
 to enforce quality-preset-level discipline.
 

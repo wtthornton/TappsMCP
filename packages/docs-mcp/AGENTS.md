@@ -289,4 +289,4 @@ When using DocsMCP with TappsMCP or in environments where the combined tool coun
   - `auditor` — project_scan + full check_* suite + validate_epic (10 tools)
   - Env: `DOCS_MCP_TOOL_PRESET=planner`
 
-Empty or missing = all 40 tools (backward compatible). Invalid tool names in `enabled_tools` are ignored and logged. Non-daily-driver tools use `defer_loading` (TAP-1987) so only ~7 eager schemas load at session start. See [tool-budget.md](../../docs/architecture/tool-budget.md) and Epic 79 planning docs.
+Empty or missing = all 40 tools (backward compatible). Invalid tool names in `enabled_tools` are ignored and logged. Non-daily-driver tools use `defer_loading` (TAP-1987) so only ~7 eager schemas load at session start. See [tool-budget.md](../../docs/architecture/tool-budget.md).

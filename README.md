@@ -43,7 +43,7 @@ See [CHANGELOG.md](CHANGELOG.md) for the full history.
 Install is from the local checkout (`uv tool install -e packages/tapps-mcp`); the packages are not published to PyPI. See [Install](#install).
 
 ```
-tapps-brain (standalone)  <──  tapps-core (shared infra)  <──  tapps-mcp (34 tools)
+tapps-brain (standalone)  <──  tapps-core (shared infra)  <──  tapps-mcp (42 tools)
                                                           <──  docs-mcp  (38 tools)
                                                                       = 70 MCP tools
 ```
@@ -1069,7 +1069,7 @@ tapps-core (shared infrastructure)
     ^              ^
     |              |
 tapps-mcp      docs-mcp
-(34 tools)     (38 tools)
+(42 tools)     (38 tools)
 ```
 
 **[tapps-brain](https://github.com/wtthornton/tapps-brain)** is the standalone memory service extracted from tapps-core. It runs as a Dockerized Postgres-backed service that TappsMCP clients reach over HTTP at `localhost:8080`. Storage engine, retrieval (BM25 + boosts), time-based decay, contradiction detection, consolidation, federation, and GC internals all live in the [tapps-brain repo](https://github.com/wtthornton/tapps-brain) and its README/CHANGELOG — refer there for the authoritative description so this page doesn't drift. tapps-brain has its own release cycle and test suite.
@@ -1201,7 +1201,7 @@ packages/
 │       ├── metrics/                   # Collector, dashboard, alerts, trends, OTel export
 │       └── adaptive/                  # Adaptive scoring, expert voting, weight distribution
 │
-├── tapps-mcp/                         # Code quality MCP server (34 tools)
+├── tapps-mcp/                         # Code quality MCP server (42 tools)
 │   └── src/tapps_mcp/
 │       ├── server.py, cli.py          # Entry points and MCP server
 │       ├── server_*.py                # Tool modules (scoring, pipeline, metrics, memory, analysis)
@@ -1334,7 +1334,7 @@ disabled_tools: []                    # Deny list — excluded from the exposed 
 
 ### Roadmap
 
-DocsMCP is feature-complete with 32 MCP tools covering README generation, API documentation, changelog/release notes, ADRs, onboarding/contributing guides, PRD/epic/story generation, LLM prompt artifacts, Mermaid/PlantUML/D2 diagrams (8 types, 3 formats, D2 themes), interactive HTML diagrams, llms.txt generation, frontmatter management, Diataxis classification, drift detection, completeness validation, link/cross-ref checking, freshness analysis, style checking, purpose/intent templates, and documentation indexing. All generators use three-tier output (write-first/inline/manifest) with auto-computed default paths. See [docs/archive/planning/DOCSMCP_PRD.md](docs/archive/planning/DOCSMCP_PRD.md) for the original specification.
+DocsMCP is feature-complete with 32 MCP tools covering README generation, API documentation, changelog/release notes, ADRs, onboarding/contributing guides, PRD/epic/story generation, LLM prompt artifacts, Mermaid/PlantUML/D2 diagrams (8 types, 3 formats, D2 themes), interactive HTML diagrams, llms.txt generation, frontmatter management, Diataxis classification, drift detection, completeness validation, link/cross-ref checking, freshness analysis, style checking, purpose/intent templates, and documentation indexing. All generators use three-tier output (write-first/inline/manifest) with auto-computed default paths. Epic and story planning live in Linear; see [packages/docs-mcp/AGENTS.md](packages/docs-mcp/AGENTS.md).
 
 ---
 
