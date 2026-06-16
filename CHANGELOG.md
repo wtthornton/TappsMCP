@@ -7,8 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [3.12.40] - 2026-06-16
+
+Patch: agent hint contract SSOT, Linear-first planning docs, fleet-ready release.
+
+### Added
+
+- **Agent hint contract (ADR-0022)** — `agent_contract.py` centralizes post-edit, stop/finish, memory, and usage-gap strings; wired into hooks, skills, rules, copilot instructions, and CI contract tests.
+
 ### Changed
 
+- **Planning docs removed** — Deleted archived epics, PRDs, and reviews under `docs/archive/planning/` and `docs/archive/reviews/`; Linear + ADRs are the backlog/history sources. Regenerated `docs/INDEX.md`; `AGENTS.md` routes epic/story work through the `linear-issue` skill.
 - **Global uv-tool default (ADR-0020)** — Blue/green `~/.tapps-mcp/current` launches are opt-in via `TAPPS_MCP_USE_BLUE_GREEN=1`. Cursor wrappers and drift probes default to `~/.local/bin` shims. `upgrade-fleet --reinstall-clis` uses `uv tool install` by default; add `--blue-green-deploy` for `deploy-local`.
 
 ## [3.12.39] - 2026-06-16
