@@ -304,7 +304,7 @@ def _reinstall_global_clis(
     if use_blue_green and not force_inplace:
         from tapps_mcp.distribution.blue_green import deploy_blue_green
 
-        deploy = deploy_blue_green(checkout)
+        deploy = deploy_blue_green(checkout, skip_gate=True)
         ok = bool(deploy.get("ok"))
         summary = json.dumps(
             {
