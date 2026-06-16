@@ -182,6 +182,7 @@ a = Analysis(
         "tapps_mcp.project.call_graph",
         "tapps_mcp.project.call_graph_analyze",
         "tapps_mcp.project.call_graph_cache",
+        "tapps_mcp.project.call_graph_fingerprint",
         "tapps_mcp.project.call_graph_resolve",
         "tapps_mcp.project.call_graph_types",
         "tapps_mcp.project.call_graph_queries",
