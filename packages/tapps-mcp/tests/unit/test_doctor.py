@@ -1819,6 +1819,33 @@ class TestCheckCacheGateBlockHint:
         assert "block" in (result.detail or "").lower()
 
 
+class TestCheckCursorStopCompletionGate:
+    def test_warn_mode_ok(self, tmp_path: Path) -> None:
+        from tapps_mcp.distribution.doctor import check_cursor_stop_completion_gate
+
+        hooks = tmp_path / ".cursor" / "hooks"
+        hooks.mkdir(parents=True)
+        (hooks / "tapps-stop.sh").write_text("#!/bin/bash\n", encoding="utf-8")
+        (tmp_path / ".tapps-mcp.yaml").write_text(
+            "cursor_stop_completion_gate: warn\n",
+            encoding="utf-8",
+        )
+        result = check_cursor_stop_completion_gate(tmp_path)
+        assert result.ok is True
+        assert "mode=warn" in result.message
+
+    def test_block_mode_fails(self, tmp_path: Path) -> None:
+        from tapps_mcp.distribution.doctor import check_cursor_stop_completion_gate
+
+        (tmp_path / ".tapps-mcp.yaml").write_text(
+            "cursor_stop_completion_gate: block\n",
+            encoding="utf-8",
+        )
+        result = check_cursor_stop_completion_gate(tmp_path)
+        assert result.ok is False
+        assert "block" in result.message
+
+
 class TestCheckInstallGitHooksHint:
     def test_high_engagement_low_pass_rate_hints(self, tmp_path, monkeypatch):
         from tapps_mcp.distribution.doctor import check_install_git_hooks_hint

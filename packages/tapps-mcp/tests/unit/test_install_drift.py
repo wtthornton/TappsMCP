@@ -19,7 +19,10 @@ from unittest.mock import patch
 import pytest
 
 from tapps_mcp.common.models import InstallDriftDiagnostic, InstallDriftEntry
-from tapps_mcp.diagnostics import check_install_drift
+from tapps_mcp.diagnostics import (
+    check_install_drift,
+    format_upgrade_blocked_by_drift,
+)
 from tapps_mcp.distribution.doctor import (
     check_binary_version_mismatch,
     check_docsmcp_binary_version_mismatch,
@@ -75,13 +78,26 @@ class TestCheckInstallDriftDrifted:
                 result = check_install_drift()
 
         assert result.drift_detected is True
-        assert "deploy-local" in result.remediation_hint
+        assert "Reload MCP" in result.remediation_hint
+        assert "Run tapps-mcp deploy-local" not in result.remediation_hint
         assert len(result.entries) == 1
         entry = result.entries[0]
         assert entry.binary == "tapps-mcp"
         assert entry.binary_version == "99.0.0"
         assert entry.source_version == tapps_v
         assert entry.drifted is True
+
+    def test_process_ahead_when_global_binary_older(self) -> None:
+        from tapps_mcp import __version__ as tapps_v
+
+        with patch("tapps_mcp.diagnostics.shutil.which") as mock_which:
+            mock_which.side_effect = lambda name: f"/fake/{name}" if name == "tapps-mcp" else None
+            with patch("tapps_mcp.diagnostics.subprocess.run") as mock_run:
+                mock_run.return_value = _mock_completed("tapps-mcp, version 0.0.1")
+                result = check_install_drift()
+
+        assert result.drift_detected is True
+        assert "Reinstall" in result.remediation_hint or "deploy-local" in result.remediation_hint
 
     def test_only_drifted_binaries_trigger_flag(self) -> None:
         """Mixed state: one matched, one drifted → drift_detected stays True."""
@@ -259,7 +275,27 @@ class TestUpgradePipelineDriftGate:
             result = upgrade_pipeline(tmp_path)
 
         combined = " ".join(result["errors"])
-        assert "uv tool install -e --reinstall" in combined
+        assert "uv tool install -e --reinstall" in combined or "Reinstall" in combined
+
+    def test_cli_ahead_upgrade_message_suggests_reload(self, tmp_path: Path) -> None:
+        from tapps_mcp import __version__
+
+        drift = InstallDriftDiagnostic(
+            drift_detected=True,
+            entries=[
+                InstallDriftEntry(
+                    binary="tapps-mcp",
+                    binary_path="/fake/tapps-mcp",
+                    binary_version="99.0.0",
+                    source_version=__version__,
+                    drifted=True,
+                )
+            ],
+            remediation_hint="Reload MCP",
+        )
+        msg = format_upgrade_blocked_by_drift(drift)
+        assert "Reload Cursor MCP" in msg
+        assert "tapps-mcp upgrade" in msg
 
     def test_dry_run_bypasses_drift_gate(self, tmp_path: Path) -> None:
         """dry_run=True skips the drift gate so operators can preview despite drift."""

@@ -69,6 +69,11 @@ _TOOL_NUDGES: dict[str, list[NudgeRule]] = {
     ],
     "tapps_session_start": [
         (
+            lambda called, ctx: (ctx or {}).get("install_drift_detected") is True,
+            "WARNING: Install drift — {install_drift_hint}",
+            _IMPACT_BLOCKING,
+        ),
+        (
             lambda called, ctx: (
                 (ctx or {}).get("call_graph_ready") is True and "tapps_call_graph" not in called
             ),

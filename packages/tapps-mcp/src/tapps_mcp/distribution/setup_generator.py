@@ -1803,6 +1803,13 @@ def _filter_hosts_for_check(hosts: list[str], project_root: Path, scope: str = "
     return configured if configured else hosts
 
 
+def _ensure_project_yaml_defaults(project_root: Path) -> None:
+    """Merge tapps-managed defaults into ``.tapps-mcp.yaml`` during init/upgrade."""
+    from tapps_mcp.pipeline.init import _ensure_cursor_stop_completion_gate_config
+
+    _ensure_cursor_stop_completion_gate_config(project_root)
+
+
 def _configure_multiple_hosts(
     hosts: list[str],
     project_root: Path,
@@ -1849,6 +1856,8 @@ def _configure_multiple_hosts(
                 _preview_rules(host, project_root, engagement_level=engagement_level)
         if not ok:
             all_ok = False
+    if all_ok and not check and not dry_run:
+        _ensure_project_yaml_defaults(project_root)
     return all_ok
 
 
@@ -2283,6 +2292,8 @@ def run_init(
         _generate_rules(mcp_host, root, engagement_level=engagement_level)
     elif ok and rules and dry_run:
         _preview_rules(mcp_host, root, engagement_level=engagement_level)
+    if ok and not dry_run:
+        _ensure_project_yaml_defaults(root)
     return ok
 
 

@@ -1091,7 +1091,7 @@ class TappsMCPSettings(BaseSettings):
             "'warn' appends .completion-gate-violations.jsonl and emits a mild "
             "followup_message when pipeline gaps are detected. 'block' uses a "
             "stronger followup_message (Cursor cannot exit-2). When unset, "
-            "defaults from llm_engagement_level: high=block, medium=warn, low=off."
+            "defaults from llm_engagement_level: high=warn, medium=warn, low=off."
         ),
     )
 
@@ -1335,9 +1335,7 @@ class TappsMCPSettings(BaseSettings):
         """Resolve Cursor stop completion gate with engagement-aware default (TAP-3921)."""
         if self.cursor_stop_completion_gate is not None:
             return self.cursor_stop_completion_gate
-        if self.llm_engagement_level == "high":
-            return "block"
-        if self.llm_engagement_level == "medium":
+        if self.llm_engagement_level in ("high", "medium"):
             return "warn"
         return "off"
 

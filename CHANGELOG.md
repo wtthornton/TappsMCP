@@ -7,6 +7,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [3.12.39] - 2026-06-16
+
+Patch: context-aware install-drift remediation and call-graph cache invalidation on upgrade.
+
+### Fixed
+
+- **Install drift remediation (TAP-2129)** — When global CLI is newer than the running MCP server (typical after `uv tool install` without MCP reload), hints now say **reload Cursor MCP** instead of `deploy-local`. `deploy-local` / reinstall hints only when the deployed CLI lags the server.
+- **Upgrade drift gate (TAP-2200)** — Block message distinguishes CLI-ahead (reload MCP or use shell `tapps-mcp upgrade`) from process-ahead (reinstall / deploy-local).
+- **Call graph schema migration** — `tapps-mcp upgrade` removes stale `.tapps-mcp/call-graph-index.json` when index schema version mismatches (v1 → v2). Doctor reports schema mismatch explicitly.
+
+### Changed
+
+- **Session start** — Surfaces install-drift warning in `next_steps` when drift is detected.
+
+## [3.12.38] - 2026-06-16
+
+Patch: default Cursor stop completion gate to warn (never block).
+
+### Fixed
+
+- **Cursor stop completion gate defaults** — `high` engagement no longer resolves to `block`; all engagement levels default to `warn` (or `off` at low). Stops misleading `BLOCKED — pipeline gaps` followup messages on Cursor stop hook.
+- **Init / upgrade / doctor** — `tapps_init`, `tapps-mcp init`, and `tapps-mcp upgrade` merge `cursor_stop_completion_gate: warn` into `.tapps-mcp.yaml` (migrates legacy `block` → `warn`). Doctor reports gate mode and Cursor/Claude stop-hook presence.
+
 ## [3.12.37] - 2026-06-16
 
 Patch: audit coverage manifest brain key fix; smoke-only pre-push; deploy-local orphan reap.

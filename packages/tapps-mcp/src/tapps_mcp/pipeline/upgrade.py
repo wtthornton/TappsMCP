@@ -1865,17 +1865,11 @@ def upgrade_pipeline(
     # install before proceeding. Dry-run bypasses the gate so operators can
     # still preview the diff while drift is present.
     if not dry_run:
-        from tapps_mcp.diagnostics import check_install_drift
+        from tapps_mcp.diagnostics import check_install_drift, format_upgrade_blocked_by_drift
 
         _drift = check_install_drift()
         if _drift.drift_detected:
-            stale = [e.binary for e in _drift.entries if e.drifted]
-            result["errors"].append(
-                f"Upgrade blocked: install drift detected for {stale}. "
-                f"All sibling tools must be at version {__version__} before upgrading. "
-                f"Run: {_drift.remediation_hint} — then re-run tapps_upgrade. "
-                "To preview the upgrade plan despite drift, use dry_run=True."
-            )
+            result["errors"].append(format_upgrade_blocked_by_drift(_drift))
             result["install_drift"] = _drift.model_dump()
             return result
 
@@ -2093,6 +2087,33 @@ def upgrade_pipeline(
     except Exception as exc:
         result["errors"].append(f"document_judges: {exc}")
         result["components"]["document_judges"] = {"action": "error", "detail": str(exc)}
+
+    try:
+        from tapps_mcp.pipeline.init import _ensure_cursor_stop_completion_gate_config
+
+        result["components"]["cursor_stop_completion_gate"] = {
+            "action": _ensure_cursor_stop_completion_gate_config(
+                project_root,
+                dry_run=dry_run,
+            )
+        }
+    except Exception as exc:
+        result["errors"].append(f"cursor_stop_completion_gate: {exc}")
+        result["components"]["cursor_stop_completion_gate"] = {
+            "action": "error",
+            "detail": str(exc),
+        }
+
+    try:
+        from tapps_mcp.project.call_graph_cache import invalidate_call_graph_cache_if_schema_stale
+
+        result["components"]["call_graph_cache"] = invalidate_call_graph_cache_if_schema_stale(
+            project_root,
+            dry_run=dry_run,
+        )
+    except Exception as exc:
+        result["errors"].append(f"call_graph_cache: {exc}")
+        result["components"]["call_graph_cache"] = {"action": "error", "detail": str(exc)}
 
     if not dry_run and not mcp_only:
         from tapps_mcp.pipeline.platform_hooks import cleanup_legacy_hook_sidecars

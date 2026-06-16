@@ -336,6 +336,43 @@ def fn():
         assert rebuilt is not first
 
 
+class TestInvalidateCallGraphCache:
+    def test_removes_schema_stale_cache(self, tmp_path: Path) -> None:
+        from tapps_mcp.project.call_graph_cache import (
+            invalidate_call_graph_cache_if_schema_stale,
+            save_call_graph_index,
+        )
+        from tapps_mcp.project.call_graph_types import CallGraphIndex
+
+        save_call_graph_index(
+            tmp_path,
+            CallGraphIndex(project_root=str(tmp_path), fingerprint="abc", version=1),
+        )
+        result = invalidate_call_graph_cache_if_schema_stale(tmp_path)
+        assert result["action"] == "removed"
+        assert result["reason"] == "index_version_mismatch"
+        assert not (tmp_path / CALL_GRAPH_CACHE_REL).is_file()
+
+    def test_skips_current_schema(self, tmp_path: Path) -> None:
+        from tapps_mcp.project.call_graph_cache import (
+            invalidate_call_graph_cache_if_schema_stale,
+            save_call_graph_index,
+        )
+        from tapps_mcp.project.call_graph_types import CallGraphIndex, INDEX_VERSION
+
+        save_call_graph_index(
+            tmp_path,
+            CallGraphIndex(
+                project_root=str(tmp_path),
+                fingerprint="abc",
+                version=INDEX_VERSION,
+            ),
+        )
+        result = invalidate_call_graph_cache_if_schema_stale(tmp_path)
+        assert result["action"] == "skipped"
+        assert (tmp_path / CALL_GRAPH_CACHE_REL).is_file()
+
+
 class TestCallGraphQueries:
     def test_callers_and_callees_helpers(self, tmp_path: Path) -> None:
         _write_pkg(

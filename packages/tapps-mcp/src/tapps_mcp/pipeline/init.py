@@ -521,6 +521,52 @@ def _ensure_memory_hooks_config(
     return "skipped"
 
 
+def _ensure_cursor_stop_completion_gate_config(
+    project_root: Path,
+    *,
+    dry_run: bool = False,
+    warnings: list[str] | None = None,
+) -> str:
+    """Merge ``cursor_stop_completion_gate: warn`` into ``.tapps-mcp.yaml`` (TAP-3921).
+
+    Adds the key when missing and migrates legacy ``block`` to ``warn``.
+    Returns ``created``, ``updated``, or ``skipped``.
+    """
+    import yaml
+
+    yaml_path = project_root / ".tapps-mcp.yaml"
+    if dry_run:
+        return "skipped"
+
+    existing: dict[str, Any] = {}
+    if yaml_path.exists():
+        try:
+            raw = yaml_path.read_text(encoding="utf-8-sig")
+            existing = yaml.safe_load(raw) or {}
+        except Exception as exc:
+            if warnings is not None:
+                warnings.append(
+                    "Could not parse .tapps-mcp.yaml for cursor_stop_completion_gate: "
+                    f"{exc}"
+                )
+            return "skipped"
+
+    if not isinstance(existing, dict):
+        existing = {}
+
+    current = existing.get("cursor_stop_completion_gate")
+    if current is None:
+        existing["cursor_stop_completion_gate"] = "warn"
+        yaml_path.parent.mkdir(parents=True, exist_ok=True)
+        yaml_path.write_text(yaml.dump(existing, default_flow_style=False), encoding="utf-8")
+        return "created"
+    if current == "block":
+        existing["cursor_stop_completion_gate"] = "warn"
+        yaml_path.write_text(yaml.dump(existing, default_flow_style=False), encoding="utf-8")
+        return "updated"
+    return "skipped"
+
+
 def _detect_docsmcp(state: _BootstrapState) -> bool:
     """Detect whether DocsMCP is available (importable or in project deps).
 
@@ -878,6 +924,10 @@ def _setup_platform(cfg: BootstrapConfig, state: _BootstrapState) -> None:
         state.project_root, engagement, dry_run=cfg.dry_run, warnings=state.warnings
     )
     state.result["memory_hooks_config"] = {"action": mh_action}
+    gate_action = _ensure_cursor_stop_completion_gate_config(
+        state.project_root, dry_run=cfg.dry_run, warnings=state.warnings
+    )
+    state.result["cursor_stop_completion_gate_config"] = {"action": gate_action}
     if cfg.platform == "claude":
         platform_action = _bootstrap_claude(
             state.project_root, cfg.overwrite_platform_rules, engagement_level=engagement

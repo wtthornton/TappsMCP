@@ -158,6 +158,93 @@ def _is_local_uv_tool_install(binary_path: str) -> tuple[bool, str]:
     return False, source
 
 
+def _version_tuple(ver: str) -> tuple[int, int, int]:
+    """Parse ``3.12.38`` → ``(3, 12, 38)`` for drift direction checks."""
+    try:
+        parts = ver.strip().split(".")[:3]
+        return (
+            int(parts[0]),
+            int(parts[1]) if len(parts) > 1 else 0,
+            int(parts[2]) if len(parts) > 2 else 0,
+        )
+    except (ValueError, IndexError):
+        return (0, 0, 0)
+
+
+def _classify_install_drift(entries: list[InstallDriftEntry]) -> str:
+    """Classify drift direction: cli_ahead, process_ahead, mixed, or unknown."""
+    drifted = [e for e in entries if e.drifted and e.binary_version and e.source_version]
+    if not drifted:
+        return "unknown"
+    cli_ahead = any(
+        _version_tuple(e.binary_version) > _version_tuple(e.source_version) for e in drifted
+    )
+    process_ahead = any(
+        _version_tuple(e.source_version) > _version_tuple(e.binary_version) for e in drifted
+    )
+    if cli_ahead and process_ahead:
+        return "mixed"
+    if cli_ahead:
+        return "cli_ahead"
+    if process_ahead:
+        return "process_ahead"
+    return "unknown"
+
+
+def install_drift_remediation_hint(
+    entries: list[InstallDriftEntry],
+    *,
+    uses_blue_green: bool,
+) -> str:
+    """Build context-aware remediation copy for install drift (TAP-2129)."""
+    kind = _classify_install_drift(entries)
+    reload = (
+        "Reload MCP in Cursor (quit/reopen or Settings → MCP → restart nlt-* servers), "
+        "then call tapps_session_start(force=true) to confirm drift is clear."
+    )
+    if kind == "cli_ahead":
+        return (
+            f"Global CLI is newer than this MCP server process. {reload} "
+            "Do not run deploy-local on consumer projects."
+        )
+    if kind == "process_ahead":
+        if uses_blue_green:
+            return (
+                "Deployed CLI is behind this MCP server. Run tapps-mcp deploy-local from "
+                f"the tapps-mcp checkout, then {reload.lower()}"
+            )
+        return (
+            "Global CLI is older than this MCP server. Reinstall: "
+            "uv tool install --reinstall --from <path>/packages/tapps-mcp tapps-mcp "
+            "(and docs-mcp), then reload MCP."
+        )
+    return (
+        f"Version mismatch between MCP server and global CLI. {reload} "
+        "If drift persists, reinstall global CLIs or run deploy-local (dev monorepo only)."
+    )
+
+
+def format_upgrade_blocked_by_drift(drift: InstallDriftDiagnostic) -> str:
+    """Human-readable upgrade gate message when install drift is detected (TAP-2200)."""
+    from tapps_mcp import __version__
+
+    stale = [e.binary for e in drift.entries if e.drifted]
+    kind = _classify_install_drift(drift.entries)
+    base = f"Upgrade blocked: install drift detected for {stale}."
+    if kind == "cli_ahead":
+        return (
+            f"{base} Global CLI is newer than this MCP server (running v{__version__}). "
+            "Reload Cursor MCP (quit/reopen), then re-run tapps_upgrade. "
+            "Alternatively run `tapps-mcp upgrade` from the shell. "
+            "Preview with dry_run=True."
+        )
+    return (
+        f"{base} All sibling tools must be at version {__version__} before upgrading. "
+        f"{drift.remediation_hint} — then re-run tapps_upgrade. "
+        "To preview the upgrade plan despite drift, use dry_run=True."
+    )
+
+
 def check_install_drift() -> InstallDriftDiagnostic:
     """TAP-2129: detect drift between in-process package versions and deployed CLIs.
 
@@ -199,10 +286,11 @@ def check_install_drift() -> InstallDriftDiagnostic:
 
     drift_detected = any(e.drifted for e in entries)
     local_install_warning = any(e.from_local_source for e in entries)
+    uses_blue_green = resolve_blue_green_binary("tapps-mcp") is not None
     hint = ""
     if drift_detected:
-        hint = "Run tapps-mcp deploy-local from the tapps-mcp checkout to refresh ~/.tapps-mcp/current."
-    elif local_install_warning and not resolve_blue_green_binary("tapps-mcp"):
+        hint = install_drift_remediation_hint(entries, uses_blue_green=uses_blue_green)
+    elif local_install_warning and not uses_blue_green:
         hint = (
             "Global CLIs installed from a local checkout — consumer repos share this binary. "
             "Pin fleet globals to release tags; dev monorepo deploys via "

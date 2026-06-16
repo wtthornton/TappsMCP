@@ -797,9 +797,20 @@ async def tapps_session_start(
         elif call_graph_block.get("stale"):
             nudge_ctx["call_graph_stale"] = True
 
+    diagnostics_block = data.get("diagnostics")
+    if isinstance(diagnostics_block, dict):
+        install_drift_block = diagnostics_block.get("install_drift")
+        if isinstance(install_drift_block, dict) and install_drift_block.get("drift_detected"):
+            hint = install_drift_block.get("remediation_hint") or ""
+            nudge_ctx["install_drift_detected"] = True
+            nudge_ctx["install_drift_hint"] = hint
+
     resp = _with_nudges("tapps_session_start", resp, nudge_ctx)
     if degraded_warning:
         _prepend_next_step(resp, degraded_warning)
+    install_drift_hint = nudge_ctx.get("install_drift_hint")
+    if isinstance(install_drift_hint, str) and install_drift_hint:
+        _prepend_next_step(resp, f"Install drift: {install_drift_hint}")
     # TAP-1379: memoize the full response so subsequent same-process calls
     # (without force=True) return instantly from cache.
     _SESSION_START_CACHE[_session_start_cache_key(False)] = resp
@@ -1351,18 +1362,36 @@ def tapps_doctor(
     # Completion-gate Stop-hook presence (warn-mode telemetry path).
     # When missing, the agent gets no "edits without validation" warn at end-of-turn.
     try:
-        hook_path = Path(root) / ".claude" / "hooks" / "tapps-stop.sh"
-        installed = hook_path.exists()
+        claude_hook = Path(root) / ".claude" / "hooks" / "tapps-stop.sh"
+        cursor_hook = Path(root) / ".cursor" / "hooks" / "tapps-stop.sh"
+        hook_paths = [p for p in (claude_hook, cursor_hook) if p.exists()]
+        installed = bool(hook_paths)
+        gate_settings = load_settings(Path(root))
+        gate_mode = gate_settings.cursor_stop_completion_gate_resolved()
         result["completion_gate_hook"] = {
-            "path": str(hook_path),
+            "paths": [str(p) for p in hook_paths],
             "installed": installed,
+            "mode": gate_mode,
+            "configured": gate_settings.cursor_stop_completion_gate,
         }
+        warnings: list[str] = []
         if not installed:
-            result["completion_gate_hook"]["warning"] = (
-                "Stop hook tapps-stop.sh is not installed. The completion-gate "
-                "warn-mode telemetry that writes .tapps-mcp/.completion-gate-violations.jsonl "
-                "is inactive. Run tapps_upgrade to install."
+            warnings.append(
+                "Stop hook tapps-stop.sh is not installed (.claude or .cursor). "
+                "Completion-gate warn-mode telemetry is inactive. Run tapps_upgrade."
             )
+        if gate_mode == "block":
+            warnings.append(
+                "cursor_stop_completion_gate resolves to block — run tapps-mcp upgrade "
+                "to pin warn and avoid BLOCKED followup messages."
+            )
+        elif gate_settings.cursor_stop_completion_gate is None:
+            warnings.append(
+                "cursor_stop_completion_gate not pinned in .tapps-mcp.yaml — "
+                "run tapps-mcp upgrade to add cursor_stop_completion_gate: warn."
+            )
+        if warnings:
+            result["completion_gate_hook"]["warning"] = " ".join(warnings)
     except Exception:
         pass
 

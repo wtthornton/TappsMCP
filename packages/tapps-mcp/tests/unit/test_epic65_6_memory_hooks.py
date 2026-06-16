@@ -12,6 +12,7 @@ import yaml
 
 from tapps_mcp.pipeline.init import (
     BootstrapConfig,
+    _ensure_cursor_stop_completion_gate_config,
     _ensure_memory_hooks_config,
     _memory_hooks_defaults_for_engagement,
     bootstrap_pipeline,
@@ -81,6 +82,32 @@ class TestEnsureMemoryHooksConfig:
         assert action == "skipped"
         assert warnings
         assert "parse" in warnings[0].lower() or "memory_hooks" in warnings[0]
+
+
+class TestCursorStopCompletionGateConfig:
+    def test_creates_warn_when_missing(self, tmp_path: Path) -> None:
+        action = _ensure_cursor_stop_completion_gate_config(tmp_path, dry_run=False)
+        assert action == "created"
+        data = yaml.safe_load((tmp_path / ".tapps-mcp.yaml").read_text(encoding="utf-8"))
+        assert data["cursor_stop_completion_gate"] == "warn"
+
+    def test_migrates_block_to_warn(self, tmp_path: Path) -> None:
+        (tmp_path / ".tapps-mcp.yaml").write_text(
+            "cursor_stop_completion_gate: block\n",
+            encoding="utf-8",
+        )
+        action = _ensure_cursor_stop_completion_gate_config(tmp_path, dry_run=False)
+        assert action == "updated"
+        data = yaml.safe_load((tmp_path / ".tapps-mcp.yaml").read_text(encoding="utf-8"))
+        assert data["cursor_stop_completion_gate"] == "warn"
+
+    def test_skips_when_warn_already_set(self, tmp_path: Path) -> None:
+        (tmp_path / ".tapps-mcp.yaml").write_text(
+            "cursor_stop_completion_gate: warn\n",
+            encoding="utf-8",
+        )
+        action = _ensure_cursor_stop_completion_gate_config(tmp_path, dry_run=False)
+        assert action == "skipped"
 
 
 class TestBootstrapMemoryHooksIntegration:

@@ -173,6 +173,33 @@ class TestToolCurationSettings:
         s = TappsMCPSettings(disabled_tools="tapps_doctor, tapps_dashboard")
         assert s.disabled_tools == ["tapps_doctor", "tapps_dashboard"]
 
+    def test_cursor_stop_completion_gate_high_defaults_warn(self) -> None:
+        from tapps_core.config.settings import TappsMCPSettings
+
+        s = TappsMCPSettings(llm_engagement_level="high")
+        assert s.cursor_stop_completion_gate_resolved() == "warn"
+
+    def test_cursor_stop_completion_gate_medium_defaults_warn(self) -> None:
+        from tapps_core.config.settings import TappsMCPSettings
+
+        s = TappsMCPSettings(llm_engagement_level="medium")
+        assert s.cursor_stop_completion_gate_resolved() == "warn"
+
+    def test_cursor_stop_completion_gate_low_defaults_off(self) -> None:
+        from tapps_core.config.settings import TappsMCPSettings
+
+        s = TappsMCPSettings(llm_engagement_level="low")
+        assert s.cursor_stop_completion_gate_resolved() == "off"
+
+    def test_cursor_stop_completion_gate_explicit_overrides(self) -> None:
+        from tapps_core.config.settings import TappsMCPSettings
+
+        s = TappsMCPSettings(
+            llm_engagement_level="high",
+            cursor_stop_completion_gate="off",
+        )
+        assert s.cursor_stop_completion_gate_resolved() == "off"
+
     def test_tool_preset_values(self) -> None:
         from tapps_core.config.settings import TappsMCPSettings
 

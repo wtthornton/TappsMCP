@@ -194,3 +194,41 @@ def summarize_call_graph_cache(
             f"{parse_fail_count} file(s) failed to parse — graph is incomplete for those modules."
         )
     return result
+
+
+def invalidate_call_graph_cache_if_schema_stale(
+    project_root: Path,
+    *,
+    dry_run: bool = False,
+) -> dict[str, object]:
+    """Remove call-graph cache when index schema version lags ``INDEX_VERSION`` (Epic 114).
+
+    Called from ``upgrade_pipeline`` so consumers do not keep v1 indexes after upgrading.
+    """
+    path = project_root / CALL_GRAPH_CACHE_REL
+    if not path.is_file():
+        return {"action": "skipped", "reason": "no_cache"}
+
+    cached = load_call_graph_index(project_root)
+    if cached is None:
+        if dry_run:
+            return {"action": "would_remove", "reason": "unreadable"}
+        path.unlink(missing_ok=True)
+        return {"action": "removed", "reason": "unreadable"}
+
+    if cached.version == INDEX_VERSION:
+        return {
+            "action": "skipped",
+            "reason": "current_schema",
+            "version": INDEX_VERSION,
+        }
+
+    payload: dict[str, object] = {
+        "action": "would_remove" if dry_run else "removed",
+        "reason": "index_version_mismatch",
+        "cached_version": cached.version,
+        "current_version": INDEX_VERSION,
+    }
+    if not dry_run:
+        path.unlink(missing_ok=True)
+    return payload

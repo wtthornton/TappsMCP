@@ -1660,6 +1660,66 @@ def check_cursor_loop_metrics_telemetry(project_root: Path) -> CheckResult:
     )
 
 
+def check_cursor_stop_completion_gate(project_root: Path) -> CheckResult:
+    """Report Cursor stop completion gate mode and hook presence (TAP-3921)."""
+    from tapps_core.config.settings import load_settings
+
+    claude_hook = project_root / ".claude" / "hooks" / "tapps-stop.sh"
+    cursor_hook = project_root / ".cursor" / "hooks" / "tapps-stop.sh"
+    hook_paths = [p for p in (claude_hook, cursor_hook) if p.exists()]
+
+    try:
+        settings = load_settings(project_root=project_root)
+        resolved = settings.cursor_stop_completion_gate_resolved()
+        explicit = settings.cursor_stop_completion_gate
+    except Exception as exc:
+        return CheckResult(
+            "Cursor stop completion gate",
+            False,
+            "Could not load settings",
+            str(exc),
+        )
+
+    hook_note = (
+        f"stop hook installed ({', '.join(p.name for p in hook_paths)})"
+        if hook_paths
+        else "stop hook missing — run tapps-mcp upgrade"
+    )
+    explicit_note = explicit if explicit is not None else "default"
+    message = f"mode={resolved} (configured={explicit_note}); {hook_note}"
+
+    if explicit == "block":
+        return CheckResult(
+            "Cursor stop completion gate",
+            False,
+            message,
+            "cursor_stop_completion_gate is block — run tapps-mcp upgrade to migrate to warn",
+        )
+
+    if resolved == "block":
+        return CheckResult(
+            "Cursor stop completion gate",
+            False,
+            message,
+            "Resolved mode is block — set cursor_stop_completion_gate: warn in "
+            ".tapps-mcp.yaml or run tapps-mcp upgrade",
+        )
+
+    detail = None
+    if explicit is None:
+        detail = (
+            "cursor_stop_completion_gate not pinned in .tapps-mcp.yaml — "
+            "run tapps-mcp upgrade --dry-run to add cursor_stop_completion_gate: warn"
+        )
+
+    return CheckResult(
+        "Cursor stop completion gate",
+        True,
+        message,
+        detail,
+    )
+
+
 def check_cache_gate_block_hint(project_root: Path) -> CheckResult:
     """Recommend ``linear_enforce_cache_gate: block`` on high-traffic projects (TAP-3577)."""
     from tapps_core.config.settings import load_settings
@@ -3316,7 +3376,12 @@ def check_call_graph_index_cache(root: Path, *, quick: bool = False) -> CheckRes
         f"Cache present ({len(cached.symbols)} symbols, {len(cached.edges)} edges)",
     ]
     if summary is not None:
-        if summary.get("stale"):
+        if summary.get("reason") == "index_version_mismatch":
+            parts.append(
+                "schema mismatch "
+                f"v{summary.get('cached_version')} → v{summary.get('current_version')}"
+            )
+        elif summary.get("stale"):
             parts.append("stale — rebuild via tapps_call_graph(force_rebuild=true)")
         else:
             parts.append("fresh")
@@ -4416,6 +4481,7 @@ def _collect_checks(root: Path, *, quick: bool = False) -> list[CheckResult]:
     checks.append(check_install_git_hooks_hint(root))
     checks.append(check_pipeline_enforce_recommendations(root))
     checks.append(check_cursor_loop_metrics_telemetry(root))
+    checks.append(check_cursor_stop_completion_gate(root))
     checks.append(check_continuous_learning_v2_skill(root))
     checks.append(check_pretooluse_matchers(root))
     checks.append(check_agents_md(root))
