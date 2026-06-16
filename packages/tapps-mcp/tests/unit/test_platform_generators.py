@@ -200,9 +200,12 @@ class TestSkillTemplates:
         assert "Optional" in content
 
     def test_generate_skills_skips_existing(self, tmp_path: Path) -> None:
+        from tapps_mcp.pipeline.platform_skills import SESSION_TRANSFER_SKILL_NAMES
+
         generate_skills(tmp_path, "claude")
         result = generate_skills(tmp_path, "claude")
-        assert len(result["skipped"]) == 16
+        assert len(result["skipped"]) == 16 - len(SESSION_TRANSFER_SKILL_NAMES)
+        assert set(result["updated"]) == set(SESSION_TRANSFER_SKILL_NAMES)
         assert len(result["created"]) == 0
 
 
