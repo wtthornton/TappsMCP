@@ -86,7 +86,7 @@ class BootstrapConfig:
     scaffold_experts: bool = False
     docs_automation: bool = True
     include_karpathy: bool = True
-    mcp_bundle: str = "developer"
+    mcp_bundle: str = "full"
 
     @classmethod
     def from_params(
@@ -584,7 +584,7 @@ def _record_session_handoff_skill_check(state: _BootstrapState) -> None:
     if not check.ok:
         state.warnings.append(
             f"Session handoff skills incomplete: {check.message}. "
-            "Re-init skips existing skills; run tapps-mcp upgrade --force to refresh templates."
+            "Run tapps-mcp upgrade --force to refresh all skill templates."
         )
 
 

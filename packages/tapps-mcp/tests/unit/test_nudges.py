@@ -261,6 +261,14 @@ class TestComputeNextSteps:
         steps = compute_next_steps("tapps_session_start", {"call_graph_ready": True})
         assert any("tapps_call_graph" in s for s in steps)
 
+    def test_session_start_suggests_build_when_missing(self) -> None:
+        steps = compute_next_steps("tapps_session_start", {"call_graph_missing": True})
+        assert any("missing" in s.lower() for s in steps)
+
+    def test_session_start_suggests_rebuild_when_stale(self) -> None:
+        steps = compute_next_steps("tapps_session_start", {"call_graph_stale": True})
+        assert any("stale" in s.lower() for s in steps)
+
     # Note: tapps_consult_expert and tapps_research were removed in EPIC-94.
     # Tests for those nudge rules have been removed.
 

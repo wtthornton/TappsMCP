@@ -23,9 +23,10 @@ from tapps_mcp.distribution.setup_generator import (
 
 
 class TestNltBundles:
-    def test_default_bundle_is_developer(self) -> None:
-        assert normalize_mcp_bundle(None) == "developer"
-        assert normalize_mcp_bundle("bogus") == "developer"
+    def test_default_bundle_is_full(self) -> None:
+        # ADR-0018: deployment default is full (all six nlt-* servers).
+        assert normalize_mcp_bundle(None) == "full"
+        assert normalize_mcp_bundle("bogus") == "full"
 
     def test_full_bundle_enables_all_servers(self) -> None:
         assert normalize_mcp_bundle("full") == "full"

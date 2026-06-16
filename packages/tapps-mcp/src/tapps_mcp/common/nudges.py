@@ -77,6 +77,22 @@ _TOOL_NUDGES: dict[str, list[NudgeRule]] = {
             _IMPACT_MEDIUM,
         ),
         (
+            lambda called, ctx: (
+                (ctx or {}).get("call_graph_missing") is True and "tapps_call_graph" not in called
+            ),
+            "NEXT: Call graph index missing — run tapps_call_graph(symbol='...', query='callers') "
+            "to build before symbol-level refactors.",
+            _IMPACT_MEDIUM,
+        ),
+        (
+            lambda called, ctx: (
+                (ctx or {}).get("call_graph_stale") is True and "tapps_call_graph" not in called
+            ),
+            "NEXT: Call graph index is stale — tapps_call_graph(force_rebuild=true) before trusting "
+            "blast radius.",
+            _IMPACT_MEDIUM,
+        ),
+        (
             lambda called, _ctx: "tapps_lookup_docs" not in called,
             "NEXT: Call tapps_lookup_docs() for any external libraries you will use.",
             _IMPACT_LOW,

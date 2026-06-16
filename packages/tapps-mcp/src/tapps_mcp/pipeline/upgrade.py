@@ -467,7 +467,7 @@ def _upgrade_mcp_config(
     force: bool,
     dry_run: bool,
     skip: set[str],
-    mcp_bundle: str = "developer",
+    mcp_bundle: str = "full",
 ) -> None:
     """Populate result["components"]["mcp_config"] for one host.
 
@@ -1183,7 +1183,7 @@ def _upgrade_platform(
     destructive_guard: bool = False,
     linear_enforce_gate: bool = False,
     linear_enforce_cache_gate: str = "off",
-    mcp_bundle: str = "developer",
+    mcp_bundle: str = "full",
 ) -> dict[str, Any]:
     """Upgrade platform-specific files for a single host.
 
@@ -1285,6 +1285,16 @@ def _upgrade_platform(
             _upgrade_cursor_live(project_root, result, force=force)
     elif host == "vscode":
         result["components"]["note"] = "no platform rules to upgrade"
+
+    if not dry_run and host in ("claude-code", "cursor"):
+        from tapps_mcp.distribution.doctor import check_session_handoff_skills
+
+        handoff_check = check_session_handoff_skills(project_root)
+        result["session_handoff_skills"] = {
+            "ok": handoff_check.ok,
+            "message": handoff_check.message,
+            "detail": handoff_check.detail,
+        }
 
     return result
 

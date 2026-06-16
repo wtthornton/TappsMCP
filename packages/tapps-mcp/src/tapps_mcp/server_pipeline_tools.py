@@ -695,9 +695,7 @@ async def tapps_session_start(
     try:
         from tapps_mcp.project.call_graph_cache import summarize_call_graph_cache
 
-        call_graph = summarize_call_graph_cache(Path(settings.project_root))
-        if call_graph is not None:
-            data["call_graph"] = call_graph
+        data["call_graph"] = summarize_call_graph_cache(Path(settings.project_root))
     except Exception:
         _logger.debug("call_graph_session_start_failed", exc_info=True)
 
@@ -779,6 +777,9 @@ async def tapps_session_start(
     # TAP-2005: record session start time so tapps_session_end can scope
     # flywheel_process to this session's events.
     _session_state.session_start_iso = datetime.now(UTC).isoformat()
+    from tapps_mcp.tools.session_end_helpers import persist_session_start_iso
+
+    persist_session_start_iso(Path(settings.project_root), _session_state.session_start_iso)
     # TAP-975: refresh sidecar so the UserPromptSubmit hook stays silent for
     # the next 30 minutes of prompts.
     write_session_start_marker(settings.project_root)
@@ -788,8 +789,13 @@ async def tapps_session_start(
 
     nudge_ctx: dict[str, Any] = {}
     call_graph_block = data.get("call_graph")
-    if isinstance(call_graph_block, dict) and call_graph_block.get("ready"):
-        nudge_ctx["call_graph_ready"] = True
+    if isinstance(call_graph_block, dict):
+        if call_graph_block.get("ready"):
+            nudge_ctx["call_graph_ready"] = True
+        elif call_graph_block.get("status") == "missing":
+            nudge_ctx["call_graph_missing"] = True
+        elif call_graph_block.get("stale"):
+            nudge_ctx["call_graph_stale"] = True
 
     resp = _with_nudges("tapps_session_start", resp, nudge_ctx)
     if degraded_warning:
@@ -932,7 +938,7 @@ async def tapps_init(
     scaffold_experts: bool = False,
     include_karpathy: bool = True,
     mcp_config: bool = True,
-    mcp_bundle: str = "developer",
+    mcp_bundle: str = "full",
     output_mode: str = "auto",
     ctx: Context[Any, Any, Any] | None = None,
 ) -> dict[str, Any]:

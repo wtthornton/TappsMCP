@@ -122,6 +122,34 @@ class TestCheckInstallDriftNoGlobal:
         assert result.entries[0].drifted is False
 
 
+class TestCheckInstallDriftLocalSource:
+    """TAP-4099: warn when global CLIs were installed from a local checkout."""
+
+    def test_local_install_sets_warning_without_version_drift(self, tmp_path: Path) -> None:
+        from tapps_mcp import __version__ as tapps_v
+
+        receipt_dir = tmp_path / "uv-tool" / "tapps-mcp"
+        receipt_dir.mkdir(parents=True)
+        local_pkg = tmp_path / "packages" / "tapps-mcp"
+        local_pkg.mkdir(parents=True)
+        receipt = receipt_dir / "uv-receipt.toml"
+        receipt.write_text(f'source = "{local_pkg}"\n', encoding="utf-8")
+        fake_bin = receipt_dir / "bin" / "tapps-mcp"
+        fake_bin.parent.mkdir(parents=True)
+        fake_bin.write_text("", encoding="utf-8")
+
+        with patch("tapps_mcp.diagnostics.shutil.which") as mock_which:
+            mock_which.side_effect = lambda name: str(fake_bin) if name == "tapps-mcp" else None
+            with patch("tapps_mcp.diagnostics.subprocess.run") as mock_run:
+                mock_run.return_value = _mock_completed(f"tapps-mcp, version {tapps_v}")
+                result = check_install_drift()
+
+        assert result.drift_detected is False
+        assert result.local_install_warning is True
+        assert result.entries[0].from_local_source is True
+        assert "local checkout" in result.remediation_hint
+
+
 class TestEntryShape:
     """InstallDriftEntry contract used by session_start consumers."""
 

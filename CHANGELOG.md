@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- **Deployment default bundle is now `full` (ADR-0018)** — `tapps_init` / `tapps_upgrade` and the `--bundle` flags default to `full` (all six `nlt-*` servers) instead of `developer`. `normalize_mcp_bundle` and `_infer_mcp_bundle` fall back to `full` via the new `DEFAULT_NLT_BUNDLE` constant. Explicit `mcp_bundle` in `.tapps-mcp.yaml` and existing on-disk server sets are still honored; opt down with `--bundle developer|minimal`. Supersedes ADR-0016 on the default bundle only.
+
 ## [3.12.35] - 2026-06-15
 
 Patch: fix zombie cleanup hook on mawk (Ubuntu default awk).

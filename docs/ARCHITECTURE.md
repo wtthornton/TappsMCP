@@ -50,7 +50,7 @@ The MCP server is split across ten files (server.py + 9 modules) sharing the sam
 | `nlt-project-docs` | (situational) | — | Doc generation and drift audit |
 | `nlt-release-ship` | (situational) | — | Release notes / ship gate |
 
-**Default bundle after `tapps_init`:** `developer` = `nlt-build` + `nlt-memory` + `nlt-linear-issues` (~18 eager tools). Use `--bundle minimal` for build-only.
+**Default bundle after `tapps_init`:** `full` = all six `nlt-*` servers ([ADR-0018](adr/0018-deploy-all-six-nlt-mcp-servers-by-default.md)). Opt down with `--bundle developer` (Build + Memory + Linear, ~18 eager) or `--bundle minimal` (build-only).
 
 **Key contract:** identical tool names on enabled servers refer to identical implementations — the NLT split is about **which tools the client sees**, not different handler code. Prefer `mcp__nlt-build__tapps_*` in generated skills when Build is always enabled.
 

@@ -158,6 +158,22 @@ class TestSkipExisting:
         assert (skill_dir / "SKILL.md").read_text() == custom
         assert (tmp_path / ".claude" / "skills" / "tapps-review-pipeline" / "SKILL.md").exists()
 
+    def test_refreshes_session_transfer_skills_without_overwrite(self, tmp_path):
+        from tapps_mcp.pipeline.platform_skills import CLAUDE_SKILLS, SESSION_TRANSFER_SKILL_NAMES
+
+        for skill_name in SESSION_TRANSFER_SKILL_NAMES:
+            skill_dir = tmp_path / ".claude" / "skills" / skill_name
+            skill_dir.mkdir(parents=True)
+            (skill_dir / "SKILL.md").write_text("# stale handoff\n", encoding="utf-8")
+
+        result = generate_skills(tmp_path, "claude")
+
+        for skill_name in SESSION_TRANSFER_SKILL_NAMES:
+            assert skill_name in result["updated"]
+            content = (tmp_path / ".claude" / "skills" / skill_name / "SKILL.md").read_text()
+            assert content == CLAUDE_SKILLS[skill_name]
+        assert "tapps-finish-task" in result["created"]
+
     def test_creates_directories(self, tmp_path):
         assert not (tmp_path / ".claude" / "skills").exists()
         generate_skills(tmp_path, "claude")

@@ -113,6 +113,14 @@ class InstallDriftEntry(BaseModel):
     binary_version: str = Field(description="Version reported by '<binary> --version'; '' if not found.")
     source_version: str = Field(description="Version of the in-process package this server is running.")
     drifted: bool = Field(description="True iff binary_version is non-empty and differs from source_version.")
+    from_local_source: bool = Field(
+        default=False,
+        description="True when ``uv tool install`` used --from/--editable local path (TAP-4099).",
+    )
+    install_source: str = Field(
+        default="",
+        description="Install source path from uv-receipt.toml when from_local_source is True.",
+    )
 
 
 class InstallDriftDiagnostic(BaseModel):
@@ -123,6 +131,10 @@ class InstallDriftDiagnostic(BaseModel):
     """
 
     drift_detected: bool = Field(description="True iff any binary in entries is drifted.")
+    local_install_warning: bool = Field(
+        default=False,
+        description="True when any global binary was installed from a local checkout path (TAP-4099).",
+    )
     entries: list[InstallDriftEntry] = Field(
         default_factory=list,
         description="Per-binary check results. Empty when no global binary is on PATH.",

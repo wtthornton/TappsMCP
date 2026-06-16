@@ -449,7 +449,23 @@ class TestSessionHandoffSkills:
 
     def test_handoff_references_session_handoff_file(self) -> None:
         assert "session-handoff.md" in CLAUDE_SKILLS["tapps-handoff-session"]
-        assert "tapps_session_end" in CURSOR_SKILLS["tapps-handoff-session"]
+        assert "tapps_handoff_save" in CURSOR_SKILLS["tapps-handoff-session"]
+
+    def test_handoff_allowed_tools_include_handoff_save(self) -> None:
+        content = CLAUDE_SKILLS["tapps-handoff-session"]
+        assert "mcp__nlt-memory__tapps_handoff_save" in content
+        assert "mcp__nlt-build__tapps_session_start" in content
+        fm = _get_frontmatter(CURSOR_SKILLS["tapps-handoff-session"])
+        assert "tapps_handoff_save" in fm
+        assert "tapps_session_start" in fm
+
+    def test_handoff_single_atomic_mcp_path(self) -> None:
+        for skills in (CLAUDE_SKILLS, CURSOR_SKILLS):
+            content = skills["tapps-handoff-session"]
+            assert "tapps_handoff_save" in content
+            assert "session_end=true" in content
+            assert "do **not** also call" in content
+            assert "Changed files" in content
 
     def test_handoff_requires_real_utc_timestamp(self) -> None:
         for skills in (CLAUDE_SKILLS, CURSOR_SKILLS):
@@ -461,8 +477,9 @@ class TestSessionHandoffSkills:
         for skills in (CLAUDE_SKILLS, CURSOR_SKILLS):
             content = skills["tapps-handoff-session"]
             assert "git rev-parse --short HEAD" in content
-            assert "uv run tapps-mcp session-end" in content
+            assert "handoff write" in content
             assert "uv run tapps-mcp memory save" in content
+            assert "allow_lint_warnings=true" in content
 
     def test_continue_session_cli_bootstrap_fallback(self) -> None:
         for skills in (CLAUDE_SKILLS, CURSOR_SKILLS):

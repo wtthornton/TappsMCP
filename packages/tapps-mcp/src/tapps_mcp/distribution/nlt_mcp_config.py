@@ -92,6 +92,12 @@ NLT_BUNDLES: Final[dict[NltBundle, tuple[str, ...]]] = {
     "full": NLT_SERVER_ORDER,
 }
 
+# Default bundle for the deployment process (init/upgrade). ADR-0018 supersedes
+# ADR-0016's ``developer`` default: every deployment now enables all six nlt-*
+# servers unless the consumer explicitly opts down via ``mcp_bundle`` in
+# ``.tapps-mcp.yaml`` or ``--bundle``.
+DEFAULT_NLT_BUNDLE: Final[NltBundle] = "full"
+
 # Eager / total tool counts per spec (Epic 109.5 / ADR-0016 doctor thresholds).
 NLT_SERVER_EAGER_COUNTS: Final[dict[str, int]] = {
     "nlt-build": 9,
@@ -169,10 +175,10 @@ NLT_TOOL_SERVER: Final[dict[str, str]] = {
 
 
 def normalize_mcp_bundle(bundle: str | None) -> NltBundle:
-    """Return a valid bundle name; default ``developer`` (never ``full``)."""
+    """Return a valid bundle name; default ``full`` (ADR-0018)."""
     if bundle in NLT_BUNDLES:
         return bundle  # type: ignore[return-value]
-    return "developer"
+    return DEFAULT_NLT_BUNDLE
 
 
 def enabled_servers_for_bundle(bundle: NltBundle) -> tuple[str, ...]:

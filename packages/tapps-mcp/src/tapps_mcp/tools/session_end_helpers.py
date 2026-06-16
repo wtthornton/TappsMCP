@@ -20,6 +20,46 @@ import structlog
 
 _logger = structlog.get_logger(__name__)
 
+_SESSION_START_ISO_REL = Path(".tapps-mcp") / ".session-start-iso"
+
+
+def persist_session_start_iso(project_root: Path, iso: str) -> None:
+    """Persist session start time for flywheel scope across MCP subprocess restarts."""
+    if not iso.strip():
+        return
+    try:
+        path = project_root / _SESSION_START_ISO_REL
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(iso.strip(), encoding="utf-8")
+    except OSError:
+        _logger.debug("persist_session_start_iso_failed", exc_info=True)
+
+
+def read_persisted_session_start_iso(project_root: Path) -> str:
+    """Return ISO timestamp written at last ``tapps_session_start``, or ``''``."""
+    path = project_root / _SESSION_START_ISO_REL
+    try:
+        if path.is_file():
+            return path.read_text(encoding="utf-8").strip()
+    except OSError:
+        pass
+    return ""
+
+
+def resolve_session_start_iso(
+    session_start_iso: str,
+    project_root: Path | None = None,
+) -> tuple[str, str]:
+    """Return ``(iso, source)`` for ``flywheel_process(since=...)``."""
+    since = session_start_iso.strip()
+    if since:
+        return since, "session_state"
+    if project_root is not None:
+        persisted = read_persisted_session_start_iso(project_root)
+        if persisted:
+            return persisted, "persisted_file"
+    return "", "missing"
+
 
 async def call_memory_search_sessions(
     query: str,
@@ -69,18 +109,18 @@ def build_session_search_query(
 ) -> tuple[str, str]:
     """Choose a retrievable ``memory_search_sessions`` query (TAP-3793).
 
-    Prefers handoff P0 / Linear id over raw ``session_start_iso`` timestamps,
-    which are poor semantic retrieval keys when the session index stores chunks.
+    Prefers handoff Linear id, then Next (P0) prose, then ``session_start_iso``.
+    Timestamps are poor semantic retrieval keys when the session index stores chunks.
     """
     if project_root is not None:
         from tapps_mcp.tools.handoff_schema import load_and_lint_handoff
 
         doc, _lint = load_and_lint_handoff(project_root)
         if doc is not None:
-            if doc.next_p0:
-                return doc.next_p0[0], "handoff_next_p0"
             if doc.linear_p0:
                 return doc.linear_p0, "handoff_linear_p0"
+            if doc.next_p0:
+                return doc.next_p0[0], "handoff_next_p0"
 
     since = session_start_iso.strip()
     if since:
@@ -97,7 +137,7 @@ async def run_session_end(
 
     Best-effort — brain outages surface in the result dict, never as exceptions.
     """
-    since = session_start_iso.strip()
+    since, since_source = resolve_session_start_iso(session_start_iso, project_root)
     flywheel = await call_flywheel_process(since)
     query, query_source = build_session_search_query(since, project_root)
     session_search = await call_memory_search_sessions(query)
@@ -105,10 +145,14 @@ async def run_session_end(
         session_search = {**session_search, "query_source": query_source}
 
     flywheel_note: str | None = None
-    if not since:
+    if since_source == "missing":
         flywheel_note = (
-            "session_start_iso missing or stale — flywheel may report "
-            "processed_events: 0; session_search uses handoff P0 when available"
+            "session_start_iso missing — call tapps_session_start() at session open; "
+            "flywheel may process unscoped events; session_search uses handoff or recent"
+        )
+    elif since_source == "persisted_file":
+        flywheel_note = (
+            "flywheel since= from persisted .session-start-iso (in-process state was empty)"
         )
     elif query_source != "session_start_iso":
         flywheel_note = (
@@ -120,6 +164,7 @@ async def run_session_end(
         "flywheel": flywheel,
         "session_search": session_search,
         "session_start_iso": since or None,
+        "session_start_iso_source": since_source,
         "session_search_query": query,
         "flywheel_note": flywheel_note,
     }

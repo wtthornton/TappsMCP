@@ -47,8 +47,14 @@ def build_call_graph_index(
     fingerprint = index_fingerprint(project_root, exclude_patterns, top_level_package)
     if not force_rebuild:
         cached = load_call_graph_index(project_root)
-        if cached is not None and cached.fingerprint == fingerprint:
+        if cached is not None and cached.version == INDEX_VERSION and cached.fingerprint == fingerprint:
             return cached
+        if cached is not None and cached.version != INDEX_VERSION:
+            logger.info(
+                "call_graph_cache_version_mismatch",
+                cached_version=cached.version,
+                current_version=INDEX_VERSION,
+            )
 
     excludes = set(_DEFAULT_EXCLUDES)
     if exclude_patterns:

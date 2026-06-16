@@ -1085,6 +1085,7 @@ _LOW_ENGAGEMENT_WORKFLOWS: frozenset[str] = frozenset(
 def _infer_mcp_bundle(project_root: Path) -> str:
     """Best-effort bundle name from YAML or enabled NLT MCP servers."""
     from tapps_mcp.distribution.nlt_mcp_config import (
+        DEFAULT_NLT_BUNDLE,
         NLT_BUNDLES,
         _load_enabled_mcp_servers,
         list_nlt_server_ids_in_config,
@@ -1108,14 +1109,14 @@ def _infer_mcp_bundle(project_root: Path) -> str:
         servers = _load_enabled_mcp_servers(project_root)
         enabled = frozenset(list_nlt_server_ids_in_config(servers))
     except Exception:
-        return "developer"
+        return DEFAULT_NLT_BUNDLE
 
     if not enabled:
-        return "developer"
+        return DEFAULT_NLT_BUNDLE
     for bundle_name, server_ids in NLT_BUNDLES.items():
         if frozenset(server_ids) == enabled:
             return bundle_name
-    return "developer"
+    return DEFAULT_NLT_BUNDLE
 
 
 def build_recommended_workflows(

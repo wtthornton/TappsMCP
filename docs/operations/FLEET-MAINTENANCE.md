@@ -40,10 +40,10 @@ $HOME/NewCompanyIdeas
 
 | Bundle | Enabled in `.cursor/mcp.json` | When |
 |--------|-------------------------------|------|
-| `developer` (default) | 3 — build, memory, linear-issues | Daily coding; doctor NLT **PASS** |
-| `full` | All 6 | Maintainer fleet upgrade / power-user; doctor NLT **WARN** if >3 enabled |
+| `full` (default) | All 6 | Default deployment ([ADR-0018](../adr/0018-deploy-all-six-nlt-mcp-servers-by-default.md)); doctor NLT **PASS** when `mcp_bundle=full` is resolved |
+| `developer` | 3 — build, memory, linear-issues | Opt-down for token-tight sessions; doctor NLT **PASS** |
 
-The **tapps-mcp dev repo** uses `mcp_bundle: developer` in `.tapps-mcp.yaml` for stable Cursor MCP. Run `TAPPS_FLEET_BUNDLE=full ./scripts/fleet-upgrade.sh` when you need all six servers across the maintainer fleet.
+The default deployment enables all six servers ([ADR-0018](../adr/0018-deploy-all-six-nlt-mcp-servers-by-default.md)). Set `mcp_bundle: developer` (or `minimal`) in `.tapps-mcp.yaml`, or run `TAPPS_FLEET_BUNDLE=developer ./scripts/fleet-upgrade.sh`, to opt a repo or the maintainer fleet down to a smaller surface.
 
 Custom non-NLT entries (e.g. NewCompanyIdeas `agentforge`) are **preserved** during `init` / fleet upgrade.
 
@@ -76,6 +76,27 @@ done
 **Cursor:** reload MCP after fleet upgrade (`Developer: Reload Window` or Settings → MCP refresh). Open **each repo as its own workspace** — `.cursor/mcp.json` is project-scoped.
 
 **Operator secrets:** `~/.tapps-operator.env` (see [OPERATOR-SECRETS.md](OPERATOR-SECRETS.md)).
+
+---
+
+## Global CLI policy (Epic 116)
+
+Consumer repos share one machine-global `uv tool install` for `tapps-mcp` and `docsmcp`. **Pin fleet globals to release tags** — not `--from packages/...` from a dev checkout:
+
+```bash
+# Consumer / fleet upgrade (tagged release)
+uv tool install --reinstall "tapps-mcp @ git+https://github.com/wtthornton/tapps-mcp@v3.12.35#subdirectory=packages/tapps-mcp"
+uv tool install --reinstall "docs-mcp @ git+https://github.com/wtthornton/tapps-mcp@v3.12.35#subdirectory=packages/docs-mcp"
+```
+
+| Context | MCP launch | Why |
+|---------|------------|-----|
+| **tapps-mcp dev monorepo** | `uv run --directory <checkout> tapps-mcp serve --profile nlt-*` | Dev work must not mutate the global binary AgentForge uses |
+| **Consumer repos** | Global `~/.local/bin/tapps-mcp` via `.cursor/bin/nlt-*-serve.sh` | Stable, tagged CLIs across the fleet |
+
+`tapps-mcp doctor` warns when globals were installed from a local path (`Global CLI install source`). AgentForge may use `mcp_bundle: developer` to opt down to three servers; tapps-mcp dev repo uses `full` by default ([ADR-0018](../adr/0018-deploy-all-six-nlt-mcp-servers-by-default.md)).
+
+After `uv tool install --reinstall --from packages/...` during local dev, rerun fleet upgrade with tagged installs before touching consumer workspaces.
 
 ---
 

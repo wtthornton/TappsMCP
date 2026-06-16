@@ -994,10 +994,11 @@ class TappsMCPSettings(BaseSettings):
         default=None,
         description=(
             "NLT MCP bundle for init/upgrade MCP config regeneration: "
-            "developer (default), minimal, planning, docs, release, or full. "
-            "When unset, inferred from enabled nlt-* servers in host MCP configs. "
-            "Set to full for maintainer repos that intentionally enable all six "
-            "NLT servers (AgentForge, tapps-mcp dev checkout)."
+            "full (default; all six nlt-* servers, ADR-0018), developer "
+            "(build + memory + linear), minimal, planning, docs, or release. "
+            "When unset, inferred from enabled nlt-* servers in host MCP configs, "
+            "falling back to full. Set to developer/minimal to opt down to a "
+            "token-tight subset."
         ),
     )
 

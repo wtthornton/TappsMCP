@@ -32,6 +32,8 @@ from tapps_mcp.distribution.setup_generator import (
     _should_use_uv_launch,
     _value_is_plaintext_secret,
     is_tapps_mcp_package_layout,
+    is_tapps_mcp_dev_monorepo,
+    _build_nlt_launch,
     run_init,
     run_upgrade,
 )
@@ -1517,6 +1519,30 @@ class TestEpic80ConsumerInit:
         root.mkdir(parents=True)
         assert is_tapps_mcp_package_layout(root) is True
         assert is_tapps_mcp_package_layout(tmp_path / "other") is False
+
+    def test_is_tapps_mcp_dev_monorepo(self, tmp_path):
+        root = tmp_path / "tapps-mcp"
+        (root / "packages" / "tapps-mcp" / "src" / "tapps_mcp").mkdir(parents=True)
+        (root / "packages" / "docs-mcp").mkdir(parents=True)
+        (root / "pyproject.toml").write_text("[project]\nname='tapps-mcp'\n", encoding="utf-8")
+        assert is_tapps_mcp_dev_monorepo(root) is True
+        assert is_tapps_mcp_dev_monorepo(tmp_path / "consumer-app") is False
+
+    def test_dev_monorepo_nlt_launch_prefers_uv_run(self, tmp_path, monkeypatch) -> None:
+        root = tmp_path / "tapps-mcp"
+        (root / "packages" / "tapps-mcp" / "src" / "tapps_mcp").mkdir(parents=True)
+        (root / "packages" / "docs-mcp").mkdir(parents=True)
+        (root / "pyproject.toml").write_text("[project]\nname='tapps-mcp'\n", encoding="utf-8")
+        monkeypatch.setattr(
+            "tapps_mcp.distribution.setup_generator.shutil.which",
+            lambda name: "/home/user/.local/bin/tapps-mcp" if name == "tapps-mcp" else None,
+        )
+        command, args = _build_nlt_launch("nlt-build", None, project_root=root)
+        assert command == "uv"
+        assert args[:3] == ["run", "--directory", str(root.resolve())]
+        assert "tapps-mcp" in args
+        assert "serve" in args
+        assert "--profile" in args
 
     def test_merge_preserves_extra_env_keys(self, tmp_path):
         """User-managed env keys (not in the default set) survive merge.

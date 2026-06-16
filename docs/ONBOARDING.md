@@ -48,11 +48,12 @@ tapps-mcp/
 
 ## MCP Session Modes (NLT)
 
-Enable **1–3** servers per session — not all six. Default after `tapps_init` is the **developer** bundle.
+Default after `tapps_init` is the **`full`** bundle — all six servers ([ADR-0018](adr/0018-deploy-all-six-nlt-mcp-servers-by-default.md)). Opt down with `--bundle developer` or `--bundle minimal` for token-tight sessions.
 
 | Mode | Servers | When |
 |------|---------|------|
-| **Developer (default)** | `nlt-build`, `nlt-memory`, `nlt-linear-issues` | Daily coding + recall + backlog |
+| **Full (default)** | all six `nlt-*` servers | Full tool surface, no mid-task gaps |
+| **Developer** | `nlt-build`, `nlt-memory`, `nlt-linear-issues` | Daily coding + recall + backlog (`--bundle developer`) |
 | **Build only** | `nlt-build` | Token-tight sessions (`--bundle minimal`) |
 | **Build + Docs** | `nlt-build`, `nlt-project-docs` | Documentation generation / drift audit |
 | **Setup** | `nlt-setup` | Bootstrap, upgrade, doctor only |

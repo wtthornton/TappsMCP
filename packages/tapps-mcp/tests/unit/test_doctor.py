@@ -1652,7 +1652,10 @@ class TestCheckSessionHandoffSkills:
         skill_dir.mkdir(parents=True, exist_ok=True)
         body = f"---\nname: {name}\n---\n"
         if name == "tapps-handoff-session":
-            body += "\nsession-handoff.md\ntapps_session_end\ntapps-mcp memory save\np0 gate\n" * 5
+            body += (
+                "\nsession-handoff.md\ntapps_handoff_save\nsession_end=true\n"
+                "tapps_session_start\np0 gate\n" * 5
+            )
         elif name == "tapps-continue-session":
             body += "\nsession-handoff.md\ntapps_session_start\nmemory search\np0 fallback\n" * 5
         (skill_dir / "SKILL.md").write_text(body, encoding="utf-8")
@@ -1698,7 +1701,7 @@ class TestCheckSessionHandoffSkills:
             body = f"---\nname: {name}\n---\n"
             body += "session-handoff.md\n"
             if name == "tapps-handoff-session":
-                body += "tapps_session_end\n"
+                body += "tapps_session_end\ntapps_handoff_save\nsession_end=true\n"
                 body += "mcp__tapps-mcp__tapps_memory(action=save)\n" * 3
             else:
                 body += "tapps_session_start\n" * 5
@@ -1719,6 +1722,32 @@ class TestCheckSessionHandoffSkills:
         self._write_skill(base, "tapps-continue-session")
         result = check_session_handoff_skills(tmp_path)
         assert result.ok is True
+
+    def test_generated_claude_templates_pass_content_check(self, tmp_path):
+        from tapps_mcp.distribution.doctor import check_session_handoff_skills
+        from tapps_mcp.pipeline.platform_skills import generate_skills
+
+        generate_skills(tmp_path, "claude")
+        result = check_session_handoff_skills(tmp_path)
+        assert result.ok is True
+
+    def test_legacy_handoff_without_handoff_save_fails(self, tmp_path):
+        from tapps_mcp.distribution.doctor import check_session_handoff_skills
+
+        base = tmp_path / ".cursor" / "skills"
+        for name in ("tapps-handoff-session", "tapps-continue-session"):
+            skill_dir = base / name
+            skill_dir.mkdir(parents=True)
+            body = f"---\nname: {name}\n---\n"
+            body += "session-handoff.md\n" * 5
+            if name == "tapps-handoff-session":
+                body += "tapps_session_end\ntapps-mcp memory save\np0 gate\n" * 3
+            else:
+                body += "tapps_session_start\nmemory search\np0 fallback\n" * 3
+            (skill_dir / "SKILL.md").write_text(body, encoding="utf-8")
+        result = check_session_handoff_skills(tmp_path)
+        assert result.ok is False
+        assert "stale" in result.message.lower()
 
 
 class TestCheckSessionHandoffSchema:

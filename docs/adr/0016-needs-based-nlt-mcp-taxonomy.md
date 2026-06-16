@@ -4,7 +4,12 @@ Date: 2026-06-13
 
 ## Status
 
-Accepted (2026-06-13; TAP-3889 / TAP-3892)
+Accepted (2026-06-13; TAP-3889 / TAP-3892).
+
+Superseded **on the default bundle only** by
+[ADR-0018](0018-deploy-all-six-nlt-mcp-servers-by-default.md) (2026-06-16): the
+deployment default is now `full` (all six servers), not `developer`. The taxonomy,
+server IDs, zero-duplication rules, and bundle definitions below remain in force.
 
 ## Context
 

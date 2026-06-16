@@ -36,13 +36,14 @@ Seven rules every agent in this project should follow.
 
 ---
 
-## NLT MCP session modes (ADR-0016)
+## NLT MCP session modes (ADR-0016, ADR-0018)
 
-Enable **1–3** `nlt-*` servers per session — not all six at once. Default after `tapps_init` is **Build + Memory + Linear** (`developer` bundle, ~18 eager tools). Use `--bundle minimal` for build-only.
+Default after `tapps_init` is the **`full`** bundle — all six `nlt-*` servers ([ADR-0018](docs/adr/0018-deploy-all-six-nlt-mcp-servers-by-default.md)). Opt **down** for token-tight sessions with `--bundle developer` (Build + Memory + Linear, ~18 eager) or `--bundle minimal` (build-only).
 
 | Mode | Enable these MCP servers | When |
 |------|--------------------------|------|
-| **Developer (default)** | `nlt-build`, `nlt-memory`, `nlt-linear-issues` | Daily coding + recall + backlog |
+| **Full (default)** | all six `nlt-*` servers | Full tool surface; no mid-task "enable the other server" gaps |
+| **Developer** | `nlt-build`, `nlt-memory`, `nlt-linear-issues` | Daily coding + recall + backlog, opt down (`--bundle developer`) |
 | **Build only** | `nlt-build` | Token-tight sessions (`--bundle minimal`) |
 | **Build + Memory** | `nlt-build`, `nlt-memory` | Need `tapps_memory` search/save or session handoff |
 | **Build + Plan** | `nlt-build`, `nlt-linear-issues` | Linear backlog / issue workflow |

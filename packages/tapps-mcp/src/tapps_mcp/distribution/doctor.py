@@ -187,6 +187,29 @@ def check_docsmcp_binary_version_mismatch() -> CheckResult:
     )
 
 
+def check_global_local_install() -> CheckResult:
+    """TAP-4099: warn when global CLIs were installed from a local checkout path."""
+    from tapps_mcp.diagnostics import check_install_drift
+
+    drift = check_install_drift()
+    local_entries = [e for e in drift.entries if e.from_local_source]
+    if not local_entries:
+        return CheckResult(
+            "Global CLI install source",
+            True,
+            "No local-path global installs detected (or globals absent)",
+        )
+    names = ", ".join(e.binary for e in local_entries)
+    sources = "; ".join(f"{e.binary}←{e.install_source}" for e in local_entries if e.install_source)
+    return CheckResult(
+        "Global CLI install source",
+        True,
+        f"WARN: {names} installed from local checkout ({sources})",
+        drift.remediation_hint
+        or "Pin consumer globals to release tags; dev monorepo uses uv run in MCP wrappers.",
+    )
+
+
 def check_json_config(
     config_path: Path,
     servers_key: str,
@@ -1339,12 +1362,13 @@ def _handoff_skill_content_ok(skill_name: str, content: str) -> bool:
     if "mcp__tapps-mcp__tapps_memory" in lowered:
         return False
     if skill_name == "tapps-handoff-session":
-        if "tapps_session_end" not in lowered:
+        if "tapps_handoff_save" not in lowered:
+            return False
+        if "session_end=true" not in lowered:
             return False
         if "p0 gate" not in lowered:
             return False
-        # Brain mirror must route through CLI, not removed MCP tool.
-        return "tapps-mcp memory save" in lowered
+        return "tapps_session_start" in lowered
     if skill_name == "tapps-continue-session":
         return (
             "tapps_session_start" in lowered
@@ -1357,8 +1381,9 @@ def _handoff_skill_content_ok(skill_name: str, content: str) -> bool:
 def check_session_handoff_skills(project_root: Path) -> CheckResult:
     """Check session-transfer skills are deployed (``tapps-handoff-session`` + ``tapps-continue-session``).
 
-    These skills write/read ``.tapps-mcp/session-handoff.md`` and pair with
-    ``tapps_session_end`` / ``tapps_session_start`` for cross-chat continuity.
+    These skills write/read ``.tapps-mcp/session-handoff.md`` via
+    ``tapps_handoff_save`` (with ``session_end=true``) and
+    ``tapps_session_start`` for cross-chat continuity.
     """
     skill_names = ("tapps-handoff-session", "tapps-continue-session")
     missing = _missing_tapps_skills(project_root, skill_names)
@@ -4309,6 +4334,7 @@ def _collect_checks(root: Path, *, quick: bool = False) -> list[CheckResult]:
     checks.append(check_binary_on_path())
     checks.append(check_binary_version_mismatch())
     checks.append(check_docsmcp_binary_version_mismatch())
+    checks.append(check_global_local_install())
     checks.append(check_claude_code_user(project_root=root))
     checks.append(check_claude_code_project(root))
     checks.append(check_cursor_config(root))

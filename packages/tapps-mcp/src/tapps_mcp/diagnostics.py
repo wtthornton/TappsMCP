@@ -106,6 +106,42 @@ def _probe_binary_version(binary_name: str) -> tuple[str, str]:
     return binary_path, result.stdout.strip().split()[-1]
 
 
+def _read_uv_tool_install_source(binary_path: str) -> str:
+    """Return install source from ``uv-receipt.toml`` when the global CLI is local (TAP-4099)."""
+    try:
+        receipt = Path(binary_path).resolve().parent.parent / "uv-receipt.toml"
+        if not receipt.is_file():
+            return ""
+        for line in receipt.read_text(encoding="utf-8").splitlines():
+            lower = line.lower()
+            if "source" not in lower and "editable" not in lower and "path" not in lower:
+                continue
+            if "=" not in line:
+                continue
+            val = line.split("=", 1)[1].strip().strip("'\"")
+            if val:
+                return val
+    except OSError:
+        pass
+    return ""
+
+
+def _is_local_uv_tool_install(binary_path: str) -> tuple[bool, str]:
+    """Return (from_local, install_source) for a global ``uv tool`` binary."""
+    source = _read_uv_tool_install_source(binary_path)
+    if not source:
+        return False, ""
+    try:
+        resolved = Path(source).expanduser().resolve()
+    except (OSError, ValueError):
+        return False, source
+    if resolved.is_dir() or resolved.is_file():
+        return True, str(resolved)
+    if "packages" in source.replace("\\", "/"):
+        return True, source
+    return False, source
+
+
 def check_install_drift() -> InstallDriftDiagnostic:
     """TAP-2129: detect drift between in-process package versions and the
     ``uv tool`` global install on PATH.
@@ -130,6 +166,7 @@ def check_install_drift() -> InstallDriftDiagnostic:
         if not binary_path:
             continue
         drifted = bool(binary_version) and binary_version != source_version
+        from_local, install_source = _is_local_uv_tool_install(binary_path)
         entries.append(
             InstallDriftEntry(
                 binary=binary,
@@ -137,10 +174,13 @@ def check_install_drift() -> InstallDriftDiagnostic:
                 binary_version=binary_version,
                 source_version=source_version,
                 drifted=drifted,
+                from_local_source=from_local,
+                install_source=install_source,
             )
         )
 
     drift_detected = any(e.drifted for e in entries)
+    local_install_warning = any(e.from_local_source for e in entries)
     hint = ""
     if drift_detected:
         hint = (
@@ -148,8 +188,14 @@ def check_install_drift() -> InstallDriftDiagnostic:
             "<path-to-tapps-mcp>/packages/tapps-mcp "
             "(and the same for packages/docs-mcp)"
         )
+    elif local_install_warning:
+        hint = (
+            "Global CLIs installed from a local checkout — consumer repos share this binary. "
+            "Pin fleet globals to release tags; dev monorepo should use uv run in MCP wrappers."
+        )
     return InstallDriftDiagnostic(
         drift_detected=drift_detected,
+        local_install_warning=local_install_warning,
         entries=entries,
         remediation_hint=hint,
     )

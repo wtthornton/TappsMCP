@@ -32,10 +32,13 @@ _HANDOFF_MARKDOWN_SHAPE = """\
 - ...
 
 ## Next (P0)
-- ...
+- ... (plain prose; put TAP-#### in **Linear P0** above)
 
 ## Blockers
-- ...
+- none
+
+## Changed files
+- ... (optional; top paths from git status when multi-file)
 
 ## Verify
 - ...
@@ -45,17 +48,38 @@ _HANDOFF_MARKDOWN_SHAPE = """\
 ```"""
 
 _HANDOFF_P0_GATE = """\
-**P0 gate.** Before writing the file: when **Open** has real items (not `none` / `- ...` placeholders), **Next (P0)** must name one concrete next action (prefer a Linear id). If P0 is missing, ask the user once — do not persist an incomplete handoff."""
+**P0 gate.** Before persisting: when **Open** has real items (not `none` / `- ...` placeholders), **Next (P0)** must name one concrete next action. Set **Linear P0:** to the TAP id when known. If P0 is missing, ask the user once — do not persist an incomplete handoff."""
 
-_HANDOFF_BRAIN_MIRROR = """\
-3. **Persist (brain mirror, best-effort).** The markdown file from step 2 is always canonical. `tapps_memory` is not an MCP tool (removed v3.12.0, TAP-1994) — use CLI only:
+_HANDOFF_PRE_GATE = """\
+0. **Session bootstrap (if needed).** If `tapps_session_start()` was not called this session, call it now (cached is fine) so flywheel scope and checker context are correct. Skip when already called."""
+
+_HANDOFF_PERSIST = """\
+2. **Persist (one atomic call when MCP is available).** Do **not** write the file separately before MCP — `tapps_handoff_save` writes `.tapps-mcp/session-handoff.md`, lints, mirrors to brain, and can close the session lifecycle.
+
+   Draft the full markdown in memory using the shape above:
+   - **Updated:** run `date -u +%Y-%m-%dT%H:%M:%SZ` — never a placeholder like `T00:00:00Z`
+   - **Git:** `git rev-parse --short HEAD` when inside a git repo
+   - **Linear P0:** TAP-#### when known (preferred retrieval key for brain session search)
+   - **Blockers:** `- none` alone when clear — put user actions under **Verify** or **Next (P0)**, not Blockers
+   - **Changed files:** optional bullets from `git status --short` when the session touched many files
 
    | Priority | When | How |
    |----------|------|-----|
-   | 1 (MCP) | TappsMCP tools available | `tapps_handoff_save(markdown=...)` with full handoff body; set `session_end=true` to close the flywheel |
-   | 2 (CLI atomic) | Shell auth available; no MCP write | `uv run tapps-mcp handoff write --file .tapps-mcp/session-handoff.md` (lint + full-body brain mirror + optional `--session-end`) |
-   | 3 (manual) | Brain HTTP reachable; atomic paths unavailable | `uv run tapps-mcp memory save --key session-handoff --tier context --tags handoff,cross-session --value "$(cat .tapps-mcp/session-handoff.md)"` — mirror the **full markdown body**, not a one-line agent summary |
-   | 4 (skip) | Brain offline or auth missing | Skip silently — `.tapps-mcp/session-handoff.md` is enough |"""
+   | 1 (MCP) | `nlt-memory` available | `tapps_handoff_save(markdown=..., session_end=true)` — single call; do **not** also call `tapps_session_end` |
+   | 2 (CLI atomic) | Shell auth; no MCP write | `uv run tapps-mcp handoff write --file .tapps-mcp/session-handoff.md --session-end` after writing the file locally |
+   | 3 (manual) | Brain HTTP only | `uv run tapps-mcp memory save --key session-handoff --tier context --tags handoff,cross-session --value "$(cat .tapps-mcp/session-handoff.md)"` — full markdown body |
+   | 4 (skip) | Brain offline | File-only via Bash heredoc: `mkdir -p .tapps-mcp && cat > .tapps-mcp/session-handoff.md <<'EOF'` … `EOF` |
+
+   Handoff **Updated** older than 7 days: pass `allow_lint_warnings=true` on `tapps_handoff_save` if lint warns on age."""
+
+# Always refreshed on init/upgrade even when overwrite=False (other skills preserve customizations).
+SESSION_TRANSFER_SKILL_NAMES: tuple[str, ...] = (
+    "tapps-handoff-session",
+    "tapps-continue-session",
+)
+
+# Legacy alias — older skill bodies referenced this name in comments only.
+_HANDOFF_BRAIN_MIRROR = _HANDOFF_PERSIST
 
 _CONTINUE_LOAD_AND_CONTEXT = """\
 2. **Load handoff (priority order).**
@@ -117,38 +141,31 @@ description: >-
   lifecycle so the next chat can continue without a long paste. Use when
   ending a session, handing off to a fresh chat, or the user says hand
   off, save session state, or continue next time.
-allowed-tools: mcp__nlt-memory__tapps_session_end Bash
+allowed-tools: mcp__nlt-memory__tapps_handoff_save mcp__nlt-build__tapps_session_start Bash
 argument-hint: "[optional Linear issue id e.g. TAP-1234]"
 disable-model-invocation: true
 ---
 
 End the session with a durable handoff the next chat can load via `/tapps-continue-session`.
 
+""" + _HANDOFF_PRE_GATE + """
+
 1. **Draft handoff (5–10 bullets).** From this session's work, write:
    - **Done** — what shipped or was verified
    - **Open** — in-progress or untested
-   - **Next (P0)** — one concrete next action (prefer a Linear id if known)
-   - **Blockers** — or `none`
+   - **Next (P0)** — one concrete next action (plain prose)
+   - **Blockers** — `- none` when clear
+   - **Changed files** — optional; top paths from `git status --short`
    - **Verify** — commands to run first in the next session
    - **Success criterion** — one line
 
 """ + _HANDOFF_P0_GATE + """
 
-2. **Persist (file is canonical).** Write or overwrite `.tapps-mcp/session-handoff.md` using this shape:
-   - Set **Updated** to the real current UTC time: run `date -u +%Y-%m-%dT%H:%M:%SZ` and paste the output — never use a placeholder like `T00:00:00Z`.
-   - Optionally add **Git:** `<short-sha>` when inside a git repo (`git rev-parse --short HEAD`).
-   - Claude Code (Bash-only): `mkdir -p .tapps-mcp && cat > .tapps-mcp/session-handoff.md <<'EOF'` … `EOF`.
-
 """ + _HANDOFF_MARKDOWN_SHAPE + """
 
-""" + _HANDOFF_BRAIN_MIRROR + """
+""" + _HANDOFF_PERSIST + """
 
-4. **Close lifecycle.** Best-effort session closure:
-   - **Preferred:** `mcp__nlt-memory__tapps_session_end()`
-   - **CLI fallback** (MCP unavailable): `uv run tapps-mcp session-end` (requires same shell auth as step 3 row 1)
-   Do not fail the handoff if either degrades.
-
-5. **Report.** One line: `Handoff written: .tapps-mcp/session-handoff.md. Linear P0: <id|none>. brain_mirror: ok|skipped. session_end: ok|skipped. Next session: invoke /tapps-continue-session`
+3. **Report.** One line: `Handoff written: .tapps-mcp/session-handoff.md. Linear P0: <id|none>. brain_mirror: ok|skipped. session_end: ok|skipped. Next session: invoke /tapps-continue-session`
 """,
     "tapps-continue-session": """\
 ---
@@ -1079,29 +1096,23 @@ description: >-
   ending a session, handing off to a fresh chat, or the user says hand
   off, save session state, or continue next time.
 mcp_tools:
-  - tapps_session_end
+  - tapps_handoff_save
+  - tapps_session_start
 ---
 
 End the session with a durable handoff the next chat loads via `tapps-continue-session`.
 
-1. **Draft handoff (5–10 bullets):** Done, Open, Next (P0), Blockers, Verify commands, Success criterion (one line).
+""" + _HANDOFF_PRE_GATE + """
+
+1. **Draft handoff (5–10 bullets):** Done, Open, Next (P0), Blockers (`- none` when clear), optional Changed files, Verify, Success criterion.
 
 """ + _HANDOFF_P0_GATE + """
 
-2. **Persist (file is canonical).** Write or overwrite `.tapps-mcp/session-handoff.md`:
-   - Set **Updated** to the real current UTC time: run `date -u +%Y-%m-%dT%H:%M:%SZ` and paste the output — never use a placeholder like `T00:00:00Z`.
-   - Optionally add **Git:** `<short-sha>` when inside a git repo (`git rev-parse --short HEAD`).
-
 """ + _HANDOFF_MARKDOWN_SHAPE + """
 
-""" + _HANDOFF_BRAIN_MIRROR + """
+""" + _HANDOFF_PERSIST + """
 
-4. **Close lifecycle.** Best-effort session closure:
-   - **Preferred:** `tapps_session_end()`
-   - **CLI fallback** (MCP unavailable): `uv run tapps-mcp session-end` (requires same shell auth as step 3 row 1)
-   Do not fail the handoff if either degrades.
-
-5. **Report.** `Handoff: .tapps-mcp/session-handoff.md. Linear P0: <id|none>. brain_mirror: ok|skipped. session_end: ok|skipped. Next: tapps-continue-session`
+3. **Report.** `Handoff: .tapps-mcp/session-handoff.md. Linear P0: <id|none>. brain_mirror: ok|skipped. session_end: ok|skipped. Next: tapps-continue-session`
 """,
     "tapps-continue-session": """\
 ---
@@ -1596,7 +1607,9 @@ def generate_skills(
     ``.claude/skills/`` or ``.cursor/skills/`` depending on the platform.
     Existing files are skipped to preserve user customizations unless
     *overwrite* is ``True`` (used by the upgrade path to refresh
-    corrected frontmatter).
+    corrected frontmatter) or the skill is in
+    :data:`SESSION_TRANSFER_SKILL_NAMES` (always refreshed so handoff
+    workflows stay aligned with doctor checks).
     When *engagement_level* is set, prepends a note (MANDATORY vs optional).
 
     Returns a summary dict with ``created``, ``updated``, and ``skipped`` lists.
@@ -1625,7 +1638,8 @@ def generate_skills(
         target = skill_dir / "SKILL.md"
         full_content = engagement_note + content
         if target.exists():
-            if overwrite:
+            refresh = overwrite or skill_name in SESSION_TRANSFER_SKILL_NAMES
+            if refresh:
                 target.write_text(full_content, encoding="utf-8")
                 updated.append(skill_name)
             else:

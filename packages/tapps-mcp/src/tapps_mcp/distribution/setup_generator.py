@@ -252,12 +252,18 @@ def _preserve_launch_on_upgrade(
     old_entry: dict[str, Any],
     *,
     binary_name: str,
+    project_root: Path | None = None,
 ) -> bool:
     """Return True when upgrade should keep the on-disk command/args.
 
     When a global ``uv tool install`` binary is available, prefer upgrading to
     that launcher instead of preserving a stale ``uv run`` entry.
+
+    Dev monorepo checkouts always regenerate wrappers (Epic 116) so Cursor uses
+    ``uv run`` instead of the fleet-shared global CLI.
     """
+    if project_root is not None and is_tapps_mcp_dev_monorepo(project_root):
+        return False
     if not upgrade_mode or "command" not in old_entry:
         return False
     return shutil.which(binary_name) is None
@@ -280,6 +286,11 @@ def _should_use_uv_launch(
     """
     if uv_mode == "off":
         return False, None, None
+    # Epic 116: dev monorepo always emits ``uv run`` — never the shared global CLI.
+    if is_tapps_mcp_dev_monorepo(project_root):
+        ctx = _detect_uv_context(project_root)
+        extra = (ctx or {}).get("tapps_mcp_extra") if ctx else None
+        return True, extra, ctx
     # Global ``uv tool install`` CLIs take precedence over workspace uv run.
     if uv_mode != "on" and _resolve_global_cli("tapps-mcp") is not None:
         return False, None, None
@@ -510,7 +521,7 @@ def _apply_cursor_launch_wrapper(
 ) -> None:
     """Point Cursor MCP entry at the env-sourcing wrapper script."""
     if server_id.startswith("nlt-"):
-        command, args = _build_nlt_launch(server_id, uv_launch)
+        command, args = _build_nlt_launch(server_id, uv_launch, project_root=project_root)
     else:
         command, args = _resolve_wrapper_launch(entry, project_root, uv_launch=uv_launch)
     wrapper = _write_cursor_mcp_wrapper(
@@ -636,6 +647,30 @@ def is_tapps_mcp_package_layout(project_root: Path) -> bool:
     parts = resolved.parts
     min_segments = 2
     return len(parts) >= min_segments and parts[-2] == "packages" and parts[-1] == "tapps-mcp"
+
+
+def is_tapps_mcp_dev_monorepo(project_root: Path) -> bool:
+    """Return True when *project_root* is the tapps-mcp workspace checkout (Epic 116 / TAP-4100).
+
+    Dev monorepo MCP wrappers must use ``uv run`` from the checkout — not the shared
+    global ``uv tool install`` binary that consumer repos (AgentForge, etc.) depend on.
+    """
+    root = project_root.resolve()
+    return (
+        (root / "packages" / "tapps-mcp" / "src" / "tapps_mcp").is_dir()
+        and (root / "packages" / "docs-mcp").is_dir()
+        and (root / "pyproject.toml").is_file()
+    )
+
+
+def _resolve_dev_monorepo_uv_launch(
+    serve_cmd: str,
+    serve_args: list[str],
+    project_root: Path,
+) -> tuple[str, list[str]]:
+    """Launch command for dev-monorepo MCP wrappers (always ``uv run`` from checkout)."""
+    directory = str(project_root.resolve())
+    return ("uv", ["run", "--directory", directory, serve_cmd, *serve_args])
 
 
 # ---------------------------------------------------------------------------
@@ -774,7 +809,12 @@ def _merge_config(
     new_entry = _build_server_entry(host, uv_launch=uv_launch, project_root=project_root)
     old_entry = merged[servers_key].get("tapps-mcp")
     if isinstance(old_entry, dict):
-        if _preserve_launch_on_upgrade(upgrade_mode, old_entry, binary_name="tapps-mcp"):
+        if _preserve_launch_on_upgrade(
+            upgrade_mode,
+            old_entry,
+            binary_name="tapps-mcp",
+            project_root=project_root,
+        ):
             new_entry["command"] = old_entry["command"]
             if "args" in old_entry:
                 new_entry["args"] = old_entry["args"]
@@ -806,7 +846,12 @@ def _merge_docsmcp_entry(
     new_docs = _build_docsmcp_server_entry(host, uv_launch=uv_launch, project_root=project_root)
     old_docs = merged[servers_key].get("docs-mcp")
     if isinstance(old_docs, dict):
-        if _preserve_launch_on_upgrade(upgrade_mode, old_docs, binary_name="docsmcp"):
+        if _preserve_launch_on_upgrade(
+            upgrade_mode,
+            old_docs,
+            binary_name="docsmcp",
+            project_root=project_root,
+        ):
             new_docs["command"] = old_docs["command"]
             if "args" in old_docs:
                 new_docs["args"] = old_docs["args"]
@@ -890,11 +935,18 @@ def _adapt_uv_launch_for_nlt(
 def _build_nlt_launch(
     server_id: str,
     uv_launch: tuple[str, list[str]] | None,
+    *,
+    project_root: Path | None = None,
 ) -> tuple[str, list[str]]:
     """Return ``command`` + ``args`` to launch an NLT MCP server."""
     spec = NLT_SERVER_SPECS[server_id]
     serve_cmd = str(spec["serve_command"])
     serve_args = [str(a) for a in spec["serve_args"]]
+
+    if project_root is not None and is_tapps_mcp_dev_monorepo(project_root):
+        if uv_launch is not None:
+            return _adapt_uv_launch_for_nlt(uv_launch, serve_cmd, serve_args)
+        return _resolve_dev_monorepo_uv_launch(serve_cmd, serve_args, project_root)
 
     if uv_launch is not None:
         return _adapt_uv_launch_for_nlt(uv_launch, serve_cmd, serve_args)
@@ -924,7 +976,7 @@ def _build_nlt_server_entry(
 ) -> dict[str, Any]:
     """Build one NLT plugin server entry for MCP host config."""
     spec = NLT_SERVER_SPECS[server_id]
-    launch = _build_nlt_launch(server_id, uv_launch)
+    launch = _build_nlt_launch(server_id, uv_launch, project_root=project_root)
 
     if spec["env_kind"] == "docs":
         entry = _build_docsmcp_server_entry(
@@ -941,7 +993,12 @@ def _build_nlt_server_entry(
 
     if isinstance(old_entry, dict):
         binary_name = str(spec["serve_command"])
-        if _preserve_launch_on_upgrade(upgrade_mode, old_entry, binary_name=binary_name):
+        if _preserve_launch_on_upgrade(
+            upgrade_mode,
+            old_entry,
+            binary_name=binary_name,
+            project_root=project_root,
+        ):
             entry["command"] = old_entry["command"]
             if "args" in old_entry:
                 entry["args"] = old_entry["args"]
@@ -973,7 +1030,7 @@ def _merge_nlt_config(
     existing: dict[str, Any],
     host: str,
     *,
-    mcp_bundle: str = "developer",
+    mcp_bundle: str = "full",
     upgrade_mode: bool = False,
     uv_launch: tuple[str, list[str]] | None = None,
     project_root: Path | None = None,
@@ -1249,7 +1306,7 @@ def _generate_config(
     with_docs_mcp: bool = False,
     uv_launch: tuple[str, list[str]] | None = None,
     extra_env: dict[str, str] | None = None,
-    mcp_bundle: str = "developer",
+    mcp_bundle: str = "full",
     use_nlt_plugin: bool = False,
 ) -> bool:
     """Generate (or merge) the MCP config for the given host.
@@ -1726,7 +1783,7 @@ def _configure_multiple_hosts(
     with_docs_mcp: bool = False,
     uv_launch: tuple[str, list[str]] | None = None,
     extra_env: dict[str, str] | None = None,
-    mcp_bundle: str = "developer",
+    mcp_bundle: str = "full",
     use_nlt_plugin: bool = False,
     engagement_level: str | None = None,
 ) -> bool:
@@ -2013,7 +2070,7 @@ def run_init(
     uv_extra: str | None = None,
     context7_api_key: str | None = None,
     overwrite_tech_stack: bool = False,
-    mcp_bundle: str = "developer",
+    mcp_bundle: str = "full",
     use_nlt_plugin: bool = True,
 ) -> bool:
     """Run the init command logic.
@@ -2095,6 +2152,13 @@ def run_init(
     if use_uv:
         chosen_extra = uv_extra or extra_auto
         uv_launch = _build_uv_run_tapps_launch(chosen_extra)
+        if is_tapps_mcp_dev_monorepo(root):
+            click.echo(
+                click.style(
+                    "Dev monorepo — emitting uv run launch (Epic 116; avoids mutating fleet global CLI)",
+                    fg="cyan",
+                )
+            )
         click.echo(
             click.style(
                 f"uv project detected — emitting '{' '.join([uv_launch[0], *uv_launch[1]])}'",

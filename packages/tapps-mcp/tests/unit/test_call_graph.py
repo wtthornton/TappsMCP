@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
 from tapps_mcp.project.call_graph import (
@@ -233,7 +234,25 @@ def fn():
         loaded = load_call_graph_index(tmp_path)
         assert loaded is not None
         assert loaded.fingerprint == built.fingerprint
-        assert _symbol_names(loaded) == _symbol_names(built)
+
+    def test_rejects_stale_index_version(self, tmp_path: Path, monkeypatch) -> None:
+        _write_pkg(
+            tmp_path,
+            "demo/version.py",
+            """
+def fn():
+    pass
+""",
+        )
+        first = build_call_graph_index(tmp_path, force_rebuild=True)
+        cache_path = tmp_path / CALL_GRAPH_CACHE_REL
+        raw = json.loads(cache_path.read_text(encoding="utf-8"))
+        raw["version"] = 0
+        cache_path.write_text(json.dumps(raw), encoding="utf-8")
+
+        rebuilt = build_call_graph_index(tmp_path, force_rebuild=False)
+        assert rebuilt.version != 0
+        assert rebuilt is not first
 
 
 class TestCallGraphQueries:

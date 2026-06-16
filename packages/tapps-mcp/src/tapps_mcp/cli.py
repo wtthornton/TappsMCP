@@ -164,8 +164,8 @@ def serve(
     "--bundle",
     "mcp_bundle",
     type=click.Choice(["developer", "minimal", "planning", "docs", "release", "full"]),
-    default="developer",
-    help="NLT MCP plugin bundle to enable (default: developer = build + memory + linear).",
+    default="full",
+    help="NLT MCP plugin bundle to enable (default: full = all six nlt-* servers; ADR-0018).",
 )
 @click.option(
     "--legacy-monolith/--no-legacy-monolith",
@@ -682,9 +682,9 @@ def tool_usage_fleet_cmd(
     "--bundle",
     "mcp_bundle",
     type=click.Choice(["developer", "minimal", "planning", "docs", "release", "full"]),
-    default="developer",
+    default="full",
     show_default=True,
-    help="NLT MCP bundle to write per project (developer = build+memory+linear; minimal = build-only).",
+    help="NLT MCP bundle to write per project (full = all six nlt-* servers; developer = build+memory+linear).",
 )
 @click.option(
     "--uv-mode",

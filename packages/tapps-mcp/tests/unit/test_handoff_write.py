@@ -218,7 +218,7 @@ class TestTappsHandoffSaveMcp:
 
 
 class TestSessionSearchQuery:
-    def test_prefers_handoff_p0_over_iso(self, tmp_path: Path) -> None:
+    def test_prefers_linear_p0_over_next_p0_and_iso(self, tmp_path: Path) -> None:
         from tapps_mcp.tools.session_end_helpers import build_session_search_query
 
         handoff_path(tmp_path).parent.mkdir(parents=True, exist_ok=True)
@@ -227,6 +227,16 @@ class TestSessionSearchQuery:
             "2026-06-12T10:00:00+00:00",
             tmp_path,
         )
+        assert query == "TAP-3790"
+        assert source == "handoff_linear_p0"
+
+    def test_prefers_next_p0_when_linear_absent(self, tmp_path: Path) -> None:
+        from tapps_mcp.tools.session_end_helpers import build_session_search_query
+
+        body = _VALID_HANDOFF.replace("**Linear P0:** TAP-3790\n", "**Linear P0:** none\n")
+        handoff_path(tmp_path).parent.mkdir(parents=True, exist_ok=True)
+        handoff_path(tmp_path).write_text(body, encoding="utf-8")
+        query, source = build_session_search_query("", tmp_path)
         assert query == "Implement handoff write CLI"
         assert source == "handoff_next_p0"
 
@@ -236,3 +246,30 @@ class TestSessionSearchQuery:
         query, source = build_session_search_query("", tmp_path)
         assert query == "recent"
         assert source == "fallback_recent"
+
+
+class TestResolveSessionStartIso:
+    def test_uses_in_process_iso_first(self, tmp_path: Path) -> None:
+        from tapps_mcp.tools.session_end_helpers import (
+            persist_session_start_iso,
+            resolve_session_start_iso,
+        )
+
+        persist_session_start_iso(tmp_path, "2026-06-12T08:00:00+00:00")
+        iso, source = resolve_session_start_iso(
+            "2026-06-12T10:00:00+00:00",
+            tmp_path,
+        )
+        assert iso == "2026-06-12T10:00:00+00:00"
+        assert source == "session_state"
+
+    def test_falls_back_to_persisted_file(self, tmp_path: Path) -> None:
+        from tapps_mcp.tools.session_end_helpers import (
+            persist_session_start_iso,
+            resolve_session_start_iso,
+        )
+
+        persist_session_start_iso(tmp_path, "2026-06-12T08:00:00+00:00")
+        iso, source = resolve_session_start_iso("", tmp_path)
+        assert iso == "2026-06-12T08:00:00+00:00"
+        assert source == "persisted_file"

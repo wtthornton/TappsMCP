@@ -27,8 +27,8 @@ The **`linear-standards.md` rule** also gains a new `### Reads (TAP-1224)` enfor
 After upgrading to a release that includes [ADR-0016](adr/0016-needs-based-nlt-mcp-taxonomy.md):
 
 1. Run `tapps-mcp upgrade --host auto --force` to refresh `.cursor/mcp.json` / `.mcp.json`.
-2. Default **developer** bundle is **`nlt-build` + `nlt-memory` + `nlt-linear-issues`** (~18 eager tools). Use `--bundle minimal` on init/upgrade-fleet for build-only (~9 eager). Enable `nlt-setup` briefly for bootstrap/doctor.
-3. Re-run `tapps-mcp init --host auto --force` or `tapps-mcp upgrade-fleet --bundle developer` so `.cursor/mcp.json` / `.mcp.json` picks up all three active servers (TAP-3925).
+2. Default **`full`** bundle enables all six `nlt-*` servers ([ADR-0018](adr/0018-deploy-all-six-nlt-mcp-servers-by-default.md)). Opt down with `--bundle developer` (`nlt-build` + `nlt-memory` + `nlt-linear-issues`, ~18 eager) or `--bundle minimal` (build-only, ~9 eager) for token-tight sessions.
+3. Re-run `tapps-mcp init --host auto --force` (or `tapps-mcp upgrade-fleet`) so `.cursor/mcp.json` / `.mcp.json` picks up all six active servers.
 4. Update skill `allowed-tools` prefixes: `mcp__nlt-build__*`, `mcp__nlt-memory__*`, `mcp__nlt-setup__*`. Legacy `nlt-code-quality` / `nlt-platform-admin` profile aliases work for one release.
 5. Session handoff / `tapps_session_notes` moved to **Memory** server — enable `nlt-memory` or use `tapps-mcp memory` CLI.
 

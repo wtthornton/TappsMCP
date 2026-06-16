@@ -18,7 +18,7 @@ The monorepo ships **TappsMCP** (32 quality tools), **DocsMCP** (documentation g
 
 - **Monorepo** with three packages: `tapps-core`, `tapps-mcp`, `docs-mcp`
 - **NLT MCP taxonomy:** `nlt-build` (score/gate/validate), `nlt-memory` (recall/save/handoff), `nlt-setup` (init/upgrade/doctor); situational: `nlt-linear-issues`, `nlt-project-docs`, `nlt-release-ship`
-- **Default session bundle:** `developer` = Build + Memory + Linear (~18 eager tools)
+- **Default session bundle:** `full` = all six `nlt-*` servers (ADR-0018); opt down with `--bundle developer` (Build + Memory + Linear, ~18 eager)
 - **Docker** images for external distribution and CI
 
 See [docs/adr/README.md](adr/README.md) for the full ADR index.

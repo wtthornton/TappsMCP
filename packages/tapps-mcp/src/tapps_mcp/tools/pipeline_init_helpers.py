@@ -107,7 +107,7 @@ def maybe_write_mcp_config(
     mcp_config: bool,
     dry_run: bool,
     *,
-    mcp_bundle: str = "developer",
+    mcp_bundle: str = "full",
 ) -> None:
     """Write project-scoped MCP config (Epic 47.2; default on for ``tapps_init``).
 

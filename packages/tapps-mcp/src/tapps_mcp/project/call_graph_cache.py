@@ -2,10 +2,13 @@
 
 from __future__ import annotations
 
+import contextlib
 import hashlib
 import json
+import os
+import tempfile
 from dataclasses import asdict
-from typing import TYPE_CHECKING
+from pathlib import Path
 
 import structlog
 
@@ -19,10 +22,24 @@ from tapps_mcp.project.call_graph_types import (
 )
 from tapps_mcp.project.import_graph import _DEFAULT_EXCLUDES, _should_skip
 
-if TYPE_CHECKING:
-    from pathlib import Path
-
 logger = structlog.get_logger(__name__)
+
+
+def _write_atomic(target: Path, content: str) -> None:
+    """Write *content* to *target* atomically via tempfile + replace (TAP-4075)."""
+    fd, tmp_path = tempfile.mkstemp(
+        dir=str(target.parent),
+        prefix=".tmp_",
+        suffix=target.suffix,
+    )
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as handle:
+            handle.write(content)
+        Path(tmp_path).replace(target)
+    except BaseException:
+        with contextlib.suppress(OSError):
+            Path(tmp_path).unlink()
+        raise
 
 
 def index_fingerprint(
@@ -63,7 +80,8 @@ def save_call_graph_index(project_root: Path, index: CallGraphIndex) -> None:
     path = project_root / CALL_GRAPH_CACHE_REL
     try:
         path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text(json.dumps(index_to_dict(index), indent=2, sort_keys=True), encoding="utf-8")
+        payload = json.dumps(index_to_dict(index), indent=2, sort_keys=True)
+        _write_atomic(path, payload)
     except OSError as exc:
         logger.warning("call_graph_cache_write_failed", path=str(path), error=str(exc))
 
@@ -93,13 +111,39 @@ def index_from_dict(raw: dict[str, object]) -> CallGraphIndex:
     )
 
 
-def summarize_call_graph_cache(project_root: Path) -> dict[str, object] | None:
-    """Lightweight call-graph cache status for session_start and doctor."""
+def summarize_call_graph_cache(project_root: Path) -> dict[str, object]:
+    """Lightweight call-graph cache status for session_start and doctor (TAP-4074)."""
+    cache_path = project_root / CALL_GRAPH_CACHE_REL
+    if not cache_path.is_file():
+        return {
+            "status": "missing",
+            "ready": False,
+            "stale": False,
+            "hint": "Call tapps_call_graph(symbol='...', query='callers') to build the index.",
+        }
+
     cached = load_call_graph_index(project_root)
     if cached is None:
-        return None
+        return {
+            "status": "unreadable",
+            "ready": False,
+            "stale": True,
+            "hint": "Cache unreadable — rebuild via tapps_call_graph(force_rebuild=true).",
+        }
 
-    cache_path = project_root / CALL_GRAPH_CACHE_REL
+    if cached.version != INDEX_VERSION:
+        return {
+            "status": "stale",
+            "ready": False,
+            "stale": True,
+            "reason": "index_version_mismatch",
+            "cached_version": cached.version,
+            "current_version": INDEX_VERSION,
+            "symbols": len(cached.symbols),
+            "edges": len(cached.edges),
+            "hint": "Index schema changed — rebuild via tapps_call_graph(force_rebuild=true).",
+        }
+
     current_fp = index_fingerprint(project_root, None, "")
     stale = cached.fingerprint != current_fp
     edge_count = len(cached.edges)
@@ -113,7 +157,9 @@ def summarize_call_graph_cache(project_root: Path) -> dict[str, object] | None:
     except OSError:
         pass
 
-    return {
+    status = "stale" if stale else "ready"
+    result: dict[str, object] = {
+        "status": status,
         "ready": not stale,
         "stale": stale,
         "symbols": len(cached.symbols),
@@ -122,3 +168,6 @@ def summarize_call_graph_cache(project_root: Path) -> dict[str, object] | None:
         "gap_rate": round(gap_count / max(edge_count, 1), 3),
         "age_hours": age_hours,
     }
+    if stale:
+        result["hint"] = "Call graph index is stale — tapps_call_graph(force_rebuild=true)."
+    return result
