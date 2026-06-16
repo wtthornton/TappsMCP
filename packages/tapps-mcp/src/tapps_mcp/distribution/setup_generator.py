@@ -73,28 +73,29 @@ def operator_env_path() -> Path:
 def _resolve_global_cli(command: str) -> str | None:
     """Resolve the MCP server binary for Cursor wrapper scripts.
 
-    Prefers an immutable blue/green release (``~/.tapps-mcp/current/bin/*``)
-    when present so ``deploy-local`` can flip without killing live stdio servers.
-    Falls back to ``uv tool install`` shims (``~/.local/bin``).
+    Returns a **stable launcher path** only — never a path inside the mutable
+    ``~/.local/share/uv/tools/*`` venv tree. In-place ``uv tool install
+    --reinstall`` replaces that tree under live MCP stdio servers and kills them
+    (ADR-0023). Wrappers always try ``~/.tapps-mcp/current/bin/*`` at runtime
+    first; this function supplies the fallback exec target.
 
-    ``uv run tapps-mcp init`` prepends the project ``.venv/bin`` to PATH, so a
-    plain :func:`shutil.which` returns the workspace copy instead of the global
-    CLI consumers actually run from Cursor wrappers (``~/.local/bin``).
+    Prefer ``~/.local/bin/<command>`` shims. Dev-monorepo ``current`` is handled
+    in :func:`_resolve_dev_monorepo_launch`.
     """
-    from tapps_mcp.distribution.blue_green import CURRENT_LINK
-
-    current_bin = CURRENT_LINK / "bin" / command
-    if current_bin.is_file():
-        return str(current_bin.resolve())
-
-    which_result = shutil.which(command)
     shim = Path.home() / ".local" / "bin" / command
-    if which_result is not None:
-        which_path = Path(which_result)
-        if ".venv" in which_path.parts and shim.is_file():
-            return str(shim.resolve())
-        return which_result
-    return None
+    if shim.is_file():
+        return str(shim)
+    which_result = shutil.which(command)
+    if which_result is None:
+        return None
+    which_path = Path(which_result)
+    if ".venv" in which_path.parts:
+        return None
+    # Never bake the uv tool venv path into generated wrappers — it is mutated
+    # in place on reinstall while MCP children keep the old inode open.
+    if ".local/share/uv/tools" in which_path.as_posix():
+        return None
+    return which_result
 
 
 def _resolve_tapps_mcp_monorepo_root() -> str | None:
@@ -438,14 +439,12 @@ fi
 
 def _render_cursor_mcp_wrapper_script(command: str, args: list[str]) -> str:
     """Shell script that sources operator + project env then execs tapps-mcp (TAP-3255)."""
-    from tapps_mcp.distribution.blue_green import blue_green_enabled
-
     tool = Path(command).name
     args_quoted = " ".join(shlex.quote(a) for a in args)
     launch = " ".join([shlex.quote(command), *[shlex.quote(a) for a in args]])
-    blue_green_block = ""
-    if blue_green_enabled():
-        blue_green_block = f"""_blue_green="${{HOME}}/.tapps-mcp/current/bin/{tool}"
+    # Always prefer ``~/.tapps-mcp/current/bin`` at runtime when present so deploy-local
+    # flips take effect on the next MCP reload without rewriting wrapper scripts.
+    blue_green_block = f"""_blue_green="${{HOME}}/.tapps-mcp/current/bin/{tool}"
 if [[ -x "$_blue_green" ]]; then
   echo "[TappsMCP] Using blue/green release: $_blue_green" >&2
   exec "$_blue_green" {args_quoted} "$@"
@@ -511,6 +510,27 @@ def _write_cursor_mcp_wrapper(
     )
     wrapper_path.chmod(wrapper_path.stat().st_mode | 0o111)
     return wrapper_path.resolve()
+
+
+def regenerate_cursor_nlt_wrappers(project_root: Path) -> list[str]:
+    """Rewrite all NLT Cursor wrapper scripts for *project_root*.
+
+    Used after ``deploy-local`` flips ``~/.tapps-mcp/current`` so new MCP launches
+    pick up the symlink target without a full ``tapps-mcp init``.
+    """
+    from tapps_mcp.distribution.nlt_mcp_config import NLT_SERVER_ORDER
+
+    root = project_root.resolve()
+    written: list[str] = []
+    for server_id in NLT_SERVER_ORDER:
+        command, args = _build_nlt_launch(server_id, None, project_root=root)
+        wrapper = _write_cursor_mcp_wrapper(
+            root,
+            uv_launch=(command, args),
+            wrapper_rel=_cursor_wrapper_rel(server_id),
+        )
+        written.append(str(wrapper.relative_to(root)))
+    return written
 
 
 def _resolve_wrapper_launch(
@@ -710,11 +730,11 @@ def _resolve_dev_monorepo_launch(
     """
     if getattr(sys, "frozen", False):
         return (sys.executable, serve_args)
-    from tapps_mcp.distribution.blue_green import resolve_blue_green_binary
+    from tapps_mcp.distribution.blue_green import CURRENT_LINK
 
-    blue_green = resolve_blue_green_binary(serve_cmd)
-    if blue_green is not None:
-        return (blue_green, serve_args)
+    current_bin = CURRENT_LINK / "bin" / serve_cmd
+    if current_bin.is_file():
+        return (str(current_bin), serve_args)
     resolved = _resolve_global_cli(serve_cmd)
     if resolved is not None:
         return (resolved, serve_args)

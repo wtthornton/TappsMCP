@@ -293,6 +293,17 @@ def _deploy_under_lock(
     report["gc"] = gc_releases(keep=keep_releases, protect=release.path)
     report["ok"] = True
     report["current"] = str(CURRENT_LINK)
+    try:
+        from tapps_mcp.distribution.setup_generator import (
+            is_tapps_mcp_dev_monorepo,
+            regenerate_cursor_nlt_wrappers,
+        )
+
+        if is_tapps_mcp_dev_monorepo(checkout):
+            wrappers = regenerate_cursor_nlt_wrappers(checkout)
+            report["cursor_wrappers"] = {"ok": True, "written": wrappers}
+    except Exception as exc:
+        report["cursor_wrappers"] = {"ok": False, "error": str(exc)}
     return report
 
 

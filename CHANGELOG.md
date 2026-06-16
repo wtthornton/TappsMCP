@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [3.12.42] - 2026-06-16
+
+Patch: immutable MCP CLI releases — stop in-place uv reinstall from killing live servers (ADR-0023).
+
+### Fixed
+
+- **MCP fleet death root cause (ADR-0023)** — `uv tool install --reinstall` mutates `~/.local/share/uv/tools/*` under live stdio MCP children; wrappers that embedded that path could not recover after Cursor restart. Fleet `--reinstall-clis` now defaults to blue/green `deploy-local`; in-place requires `--force-inplace-cli-reinstall`. Wrappers always probe `~/.tapps-mcp/current/bin/*` at runtime and never bake mutable uv-tool venv paths. Fleet upgrade regenerates consumer `.cursor/bin/nlt-*-serve.sh` after deploy.
+
 ## [3.12.41] - 2026-06-16
 
 Patch: fleet CLI reinstall no longer kills live Cursor MCP servers.

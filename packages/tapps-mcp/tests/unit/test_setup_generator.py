@@ -39,6 +39,18 @@ from tapps_mcp.distribution.setup_generator import (
 )
 
 
+@pytest.fixture(autouse=True)
+def _isolate_operator_home(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    """Keep tests off the developer machine's real ~/.local/bin MCP shims."""
+    fake_home = tmp_path / "isolated-home"
+    fake_home.mkdir()
+    monkeypatch.setattr("tapps_mcp.distribution.setup_generator.Path.home", lambda: fake_home)
+    monkeypatch.setattr(
+        "tapps_mcp.distribution.blue_green.CURRENT_LINK",
+        fake_home / ".tapps-mcp" / "current",
+    )
+
+
 def _cursor_wrapper_path(project: Path) -> str:
     return str((project / ".cursor" / "bin" / "tapps-mcp-serve.sh").resolve())
 
@@ -247,6 +259,8 @@ class TestCursorMcpWrapper:
         )
         assert "serve --profile nlt-build" in script
         assert "Reaping stale serve PIDs" not in script
+        assert "_blue_green=" in script
+        assert 'exec "$_blue_green"' in script
 
     def test_cursor_wrapper_without_nlt_profile_skips_reap(self) -> None:
         script = _render_cursor_mcp_wrapper_script(
@@ -1528,41 +1542,68 @@ class TestEpic80ConsumerInit:
         assert is_tapps_mcp_dev_monorepo(root) is True
         assert is_tapps_mcp_dev_monorepo(tmp_path / "consumer-app") is False
 
+    def test_resolve_global_cli_prefers_shim_over_uv_tool_venv(self, tmp_path, monkeypatch) -> None:
+        shim = tmp_path / ".local" / "bin" / "tapps-mcp"
+        shim.parent.mkdir(parents=True)
+        shim.write_text("#!/bin/sh\n", encoding="utf-8")
+        monkeypatch.setattr(
+            "tapps_mcp.distribution.setup_generator.Path.home",
+            lambda: tmp_path,
+        )
+        monkeypatch.setattr(
+            "tapps_mcp.distribution.setup_generator.shutil.which",
+            lambda name: str(tmp_path / ".local/share/uv/tools/tapps-mcp/bin" / name),
+        )
+        from tapps_mcp.distribution.setup_generator import _resolve_global_cli
+
+        assert _resolve_global_cli("tapps-mcp") == str(shim)
+
+    def test_resolve_global_cli_rejects_uv_tool_venv_without_shim(self, tmp_path, monkeypatch) -> None:
+        monkeypatch.setattr(
+            "tapps_mcp.distribution.setup_generator.Path.home",
+            lambda: tmp_path,
+        )
+        monkeypatch.setattr(
+            "tapps_mcp.distribution.setup_generator.shutil.which",
+            lambda name: str(tmp_path / ".local/share/uv/tools/tapps-mcp/bin" / name),
+        )
+        from tapps_mcp.distribution.setup_generator import _resolve_global_cli
+
+        assert _resolve_global_cli("tapps-mcp") is None
+
     def test_dev_monorepo_nlt_launch_prefers_blue_green_binary(self, tmp_path, monkeypatch) -> None:
         """When blue/green current exists, dev wrappers exec that release binary."""
         root = tmp_path / "tapps-mcp"
         (root / "packages" / "tapps-mcp" / "src" / "tapps_mcp").mkdir(parents=True)
         (root / "packages" / "docs-mcp").mkdir(parents=True)
         (root / "pyproject.toml").write_text("[project]\nname='tapps-mcp'\n", encoding="utf-8")
-        monkeypatch.setattr(
-            "tapps_mcp.distribution.blue_green.blue_green_enabled",
-            lambda: True,
-        )
-        monkeypatch.setattr(
-            "tapps_mcp.distribution.blue_green.resolve_blue_green_binary",
-            lambda name: f"/home/user/.tapps-mcp/current/bin/{name}",
-        )
+        bg_home = tmp_path / "bg-home"
+        release = bg_home / "releases" / "3.12.35-deadbeef" / "bin"
+        release.mkdir(parents=True)
+        (release / "tapps-mcp").write_text("#!/bin/sh\n", encoding="utf-8")
+        current = bg_home / "current"
+        current.symlink_to(release.parent, target_is_directory=True)
+        monkeypatch.setattr("tapps_mcp.distribution.blue_green.CURRENT_LINK", current)
         command, args = _build_nlt_launch("nlt-build", None, project_root=root)
-        assert command == "/home/user/.tapps-mcp/current/bin/tapps-mcp"
+        assert command == str(current / "bin" / "tapps-mcp")
         assert args[:2] == ["serve", "--profile"]
         assert "nlt-build" in args
 
     def test_dev_monorepo_nlt_launch_prefers_global_binary(self, tmp_path, monkeypatch) -> None:
-        """Without blue/green, the dev wrapper execs the deployed global binary."""
+        """Without blue/green current, the dev wrapper execs the deployed global binary."""
         root = tmp_path / "tapps-mcp"
         (root / "packages" / "tapps-mcp" / "src" / "tapps_mcp").mkdir(parents=True)
         (root / "packages" / "docs-mcp").mkdir(parents=True)
         (root / "pyproject.toml").write_text("[project]\nname='tapps-mcp'\n", encoding="utf-8")
+        shim = Path.home() / ".local" / "bin" / "tapps-mcp"
+        shim.parent.mkdir(parents=True, exist_ok=True)
+        shim.write_text("#!/bin/sh\n", encoding="utf-8")
         monkeypatch.setattr(
-            "tapps_mcp.distribution.blue_green.resolve_blue_green_binary",
-            lambda _name: None,
-        )
-        monkeypatch.setattr(
-            "tapps_mcp.distribution.setup_generator.shutil.which",
-            lambda name: "/home/user/.local/bin/tapps-mcp" if name == "tapps-mcp" else None,
+            "tapps_mcp.distribution.blue_green.CURRENT_LINK",
+            tmp_path / "missing-current",
         )
         command, args = _build_nlt_launch("nlt-build", None, project_root=root)
-        assert command == "/home/user/.local/bin/tapps-mcp"
+        assert command == str(shim)
         assert args[:2] == ["serve", "--profile"]
         assert "nlt-build" in args
         assert "uv" not in command
@@ -1574,8 +1615,8 @@ class TestEpic80ConsumerInit:
         (root / "packages" / "docs-mcp").mkdir(parents=True)
         (root / "pyproject.toml").write_text("[project]\nname='tapps-mcp'\n", encoding="utf-8")
         monkeypatch.setattr(
-            "tapps_mcp.distribution.blue_green.resolve_blue_green_binary",
-            lambda _name: None,
+            "tapps_mcp.distribution.blue_green.CURRENT_LINK",
+            tmp_path / "missing-current",
         )
         monkeypatch.setattr(
             "tapps_mcp.distribution.setup_generator.shutil.which",

@@ -192,7 +192,7 @@ def run_fleet_upgrade(
     uv_mode: UvMode = "auto",
     run_doctor: bool = True,
     reinstall_clis: bool = False,
-    blue_green_deploy: bool = False,
+    blue_green_deploy: bool = True,
     force_inplace_cli_reinstall: bool = False,
     tapps_checkout: Path | None = None,
     import_legacy_doc_cache: bool = False,
@@ -209,6 +209,20 @@ def run_fleet_upgrade(
             use_blue_green=blue_green_deploy,
             force_inplace=force_inplace_cli_reinstall,
         )
+        if cli_reinstall.get("ok") and cli_reinstall.get("strategy", "").startswith("blue_green"):
+            from tapps_mcp.distribution.setup_generator import regenerate_cursor_nlt_wrappers
+
+            wrapper_refresh: list[dict[str, Any]] = []
+            for root in resolved:
+                cursor_mcp = root / ".cursor" / "mcp.json"
+                if not cursor_mcp.is_file():
+                    continue
+                try:
+                    written = regenerate_cursor_nlt_wrappers(root)
+                    wrapper_refresh.append({"root": str(root), "ok": True, "written": written})
+                except Exception as exc:
+                    wrapper_refresh.append({"root": str(root), "ok": False, "error": str(exc)})
+            cli_reinstall["wrapper_refresh"] = wrapper_refresh
 
     project_results: list[FleetUpgradeProjectResult] = []
     for root in resolved:
@@ -256,27 +270,30 @@ def run_fleet_upgrade(
 def _reinstall_global_clis(
     checkout: Path,
     *,
-    use_blue_green: bool = False,
+    use_blue_green: bool = True,
     force_inplace: bool = False,
 ) -> dict[str, Any]:
     """Reinstall global tapps-mcp + docs-mcp from *checkout*.
 
-    In-place ``uv tool install --reinstall`` mutates ``~/.local/share/uv/tools/*``
-    under live MCP stdio servers and kills them. When live servers are detected,
-    auto-promote to blue/green ``deploy-local`` unless *force_inplace* is set.
+    Default is immutable blue/green ``deploy-local`` (ADR-0023). In-place
+    ``uv tool install --reinstall`` mutates ``~/.local/share/uv/tools/*`` under
+    live MCP stdio servers and corrupts them — only allowed with
+    *force_inplace* when the operator accepts killing every MCP window.
     """
     from tapps_mcp.distribution.mcp_zombie_reap import find_live_mcp_serve_pids
 
     live_pids = find_live_mcp_serve_pids()
-    strategy = "blue_green" if use_blue_green else "inplace"
     auto_promoted = False
-    if live_pids and not use_blue_green:
-        if force_inplace:
-            strategy = "inplace_forced"
-        else:
-            use_blue_green = True
-            strategy = "blue_green_auto"
-            auto_promoted = True
+    if force_inplace:
+        strategy = "inplace_forced"
+    elif use_blue_green:
+        strategy = "blue_green_auto" if live_pids else "blue_green"
+    elif live_pids:
+        use_blue_green = True
+        strategy = "blue_green_auto"
+        auto_promoted = True
+    else:
+        strategy = "inplace"
 
     meta: dict[str, Any] = {
         "live_mcp_pids": live_pids,
@@ -284,7 +301,7 @@ def _reinstall_global_clis(
         "auto_promoted": auto_promoted,
     }
 
-    if use_blue_green:
+    if use_blue_green and not force_inplace:
         from tapps_mcp.distribution.blue_green import deploy_blue_green
 
         deploy = deploy_blue_green(checkout)
@@ -303,6 +320,7 @@ def _reinstall_global_clis(
             shared["error"] = json.dumps(err, default=str)[-500:]
         return {
             **meta,
+            "ok": ok,
             "blue_green": deploy,
             "tapps-mcp": {**shared, "binary": "tapps-mcp"},
             "docs-mcp": {**shared, "binary": "docsmcp"},

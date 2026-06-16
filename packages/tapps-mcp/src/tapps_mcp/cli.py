@@ -779,10 +779,11 @@ def deploy_local_cmd(
     help="Reinstall global tapps-mcp + docs-mcp from --tapps-checkout (uv tool install).",
 )
 @click.option(
-    "--blue-green-deploy",
-    is_flag=True,
-    default=False,
-    help="With --reinstall-clis, use tapps-mcp deploy-local instead of uv tool install.",
+    "--blue-green-deploy/--inplace-cli-reinstall",
+    default=True,
+    show_default=True,
+    help="With --reinstall-clis, use immutable deploy-local (default, ADR-0023). "
+    "In-place uv tool install mutates the venv under live MCP servers.",
 )
 @click.option(
     "--force-inplace-cli-reinstall",

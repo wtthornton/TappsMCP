@@ -140,6 +140,28 @@ class TestFleetUpgradeHelpers:
         assert "AgentForge" in md
         assert "developer" in md
 
+    def test_reinstall_defaults_to_blue_green_without_live_mcp(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        monkeypatch.setattr(
+            "tapps_mcp.distribution.mcp_zombie_reap.find_live_mcp_serve_pids",
+            lambda: [],
+        )
+        deploy_called: list[bool] = []
+
+        def _fake_deploy(checkout: Path) -> dict[str, object]:
+            deploy_called.append(True)
+            return {"ok": True, "release": "3.12.42-deadbeef", "current": str(checkout)}
+
+        monkeypatch.setattr(
+            "tapps_mcp.distribution.blue_green.deploy_blue_green",
+            _fake_deploy,
+        )
+        result = _reinstall_global_clis(tmp_path)
+        assert deploy_called == [True]
+        assert result["strategy"] == "blue_green"
+        assert result["ok"] is True
+
     def test_reinstall_auto_promotes_when_live_mcp(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setattr(
             "tapps_mcp.distribution.mcp_zombie_reap.find_live_mcp_serve_pids",
