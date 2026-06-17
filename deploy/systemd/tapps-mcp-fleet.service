@@ -1,0 +1,15 @@
+[Unit]
+Description=TappsMCP shared HTTP MCP fleet (six NLT servers, ADR-0024)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+# Prefer blue/green release; fall back to PATH tapps-mcp.
+ExecStart=%h/.tapps-mcp/current/bin/tapps-mcp fleet start
+ExecStop=%h/.tapps-mcp/current/bin/tapps-mcp fleet stop
+Environment=PYTHONUNBUFFERED=1
+
+[Install]
+WantedBy=default.target

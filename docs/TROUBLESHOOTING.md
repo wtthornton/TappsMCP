@@ -221,7 +221,23 @@ done | xargs -r kill 2>/dev/null || true
 
 **Prevention:** Run `tapps-mcp upgrade --host cursor` so hooks use orphan-only reap (not duplicate/stale per profile). Avoid `pkill -f 'serve --profile nlt-'` during normal use — that kills every window's fleet.
 
-**Host-level shared fleet (roadmap):** Run six long-lived `tapps-mcp serve --transport http` processes once (systemd/user service) and point all Cursor windows at SSE URLs — one process set serves every window. Not yet the default stdio layout; track as fleet hardening follow-up.
+**Host-level shared fleet (recommended for multi-window full bundle):** Run six long-lived HTTP processes once and point every window at Streamable HTTP URLs — **six processes total**, no per-window stdio rotation storms. See [ADR-0024](adr/0024-shared-http-mcp-fleet.md).
+
+```bash
+# Once per machine
+tapps-mcp fleet start
+# optional persistence:
+tapps-mcp fleet install-systemd
+systemctl --user enable --now tapps-mcp-fleet
+
+# Per consumer repo (or set mcp_transport: http in .tapps-mcp.yaml)
+tapps-mcp init --host cursor --mcp-transport http --force --bundle full
+# Then Reload Window once
+```
+
+Ports: `8760` (nlt-build) … `8765` (nlt-release-ship). Config: `~/.tapps-mcp/fleet.env` (`TAPPS_FLEET_CODE_ROOT`, default `~/code`).
+
+**Legacy note:** stdio wrappers remain the default when `mcp_transport` is unset.
 
 **After editing `packages/tapps-mcp` or `packages/docs-mcp` (dev monorepo):**
 

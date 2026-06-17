@@ -44,3 +44,4 @@ validate_changed:
     - src/**
     - brands/**
     - templates/**
+mcp_transport: http

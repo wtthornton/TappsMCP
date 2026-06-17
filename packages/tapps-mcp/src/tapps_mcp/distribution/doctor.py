@@ -307,6 +307,11 @@ def _validate_json_config(config_path: Path, servers_key: str) -> str | None:
         if not isinstance(entry, dict):
             return f"tapps-mcp / nlt-build not in {config_path}"
 
+    from tapps_mcp.distribution.nlt_http_fleet import is_valid_http_fleet_mcp_entry
+
+    if isinstance(entry, dict) and is_valid_http_fleet_mcp_entry(entry):
+        return None
+
     command = entry.get("command", "")
     args = entry.get("args", [])
     if _is_valid_tapps_command(command, args if isinstance(args, list) else None):

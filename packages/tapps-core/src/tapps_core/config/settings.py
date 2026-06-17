@@ -1001,6 +1001,19 @@ class TappsMCPSettings(BaseSettings):
             "token-tight subset."
         ),
     )
+    mcp_transport: Literal["stdio", "http"] = Field(
+        default="stdio",
+        description=(
+            "MCP transport for host config generation (ADR-0024). "
+            "'stdio' spawns per-window wrapper scripts (default). "
+            "'http' points all nlt-* entries at the shared localhost fleet "
+            "(run `tapps-mcp fleet start` first)."
+        ),
+    )
+    mcp_fleet_host: str = Field(
+        default="127.0.0.1",
+        description="Host for shared HTTP MCP fleet URLs when mcp_transport is http.",
+    )
 
     # Upgrade opt-outs for publisher/non-greenfield consumers
     upgrade_create_agents_md: bool = Field(
@@ -1464,6 +1477,10 @@ def load_settings(project_root: Path | None = None) -> TappsMCPSettings:
     created on the first call.  Pass an explicit *project_root* to bypass the
     cache entirely.
 
+    HTTP fleet requests may bind ``X-Tapps-Project-Root`` via
+    :mod:`tapps_core.http.request_context`; that overrides the env/CWD root
+    without polluting the stdio singleton cache.
+
     Args:
         project_root: Override for project root.  When ``None``, uses CWD.
 
@@ -1472,10 +1489,16 @@ def load_settings(project_root: Path | None = None) -> TappsMCPSettings:
     """
     global _cached_settings
 
+    from tapps_core.http.request_context import get_request_project_root
+
+    request_root = get_request_project_root()
+    if project_root is None and request_root is not None:
+        project_root = request_root
+
     if project_root is None and _cached_settings is not None:
         return _cached_settings
 
-    # Determine root: explicit arg > env var > CWD
+    # Determine root: explicit arg > request header > env var > CWD
     if project_root:
         root = Path(project_root)
     else:
@@ -1494,7 +1517,7 @@ def load_settings(project_root: Path | None = None) -> TappsMCPSettings:
 
     result = TappsMCPSettings(**yaml_data)
 
-    if project_root is None:
+    if project_root is None and request_root is None:
         _cached_settings = result
 
     return result

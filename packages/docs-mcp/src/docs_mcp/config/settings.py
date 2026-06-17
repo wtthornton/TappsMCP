@@ -432,12 +432,16 @@ def load_docs_settings(project_root: Path | None = None) -> DocsMCPSettings:
     """
     global _cached_settings
 
+    from tapps_core.http.request_context import get_request_project_root
+
+    request_root = get_request_project_root()
+    if project_root is None and request_root is not None:
+        project_root = request_root
+
     if project_root is None and _cached_settings is not None:
         return _cached_settings
 
-    # Determine root: explicit arg > env var > CWD walked up to workspace root.
-    # The walk-up only applies to the CWD-default path so explicit overrides
-    # are still trusted verbatim.
+    # Determine root: explicit arg > request header > env var > CWD walk-up.
     if project_root:
         root = _expand_path(str(project_root))
     else:
@@ -475,7 +479,7 @@ def load_docs_settings(project_root: Path | None = None) -> DocsMCPSettings:
             hint="Directory does not exist yet - it may be created later.",
         )
 
-    if project_root is None:
+    if project_root is None and request_root is None:
         _cached_settings = result
 
     return result

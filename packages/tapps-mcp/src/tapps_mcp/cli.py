@@ -19,6 +19,86 @@ def main() -> None:
     cleanup_stale_old_exes()
 
 
+@main.group()
+def fleet() -> None:
+    """Manage the host-level shared HTTP MCP fleet (ADR-0024)."""
+
+
+@fleet.command("start")
+@click.option("--force", is_flag=True, help="Restart servers that are already running.")
+def fleet_start(force: bool) -> None:
+    """Start six long-lived HTTP NLT servers on localhost:8760-8765."""
+    from tapps_mcp.distribution.fleet_control import ensure_fleet_env_file, start_fleet
+
+    ensure_fleet_env_file()
+    result = start_fleet(force=force)
+    click.echo(f"Fleet code root: {result['code_root']}")
+    click.echo(f"Fleet host: {result['host']}")
+    if result["started"]:
+        click.echo(click.style("Started: " + ", ".join(result["started"]), fg="green"))
+    if result["skipped"]:
+        click.echo("Already running: " + ", ".join(result["skipped"]))
+    for err in result["errors"]:
+        click.echo(click.style(err, fg="red"))
+    if result["errors"]:
+        raise SystemExit(1)
+
+
+@fleet.command("stop")
+def fleet_stop() -> None:
+    """Stop all HTTP fleet servers."""
+    from tapps_mcp.distribution.fleet_control import stop_fleet
+
+    result = stop_fleet()
+    if result["stopped"]:
+        click.echo(click.style("Stopped: " + ", ".join(result["stopped"]), fg="green"))
+    if result["missing"]:
+        click.echo("Not running: " + ", ".join(result["missing"]))
+
+
+@fleet.command("status")
+def fleet_status_cmd() -> None:
+    """Show HTTP fleet process and reachability status."""
+    from tapps_mcp.distribution.fleet_control import fleet_status
+
+    result = fleet_status()
+    click.echo(f"Running {result['running']}/{result['total']} on {result['host']}")
+    click.echo(f"Code root: {result['code_root']}")
+    click.echo(f"Env: {result['env_file']}")
+    for server_id, row in result["servers"].items():
+        state = "ok" if row["reachable"] else ("pid" if row["alive"] else "down")
+        color = "green" if row["reachable"] else ("yellow" if row["alive"] else "red")
+        click.echo(
+            click.style(
+                f"  {server_id}: {state} pid={row['pid']} url={row['url']}",
+                fg=color,
+            )
+        )
+
+
+@fleet.command("restart")
+@click.option("--force", is_flag=True, help="Force restart even when PIDs look healthy.")
+def fleet_restart(force: bool) -> None:
+    """Stop then start the HTTP fleet."""
+    from tapps_mcp.distribution.fleet_control import start_fleet, stop_fleet
+
+    stop_fleet()
+    result = start_fleet(force=True)
+    click.echo(click.style("Restarted: " + ", ".join(result["started"]), fg="green"))
+
+
+@fleet.command("install-systemd")
+def fleet_install_systemd() -> None:
+    """Install a systemd user unit (~/.config/systemd/user/tapps-mcp-fleet.service)."""
+    from tapps_mcp.distribution.fleet_control import install_systemd_user_unit
+
+    path = install_systemd_user_unit()
+    click.echo(click.style(f"Wrote {path}", fg="green"))
+    click.echo("Enable with:")
+    click.echo("  systemctl --user daemon-reload")
+    click.echo("  systemctl --user enable --now tapps-mcp-fleet.service")
+
+
 @main.command()
 @click.option(
     "--transport",
@@ -196,6 +276,15 @@ def serve(
         "via Context7. Pass the key value, or 'prompt' to be asked interactively."
     ),
 )
+@click.option(
+    "--mcp-transport",
+    type=click.Choice(["stdio", "http"]),
+    default=None,
+    help=(
+        "MCP transport for host config (ADR-0024). "
+        "'http' writes streamableHttp URLs to the shared localhost fleet."
+    ),
+)
 def init(
     mcp_host: str,
     project_root: str,
@@ -213,6 +302,7 @@ def init(
     uv_flag: bool | None,
     uv_extra: str | None,
     with_context7: str | None,
+    mcp_transport: str | None,
 ) -> None:
     """Bootstrap TappsMCP in a project (MCP config, AGENTS.md, hooks, agents, skills, rules).
 
@@ -262,6 +352,7 @@ def init(
         overwrite_tech_stack=overwrite_tech_stack,
         mcp_bundle=mcp_bundle,
         use_nlt_plugin=not legacy_monolith,
+        mcp_transport=mcp_transport,
     )
     if not success:
         raise SystemExit(1)

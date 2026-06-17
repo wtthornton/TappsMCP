@@ -1870,6 +1870,8 @@ def run_server(
         from starlette.responses import HTMLResponse
         from starlette.routing import Route
 
+        from tapps_core.http.middleware import wrap_streamable_http_app
+
         mcp_app = mcp.streamable_http_app()
 
         def _root(_request: Request) -> HTMLResponse:
@@ -1881,6 +1883,7 @@ def run_server(
             )
 
         mcp_app.routes.insert(0, Route("/", _root))
+        mcp_app = wrap_streamable_http_app(mcp_app)
         uvicorn.run(mcp_app, host=host, port=port)
     else:
         msg = f"Unsupported transport: {transport}"

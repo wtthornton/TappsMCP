@@ -255,7 +255,9 @@ def run_combined_server(
     elif transport == "http":
         import uvicorn
 
-        app = combined.streamable_http_app()
+        from tapps_core.http.middleware import wrap_streamable_http_app
+
+        app = wrap_streamable_http_app(combined.streamable_http_app())
         uvicorn.run(app, host=host, port=port)
     else:
         msg = f"Unknown transport: {transport}"

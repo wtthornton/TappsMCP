@@ -31,6 +31,7 @@ CLAUDE.md and per-package CLAUDE.md files point at ADRs by number rather than em
 | [0023](0023-immutable-mcp-cli-releases-no-inplace-uv-reinstall.md) | Immutable MCP CLI releases — no in-place uv reinstall | Accepted |
 | [0021](0021-usage-gap-doc-lookup-telemetry-and-import-cache-aliases.md) | Usage-gap doc lookup: import/cache aliases + cross-channel telemetry | Accepted |
 | [0022](0022-agent-hint-contract-lookup-and-validation-semantics.md) | Agent hint contract — lookup timing and validation semantics | Accepted |
+| [0024](0024-shared-http-mcp-fleet.md) | Shared HTTP MCP fleet for multi-window Cursor | Accepted |
 
 ## Adding a new ADR
 

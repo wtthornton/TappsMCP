@@ -1117,7 +1117,9 @@ def run_server(
     elif transport == "http":
         import uvicorn
 
-        mcp_app = mcp.streamable_http_app()
+        from tapps_core.http.middleware import wrap_streamable_http_app
+
+        mcp_app = wrap_streamable_http_app(mcp.streamable_http_app())
         uvicorn.run(mcp_app, host=host, port=port)
     else:
         msg = f"Unknown transport: {transport}"

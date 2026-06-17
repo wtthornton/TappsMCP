@@ -1040,8 +1040,19 @@ def _build_nlt_server_entry(
     project_root: Path | None = None,
     upgrade_mode: bool = False,
     old_entry: dict[str, Any] | None = None,
+    mcp_transport: str = "stdio",
+    fleet_host: str | None = None,
 ) -> dict[str, Any]:
     """Build one NLT plugin server entry for MCP host config."""
+    if mcp_transport == "http":
+        from tapps_mcp.distribution.nlt_http_fleet import build_nlt_http_mcp_entry
+
+        return build_nlt_http_mcp_entry(
+            server_id,
+            project_root=project_root,
+            fleet_host=fleet_host,
+        )
+
     spec = NLT_SERVER_SPECS[server_id]
     launch = _build_nlt_launch(server_id, uv_launch, project_root=project_root)
 
@@ -1101,6 +1112,8 @@ def _merge_nlt_config(
     upgrade_mode: bool = False,
     uv_launch: tuple[str, list[str]] | None = None,
     project_root: Path | None = None,
+    mcp_transport: str = "stdio",
+    fleet_host: str | None = None,
 ) -> tuple[dict[str, Any], tuple[str, ...], tuple[str, ...]]:
     """Merge NLT plugin server entries into *existing* config."""
     bundle = normalize_mcp_bundle(mcp_bundle)
@@ -1139,8 +1152,10 @@ def _merge_nlt_config(
             project_root=project_root,
             upgrade_mode=upgrade_mode,
             old_entry=old_entry if isinstance(old_entry, dict) else None,
+            mcp_transport=mcp_transport,
+            fleet_host=fleet_host,
         )
-        if server_id == "nlt-build" and legacy_env:
+        if server_id == "nlt-build" and legacy_env and mcp_transport != "http":
             cur_env = entry.get("env")
             if not isinstance(cur_env, dict):
                 cur_env = {}
@@ -1375,6 +1390,7 @@ def _generate_config(
     extra_env: dict[str, str] | None = None,
     mcp_bundle: str = "full",
     use_nlt_plugin: bool = False,
+    mcp_transport: str | None = None,
 ) -> bool:
     """Generate (or merge) the MCP config for the given host.
 
@@ -1392,6 +1408,26 @@ def _generate_config(
         ``True`` if configuration was successfully written, ``False`` if the
         operation was aborted or failed (e.g. invalid JSON).
     """
+    from tapps_mcp.distribution.nlt_http_fleet import resolve_mcp_transport
+
+    transport = resolve_mcp_transport(project_root, explicit=mcp_transport)
+    fleet_host = "127.0.0.1"
+    try:
+        from tapps_core.config.settings import load_settings
+
+        fleet_host = load_settings(project_root=project_root).mcp_fleet_host
+    except Exception:
+        pass
+
+    if transport == "http":
+        click.echo(
+            click.style(
+                "HTTP fleet transport — ensure `tapps-mcp fleet start` is running "
+                f"(six servers on {fleet_host}:8760-8765).",
+                fg="cyan",
+            )
+        )
+
     config_path = _get_config_path(host, project_root, scope=scope)
     servers_key = _get_servers_key(host)
     existing: dict[str, Any] = {}
@@ -1452,6 +1488,8 @@ def _generate_config(
                 upgrade_mode=upgrade_mode,
                 uv_launch=uv_launch,
                 project_root=project_root,
+                mcp_transport=transport,
+                fleet_host=fleet_host,
             )
         else:
             merged = _merge_config(
@@ -1469,6 +1507,8 @@ def _generate_config(
             upgrade_mode=upgrade_mode,
             uv_launch=uv_launch,
             project_root=project_root,
+            mcp_transport=transport,
+            fleet_host=fleet_host,
         )
     else:
         servers_key_new = _get_servers_key(host)
@@ -1547,13 +1587,16 @@ def _generate_config(
             if use_nlt_plugin:
                 from tapps_mcp.distribution.nlt_mcp_config import NLT_SERVER_ORDER
 
-                for sid in NLT_SERVER_ORDER:
-                    click.echo(f"  Would write Cursor wrapper: {project_root / _cursor_wrapper_rel(sid)}")
+                if transport == "http":
+                    click.echo("  Would write streamableHttp URLs (no stdio wrappers).")
+                else:
+                    for sid in NLT_SERVER_ORDER:
+                        click.echo(f"  Would write Cursor wrapper: {project_root / _cursor_wrapper_rel(sid)}")
             else:
                 click.echo(f"  Would write Cursor wrapper: {project_root / _CURSOR_MCP_WRAPPER_REL}")
         return True
 
-    if host == "cursor":
+    if host == "cursor" and transport != "http":
         servers_block = merged.get(servers_key, {})
         if isinstance(servers_block, dict):
             if use_nlt_plugin:
@@ -1803,6 +1846,11 @@ def _validate_config_file(config_path: Path, servers_key: str) -> str | None:
     if not isinstance(entry, dict):
         return f"tapps-mcp / nlt-build entry not found in {config_path} under '{servers_key}'"
 
+    from tapps_mcp.distribution.nlt_http_fleet import is_valid_http_fleet_mcp_entry
+
+    if is_valid_http_fleet_mcp_entry(entry):
+        return None
+
     command = entry.get("command", "")
     args = entry.get("args", [])
     if _is_valid_tapps_command(command, args if isinstance(args, list) else None):
@@ -1860,6 +1908,7 @@ def _configure_multiple_hosts(
     mcp_bundle: str = "full",
     use_nlt_plugin: bool = False,
     engagement_level: str | None = None,
+    mcp_transport: str | None = None,
 ) -> bool:
     """Configure (or check) multiple hosts, reporting per-host results.
 
@@ -1884,6 +1933,7 @@ def _configure_multiple_hosts(
                 extra_env=extra_env,
                 mcp_bundle=mcp_bundle,
                 use_nlt_plugin=use_nlt_plugin,
+                mcp_transport=mcp_transport,
             )
             if ok and rules and not dry_run:
                 _generate_rules(host, project_root, engagement_level=engagement_level)
@@ -2130,6 +2180,22 @@ def _write_engagement_level_to_yaml(project_root: Path, level: str) -> None:
         yaml.dump(data, f, default_flow_style=False, sort_keys=False)
 
 
+def _write_mcp_transport_to_yaml(project_root: Path, transport: str) -> None:
+    """Persist ``mcp_transport`` to ``.tapps-mcp.yaml`` when explicitly chosen."""
+    import yaml
+
+    config_path = project_root / ".tapps-mcp.yaml"
+    data: dict[str, Any] = {}
+    if config_path.is_file():
+        loaded = yaml.safe_load(config_path.read_text(encoding="utf-8"))
+        if isinstance(loaded, dict):
+            data = loaded
+    data["mcp_transport"] = transport
+    config_path.parent.mkdir(parents=True, exist_ok=True)
+    with config_path.open("w", encoding="utf-8") as handle:
+        yaml.dump(data, handle, default_flow_style=False, sort_keys=False)
+
+
 def run_init(
     *,
     mcp_host: str = "auto",
@@ -2148,6 +2214,7 @@ def run_init(
     overwrite_tech_stack: bool = False,
     mcp_bundle: str = "full",
     use_nlt_plugin: bool = True,
+    mcp_transport: str | None = None,
 ) -> bool:
     """Run the init command logic.
 
@@ -2275,6 +2342,14 @@ def run_init(
             f"  Add to your shell profile:  export TAPPS_MCP_CONTEXT7_API_KEY='{context7_api_key}'"
         )
 
+    if engagement_level is not None and not dry_run and not check:
+        _write_engagement_level_to_yaml(root, engagement_level)
+    if mcp_transport is not None and not dry_run and not check:
+        _write_mcp_transport_to_yaml(root, mcp_transport)
+        if mcp_transport == "http":
+            from tapps_mcp.distribution.fleet_control import ensure_fleet_env_file
+
+            ensure_fleet_env_file()
     if mcp_host == "auto":
         hosts = _detect_hosts()
         if not hosts:
@@ -2303,6 +2378,7 @@ def run_init(
             mcp_bundle=mcp_bundle,
             use_nlt_plugin=use_nlt_plugin,
             engagement_level=engagement_level,
+            mcp_transport=mcp_transport,
         )
 
     if check:
@@ -2322,6 +2398,7 @@ def run_init(
         extra_env=extra_env,
         mcp_bundle=mcp_bundle,
         use_nlt_plugin=use_nlt_plugin,
+        mcp_transport=mcp_transport,
     )
     if ok and rules and not dry_run:
         _generate_rules(mcp_host, root, engagement_level=engagement_level)
