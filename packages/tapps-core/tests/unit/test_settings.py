@@ -6,6 +6,8 @@ import os
 from pathlib import Path
 from unittest import mock
 
+import pytest
+
 
 class TestScoringWeights:
     """Validate ScoringWeights defaults and constraints."""
@@ -281,6 +283,13 @@ class TestMemoryProjectIdAutoDerive:
 
 class TestProjectIdRootFallback:
     """TAP-1286: when both memory ids are empty, derive from project_root.name."""
+
+    @pytest.fixture(autouse=True)
+    def _isolate_tapps_env(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """HTTP fleet / Cursor MCP inject TAPPS_MCP_* into the agent shell."""
+        for key in list(os.environ):
+            if key.startswith("TAPPS_MCP_"):
+                monkeypatch.delenv(key, raising=False)
 
     def test_derives_slug_from_project_root_name(self, tmp_path: Path) -> None:
         from tapps_core.config.settings import TappsMCPSettings
