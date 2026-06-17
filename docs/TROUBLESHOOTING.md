@@ -247,7 +247,7 @@ tapps-mcp init --host cursor --force --allow-package-init --no-uv --bundle full
 # Then Reload Window / refresh MCP
 ```
 
-Use `--skip-gate` only in emergencies (deploy waits for pytest quiescence by default). See [ADR-0019](adr/0019-blue-green-dev-monorepo-mcp-deploy.md).
+Use `--skip-gate` only in emergencies (deploy waits for pytest quiescence by default). See [ADR-0023](adr/0023-immutable-mcp-cli-releases-no-inplace-uv-reinstall.md) (current; supersedes [ADR-0019](adr/0019-blue-green-dev-monorepo-mcp-deploy.md)).
 
 ## Cursor agent transcripts and loop metrics {#cursor-vs-claude-transcript-parsing}
 
@@ -257,7 +257,7 @@ Use `--skip-gate` only in emergencies (deploy waits for pytest quiescence by def
 
 **Fix:** Ensure tapps-mcp ≥ 3.12.28 (TAP-4017 unwraps `CallMcpTool`). Run `tapps_doctor(quick=True)` and inspect loop-metrics / completion-gate sections. Retest checklist: [docs/operations/DOGFOOD-RETEST.md](operations/DOGFOOD-RETEST.md). See [TAP-4016](https://linear.app/tappscodingagents/issue/TAP-4016) and child stories in Linear.
 
-**Dev repo note:** `.cursor/bin/nlt-*-serve.sh` prefer `~/.tapps-mcp/current/bin/{tapps-mcp,tapps-platform,docsmcp}` when blue/green is configured ([ADR-0019](adr/0019-blue-green-dev-monorepo-mcp-deploy.md)), else legacy global shims. **Do not** point wrappers at `.venv` or `uv run`. After source edits:
+**Dev repo note:** `.cursor/bin/nlt-*-serve.sh` always probe `~/.tapps-mcp/current/bin/{tapps-mcp,tapps-platform,docsmcp}` at runtime and fall back to the `~/.local/bin` global shims when no blue/green release is present ([ADR-0023](adr/0023-immutable-mcp-cli-releases-no-inplace-uv-reinstall.md)). **Do not** point wrappers at `.venv` or `uv run`. Note: Claude Code `.mcp.json` launches the `~/.local/bin` shim directly and does **not** probe `current` — bring that global to the target version and reload to upgrade Claude Code. After source edits:
 
 ```bash
 tapps-mcp deploy-local
