@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [3.12.43] - 2026-06-16
+
+Patch: hook matchers follow the NLT MCP server split — PostToolUse/PreToolUse gates fire again.
+
+### Fixed
+
+- **Stale hook matchers after the NLT server split (ADR-0016/0018)** — Generated Claude Code and Cursor hook matchers still targeted the pre-split `mcp__tapps-mcp__*` / `mcp__docs-mcp__*` tool names, so PostToolUse/PreToolUse gates (docs-validate sentinel, Linear cache-first read gate, validate-changed) silently stopped firing once tools moved to the six `nlt-*` profile servers. All matchers now use the split server names (`mcp__nlt-build__*`, `mcp__nlt-linear-issues__*`, …). Consumer repos pick this up on `tapps-mcp upgrade`.
+
 ## [3.12.42] - 2026-06-16
 
 Patch: immutable MCP CLI releases — stop in-place uv reinstall from killing live servers (ADR-0023).
