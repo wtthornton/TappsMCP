@@ -150,7 +150,7 @@ class TestToolFailureEngagementGating:
             (tmp_path / ".claude" / "settings.json").read_text(encoding="utf-8")
         )
         entries = settings["hooks"].get("PostToolUseFailure", [])
-        assert any(e.get("matcher") == "mcp__tapps-mcp__.*" for e in entries)
+        assert any(e.get("matcher") == "mcp__nlt-build__.*" for e in entries)
 
     def test_medium_settings_omits_event(self, tmp_path: Path) -> None:
         generate_claude_hooks(tmp_path, force_windows=False, engagement_level="medium")

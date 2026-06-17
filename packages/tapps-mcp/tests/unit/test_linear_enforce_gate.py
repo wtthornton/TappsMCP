@@ -39,7 +39,7 @@ class TestGateHooksConfig:
     def test_has_posttooluse_validate_matcher(self) -> None:
         entries = LINEAR_GATE_HOOKS_CONFIG["PostToolUse"]
         matchers = [e["matcher"] for e in entries]
-        assert "mcp__docs-mcp__docs_validate_linear_issue" in matchers
+        assert "mcp__nlt-linear-issues__docs_validate_linear_issue" in matchers
 
     def test_scripts_map_has_both(self) -> None:
         assert "tapps-pre-linear-write.sh" in LINEAR_GATE_SCRIPTS
@@ -83,7 +83,7 @@ class TestGateFlagWiring:
         pre_matchers = [e.get("matcher") for e in settings["hooks"].get("PreToolUse", [])]
         post_matchers = [e.get("matcher") for e in settings["hooks"].get("PostToolUse", [])]
         assert "mcp__plugin_linear_linear__save_issue" in pre_matchers
-        assert "mcp__docs-mcp__docs_validate_linear_issue" in post_matchers
+        assert "mcp__nlt-linear-issues__docs_validate_linear_issue" in post_matchers
 
     def test_independent_of_destructive_guard(self, tmp_path: Path) -> None:
         """linear_enforce_gate alone must not pull in the Bash matcher."""
@@ -139,7 +139,7 @@ class TestGatePowerShellScripts:
         pre_matchers = [e["matcher"] for e in LINEAR_GATE_HOOKS_CONFIG_PS["PreToolUse"]]
         post_matchers = [e["matcher"] for e in LINEAR_GATE_HOOKS_CONFIG_PS["PostToolUse"]]
         assert "mcp__plugin_linear_linear__save_issue" in pre_matchers
-        assert "mcp__docs-mcp__docs_validate_linear_issue" in post_matchers
+        assert "mcp__nlt-linear-issues__docs_validate_linear_issue" in post_matchers
 
     def test_ps_pre_save_script_mentions_bypass_env_var(self) -> None:
         assert "TAPPS_LINEAR_SKIP_VALIDATE" in LINEAR_GATE_PRE_SAVE_SCRIPT_PS
@@ -220,7 +220,7 @@ class TestGateScriptBehavior:
             script,
             json.dumps(
                 {
-                    "tool_name": "mcp__docs-mcp__docs_validate_linear_issue",
+                    "tool_name": "mcp__nlt-linear-issues__docs_validate_linear_issue",
                     "tool_response": {"data": {"agent_ready": True}},
                 }
             ),

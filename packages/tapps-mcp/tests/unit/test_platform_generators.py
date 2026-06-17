@@ -363,7 +363,7 @@ class TestEpic36NewHookTemplates:
         """PostToolUseFailure config includes tool name matcher."""
         entries = _CLAUDE_HOOKS_CONFIG["PostToolUseFailure"]
         assert len(entries) == 1
-        assert entries[0].get("matcher") == "mcp__tapps-mcp__.*"
+        assert entries[0].get("matcher") == "mcp__nlt-build__.*"
 
 
 class TestEpic36EngagementLevelBlocking:

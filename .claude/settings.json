@@ -124,16 +124,7 @@
     ],
     "PostToolUse": [
       {
-        "matcher": "Edit|Write",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "bash .claude/hooks/tapps-post-edit.sh"
-          }
-        ]
-      },
-      {
-        "matcher": "mcp__tapps-mcp__tapps_validate_changed|mcp__tapps-mcp__tapps_report",
+        "matcher": "mcp__nlt-build__tapps_validate_changed|mcp__nlt-build__tapps_report",
         "hooks": [
           {
             "type": "command",
@@ -142,7 +133,7 @@
         ]
       },
       {
-        "matcher": "mcp__tapps-mcp__tapps_validate_changed",
+        "matcher": "mcp__nlt-build__tapps_validate_changed",
         "hooks": [
           {
             "type": "command",
@@ -152,7 +143,7 @@
         ]
       },
       {
-        "matcher": "mcp__tapps-mcp__tapps_report",
+        "matcher": "mcp__nlt-build__tapps_report",
         "hooks": [
           {
             "type": "command",
@@ -168,24 +159,6 @@
           {
             "type": "command",
             "command": ".claude/hooks/tapps-post-edit.sh"
-          }
-        ]
-      },
-      {
-        "matcher": "mcp__docs-mcp__docs_validate_linear_issue",
-        "hooks": [
-          {
-            "type": "command",
-            "command": ".claude/hooks/tapps-post-docs-validate.sh"
-          }
-        ]
-      },
-      {
-        "matcher": "mcp__tapps-mcp__tapps_linear_snapshot_get",
-        "hooks": [
-          {
-            "type": "command",
-            "command": ".claude/hooks/tapps-post-linear-snapshot-get.sh"
           }
         ]
       },
@@ -313,8 +286,8 @@
     ],
     "PostToolUseFailure": [
       {
-        "matcher": "mcp__tapps-mcp__.*",
-        "if": "mcp__tapps-mcp__*",
+        "matcher": "mcp__nlt-build__.*",
+        "if": "mcp__nlt-build__*",
         "hooks": [
           {
             "type": "command",

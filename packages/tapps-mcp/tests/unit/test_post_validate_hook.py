@@ -76,12 +76,12 @@ class TestPostValidateHookConfig:
     def test_bash_config_has_validate_matcher(self) -> None:
         post_tool_entries = CLAUDE_HOOKS_CONFIG["PostToolUse"]
         matchers = [e.get("matcher", "") for e in post_tool_entries]
-        assert "mcp__tapps-mcp__tapps_validate_changed" in matchers
+        assert "mcp__nlt-build__tapps_validate_changed" in matchers
 
     def test_bash_config_validate_hook_has_timeout(self) -> None:
         post_tool_entries = CLAUDE_HOOKS_CONFIG["PostToolUse"]
         for entry in post_tool_entries:
-            if entry.get("matcher") == "mcp__tapps-mcp__tapps_validate_changed":
+            if entry.get("matcher") == "mcp__nlt-build__tapps_validate_changed":
                 hook = entry["hooks"][0]
                 assert hook.get("timeout") == 10
                 break
@@ -91,12 +91,12 @@ class TestPostValidateHookConfig:
     def test_ps_config_has_validate_matcher(self) -> None:
         post_tool_entries = CLAUDE_HOOKS_CONFIG_PS["PostToolUse"]
         matchers = [e.get("matcher", "") for e in post_tool_entries]
-        assert "mcp__tapps-mcp__tapps_validate_changed" in matchers
+        assert "mcp__nlt-build__tapps_validate_changed" in matchers
 
     def test_ps_config_validate_hook_has_timeout(self) -> None:
         post_tool_entries = CLAUDE_HOOKS_CONFIG_PS["PostToolUse"]
         for entry in post_tool_entries:
-            if entry.get("matcher") == "mcp__tapps-mcp__tapps_validate_changed":
+            if entry.get("matcher") == "mcp__nlt-build__tapps_validate_changed":
                 hook = entry["hooks"][0]
                 assert hook.get("timeout") == 10
                 break
@@ -193,12 +193,12 @@ class TestPostReportHookTemplate:
     def test_config_has_report_matcher(self) -> None:
         post_tool_entries = CLAUDE_HOOKS_CONFIG["PostToolUse"]
         matchers = [e.get("matcher", "") for e in post_tool_entries]
-        assert "mcp__tapps-mcp__tapps_report" in matchers
+        assert "mcp__nlt-build__tapps_report" in matchers
 
     def test_config_timeout(self) -> None:
         post_tool_entries = CLAUDE_HOOKS_CONFIG["PostToolUse"]
         for entry in post_tool_entries:
-            if entry.get("matcher") == "mcp__tapps-mcp__tapps_report":
+            if entry.get("matcher") == "mcp__nlt-build__tapps_report":
                 hook = entry["hooks"][0]
                 assert hook.get("timeout") == 10
                 break
@@ -208,7 +208,7 @@ class TestPostReportHookTemplate:
     def test_config_ps_has_report_matcher(self) -> None:
         post_tool_entries = CLAUDE_HOOKS_CONFIG_PS["PostToolUse"]
         matchers = [e.get("matcher", "") for e in post_tool_entries]
-        assert "mcp__tapps-mcp__tapps_report" in matchers
+        assert "mcp__nlt-build__tapps_report" in matchers
 
 
 # ---------------------------------------------------------------------------

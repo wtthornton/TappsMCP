@@ -76,7 +76,7 @@ class TestFreshInitProducesWorkingGate:
         pre_matchers = [e.get("matcher") for e in settings["hooks"].get("PreToolUse", [])]
         post_matchers = [e.get("matcher") for e in settings["hooks"].get("PostToolUse", [])]
         assert "mcp__plugin_linear_linear__save_issue" in pre_matchers
-        assert "mcp__docs-mcp__docs_validate_linear_issue" in post_matchers
+        assert "mcp__nlt-linear-issues__docs_validate_linear_issue" in post_matchers
 
     def test_raw_save_issue_blocked(self, tmp_path: Path) -> None:
         _bootstrap_high_engagement_project(tmp_path)
@@ -106,7 +106,7 @@ class TestFreshInitProducesWorkingGate:
             tmp_path / ".claude" / "hooks" / "tapps-post-docs-validate.sh",
             json.dumps(
                 {
-                    "tool_name": "mcp__docs-mcp__docs_validate_linear_issue",
+                    "tool_name": "mcp__nlt-linear-issues__docs_validate_linear_issue",
                     "tool_response": {"data": {"agent_ready": True}},
                 }
             ),

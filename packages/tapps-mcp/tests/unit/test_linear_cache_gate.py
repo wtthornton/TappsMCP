@@ -39,7 +39,6 @@ class TestCacheGateConfig:
 
     def test_posttooluse_matches_snapshot_get(self) -> None:
         matchers = [e["matcher"] for e in LINEAR_CACHE_GATE_HOOKS_CONFIG["PostToolUse"]]
-        assert "mcp__tapps-mcp__tapps_linear_snapshot_get" in matchers
         assert "mcp__nlt-linear-issues__tapps_linear_snapshot_get" in matchers
 
     def test_scripts_map_has_both(self) -> None:
@@ -117,7 +116,7 @@ class TestCacheGateFlagWiring:
         pre = [e.get("matcher") for e in settings["hooks"].get("PreToolUse", [])]
         post = [e.get("matcher") for e in settings["hooks"].get("PostToolUse", [])]
         assert "mcp__plugin_linear_linear__list_issues" in pre
-        assert "mcp__tapps-mcp__tapps_linear_snapshot_get" in post
+        assert "mcp__nlt-linear-issues__tapps_linear_snapshot_get" in post
 
     def test_independent_of_save_issue_gate(self, tmp_path: Path) -> None:
         """linear_enforce_cache_gate alone must not pull in the save_issue matcher."""
@@ -158,7 +157,7 @@ class TestPowerShellTemplates:
         pre = [e["matcher"] for e in LINEAR_CACHE_GATE_HOOKS_CONFIG_PS["PreToolUse"]]
         post = [e["matcher"] for e in LINEAR_CACHE_GATE_HOOKS_CONFIG_PS["PostToolUse"]]
         assert "mcp__plugin_linear_linear__list_issues" in pre
-        assert "mcp__tapps-mcp__tapps_linear_snapshot_get" in post
+        assert "mcp__nlt-linear-issues__tapps_linear_snapshot_get" in post
 
     def test_ps_pre_list_mentions_bypass_env_var(self) -> None:
         assert "TAPPS_LINEAR_SKIP_CACHE_GATE" in LINEAR_CACHE_GATE_PRE_LIST_SCRIPT_PS

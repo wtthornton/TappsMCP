@@ -651,7 +651,7 @@ print(d.get('tool_name',''))
 " 2>/dev/null)
 # Only log failures from TappsMCP tools — non-tapps failures stay silent.
 case "$TOOL" in
-  mcp__tapps-mcp__*|mcp__tapps_mcp__*) ;;
+  mcp__nlt-*|mcp__tapps-mcp__*|mcp__tapps_mcp__*) ;;
   *) exit 0 ;;
 esac
 ERROR=$(echo "$INPUT" | "$PYBIN" -c "
@@ -1194,8 +1194,8 @@ CLAUDE_HOOKS_CONFIG_PS: dict[str, list[dict[str, Any]]] = {
             ],
         },
         {
-            "matcher": "mcp__tapps-mcp__tapps_validate_changed",
-            "if": "mcp__tapps-mcp__tapps_validate_changed",
+            "matcher": "mcp__nlt-build__tapps_validate_changed",
+            "if": "mcp__nlt-build__tapps_validate_changed",
             "hooks": [
                 {
                     "type": "command",
@@ -1208,8 +1208,8 @@ CLAUDE_HOOKS_CONFIG_PS: dict[str, list[dict[str, Any]]] = {
             ],
         },
         {
-            "matcher": "mcp__tapps-mcp__tapps_report",
-            "if": "mcp__tapps-mcp__tapps_report",
+            "matcher": "mcp__nlt-build__tapps_report",
+            "if": "mcp__nlt-build__tapps_report",
             "hooks": [
                 {
                     "type": "command",
@@ -1302,8 +1302,8 @@ CLAUDE_HOOKS_CONFIG_PS: dict[str, list[dict[str, Any]]] = {
     ],
     "PostToolUseFailure": [
         {
-            "matcher": "mcp__tapps-mcp__.*",
-            "if": "mcp__tapps-mcp__*",
+            "matcher": "mcp__nlt-build__.*",
+            "if": "mcp__nlt-build__*",
             "hooks": [
                 {
                     "type": "command",
@@ -1357,8 +1357,8 @@ CLAUDE_HOOKS_CONFIG: dict[str, list[dict[str, Any]]] = {
             ],
         },
         {
-            "matcher": "mcp__tapps-mcp__tapps_validate_changed",
-            "if": "mcp__tapps-mcp__tapps_validate_changed",
+            "matcher": "mcp__nlt-build__tapps_validate_changed",
+            "if": "mcp__nlt-build__tapps_validate_changed",
             "hooks": [
                 {
                     "type": "command",
@@ -1368,8 +1368,8 @@ CLAUDE_HOOKS_CONFIG: dict[str, list[dict[str, Any]]] = {
             ],
         },
         {
-            "matcher": "mcp__tapps-mcp__tapps_report",
-            "if": "mcp__tapps-mcp__tapps_report",
+            "matcher": "mcp__nlt-build__tapps_report",
+            "if": "mcp__nlt-build__tapps_report",
             "hooks": [
                 {"type": "command", "command": ".claude/hooks/tapps-post-report.sh", "timeout": 10},
             ],
@@ -1419,8 +1419,8 @@ CLAUDE_HOOKS_CONFIG: dict[str, list[dict[str, Any]]] = {
     ],
     "PostToolUseFailure": [
         {
-            "matcher": "mcp__tapps-mcp__.*",
-            "if": "mcp__tapps-mcp__*",
+            "matcher": "mcp__nlt-build__.*",
+            "if": "mcp__nlt-build__*",
             "hooks": [
                 {"type": "command", "command": ".claude/hooks/tapps-tool-failure.sh"},
             ],
@@ -2294,15 +2294,6 @@ LINEAR_GATE_HOOKS_CONFIG: dict[str, list[dict[str, Any]]] = {
     ],
     "PostToolUse": [
         {
-            "matcher": "mcp__docs-mcp__docs_validate_linear_issue",
-            "hooks": [
-                {
-                    "type": "command",
-                    "command": ".claude/hooks/tapps-post-docs-validate.sh",
-                },
-            ],
-        },
-        {
             "matcher": "mcp__nlt-linear-issues__docs_validate_linear_issue",
             "hooks": [
                 {
@@ -2445,18 +2436,6 @@ LINEAR_GATE_HOOKS_CONFIG_PS: dict[str, list[dict[str, Any]]] = {
         },
     ],
     "PostToolUse": [
-        {
-            "matcher": "mcp__docs-mcp__docs_validate_linear_issue",
-            "hooks": [
-                {
-                    "type": "command",
-                    "command": (
-                        "powershell -NoProfile -ExecutionPolicy Bypass"
-                        " -File .claude/hooks/tapps-post-docs-validate.ps1"
-                    ),
-                },
-            ],
-        },
         {
             "matcher": "mcp__nlt-linear-issues__docs_validate_linear_issue",
             "hooks": [
@@ -2832,15 +2811,6 @@ LINEAR_CACHE_GATE_HOOKS_CONFIG: dict[str, list[dict[str, Any]]] = {
     ],
     "PostToolUse": [
         {
-            "matcher": "mcp__tapps-mcp__tapps_linear_snapshot_get",
-            "hooks": [
-                {
-                    "type": "command",
-                    "command": ".claude/hooks/tapps-post-linear-snapshot-get.sh",
-                },
-            ],
-        },
-        {
             "matcher": "mcp__nlt-linear-issues__tapps_linear_snapshot_get",
             "hooks": [
                 {
@@ -2994,18 +2964,6 @@ LINEAR_CACHE_GATE_HOOKS_CONFIG_PS: dict[str, list[dict[str, Any]]] = {
     ],
     "PostToolUse": [
         {
-            "matcher": "mcp__tapps-mcp__tapps_linear_snapshot_get",
-            "hooks": [
-                {
-                    "type": "command",
-                    "command": (
-                        "powershell -NoProfile -ExecutionPolicy Bypass"
-                        " -File .claude/hooks/tapps-post-linear-snapshot-get.ps1"
-                    ),
-                },
-            ],
-        },
-        {
             "matcher": "mcp__nlt-linear-issues__tapps_linear_snapshot_get",
             "hooks": [
                 {
@@ -3087,14 +3045,14 @@ echo "{}"
     "tapps-permission-denied.sh": """\
 #!/usr/bin/env bash
 # TappsMCP PermissionDenied hook — retries safe auto-mode denials for
-# mcp__tapps-mcp__* read-only tools. Returns {retry: true} when recoverable.
+# nlt-build read-only tools. Returns {retry: true} when recoverable.
 INPUT=$(cat)
 PYBIN=$(command -v python3 2>/dev/null || command -v python 2>/dev/null)
 echo "$INPUT" | "$PYBIN" -c "
 import json, sys
 d = json.load(sys.stdin)
 tool = (d.get('tool_name') or '').lower()
-if tool.startswith('mcp__tapps-mcp__'):
+if tool.startswith('mcp__nlt-build__'):
     print(json.dumps({'retry': True}))
 else:
     print('{}')
@@ -3147,11 +3105,11 @@ New-Item -ItemType File -Force -Path "$dir/.tapps-mcp/.cwd-reload-marker" | Out-
 Write-Output '{}'
 """,
     "tapps-permission-denied.ps1": """\
-# TappsMCP PermissionDenied hook — retries safe tapps-* denials.
+# TappsMCP PermissionDenied hook — retries safe nlt-build denials.
 $stdin = [Console]::In.ReadToEnd()
 $d = $stdin | ConvertFrom-Json
 $tool = ($d.tool_name | Out-String).Trim().ToLower()
-if ($tool.StartsWith('mcp__tapps-mcp__')) {
+if ($tool.StartsWith('mcp__nlt-build__')) {
     Write-Output (@{retry=$true} | ConvertTo-Json -Compress)
 } else {
     Write-Output '{}'
@@ -3215,8 +3173,8 @@ def _reactive_config(flag: str, *, win: bool) -> dict[str, list[dict[str, Any]]]
         return {
             "PermissionDenied": [
                 {
-                    "matcher": "mcp__tapps-mcp__.*",
-                    "if": "mcp__tapps-mcp__*",
+                    "matcher": "mcp__nlt-build__.*",
+                    "if": "mcp__nlt-build__*",
                     "hooks": [
                         {
                             "type": "command",
