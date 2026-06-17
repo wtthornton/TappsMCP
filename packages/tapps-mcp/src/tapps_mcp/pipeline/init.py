@@ -959,7 +959,6 @@ def _setup_platform(cfg: BootstrapConfig, state: _BootstrapState) -> None:
                 generate_claude_python_quality_rule,
                 generate_claude_security_rule,
                 generate_claude_test_quality_rule,
-                generate_copilot_instructions,
                 generate_skills,
                 generate_subagent_definitions,
             )
@@ -1084,9 +1083,6 @@ def _setup_platform(cfg: BootstrapConfig, state: _BootstrapState) -> None:
                     memory_auto_capture=cfg.memory_auto_capture,
                 )
             )
-            state.result["copilot_instructions"] = generate_copilot_instructions(
-                state.project_root,
-            )
     elif cfg.platform == "cursor":
         platform_action = _bootstrap_cursor(
             state.project_root, cfg.overwrite_platform_rules, engagement_level=engagement
@@ -1098,7 +1094,6 @@ def _setup_platform(cfg: BootstrapConfig, state: _BootstrapState) -> None:
         if not cfg.minimal:
             from tapps_mcp.pipeline.platform_generators import (
                 generate_bugbot_rules,
-                generate_copilot_instructions,
                 generate_cursor_hooks,
                 generate_cursor_rules,
                 generate_skills,
@@ -1132,9 +1127,6 @@ def _setup_platform(cfg: BootstrapConfig, state: _BootstrapState) -> None:
                 )
             state.result["cursor_rules"] = generate_cursor_rules(state.project_root)
             state.result["bugbot_rules"] = generate_bugbot_rules(state.project_root)
-            state.result["copilot_instructions"] = generate_copilot_instructions(
-                state.project_root,
-            )
     else:
         state.errors.append(f"Unknown platform: {cfg.platform!r}. Use 'claude' or 'cursor'.")
 

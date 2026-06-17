@@ -4,16 +4,17 @@ from __future__ import annotations
 
 import os
 from pathlib import Path
-
 from unittest.mock import patch
 
 import pytest
 
 from tapps_mcp.distribution.nlt_mcp_config import needs_legacy_nlt_migration
 from tapps_mcp.tools.fleet_upgrade import (
+    FleetUpgradeProjectResult,
     _reinstall_global_clis,
     format_fleet_upgrade_markdown,
     resolve_fleet_roots,
+    run_fleet_upgrade,
     upgrade_project_root,
 )
 
@@ -148,9 +149,11 @@ class TestFleetUpgradeHelpers:
             lambda: [],
         )
         deploy_called: list[bool] = []
+        skip_gate_flags: list[bool] = []
 
-        def _fake_deploy(checkout: Path) -> dict[str, object]:
+        def _fake_deploy(checkout: Path, *, skip_gate: bool = False) -> dict[str, object]:
             deploy_called.append(True)
+            skip_gate_flags.append(skip_gate)
             return {"ok": True, "release": "3.12.42-deadbeef", "current": str(checkout)}
 
         monkeypatch.setattr(
@@ -159,6 +162,7 @@ class TestFleetUpgradeHelpers:
         )
         result = _reinstall_global_clis(tmp_path)
         assert deploy_called == [True]
+        assert skip_gate_flags == [True]
         assert result["strategy"] == "blue_green"
         assert result["ok"] is True
 
@@ -168,9 +172,11 @@ class TestFleetUpgradeHelpers:
             lambda: [4242],
         )
         deploy_called: list[bool] = []
+        skip_gate_flags: list[bool] = []
 
-        def _fake_deploy(checkout: Path) -> dict[str, object]:
+        def _fake_deploy(checkout: Path, *, skip_gate: bool = False) -> dict[str, object]:
             deploy_called.append(True)
+            skip_gate_flags.append(skip_gate)
             return {"ok": True, "release": "3.12.40-deadbeef", "current": str(checkout)}
 
         monkeypatch.setattr(
@@ -179,9 +185,67 @@ class TestFleetUpgradeHelpers:
         )
         result = _reinstall_global_clis(tmp_path, use_blue_green=False)
         assert deploy_called == [True]
+        assert skip_gate_flags == [True]
         assert result["strategy"] == "blue_green_auto"
         assert result["auto_promoted"] is True
         assert result["live_mcp_pids"] == [4242]
+
+    def test_fleet_reinstall_refreshes_cursor_wrappers(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        consumer = tmp_path / "consumer"
+        consumer.mkdir()
+        (consumer / ".tapps-mcp.yaml").write_text("quality_preset: standard\n")
+        (consumer / ".cursor").mkdir()
+        (consumer / ".cursor" / "mcp.json").write_text('{"mcpServers": {}}', encoding="utf-8")
+
+        def _fake_deploy(checkout: Path, *, skip_gate: bool = False) -> dict[str, object]:
+            return {"ok": True, "release": "3.12.42-deadbeef", "current": str(checkout)}
+
+        refreshed: list[Path] = []
+
+        def _fake_regenerate(project_root: Path) -> list[str]:
+            refreshed.append(project_root.resolve())
+            return [".cursor/bin/nlt-build-serve.sh"]
+
+        monkeypatch.setattr(
+            "tapps_mcp.distribution.mcp_zombie_reap.find_live_mcp_serve_pids",
+            lambda: [],
+        )
+        monkeypatch.setattr(
+            "tapps_mcp.distribution.blue_green.deploy_blue_green",
+            _fake_deploy,
+        )
+        monkeypatch.setattr(
+            "tapps_mcp.distribution.setup_generator.regenerate_cursor_nlt_wrappers",
+            _fake_regenerate,
+        )
+        monkeypatch.setattr(
+            "tapps_mcp.tools.fleet_upgrade.upgrade_project_root",
+            lambda root, **kwargs: FleetUpgradeProjectResult(
+                root=root.resolve(),
+                success=True,
+                upgrade_ok=True,
+            ),
+        )
+
+        report = run_fleet_upgrade(
+            roots=[consumer],
+            reinstall_clis=True,
+            tapps_checkout=tmp_path,
+            refresh_mcp=False,
+            run_doctor=False,
+        )
+
+        assert refreshed == [consumer.resolve()]
+        wrapper_refresh = report["reinstall_clis"]["wrapper_refresh"]
+        assert wrapper_refresh == [
+            {
+                "root": str(consumer.resolve()),
+                "ok": True,
+                "written": [".cursor/bin/nlt-build-serve.sh"],
+            }
+        ]
 
     def test_reinstall_inplace_when_forced_despite_live_mcp(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch,

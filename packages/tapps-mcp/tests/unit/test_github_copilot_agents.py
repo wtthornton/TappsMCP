@@ -145,6 +145,15 @@ class TestEnhancedCopilotInstructions:
         assert "tapps_quick_check" in content
         assert "tapps_validate_changed" in content
 
+    def test_includes_project_scope(self, tmp_path):
+        from tapps_mcp.pipeline.github_copilot import generate_enhanced_copilot_instructions
+
+        generate_enhanced_copilot_instructions(tmp_path)
+        content = (tmp_path / ".github" / "copilot-instructions.md").read_text()
+        assert "Project Scope" in content
+        assert "do not break out of this repo/project" in content
+        assert "different project than this repo" in content
+
     def test_up_to_date_when_current_version(self, tmp_path):
         from tapps_mcp.pipeline.github_copilot import generate_enhanced_copilot_instructions
 

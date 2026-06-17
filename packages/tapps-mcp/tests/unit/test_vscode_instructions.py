@@ -75,6 +75,12 @@ class TestContent:
         content = (tmp_path / ".github" / "copilot-instructions.md").read_text()
         assert ".vscode/mcp.json" in content
 
+    def test_includes_project_scope(self, tmp_path):
+        generate_copilot_instructions(tmp_path)
+        content = (tmp_path / ".github" / "copilot-instructions.md").read_text()
+        assert "Project Scope" in content
+        assert "do not break out of this repo/project" in content
+
 
 class TestIdempotency:
     """Tests for idempotent behavior."""

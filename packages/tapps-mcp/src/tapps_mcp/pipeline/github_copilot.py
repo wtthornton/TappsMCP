@@ -158,6 +158,7 @@ applyTo: "tests/**"
 """
 
 from tapps_mcp.pipeline.agent_contract import (
+    COPILOT_PROJECT_SCOPE_SECTION,
     MEMORY_RECALL_SESSION_START,
     MEMORY_SYSTEMS_BULLET,
 )
@@ -211,6 +212,8 @@ the pipeline below.
 - `structlog` for logging, `pathlib.Path` for file paths
 - `ruff` for linting and formatting (line length: 100)
 - All file operations through the path validator
+
+{COPILOT_PROJECT_SCOPE_SECTION}
 """
 
 # ---------------------------------------------------------------------------

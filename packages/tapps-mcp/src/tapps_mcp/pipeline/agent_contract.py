@@ -93,6 +93,22 @@ MEMORY_ACTIONS_ACCESS_NOTE = (
     "Not on default `nlt-build` alone (TAP-1994)."
 )
 
+# Copilot / VS Code — bounded write scope (parity with agent-scope.md / tapps-agent-scope.mdc)
+COPILOT_PROJECT_SCOPE_SECTION = """\
+## Project Scope (do not break out of this repo/project)
+
+This Copilot instance was configured for THIS repo by `tapps_init` /
+`tapps_upgrade`. Reading docs across projects is fine; **writing** outside
+this repo or the linked tracker project is not. Specifically:
+
+- Do not create, update, comment on, or move issues that belong to a
+  different project than this repo.
+- Do not modify files, branches, or pull requests in any other repository.
+- Read team / project identity from `.tapps-mcp.yaml` or the current git
+  remote, not from arbitrary search results.
+- If a task seems to require a write outside this repo/project, ask the
+  user before proceeding."""
+
 _FINISH_TASK_DOC_GAPS_STEP3_BODY = """\
 3. **Clear doc-lookup gaps.** When `usage_gaps.gaps` includes `library_uses_without_lookup_docs` or `libraries_without_lookup` is non-empty:
    - Call `{lookup_tool}` for **each** listed library (retrospective MCP lookups clear telemetry gaps; cache hits are fine — ADR-0021).
@@ -184,14 +200,15 @@ def finish_task_checklist_and_doc_gaps(*, claude_nlt_prefix: bool) -> str:
 __all__ = [
     "AGENTS_TEMPLATE_TOOL_COUNT_PLACEHOLDER",
     "CHECKLIST_SKIPPED_REC",
+    "COPILOT_PROJECT_SCOPE_SECTION",
     "DOC_GAP_TELEMETRY_NOTE",
     "LOOKUP_GAP_RETRO_NOTE",
     "LOOKUP_TIMING_RULE",
+    "MEMORY_ACTIONS_ACCESS_NOTE",
     "MEMORY_RECALL_SESSION_START",
     "MEMORY_SYSTEMS_BULLET",
-    "MEMORY_ACTIONS_ACCESS_NOTE",
-    "POST_EDIT_IMPORT_LOOKUP_MSG",
     "POST_EDIT_IMPORT_LOOKUP_BASH",
+    "POST_EDIT_IMPORT_LOOKUP_MSG",
     "POST_EDIT_QUICK_CHECK_BASH",
     "POST_EDIT_QUICK_CHECK_MSG",
     "SESSION_START_CHECKLIST_GAP_HINT",

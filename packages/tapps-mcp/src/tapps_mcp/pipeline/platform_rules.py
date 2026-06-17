@@ -13,6 +13,7 @@ if TYPE_CHECKING:
     from pathlib import Path
 
 from tapps_mcp.pipeline.agent_contract import (
+    COPILOT_PROJECT_SCOPE_SECTION,
     MEMORY_RECALL_SESSION_START,
     MEMORY_SYSTEMS_BULLET,
 )
@@ -225,19 +226,7 @@ TappsMCP scores code across 7 categories (0-100 each):
 correctness, security, maintainability, performance, documentation,
 testing, and style.
 
-## Project Scope (do not break out of this repo/project)
-
-This Copilot instance was configured for THIS repo by `tapps_init` /
-`tapps_upgrade`. Reading docs across projects is fine; **writing** outside
-this repo or the linked tracker project is not. Specifically:
-
-- Do not create, update, comment on, or move issues that belong to a
-  different project than this repo.
-- Do not modify files, branches, or pull requests in any other repository.
-- Read team / project identity from `.tapps-mcp.yaml` or the current git
-  remote, not from arbitrary search results.
-- If a task seems to require a write outside this repo/project, ask the
-  user before proceeding.
+{COPILOT_PROJECT_SCOPE_SECTION}
 """
 
 
