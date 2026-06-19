@@ -1,11 +1,15 @@
-#!/usr/bin/env bash
 # tapps-mcp-hook-version: 3.12.43
-# tapps-mcp-hook-content-sha: 8ac3fe5f
+# tapps-mcp-hook-content-sha: 1b1eb9ca
 # TappsMCP afterFileEdit hook (fire-and-forget) — TAP-1330 import parity
 # Detects external imports requiring tapps_lookup_docs. Advisory only.
-INPUT=$(cat)
-PYBIN=$(command -v python3 2>/dev/null || command -v python 2>/dev/null)
-PARSED=$(TAPPS_HOOK_INPUT="$INPUT" "$PYBIN" - <<'PYEOF' 2>/dev/null
+$rawInput = @($input) -join "`n"
+$env:TAPPS_HOOK_INPUT = $rawInput
+$py = Get-Command python3 -ErrorAction SilentlyContinue
+if (-not $py) { $py = Get-Command python -ErrorAction SilentlyContinue }
+$file = "unknown"
+$libs = ""
+if ($py) {
+    $parseScript = @'
 import os, json, re
 from pathlib import Path
 
@@ -52,22 +56,25 @@ try:
 except Exception:
     print("")
     print("")
-PYEOF
-)
-FILE=$(echo "$PARSED" | sed -n '1p')
-LIBS=$(echo "$PARSED" | sed -n '2p')
-case "$FILE" in
-  *.py|*.pyi|*.ts|*.tsx|*.js|*.jsx|*.go|*.rs)
-    echo "Edited: $FILE — run tapps_quick_check after this edit." >&2
-    if [ -n "$LIBS" ]; then
-      echo "Imports detected ($LIBS) — call tapps_lookup_docs(library=..., topic=...) before using those APIs in this session (TAP-1330)." >&2
-    fi
-    ;;
-  *)
-    if [ -n "$FILE" ] && [ "$FILE" != "unknown" ]; then
-      echo "File edited: $FILE"
-      echo "Consider running tapps_quick_check to verify quality."
-    fi
-    ;;
-esac
+'@
+    $parsed = @($parseScript | & $py.Source - 2>$null)
+    if ($parsed.Count -ge 1) { $file = [string]$parsed[0] }
+    if ($parsed.Count -ge 2) { $libs = [string]$parsed[1] }
+}
+switch -Regex ($file) {
+    '\.(py|pyi|ts|tsx|js|jsx|go|rs)$' {
+        Write-Output "Edited: $file — run tapps_quick_check after this edit."
+        if ($libs) {
+            [Console]::Error.WriteLine(
+                "Imports detected ($libs) — call tapps_lookup_docs(library=..., topic=...) before using those APIs in this session (TAP-1330)."
+            )
+        }
+    }
+    default {
+        if ($file -and $file -ne "unknown") {
+            Write-Output "File edited: $file"
+            Write-Output "Consider running tapps_quick_check to verify quality."
+        }
+    }
+}
 exit 0
