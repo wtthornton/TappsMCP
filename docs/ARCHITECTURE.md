@@ -13,7 +13,7 @@ tapps-core (shared infrastructure)
     ^              ^
     |              |
 tapps-mcp      docs-mcp
-(35 tools)     (40 tools)
+(42 tools)     (42 tools)
 ```
 
 **tapps-brain** is the standalone memory service extracted from tapps-core. It runs as a Dockerized PostgreSQL-backed service. tapps-mcp accesses it through `BrainBridge`, which supports two transports — **in-process** (default; see [ADR-0001](adr/0001-in-process-agentbrain-via-brainbridge.md)) and **HTTP** (selected automatically when `memory.brain_http_url` is set in `.tapps-mcp.yaml`, e.g. `http://localhost:8080`). Both modes share the same circuit-breaker / offline-queue / version-floor logic. Persistence engine, retrieval (BM25 + boosts), time-based decay, contradiction detection, consolidation, federation, and GC all live in the [tapps-brain repo](https://github.com/wtthornton/tapps-brain) — refer there for the authoritative description. tapps-brain has its own repository, release cycle, and test suite.

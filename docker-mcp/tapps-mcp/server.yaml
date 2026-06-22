@@ -14,7 +14,7 @@ about:
     Deterministic code quality MCP server. Scores Python files across 7
     categories, runs security scans, enforces quality gates, looks up
     library docs (Context7-backed), and validates infra configs.
-    32 tools, zero LLM calls in the tool chain.
+    42 tools, zero LLM calls in the tool chain.
   icon: https://raw.githubusercontent.com/wtthornton/TappsMCP/master/docs/icon.png
 source:
   project: https://github.com/wtthornton/TappsMCP

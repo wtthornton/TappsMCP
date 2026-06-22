@@ -51,6 +51,7 @@
 - `llms-full.txt`
 - `llms.txt`
 - `docs/ARCHITECTURE.md`
+- `docs/CALL_GRAPH.md`
 - `docs/CHECKLIST.md`
 - `docs/CONFIG_REFERENCE.md`
 - `docs/DOCKER_DEPLOYMENT.md`
@@ -69,5 +70,4 @@
 - `docs/TAPPS_BACKLOG_PLAN.md`
 - `docs/TAPPS_BRAIN_V2.1_TAG.md`
 - `docs/TROUBLESHOOTING.md`
-- `docs/UPGRADE-PROMPT.md`
-- ... and 318 more
+- ... and 118 more

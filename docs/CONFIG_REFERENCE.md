@@ -83,9 +83,9 @@ The MCP server binary is registered three times in `.mcp.json` under different n
 
 | Server name | CLI mode | Preset constant | Tool count | Purpose |
 |---|---|---|---|---|
-| `tapps-mcp` | `--mode all` (default) | _none — all tools_ | 32 | Full surface |
+| `tapps-mcp` | `--mode all` (default) | _none — all tools_ | 42 | Full surface (10 eager + 32 deferred on `serve`) |
 | `tapps-quality` | `--mode quality` | `TAPPS_TOOL_PRESET_QUALITY` | 15 | Coding-session subset (scoring, gate, quick_check, security, memory, lookup_docs, dead_code, impact_analysis, validate_config, dependency_scan, dependency_graph, audit_campaign) |
-| `tapps-admin` | `--mode admin` | `TAPPS_TOOL_PRESET_ADMIN` | 12 | Setup / troubleshooting (init, upgrade, doctor, server_info, set_engagement_level, dashboard, stats, feedback, report, pipeline, decompose, session_notes) |
+| `tapps-admin` | `--mode admin` | `TAPPS_TOOL_PRESET_ADMIN` | 15 | Setup / troubleshooting (init, upgrade, doctor, server_info, set_engagement_level, dashboard, stats, feedback, report, pipeline, decompose, session_notes) |
 
 Role-scoped presets (selected via `TAPPS_MCP_TOOL_PRESET=<name>` env var, Epic 79.5):
 
@@ -98,7 +98,7 @@ Role-scoped presets (selected via `TAPPS_MCP_TOOL_PRESET=<name>` env var, Epic 7
 | `TOOL_PRESET_FRONTEND` | `tapps_session_start`, `tapps_quick_check`, `tapps_score_file`, `tapps_lookup_docs`, `tapps_quality_gate` | Frontend-focused agent |
 | `TOOL_PRESET_DEVELOPER` | `tapps_session_start`, `tapps_quick_check`, `tapps_validate_changed`, `tapps_quality_gate`, `tapps_checklist`, `tapps_score_file`, `tapps_security_scan`, `tapps_lookup_docs`, `tapps_memory`, `tapps_impact_analysis` | General developer agent |
 
-DocsMCP role presets (40 tools total; 7 eager via `defer_loading`):
+DocsMCP role presets (42 tools total in full catalog; 7 eager via `defer_loading` on full `docsmcp serve`):
 
 | Preset | Env | Tools | Use case |
 |---|---|---|---|
@@ -106,9 +106,38 @@ DocsMCP role presets (40 tools total; 7 eager via `defer_loading`):
 | `planner` | `DOCS_MCP_TOOL_PRESET=planner` | 10 | Epic/story/prompt + Linear lint/validate/save/triage |
 | `release` | `DOCS_MCP_TOOL_PRESET=release` | 10 | Changelog, release notes/update, release_gate |
 | `auditor` | `DOCS_MCP_TOOL_PRESET=auditor` | 10 | project_scan + full check_* suite |
-| `full` | *(default)* | 40 | No restriction |
+| `full` | *(default)* | 42 | No restriction |
 
 Source: [`DOCS_TOOL_PRESET_*` in `docs_mcp/server.py`](../packages/docs-mcp/src/docs_mcp/server.py).
+
+### NLT MCP profile constants (Epic 109 / ADR-0016)
+
+Registered via `tapps-mcp serve --profile <name>` or the six `nlt-*` MCP servers. Frozensets in [`server.py`](../packages/tapps-mcp/src/tapps_mcp/server.py):
+
+| Constant | Profile / server | Tools (total) |
+|---|---|---|
+| `TOOL_PROFILE_NLT_BUILD` | `nlt-build` | 18 |
+| `TOOL_PROFILE_NLT_MEMORY` | `nlt-memory` | 4 |
+| `TOOL_PROFILE_NLT_SETUP` | `nlt-setup` | 7 |
+| `TOOL_PROFILE_NLT_CODE_QUALITY` | legacy alias → `nlt-build` | 18 |
+| `TOOL_PROFILE_NLT_PLATFORM_ADMIN` | legacy alias → `nlt-setup` | 7 |
+
+DocsMCP NLT preset: `DOCS_TOOL_PRESET_NLT_PROJECT_DOCS` (29 tools on `docsmcp serve --profile nlt-project-docs`). See [architecture/tool-budget.md](architecture/tool-budget.md) for eager vs deferred splits.
+
+### Docs quality CI gate
+
+[`scripts/docs-quality-gate.py`](../scripts/docs-quality-gate.py) runs on PRs that touch tier-1 docs (`.github/workflows/docs-quality.yml`):
+
+| Constant | Value | Meaning |
+|---|---|---|
+| `MIN_COMPLETENESS` | `96.0` | Minimum completeness score (0–100) |
+| `MIN_CROSS_REF_SCORE` | `80.0` | Minimum cross-reference score (0–100) |
+
+Also fails on any broken markdown links or broken cross-references in `docs/` (excluding `docs/archive/**`).
+
+### Tool-description eval (`scripts/eval-descriptions/`)
+
+Harness for A/B testing MCP tool-selection accuracy. See [scripts/eval-descriptions/README.md](../scripts/eval-descriptions/README.md). Key symbols: `REPO_ROOT`, `RUN_SCRIPT`, `prewarm_mcp`.
 
 Source of truth: [`packages/tapps-mcp/src/tapps_mcp/server.py`](../packages/tapps-mcp/src/tapps_mcp/server.py) (lines 233-340) and [`packages/docs-mcp/src/docs_mcp/server.py`](../packages/docs-mcp/src/docs_mcp/server.py).
 

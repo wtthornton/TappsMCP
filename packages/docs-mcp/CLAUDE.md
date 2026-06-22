@@ -171,7 +171,7 @@ To add a new MCP tool:
 4. Use `error_response()` and `success_response()` for return values
 5. Add tests in `packages/docs-mcp/tests/unit/`
 
-## The 40 MCP tools
+## The 42 MCP tools
 
 | Category | Tool | Description |
 |---|---|---|

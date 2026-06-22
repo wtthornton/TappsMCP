@@ -33,6 +33,7 @@ def build_story(
     bundle: StyleBundle | None = None,
     template: ReportTemplate | None = None,
 ):
+    """Build the ReportLab story list for the TappsMCP architecture smoke PDF."""
     resolved_brand = brand or BrandPack.from_id("nlt-v3.2")
     resolved_bundle = bundle or build_styles(resolved_brand, has_dejavu=False)
     root = _tapps_root()

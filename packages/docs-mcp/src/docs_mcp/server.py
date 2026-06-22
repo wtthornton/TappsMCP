@@ -87,7 +87,7 @@ def _reset_tool_calls() -> None:
 # Tool curation (Epic 79.2): allowed tool names and presets
 # ---------------------------------------------------------------------------
 
-# Canonical list of all DocsMCP tools (40). Used for filtering.
+# Canonical list of all DocsMCP tools (42). Used for filtering.
 ALL_DOCS_TOOL_NAMES: frozenset[str] = frozenset(
     {
         "docs_session_start",
@@ -193,7 +193,7 @@ DOCS_TOOL_PRESET_AUDITOR: frozenset[str] = frozenset(
     }
 )
 
-# Epic 109: NLT plugin ``nlt-project-docs`` server (27 tools, 6 eager).
+# Epic 109: NLT plugin ``nlt-project-docs`` server (29 tools, all deferred).
 # Canonical spec: docs/architecture/nlt-mcp-plugin-spec.yaml
 DOCS_TOOL_PRESET_NLT_PROJECT_DOCS: frozenset[str] = frozenset(
     {

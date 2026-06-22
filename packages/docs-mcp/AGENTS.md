@@ -273,7 +273,7 @@ Settings can be viewed/changed via `docs_config` or set in `.docsmcp.yaml`:
 | `style_auto_detect_max_terms` | `80` | Max terms to add from auto-detect |
 | `enabled_tools` | *(none)* | Allow list: only these tools are exposed. Empty/missing = all tools. Env: `DOCS_MCP_ENABLED_TOOLS` (comma-separated). |
 | `disabled_tools` | `[]` | Deny list: excluded from the exposed set. Ignored when `enabled_tools` is set. Env: `DOCS_MCP_DISABLED_TOOLS`. |
-| `tool_preset` | *(none)* | Preset: `full` (all 40 tools), `core` (6 tools), `planner` (10), `release` (10), `auditor` (10). See § Reducing tool count. Env: `DOCS_MCP_TOOL_PRESET`. |
+| `tool_preset` | *(none)* | Preset: `full` (all 42 tools), `core` (6 tools), `planner` (10), `release` (10), `auditor` (10). See § Reducing tool count. Env: `DOCS_MCP_TOOL_PRESET`. |
 
 Environment variables use the `DOCS_MCP_` prefix (e.g., `DOCS_MCP_OUTPUT_DIR`).
 
@@ -284,11 +284,11 @@ When using DocsMCP with TappsMCP or in environments where the combined tool coun
 - **enabled_tools** (allow list): when non-empty, only these tools are registered. Comma-separated in env: `DOCS_MCP_ENABLED_TOOLS=docs_session_start,docs_project_scan,docs_check_drift`.
 - **disabled_tools** (deny list): tools to exclude from the full set. Applied when `enabled_tools` is not set. Env: `DOCS_MCP_DISABLED_TOOLS`.
 - **tool_preset** role subsets (when `enabled_tools` is unset):
-  - `full` — all 40 tools (default when unset)
+  - `full` — all 42 tools (default when unset)
   - `core` — session_start, project_scan, check_drift, generate_readme, check_completeness, check_links (6 tools)
   - `planner` — epic/story/prompt generation, validate_epic, Linear lint/validate/save/triage (10 tools)
   - `release` — git_summary, changelog, release notes/update, release_gate, drift/links/freshness (10 tools)
   - `auditor` — project_scan + full check_* suite + validate_epic (10 tools)
   - Env: `DOCS_MCP_TOOL_PRESET=planner`
 
-Empty or missing = all 40 tools (backward compatible). Invalid tool names in `enabled_tools` are ignored and logged. Non-daily-driver tools use `defer_loading` (TAP-1987) so only ~7 eager schemas load at session start. See [tool-budget.md](../../docs/architecture/tool-budget.md).
+Empty or missing = all 42 tools (backward compatible). Invalid tool names in `enabled_tools` are ignored and logged. Non-daily-driver tools use `defer_loading` (TAP-1987) so only ~7 eager schemas load at session start on full `docsmcp serve`. See [tool-budget.md](../../docs/architecture/tool-budget.md).

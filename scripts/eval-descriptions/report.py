@@ -27,6 +27,7 @@ def _delta(x: float) -> str:
 
 
 def render_markdown(comparison: dict[str, Any], baseline: dict[str, Any], head: dict[str, Any]) -> str:
+    """Render an A/B comparison dict as a Markdown report string."""
     base_label = comparison.get("baseline_label", "baseline")
     head_label = comparison.get("head_label", "head")
     base_sha = comparison.get("baseline_sha", "?")

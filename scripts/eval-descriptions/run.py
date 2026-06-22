@@ -81,6 +81,8 @@ choice is.
 
 @dataclass
 class ScenarioResult:
+    """Outcome of a single tool-selection eval scenario."""
+
     scenario_id: str
     category: str
     expected_tool: str
@@ -93,6 +95,7 @@ class ScenarioResult:
 
 
 def load_scenarios(path: Path = SCENARIOS_PATH) -> list[dict[str, Any]]:
+    """Load eval scenario definitions from a YAML file."""
     with path.open(encoding="utf-8") as f:
         data = yaml.safe_load(f)
     scenarios = data.get("scenarios", [])
@@ -123,6 +126,7 @@ def first_mcp_tool_call(stream_events: list[dict[str, Any]]) -> str | None:
 
 
 def score(expected: str, alternatives: list[str], actual: str | None) -> str:
+    """Map expected vs actual MCP tool name to an eval verdict string."""
     if actual is None:
         return "no_tool"
     if actual == expected:
@@ -139,6 +143,7 @@ def run_scenario(
     cwd: Path,
     raw_output_dir: Path,
 ) -> ScenarioResult:
+    """Invoke `claude -p` for one scenario and score the first MCP tool call."""
     sid = scenario["id"]
     prompt = scenario["prompt"]
     expected = scenario["expected_tool"]
@@ -539,6 +544,7 @@ def build_summary(
     cwd: Path,
     mcp_config: Path | None,
 ) -> dict[str, Any]:
+    """Aggregate per-scenario verdicts into a JSON-serializable summary."""
     n = max(len(results), 1)
     verdict_counts = {v: 0 for v in _VERDICT_NAMES}
     n_strict = 0
@@ -562,6 +568,7 @@ def build_summary(
 
 
 def main() -> int:
+    """CLI entry: run eval scenarios and write JSON results."""
     args = _build_arg_parser().parse_args()
     scenarios = _filter_scenarios(load_scenarios(), args.only)
     if not scenarios:

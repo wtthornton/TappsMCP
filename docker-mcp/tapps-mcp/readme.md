@@ -1,6 +1,6 @@
 # TappsMCP
 
-Deterministic code quality MCP server providing 32 tools for AI coding assistants.
+Deterministic code quality MCP server providing 42 tools for AI coding assistants.
 
 ## Features
 

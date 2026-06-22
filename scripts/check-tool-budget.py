@@ -24,10 +24,10 @@ Example CI usage (GitHub Actions, single-commit push):
 from __future__ import annotations
 
 import argparse
+import os
 import re
 import subprocess
 import sys
-import os
 import textwrap
 
 # Pattern that marks a new MCP tool registration line in a diff.
@@ -115,7 +115,7 @@ def _run_tests() -> None:
     diff_with_tool = "+    @mcp.tool()\n+    async def my_new_tool() -> None: ...\n"
     ok, msg = _check(diff_with_tool, [_BUDGET_DOC, "packages/tapps-mcp/src/server.py"], "")
     assert ok, f"Expected PASS when budget doc updated, got: {msg}"
-    print(f"  PASS: new tool + budget doc updated → ok")
+    print("  PASS: new tool + budget doc updated → ok")
 
     # Pass: bypass token in commit message
     ok, msg = _check(diff_with_tool, [], "feat: add tool\n\nTool-Budget: deferred\n")
@@ -151,6 +151,7 @@ def _run_tests() -> None:
 
 
 def main() -> int:
+    """Parse CLI args and enforce tool-budget doc updates for new MCP tools."""
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument(
         "--diff-range",

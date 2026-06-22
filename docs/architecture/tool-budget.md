@@ -35,25 +35,26 @@ Polyglot scoring (TypeScript, Go, Rust) does **not** imply polyglot import graph
 Post TAP-1986/TAP-1987: non-daily-driver tools carry `defer_loading=True` and are loaded
 on-demand via Tool Search. The counts below reflect the current **eager** vs **deferred** split.
 
-Eager tools: `tapps_session_start`, `tapps_validate_changed`, `tapps_score_file`,
-`tapps_quality_gate`, `tapps_quick_check`, `tapps_lookup_docs`, `tapps_checklist`,
-`tapps_impact_analysis`, `tapps_usage` (9 total).
+Eager tapps-mcp tools (full `tapps-mcp serve`): `tapps_session_start`, `tapps_validate_changed`,
+`tapps_score_file`, `tapps_quality_gate`, `tapps_quick_check`, `tapps_lookup_docs`,
+`tapps_checklist`, `tapps_impact_analysis`, `tapps_usage`, `tapps_memory` (10 total).
 
 | Server | Mode | Eager tools | Deferred tools | Total |
 |---|---|---|---|---|
-| `tapps-mcp` | full (no `--mode`) | 9 | 28 | 37 |
+| `tapps-mcp` | full (no `--mode`) | 10 | 32 | 42 |
 | `tapps-quality` | `--mode quality` | 9 | 6 | 15 |
 | `tapps-admin` | `--mode admin` | 1 | 12 | 13 |
-| `docs-mcp` | — | 7 | 33 | 40 |
+| `docs-mcp` | full `docsmcp serve` | 7 | 35 | 42 |
+| `docs-mcp` | `--profile nlt-project-docs` | 0 | 29 | 29 |
 
-Eager docs-mcp tools: `docs_generate_changelog`, `docs_generate_epic`,
+Eager docs-mcp tools (full serve): `docs_generate_changelog`, `docs_generate_epic`,
 `docs_generate_story`, `docs_lint_linear_issue`, `docs_validate_linear_issue`,
-`docs_save_linear_issue`, `docs_release_gate` (7 total).
+`docs_save_linear_issue`, `docs_release_gate` (7 total). The `nlt-project-docs` profile
+registers 29 tools with **all** `defer_loading=True` (loaded via Tool Search).
 
-> **Note:** The original TAP-1986 count was 8 eager tools. `tapps_usage` was added
-> as an eager daily-driver in v3.11.0, and two deferred brain-elevation tools
-> (`brain_propose_hive_elevation`, `brain_approve_hive_elevation`) were added in
-> TAP-2014, bringing full-mode totals to 35 tools (9 eager, 26 deferred).
+> **Note:** Full-catalog sizes are `ALL_TOOL_NAMES` / `ALL_DOCS_TOOL_NAMES` (42 each, 84
+> combined). NLT profiles expose subsets — e.g. `nlt-build` (18 tools, 9 eager),
+> `nlt-memory` (4 tools), `nlt-project-docs` (29 tools, 0 eager).
 
 ## Updating the budget
 
@@ -64,8 +65,8 @@ Set `doctor_tool_budget_limit` in `.tapps-mcp.yaml`:
 doctor_tool_budget_limit: 30
 ```
 
-If you intentionally run tapps-mcp in full mode (42 tools) and accept the context cost,
-raise the budget to 35 to silence the WARN. If you want a stricter check, lower it to 15
+If you intentionally run tapps-mcp in full mode (42 tools, 10 eager) and accept the context cost,
+raise the budget to 10 (or higher) to silence the WARN. If you want a stricter check, lower it to 15
 to enforce quality-preset-level discipline.
 
 ## Reducing tool count

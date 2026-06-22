@@ -16,6 +16,7 @@ ARCHIVE_GLOBS = ["docs/archive/**"]
 
 
 def main() -> int:
+    """Run link, cross-ref, and completeness checks; exit 1 on gate failure."""
     root = Path.cwd()
     failures: list[str] = []
 

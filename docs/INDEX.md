@@ -1,34 +1,33 @@
 # tapps-mcp — Documentation Index
 
-**234 documents** across **9 categories**
+**138 documents** across **9 categories**
 
 ## Overview
 
 | Category | Count |
 |---|---|
-| API Reference | 42 |
-| Architecture | 50 |
-| Configuration | 10 |
-| Getting Started | 32 |
-| Guides | 14 |
-| Operations | 30 |
-| Other | 17 |
-| Planning | 22 |
-| Release | 17 |
+| API Reference | 32 |
+| Architecture | 46 |
+| Configuration | 3 |
+| Getting Started | 15 |
+| Guides | 9 |
+| Operations | 6 |
+| Other | 5 |
+| Planning | 12 |
+| Release | 10 |
 
 ## API Reference
 
-- [TappsMCP - instructions for AI assistants](../AGENTS.md) — <!-- tapps-agents-version: 3.12.39 --> *(updated 2026-06-16)*
 - [Configuration Reference](CONFIG_REFERENCE.md) — TappsMCP is configured via `.tapps-mcp.yaml` in the project root. Settings can also be overridden with environment va... *(updated 2026-06-10)*
 - [Field Report: TappsMCP + DocsMCP Full-Session Usage](FEEDBACK_2026-04-06_agentforge-cleanup-session.md) — **Date:** 2026-04-06 *(updated 2026-04-06)*
-- [tapps-mcp — Documentation Index](INDEX.md) — **339 documents** across **9 categories** *(updated 2026-06-15)*
+- [tapps-mcp — Documentation Index](INDEX.md) — **234 documents** across **9 categories** *(updated 2026-06-16)*
 - [TappsMCP Memory Reference](MEMORY_REFERENCE.md) — Complete reference for TappsMCP **shared brain memory** — **42 actions** when accessed via CLI or the `nlt-memory` MC... *(updated 2026-06-16)*
 - [Skill Authoring Conventions](SKILL_AUTHORING.md) — Reference commit: mattpocock/skills@b8be62f *(updated 2026-05-27)*
 - [TAP-967: 2-Week `list_issues` Call-Count Measurement Report](TAP-967-measurement.md) — **Measurement date:** 2026-05-07 *(updated 2026-06-13)*
-- [`packages.docs-mcp.src.docs_mcp`](api/docs-mcp.md) — Docs MCP: Documentation MCP server for the Tapps platform. *(updated 2026-06-15)*
+- [`packages.docs-mcp.src.docs_mcp`](api/docs-mcp.md) — Docs MCP: Documentation MCP server for the Tapps platform. *(updated 2026-06-22)*
 - [`.tapps-mcp.test_handoff_mcp_client`](api/reference.md) — Single-tool stdio verify: tapps_handoff_save on nlt-memory. *(updated 2026-06-15)*
-- [`packages.tapps-core.src.tapps_core`](api/tapps-core.md) — Tapps Core: Shared infrastructure library for the Tapps platform. *(updated 2026-06-15)*
-- [`packages.tapps-mcp.src.tapps_mcp`](api/tapps-mcp.md) — TappsMCP: MCP server providing code quality tools. *(updated 2026-06-15)*
+- [`packages.tapps-core.src.tapps_core`](api/tapps-core.md) — Tapps Core: Shared infrastructure library for the Tapps platform. *(updated 2026-06-22)*
+- [`packages.tapps-mcp.src.tapps_mcp`](api/tapps-mcp.md) — TappsMCP: MCP server providing code quality tools. *(updated 2026-06-22)*
 - [`packages.docs-mcp.src.docs_mcp`](archive/api/docs-mcp-api.md) — Docs MCP: Documentation MCP server for the Tapps platform. *(updated 2026-04-05)*
 - [`packages.tapps-core.src.tapps_core`](archive/api/tapps-core-api.md) — Tapps Core: Shared infrastructure library for the Tapps platform. *(updated 2026-04-05)*
 - [`packages.tapps-mcp.src.tapps_mcp.server_analysis_tools`](archive/api/tapps-mcp-analysis_tools.md) — Analysis and inspection tool handlers for TappsMCP. *(updated 2026-04-05)*
@@ -51,15 +50,6 @@
 - [CI Integration Guide](archive/reference/ci-integration.md) — TappsMCP can run quality checks in CI pipelines without an interactive session. *(updated 2026-04-05)*
 - [Phase B Rollup — outputSchema declarations on high-traffic tools](benchmarks/2026-05-outputschema-rollup.md) — **Status:** **CLOSED** — B1 shipped as a low-risk schema declaration, B4–B8 *(updated 2026-05-22)*
 - [Operator secrets (one file, all repos)](operations/OPERATOR-SECRETS.md) — TappsMCP operator secrets are **machine-wide** — the same Context7 API key and *(updated 2026-06-15)*
-- [Stage 3 of 5: Develop](../packages/tapps-core/src/tapps_core/prompts/develop.md) — Write or modify code with rapid quality feedback. Use quick scoring to catch lint issues and maintain code quality du... *(updated 2026-04-05)*
-- [Stage 2 of 5: Research](../packages/tapps-core/src/tapps_core/prompts/research.md) — Gather domain knowledge and library documentation before writing code. This prevents hallucinated APIs and ensures be... *(updated 2026-04-08)*
-- [State Files Reference](../packages/tapps-mcp/docs/state-files.md) — Documents the files and directories that TappsMCP creates at runtime in *(updated 2026-06-11)*
-- [TappsMCP - instructions for AI assistants (optional guidance)](../packages/tapps-mcp/src/tapps_mcp/prompts/agents_template_low.md) — When the **TappsMCP** MCP server is configured, you can use its tools for code quality, doc lookup, and domain expert... *(updated 2026-06-16)*
-- [TappsMCP - instructions for AI assistants](../packages/tapps-mcp/src/tapps_mcp/prompts/agents_template_medium.md) — When the **TappsMCP** MCP server is configured, you have access to tools for **code quality, doc lookup, and domain e... *(updated 2026-06-16)*
-- [Stage 3 of 5: Develop](../packages/tapps-mcp/src/tapps_mcp/prompts/develop.md) — Write or modify code with rapid quality feedback. Use quick scoring to catch lint issues and maintain code quality du... *(updated 2026-04-05)*
-- [Stage 2 of 5: Research](../packages/tapps-mcp/src/tapps_mcp/prompts/research.md) — Gather domain knowledge and library documentation before writing code. This prevents hallucinated APIs and ensures be... *(updated 2026-04-08)*
-- [Skill](../plugin/cursor/skills/tapps-research/SKILL.md) — Look up library documentation using TappsMCP: *(updated 2026-06-14)*
-- [Skill](../plugin/cursor/skills/tapps-tool-reference/SKILL.md) — When the user asks about TappsMCP tools, provide the full tool reference. *(updated 2026-06-14)*
 ## Architecture
 
 - [TappsMCP Architecture Reference](ARCHITECTURE.md) — Detailed internal architecture for developers working on TappsMCP itself. *(updated 2026-06-16)*
@@ -78,13 +68,14 @@
 - [13. Pin tapps-brain version floor at 3.24.0 (range: >=3.24.0, <4)](adr/0013-pin-tapps-brain-version-floor-at-3240.md) — Date: 2026-06-09 *(updated 2026-06-14)*
 - [14. Brain-central doc RAG (big-bang cutover)](adr/0014-brain-central-doc-rag-big-bang.md) — Date: 2026-06-13 *(updated 2026-06-14)*
 - [15. Require tapps-brain docs_lookup at 3.24.0+ (ADR-0014 consumer floor)](adr/0015-require-tapps-brain-docs-lookup-at-3240.md) — Date: 2026-06-13 *(updated 2026-06-13)*
-- [16. Needs-based NLT MCP taxonomy (Build / Memory / Setup)](adr/0016-needs-based-nlt-mcp-taxonomy.md) — Date: 2026-06-13 *(updated 2026-06-16)*
+- [16. Needs-based NLT MCP taxonomy (Build / Memory / Setup)](adr/0016-needs-based-nlt-mcp-taxonomy.md) — Date: 2026-06-13 *(updated 2026-06-22)*
 - [17. Function-level call graph (Python-first)](adr/0017-function-level-call-graph-python-first.md) — Date: 2026-06-15 *(updated 2026-06-15)*
 - [18. Deploy all six NLT MCP servers by default (full bundle)](adr/0018-deploy-all-six-nlt-mcp-servers-by-default.md) — Date: 2026-06-16 *(updated 2026-06-16)*
 - [19. Blue/green dev-monorepo MCP deploy](adr/0019-blue-green-dev-monorepo-mcp-deploy.md) — Date: 2026-06-16 *(updated 2026-06-16)*
 - [20. Global uv-tool default; blue/green deploy opt-in](adr/0020-global-uv-tool-default-blue-green-opt-in.md) — Date: 2026-06-16 *(updated 2026-06-16)*
 - [21. Usage-gap doc lookup: import/cache aliases + cross-channel telemetry](adr/0021-usage-gap-doc-lookup-telemetry-and-import-cache-aliases.md) — Date: 2026-06-16 *(updated 2026-06-16)*
 - [22. Agent hint contract — lookup timing and validation semantics](adr/0022-agent-hint-contract-lookup-and-validation-semantics.md) — Date: 2026-06-16 *(updated 2026-06-16)*
+- [ADR-0024: Shared HTTP MCP fleet for multi-window Cursor](adr/0024-shared-http-mcp-fleet.md) — Accepted (2026-06-16) *(updated 2026-06-22)*
 - [Agent Gateway Refusal Envelope — Field Spec](architecture/gateway-envelope.md) — When a tapps-mcp or docs-mcp gateway fires, the tool response (or PreToolUse exit-2 body) *(updated 2026-06-02)*
 - [MCP Server Eager-Tool Budget](architecture/tool-budget.md) — **Default budget:** 20 tools per MCP server *(updated 2026-06-16)*
 - [PRD: Zeek Network Intelligence Service](architecture/zeek-network-intelligence-prd.md) — <!-- docsmcp:start:executive-summary --> *(updated 2026-04-05)*
@@ -107,34 +98,18 @@
 - [ER — Structured Output Schemas](diagrams/07-er-output-schemas.md) — Pydantic models that define `structuredContent` for tapps-mcp tool responses. Source: packages/tapps-mcp/src/tapps_mc... *(updated 2026-05-19)*
 - [Sequence — TAPPS Quality Pipeline](diagrams/08-sequence-quality-pipeline.md) — The recommended tool call order for a coding session. Auto-generated by `docs_generate_diagram(diagram_type="sequence... *(updated 2026-05-19)*
 - [tapps-brain 3.22.0 — Integration Review for tapps-mcp + docs-mcp](handoff/BRAIN-322-integration-review.md) — **Date:** 2026-06-03 *(updated 2026-06-15)*
-- [Brain KG Event Taxonomy (TAP-2003)](../packages/tapps-mcp/docs/architecture/kg-events.md) — tapps-mcp fires brain KG events for significant pipeline actions so that subsequent agents can discover history via `... *(updated 2026-05-23)*
-- [MCP Tool Budget — Per-Server Daily Drivers](../packages/tapps-mcp/docs/architecture/tool-budget.md) — This document defines the **eager-load budget** for each MCP server in the *(updated 2026-05-23)*
-- [TappsMCP - instructions for AI assistants](../packages/tapps-mcp/src/tapps_mcp/prompts/agents_template.md) — When the **TappsMCP** MCP server is configured in your host (Claude Code, Cursor, VS Code Copilot, Claude Desktop, et... *(updated 2026-06-16)*
-- [Continuous Learning v2.1 - Instinct-Based Architecture](../plugin/cursor/skills/continuous-learning-v2/SKILL.md) — An advanced learning system that turns your Claude Code sessions into reusable knowledge through atomic "instincts" -... *(updated 2026-06-14)*
-- [How the TappsMCP Memory Brain Works](../stories/tapps-memory-brain-architecture.md) *(updated 2026-05-19)*
 ## Configuration
 
-- [CLAUDE.md](../CLAUDE.md) — <!-- tapps-claude-version: 3.12.39 --> *(updated 2026-06-16)*
-- [Code of Conduct](../CODE_OF_CONDUCT.md) — We as members, contributors, and maintainers of the TappsMCP project pledge to make participation a harassment-free e... *(updated 2026-04-23)*
 - [Tool-Description Eval: tool-selection accuracy A/B](benchmarks/2026-05-19-description-eval.md) — **Baseline:** `cc1d340^` (`b7f0ba4`) — **HEAD:** `HEAD` (`7e31f2c`) *(updated 2026-05-19)*
 - [Tool-Description Eval: tool-selection accuracy A/B (Phase A — clean noise floor)](benchmarks/2026-05-20-description-eval.md) — **Baseline:** `cc1d340^` (`b7f0ba4`) — **HEAD:** `HEAD` (`4c11f2f`) *(updated 2026-05-21)*
 - [outputSchema A/B (negative finding) — tapps_quick_check (B2)](benchmarks/outputschema-tapps_quick_check.md) — **Baseline:** `HEAD^=30149b1` (post-B1) — **HEAD:** `634ea57` (B2 candidate) *(updated 2026-05-20)*
-- [DocsMCP - instructions for AI assistants](../packages/docs-mcp/AGENTS.md) — When the **DocsMCP** MCP server is configured in your host (Claude Code, Cursor, VS Code Copilot, etc.), you have acc... *(updated 2026-06-16)*
-- [docs-mcp — Documentation Index](../packages/docs-mcp/docs/INDEX.md) — **18 documents** across **6 categories** *(updated 2026-05-02)*
-- [TappsMCP - instructions for AI assistants (HIGH enforcement)](../packages/tapps-mcp/src/tapps_mcp/prompts/agents_template_high.md) — When the **TappsMCP** MCP server is configured, you **MUST** use its tools for code quality, doc lookup, and domain e... *(updated 2026-06-16)*
-- [Stage 1 of 5: Discover](../packages/tapps-mcp/src/tapps_mcp/prompts/discover.md) — Understand the TappsMCP server capabilities and the project's tech stack before writing any code. This stage ensures ... *(updated 2026-04-08)*
-- [Skill](../plugin/cursor/skills/tapps-init/SKILL.md) — Bootstrap TappsMCP in a new or existing project: *(updated 2026-06-14)*
 ## Getting Started
 
-- [tapps-mcp](../README.md) — **Tapps Platform** ships two MCP servers for AI-assisted development: **TappsMCP** (code quality, security, shared me... *(updated 2026-06-16)*
-- [Tech Stack](../TECH_STACK.md) — - **Python 3.12+** with `from __future__ import annotations` *(updated 2026-06-16)*
-- [Docker MCP Distribution](../docker-mcp/README.md) — Docker images for TappsMCP and DocsMCP, used for external distribution, CI/CD, *(updated 2026-05-12)*
-- [DocsMCP](../docker-mcp/docs-mcp/readme.md) — Documentation generation and maintenance MCP server providing 38 tools for AI coding assistants. *(updated 2026-05-12)*
-- [TappsMCP](../docker-mcp/tapps-mcp/readme.md) — Deterministic code quality MCP server providing 32 tools for AI coding assistants. *(updated 2026-05-18)*
 - [TappsMCP checklist (`tapps_checklist`)](CHECKLIST.md) — The checklist tracks **which MCP tools were invoked** in the current **checklist session** and compares that to **tas... *(updated 2026-06-12)*
-- [GitHub Setup Guide](GITHUB_SETUP_GUIDE.md) — <!-- tapps-generated: v3.12.39 --> *(updated 2026-06-16)*
+- [GitHub Setup Guide](GITHUB_SETUP_GUIDE.md) — <!-- tapps-generated: v3.12.45 --> *(updated 2026-06-22)*
 - [3. No PyPI or npm publish — global install from local checkout](adr/0003-no-pypi-or-npm-publish-global-install-from-local-checkout.md) — Date: 2026-05-02 *(updated 2026-05-12)*
-- [Architecture Decision Records](adr/README.md) — Architectural decisions for tapps-mcp / tapps-core / docs-mcp / tapps-brain. Each ADR follows the MADR template (Cont... *(updated 2026-06-16)*
+- [23. Immutable MCP CLI releases — no in-place uv tool reinstall](adr/0023-immutable-mcp-cli-releases-no-inplace-uv-reinstall.md) — Date: 2026-06-16 *(updated 2026-06-16)*
+- [Architecture Decision Records](adr/README.md) — Architectural decisions for tapps-mcp / tapps-core / docs-mcp / tapps-brain. Each ADR follows the MADR template (Cont... *(updated 2026-06-22)*
 - [Archived Documentation](archive/README.md) — Regeneratable or supplementary docs kept out of the main tree to reduce noise for LLMs and developers. *(updated 2026-06-16)*
 - [Claude Code: Full Access Setup (No Permission Prompts)](archive/reference/CLAUDE_FULL_ACCESS_SETUP.md) — This guide explains how to grant Claude Code **100% full access** so it never asks for permission when using tools (B... *(updated 2026-04-05)*
 - [YouTube MCP Setup](archive/reference/MCP_YOUTUBE_SETUP.md) — The YouTube MCP server is configured for this workspace. It provides: *(updated 2026-04-05)*
@@ -145,23 +120,9 @@
 - [tapps-brain: Local and Multi-Project Setup](operations/TAPPS-BRAIN-LOCAL-SETUP.md) — This guide explains how to connect tapps-mcp to tapps-brain for persistent memory. *(updated 2026-06-09)*
 - [TappsMCP Epics](planning/epics/README.md) — Epics live in **Linear**, not in this repository. Per `.claude/rules/linear-standards.md`, create and update epics th... *(updated 2026-06-16)*
 - [Tutorials](tutorials/README.md) — Six short, copy-paste runnable walkthroughs for the most-asked starter tasks. Each ends with explicit verification st... *(updated 2026-06-15)*
-- [TappsMCP + Agent SDK Examples](../examples/agent-sdk/README.md) — These examples show how to use TappsMCP as an MCP server within Claude Agent SDK *(updated 2026-05-12)*
-- [docs-mcp (npm wrapper)](../npm-docs-mcp/README.md) — npm wrapper for the DocsMCP Python MCP server — a documentation toolset for AI coding assistants. *(updated 2026-05-12)*
-- [tapps-mcp (npm wrapper)](../npm/README.md) — npm wrapper for the TappsMCP Python MCP server — a quality toolset for AI coding assistants. *(updated 2026-05-12)*
-- [CLAUDE.md](../packages/docs-mcp/CLAUDE.md) — This file provides guidance to Claude Code (claude.ai/code) when working with code in the docs-mcp package. *(updated 2026-06-15)*
-- [DocsMCP Installation Guide](../packages/docs-mcp/docs/INSTALLATION.md) — DocsMCP is an MCP server for automated documentation generation, validation, and maintenance. It is **not published t... *(updated 2026-06-10)*
-- [docs-mcp](../packages/docs-mcp/docs/README.md) — MCP server for **deterministic** documentation generation, validation, and maintenance. Part of the TappsMCP Platform... *(updated 2026-06-15)*
-- [docs-mcp](../packages/docs-mcp/packages/docs-mcp/docs/README.md) — !Python  !License  !Version *(updated 2026-06-15)*
-- [tapps-core](../packages/tapps-core/README.md) — Shared infrastructure library for the TappsMCP Platform. Provides config, security, logging, knowledge lookup, metric... *(updated 2026-06-15)*
-- [tapps_core.knowledge](../packages/tapps-core/src/tapps_core/knowledge/README.md) — Knowledge & documentation lookup system (Epic 2) plus Knowledge-Graph (KG) *(updated 2026-06-09)*
-- [Stage 1 of 5: Discover](../packages/tapps-core/src/tapps_core/prompts/discover.md) — Understand the TappsMCP server capabilities and the project's tech stack before writing any code. This stage ensures ... *(updated 2026-06-12)*
-- [tapps-mcp](../packages/tapps-mcp/README.md) — <!-- mcp-name: io.github.wtthornton/tapps-mcp --> *(updated 2026-06-16)*
-- [TappsMCP Quality Tools for Cursor](../plugin/cursor/README.md) — Code quality scoring, security scanning, and quality gates for Python projects. *(updated 2026-06-14)*
-- [Tool-description eval harness](../scripts/eval-descriptions/README.md) — Measures whether changes to tapps-mcp tool descriptions actually move *(updated 2026-05-21)*
 ## Guides
 
-- [Contributing to tapps-mcp](../CONTRIBUTING.md) — Thank you for your interest in contributing to tapps-mcp! This guide will help you get started. *(updated 2026-06-15)*
-- [Call graph tools (consumer guide)](CALL_GRAPH.md) — TappsMCP v3.12.31+ ships **function-level call graph** tools for Python projects (Epic 114, ADR-0017). Use them befor... *(updated 2026-06-16)*
+- [Call graph tools (consumer guide)](CALL_GRAPH.md) — TappsMCP v3.12.31+ ships **function-level call graph** tools for Python projects (Epic 114, ADR-0017). Use them befor... *(updated 2026-06-22)*
 - [Getting Started with tapps-mcp](ONBOARDING.md) — - **Python 3.12+** *(updated 2026-06-16)*
 - [TappsMCP Design System Style Guide](STYLE_GUIDE.md) — **Derived from:** the HomeIQ Design System Style Guide (sibling repo, see workspace). *(updated 2026-05-12)*
 - [Tutorial: Add a new MCP tool to tapps-mcp](tutorials/01-add-an-mcp-tool.md) — **Time:** ~15 minutes. **Outcome:** A working `tapps_hello` MCP tool callable from Claude Code, registered in the che... *(updated 2026-05-18)*
@@ -170,10 +131,6 @@
 - [Tutorial: NLT MCP session modes](tutorials/04-nlt-mcp-session-modes.md) — **Time:** ~10 minutes. **Outcome:** You enable the right 1–3 MCP servers for your task, verify tools appear in Cursor... *(updated 2026-06-15)*
 - [Tutorial: Documentation refresh workflow](tutorials/05-docs-refresh-workflow.md) — **Time:** ~2 hours (full pass). **Outcome:** Tier-1 docs accurate, API/diagrams regenerated, link graph clean, CI doc... *(updated 2026-06-15)*
 - [Tutorial: Your first memory save and recall](tutorials/06-first-memory-session.md) — **Time:** ~10 min (after tutorial 03 brain wiring). **Outcome:** Save a project decision, recall it in a new chat, an... *(updated 2026-06-15)*
-- [Contributing to docs-mcp](../packages/docs-mcp/CONTRIBUTING.md) — docs-mcp is part of the TappsMCP monorepo. See the top-level CONTRIBUTING.md for general setup, workflow, and code co... *(updated 2026-05-23)*
-- [Contributing to docs-mcp](../packages/docs-mcp/docs/CONTRIBUTING.md) — docs-mcp lives inside the TappsMCP monorepo and follows the same conventions as the parent project. See the top-level... *(updated 2026-05-12)*
-- [Getting Started with docs-mcp](../packages/docs-mcp/docs/ONBOARDING.md) — - Python >=3.12 *(updated 2026-05-12)*
-- [Karpathy Guidelines](../packages/tapps-mcp/src/tapps_mcp/prompts/karpathy_guidelines.md) — <!-- *(updated 2026-04-17)*
 ## Operations
 
 - [TappsMCP: Docker Deployment](DOCKER_DEPLOYMENT.md) — Run TappsMCP as a **local Docker MCP server** using Streamable HTTP. The server listens on port **8000** and exposes ... *(updated 2026-06-09)*
@@ -181,56 +138,20 @@
 - [Prompt: smoke-prompt](archive/smoke/smoke-prompt.md) — <!-- docsmcp:start:metadata --> *(updated 2026-06-15)*
 - [Agent Teams Feature Gate Audit (TAP-2021)](features/agent-teams.md) — Audit of every `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS` gate in tapps-mcp. *(updated 2026-05-27)*
 - [Agent-facing Linear issues — conventions](linear/AGENT_ISSUES.md) — Durable policy for how Linear issues are written, labeled, and nested in the *(updated 2026-05-02)*
-- [Brain-central doc RAG — fleet cutover runbook](operations/brain-doc-rag-cutover-runbook.md) — Maintenance window (~30 minutes) for ADR-0014 big-bang cutover. *(updated 2026-06-14)*
-- [tapps-mcp](../llms-full.txt) — - Python *(updated 2026-06-15)*
-- [tapps-mcp](../llms.txt) — - Python *(updated 2026-06-15)*
-- [Story 9.2 -- Harden CI Pipeline](../packages/docs-mcp/docs/issues/story-009.2-harden-ci.md) — <!-- docsmcp:start:user-story --> *(updated 2026-04-08)*
-- [Story 9.4 -- Claude CLI Token Budget Monitoring](../packages/docs-mcp/docs/issues/story-009.4-token-budget-monitoring.md) — <!-- docsmcp:start:user-story --> *(updated 2026-04-08)*
-- [TAPPS Handoff](../packages/tapps-core/src/tapps_core/prompts/handoff_template.md) — **Objective:** <!-- Describe the task --> *(updated 2026-04-08)*
-- [TAPPS Quality Pipeline - Overview](../packages/tapps-core/src/tapps_core/prompts/overview.md) *(updated 2026-06-12)*
-- [TAPPS Run Log](../packages/tapps-core/src/tapps_core/prompts/runlog_template.md) — <!-- Example entries: *(updated 2026-04-08)*
-- [Brain Deployment — Async-Native Write Path](../packages/tapps-mcp/docs/operations/brain-deployment.md) — This document explains how the async-native write path activates in the tapps-brain *(updated 2026-05-27)*
-- [Compaction Resilience](../packages/tapps-mcp/docs/specs/compaction-resilience.md) — **TAP-2017** — `memory_index_session` at compaction boundary + verify load on rehydration *(updated 2026-05-27)*
-- [TAPPS Handoff](../packages/tapps-mcp/src/tapps_mcp/prompts/handoff_template.md) — **Objective:** <!-- Describe the task --> *(updated 2026-04-08)*
-- [TAPPS Quality Pipeline - Overview](../packages/tapps-mcp/src/tapps_mcp/prompts/overview.md) *(updated 2026-06-12)*
-- [TAPPS Quality Pipeline - MANDATORY](../packages/tapps-mcp/src/tapps_mcp/prompts/platform_claude.md) — This project uses the TAPPS MCP server for automated code quality enforcement. *(updated 2026-06-15)*
-- [TAPPS Quality Pipeline - MANDATORY](../packages/tapps-mcp/src/tapps_mcp/prompts/platform_claude_high.md) — This project uses the TAPPS MCP server for automated code quality enforcement. *(updated 2026-06-15)*
-- [TAPPS Quality Pipeline (optional)](../packages/tapps-mcp/src/tapps_mcp/prompts/platform_claude_low.md) — This project can use the TAPPS MCP server for code quality. Tool responses include `next_steps` - consider them when ... *(updated 2026-06-15)*
-- [TAPPS Quality Pipeline](../packages/tapps-mcp/src/tapps_mcp/prompts/platform_claude_medium.md) — This project uses the TAPPS MCP server for code quality enforcement. *(updated 2026-06-15)*
-- [TAPPS Quality Pipeline - MANDATORY](../packages/tapps-mcp/src/tapps_mcp/prompts/platform_cursor.md) — This project uses the TAPPS MCP server for automated code quality enforcement. *(updated 2026-06-15)*
-- [TAPPS Quality Pipeline - MANDATORY](../packages/tapps-mcp/src/tapps_mcp/prompts/platform_cursor_high.md) — This project uses the TAPPS MCP server for automated code quality enforcement. *(updated 2026-06-15)*
-- [TAPPS Quality Pipeline (optional)](../packages/tapps-mcp/src/tapps_mcp/prompts/platform_cursor_low.md) — This project can use the TAPPS MCP server for code quality. Tool responses include `next_steps` - consider them when ... *(updated 2026-06-15)*
-- [TAPPS Quality Pipeline](../packages/tapps-mcp/src/tapps_mcp/prompts/platform_cursor_medium.md) — This project uses the TAPPS MCP server for code quality enforcement. *(updated 2026-06-15)*
-- [TAPPS Run Log](../packages/tapps-mcp/src/tapps_mcp/prompts/runlog_template.md) — <!-- Example entries: *(updated 2026-04-08)*
-- [Skill](../plugin/cursor/skills/tapps-apply-files/SKILL.md) — When a TappsMCP or DocsMCP tool returns `content_return: true` with a `file_manifest`, *(updated 2026-06-14)*
-- [Skill](../plugin/cursor/skills/tapps-finish-task/SKILL.md) — Close out the current task end-to-end. Run each step; do NOT skip one that failed — surface the failure and stop. *(updated 2026-06-14)*
-- [Skill](../plugin/cursor/skills/tapps-memory/SKILL.md) — `tapps_memory` is **not** an MCP tool (removed v3.12.0, TAP-1994). Consumer repos stay **bridge-only** — never add `t... *(updated 2026-06-14)*
-- [Skill](../plugin/cursor/skills/tapps-review-pipeline/SKILL.md) — Run a parallel review-fix-validate pipeline on changed Python files: *(updated 2026-06-14)*
+- [Brain-central doc RAG — fleet cutover runbook](operations/brain-doc-rag-cutover-runbook.md) — Maintenance window (~30 minutes) for ADR-0014 big-bang cutover. *(updated 2026-06-22)*
 ## Other
 
-- [Security Policy](../SECURITY.md) — | Version | Supported          | *(updated 2026-05-12)*
-- [Troubleshooting](TROUBLESHOOTING.md) — **Problem:** When the MCP host (Claude Code, Cursor, VS Code) restarts or reloads, the MCP server connection is lost.... *(updated 2026-06-16)*
+- [Troubleshooting](TROUBLESHOOTING.md) — **Problem:** When the MCP host (Claude Code, Cursor, VS Code) restarts or reloads, the MCP server connection is lost.... *(updated 2026-06-17)*
 - [1. Smoke](archive/smoke/0001-smoke.md) — Date: 2026-06-14 *(updated 2026-06-14)*
 - [2. Smoke](archive/smoke/0002-smoke.md) — Date: 2026-06-14 *(updated 2026-06-14)*
 - [3. Smoke](archive/smoke/0003-smoke.md) — Date: 2026-06-14 *(updated 2026-06-15)*
-- [Compaction Resilience Spec](specs/compaction-resilience.md) — **Status:** Active *(updated 2026-05-23)*
-- [Stage 4 of 5: Validate](../packages/tapps-core/src/tapps_core/prompts/validate.md) — Run comprehensive quality checks on all changed files. Full scoring includes type checking, security analysis, and co... *(updated 2026-04-05)*
-- [Stage 5 of 5: Verify](../packages/tapps-core/src/tapps_core/prompts/verify.md) — Final verification that all required quality steps were completed. The checklist reviews which tools were called duri... *(updated 2026-04-05)*
-- [Stage 4 of 5: Validate](../packages/tapps-mcp/src/tapps_mcp/prompts/validate.md) — Run comprehensive quality checks on all changed files. Full scoring includes type checking, security analysis, and co... *(updated 2026-04-05)*
-- [Stage 5 of 5: Verify](../packages/tapps-mcp/src/tapps_mcp/prompts/verify.md) — Final verification that all required quality steps were completed. The checklist reviews which tools were called duri... *(updated 2026-06-12)*
-- [Tapps Researcher](../plugin/cursor/agents/tapps-researcher.md) — You are a TappsMCP research assistant. When invoked: *(updated 2026-04-05)*
-- [Tapps Reviewer](../plugin/cursor/agents/tapps-reviewer.md) — You are a TappsMCP quality reviewer. When invoked: *(updated 2026-04-05)*
-- [Tapps Validator](../plugin/cursor/agents/tapps-validator.md) — You are a TappsMCP validation agent. When invoked: *(updated 2026-04-05)*
-- [Skill](../plugin/cursor/skills/linear-read/SKILL.md) — Multi-issue Linear reads are cache-first by contract (TAP-967 audit: 5,368 `list_issues` calls / 0.26% cache adoption... *(updated 2026-06-14)*
-- [Skill](../plugin/cursor/skills/tapps-continue-session/SKILL.md) — Start work in a fresh context by assembling structured state. *(updated 2026-06-14)*
-- [Skill](../plugin/cursor/skills/tapps-engagement/SKILL.md) — Set the TappsMCP LLM engagement level: *(updated 2026-06-14)*
-- [Skill](../plugin/cursor/skills/tapps-handoff-session/SKILL.md) — End the session with a durable handoff the next chat can load via `/tapps-continue-session`. *(updated 2026-06-16)*
+- [Compaction Resilience Spec](specs/compaction-resilience.md) — **Status:** Active *(updated 2026-06-16)*
 ## Planning
 
 - [TappsMCP Platform — Backlog Plan (Obsolete — see Linear)](TAPPS_BACKLOG_PLAN.md) — This file is no longer maintained. The 49-issue plan generated on 2026-04-21 *(updated 2026-05-05)*
 - [PRD: Smoke](archive/smoke/PRD-smoke.md) — <!-- docsmcp:start:executive-summary --> *(updated 2026-06-15)*
 - [Epic 111: Dependency Upgrade: Latest Stable Quality & Runtime Libraries](epics/EPIC-111.md) — <!-- docsmcp:start:metadata --> *(updated 2026-06-15)*
-- [Epic 112: Quality Tool Cross-Repo UX & Audit Hardening](epics/EPIC-112.md) — <!-- docsmcp:start:metadata --> *(updated 2026-06-15)*
+- [Epic 112: Quality Tool Cross-Repo UX & Audit Hardening](epics/EPIC-112.md) — <!-- docsmcp:start:metadata --> *(updated 2026-06-22)*
 - [server_analysis_tools.py: honor project_root in MCP handlers](epics/stories/STORY-112.1.md) — server_analysis_tools.py: honor project_root in MCP handlers *(updated 2026-06-15)*
 - [validate_changed.py: cross-repo explicit file_paths](epics/stories/STORY-112.2.md) — validate_changed.py: cross-repo explicit file_paths *(updated 2026-06-15)*
 - [audit_chunker.py: auto-detect monorepo graph_root](epics/stories/STORY-112.3.md) — audit_chunker.py: auto-detect monorepo graph_root *(updated 2026-06-15)*
@@ -239,19 +160,8 @@
 - [validate_changed_diagnostics.py: close EPIC-103 gaps](epics/stories/STORY-112.6.md) — validate_changed_diagnostics.py: close EPIC-103 gaps *(updated 2026-06-15)*
 - [Handoff → tapps-brain: capabilities needed to unblock the "migrate local state into brain" epic (TAP-1996)](handoff/BRAIN-wave2-capabilities.md) — **Status:** requested by tapps-mcp 2026-06-01; revised 2026-06-09 after brain-side review. *(updated 2026-06-09)*
 - [Dogfood Retest Checklist (EPIC-113 / TAP-4026)](operations/DOGFOOD-RETEST.md) — Run this checklist on the **tapps-mcp dev repo** after CallMcpTool unwrap (TAP-4017), rolling-stats filter (TAP-4025)... *(updated 2026-06-15)*
-- [Epic 2: System Hardening](../packages/docs-mcp/docs/issues/epic-002-system-hardening.md) — <!-- docsmcp:start:metadata --> *(updated 2026-04-08)*
-- [Epic 3: Observability Stack](../packages/docs-mcp/docs/issues/epic-003-observability-stack.md) — <!-- docsmcp:start:metadata --> *(updated 2026-04-08)*
-- [Epic 4: Backup and Recovery](../packages/docs-mcp/docs/issues/epic-004-backup-recovery.md) — <!-- docsmcp:start:metadata --> *(updated 2026-04-08)*
-- [Epic 5: Secrets Management](../packages/docs-mcp/docs/issues/epic-005-secrets-management.md) — <!-- docsmcp:start:metadata --> *(updated 2026-04-08)*
-- [Epic 6: Supply Chain Security](../packages/docs-mcp/docs/issues/epic-006-supply-chain-security.md) — <!-- docsmcp:start:metadata --> *(updated 2026-04-08)*
-- [Epic 7: AI Agent Security](../packages/docs-mcp/docs/issues/epic-007-agent-security.md) — <!-- docsmcp:start:metadata --> *(updated 2026-04-08)*
-- [Story 9.3 -- Evaluate CLI Fallback Agent (Aider or Codex)](../packages/docs-mcp/docs/issues/story-009.3-cli-fallback-eval.md) — <!-- docsmcp:start:user-story --> *(updated 2026-04-08)*
-- [init.py: _bootstrap_claude skips CLAUDE.md obligation updates on upgrade](../packages/docs-mcp/docs/stories/STORY-tapps-obligations-marker-block.md) — On 2026-04-24 I shipped TAP-964 (tapps_linear_snapshot_get/put/invalidate) and TAP-967 (narrow list_issues triage) in... *(updated 2026-04-28)*
-- [Skill](../plugin/cursor/skills/linear-issue/SKILL.md) — Work with Linear issues for AI-agent consumption. Infer intent from the user's prompt and act autonomously within sco... *(updated 2026-06-14)*
-- [Epic 86: Zeek 8.x Native Telemetry & Capture Health Dashboard](../stories/epic-86-zeek-telemetry-capture-health.md) — <!-- docsmcp:start:metadata --> *(updated 2026-04-05)*
 ## Release
 
-- [Changelog](../CHANGELOG.md) — All notable changes to this project will be documented in this file. *(updated 2026-06-16)*
 - [Init and Upgrade — Feature List](INIT_AND_UPGRADE_FEATURE_LIST.md) — This document lists what each init-related process does. The codebase has **two init flows** plus **upgrade commands*... *(updated 2026-06-09)*
 - [TappsMCP Platform — Sprint Board](SPRINT_BOARD.md) — **Project:** TappsMCP Platform *(updated 2026-06-09)*
 - [tapps-brain v2.1.0 — Tag Required](TAPPS_BRAIN_V2.1_TAG.md) — **Date:** 2026-04-07 *(updated 2026-04-07)*
@@ -261,10 +171,4 @@
 - [Brain v3.18.0 Kwarg Audit — TAP-1977](migrations/brain-v3.18-kwarg-audit.md) — **Date:** 2026-05-23 *(updated 2026-06-13)*
 - [tapps_memory Deprecation Migration Table (TAP-1991)](migrations/tapps-memory-deprecation.md) — **Status:** REMOVED — v3.12.0 (TAP-1994, Phase 3 complete 2026-Q2). *(updated 2026-06-01)*
 - [Migration: `<old_tool_name>` → `<new_tool_name>`](migrations/template.md) — **Removed in**: vX.Y.Z *(updated 2026-05-23)*
-- [Fleet maintenance — multi-repo TAPPS upgrade and audit](operations/FLEET-MAINTENANCE.md) — Runbook for upgrading **tapps-mcp**, **AgentForge**, and **NewCompanyIdeas** together on one machine (Cursor primary)... *(updated 2026-06-16)*
-- [Changelog](../packages/docs-mcp/docs/CHANGELOG_GENERATED.md) — All notable changes to this project will be documented in this file. *(updated 2026-04-13)*
-- [tapps_memory Deprecation Migration](../packages/tapps-mcp/docs/migrations/tapps-memory-deprecation.md) — **Status:** Phase 2 complete (TAP-1993, 2026-05-26) *(updated 2026-05-27)*
-- [Changelog](../plugin/cursor/CHANGELOG.md) — - Initial release of TappsMCP Quality Tools for Cursor *(updated 2026-04-05)*
-- [Skill](../plugin/cursor/skills/linear-release-update/SKILL.md) — Post a structured Linear project update document when a new version is released. The user's request to post a release... *(updated 2026-06-14)*
-- [Skill](../plugin/cursor/skills/tapps-security/SKILL.md) — Run a comprehensive security audit using TappsMCP: *(updated 2026-06-14)*
-- [Skill](../plugin/cursor/skills/tapps-upgrade/SKILL.md) — Upgrade tapps-mcp / docs-mcp end-to-end. The user's request is standing authorization — do NOT pause mid-flow. *(updated 2026-06-14)*
+- [Fleet maintenance — multi-repo TAPPS upgrade and audit](operations/FLEET-MAINTENANCE.md) — Runbook for upgrading **tapps-mcp**, **AgentForge**, **NLTlabsPE**, and **NewCompanyIdeas** together on one machine (... *(updated 2026-06-17)*

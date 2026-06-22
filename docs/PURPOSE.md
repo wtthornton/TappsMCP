@@ -4,7 +4,7 @@
 
 **tapps-mcp** exists to give AI coding assistants **deterministic, checker-backed quality tools** instead of relying on model memory for lint rules, security patterns, and gate thresholds. It provides MCP servers that score code, enforce quality gates, scan dependencies, look up library documentation, and persist cross-session decisions via tapps-brain — for Claude Code, Cursor, VS Code Copilot, and any MCP-capable client.
 
-The monorepo ships **TappsMCP** (32 quality tools), **DocsMCP** (documentation generation and validation), and **tapps-core** (shared infrastructure). Consuming projects bootstrap via `tapps_init` and run the TAPPS quality pipeline (`tapps_session_start` → `tapps_quick_check` → `tapps_validate_changed` → `tapps_checklist`).
+The monorepo ships **TappsMCP** (42 quality tools), **DocsMCP** (42 documentation tools), and **tapps-core** (shared infrastructure) — **84 MCP tools** combined. Consuming projects bootstrap via `tapps_init` and run the TAPPS quality pipeline (`tapps_session_start` → `tapps_quick_check` → `tapps_validate_changed` → `tapps_checklist`).
 
 ## Design Principles
 

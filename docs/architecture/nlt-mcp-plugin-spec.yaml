@@ -73,7 +73,7 @@ plugin_version: "1.0.0"
 # Research-aligned constraints (2026)
 # ---------------------------------------------------------------------------
 constraints:
-  max_tools_per_server: 20 # soft target; nlt-project-docs is 27 total / 6 eager — defer_loading required
+  max_tools_per_server: 20 # soft target; nlt-project-docs is 29 total / 0 eager — defer_loading required
   max_eager_tools_per_server: 9
   duplication_policy: zero # no tool name in more than one server profile
   tool_name_prefixes: # unchanged; server ID provides namespace via host (mcp__nlt-code-quality__...)
@@ -248,20 +248,20 @@ servers:
     serve_command: docsmcp
     serve_args: ["serve", "--profile", "nlt-project-docs"]
     default_enabled: false
-    tool_count: 27
-    eager_count: 6
+    tool_count: 29
+    eager_count: 0
     skills: []
     hooks:
       - tapps-post-docs-validate
     tools:
-      eager:
+      eager: []
+      deferred:
         - docs_session_start
         - docs_project_scan
         - docs_check_drift
         - docs_generate_readme
         - docs_check_completeness
         - docs_check_links
-      deferred:
         - docs_config
         - docs_module_map
         - docs_api_surface
@@ -270,6 +270,8 @@ servers:
         - docs_generate_adr
         - docs_generate_onboarding
         - docs_generate_contributing
+        - docs_generate_runbook
+        - docs_generate_postmortem
         - docs_generate_prd
         - docs_generate_diagram
         - docs_generate_architecture

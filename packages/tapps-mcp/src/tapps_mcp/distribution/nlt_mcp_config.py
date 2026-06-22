@@ -104,7 +104,7 @@ NLT_SERVER_EAGER_COUNTS: Final[dict[str, int]] = {
     "nlt-memory": 2,
     "nlt-setup": 2,
     "nlt-linear-issues": 7,
-    "nlt-project-docs": 6,
+    "nlt-project-docs": 0,
     "nlt-release-ship": 5,
     # Legacy profile names in --profile args map to same counts
     "nlt-code-quality": 9,
@@ -116,7 +116,7 @@ NLT_SERVER_TOTAL_COUNTS: Final[dict[str, int]] = {
     "nlt-memory": 4,
     "nlt-setup": 7,
     "nlt-linear-issues": 15,
-    "nlt-project-docs": 27,
+    "nlt-project-docs": 29,
     "nlt-release-ship": 6,
     "nlt-code-quality": 18,
     "nlt-platform-admin": 7,

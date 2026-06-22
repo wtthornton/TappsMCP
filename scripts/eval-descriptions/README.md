@@ -30,6 +30,14 @@ For each scenario in `scenarios.yaml`, the harness:
 | `compare.py` | A/B between two git refs via `git worktree`. Wraps `run.py` twice + emits diff. |
 | `report.py` | Renders the comparison JSON as Markdown. Importable from `compare.py`. |
 
+## Module constants
+
+| Name | Module | Meaning |
+|---|---|---|
+| `REPO_ROOT` | `run.py`, `compare.py` | Monorepo root (`scripts/eval-descriptions/../../`) |
+| `RUN_SCRIPT` | `compare.py` | Path to `run.py` invoked inside worktrees |
+| `prewarm_mcp` | `run.py` | Optional dummy `claude -p` call to warm MCP server spawn before scenarios |
+
 ## Usage
 
 ```bash

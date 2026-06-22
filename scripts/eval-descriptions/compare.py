@@ -69,6 +69,7 @@ def add_worktree(ref: str, target: Path) -> None:
 
 
 def remove_worktree(target: Path) -> None:
+    """Remove a detached git worktree created for eval baselines."""
     subprocess.run(  # nosec B603 — explicit args, no shell, no user input.
         ["git", "worktree", "remove", "--force", str(target)],
         cwd=REPO_ROOT,
@@ -134,6 +135,7 @@ def run_eval(
     backend: str = "cli",
     model: str | None = None,
 ) -> dict:
+    """Run ``run.py`` in a worktree and return parsed JSON results."""
     mcp_config = copy_mcp_config(worktree)
     cmd: list[str] = [
         sys.executable,
@@ -333,6 +335,7 @@ def _write_report(
 
 
 def main() -> int:
+    """Compare tool-selection eval results between two git refs."""
     args = _build_arg_parser().parse_args()
     base_label = safe_ref_label(args.baseline_ref)
     head_label = safe_ref_label(args.head_ref)

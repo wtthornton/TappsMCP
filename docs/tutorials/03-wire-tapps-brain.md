@@ -80,7 +80,7 @@ uv run tapps-mcp memory save \
 
 The JSON output should include `success: true` and an `expires_at` timestamp 14 days out (default for the `context` tier).
 
-Alternatively, enable **`nlt-memory`** in MCP config and ask the agent to save via the memory MCP tools (see [tutorial 06](06-first-memory-session.md)). The standalone `tapps_memory` MCP tool was removed in v3.12.0.
+Alternatively, enable **`nlt-memory`** in MCP config and use the slim `tapps_memory` MCP facade (see [tutorial 06](06-first-memory-session.md)). The tool is **not** on `nlt-build`; prefer `uv run tapps-mcp memory` CLI for full brain actions.
 
 ## Step 6 — Recall it from a new session
 

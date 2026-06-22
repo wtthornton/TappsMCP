@@ -2,13 +2,13 @@
 
 ## Overview
 
-**Tapps Platform** ships two MCP servers for AI-assisted development: **TappsMCP** (code quality, security, shared memory) and **DocsMCP** (documentation generation and maintenance). Together they expose **70 tools** with structured, deterministic outputs suitable for Claude Code, Cursor, VS Code, and any MCP host.
+**Tapps Platform** ships two MCP servers for AI-assisted development: **TappsMCP** (code quality, security, shared memory) and **DocsMCP** (documentation generation and maintenance). Together they expose **84 tools** (42 per package) with structured, deterministic outputs suitable for Claude Code, Cursor, VS Code, and any MCP host.
 
 ### What's new in v3.12
 
 - **Needs-based NLT MCP taxonomy** ([ADR-0016](docs/adr/0016-needs-based-nlt-mcp-taxonomy.md)) — six `nlt-*` servers split by workflow. The deployment default is the **`full` bundle** (all six servers, [ADR-0018](docs/adr/0018-deploy-all-six-nlt-mcp-servers-by-default.md)); opt down with `--bundle developer` (`nlt-build` + `nlt-memory` + `nlt-linear-issues`, ~18 eager) or `--bundle minimal` for token-tight sessions. Legacy IDs `nlt-code-quality` / `nlt-platform-admin` map to `nlt-build` / `nlt-setup` for one release. See [docs/tutorials/04-nlt-mcp-session-modes.md](docs/tutorials/04-nlt-mcp-session-modes.md).
 - **Brain-central doc RAG** ([ADR-0014](docs/adr/0014-brain-central-doc-rag-big-bang.md)) — `tapps_lookup_docs` routes through tapps-brain when you enable `docs_via_brain`; fleet cutover runbook at [docs/operations/brain-doc-rag-cutover-runbook.md](docs/operations/brain-doc-rag-cutover-runbook.md).
-- **Cross-session handoff** — `/tapps-handoff-session` writes `.tapps-mcp/session-handoff.md`; `/tapps-continue-session` bootstraps the next chat. Memory persistence via `uv run tapps-mcp memory` CLI (BrainBridge); `tapps_memory` MCP tool removed in v3.12.0.
+- **Cross-session handoff** — `/tapps-handoff-session` writes `.tapps-mcp/session-handoff.md`; `/tapps-continue-session` bootstraps the next chat. Memory persistence via `uv run tapps-mcp memory` CLI (BrainBridge); slim `tapps_memory` MCP on `nlt-memory` only (not on `nlt-build`).
 - **Cursor loop observability** — stop hook records loop metrics, completion-gate violations (`.tapps-mcp/.completion-gate-violations.jsonl`), and `tapps_usage` gap reports inlined on `tapps_checklist`.
 - **Docs quality CI** — `.github/workflows/docs-quality.yml` runs `scripts/docs-quality-gate.py` on PRs touching tier-1 docs. Refresh workflow: [docs/tutorials/05-docs-refresh-workflow.md](docs/tutorials/05-docs-refresh-workflow.md).
 - **Wrapper skills removed** — `tapps-score`, `tapps-gate`, `tapps-validate`, `tapps-report` deleted; use direct MCP tools or `/tapps-finish-task`.
@@ -37,8 +37,8 @@ See [CHANGELOG.md](CHANGELOG.md) for the full history.
 |---|---|---|
 | **tapps-brain** | Shared memory service (Docker + Postgres, HTTP at `localhost:8080`). External repo — see [tapps-brain](https://github.com/wtthornton/tapps-brain) for the canonical storage/retrieval/federation docs. | 0 (library; brain_* MCP tools ship in the service) |
 | **tapps-core** | Shared infrastructure (config, security, logging, knowledge, metrics, adaptive) | 0 (library) |
-| **tapps-mcp** | Code quality MCP server (scoring, gates, tools, validation) | 32 |
-| **docs-mcp** | Documentation generation and maintenance MCP server | 38 |
+| **tapps-mcp** | Code quality MCP server (scoring, gates, tools, validation) | 42 |
+| **docs-mcp** | Documentation generation and maintenance MCP server | 42 |
 
 Install is from the local checkout (`uv tool install -e packages/tapps-mcp`); the packages are not published to PyPI. See [Install](#install).
 
