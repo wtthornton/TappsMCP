@@ -63,6 +63,20 @@ class TestEnsureFleetRunning:
 
         monkeypatch.setattr(time, "sleep", lambda _s: None)
 
+    @pytest.fixture(autouse=True)
+    def _isolate_state(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        # The watchdog debounce persists the previous unhealthy set to disk;
+        # keep that out of the real ~/.tapps-mcp during tests.
+        monkeypatch.setattr(
+            fleet_control, "FLEET_WATCH_STATE_FILE", tmp_path / ".watch-unhealthy.json"
+        )
+
+    @staticmethod
+    def _seed_prev_unhealthy(*server_ids: str) -> None:
+        # Simulate a prior watchdog poll that already saw these servers down,
+        # so the next call treats them as confirmed (debounce satisfied).
+        fleet_control._write_prev_unhealthy(set(server_ids))
+
     def test_healthy_is_noop(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setattr(fleet_control, "_port_listening", _listening(set()))
         result = fleet_control.ensure_fleet_running()
@@ -91,10 +105,28 @@ class TestEnsureFleetRunning:
         result = fleet_control.ensure_fleet_running()
         assert result == {"action": "none", "healthy": True, "unhealthy": []}
 
+    def test_first_strike_defers_without_restart(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        # A server down on a single poll (no prior strike) must defer, not
+        # restart -- this is the host-overload debounce.
+        monkeypatch.setattr(fleet_control, "_port_listening", _listening({8764}))
+
+        def _no_restart(*_a: Any, **_kw: Any) -> Any:  # pragma: no cover - must not run
+            raise AssertionError("first strike must not restart")
+
+        monkeypatch.setattr(fleet_control.subprocess, "run", _no_restart)
+        monkeypatch.setattr(fleet_control, "start_fleet", _no_restart)
+
+        result = fleet_control.ensure_fleet_running()
+        assert result["action"] == "defer"
+        assert result["unhealthy"] == ["nlt-project-docs"]
+        # The suspect set is persisted for the next poll's confirmation.
+        assert fleet_control._read_prev_unhealthy() == {"nlt-project-docs"}
+
     def test_unhealthy_restarts_canonical_service(self, monkeypatch: pytest.MonkeyPatch) -> None:
         # 8760 == nlt-build port; mark it down so the fleet is unhealthy.
         monkeypatch.setattr(fleet_control, "_port_listening", _listening({8760}))
         monkeypatch.setattr(fleet_control, "_systemd_unit_available", lambda _unit: True)
+        self._seed_prev_unhealthy("nlt-build")  # second consecutive strike
         calls: list[list[str]] = []
 
         class _Proc:
@@ -121,6 +153,7 @@ class TestEnsureFleetRunning:
     ) -> None:
         monkeypatch.setattr(fleet_control, "_port_listening", _listening({8760}))
         monkeypatch.setattr(fleet_control, "_systemd_unit_available", lambda _unit: False)
+        self._seed_prev_unhealthy("nlt-build")  # second consecutive strike
         started: list[bool] = []
         monkeypatch.setattr(
             fleet_control, "start_fleet", lambda *, force: started.append(force) or {}
@@ -128,6 +161,20 @@ class TestEnsureFleetRunning:
         result = fleet_control.ensure_fleet_running()
         assert result["action"] == "direct_start"
         assert started == [True]
+
+
+class TestFleetStatusReachability:
+    def test_reachable_uses_tcp_not_http_root(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        # Platform servers return 404 on `/`; status must not treat that as down.
+        seen: list[tuple[str, int]] = []
+
+        def _probe(host: str, port: int, **_kw: Any) -> bool:
+            seen.append((host, port))
+            return True
+
+        monkeypatch.setattr(fleet_control, "_port_listening", _probe)
+        assert fleet_control._http_reachable("nlt-project-docs") is True
+        assert seen == [(fleet_control.resolve_fleet_host(), 8764)]
 
 
 class TestDoctorCrashLoopCheck:

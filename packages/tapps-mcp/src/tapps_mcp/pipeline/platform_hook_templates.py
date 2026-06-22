@@ -20,6 +20,10 @@ from tapps_mcp.pipeline.agent_contract import (
 )
 
 
+# ADR-0024: never reap the shared HTTP fleet (`serve --transport http`).
+_FLEET_HTTP_AWK_SKIP = " && !/--transport http|--transport=http/"
+
+
 def _mcp_zombie_cleanup_bash(
     *,
     reap_nlt_duplicates: bool = False,
@@ -39,7 +43,7 @@ def _mcp_zombie_cleanup_bash(
     if reap_nlt_duplicates:
         nlt_dup_block = """
     NLT_DUP_PIDS=$(ps -eo pid,etimes,cmd 2>/dev/null | \\
-        awk '/serve --profile nlt-/ {
+        awk '/serve --profile nlt-/ && !/--transport http|--transport=http/ {
             pid=$1; age=$2;
             rest=$0;
             sub(/^.*serve --profile /, "", rest);
@@ -65,7 +69,7 @@ def _mcp_zombie_cleanup_bash(
     if reap_stale_nlt_profiles:
         nlt_stale_block = f"""
     NLT_STALE_PIDS=$(ps -eo pid,etimes,cmd 2>/dev/null | \\
-        awk '$2 > {stale_nlt_min_age_seconds} && /serve --profile nlt-/ {{print $1}}')"""
+        awk '$2 > {stale_nlt_min_age_seconds} && /serve --profile nlt-/{_FLEET_HTTP_AWK_SKIP} {{print $1}}')"""
     merge_parts: list[str] = ['"$OLD_PIDS"', '"$VENV_PIDS"']
     if reap_nlt_duplicates:
         merge_parts.append('"$NLT_DUP_PIDS"')
@@ -78,7 +82,7 @@ def _mcp_zombie_cleanup_bash(
 # DO NOT REMOVE — see docs/adr/0005-mcp-server-zombie-cleanup-hook-on-session-start.md
 if command -v ps &>/dev/null && command -v awk &>/dev/null; then
     OLD_PIDS=$(ps -eo pid,etimes,cmd 2>/dev/null | \\
-        awk '$2 > 7200 && /tapps-mcp|docsmcp|tapps-platform/ && /serve/ {{print $1}}')
+        awk '$2 > 7200 && /tapps-mcp|docsmcp|tapps-platform/ && /serve/{_FLEET_HTTP_AWK_SKIP} {{print $1}}')
     VENV_PIDS=$(ps -eo pid,cmd 2>/dev/null | \\
         awk '/\\.venv\\/bin\\/(tapps-mcp|docsmcp|tapps-platform)/ && /serve/ {{print $1}}'){nlt_dup_block}{nlt_stale_block}
     ZOMBIE_PIDS=$({{
@@ -106,6 +110,9 @@ def _mcp_zombie_cleanup_cursor_bash() -> str:
 if command -v ps &>/dev/null; then
     ORPHAN_PIDS=$(ps -eo pid=,ppid=,cmd= 2>/dev/null | while read -r pid ppid cmd_rest; do
         if printf '%s' "$cmd_rest" | grep -qE 'serve --profile nlt-|/(tapps-mcp|docsmcp|tapps-platform)( |$).*serve'; then
+            if printf '%s' "$cmd_rest" | grep -qE -- '--transport[ =]http'; then
+                continue
+            fi
             if [ "$ppid" = "1" ] || ! kill -0 "$ppid" 2>/dev/null; then
                 echo "$pid"
             fi

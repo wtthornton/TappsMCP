@@ -29,6 +29,33 @@ class TestFindOrphanMcpServePids:
         ):
             assert find_orphan_mcp_serve_pids() == [12345]
 
+    def test_skips_fleet_http_transport(self) -> None:
+        ps_out = (
+            "12345 1 tapps-mcp serve --profile nlt-build --transport http --port 8760\n"
+            "99999 1 uv run tapps-mcp serve --profile nlt-build\n"
+        )
+        with patch(
+            "tapps_mcp.distribution.mcp_zombie_reap.subprocess.run",
+            return_value=type("R", (), {"returncode": 0, "stdout": ps_out})(),
+        ):
+            assert find_orphan_mcp_serve_pids() == [99999]
+
+    def test_skips_fleet_pid_file(self, tmp_path) -> None:
+        from tapps_mcp.distribution import nlt_http_fleet
+
+        pid_dir = tmp_path / "pids"
+        pid_dir.mkdir()
+        (pid_dir / "nlt-build.pid").write_text("12345", encoding="utf-8")
+        ps_out = "12345 1 tapps-mcp serve --profile nlt-build\n"
+        with (
+            patch.object(nlt_http_fleet, "FLEET_PID_DIR", pid_dir),
+            patch(
+                "tapps_mcp.distribution.mcp_zombie_reap.subprocess.run",
+                return_value=type("R", (), {"returncode": 0, "stdout": ps_out})(),
+            ),
+        ):
+            assert find_orphan_mcp_serve_pids() == []
+
     def test_skips_live_parent(self) -> None:
         ps_out = "99999 88888 uv run tapps-mcp serve --profile nlt-build\n"
         with (

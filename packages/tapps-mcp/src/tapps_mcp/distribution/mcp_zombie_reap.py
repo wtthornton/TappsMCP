@@ -66,11 +66,26 @@ def _iter_mcp_serve_processes() -> list[tuple[int, int, str]]:
 
 def find_orphan_mcp_serve_pids() -> list[int]:
     """Return PIDs of MCP serve processes whose parent is dead."""
+    fleet_pids = _load_fleet_supervised_pids()
     orphans: list[int] = []
-    for pid, ppid, _cmd in _iter_mcp_serve_processes():
+    for pid, ppid, cmd in _iter_mcp_serve_processes():
+        if pid in fleet_pids or _is_fleet_http_serve(cmd):
+            continue
         if ppid == 1 or not _parent_alive(ppid):
             orphans.append(pid)
     return sorted(orphans)
+
+
+def _load_fleet_supervised_pids() -> set[int]:
+    from tapps_mcp.distribution.nlt_http_fleet import read_fleet_supervised_pids
+
+    return read_fleet_supervised_pids()
+
+
+def _is_fleet_http_serve(cmd: str) -> bool:
+    from tapps_mcp.distribution.nlt_http_fleet import is_fleet_http_serve_command
+
+    return is_fleet_http_serve_command(cmd)
 
 
 def find_live_mcp_serve_pids() -> list[int]:

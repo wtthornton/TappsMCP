@@ -18,14 +18,14 @@
 
 ## API Reference
 
-- [Configuration Reference](CONFIG_REFERENCE.md) — TappsMCP is configured via `.tapps-mcp.yaml` in the project root. Settings can also be overridden with environment va... *(updated 2026-06-10)*
+- [Configuration Reference](CONFIG_REFERENCE.md) — TappsMCP is configured via `.tapps-mcp.yaml` in the project root. Settings can also be overridden with environment va... *(updated 2026-06-22)*
 - [Field Report: TappsMCP + DocsMCP Full-Session Usage](FEEDBACK_2026-04-06_agentforge-cleanup-session.md) — **Date:** 2026-04-06 *(updated 2026-04-06)*
-- [tapps-mcp — Documentation Index](INDEX.md) — **234 documents** across **9 categories** *(updated 2026-06-16)*
+- [tapps-mcp — Documentation Index](INDEX.md) — **138 documents** across **9 categories** *(updated 2026-06-22)*
 - [TappsMCP Memory Reference](MEMORY_REFERENCE.md) — Complete reference for TappsMCP **shared brain memory** — **42 actions** when accessed via CLI or the `nlt-memory` MC... *(updated 2026-06-16)*
 - [Skill Authoring Conventions](SKILL_AUTHORING.md) — Reference commit: mattpocock/skills@b8be62f *(updated 2026-05-27)*
 - [TAP-967: 2-Week `list_issues` Call-Count Measurement Report](TAP-967-measurement.md) — **Measurement date:** 2026-05-07 *(updated 2026-06-13)*
 - [`packages.docs-mcp.src.docs_mcp`](api/docs-mcp.md) — Docs MCP: Documentation MCP server for the Tapps platform. *(updated 2026-06-22)*
-- [`.tapps-mcp.test_handoff_mcp_client`](api/reference.md) — Single-tool stdio verify: tapps_handoff_save on nlt-memory. *(updated 2026-06-15)*
+- [API Reference Index](api/reference.md) — Auto-generated package-level API docs (public symbols, markdown). Regenerate with `docs_generate_api` per package or ... *(updated 2026-06-22)*
 - [`packages.tapps-core.src.tapps_core`](api/tapps-core.md) — Tapps Core: Shared infrastructure library for the Tapps platform. *(updated 2026-06-22)*
 - [`packages.tapps-mcp.src.tapps_mcp`](api/tapps-mcp.md) — TappsMCP: MCP server providing code quality tools. *(updated 2026-06-22)*
 - [`packages.docs-mcp.src.docs_mcp`](archive/api/docs-mcp-api.md) — Docs MCP: Documentation MCP server for the Tapps platform. *(updated 2026-04-05)*
@@ -52,8 +52,8 @@
 - [Operator secrets (one file, all repos)](operations/OPERATOR-SECRETS.md) — TappsMCP operator secrets are **machine-wide** — the same Context7 API key and *(updated 2026-06-15)*
 ## Architecture
 
-- [TappsMCP Architecture Reference](ARCHITECTURE.md) — Detailed internal architecture for developers working on TappsMCP itself. *(updated 2026-06-16)*
-- [tapps-mcp — Architecture Overview](PURPOSE.md) — **tapps-mcp** exists to give AI coding assistants **deterministic, checker-backed quality tools** instead of relying ... *(updated 2026-06-16)*
+- [TappsMCP Architecture Reference](ARCHITECTURE.md) — Detailed internal architecture for developers working on TappsMCP itself. *(updated 2026-06-22)*
+- [tapps-mcp — Architecture Overview](PURPOSE.md) — **tapps-mcp** exists to give AI coding assistants **deterministic, checker-backed quality tools** instead of relying ... *(updated 2026-06-22)*
 - [1. In-process AgentBrain via BrainBridge](adr/0001-in-process-agentbrain-via-brainbridge.md) — Date: 2026-05-02 *(updated 2026-05-12)*
 - [2. Pin tapps-brain version floor at 3.7.2 (range: >=3.7.2, <4)](adr/0002-pin-tapps-brain-version-floor-at-372.md) — Date: 2026-05-02 *(updated 2026-05-15)*
 - [4. Deterministic-tools-only contract](adr/0004-deterministic-tools-only-contract.md) — Date: 2026-05-02 *(updated 2026-05-12)*
@@ -77,7 +77,7 @@
 - [22. Agent hint contract — lookup timing and validation semantics](adr/0022-agent-hint-contract-lookup-and-validation-semantics.md) — Date: 2026-06-16 *(updated 2026-06-16)*
 - [ADR-0024: Shared HTTP MCP fleet for multi-window Cursor](adr/0024-shared-http-mcp-fleet.md) — Accepted (2026-06-16) *(updated 2026-06-22)*
 - [Agent Gateway Refusal Envelope — Field Spec](architecture/gateway-envelope.md) — When a tapps-mcp or docs-mcp gateway fires, the tool response (or PreToolUse exit-2 body) *(updated 2026-06-02)*
-- [MCP Server Eager-Tool Budget](architecture/tool-budget.md) — **Default budget:** 20 tools per MCP server *(updated 2026-06-16)*
+- [MCP Server Eager-Tool Budget](architecture/tool-budget.md) — **Default budget:** 20 tools per MCP server *(updated 2026-06-22)*
 - [PRD: Zeek Network Intelligence Service](architecture/zeek-network-intelligence-prd.md) — <!-- docsmcp:start:executive-summary --> *(updated 2026-04-05)*
 - [Class Hierarchy](archive/diagrams/class-hierarchy.md) *(updated 2026-04-05)*
 - [docs-mcp Dependency](archive/diagrams/docs-mcp-dependency.md) *(updated 2026-04-05)*
@@ -115,7 +115,7 @@
 - [YouTube MCP Setup](archive/reference/MCP_YOUTUBE_SETUP.md) — The YouTube MCP server is configured for this workspace. It provides: *(updated 2026-04-05)*
 - [TappsMCP: Setup and Use Summary](archive/reference/TAPPS_MCP_SETUP_AND_USE.md) — TappsMCP is an **MCP (Model Context Protocol) server** that exposes **code quality tools** to LLMs (Claude, Cursor, e... *(updated 2026-04-05)*
 - [Archived smoke-test artifacts](archive/smoke/README.md) — DocsMCP generator smoke outputs moved here during the 2026-06 documentation refresh. *(updated 2026-06-15)*
-- [TappsMCP Diagrams](diagrams/README.md) — Auto-generated from source by `docs-mcp`. All diagrams render natively on GitHub. *(updated 2026-06-10)*
+- [TappsMCP Diagrams](diagrams/README.md) — Auto-generated from source by `docs-mcp`. All diagrams render natively on GitHub. *(updated 2026-06-22)*
 - [Consumer repo: verify tapps-mcp ↔ tapps-brain wiring](operations/CONSUMER-REPO-BRAIN-WIRING.md) — Operator and agent checklist for wiring a **new LLM coding repo** to the shared *(updated 2026-06-15)*
 - [tapps-brain: Local and Multi-Project Setup](operations/TAPPS-BRAIN-LOCAL-SETUP.md) — This guide explains how to connect tapps-mcp to tapps-brain for persistent memory. *(updated 2026-06-09)*
 - [TappsMCP Epics](planning/epics/README.md) — Epics live in **Linear**, not in this repository. Per `.claude/rules/linear-standards.md`, create and update epics th... *(updated 2026-06-16)*
@@ -123,11 +123,11 @@
 ## Guides
 
 - [Call graph tools (consumer guide)](CALL_GRAPH.md) — TappsMCP v3.12.31+ ships **function-level call graph** tools for Python projects (Epic 114, ADR-0017). Use them befor... *(updated 2026-06-22)*
-- [Getting Started with tapps-mcp](ONBOARDING.md) — - **Python 3.12+** *(updated 2026-06-16)*
+- [Getting Started with tapps-mcp](ONBOARDING.md) — - **Python 3.12+** *(updated 2026-06-22)*
 - [TappsMCP Design System Style Guide](STYLE_GUIDE.md) — **Derived from:** the HomeIQ Design System Style Guide (sibling repo, see workspace). *(updated 2026-05-12)*
 - [Tutorial: Add a new MCP tool to tapps-mcp](tutorials/01-add-an-mcp-tool.md) — **Time:** ~15 minutes. **Outcome:** A working `tapps_hello` MCP tool callable from Claude Code, registered in the che... *(updated 2026-05-18)*
 - [Tutorial: Run the quality pipeline against a fresh Python project](tutorials/02-quality-pipeline-walkthrough.md) — **Time:** ~10 minutes. **Outcome:** A new Python project bootstrapped with TappsMCP scaffolding, a deliberate quality... *(updated 2026-05-02)*
-- [Tutorial: Wire tapps-brain into a Claude Code session](tutorials/03-wire-tapps-brain.md) — **Time:** ~20 minutes (10 of it is the brain HTTP service warming up the first time). **Outcome:** A Claude Code sess... *(updated 2026-06-15)*
+- [Tutorial: Wire tapps-brain into a Claude Code session](tutorials/03-wire-tapps-brain.md) — **Time:** ~20 minutes (10 of it is the brain HTTP service warming up the first time). **Outcome:** A Claude Code sess... *(updated 2026-06-22)*
 - [Tutorial: NLT MCP session modes](tutorials/04-nlt-mcp-session-modes.md) — **Time:** ~10 minutes. **Outcome:** You enable the right 1–3 MCP servers for your task, verify tools appear in Cursor... *(updated 2026-06-15)*
 - [Tutorial: Documentation refresh workflow](tutorials/05-docs-refresh-workflow.md) — **Time:** ~2 hours (full pass). **Outcome:** Tier-1 docs accurate, API/diagrams regenerated, link graph clean, CI doc... *(updated 2026-06-15)*
 - [Tutorial: Your first memory save and recall](tutorials/06-first-memory-session.md) — **Time:** ~10 min (after tutorial 03 brain wiring). **Outcome:** Save a project decision, recall it in a new chat, an... *(updated 2026-06-15)*

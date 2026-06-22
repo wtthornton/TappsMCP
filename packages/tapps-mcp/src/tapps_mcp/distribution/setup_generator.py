@@ -428,7 +428,7 @@ def _render_profile_stale_reap_bash(profile: str, *, min_age_seconds: int = 45) 
 # ADR-0005: reap stale orphans for this profile before exec (Cursor fleet hardening).
 if command -v ps &>/dev/null && command -v awk &>/dev/null; then
   _STALE_PIDS=$(ps -eo pid,etimes,cmd 2>/dev/null | \\
-    awk '$2 > {min_age_seconds} && /serve --profile {profile}/ {{print $1}}' || true)
+    awk '$2 > {min_age_seconds} && /serve --profile {profile}/ && !/--transport http|--transport=http/ {{print $1}}' || true)
   if [[ -n "${{_STALE_PIDS:-}}" ]]; then
     echo "[TappsMCP] Reaping stale serve PIDs for {profile}: $_STALE_PIDS" >&2
     echo "$_STALE_PIDS" | xargs kill 2>/dev/null || true

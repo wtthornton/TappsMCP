@@ -35,6 +35,24 @@ FLEET_LOG_DIR: Final[Path] = Path.home() / ".tapps-mcp" / "fleet" / "logs"
 FLEET_ENV_FILE: Final[Path] = Path.home() / ".tapps-mcp" / "fleet.env"
 
 
+def read_fleet_supervised_pids() -> set[int]:
+    """Return PIDs recorded by ``fleet start`` (ADR-0024 HTTP fleet)."""
+    pids: set[int] = set()
+    if not FLEET_PID_DIR.is_dir():
+        return pids
+    for pid_file in FLEET_PID_DIR.glob("*.pid"):
+        try:
+            pids.add(int(pid_file.read_text(encoding="utf-8").strip()))
+        except (OSError, ValueError):
+            continue
+    return pids
+
+
+def is_fleet_http_serve_command(cmd: str) -> bool:
+    """True when *cmd* is a shared HTTP fleet ``serve`` (must not be reaped)."""
+    return "--transport http" in cmd or "--transport=http" in cmd
+
+
 def default_fleet_code_root() -> Path:
     """Prefer ``~/code`` when present; else home."""
     code = Path.home() / "code"

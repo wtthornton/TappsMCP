@@ -97,6 +97,17 @@ def fleet_ensure() -> None:
         click.echo(click.style("Fleet healthy: all servers reachable", fg="green"))
         return
     unhealthy = ", ".join(result["unhealthy"])
+    if result["action"] == "defer":
+        # First strike: a single bad poll defers a restart so transient host
+        # overload does not sever every client's session (debounce).
+        click.echo(
+            click.style(
+                f"Fleet degraded ({unhealthy}); deferring restart pending "
+                "confirmation on the next poll",
+                fg="yellow",
+            )
+        )
+        return
     click.echo(
         click.style(
             f"Fleet unhealthy ({unhealthy}); recovered via {result['action']}",

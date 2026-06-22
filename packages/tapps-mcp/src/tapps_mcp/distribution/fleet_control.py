@@ -2,12 +2,11 @@
 
 from __future__ import annotations
 
+import json
 import os
 import signal
 import subprocess
 import time
-import urllib.error
-import urllib.request
 from pathlib import Path
 from typing import Any
 
@@ -23,6 +22,32 @@ from tapps_mcp.distribution.nlt_http_fleet import (
 )
 
 _OPERATOR_ENV = Path.home() / ".tapps-operator.env"
+
+# Cross-invocation watchdog state: server ids that were unreachable on the
+# previous ``fleet ensure`` run. A whole-fleet restart severs every client's
+# HTTP session, so we only act on servers that stay down across two
+# consecutive polls -- this debounces transient host overload (a heavy
+# ``uv run pytest`` / build saturating CPU makes short TCP probes time out for
+# every port at once, which must not trigger a fleet-wide restart).
+FLEET_WATCH_STATE_FILE = FLEET_PID_DIR.parent / ".watch-unhealthy.json"
+
+
+def _read_prev_unhealthy() -> set[str]:
+    try:
+        data = json.loads(FLEET_WATCH_STATE_FILE.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return set()
+    if isinstance(data, list):
+        return {str(item) for item in data}
+    return set()
+
+
+def _write_prev_unhealthy(unhealthy: set[str]) -> None:
+    try:
+        FLEET_WATCH_STATE_FILE.parent.mkdir(parents=True, exist_ok=True)
+        FLEET_WATCH_STATE_FILE.write_text(json.dumps(sorted(unhealthy)), encoding="utf-8")
+    except OSError:
+        pass
 
 
 def ensure_fleet_env_file() -> Path:
@@ -99,14 +124,15 @@ def _read_pid(server_id: str) -> int | None:
 
 
 def _http_reachable(server_id: str, fleet_host: str | None = None) -> bool:
+    """Return ``True`` when the fleet server's TCP port accepts connections.
+
+    Platform servers (``tapps-platform``, ``docsmcp``) return 404 on ``/`` with
+    MCP at ``/mcp``; an HTTP GET probe would misread that as down (``urlopen``
+    raises on 404). Match the watchdog and doctor: TCP listen check only.
+    """
     host = fleet_host or resolve_fleet_host()
     port = NLT_HTTP_FLEET_PORTS[server_id]
-    url = f"http://{host}:{port}/"
-    try:
-        with urllib.request.urlopen(url, timeout=1.5) as resp:  # noqa: S310
-            return 200 <= resp.status < 500
-    except (urllib.error.URLError, TimeoutError, ValueError):
-        return False
+    return _port_listening(host, port, timeout=1.5)
 
 
 def start_fleet(*, force: bool = False) -> dict[str, Any]:
@@ -260,13 +286,31 @@ def ensure_fleet_running() -> dict[str, Any]:
     cgroup; only outside systemd do we fall back to a direct start.
     """
     host = resolve_fleet_host()
-    unhealthy = [
+    down_now = {
         server_id
         for server_id, port in NLT_HTTP_FLEET_PORTS.items()
         if _port_persistently_down(host, port)
-    ]
-    if not unhealthy:
+    }
+
+    if not down_now:
+        _write_prev_unhealthy(set())
         return {"action": "none", "healthy": True, "unhealthy": []}
+
+    # Debounce: only act on servers that were ALSO down on the previous poll.
+    # A single bad poll (transient host overload) records the suspect set but
+    # defers the restart, so the fleet is not torn down for every CPU blip.
+    prev_down = _read_prev_unhealthy()
+    _write_prev_unhealthy(down_now)
+    confirmed = sorted(down_now & prev_down)
+    if not confirmed:
+        return {
+            "action": "defer",
+            "healthy": False,
+            "unhealthy": sorted(down_now),
+            "deferred": sorted(down_now),
+        }
+
+    unhealthy = confirmed
 
     if _systemd_unit_available(_CANONICAL_UNIT):
         try:

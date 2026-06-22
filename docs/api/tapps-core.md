@@ -6763,6 +6763,14 @@ Provider name (e.g., 'context7', 'llms_txt').
 
 **Returns:** `str`
 
+**Examples:**
+
+```python
+def test_combined_server_name(combined) -> None:
+    """Combined server is named TappsPlatform."""
+    assert combined.name == "TappsPlatform"
+```
+
 #### `is_available`
 
 ```python
@@ -6790,6 +6798,20 @@ Returns None if library not found.
 | `library` | `str` |  | *required* |
 
 **Returns:** `str | None`
+
+**Examples:**
+
+```python
+def test_tapps_story_citations_resolve() -> None:
+    root = Path(__file__).resolve().parents[2]
+    story_path = root / "reports" / "tapps_architecture" / "story.py"
+    result = verify_citations(
+        [story_path],
+        source_roots=[root],
+        path_prefixes=["packages/tapps-mcp/src/"],
+    )
+    assert result.ok, [f"{b.citation.rel_path}::{b.citation.symbol}: {b.reason}" for b in result.broken]
+```
 
 #### async `fetch`
 
@@ -6872,6 +6894,14 @@ def name(self) -> str:
 
 **Returns:** `str`
 
+**Examples:**
+
+```python
+def test_combined_server_name(combined) -> None:
+    """Combined server is named TappsPlatform."""
+    assert combined.name == "TappsPlatform"
+```
+
 #### `is_available`
 
 ```python
@@ -6893,6 +6923,20 @@ async def resolve(self, library: str) -> str | None:
 | `library` | `str` |  | *required* |
 
 **Returns:** `str | None`
+
+**Examples:**
+
+```python
+def test_tapps_story_citations_resolve() -> None:
+    root = Path(__file__).resolve().parents[2]
+    story_path = root / "reports" / "tapps_architecture" / "story.py"
+    result = verify_citations(
+        [story_path],
+        source_roots=[root],
+        path_prefixes=["packages/tapps-mcp/src/"],
+    )
+    assert result.ok, [f"{b.citation.rel_path}::{b.citation.symbol}: {b.reason}" for b in result.broken]
+```
 
 #### async `fetch`
 
@@ -6960,6 +7004,14 @@ def name(self) -> str:
 
 **Returns:** `str`
 
+**Examples:**
+
+```python
+def test_combined_server_name(combined) -> None:
+    """Combined server is named TappsPlatform."""
+    assert combined.name == "TappsPlatform"
+```
+
 #### `is_available`
 
 ```python
@@ -6983,6 +7035,20 @@ Resolve library to an llms.txt URL.
 | `library` | `str` |  | *required* |
 
 **Returns:** `str | None`
+
+**Examples:**
+
+```python
+def test_tapps_story_citations_resolve() -> None:
+    root = Path(__file__).resolve().parents[2]
+    story_path = root / "reports" / "tapps_architecture" / "story.py"
+    result = verify_citations(
+        [story_path],
+        source_roots=[root],
+        path_prefixes=["packages/tapps-mcp/src/"],
+    )
+    assert result.ok, [f"{b.citation.rel_path}::{b.citation.symbol}: {b.reason}" for b in result.broken]
+```
 
 #### async `fetch`
 
