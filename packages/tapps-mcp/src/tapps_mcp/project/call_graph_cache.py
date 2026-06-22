@@ -21,6 +21,7 @@ from tapps_mcp.project.call_graph_fingerprint import (
     compute_index_fingerprint,
     fingerprint_settings,
 )
+from tapps_mcp.project.call_graph_gap_classify import split_gap_counts
 from tapps_mcp.project.call_graph_types import (
     CALL_GRAPH_CACHE_REL,
     INDEX_VERSION,
@@ -176,8 +177,11 @@ def summarize_call_graph_cache(
     except OSError:
         pass
 
+    external_gaps, in_repo_gaps, in_repo_gap_reasons = split_gap_counts(cached.resolution_gaps)
+    in_repo_gap_rate = round(in_repo_gaps / max(edge_count, 1), 3)
+
     status = "stale" if stale else "ready"
-    degraded = parse_fail_count > 0 or gap_count > 0
+    degraded = parse_fail_count > 0 or in_repo_gaps > 0
     result: dict[str, object] = {
         "status": status,
         "ready": not stale,
@@ -186,8 +190,12 @@ def summarize_call_graph_cache(
         "symbols": len(cached.symbols),
         "edges": edge_count,
         "resolution_gaps": gap_count,
+        "external_gaps": external_gaps,
+        "in_repo_gaps": in_repo_gaps,
         "gap_rate": round(gap_count / max(edge_count, 1), 3),
+        "in_repo_gap_rate": in_repo_gap_rate,
         "gap_reasons": _gap_reason_counts(cached.resolution_gaps),
+        "in_repo_gap_reasons": in_repo_gap_reasons,
         "parse_failures": parse_fail_count,
         "age_hours": age_hours,
     }
@@ -197,7 +205,7 @@ def summarize_call_graph_cache(
         result["hint"] = (
             f"{parse_fail_count} file(s) failed to parse — graph is incomplete for those modules."
         )
-    elif degraded and gap_count:
+    elif degraded and in_repo_gaps:
         result["hint"] = CALL_GRAPH_DEGRADED_HINT
     return result
 

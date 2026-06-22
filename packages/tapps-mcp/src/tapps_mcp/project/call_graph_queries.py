@@ -200,3 +200,61 @@ def query_call_graph(
         "truncated": truncated,
         "token_budget": token_budget,
     }
+
+
+def compact_symbol_impact(
+    index: CallGraphIndex,
+    file_path: str,
+    *,
+    max_callers: int = 5,
+    max_tests: int = 5,
+    token_budget: int = 500,
+) -> dict[str, Any] | None:
+    """Token-capped caller/test summary for symbols defined in *file_path* (TAP-4270)."""
+    normalized = file_path.replace("\\", "/")
+    file_symbols = [
+        s
+        for s in index.symbols
+        if s.file_path.replace("\\", "/") == normalized and s.kind in ("function", "method")
+    ]
+    if not file_symbols:
+        return None
+
+    from tapps_mcp.project.test_linker import build_test_edges, get_tests_for_symbol
+
+    test_edges = build_test_edges(index)
+    symbols_out: list[dict[str, Any]] = []
+    truncated = False
+
+    for sym in file_symbols:
+        callers = [
+            edge.caller.rsplit(".", maxsplit=1)[-1]
+            for edge in index.callers_of(sym.qualified_name)[:max_callers]
+        ]
+        tests = get_tests_for_symbol(test_edges, sym.qualified_name, index=index)[:max_tests]
+        entry = {
+            "symbol": sym.qualified_name.rsplit(".", maxsplit=1)[-1],
+            "qualified_name": sym.qualified_name,
+            "callers": callers,
+            "tests": [
+                {
+                    "test_file": t.get("test_file", ""),
+                    "test_symbol": t.get("test_symbol", ""),
+                }
+                for t in tests
+            ],
+        }
+        trial = {"symbols": [*symbols_out, entry]}
+        if _estimate_tokens(trial) > token_budget:
+            truncated = True
+            break
+        symbols_out.append(entry)
+
+    if not symbols_out:
+        return None
+    return {
+        "file_path": normalized,
+        "symbols": symbols_out,
+        "truncated": truncated,
+        "token_budget": token_budget,
+    }

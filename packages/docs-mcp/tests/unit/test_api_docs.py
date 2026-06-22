@@ -1374,3 +1374,65 @@ class TestQualityMetrics:
         result = gen.generate(source, project_root=tmp_path)
 
         assert "missing return docs" in result or "missing examples" in result
+
+
+class TestAPIDocCallGraphSections:
+    def test_markdown_includes_used_by_and_depends_on(self, tmp_path: Path) -> None:
+        import json
+
+        (tmp_path / "app").mkdir()
+        (tmp_path / "app" / "__init__.py").write_text("", encoding="utf-8")
+        (tmp_path / "app" / "core.py").write_text(
+            '"""Core module."""\n\ndef compute():\n    return 1\n',
+            encoding="utf-8",
+        )
+        (tmp_path / "app" / "api.py").write_text(
+            '"""API module."""\n\nfrom app.core import compute\n\ndef run():\n    return compute()\n',
+            encoding="utf-8",
+        )
+        cache_dir = tmp_path / ".tapps-mcp"
+        cache_dir.mkdir()
+        (cache_dir / "call-graph-index.json").write_text(
+            json.dumps(
+                {
+                    "version": 2,
+                    "symbols": [
+                        {
+                            "qualified_name": "app.core.compute",
+                            "module": "app.core",
+                            "file_path": "app/core.py",
+                            "line": 3,
+                            "kind": "function",
+                        },
+                        {
+                            "qualified_name": "app.api.run",
+                            "module": "app.api",
+                            "file_path": "app/api.py",
+                            "line": 5,
+                            "kind": "function",
+                        },
+                    ],
+                    "edges": [
+                        {
+                            "caller": "app.api.run",
+                            "callee": "app.core.compute",
+                            "callee_expr": "compute()",
+                            "line": 5,
+                            "resolved": True,
+                        }
+                    ],
+                    "resolution_gaps": [],
+                    "parse_failures": [],
+                }
+            ),
+            encoding="utf-8",
+        )
+
+        gen = APIDocGenerator()
+        core_doc = gen.generate(tmp_path / "app" / "core.py", project_root=tmp_path)
+        assert "## Used By" in core_doc
+        assert "app.api.run" in core_doc
+
+        api_doc = gen.generate(tmp_path / "app" / "api.py", project_root=tmp_path)
+        assert "## Depends On" in api_doc
+        assert "app.core.compute" in api_doc

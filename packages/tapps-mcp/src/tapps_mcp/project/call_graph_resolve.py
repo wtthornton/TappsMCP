@@ -31,6 +31,25 @@ def unparse_expr(node: ast.expr) -> str:
         return "<expr>"
 
 
+def _apply_import_bindings(
+    idx: FileIndex,
+    bindings: dict[str, str],
+    node: ast.Import | ast.ImportFrom,
+) -> None:
+    """Record Import/ImportFrom bindings (module-level or in-function lazy imports)."""
+    if isinstance(node, ast.Import):
+        for alias in node.names:
+            bound = alias.asname or alias.name.split(".", maxsplit=1)[0]
+            bindings[bound] = alias.name
+        return
+    base = node.module or ""
+    for alias in node.names:
+        if alias.name == "*":
+            continue
+        bound = alias.asname or alias.name
+        bindings[bound] = f"{base}.{alias.name}" if base else alias.name
+
+
 def local_bindings(
     idx: FileIndex,
     node: ast.FunctionDef | ast.AsyncFunctionDef,
@@ -38,6 +57,9 @@ def local_bindings(
 ) -> dict[str, str]:
     bindings = {a.arg: a.arg for a in node.args.args}
     for child in ast.walk(node):
+        if isinstance(child, ast.Import | ast.ImportFrom):
+            _apply_import_bindings(idx, bindings, child)
+            continue
         if not isinstance(child, ast.Assign):
             continue
         for target in child.targets:

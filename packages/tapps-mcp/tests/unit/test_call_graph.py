@@ -417,3 +417,33 @@ class TestSummarizeCallGraphCache:
         assert summary.get("stale") is True
         assert summary.get("hint") == CALL_GRAPH_STALE_HINT
         assert "automatically" in str(summary.get("hint"))
+
+    def test_summary_includes_in_repo_gap_metrics(self, tmp_path: Path) -> None:
+        from tapps_mcp.project.call_graph_cache import save_call_graph_index, summarize_call_graph_cache
+        from tapps_mcp.project.call_graph_types import (
+            CallEdge,
+            CallGraphIndex,
+            INDEX_VERSION,
+            ResolutionGap,
+        )
+        from tapps_mcp.project.call_graph_fingerprint import compute_index_fingerprint, fingerprint_settings
+
+        settings = fingerprint_settings(tmp_path)
+        fp = compute_index_fingerprint(settings, index_version=INDEX_VERSION)
+        save_call_graph_index(
+            tmp_path,
+            CallGraphIndex(
+                project_root=str(tmp_path),
+                fingerprint=fp,
+                version=INDEX_VERSION,
+                edges=[CallEdge("a.f", "b.g", "helper()", 1, True)],
+                resolution_gaps=[
+                    ResolutionGap("a.f", "len(x)", 1, "unresolved_static_call"),
+                    ResolutionGap("a.f", "helper()", 2, "unresolved_static_call"),
+                ],
+            ),
+        )
+        summary = summarize_call_graph_cache(tmp_path)
+        assert summary.get("external_gaps") == 1
+        assert summary.get("in_repo_gaps") == 1
+        assert summary.get("in_repo_gap_rate") == 1.0

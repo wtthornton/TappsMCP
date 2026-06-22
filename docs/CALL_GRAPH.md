@@ -40,12 +40,18 @@ Check status anytime via `tapps_session_start` (`call_graph` block) or `tapps_do
 
 | Metric | Meaning |
 |--------|---------|
-| `gap_rate` | `resolution_gaps / edges` — primary health signal |
+| `gap_rate` | `resolution_gaps / edges` — total unresolved call sites |
+| `in_repo_gap_rate` | Actionable in-repo unresolved calls / edges — primary trust signal |
+| `external_gaps` | Stdlib, builtin, and expected dynamic dispatch (not graph breakage) |
+| `in_repo_gaps` | Unresolved calls that may be fixable via better static analysis |
 | `gap_reasons` | Taxonomy: `unresolved_static_call`, `dynamic_dispatch`, `callback_opaque`, `framework_hof`, … |
+| `in_repo_gap_reasons` | Gap reasons counted only for in-repo gaps |
 | `parse_failures` | Files with syntax/decode errors omitted from the graph |
-| `degraded` | Tool response flag when gaps or parse failures exist |
+| `degraded` | Tool response flag when in-repo gaps or parse failures exist |
 
-High `gap_rate` on dynamic codebases is **expected**. Static analysis cannot resolve all Python dispatch. Gaps are honest uncertainty — prefer them over silent wrong edges ([ADR-0004](adr/0004-deterministic-tools-only-contract.md)).
+High total `gap_rate` on dynamic codebases is **expected** — most gaps are stdlib/builtin calls.
+Use `in_repo_gap_rate` to judge whether the graph is trustworthy for refactor workflows.
+Static analysis cannot resolve all Python dispatch. Gaps are honest uncertainty — prefer them over silent wrong edges ([ADR-0004](adr/0004-deterministic-tools-only-contract.md)).
 
 ---
 
@@ -66,7 +72,7 @@ Format: `code_symbol<TAB>test_file<TAB>test_symbol` — useful for CI scripts an
 
 ## Recommended agent workflow
 
-1. **Session start** — confirm `call_graph.ready` or follow the rebuild hint.
+1. **Session start** — confirm `call_graph.ready` or wait for background rebuild (`rebuild_scheduled`).
 2. **Before editing a function** — `tapps_call_graph(symbol="handler_name", query="callers")`.
 3. **After editing Python files** — `tapps_diff_impact` or `tapps_validate_changed(include_impact=true)`.
 4. **Before deleting a symbol** — `tapps_impact_analysis(..., symbol="...", granularity="both")`.

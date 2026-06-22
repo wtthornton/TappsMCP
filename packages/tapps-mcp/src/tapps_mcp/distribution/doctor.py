@@ -3622,11 +3622,14 @@ def check_call_graph_index_cache(root: Path, *, quick: bool = False) -> CheckRes
         gap_count = int(summary.get("resolution_gaps", 0))
         if gap_count:
             gap_reasons = summary.get("gap_reasons")
+            in_repo_rate = summary.get("in_repo_gap_rate")
             if isinstance(gap_reasons, dict) and gap_reasons:
                 reason_bits = ", ".join(f"{k}={v}" for k, v in gap_reasons.items())
                 parts.append(f"{gap_count} resolution gaps ({reason_bits})")
             else:
                 parts.append(f"{gap_count} resolution gaps")
+            if in_repo_rate is not None:
+                parts.append(f"in_repo_gap_rate={in_repo_rate}")
         parse_failures = int(summary.get("parse_failures", 0))
         if parse_failures:
             parts.append(f"{parse_failures} parse failure(s)")

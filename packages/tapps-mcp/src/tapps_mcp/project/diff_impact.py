@@ -11,6 +11,7 @@ from tapps_mcp.project.impact_analyzer import analyze_impact, build_import_graph
 from tapps_mcp.project.test_linker import build_test_edges, edges_for_symbols
 
 DEFAULT_AFFECTED_TESTS_LIMIT = 20
+DEFAULT_DOC_DRIFT_CALLER_THRESHOLD = 5
 
 
 @dataclass
@@ -20,6 +21,56 @@ class RankedTest:
     reasons: list[str]
     test_symbols: list[str]
     code_symbols: list[str]
+
+
+def _doc_paths_for_module(module: str) -> list[str]:
+    """Heuristic doc paths agents may want to refresh after structural edits."""
+    parts = module.split(".")
+    candidates = [
+        f"docs/{'/'.join(parts)}.md",
+        f"docs/{parts[-1]}.md",
+        f"docs/architecture/{parts[-1]}.md",
+    ]
+    if len(parts) >= 2:
+        candidates.append(f"docs/{parts[0]}/{parts[-1]}.md")
+    seen: set[str] = set()
+    ordered: list[str] = []
+    for path in candidates:
+        if path not in seen:
+            seen.add(path)
+            ordered.append(path)
+    return ordered
+
+
+def _collect_doc_drift_hints(
+    index: object,
+    changed_symbols: set[str],
+    *,
+    caller_threshold: int = DEFAULT_DOC_DRIFT_CALLER_THRESHOLD,
+) -> list[dict[str, object]]:
+    from tapps_mcp.project.call_graph_types import CallGraphIndex
+
+    if not isinstance(index, CallGraphIndex):
+        return []
+    hints: list[dict[str, object]] = []
+    for sym in sorted(changed_symbols):
+        direct_callers = index.callers_of(sym)
+        if len(direct_callers) < caller_threshold:
+            continue
+        record = next((s for s in index.symbols if s.qualified_name == sym), None)
+        module = record.module if record else sym.rsplit(".", maxsplit=1)[0]
+        hints.append(
+            {
+                "symbol": sym,
+                "direct_callers": len(direct_callers),
+                "suggested_doc_paths": _doc_paths_for_module(module),
+                "message": (
+                    f"{sym} has {len(direct_callers)} direct callers — "
+                    "consider updating related documentation."
+                ),
+            }
+        )
+    return hints
 
 
 def _symbols_in_file(index: object, rel_path: str) -> set[str]:
@@ -36,6 +87,7 @@ def analyze_diff_impact(
     project_root: Path,
     *,
     max_tests: int = DEFAULT_AFFECTED_TESTS_LIMIT,
+    doc_drift_caller_threshold: int = DEFAULT_DOC_DRIFT_CALLER_THRESHOLD,
 ) -> dict[str, object]:
     """Rank tests affected by *changed_files* using TESTS edges and import impact."""
     index = build_call_graph_index(project_root)
@@ -99,7 +151,20 @@ def analyze_diff_impact(
     ordered = sorted(ranked.values(), key=lambda r: (-r.score, r.test_file))
     cap = max(1, max_tests)
     degraded = bool(index.resolution_gaps or index.parse_failures)
-    return {
+    all_changed_symbols: set[str] = set()
+    for changed in changed_files:
+        try:
+            rel = str(changed.resolve().relative_to(project_root.resolve()))
+        except ValueError:
+            rel = str(changed)
+        all_changed_symbols.update(_symbols_in_file(index, rel.replace("\\", "/")))
+
+    doc_drift_hints = _collect_doc_drift_hints(
+        index,
+        all_changed_symbols,
+        caller_threshold=doc_drift_caller_threshold,
+    )
+    payload: dict[str, object] = {
         "changed_files": [str(p) for p in changed_files],
         "affected_tests": [asdict(r) for r in ordered[:cap]],
         "total_affected_tests": len(ordered),
@@ -108,6 +173,9 @@ def analyze_diff_impact(
         "degraded": degraded,
         "parse_failures": len(index.parse_failures),
     }
+    if doc_drift_hints:
+        payload["doc_drift_hints"] = doc_drift_hints
+    return payload
 
 
 def export_test_map(

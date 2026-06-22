@@ -1289,3 +1289,38 @@ def _schedule_lookup_docs_warm(
         }
     except RuntimeError:
         return {"scheduled": False, "skipped": "no_running_loop"}
+
+
+# ---------------------------------------------------------------------------
+# TAP-4266: background call-graph rebuild on session_start when stale/missing
+# ---------------------------------------------------------------------------
+
+
+def _schedule_call_graph_rebuild(
+    project_root: Path,
+    call_graph_summary: dict[str, object],
+) -> dict[str, object]:
+    """Fire-and-forget rebuild when cache is stale or missing."""
+    status = str(call_graph_summary.get("status", ""))
+    stale = bool(call_graph_summary.get("stale"))
+    if status not in {"missing", "stale", "unreadable"} and not stale:
+        return {"scheduled": False, "skipped": "cache_fresh"}
+
+    from tapps_mcp import server_pipeline_tools as _host
+
+    async def _runner() -> None:
+        try:
+            from tapps_mcp.project.call_graph import build_call_graph_index
+
+            await asyncio.to_thread(build_call_graph_index, project_root)
+        except Exception:
+            _logger.debug("call_graph_background_rebuild_failed", exc_info=True)
+
+    try:
+        loop = asyncio.get_running_loop()
+        task = loop.create_task(_runner())
+        _host._background_tasks.add(task)
+        task.add_done_callback(_host._background_tasks.discard)
+        return {"scheduled": True, "reason": status or "stale"}
+    except RuntimeError:
+        return {"scheduled": False, "skipped": "no_running_loop"}
