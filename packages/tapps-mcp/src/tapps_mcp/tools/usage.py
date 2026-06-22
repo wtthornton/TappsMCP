@@ -35,6 +35,7 @@ from tapps_mcp.tools.pipeline_tool_sets import (
     matches_pipeline_tool,
 )
 from tapps_mcp.pipeline.agent_contract import (
+    CALL_GRAPH_STOP_FOLLOWUP,
     CHECKLIST_SKIPPED_REC,
     SESSION_START_CHECKLIST_GAP_HINT,
     STOP_GAP_FOLLOWUP_DEFAULT,
@@ -409,6 +410,28 @@ def format_stop_gap_followup(
     return f"TappsMCP pipeline gaps ({headline}). {body}"
 
 
+def append_call_graph_stop_followup(
+    followup: str | None,
+    project_root: Path,
+    *,
+    files_edited: list[str],
+    called_tools: set[str],
+) -> str | None:
+    """Append stale call-graph note when Python was edited but graph tools were skipped."""
+    if not any(str(path).endswith(".py") for path in files_edited):
+        return followup
+    if {"tapps_call_graph", "tapps_diff_impact", "tapps_validate_changed"} & called_tools:
+        return followup
+    from tapps_mcp.project.call_graph_cache import summarize_call_graph_cache
+
+    summary = summarize_call_graph_cache(project_root)
+    if not summary.get("stale"):
+        return followup
+    if followup:
+        return f"{followup} {CALL_GRAPH_STOP_FOLLOWUP}"
+    return f"TappsMCP: {CALL_GRAPH_STOP_FOLLOWUP}"
+
+
 def render_markdown(report: dict[str, Any]) -> str:
     """Render a compact markdown summary of a gap report."""
     lines: list[str] = ["## tapps_usage gap report"]
@@ -439,6 +462,7 @@ def render_markdown(report: dict[str, Any]) -> str:
 
 
 __all__ = [
+    "append_call_graph_stop_followup",
     "compute_gaps",
     "format_session_start_gap_hint",
     "format_stop_gap_followup",

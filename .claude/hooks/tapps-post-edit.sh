@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# tapps-mcp-hook-version: 3.12.44
-# tapps-mcp-hook-content-sha: f8957b33
+# tapps-mcp-hook-version: 3.12.45
+# tapps-mcp-hook-content-sha: a8a104bc
 # TappsMCP PostToolUse hook (Edit/Write) — TAP-1326 / TAP-1330
 # Detects new external imports requiring tapps_lookup_docs. Advisory only;
 # the Stop hook enforces the completion gate.
@@ -72,6 +72,7 @@ case "$FILE" in
     fi
     if [ "$API" = "1" ]; then
       echo "Public API change detected ($FILE) — call docs_check_drift and docs_api_surface on nlt-project-docs when documenting (warn-only)." >&2
+      echo "Blast radius ($FILE) — tapps_call_graph(symbol='...', query='callers') or tapps_impact_analysis(file_path='...', symbol='...', granularity='both') before changing callers (warn-only)." >&2
     fi
     ;;
 esac

@@ -23,6 +23,51 @@ POST_EDIT_PUBLIC_API_DRIFT_BASH = (
     "Public API change detected ($FILE) — call docs_check_drift and "
     "docs_api_surface on nlt-project-docs when documenting (warn-only)."
 )
+POST_EDIT_PUBLIC_API_CALL_GRAPH_MSG = (
+    "Public API change in {file} — call tapps_call_graph(symbol='...', query='callers') "
+    "or tapps_impact_analysis(file_path='{file}', symbol='...', granularity='both') "
+    "before changing callers (warn-only)."
+)
+POST_EDIT_PUBLIC_API_CALL_GRAPH_BASH = (
+    "Blast radius ($FILE) — tapps_call_graph(symbol='...', query='callers') or "
+    "tapps_impact_analysis(file_path='...', symbol='...', granularity='both') "
+    "before changing callers (warn-only)."
+)
+
+# Call graph (Epic 114) — stale is disk vs git fingerprint; tools auto-rebuild on mismatch.
+CALL_GRAPH_STALE_HINT = (
+    "Call graph index is stale for current git state — tapps_call_graph or "
+    "tapps_diff_impact rebuilds automatically on first use; force_rebuild=true "
+    "only bypasses a matching cache you do not trust."
+)
+CALL_GRAPH_STALE_NUDGE = (
+    "NEXT: Call graph index is stale — tapps_call_graph or tapps_diff_impact "
+    "rebuilds automatically on first use (force_rebuild=true optional)."
+)
+CALL_GRAPH_STALE_DOCTOR = (
+    "stale — auto-rebuilds on tapps_call_graph or tapps_diff_impact"
+)
+CALL_GRAPH_DEGRADED_HINT = (
+    "High gap_rate is expected for dynamic Python — graph is usable for static "
+    "callers/callees; see docs/CALL_GRAPH.md."
+)
+CALL_GRAPH_STOP_FOLLOWUP = (
+    "Call graph index stale — tapps_call_graph or tapps_diff_impact rebuilds on first use."
+)
+
+FINISH_TASK_VALIDATE_CALL_GRAPH_NOTE = (
+    "**Call graph:** `include_impact` defaults to true — `tapps_validate_changed` "
+    "refreshes the cache via `tapps_diff_impact`. Before function-level refactors, "
+    "call `tapps_call_graph(symbol='...', query='callers')`."
+)
+TOOL_REFERENCE_CALL_GRAPH_ROWS = (
+    "| **tapps_call_graph** | Before editing a function — "
+    "`query=callers|callees|chain|all`; stale cache auto-rebuilds on first use |\n"
+    "| **tapps_impact_analysis** | Module blast radius, or symbol-level with "
+    "`symbol=` + `granularity=symbol|both` |\n"
+    "| **tapps_diff_impact** | After Python edits — ranked affected tests for changed files |\n"
+    "| **tapps_validate_changed** | `include_impact=true` (default) refreshes cache via diff_impact |"
+)
 # Bash hook templates use $LIBS / $FILE instead of Python format fields.
 POST_EDIT_IMPORT_LOOKUP_BASH = (
     "Imports detected ($LIBS) — call tapps_lookup_docs(library=..., topic=...) "
@@ -215,8 +260,18 @@ __all__ = [
     "MEMORY_ACTIONS_ACCESS_NOTE",
     "MEMORY_RECALL_SESSION_START",
     "MEMORY_SYSTEMS_BULLET",
+    "CALL_GRAPH_DEGRADED_HINT",
+    "CALL_GRAPH_STALE_DOCTOR",
+    "CALL_GRAPH_STALE_HINT",
+    "CALL_GRAPH_STALE_NUDGE",
+    "CALL_GRAPH_STOP_FOLLOWUP",
+    "FINISH_TASK_VALIDATE_CALL_GRAPH_NOTE",
     "POST_EDIT_IMPORT_LOOKUP_BASH",
     "POST_EDIT_IMPORT_LOOKUP_MSG",
+    "POST_EDIT_PUBLIC_API_CALL_GRAPH_BASH",
+    "POST_EDIT_PUBLIC_API_CALL_GRAPH_MSG",
+    "POST_EDIT_PUBLIC_API_DRIFT_BASH",
+    "POST_EDIT_PUBLIC_API_DRIFT_MSG",
     "POST_EDIT_QUICK_CHECK_BASH",
     "POST_EDIT_QUICK_CHECK_MSG",
     "SESSION_START_CHECKLIST_GAP_HINT",
@@ -224,6 +279,7 @@ __all__ = [
     "STOP_GAP_FOLLOWUP_DEFAULT",
     "SUBAGENT_START_INTRO",
     "SUBAGENT_START_TOOLS_LINE",
+    "TOOL_REFERENCE_CALL_GRAPH_ROWS",
     "VALIDATION_QUICK_VS_BATCH",
     "finish_task_checklist_and_doc_gaps",
     "finish_task_doc_gaps_step",

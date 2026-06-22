@@ -13,6 +13,7 @@ from __future__ import annotations
 from typing import Any
 
 from tapps_core.common.pipeline_models import STAGE_ORDER, STAGE_TOOLS, PipelineStage
+from tapps_mcp.pipeline.agent_contract import CALL_GRAPH_STALE_NUDGE
 
 # Lazy: avoid breaking when checklist module is missing (e.g. standalone binary).
 # Use a list to avoid global statement (PLW0603); index 0 holds type or False.
@@ -93,8 +94,7 @@ _TOOL_NUDGES: dict[str, list[NudgeRule]] = {
             lambda called, ctx: (
                 (ctx or {}).get("call_graph_stale") is True and "tapps_call_graph" not in called
             ),
-            "NEXT: Call graph index is stale — tapps_call_graph(force_rebuild=true) before trusting "
-            "blast radius.",
+            CALL_GRAPH_STALE_NUDGE,
             _IMPACT_MEDIUM,
         ),
         (

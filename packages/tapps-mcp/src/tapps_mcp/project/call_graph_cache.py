@@ -12,6 +12,10 @@ from pathlib import Path
 
 import structlog
 
+from tapps_mcp.pipeline.agent_contract import (
+    CALL_GRAPH_DEGRADED_HINT,
+    CALL_GRAPH_STALE_HINT,
+)
 from tapps_mcp.project.call_graph_fingerprint import (
     CallGraphFingerprintSettings,
     compute_index_fingerprint,
@@ -144,7 +148,7 @@ def summarize_call_graph_cache(
             "status": "unreadable",
             "ready": False,
             "stale": True,
-            "hint": "Cache unreadable — rebuild via tapps_call_graph(force_rebuild=true).",
+            "hint": CALL_GRAPH_STALE_HINT,
         }
 
     if cached.version != INDEX_VERSION:
@@ -157,7 +161,7 @@ def summarize_call_graph_cache(
             "current_version": INDEX_VERSION,
             "symbols": len(cached.symbols),
             "edges": len(cached.edges),
-            "hint": "Index schema changed — rebuild via tapps_call_graph(force_rebuild=true).",
+            "hint": CALL_GRAPH_STALE_HINT,
         }
 
     current_fp = compute_index_fingerprint(settings, index_version=INDEX_VERSION)
@@ -188,11 +192,13 @@ def summarize_call_graph_cache(
         "age_hours": age_hours,
     }
     if stale:
-        result["hint"] = "Call graph index is stale — tapps_call_graph(force_rebuild=true)."
+        result["hint"] = CALL_GRAPH_STALE_HINT
     elif parse_fail_count:
         result["hint"] = (
             f"{parse_fail_count} file(s) failed to parse — graph is incomplete for those modules."
         )
+    elif degraded and gap_count:
+        result["hint"] = CALL_GRAPH_DEGRADED_HINT
     return result
 
 

@@ -32,7 +32,7 @@ This file is **gitignored** by design. It is rebuilt automatically when:
 
 Check status anytime via `tapps_session_start` (`call_graph` block) or `tapps_doctor`.
 
-**Rebuild manually:** `tapps_call_graph(symbol="...", query="callers", force_rebuild=true)`
+**Rebuild manually:** any `tapps_call_graph` or `tapps_diff_impact` call rebuilds when stale; use `force_rebuild=true` only to bypass a matching cache you do not trust.
 
 ---
 

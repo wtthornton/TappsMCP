@@ -1,5 +1,5 @@
-# tapps-mcp-hook-version: 3.12.43
-# tapps-mcp-hook-content-sha: 1b1eb9ca
+# tapps-mcp-hook-version: 3.12.45
+# tapps-mcp-hook-content-sha: 8ccdbe5e
 # TappsMCP afterFileEdit hook (fire-and-forget) — TAP-1330 import parity
 # Detects external imports requiring tapps_lookup_docs. Advisory only.
 $rawInput = @($input) -join "`n"
@@ -8,6 +8,7 @@ $py = Get-Command python3 -ErrorAction SilentlyContinue
 if (-not $py) { $py = Get-Command python -ErrorAction SilentlyContinue }
 $file = "unknown"
 $libs = ""
+$api = ""
 if ($py) {
     $parseScript = @'
 import os, json, re
@@ -53,13 +54,20 @@ try:
         for m in re.finditer(js_import, content, re.M):
             libs.add(m.group(1).split("/")[0])
     print(",".join(sorted(libs)))
+    api = "0"
+    if f.endswith((".py", ".pyi")):
+        if re.search(r"^\s*(?:async\s+)?def\s+\w+|^\s*class\s+\w+", content, re.M):
+            api = "1"
+    print(api)
 except Exception:
+    print("")
     print("")
     print("")
 '@
     $parsed = @($parseScript | & $py.Source - 2>$null)
     if ($parsed.Count -ge 1) { $file = [string]$parsed[0] }
     if ($parsed.Count -ge 2) { $libs = [string]$parsed[1] }
+    if ($parsed.Count -ge 3) { $api = [string]$parsed[2] }
 }
 switch -Regex ($file) {
     '\.(py|pyi|ts|tsx|js|jsx|go|rs)$' {
@@ -68,6 +76,10 @@ switch -Regex ($file) {
             [Console]::Error.WriteLine(
                 "Imports detected ($libs) — call tapps_lookup_docs(library=..., topic=...) before using those APIs in this session (TAP-1330)."
             )
+        }
+        if ($api -eq '1') {
+            [Console]::Error.WriteLine("Public API change detected ($file) — call docs_check_drift and docs_api_surface on nlt-project-docs when documenting (warn-only).")
+            [Console]::Error.WriteLine("Blast radius ($file) — tapps_call_graph(symbol='...', query='callers') or tapps_impact_analysis(file_path='...', symbol='...', granularity='both') before changing callers (warn-only).")
         }
     }
     default {

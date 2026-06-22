@@ -3535,7 +3535,9 @@ def check_call_graph_index_cache(root: Path, *, quick: bool = False) -> CheckRes
                 f"v{summary.get('cached_version')} → v{summary.get('current_version')}"
             )
         elif summary.get("stale"):
-            parts.append("stale — rebuild via tapps_call_graph(force_rebuild=true)")
+            from tapps_mcp.pipeline.agent_contract import CALL_GRAPH_STALE_DOCTOR
+
+            parts.append(CALL_GRAPH_STALE_DOCTOR)
         else:
             parts.append("fresh")
         gap_count = int(summary.get("resolution_gaps", 0))

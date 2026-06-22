@@ -4,21 +4,27 @@ from __future__ import annotations
 
 from tapps_mcp.pipeline.agent_contract import (
     CHECKLIST_SKIPPED_REC,
+    FINISH_TASK_VALIDATE_CALL_GRAPH_NOTE,
     LOOKUP_GAP_RETRO_NOTE,
     MEMORY_RECALL_SESSION_START,
     POST_EDIT_IMPORT_LOOKUP_BASH,
+    POST_EDIT_PUBLIC_API_CALL_GRAPH_BASH,
     SESSION_START_CHECKLIST_GAP_HINT,
     STOP_FINISH_REMINDER,
     STOP_GAP_FOLLOWUP_DEFAULT,
     SUBAGENT_START_INTRO,
     SUBAGENT_START_TOOLS_LINE,
     VALIDATION_QUICK_VS_BATCH,
+    lookup_gap_recommendation,
 )
-from tapps_mcp.pipeline.platform_hook_templates import CLAUDE_HOOK_SCRIPTS
+from tapps_mcp.pipeline.platform_hook_templates import CLAUDE_HOOK_SCRIPTS, CURSOR_HOOK_SCRIPTS
 from tapps_mcp.pipeline.platform_rules import CURSOR_RULE_TEMPLATES
 from tapps_mcp.pipeline.platform_skills import CLAUDE_SKILLS, CURSOR_SKILLS
-from tapps_mcp.tools.usage import compute_gaps, format_session_start_gap_hint, format_stop_gap_followup
-from tapps_mcp.pipeline.agent_contract import lookup_gap_recommendation
+from tapps_mcp.tools.usage import (
+    compute_gaps,
+    format_session_start_gap_hint,
+    format_stop_gap_followup,
+)
 
 
 class TestUsageGapStringsMatchContract:
@@ -60,6 +66,29 @@ class TestUsageGapStringsMatchContract:
     def test_stop_gap_followup_default_constant(self) -> None:
         assert "tapps-finish-task" in STOP_GAP_FOLLOWUP_DEFAULT
 
+    def test_append_call_graph_stop_followup_when_stale(self, tmp_path) -> None:
+        from tapps_mcp.project.call_graph_cache import save_call_graph_index
+        from tapps_mcp.project.call_graph_types import INDEX_VERSION, CallGraphIndex
+        from tapps_mcp.tools.usage import append_call_graph_stop_followup
+
+        save_call_graph_index(
+            tmp_path,
+            CallGraphIndex(
+                project_root=str(tmp_path),
+                fingerprint="stale-fingerprint",
+                version=INDEX_VERSION,
+            ),
+        )
+        followup = append_call_graph_stop_followup(
+            None,
+            tmp_path,
+            files_edited=["src/a.py"],
+            called_tools=set(),
+        )
+        assert followup is not None
+        assert "stale" in followup.lower()
+        assert "tapps_call_graph" in followup
+
     def test_lookup_gap_recommendation_retro_note(self) -> None:
         rec = lookup_gap_recommendation(["fastapi"], generic=False)
         assert LOOKUP_GAP_RETRO_NOTE in rec
@@ -91,6 +120,17 @@ class TestGeneratedSurfacesEchoContract:
             assert "ADR-0021" in body
             assert "usage_gaps" in body
             assert "tapps_checklist" in body
+            assert FINISH_TASK_VALIDATE_CALL_GRAPH_NOTE in body
+
+    def test_cursor_after_edit_call_graph_nudge(self) -> None:
+        assert POST_EDIT_PUBLIC_API_CALL_GRAPH_BASH in CURSOR_HOOK_SCRIPTS["tapps-after-edit.sh"]
+
+    def test_claude_post_edit_call_graph_nudge(self) -> None:
+        assert POST_EDIT_PUBLIC_API_CALL_GRAPH_BASH in CLAUDE_HOOK_SCRIPTS["tapps-post-edit.sh"]
+
+    def test_refactor_skill_present(self) -> None:
+        assert "tapps_call_graph" in CLAUDE_SKILLS["tapps-refactor"]
+        assert "tapps_call_graph" in CURSOR_SKILLS["tapps-refactor"]
 
     def test_validation_semantics_in_contract(self) -> None:
         assert "tapps_quick_check" in VALIDATION_QUICK_VS_BATCH

@@ -11,7 +11,11 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
 
-from tapps_mcp.pipeline.agent_contract import finish_task_checklist_and_doc_gaps
+from tapps_mcp.pipeline.agent_contract import (
+    FINISH_TASK_VALIDATE_CALL_GRAPH_NOTE,
+    TOOL_REFERENCE_CALL_GRAPH_ROWS,
+    finish_task_checklist_and_doc_gaps,
+)
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -129,6 +133,8 @@ Close out the current task end-to-end. Run each step; do NOT skip one that faile
 
 1. **Validate changed files.** Identify the files you edited this session (git status, your edit history). Call `mcp__nlt-build__tapps_validate_changed` with explicit `file_paths` (comma-separated) scoped to those files. **Never call without `file_paths`.** Default is quick mode. If any file fails, list it with the top blocking issue and stop — the task is not complete. Do not proceed to step 2 until all changed files pass.
 
+   """ + FINISH_TASK_VALIDATE_CALL_GRAPH_NOTE + """
+
 """ + _FINISH_TASK_CHECKLIST_AND_DOC_GAPS_CLAUDE + """
 
 4. **Save learnings (conditional).** If this session produced a non-obvious architectural or pattern-level decision — a new convention, a subtle trade-off, a gotcha someone else would re-discover — run `uv run tapps-mcp memory save --key <slug> --tier <architectural|pattern> --value "<concise decision>"` (CLI via BrainBridge). Skip for routine fixes, refactors where the code documents the decision, or trivial bugfixes. Brain offline → skip silently.
@@ -228,6 +234,42 @@ Run a parallel review-fix-validate pipeline on changed Python files:
 6. Call `mcp__nlt-build__tapps_validate_changed` with explicit `file_paths` to verify all files pass
 7. Call `mcp__nlt-build__tapps_checklist(task_type="review")` for final verification
 8. Present a summary table: file | before score | after score | gate | fixes applied
+""",
+    "tapps-refactor": """\
+---
+name: tapps-refactor
+user-invocable: true
+model: claude-sonnet-4-6
+description: >-
+  Function-level refactor workflow using call graph tools (Epic 114).
+  Use before changing a symbol's signature, deleting a function, or
+  refactoring callers — maps blast radius via tapps_call_graph and diff_impact.
+allowed-tools: >-
+  mcp__nlt-build__tapps_session_start
+  mcp__nlt-build__tapps_call_graph
+  mcp__nlt-build__tapps_impact_analysis
+  mcp__nlt-build__tapps_diff_impact
+  mcp__nlt-build__tapps_quick_check
+  mcp__nlt-build__tapps_validate_changed
+  mcp__nlt-build__tapps_checklist
+argument-hint: "[symbol or file-path]"
+---
+
+Symbol-level refactor workflow (Epic 114 / ADR-0017):
+
+1. **Session bootstrap.** Call `mcp__nlt-build__tapps_session_start()` — read `data.call_graph` (`ready`, `stale`, `degraded`). Stale is informational; graph tools auto-rebuild on first use.
+
+2. **Before editing a function.** `mcp__nlt-build__tapps_call_graph(symbol='...', query='callers')` — who calls this symbol? Use `query='callees'` for downstream dependencies or `query='chain'` for bounded chains.
+
+3. **Optional module context.** `mcp__nlt-build__tapps_impact_analysis(file_path='...', symbol='...', granularity='both')` for import + symbol blast radius.
+
+4. **Edit loop.** After each Python file change, `mcp__nlt-build__tapps_quick_check(file_path='...')`.
+
+5. **After edits.** `mcp__nlt-build__tapps_diff_impact(file_paths='...')` or finish with `/tapps-finish-task` (`include_impact` default true refreshes cache).
+
+6. **Close out.** `/tapps-finish-task` with `task_type=refactor` — checklist recommends `tapps_call_graph` and `tapps_diff_impact`.
+
+See `docs/CALL_GRAPH.md` for gap_rate / degraded semantics.
 """,
     "tapps-research": """\
 ---
@@ -403,7 +445,8 @@ provide the full tool reference from this skill.
 |------|----------------|
 | **tapps_security_scan** | Security-sensitive changes or before security review |
 | **tapps_validate_config** | When adding/changing Dockerfile, docker-compose, infra |
-| **tapps_impact_analysis** | Before modifying a file's public API |
+| **tapps_impact_analysis** | Module-level import blast radius before API or layout changes |
+""" + TOOL_REFERENCE_CALL_GRAPH_ROWS + """
 | **tapps_dead_code** | Find unused code during refactoring |
 | **tapps_dependency_scan** | Check for CVEs before releases |
 | **tapps_dependency_graph** | Understand module dependencies, circular imports |
@@ -416,7 +459,7 @@ provide the full tool reference from this skill.
 | **tapps_doctor** | Diagnose configuration issues |
 | **tapps_set_engagement_level** | Change enforcement intensity (high/medium/low) |
 
-Use `tapps_server_info` for the latest recommended workflow string.
+For function-level refactors use `/tapps-refactor`. Call `tapps_server_info` for the latest recommended workflow string.
 """,
     "tapps-init": """\
 ---
@@ -1091,6 +1134,8 @@ Close out the current task end-to-end. Run each step; do NOT skip one that faile
 
 1. **Validate changed files.** Identify files edited this session (git status, edit history). Call `tapps_validate_changed` with explicit `file_paths` (comma-separated). Never call without `file_paths`. If any file fails, list it with the top blocking issue and stop.
 
+   """ + FINISH_TASK_VALIDATE_CALL_GRAPH_NOTE + """
+
 """ + _FINISH_TASK_CHECKLIST_AND_DOC_GAPS_CURSOR + """
 
 4. **Save learnings (conditional).** If the session produced a non-obvious architectural or pattern-level decision, run `uv run tapps-mcp memory save --key <slug> --tier <architectural|pattern> --value "<decision>"` (CLI via BrainBridge). Skip for routine fixes. Brain offline → skip silently.
@@ -1177,6 +1222,39 @@ Run a parallel review-fix-validate pipeline on changed Python files:
 6. Call `tapps_validate_changed` with explicit `file_paths` to verify all files pass
 7. Call `tapps_checklist(task_type="review")` for final verification
 8. Present a summary table: file | before score | after score | gate | fixes applied
+""",
+    "tapps-refactor": """\
+---
+name: tapps-refactor
+description: >-
+  Function-level refactor workflow using call graph tools (Epic 114).
+  Use before changing a symbol's signature, deleting a function, or
+  refactoring callers — maps blast radius via tapps_call_graph and diff_impact.
+mcp_tools:
+  - tapps_session_start
+  - tapps_call_graph
+  - tapps_impact_analysis
+  - tapps_diff_impact
+  - tapps_quick_check
+  - tapps_validate_changed
+  - tapps_checklist
+---
+
+Symbol-level refactor workflow (Epic 114 / ADR-0017):
+
+1. **Session bootstrap.** Call `tapps_session_start()` — read `call_graph` (`ready`, `stale`, `degraded`). Stale is informational; graph tools auto-rebuild on first use.
+
+2. **Before editing a function.** `tapps_call_graph(symbol='...', query='callers')` — who calls this symbol? Use `query='callees'` or `query='chain'` as needed.
+
+3. **Optional module context.** `tapps_impact_analysis(file_path='...', symbol='...', granularity='both')`.
+
+4. **Edit loop.** After each Python file change, `tapps_quick_check(file_path='...')`.
+
+5. **After edits.** `tapps_diff_impact(file_paths='...')` or `/tapps-finish-task` (`include_impact` default true refreshes cache).
+
+6. **Close out.** `/tapps-finish-task` with `task_type=refactor`.
+
+See `docs/CALL_GRAPH.md` for gap_rate / degraded semantics.
 """,
     "tapps-research": """\
 ---
@@ -1265,7 +1343,28 @@ mcp_tools:
 When the user asks about TappsMCP tools, provide the full tool reference.
 Essential: tapps_session_start (first), tapps_quick_check (after edits),
 tapps_validate_changed (before complete, always pass file_paths), tapps_checklist (before complete).
-For the full table, see the skill content. Call tapps_server_info for workflow.
+
+## Essential tools (always-on workflow)
+| Tool | When to use it |
+|------|----------------|
+| **tapps_session_start** | **FIRST call in every session** — server info + call_graph cache status |
+| **tapps_quick_check** | **After editing any Python file** — quick score + gate + basic security |
+| **tapps_validate_changed** | **Before multi-file complete** — score + gate on changed files. Always pass explicit `file_paths`. `include_impact=true` (default) refreshes call-graph cache. |
+| **tapps_checklist** | **Before declaring complete** — reports which tools were called |
+| **tapps_quality_gate** | Before declaring work complete — ensures file passes preset |
+
+## Validation & analysis
+| Tool | When to use it |
+|------|----------------|
+| **tapps_security_scan** | Security-sensitive changes or before security review |
+| **tapps_validate_config** | When adding/changing Dockerfile, docker-compose, infra |
+| **tapps_impact_analysis** | Module-level import blast radius before API or layout changes |
+""" + TOOL_REFERENCE_CALL_GRAPH_ROWS + """
+| **tapps_dead_code** | Find unused code during refactoring |
+| **tapps_dependency_scan** | Check for CVEs before releases |
+| **tapps_dependency_graph** | Understand module dependencies, circular imports |
+
+For function-level refactors use `/tapps-refactor`. Call `tapps_server_info` for the latest recommended workflow string.
 """,
     "tapps-init": """\
 ---

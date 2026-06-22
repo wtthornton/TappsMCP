@@ -41,6 +41,8 @@ class TestTaskToolMap:
         m = TASK_TOOL_MAP["refactor"]
         assert "tapps_score_file" in m["required"]
         assert "tapps_quality_gate" in m["required"]
+        assert "tapps_call_graph" in m["recommended"]
+        assert "tapps_diff_impact" in m["recommended"]
 
     def test_security_task(self):
         m = TASK_TOOL_MAP["security"]

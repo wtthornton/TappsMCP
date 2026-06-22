@@ -394,3 +394,26 @@ def top():
         assert index.callees_of("demo.graph.top")[0].callee == "demo.graph.mid"
         assert len(index.callers_of("demo.graph.leaf")) == 1
         assert index.callers_of("demo.graph.leaf")[0].caller == "demo.graph.mid"
+
+
+class TestSummarizeCallGraphCache:
+    def test_stale_hint_mentions_auto_rebuild(self, tmp_path: Path) -> None:
+        from tapps_mcp.pipeline.agent_contract import CALL_GRAPH_STALE_HINT
+        from tapps_mcp.project.call_graph_cache import (
+            save_call_graph_index,
+            summarize_call_graph_cache,
+        )
+        from tapps_mcp.project.call_graph_types import CallGraphIndex, INDEX_VERSION
+
+        save_call_graph_index(
+            tmp_path,
+            CallGraphIndex(
+                project_root=str(tmp_path),
+                fingerprint="stale-fingerprint",
+                version=INDEX_VERSION,
+            ),
+        )
+        summary = summarize_call_graph_cache(tmp_path)
+        assert summary.get("stale") is True
+        assert summary.get("hint") == CALL_GRAPH_STALE_HINT
+        assert "automatically" in str(summary.get("hint"))

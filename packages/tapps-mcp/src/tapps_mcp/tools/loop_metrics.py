@@ -361,7 +361,11 @@ def resolve_transcript_from_payload(
 def record_loop_metrics_from_hook_payload(payload: dict[str, Any]) -> dict[str, Any]:
     """Record loop-metrics from a Cursor/Claude stop-hook stdin payload."""
     from tapps_core.config.settings import load_settings
-    from tapps_mcp.tools.usage import compute_gaps, format_stop_gap_followup
+    from tapps_mcp.tools.usage import (
+        append_call_graph_stop_followup,
+        compute_gaps,
+        format_stop_gap_followup,
+    )
 
     project_root = resolve_project_root_from_payload(payload)
     transcript = resolve_transcript_from_payload(payload, project_root)
@@ -384,6 +388,12 @@ def record_loop_metrics_from_hook_payload(payload: dict[str, Any]) -> dict[str, 
         called_tools=called_tools,
         mode=gate_mode,
         fresh_violations=violations,
+    )
+    followup = append_call_graph_stop_followup(
+        followup,
+        project_root,
+        files_edited=[str(f) for f in row.get("files_edited") or []],
+        called_tools=called_tools,
     )
 
     return {

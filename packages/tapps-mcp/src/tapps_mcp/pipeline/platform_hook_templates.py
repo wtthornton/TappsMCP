@@ -13,6 +13,7 @@ from tapps_mcp.pipeline.agent_contract import (
     SUBAGENT_START_INTRO,
     SUBAGENT_START_TOOLS_LINE,
     POST_EDIT_IMPORT_LOOKUP_BASH,
+    POST_EDIT_PUBLIC_API_CALL_GRAPH_BASH,
     POST_EDIT_PUBLIC_API_DRIFT_BASH,
     POST_EDIT_QUICK_CHECK_BASH,
     STOP_FINISH_REMINDER,
@@ -291,6 +292,7 @@ case "$FILE" in
         + "    fi\n"
         + "    if [ \"$API\" = \"1\" ]; then\n"
         + f'      echo "{POST_EDIT_PUBLIC_API_DRIFT_BASH}" >&2\n'
+        + f'      echo "{POST_EDIT_PUBLIC_API_CALL_GRAPH_BASH}" >&2\n'
         + """    fi
     ;;
 esac
@@ -1521,6 +1523,7 @@ switch -Regex ($file) {{
         }}
         if ($api -eq '1') {{
             [Console]::Error.WriteLine("{POST_EDIT_PUBLIC_API_DRIFT_BASH.replace('$FILE', '$file')}")
+            [Console]::Error.WriteLine("{POST_EDIT_PUBLIC_API_CALL_GRAPH_BASH.replace('$FILE', '$file')}")
         }}
     }}
     default {{
@@ -1594,6 +1597,7 @@ case "$FILE" in
         + "    fi\n"
         + "    if [ \"$API\" = \"1\" ]; then\n"
         + f'      echo "{POST_EDIT_PUBLIC_API_DRIFT_BASH}" >&2\n'
+        + f'      echo "{POST_EDIT_PUBLIC_API_CALL_GRAPH_BASH}" >&2\n'
         + """    fi
     ;;
   *)
