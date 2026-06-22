@@ -6,7 +6,7 @@ When the **DocsMCP** MCP server is configured in your host (Claude Code, Cursor,
 
 ## What DocsMCP is
 
-DocsMCP is an MCP server that provides 40 tools for:
+DocsMCP is an MCP server that provides 42 tools for:
 
 - **Code analysis** -- module maps, API surface extraction, dependency analysis via AST parsing
 - **Git analysis** -- commit history with conventional commit parsing, version detection from tags
@@ -41,6 +41,8 @@ You only see these tools when the host has started the DocsMCP server and attach
 | **docs_generate_adr** | Create auto-numbered Architecture Decision Records (MADR/Nygard) |
 | **docs_generate_onboarding** | Generate getting-started / onboarding guide |
 | **docs_generate_contributing** | Generate CONTRIBUTING.md with dev setup and PR workflow |
+| **docs_generate_runbook** | Generate operational runbook (procedure, rollback, escalation) |
+| **docs_generate_postmortem** | Generate incident postmortem (timeline, impact, root cause, actions) |
 | **docs_generate_prd** | Generate Product Requirements Documents (standard/comprehensive, auto-populate, SmartMerger) |
 | **docs_generate_diagram** | Generate Mermaid/PlantUML/D2 diagrams (dependency/class/module/ER/C4/sequence, D2 themes) |
 | **docs_generate_architecture** | Self-contained HTML architecture report with SVG diagrams |

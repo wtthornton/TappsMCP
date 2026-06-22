@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [3.12.44] - 2026-06-19
+
+Patch: doctor surfaces HTTP MCP fleet failures and transport drift (ADR-0024) instead of letting consumer `nlt-*` servers fail opaquely.
+
+### Fixed
+
+- **Opaque HTTP fleet failure when the fleet is down (ADR-0024)** — `tapps-mcp doctor` only validated the *shape* of `streamableHttp` MCP entries, never that the fleet ports (8760-8765) were listening. When the shared fleet was never started, every consumer `nlt-*` server failed in Cursor with the bare "The MCP server errored" and no remediation. New `check_http_fleet_liveness` probes each configured fleet endpoint and points at `tapps-mcp fleet start` (or the stdio revert) when a port is down.
+- **MCP transport drift between `.cursor/mcp.json` and `.tapps-mcp.yaml`** — a repo's Cursor config could be `streamableHttp` while `.tapps-mcp.yaml` had no `mcp_transport` key (defaults stdio), so a plain `tapps-mcp upgrade --host cursor` silently flipped transport. `run_init` now persists the resolved `mcp_transport` whenever it is explicit or resolves to http, and new `check_mcp_transport_drift` flags config/yaml mismatches in doctor (including the `doctor --quick` run inside fleet upgrade).
+
 ## [3.12.43] - 2026-06-16
 
 Patch: hook matchers follow the NLT MCP server split — PostToolUse/PreToolUse gates fire again.

@@ -1034,7 +1034,7 @@ name: linear-release-update
 user-invocable: true
 model: claude-haiku-4-5-20251001
 description: Post a structured Linear project update document on a version release. Orchestrates tapps_release_update → docs_validate_release_update → save_document → cache invalidation. Use when posting a release announcement to Linear after shipping a new version.
-allowed-tools: mcp__nlt-release-ship__tapps_release_update mcp__nlt-release-ship__docs_generate_release_update mcp__nlt-release-ship__docs_validate_release_update mcp__plugin_linear_linear__save_document mcp__nlt-linear-issues__tapps_linear_snapshot_invalidate
+allowed-tools: mcp__nlt-release-ship__tapps_release_update mcp__nlt-release-ship__docs_generate_release_update mcp__nlt-release-ship__docs_validate_release_update mcp__nlt-release-ship__docs_release_gate mcp__plugin_linear_linear__save_document mcp__nlt-linear-issues__tapps_linear_snapshot_invalidate
 argument-hint: "--version vX.Y.Z --prev-version vX.Y.W [--team <team>] [--project <project>] [--dry-run]"
 ---
 
@@ -1046,6 +1046,8 @@ Post a structured Linear project update document when a new version is released.
    - `version` and `prev_version` are required. Parse from the user's prompt or ask once if both are missing.
    - `team` and `project`: read from `.tapps-mcp.yaml` if present (`linear_team`, `linear_project` fields), otherwise pass empty strings.
    - If `dry_run=true` is requested, pass it through — the tool returns the body without requiring validation to pass.
+
+1b. **Docs release gate (required unless dry_run):** Call `mcp__nlt-release-ship__docs_release_gate`. If `success=false` or aggregate verdict is fail, surface findings and stop — do not post.
 
 2. Check the response:
    - If `success=false`: surface the `error.message` and `findings` to the user. Stop — do not post.
@@ -1566,6 +1568,7 @@ mcp_tools:
   - tapps_release_update
   - docs_generate_release_update
   - docs_validate_release_update
+  - docs_release_gate
   - linear_save_document
   - tapps_linear_snapshot_invalidate
 ---
@@ -1578,6 +1581,8 @@ Post a structured Linear project update document when a new version is released.
    - `version` and `prev_version` are required. Parse from the user's prompt or ask once if both are missing.
    - `team` and `project`: read from `.tapps-mcp.yaml` if present (`linear_team`, `linear_project` fields), otherwise pass empty strings.
    - If `dry_run=true` is requested, pass it through — the tool returns the body without requiring validation to pass.
+
+1b. **Docs release gate (required unless dry_run):** Call `docs_release_gate`. Stop on fail.
 
 2. Check the response:
    - If `success=false`: surface the `error.message` and `findings` to the user. Stop — do not post.

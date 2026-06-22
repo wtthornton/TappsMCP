@@ -13,6 +13,7 @@ from tapps_mcp.pipeline.agent_contract import (
     SUBAGENT_START_INTRO,
     SUBAGENT_START_TOOLS_LINE,
     POST_EDIT_IMPORT_LOOKUP_BASH,
+    POST_EDIT_PUBLIC_API_DRIFT_BASH,
     POST_EDIT_QUICK_CHECK_BASH,
     STOP_FINISH_REMINDER,
 )
@@ -127,6 +128,63 @@ exit 0
 """
 
 
+# Shared Python for after-edit import + public API detection (TAP-1330 / doc drift nudge).
+_CURSOR_AFTER_EDIT_IMPORT_PARSE_PY = """\
+import os, json, re
+from pathlib import Path
+
+try:
+    d = json.loads(os.environ.get("TAPPS_HOOK_INPUT", "{}"))
+    ti = d.get("tool_input") or d.get("toolInput") or {}
+    f = (
+        d.get("file")
+        or d.get("file_path")
+        or ti.get("file_path")
+        or ti.get("path")
+        or ""
+    )
+    content = ti.get("content") or ti.get("new_string") or ""
+    if not content and f:
+        candidate = Path(f)
+        if not candidate.is_file():
+            for root in (
+                os.environ.get("TAPPS_MCP_PROJECT_ROOT"),
+                os.environ.get("TAPPS_PROJECT_ROOT"),
+                os.environ.get("CURSOR_PROJECT_DIR"),
+                os.getcwd(),
+            ):
+                if not root:
+                    continue
+                alt = Path(root) / f
+                if alt.is_file():
+                    candidate = alt
+                    break
+        if candidate.is_file():
+            content = candidate.read_text(encoding="utf-8", errors="replace")
+    print(f)
+    libs: set[str] = set()
+    if f.endswith((".py", ".pyi")):
+        for m in re.finditer(
+            r"^\\s*(?:from|import)\\s+([A-Za-z_][A-Za-z0-9_]*)", content, re.M
+        ):
+            libs.add(m.group(1))
+    elif f.endswith((".ts", ".tsx", ".js", ".jsx", ".mjs", ".cjs")):
+        js_import = r"^\\s*import[^'\"]*['\"]([^'\"./][^'\"]*)['\"]"
+        for m in re.finditer(js_import, content, re.M):
+            libs.add(m.group(1).split("/")[0])
+    print(",".join(sorted(libs)))
+    api = "0"
+    if f.endswith((".py", ".pyi")):
+        if re.search(r"^\\s*(?:async\\s+)?def\\s+\\w+|^\\s*class\\s+\\w+", content, re.M):
+            api = "1"
+    print(api)
+except Exception:
+    print("")
+    print("")
+    print("")
+"""
+
+
 # ---------------------------------------------------------------------------
 # Claude Code hook script templates (Story 12.5)
 # ---------------------------------------------------------------------------
@@ -216,34 +274,23 @@ exit 0
 INPUT=$(cat)
 PYBIN=$(command -v python3 2>/dev/null || command -v python 2>/dev/null)
 PARSED=$(TAPPS_HOOK_INPUT="$INPUT" "$PYBIN" - <<'PYEOF' 2>/dev/null
-import os, json, re
-try:
-    d = json.loads(os.environ.get('TAPPS_HOOK_INPUT', '{}'))
-    ti = d.get('tool_input') or d.get('toolInput') or {}
-    f = ti.get('file_path') or ti.get('path') or ''
-    content = ti.get('content') or ti.get('new_string') or ''
-    print(f)
-    libs = set()
-    if f.endswith(('.py', '.pyi')):
-        for m in re.finditer(r'^\\s*(?:from|import)\\s+([A-Za-z_][A-Za-z0-9_]*)', content, re.M):
-            libs.add(m.group(1))
-    elif f.endswith(('.ts', '.tsx', '.js', '.jsx', '.mjs', '.cjs')):
-        for m in re.finditer(r'''^\\s*import[^'"]*['"]([^'"./][^'"]*)['"]''', content, re.M):
-            libs.add(m.group(1).split('/')[0])
-    print(','.join(sorted(libs)))
-except Exception:
-    print('')
-    print('')
+"""
+        + _CURSOR_AFTER_EDIT_IMPORT_PARSE_PY
+        + """\
 PYEOF
 )
 FILE=$(echo "$PARSED" | sed -n '1p')
 LIBS=$(echo "$PARSED" | sed -n '2p')
+API=$(echo "$PARSED" | sed -n '3p')
 case "$FILE" in
   *.py|*.pyi|*.ts|*.tsx|*.js|*.jsx|*.go|*.rs)
 """
         + f'    echo "{POST_EDIT_QUICK_CHECK_BASH}" >&2\n'
         + "    if [ -n \"$LIBS\" ]; then\n"
         + f'      echo "{POST_EDIT_IMPORT_LOOKUP_BASH}" >&2\n'
+        + "    fi\n"
+        + "    if [ \"$API\" = \"1\" ]; then\n"
+        + f'      echo "{POST_EDIT_PUBLIC_API_DRIFT_BASH}" >&2\n'
         + """    fi
     ;;
 esac
@@ -1442,58 +1489,6 @@ CLAUDE_HOOKS_CONFIG: dict[str, list[dict[str, Any]]] = {
 # Cursor hook script templates (Story 12.7)
 # ---------------------------------------------------------------------------
 
-# Shared Python for after-edit import detection (TAP-1330 Cursor parity).
-# Reads hook JSON from TAPPS_HOOK_INPUT; falls back to on-disk file content
-# when Cursor afterFileEdit omits edit payload text.
-_CURSOR_AFTER_EDIT_IMPORT_PARSE_PY = """\
-import os, json, re
-from pathlib import Path
-
-try:
-    d = json.loads(os.environ.get("TAPPS_HOOK_INPUT", "{}"))
-    ti = d.get("tool_input") or d.get("toolInput") or {}
-    f = (
-        d.get("file")
-        or d.get("file_path")
-        or ti.get("file_path")
-        or ti.get("path")
-        or ""
-    )
-    content = ti.get("content") or ti.get("new_string") or ""
-    if not content and f:
-        candidate = Path(f)
-        if not candidate.is_file():
-            for root in (
-                os.environ.get("TAPPS_MCP_PROJECT_ROOT"),
-                os.environ.get("TAPPS_PROJECT_ROOT"),
-                os.environ.get("CURSOR_PROJECT_DIR"),
-                os.getcwd(),
-            ):
-                if not root:
-                    continue
-                alt = Path(root) / f
-                if alt.is_file():
-                    candidate = alt
-                    break
-        if candidate.is_file():
-            content = candidate.read_text(encoding="utf-8", errors="replace")
-    print(f)
-    libs: set[str] = set()
-    if f.endswith((".py", ".pyi")):
-        for m in re.finditer(
-            r"^\\s*(?:from|import)\\s+([A-Za-z_][A-Za-z0-9_]*)", content, re.M
-        ):
-            libs.add(m.group(1))
-    elif f.endswith((".ts", ".tsx", ".js", ".jsx", ".mjs", ".cjs")):
-        js_import = r"^\\s*import[^'\"]*['\"]([^'\"./][^'\"]*)['\"]"
-        for m in re.finditer(js_import, content, re.M):
-            libs.add(m.group(1).split("/")[0])
-    print(",".join(sorted(libs)))
-except Exception:
-    print("")
-    print("")
-"""
-
 
 def _cursor_after_edit_ps1_script() -> str:
     """PowerShell afterFileEdit hook with TAP-1330 import detection."""
@@ -1506,6 +1501,7 @@ $py = Get-Command python3 -ErrorAction SilentlyContinue
 if (-not $py) {{ $py = Get-Command python -ErrorAction SilentlyContinue }}
 $file = "unknown"
 $libs = ""
+$api = ""
 if ($py) {{
     $parseScript = @'
 {_CURSOR_AFTER_EDIT_IMPORT_PARSE_PY}\
@@ -1513,6 +1509,7 @@ if ($py) {{
     $parsed = @($parseScript | & $py.Source - 2>$null)
     if ($parsed.Count -ge 1) {{ $file = [string]$parsed[0] }}
     if ($parsed.Count -ge 2) {{ $libs = [string]$parsed[1] }}
+    if ($parsed.Count -ge 3) {{ $api = [string]$parsed[2] }}
 }}
 switch -Regex ($file) {{
     '\\.(py|pyi|ts|tsx|js|jsx|go|rs)$' {{
@@ -1521,6 +1518,9 @@ switch -Regex ($file) {{
             [Console]::Error.WriteLine(
                 "{POST_EDIT_IMPORT_LOOKUP_BASH.replace('$LIBS', '$libs')}"
             )
+        }}
+        if ($api -eq '1') {{
+            [Console]::Error.WriteLine("{POST_EDIT_PUBLIC_API_DRIFT_BASH.replace('$FILE', '$file')}")
         }}
     }}
     default {{
@@ -1584,12 +1584,16 @@ PYEOF
 )
 FILE=$(echo "$PARSED" | sed -n '1p')
 LIBS=$(echo "$PARSED" | sed -n '2p')
+API=$(echo "$PARSED" | sed -n '3p')
 case "$FILE" in
   *.py|*.pyi|*.ts|*.tsx|*.js|*.jsx|*.go|*.rs)
 """
         + f'    echo "{POST_EDIT_QUICK_CHECK_BASH}" >&2\n'
         + "    if [ -n \"$LIBS\" ]; then\n"
         + f'      echo "{POST_EDIT_IMPORT_LOOKUP_BASH}" >&2\n'
+        + "    fi\n"
+        + "    if [ \"$API\" = \"1\" ]; then\n"
+        + f'      echo "{POST_EDIT_PUBLIC_API_DRIFT_BASH}" >&2\n'
         + """    fi
     ;;
   *)

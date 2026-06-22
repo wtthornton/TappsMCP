@@ -374,6 +374,152 @@ def check_vscode_config(project_root: Path) -> CheckResult:
     )
 
 
+def _iter_http_fleet_endpoints(project_root: Path) -> list[tuple[str, str, str]]:
+    """Return ``(host_label, server_name, url)`` for ``streamableHttp`` entries.
+
+    Scans the host MCP configs for shared-fleet (ADR-0024) ``streamableHttp``
+    entries so doctor can probe whether their ports are actually listening.
+    """
+    from tapps_mcp.distribution.setup_generator import _load_mcp_config_json
+
+    sources = (
+        (Path(".cursor") / "mcp.json", "mcpServers", "Cursor"),
+        (Path(".vscode") / "mcp.json", "servers", "VS Code"),
+        (Path(".mcp.json"), "mcpServers", "Claude Code"),
+    )
+    endpoints: list[tuple[str, str, str]] = []
+    for rel, servers_key, label in sources:
+        path = project_root / rel
+        if not path.exists():
+            continue
+        data = _load_mcp_config_json(path)
+        if not isinstance(data, dict):
+            continue
+        servers = data.get(servers_key, {})
+        if not isinstance(servers, dict):
+            continue
+        for name, entry in servers.items():
+            if not isinstance(entry, dict) or entry.get("type") != "streamableHttp":
+                continue
+            url = entry.get("url")
+            if isinstance(url, str) and url.startswith("http"):
+                endpoints.append((label, str(name), url))
+    return endpoints
+
+
+def _probe_tcp(url: str, *, timeout: float = 0.5) -> bool:
+    """Return ``True`` when a TCP connection to *url*'s host:port succeeds."""
+    import socket
+    from urllib.parse import urlparse
+
+    parsed = urlparse(url)
+    host = parsed.hostname or "127.0.0.1"
+    port = parsed.port or (443 if parsed.scheme == "https" else 80)
+    try:
+        with socket.create_connection((host, port), timeout=timeout):
+            return True
+    except OSError:
+        return False
+
+
+def check_http_fleet_liveness(project_root: Path) -> CheckResult:
+    """Probe shared HTTP MCP fleet ports referenced by host configs (ADR-0024).
+
+    ``check_*_config`` only validates the *shape* of a ``streamableHttp`` entry.
+    When the fleet was never started (``tapps-mcp fleet start``), every host
+    server fails with an opaque transport error and no remediation. This probes
+    each configured fleet port so the failure surfaces with a fix.
+    """
+    name = "HTTP MCP fleet liveness"
+    endpoints = _iter_http_fleet_endpoints(project_root)
+    if not endpoints:
+        return CheckResult(name, True, "No streamableHttp MCP entries (stdio transport)")
+    down = [(srv, url) for _label, srv, url in endpoints if not _probe_tcp(url)]
+    if not down:
+        return CheckResult(name, True, f"All {len(endpoints)} fleet endpoint(s) reachable")
+    preview = ", ".join(f"{srv} ({url})" for srv, url in down[:4])
+    return CheckResult(
+        name,
+        False,
+        f"{len(down)}/{len(endpoints)} fleet endpoint(s) not listening: {preview}",
+        "Start the shared HTTP MCP fleet with `tapps-mcp fleet start` (ADR-0024), "
+        "or switch this repo to stdio: set `mcp_transport: stdio` in "
+        ".tapps-mcp.yaml and re-run `tapps-mcp upgrade --host cursor`.",
+    )
+
+
+def _cursor_config_transport(project_root: Path) -> str | None:
+    """Return ``"http"``/``"stdio"`` for the Cursor MCP config, ``None`` if absent."""
+    from tapps_mcp.distribution.setup_generator import _load_mcp_config_json
+
+    path = project_root / ".cursor" / "mcp.json"
+    if not path.exists():
+        return None
+    data = _load_mcp_config_json(path)
+    if not isinstance(data, dict):
+        return None
+    servers = data.get("mcpServers", {})
+    if not isinstance(servers, dict) or not servers:
+        return None
+    has_http = any(
+        isinstance(entry, dict) and entry.get("type") == "streamableHttp"
+        for entry in servers.values()
+    )
+    return "http" if has_http else "stdio"
+
+
+def _yaml_mcp_transport(project_root: Path) -> str | None:
+    """Return ``mcp_transport`` from ``.tapps-mcp.yaml`` (``None`` when unset)."""
+    import yaml
+
+    config_path = project_root / ".tapps-mcp.yaml"
+    if not config_path.is_file():
+        return None
+    try:
+        loaded = yaml.safe_load(config_path.read_text(encoding="utf-8"))
+    except Exception:
+        log.debug("yaml_mcp_transport_load_failed", exc_info=True)
+        return None
+    if isinstance(loaded, dict):
+        value = loaded.get("mcp_transport")
+        if isinstance(value, str):
+            return value
+    return None
+
+
+def check_mcp_transport_drift(project_root: Path) -> CheckResult:
+    """Flag when the Cursor MCP config transport disagrees with yaml ``mcp_transport``.
+
+    ``mcp_transport`` (``.tapps-mcp.yaml``) is the source of truth that
+    ``init``/``upgrade`` use to regenerate ``.cursor/mcp.json``. When the
+    generated config is ``streamableHttp`` but the yaml key is unset (defaults
+    stdio) — or vice versa — the next ``upgrade`` silently flips transport.
+    """
+    name = "MCP transport drift"
+    config_transport = _cursor_config_transport(project_root)
+    if config_transport is None:
+        return CheckResult(name, True, "No Cursor MCP config to compare")
+    yaml_transport = _yaml_mcp_transport(project_root)
+    effective_yaml = yaml_transport or "stdio"
+    if config_transport == effective_yaml:
+        return CheckResult(
+            name,
+            True,
+            f".cursor/mcp.json and .tapps-mcp.yaml agree (mcp_transport={config_transport})",
+        )
+    return CheckResult(
+        name,
+        False,
+        (
+            f".cursor/mcp.json is {config_transport} but .tapps-mcp.yaml "
+            f"mcp_transport={yaml_transport or '<unset, defaults stdio>'}"
+        ),
+        "Reconcile transport so `upgrade` cannot silently flip it: run "
+        f"`tapps-mcp init --host cursor --mcp-transport {config_transport} --force` "
+        "to persist the yaml key, or regenerate the config to match yaml.",
+    )
+
+
 _BRAIN_MCP_SERVER_NAMES: frozenset[str] = frozenset({"tapps-brain", "tapps-brain-mcp"})
 _BRAIN_MCP_CONFIG_PATHS: tuple[tuple[str, str], ...] = (
     (".mcp.json", "mcpServers"),
@@ -4461,6 +4607,8 @@ def _collect_checks(root: Path, *, quick: bool = False) -> list[CheckResult]:
     checks.append(check_claude_code_project(root))
     checks.append(check_cursor_config(root))
     checks.append(check_vscode_config(root))
+    checks.append(check_mcp_transport_drift(root))
+    checks.append(check_http_fleet_liveness(root))
     checks.append(check_mcp_client_config(root))
     checks.append(check_mcp_tool_budget(root))
     checks.append(check_call_graph_tools_profile(root))

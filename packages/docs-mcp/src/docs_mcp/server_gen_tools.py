@@ -774,6 +774,184 @@ async def docs_generate_contributing(
     return success_response("docs_generate_contributing", elapsed_ms, data)
 
 
+async def docs_generate_runbook(
+    title: str,
+    service: str = "",
+    when_to_use: str = "",
+    prerequisites: str = "",
+    procedure: str = "",
+    rollback_steps: str = "",
+    escalation: str = "",
+    output_path: str = "",
+    project_root: str = "",
+) -> dict[str, Any]:
+    """Generate an operational runbook with procedure, rollback, and escalation sections.
+
+    Args:
+        title: Runbook title (required).
+        service: Service or system name.
+        when_to_use: Symptoms or triggers for using this runbook.
+        prerequisites: Access, credentials, and tooling required.
+        procedure: Step-by-step procedure (numbered lines or markdown list).
+        rollback_steps: How to revert if the procedure fails.
+        escalation: On-call paths and severity thresholds.
+        output_path: Output file path (default: docs/operations/runbooks/<slug>.md).
+        project_root: Override project root path (default: configured root).
+    """
+    _record_call("docs_generate_runbook")
+    start = time.perf_counter_ns()
+
+    if not title.strip():
+        return error_response(
+            "docs_generate_runbook",
+            "INPUT_INVALID",
+            "title is required.",
+        )
+
+    settings = _get_settings()
+    root = Path(project_root) if project_root else Path(settings.project_root)
+
+    if not root.is_dir():
+        return error_response(
+            "docs_generate_runbook",
+            "INVALID_ROOT",
+            f"Project root does not exist: {root}",
+        )
+
+    from docs_mcp.generators.operations import RunbookGenerator
+
+    try:
+        generator = RunbookGenerator()
+        content = generator.generate(
+            root,
+            title=title,
+            service=service,
+            when_to_use=when_to_use,
+            prerequisites=prerequisites,
+            procedure=procedure,
+            rollback_steps=rollback_steps,
+            escalation=escalation,
+        )
+    except Exception as exc:
+        return error_response(
+            "docs_generate_runbook",
+            "GENERATION_ERROR",
+            f"Failed to generate runbook: {exc}",
+        )
+
+    if not content:
+        return error_response(
+            "docs_generate_runbook",
+            "NO_CONTENT",
+            "Could not generate runbook content.",
+        )
+
+    slug = safe_slug(title)
+    target = output_path.strip() or f"docs/operations/runbooks/{slug}.md"
+
+    out = await finalize_output(
+        "docs_generate_runbook",
+        content,
+        target,
+        root,
+        description=f"Operational runbook: {title.strip()}.",
+    )
+    if not out.get("success", True):
+        return out
+
+    elapsed_ms = (time.perf_counter_ns() - start) // 1_000_000
+    return success_response("docs_generate_runbook", elapsed_ms, {**out})
+
+
+async def docs_generate_postmortem(
+    title: str,
+    incident_date: str = "",
+    summary: str = "",
+    timeline: str = "",
+    impact: str = "",
+    root_cause: str = "",
+    action_items: str = "",
+    output_path: str = "",
+    project_root: str = "",
+) -> dict[str, Any]:
+    """Generate an incident postmortem document (blameless, action-oriented).
+
+    Args:
+        title: Postmortem title (required).
+        incident_date: Incident date (ISO-8601 or free text).
+        summary: Brief summary of what happened.
+        timeline: Detection → mitigation → recovery timeline.
+        impact: User/business impact and duration.
+        root_cause: Root cause analysis (technical and process).
+        action_items: Follow-ups with owners (markdown list).
+        output_path: Output path (default: docs/operations/postmortems/<slug>.md).
+        project_root: Override project root path (default: configured root).
+    """
+    _record_call("docs_generate_postmortem")
+    start = time.perf_counter_ns()
+
+    if not title.strip():
+        return error_response(
+            "docs_generate_postmortem",
+            "INPUT_INVALID",
+            "title is required.",
+        )
+
+    settings = _get_settings()
+    root = Path(project_root) if project_root else Path(settings.project_root)
+
+    if not root.is_dir():
+        return error_response(
+            "docs_generate_postmortem",
+            "INVALID_ROOT",
+            f"Project root does not exist: {root}",
+        )
+
+    from docs_mcp.generators.operations import PostmortemGenerator
+
+    try:
+        generator = PostmortemGenerator()
+        content = generator.generate(
+            root,
+            title=title,
+            incident_date=incident_date,
+            summary=summary,
+            timeline=timeline,
+            impact=impact,
+            root_cause=root_cause,
+            action_items=action_items,
+        )
+    except Exception as exc:
+        return error_response(
+            "docs_generate_postmortem",
+            "GENERATION_ERROR",
+            f"Failed to generate postmortem: {exc}",
+        )
+
+    if not content:
+        return error_response(
+            "docs_generate_postmortem",
+            "NO_CONTENT",
+            "Could not generate postmortem content.",
+        )
+
+    slug = safe_slug(title)
+    target = output_path.strip() or f"docs/operations/postmortems/{slug}.md"
+
+    out = await finalize_output(
+        "docs_generate_postmortem",
+        content,
+        target,
+        root,
+        description=f"Incident postmortem: {title.strip()}.",
+    )
+    if not out.get("success", True):
+        return out
+
+    elapsed_ms = (time.perf_counter_ns() - start) // 1_000_000
+    return success_response("docs_generate_postmortem", elapsed_ms, {**out})
+
+
 async def docs_generate_prd(
     title: str,
     problem: str = "",
@@ -2450,6 +2628,20 @@ def register(mcp_instance: FastMCP, allowed_tools: frozenset[str]) -> None:
         register_tool(
             mcp_instance,
             docs_generate_contributing,
+            annotations=_ANNOTATIONS_SIDE_EFFECT_IDEMPOTENT,
+            meta=_META_DEFERRED,
+        )
+    if "docs_generate_runbook" in allowed_tools:
+        register_tool(
+            mcp_instance,
+            docs_generate_runbook,
+            annotations=_ANNOTATIONS_SIDE_EFFECT_IDEMPOTENT,
+            meta=_META_DEFERRED,
+        )
+    if "docs_generate_postmortem" in allowed_tools:
+        register_tool(
+            mcp_instance,
+            docs_generate_postmortem,
             annotations=_ANNOTATIONS_SIDE_EFFECT_IDEMPOTENT,
             meta=_META_DEFERRED,
         )

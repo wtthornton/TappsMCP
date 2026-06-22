@@ -15,6 +15,14 @@ POST_EDIT_IMPORT_LOOKUP_MSG = (
     "Imports detected ({libs}) — call tapps_lookup_docs(library=..., topic=...) "
     "before using those APIs in this session."
 )
+POST_EDIT_PUBLIC_API_DRIFT_MSG = (
+    "Public API change detected in {file} — call docs_check_drift and "
+    "docs_api_surface(file_path='{file}') when nlt-project-docs is enabled."
+)
+POST_EDIT_PUBLIC_API_DRIFT_BASH = (
+    "Public API change detected ($FILE) — call docs_check_drift and "
+    "docs_api_surface on nlt-project-docs when documenting (warn-only)."
+)
 # Bash hook templates use $LIBS / $FILE instead of Python format fields.
 POST_EDIT_IMPORT_LOOKUP_BASH = (
     "Imports detected ($LIBS) — call tapps_lookup_docs(library=..., topic=...) "

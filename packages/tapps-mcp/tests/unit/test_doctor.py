@@ -29,10 +29,12 @@ from tapps_mcp.distribution.doctor import (
     check_cursor_mcp_zombie_cleanup,
     check_cursor_rules,
     check_hooks,
+    check_http_fleet_liveness,
     check_json_config,
     check_mcp_client_config,
     check_mcp_config_unresolved_project_root,
     check_mcp_tool_budget,
+    check_mcp_transport_drift,
     check_nlt_partial_enablement,
     check_plaintext_secrets,
     check_scope_recommendation,
@@ -314,6 +316,92 @@ class TestHostConfigChecks:
     def test_vscode_config_missing(self, tmp_path):
         result = check_vscode_config(tmp_path)
         assert result.ok is False
+
+
+# ---------------------------------------------------------------------------
+# HTTP fleet liveness + transport drift (ADR-0024)
+# ---------------------------------------------------------------------------
+
+
+def _write_cursor_config(root: Path, servers: dict) -> None:
+    cursor_dir = root / ".cursor"
+    cursor_dir.mkdir(parents=True, exist_ok=True)
+    (cursor_dir / "mcp.json").write_text(
+        json.dumps({"mcpServers": servers}), encoding="utf-8"
+    )
+
+
+def _http_entry(port: int) -> dict:
+    return {
+        "type": "streamableHttp",
+        "url": f"http://127.0.0.1:{port}/mcp",
+        "headers": {"X-Tapps-Project-Root": "/tmp/repo"},
+    }
+
+
+class TestHttpFleetLiveness:
+    """Tests for check_http_fleet_liveness (Issue A)."""
+
+    def test_no_http_entries_passes(self, tmp_path):
+        _write_cursor_config(tmp_path, {"nlt-build": {"command": "tapps-mcp"}})
+        result = check_http_fleet_liveness(tmp_path)
+        assert result.ok is True
+        assert "stdio" in result.message
+
+    def test_no_config_passes(self, tmp_path):
+        result = check_http_fleet_liveness(tmp_path)
+        assert result.ok is True
+
+    def test_fleet_down_fails_with_remediation(self, tmp_path):
+        # Port 1 is reserved/unused — connection refused.
+        _write_cursor_config(tmp_path, {"nlt-build": _http_entry(1)})
+        result = check_http_fleet_liveness(tmp_path)
+        assert result.ok is False
+        assert "not listening" in result.message
+        assert "tapps-mcp fleet start" in result.detail
+
+    def test_fleet_up_passes(self, tmp_path):
+        import socket
+
+        listener = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        listener.bind(("127.0.0.1", 0))
+        listener.listen(1)
+        port = listener.getsockname()[1]
+        try:
+            _write_cursor_config(tmp_path, {"nlt-build": _http_entry(port)})
+            result = check_http_fleet_liveness(tmp_path)
+            assert result.ok is True
+            assert "reachable" in result.message
+        finally:
+            listener.close()
+
+
+class TestMcpTransportDrift:
+    """Tests for check_mcp_transport_drift (Issue B)."""
+
+    def test_no_cursor_config_passes(self, tmp_path):
+        result = check_mcp_transport_drift(tmp_path)
+        assert result.ok is True
+
+    def test_http_config_missing_yaml_key_is_drift(self, tmp_path):
+        _write_cursor_config(tmp_path, {"nlt-build": _http_entry(8760)})
+        # No .tapps-mcp.yaml mcp_transport key → defaults stdio → drift.
+        result = check_mcp_transport_drift(tmp_path)
+        assert result.ok is False
+        assert "http" in result.message
+        assert "init --host cursor --mcp-transport http" in result.detail
+
+    def test_http_config_with_http_yaml_agrees(self, tmp_path):
+        _write_cursor_config(tmp_path, {"nlt-build": _http_entry(8760)})
+        (tmp_path / ".tapps-mcp.yaml").write_text("mcp_transport: http\n", encoding="utf-8")
+        result = check_mcp_transport_drift(tmp_path)
+        assert result.ok is True
+        assert "agree" in result.message
+
+    def test_stdio_config_default_yaml_agrees(self, tmp_path):
+        _write_cursor_config(tmp_path, {"nlt-build": {"command": "tapps-mcp"}})
+        result = check_mcp_transport_drift(tmp_path)
+        assert result.ok is True
 
 
 # ---------------------------------------------------------------------------

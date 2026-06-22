@@ -1049,6 +1049,9 @@ _WORKFLOW_ONE_LINERS: dict[str, str] = {
     "tapps-continue-session": "Bootstrap a new chat from the last session handoff.",
     "tapps-memory": "Search or save cross-session architectural decisions and patterns.",
     "linear-issue": "Create, lint, and validate Linear issues/epics before save.",
+    "tapps-docs-refresh": "Full documentation refresh: links, API, diagrams, validation suite.",
+    "tapps-docs-bootstrap": "Bootstrap README, CONTRIBUTING, and onboarding for new projects.",
+    "tapps-docs-finish-task": "Doc-work finish bundle: drift, links, completeness, release gate.",
 }
 
 _BUNDLE_WORKFLOW_KEYS: dict[str, tuple[str, ...]] = {
@@ -1065,8 +1068,12 @@ _BUNDLE_WORKFLOW_KEYS: dict[str, tuple[str, ...]] = {
         "tapps-memory",
     ),
     "planning": ("tapps-finish-task", "linear-read", "linear-issue"),
-    "docs": ("tapps-finish-task",),
-    "release": ("tapps-finish-task",),
+    "docs": (
+        "tapps-docs-refresh",
+        "tapps-docs-bootstrap",
+        "tapps-docs-finish-task",
+    ),
+    "release": ("tapps-finish-task", "tapps-docs-finish-task"),
     "security": ("tapps-finish-task",),
     "audit": ("tapps-finish-task", "linear-read"),
     "full": (

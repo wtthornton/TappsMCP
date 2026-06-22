@@ -6,7 +6,9 @@ from pathlib import Path
 
 from tapps_mcp.pipeline.platform_docs_automation import (
     CLAUDE_DOC_AGENTS,
+    CLAUDE_DOCS_SKILLS,
     CURSOR_DOC_AGENTS,
+    CURSOR_DOCS_SKILLS,
     DOCS_SKILLS,
     generate_docs_agents,
     generate_docs_automation,
@@ -42,19 +44,27 @@ class TestDocAgentTemplates:
 
 class TestDocSkillTemplates:
     def test_all_skills_defined(self) -> None:
+        assert "tapps-docs-refresh" in DOCS_SKILLS
+        assert "tapps-docs-bootstrap" in DOCS_SKILLS
+        assert "tapps-docs-finish-task" in DOCS_SKILLS
         assert "tapps-docs-report" in DOCS_SKILLS
         assert "tapps-docs-validate" in DOCS_SKILLS
         assert "tapps-docs-generate" in DOCS_SKILLS
+        assert DOCS_SKILLS is CLAUDE_DOCS_SKILLS
 
     def test_skills_contain_frontmatter(self) -> None:
-        for name, content in DOCS_SKILLS.items():
+        for name, content in CLAUDE_DOCS_SKILLS.items():
             assert content.startswith("---\n"), f"{name} missing frontmatter"
             assert "name:" in content, f"{name} missing name"
             assert "allowed-tools:" in content, f"{name} missing allowed-tools"
 
-    def test_skills_reference_docsmcp_tools(self) -> None:
-        for name, content in DOCS_SKILLS.items():
-            assert "docs-mcp" in content, f"{name} does not reference docs-mcp tools"
+    def test_skills_reference_nlt_project_docs(self) -> None:
+        for name, content in CLAUDE_DOCS_SKILLS.items():
+            assert "nlt-project-docs" in content, f"{name} missing nlt-project-docs prefix"
+
+    def test_cursor_skills_use_mcp_tools(self) -> None:
+        for name, content in CURSOR_DOCS_SKILLS.items():
+            assert "mcp_tools:" in content, f"{name} missing mcp_tools"
 
 
 # ---------------------------------------------------------------------------
@@ -112,10 +122,10 @@ class TestGenerateDocsSkills:
     def test_claude_skills_created(self, tmp_path: Path) -> None:
         result = generate_docs_skills(tmp_path, "claude")
 
-        assert len(result["created"]) == 3
-        assert "tapps-docs-report" in result["created"]
-        assert "tapps-docs-validate" in result["created"]
-        assert "tapps-docs-generate" in result["created"]
+        assert len(result["created"]) == 6
+        assert "tapps-docs-refresh" in result["created"]
+        assert "tapps-docs-bootstrap" in result["created"]
+        assert "tapps-docs-finish-task" in result["created"]
 
         # Verify files exist
         skills_dir = tmp_path / ".claude" / "skills"
@@ -126,7 +136,7 @@ class TestGenerateDocsSkills:
     def test_cursor_skills_created(self, tmp_path: Path) -> None:
         result = generate_docs_skills(tmp_path, "cursor")
 
-        assert len(result["created"]) == 3
+        assert len(result["created"]) == 6
         skills_dir = tmp_path / ".cursor" / "skills"
         assert (skills_dir / "tapps-docs-report" / "SKILL.md").exists()
 
@@ -134,14 +144,14 @@ class TestGenerateDocsSkills:
         generate_docs_skills(tmp_path, "claude")
         result = generate_docs_skills(tmp_path, "claude")
 
-        assert len(result["skipped"]) == 3
+        assert len(result["skipped"]) == 6
         assert len(result["created"]) == 0
 
     def test_overwrite_mode(self, tmp_path: Path) -> None:
         generate_docs_skills(tmp_path, "claude")
         result = generate_docs_skills(tmp_path, "claude", overwrite=True)
 
-        assert len(result["updated"]) == 3
+        assert len(result["updated"]) == 6
 
     def test_unknown_platform(self, tmp_path: Path) -> None:
         result = generate_docs_skills(tmp_path, "unknown")
@@ -160,14 +170,14 @@ class TestGenerateDocsAutomation:
         assert "agents" in result
         assert "skills" in result
         assert len(result["agents"]["created"]) == 2
-        assert len(result["skills"]["created"]) == 3
+        assert len(result["skills"]["created"]) == 6
 
     def test_idempotent(self, tmp_path: Path) -> None:
         generate_docs_automation(tmp_path, "claude")
         result = generate_docs_automation(tmp_path, "claude")
 
         assert len(result["agents"]["skipped"]) == 2
-        assert len(result["skills"]["skipped"]) == 3
+        assert len(result["skills"]["skipped"]) == 6
 
     def test_both_platforms(self, tmp_path: Path) -> None:
         result_claude = generate_docs_automation(tmp_path, "claude")

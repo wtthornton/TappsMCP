@@ -121,75 +121,301 @@ Be concise. Only flag actual problems, not stylistic preferences.
 
 
 # ---------------------------------------------------------------------------
-# Doc skill templates
+# Doc skill templates (Claude Code — nlt-project-docs MCP prefix)
 # ---------------------------------------------------------------------------
 
-_DOCS_REPORT_SKILL = """\
+_NLT_DOCS = "mcp__nlt-project-docs__"
+
+_DOCS_REFRESH_SKILL = f"""\
+---
+name: tapps-docs-refresh
+user-invocable: true
+description: >-
+  Full documentation refresh workflow: cross-refs, narrative docs, API/diagrams,
+  validation suite. Codifies docs/tutorials/05-docs-refresh-workflow.md. Use when
+  refreshing project docs, auditing doc health, or preparing docs before a release.
+allowed-tools: >-
+  {_NLT_DOCS}docs_session_start
+  {_NLT_DOCS}docs_check_cross_refs
+  {_NLT_DOCS}docs_check_links
+  {_NLT_DOCS}docs_generate_doc_index
+  {_NLT_DOCS}docs_generate_purpose
+  {_NLT_DOCS}docs_generate_onboarding
+  {_NLT_DOCS}docs_generate_llms_txt
+  {_NLT_DOCS}docs_generate_api
+  {_NLT_DOCS}docs_generate_architecture
+  {_NLT_DOCS}docs_generate_interactive_diagrams
+  {_NLT_DOCS}docs_check_completeness
+  {_NLT_DOCS}docs_check_freshness
+  {_NLT_DOCS}docs_check_drift
+  {_NLT_DOCS}docs_check_diataxis
+  {_NLT_DOCS}docs_check_style
+argument-hint: "[--exclude docs/archive]"
+---
+
+Run the full documentation refresh pipeline. Requires **nlt-project-docs** (and **nlt-build** for code edits). Do not skip failed validation steps.
+
+**Phase 0 — Scope:** Exclude `docs/archive/**` from validation. Tier-1 targets: `PURPOSE.md`, `ONBOARDING.md`, `ARCHITECTURE.md`, `docs/api/*`, `docs/adr/*`.
+
+**Phase 1 — Navigation:**
+1. `{_NLT_DOCS}docs_check_cross_refs(doc_dirs="docs", exclude="docs/archive")`
+2. `{_NLT_DOCS}docs_check_links(broken_only=true)`
+3. `{_NLT_DOCS}docs_generate_doc_index(doc_dirs="docs,README.md,AGENTS.md", output_path="docs/INDEX.md")`
+
+**Phase 2 — Narrative:** `{_NLT_DOCS}docs_generate_purpose`, `docs_generate_onboarding`, `docs_generate_llms_txt(mode="compact")` — hand-edit placeholders after generation.
+
+**Phase 3 — API & diagrams:** Regenerate `docs_generate_api` per package; `docs_generate_architecture`; `docs_generate_interactive_diagrams`.
+
+**Phase 4 — Verification (targets):** completeness ≥ 98, cross-refs ≥ 90; run `docs_check_drift`, `docs_check_freshness(summary_only=true)`, `docs_check_diataxis`.
+
+**Phase 5 — Style (optional):** `docs_check_style` on tier-1 narrative files only — skip auto-generated `docs/api/*`.
+
+**Report:** Summary table of scores, broken links count, drift findings, files written.
+"""
+
+_DOCS_BOOTSTRAP_SKILL = f"""\
+---
+name: tapps-docs-bootstrap
+user-invocable: true
+description: >-
+  Bootstrap documentation for a new or under-documented project: README,
+  CONTRIBUTING, onboarding, completeness check. Use when creating a README,
+  onboarding guide, or initial doc scaffold (Anthropic documentation skill parity).
+allowed-tools: >-
+  {_NLT_DOCS}docs_session_start
+  {_NLT_DOCS}docs_module_map
+  {_NLT_DOCS}docs_generate_readme
+  {_NLT_DOCS}docs_generate_contributing
+  {_NLT_DOCS}docs_generate_onboarding
+  {_NLT_DOCS}docs_check_completeness
+argument-hint: "[style: minimal|standard|comprehensive]"
+---
+
+Bootstrap project documentation end-to-end:
+
+1. `{_NLT_DOCS}docs_session_start` — inventory gaps and recommendations.
+2. `{_NLT_DOCS}docs_module_map` — understand structure (optional but recommended).
+3. `{_NLT_DOCS}docs_generate_readme(style="standard", merge=true)` — create/update README.
+4. `{_NLT_DOCS}docs_generate_contributing` — CONTRIBUTING.md.
+5. `{_NLT_DOCS}docs_generate_onboarding` — docs/ONBOARDING.md.
+6. `{_NLT_DOCS}docs_check_completeness` — target score ≥ 80 for bootstrap; list remaining gaps.
+
+Hand-edit placeholders in onboarding/README before declaring done.
+"""
+
+_DOCS_FINISH_TASK_SKILL = f"""\
+---
+name: tapps-docs-finish-task
+user-invocable: true
+description: >-
+  End-of-doc-work validation bundle: drift, links, cross-refs, completeness,
+  optional release gate. Use when documentation edits are complete and you
+  need a pass/fail verdict before merging or releasing.
+allowed-tools: >-
+  {_NLT_DOCS}docs_check_drift
+  {_NLT_DOCS}docs_check_links
+  {_NLT_DOCS}docs_check_cross_refs
+  {_NLT_DOCS}docs_check_completeness
+  {_NLT_DOCS}docs_release_gate
+  mcp__nlt-build__tapps_checklist
+argument-hint: "[--release]"
+---
+
+Close out documentation work:
+
+1. `{_NLT_DOCS}docs_check_drift` — stop if critical undocumented APIs (report count).
+2. `{_NLT_DOCS}docs_check_links(broken_only=true)` — stop on broken internal links.
+3. `{_NLT_DOCS}docs_check_cross_refs(doc_dirs="docs")` — orphans and broken refs.
+4. `{_NLT_DOCS}docs_check_completeness` — target ≥ 90 for merge-ready.
+5. **Release only:** `{_NLT_DOCS}docs_release_gate` — aggregate verdict; stop if fail.
+6. `mcp__nlt-build__tapps_checklist(task_type=documentation)` — TAPPS doc-workflow checklist.
+
+**Report:** `Drift: N findings. Links: pass|fail. Completeness: X/100. Release gate: pass|skipped|fail.`
+"""
+
+_DOCS_REPORT_SKILL = f"""\
 ---
 name: tapps-docs-report
 description: >-
   Generate a documentation quality report. Runs project scan, completeness
-  check, and Diataxis balance analysis.
+  check, and Diataxis balance analysis. Use when you need a doc health
+  dashboard or audit summary.
 allowed-tools: >-
-  mcp__docs-mcp__docs_project_scan
-  mcp__docs-mcp__docs_check_completeness
-  mcp__docs-mcp__docs_check_diataxis
+  {_NLT_DOCS}docs_project_scan
+  {_NLT_DOCS}docs_check_completeness
+  {_NLT_DOCS}docs_check_diataxis
 ---
 
 Run a comprehensive documentation quality report:
 
-1. Call `mcp__docs-mcp__docs_project_scan` to inventory all documentation
-2. Call `mcp__docs-mcp__docs_check_completeness` for a health score
-3. Call `mcp__docs-mcp__docs_check_diataxis` for content balance analysis
+1. `{_NLT_DOCS}docs_project_scan`
+2. `{_NLT_DOCS}docs_check_completeness`
+3. `{_NLT_DOCS}docs_check_diataxis`
 4. Present a summary table with scores and recommendations
 """
 
-_DOCS_VALIDATE_SKILL = """\
+_DOCS_VALIDATE_SKILL = f"""\
 ---
 name: tapps-docs-validate
 description: >-
   Validate documentation quality. Checks drift, freshness, links, and
-  Diataxis balance across the project.
+  Diataxis balance. Use for a lighter validation pass than tapps-docs-finish-task.
 allowed-tools: >-
-  mcp__docs-mcp__docs_check_drift
-  mcp__docs-mcp__docs_check_freshness
-  mcp__docs-mcp__docs_check_links
-  mcp__docs-mcp__docs_check_diataxis
+  {_NLT_DOCS}docs_check_drift
+  {_NLT_DOCS}docs_check_freshness
+  {_NLT_DOCS}docs_check_links
+  {_NLT_DOCS}docs_check_diataxis
 ---
 
 Validate documentation quality across the project:
 
-1. Call `mcp__docs-mcp__docs_check_drift` to find docs out of sync with code
-2. Call `mcp__docs-mcp__docs_check_freshness` to identify stale docs
-3. Call `mcp__docs-mcp__docs_check_links` to find broken links
-4. Call `mcp__docs-mcp__docs_check_diataxis` for content balance
-5. Present pass/fail results with specific fixes needed
+1. `{_NLT_DOCS}docs_check_drift`
+2. `{_NLT_DOCS}docs_check_freshness`
+3. `{_NLT_DOCS}docs_check_links`
+4. `{_NLT_DOCS}docs_check_diataxis`
+5. Present pass/fail with specific fixes
 """
 
-_DOCS_GENERATE_SKILL = """\
+_DOCS_GENERATE_SKILL = f"""\
 ---
 name: tapps-docs-generate
 description: >-
-  Generate documentation files. Creates README, llms.txt, and changelog
-  from project analysis.
+  Quick doc generation: README, llms.txt, changelog. Use for a minimal
+  generate pass; prefer tapps-docs-bootstrap for new projects.
 allowed-tools: >-
-  mcp__docs-mcp__docs_generate_readme
-  mcp__docs-mcp__docs_generate_llms_txt
-  mcp__docs-mcp__docs_generate_changelog
+  {_NLT_DOCS}docs_generate_readme
+  {_NLT_DOCS}docs_generate_llms_txt
+  {_NLT_DOCS}docs_generate_changelog
+  {_NLT_DOCS}docs_generate_runbook
+  {_NLT_DOCS}docs_generate_postmortem
 ---
 
-Generate documentation for the project:
+Generate documentation artifacts:
 
-1. Call `mcp__docs-mcp__docs_generate_readme` to create or update README.md
-2. Call `mcp__docs-mcp__docs_generate_llms_txt` to create llms.txt
-3. Call `mcp__docs-mcp__docs_generate_changelog` if git tags are present
-4. Present a summary of generated files
+1. `{_NLT_DOCS}docs_generate_readme(merge=true)`
+2. `{_NLT_DOCS}docs_generate_llms_txt(mode="compact")`
+3. `{_NLT_DOCS}docs_generate_changelog` when git tags exist
+4. For operational docs: `docs_generate_runbook` / `docs_generate_postmortem` with structured fields
 """
 
-DOCS_SKILLS: dict[str, str] = {
+CLAUDE_DOCS_SKILLS: dict[str, str] = {
+    "tapps-docs-refresh": _DOCS_REFRESH_SKILL,
+    "tapps-docs-bootstrap": _DOCS_BOOTSTRAP_SKILL,
+    "tapps-docs-finish-task": _DOCS_FINISH_TASK_SKILL,
     "tapps-docs-report": _DOCS_REPORT_SKILL,
     "tapps-docs-validate": _DOCS_VALIDATE_SKILL,
     "tapps-docs-generate": _DOCS_GENERATE_SKILL,
+}
+
+# Backward-compatible alias (tests import DOCS_SKILLS)
+DOCS_SKILLS: dict[str, str] = CLAUDE_DOCS_SKILLS
+
+CURSOR_DOCS_SKILLS: dict[str, str] = {
+    "tapps-docs-refresh": """\
+---
+name: tapps-docs-refresh
+description: >-
+  Full documentation refresh workflow (cross-refs, API, diagrams, validation).
+  Use when refreshing project docs, auditing doc health, or pre-release doc pass.
+mcp_tools:
+  - docs_session_start
+  - docs_check_cross_refs
+  - docs_check_links
+  - docs_generate_doc_index
+  - docs_generate_purpose
+  - docs_generate_onboarding
+  - docs_generate_llms_txt
+  - docs_generate_api
+  - docs_generate_architecture
+  - docs_generate_interactive_diagrams
+  - docs_check_completeness
+  - docs_check_freshness
+  - docs_check_drift
+  - docs_check_diataxis
+  - docs_check_style
+---
+
+Run phases from `docs/tutorials/05-docs-refresh-workflow.md`: navigation → narrative → API/diagrams → verification (completeness ≥ 98, cross-refs ≥ 90) → optional style pass. Exclude `docs/archive/**`.
+""",
+    "tapps-docs-bootstrap": """\
+---
+name: tapps-docs-bootstrap
+description: >-
+  Bootstrap README, CONTRIBUTING, onboarding for new projects. Use when
+  creating a README, onboarding guide, or initial doc scaffold.
+mcp_tools:
+  - docs_session_start
+  - docs_module_map
+  - docs_generate_readme
+  - docs_generate_contributing
+  - docs_generate_onboarding
+  - docs_check_completeness
+---
+
+1. `docs_session_start` → `docs_module_map` → `docs_generate_readme(merge=true)` → `docs_generate_contributing` → `docs_generate_onboarding` → `docs_check_completeness` (target ≥ 80).
+""",
+    "tapps-docs-finish-task": """\
+---
+name: tapps-docs-finish-task
+description: >-
+  Doc-work finish bundle: drift, links, cross-refs, completeness, optional
+  release gate. Use when documentation edits are complete before merge/release.
+mcp_tools:
+  - docs_check_drift
+  - docs_check_links
+  - docs_check_cross_refs
+  - docs_check_completeness
+  - docs_release_gate
+  - tapps_checklist
+---
+
+Run drift → links → cross_refs → completeness; add `docs_release_gate` for releases; finish with `tapps_checklist(task_type=documentation)`.
+""",
+    "tapps-docs-report": """\
+---
+name: tapps-docs-report
+description: >-
+  Documentation quality report via project scan, completeness, Diataxis.
+  Use when you need a doc health dashboard.
+mcp_tools:
+  - docs_project_scan
+  - docs_check_completeness
+  - docs_check_diataxis
+---
+
+Run scan + completeness + Diataxis; present summary table.
+""",
+    "tapps-docs-validate": """\
+---
+name: tapps-docs-validate
+description: >-
+  Lighter doc validation: drift, freshness, links, Diataxis. Use before
+  merge when you do not need the full finish-task bundle.
+mcp_tools:
+  - docs_check_drift
+  - docs_check_freshness
+  - docs_check_links
+  - docs_check_diataxis
+---
+
+Run all four checks; report pass/fail.
+""",
+    "tapps-docs-generate": """\
+---
+name: tapps-docs-generate
+description: >-
+  Quick generate README, llms.txt, changelog, runbook, postmortem. Use for
+  minimal generation; prefer tapps-docs-bootstrap for new projects.
+mcp_tools:
+  - docs_generate_readme
+  - docs_generate_llms_txt
+  - docs_generate_changelog
+  - docs_generate_runbook
+  - docs_generate_postmortem
+---
+
+Generate requested artifacts; summarize files written.
+""",
 }
 
 
@@ -267,15 +493,17 @@ def generate_docs_skills(
     """
     if platform == "claude":
         skills_dir = project_root / ".claude" / "skills"
+        templates = CLAUDE_DOCS_SKILLS
     elif platform == "cursor":
         skills_dir = project_root / ".cursor" / "skills"
+        templates = CURSOR_DOCS_SKILLS
     else:
         return {"created": [], "skipped": [], "error": f"Unknown platform: {platform}"}
 
     created: list[str] = []
     updated: list[str] = []
     skipped: list[str] = []
-    for skill_name, content in DOCS_SKILLS.items():
+    for skill_name, content in templates.items():
         skill_dir = skills_dir / skill_name
         skill_dir.mkdir(parents=True, exist_ok=True)
         target = skill_dir / "SKILL.md"

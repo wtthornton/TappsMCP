@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# tapps-mcp-hook-version: 3.12.43
+# tapps-mcp-hook-version: 3.12.44
 # tapps-mcp-hook-content-sha: 1d39aaf5
 # TappsMCP PreCompact hook (TAP-2017)
 # Indexes pre-compaction session state in brain for post-compact rehydration.

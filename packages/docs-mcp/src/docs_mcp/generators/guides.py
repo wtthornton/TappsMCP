@@ -125,7 +125,9 @@ class OnboardingGuideGenerator:
         sections.extend(self._next_steps(project_root))
         sections.append("")
 
-        return "\n".join(sections)
+        from docs_mcp.generators.writing_principles import append_writing_principles
+
+        return append_writing_principles("\n".join(sections))
 
     @staticmethod
     def _prerequisites(
@@ -599,7 +601,9 @@ class ContributingGuideGenerator:
         sections.extend(self._issue_guidance(project_root))
         sections.append("")
 
-        return "\n".join(sections)
+        from docs_mcp.generators.writing_principles import append_writing_principles
+
+        return append_writing_principles("\n".join(sections))
 
     @staticmethod
     def _dev_setup(

@@ -211,6 +211,11 @@ TASK_TOOL_MAP: dict[str, dict[str, list[str]]] = {
         "recommended": ["tapps_validate_config", "tapps_lookup_docs", "tapps_checklist"],
         "optional": ["tapps_impact_analysis"],
     },
+    "documentation": {
+        "required": [],
+        "recommended": ["tapps_checklist"],
+        "optional": ["tapps_lookup_docs"],
+    },
 }
 
 # High engagement: more tools required (stricter)
@@ -271,6 +276,11 @@ TASK_TOOL_MAP_HIGH: dict[str, dict[str, list[str]]] = {
         "recommended": ["tapps_validate_config", "tapps_lookup_docs", "tapps_quality_gate"],
         "optional": ["tapps_impact_analysis"],
     },
+    "documentation": {
+        "required": ["tapps_checklist"],
+        "recommended": [],
+        "optional": ["tapps_lookup_docs"],
+    },
 }
 
 # Low engagement: fewer tools required (lighter)
@@ -315,6 +325,11 @@ TASK_TOOL_MAP_LOW: dict[str, dict[str, list[str]]] = {
         "recommended": ["tapps_validate_config", "tapps_lookup_docs"],
         "optional": ["tapps_checklist", "tapps_impact_analysis"],
     },
+    "documentation": {
+        "required": [],
+        "recommended": [],
+        "optional": ["tapps_checklist", "tapps_lookup_docs"],
+    },
 }
 
 # Alias for medium (same as TASK_TOOL_MAP)
@@ -333,6 +348,11 @@ TASK_TYPE_REASONS: dict[str, str] = {
         "Document/PDF/HTML output work: run validate_changed with blocking judges "
         "(shell/pytest audit CLIs), validate_config for brand/template YAML manifests, "
         "and rebuild shipped outputs after layout changes."
+    ),
+    "documentation": (
+        "Project documentation work: invoke /tapps-docs-bootstrap or /tapps-docs-refresh "
+        "skills (nlt-project-docs). Finish with /tapps-docs-finish-task for drift, links, "
+        "and completeness checks."
     ),
 }
 

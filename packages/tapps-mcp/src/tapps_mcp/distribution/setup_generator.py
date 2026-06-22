@@ -2181,7 +2181,11 @@ def _write_engagement_level_to_yaml(project_root: Path, level: str) -> None:
 
 
 def _write_mcp_transport_to_yaml(project_root: Path, transport: str) -> None:
-    """Persist ``mcp_transport`` to ``.tapps-mcp.yaml`` when explicitly chosen."""
+    """Persist ``mcp_transport`` to ``.tapps-mcp.yaml``.
+
+    Called when the transport is chosen explicitly or resolves to ``http`` so
+    the generated host config and the yaml source-of-truth stay consistent.
+    """
     import yaml
 
     config_path = project_root / ".tapps-mcp.yaml"
@@ -2344,9 +2348,16 @@ def run_init(
 
     if engagement_level is not None and not dry_run and not check:
         _write_engagement_level_to_yaml(root, engagement_level)
-    if mcp_transport is not None and not dry_run and not check:
-        _write_mcp_transport_to_yaml(root, mcp_transport)
-        if mcp_transport == "http":
+    if not dry_run and not check:
+        from tapps_mcp.distribution.nlt_http_fleet import resolve_mcp_transport
+
+        effective_transport = resolve_mcp_transport(root, explicit=mcp_transport)
+        # Persist whenever transport is explicit or resolves to http so the
+        # generated host config and .tapps-mcp.yaml never drift — a plain
+        # `upgrade` must not silently flip an http repo back to stdio.
+        if mcp_transport is not None or effective_transport == "http":
+            _write_mcp_transport_to_yaml(root, effective_transport)
+        if effective_transport == "http":
             from tapps_mcp.distribution.fleet_control import ensure_fleet_env_file
 
             ensure_fleet_env_file()

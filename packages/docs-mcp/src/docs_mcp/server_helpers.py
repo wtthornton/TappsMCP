@@ -257,6 +257,8 @@ def build_generator_manifest(
         "docs_generate_adr": "Architecture decision recorder.",
         "docs_generate_onboarding": "Onboarding guide author.",
         "docs_generate_contributing": "Contributing guide author.",
+        "docs_generate_runbook": "Operational runbook author.",
+        "docs_generate_postmortem": "Incident postmortem author.",
         "docs_generate_prd": "Product requirements author.",
         "docs_generate_diagram": "Diagram generator.",
         "docs_generate_architecture": "Architecture documentation specialist.",

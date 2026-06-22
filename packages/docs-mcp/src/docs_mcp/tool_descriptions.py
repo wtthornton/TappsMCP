@@ -35,6 +35,12 @@ TOOL_DESCRIPTIONS: dict[str, str] = {
     "docs_generate_adr": ("Create an auto-numbered Architecture Decision Record."),
     "docs_generate_onboarding": ("Generate a getting-started / onboarding guide."),
     "docs_generate_contributing": ("Generate CONTRIBUTING.md with dev setup and PR workflow."),
+    "docs_generate_runbook": (
+        "Generate an operational runbook (procedure, rollback, escalation)."
+    ),
+    "docs_generate_postmortem": (
+        "Generate an incident postmortem (timeline, impact, root cause, action items)."
+    ),
     "docs_generate_prd": ("Generate a Product Requirements Document with phased requirements."),
     "docs_generate_diagram": (
         "Generate Mermaid, PlantUML, or D2 diagrams from code analysis."
