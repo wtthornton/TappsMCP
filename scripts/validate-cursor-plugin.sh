@@ -14,9 +14,12 @@ REQUIRED_FILES=(
   "logo.png"
   "README.md"
   "CHANGELOG.md"
-  "skills/tapps-score/SKILL.md"
-  "skills/tapps-gate/SKILL.md"
-  "skills/tapps-validate/SKILL.md"
+  "skills/tapps-finish-task/SKILL.md"
+  "skills/tapps-refactor/SKILL.md"
+  "skills/tapps-docs-refresh/SKILL.md"
+  "agents/tapps-reviewer.md"
+  "agents/tapps-docs-reviewer.md"
+  "hooks/hooks.json"
 )
 
 FAIL=0

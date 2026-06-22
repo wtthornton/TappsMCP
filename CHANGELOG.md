@@ -7,6 +7,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [3.12.46] - 2026-06-22
+
+Patch: call-graph agent UX, Cursor hook migration fix, and refreshed Cursor marketplace plugin.
+
+### Added
+
+- **Call-graph agent UX (Epic 114 / ADR-0017)** — Centralized stale/degraded hints in `agent_contract.py`; post-edit blast-radius nudge; stop-hook stale followup; `/tapps-refactor` skill; `tapps_diff_impact` on the refactor checklist; expanded `tapps-tool-reference` and `tapps-finish-task` call-graph notes.
+- **`tapps-mcp build-cursor-plugin`** — CLI to regenerate `plugin/cursor/` from live templates (core + doc skills/agents).
+
+### Fixed
+
+- **Cursor hook merge on platform migration** — `upgrade` on Linux no longer leaves duplicate `.ps1` + `.sh` entries on `sessionStart` / `preCompact` when migrating from a Windows-init repo.
+- **Doc agent templates** — Repointed from stale `mcp__docs-mcp__` to `nlt-project-docs` / `docs_check_*` MCP tools.
+
+### Changed
+
+- **Cursor marketplace plugin (`plugin/cursor/`)** — Refreshed to include `tapps-refactor`, six doc-orchestration skills, doc reviewer/validator agents, and updated README/hooks.
+
 ## [3.12.45] - 2026-06-22
 
 Minor: documentation-automation parity — doc-orchestration skills, runbook/postmortem generators, and the upgrade-refresh fix that ships them to consuming repos.

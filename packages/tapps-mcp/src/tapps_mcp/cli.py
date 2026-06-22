@@ -1253,6 +1253,31 @@ def build_plugin(output_dir: str, engagement_level: str) -> None:
             click.echo(f"  {component}: {status}")
 
 
+@main.command("build-cursor-plugin")
+@click.option(
+    "--output-dir",
+    default="./plugin/cursor",
+    type=click.Path(path_type=str),
+    help="Output directory for the Cursor plugin (default: ./plugin/cursor/).",
+)
+@click.option(
+    "--version",
+    "plugin_version",
+    default=None,
+    help="Plugin version (default: tapps-mcp package version).",
+)
+def build_cursor_plugin(output_dir: str, plugin_version: str | None) -> None:
+    """Generate the Cursor marketplace plugin bundle from TappsMCP templates."""
+    from pathlib import Path
+
+    from tapps_mcp.pipeline.platform_generators import generate_cursor_plugin_bundle
+
+    out = Path(output_dir).resolve()
+    result = generate_cursor_plugin_bundle(out, version=plugin_version)
+    click.echo(f"Cursor plugin built at {out}")
+    click.echo(f"  files_created: {len(result.get('files_created', []))}")
+
+
 @main.command("validate-skills")
 @click.option(
     "--path",

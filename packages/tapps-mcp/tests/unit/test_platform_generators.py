@@ -177,14 +177,14 @@ class TestSkillTemplates:
     def test_claude_skills_count(self) -> None:
         # 16 tapps-* (incl. tapps-finish-task, tapps-handoff-session,
         # tapps-continue-session, tapps-upgrade v3.11.0) + continuous-learning-v2
-        assert len(CLAUDE_SKILLS) == 16
+        assert len(CLAUDE_SKILLS) == 17
 
     def test_cursor_skills_count(self) -> None:
-        assert len(CURSOR_SKILLS) == 16
+        assert len(CURSOR_SKILLS) == 17
 
     def test_generate_claude_skills(self, tmp_path: Path) -> None:
         result = generate_skills(tmp_path, "claude")
-        assert len(result["created"]) == 16
+        assert len(result["created"]) == 17
         assert (tmp_path / ".claude" / "skills" / "tapps-finish-task" / "SKILL.md").exists()
 
     def test_generate_skills_high_engagement(self, tmp_path: Path) -> None:
@@ -204,7 +204,7 @@ class TestSkillTemplates:
 
         generate_skills(tmp_path, "claude")
         result = generate_skills(tmp_path, "claude")
-        assert len(result["skipped"]) == 16 - len(SESSION_TRANSFER_SKILL_NAMES)
+        assert len(result["skipped"]) == 17 - len(SESSION_TRANSFER_SKILL_NAMES)
         assert set(result["updated"]) == set(SESSION_TRANSFER_SKILL_NAMES)
         assert len(result["created"]) == 0
 

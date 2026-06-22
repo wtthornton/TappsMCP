@@ -14,6 +14,15 @@ import stat
 from typing import TYPE_CHECKING, Any
 
 from tapps_core.brain_bridge import BRAIN_PROFILE_SERVER
+from tapps_mcp import __version__
+from tapps_mcp.pipeline.agent_contract import (
+    MEMORY_RECALL_SESSION_START,
+    VALIDATION_QUICK_VS_BATCH,
+)
+from tapps_mcp.pipeline.platform_docs_automation import (
+    CURSOR_DOC_AGENTS,
+    CURSOR_DOCS_SKILLS,
+)
 from tapps_mcp.pipeline.platform_hook_templates import (
     AGENT_TEAMS_CLAUDE_MD_SECTION,
     AGENT_TEAMS_HOOK_SCRIPTS,
@@ -27,10 +36,6 @@ from tapps_mcp.pipeline.platform_hook_templates import (
 )
 from tapps_mcp.pipeline.platform_rules import (
     CURSOR_RULE_TEMPLATES,
-)
-from tapps_mcp.pipeline.agent_contract import (
-    MEMORY_RECALL_SESSION_START,
-    VALIDATION_QUICK_VS_BATCH,
 )
 from tapps_mcp.pipeline.platform_skills import CLAUDE_SKILLS, CURSOR_SKILLS
 from tapps_mcp.pipeline.platform_subagents import CLAUDE_AGENTS, CURSOR_AGENTS
@@ -213,31 +218,45 @@ session. Use `/tapps-finish-task` before declaring work complete,
 """
 
 _CURSOR_PLUGIN_README = """\
-# TappsMCP - Cursor Plugin
+# TappsMCP Quality Tools for Cursor
 
-Code quality scoring, security scanning, and quality gates
-for Python projects.
+Code quality scoring, security scanning, and quality gates for Python projects.
 
 ## Installation
 
-Install via Cursor marketplace or place this directory as a
-Cursor plugin.
+**Via Cursor Marketplace:** search for "TappsMCP" at [cursor.com/marketplace](https://cursor.com/marketplace)
+
+**Via deep link:** `cursor://install-plugin/tapps-mcp-plugin`
+
+**In Cursor:** run `/add-plugin tapps-mcp-plugin` in the command palette.
+
+## Requirements
+
+- Python 3.12+
+- `uv` or `uvx` installed
+- Cursor 2.5 or later
 
 ## What's Included
 
-- **MCP Server**: `tapps-mcp serve` with 12+ quality tools
-- **Agents**: tapps-reviewer, tapps-researcher, tapps-validator
-- **Skills**: `@tapps-finish-task`, `@tapps-review-pipeline`, `@linear-read`
-- **Hooks**: Before MCP, after edit reminders, stop prompt
-- **Rules**: Pipeline (always), Python quality (auto-attach),
-  Expert consultation (agent-requested)
+- **MCP Server**: `tapps-mcp serve` with 42+ quality tools (via `uvx`)
+- **Agents**: tapps-reviewer, tapps-researcher, tapps-validator, tapps-docs-reviewer, tapps-docs-validator
+- **Skills**: finish-task, refactor, review-pipeline, docs-refresh/bootstrap/finish-task, linear-issue/read, memory, and more
+- **Hooks**: before MCP logging, after-edit quality reminders, stop validation gate
+- **Rules**: pipeline (always), Python quality (auto-attach), expert consultation (agent-requested)
 
 ## Usage
 
-Once installed, the TappsMCP tools are available in every
-session. Use `@tapps-finish-task` before declaring work complete,
-`@tapps-review-pipeline` for multi-file review, and direct MCP tools
-(`tapps_quick_check`, `tapps_validate_changed`) during edit loops.
+Once installed, TappsMCP tools are available in every session:
+
+- `@tapps-finish-task` before declaring work complete
+- `@tapps-refactor` before changing a function signature or deleting a symbol
+- `@tapps-review-pipeline` for multi-file review
+- `@tapps-docs-refresh` / `@tapps-docs-bootstrap` for documentation workflows
+- Direct MCP tools (`tapps_quick_check`, `tapps_validate_changed`) during edit loops
+
+## License
+
+MIT
 """
 
 
@@ -437,7 +456,7 @@ def generate_claude_plugin_bundle(
 
 def generate_cursor_plugin_bundle(
     output_dir: Path,
-    version: str = "0.3.0",
+    version: str | None = None,
 ) -> dict[str, Any]:
     """Generate a Cursor plugin bundle directory.
 
@@ -447,7 +466,11 @@ def generate_cursor_plugin_bundle(
 
     Returns a summary dict with ``files_created``.
     """
+    resolved_version = version if version is not None else __version__
     files_created: list[str] = []
+
+    cursor_skills = {**CURSOR_SKILLS, **CURSOR_DOCS_SKILLS}
+    cursor_agents = {**CURSOR_AGENTS, **CURSOR_DOC_AGENTS}
 
     # .cursor-plugin/plugin.json
     meta_dir = output_dir / ".cursor-plugin"
@@ -467,7 +490,7 @@ def generate_cursor_plugin_bundle(
             "python",
         ],
         "license": "MIT",
-        "version": version,
+        "version": resolved_version,
     }
     (meta_dir / "plugin.json").write_text(
         json.dumps(plugin_data, indent=2) + "\n", encoding="utf-8"
@@ -477,12 +500,12 @@ def generate_cursor_plugin_bundle(
     # agents/
     agents_dir = output_dir / "agents"
     agents_dir.mkdir(parents=True, exist_ok=True)
-    for name, content in CURSOR_AGENTS.items():
+    for name, content in cursor_agents.items():
         (agents_dir / name).write_text(content, encoding="utf-8")
         files_created.append(f"agents/{name}")
 
     # skills/
-    for skill_name, content in CURSOR_SKILLS.items():
+    for skill_name, content in cursor_skills.items():
         skill_dir = output_dir / "skills" / skill_name
         skill_dir.mkdir(parents=True, exist_ok=True)
         (skill_dir / "SKILL.md").write_text(content, encoding="utf-8")

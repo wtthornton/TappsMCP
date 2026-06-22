@@ -1,9 +1,14 @@
 #!/usr/bin/env bash
-# TappsMCP stop hook (Cursor)
-# Uses followup_message to prompt validation before session ends.
-# Note: Cursor does not support exit-2 blocking on the stop event.
+# TappsMCP Cursor stop hook — TAP-3918 loop-metrics + optional followup (TAP-3921)
+# Resolves project root from workspace_roots; transcript from agent-transcripts/.
+# Requires tapps-mcp on PATH. See docs/TROUBLESHOOTING.md#cursor-stop-hook-env.
 INPUT=$(cat)
-MSG="Before ending: please run tapps_validate_changed"
-MSG="$MSG to confirm all changed files pass quality gates."
-echo "{"followup_message": "$MSG"}"
+TAPPS=$(command -v tapps-mcp 2>/dev/null)
+if [ -z "$TAPPS" ]; then
+  exit 0
+fi
+OUT=$(echo "$INPUT" | "$TAPPS" loop-metrics-record 2>/dev/null)
+if [ -n "$OUT" ]; then
+  echo "$OUT"
+fi
 exit 0

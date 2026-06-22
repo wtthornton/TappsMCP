@@ -4,49 +4,35 @@ Code quality scoring, security scanning, and quality gates for Python projects.
 
 ## Installation
 
-**Via Cursor Marketplace:**
-Search for "TappsMCP" at [cursor.com/marketplace](https://cursor.com/marketplace)
+**Via Cursor Marketplace:** search for "TappsMCP" at [cursor.com/marketplace](https://cursor.com/marketplace)
 
-**Via deep link:**
-```
-cursor://install-plugin/tapps-mcp-plugin
-```
+**Via deep link:** `cursor://install-plugin/tapps-mcp-plugin`
 
-**In Cursor:**
-Run `/add-plugin tapps-mcp-plugin` in the command palette.
+**In Cursor:** run `/add-plugin tapps-mcp-plugin` in the command palette.
 
 ## Requirements
 
 - Python 3.12+
-- `uv` or `uvx` installed (`pip install uv`)
+- `uv` or `uvx` installed
 - Cursor 2.5 or later
-
-## Quick Start
-
-1. After installation, open a Python project
-2. The TappsMCP MCP server starts automatically
-3. Ask Cursor: "Check the quality of this file" — TappsMCP will score it
 
 ## What's Included
 
-- **3 Skills**: `tapps-score`, `tapps-gate`, `tapps-validate`
-- **3 Agents**: `tapps-reviewer`, `tapps-researcher`, `tapps-validator`
-- **3 Rules**: pipeline (always), python-quality (auto-attach), expert-consultation (agent-requested)
-- **Hooks**: `afterFileEdit` auto-quality-check, `stop` validation gate, `beforeMCPExecution` logging
+- **MCP Server**: `tapps-mcp serve` with 42+ quality tools (via `uvx`)
+- **Agents**: tapps-reviewer, tapps-researcher, tapps-validator, tapps-docs-reviewer, tapps-docs-validator
+- **Skills**: finish-task, refactor, review-pipeline, docs-refresh/bootstrap/finish-task, linear-issue/read, memory, and more
+- **Hooks**: before MCP logging, after-edit quality reminders, stop validation gate
+- **Rules**: pipeline (always), Python quality (auto-attach), expert consultation (agent-requested)
 
-## Quality Scoring Categories
+## Usage
 
-TappsMCP scores Python code across 7 categories (0-100 each):
+Once installed, TappsMCP tools are available in every session:
 
-| Category | What It Checks |
-|----------|---------------|
-| Correctness | Logic errors, type safety, edge cases |
-| Security | Vulnerabilities, injection risks, secrets |
-| Maintainability | Complexity, naming, structure |
-| Performance | Efficiency, resource usage, scaling |
-| Documentation | Docstrings, comments, clarity |
-| Testing | Coverage, edge cases, assertions |
-| Style | PEP 8, formatting, consistency |
+- `@tapps-finish-task` before declaring work complete
+- `@tapps-refactor` before changing a function signature or deleting a symbol
+- `@tapps-review-pipeline` for multi-file review
+- `@tapps-docs-refresh` / `@tapps-docs-bootstrap` for documentation workflows
+- Direct MCP tools (`tapps_quick_check`, `tapps_validate_changed`) during edit loops
 
 ## License
 

@@ -1,29 +1,20 @@
 ---
 name: tapps-handoff-session
-user-invocable: true
-model: claude-haiku-4-5-20251001
 description: >-
   Write a structured cross-session handoff and close the TAPPS session
   lifecycle so the next chat can continue without a long paste. Use when
   ending a session, handing off to a fresh chat, or the user says hand
   off, save session state, or continue next time.
-allowed-tools: mcp__nlt-memory__tapps_handoff_save mcp__nlt-build__tapps_session_start Bash
-argument-hint: "[optional Linear issue id e.g. TAP-1234]"
-disable-model-invocation: true
+mcp_tools:
+  - tapps_handoff_save
+  - tapps_session_start
 ---
 
-End the session with a durable handoff the next chat can load via `/tapps-continue-session`.
+End the session with a durable handoff the next chat loads via `tapps-continue-session`.
 
 0. **Session bootstrap (if needed).** If `tapps_session_start()` was not called this session, call it now (cached is fine) so flywheel scope and checker context are correct. Skip when already called.
 
-1. **Draft handoff (5–10 bullets).** From this session's work, write:
-   - **Done** — what shipped or was verified
-   - **Open** — in-progress or untested
-   - **Next (P0)** — one concrete next action (plain prose)
-   - **Blockers** — `- none` when clear
-   - **Changed files** — optional; top paths from `git status --short`
-   - **Verify** — commands to run first in the next session
-   - **Success criterion** — one line
+1. **Draft handoff (5–10 bullets):** Done, Open, Next (P0), Blockers (`- none` when clear), optional Changed files, Verify, Success criterion.
 
 **P0 gate.** Before persisting: when **Open** has real items (not `none` / `- ...` placeholders), **Next (P0)** must name one concrete next action. Set **Linear P0:** to the TAP id when known. If P0 is missing, ask the user once — do not persist an incomplete handoff.
 
@@ -73,4 +64,4 @@ End the session with a durable handoff the next chat can load via `/tapps-contin
 
    Handoff **Updated** older than 7 days: pass `allow_lint_warnings=true` on `tapps_handoff_save` if lint warns on age.
 
-3. **Report.** One line: `Handoff written: .tapps-mcp/session-handoff.md. Linear P0: <id|none>. brain_mirror: ok|skipped. session_end: ok|skipped. Next session: invoke /tapps-continue-session`
+3. **Report.** `Handoff: .tapps-mcp/session-handoff.md. Linear P0: <id|none>. brain_mirror: ok|skipped. session_end: ok|skipped. Next: tapps-continue-session`

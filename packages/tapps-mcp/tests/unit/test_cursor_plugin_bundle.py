@@ -105,10 +105,17 @@ class TestPluginStructure:
         generate_cursor_plugin_bundle(tmp_path)
         assert (tmp_path / "skills" / "tapps-finish-task" / "SKILL.md").exists()
         assert (tmp_path / "skills" / "tapps-review-pipeline" / "SKILL.md").exists()
+        assert (tmp_path / "skills" / "tapps-refactor" / "SKILL.md").exists()
+        assert (tmp_path / "skills" / "tapps-docs-refresh" / "SKILL.md").exists()
         assert (tmp_path / "skills" / "tapps-research" / "SKILL.md").exists()
         assert (tmp_path / "skills" / "tapps-security" / "SKILL.md").exists()
         assert (tmp_path / "skills" / "tapps-memory" / "SKILL.md").exists()
         assert not (tmp_path / "skills" / "tapps-score" / "SKILL.md").exists()
+
+    def test_doc_agents_exist(self, tmp_path):
+        generate_cursor_plugin_bundle(tmp_path)
+        assert (tmp_path / "agents" / "tapps-docs-reviewer.md").exists()
+        assert (tmp_path / "agents" / "tapps-docs-validator.md").exists()
 
     def test_skills_have_name_frontmatter(self, tmp_path):
         generate_cursor_plugin_bundle(tmp_path)
