@@ -64,3 +64,29 @@ def test_compute_{i}():
         result = analyze_diff_impact([changed], tmp_path, max_tests=2)
         assert len(result["affected_tests"]) == 2
         assert result["total_affected_tests"] >= 2
+
+    def test_doc_drift_hint_for_high_caller_symbol(self, tmp_path: Path) -> None:
+        callers = "\n".join(
+            f"""
+def caller_{i}():
+    from app.core import compute
+    return compute()
+"""
+            for i in range(6)
+        )
+        _write(
+            tmp_path,
+            "app/core.py",
+            """
+def compute():
+    return 42
+""",
+        )
+        _write(tmp_path, "app/callers.py", callers)
+        changed = tmp_path / "app/core.py"
+        result = analyze_diff_impact([changed], tmp_path, doc_drift_caller_threshold=5)
+        hints = result.get("doc_drift_hints")
+        assert isinstance(hints, list)
+        assert len(hints) >= 1
+        assert hints[0]["direct_callers"] >= 5
+        assert hints[0]["suggested_doc_paths"]

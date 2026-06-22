@@ -329,6 +329,26 @@ def ensure_fleet_running() -> dict[str, Any]:
     return {"action": "direct_start", "healthy": False, "unhealthy": unhealthy}
 
 
+def fleet_any_running() -> bool:
+    """Return True when at least one supervised fleet server has a live PID."""
+    return fleet_status()["running"] > 0
+
+
+def restart_fleet_with_smoke(*, project_root: Path | None = None) -> dict[str, Any]:
+    """Stop, start, then run Cursor-style MCP smoke on every fleet server."""
+    from tapps_mcp.distribution.fleet_smoke import smoke_test_fleet
+
+    stop_fleet()
+    started = start_fleet(force=True)
+    smoke = smoke_test_fleet(project_root=project_root)
+    return {
+        "ok": bool(smoke.get("ok")),
+        "started": started.get("started", []),
+        "errors": started.get("errors", []),
+        "smoke": smoke,
+    }
+
+
 def fleet_status() -> dict[str, Any]:
     """Return running/reachable status for each fleet server."""
     host = resolve_fleet_host()

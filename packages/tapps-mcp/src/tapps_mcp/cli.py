@@ -78,13 +78,88 @@ def fleet_status_cmd() -> None:
 
 @fleet.command("restart")
 @click.option("--force", is_flag=True, help="Force restart even when PIDs look healthy.")
-def fleet_restart(force: bool) -> None:
-    """Stop then start the HTTP fleet."""
-    from tapps_mcp.distribution.fleet_control import start_fleet, stop_fleet
+@click.option(
+    "--skip-smoke",
+    is_flag=True,
+    default=False,
+    help="Skip post-restart MCP handshake smoke (not recommended).",
+)
+@click.option(
+    "--project-root",
+    default=".",
+    show_default=True,
+    help="Project root sent as X-Tapps-Project-Root during smoke probes.",
+)
+def fleet_restart(force: bool, skip_smoke: bool, project_root: str) -> None:
+    """Stop then start the HTTP fleet and verify MCP handshakes."""
+    from tapps_mcp.distribution.fleet_control import (
+        restart_fleet_with_smoke,
+        start_fleet,
+        stop_fleet,
+    )
 
-    stop_fleet()
-    result = start_fleet(force=True)
-    click.echo(click.style("Restarted: " + ", ".join(result["started"]), fg="green"))
+    root = Path(project_root).resolve()
+    if skip_smoke:
+        stop_fleet()
+        result = start_fleet(force=True)
+        click.echo(click.style("Restarted: " + ", ".join(result["started"]), fg="green"))
+        for err in result.get("errors", []):
+            click.echo(click.style(err, fg="red"))
+        if result.get("errors"):
+            raise SystemExit(1)
+        return
+
+    report = restart_fleet_with_smoke(project_root=root)
+    click.echo(click.style("Restarted: " + ", ".join(report["started"]), fg="green"))
+    smoke = report["smoke"]
+    for server_id, row in smoke.get("servers", {}).items():
+        if row.get("ok"):
+            click.echo(
+                click.style(
+                    f"  smoke {server_id}: ok ({row.get('tool_count', 0)} tools)",
+                    fg="green",
+                )
+            )
+        else:
+            click.echo(click.style(f"  smoke {server_id}: FAIL ({row.get('stage')})", fg="red"))
+    for err in report.get("errors", []):
+        click.echo(click.style(err, fg="red"))
+    if not report.get("ok"):
+        raise SystemExit(1)
+
+
+@fleet.command("smoke")
+@click.option(
+    "--project-root",
+    default=".",
+    show_default=True,
+    help="Project root sent as X-Tapps-Project-Root during smoke probes.",
+)
+def fleet_smoke_cmd(project_root: str) -> None:
+    """Verify initialize + tools/list on every HTTP fleet server (Cursor-like)."""
+    from tapps_mcp.distribution.fleet_smoke import smoke_test_fleet
+
+    root = Path(project_root).resolve()
+    result = smoke_test_fleet(project_root=root)
+    for server_id, row in result.get("servers", {}).items():
+        if row.get("ok"):
+            click.echo(
+                click.style(
+                    f"PASS {server_id}: {row.get('tool_count', 0)} tools @ {row.get('url')}",
+                    fg="green",
+                )
+            )
+        else:
+            detail = row.get("error") or f"http={row.get('http_status')}"
+            click.echo(
+                click.style(
+                    f"FAIL {server_id} ({row.get('stage', '?')}): {detail}",
+                    fg="red",
+                )
+            )
+    if not result.get("ok"):
+        raise SystemExit(1)
+    click.echo(click.style(f"All {result['total']} fleet servers passed MCP smoke.", fg="green"))
 
 
 @fleet.command("ensure")

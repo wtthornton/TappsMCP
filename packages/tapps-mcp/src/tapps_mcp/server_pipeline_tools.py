@@ -694,8 +694,13 @@ async def tapps_session_start(
     # Epic 114: surface call-graph cache readiness for symbol-level refactors.
     try:
         from tapps_mcp.project.call_graph_cache import summarize_call_graph_cache
+        from tapps_mcp.tools.session_start_helpers import _schedule_call_graph_rebuild
 
-        data["call_graph"] = summarize_call_graph_cache(Path(settings.project_root))
+        call_graph_summary = summarize_call_graph_cache(Path(settings.project_root))
+        rebuild = _schedule_call_graph_rebuild(Path(settings.project_root), call_graph_summary)
+        if rebuild.get("scheduled"):
+            call_graph_summary["rebuild_scheduled"] = True
+        data["call_graph"] = call_graph_summary
     except Exception:
         _logger.debug("call_graph_session_start_failed", exc_info=True)
 

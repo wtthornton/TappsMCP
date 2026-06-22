@@ -69,3 +69,30 @@ def mystery(obj):
         index = build_call_graph_index(tmp_path, force_rebuild=True)
         result = query_call_graph(index, "pkg.big.f", mode="callers", max_depth=10, token_budget=50)
         assert result["truncated"] is True
+
+
+def test_compact_symbol_impact_budget(tmp_path: Path) -> None:
+    from tapps_mcp.project.call_graph_queries import compact_symbol_impact
+
+    _write(
+        tmp_path,
+        "pkg/target.py",
+        """
+def target():
+    return 1
+""",
+    )
+    _write(
+        tmp_path,
+        "pkg/caller.py",
+        """
+from pkg.target import target
+
+def run():
+    return target()
+""",
+    )
+    index = build_call_graph_index(tmp_path, force_rebuild=True)
+    block = compact_symbol_impact(index, "pkg/target.py", token_budget=500)
+    assert block is not None
+    assert block["symbols"][0]["callers"] == ["run"]

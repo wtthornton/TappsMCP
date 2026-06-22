@@ -604,6 +604,29 @@ def _attach_cross_file_analysis(
         data["cross_file_analysis"] = "degraded"
 
 
+def _attach_symbol_impact(
+    data: dict[str, Any],
+    resolved: Path,
+    project_root: Path,
+) -> None:
+    """Attach compact call-graph symbol impact when index is available (TAP-4270)."""
+    if resolved.suffix not in {".py", ".pyi"}:
+        return
+    try:
+        from tapps_mcp.project.call_graph_cache import load_call_graph_index
+        from tapps_mcp.project.call_graph_queries import compact_symbol_impact
+
+        index = load_call_graph_index(project_root)
+        if index is None:
+            return
+        rel = str(resolved.relative_to(project_root)).replace("\\", "/")
+        block = compact_symbol_impact(index, rel)
+        if block is not None:
+            data["symbol_impact"] = block
+    except Exception:
+        logger.debug("quick_check_symbol_impact_failed", exc_info=True)
+
+
 def _attach_uncached_libraries_hint(
     data: dict[str, Any],
     resolved: Path,
@@ -795,6 +818,7 @@ async def _quick_check_single(
     # Story 75.2: Cross-file kwarg mismatch detection (Python only)
     if is_python:
         _attach_cross_file_analysis(data, resolved, settings.project_root)
+        _attach_symbol_impact(data, resolved, settings.project_root)
 
     data["success"] = True
     data["gate_passed"] = gate_result.passed
@@ -1055,6 +1079,7 @@ async def tapps_quick_check(
     # Story 75.2: Cross-file kwarg mismatch detection (Python only)
     if is_python:
         _attach_cross_file_analysis(data, resolved, settings.project_root)
+        _attach_symbol_impact(data, resolved, settings.project_root)
 
     resp = success_response(
         "tapps_quick_check",

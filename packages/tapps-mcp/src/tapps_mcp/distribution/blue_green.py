@@ -290,6 +290,15 @@ def _deploy_under_lock(
             report["ok"] = False
             return report
 
+    from tapps_mcp.distribution.fleet_control import fleet_any_running, restart_fleet_with_smoke
+
+    if fleet_any_running():
+        fleet_smoke = restart_fleet_with_smoke(project_root=checkout)
+        report["fleet_restart_smoke"] = fleet_smoke
+        if not fleet_smoke.get("ok"):
+            report["ok"] = False
+            return report
+
     report["gc"] = gc_releases(keep=keep_releases, protect=release.path)
     report["ok"] = True
     report["current"] = str(CURRENT_LINK)

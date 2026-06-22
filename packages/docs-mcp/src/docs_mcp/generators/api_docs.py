@@ -306,10 +306,10 @@ class APIDocGenerator:
             return ""
 
         if output_format == "mkdocs":
-            return self._render_mkdocs(module)
+            return self._render_mkdocs(module, project_root=project_root)
         if output_format == "sphinx_rst":
-            return self._render_sphinx_rst(module)
-        return self._render_markdown(module)
+            return self._render_sphinx_rst(module, project_root=project_root)
+        return self._render_markdown(module, project_root=project_root)
 
     # ------------------------------------------------------------------
     # Extraction
@@ -871,15 +871,47 @@ class APIDocGenerator:
 
         return re.sub(r"`(\w+)`", _replace, text)
 
+    @staticmethod
+    def _append_call_graph_sections(
+        lines: list[str],
+        project_root: Path,
+        module_name: str,
+    ) -> None:
+        """Append Used By / Depends On from TappsMCP call graph index (TAP-4271)."""
+        from docs_mcp.integrations.call_graph import module_depends_on, module_used_by
+
+        used = module_used_by(project_root, module_name, limit=10)
+        if used.get("available") and used.get("used_by"):
+            lines.append("## Used By")
+            lines.append("")
+            for entry in used["used_by"]:
+                if isinstance(entry, dict):
+                    caller = entry.get("caller", "")
+                    if caller:
+                        lines.append(f"- `{caller}`")
+            lines.append("")
+
+        depends = module_depends_on(project_root, module_name, limit=10)
+        if depends.get("available") and depends.get("depends_on"):
+            lines.append("## Depends On")
+            lines.append("")
+            for entry in depends["depends_on"]:
+                if isinstance(entry, dict):
+                    callee = entry.get("callee", "")
+                    if callee:
+                        lines.append(f"- `{callee}`")
+            lines.append("")
+
     # ------------------------------------------------------------------
     # Markdown renderer
     # ------------------------------------------------------------------
 
-    def _render_markdown(self, module: APIDocModule) -> str:
+    def _render_markdown(self, module: APIDocModule, *, project_root: Path | None = None) -> str:
         """Render API documentation as GitHub-flavored markdown.
 
         Args:
             module: The extracted module information.
+            project_root: Project root for optional call-graph used-by sections.
 
         Returns:
             The rendered markdown string.
@@ -895,6 +927,9 @@ class APIDocGenerator:
                 self._resolve_cross_refs(module.docstring, known_symbols),
             )
             lines.append("")
+
+        if project_root is not None:
+            self._append_call_graph_sections(lines, project_root, module.name)
 
         # Classes section
         if module.classes:
@@ -1098,7 +1133,7 @@ class APIDocGenerator:
     # MkDocs renderer
     # ------------------------------------------------------------------
 
-    def _render_mkdocs(self, module: APIDocModule) -> str:
+    def _render_mkdocs(self, module: APIDocModule, *, project_root: Path | None = None) -> str:
         """Render API documentation in MkDocs-compatible markdown.
 
         Adds YAML frontmatter and `:::` autodoc syntax for compatibility
@@ -1126,7 +1161,7 @@ class APIDocGenerator:
         lines.append("")
 
         # Append the standard markdown rendering
-        md = self._render_markdown(module)
+        md = self._render_markdown(module, project_root=project_root)
         lines.append(md)
 
         return "\n".join(lines)
@@ -1135,7 +1170,7 @@ class APIDocGenerator:
     # Sphinx RST renderer
     # ------------------------------------------------------------------
 
-    def _render_sphinx_rst(self, module: APIDocModule) -> str:
+    def _render_sphinx_rst(self, module: APIDocModule, *, project_root: Path | None = None) -> str:
         """Render API documentation as Sphinx reStructuredText.
 
         Args:
