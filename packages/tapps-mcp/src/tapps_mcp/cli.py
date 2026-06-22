@@ -87,16 +87,36 @@ def fleet_restart(force: bool) -> None:
     click.echo(click.style("Restarted: " + ", ".join(result["started"]), fg="green"))
 
 
+@fleet.command("ensure")
+def fleet_ensure() -> None:
+    """Restart the fleet only when it is not fully reachable (watchdog entry)."""
+    from tapps_mcp.distribution.fleet_control import ensure_fleet_running
+
+    result = ensure_fleet_running()
+    if result["action"] == "none":
+        click.echo(click.style("Fleet healthy: all servers reachable", fg="green"))
+        return
+    unhealthy = ", ".join(result["unhealthy"])
+    click.echo(
+        click.style(
+            f"Fleet unhealthy ({unhealthy}); recovered via {result['action']}",
+            fg="yellow",
+        )
+    )
+
+
 @fleet.command("install-systemd")
 def fleet_install_systemd() -> None:
-    """Install a systemd user unit (~/.config/systemd/user/tapps-mcp-fleet.service)."""
+    """Install systemd user units for the fleet + health-aware watchdog timer."""
     from tapps_mcp.distribution.fleet_control import install_systemd_user_unit
 
-    path = install_systemd_user_unit()
-    click.echo(click.style(f"Wrote {path}", fg="green"))
+    paths = install_systemd_user_unit()
+    for path in paths:
+        click.echo(click.style(f"Wrote {path}", fg="green"))
     click.echo("Enable with:")
     click.echo("  systemctl --user daemon-reload")
     click.echo("  systemctl --user enable --now tapps-mcp-fleet.service")
+    click.echo("  systemctl --user enable --now tapps-mcp-fleet-watch.timer")
 
 
 @main.command()

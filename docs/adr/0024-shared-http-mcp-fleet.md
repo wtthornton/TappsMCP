@@ -34,6 +34,13 @@ Consumer projects opt in with `mcp_transport: http` in `.tapps-mcp.yaml` or `tap
 
 **Fleet process env:** `~/.tapps-mcp/fleet.env` sets `TAPPS_FLEET_CODE_ROOT` (default `~/code` when present) for path mapping via `TAPPS_MCP_HOST_PROJECT_ROOT`. Operator secrets load from `~/.tapps-operator.env` (same as stdio wrappers).
 
+**Supervision / systemd cgroup constraint (load-bearing):** `fleet start` launches the six servers as plain subprocesses (`setsid`, not a new systemd scope), so they remain in the **invoking unit's cgroup**. Under systemd the default `KillMode=control-group` reaps everything in a unit's cgroup the moment the unit's main process exits. Therefore:
+
+- The canonical `tapps-mcp-fleet.service` is `Type=oneshot` **with `RemainAfterExit=yes`** — the unit stays "active (exited)", its cgroup is not torn down, and the servers survive.
+- The watchdog (`tapps-mcp-fleet-watch.service` + `.timer`, polling every 60s) must **never call `fleet start` directly**. A `Type=oneshot` watchdog without `RemainAfterExit` would spawn the servers into its own cgroup and reap them on exit — a self-sustaining down→respawn→kill loop. Instead it runs `tapps-mcp fleet ensure`, which probes reachability and, only when unhealthy, runs `systemctl --user restart tapps-mcp-fleet.service` so the servers land in the canonical unit's surviving cgroup (falling back to a direct start only outside systemd).
+
+`tapps-mcp fleet install-systemd` is the **single source of truth** for all three units; do not hand-author the watchdog. `tapps-mcp doctor` flags the crash-loop signature (PID files recorded but ports not listening) distinctly from "never started".
+
 ## Consequences
 
 ### Positive
@@ -61,7 +68,11 @@ Consumer projects opt in with `mcp_transport: http` in `.tapps-mcp.yaml` or `tap
 ```bash
 # 1. Start fleet (once per machine)
 tapps-mcp fleet start
-# optional: tapps-mcp fleet install-systemd && systemctl --user enable --now tapps-mcp-fleet
+# optional (recommended) — install all units (service + health-aware watchdog):
+#   tapps-mcp fleet install-systemd
+#   systemctl --user daemon-reload
+#   systemctl --user enable --now tapps-mcp-fleet.service
+#   systemctl --user enable --now tapps-mcp-fleet-watch.timer
 
 # 2. Per consumer repo
 tapps-mcp init --host cursor --mcp-transport http --force --bundle full

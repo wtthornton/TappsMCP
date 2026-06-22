@@ -12,8 +12,6 @@ from pathlib import Path
 from typing import Any
 
 from tapps_mcp.distribution.nlt_http_fleet import (
-    DEFAULT_FLEET_CODE_ROOT_ENV,
-    DEFAULT_FLEET_HOST_ENV,
     FLEET_ENV_FILE,
     FLEET_LOG_DIR,
     FLEET_PID_DIR,
@@ -68,7 +66,7 @@ def _build_fleet_process_env() -> dict[str, str]:
 
     mem_token = env.get("TAPPS_MCP_MEMORY_BRAIN_AUTH_TOKEN", "")
     brain_token = env.get("TAPPS_BRAIN_AUTH_TOKEN", "")
-    if brain_token and (not mem_token or mem_token == "${TAPPS_BRAIN_AUTH_TOKEN}"):
+    if brain_token and (not mem_token or mem_token == "${TAPPS_BRAIN_AUTH_TOKEN}"):  # noqa: S105
         env["TAPPS_MCP_MEMORY_BRAIN_AUTH_TOKEN"] = brain_token
 
     if not env.get("TAPPS_MCP_CONTEXT7_API_KEY") and env.get("CONTEXT7_API_KEY"):
@@ -194,6 +192,79 @@ def stop_fleet(*, server_ids: list[str] | None = None) -> dict[str, Any]:
     return {"stopped": stopped, "missing": missing}
 
 
+_CANONICAL_UNIT = "tapps-mcp-fleet.service"
+
+
+def _port_listening(host: str, port: int, *, timeout: float = 1.0) -> bool:
+    """Return ``True`` when a TCP connection to ``host:port`` succeeds.
+
+    A listening port means uvicorn is up and serving the MCP endpoint. This is
+    deliberately *not* an HTTP GET on ``/``: the platform servers return 404
+    there (MCP lives at ``/mcp``), which an HTTP probe would misread as down.
+    """
+    import socket
+
+    try:
+        with socket.create_connection((host, port), timeout=timeout):
+            return True
+    except OSError:
+        return False
+
+
+def _systemd_unit_available(unit: str) -> bool:
+    """Return ``True`` when the named systemd --user unit is known to systemd."""
+    import shutil
+
+    if shutil.which("systemctl") is None:
+        return False
+    try:
+        proc = subprocess.run(
+            ["systemctl", "--user", "cat", unit],
+            capture_output=True,
+            timeout=5,
+            check=False,
+        )
+    except (OSError, subprocess.SubprocessError):
+        return False
+    return proc.returncode == 0
+
+
+def ensure_fleet_running() -> dict[str, Any]:
+    """Restart the fleet only when it is not fully reachable (watchdog entry).
+
+    Designed to be the ``ExecStart`` of a ``Type=oneshot`` watchdog unit. It must
+    never spawn the long-lived servers into its *own* cgroup: a oneshot without
+    ``RemainAfterExit`` would then reap them on exit (the ADR-0024 regression).
+    When the canonical ``tapps-mcp-fleet.service`` is available we delegate to
+    ``systemctl --user restart`` so the servers land in *that* unit's surviving
+    cgroup; only outside systemd do we fall back to a direct start.
+    """
+    host = resolve_fleet_host()
+    unhealthy = [
+        server_id
+        for server_id, port in NLT_HTTP_FLEET_PORTS.items()
+        if not _port_listening(host, port)
+    ]
+    if not unhealthy:
+        return {"action": "none", "healthy": True, "unhealthy": []}
+
+    if _systemd_unit_available(_CANONICAL_UNIT):
+        try:
+            proc = subprocess.run(
+                ["systemctl", "--user", "restart", _CANONICAL_UNIT],
+                capture_output=True,
+                timeout=60,
+                check=False,
+            )
+        except (OSError, subprocess.SubprocessError):
+            proc = None
+        if proc is not None and proc.returncode == 0:
+            return {"action": "systemd_restart", "healthy": False, "unhealthy": unhealthy}
+
+    start_fleet(force=True)
+    return {"action": "direct_start", "healthy": False, "unhealthy": unhealthy}
+
+
 def fleet_status() -> dict[str, Any]:
     """Return running/reachable status for each fleet server."""
     host = resolve_fleet_host()
@@ -220,13 +291,29 @@ def fleet_status() -> dict[str, Any]:
     }
 
 
-def install_systemd_user_unit(*, script_path: Path | None = None) -> Path:
-    """Write a systemd user unit that wraps ``tapps-mcp fleet start/stop``."""
+def install_systemd_user_unit(*, script_path: Path | None = None) -> list[Path]:
+    """Write the systemd user units that supervise the shared HTTP fleet.
+
+    Single source of truth for all fleet units (ADR-0024). Three files are
+    written:
+
+    * ``tapps-mcp-fleet.service`` — ``Type=oneshot`` + ``RemainAfterExit=yes``.
+      ``RemainAfterExit`` keeps the unit's cgroup alive so the six servers
+      spawned by ``fleet start`` are *not* reaped when the start command exits.
+    * ``tapps-mcp-fleet-watch.service`` — health-aware watchdog. It runs
+      ``fleet ensure`` which restarts the canonical service when unhealthy, so
+      it never owns the long-lived servers in its own cgroup. A hand-rolled
+      watchdog that called ``fleet start`` directly (oneshot, no
+      ``RemainAfterExit``) reaped the fleet every 60s — this generator replaces
+      that footgun.
+    * ``tapps-mcp-fleet-watch.timer`` — polls every 60s.
+    """
     unit_dir = Path.home() / ".config" / "systemd" / "user"
     unit_dir.mkdir(parents=True, exist_ok=True)
     tapps_bin = _resolve_tapps_mcp_bin()
-    unit_path = unit_dir / "tapps-mcp-fleet.service"
-    unit_path.write_text(
+
+    service_path = unit_dir / "tapps-mcp-fleet.service"
+    service_path.write_text(
         "\n".join(
             [
                 "[Unit]",
@@ -248,7 +335,48 @@ def install_systemd_user_unit(*, script_path: Path | None = None) -> Path:
         ),
         encoding="utf-8",
     )
-    return unit_path
+
+    watch_service_path = unit_dir / "tapps-mcp-fleet-watch.service"
+    watch_service_path.write_text(
+        "\n".join(
+            [
+                "[Unit]",
+                "Description=Ensure TappsMCP HTTP fleet is running (watchdog)",
+                "After=network-online.target",
+                "",
+                "[Service]",
+                "Type=oneshot",
+                # No RemainAfterExit by design: `fleet ensure` does not spawn the
+                # servers into this unit's cgroup, so oneshot teardown is safe.
+                f"ExecStart={tapps_bin} fleet ensure",
+                "Environment=PYTHONUNBUFFERED=1",
+                "",
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+    watch_timer_path = unit_dir / "tapps-mcp-fleet-watch.timer"
+    watch_timer_path.write_text(
+        "\n".join(
+            [
+                "[Unit]",
+                "Description=Poll TappsMCP HTTP fleet every 60s and start if down",
+                "",
+                "[Timer]",
+                "OnBootSec=45",
+                "OnUnitActiveSec=60",
+                "Persistent=true",
+                "",
+                "[Install]",
+                "WantedBy=timers.target",
+                "",
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+    return [service_path, watch_service_path, watch_timer_path]
 
 
 def _resolve_tapps_mcp_bin() -> str:

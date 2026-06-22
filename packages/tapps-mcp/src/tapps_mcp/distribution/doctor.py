@@ -448,6 +448,51 @@ def check_http_fleet_liveness(project_root: Path) -> CheckResult:
     )
 
 
+def check_fleet_crash_loop(project_root: Path) -> CheckResult:
+    """Detect the ADR-0024 crash-loop: PID files recorded but ports not listening.
+
+    ``check_http_fleet_liveness`` reports ports being down, but cannot tell
+    "never started" apart from "starts then dies". When ``fleet start`` records
+    PID files yet nothing is listening, a supervisor is reaping the fleet — the
+    classic symptom of a ``Type=oneshot`` watchdog without ``RemainAfterExit``
+    tearing down its cgroup. Surface that distinctly with a targeted fix.
+    """
+    name = "HTTP MCP fleet stability"
+    from tapps_mcp.distribution.nlt_http_fleet import (
+        FLEET_PID_DIR,
+        NLT_HTTP_FLEET_PORTS,
+        resolve_fleet_host,
+    )
+
+    recorded = [
+        server_id
+        for server_id in NLT_HTTP_FLEET_PORTS
+        if (FLEET_PID_DIR / f"{server_id}.pid").is_file()
+    ]
+    if not recorded:
+        return CheckResult(name, True, "No fleet PID files (not supervised on this host)")
+    host = resolve_fleet_host()
+    dead = [
+        server_id
+        for server_id in recorded
+        if not _probe_tcp(f"http://{host}:{NLT_HTTP_FLEET_PORTS[server_id]}/")
+    ]
+    if not dead:
+        return CheckResult(name, True, f"{len(recorded)} supervised fleet server(s) listening")
+    preview = ", ".join(dead[:4])
+    return CheckResult(
+        name,
+        False,
+        f"{len(dead)}/{len(recorded)} supervised fleet server(s) have PID files but "
+        f"are not listening (started-then-died): {preview}",
+        "The fleet is likely being reaped by a misconfigured systemd watchdog "
+        "(a Type=oneshot unit without RemainAfterExit reaps its cgroup on exit). "
+        "Refresh units with `tapps-mcp fleet install-systemd`, then "
+        "`systemctl --user daemon-reload && systemctl --user restart "
+        "tapps-mcp-fleet.service`. Inspect ~/.tapps-mcp/fleet/logs/*.log.",
+    )
+
+
 def _cursor_config_transport(project_root: Path) -> str | None:
     """Return ``"http"``/``"stdio"`` for the Cursor MCP config, ``None`` if absent."""
     from tapps_mcp.distribution.setup_generator import _load_mcp_config_json
@@ -4611,6 +4656,7 @@ def _collect_checks(root: Path, *, quick: bool = False) -> list[CheckResult]:
     checks.append(check_vscode_config(root))
     checks.append(check_mcp_transport_drift(root))
     checks.append(check_http_fleet_liveness(root))
+    checks.append(check_fleet_crash_loop(root))
     checks.append(check_mcp_client_config(root))
     checks.append(check_mcp_tool_budget(root))
     checks.append(check_call_graph_tools_profile(root))
