@@ -2231,6 +2231,40 @@ def check_claude_settings(project_root: Path) -> CheckResult:
     )
 
 
+def check_managed_json_parseable(project_root: Path) -> CheckResult:
+    """Verify tapps-managed JSON configs parse cleanly.
+
+    A malformed ``.claude/settings.json`` or ``.cursor/hooks.json`` (e.g. a
+    dropped opening ``{`` brace from an external editor or a Windows BOM) makes
+    ``tapps-mcp upgrade`` skip that platform's hooks merge. Catch it here with a
+    one-line repair hint so the operator fixes the file before the next upgrade.
+    """
+    from tapps_mcp.pipeline.platform_hooks import ManagedJsonError, _load_managed_json
+
+    name = "Managed JSON configs"
+    targets = [
+        project_root / ".claude" / "settings.json",
+        project_root / ".cursor" / "hooks.json",
+    ]
+    broken: list[str] = []
+    for target in targets:
+        if not target.exists():
+            continue
+        try:
+            _load_managed_json(target)
+        except ManagedJsonError as exc:
+            broken.append(str(exc))
+    if broken:
+        return CheckResult(
+            name,
+            False,
+            "; ".join(broken),
+            "Repair the file (a common cause is a missing opening '{' brace) or "
+            "restore it from a .tapps-mcp backup, then re-run tapps-mcp upgrade.",
+        )
+    return CheckResult(name, True, ".claude/settings.json / .cursor/hooks.json parse cleanly")
+
+
 def _check_cursor_mcp_zombie_cleanup(project_root: Path) -> CheckResult | None:
     """Verify Cursor sessionStart does NOT run MCP zombie cleanup (deploy-local only)."""
     hooks_json = project_root / ".cursor" / "hooks.json"
@@ -4691,6 +4725,7 @@ def _collect_checks(root: Path, *, quick: bool = False) -> list[CheckResult]:
     checks.append(check_karpathy_guidelines(root))
     checks.append(check_tapps_mcp_yaml(root))
     checks.append(check_claude_settings(root))
+    checks.append(check_managed_json_parseable(root))
     checks.append(check_claude_hook_scripts(root))
     checks.append(check_hooks(root))
     checks.append(check_cursor_mcp_zombie_cleanup(root))

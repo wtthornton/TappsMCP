@@ -616,20 +616,26 @@ def _build_dry_run_summary(result: dict[str, Any]) -> dict[str, Any]:
     - ``managed_file_count``: tapps-* files the upgrade would write
     - ``preserved_file_count``: consumer-custom files the upgrade would NOT touch
     - ``skipped_components``: components opted out via ``upgrade_skip_files``
-    - ``verdict``: one of ``"safe-to-run"``, ``"review-recommended"``
+    - ``verdict``: one of ``"safe-to-run"``, ``"review-recommended"``, ``"blocked"``
 
     ``review-recommended`` fires when an upgrade would touch a
     user-editable file (``CLAUDE.md``, settings merge) so the consumer
     should inspect diffs before running live. Pure ``tapps-*`` writes
     plus preserved custom files → ``safe-to-run``.
+
+    ``blocked`` fires when a managed JSON config (``.claude/settings.json``,
+    ``.cursor/hooks.json``) fails to parse — repair the file before upgrading.
     """
     managed = 0
     preserved_items: list[str] = []
     skipped: list[str] = []
     review_flags: list[str] = []
+    parse_errors: list[str] = []
 
     def _absorb_component(scope: str, name: str, value: Any) -> None:
         if isinstance(value, dict):
+            if value.get("action") == "error":
+                parse_errors.append(f"{scope}:{name}: {value.get('error', '')}")
             managed_files = value.get("managed_files", [])
             managed_skills = value.get("managed_skills", [])
             nonlocal managed
@@ -662,8 +668,13 @@ def _build_dry_run_summary(result: dict[str, Any]) -> dict[str, Any]:
     if isinstance(agents_md, dict) and agents_md.get("action", "").startswith("would"):
         review_flags.append("agents_md")
 
-    verdict = "review-recommended" if review_flags else "safe-to-run"
-    if verdict == "safe-to-run":
+    verdict = "blocked" if parse_errors else ("review-recommended" if review_flags else "safe-to-run")
+    if verdict == "blocked":
+        message = (
+            "Managed JSON parse failure — repair before upgrading: "
+            + "; ".join(parse_errors)
+        )
+    elif verdict == "safe-to-run":
         message = (
             f"Upgrade is additive: {managed} tapps-managed files would be "
             f"written, {len(preserved_items)} custom files preserved."
@@ -690,6 +701,7 @@ def _build_dry_run_summary(result: dict[str, Any]) -> dict[str, Any]:
         "preserved_files": sorted(preserved_items),
         "skipped_components": sorted(skipped),
         "review_recommended_for": sorted(review_flags),
+        "parse_errors": sorted(parse_errors),
         "would_recreate_deleted_files": would_recreate,
     }
 
@@ -762,6 +774,7 @@ def _upgrade_claude_code_dry_run(
     existing non-managed files that would be preserved, so consumers can see
     that custom agents/skills/hooks are safe from the upgrade.
     """
+    from tapps_mcp.pipeline.platform_hooks import dry_run_managed_json_status
     from tapps_mcp.pipeline.platform_skills import CLAUDE_SKILLS
     from tapps_mcp.pipeline.platform_subagents import CLAUDE_AGENTS
 
@@ -769,14 +782,23 @@ def _upgrade_claude_code_dry_run(
         result["components"]["claude_md"] = "skipped (upgrade_skip_files)"
     else:
         result["components"]["claude_md"] = _dry_run_claude_md_status(project_root, force=force)
-    result["components"]["settings"] = (
+    settings_status = (
         "skipped (upgrade_skip_files)"
         if _skipped("claude_settings", skip)
-        else "would-merge (hooks merged by matcher; existing entries preserved)"
+        else dry_run_managed_json_status(
+            project_root / ".claude" / "settings.json",
+            ok_message="would-merge (hooks merged by matcher; existing entries preserved)",
+        )
     )
+    result["components"]["settings"] = settings_status
 
     if _skipped("claude_hooks", skip):
         result["components"]["hooks"] = "skipped (upgrade_skip_files)"
+    elif isinstance(settings_status, dict) and settings_status.get("action") == "error":
+        result["components"]["hooks"] = {
+            "action": "skipped",
+            "note": "blocked by malformed .claude/settings.json (see settings component)",
+        }
     else:
         hooks_dir = project_root / ".claude" / "hooks"
         managed_hooks = (
@@ -890,6 +912,23 @@ def _upgrade_claude_code_dry_run(
     )
 
 
+def _record_managed_json_error(result: dict[str, Any], key: str, exc: Any) -> None:
+    """Isolate a malformed managed-JSON failure to a single component.
+
+    Records a structured, actionable error under ``result["components"][key]``
+    and stashes it on ``component_errors`` so the orchestrator can surface it at
+    the top level. The rest of the platform scope keeps upgrading instead of
+    aborting on a bare ``JSONDecodeError`` when ``.claude/settings.json`` or
+    ``.cursor/hooks.json`` is malformed (e.g. a dropped opening brace).
+    """
+    result["components"][key] = {
+        "action": "error",
+        "error": str(exc),
+        "hint": getattr(exc, "remediation", ""),
+    }
+    result.setdefault("component_errors", []).append(f"{key}: {exc}")
+
+
 def _upgrade_claude_code_live(
     project_root: Path,
     result: dict[str, Any],
@@ -919,6 +958,7 @@ def _upgrade_claude_code_live(
         generate_skills,
         generate_subagent_definitions,
     )
+    from tapps_mcp.pipeline.platform_hooks import ManagedJsonError
 
     # CLAUDE.md — merges into user content via _replace_tapps_section.
     if _skipped("claude_md", skip):
@@ -957,27 +997,32 @@ def _upgrade_claude_code_live(
                 result["auto_promote"]["cache_gate"]["to"] = "block"
         except Exception:
             pass
-        hooks_result = generate_claude_hooks(
-            project_root,
-            engagement_level=engagement_level,
-            destructive_guard=destructive_guard,
-            linear_enforce_gate=linear_enforce_gate,
-            linear_enforce_cache_gate=linear_enforce_cache_gate,
-        )
-        result["components"]["hooks"] = {
-            "scripts_created": hooks_result.get("scripts_created", []),
-            "hooks_added": hooks_result.get("hooks_added", 0),
-            "destructive_guard": hooks_result.get("destructive_guard", False),
-            "linear_enforce_gate": hooks_result.get("linear_enforce_gate", False),
-            "linear_enforce_cache_gate": hooks_result.get("linear_enforce_cache_gate", "off"),
-            "manifest_verification": _verify_hook_manifest(project_root),
-        }
-        from tapps_mcp.pipeline.platform_hooks import wire_memory_hooks
+        try:
+            hooks_result = generate_claude_hooks(
+                project_root,
+                engagement_level=engagement_level,
+                destructive_guard=destructive_guard,
+                linear_enforce_gate=linear_enforce_gate,
+                linear_enforce_cache_gate=linear_enforce_cache_gate,
+            )
+            result["components"]["hooks"] = {
+                "scripts_created": hooks_result.get("scripts_created", []),
+                "hooks_added": hooks_result.get("hooks_added", 0),
+                "destructive_guard": hooks_result.get("destructive_guard", False),
+                "linear_enforce_gate": hooks_result.get("linear_enforce_gate", False),
+                "linear_enforce_cache_gate": hooks_result.get(
+                    "linear_enforce_cache_gate", "off"
+                ),
+                "manifest_verification": _verify_hook_manifest(project_root),
+            }
+            from tapps_mcp.pipeline.platform_hooks import wire_memory_hooks
 
-        result["components"]["memory_hooks"] = wire_memory_hooks(
-            project_root,
-            platform="claude",
-        )
+            result["components"]["memory_hooks"] = wire_memory_hooks(
+                project_root,
+                platform="claude",
+            )
+        except ManagedJsonError as exc:
+            _record_managed_json_error(result, "hooks", exc)
 
     if _skipped("claude_agents", skip):
         result["components"]["agents"] = "skipped (upgrade_skip_files)"
@@ -1126,6 +1171,7 @@ def _upgrade_cursor_dry_run(
     Mirrors :func:`_upgrade_claude_code_dry_run` — enumerates managed vs
     preserved files so consumers can see which custom assets stay untouched.
     """
+    from tapps_mcp.pipeline.platform_hooks import ManagedJsonError, preview_cursor_hooks_merge
     from tapps_mcp.pipeline.platform_skills import CURSOR_SKILLS
     from tapps_mcp.pipeline.platform_subagents import CURSOR_AGENTS
 
@@ -1135,21 +1181,29 @@ def _upgrade_cursor_dry_run(
     managed_hooks = (
         frozenset(p.name for p in hooks_dir.glob("tapps-*")) if hooks_dir.is_dir() else frozenset()
     )
-    from tapps_mcp.pipeline.platform_hooks import preview_cursor_hooks_merge
+    try:
+        hooks_preview = preview_cursor_hooks_merge(project_root)
+    except ManagedJsonError as exc:
+        result["components"]["hooks"] = {
+            "action": "error",
+            "error": str(exc),
+            "hint": exc.remediation,
+        }
+        hooks_preview = None
 
-    hooks_preview = preview_cursor_hooks_merge(project_root)
-    hooks_note = "hooks.json entries merged — third-party keys preserved"
-    would_remove = hooks_preview.get("would_remove_keys") or []
-    if would_remove:
-        hooks_note = f"hooks.json would-remove-keys: {', '.join(would_remove)}"
-    result["components"]["hooks"] = {
-        "action": "would-write-managed-scripts",
-        "note": hooks_note,
-        "preserved_hook_keys": hooks_preview.get("preserved_hook_keys", []),
-        "third_party_hook_keys": hooks_preview.get("third_party_hook_keys", []),
-        "would_remove_keys": would_remove,
-        "preserved_files": _enumerate_preserved(hooks_dir, managed_hooks),
-    }
+    if hooks_preview is not None:
+        hooks_note = "hooks.json entries merged — third-party keys preserved"
+        would_remove = hooks_preview.get("would_remove_keys") or []
+        if would_remove:
+            hooks_note = f"hooks.json would-remove-keys: {', '.join(would_remove)}"
+        result["components"]["hooks"] = {
+            "action": "would-write-managed-scripts",
+            "note": hooks_note,
+            "preserved_hook_keys": hooks_preview.get("preserved_hook_keys", []),
+            "third_party_hook_keys": hooks_preview.get("third_party_hook_keys", []),
+            "would_remove_keys": would_remove,
+            "preserved_files": _enumerate_preserved(hooks_dir, managed_hooks),
+        }
 
     agents_dir = project_root / ".cursor" / "agents"
     managed_agents = frozenset(CURSOR_AGENTS.keys())
@@ -1195,21 +1249,25 @@ def _upgrade_cursor_live(
         generate_skills,
         generate_subagent_definitions,
     )
+    from tapps_mcp.pipeline.platform_hooks import ManagedJsonError
 
     result["components"]["cursor_rules"] = _bootstrap_cursor(project_root, overwrite=force)
-    hooks_result = generate_cursor_hooks(project_root)
-    result["components"]["hooks"] = {
-        "scripts_created": hooks_result.get("scripts_created", []),
-        "hooks_added": hooks_result.get("hooks_added", 0),
-        "third_party_hook_keys": hooks_result.get("third_party_hook_keys", []),
-        "preserved_hook_keys": hooks_result.get("preserved_hook_keys", []),
-    }
-    from tapps_mcp.pipeline.platform_hooks import wire_memory_hooks
+    try:
+        hooks_result = generate_cursor_hooks(project_root)
+        result["components"]["hooks"] = {
+            "scripts_created": hooks_result.get("scripts_created", []),
+            "hooks_added": hooks_result.get("hooks_added", 0),
+            "third_party_hook_keys": hooks_result.get("third_party_hook_keys", []),
+            "preserved_hook_keys": hooks_result.get("preserved_hook_keys", []),
+        }
+        from tapps_mcp.pipeline.platform_hooks import wire_memory_hooks
 
-    result["components"]["memory_hooks"] = wire_memory_hooks(
-        project_root,
-        platform="cursor",
-    )
+        result["components"]["memory_hooks"] = wire_memory_hooks(
+            project_root,
+            platform="cursor",
+        )
+    except ManagedJsonError as exc:
+        _record_managed_json_error(result, "hooks", exc)
     result["components"]["agents"] = generate_subagent_definitions(
         project_root, "cursor", overwrite=True
     )
@@ -2076,6 +2134,11 @@ def upgrade_pipeline(
                 mcp_bundle=mcp_bundle,
             )
             platform_results.append(host_result)
+            # Surface isolated managed-JSON component failures (malformed
+            # settings.json / hooks.json) at the top level so `success` is
+            # False and the CLI prints them — without aborting the scope.
+            for component_error in host_result.get("component_errors", []):
+                result["errors"].append(f"{host}: {component_error}")
         except Exception as exc:
             result["errors"].append(f"{host}: {exc}")
             platform_results.append(
@@ -2184,10 +2247,12 @@ def upgrade_pipeline(
             dry_run=False,
         )
 
-    result["success"] = len(result["errors"]) == 0
-    result["consumer_requirements"] = "docs/TAPPS_MCP_REQUIREMENTS.md"
-
     if dry_run:
         result["dry_run_summary"] = _build_dry_run_summary(result)
+        for parse_error in result["dry_run_summary"].get("parse_errors", []):
+            result["errors"].append(parse_error)
+
+    result["success"] = len(result["errors"]) == 0
+    result["consumer_requirements"] = "docs/TAPPS_MCP_REQUIREMENTS.md"
 
     return result

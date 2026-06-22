@@ -568,6 +568,71 @@ def _cleanup_wrong_platform_scripts(hooks_dir: Path, win: bool) -> list[str]:
     return removed
 
 
+class ManagedJsonError(ValueError):
+    """A tapps-managed JSON config (settings.json / hooks.json) failed to parse.
+
+    Carries the offending path plus a remediation hint so the upgrade pipeline
+    can report which file is broken and how to repair it, instead of aborting an
+    entire platform scope with a bare ``Extra data`` traceback.
+    """
+
+    def __init__(self, path: Path, original: json.JSONDecodeError) -> None:
+        self.path = path
+        self.original = original
+        self.remediation = (
+            "Repair the file (a common cause is a missing opening '{' brace or a "
+            "leading byte-order mark) or restore it from a .tapps-mcp backup, then "
+            "re-run `tapps-mcp upgrade`. Run `tapps-mcp doctor` to confirm it parses."
+        )
+        super().__init__(
+            f"{path}: invalid JSON — {original.msg} "
+            f"(line {original.lineno}, column {original.colno})"
+        )
+
+
+def _load_managed_json(path: Path) -> dict[str, Any]:
+    """Load a tapps-managed JSON config, returning ``{}`` when absent or empty.
+
+    Raises :class:`ManagedJsonError` on a parse failure so callers can surface a
+    file-scoped, actionable error rather than letting a bare ``JSONDecodeError``
+    abort the whole upgrade scope.
+    """
+    if not path.exists():
+        return {}
+    raw = path.read_text(encoding="utf-8")
+    if not raw.strip():
+        return {}
+    try:
+        data = json.loads(raw)
+    except json.JSONDecodeError as exc:
+        raise ManagedJsonError(path, exc) from exc
+    return data if isinstance(data, dict) else {}
+
+
+def _write_managed_json(path: Path, data: dict[str, Any]) -> None:
+    """Write a tapps-managed JSON config with a round-trip sanity check.
+
+    Serializes with ``json.dumps``, verifies the output parses back through
+    ``json.loads`` before touching disk, then writes UTF-8 text. Catches generator
+    bugs that would emit a document missing its opening ``{`` brace.
+    """
+    path.parent.mkdir(parents=True, exist_ok=True)
+    text = json.dumps(data, indent=2) + "\n"
+    json.loads(text)
+    path.write_text(text, encoding="utf-8")
+
+
+def dry_run_managed_json_status(path: Path, *, ok_message: str) -> str | dict[str, Any]:
+    """Dry-run helper: parse the real managed JSON file or return an error dict."""
+    if not path.exists():
+        return ok_message
+    try:
+        _load_managed_json(path)
+    except ManagedJsonError as exc:
+        return {"action": "error", "error": str(exc), "hint": exc.remediation}
+    return ok_message
+
+
 def _merge_hooks_config(
     existing_hooks: dict[str, Any],
     hooks_config: dict[str, Any],
@@ -726,11 +791,7 @@ def generate_claude_hooks(
 
     # Load or init .claude/settings.json
     settings_file = project_root / ".claude" / "settings.json"
-    if settings_file.exists():
-        raw = settings_file.read_text(encoding="utf-8")
-        config: dict[str, Any] = json.loads(raw) if raw.strip() else {}
-    else:
-        config = {}
+    config: dict[str, Any] = _load_managed_json(settings_file)
 
     existing_hooks: dict[str, Any] = config.setdefault("hooks", {})
     hooks_added = _merge_hooks_config(existing_hooks, hooks_config)
@@ -746,8 +807,7 @@ def generate_claude_hooks(
         k: v for k, v in config["hooks"].items() if k not in _INVALID_CLAUDE_HOOK_KEYS
     }
 
-    settings_file.parent.mkdir(parents=True, exist_ok=True)
-    settings_file.write_text(json.dumps(config, indent=2) + "\n", encoding="utf-8")
+    _write_managed_json(settings_file, config)
 
     action = "migrated" if hooks_migrated > 0 else ("created" if hooks_added > 0 else "skipped")
     return {
@@ -766,10 +826,7 @@ def generate_claude_hooks(
 
 def _parse_cursor_hooks_file(hooks_file: Path) -> dict[str, Any]:
     """Load ``.cursor/hooks.json`` or return an empty config dict."""
-    if not hooks_file.exists():
-        return {}
-    raw = hooks_file.read_text(encoding="utf-8")
-    return json.loads(raw) if raw.strip() else {}
+    return _load_managed_json(hooks_file)
 
 
 def _normalize_cursor_hooks_raw(config: dict[str, Any]) -> dict[str, list[dict[str, str]]]:
@@ -889,8 +946,7 @@ def generate_cursor_hooks(
 
     config["hooks"] = existing_hooks
     config["version"] = 1
-    hooks_file.parent.mkdir(parents=True, exist_ok=True)
-    hooks_file.write_text(json.dumps(config, indent=2) + "\n", encoding="utf-8")
+    _write_managed_json(hooks_file, config)
 
     action = "migrated" if hooks_migrated > 0 else ("created" if hooks_added > 0 else "skipped")
     return {
@@ -946,11 +1002,7 @@ def generate_memory_capture_hook(
 
     # Merge hooks config into .claude/settings.json
     settings_file = project_root / ".claude" / "settings.json"
-    if settings_file.exists():
-        raw = settings_file.read_text(encoding="utf-8")
-        config: dict[str, Any] = json.loads(raw) if raw.strip() else {}
-    else:
-        config = {}
+    config: dict[str, Any] = _load_managed_json(settings_file)
 
     existing_hooks: dict[str, Any] = config.setdefault("hooks", {})
     hooks_added = 0
@@ -978,8 +1030,7 @@ def generate_memory_capture_hook(
     config["hooks"] = {
         k: v for k, v in config["hooks"].items() if k not in _INVALID_CLAUDE_HOOK_KEYS
     }
-    settings_file.parent.mkdir(parents=True, exist_ok=True)
-    settings_file.write_text(json.dumps(config, indent=2) + "\n", encoding="utf-8")
+    _write_managed_json(settings_file, config)
 
     return {
         "script_created": script_name,
@@ -1052,11 +1103,7 @@ def generate_memory_auto_recall_hook(
         script_path.chmod(script_path.stat().st_mode | stat.S_IXUSR | stat.S_IXGRP)
 
     settings_file = project_root / ".claude" / "settings.json"
-    if settings_file.exists():
-        raw = settings_file.read_text(encoding="utf-8")
-        config: dict[str, Any] = json.loads(raw) if raw.strip() else {}
-    else:
-        config = {}
+    config: dict[str, Any] = _load_managed_json(settings_file)
 
     existing_hooks: dict[str, Any] = config.setdefault("hooks", {})
     hooks_added = _merge_claude_memory_hook_entries(existing_hooks, hooks_config)
@@ -1064,8 +1111,7 @@ def generate_memory_auto_recall_hook(
     config["hooks"] = {
         k: v for k, v in config["hooks"].items() if k not in _INVALID_CLAUDE_HOOK_KEYS
     }
-    settings_file.parent.mkdir(parents=True, exist_ok=True)
-    settings_file.write_text(json.dumps(config, indent=2) + "\n", encoding="utf-8")
+    _write_managed_json(settings_file, config)
 
     return {
         "script_created": script_name,
@@ -1215,8 +1261,7 @@ def _generate_cursor_memory_auto_recall_hook(
 
     config["hooks"] = existing_hooks
     config["version"] = 1
-    hooks_file.parent.mkdir(parents=True, exist_ok=True)
-    hooks_file.write_text(json.dumps(config, indent=2) + "\n", encoding="utf-8")
+    _write_managed_json(hooks_file, config)
 
     return {
         "script_created": script_name,
@@ -1306,11 +1351,7 @@ def generate_memory_auto_capture_hook(
         script_path.chmod(script_path.stat().st_mode | stat.S_IXUSR | stat.S_IXGRP)
 
     settings_file = project_root / ".claude" / "settings.json"
-    if settings_file.exists():
-        raw = settings_file.read_text(encoding="utf-8")
-        config: dict[str, Any] = json.loads(raw) if raw.strip() else {}
-    else:
-        config = {}
+    config: dict[str, Any] = _load_managed_json(settings_file)
 
     existing_hooks: dict[str, Any] = config.setdefault("hooks", {})
     hooks_added = 0
@@ -1337,8 +1378,7 @@ def generate_memory_auto_capture_hook(
     config["hooks"] = {
         k: v for k, v in config["hooks"].items() if k not in _INVALID_CLAUDE_HOOK_KEYS
     }
-    settings_file.parent.mkdir(parents=True, exist_ok=True)
-    settings_file.write_text(json.dumps(config, indent=2) + "\n", encoding="utf-8")
+    _write_managed_json(settings_file, config)
 
     return {
         "script_created": script_name,

@@ -1722,7 +1722,9 @@ def _bootstrap_claude_settings(
             docsmcp_detected=docsmcp_detected,
             use_nlt_plugin=use_nlt_plugin,
         )
-        settings_file.write_text(json.dumps(config, indent=2) + "\n", encoding="utf-8")
+        from tapps_mcp.pipeline.platform_hooks import _write_managed_json
+
+        _write_managed_json(settings_file, config)
         return "created"
 
     raw = settings_file.read_text(encoding="utf-8")
@@ -1743,7 +1745,9 @@ def _bootstrap_claude_settings(
     if merged == existing:
         return "skipped"
 
-    settings_file.write_text(json.dumps(merged, indent=2) + "\n", encoding="utf-8")
+    from tapps_mcp.pipeline.platform_hooks import _write_managed_json
+
+    _write_managed_json(settings_file, merged)
     return "updated"
 
 
