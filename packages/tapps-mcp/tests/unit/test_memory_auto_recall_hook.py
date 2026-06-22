@@ -183,6 +183,39 @@ class TestGenerateMemoryAutoRecallHook:
         assert ".cursor/hooks/tapps-mcp-zombie-cleanup.sh" not in session_cmds
         assert ".cursor/hooks/tapps-memory-auto-recall.sh" in session_cmds
 
+    def test_cursor_memory_recall_migrates_ps1_on_unix(self, tmp_path: Path) -> None:
+        """sessionStart must not keep both .ps1 and .sh memory-recall hooks (TAP-4080)."""
+        from tapps_mcp.pipeline.platform_hook_templates import PS1_PREFIX
+        from tapps_mcp.pipeline.platform_hooks import _generate_cursor_memory_auto_recall_hook
+
+        cursor_dir = tmp_path / ".cursor"
+        cursor_dir.mkdir(parents=True)
+        ps1_cmd = PS1_PREFIX + ".cursor/hooks/tapps-memory-auto-recall.ps1"
+        existing = {
+            "version": 1,
+            "hooks": {
+                "sessionStart": [{"command": ps1_cmd}],
+                "preCompact": [{"command": ps1_cmd}],
+            },
+        }
+        (cursor_dir / "hooks.json").write_text(json.dumps(existing), encoding="utf-8")
+
+        _generate_cursor_memory_auto_recall_hook(
+            tmp_path,
+            win=False,
+            max_results=3,
+            min_score=0.3,
+            min_prompt_length=50,
+            recall_keys=[],
+        )
+
+        hooks = json.loads((cursor_dir / "hooks.json").read_text())
+        for event in ("sessionStart", "preCompact"):
+            cmds = [e["command"] for e in hooks["hooks"][event]]
+            assert len(cmds) == 1
+            assert cmds[0] == ".cursor/hooks/tapps-memory-auto-recall.sh"
+            assert ".ps1" not in cmds[0]
+
     def test_custom_max_results_min_score_baked_in(self, tmp_path: Path) -> None:
         generate_memory_auto_recall_hook(
             tmp_path,
@@ -230,7 +263,6 @@ class TestMemoryRecallCLI:
     def test_recall_outputs_xml_when_memories_exist(self, tmp_path: Path) -> None:
         """Memory recall outputs <memory_context> XML when memories match."""
         from click.testing import CliRunner
-
         from tapps_brain.store import MemoryStore
 
         # Create memory store with an entry

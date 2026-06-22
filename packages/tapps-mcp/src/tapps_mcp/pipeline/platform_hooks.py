@@ -1106,6 +1106,8 @@ def _merge_claude_memory_hook_entries(
 def _merge_cursor_hook_command_entries(
     existing_hooks: dict[str, list[dict[str, str]]],
     hooks_config: dict[str, list[dict[str, str]]],
+    *,
+    win: bool,
 ) -> int:
     """Append Tapps hook commands per event without duplicating command paths."""
     hooks_added = 0
@@ -1114,6 +1116,12 @@ def _merge_cursor_hook_command_entries(
             existing_hooks[event] = list(entries)
             hooks_added += len(entries)
             continue
+        existing_hooks[event] = [
+            entry
+            for entry in existing_hooks[event]
+            if isinstance(entry, dict)
+            and not _is_wrong_platform_command(entry.get("command", ""), win=win)
+        ]
         existing_cmds = {
             entry.get("command", "")
             for entry in existing_hooks[event]
@@ -1202,7 +1210,7 @@ def _generate_cursor_memory_auto_recall_hook(
     hooks_file = project_root / ".cursor" / "hooks.json"
     config = _parse_cursor_hooks_file(hooks_file)
     existing_hooks = _normalize_cursor_hooks_raw(config)
-    hooks_added = _merge_cursor_hook_command_entries(existing_hooks, hooks_config)
+    hooks_added = _merge_cursor_hook_command_entries(existing_hooks, hooks_config, win=win)
     hooks_reordered = _ensure_cursor_session_start_order(existing_hooks)
 
     config["hooks"] = existing_hooks

@@ -37,9 +37,12 @@ class TestDocAgentTemplates:
 
     def test_agents_reference_docsmcp_tools(self) -> None:
         for name, content in CLAUDE_DOC_AGENTS.items():
-            assert "docs-mcp" in content or "docs_check" in content, (
-                f"{name} does not reference DocsMCP tools"
+            assert "mcp__nlt-project-docs__" in content, (
+                f"{name} should use nlt-project-docs MCP prefix"
             )
+        for name, content in CURSOR_DOC_AGENTS.items():
+            assert "docs_check" in content, f"{name} does not reference DocsMCP tools"
+            assert "mcp__docs-mcp__" not in content, f"{name} uses stale docs-mcp prefix"
 
 
 class TestDocSkillTemplates:

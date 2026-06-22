@@ -1,4 +1,4 @@
-<!-- tapps-generated: v3.12.44 -->
+<!-- tapps-generated: v3.12.45 -->
 ---
 name: tapps-researcher
 description: Technical researcher using TappsMCP library docs lookup and impact analysis

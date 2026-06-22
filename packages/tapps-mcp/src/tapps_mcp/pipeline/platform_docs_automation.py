@@ -14,13 +14,15 @@ import structlog
 
 logger: structlog.stdlib.BoundLogger = structlog.get_logger()
 
+_NLT_DOCS = "mcp__nlt-project-docs__"
+
 
 # ---------------------------------------------------------------------------
 # Doc agent templates
 # ---------------------------------------------------------------------------
 
 CLAUDE_DOC_AGENTS: dict[str, str] = {
-    "tapps-docs-reviewer.md": """\
+    "tapps-docs-reviewer.md": f"""\
 ---
 name: tapps-docs-reviewer
 description: >-
@@ -31,22 +33,20 @@ model: claude-sonnet-4-6
 maxTurns: 20
 permissionMode: plan
 memory: project
-mcpServers:
-  docs-mcp: {}
 ---
 
 You are a DocsMCP documentation reviewer. When invoked:
 
-1. Call `mcp__docs-mcp__docs_check_drift` to find docs that are out of sync with code
-2. Call `mcp__docs-mcp__docs_check_freshness` to identify stale documentation
-3. Call `mcp__docs-mcp__docs_check_completeness` for a documentation health score
-4. Call `mcp__docs-mcp__docs_check_links` to find broken internal links
-5. Call `mcp__docs-mcp__docs_check_diataxis` for content balance analysis
+1. Call `{_NLT_DOCS}docs_check_drift` to find docs that are out of sync with code
+2. Call `{_NLT_DOCS}docs_check_freshness` to identify stale documentation
+3. Call `{_NLT_DOCS}docs_check_completeness` for a documentation health score
+4. Call `{_NLT_DOCS}docs_check_links` to find broken internal links
+5. Call `{_NLT_DOCS}docs_check_diataxis` for content balance analysis
 6. Summarize findings by severity and recommend specific fixes
 
 Focus on actionable feedback. Prioritize drift and broken links over style issues.
 """,
-    "tapps-docs-validator.md": """\
+    "tapps-docs-validator.md": f"""\
 ---
 name: tapps-docs-validator
 description: >-
@@ -57,16 +57,14 @@ model: claude-haiku-4-5-20251001
 maxTurns: 10
 permissionMode: plan
 memory: project
-mcpServers:
-  docs-mcp: {}
 ---
 
 You are a lightweight documentation validator. When invoked:
 
 1. Identify which markdown files were recently changed
-2. Call `mcp__docs-mcp__docs_check_links` on changed files
-3. Call `mcp__docs-mcp__docs_check_freshness` to verify nothing is stale
-4. Call `mcp__docs-mcp__docs_check_drift` on the project
+2. Call `{_NLT_DOCS}docs_check_links` on changed files
+3. Call `{_NLT_DOCS}docs_check_freshness` to verify nothing is stale
+4. Call `{_NLT_DOCS}docs_check_drift` on the project
 5. Report pass/fail with brief explanation
 
 Be concise. Only flag actual problems, not stylistic preferences.
@@ -83,15 +81,21 @@ description: >-
 tools: Read, Glob, Grep, Write, Edit
 model: claude-sonnet-4-6
 maxTurns: 20
+mcp_tools:
+  - docs_check_drift
+  - docs_check_freshness
+  - docs_check_completeness
+  - docs_check_links
+  - docs_check_diataxis
 ---
 
 You are a DocsMCP documentation reviewer. When invoked:
 
-1. Call `mcp__docs-mcp__docs_check_drift` to find docs that are out of sync with code
-2. Call `mcp__docs-mcp__docs_check_freshness` to identify stale documentation
-3. Call `mcp__docs-mcp__docs_check_completeness` for a documentation health score
-4. Call `mcp__docs-mcp__docs_check_links` to find broken internal links
-5. Call `mcp__docs-mcp__docs_check_diataxis` for content balance analysis
+1. Call `docs_check_drift` on nlt-project-docs to find docs out of sync with code
+2. Call `docs_check_freshness` to identify stale documentation
+3. Call `docs_check_completeness` for a documentation health score
+4. Call `docs_check_links` to find broken internal links
+5. Call `docs_check_diataxis` for content balance analysis
 6. Summarize findings by severity and recommend specific fixes
 
 Focus on actionable feedback. Prioritize drift and broken links over style issues.
@@ -105,14 +109,18 @@ description: >-
 tools: Read, Glob, Grep
 model: claude-haiku-4-5-20251001
 maxTurns: 10
+mcp_tools:
+  - docs_check_links
+  - docs_check_freshness
+  - docs_check_drift
 ---
 
 You are a lightweight documentation validator. When invoked:
 
 1. Identify which markdown files were recently changed
-2. Call `mcp__docs-mcp__docs_check_links` on changed files
-3. Call `mcp__docs-mcp__docs_check_freshness` to verify nothing is stale
-4. Call `mcp__docs-mcp__docs_check_drift` on the project
+2. Call `docs_check_links` on changed files
+3. Call `docs_check_freshness` to verify nothing is stale
+4. Call `docs_check_drift` on the project
 5. Report pass/fail with brief explanation
 
 Be concise. Only flag actual problems, not stylistic preferences.
@@ -123,8 +131,6 @@ Be concise. Only flag actual problems, not stylistic preferences.
 # ---------------------------------------------------------------------------
 # Doc skill templates (Claude Code — nlt-project-docs MCP prefix)
 # ---------------------------------------------------------------------------
-
-_NLT_DOCS = "mcp__nlt-project-docs__"
 
 _DOCS_REFRESH_SKILL = f"""\
 ---
