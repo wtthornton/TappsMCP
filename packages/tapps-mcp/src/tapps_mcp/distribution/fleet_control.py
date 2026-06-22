@@ -195,7 +195,7 @@ def stop_fleet(*, server_ids: list[str] | None = None) -> dict[str, Any]:
 _CANONICAL_UNIT = "tapps-mcp-fleet.service"
 
 
-def _port_listening(host: str, port: int, *, timeout: float = 1.0) -> bool:
+def _port_listening(host: str, port: int, *, timeout: float = 2.0) -> bool:
     """Return ``True`` when a TCP connection to ``host:port`` succeeds.
 
     A listening port means uvicorn is up and serving the MCP endpoint. This is
@@ -209,6 +209,26 @@ def _port_listening(host: str, port: int, *, timeout: float = 1.0) -> bool:
             return True
     except OSError:
         return False
+
+
+def _port_persistently_down(
+    host: str, port: int, *, attempts: int = 3, backoff: float = 0.5
+) -> bool:
+    """Return ``True`` only when ``host:port`` fails *every* probe attempt.
+
+    The watchdog restart severs every client's HTTP session, so a single
+    transient miss (e.g. the box is briefly CPU-bound during a commit or test
+    run) must not trip a full fleet restart. Re-probe with a short backoff and
+    declare a port down only when it is unreachable across all attempts.
+    """
+    import time
+
+    for attempt in range(attempts):
+        if _port_listening(host, port):
+            return False
+        if attempt < attempts - 1:
+            time.sleep(backoff)
+    return True
 
 
 def _systemd_unit_available(unit: str) -> bool:
@@ -243,7 +263,7 @@ def ensure_fleet_running() -> dict[str, Any]:
     unhealthy = [
         server_id
         for server_id, port in NLT_HTTP_FLEET_PORTS.items()
-        if not _port_listening(host, port)
+        if _port_persistently_down(host, port)
     ]
     if not unhealthy:
         return {"action": "none", "healthy": True, "unhealthy": []}

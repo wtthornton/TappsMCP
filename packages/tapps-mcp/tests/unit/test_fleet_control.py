@@ -56,8 +56,38 @@ def _listening(down_ports: set[int]) -> Any:
 
 
 class TestEnsureFleetRunning:
+    @pytest.fixture(autouse=True)
+    def _no_sleep(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        # Keep the re-probe backoff from slowing the suite down.
+        import time
+
+        monkeypatch.setattr(time, "sleep", lambda _s: None)
+
     def test_healthy_is_noop(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setattr(fleet_control, "_port_listening", _listening(set()))
+        result = fleet_control.ensure_fleet_running()
+        assert result == {"action": "none", "healthy": True, "unhealthy": []}
+
+    def test_transient_single_miss_does_not_restart(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        # One failed probe followed by success must NOT trip a fleet-wide restart
+        # (that would sever every client's HTTP session). Regression for the
+        # watchdog restarting a healthy fleet mid-commit (ADR-0024).
+        seen: dict[int, int] = {}
+
+        def _flaky(_host: str, port: int, **_kw: Any) -> bool:
+            seen[port] = seen.get(port, 0) + 1
+            return not (port == 8760 and seen[port] == 1)
+
+        monkeypatch.setattr(fleet_control, "_port_listening", _flaky)
+
+        def _no_restart(*_a: Any, **_kw: Any) -> Any:  # pragma: no cover - must not run
+            raise AssertionError("watchdog must not restart on a transient miss")
+
+        monkeypatch.setattr(fleet_control.subprocess, "run", _no_restart)
+        monkeypatch.setattr(fleet_control, "start_fleet", _no_restart)
+
         result = fleet_control.ensure_fleet_running()
         assert result == {"action": "none", "healthy": True, "unhealthy": []}
 
