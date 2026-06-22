@@ -1,6 +1,6 @@
 # DocsMCP
 
-Documentation generation and maintenance MCP server providing 38 tools for AI coding assistants.
+Documentation generation and maintenance MCP server providing 42 tools for AI coding assistants.
 
 ## Features
 

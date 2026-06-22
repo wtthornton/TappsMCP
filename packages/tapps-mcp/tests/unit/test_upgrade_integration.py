@@ -120,6 +120,53 @@ class TestUpgradeSkills:
 
 
 # ---------------------------------------------------------------------------
+# Tests: Doc-automation skills get refreshed on upgrade (not just init)
+# ---------------------------------------------------------------------------
+
+
+class TestUpgradeDocsAutomation:
+    """Verify ``tapps_upgrade`` refreshes the doc-orchestration skills."""
+
+    def test_docs_skills_created_on_claude_upgrade(self, tmp_path: Path) -> None:
+        from tapps_mcp.pipeline.upgrade import upgrade_pipeline
+
+        # pyproject with a docs-mcp dep triggers detect_docsmcp.
+        (tmp_path / ".claude").mkdir(parents=True, exist_ok=True)
+        (tmp_path / "pyproject.toml").write_text(
+            '[project]\nname = "x"\ndependencies = ["docs-mcp"]\n',
+            encoding="utf-8",
+        )
+
+        result = upgrade_pipeline(tmp_path, platform="claude")
+        claude_result = result["components"]["platforms"][0]
+        docs_info = claude_result["components"]["docs_automation"]
+        assert isinstance(docs_info, dict)
+        assert "tapps-docs-refresh" in docs_info["skills"]["created"]
+        assert (tmp_path / ".claude" / "skills" / "tapps-docs-refresh" / "SKILL.md").is_file()
+
+    def test_docs_skills_updated_on_cursor_upgrade(self, tmp_path: Path) -> None:
+        from tapps_mcp.pipeline.upgrade import upgrade_pipeline
+
+        (tmp_path / ".cursor").mkdir(parents=True, exist_ok=True)
+        (tmp_path / "pyproject.toml").write_text(
+            '[project]\nname = "x"\ndependencies = ["docs-mcp"]\n',
+            encoding="utf-8",
+        )
+        # Pre-create a stale doc skill so the upgrade must overwrite it.
+        stale = tmp_path / ".cursor" / "skills" / "tapps-docs-finish-task"
+        stale.mkdir(parents=True, exist_ok=True)
+        (stale / "SKILL.md").write_text("stale\n", encoding="utf-8")
+
+        result = upgrade_pipeline(tmp_path, platform="cursor")
+        cursor_result = result["components"]["platforms"][0]
+        docs_info = cursor_result["components"]["docs_automation"]
+        assert isinstance(docs_info, dict)
+        assert "tapps-docs-finish-task" in docs_info["skills"]["updated"]
+        refreshed = (stale / "SKILL.md").read_text(encoding="utf-8")
+        assert refreshed != "stale\n"
+
+
+# ---------------------------------------------------------------------------
 # Tests: Subagents get corrected frontmatter after upgrade
 # ---------------------------------------------------------------------------
 
@@ -899,8 +946,8 @@ class TestUpgradeClaudeMdStamp:
         """A stale stamp causes the upgrade to rewrite the obligations block
         and bump the stamp."""
         from tapps_mcp import __version__
-        from tapps_mcp.pipeline.upgrade import upgrade_pipeline
         from tapps_mcp.pipeline.tapps_obligations_block import wrap_with_markers
+        from tapps_mcp.pipeline.upgrade import upgrade_pipeline
         from tapps_mcp.prompts.prompt_loader import load_platform_rules
 
         _setup_claude_project(tmp_path)
@@ -921,8 +968,8 @@ class TestUpgradeClaudeMdStamp:
     def test_user_customizations_preserved_on_merge(self, tmp_path: Path) -> None:
         """User content outside the markered obligations block survives a
         stamp-bump merge."""
-        from tapps_mcp.pipeline.upgrade import upgrade_pipeline
         from tapps_mcp.pipeline.tapps_obligations_block import wrap_with_markers
+        from tapps_mcp.pipeline.upgrade import upgrade_pipeline
         from tapps_mcp.prompts.prompt_loader import load_platform_rules
 
         _setup_claude_project(tmp_path)
@@ -949,8 +996,8 @@ class TestUpgradeClaudeMdStamp:
         """A CLAUDE.md without a stamp gets the stamp added without losing
         user content."""
         from tapps_mcp import __version__
-        from tapps_mcp.pipeline.upgrade import upgrade_pipeline
         from tapps_mcp.pipeline.tapps_obligations_block import wrap_with_markers
+        from tapps_mcp.pipeline.upgrade import upgrade_pipeline
         from tapps_mcp.prompts.prompt_loader import load_platform_rules
 
         _setup_claude_project(tmp_path)
@@ -974,8 +1021,8 @@ class TestUpgradeClaudeMdStamp:
         """A non-semver stamp is treated as missing — upgrade prepends the
         canonical stamp without crashing on the malformed value."""
         from tapps_mcp import __version__
-        from tapps_mcp.pipeline.upgrade import upgrade_pipeline
         from tapps_mcp.pipeline.tapps_obligations_block import wrap_with_markers
+        from tapps_mcp.pipeline.upgrade import upgrade_pipeline
         from tapps_mcp.prompts.prompt_loader import load_platform_rules
 
         _setup_claude_project(tmp_path)
@@ -998,8 +1045,8 @@ class TestUpgradeClaudeMdStamp:
     def test_dry_run_reports_would_merge(self, tmp_path: Path) -> None:
         """Dry-run with a stale stamp surfaces ``would-merge`` and does not
         write to disk."""
-        from tapps_mcp.pipeline.upgrade import upgrade_pipeline
         from tapps_mcp.pipeline.tapps_obligations_block import wrap_with_markers
+        from tapps_mcp.pipeline.upgrade import upgrade_pipeline
         from tapps_mcp.prompts.prompt_loader import load_platform_rules
 
         _setup_claude_project(tmp_path)

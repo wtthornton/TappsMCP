@@ -424,6 +424,41 @@ Generate requested artifacts; summarize files written.
 # ---------------------------------------------------------------------------
 
 
+def detect_docsmcp(project_root: Path) -> bool:
+    """Return True when DocsMCP is importable or declared in project deps.
+
+    Mirrors the detection used by ``tapps_init`` so ``tapps_upgrade`` can refresh
+    doc automation under the same condition. Checks importability of ``docs_mcp``
+    first, then scans ``pyproject.toml`` / ``requirements*.txt`` for a docs-mcp dep.
+    """
+    try:
+        import importlib
+
+        importlib.import_module("docs_mcp")
+        return True
+    except ImportError:
+        pass
+
+    pyproject = project_root / "pyproject.toml"
+    if pyproject.exists():
+        try:
+            content = pyproject.read_text(encoding="utf-8")
+            if "docs-mcp" in content or "docs_mcp" in content:
+                return True
+        except OSError:
+            pass
+
+    for req_file in project_root.glob("requirements*.txt"):
+        try:
+            content = req_file.read_text(encoding="utf-8")
+            if "docs-mcp" in content or "docs_mcp" in content:
+                return True
+        except OSError:
+            pass
+
+    return False
+
+
 def generate_docs_agents(
     project_root: Path,
     platform: str,

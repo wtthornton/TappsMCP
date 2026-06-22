@@ -7,6 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [3.12.45] - 2026-06-22
+
+Minor: documentation-automation parity — doc-orchestration skills, runbook/postmortem generators, and the upgrade-refresh fix that ships them to consuming repos.
+
+### Added
+
+- **Doc-orchestration skills** — `tapps-docs-refresh`, `tapps-docs-bootstrap`, and `tapps-docs-finish-task` (Claude + Cursor) codify the full docs-refresh, new-project bootstrap, and end-of-doc-work validation workflows on the `nlt-project-docs` MCP. Existing `tapps-docs-{report,validate,generate}` skills were repointed from the stale `mcp__docs-mcp__` prefix to `nlt-project-docs`.
+- **DocsMCP `docs_generate_runbook` / `docs_generate_postmortem`** — operational doc generators (prerequisites/steps/rollback/escalation; timeline/impact/root-cause/action-items) backed by `generators/operations.py`, plus a shared `generators/writing_principles.py` reader-first block appended to onboarding/contributing. DocsMCP tool count 40 → **42** (platform total now 84).
+- **Pipeline integration** — a `documentation` checklist task type, a post-edit drift nudge after Python public-API edits (`docs_check_drift` / `docs_api_surface`), `linear-release-update` now requires `docs_release_gate` before posting, and session-start surfaces doc skills on the `docs` / `release` bundles.
+
+### Fixed
+
+- **`tapps_upgrade` did not refresh doc-automation skills** — `run_init` deployed the doc skills when DocsMCP was detected, but `tapps_upgrade` only regenerated the core skill set, so consuming repos never received new or updated doc skills on upgrade. The Claude and Cursor upgrade paths (live + dry-run) now call `generate_docs_automation(overwrite=True)` under the same `detect_docsmcp` gate, honoring `upgrade_skip_files`.
+
 ## [3.12.44] - 2026-06-19
 
 Patch: doctor surfaces HTTP MCP fleet failures and transport drift (ADR-0024) instead of letting consumer `nlt-*` servers fail opaquely.

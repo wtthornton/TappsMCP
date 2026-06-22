@@ -1,4 +1,4 @@
-<!-- tapps-claude-version: 3.12.44 -->
+<!-- tapps-claude-version: 3.12.45 -->
 # CLAUDE.md
 
 This file provides guidance to Claude Code when working with code in this repository.
@@ -16,7 +16,7 @@ This is a **uv workspace monorepo** with three packages plus an external depende
 | **tapps-brain** | [github.com/wtthornton/tapps-brain](https://github.com/wtthornton/tapps-brain) | Shared memory service (Docker + Postgres, HTTP at `localhost:8080`). Accessed from tapps-mcp via `BrainBridge` (`uv run tapps-mcp memory` CLI; optional `tapps_memory` MCP on `nlt-memory`, TAP-3895). See the [tapps-brain repo](https://github.com/wtthornton/tapps-brain) for storage internals. |
 | **tapps-core** | `packages/tapps-core/` | Shared infrastructure library (config, security, logging, knowledge, metrics, adaptive) |
 | **tapps-mcp** | `packages/tapps-mcp/` | Code quality MCP server (42 tools) |
-| **docs-mcp** | `packages/docs-mcp/` | Documentation MCP server (38 tools) |
+| **docs-mcp** | `packages/docs-mcp/` | Documentation MCP server (42 tools) |
 
 tapps-core no longer ships a `memory/` package — the re-export shims that previously delegated to tapps-brain were removed in [TAP-1995](https://linear.app/tappscodingagents/issue/TAP-1995). Callers now import from `tapps_brain` directly. The `BrainBridge` adapter lives at `tapps_core.brain_bridge` (single module, replacing the old `tapps_core.memory.*` layout). tapps-mcp re-exports from tapps-core for backward compatibility (`from tapps_mcp.config import load_settings` still works).
 
@@ -117,7 +117,7 @@ uv run tapps-mcp benchmark tools report|rank|calibrate
 - **Deterministic tools only** -- no LLM calls in the tool chain; same input → same output. Missing external checkers fall back to AST analysis and mark results `degraded: true`. See [ADR-0004](docs/adr/0004-deterministic-tools-only-contract.md).
 - **Architectural decisions** live in [docs/adr/](docs/adr/) — see the [index](docs/adr/README.md). When changing a load-bearing decision, supersede the ADR; do not edit history.
 
-<!-- BEGIN: tapps-obligations v3.12.44 -->
+<!-- BEGIN: tapps-obligations v3.12.45 -->
 # TAPPS Quality Pipeline
 
 This project uses the TAPPS MCP server for code quality enforcement.

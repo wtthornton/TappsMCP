@@ -836,6 +836,22 @@ def _upgrade_claude_code_dry_run(
             ),
         }
 
+    if _skipped("docs_automation", skip):
+        result["components"]["docs_automation"] = "skipped (upgrade_skip_files)"
+    else:
+        from tapps_mcp.pipeline.platform_docs_automation import (
+            CLAUDE_DOCS_SKILLS,
+            detect_docsmcp,
+        )
+
+        if detect_docsmcp(project_root):
+            result["components"]["docs_automation"] = {
+                "action": "would-write-managed-skills",
+                "managed_skills": sorted(CLAUDE_DOCS_SKILLS.keys()),
+            }
+        else:
+            result["components"]["docs_automation"] = "skipped (no docsmcp detected)"
+
     result["components"]["python_quality_rule"] = (
         "would-regenerate" if python_ok else "skipped (no python detected)"
     )
@@ -974,6 +990,21 @@ def _upgrade_claude_code_live(
         result["components"]["skills"] = "skipped (upgrade_skip_files)"
     else:
         result["components"]["skills"] = generate_skills(project_root, "claude", overwrite=True)
+
+    if _skipped("docs_automation", skip):
+        result["components"]["docs_automation"] = "skipped (upgrade_skip_files)"
+    else:
+        from tapps_mcp.pipeline.platform_docs_automation import (
+            detect_docsmcp,
+            generate_docs_automation,
+        )
+
+        if detect_docsmcp(project_root):
+            result["components"]["docs_automation"] = generate_docs_automation(
+                project_root, "claude", overwrite=True
+            )
+        else:
+            result["components"]["docs_automation"] = "skipped (no docsmcp detected)"
 
     if _skipped("python_quality_rule", skip):
         result["components"]["python_quality_rule"] = "skipped (upgrade_skip_files)"
@@ -1136,6 +1167,19 @@ def _upgrade_cursor_dry_run(
         "preserved_skills": _enumerate_preserved(skills_dir, managed_skills, is_dir_target=True),
     }
 
+    from tapps_mcp.pipeline.platform_docs_automation import (
+        CURSOR_DOCS_SKILLS,
+        detect_docsmcp,
+    )
+
+    if detect_docsmcp(project_root):
+        result["components"]["docs_automation"] = {
+            "action": "would-write-managed-skills",
+            "managed_skills": sorted(CURSOR_DOCS_SKILLS.keys()),
+        }
+    else:
+        result["components"]["docs_automation"] = "skipped (no docsmcp detected)"
+
 
 def _upgrade_cursor_live(
     project_root: Path,
@@ -1170,6 +1214,19 @@ def _upgrade_cursor_live(
         project_root, "cursor", overwrite=True
     )
     result["components"]["skills"] = generate_skills(project_root, "cursor", overwrite=True)
+
+    from tapps_mcp.pipeline.platform_docs_automation import (
+        detect_docsmcp,
+        generate_docs_automation,
+    )
+
+    if detect_docsmcp(project_root):
+        result["components"]["docs_automation"] = generate_docs_automation(
+            project_root, "cursor", overwrite=True
+        )
+    else:
+        result["components"]["docs_automation"] = "skipped (no docsmcp detected)"
+
     result["components"]["cursor_rule_types"] = generate_cursor_rules(project_root, overwrite=force)
 
 
