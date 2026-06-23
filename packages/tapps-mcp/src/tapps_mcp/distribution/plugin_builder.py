@@ -159,8 +159,9 @@ class PluginBuilder:
             "- Security floor: minimum 50/100 on security category\n\n"
             "## Workflow\n"
             "1. Call `tapps_session_start` at the beginning of each session\n"
-            "2. Use `tapps_quick_check` after editing Python files\n"
-            "3. Run `tapps_validate_changed` before declaring work complete\n"
+            "2. Call `tapps_lookup_docs` **before the first edit** that uses an external library API\n"
+            "3. Use `tapps_quick_check` after editing Python files\n"
+            "4. Run `tapps_validate_changed` before declaring work complete\n"
         )
         (rules_dir / "python-quality.md").write_text(rule_content, encoding="utf-8")
         self._result["components"]["rules"] = "created"

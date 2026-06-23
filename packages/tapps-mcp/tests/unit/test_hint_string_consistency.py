@@ -100,7 +100,17 @@ class TestGeneratedSurfacesEchoContract:
 
     def test_claude_post_edit_lookup_phrasing(self) -> None:
         assert POST_EDIT_IMPORT_LOOKUP_BASH in CLAUDE_HOOK_SCRIPTS["tapps-post-edit.sh"]
-        assert "before using those APIs" in POST_EDIT_IMPORT_LOOKUP_BASH
+        assert "before editing" in POST_EDIT_IMPORT_LOOKUP_BASH
+
+    def test_cursor_pipeline_lookup_before_edit(self) -> None:
+        body = CURSOR_RULE_TEMPLATES["tapps-pipeline.mdc"]
+        assert "before the first edit" in body
+        assert "lookup_docs_underused" in body
+
+    def test_cursor_python_quality_lookup_before_edit(self) -> None:
+        body = CURSOR_RULE_TEMPLATES["tapps-python-quality.mdc"]
+        assert "before the first edit" in body
+        assert "lookup_docs_underused" in body
 
     def test_subagent_start_no_legacy_tapps_memory_mcp(self) -> None:
         script = CLAUDE_HOOK_SCRIPTS["tapps-subagent-start.sh"]

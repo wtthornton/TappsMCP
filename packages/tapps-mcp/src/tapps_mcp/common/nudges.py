@@ -99,7 +99,8 @@ _TOOL_NUDGES: dict[str, list[NudgeRule]] = {
         ),
         (
             lambda called, _ctx: "tapps_lookup_docs" not in called,
-            "NEXT: Call tapps_lookup_docs() for any external libraries you will use.",
+            "NEXT: Call tapps_lookup_docs(library=..., topic=...) **before the first edit** "
+            "that uses an external library API — not after.",
             _IMPACT_LOW,
         ),
     ],

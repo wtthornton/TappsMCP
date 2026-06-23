@@ -1724,6 +1724,10 @@ def _print_next_steps(host: str, *, project_root: Path | None = None) -> None:
     """
     click.echo("")
     click.echo("Next steps:")
+    click.echo(
+        "  • Pipeline: tapps_lookup_docs **before** external API edits → "
+        "tapps_quick_check after edits → /tapps-finish-task before done"
+    )
     if host == "claude-code":
         click.echo("  1. Restart Claude Code (or run: claude mcp list)")
         click.echo("  2. Ask Claude to use TappsMCP tools")

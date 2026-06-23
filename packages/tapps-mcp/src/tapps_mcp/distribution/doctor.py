@@ -1512,7 +1512,9 @@ def _memory_skill_content_ok(skill_name: str, content: str) -> bool:
     if skill_name == "tapps-finish-task":
         if "tapps_validate_changed" not in lowered or "tapps_checklist" not in lowered:
             return False
-        return "tapps-mcp memory save" in lowered
+        return (
+            "tapps-mcp memory save" in lowered and "lookup_docs_underused" in lowered
+        )
     return False
 
 
@@ -1722,6 +1724,7 @@ def check_session_handoff_schema(project_root: Path) -> CheckResult:
 
 _CACHE_GATE_BLOCK_HINT_THRESHOLD = 20
 _PIPELINE_ENFORCE_SKIP_THRESHOLD = 0.30
+_PIPELINE_ENFORCE_LOOKUP_THRESHOLD = 0.20
 _PIPELINE_ENFORCE_MIN_LOOPS = 7
 
 
@@ -1736,9 +1739,14 @@ def check_pipeline_enforce_recommendations(project_root: Path) -> CheckResult:
 
     stats = compute_rolling_stats(project_root, window_days=_PROMOTE_WINDOW_DAYS)
     skip_rate = float(stats.get("gate_skip_rate", 0.0))
+    lookup_ratio = float(stats.get("lookup_docs_to_edit_ratio", 0.0))
     loops = int(stats.get("loops", 0))
     skip_pct = int(round(skip_rate * 100))
-    message = f"7d gate_skip_rate={skip_pct}% ({loops} loops in loop-metrics)"
+    lookup_pct = int(round(lookup_ratio * 100))
+    message = (
+        f"7d gate_skip_rate={skip_pct}% lookup_docs_to_edit_ratio={lookup_pct}% "
+        f"({loops} loops in loop-metrics)"
+    )
 
     engagement = _read_engagement_level(project_root) or "medium"
     settings = None
@@ -1764,6 +1772,16 @@ def check_pipeline_enforce_recommendations(project_root: Path) -> CheckResult:
                 f"Chronic gate skips ({skip_pct}% ≥ {_PIPELINE_ENFORCE_SKIP_THRESHOLD:.0%}) "
                 f"at {engagement} engagement — enforce validate-changed on commit"
             )
+
+    if (
+        loops >= _PIPELINE_ENFORCE_MIN_LOOPS
+        and lookup_ratio < _PIPELINE_ENFORCE_LOOKUP_THRESHOLD
+        and engagement in ("medium", "high")
+    ):
+        hints.append(
+            f"Low tapps_lookup_docs usage ({lookup_pct}% of edit loops) — call "
+            "tapps_lookup_docs before the first edit on external library APIs"
+        )
 
     cache_mode = _detect_cache_gate_mode(project_root)
     if settings is not None:
@@ -1805,6 +1823,69 @@ def check_pipeline_enforce_recommendations(project_root: Path) -> CheckResult:
         True,
         message + suffix,
         detail,
+    )
+
+
+def check_lookup_docs_discipline(project_root: Path) -> CheckResult:
+    """Verify lookup-first rules/skills are deployed and report chronic underuse."""
+    from tapps_mcp.pipeline.agent_contract import LOOKUP_FIRST_RULE_MARKERS
+    from tapps_mcp.tools.loop_metrics import (
+        _PROMOTE_WINDOW_DAYS,
+        compute_rolling_stats,
+    )
+
+    stale: list[str] = []
+    rule_paths = (
+        project_root / ".claude" / "rules" / "python-quality.md",
+        project_root / ".cursor" / "rules" / "tapps-python-quality.mdc",
+        project_root / ".cursor" / "rules" / "tapps-pipeline.mdc",
+    )
+    for path in rule_paths:
+        if not path.is_file():
+            continue
+        content = path.read_text(encoding="utf-8")
+        if not all(marker in content for marker in LOOKUP_FIRST_RULE_MARKERS):
+            try:
+                stale.append(str(path.relative_to(project_root.resolve())))
+            except ValueError:
+                stale.append(str(path))
+
+    for host_label, base in _tapps_skill_bases(project_root):
+        skill_path = base / "tapps-finish-task" / "SKILL.md"
+        if skill_path.is_file():
+            content = skill_path.read_text(encoding="utf-8")
+            if not _memory_skill_content_ok("tapps-finish-task", content):
+                stale.append(f"{host_label}/tapps-finish-task")
+
+    stats = compute_rolling_stats(project_root, window_days=_PROMOTE_WINDOW_DAYS)
+    lookup_ratio = float(stats.get("lookup_docs_to_edit_ratio", 0.0))
+    lookup_pct = int(round(lookup_ratio * 100))
+    loops = int(stats.get("loops", 0))
+
+    parts = [f"7d lookup_docs_to_edit_ratio={lookup_pct}% ({loops} loops)"]
+    detail_parts: list[str] = []
+    if stale:
+        detail_parts.append(
+            "Stale lookup-first scaffolding: "
+            + ", ".join(sorted(stale))
+            + ". Run: tapps-mcp upgrade --force"
+        )
+    if (
+        loops >= _PIPELINE_ENFORCE_MIN_LOOPS
+        and lookup_ratio < _PIPELINE_ENFORCE_LOOKUP_THRESHOLD
+    ):
+        detail_parts.append(
+            "Chronic lookup_docs_underused pattern — call tapps_lookup_docs before "
+            "the first edit on external library APIs; finish-task must clear "
+            "usage_gaps before Done."
+        )
+
+    ok = not stale
+    return CheckResult(
+        "Lookup-docs discipline",
+        ok,
+        "; ".join(parts),
+        "\n".join(detail_parts) if detail_parts else None,
     )
 
 
@@ -4720,6 +4801,7 @@ def _collect_checks(root: Path, *, quick: bool = False) -> list[CheckResult]:
     checks.append(check_cache_gate_block_hint(root))
     checks.append(check_install_git_hooks_hint(root))
     checks.append(check_pipeline_enforce_recommendations(root))
+    checks.append(check_lookup_docs_discipline(root))
     checks.append(check_cursor_loop_metrics_telemetry(root))
     checks.append(check_cursor_stop_completion_gate(root))
     checks.append(check_continuous_learning_v2_skill(root))

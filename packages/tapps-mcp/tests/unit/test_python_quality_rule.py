@@ -94,6 +94,8 @@ class TestEngagementLevelVariants:
         # tapps_research removed in EPIC-94; replaced by tapps_lookup_docs
         content = generate_python_quality_rule("medium")
         assert "tapps_lookup_docs" in content
+        assert "before the first edit" in content
+        assert "lookup_docs_underused" in content
 
     def test_low_uses_consider_language(self) -> None:
         content = generate_python_quality_rule("low")

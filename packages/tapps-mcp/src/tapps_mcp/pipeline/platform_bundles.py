@@ -17,6 +17,7 @@ from tapps_core.brain_bridge import BRAIN_PROFILE_SERVER
 from tapps_mcp import __version__
 from tapps_mcp.pipeline.agent_contract import (
     MEMORY_RECALL_SESSION_START,
+    PYTHON_QUALITY_SCORING_SECTION,
     VALIDATION_QUICK_VS_BATCH,
 )
 from tapps_mcp.pipeline.platform_docs_automation import (
@@ -655,24 +656,16 @@ paths:
 ---
 # Python Quality Rules (TappsMCP)
 
+REQUIRED: Call `tapps_lookup_docs(library, topic)` **before the first edit** that uses an
+external library API. Skipping triggers `lookup_docs_underused` in checklist `usage_gaps`.
+
 REQUIRED: Run `tapps_quick_check(file_path)` after editing Python files.
 
 REQUIRED: Call `tapps_validate_changed(file_paths="file1.py,file2.py")` with explicit paths before declaring work complete. Never call without `file_paths`. Default is quick mode; only use `quick=false` as a last resort.
 
-REQUIRED: Use `tapps_lookup_docs(library, topic)` before using unfamiliar library APIs.
+Do NOT mark tasks complete if quality gate has not passed or `usage_gaps` lists `lookup_docs_underused`.
 
-Do NOT mark tasks complete if quality gate has not passed.
-
-## Quality Scoring (7 Categories, 0-100 each)
-
-1. **Complexity** - Cyclomatic complexity (radon cc / AST fallback)
-2. **Security** - Bandit + pattern heuristics
-3. **Maintainability** - Maintainability index (radon mi / AST fallback)
-4. **Test Coverage** - Heuristic from matching test file existence
-5. **Performance** - Halstead metrics, perflint anti-patterns, nested loops, large functions, deep nesting
-6. **Structure** - Project layout (pyproject.toml, tests/, README, .git)
-7. **DevEx** - Developer experience (docs, AGENTS.md, tooling config)
-
+""" + PYTHON_QUALITY_SCORING_SECTION + """
 Any category scoring below 70 MUST be addressed immediately.
 """
 
@@ -683,22 +676,16 @@ paths:
 ---
 # Python Quality Rules (TappsMCP)
 
-Run `tapps_quick_check(file_path)` after editing Python files.
+Run tools in this order when editing Python:
 
-Use `tapps_lookup_docs(library, topic)` before using unfamiliar library APIs.
+1. **`tapps_lookup_docs(library, topic)` before the first edit** that uses an external
+   library API. Skipping triggers `lookup_docs_underused` in checklist `usage_gaps`.
+2. **`tapps_quick_check(file_path)` after each edit**
+3. **`tapps_validate_changed(file_paths="file1.py,file2.py")`** with explicit paths before declaring work complete. Never call without `file_paths`. Default is quick mode; only use `quick=false` as a last resort.
 
-Call `tapps_validate_changed(file_paths="file1.py,file2.py")` with explicit paths before declaring work complete. Never call without `file_paths`. Default is quick mode; only use `quick=false` as a last resort.
+Do not guess API signatures from training data.
 
-## Quality Scoring (7 Categories, 0-100 each)
-
-1. **Complexity** - Cyclomatic complexity (radon cc / AST fallback)
-2. **Security** - Bandit + pattern heuristics
-3. **Maintainability** - Maintainability index (radon mi / AST fallback)
-4. **Test Coverage** - Heuristic from matching test file existence
-5. **Performance** - Halstead metrics, perflint anti-patterns, nested loops, large functions, deep nesting
-6. **Structure** - Project layout (pyproject.toml, tests/, README, .git)
-7. **DevEx** - Developer experience (docs, AGENTS.md, tooling config)
-
+""" + PYTHON_QUALITY_SCORING_SECTION + """
 Any category scoring below 70 should be addressed.
 """
 
@@ -709,22 +696,13 @@ paths:
 ---
 # Python Quality Rules (TappsMCP)
 
-Consider running `tapps_quick_check(file_path)` after editing Python files.
+Consider this order when editing Python:
 
-Consider using `tapps_lookup_docs(library, topic)` for unfamiliar APIs.
+1. **`tapps_lookup_docs(library, topic)` before the first edit** on external library APIs
+2. **`tapps_quick_check(file_path)` after edits**
+3. **`tapps_validate_changed(file_paths="file1.py,file2.py")`** before declaring work complete
 
-Consider calling `tapps_validate_changed(file_paths="file1.py,file2.py")` with explicit paths before declaring work complete. Default is quick mode; only use `quick=false` as a last resort.
-
-## Quality Scoring (7 Categories, 0-100 each)
-
-1. **Complexity** - Cyclomatic complexity (radon cc / AST fallback)
-2. **Security** - Bandit + pattern heuristics
-3. **Maintainability** - Maintainability index (radon mi / AST fallback)
-4. **Test Coverage** - Heuristic from matching test file existence
-5. **Performance** - Halstead metrics, perflint anti-patterns, nested loops, large functions, deep nesting
-6. **Structure** - Project layout (pyproject.toml, tests/, README, .git)
-7. **DevEx** - Developer experience (docs, AGENTS.md, tooling config)
-
+""" + PYTHON_QUALITY_SCORING_SECTION + """
 Categories scoring below 70 may benefit from attention.
 """
 
