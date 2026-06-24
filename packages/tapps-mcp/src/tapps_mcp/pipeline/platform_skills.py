@@ -459,6 +459,16 @@ provide the full tool reference from this skill.
 | **tapps_doctor** | Diagnose configuration issues |
 | **tapps_set_engagement_level** | Change enforcement intensity (high/medium/low) |
 
+## Planning, metrics & audit
+| Tool | When to use it |
+|------|----------------|
+| **tapps_decompose** | Break a vague task into ordered, verifiable TAPPS tool-call steps before starting |
+| **tapps_pipeline** | Show TAPPS pipeline stage progress and the next recommended tool call |
+| **tapps_audit_campaign** | Plan, dispatch, or convert a file-scope audit campaign to a fix plan |
+| **tapps_usage** | Session gap report: tools called vs pipeline expectations (edits without validation, libraries used without lookup_docs) |
+| **tapps_dashboard** | Metrics dashboard: usage, gate pass rate, and trends |
+| **tapps_stats** | Per-tool usage statistics: call counts, success rates, latency percentiles |
+
 For function-level refactors use `/tapps-refactor`. Call `tapps_server_info` for the latest recommended workflow string.
 """,
     "tapps-init": """\
@@ -1363,6 +1373,16 @@ tapps_validate_changed (before complete, always pass file_paths), tapps_checklis
 | **tapps_dead_code** | Find unused code during refactoring |
 | **tapps_dependency_scan** | Check for CVEs before releases |
 | **tapps_dependency_graph** | Understand module dependencies, circular imports |
+
+## Planning, metrics & audit
+| Tool | When to use it |
+|------|----------------|
+| **tapps_decompose** | Break a vague task into ordered, verifiable TAPPS tool-call steps before starting |
+| **tapps_pipeline** | Show TAPPS pipeline stage progress and the next recommended tool call |
+| **tapps_audit_campaign** | Plan, dispatch, or convert a file-scope audit campaign to a fix plan |
+| **tapps_usage** | Session gap report: tools called vs pipeline expectations (edits without validation, libraries used without lookup_docs) |
+| **tapps_dashboard** | Metrics dashboard: usage, gate pass rate, and trends |
+| **tapps_stats** | Per-tool usage statistics: call counts, success rates, latency percentiles |
 
 For function-level refactors use `/tapps-refactor`. Call `tapps_server_info` for the latest recommended workflow string.
 """,
