@@ -181,6 +181,118 @@ def _verify_hook_manifest(project_root: Path) -> dict[str, Any]:
     }
 
 
+# Hooks retired across versions. Settings ``hooks`` entries are merge-only on
+# upgrade (existing entries are preserved, never removed), so a project that
+# wired one of these before it was superseded keeps running it forever unless
+# upgrade actively migrates the wiring. Renames swap the command in place
+# (matcher/structure preserved) so a safety guard is upgraded, never dropped;
+# unwires remove the entry for pure no-op hooks.
+_RETIRED_HOOK_RENAMES: dict[str, str] = {
+    # Fail-OPEN destructive guard -> fail-closed replacement (TAP-1785). The old
+    # hook had no ``[ -z "$PYBIN" ]`` guard, so a missing interpreter let
+    # ``rm -rf`` through (exit 0).
+    "tapps-pre-tooluse.sh": "tapps-pre-bash.sh",
+    "tapps-pre-tooluse.ps1": "tapps-pre-bash.ps1",
+}
+# No-op hooks to unwire (session capture went brain-native via
+# ``memory_index_session``, TAP-1999). The script file is still shipped inert by
+# canonical generation, so only the wiring is retired here.
+_RETIRED_HOOK_UNWIRE: frozenset[str] = frozenset(
+    {"tapps-memory-capture.sh", "tapps-memory-capture.ps1"}
+)
+# Retired hook *files* no longer shipped by canonical generation — safe to
+# delete outright (the rename above repoints the wiring to the replacement,
+# which canonical generation does ship).
+_RETIRED_HOOK_DELETE: frozenset[str] = frozenset(
+    {"tapps-pre-tooluse.sh", "tapps-pre-tooluse.ps1"}
+)
+
+
+def _migrate_retired_hooks(project_root: Path) -> dict[str, Any]:
+    """Rewire/strip retired hooks in an existing project's Claude settings.
+
+    * Renames a retired hook's command in place to its fail-closed replacement
+      (``tapps-pre-tooluse.sh`` -> ``tapps-pre-bash.sh``) so the destructive
+      guard is upgraded rather than silently dropped.
+    * Drops the wiring for pure no-op hooks (``tapps-memory-capture.sh``).
+    * Deletes retired hook script files canonical generation no longer ships.
+
+    Always returns a summary; never raises into the upgrade flow.
+    """
+    from tapps_mcp.pipeline.platform_hooks import (
+        ManagedJsonError,
+        _load_managed_json,
+        _write_managed_json,
+    )
+
+    summary: dict[str, Any] = {"renamed": [], "unwired": [], "removed_files": []}
+
+    for settings_name in ("settings.json", "settings.local.json"):
+        settings_file = project_root / ".claude" / settings_name
+        if not settings_file.exists():
+            continue
+        try:
+            config = _load_managed_json(settings_file)
+        except ManagedJsonError:
+            continue
+        hooks = config.get("hooks")
+        if not isinstance(hooks, dict):
+            continue
+        changed = False
+        for event in list(hooks.keys()):
+            entries = hooks.get(event)
+            if not isinstance(entries, list):
+                continue
+            new_entries: list[Any] = []
+            for entry in entries:
+                if not isinstance(entry, dict) or not isinstance(entry.get("hooks"), list):
+                    new_entries.append(entry)
+                    continue
+                kept_inner: list[Any] = []
+                for inner in entry["hooks"]:
+                    cmd = inner.get("command") if isinstance(inner, dict) else None
+                    if isinstance(cmd, str):
+                        for old, new in _RETIRED_HOOK_RENAMES.items():
+                            if old in cmd:
+                                inner["command"] = cmd.replace(old, new)
+                                cmd = inner["command"]
+                                summary["renamed"].append(f"{old} -> {new}")
+                                changed = True
+                        unwired = next((n for n in _RETIRED_HOOK_UNWIRE if n in cmd), None)
+                        if unwired is not None:
+                            summary["unwired"].append(unwired)
+                            changed = True
+                            continue  # drop this inner hook
+                    kept_inner.append(inner)
+                if kept_inner:
+                    entry["hooks"] = kept_inner
+                    new_entries.append(entry)
+                else:
+                    changed = True  # entry held only unwired hooks -> drop it
+            if new_entries:
+                hooks[event] = new_entries
+            else:
+                del hooks[event]
+                changed = True
+        if changed:
+            try:
+                _write_managed_json(settings_file, config)
+            except OSError:  # pragma: no cover - disk error
+                pass
+
+    hooks_dir = project_root / ".claude" / "hooks"
+    for name in sorted(_RETIRED_HOOK_DELETE):
+        retired_file = hooks_dir / name
+        if retired_file.is_file():
+            try:
+                retired_file.unlink()
+                summary["removed_files"].append(name)
+            except OSError:  # pragma: no cover - disk error
+                pass
+
+    return summary
+
+
 def _skipped(artifact: str, skip: set[str]) -> bool:
     return bool(_SKIP_TOKENS.get(artifact, frozenset()) & skip)
 
@@ -1015,6 +1127,11 @@ def _upgrade_claude_code_live(
                 ),
                 "manifest_verification": _verify_hook_manifest(project_root),
             }
+            # Migrate retired hook wiring: rename the fail-open destructive guard
+            # to its fail-closed replacement, unwire the no-op memory-capture
+            # hook, and delete retired files. Runs after generation (which
+            # redeploys the canonical replacement) so the rename target exists.
+            result["components"]["retired_hooks"] = _migrate_retired_hooks(project_root)
             from tapps_mcp.pipeline.platform_hooks import wire_memory_hooks
 
             result["components"]["memory_hooks"] = wire_memory_hooks(
