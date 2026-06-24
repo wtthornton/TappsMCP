@@ -7,6 +7,48 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [3.12.48] - 2026-06-24
+
+Patch: support-layer hygiene from the Linear cache-gate review — fail-closed
+destructive guard, retired-hook migration, and full removal of the no-op
+memory-capture subsystem.
+
+### Removed
+
+- **`tapps_init(memory_capture=)` opt-in subsystem** (TAP-1999). The
+  memory-capture Stop hook has been a no-op since session capture went
+  brain-native (`memory_index_session`). Removed the public `tapps_init`
+  param + pass-through chain, `generate_memory_capture_hook()`, the sh/ps1
+  templates, the `MEMORY_CAPTURE_HOOKS_CONFIG` dicts, and the canonical-manifest
+  entry. Canonical generation no longer ships the file (script counts 16 → 15).
+  No CLI flag exposed the param; the default was `False`.
+
+### Added
+
+- **Retired-hook migration in `tapps_upgrade`** — settings `hooks` entries are
+  merge-only, so existing projects kept running superseded hooks. Upgrade now
+  renames the fail-**open** `tapps-pre-tooluse.sh` wiring in place to the
+  fail-**closed** `tapps-pre-bash.sh` (guard upgraded, never dropped), unwires
+  and deletes the no-op `tapps-memory-capture.sh`.
+- **`check_retired_hooks` (doctor)** — flags a wired memory-capture hook or a
+  present `tapps-pre-tooluse.sh` as drift, with `tapps-mcp upgrade` remediation.
+- **Cross-language cache-key parity guard** — test that the bash Linear
+  cache-key derivation matches the authoritative Python `_resolve_cache_key`,
+  so drift becomes a CI failure instead of a silent cache miss.
+- **`tapps-tool-reference` skill** now lists previously-unbound tools
+  (`tapps_decompose`, `tapps_pipeline`, `tapps_audit_campaign`, `tapps_usage`,
+  `tapps_dashboard`, `tapps_stats`).
+
+### Fixed
+
+- **Destructive-command guard fail-open → fail-closed.** The deployed
+  `settings.json` wired the retired `tapps-pre-tooluse.sh`, which had no
+  `[ -z "$PYBIN" ]` guard — a missing interpreter let `rm -rf` through (exit 0).
+  Rewired to the fail-closed `tapps-pre-bash.sh` (TAP-1785).
+- **Linear routing precedence** — the `linear-standards` rule now states the
+  generic plugin `linear` skill does not satisfy the validate/cache gates; use
+  `linear-issue` / `linear-read`.
+
 ## [3.12.47] - 2026-06-22
 
 Patch: enforce lookup-first discipline in init/upgrade scaffolding and doctor.
