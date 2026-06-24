@@ -10,15 +10,14 @@ import shlex
 from typing import Any
 
 from tapps_mcp.pipeline.agent_contract import (
-    SUBAGENT_START_INTRO,
-    SUBAGENT_START_TOOLS_LINE,
     POST_EDIT_IMPORT_LOOKUP_BASH,
     POST_EDIT_PUBLIC_API_CALL_GRAPH_BASH,
     POST_EDIT_PUBLIC_API_DRIFT_BASH,
     POST_EDIT_QUICK_CHECK_BASH,
     STOP_FINISH_REMINDER,
+    SUBAGENT_START_INTRO,
+    SUBAGENT_START_TOOLS_LINE,
 )
-
 
 # ADR-0024: never reap the shared HTTP fleet (`serve --transport http`).
 _FLEET_HTTP_AWK_SKIP = " && !/--transport http|--transport=http/"
@@ -798,29 +797,6 @@ elif [ -n "$PYBIN" ]; then
 fi
 exit 0
 """,
-    "tapps-memory-capture.sh": """\
-#!/usr/bin/env bash
-# TappsMCP Stop hook - Session Quality Tracker (TAP-1999)
-# Session episodic memory migrated to brain-native memory_index_session.
-# Hook retained only for the stop_hook_active guard (prevents infinite loops).
-# IMPORTANT: Must check stop_hook_active to prevent infinite loops.
-INPUT=$(cat)
-PYBIN=$(command -v python3 2>/dev/null || command -v python 2>/dev/null)
-ACTIVE=$(echo "$INPUT" | "$PYBIN" -c \
-  "import sys,json; d=json.load(sys.stdin); print(d.get('stop_hook_active','false'))" \
-  2>/dev/null)
-if [ "$ACTIVE" = "True" ] || [ "$ACTIVE" = "true" ]; then
-  exit 0
-fi
-PROJECT_DIR="${CLAUDE_PROJECT_DIR:-.}"
-CAPTURE_DIR="$PROJECT_DIR/.tapps-mcp"
-MARKER="$CAPTURE_DIR/.validation-marker"
-if [ -f "$MARKER" ]; then
-  : # validation occurred; tapps_session_start handles brain indexing via memory_index_session
-fi
-# Session capture now handled by brain-native memory_index_session (TAP-1999).
-exit 0
-""",
 }
 
 # ---------------------------------------------------------------------------
@@ -1179,31 +1155,6 @@ try {
         $rawInput | python -m tapps_mcp.cli auto-capture --project-root $projDir 2>$null
     }
 } catch {}
-exit 0
-""",
-    "tapps-memory-capture.ps1": """\
-# TappsMCP Stop hook - Session Quality Tracker (TAP-1999)
-# Session episodic memory migrated to brain-native memory_index_session.
-# Hook retained only for the stop_hook_active guard (prevents infinite loops).
-# IMPORTANT: Must check stop_hook_active to prevent infinite loops.
-$rawInput = @($input) -join "`n"
-try {
-    $data = $rawInput | ConvertFrom-Json
-    $active = $data.stop_hook_active
-} catch {
-    $active = $false
-}
-if ($active -eq $true -or $active -eq "true" -or $active -eq "True") {
-    exit 0
-}
-$projDir = $env:CLAUDE_PROJECT_DIR
-if (-not $projDir) { $projDir = "." }
-$captureDir = "$projDir/.tapps-mcp"
-$marker = "$captureDir/.validation-marker"
-if (Test-Path $marker) {
-    # validation occurred; tapps_session_start handles brain indexing via memory_index_session
-}
-# Session capture now handled by brain-native memory_index_session (TAP-1999).
 exit 0
 """,
 }
@@ -1783,10 +1734,6 @@ MEMORY_AUTO_CAPTURE_HOOKS_CONFIG_PS: dict[str, list[dict[str, Any]]] = {
 }
 
 # ---------------------------------------------------------------------------
-# Memory capture hook config (Epic 34.5) — opt-in via memory_capture=True
-# ---------------------------------------------------------------------------
-
-# ---------------------------------------------------------------------------
 # Memory auto-recall hook templates (Epic 65.4)
 # Runs before agent prompt (PreCompact, SessionStart) to inject relevant memories.
 # Calls tapps-mcp memory recall with query from prompt/last user message.
@@ -2103,35 +2050,6 @@ CURSOR_MEMORY_AUTO_RECALL_HOOKS_CONFIG_PS: dict[str, list[dict[str, str]]] = {
     ],
     "preCompact": [
         {"command": PS1_PREFIX + ".cursor/hooks/tapps-memory-auto-recall.ps1"},
-    ],
-}
-
-MEMORY_CAPTURE_HOOKS_CONFIG: dict[str, list[dict[str, Any]]] = {
-    "Stop": [
-        {
-            "hooks": [
-                {
-                    "type": "command",
-                    "command": ".claude/hooks/tapps-memory-capture.sh",
-                },
-            ],
-        },
-    ],
-}
-
-MEMORY_CAPTURE_HOOKS_CONFIG_PS: dict[str, list[dict[str, Any]]] = {
-    "Stop": [
-        {
-            "hooks": [
-                {
-                    "type": "command",
-                    "command": (
-                        "powershell -NoProfile -ExecutionPolicy Bypass"
-                        " -File .claude/hooks/tapps-memory-capture.ps1"
-                    ),
-                },
-            ],
-        },
     ],
 }
 

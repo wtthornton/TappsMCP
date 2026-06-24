@@ -49,6 +49,12 @@ from tapps_mcp.pipeline.platform_hook_templates import (
     CURSOR_HOOKS_CONFIG_PS as _CURSOR_HOOKS_CONFIG_PS,
 )
 from tapps_mcp.pipeline.platform_hook_templates import (
+    CURSOR_MEMORY_AUTO_RECALL_HOOKS_CONFIG as _CURSOR_MEMORY_AUTO_RECALL_HOOKS_CONFIG,
+)
+from tapps_mcp.pipeline.platform_hook_templates import (
+    CURSOR_MEMORY_AUTO_RECALL_HOOKS_CONFIG_PS as _CURSOR_MEMORY_AUTO_RECALL_HOOKS_CONFIG_PS,
+)
+from tapps_mcp.pipeline.platform_hook_templates import (
     DESTRUCTIVE_GUARD_HOOKS_CONFIG as _DESTRUCTIVE_GUARD_HOOKS_CONFIG,
 )
 from tapps_mcp.pipeline.platform_hook_templates import (
@@ -91,13 +97,10 @@ from tapps_mcp.pipeline.platform_hook_templates import (
     MEMORY_AUTO_RECALL_HOOKS_CONFIG_PS as _MEMORY_AUTO_RECALL_HOOKS_CONFIG_PS,
 )
 from tapps_mcp.pipeline.platform_hook_templates import (
-    MEMORY_CAPTURE_HOOKS_CONFIG as _MEMORY_CAPTURE_HOOKS_CONFIG,
-)
-from tapps_mcp.pipeline.platform_hook_templates import (
-    MEMORY_CAPTURE_HOOKS_CONFIG_PS as _MEMORY_CAPTURE_HOOKS_CONFIG_PS,
-)
-from tapps_mcp.pipeline.platform_hook_templates import (
     PROMPT_HOOK_CONFIG as _PROMPT_HOOK_CONFIG,
+)
+from tapps_mcp.pipeline.platform_hook_templates import (
+    PS1_PREFIX,
 )
 from tapps_mcp.pipeline.platform_hook_templates import (
     SUPPORTED_CURSOR_HOOK_KEYS as _SUPPORTED_CURSOR_HOOK_KEYS,
@@ -106,25 +109,16 @@ from tapps_mcp.pipeline.platform_hook_templates import (
     TAPPS_MANAGED_CURSOR_HOOK_KEYS as _TAPPS_MANAGED_CURSOR_HOOK_KEYS,
 )
 from tapps_mcp.pipeline.platform_hook_templates import (
-    PS1_PREFIX,
-)
-from tapps_mcp.pipeline.platform_hook_templates import (
-    CURSOR_MEMORY_AUTO_RECALL_HOOKS_CONFIG as _CURSOR_MEMORY_AUTO_RECALL_HOOKS_CONFIG,
-)
-from tapps_mcp.pipeline.platform_hook_templates import (
-    CURSOR_MEMORY_AUTO_RECALL_HOOKS_CONFIG_PS as _CURSOR_MEMORY_AUTO_RECALL_HOOKS_CONFIG_PS,
-)
-from tapps_mcp.pipeline.platform_hook_templates import (
     _mcp_zombie_cleanup_standalone_script as _mcp_zombie_cleanup_standalone_script_fn,
+)
+from tapps_mcp.pipeline.platform_hook_templates import (
+    _memory_auto_recall_script as _memory_auto_recall_script_fn,
 )
 from tapps_mcp.pipeline.platform_hook_templates import (
     _memory_auto_recall_script_cursor as _memory_auto_recall_script_cursor_fn,
 )
 from tapps_mcp.pipeline.platform_hook_templates import (
     _memory_auto_recall_script_cursor_ps as _memory_auto_recall_script_cursor_ps_fn,
-)
-from tapps_mcp.pipeline.platform_hook_templates import (
-    _memory_auto_recall_script as _memory_auto_recall_script_fn,
 )
 from tapps_mcp.pipeline.platform_hook_templates import (
     _memory_auto_recall_script_ps as _memory_auto_recall_script_ps_fn,
@@ -249,7 +243,6 @@ def _filter_scripts(
         "tapps-subagent-stop": "SubagentStop",
         "tapps-session-end": "SessionEnd",
         "tapps-tool-failure": "PostToolUseFailure",
-        "tapps-memory-capture": "Stop",
         "tapps-memory-auto-capture": "Stop",
         "tapps-pre-bash": "PreToolUse",
         # TAP-975 pipeline-state reminder
@@ -959,83 +952,6 @@ def generate_cursor_hooks(
         "unknown_hook_keys": merge_stats["unknown_hook_keys"],
         "preserved_hook_keys": merge_stats["preserved_hook_keys"],
         "removed_hook_keys": [],
-    }
-
-
-def generate_memory_capture_hook(
-    project_root: Path,
-    *,
-    force_windows: bool | None = None,
-) -> dict[str, Any]:
-    """Generate the memory-capture Stop hook script and settings entry.
-
-    Writes the ``tapps-memory-capture`` script into ``.claude/hooks/`` and
-    merges a Stop hook entry into ``.claude/settings.json``.
-
-    This is opt-in via ``memory_capture=True`` in ``tapps_init``.
-
-    Args:
-        project_root: Target project root directory.
-        force_windows: Override platform detection for testing.
-
-    Returns a summary dict with ``script_created`` and ``hooks_action``.
-    """
-    win = force_windows if force_windows is not None else _is_windows()
-
-    # Select platform-appropriate script and config
-    if win:
-        script_name = "tapps-memory-capture.ps1"
-        script_content = _CLAUDE_HOOK_SCRIPTS_PS[script_name]
-        hooks_config = _MEMORY_CAPTURE_HOOKS_CONFIG_PS
-    else:
-        script_name = "tapps-memory-capture.sh"
-        script_content = _CLAUDE_HOOK_SCRIPTS[script_name]
-        hooks_config = _MEMORY_CAPTURE_HOOKS_CONFIG
-
-    hooks_dir = project_root / ".claude" / "hooks"
-    hooks_dir.mkdir(parents=True, exist_ok=True)
-
-    script_path = hooks_dir / script_name
-    script_path.write_text(script_content, encoding="utf-8")
-    if not win:
-        script_path.chmod(script_path.stat().st_mode | stat.S_IXUSR | stat.S_IXGRP)
-
-    # Merge hooks config into .claude/settings.json
-    settings_file = project_root / ".claude" / "settings.json"
-    config: dict[str, Any] = _load_managed_json(settings_file)
-
-    existing_hooks: dict[str, Any] = config.setdefault("hooks", {})
-    hooks_added = 0
-    for event, entries in hooks_config.items():
-        if event not in existing_hooks:
-            existing_hooks[event] = list(entries)
-            hooks_added += len(entries)
-        else:
-            # Check if memory capture hook is already registered
-            existing_cmds: set[str] = set()
-            for me in existing_hooks[event]:
-                if isinstance(me, dict):
-                    for h in me.get("hooks", [me]):
-                        if isinstance(h, dict):
-                            existing_cmds.add(h.get("command", ""))
-            for entry in entries:
-                entry_cmds: set[str] = set()
-                for h in entry.get("hooks", [entry]):
-                    if isinstance(h, dict):
-                        entry_cmds.add(h.get("command", ""))
-                if not entry_cmds & existing_cmds:
-                    existing_hooks[event].append(entry)
-                    hooks_added += 1
-
-    config["hooks"] = {
-        k: v for k, v in config["hooks"].items() if k not in _INVALID_CLAUDE_HOOK_KEYS
-    }
-    _write_managed_json(settings_file, config)
-
-    return {
-        "script_created": script_name,
-        "hooks_action": "created" if hooks_added > 0 else "skipped",
-        "hooks_added": hooks_added,
     }
 
 

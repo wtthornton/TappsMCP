@@ -84,14 +84,14 @@ class TestHookTemplates:
     """Verify hook template dicts have expected keys and content."""
 
     def test_claude_sh_scripts_count(self) -> None:
-        # 8 original + 3 Epic 36 + 1 memory-capture (Epic 34.5) +
-        # 1 post-validate + 1 post-report + 1 user-prompt-submit (TAP-975)
-        assert len(_CLAUDE_HOOK_SCRIPTS) == 16
+        # 8 original + 3 Epic 36 + 1 post-validate + 1 post-report +
+        # 1 user-prompt-submit (TAP-975). memory-capture removed (TAP-1999).
+        assert len(_CLAUDE_HOOK_SCRIPTS) == 15
 
     def test_claude_ps1_scripts_count(self) -> None:
-        # 8 original + 3 Epic 36 + 1 memory-capture (Epic 34.5) +
-        # 1 post-validate + 1 post-report + 1 user-prompt-submit (TAP-975)
-        assert len(_CLAUDE_HOOK_SCRIPTS_PS) == 16
+        # 8 original + 3 Epic 36 + 1 post-validate + 1 post-report +
+        # 1 user-prompt-submit (TAP-975). memory-capture removed (TAP-1999).
+        assert len(_CLAUDE_HOOK_SCRIPTS_PS) == 15
 
     def test_cursor_sh_scripts_count(self) -> None:
         assert len(_CURSOR_HOOK_SCRIPTS) == 3
@@ -271,7 +271,7 @@ class TestMiscGenerators:
         # PostToolUse, Stop, TaskCompleted, PreCompact, SubagentStart,
         # SubagentStop, plus TAP-975 UserPromptSubmit script.
         result = generate_claude_hooks(tmp_path, force_windows=False)
-        assert len(result["scripts_created"]) == 13
+        assert len(result["scripts_created"]) == 12
         assert result["engagement_level"] == "medium"
 
     def test_cursor_hooks_creates_scripts(self, tmp_path: Path) -> None:

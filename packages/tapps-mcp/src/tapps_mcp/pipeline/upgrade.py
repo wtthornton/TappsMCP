@@ -140,7 +140,6 @@ _CANONICAL_HOOK_MANIFEST: frozenset[str] = frozenset({
     "tapps-task-completed.sh",
     "tapps-subagent-start.sh",
     "tapps-subagent-stop.sh",
-    "tapps-memory-capture.sh",
     "tapps-memory-auto-capture.sh",
     # NOTE: tapps-session-end.sh and tapps-tool-failure.sh deploy ONLY at
     # engagement_level=high (SessionEnd / PostToolUseFailure events live in
@@ -195,16 +194,23 @@ _RETIRED_HOOK_RENAMES: dict[str, str] = {
     "tapps-pre-tooluse.ps1": "tapps-pre-bash.ps1",
 }
 # No-op hooks to unwire (session capture went brain-native via
-# ``memory_index_session``, TAP-1999). The script file is still shipped inert by
-# canonical generation, so only the wiring is retired here.
+# ``memory_index_session``, TAP-1999). memory-capture is fully retired — its
+# template, generator, and tapps_init opt-in were removed — so the wiring is
+# stripped AND the file is deleted (see ``_RETIRED_HOOK_DELETE``).
 _RETIRED_HOOK_UNWIRE: frozenset[str] = frozenset(
     {"tapps-memory-capture.sh", "tapps-memory-capture.ps1"}
 )
 # Retired hook *files* no longer shipped by canonical generation — safe to
-# delete outright (the rename above repoints the wiring to the replacement,
-# which canonical generation does ship).
+# delete outright. tapps-pre-tooluse is renamed (its wiring repoints to the
+# fail-closed replacement, which canonical generation ships); memory-capture is
+# gone entirely.
 _RETIRED_HOOK_DELETE: frozenset[str] = frozenset(
-    {"tapps-pre-tooluse.sh", "tapps-pre-tooluse.ps1"}
+    {
+        "tapps-pre-tooluse.sh",
+        "tapps-pre-tooluse.ps1",
+        "tapps-memory-capture.sh",
+        "tapps-memory-capture.ps1",
+    }
 )
 
 

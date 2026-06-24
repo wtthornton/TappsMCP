@@ -39,7 +39,7 @@ unknown files are present and leaves them alone.
 |---|---|---|
 | `.tapps-mcp/session-handoff.md` | `tapps-handoff-session` skill (or manual) | Cross-session continue block; read by `tapps-continue-session` on next chat. Brain mirror via `tapps-mcp memory save --key session-handoff`. |
 | `.tapps-mcp/metrics/tool_calls_*.jsonl` | TappsMCP tool handlers | Daily execution metrics (local leg of `dual` storage). Feeds `tapps_dashboard` / `tapps_stats` including `docs_metrics` and `session_funnel` sections. |
-| `.tapps-mcp/session-capture.json` | `tapps-memory-capture.sh` Stop hook (legacy) | Session summary written at session end; read at next session start. Superseded by `call_memory_index_session_start` (TAP-1999) but kept for backward compat. |
+| `.tapps-mcp/session-capture.json` | legacy (pre-TAP-1999) | Session summary from the removed `tapps-memory-capture.sh` Stop hook. Superseded by `call_memory_index_session_start` (TAP-1999); the hook, its templates, and the `tapps_init(memory_capture=)` opt-in were removed. `tapps_session_start` still reads a stale file if present, for backward compat. |
 | `.tapps-mcp/.linear-validate-sentinel` | `tapps-post-docs-validate.sh` | Confirms `docs_validate_linear_issue` ran before `save_issue` |
 | `.tapps-mcp/.linear-snapshot-sentinel-*` | `tapps-post-linear-snapshot-get.sh` | Per-key unlock for Linear list-issues cache gate |
 | `.tapps-mcp/.bypass-log.jsonl` | Hook bypass paths | Audit log of guarded-operation bypasses |

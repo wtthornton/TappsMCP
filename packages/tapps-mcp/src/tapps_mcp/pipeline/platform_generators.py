@@ -122,7 +122,6 @@ from tapps_mcp.pipeline.platform_hooks import (
     generate_cursor_hooks,
     generate_memory_auto_capture_hook,
     generate_memory_auto_recall_hook,
-    generate_memory_capture_hook,
 )
 from tapps_mcp.pipeline.platform_rules import (
     generate_bugbot_rules,
@@ -170,7 +169,6 @@ __all__ = [
     "generate_memory_auto_capture_hook",
     "generate_memory_auto_recall_hook",
     "generate_memory_auto_recall_hook",
-    "generate_memory_capture_hook",
     "generate_python_quality_rule",
     "generate_skills",
     "generate_subagent_definitions",
