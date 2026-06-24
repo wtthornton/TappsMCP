@@ -424,6 +424,7 @@ class TestFinishTaskSkill:
     def test_finish_task_clears_doc_lookup_gaps(self) -> None:
         for content in (CLAUDE_SKILLS["tapps-finish-task"], CURSOR_SKILLS["tapps-finish-task"]):
             assert "library_uses_without_lookup_docs" in content
+            assert "lookup_docs_underused" in content
             assert "libraries_without_lookup" in content
             assert "usage_gaps" in content
             assert "Doc gaps:" in content

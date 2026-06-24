@@ -1650,12 +1650,44 @@ class TestCheckLinearIssueSkillCurrent:
         assert "cursor" in result.message
 
 
+class TestCheckLookupDocsDiscipline:
+    """check_lookup_docs_discipline flags stale lookup-first scaffolding."""
+
+    _FRESH_RULE = (
+        "# rules\nCall tapps_lookup_docs before the first edit.\n"
+        "lookup_docs_underused blocks Done.\n"
+    )
+
+    def test_fresh_rules_pass(self, tmp_path):
+        from tapps_mcp.distribution.doctor import check_lookup_docs_discipline
+
+        rules = tmp_path / ".cursor" / "rules"
+        rules.mkdir(parents=True)
+        (rules / "tapps-python-quality.mdc").write_text(self._FRESH_RULE, encoding="utf-8")
+        result = check_lookup_docs_discipline(tmp_path)
+        assert result.ok is True
+
+    def test_stale_python_quality_rule_fails(self, tmp_path):
+        from tapps_mcp.distribution.doctor import check_lookup_docs_discipline
+
+        rules = tmp_path / ".cursor" / "rules"
+        rules.mkdir(parents=True)
+        (rules / "tapps-python-quality.mdc").write_text(
+            "# old\nUse tapps_lookup_docs for unfamiliar APIs.\n",
+            encoding="utf-8",
+        )
+        result = check_lookup_docs_discipline(tmp_path)
+        assert result.ok is False
+        assert "upgrade" in (result.detail or "").lower()
+
+
 class TestCheckFinishTaskSkill:
     """check_finish_task_skill covers the composite tapps-finish-task skill."""
 
     _BODY = (
         "---\nname: tapps-finish-task\n---\n"
-        "tapps_validate_changed\ntapps_checklist\ntapps-mcp memory save\n" * 5
+        "tapps_validate_changed\ntapps_checklist\nlookup_docs_underused\n"
+        "tapps-mcp memory save\n" * 5
     )
 
     def test_present_passes(self, tmp_path):

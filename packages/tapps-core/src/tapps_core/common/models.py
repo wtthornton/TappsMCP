@@ -65,10 +65,35 @@ class SecurityIssue(BaseModel):
 
 
 class Context7Diagnostic(BaseModel):
-    """Context7 API key availability check."""
+    """Context7 API liveness check.
+
+    ``status`` reports the *liveness* verdict, not mere key presence:
+    ``no_key`` (no key configured — llms.txt fallback active), ``available``
+    (key set + a live round-trip succeeded), ``unauthorized`` (key set but the
+    API rejected it — expired/revoked), ``unreachable`` (network/timeout/5xx or
+    circuit open), or ``unknown`` (probe skipped, e.g. quick mode / key-only).
+    """
 
     api_key_set: bool = Field(description="Whether TAPPS_MCP_CONTEXT7_API_KEY is configured.")
-    status: str = Field(description="'available' if key is set, 'no_key' otherwise.")
+    status: str = Field(
+        description="One of: no_key, available, unauthorized, unreachable, unknown.",
+    )
+    reachable: bool | None = Field(
+        default=None,
+        description="True/False if a live probe ran; None when no probe was attempted.",
+    )
+    http_status: int | None = Field(
+        default=None,
+        description="HTTP status from the probe round-trip, when available.",
+    )
+    latency_ms: float | None = Field(
+        default=None,
+        description="Probe round-trip latency in milliseconds, when a probe ran.",
+    )
+    detail: str | None = Field(
+        default=None,
+        description="Human-readable explanation of a non-available verdict.",
+    )
 
 
 class CacheDiagnostic(BaseModel):
@@ -110,9 +135,15 @@ class InstallDriftEntry(BaseModel):
 
     binary: str = Field(description="Binary name (e.g. 'tapps-mcp', 'docsmcp').")
     binary_path: str = Field(description="Resolved path of the global binary; '' if not found.")
-    binary_version: str = Field(description="Version reported by '<binary> --version'; '' if not found.")
-    source_version: str = Field(description="Version of the in-process package this server is running.")
-    drifted: bool = Field(description="True iff binary_version is non-empty and differs from source_version.")
+    binary_version: str = Field(
+        description="Version reported by '<binary> --version'; '' if not found."
+    )
+    source_version: str = Field(
+        description="Version of the in-process package this server is running."
+    )
+    drifted: bool = Field(
+        description="True iff binary_version is non-empty and differs from source_version."
+    )
     from_local_source: bool = Field(
         default=False,
         description="True when ``uv tool install`` used --from/--editable local path (TAP-4099).",

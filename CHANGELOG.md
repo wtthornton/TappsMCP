@@ -7,6 +7,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [3.12.47] - 2026-06-22
+
+Patch: enforce lookup-first discipline in init/upgrade scaffolding and doctor.
+
+### Added
+
+- **`check_lookup_docs_discipline` (doctor)** — fails when python-quality / pipeline rules or
+  `tapps-finish-task` skill lack lookup-first markers; reports 7d
+  `lookup_docs_to_edit_ratio`.
+- **Shared lookup-first contract strings** — `agent_contract.py` now owns Cursor pipeline
+  section, ordered python-quality actions, and `LOOKUP_FIRST_RULE_MARKERS` for doctor.
+
+### Changed
+
+- **Init/upgrade templates** — `.cursor/rules/tapps-pipeline.mdc` and
+  `tapps-python-quality.mdc`, `.claude/rules/python-quality.md`, post-edit hooks, session
+  nudges, and init next-steps all require `tapps_lookup_docs` **before the first edit** on
+  external library APIs; `lookup_docs_underused` blocks Done.
+- **`tapps-finish-task` skill** — step 3 explicitly clears `lookup_docs_underused` gaps.
+- **`check_pipeline_enforce_recommendations`** — warns when 7d lookup-to-edit ratio is below
+  20% at medium/high engagement.
+
 ## [3.12.46] - 2026-06-22
 
 Patch: call-graph agent UX, Cursor hook migration fix, and refreshed Cursor marketplace plugin.

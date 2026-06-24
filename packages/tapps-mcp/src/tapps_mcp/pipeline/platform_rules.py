@@ -14,8 +14,11 @@ if TYPE_CHECKING:
 
 from tapps_mcp.pipeline.agent_contract import (
     COPILOT_PROJECT_SCOPE_SECTION,
+    CURSOR_PIPELINE_BEFORE_EDIT_LOOKUP,
+    CURSOR_PYTHON_QUALITY_ACTIONS,
     MEMORY_RECALL_SESSION_START,
     MEMORY_SYSTEMS_BULLET,
+    PYTHON_QUALITY_SCORING_SECTION,
 )
 
 # ---------------------------------------------------------------------------
@@ -37,6 +40,7 @@ Call `tapps_session_start()` as the FIRST action in every session.
 {MEMORY_RECALL_SESSION_START}
 Read `.tapps-mcp/session-handoff.md` when continuing work.
 
+""" + CURSOR_PIPELINE_BEFORE_EDIT_LOOKUP + """\
 ## After Editing Python Files (REQUIRED)
 
 Call `tapps_quick_check(file_path)` after editing any Python file.
@@ -72,14 +76,7 @@ TappsMCP scores Python code across 7 categories (0-100 each):
 6. **Structure** - Project layout (pyproject.toml, tests/, README, .git)
 7. **DevEx** - Developer experience (docs, AGENTS.md, tooling config)
 
-## Actions
-
-- Call `tapps_quick_check(file_path)` on edited Python files
-- Use `tapps_lookup_docs(library, topic)` before using unfamiliar library APIs
-- Run `tapps_security_scan(file_path)` on security-sensitive changes
-- Any category scoring below 70 needs immediate attention
-- Call `tapps_score_file(file_path)` for full breakdown
-"""
+""" + CURSOR_PYTHON_QUALITY_ACTIONS
 
 _CURSOR_RULE_EXPERT = """\
 ---

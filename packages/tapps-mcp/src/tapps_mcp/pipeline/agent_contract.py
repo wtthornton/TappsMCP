@@ -13,7 +13,8 @@ POST_EDIT_QUICK_CHECK_MSG = (
 )
 POST_EDIT_IMPORT_LOOKUP_MSG = (
     "Imports detected ({libs}) — call tapps_lookup_docs(library=..., topic=...) "
-    "before using those APIs in this session."
+    "**before editing** code that uses those APIs. Retrospective lookups at "
+    "finish-task do not excuse skipped pre-edit lookups."
 )
 POST_EDIT_PUBLIC_API_DRIFT_MSG = (
     "Public API change detected in {file} — call docs_check_drift and "
@@ -71,7 +72,8 @@ TOOL_REFERENCE_CALL_GRAPH_ROWS = (
 # Bash hook templates use $LIBS / $FILE instead of Python format fields.
 POST_EDIT_IMPORT_LOOKUP_BASH = (
     "Imports detected ($LIBS) — call tapps_lookup_docs(library=..., topic=...) "
-    "before using those APIs in this session (TAP-1330)."
+    "**before editing** code that uses those APIs (TAP-1330). Retrospective "
+    "lookups at finish-task do not excuse skipped pre-edit lookups."
 )
 POST_EDIT_QUICK_CHECK_BASH = (
     "Edited: $FILE — run tapps_quick_check after this edit."
@@ -100,14 +102,58 @@ LOOKUP_GAP_RETRO_NOTE = (
     "retrospective MCP lookups clear telemetry gaps; cache hits are fine"
 )
 LOOKUP_TIMING_RULE = (
-    "Call tapps_lookup_docs before first use of each external library in a session; "
-    "retrospective lookups only clear telemetry gaps (ADR-0021), not missing knowledge."
+    "Call tapps_lookup_docs **before the first edit** that uses each external "
+    "library in a session; retrospective lookups only clear telemetry gaps "
+    "(ADR-0021), not missing knowledge."
 )
+
+LOOKUP_DOCS_UNDERUSED_GAP = "lookup_docs_underused"
+
+# Doctor / upgrade freshness markers for lookup-first python-quality rules.
+LOOKUP_FIRST_RULE_MARKERS = (
+    "before the first edit",
+    LOOKUP_DOCS_UNDERUSED_GAP,
+)
+
+CURSOR_PIPELINE_BEFORE_EDIT_LOOKUP = """\
+## Before Editing External Library APIs (REQUIRED)
+
+Call `tapps_lookup_docs(library, topic)` **before the first edit** that uses an
+external library API (`reportlab`, `pytest`, `yaml`, …). Cache hits are free.
+Skipping this triggers `lookup_docs_underused` in `tapps_checklist` `usage_gaps`.
+
+"""
+
+CURSOR_PYTHON_QUALITY_ACTIONS = """\
+## Actions (order matters)
+
+1. **`tapps_lookup_docs(library, topic)` before the first edit** that uses an external
+   library API. Skipping triggers `lookup_docs_underused` in checklist `usage_gaps`.
+2. **`tapps_quick_check(file_path)` after each Python edit**
+3. **`tapps_security_scan(file_path)`** on security-sensitive changes
+4. **`tapps_score_file(file_path)`** when any category scores below 70
+
+Do not guess API signatures from training data. Retrospective lookups at finish-task
+clear telemetry but do not excuse skipped pre-edit lookups.
+"""
+
+PYTHON_QUALITY_SCORING_SECTION = """\
+## Quality Scoring (7 Categories, 0-100 each)
+
+1. **Complexity** - Cyclomatic complexity (radon cc / AST fallback)
+2. **Security** - Bandit + pattern heuristics
+3. **Maintainability** - Maintainability index (radon mi / AST fallback)
+4. **Test Coverage** - Heuristic from matching test file existence
+5. **Performance** - Halstead metrics, perflint anti-patterns, nested loops, large functions, deep nesting
+6. **Structure** - Project layout (pyproject.toml, tests/, README, .git)
+7. **DevEx** - Developer experience (docs, AGENTS.md, tooling config)
+"""
 
 # SubagentStart hook (Claude) — no stale direct tapps-mcp tapps_memory routing
 SUBAGENT_START_INTRO = "[TappsMCP] This project uses TappsMCP for code quality."
 SUBAGENT_START_TOOLS_LINE = (
-    "Tools: tapps_quick_check, tapps_score_file, tapps_validate_changed. "
+    "Tools: tapps_lookup_docs (before external API edits), tapps_quick_check, "
+    "tapps_score_file, tapps_validate_changed. "
     "Memory: uv run tapps-mcp memory …; tapps_memory on nlt-memory when enabled (TAP-3895)."
 )
 
@@ -163,11 +209,12 @@ this repo or the linked tracker project is not. Specifically:
   user before proceeding."""
 
 _FINISH_TASK_DOC_GAPS_STEP3_BODY = """\
-3. **Clear doc-lookup gaps.** When `usage_gaps.gaps` includes `library_uses_without_lookup_docs` or `libraries_without_lookup` is non-empty:
+3. **Clear doc-lookup gaps.** When `usage_gaps.gaps` includes `lookup_docs_underused`,
+   `library_uses_without_lookup_docs`, or `libraries_without_lookup` is non-empty:
    - Call `{lookup_tool}` for **each** listed library (retrospective MCP lookups clear telemetry gaps; cache hits are fine — ADR-0021).
    - CLI `tapps-mcp lookup-docs` also records `.lookup-docs-events.jsonl` for the next session.
    - Re-run `{checklist_tool}` until `usage_gaps.gaps` is empty **and** `complete: true`.
-   Prefer lookup **before first use** of each external library in future sessions."""
+   Prefer lookup **before the first edit** that uses each external library in future sessions."""
 
 AGENTS_TEMPLATE_TOOL_COUNT_PLACEHOLDER = "{{TAPPS_MCP_TOOL_COUNT}}"
 AGENTS_TEMPLATE_MEMORY_SYSTEMS_PLACEHOLDER = "{{MEMORY_SYSTEMS_BULLET}}"
@@ -256,7 +303,12 @@ __all__ = [
     "COPILOT_PROJECT_SCOPE_SECTION",
     "DOC_GAP_TELEMETRY_NOTE",
     "LOOKUP_GAP_RETRO_NOTE",
+    "LOOKUP_DOCS_UNDERUSED_GAP",
+    "LOOKUP_FIRST_RULE_MARKERS",
     "LOOKUP_TIMING_RULE",
+    "CURSOR_PIPELINE_BEFORE_EDIT_LOOKUP",
+    "CURSOR_PYTHON_QUALITY_ACTIONS",
+    "PYTHON_QUALITY_SCORING_SECTION",
     "MEMORY_ACTIONS_ACCESS_NOTE",
     "MEMORY_RECALL_SESSION_START",
     "MEMORY_SYSTEMS_BULLET",
