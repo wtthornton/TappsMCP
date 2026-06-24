@@ -99,7 +99,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "bash .claude/hooks/tapps-pre-tooluse.sh"
+            "command": "bash .claude/hooks/tapps-pre-bash.sh"
           }
         ]
       },
@@ -196,14 +196,6 @@
           {
             "type": "command",
             "command": "bash .claude/hooks/tapps-stop.sh"
-          }
-        ]
-      },
-      {
-        "hooks": [
-          {
-            "type": "command",
-            "command": "bash .claude/hooks/tapps-memory-capture.sh"
           }
         ]
       },
