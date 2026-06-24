@@ -39,7 +39,6 @@ class TestClaudeHooksScripts:
             "tapps-pre-compact.sh",
             "tapps-subagent-start.sh",
             "tapps-subagent-stop.sh",
-            "tapps-memory-capture.sh",
         ]
         for name in expected:
             assert (hooks_dir / name).exists(), f"Missing: {name}"
@@ -428,8 +427,9 @@ class TestClaudeHooksMerge:
         """Returns a summary dict with scripts_created and hooks_action."""
         result = generate_claude_hooks(tmp_path, force_windows=False)
         assert "scripts_created" in result
-        # medium + post-validate/report + memory + user-prompt-submit hooks
-        assert len(result["scripts_created"]) == 13
+        # medium + post-validate/report + user-prompt-submit hooks
+        # (memory-capture removed, TAP-1999)
+        assert len(result["scripts_created"]) == 12
         assert result["hooks_action"] == "created"
         assert result["hooks_added"] > 0
 
@@ -460,7 +460,6 @@ class TestClaudeHooksScriptsWindows:
             "tapps-pre-compact.ps1",
             "tapps-subagent-start.ps1",
             "tapps-subagent-stop.ps1",
-            "tapps-memory-capture.ps1",
         ]
         for name in expected:
             assert (hooks_dir / name).exists(), f"Missing: {name}"
@@ -504,8 +503,9 @@ class TestClaudeHooksScriptsWindows:
     def test_result_dict(self, tmp_path):
         result = generate_claude_hooks(tmp_path, force_windows=True)
         assert "scripts_created" in result
-        # medium + post-validate/report + memory + user-prompt-submit hooks
-        assert len(result["scripts_created"]) == 13
+        # medium + post-validate/report + user-prompt-submit hooks
+        # (memory-capture removed, TAP-1999)
+        assert len(result["scripts_created"]) == 12
         assert all(n.endswith(".ps1") for n in result["scripts_created"])
         assert result["hooks_action"] == "created"
         assert result["hooks_added"] > 0

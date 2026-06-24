@@ -62,8 +62,11 @@ def test_pre_tooluse_renamed_in_place_to_pre_bash(tmp_path: Path) -> None:
     assert data["hooks"]["PreToolUse"][0]["matcher"] == "Bash"
 
 
-def test_memory_capture_unwired_and_empty_event_dropped(tmp_path: Path) -> None:
-    """The no-op memory-capture Stop hook is unwired; siblings are preserved."""
+def test_memory_capture_unwired_deleted_and_empty_event_dropped(tmp_path: Path) -> None:
+    """The fully-retired memory-capture hook is unwired AND its file deleted."""
+    hooks_dir = tmp_path / ".claude" / "hooks"
+    hooks_dir.mkdir(parents=True)
+    (hooks_dir / "tapps-memory-capture.sh").write_text("#!/usr/bin/env bash\nexit 0\n")
     sf = _write_settings(
         tmp_path,
         {
@@ -83,6 +86,9 @@ def test_memory_capture_unwired_and_empty_event_dropped(tmp_path: Path) -> None:
     assert "bash .claude/hooks/tapps-stop.sh" in stop
     assert not any("tapps-memory-capture.sh" in c for c in stop)
     assert "tapps-memory-capture.sh" in summary["unwired"]
+    # Fully retired (TAP-1999): no longer canonical-shipped, so the file is gone.
+    assert not (hooks_dir / "tapps-memory-capture.sh").exists()
+    assert "tapps-memory-capture.sh" in summary["removed_files"]
 
 
 def test_retired_pre_tooluse_file_deleted(tmp_path: Path) -> None:

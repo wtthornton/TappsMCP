@@ -478,7 +478,6 @@ The MCP tool exposes a richer parameter surface than the CLI (which auto-fills s
 | `overwrite_tech_stack_md` | bool | `false` | Overwrite existing TECH_STACK.md. |
 | `llm_engagement_level` | str \| null | `null` | Override LLM engagement level (`"high"` / `"medium"` / `"low"`); when unset, the wizard or `.tapps-mcp.yaml` decides. |
 | `agent_teams` | bool | `false` | Generate Agent Teams hooks (Claude Code only). |
-| `memory_capture` | bool | `false` | Wire the Stop-hook memory-capture script. |
 | `memory_auto_capture` | bool | `false` | Wire the auto-capture Stop hook (durable-fact extraction). |
 | `memory_auto_recall` | bool | `false` | Wire the auto-recall pre-prompt hook. |
 | `destructive_guard` | bool \| null | `null` | Install the PreToolUse Bash gate; default follows engagement level. |
