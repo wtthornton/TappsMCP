@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# tapps-mcp-hook-version: 3.12.45
-# tapps-mcp-hook-content-sha: cc3aecbd
+# tapps-mcp-hook-version: 3.12.48
+# tapps-mcp-hook-content-sha: 319e1ea6
 # TappsMCP SessionStart hook (startup/resume)
 # Directs the agent to call tapps_session_start as the first MCP action.
 # TAP-1379: Short-circuits on subsequent fires within the same Claude session
@@ -29,7 +29,7 @@ if command -v ps &>/dev/null && command -v awk &>/dev/null; then
     OLD_PIDS=$(ps -eo pid,etimes,cmd 2>/dev/null | \
         awk '$2 > 7200 && /tapps-mcp|docsmcp|tapps-platform/ && /serve/ && !/--transport http|--transport=http/ {print $1}')
     VENV_PIDS=$(ps -eo pid,cmd 2>/dev/null | \
-        awk '/\.venv\/bin\/(tapps-mcp|docsmcp|tapps-platform)/ && /serve/ && !/--transport http|--transport=http/ {print $1}')
+        awk '/\.venv\/bin\/(tapps-mcp|docsmcp|tapps-platform)/ && /serve/ {print $1}')
     NLT_DUP_PIDS=$(ps -eo pid,etimes,cmd 2>/dev/null | \
         awk '/serve --profile nlt-/ && !/--transport http|--transport=http/ {
             pid=$1; age=$2;
