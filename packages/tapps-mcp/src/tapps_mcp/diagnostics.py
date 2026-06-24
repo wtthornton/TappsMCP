@@ -2,10 +2,13 @@
 
 from __future__ import annotations
 
+import asyncio
+import json
 import os
 import shutil
 import subprocess
 import tempfile
+import time
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -23,12 +26,190 @@ if TYPE_CHECKING:
 
 
 def check_context7(api_key: SecretStr | None) -> Context7Diagnostic:
-    """Check whether a Context7 API key is configured."""
+    """Cheap key-presence check (no network). Prefer :func:`probe_context7`.
+
+    Returns ``unknown`` when a key is set because presence alone says nothing
+    about whether Context7 is reachable or the key is valid — call
+    :func:`probe_context7` for the live verdict.
+    """
     has_key = api_key is not None and len(api_key.get_secret_value()) > 0
     return Context7Diagnostic(
         api_key_set=has_key,
-        status="available" if has_key else "no_key",
+        status="unknown" if has_key else "no_key",
+        reachable=None,
+        detail=None if has_key else "No Context7 API key configured; llms.txt fallback active.",
     )
+
+
+# Live-probe machinery -------------------------------------------------------
+
+_PROBE_MARKER_NAME = ".context7-probe-marker"
+_PROBE_TTL_SECONDS = 900  # 15 min — bounds probe frequency across hot session_starts
+_PROBE_LIBRARY = "python"  # cheap, always-indexed resolve target
+
+
+def context7_probe_marker_path(project_root: Path) -> Path:
+    """Return the throttle-marker path for the Context7 liveness probe."""
+    return project_root / ".tapps-mcp" / _PROBE_MARKER_NAME
+
+
+def _read_probe_marker(
+    project_root: Path,
+    *,
+    ttl: int = _PROBE_TTL_SECONDS,
+) -> Context7Diagnostic | None:
+    """Return the cached probe verdict if a fresh marker exists, else ``None``."""
+    path = context7_probe_marker_path(project_root)
+    try:
+        raw = path.read_text(encoding="utf-8")
+    except OSError:
+        return None
+    try:
+        data = json.loads(raw)
+    except (ValueError, TypeError):
+        return None
+    ts = data.get("ts", 0)
+    if not isinstance(ts, (int, float)) or (time.time() - ts) > ttl:
+        return None
+    diag = data.get("diagnostic")
+    if not isinstance(diag, dict):
+        return None
+    try:
+        return Context7Diagnostic.model_validate(diag)
+    except Exception:
+        return None
+
+
+def _write_probe_marker(project_root: Path, diagnostic: Context7Diagnostic) -> None:
+    """Persist the probe verdict + timestamp. Best-effort; never raises."""
+    path = context7_probe_marker_path(project_root)
+    try:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        payload = {"ts": int(time.time()), "diagnostic": diagnostic.model_dump()}
+        path.write_text(json.dumps(payload), encoding="utf-8")
+    except OSError:
+        return
+
+
+def _status_from_error_message(message: str) -> int | None:
+    """Extract a trailing HTTP status code from a Context7Error message."""
+    token = message.strip().rstrip(".").split()[-1] if message.strip() else ""
+    if token.isdigit():
+        code = int(token)
+        if 100 <= code <= 599:
+            return code
+    return None
+
+
+async def probe_context7_async(
+    api_key: SecretStr | None,
+    *,
+    timeout: float = 3.0,
+    breaker: object | None = None,
+) -> Context7Diagnostic:
+    """Live round-trip against Context7, returning a 4-state liveness verdict.
+
+    Resolves a cheap, always-indexed library through the shared circuit
+    breaker. Never raises: every failure mode collapses into an
+    ``unreachable``/``unauthorized`` diagnostic.
+    """
+    has_key = api_key is not None and len(api_key.get_secret_value()) > 0
+    if not has_key:
+        return Context7Diagnostic(
+            api_key_set=False,
+            status="no_key",
+            reachable=None,
+            detail="No Context7 API key configured; llms.txt fallback active.",
+        )
+
+    import httpx
+
+    from tapps_core.knowledge.circuit_breaker import (
+        CircuitBreaker,
+        CircuitBreakerOpenError,
+        get_context7_circuit_breaker,
+    )
+    from tapps_core.knowledge.context7_client import Context7Client, Context7Error
+
+    cb: CircuitBreaker = (
+        breaker if isinstance(breaker, CircuitBreaker) else get_context7_circuit_breaker()
+    )
+    client = Context7Client(api_key=api_key, timeout=timeout)
+    start = time.monotonic()
+    try:
+        matches = await cb.call(client.resolve_library, _PROBE_LIBRARY)
+        latency = round((time.monotonic() - start) * 1000, 1)
+        return Context7Diagnostic(
+            api_key_set=True,
+            status="available",
+            reachable=True,
+            http_status=200,
+            latency_ms=latency,
+            detail=None if matches else "Reachable, but probe query returned no matches.",
+        )
+    except CircuitBreakerOpenError:
+        latency = round((time.monotonic() - start) * 1000, 1)
+        return Context7Diagnostic(
+            api_key_set=True,
+            status="unreachable",
+            reachable=False,
+            latency_ms=latency,
+            detail="Circuit breaker open after repeated Context7 failures.",
+        )
+    except Context7Error as exc:
+        latency = round((time.monotonic() - start) * 1000, 1)
+        code = _status_from_error_message(str(exc))
+        if code in (401, 403):
+            return Context7Diagnostic(
+                api_key_set=True,
+                status="unauthorized",
+                reachable=True,
+                http_status=code,
+                latency_ms=latency,
+                detail="Context7 rejected the API key (expired/revoked/invalid).",
+            )
+        return Context7Diagnostic(
+            api_key_set=True,
+            status="unreachable",
+            reachable=False,
+            http_status=code,
+            latency_ms=latency,
+            detail=str(exc),
+        )
+    except (TimeoutError, httpx.HTTPError) as exc:
+        latency = round((time.monotonic() - start) * 1000, 1)
+        return Context7Diagnostic(
+            api_key_set=True,
+            status="unreachable",
+            reachable=False,
+            latency_ms=latency,
+            detail=f"Network error reaching Context7: {exc}",
+        )
+    finally:
+        await client.close()
+
+
+def probe_context7(
+    project_root: Path,
+    api_key: SecretStr | None,
+    *,
+    force: bool = False,
+    timeout: float = 3.0,
+) -> Context7Diagnostic:
+    """Throttled, synchronous live probe — safe to call from sync CLI paths.
+
+    Returns a cached verdict when a fresh marker (< ``_PROBE_TTL_SECONDS``)
+    exists unless ``force`` is set (init/upgrade just wrote the key). Must not
+    be called from within a running event loop — use
+    :func:`probe_context7_async` there.
+    """
+    if not force:
+        cached = _read_probe_marker(project_root)
+        if cached is not None:
+            return cached
+    diagnostic = asyncio.run(probe_context7_async(api_key, timeout=timeout))
+    _write_probe_marker(project_root, diagnostic)
+    return diagnostic
 
 
 def check_cache(cache_dir: Path) -> CacheDiagnostic:
@@ -307,10 +488,19 @@ def check_install_drift() -> InstallDriftDiagnostic:
 def collect_diagnostics(
     api_key: SecretStr | None,
     cache_dir: Path,
+    *,
+    project_root: Path | None = None,
 ) -> StartupDiagnostics:
-    """Run all diagnostic checks and return a single ``StartupDiagnostics``."""
+    """Run all diagnostic checks and return a single ``StartupDiagnostics``.
+
+    Uses the throttled live :func:`probe_context7` so ``context7.status``
+    reflects real reachability, not mere key presence. The 15-minute marker
+    keeps this cheap across frequent session starts. Runs in a worker thread
+    (``asyncio.to_thread``) so the inner ``asyncio.run`` is safe.
+    """
+    root = project_root if project_root is not None else cache_dir.parent
     return StartupDiagnostics(
-        context7=check_context7(api_key),
+        context7=probe_context7(root, api_key),
         cache=check_cache(cache_dir),
         knowledge_base=check_knowledge_base(),
         install_drift=check_install_drift(),

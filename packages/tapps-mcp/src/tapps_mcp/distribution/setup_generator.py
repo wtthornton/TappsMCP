@@ -61,6 +61,8 @@ def _cursor_wrapper_rel(server_id: str = "tapps-mcp") -> Path:
     if server_id == "tapps-mcp":
         return _CURSOR_MCP_WRAPPER_REL
     return Path(f".cursor/bin/{server_id}-serve.sh")
+
+
 # Literal emitted in mcp.json env; wrapper treats this as "unset" when mapping tokens.
 _BRAIN_AUTH_TOKEN_ENV_PLACEHOLDER = "${TAPPS_BRAIN_AUTH_TOKEN}"  # noqa: S105
 
@@ -632,6 +634,7 @@ def _build_server_entry(
         apply_docs_via_brain_mcp_env,
         docs_via_brain_enabled,
     )
+
     if not docs_via_brain_enabled():
         env["TAPPS_MCP_CONTEXT7_API_KEY"] = "${TAPPS_MCP_CONTEXT7_API_KEY}"
     env = apply_docs_via_brain_mcp_env(env)
@@ -1177,7 +1180,6 @@ def _merge_nlt_config(
     return merged, enabled, commented
 
 
-
 def _serialize_nlt_mcp_config(
     merged: dict[str, Any],
     host: str,
@@ -1520,10 +1522,14 @@ def _generate_config(
             }
         }
 
-    include_docs_mcp = False if use_nlt_plugin else _should_include_docs_mcp(
-        with_docs_mcp,
-        existing=existing if config_path.exists() else None,
-        servers_key=servers_key,
+    include_docs_mcp = (
+        False
+        if use_nlt_plugin
+        else _should_include_docs_mcp(
+            with_docs_mcp,
+            existing=existing if config_path.exists() else None,
+            servers_key=servers_key,
+        )
     )
 
     migrated_env = _load_existing_env_from_other_scope(host, project_root, scope)
@@ -1549,9 +1555,17 @@ def _generate_config(
     if extra_env:
         servers_block = merged.get(servers_key, {})
         if isinstance(servers_block, dict):
-            for env_key in ("tapps-mcp", "nlt-build", "nlt-code-quality", "nlt-setup", "nlt-platform-admin"):
+            for env_key in (
+                "tapps-mcp",
+                "nlt-build",
+                "nlt-code-quality",
+                "nlt-setup",
+                "nlt-platform-admin",
+            ):
                 tapps_entry = servers_block.get(env_key)
-                if isinstance(tapps_entry, dict) and tapps_entry.get("env", {}).get("TAPPS_MCP_PROJECT_ROOT"):
+                if isinstance(tapps_entry, dict) and tapps_entry.get("env", {}).get(
+                    "TAPPS_MCP_PROJECT_ROOT"
+                ):
                     env = tapps_entry.get("env")
                     if not isinstance(env, dict):
                         env = {}
@@ -1591,9 +1605,13 @@ def _generate_config(
                     click.echo("  Would write streamableHttp URLs (no stdio wrappers).")
                 else:
                     for sid in NLT_SERVER_ORDER:
-                        click.echo(f"  Would write Cursor wrapper: {project_root / _cursor_wrapper_rel(sid)}")
+                        click.echo(
+                            f"  Would write Cursor wrapper: {project_root / _cursor_wrapper_rel(sid)}"
+                        )
             else:
-                click.echo(f"  Would write Cursor wrapper: {project_root / _CURSOR_MCP_WRAPPER_REL}")
+                click.echo(
+                    f"  Would write Cursor wrapper: {project_root / _CURSOR_MCP_WRAPPER_REL}"
+                )
         return True
 
     if host == "cursor" and transport != "http":
@@ -1763,6 +1781,53 @@ def _print_context7_hint_if_missing() -> None:
     click.echo("  Get a key: https://context7.com")
 
 
+def _verify_context7_live(root: Path, api_key_override: str | None = None) -> None:
+    """Live-probe Context7 after scaffolding so a bad key surfaces now, not mid-edit.
+
+    Warn-only: the llms.txt fallback keeps lookups working when Context7 is
+    down or unconfigured. Skipped when docs route through tapps-brain. When
+    ``api_key_override`` is given (init just received a ``--context7-api-key``),
+    that key is probed directly — it may not be exported in the process env yet.
+    """
+    from pydantic import SecretStr
+
+    from tapps_core.config.settings import load_settings
+    from tapps_core.knowledge.brain_docs import docs_via_brain_enabled
+    from tapps_mcp.diagnostics import probe_context7
+
+    try:
+        settings = load_settings(project_root=root)
+    except Exception:
+        return
+    if docs_via_brain_enabled(settings):
+        return
+
+    api_key = SecretStr(api_key_override) if api_key_override else settings.context7_api_key
+    if api_key is None:
+        return
+
+    diag = probe_context7(root, api_key, force=True)
+    if diag.status == "available":
+        latency = f"{diag.latency_ms:.0f}ms" if diag.latency_ms is not None else ""
+        click.echo(click.style(f"  Context7 verified — reachable ({latency}).", fg="green"))
+    elif diag.status == "unauthorized":
+        click.echo(
+            click.style(
+                "  Context7 key rejected (expired/revoked). Rotate TAPPS_MCP_CONTEXT7_API_KEY "
+                "— https://context7.com. Lookups will use the llms.txt fallback meanwhile.",
+                fg="yellow",
+            )
+        )
+    elif diag.status == "unreachable":
+        click.echo(
+            click.style(
+                f"  Context7 unreachable ({diag.detail or 'network error'}). "
+                "llms.txt fallback active; re-run doctor once connectivity returns.",
+                fg="yellow",
+            )
+        )
+
+
 # ---------------------------------------------------------------------------
 # Check mode
 # ---------------------------------------------------------------------------
@@ -1879,7 +1944,9 @@ def _host_config_exists(host: str, project_root: Path, scope: str = "project") -
     return _get_config_path(host, project_root, scope=scope).exists()
 
 
-def _filter_hosts_for_check(hosts: list[str], project_root: Path, scope: str = "project") -> list[str]:
+def _filter_hosts_for_check(
+    hosts: list[str], project_root: Path, scope: str = "project"
+) -> list[str]:
     """Limit ``init --check`` to hosts already configured in the project.
 
     Cursor-only consumers should not fail because Claude Code or VS Code is
@@ -2349,6 +2416,8 @@ def run_init(
         click.echo(
             f"  Add to your shell profile:  export TAPPS_MCP_CONTEXT7_API_KEY='{context7_api_key}'"
         )
+        if not dry_run and not check:
+            _verify_context7_live(root, api_key_override=context7_api_key)
 
     if engagement_level is not None and not dry_run and not check:
         _write_engagement_level_to_yaml(root, engagement_level)
@@ -2595,4 +2664,8 @@ def run_upgrade(
         click.echo(json.dumps(result, indent=2, default=str))
     else:
         _format_upgrade_result(result, dry_run=dry_run)
+        # Verify Context7 liveness post-upgrade (warn-only). Skipped for JSON
+        # output to keep stdout pure, and for dry runs (nothing changed).
+        if not dry_run:
+            _verify_context7_live(root)
     return bool(result.get("success", True))

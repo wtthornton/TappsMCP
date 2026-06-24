@@ -285,7 +285,10 @@ def check_json_config(
 
 def _validate_json_config(config_path: Path, servers_key: str) -> str | None:
     """Return an error message if *config_path* is invalid, else ``None``."""
-    from tapps_mcp.distribution.setup_generator import _is_valid_tapps_command, _load_mcp_config_json
+    from tapps_mcp.distribution.setup_generator import (
+        _is_valid_tapps_command,
+        _load_mcp_config_json,
+    )
 
     if not config_path.exists():
         return f"Not found: {config_path}"
@@ -753,7 +756,9 @@ def check_mcp_client_config(
                     if isinstance(servers, dict):
                         nlt_ids = list_nlt_server_ids_in_config(servers)
                         if nlt_ids:
-                            nlt_note = f"; NLT plugin: {len(nlt_ids)} enabled ({', '.join(nlt_ids)})"
+                            nlt_note = (
+                                f"; NLT plugin: {len(nlt_ids)} enabled ({', '.join(nlt_ids)})"
+                            )
                 except Exception:
                     pass
 
@@ -838,9 +843,7 @@ def check_mcp_config_unresolved_project_root(project_root: Path) -> CheckResult:
     ]
     broken: list[str] = []
     for path, servers_key, label in candidates:
-        for server_name, env_key, value in _unresolved_project_root_in_mcp_json(
-            path, servers_key
-        ):
+        for server_name, env_key, value in _unresolved_project_root_in_mcp_json(path, servers_key):
             broken.append(f"{label} [{server_name}].env.{env_key} = {value!r}")
     if not broken:
         return CheckResult(
@@ -1512,9 +1515,7 @@ def _memory_skill_content_ok(skill_name: str, content: str) -> bool:
     if skill_name == "tapps-finish-task":
         if "tapps_validate_changed" not in lowered or "tapps_checklist" not in lowered:
             return False
-        return (
-            "tapps-mcp memory save" in lowered and "lookup_docs_underused" in lowered
-        )
+        return "tapps-mcp memory save" in lowered and "lookup_docs_underused" in lowered
     return False
 
 
@@ -1791,9 +1792,7 @@ def check_pipeline_enforce_recommendations(project_root: Path) -> CheckResult:
     if cache_mode != "block":
         if viol_24h >= _CACHE_GATE_BLOCK_HINT_THRESHOLD:
             yaml_snippets.append("linear_enforce_cache_gate: block")
-            hints.append(
-                f"{viol_24h} Linear cache-gate misses in 24h while mode={cache_mode}"
-            )
+            hints.append(f"{viol_24h} Linear cache-gate misses in 24h while mode={cache_mode}")
         elif settings is not None and settings.linear_enforce_cache_gate_auto_promote:
             promote, _telemetry = should_auto_promote_cache_gate(
                 project_root,
@@ -1802,15 +1801,11 @@ def check_pipeline_enforce_recommendations(project_root: Path) -> CheckResult:
             )
             if promote:
                 yaml_snippets.append("linear_enforce_cache_gate: block")
-                hints.append(
-                    "TAP-1333 auto-promote criteria met (stable pipeline, low skip rate)"
-                )
+                hints.append("TAP-1333 auto-promote criteria met (stable pipeline, low skip rate)")
 
     detail_parts = list(hints)
     if yaml_snippets:
-        detail_parts.append(
-            "Suggested .tapps-mcp.yaml:\n" + "\n".join(yaml_snippets)
-        )
+        detail_parts.append("Suggested .tapps-mcp.yaml:\n" + "\n".join(yaml_snippets))
     detail = "\n".join(detail_parts)
 
     suffix = (
@@ -1870,10 +1865,7 @@ def check_lookup_docs_discipline(project_root: Path) -> CheckResult:
             + ", ".join(sorted(stale))
             + ". Run: tapps-mcp upgrade --force"
         )
-    if (
-        loops >= _PIPELINE_ENFORCE_MIN_LOOPS
-        and lookup_ratio < _PIPELINE_ENFORCE_LOOKUP_THRESHOLD
-    ):
+    if loops >= _PIPELINE_ENFORCE_MIN_LOOPS and lookup_ratio < _PIPELINE_ENFORCE_LOOKUP_THRESHOLD:
         detail_parts.append(
             "Chronic lookup_docs_underused pattern — call tapps_lookup_docs before "
             "the first edit on external library APIs; finish-task must clear "
@@ -1905,9 +1897,7 @@ def check_cursor_loop_metrics_telemetry(project_root: Path) -> CheckResult:
     rows = [r for r in read_loop_metrics(project_root) if int(r.get("ts", 0)) >= cutoff]
     legacy_unparsed = sum(1 for r in rows if _legacy_cursor_unparsed_callmcptool(r))
     callmcptool_rows = sum(
-        1
-        for r in rows
-        if "CallMcpTool" in [str(t) for t in (r.get("tools_used") or [])]
+        1 for r in rows if "CallMcpTool" in [str(t) for t in (r.get("tools_used") or [])]
     )
     resolved_gate_rows = 0
     for row in rows:
@@ -3346,7 +3336,11 @@ def _parse_version_tuple(ver_str: str) -> tuple[int, int, int]:
     """Parse ``'3.18.0'`` → ``(3, 18, 0)``.  Returns ``(0, 0, 0)`` on error."""
     try:
         parts = ver_str.split(".")[:3]
-        return (int(parts[0]), int(parts[1]) if len(parts) > 1 else 0, int(parts[2]) if len(parts) > 2 else 0)
+        return (
+            int(parts[0]),
+            int(parts[1]) if len(parts) > 1 else 0,
+            int(parts[2]) if len(parts) > 2 else 0,
+        )
     except Exception:
         return (0, 0, 0)
 
@@ -3359,7 +3353,7 @@ def _read_brain_floor_pin() -> str | None:
     requirement cannot be parsed.
     """
     try:
-        for req in (_requires("tapps-core") or []):
+        for req in _requires("tapps-core") or []:
             m = re.match(r"^tapps.brain\s*>=\s*([0-9]+\.[0-9]+(?:\.[0-9]+)?)", req, re.IGNORECASE)
             if m:
                 return m.group(1)
@@ -3514,9 +3508,9 @@ _TAPPS_MCP_MODE_TOOL_COUNTS: dict[str, int] = {
     # Eager set: session_start, validate_changed, score_file, quality_gate,
     # quick_check, lookup_docs, checklist, impact_analysis, usage, tapps_memory (10 total).
     # Deferred: 32 (full=42 total; quality=15 total; admin=13 total).
-    "full": 10,     # 10 eager daily-driver tools; 32 deferred via Tool Search (42 total)
+    "full": 10,  # 10 eager daily-driver tools; 32 deferred via Tool Search (42 total)
     "quality": 9,  # 9 eager (all 9 daily drivers are in the quality preset; 6 deferred)
-    "admin": 1,    # 1 eager (tapps_usage); 12 deferred
+    "admin": 1,  # 1 eager (tapps_usage); 12 deferred
 }
 _DOCS_MCP_TOOL_COUNT: int = 7  # TAP-1987: 7 eager tools on full serve; 35 deferred (42 total)
 _DEFAULT_TOOL_BUDGET: int = 20
@@ -3800,10 +3794,7 @@ def check_nlt_partial_enablement(root: Path) -> CheckResult:
         total_label = str(total) if total is not None else "?"
         lines.append(f"{server_id}: {eager} eager / {total_label} total")
 
-    summary = (
-        f"{len(nlt_ids)} server(s); combined eager={combined_eager}; "
-        + "; ".join(lines)
-    )
+    summary = f"{len(nlt_ids)} server(s); combined eager={combined_eager}; " + "; ".join(lines)
     if set(nlt_ids) == set(NLT_SERVER_ORDER):
         bundle = _resolved_mcp_bundle(root)
         if bundle == "full":
@@ -4570,8 +4561,7 @@ def _mcp_configs_reference_brain_auth(root: Path) -> bool:
                 continue
             env = spec.get("env") or {}
             if isinstance(env, dict) and (
-                env.get("TAPPS_MCP_MEMORY_BRAIN_AUTH_TOKEN")
-                or env.get("TAPPS_BRAIN_AUTH_TOKEN")
+                env.get("TAPPS_MCP_MEMORY_BRAIN_AUTH_TOKEN") or env.get("TAPPS_BRAIN_AUTH_TOKEN")
             ):
                 return True
     return False
@@ -4755,6 +4745,64 @@ def check_consumer_context7_env(root: Path) -> CheckResult:
     )
 
 
+def check_context7_live(root: Path, *, quick: bool = False) -> CheckResult:
+    """Live Context7 liveness probe (TAP — lookup-docs discipline).
+
+    Replaces key-presence guessing with a real round-trip verdict. Warn-only:
+    the llms.txt fallback means a dead Context7 degrades, it does not break.
+    Skipped in quick mode (network) and when docs route through tapps-brain.
+    """
+    from tapps_core.config.settings import load_settings
+    from tapps_core.knowledge.brain_docs import docs_via_brain_enabled
+    from tapps_mcp.diagnostics import probe_context7
+
+    if quick:
+        return CheckResult(
+            "context7_live",
+            True,
+            "Skipped (quick mode — run without --quick for a live probe)",
+        )
+
+    try:
+        settings = load_settings(project_root=root)
+    except Exception:
+        return CheckResult("context7_live", True, "Skipped (could not load settings)")
+
+    if docs_via_brain_enabled(settings):
+        return CheckResult(
+            "context7_live",
+            True,
+            "Skipped (docs_via_brain enabled — Context7 not used)",
+        )
+
+    diag = probe_context7(root, settings.context7_api_key, force=True)
+    latency = f"{diag.latency_ms:.0f}ms" if diag.latency_ms is not None else "n/a"
+
+    if diag.status == "no_key":
+        return CheckResult(
+            "context7_live",
+            True,
+            "No Context7 API key — using llms.txt fallback (set TAPPS_MCP_CONTEXT7_API_KEY for richer docs)",
+        )
+    if diag.status == "available":
+        return CheckResult("context7_live", True, f"Context7 reachable ({latency})")
+    if diag.status == "unauthorized":
+        return CheckResult(
+            "context7_live",
+            False,
+            "Context7 rejected the API key (expired/revoked/invalid)",
+            "Rotate TAPPS_MCP_CONTEXT7_API_KEY — get a key at https://context7.com.",
+        )
+    if diag.status == "unreachable":
+        return CheckResult(
+            "context7_live",
+            False,
+            f"Context7 unreachable ({diag.detail or 'network error'})",
+            "Transient — llms.txt fallback is active; re-run doctor once connectivity is restored.",
+        )
+    return CheckResult("context7_live", True, f"Context7 status: {diag.status}")
+
+
 def _collect_checks(root: Path, *, quick: bool = False) -> list[CheckResult]:
     """Collect all diagnostic checks for the given project root.
 
@@ -4834,6 +4882,7 @@ def _collect_checks(root: Path, *, quick: bool = False) -> list[CheckResult]:
     checks.append(check_brain_docs_tools(root))
     checks.append(check_mcp_operator_secrets(root))
     checks.append(check_consumer_context7_env(root))
+    checks.append(check_context7_live(root, quick=quick))
     if quick:
         checks.append(
             CheckResult(
