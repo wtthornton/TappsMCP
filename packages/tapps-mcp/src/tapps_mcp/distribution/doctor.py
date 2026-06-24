@@ -935,6 +935,52 @@ def check_claude_hook_scripts(project_root: Path) -> CheckResult:
     )
 
 
+# Retired hooks doctor should flag (remediated by tapps_upgrade). Keys are the
+# script basenames; values are the human-readable reason.
+_RETIRED_HOOK_REASONS: dict[str, str] = {
+    "tapps-pre-tooluse.sh": "fail-open destructive guard — superseded by fail-closed tapps-pre-bash.sh (TAP-1785)",
+    "tapps-memory-capture.sh": "no-op session-capture hook — brain-native since TAP-1999",
+}
+
+
+def check_retired_hooks(project_root: Path) -> CheckResult:
+    """Flag retired hooks still wired (or, for tapps-pre-tooluse, present).
+
+    The memory-capture hook ships inert via canonical generation, so it is only
+    a problem when *wired* into Stop; tapps-pre-tooluse is no longer shipped at
+    all, so its mere presence is drift. Both are fixed by ``tapps_upgrade``.
+    """
+    findings: list[str] = []
+    for name in ("settings.json", "settings.local.json"):
+        sf = project_root / ".claude" / name
+        if not sf.exists():
+            continue
+        try:
+            raw = sf.read_text(encoding="utf-8-sig")
+            data = json.loads(raw) if raw.strip() else {}
+        except (json.JSONDecodeError, OSError):
+            continue
+        if not isinstance(data, dict):
+            continue
+        for rel in _hook_paths_from_claude_settings(cast("dict[str, object]", data)):
+            base = Path(rel).name
+            if base in _RETIRED_HOOK_REASONS:
+                findings.append(f"{base} wired via {name} ({_RETIRED_HOOK_REASONS[base]})")
+    pre_tooluse = project_root / ".claude" / "hooks" / "tapps-pre-tooluse.sh"
+    if pre_tooluse.is_file():
+        findings.append(
+            f"tapps-pre-tooluse.sh present in .claude/hooks ({_RETIRED_HOOK_REASONS['tapps-pre-tooluse.sh']})"
+        )
+    if findings:
+        return CheckResult(
+            "Retired hooks",
+            False,
+            "; ".join(sorted(set(findings))),
+            "Run: tapps-mcp upgrade --host claude-code --force",
+        )
+    return CheckResult("Retired hooks", True, "No retired hooks wired or present")
+
+
 def check_claude_md(project_root: Path) -> CheckResult:
     """Check if CLAUDE.md exists and contains TAPPS reference.
 
@@ -4835,6 +4881,7 @@ def _collect_checks(root: Path, *, quick: bool = False) -> list[CheckResult]:
     checks.append(check_claude_md_stamp(root))
     checks.append(check_cursor_rules(root))
     checks.append(check_linear_standards_rule(root))
+    checks.append(check_retired_hooks(root))
     checks.append(check_autonomy_rule(root))
     # TAP-978: scoped quality rules — report presence + gate status.
     checks.append(check_security_rule(root))

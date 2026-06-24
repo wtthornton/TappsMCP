@@ -1069,9 +1069,12 @@ def _setup_platform(cfg: BootstrapConfig, state: _BootstrapState) -> None:
             if cfg.agent_teams:
                 state.result["agent_teams"] = generate_agent_teams_hooks(state.project_root)
             if cfg.memory_capture:
-                from tapps_mcp.pipeline.platform_hooks import generate_memory_capture_hook
-
-                state.result["memory_capture"] = generate_memory_capture_hook(state.project_root)
+                # TAP-1999: the memory-capture Stop hook is a no-op — session
+                # capture is brain-native via memory_index_session. The opt-in is
+                # retained for backward compat but no longer installs the hook,
+                # so fresh projects never wire a hook that only fires the
+                # stop_hook_active guard and does nothing else.
+                state.result["memory_capture"] = "deprecated_noop"
             # Epic 65.4/65.6: Wire auto-recall and auto-capture hooks from config or explicit param
             from tapps_mcp.pipeline.platform_hooks import wire_memory_hooks
 
