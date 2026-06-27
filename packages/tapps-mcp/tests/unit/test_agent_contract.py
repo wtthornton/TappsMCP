@@ -28,8 +28,10 @@ class TestAgentContractConstants:
         assert tapps_mcp_tool_count() == len(ALL_TOOL_NAMES)
 
     def test_post_edit_lookup_messages_unified(self) -> None:
-        assert "before using those APIs" in POST_EDIT_IMPORT_LOOKUP_MSG
-        assert "before using those APIs" in POST_EDIT_IMPORT_LOOKUP_BASH
+        assert "before editing" in POST_EDIT_IMPORT_LOOKUP_MSG
+        assert "code that uses those APIs" in POST_EDIT_IMPORT_LOOKUP_MSG
+        assert "before editing" in POST_EDIT_IMPORT_LOOKUP_BASH
+        assert "code that uses those APIs" in POST_EDIT_IMPORT_LOOKUP_BASH
         assert "before declaring complete" not in POST_EDIT_IMPORT_LOOKUP_BASH
         assert "before writing more code" not in POST_EDIT_IMPORT_LOOKUP_BASH
 
