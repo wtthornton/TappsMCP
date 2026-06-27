@@ -32,7 +32,7 @@ Seven rules every agent in this project should follow.
 | **tapps_usage** | When you want to see what you missed this session - per-session `gaps` + concrete `recommendations`. Inlined as `usage_gaps` on every `tapps_checklist` response. |
 | **tapps_quality_gate** | Before declaring work complete - ensures file passes preset |
 
-**For full tool reference** (42 tools with per-tool guidance), invoke the **tapps-tool-reference** skill when the user asks "what tools does TappsMCP have?", "when do I use tapps_score_file?", etc.
+**For full tool reference** (43 tools with per-tool guidance), invoke the **tapps-tool-reference** skill when the user asks "what tools does TappsMCP have?", "when do I use tapps_score_file?", etc.
 
 ---
 
@@ -99,6 +99,7 @@ See [ADR-0017](docs/adr/0017-function-level-call-graph-python-first.md).
 | **tapps_release_update** | Source release body from CHANGELOG/git, generate + validate via docs-mcp, return for Linear post via `linear-release-update` skill |
 | **tapps_pipeline** | Show TAPPS pipeline stage progress and next-step hint for the current session |
 | **tapps_decompose** | Decompose a high-level task into TappsMCP tool call steps for the current pipeline stage |
+| **tapps_domain_playbook** | Load a bundled domain checklist (testing, security, UX, etc.) and suggested TAPPS tool order — deterministic, not RAG |
 | **tapps_linear_snapshot_get / _put / _invalidate** | Cache-first Linear list reads (TAP-1224); orchestrated by the `linear-read` skill — never call directly without snapshot_get first |
 | **tapps_linear_count** | Count Linear issues for a `(team, project, state, label)` slice; backs the cache gate violation telemetry |
 | **tapps_server_info** | Lightweight server discovery (version, checkers, config) — prefer `tapps_session_start` which returns the same info plus session bootstrap |
@@ -182,9 +183,9 @@ The checklist uses this to decide which tools are required vs recommended vs opt
 
 `tapps_init` generates hooks, agents, skills, and rules for Claude Code and Cursor. See the generated files in `.claude/` and `.cursor/` directories.
 
-**Subagents:** tapps-reviewer (sonnet), tapps-researcher (haiku), tapps-validator (sonnet), tapps-review-fixer (sonnet + worktree).
+**Subagents:** tapps-reviewer (sonnet), tapps-researcher (haiku), tapps-validator (sonnet), tapps-review-fixer (sonnet + worktree), tapps-frontend-reviewer (sonnet).
 
-**Skills:** tapps-finish-task, tapps-handoff-session, tapps-continue-session, tapps-review-pipeline, tapps-research, tapps-security, tapps-memory, tapps-tool-reference, tapps-init, tapps-engagement, tapps-upgrade, tapps-apply-files.
+**Skills:** tapps-finish-task, tapps-handoff-session, tapps-continue-session, tapps-review-pipeline, tapps-research, tapps-security, tapps-memory, tapps-tool-reference, tapps-init, tapps-engagement, tapps-upgrade, tapps-apply-files, tapps-domain-* (security/testing/frontend), tapps-flow-* (develop/review/frontend).
 
 ## Agent ecosystem (using TappsMCP with other agent libraries)
 
@@ -313,7 +314,7 @@ For direct stdio connections you can expose only a subset of tools to keep the a
 - **disabled_tools** (deny list): tools to exclude from the full set. Applied when `enabled_tools` is not set. Env: `TAPPS_MCP_DISABLED_TOOLS`.
 - **tool_preset**: `full` (all tools), `core` (7 Tier-1 tools), `pipeline` (Tier 1 + Tier 2), or role presets: `reviewer`, `planner`, `frontend`, `developer` (Epic 79.5). NLT profiles: `nlt-build`, `nlt-memory`, `nlt-setup` (legacy: `nlt-code-quality`, `nlt-platform-admin`). Env: `TAPPS_MCP_TOOL_PRESET=nlt-build`.
 
-Empty or missing = all 42 tools (default, backward compatible). Invalid tool names in `enabled_tools` are ignored and logged. Recommended subsets by task/role and Docker tool filtering: see [docs/architecture/tool-budget.md](docs/architecture/tool-budget.md).
+Empty or missing = all 43 tools (default, backward compatible). Invalid tool names in `enabled_tools` are ignored and logged. Recommended subsets by task/role and Docker tool filtering: see [docs/architecture/tool-budget.md](docs/architecture/tool-budget.md).
 
 ---
 ## tapps_session_start vs tapps_init
@@ -370,11 +371,12 @@ Run `tapps-mcp doctor` to list wired matchers.
 
 ### Subagents (auto-generated)
 
-Four agent definitions per platform in `.claude/agents/` or `.cursor/agents/`:
+Four core quality subagents plus one domain reviewer per platform in `.claude/agents/` or `.cursor/agents/`:
 - **tapps-reviewer** (sonnet) - Reviews code quality and runs security scans after edits
 - **tapps-researcher** (sonnet) - Looks up documentation and researches best practices
 - **tapps-validator** (haiku) - Runs pre-completion validation on all changed files
 - **tapps-review-fixer** (sonnet, isolated worktree) - Combined score-fix-validate pass; designed for parallel multi-file pipelines
+- **tapps-frontend-reviewer** (sonnet) - UI/UX review via `tapps_domain_playbook` + lookup docs; closes with `/tapps-finish-task`
 
 ### Skills (auto-generated)
 

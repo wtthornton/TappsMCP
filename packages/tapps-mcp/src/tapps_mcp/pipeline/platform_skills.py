@@ -1726,6 +1726,14 @@ Post a structured Linear project update document when a new version is released.
 """,
 }
 
+from tapps_mcp.pipeline.platform_domain_skills import (  # noqa: E402
+    CLAUDE_DOMAIN_SKILLS,
+    CURSOR_DOMAIN_SKILLS,
+)
+
+CLAUDE_SKILLS.update(CLAUDE_DOMAIN_SKILLS)
+CURSOR_SKILLS.update(CURSOR_DOMAIN_SKILLS)
+
 
 def generate_skills(
     project_root: Path,

@@ -1031,11 +1031,15 @@ class StoryGenerator:
 
     @staticmethod
     def _enrich_experts(config: StoryConfig, enrichment: dict[str, Any]) -> None:
-        """No-op — expert system removed (EPIC-94).
+        """Enrich stories with bundled domain playbook excerpts (ADR-0025)."""
+        from docs_mcp.generators.domain_enrichment import enrich_expert_guidance
 
-        Previously enriched stories with TappsMCP domain expert guidance.
-        Retained as a no-op to preserve the enrichment pipeline interface.
-        """
+        context_parts = [
+            config.title or "",
+            config.purpose_and_intent or "",
+            " ".join(config.acceptance_criteria) if config.acceptance_criteria else "",
+        ]
+        enrich_expert_guidance("\n".join(context_parts), enrichment, limit=2)
 
     # -- helpers -----------------------------------------------------------
 

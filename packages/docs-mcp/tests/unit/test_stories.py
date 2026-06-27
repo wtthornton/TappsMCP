@@ -533,21 +533,28 @@ class TestStoryGeneratorAutoPopulate:
 # ---------------------------------------------------------------------------
 
 
-class TestStoryExpertEnrichmentNoOp:
-    """Issue #82: _enrich_experts is a no-op after EPIC-94 removal."""
+class TestStoryExpertEnrichmentPlaybooks:
+    """ADR-0025: _enrich_experts uses bundled domain playbooks."""
 
-    def test_enrich_experts_is_noop(self) -> None:
+    def test_enrich_experts_adds_testing_guidance(self) -> None:
         from docs_mcp.generators.stories import StoryConfig, StoryGenerator
 
-        config = StoryConfig(epic_number=1, story_number=1, title="Test")
+        config = StoryConfig(
+            epic_number=1,
+            story_number=1,
+            title="Add pytest coverage for checkout",
+        )
+        enrichment: dict[str, Any] = {}
+        StoryGenerator._enrich_experts(config, enrichment)
+        assert "expert_guidance" in enrichment
+
+    def test_enrich_experts_no_match_leaves_empty(self) -> None:
+        from docs_mcp.generators.stories import StoryConfig, StoryGenerator
+
+        config = StoryConfig(epic_number=1, story_number=2, title="Rename variable")
         enrichment: dict[str, Any] = {}
         StoryGenerator._enrich_experts(config, enrichment)
         assert "expert_guidance" not in enrichment
-
-
-# Note: TestStoryGeneratorExpertEnrichment was removed when the expert
-# enrichment system was deleted (EPIC-94). The dead test class has been
-# removed entirely rather than kept as commented-out code.
 
 
 # ---------------------------------------------------------------------------

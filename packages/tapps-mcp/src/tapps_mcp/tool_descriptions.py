@@ -106,6 +106,9 @@ TOOL_DESCRIPTIONS: dict[str, str] = {
     "tapps_decompose": (
         "Break a vague task into ordered, verifiable TAPPS tool-call steps."
     ),
+    "tapps_domain_playbook": (
+        "Return a bundled domain checklist and suggested TAPPS tool order (deterministic)."
+    ),
     "tapps_linear_snapshot_get": (
         "Cache-first Linear read: return cached issues or signal a cache miss."
     ),

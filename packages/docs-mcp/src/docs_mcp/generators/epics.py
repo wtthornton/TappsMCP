@@ -1404,11 +1404,16 @@ class EpicGenerator:
 
     @staticmethod
     def _enrich_experts(config: EpicConfig, enrichment: dict[str, Any]) -> None:
-        """No-op — expert system removed (EPIC-94).
+        """Enrich epics with bundled domain playbook excerpts (ADR-0025)."""
+        from docs_mcp.generators.domain_enrichment import enrich_expert_guidance
 
-        Previously enriched epics with TappsMCP domain expert guidance.
-        Retained as a no-op to preserve the enrichment pipeline interface.
-        """
+        context_parts = [
+            config.title or "",
+            config.purpose_and_intent or "",
+            config.goal or "",
+            " ".join(s.title for s in config.stories) if config.stories else "",
+        ]
+        enrich_expert_guidance("\n".join(context_parts), enrichment)
 
     # -- expert filtering (Epic 18.3) ---------------------------------------
 

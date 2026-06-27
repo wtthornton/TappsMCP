@@ -138,7 +138,7 @@ class TestSubagentTemplates:
     """Verify subagent template dicts."""
 
     def test_claude_agents_count(self) -> None:
-        assert len(CLAUDE_AGENTS) == 4
+        assert len(CLAUDE_AGENTS) == 5
 
     def test_cursor_agents_count(self) -> None:
         assert len(CURSOR_AGENTS) == 4

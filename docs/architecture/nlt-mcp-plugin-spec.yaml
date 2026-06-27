@@ -146,16 +146,19 @@ servers:
     serve_args: ["serve", "--profile", "nlt-build"]
     legacy_profile_alias: nlt-code-quality
     default_enabled: true
-    tool_count: 18
+    tool_count: 19
     eager_count: 9
     skills:
       - tapps-finish-task
       - tapps-review-pipeline
+      - tapps-domain-security
+      - tapps-domain-testing
+      - tapps-domain-frontend
+      - tapps-flow-develop
+      - tapps-flow-review
+      - tapps-flow-frontend
       - tapps-security
       - tapps-research
-      - tapps-score
-      - tapps-gate
-      - tapps-validate
     hooks:
       - tapps-after-edit # Cursor: remind quick_check
       - tapps-post-edit # Claude: remind quick_check
@@ -180,6 +183,7 @@ servers:
         - tapps_audit_campaign
         - tapps_call_graph
         - tapps_diff_impact
+        - tapps_domain_playbook
 
   nlt-memory:
     display_name: "Memory"

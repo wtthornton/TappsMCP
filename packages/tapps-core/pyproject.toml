@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "tapps-core"
-version = "3.12.48"
+version = "3.12.49"
 description = "Shared infrastructure library for Tapps platform (config, security, logging, knowledge, memory, metrics)"
 license = "MIT"
 requires-python = ">=3.12"
@@ -47,3 +47,6 @@ include = ["src/tapps_core/"]
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/tapps_core"]
+
+[tool.hatch.build.targets.wheel.force-include]
+"src/tapps_core/playbooks/data" = "tapps_core/playbooks/data"
