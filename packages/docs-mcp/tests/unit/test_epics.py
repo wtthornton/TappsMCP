@@ -813,21 +813,29 @@ class TestEpicGeneratorAutoPopulate:
 # ---------------------------------------------------------------------------
 
 
-class TestEpicExpertEnrichmentNoOp:
-    """Issue #82: _enrich_experts is a no-op after EPIC-94 removal."""
+class TestEpicExpertEnrichmentPlaybooks:
+    """ADR-0025: _enrich_experts uses bundled domain playbooks."""
 
-    def test_enrich_experts_is_noop(self) -> None:
+    def test_enrich_experts_adds_security_guidance(self) -> None:
         from docs_mcp.generators.epics import EpicConfig, EpicGenerator
 
-        config = EpicConfig(number=1, title="Test")
+        config = EpicConfig(
+            number=1,
+            title="API security hardening",
+            purpose_and_intent="We are doing this so that auth endpoints resist abuse.",
+        )
+        enrichment: dict[str, Any] = {}
+        EpicGenerator._enrich_experts(config, enrichment)
+        assert "expert_guidance" in enrichment
+        assert enrichment["expert_guidance"][0]["source"] == "domain_playbook"
+
+    def test_enrich_experts_no_match_leaves_empty(self) -> None:
+        from docs_mcp.generators.epics import EpicConfig, EpicGenerator
+
+        config = EpicConfig(number=2, title="Rename internal variable")
         enrichment: dict[str, Any] = {}
         EpicGenerator._enrich_experts(config, enrichment)
         assert "expert_guidance" not in enrichment
-
-
-# Note: TestEpicGeneratorExpertEnrichment was removed when the expert
-# enrichment system was deleted (EPIC-94). The dead test class has been
-# removed entirely rather than kept as commented-out code.
 
 
 # ---------------------------------------------------------------------------

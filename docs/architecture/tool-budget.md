@@ -41,7 +41,7 @@ Eager tapps-mcp tools (full `tapps-mcp serve`): `tapps_session_start`, `tapps_va
 
 | Server | Mode | Eager tools | Deferred tools | Total |
 |---|---|---|---|---|
-| `tapps-mcp` | full (no `--mode`) | 10 | 32 | 42 |
+| `tapps-mcp` | full (no `--mode`) | 10 | 33 | 43 |
 | `tapps-quality` | `--mode quality` | 9 | 6 | 15 |
 | `tapps-admin` | `--mode admin` | 1 | 12 | 13 |
 | `docs-mcp` | full `docsmcp serve` | 7 | 35 | 42 |
@@ -52,8 +52,8 @@ Eager docs-mcp tools (full serve): `docs_generate_changelog`, `docs_generate_epi
 `docs_save_linear_issue`, `docs_release_gate` (7 total). The `nlt-project-docs` profile
 registers 29 tools with **all** `defer_loading=True` (loaded via Tool Search).
 
-> **Note:** Full-catalog sizes are `ALL_TOOL_NAMES` / `ALL_DOCS_TOOL_NAMES` (42 each, 84
-> combined). NLT profiles expose subsets — e.g. `nlt-build` (18 tools, 9 eager),
+> **Note:** Full-catalog sizes are `ALL_TOOL_NAMES` / `ALL_DOCS_TOOL_NAMES` (43 / 42, 85
+> combined). NLT profiles expose subsets — e.g. `nlt-build` (19 tools, 9 eager),
 > `nlt-memory` (4 tools), `nlt-project-docs` (29 tools, 0 eager).
 
 ## Updating the budget
@@ -65,7 +65,7 @@ Set `doctor_tool_budget_limit` in `.tapps-mcp.yaml`:
 doctor_tool_budget_limit: 30
 ```
 
-If you intentionally run tapps-mcp in full mode (42 tools, 10 eager) and accept the context cost,
+If you intentionally run tapps-mcp in full mode (43 tools, 10 eager) and accept the context cost,
 raise the budget to 10 (or higher) to silence the WARN. If you want a stricter check, lower it to 15
 to enforce quality-preset-level discipline.
 

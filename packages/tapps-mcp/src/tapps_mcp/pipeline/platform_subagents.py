@@ -152,6 +152,34 @@ You are a TappsMCP review-fixer agent. For each file assigned to you:
 Be thorough but minimal - only change what is needed to pass the quality gate.
 Do not refactor beyond what the issues require.
 """,
+    "tapps-frontend-reviewer.md": """\
+---
+name: tapps-frontend-reviewer
+description: >-
+  Review UI/UX and frontend changes using domain playbooks and TAPPS quality
+  gates. Use for React, CSS, accessibility, or layout work.
+tools: Read, Glob, Grep, Write, Edit
+model: claude-sonnet-4-6
+maxTurns: 20
+permissionMode: acceptEdits
+memory: project
+skills:
+  - tapps-domain-frontend
+  - tapps-finish-task
+mcpServers:
+  tapps-mcp: {}
+---
+
+You are a TappsMCP frontend reviewer. When invoked:
+
+1. Call `mcp__tapps-mcp__tapps_domain_playbook` with `domain="user-experience"` (or alias `frontend`)
+2. Call `mcp__tapps-mcp__tapps_lookup_docs` for the UI library in use (React, Next.js, etc.)
+3. Review changed files against the playbook checklist (a11y, layout, UX)
+4. Call `mcp__tapps-mcp__tapps_quick_check` on any changed Python/TS files
+5. Summarize findings and recommend `/tapps-finish-task` before declaring done
+
+Optional persona voice: agency-agents Frontend Developer — TappsMCP owns all gates.
+""",
 }
 
 CURSOR_AGENTS: dict[str, str] = {
@@ -255,6 +283,31 @@ You are a TappsMCP review-fixer agent. For each file assigned to you:
 Be thorough but minimal - only change what is needed to pass the quality gate.
 Do not refactor beyond what the issues require.
 """,
+    "tapps-frontend-reviewer.md": """\
+---
+name: tapps-frontend-reviewer
+description: >-
+  Review UI/UX and frontend changes using domain playbooks and TAPPS quality
+  gates. Use for React, CSS, accessibility, or layout work.
+model: sonnet
+readonly: false
+is_background: false
+tools:
+  - code_search
+  - read_file
+  - edit_file
+---
+
+You are a TappsMCP frontend reviewer. When invoked:
+
+1. Call `tapps_domain_playbook` with `domain="user-experience"` (or alias `frontend`)
+2. Call `tapps_lookup_docs` for the UI library in use (React, Next.js, etc.)
+3. Review changed files against the playbook checklist (a11y, layout, UX)
+4. Call `tapps_quick_check` on any changed Python/TS files
+5. Summarize findings and recommend `/tapps-finish-task` before declaring done
+
+Optional persona voice: agency-agents Frontend Developer — TappsMCP owns all gates.
+""",
 }
 
 
@@ -275,7 +328,7 @@ def generate_subagent_definitions(
 ) -> dict[str, Any]:
     """Generate subagent definition files for the given platform.
 
-    Creates 4 agent ``.md`` files in ``.claude/agents/`` or ``.cursor/agents/``
+    Creates 5 agent ``.md`` files in ``.claude/agents/`` or ``.cursor/agents/``
     depending on the platform. Existing files are skipped to preserve
     user customizations unless *overwrite* is ``True`` (used by the
     upgrade path to refresh corrected frontmatter).

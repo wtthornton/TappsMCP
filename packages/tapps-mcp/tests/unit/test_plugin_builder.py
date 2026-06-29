@@ -87,7 +87,7 @@ class TestPluginAgents:
         agents_dir = plugin_dir / "agents"
         assert agents_dir.exists()
         agent_files = list(agents_dir.glob("*.md"))
-        assert len(agent_files) == 4
+        assert len(agent_files) == 5
 
     def test_agent_names(self, plugin_dir: Path) -> None:
         builder = PluginBuilder(output_dir=plugin_dir)

@@ -217,6 +217,16 @@ TASK_TOOL_MAP: dict[str, dict[str, list[str]]] = {
         "recommended": ["tapps_checklist"],
         "optional": ["tapps_lookup_docs"],
     },
+    "qa": {
+        "required": ["tapps_validate_changed", "tapps_security_scan", "tapps_quality_gate"],
+        "recommended": ["tapps_diff_impact", "tapps_checklist"],
+        "optional": ["tapps_score_file"],
+    },
+    "frontend": {
+        "required": ["tapps_lookup_docs", "tapps_quality_gate"],
+        "recommended": ["tapps_score_file", "tapps_validate_changed", "tapps_checklist"],
+        "optional": ["tapps_quick_check"],
+    },
 }
 
 # High engagement: more tools required (stricter)
@@ -283,6 +293,21 @@ TASK_TOOL_MAP_HIGH: dict[str, dict[str, list[str]]] = {
         "recommended": [],
         "optional": ["tapps_lookup_docs"],
     },
+    "qa": {
+        "required": [
+            "tapps_validate_changed",
+            "tapps_security_scan",
+            "tapps_quality_gate",
+            "tapps_checklist",
+        ],
+        "recommended": ["tapps_diff_impact", "tapps_score_file"],
+        "optional": [],
+    },
+    "frontend": {
+        "required": ["tapps_lookup_docs", "tapps_quality_gate", "tapps_validate_changed"],
+        "recommended": ["tapps_score_file", "tapps_checklist"],
+        "optional": ["tapps_quick_check"],
+    },
 }
 
 # Low engagement: fewer tools required (lighter)
@@ -332,6 +357,16 @@ TASK_TOOL_MAP_LOW: dict[str, dict[str, list[str]]] = {
         "recommended": [],
         "optional": ["tapps_checklist", "tapps_lookup_docs"],
     },
+    "qa": {
+        "required": ["tapps_quality_gate", "tapps_security_scan"],
+        "recommended": ["tapps_validate_changed", "tapps_checklist"],
+        "optional": ["tapps_diff_impact"],
+    },
+    "frontend": {
+        "required": ["tapps_lookup_docs"],
+        "recommended": ["tapps_quality_gate", "tapps_quick_check"],
+        "optional": ["tapps_checklist"],
+    },
 }
 
 # Alias for medium (same as TASK_TOOL_MAP)
@@ -355,6 +390,14 @@ TASK_TYPE_REASONS: dict[str, str] = {
         "Project documentation work: invoke /tapps-docs-bootstrap or /tapps-docs-refresh "
         "skills (nlt-project-docs). Finish with /tapps-docs-finish-task for drift, links, "
         "and completeness checks."
+    ),
+    "qa": (
+        "QA and test-validation work: use /tapps-domain-testing or task_type=qa; "
+        "require validate_changed, security_scan, and diff_impact when tests are in scope."
+    ),
+    "frontend": (
+        "Frontend/UX work: use /tapps-domain-frontend or /tapps-flow-frontend; "
+        "lookup_docs for UI libraries before implementation."
     ),
 }
 

@@ -1,6 +1,6 @@
 """Tests for subagent definition generation (Story 12.6).
 
-Verifies that generate_subagent_definitions() creates 4 agent .md files per
+Verifies that generate_subagent_definitions() creates 5 agent .md files per
 platform with correct YAML frontmatter format differences between Claude Code
 and Cursor.
 """
@@ -20,6 +20,7 @@ class TestClaudeAgents:
         assert (agents_dir / "tapps-researcher.md").exists()
         assert (agents_dir / "tapps-validator.md").exists()
         assert (agents_dir / "tapps-review-fixer.md").exists()
+        assert (agents_dir / "tapps-frontend-reviewer.md").exists()
 
     def test_reviewer_has_comma_separated_tools(self, tmp_path):
         generate_subagent_definitions(tmp_path, "claude")
@@ -230,6 +231,7 @@ class TestCursorAgents:
         assert (agents_dir / "tapps-researcher.md").exists()
         assert (agents_dir / "tapps-validator.md").exists()
         assert (agents_dir / "tapps-review-fixer.md").exists()
+        assert (agents_dir / "tapps-frontend-reviewer.md").exists()
 
     def test_review_fixer_has_edit_tools(self, tmp_path):
         generate_subagent_definitions(tmp_path, "cursor")

@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "docs-mcp"
-version = "3.12.48"
+version = "3.12.49"
 description = "MCP server for automated documentation generation, validation, and maintenance"
 readme = "docs/README.md"
 license = "MIT"

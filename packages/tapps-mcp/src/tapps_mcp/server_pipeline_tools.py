@@ -1693,3 +1693,12 @@ def register(mcp_instance: FastMCP, allowed_tools: frozenset[str]) -> None:
             annotations=_ANNOTATIONS_READ_ONLY,
             meta=_META_DEFERRED,
         )
+    if "tapps_domain_playbook" in allowed_tools:
+        from tapps_mcp.tools.domain_playbook import tapps_domain_playbook
+
+        register_tool(
+            mcp_instance,
+            tapps_domain_playbook,
+            annotations=_ANNOTATIONS_READ_ONLY,
+            meta=_META_DEFERRED,
+        )

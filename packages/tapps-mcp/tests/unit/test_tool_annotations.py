@@ -172,9 +172,9 @@ class TestAnnotationCategories:
         # + 1 tapps_linear_count (TAP-1847) + 1 tapps_audit_campaign (TAP-2036)
         # + 1 tapps_usage (v3.11.0) + 1 tapps_linear_list_issues (TAP-2010)
         # + 1 tapps_finding_to_story (TAP-2717) + 1 tapps_memory (TAP-3895)
-        # + 2 Epic 114 read-only tools = 30
-        assert len(read_only) == 30, (
-            f"Expected 28 read-only tools, got {len(read_only)}"
+        # + 2 Epic 114 read-only tools + 1 tapps_domain_playbook (ADR-0025) = 31
+        assert len(read_only) == 31, (
+            f"Expected 31 read-only tools, got {len(read_only)}"
         )
 
     def test_side_effect_count(self) -> None:
@@ -215,9 +215,9 @@ class TestAnnotationCategories:
         # + 1 tapps_usage (v3.11.0) + 1 tapps_linear_list_issues (TAP-2010)
         # + 1 tapps_finding_to_story (TAP-2717)
         # + 1 tapps_audit_close_coverage (TAP-2798) + 1 tapps_handoff_save (TAP-3792)
-        # + 1 tapps_memory (TAP-3895) + 2 Epic 114 tools = 37
-        assert len(idempotent) == 37, (
-            f"Expected 35 idempotent tools, got {len(idempotent)}: {sorted(idempotent)}"
+        # + 1 tapps_memory (TAP-3895) + 2 Epic 114 tools + 1 tapps_domain_playbook = 38
+        assert len(idempotent) == 38, (
+            f"Expected 38 idempotent tools, got {len(idempotent)}: {sorted(idempotent)}"
         )
 
 

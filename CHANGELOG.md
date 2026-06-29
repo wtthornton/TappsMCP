@@ -7,7 +7,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-## [3.12.48] - 2026-06-24
+## [3.12.49] - 2026-06-26
+
+Feature: light domain playbooks ([ADR-0025](docs/adr/0025-light-domain-playbooks-not-rag-experts.md)) — static checklists and skills instead of EPIC-94 RAG experts.
+
+### Added
+
+- **`tapps_core.playbooks`** — bundled markdown playbooks (testing, security, UX, performance, API design, architecture) with registry and loader.
+- **`tapps_domain_playbook`** MCP tool (43 tools total; +1 deferred on `nlt-build`).
+- **Skills** — `tapps-domain-*` (security, testing, frontend) and `tapps-flow-*` (develop, review, frontend).
+- **Checklist task types** — `qa` and `frontend` policy variants.
+- **DocsMCP enrichment** — epic/story `expert_guidance` from static playbook excerpts.
+- **`tapps-frontend-reviewer`** subagent for UI/UX review workflows.
+
+### Changed
+
+- `tapps_init` agency-agents hint now references pairing with `tapps-domain-*` skills.
+- Docker `tapps-frontend` profile documents `tapps_domain_playbook` instead of removed `consult_expert`.
+
 
 Patch: support-layer hygiene from the Linear cache-gate review — fail-closed
 destructive guard, retired-hook migration, and full removal of the no-op

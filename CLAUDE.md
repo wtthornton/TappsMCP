@@ -5,7 +5,7 @@ This file provides guidance to Claude Code when working with code in this reposi
 
 ## What is TappsMCP?
 
-TappsMCP is an **MCP server** providing deterministic code quality tools to LLMs and AI coding assistants. It scores Python files, runs security scans, enforces quality gates, looks up library docs, and validates configs -- all via structured MCP tool calls (42 tools). Any MCP-capable client (Claude Code, Cursor, VS Code Copilot) can use it. If you are a consuming project, see [AGENTS.md](AGENTS.md) instead.
+TappsMCP is an **MCP server** providing deterministic code quality tools to LLMs and AI coding assistants. It scores Python files, runs security scans, enforces quality gates, looks up library docs, and validates configs -- all via structured MCP tool calls (43 tools). Any MCP-capable client (Claude Code, Cursor, VS Code Copilot) can use it. If you are a consuming project, see [AGENTS.md](AGENTS.md) instead.
 
 ## Repository structure
 
@@ -15,7 +15,7 @@ This is a **uv workspace monorepo** with three packages plus an external depende
 |---|---|---|
 | **tapps-brain** | [github.com/wtthornton/tapps-brain](https://github.com/wtthornton/tapps-brain) | Shared memory service (Docker + Postgres, HTTP at `localhost:8080`). Accessed from tapps-mcp via `BrainBridge` (`uv run tapps-mcp memory` CLI; optional `tapps_memory` MCP on `nlt-memory`, TAP-3895). See the [tapps-brain repo](https://github.com/wtthornton/tapps-brain) for storage internals. |
 | **tapps-core** | `packages/tapps-core/` | Shared infrastructure library (config, security, logging, knowledge, metrics, adaptive) |
-| **tapps-mcp** | `packages/tapps-mcp/` | Code quality MCP server (42 tools) |
+| **tapps-mcp** | `packages/tapps-mcp/` | Code quality MCP server (43 tools) |
 | **docs-mcp** | `packages/docs-mcp/` | Documentation MCP server (42 tools) |
 
 tapps-core no longer ships a `memory/` package — the re-export shims that previously delegated to tapps-brain were removed in [TAP-1995](https://linear.app/tappscodingagents/issue/TAP-1995). Callers now import from `tapps_brain` directly. The `BrainBridge` adapter lives at `tapps_core.brain_bridge` (single module, replacing the old `tapps_core.memory.*` layout). tapps-mcp re-exports from tapps-core for backward compatibility (`from tapps_mcp.config import load_settings` still works).

@@ -2,7 +2,11 @@
 
 ## Overview
 
-**Tapps Platform** ships two MCP servers for AI-assisted development: **TappsMCP** (code quality, security, shared memory) and **DocsMCP** (documentation generation and maintenance). Together they expose **84 tools** (42 per package) with structured, deterministic outputs suitable for Claude Code, Cursor, VS Code, and any MCP host.
+**Tapps Platform** ships two MCP servers for AI-assisted development: **TappsMCP** (code quality, security, shared memory) and **DocsMCP** (documentation generation and maintenance). Together they expose **85 tools** (43 TappsMCP + 42 DocsMCP) with structured, deterministic outputs suitable for Claude Code, Cursor, VS Code, and any MCP host.
+
+### What's new in v3.12.49
+
+- **Light domain playbooks** ([ADR-0025](docs/adr/0025-light-domain-playbooks-not-rag-experts.md)) — `tapps_domain_playbook`, six bundled checklists, `tapps-domain-*` / `tapps-flow-*` skills, `qa`/`frontend` checklist types, DocsMCP epic enrichment. Replaces EPIC-94 RAG experts without reviving vector consultation.
 
 ### What's new in v3.12
 
@@ -37,15 +41,15 @@ See [CHANGELOG.md](CHANGELOG.md) for the full history.
 |---|---|---|
 | **tapps-brain** | Shared memory service (Docker + Postgres, HTTP at `localhost:8080`). External repo — see [tapps-brain](https://github.com/wtthornton/tapps-brain) for the canonical storage/retrieval/federation docs. | 0 (library; brain_* MCP tools ship in the service) |
 | **tapps-core** | Shared infrastructure (config, security, logging, knowledge, metrics, adaptive) | 0 (library) |
-| **tapps-mcp** | Code quality MCP server (scoring, gates, tools, validation) | 42 |
+| **tapps-mcp** | Code quality MCP server (scoring, gates, tools, validation) | 43 |
 | **docs-mcp** | Documentation generation and maintenance MCP server | 42 |
 
 Install is from the local checkout (`uv tool install -e packages/tapps-mcp`); the packages are not published to PyPI. See [Install](#install).
 
 ```
-tapps-brain (standalone)  <──  tapps-core (shared infra)  <──  tapps-mcp (42 tools)
+tapps-brain (standalone)  <──  tapps-core (shared infra)  <──  tapps-mcp (43 tools)
                                                           <──  docs-mcp  (42 tools)
-                                                                      = 84 MCP tools
+                                                                      = 85 MCP tools
 ```
 
 ### Key highlights

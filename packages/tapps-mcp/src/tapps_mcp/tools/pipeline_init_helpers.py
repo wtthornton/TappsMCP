@@ -279,8 +279,10 @@ def enrich_init_result_hints(
             "YouTube, Sentry, and other MCPs alongside TappsMCP."
         )
     result["agency_agents_hint"] = (
-        "Optional: For more specialized agents (e.g. Frontend Developer, Reality Checker), "
-        "see https://github.com/msitarzewski/agency-agents and run their install script for your platform."
+        "Optional: For persona voice (e.g. Frontend Developer), install "
+        "https://github.com/msitarzewski/agency-agents and pair with TappsMCP "
+        "domain skills (`/tapps-domain-frontend`, `/tapps-flow-frontend`). "
+        "TappsMCP owns quality gates; agency-agents owns tone only."
     )
     result["consumer_requirements"] = (
         "For a full checklist of what you need to use most tools "

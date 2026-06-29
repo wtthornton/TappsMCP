@@ -252,6 +252,8 @@ ALL_TOOL_NAMES: frozenset[str] = frozenset(
         "tapps_audit_close_coverage",
         # TAP-3895: slim tapps_memory facade on nlt-memory profile only
         "tapps_memory",
+        # ADR-0025: deterministic domain playbooks (deferred on nlt-build)
+        "tapps_domain_playbook",
     }
 )
 
@@ -388,6 +390,7 @@ TOOL_PROFILE_NLT_BUILD: frozenset[str] = frozenset(
         "tapps_dependency_scan",
         "tapps_report",
         "tapps_audit_campaign",
+        "tapps_domain_playbook",
     }
 )
 
