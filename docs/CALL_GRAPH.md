@@ -1,6 +1,6 @@
 # Call graph tools (consumer guide)
 
-TappsMCP v3.12.31+ ships **function-level call graph** tools for Python projects (Epic 114, [ADR-0017](adr/0017-function-level-call-graph-python-first.md)). Use them before refactors to see callers, callees, and affected tests — without grepping the repo.
+TappsMCP v3.12.31+ ships **function-level call graph** tools for Python projects (Epic 114, [ADR-0017](adr/0017-function-level-call-graph-python-first.md)). Use them before refactors to see callers, callees, and affected tests — without grepping the repo. TypeScript (`.ts`/`.tsx`) support via tree-sitter is described in [ADR-0026](adr/0026-typescript-call-graph-via-tree-sitter.md).
 
 ---
 

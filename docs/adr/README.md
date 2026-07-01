@@ -33,6 +33,7 @@ CLAUDE.md and per-package CLAUDE.md files point at ADRs by number rather than em
 | [0022](0022-agent-hint-contract-lookup-and-validation-semantics.md) | Agent hint contract — lookup timing and validation semantics | Accepted |
 | [0024](0024-shared-http-mcp-fleet.md) | Shared HTTP MCP fleet for multi-window Cursor | Accepted |
 | [0025](0025-light-domain-playbooks-not-rag-experts.md) | Light domain playbooks (not RAG experts) | Accepted |
+| [0026](0026-typescript-call-graph-via-tree-sitter.md) | TypeScript call graph via tree-sitter (language dispatch + honesty boundary) | Accepted |
 
 ## Adding a new ADR
 
