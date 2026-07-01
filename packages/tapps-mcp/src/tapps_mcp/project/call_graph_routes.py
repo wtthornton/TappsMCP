@@ -10,17 +10,24 @@ handler Y" (blast radius). Two frameworks are covered:
   scheme as ``call_graph_analyze``); the HTTP verb is the decorator method and the
   first string-literal argument is the path.
 
-* **React Router (TypeScript, tree-sitter)** — the JSX ``<Route path="/x"
-  element={<Comp/>} />`` form. The component named in ``element`` is the handler
-  symbol; when the component is imported from an in-repo relative module the symbol
-  is qualified to ``<module>.<Comp>``, otherwise the bare local name is kept.
+* **React Router (TypeScript, tree-sitter)** — two forms:
+
+  * the JSX ``<Route path="/x" element={<Comp/>} />`` element form; and
+  * the object-literal ``createBrowserRouter([{path, element}])`` /
+    ``createHashRouter([...])`` form (TAP-4551), including nested ``children``
+    arrays with static parent+child path composition.
+
+  In both, the component named in ``element`` is the handler symbol; when the
+  component is imported from an in-repo relative module the symbol is qualified
+  to ``<module>.<Comp>``, otherwise the bare local name is kept.
 
 Deterministic contract (ADR-0004): no LLM, no network. A route whose path or
 handler cannot be read from a literal (dynamic ``add_api_route`` calls, a spread
-``{...route}`` element, a computed path expression, the ``createBrowserRouter``
-object-literal form) is simply **not emitted** — never a guessed edge. The
-object-literal router form is intentionally deferred for a clean v1 (see the
-module docstring in the ticket); only the JSX ``<Route>`` form is extracted.
+``{...route}`` element, ``element={route.el}``, a computed / non-literal path
+expression) is simply **not emitted** — never a guessed edge. For the
+object-literal form, path composition (parent + child) is applied only when both
+segments are string literals; a non-literal segment leaves the child with its own
+literal path (or omits it entirely), never a fabricated join.
 """
 
 from __future__ import annotations
@@ -160,12 +167,13 @@ def extract_react_router_routes(
     module: str,
     project_root: Path,
 ) -> list[RouteEdge]:
-    """Extract React Router ``<Route path=... element={<Comp/>} />`` edges.
+    """Extract React Router route -> component edges (JSX + object-literal forms).
 
-    Covers only the JSX ``<Route>`` element form. The ``createBrowserRouter([...])``
-    object-literal form is deferred (v1) — nothing is emitted for it rather than
-    guessing. A ``<Route>`` missing a literal ``path`` or a nameable ``element``
-    component is skipped.
+    Covers both the JSX ``<Route path=... element={<Comp/>} />`` element form and
+    the ``createBrowserRouter([...])`` / ``createHashRouter([...])`` object-literal
+    form (TAP-4551), the latter including nested ``children`` arrays with static
+    parent+child path composition. A route missing a literal ``path`` or a
+    nameable ``element`` component is skipped, never guessed.
 
     The component's handler symbol is qualified to ``<target_module>.<Comp>`` when
     the component is imported from an in-repo relative module; otherwise the bare
@@ -198,6 +206,7 @@ def extract_react_router_routes(
     component_modules = _react_component_import_modules(root, source, module)
     routes: list[RouteEdge] = []
     _walk_jsx_routes(root, source, rel_path, component_modules, routes)
+    _walk_object_router_calls(root, source, rel_path, component_modules, routes)
     return routes
 
 
@@ -280,11 +289,26 @@ def _route_edge_from_jsx(
             component = _jsx_element_component(child, source)
     if path is None or component is None:
         return None
+    line = int(element.start_point[0]) + 1
+    return _build_react_route_edge(path, component, rel_path, component_modules, line)
+
+
+def _build_react_route_edge(
+    path: str,
+    component: str,
+    rel_path: str,
+    component_modules: dict[str, str],
+    line: int,
+) -> RouteEdge:
+    """Build a react-router RouteEdge, resolving the component via the import table.
+
+    Shared by the JSX ``<Route>`` and object-literal ``createBrowserRouter`` paths
+    so component resolution (bare name vs ``<module>.<Comp>``) stays in one place.
+    """
     handler = component
     target = component_modules.get(component)
     if target is not None:
         handler = f"{target}.{component}"
-    line = int(element.start_point[0]) + 1
     return RouteEdge(
         method="ROUTE",
         path=path,
@@ -324,16 +348,167 @@ def _jsx_element_component(attr: Any, source: bytes) -> str | None:
         if child.type != "jsx_expression":
             continue
         for inner in child.children:
-            if inner.type in ("jsx_self_closing_element", "jsx_element"):
-                target = inner
-                if inner.type == "jsx_element":
-                    # <Comp>...</Comp> -> use the opening element's name.
-                    for sub in inner.children:
-                        if sub.type == "jsx_opening_element":
-                            target = sub
-                            break
-                return _jsx_element_name(target, source)
+            name = _component_name_from_jsx_node(inner, source)
+            if name is not None:
+                return name
     return None
+
+
+def _component_name_from_jsx_node(node: Any, source: bytes) -> str | None:
+    """Component name of a bare JSX element node, or ``None`` if not a JSX element.
+
+    Accepts a ``jsx_self_closing_element`` (``<Comp/>``) or ``jsx_element``
+    (``<Comp>...</Comp>``) node directly. A non-JSX value (``member_expression``,
+    spread, etc.) yields ``None`` -> the route is skipped, never guessed.
+    """
+    if node.type not in ("jsx_self_closing_element", "jsx_element"):
+        return None
+    target = node
+    if node.type == "jsx_element":
+        # <Comp>...</Comp> -> use the opening element's name.
+        for sub in node.children:
+            if sub.type == "jsx_opening_element":
+                target = sub
+                break
+    return _jsx_element_name(target, source)
+
+
+# ----------------------------------------------------------------------
+# React Router object-literal form: createBrowserRouter / createHashRouter (TAP-4551)
+# ----------------------------------------------------------------------
+
+_OBJECT_ROUTER_FACTORIES = frozenset({"createBrowserRouter", "createHashRouter"})
+
+
+def _walk_object_router_calls(
+    node: Any,
+    source: bytes,
+    rel_path: str,
+    component_modules: dict[str, str],
+    routes: list[RouteEdge],
+) -> None:
+    """Depth-first walk collecting ``createBrowserRouter``/``createHashRouter`` calls."""
+    if node.type == "call_expression":
+        callee = node.child_by_field_name("function")
+        if callee is not None and callee.type == "identifier":
+            if _node_text(callee, source) in _OBJECT_ROUTER_FACTORIES:
+                route_array = _first_array_argument(node)
+                if route_array is not None:
+                    _collect_route_objects(
+                        route_array, source, rel_path, component_modules, routes, parent_path=None
+                    )
+    for child in node.children:
+        _walk_object_router_calls(child, source, rel_path, component_modules, routes)
+
+
+def _first_array_argument(call: Any) -> Any | None:
+    """The ``array`` node of the call's first argument, or ``None``."""
+    args = call.child_by_field_name("arguments")
+    if args is None:
+        return None
+    for child in args.children:
+        if child.type == "array":
+            return child
+        if child.type in ("(", ")", ","):
+            continue
+        # First real argument is not an array literal -> nothing to extract.
+        return None
+    return None
+
+
+def _collect_route_objects(
+    array_node: Any,
+    source: bytes,
+    rel_path: str,
+    component_modules: dict[str, str],
+    routes: list[RouteEdge],
+    *,
+    parent_path: str | None,
+) -> None:
+    """Emit edges for each ``{path, element, children}`` object in *array_node*.
+
+    ``parent_path`` is the statically-composed path of the enclosing route, or
+    ``None`` when the parent path was non-literal / absent. Composition is applied
+    only when both parent and child paths are string literals.
+    """
+    for element in array_node.children:
+        if element.type != "object":
+            continue
+        raw_path = _object_pair_string(element, "path", source)
+        composed = _compose_route_path(parent_path, raw_path)
+
+        element_value = _object_pair_value(element, "element", source)
+        if element_value is not None and raw_path is not None:
+            component = _component_name_from_jsx_node(element_value, source)
+            if component is not None:
+                line = int(element.start_point[0]) + 1
+                routes.append(
+                    _build_react_route_edge(
+                        composed if composed is not None else raw_path,
+                        component,
+                        rel_path,
+                        component_modules,
+                        line,
+                    )
+                )
+
+        children = _object_pair_value(element, "children", source)
+        if children is not None and children.type == "array":
+            _collect_route_objects(
+                children,
+                source,
+                rel_path,
+                component_modules,
+                routes,
+                parent_path=composed,
+            )
+
+
+def _object_pair_value(obj: Any, key: str, source: bytes) -> Any | None:
+    """The value node of ``{key: <value>}`` inside an object literal, or ``None``."""
+    for child in obj.children:
+        if child.type != "pair":
+            continue
+        pair_key = child.child_by_field_name("key")
+        if pair_key is None or _node_text(pair_key, source) != key:
+            continue
+        return child.child_by_field_name("value")
+    return None
+
+
+def _object_pair_string(obj: Any, key: str, source: bytes) -> str | None:
+    """Literal string value of ``{key: "..."}``, or ``None`` if absent/non-literal."""
+    value = _object_pair_value(obj, key, source)
+    if value is None or value.type != "string":
+        return None
+    for frag in value.children:
+        if frag.type == "string_fragment":
+            return _node_text(frag, source)
+    # Empty string literal (``path: ""``).
+    return ""
+
+
+def _compose_route_path(parent_path: str | None, child_path: str | None) -> str | None:
+    """Join *parent_path* + *child_path*, normalizing slashes, or ``None``.
+
+    Composition is only statically determinable when both segments are literal
+    strings. If the child path is absent or non-literal, or the parent was
+    non-literal (``None``), the child path stands on its own — never a guessed join.
+    """
+    if child_path is None:
+        return None
+    if parent_path is None:
+        return child_path
+    if child_path.startswith("/"):
+        # Absolute child path ignores the parent (React Router semantics).
+        return child_path
+    left = parent_path.rstrip("/")
+    right = child_path.lstrip("/")
+    if not right:
+        return left if left else "/"
+    if not left:
+        return f"/{right}" if parent_path.startswith("/") else right
+    return f"{left}/{right}"
 
 
 # ----------------------------------------------------------------------

@@ -198,9 +198,90 @@ function AppRoutes(routeDef: any) {
         # element is not a nameable JSX component -> no RouteEdge.
         assert [r for r in index.routes if r.framework == "react-router"] == []
 
-    def test_object_literal_router_form_deferred(self, tmp_path: Path) -> None:
-        # createBrowserRouter object form is deferred for v1 — nothing emitted,
-        # never guessed. (Documented deferral in call_graph_routes.py.)
+    def test_object_literal_router_form_extracts_edges(self, tmp_path: Path) -> None:
+        # createBrowserRouter([{path, element}]) now produces route edges (TAP-4551),
+        # resolving the component via the same TS import table the JSX form uses.
+        _write(
+            tmp_path,
+            "src/router.tsx",
+            """
+import { createBrowserRouter } from "react-router-dom";
+import Home from "./Home";
+import { About } from "./pages/About";
+
+const router = createBrowserRouter([
+  { path: "/", element: <Home /> },
+  { path: "/about", element: <About /> },
+]);
+""",
+        )
+        index = build_call_graph_index(tmp_path, force_rebuild=True)
+        routes = [r for r in index.routes if r.framework == "react-router"]
+        by_path = {r.path: r for r in routes}
+
+        assert set(by_path) == {"/", "/about"}
+        assert by_path["/"].method == "ROUTE"
+        # Default import from ./Home resolves the component to its module.
+        assert by_path["/"].handler_symbol == "Home.Home"
+        assert by_path["/"].file_path == "src/router.tsx"
+        # Named relative import -> qualified to the target module.
+        assert by_path["/about"].handler_symbol == "pages/About.About"
+
+    def test_object_literal_nested_children_compose_paths(self, tmp_path: Path) -> None:
+        # Nested children arrays compose parent + child paths when both are literals.
+        _write(
+            tmp_path,
+            "src/router.tsx",
+            """
+import { createBrowserRouter } from "react-router-dom";
+import Root from "./Root";
+import { Settings } from "./pages/Settings";
+import { Profile } from "./pages/Profile";
+
+const router = createBrowserRouter([
+  {
+    path: "/dashboard",
+    element: <Root />,
+    children: [
+      { path: "settings", element: <Settings /> },
+      { path: "profile", element: <Profile /> },
+    ],
+  },
+]);
+""",
+        )
+        index = build_call_graph_index(tmp_path, force_rebuild=True)
+        routes = [r for r in index.routes if r.framework == "react-router"]
+        by_path = {r.path: r for r in routes}
+
+        assert set(by_path) == {"/dashboard", "/dashboard/settings", "/dashboard/profile"}
+        assert by_path["/dashboard"].handler_symbol == "Root.Root"
+        assert by_path["/dashboard/settings"].handler_symbol == "pages/Settings.Settings"
+        assert by_path["/dashboard/profile"].handler_symbol == "pages/Profile.Profile"
+
+    def test_create_hash_router_extracts_edges(self, tmp_path: Path) -> None:
+        # createHashRouter is handled identically to createBrowserRouter.
+        _write(
+            tmp_path,
+            "src/hashRouter.tsx",
+            """
+import { createHashRouter } from "react-router-dom";
+import Home from "./Home";
+
+const router = createHashRouter([
+  { path: "/h", element: <Home /> },
+]);
+""",
+        )
+        index = build_call_graph_index(tmp_path, force_rebuild=True)
+        routes = [r for r in index.routes if r.framework == "react-router"]
+        assert len(routes) == 1
+        assert routes[0].path == "/h"
+        assert routes[0].handler_symbol == "Home.Home"
+
+    def test_object_literal_dynamic_and_computed_omitted(self, tmp_path: Path) -> None:
+        # Non-literal path and non-nameable element are omitted, never guessed;
+        # only the fully-literal, nameable route survives.
         _write(
             tmp_path,
             "src/router.tsx",
@@ -209,12 +290,17 @@ import { createBrowserRouter } from "react-router-dom";
 import Home from "./Home";
 
 const router = createBrowserRouter([
-  { path: "/", element: <Home /> },
+  { path: routeDef.p, element: <Home /> },
+  { path: "/dyn", element: routeDef.el },
+  { path: "/good", element: <Home /> },
 ]);
 """,
         )
         index = build_call_graph_index(tmp_path, force_rebuild=True)
-        assert [r for r in index.routes if r.framework == "react-router"] == []
+        routes = [r for r in index.routes if r.framework == "react-router"]
+        assert len(routes) == 1
+        assert routes[0].path == "/good"
+        assert routes[0].handler_symbol == "Home.Home"
 
 
 class TestRouteQueries:
