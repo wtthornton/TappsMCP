@@ -64,6 +64,14 @@ class ScoreResult(BaseModel):
     missing_tools: list[str] = Field(
         default_factory=list, description="Names of unavailable external tools."
     )
+    skipped_tools: list[str] = Field(
+        default_factory=list,
+        description=(
+            "Optional checkers that were skipped without failing the score "
+            "(e.g. 'semgrep' when the binary is absent). Informational only — "
+            "does not by itself set degraded."
+        ),
+    )
     tool_errors: dict[str, str] = Field(
         default_factory=dict, description="Per-tool error reasons when tools fail."
     )

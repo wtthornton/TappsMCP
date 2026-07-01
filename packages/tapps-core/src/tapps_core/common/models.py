@@ -57,6 +57,10 @@ class SecurityIssue(BaseModel):
     severity: str = Field(default="medium", description="critical | high | medium | low | info.")
     confidence: str = Field(default="medium", description="high | medium | low.")
     owasp: str | None = Field(default=None, description="OWASP category if mapped.")
+    source: str = Field(
+        default="bandit",
+        description="Provenance of the finding: 'bandit', 'semgrep', or 'heuristic'.",
+    )
 
 
 # ---------------------------------------------------------------------------

@@ -922,6 +922,16 @@ class TappsMCPSettings(BaseSettings):
         description="File name patterns to exclude from dead code findings (fnmatch).",
     )
 
+    # Semgrep security scanning (TAP-4529) — deterministic, offline, pinned ruleset
+    semgrep_enabled: bool = Field(
+        default=True,
+        description=(
+            "Enable semgrep static security scanning in scoring. Runs against a "
+            "pinned in-repo ruleset with no network fetch; degrades gracefully "
+            "when the semgrep binary is absent."
+        ),
+    )
+
     # Dependency vulnerability scanning
     dependency_scan_enabled: bool = Field(
         default=True,
