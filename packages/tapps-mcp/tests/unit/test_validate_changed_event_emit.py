@@ -2,9 +2,9 @@
 
 from __future__ import annotations
 
+from contextlib import contextmanager
 from pathlib import Path
 from typing import Any
-from contextlib import contextmanager
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -36,6 +36,7 @@ def _make_outcome(
         total_sec=total_sec,
         impact_data=None,
         affected_tests_data=None,
+        diff_impact_data=None,
         timeout_info=_TimedOutInfo(timed_out=False, files_remaining=[]),
     )
 

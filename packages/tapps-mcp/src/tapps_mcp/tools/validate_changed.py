@@ -69,11 +69,13 @@ from tapps_mcp.tools.validate_changed_output import (
     _build_response_data,
     _build_structured_validation_output,
     _build_validation_summary,
+    _compute_diff_impact,
     _handle_no_changed_files,
     _resolve_security_depth,
     _run_judges,
     apply_judge_payload,
     attach_affected_tests,
+    attach_diff_impact,
 )
 from tapps_mcp.tools.validation_progress import (
     _PROGRESS_HEARTBEAT_INTERVAL,
@@ -212,6 +214,7 @@ class _BatchOutcome:
     total_sec: int
     impact_data: dict[str, Any] | None
     affected_tests_data: dict[str, Any] | None
+    diff_impact_data: dict[str, Any] | None
     timeout_info: _TimedOutInfo
 
 
@@ -336,6 +339,11 @@ def _finalize_outcome(
         if bc.include_impact and bc.paths
         else None
     )
+    diff_impact_data = (
+        _compute_diff_impact(bc.paths, bc.settings.project_root)
+        if bc.include_impact and bc.paths
+        else None
+    )
 
     if not all_passed:
         _record_call("tapps_validate_changed", success=False)
@@ -348,6 +356,7 @@ def _finalize_outcome(
         total_sec=total_sec,
         impact_data=impact_data,
         affected_tests_data=affected_tests_data,
+        diff_impact_data=diff_impact_data,
         timeout_info=timeout_info,
     )
 
@@ -413,6 +422,7 @@ async def _assemble_response(
         outcome.impact_data,
     )
     attach_affected_tests(resp_data, outcome.affected_tests_data)
+    attach_diff_impact(resp_data, outcome.diff_impact_data)
     _attach_optional_payload(
         resp_data,
         paths=bc.paths,
