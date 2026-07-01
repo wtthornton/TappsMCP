@@ -69,12 +69,14 @@ from tapps_mcp.tools.validate_changed_output import (
     _build_response_data,
     _build_structured_validation_output,
     _build_validation_summary,
+    _compute_blast_radius_caveat,
     _compute_diff_impact,
     _handle_no_changed_files,
     _resolve_security_depth,
     _run_judges,
     apply_judge_payload,
     attach_affected_tests,
+    attach_blast_radius_caveat,
     attach_diff_impact,
 )
 from tapps_mcp.tools.validation_progress import (
@@ -215,6 +217,7 @@ class _BatchOutcome:
     impact_data: dict[str, Any] | None
     affected_tests_data: dict[str, Any] | None
     diff_impact_data: dict[str, Any] | None
+    blast_radius_caveat: dict[str, Any] | None
     timeout_info: _TimedOutInfo
 
 
@@ -282,9 +285,7 @@ async def _execute_validation_batch(
     _maybe_warm_dependency_cache(bc.settings, bc.quick)
 
     sem = asyncio.Semaphore(_VALIDATE_CONCURRENCY)
-    do_security_full = _resolve_security_depth(
-        bc.security_depth, bc.include_security, bc.quick
-    )
+    do_security_full = _resolve_security_depth(bc.security_depth, bc.include_security, bc.quick)
 
     tasks = [
         asyncio.create_task(
@@ -344,6 +345,11 @@ def _finalize_outcome(
         if bc.include_impact and bc.paths
         else None
     )
+    blast_radius_caveat = (
+        _compute_blast_radius_caveat(bc.paths, bc.settings.project_root)
+        if bc.include_impact and bc.paths
+        else None
+    )
 
     if not all_passed:
         _record_call("tapps_validate_changed", success=False)
@@ -357,6 +363,7 @@ def _finalize_outcome(
         impact_data=impact_data,
         affected_tests_data=affected_tests_data,
         diff_impact_data=diff_impact_data,
+        blast_radius_caveat=blast_radius_caveat,
         timeout_info=timeout_info,
     )
 
@@ -405,9 +412,7 @@ async def _assemble_response(
     """Build the final response dict from batch context + outcome."""
     from tapps_mcp.server import _with_nudges
 
-    summary = _build_validation_summary(
-        outcome.results, bc.quick, bc.capped, bc.extra_count
-    )
+    summary = _build_validation_summary(outcome.results, bc.quick, bc.capped, bc.extra_count)
     per_file_results, summary_rows = _build_per_file_results(outcome.results)
     elapsed_ms = (time.perf_counter_ns() - bc.start) // 1_000_000
     bc.tracker.finalize(outcome.all_passed, summary, elapsed_ms)
@@ -423,6 +428,7 @@ async def _assemble_response(
     )
     attach_affected_tests(resp_data, outcome.affected_tests_data)
     attach_diff_impact(resp_data, outcome.diff_impact_data)
+    attach_blast_radius_caveat(resp_data, outcome.blast_radius_caveat)
     _attach_optional_payload(
         resp_data,
         paths=bc.paths,

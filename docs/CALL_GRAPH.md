@@ -48,6 +48,36 @@ raising. Rebuild via `tapps_call_graph` or `tapps_diff_impact(force_rebuild=true
 then re-review. This is distinct from the flat, cross-change-set `affected_tests`
 block: `diff_impact` is keyed **per symbol** and adds each symbol's callers.
 
+### `blast_radius_caveat` — incomplete-impact trust signal (TAP-4528)
+
+When a reviewed change lands in a region where the call graph is **materially
+incomplete**, the review verdict carries a top-level `blast_radius_caveat` so
+agents know the impact analysis (callers / affected tests) may be partial:
+
+```json
+"blast_radius_caveat": {
+  "degraded": true,
+  "in_repo_gap_rate": 0.42,
+  "parse_failures": 0,
+  "reason": "high_in_repo_gap_rate",
+  "note": "In-repo call-graph gap rate is 42% (threshold 10%) — many in-repo references are unresolved, so this change's blast radius may be incomplete."
+}
+```
+
+- **`reason`** is one of `cache_not_ready` (cache missing / stale / unreadable —
+  impact could not be computed), `parse_failures` (≥ 1 file failed to parse), or
+  `high_in_repo_gap_rate` (in-repo gap rate `>=` the 10% threshold).
+- The caveat is **derived from `summarize_call_graph_cache` output** — it is a
+  read of the same health metrics below, not a new analysis pass (deterministic,
+  ADR-0004: no LLM / no network).
+- **Healthy / low-gap regions produce no caveat** — the field is absent, so
+  clean reviews stay clean (no false alarms). A handful of stray unresolved
+  external references (below the 10% in-repo threshold, zero parse failures) is
+  normal and does **not** trip it.
+
+The field sits beside `diff_impact` on `tapps_validate_changed` output when
+`include_impact=true` and source (non-test) Python files are in the change set.
+
 ---
 
 ## Local cache (not in git)

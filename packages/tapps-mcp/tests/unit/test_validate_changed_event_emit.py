@@ -37,6 +37,7 @@ def _make_outcome(
         impact_data=None,
         affected_tests_data=None,
         diff_impact_data=None,
+        blast_radius_caveat=None,
         timeout_info=_TimedOutInfo(timed_out=False, files_remaining=[]),
     )
 
@@ -70,9 +71,7 @@ class TestFireValidateEvents:
 
         with (
             patch_kg_emit(bridge=mock_bridge),
-            patch(
-                "tapps_mcp.tools.validate_changed.asyncio.create_task"
-            ) as mock_task,
+            patch("tapps_mcp.tools.validate_changed.asyncio.create_task") as mock_task,
         ):
             _fire_validate_events(_make_paths(), _make_outcome(), elapsed_ms=42)
 
@@ -96,7 +95,9 @@ class TestFireValidateEvents:
             ),
         ):
             paths = _make_paths(["/project/src/a.py", "/project/src/b.py"])
-            _fire_validate_events(paths, _make_outcome(file_paths=[str(p) for p in paths]), elapsed_ms=100)
+            _fire_validate_events(
+                paths, _make_outcome(file_paths=[str(p) for p in paths]), elapsed_ms=100
+            )
 
             assert len(captured) == 1
             await captured[0]

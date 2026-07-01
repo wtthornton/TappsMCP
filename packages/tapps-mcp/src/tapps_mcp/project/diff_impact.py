@@ -14,6 +14,12 @@ from tapps_mcp.project.test_linker import build_test_edges, edges_for_symbols
 DEFAULT_AFFECTED_TESTS_LIMIT = 20
 DEFAULT_DOC_DRIFT_CALLER_THRESHOLD = 5
 
+# Blast-radius caveat: in-repo gap rate at or above this fraction of edges means
+# the impact analysis is materially incomplete and the review verdict should say so.
+# Below the threshold (a handful of stray unresolved refs) is normal and must NOT
+# raise a caveat — otherwise every healthy review gets a false alarm (TAP-4528).
+BLAST_RADIUS_GAP_RATE_THRESHOLD = 0.10
+
 
 @dataclass
 class RankedTest:
@@ -97,7 +103,9 @@ def analyze_diff_impact(
 
     ranked: dict[str, RankedTest] = {}
 
-    def bump(test_file: str, score: float, reason: str, test_sym: str = "", code_sym: str = "") -> None:
+    def bump(
+        test_file: str, score: float, reason: str, test_sym: str = "", code_sym: str = ""
+    ) -> None:
         entry = ranked.get(test_file)
         if entry is None:
             entry = RankedTest(test_file, 0.0, [], [], [])
@@ -255,10 +263,7 @@ def build_diff_impact_enrichment(
         for sym in sorted(_symbols_in_file(index, rel.replace("\\", "/"))):
             if sym in symbols_out:
                 continue
-            callers = [
-                edge.caller
-                for edge in index.callers_of(sym)[:max_callers]
-            ]
+            callers = [edge.caller for edge in index.callers_of(sym)[:max_callers]]
             tests = get_tests_for_symbol(test_edges, sym, index=index)[:max_tests]
             symbols_out[sym] = {
                 "callers": callers,
@@ -284,6 +289,100 @@ def build_diff_impact_enrichment(
             f"{len(index.parse_failures)} parse failure(s) — some callers/tests may be missing."
         )
     return payload
+
+
+def caveat_from_call_graph_summary(
+    summary: dict[str, object],
+    *,
+    gap_rate_threshold: float = BLAST_RADIUS_GAP_RATE_THRESHOLD,
+) -> dict[str, object] | None:
+    """Map a ``summarize_call_graph_cache`` summary → optional blast-radius caveat.
+
+    Deterministic (ADR-0004): consumes the already-computed cache summary — no
+    new analysis pass, no index rebuild, no network / LLM. Returns ``None`` for a
+    healthy / low-gap region (no false alarms, TAP-4528 AC2) and a caveat dict
+    when the call graph is materially incomplete::
+
+        {
+            "degraded": True,
+            "in_repo_gap_rate": 0.42,
+            "parse_failures": 2,
+            "reason": "parse_failures" | "high_in_repo_gap_rate" | "cache_not_ready",
+            "note": "<human-readable caveat>",
+        }
+
+    A caveat is raised when ANY of:
+      * the cache is not ready (missing / stale / unreadable) — impact analysis
+        could not run at all, so the blast radius is unknown;
+      * one or more files failed to parse (``parse_failures > 0``);
+      * the in-repo gap rate meets ``gap_rate_threshold`` — enough unresolved
+        in-repo references that callers/tests are likely missing.
+    """
+    status = str(summary.get("status", "missing"))
+    raw_parse_failures = summary.get("parse_failures", 0) or 0
+    raw_gap_rate = summary.get("in_repo_gap_rate", 0.0) or 0.0
+    parse_failures = int(raw_parse_failures) if isinstance(raw_parse_failures, (int, float)) else 0
+    in_repo_gap_rate = float(raw_gap_rate) if isinstance(raw_gap_rate, (int, float)) else 0.0
+
+    if status != "ready":
+        note = str(
+            summary.get("hint")
+            or "Call-graph cache is not ready — the reviewed change's blast radius "
+            "could not be computed, so impact analysis may be partial. Run "
+            "tapps_call_graph or tapps_diff_impact(force_rebuild=True) to rebuild it."
+        )
+        return {
+            "degraded": True,
+            "in_repo_gap_rate": in_repo_gap_rate,
+            "parse_failures": parse_failures,
+            "reason": "cache_not_ready",
+            "note": note,
+        }
+
+    if parse_failures > 0:
+        return {
+            "degraded": True,
+            "in_repo_gap_rate": in_repo_gap_rate,
+            "parse_failures": parse_failures,
+            "reason": "parse_failures",
+            "note": (
+                f"{parse_failures} file(s) failed to parse — the call graph is "
+                "incomplete for those modules, so this change's blast radius "
+                "(callers / affected tests) may be partial."
+            ),
+        }
+
+    if in_repo_gap_rate >= gap_rate_threshold:
+        return {
+            "degraded": True,
+            "in_repo_gap_rate": in_repo_gap_rate,
+            "parse_failures": parse_failures,
+            "reason": "high_in_repo_gap_rate",
+            "note": (
+                f"In-repo call-graph gap rate is {in_repo_gap_rate:.0%} "
+                f"(threshold {gap_rate_threshold:.0%}) — many in-repo references "
+                "are unresolved, so this change's blast radius may be incomplete."
+            ),
+        }
+
+    return None
+
+
+def build_blast_radius_caveat(
+    project_root: Path,
+    *,
+    gap_rate_threshold: float = BLAST_RADIUS_GAP_RATE_THRESHOLD,
+) -> dict[str, object] | None:
+    """Load the call-graph cache summary and derive a blast-radius caveat (TAP-4528).
+
+    Thin convenience over :func:`caveat_from_call_graph_summary` for callers that
+    do not already hold a summary. Deterministic: reuses
+    ``summarize_call_graph_cache`` output only. Returns ``None`` when healthy.
+    """
+    from tapps_mcp.project.call_graph_cache import summarize_call_graph_cache
+
+    summary = summarize_call_graph_cache(project_root)
+    return caveat_from_call_graph_summary(summary, gap_rate_threshold=gap_rate_threshold)
 
 
 def export_test_map(

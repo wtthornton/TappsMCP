@@ -92,9 +92,7 @@ def _compute_affected_tests(
     from tapps_mcp.project.impact_analyzer import _is_test_file
 
     py_sources = [
-        p
-        for p in paths
-        if p.suffix in {".py", ".pyi"} and p.exists() and not _is_test_file(p)
+        p for p in paths if p.suffix in {".py", ".pyi"} and p.exists() and not _is_test_file(p)
     ]
     if not py_sources:
         return None
@@ -126,9 +124,7 @@ def _compute_diff_impact(
     from tapps_mcp.project.impact_analyzer import _is_test_file
 
     py_sources = [
-        p
-        for p in paths
-        if p.suffix in {".py", ".pyi"} and p.exists() and not _is_test_file(p)
+        p for p in paths if p.suffix in {".py", ".pyi"} and p.exists() and not _is_test_file(p)
     ]
     if not py_sources:
         return None
@@ -141,6 +137,46 @@ def _compute_diff_impact(
             "note": "diff-impact enrichment failed",
             "symbols": {},
         }
+
+
+def _compute_blast_radius_caveat(
+    paths: list[Path],
+    project_root: Path,
+) -> dict[str, Any] | None:
+    """Derive an incomplete-blast-radius caveat from call-graph health (TAP-4528).
+
+    Deterministic reuse of ``summarize_call_graph_cache`` — no new analysis pass,
+    no network / LLM (ADR-0004). Returns ``None`` for a healthy / low-gap region
+    (no false alarms) and a machine-readable caveat dict (with a human-readable
+    ``note``) when the call graph is materially incomplete. Only relevant when
+    source (non-test) Python files are in the change set.
+    """
+    from tapps_mcp.project.diff_impact import build_blast_radius_caveat
+    from tapps_mcp.project.impact_analyzer import _is_test_file
+
+    py_sources = [
+        p for p in paths if p.suffix in {".py", ".pyi"} and p.exists() and not _is_test_file(p)
+    ]
+    if not py_sources:
+        return None
+    try:
+        return build_blast_radius_caveat(project_root)
+    except Exception:
+        _logger.debug("blast_radius_caveat_failed", exc_info=True)
+        return None
+
+
+def attach_blast_radius_caveat(
+    resp_data: dict[str, Any],
+    caveat: dict[str, Any] | None,
+) -> None:
+    """Attach a top-level ``blast_radius_caveat`` when the call graph is degraded.
+
+    Absent when healthy (``caveat is None``) so low-gap reviews stay clean
+    (TAP-4528). Sits beside ``diff_impact`` on the review verdict.
+    """
+    if caveat is not None:
+        resp_data["blast_radius_caveat"] = caveat
 
 
 def _build_structured_validation_output(
@@ -344,8 +380,8 @@ async def _handle_no_changed_files(
             )
             resp_data["next_steps"] = [
                 "FALLBACK: Use tapps_quick_check on individual files with the same project_root.",
-                f"Example: tapps_validate_changed(file_paths=\"packages/foo/src/bar.py\", "
-                f"project_root=\"{settings.project_root}\")",
+                f'Example: tapps_validate_changed(file_paths="packages/foo/src/bar.py", '
+                f'project_root="{settings.project_root}")',
             ]
         else:
             resp_data["path_hint"] = (
@@ -436,9 +472,7 @@ def _append_judge_summary(summary: str, judge_results: list[dict[str, Any]]) -> 
         return summary
     passed = sum(1 for r in judge_results if r.get("result") == "pass")
     failed = sum(
-        1
-        for r in judge_results
-        if r.get("result") in {"fail", "error"} and r.get("blocking")
+        1 for r in judge_results if r.get("result") in {"fail", "error"} and r.get("blocking")
     )
     skipped = sum(1 for r in judge_results if r.get("result") == "skipped")
     suffix = f" | judges: {passed} passed"
@@ -531,11 +565,13 @@ __all__ = [
     "_build_response_data",
     "_build_structured_validation_output",
     "_build_validation_summary",
-    "_compute_impact_analysis",
     "_compute_affected_tests",
+    "_compute_blast_radius_caveat",
+    "_compute_impact_analysis",
     "_handle_no_changed_files",
     "_resolve_security_depth",
     "_run_judges",
     "apply_judge_payload",
     "attach_affected_tests",
+    "attach_blast_radius_caveat",
 ]
