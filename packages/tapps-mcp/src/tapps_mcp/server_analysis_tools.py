@@ -466,14 +466,23 @@ async def tapps_call_graph(
     token_budget: int = 4000,
     force_rebuild: bool = False,
 ) -> dict[str, Any]:
-    """Query function-level callers, callees, or call chains for one symbol.
+    """Query function-level callers, callees, call chains, or HTTP routes.
 
-    Deterministic Python AST call graph (ADR-0017). Use before refactoring a
-    function to replace grep-based caller discovery.
+    Deterministic Python/TypeScript call graph (ADR-0017). Use before refactoring
+    a function to replace grep-based caller discovery.
+
+    Route queries (TAP-4532) resolve HTTP route <-> handler edges (FastAPI
+    decorators, React Router JSX):
+      * ``query="route_handler"`` — pass ``symbol`` as a route path (e.g.
+        ``/users/{id}``); returns the handler(s) serving it.
+      * ``query="handler_routes"`` — pass ``symbol`` as a handler function /
+        component name; returns the routes that break if it changes (blast radius).
 
     Args:
-        symbol: Qualified or short function/method name.
-        query: ``callers``, ``callees``, ``chain``, or ``all`` (default).
+        symbol: Qualified or short function/method name; a route path for
+            ``route_handler``; a handler symbol for ``handler_routes``.
+        query: ``callers``, ``callees``, ``chain``, ``all`` (default),
+            ``route_handler``, or ``handler_routes``.
         project_root: Optional project root override.
         max_depth: Max expansion depth for graph traversal.
         token_budget: Approximate token cap for serialized graph payload.
@@ -493,24 +502,33 @@ async def tapps_call_graph(
     root = root_result.root
 
     mode = query.strip().lower() or "all"
-    if mode not in {"callers", "callees", "chain", "all"}:
+    if mode not in {"callers", "callees", "chain", "all", "route_handler", "handler_routes"}:
         return error_response(
             "tapps_call_graph",
             "invalid_query",
-            "query must be callers, callees, chain, or all",
+            "query must be callers, callees, chain, all, route_handler, or handler_routes",
         )
 
     from tapps_mcp.project.call_graph import build_call_graph_index
-    from tapps_mcp.project.call_graph_queries import query_call_graph
+    from tapps_mcp.project.call_graph_queries import (
+        query_call_graph,
+        query_route_handler,
+        query_routes_for_handler,
+    )
 
     index = build_call_graph_index(root, force_rebuild=force_rebuild)
-    result = query_call_graph(
-        index,
-        symbol,
-        mode=mode,  # type: ignore[arg-type]
-        max_depth=max(1, max_depth),
-        token_budget=max(256, token_budget),
-    )
+    if mode == "route_handler":
+        result = query_route_handler(index, symbol)
+    elif mode == "handler_routes":
+        result = query_routes_for_handler(index, symbol)
+    else:
+        result = query_call_graph(
+            index,
+            symbol,
+            mode=mode,  # type: ignore[arg-type]
+            max_depth=max(1, max_depth),
+            token_budget=max(256, token_budget),
+        )
 
     elapsed_ms = (time.perf_counter_ns() - start) // 1_000_000
     _record_execution(

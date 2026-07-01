@@ -8,7 +8,9 @@ from typing import Literal
 CALL_GRAPH_CACHE_REL = ".tapps-mcp/call-graph-index.json"
 # v3 (TAP-4537): SymbolRecord gains a ``language`` tag for the TypeScript
 # language-dispatch scaffold. Bumping this invalidates any v2 cache on load.
-INDEX_VERSION = 3
+# v4 (TAP-4532): CallGraphIndex gains a persisted ``routes: list[RouteEdge]``
+# for HTTP route -> handler edges (FastAPI decorators + React Router JSX).
+INDEX_VERSION = 4
 SymbolKind = Literal["function", "method"]
 
 # Stable taxonomy for resolution gaps (TAP-4092).
@@ -70,6 +72,26 @@ class ParseFailure:
     reason: PARSE_FAILURE_REASON | str
 
 
+# HTTP route -> handler relationships as first-class edges (TAP-4532).
+# ``framework`` names the router this edge came from ("fastapi" for Python
+# decorator routes, "react-router" for React Router JSX). ``method`` is the
+# uppercased HTTP verb for FastAPI (``GET``/``POST``/...) or the literal
+# ``"ROUTE"`` for React Router (client-side routes have no HTTP method).
+# ``handler_symbol`` is the qualified name of the handler function / component
+# symbol when resolvable, else the bare local name (never a fabricated target).
+RouteFramework = Literal["fastapi", "react-router"]
+
+
+@dataclass
+class RouteEdge:
+    method: str
+    path: str
+    handler_symbol: str
+    framework: RouteFramework | str
+    file_path: str
+    line: int
+
+
 # --- TypeScript deferred cross-file resolution (TAP-4540) -----------------
 # The following records are internal to the build-time cross-file resolution
 # pass in ``call_graph.py``. They are NOT persisted in the on-disk index — they
@@ -122,6 +144,8 @@ class CallGraphIndex:
     edges: list[CallEdge] = field(default_factory=list)
     resolution_gaps: list[ResolutionGap] = field(default_factory=list)
     parse_failures: list[ParseFailure] = field(default_factory=list)
+    # HTTP route -> handler edges (TAP-4532). Persisted in the v4 index.
+    routes: list[RouteEdge] = field(default_factory=list)
     project_root: str = ""
     fingerprint: str = ""
     version: int = INDEX_VERSION
