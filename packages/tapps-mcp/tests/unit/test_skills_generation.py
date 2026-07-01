@@ -181,7 +181,9 @@ class TestSkipExisting:
 
     def test_result_dict_tracks_created(self, tmp_path):
         result = generate_skills(tmp_path, "claude")
-        assert len(result["created"]) == 16
+        # 23 single-file skills (base + domain) + orchestration-prompt (multi-file,
+        # smart-merged). The prior literal (16) had drifted stale as skills were added.
+        assert len(result["created"]) == 24
         assert len(result["skipped"]) == 0
 
     def test_unknown_platform_returns_error(self, tmp_path):
