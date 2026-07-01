@@ -229,9 +229,7 @@ class TestValidateChangedP0:
         assert affected["affected_tests"][0]["test_file"]
 
     @pytest.mark.asyncio
-    async def test_include_impact_returns_diff_impact_enrichment(
-        self, tmp_path: Path
-    ) -> None:
+    async def test_include_impact_returns_diff_impact_enrichment(self, tmp_path: Path) -> None:
         """include_impact=True attaches per-symbol diff_impact enrichment (TAP-4526)."""
         from tapps_mcp.project.call_graph import build_call_graph_index
         from tapps_mcp.server_pipeline_tools import tapps_validate_changed
@@ -288,10 +286,71 @@ class TestValidateChangedP0:
         symbols = diff_impact["symbols"]
         key = next(k for k in symbols if k.endswith("compute"))
         assert any("do_work" in c for c in symbols[key]["callers"])
-        assert any(
-            "tests/test_core.py" in t["test_file"]
-            for t in symbols[key]["affected_tests"]
-        )
+        assert any("tests/test_core.py" in t["test_file"] for t in symbols[key]["affected_tests"])
+        # Healthy graph → no blast-radius caveat (no false alarm, TAP-4528 AC2).
+        assert result["data"].get("blast_radius_caveat") is None
+
+    @pytest.mark.asyncio
+    async def test_include_impact_attaches_blast_radius_caveat_when_degraded(
+        self, tmp_path: Path
+    ) -> None:
+        """A degraded call graph attaches a top-level blast_radius_caveat (TAP-4528).
+
+        The validate pipeline warms a clean cache, so a real gap can't be forced
+        deterministically here — patch the (unit-tested) caveat helper and assert
+        the wiring surfaces its result on the review verdict.
+        """
+        from tapps_mcp.server_pipeline_tools import tapps_validate_changed
+
+        src = tmp_path / "app" / "core.py"
+        src.parent.mkdir(parents=True)
+        src.write_text("def compute():\n    return 42\n", encoding="utf-8")
+
+        scorer = _mock_scorer()
+        mock_gate = MagicMock(passed=True, failures=[])
+        mock_report = _mock_impact_report(str(src), severity="low")
+        degraded_caveat = {
+            "degraded": True,
+            "in_repo_gap_rate": 0.42,
+            "parse_failures": 0,
+            "reason": "high_in_repo_gap_rate",
+            "note": "In-repo call-graph gap rate is 42% — blast radius may be incomplete.",
+        }
+
+        with (
+            patch("tapps_mcp.server_pipeline_tools.load_settings") as mock_settings,
+            patch("tapps_mcp.server._validate_file_path", side_effect=Path),
+            patch("tapps_mcp.scoring.scorer.CodeScorer", return_value=scorer),
+            patch("tapps_mcp.gates.evaluator.evaluate_gate", return_value=mock_gate),
+            patch(
+                "tapps_mcp.project.impact_analyzer.build_import_graph",
+                return_value={},
+            ),
+            patch(
+                "tapps_mcp.project.impact_analyzer.analyze_impact",
+                return_value=mock_report,
+            ),
+            patch(
+                "tapps_mcp.project.diff_impact.build_blast_radius_caveat",
+                return_value=degraded_caveat,
+            ),
+        ):
+            mock_settings.return_value.project_root = tmp_path
+            mock_settings.return_value.tool_timeout = 30
+            mock_settings.return_value.dependency_scan_enabled = False
+
+            result = await tapps_validate_changed(
+                file_paths=str(src),
+                quick=True,
+                include_impact=True,
+            )
+
+        assert result["success"] is True
+        caveat = result["data"].get("blast_radius_caveat")
+        assert caveat is not None
+        assert caveat["degraded"] is True
+        assert caveat["reason"] == "high_in_repo_gap_rate"
+        assert caveat["note"]
 
     @pytest.mark.asyncio
     async def test_include_impact_false_no_summary(self, tmp_path: Path) -> None:
