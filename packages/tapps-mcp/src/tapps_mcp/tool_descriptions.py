@@ -89,7 +89,9 @@ TOOL_DESCRIPTIONS: dict[str, str] = {
         "Session gap report: tools called vs TAPPS pipeline expectations."
     ),
     "tapps_dead_code": (
-        "Find unused Python functions, classes, imports, and variables (vulture-backed)."
+        "Find unused Python functions, classes, imports, and variables (vulture-backed). "
+        "GA; accuracy caveat: dynamic dispatch can hide callers, so treat results from "
+        "high in_repo_gap_rate repos as advisory (potential false 'unused' positives)."
     ),
     "tapps_dependency_scan": (
         "Scan project dependencies for known CVEs via pip-audit."
