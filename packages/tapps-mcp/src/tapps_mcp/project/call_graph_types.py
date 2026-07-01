@@ -70,6 +70,52 @@ class ParseFailure:
     reason: PARSE_FAILURE_REASON | str
 
 
+# --- TypeScript deferred cross-file resolution (TAP-4540) -----------------
+# The following records are internal to the build-time cross-file resolution
+# pass in ``call_graph.py``. They are NOT persisted in the on-disk index — they
+# carry the structured hints the per-file TS analyzer cannot resolve on its own
+# (default exports, tsconfig path aliases, re-export chains).
+
+# How a deferred call binding was imported.
+DeferredImportKind = Literal["default", "named", "namespace"]
+
+
+@dataclass
+class DeferredCall:
+    """A TS call site the per-file analyzer could not resolve alone (TAP-4540).
+
+    The cross-file post-pass tries to turn each ``DeferredCall`` into a
+    ``CallEdge`` using module export tables + tsconfig aliases. When it cannot,
+    the recorded ``gap`` is emitted verbatim so nothing is fabricated.
+    """
+
+    gap: ResolutionGap
+    kind: DeferredImportKind
+    # Real imported symbol name (named import) or accessed member (namespace).
+    # ``None`` for a bare default import.
+    imported_name: str | None
+    # Resolved in-repo target module when the specifier is relative, else ``None``
+    # (an unresolved specifier still needs ``specifier`` for alias resolution).
+    target_module: str | None
+    # Raw import specifier (``"./util"``, ``"@/util"``) for tsconfig aliasing.
+    specifier: str
+    caller: str
+
+
+@dataclass
+class ModuleExports:
+    """Export surface of one TS module, for cross-file resolution (TAP-4540)."""
+
+    module: str
+    # Qualified name of the module's ``export default`` symbol, if any.
+    default_symbol: str | None = None
+    # Re-export edges: local exported name -> (from-specifier, origin name).
+    # ``export {a as b} from "./y"`` -> {"b": ("./y", "a")}.
+    reexports: dict[str, tuple[str, str]] = field(default_factory=dict)
+    # ``export * from "./y"`` specifiers (star re-exports — any name may pass).
+    star_reexports: list[str] = field(default_factory=list)
+
+
 @dataclass
 class CallGraphIndex:
     symbols: list[SymbolRecord] = field(default_factory=list)

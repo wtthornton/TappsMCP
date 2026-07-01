@@ -8,18 +8,22 @@ from pathlib import Path
 import structlog
 
 from tapps_mcp.project.call_graph_analyze import analyze_file
-from tapps_mcp.project.call_graph_analyze_ts import analyze_file_ts
+from tapps_mcp.project.call_graph_analyze_ts import analyze_file_ts, analyze_file_ts_full
 from tapps_mcp.project.call_graph_cache import (
     fingerprint_settings,
     load_call_graph_index,
     save_call_graph_index,
 )
 from tapps_mcp.project.call_graph_fingerprint import compute_index_fingerprint
+from tapps_mcp.project.call_graph_resolve_ts import resolve_ts_cross_file
+from tapps_mcp.project.call_graph_tsconfig import load_tsconfig_paths
 from tapps_mcp.project.call_graph_types import (
     CALL_GRAPH_CACHE_REL,
     INDEX_VERSION,
     CallEdge,
     CallGraphIndex,
+    DeferredCall,
+    ModuleExports,
     ParseFailure,
     ResolutionGap,
     SymbolRecord,
@@ -117,6 +121,10 @@ def build_call_graph_index(
     edges: list[CallEdge] = []
     gaps: list[ResolutionGap] = []
     parse_failures: list[ParseFailure] = []
+    # TS cross-file resolution material (S4, TAP-4540): each module's export
+    # surface plus the deferred call sites the per-file pass could not resolve.
+    ts_exports: dict[str, ModuleExports] = {}
+    ts_deferred: list[DeferredCall] = []
 
     walk_suffixes = _PY_SUFFIXES + _TS_SUFFIXES
     source_files = sorted(
@@ -137,13 +145,65 @@ def build_call_graph_index(
             module = _file_to_module(source_file, project_root, top_level_package)
         if not module:
             continue
-        file_symbols, file_edges, file_gaps, file_failures = analyzer(
-            source_file, module, project_root
-        )
+        if suffix in _TS_SUFFIXES:
+            (
+                file_symbols,
+                file_edges,
+                file_gaps,
+                file_failures,
+                module_exports,
+                deferred,
+            ) = analyze_file_ts_full(source_file, module, project_root)
+            ts_exports[module] = module_exports
+            ts_deferred.extend(deferred)
+        else:
+            file_symbols, file_edges, file_gaps, file_failures = analyzer(
+                source_file, module, project_root
+            )
         symbols.extend(file_symbols)
         edges.extend(file_edges)
         gaps.extend(file_gaps)
         parse_failures.extend(file_failures)
+
+    # S4 cross-file post-pass (TAP-4540): promote deferred default-export /
+    # path-alias / re-export calls to edges, and follow already-resolved edges
+    # through re-export barrels to their origin symbol. Anything unresolved
+    # keeps its honest gap (ADR-0004 — never fabricate an edge).
+    if ts_exports:
+        symbol_names = {s.qualified_name for s in symbols}
+        result = resolve_ts_cross_file(
+            deferred_calls=ts_deferred,
+            exports_by_module=ts_exports,
+            symbol_names=symbol_names,
+            resolved_edges=edges,
+            tsconfig=load_tsconfig_paths(project_root),
+        )
+        edges.extend(result.new_edges)
+        gaps.extend(result.remaining_gaps)
+        if result.edge_rewrites:
+            for edge in edges:
+                rewritten = result.edge_rewrites.get(edge.callee)
+                if rewritten is not None:
+                    edge.callee = rewritten
+        if result.dangling_callees:
+            # Demote phantom edges (eager S3 named imports whose callee module
+            # neither defines nor resolvably re-exports the symbol) to honest
+            # gaps — never keep a fabricated target (ADR-0004).
+            kept: list[CallEdge] = []
+            for edge in edges:
+                if edge.callee in result.dangling_callees:
+                    gaps.append(
+                        ResolutionGap(
+                            edge.caller,
+                            edge.callee_expr,
+                            edge.line,
+                            "reexport_unresolved",
+                            language="typescript",
+                        )
+                    )
+                else:
+                    kept.append(edge)
+            edges = kept
 
     symbols.sort(key=lambda s: (s.qualified_name, s.file_path, s.line))
     edges.sort(key=lambda e: (e.caller, e.line, e.callee_expr))
