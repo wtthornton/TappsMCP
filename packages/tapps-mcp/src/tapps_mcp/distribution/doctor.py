@@ -1359,6 +1359,52 @@ def check_linear_issue_skill_current(project_root: Path) -> CheckResult:
     return CheckResult("linear-issue skill", False, message, detail)
 
 
+def check_orchestration_prompt_skill_current(project_root: Path) -> CheckResult:
+    """Check the ``orchestration-prompt`` skill is deployed with its companions.
+
+    The skill is multi-file (TAP orchestration-prompt platformisation): SKILL.md
+    carries the managed-block marker (proving smart-merge is wired, not a stale
+    hand-authored copy) and ships ``assets/prompt-template.md`` +
+    ``references/claude-feature-map.md``. Only hosts that already have the skill
+    deployed are validated — the skill is opt-in per host, so absence everywhere
+    is reported as ok (nothing to check), while a *partial* deployment is flagged.
+    """
+    marker = "<!-- BEGIN: tapps-skill orchestration-prompt"
+    companions = ("assets/prompt-template.md", "references/claude-feature-map.md")
+    valid_hosts: list[str] = []
+    problems: list[str] = []
+    for host_label, base in _tapps_skill_bases(project_root):
+        skill_dir = base / "orchestration-prompt"
+        skill_path = skill_dir / "SKILL.md"
+        if not skill_path.exists():
+            continue  # not deployed on this host — opt-in, not a failure
+        content = skill_path.read_text(encoding="utf-8")
+        if marker not in content:
+            problems.append(f"{host_label}/orchestration-prompt stale (no managed-block marker)")
+            continue
+        missing = [c for c in companions if not (skill_dir / c).exists()]
+        if missing:
+            problems.append(f"{host_label}/orchestration-prompt missing {', '.join(missing)}")
+            continue
+        valid_hosts.append(host_label)
+
+    if not valid_hosts and not problems:
+        return CheckResult(
+            "orchestration-prompt skill",
+            True,
+            "orchestration-prompt skill not deployed (opt-in) — nothing to check",
+        )
+    if valid_hosts and not problems:
+        return CheckResult(
+            "orchestration-prompt skill",
+            True,
+            f"orchestration-prompt skill current on: {', '.join(valid_hosts)}",
+        )
+    detail = "Run: tapps-mcp upgrade --force"
+    message = problems[0] if len(problems) == 1 else f"Issues: {'; '.join(problems)}"
+    return CheckResult("orchestration-prompt skill", False, message, detail)
+
+
 def check_pretooluse_matchers(project_root: Path) -> CheckResult:
     """Report each PreToolUse matcher present in .claude/settings.json (TAP-981).
 
@@ -4888,6 +4934,7 @@ def _collect_checks(root: Path, *, quick: bool = False) -> list[CheckResult]:
     checks.append(check_test_quality_rule(root))
     checks.append(check_config_files_rule(root))
     checks.append(check_linear_issue_skill_current(root))
+    checks.append(check_orchestration_prompt_skill_current(root))
     checks.append(check_finish_task_skill(root))
     checks.append(check_deprecated_wrapper_skills(root))
     checks.append(check_tapps_memory_skill(root))

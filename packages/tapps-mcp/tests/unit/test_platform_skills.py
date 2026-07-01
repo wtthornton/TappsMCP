@@ -67,8 +67,11 @@ class TestClaudeAllowedTools:
             assert "\ntools:" not in fm, f"{name} still uses 'tools:' instead of 'allowed-tools:'"
 
     def test_all_skills_have_allowed_tools(self) -> None:
+        # orchestration-prompt, like continuous-learning-v2, is a host-agnostic
+        # prose/meta skill with no tool-grant frontmatter (shared body across hosts).
+        no_tool_grant_skills = {"continuous-learning-v2", "orchestration-prompt"}
         for name, content in CLAUDE_SKILLS.items():
-            if name == "continuous-learning-v2":
+            if name in no_tool_grant_skills:
                 continue
             fm = _get_frontmatter(content)
             assert "allowed-tools:" in fm, f"{name} missing 'allowed-tools:' field"
@@ -218,8 +221,10 @@ class TestCursorSkillsUnchanged:
     """Cursor skills should still use mcp_tools, not allowed-tools."""
 
     def test_cursor_skills_use_mcp_tools(self) -> None:
+        # Prose/meta skills carry no tool-grant frontmatter on either host.
+        no_tool_grant_skills = {"continuous-learning-v2", "orchestration-prompt"}
         for name, content in CURSOR_SKILLS.items():
-            if name == "continuous-learning-v2":
+            if name in no_tool_grant_skills:
                 continue
             fm = _get_frontmatter(content)
             assert "mcp_tools:" in fm, f"Cursor {name} should use 'mcp_tools:'"
