@@ -98,3 +98,8 @@ target/
 .claude/agent-memory-local/
 # Third-party skill clones (separate git repos, contains node_modules)
 .claude/skills/linear/
+
+# Cleanup (2026-06-30): runtime state accidentally tracked + scratch scripts
+.tapps-mcp/metrics/
+.tapps-mcp/sessions/
+.scratch/
