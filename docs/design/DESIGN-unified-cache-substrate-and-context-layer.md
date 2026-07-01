@@ -54,6 +54,18 @@ Retrieval mechanisms stay separate and domain-specific. Per 2026: code stays a d
 
 Once the substrate exists, the three retrieval sources — **code graph (structural)**, **docs (external/semantic)**, **brain (episodic/cross-session)** — front a common on-demand *retrieval-provider* protocol, matching the 2026 layered-memory model (graph + semantic + episodic). This is where the redundant per-cache implementations are **migrated and deleted**.
 
+> **Verified inventory corrections (2026-07-01, during P2/P3 implementation):**
+> the table above overstates the duplication. Measured against the code:
+> (1) only **2** real `_write_atomic` helpers existed (KBCache + call-graph) —
+> content-hash (#3) and dependency-scan (#4) are **in-memory** dicts, not file
+> caches, so no file migration applies; (2) there are **2** warmers, not 3 —
+> `experts/rag_warming.py` is a tech-stack→domain mapping, its warming
+> infrastructure was already removed; (3) the "3 Linear gateway" sites are two
+> deliberately distinct Agent-Gateway sentinel checks (TAP-2009 write-gate,
+> TAP-2010 read-gate) plus one real snapshot cache — **not collapsible**.
+> Consequence: the net-code-DOWN success metric was unachievable as scoped; see
+> [ADR-0029 § Outcome](../adr/0029-unified-cache-substrate.md#outcome-2026-07-01-p1p3-measured).
+
 ## 4. Refactor / delete inventory (rolled into Phase 3; pulled earlier only where prereq)
 
 | Item | Action | Phase | Note |

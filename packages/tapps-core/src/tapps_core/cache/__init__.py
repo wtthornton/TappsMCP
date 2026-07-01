@@ -15,6 +15,11 @@ from tapps_core.cache.staleness import (
     TTLStaleness,
     VersionStaleness,
 )
+from tapps_core.cache.stats import (
+    collect_cache_stats,
+    register_cache_stats,
+    unregister_cache_stats,
+)
 
 __all__ = [
     "AtomicJsonCache",
@@ -22,4 +27,7 @@ __all__ = [
     "StalenessStrategy",
     "TTLStaleness",
     "VersionStaleness",
+    "collect_cache_stats",
+    "register_cache_stats",
+    "unregister_cache_stats",
 ]

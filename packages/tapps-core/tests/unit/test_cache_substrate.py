@@ -14,6 +14,9 @@ from tapps_core.cache import (
     FingerprintStaleness,
     TTLStaleness,
     VersionStaleness,
+    collect_cache_stats,
+    register_cache_stats,
+    unregister_cache_stats,
 )
 
 
@@ -83,3 +86,41 @@ class TestStalenessStrategies:
         strat = TTLStaleness(ttl_seconds=60.0, now_fn=lambda: 1060.0)
         # >= ttl is stale (matches the KBCache/dep-scan expire-at semantics).
         assert strat.is_stale(1000.0) is True
+
+
+class TestCacheStatsRegistry:
+    def test_register_and_collect(self) -> None:
+        register_cache_stats("_test_cache_a", lambda: {"hits": 3, "misses": 1})
+        try:
+            collected = collect_cache_stats()
+            assert collected["_test_cache_a"] == {"hits": 3, "misses": 1}
+        finally:
+            unregister_cache_stats("_test_cache_a")
+
+    def test_register_is_idempotent_replace(self) -> None:
+        register_cache_stats("_test_cache_b", lambda: {"hits": 0})
+        register_cache_stats("_test_cache_b", lambda: {"hits": 9})
+        try:
+            assert collect_cache_stats()["_test_cache_b"] == {"hits": 9}
+        finally:
+            unregister_cache_stats("_test_cache_b")
+
+    def test_provider_error_is_isolated(self) -> None:
+        def _boom() -> dict[str, int]:
+            raise RuntimeError("provider exploded")
+
+        register_cache_stats("_test_cache_boom", _boom)
+        register_cache_stats("_test_cache_ok", lambda: {"hits": 1})
+        try:
+            collected = collect_cache_stats()
+            # The broken provider reports an error entry; the healthy one is intact.
+            assert collected["_test_cache_boom"] == {"error": "provider exploded"}
+            assert collected["_test_cache_ok"] == {"hits": 1}
+        finally:
+            unregister_cache_stats("_test_cache_boom")
+            unregister_cache_stats("_test_cache_ok")
+
+    def test_unregister_removes_provider(self) -> None:
+        register_cache_stats("_test_cache_gone", lambda: {"hits": 1})
+        unregister_cache_stats("_test_cache_gone")
+        assert "_test_cache_gone" not in collect_cache_stats()

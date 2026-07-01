@@ -36,6 +36,7 @@ from typing import TYPE_CHECKING, Any
 
 import structlog
 
+from tapps_core.cache import AtomicJsonCache, register_cache_stats
 from tapps_core.config.settings import load_settings
 from tapps_mcp.mcp_register import register_tool
 from tapps_mcp.server_helpers import error_response, success_response
@@ -143,32 +144,41 @@ def _ttl_for_state(state: str | None, ttl_open: int, ttl_closed: int) -> int:
     return ttl_open
 
 
+# ADR-0029 / TAP-4561: unified cache-stats counters (snapshot reads/writes).
+_snapshot_stats: dict[str, int] = {"hits": 0, "misses": 0, "writes": 0}
+register_cache_stats("linear_snapshot", lambda: dict(_snapshot_stats))
+
+
 def _cache_read(cache_dir: Path, cache_key: str) -> dict[str, Any] | None:
     """Return cached payload if present and unexpired; None otherwise."""
     cache_file = cache_dir / f"{cache_key}.json"
     if not cache_file.exists():
+        _snapshot_stats["misses"] += 1
         return None
     try:
         raw = cache_file.read_text(encoding="utf-8")
         payload = json.loads(raw)
     except (OSError, json.JSONDecodeError) as exc:
         logger.debug("linear_cache_read_failed", key=cache_key, exc=str(exc))
+        _snapshot_stats["misses"] += 1
         return None
     expires_at = float(payload.get("expires_at", 0))
     if expires_at <= time.time():
+        _snapshot_stats["misses"] += 1
         return None
+    _snapshot_stats["hits"] += 1
     return payload  # type: ignore[no-any-return]
 
 
 def _cache_write(
     cache_dir: Path, cache_key: str, payload: dict[str, Any]
 ) -> None:
-    """Write payload to the cache atomically (tmp + rename)."""
+    """Write payload to the cache atomically (ADR-0029 shared primitive)."""
     cache_file = cache_dir / f"{cache_key}.json"
-    tmp = cache_file.with_suffix(".json.tmp")
     try:
-        tmp.write_text(json.dumps(payload), encoding="utf-8")
-        tmp.replace(cache_file)
+        # indent=None keeps the compact json.dumps byte layout from before.
+        AtomicJsonCache.write_json(cache_file, payload, indent=None)
+        _snapshot_stats["writes"] += 1
     except OSError as exc:
         logger.debug("linear_cache_write_failed", key=cache_key, exc=str(exc))
 

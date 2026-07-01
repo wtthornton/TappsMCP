@@ -110,3 +110,9 @@ def size() -> int:
     """Current number of entries in the cache."""
     with _lock:
         return len(_cache)
+
+
+# ADR-0029 / TAP-4561: report into the unified cache-stats surface.
+from tapps_core.cache import register_cache_stats as _register_cache_stats
+
+_register_cache_stats("content_hash", lambda: {**stats(), "size": size()})

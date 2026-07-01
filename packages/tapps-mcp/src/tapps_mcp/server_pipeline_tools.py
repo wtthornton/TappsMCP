@@ -673,12 +673,13 @@ async def tapps_session_start(
         data["search_first"] = search_first
         # TAP-1331: schedule background lookup_docs cache warm so the next
         # session's first call is a hit, not a 1-3s Context7 round-trip.
+        # Routed through the single session-start warmer (ADR-0029 / TAP-4561).
         try:
-            from tapps_mcp.tools.session_start_helpers import _schedule_lookup_docs_warm
+            from tapps_mcp.tools.session_start_helpers import schedule_session_warm
 
-            data["cache_warm"] = _schedule_lookup_docs_warm(
-                settings.project_root, search_first.get("covered", [])
-            )
+            data["cache_warm"] = schedule_session_warm(
+                settings.project_root, covered=search_first.get("covered", [])
+            )["docs"]
         except Exception:
             data["cache_warm"] = {"scheduled": False, "skipped": "exception"}
 
@@ -692,12 +693,15 @@ async def tapps_session_start(
         _logger.debug("repo_orientation_session_start_failed", exc_info=True)
 
     # Epic 114: surface call-graph cache readiness for symbol-level refactors.
+    # Rebuild scheduling routes through the single warmer (ADR-0029 / TAP-4561).
     try:
         from tapps_mcp.project.call_graph_cache import summarize_call_graph_cache
-        from tapps_mcp.tools.session_start_helpers import _schedule_call_graph_rebuild
+        from tapps_mcp.tools.session_start_helpers import schedule_session_warm
 
         call_graph_summary = summarize_call_graph_cache(Path(settings.project_root))
-        rebuild = _schedule_call_graph_rebuild(Path(settings.project_root), call_graph_summary)
+        rebuild = schedule_session_warm(
+            Path(settings.project_root), call_graph_summary=call_graph_summary
+        )["call_graph"]
         if rebuild.get("scheduled"):
             call_graph_summary["rebuild_scheduled"] = True
         data["call_graph"] = call_graph_summary

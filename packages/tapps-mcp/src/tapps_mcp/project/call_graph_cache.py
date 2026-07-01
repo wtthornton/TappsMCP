@@ -8,7 +8,12 @@ from pathlib import Path
 
 import structlog
 
-from tapps_core.cache import AtomicJsonCache, FingerprintStaleness, VersionStaleness
+from tapps_core.cache import (
+    AtomicJsonCache,
+    FingerprintStaleness,
+    VersionStaleness,
+    register_cache_stats,
+)
 from tapps_mcp.pipeline.agent_contract import (
     CALL_GRAPH_DEGRADED_HINT,
     CALL_GRAPH_STALE_HINT,
@@ -35,6 +40,10 @@ from tapps_mcp.project.call_graph_types import (
 
 logger = structlog.get_logger(__name__)
 
+# ADR-0029 / TAP-4561: unified cache-stats counters (index load hits/misses).
+_stats: dict[str, int] = {"hits": 0, "misses": 0}
+register_cache_stats("call_graph", lambda: dict(_stats))
+
 
 def index_fingerprint(
     project_root: Path,
@@ -53,13 +62,17 @@ def index_fingerprint(
 def load_call_graph_index(project_root: Path) -> CallGraphIndex | None:
     path = project_root / CALL_GRAPH_CACHE_REL
     if not path.is_file():
+        _stats["misses"] += 1
         return None
     raw = AtomicJsonCache.read_json(path)
     if raw is None:
         logger.warning("call_graph_cache_read_failed", path=str(path))
+        _stats["misses"] += 1
         return None
     if not isinstance(raw, dict):
+        _stats["misses"] += 1
         return None
+    _stats["hits"] += 1
     return index_from_dict(raw)
 
 
