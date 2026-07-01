@@ -276,6 +276,15 @@ class _TsFileAnalyzer:
         self._local_functions: dict[str, str] = {}
         # "ClassName.method" -> qualified name.
         self._class_methods: dict[str, str] = {}
+        # tree-sitter node ids of the callable bodies that ARE registered
+        # symbols (top-level function decls, top-level arrow-const values, class
+        # methods). Phase 2 re-walks each of these as its own caller, so
+        # ``_walk_calls`` must STOP at them. Any *other* nested callable body —
+        # an anonymous arrow/function-expression closure (e.g. the callback in
+        # ``items.forEach(x => helper())``) — is NOT in this set, so the walk
+        # descends through it and attributes its calls to the nearest enclosing
+        # named symbol (TAP-4552), never dropping or mis-attributing them.
+        self._symbol_bodies: set[int] = set()
         # Cross-module import bindings (TAP-4539). Each maps a local binding name
         # to a resolution decision:
         #  - _named_bindings: local -> qualified callee ("<module>.<realName>"),
@@ -392,11 +401,13 @@ class _TsFileAnalyzer:
             if name:
                 qname = self._qualify(name)
                 self._local_functions[name] = qname
+                self._symbol_bodies.add(id(node))
                 self.symbols.append(self._symbol(qname, node, "function"))
         elif node.type == "lexical_declaration":
             for name, arrow in _arrow_declarators(node, self.source):
                 qname = self._qualify(name)
                 self._local_functions[name] = qname
+                self._symbol_bodies.add(id(arrow))
                 self.symbols.append(self._symbol(qname, arrow, "function"))
         elif node.type == "class_declaration":
             self._register_class(node)
@@ -419,6 +430,7 @@ class _TsFileAnalyzer:
                 continue
             qname = self._qualify_method(class_name, method_name)
             self._class_methods[f"{class_name}.{method_name}"] = qname
+            self._symbol_bodies.add(id(member))
             self.symbols.append(self._symbol(qname, member, "method"))
 
     # ------------------------------------------------------------------
@@ -553,24 +565,41 @@ class _TsFileAnalyzer:
             self._record_call(call, caller=caller, class_name=class_name)
 
     def _walk_calls(self, node: Any, *, skip_root: bool) -> list[Any]:
-        """Collect ``call_expression`` nodes owned by ``node``'s body.
+        """Collect ``call_expression`` nodes attributed to ``node``'s symbol.
 
         Descends through non-callable containers — crucially including
         ``variable_declarator`` — so a call in ``const x = f()`` is attributed
-        to the enclosing symbol (AC3). It does NOT descend into a nested
-        callable body (arrow / function / method): those are either their own
-        registered symbol (re-walked in phase 2) or an anonymous inline closure,
-        whose calls are deliberately dropped here rather than mis-attributed to
-        the enclosing caller (deterministic contract — never guess a caller).
+        to the enclosing symbol (AC3).
+
+        Nested callable bodies split two ways (TAP-4552):
+
+        * A callable that IS a registered symbol (a top-level function decl,
+          top-level arrow-const, or class method — tracked in
+          ``self._symbol_bodies``) is its own scope and is re-walked in phase 2
+          as its own caller, so the walk STOPS at it here to avoid
+          double-attribution.
+        * An ANONYMOUS closure (arrow / function-expression not registered as a
+          symbol — e.g. ``x => helper()`` in ``items.forEach(x => helper())``)
+          has no symbol of its own. The walk DESCENDS through it so its calls
+          attribute to the nearest enclosing NAMED symbol. Previously these
+          calls were dropped; now they are attributed correctly. Resolution of
+          the recovered call is identical to a direct call (``_resolve``), so an
+          unresolved callee still becomes an honest gap — never a guess.
         """
         out: list[Any] = []
         for child in node.children:
             if not skip_root and child.type == "call_expression":
                 out.append(child)
-            if child.type in (_ARROW_TYPE, _FUNCTION_DECL_TYPE, "function_expression"):
-                continue
-            if child.type == _METHOD_TYPE:
-                continue
+            if child.type in (
+                _ARROW_TYPE,
+                _FUNCTION_DECL_TYPE,
+                "function_expression",
+                _METHOD_TYPE,
+            ):
+                # Stop only at a registered symbol body (its own scope); descend
+                # through an anonymous closure to attribute its calls upward.
+                if id(child) in self._symbol_bodies:
+                    continue
             out.extend(self._walk_calls(child, skip_root=False))
         return out
 

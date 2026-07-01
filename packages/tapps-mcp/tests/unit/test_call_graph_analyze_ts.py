@@ -374,3 +374,158 @@ function run() { Component(); }
         _edges, gaps = self._gaps(tmp_path, "consumer", src)
         gap = next(g for g in gaps if g.expr == "Component")
         assert gap.reason == "import_unresolved"
+
+
+class TestCallbackAttribution:
+    """TAP-4552: calls inside anonymous callbacks attribute to the enclosing
+    NAMED symbol instead of being dropped.
+
+    Resolution of the recovered call is identical to a direct call: an
+    in-module callee produces a resolved edge; an unimported/unknown callee
+    produces an honest ``import_unresolved`` gap (ADR-0004 — never guessed).
+    """
+
+    def _run(self, tmp_path: Path, module: str, src: str, name: str = "mod.ts"):
+        f = _write(tmp_path, name, src)
+        _s, edges, gaps, failures = analyze_file_ts(f, module, tmp_path)
+        assert failures == []
+        return edges, gaps
+
+    def test_foreach_callback_resolved_callee(self, tmp_path: Path) -> None:
+        # AC1: `function render() { items.forEach(x => helper()); }`
+        # -> edge render -> helper (resolved in-module), NOT dropped.
+        src = """\
+function helper() {}
+function render() {
+  items.forEach(x => helper());
+}
+"""
+        edges, _gaps = self._run(tmp_path, "mod", src)
+        helper_edges = [e for e in edges if e.callee_expr == "helper"]
+        assert len(helper_edges) == 1
+        assert helper_edges[0].caller == "mod.render"
+        assert helper_edges[0].callee == "mod.helper"
+        assert helper_edges[0].resolved is True
+
+    def test_foreach_callback_unresolved_callee_is_honest_gap(
+        self, tmp_path: Path
+    ) -> None:
+        # AC2: an unknown callee inside the callback stays an honest gap.
+        src = """\
+function render() {
+  items.forEach(x => mysteryGlobal());
+}
+"""
+        edges, gaps = self._run(tmp_path, "mod", src)
+        assert not any(e.callee_expr == "mysteryGlobal" for e in edges)
+        gap = next(g for g in gaps if g.expr == "mysteryGlobal")
+        assert gap.caller == "mod.render"
+        assert gap.reason == "import_unresolved"
+
+    def test_map_callback_resolved_and_unresolved(self, tmp_path: Path) -> None:
+        # `.map` callback, resolved + unresolved callees together.
+        src = """\
+function transform(x) {}
+function build(rows) {
+  return rows.map(r => transform(unknownFn()));
+}
+"""
+        edges, gaps = self._run(tmp_path, "mod", src)
+        transform_edges = [e for e in edges if e.callee_expr == "transform"]
+        assert len(transform_edges) == 1
+        assert transform_edges[0].caller == "mod.build"
+        assert transform_edges[0].callee == "mod.transform"
+        gap = next(g for g in gaps if g.expr == "unknownFn")
+        assert gap.caller == "mod.build"
+        assert gap.reason == "import_unresolved"
+
+    def test_then_callback_resolved_and_unresolved(self, tmp_path: Path) -> None:
+        # A `.then` promise callback (function_expression form) — resolved and
+        # unresolved callees both attribute to the enclosing named function.
+        src = """\
+function onResult(v) {}
+function load(p) {
+  p.then(function (v) { onResult(missingCb()); });
+}
+"""
+        edges, gaps = self._run(tmp_path, "mod", src)
+        res_edges = [e for e in edges if e.callee_expr == "onResult"]
+        assert len(res_edges) == 1
+        assert res_edges[0].caller == "mod.load"
+        assert res_edges[0].callee == "mod.onResult"
+        gap = next(g for g in gaps if g.expr == "missingCb")
+        assert gap.caller == "mod.load"
+        assert gap.reason == "import_unresolved"
+
+    def test_callback_inside_method_attributes_to_method(self, tmp_path: Path) -> None:
+        # Inside a class method, a callback's `this.method()` resolves intra-class
+        # and its calls attribute to the enclosing method (not dropped).
+        src = """\
+class C {
+  helper() {}
+  run(items) {
+    items.forEach(x => this.helper());
+  }
+}
+"""
+        edges, _gaps = self._run(tmp_path, "c", src)
+        helper_edges = [e for e in edges if e.callee_expr == "this.helper"]
+        assert len(helper_edges) == 1
+        assert helper_edges[0].caller == "c.C.run"
+        assert helper_edges[0].callee == "c.C.helper"
+
+    def test_nested_anonymous_callbacks_attribute_to_outermost_named(
+        self, tmp_path: Path
+    ) -> None:
+        # `a.forEach(() => b.map(() => helper()))` -> attribute to the enclosing
+        # NAMED symbol, through two anonymous closures.
+        src = """\
+function helper() {}
+function render(a, b) {
+  a.forEach(() => b.map(() => helper()));
+}
+"""
+        edges, _gaps = self._run(tmp_path, "mod", src)
+        helper_edges = [e for e in edges if e.callee_expr == "helper"]
+        assert len(helper_edges) == 1
+        assert helper_edges[0].caller == "mod.render"
+        assert helper_edges[0].callee == "mod.helper"
+
+    def test_imported_callee_in_callback_resolves_cross_module(
+        self, tmp_path: Path
+    ) -> None:
+        # AC2: recovered call uses the same import resolution as a direct call.
+        src = """\
+import { greet } from "./util";
+function render(items) {
+  items.forEach(x => greet());
+}
+"""
+        edges, _gaps = self._run(tmp_path, "consumer", src)
+        edge = next(e for e in edges if e.callee_expr == "greet")
+        assert edge.caller == "consumer.render"
+        assert edge.callee == "util.greet"
+        assert edge.resolved is True
+
+    def test_module_top_level_callback_not_fabricated(self, tmp_path: Path) -> None:
+        # AC3: a callback at module top level (no enclosing named symbol) is
+        # handled sanely — dropped, never a fabricated caller, no crash.
+        src = """\
+function helper() {}
+items.forEach(x => helper());
+"""
+        edges, gaps = self._run(tmp_path, "mod", src)
+        assert not any(e.callee_expr == "helper" for e in edges)
+        assert not any(g.expr == "helper" for g in gaps)
+
+    def test_top_level_named_arrow_const_still_own_scope(self, tmp_path: Path) -> None:
+        # Regression guard: a TOP-LEVEL named arrow-const remains its own caller
+        # scope (must NOT be swallowed by the callback-attribution change).
+        src = """\
+function target() {}
+const runner = () => { target(); };
+"""
+        edges, _gaps = self._run(tmp_path, "mod", src)
+        edge = next(e for e in edges if e.callee_expr == "target")
+        assert edge.caller == "mod.runner"
+        assert edge.callee == "mod.target"
