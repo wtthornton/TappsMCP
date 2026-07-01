@@ -16,6 +16,10 @@ from tapps_mcp.project.call_graph_cache import (
 )
 from tapps_mcp.project.call_graph_fingerprint import compute_index_fingerprint
 from tapps_mcp.project.call_graph_resolve_ts import resolve_ts_cross_file
+from tapps_mcp.project.call_graph_routes import (
+    extract_fastapi_routes,
+    extract_react_router_routes,
+)
 from tapps_mcp.project.call_graph_tsconfig import load_tsconfig_paths
 from tapps_mcp.project.call_graph_types import (
     CALL_GRAPH_CACHE_REL,
@@ -26,6 +30,7 @@ from tapps_mcp.project.call_graph_types import (
     ModuleExports,
     ParseFailure,
     ResolutionGap,
+    RouteEdge,
     SymbolRecord,
 )
 from tapps_mcp.project.import_graph import _DEFAULT_EXCLUDES, _file_to_module, _should_skip
@@ -121,6 +126,9 @@ def build_call_graph_index(
     edges: list[CallEdge] = []
     gaps: list[ResolutionGap] = []
     parse_failures: list[ParseFailure] = []
+    # HTTP route -> handler edges (TAP-4532): FastAPI decorators (Python) and
+    # React Router JSX (TS). Deterministic; dynamic routes are omitted, not guessed.
+    routes: list[RouteEdge] = []
     # TS cross-file resolution material (S4, TAP-4540): each module's export
     # surface plus the deferred call sites the per-file pass could not resolve.
     ts_exports: dict[str, ModuleExports] = {}
@@ -156,10 +164,12 @@ def build_call_graph_index(
             ) = analyze_file_ts_full(source_file, module, project_root)
             ts_exports[module] = module_exports
             ts_deferred.extend(deferred)
+            routes.extend(extract_react_router_routes(source_file, module, project_root))
         else:
             file_symbols, file_edges, file_gaps, file_failures = analyzer(
                 source_file, module, project_root
             )
+            routes.extend(extract_fastapi_routes(source_file, module, project_root))
         symbols.extend(file_symbols)
         edges.extend(file_edges)
         gaps.extend(file_gaps)
@@ -209,15 +219,23 @@ def build_call_graph_index(
     edges.sort(key=lambda e: (e.caller, e.line, e.callee_expr))
     gaps.sort(key=lambda g: (g.caller, g.line, g.expr))
     parse_failures.sort(key=lambda p: (p.file_path, p.line))
+    routes.sort(key=lambda r: (r.file_path, r.line, r.method, r.path))
 
     index = CallGraphIndex(
         symbols=symbols,
         edges=edges,
         resolution_gaps=gaps,
         parse_failures=parse_failures,
+        routes=routes,
         project_root=str(project_root),
         fingerprint=fingerprint,
     )
     save_call_graph_index(project_root, index)
-    logger.info("call_graph_index_built", symbols=len(symbols), edges=len(edges), gaps=len(gaps))
+    logger.info(
+        "call_graph_index_built",
+        symbols=len(symbols),
+        edges=len(edges),
+        gaps=len(gaps),
+        routes=len(routes),
+    )
     return index

@@ -7,6 +7,7 @@ from collections import deque
 from dataclasses import asdict
 from typing import Any, Literal
 
+from tapps_mcp.project.call_graph_routes import handlers_for_path, routes_for_handler
 from tapps_mcp.project.call_graph_types import CallGraphIndex, ResolutionGap
 
 DEFAULT_TOKEN_BUDGET = 4000
@@ -257,4 +258,24 @@ def compact_symbol_impact(
         "symbols": symbols_out,
         "truncated": truncated,
         "token_budget": token_budget,
+    }
+
+
+def query_route_handler(index: CallGraphIndex, path: str) -> dict[str, Any]:
+    """Which handler(s) serve HTTP/route *path* (TAP-4532 AC2)."""
+    matches = handlers_for_path(index.routes, path.strip())
+    return {
+        "path": path,
+        "found": bool(matches),
+        "handlers": [asdict(r) for r in matches],
+    }
+
+
+def query_routes_for_handler(index: CallGraphIndex, handler: str) -> dict[str, Any]:
+    """Which routes break if handler *handler* changes — blast radius (AC2)."""
+    matches = routes_for_handler(index.routes, handler)
+    return {
+        "handler": handler,
+        "found": bool(matches),
+        "routes": [asdict(r) for r in matches],
     }

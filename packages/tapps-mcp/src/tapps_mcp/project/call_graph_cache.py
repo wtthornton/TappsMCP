@@ -29,6 +29,7 @@ from tapps_mcp.project.call_graph_types import (
     CallGraphIndex,
     ParseFailure,
     ResolutionGap,
+    RouteEdge,
     SymbolRecord,
 )
 
@@ -99,6 +100,7 @@ def index_to_dict(index: CallGraphIndex) -> dict[str, object]:
         "edges": [asdict(e) for e in index.edges],
         "resolution_gaps": [asdict(g) for g in index.resolution_gaps],
         "parse_failures": [asdict(p) for p in index.parse_failures],
+        "routes": [asdict(r) for r in index.routes],
     }
 
 
@@ -109,11 +111,13 @@ def index_from_dict(raw: dict[str, object]) -> CallGraphIndex:
     failures = [
         ParseFailure(**p) for p in raw.get("parse_failures", []) if isinstance(p, dict)
     ]  # type: ignore[arg-type]
+    routes = [RouteEdge(**r) for r in raw.get("routes", []) if isinstance(r, dict)]  # type: ignore[arg-type]
     return CallGraphIndex(
         symbols=symbols,
         edges=edges,
         resolution_gaps=gaps,
         parse_failures=failures,
+        routes=routes,
         project_root=str(raw.get("project_root", "")),
         fingerprint=str(raw.get("fingerprint", "")),
         version=int(raw.get("version", INDEX_VERSION)),
