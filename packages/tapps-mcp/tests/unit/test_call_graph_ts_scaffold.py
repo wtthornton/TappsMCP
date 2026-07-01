@@ -10,11 +10,11 @@ from __future__ import annotations
 from pathlib import Path
 
 from tapps_mcp.project.call_graph import (
-    _analyze_ts_placeholder,
     _analyzer_for,
     _ts_file_to_module,
 )
 from tapps_mcp.project.call_graph_analyze import analyze_file
+from tapps_mcp.project.call_graph_analyze_ts import analyze_file_ts
 from tapps_mcp.project.call_graph_cache import index_from_dict, index_to_dict
 from tapps_mcp.project.call_graph_types import (
     INDEX_VERSION,
@@ -81,20 +81,14 @@ class TestSuffixDispatch:
     def test_py_routes_to_analyze_file(self) -> None:
         assert _analyzer_for(".py") is analyze_file
 
-    def test_ts_routes_to_placeholder(self) -> None:
-        assert _analyzer_for(".ts") is _analyze_ts_placeholder
+    def test_ts_routes_to_ts_analyzer(self) -> None:
+        assert _analyzer_for(".ts") is analyze_file_ts
 
-    def test_tsx_routes_to_placeholder(self) -> None:
-        assert _analyzer_for(".tsx") is _analyze_ts_placeholder
+    def test_tsx_routes_to_ts_analyzer(self) -> None:
+        assert _analyzer_for(".tsx") is analyze_file_ts
 
     def test_unknown_suffix_has_no_analyzer(self) -> None:
         assert _analyzer_for(".rb") is None
-
-    def test_placeholder_returns_empty_results(self, tmp_path: Path) -> None:
-        symbols, edges, gaps, failures = _analyze_ts_placeholder(
-            tmp_path / "x.ts", "x", tmp_path
-        )
-        assert (symbols, edges, gaps, failures) == ([], [], [], [])
 
 
 class TestTsFileToModule:

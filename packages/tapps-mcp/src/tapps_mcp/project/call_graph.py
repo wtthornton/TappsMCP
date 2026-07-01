@@ -8,6 +8,7 @@ from pathlib import Path
 import structlog
 
 from tapps_mcp.project.call_graph_analyze import analyze_file
+from tapps_mcp.project.call_graph_analyze_ts import analyze_file_ts
 from tapps_mcp.project.call_graph_cache import (
     fingerprint_settings,
     load_call_graph_index,
@@ -37,23 +38,10 @@ AnalyzeResult = tuple[
 # A file analyzer takes (file_path, module, project_root) and returns AnalyzeResult.
 FileAnalyzer = Callable[[Path, str, Path], AnalyzeResult]
 
-# Suffixes we collect during the walk. Python routes to the real analyzer;
-# TypeScript routes to the S2 placeholder until the TS analyzer lands (TAP-4537).
+# Suffixes we collect during the walk. Python routes to the real Python
+# analyzer; TypeScript routes to the tree-sitter TS analyzer (S2, TAP-4538).
 _PY_SUFFIXES = (".py",)
 _TS_SUFFIXES = (".ts", ".tsx")
-
-
-def _analyze_ts_placeholder(
-    file_path: Path,
-    module: str,
-    project_root: Path,
-) -> AnalyzeResult:
-    """Placeholder TS analyzer — returns empty results until S2 (TAP-4537).
-
-    The real tree-sitter TypeScript analyzer arrives in S2; this keeps the
-    suffix-dispatch wiring exercisable and the ``.ts``/``.tsx`` walk inert.
-    """
-    return ([], [], [], [])
 
 
 def _analyzer_for(suffix: str) -> FileAnalyzer | None:
@@ -61,7 +49,7 @@ def _analyzer_for(suffix: str) -> FileAnalyzer | None:
     if suffix in _PY_SUFFIXES:
         return analyze_file
     if suffix in _TS_SUFFIXES:
-        return _analyze_ts_placeholder
+        return analyze_file_ts
     return None
 
 
