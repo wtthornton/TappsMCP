@@ -10,7 +10,11 @@ CALL_GRAPH_CACHE_REL = ".tapps-mcp/call-graph-index.json"
 # language-dispatch scaffold. Bumping this invalidates any v2 cache on load.
 # v4 (TAP-4532): CallGraphIndex gains a persisted ``routes: list[RouteEdge]``
 # for HTTP route -> handler edges (FastAPI decorators + React Router JSX).
-INDEX_VERSION = 4
+# v5 (TAP-4533): CallGraphIndex gains persisted incremental-reindex material —
+# ``per_file_fingerprints`` (changed-subset detection) and ``ts_exports`` /
+# ``ts_deferred`` (the TS cross-file post-pass inputs, so unchanged TS files
+# need not be re-parsed on an incremental update). Bumping invalidates v4.
+INDEX_VERSION = 5
 SymbolKind = Literal["function", "method"]
 
 # Stable taxonomy for resolution gaps (TAP-4092).
@@ -125,6 +129,34 @@ class DeferredCall:
 
 
 @dataclass
+class PerFileRaw:
+    """Persisted per-file raw analysis result for incremental re-index (TAP-4533).
+
+    This is the pre-post-pass output of analyzing ONE source file: its symbols,
+    raw edges, raw gaps, parse failures, routes, and (for TS files) the
+    cross-file post-pass inputs. The finalize step merges every file's
+    ``PerFileRaw`` and runs the TS post-pass over the combined set — so an
+    incremental update re-parses only the changed files, swaps their
+    ``PerFileRaw`` entries, and re-runs the identical finalize for a result
+    byte-equivalent to a full rebuild (ADR-0004).
+
+    Persisting the raw (pre-post-pass) edges/gaps — separately from the index's
+    final post-processed edges/gaps — is what makes reconstruction exact: the TS
+    post-pass is idempotent only when fed raw inputs, never its own output.
+    """
+
+    symbols: list[SymbolRecord] = field(default_factory=list)
+    edges: list[CallEdge] = field(default_factory=list)
+    gaps: list[ResolutionGap] = field(default_factory=list)
+    parse_failures: list[ParseFailure] = field(default_factory=list)
+    routes: list[RouteEdge] = field(default_factory=list)
+    # TS-only cross-file post-pass inputs; ``ts_module`` is None for Python.
+    ts_module: str | None = None
+    ts_exports: ModuleExports | None = None
+    ts_deferred: list[DeferredCall] = field(default_factory=list)
+
+
+@dataclass
 class ModuleExports:
     """Export surface of one TS module, for cross-file resolution (TAP-4540)."""
 
@@ -149,6 +181,16 @@ class CallGraphIndex:
     project_root: str = ""
     fingerprint: str = ""
     version: int = INDEX_VERSION
+    # Incremental-reindex material (TAP-4533), persisted in the v5 index.
+    # ``per_file_fingerprints``: {relative_posix_path: content_hash} — the
+    # changed subset for an incremental update is the diff of this map against a
+    # freshly computed one. ``raw_by_file``: {relative_posix_path: PerFileRaw} —
+    # the pre-post-pass analysis of every file, so an incremental update
+    # re-parses only changed files then re-runs the finalize/post-pass over the
+    # combined raw set (byte-equivalent to a full rebuild). Both are empty for a
+    # v4 cache loaded before a rebuild, which correctly forces a full rebuild.
+    per_file_fingerprints: dict[str, str] = field(default_factory=dict)
+    raw_by_file: dict[str, PerFileRaw] = field(default_factory=dict)
 
     def symbol_names(self) -> set[str]:
         return {s.qualified_name for s in self.symbols}

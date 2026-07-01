@@ -101,9 +101,7 @@ def _mtime_fingerprint_component(settings: CallGraphFingerprintSettings, index_v
         excludes.update(settings.exclude_patterns)
     parts = [f"v{index_version}", settings.top_level_package]
     source_files = sorted(
-        f
-        for suffix in _FINGERPRINT_SUFFIXES
-        for f in settings.project_root.rglob(f"*{suffix}")
+        f for suffix in _FINGERPRINT_SUFFIXES for f in settings.project_root.rglob(f"*{suffix}")
     )
     for source_file in source_files:
         if _should_skip(source_file, excludes) or source_file.name.endswith("_pb2.py"):
@@ -117,6 +115,37 @@ def _mtime_fingerprint_component(settings: CallGraphFingerprintSettings, index_v
     return "|".join(parts)
 
 
+def compute_per_file_fingerprints(
+    settings: CallGraphFingerprintSettings,
+) -> dict[str, str]:
+    """Return a ``{relative_posix_path: content_hash}`` map for the source tree.
+
+    Per-file fingerprints (TAP-4533) let the incremental re-index compute the
+    *changed subset* without re-hashing every file semantically: compare this
+    map to the one persisted in the cached index and the differing keys are the
+    files to re-parse. The hash is content-based (sha256 of the file bytes) so
+    it is stable across checkouts and machines — unlike an mtime, which changes
+    on a no-op ``touch`` and would force a needless re-parse.
+    """
+    excludes = set(_DEFAULT_EXCLUDES)
+    if settings.exclude_patterns:
+        excludes.update(settings.exclude_patterns)
+    fingerprints: dict[str, str] = {}
+    source_files = sorted(
+        f for suffix in _FINGERPRINT_SUFFIXES for f in settings.project_root.rglob(f"*{suffix}")
+    )
+    for source_file in source_files:
+        if _should_skip(source_file, excludes) or source_file.name.endswith("_pb2.py"):
+            continue
+        try:
+            data = source_file.read_bytes()
+        except OSError:
+            continue
+        rel = source_file.relative_to(settings.project_root).as_posix()
+        fingerprints[rel] = hashlib.sha256(data).hexdigest()[:16]
+    return fingerprints
+
+
 def compute_index_fingerprint(
     settings: CallGraphFingerprintSettings,
     *,
@@ -127,8 +156,7 @@ def compute_index_fingerprint(
     git_part = _git_fingerprint_component(settings.project_root)
     if git_part is not None:
         payload = (
-            f"git:{git_part}|pkg:{settings.top_level_package}"
-            f"|v{index_version}|ts:{ts_grammar}"
+            f"git:{git_part}|pkg:{settings.top_level_package}|v{index_version}|ts:{ts_grammar}"
         )
     else:
         payload = f"{_mtime_fingerprint_component(settings, index_version)}|ts:{ts_grammar}"
