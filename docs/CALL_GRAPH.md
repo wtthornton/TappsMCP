@@ -1,6 +1,6 @@
 # Call graph tools (consumer guide)
 
-TappsMCP v3.12.31+ ships **function-level call graph** tools for Python projects (Epic 114, [ADR-0017](adr/0017-function-level-call-graph-python-first.md)). Use them before refactors to see callers, callees, and affected tests — without grepping the repo. TypeScript (`.ts`/`.tsx`) support via tree-sitter is described in [ADR-0026](adr/0026-typescript-call-graph-via-tree-sitter.md). Sharing a CI-built index across fresh checkouts (proposed) is designed in [ADR-0027](adr/0027-shareable-call-graph-artifact.md).
+TappsMCP v3.12.31+ ships **function-level call graph** tools for Python projects (Epic 114, [ADR-0017](adr/0017-function-level-call-graph-python-first.md)). Use them before refactors to see callers, callees, and affected tests — without grepping the repo. TypeScript (`.ts`/`.tsx`) support via tree-sitter is described in [ADR-0026](adr/0026-typescript-call-graph-via-tree-sitter.md). Sharing a CI-built index across fresh checkouts (proposed) is designed in [ADR-0027](adr/0027-shareable-call-graph-artifact.md). The boundary — why this stays a single deterministic store with fixed tools (no Cypher/query language) and how an external comprehension tool must be fenced off from the graph/memory/review path — is set in [ADR-0028](adr/0028-code-graph-boundary-fenced-external-comprehension-and-no-query-language.md).
 
 ---
 
@@ -161,7 +161,10 @@ Format: `code_symbol<TAB>test_file<TAB>test_symbol` — useful for CI scripts an
 - Committing `call-graph-index.json` to git
 - Eliminating all `resolution_gaps`
 
-See [ADR-0017](adr/0017-function-level-call-graph-python-first.md) for scope and alternatives.
+- General graph-query language (Cypher/openCypher) — the graph is served by fixed, purpose-built tools only ([ADR-0028](adr/0028-code-graph-boundary-fenced-external-comprehension-and-no-query-language.md))
+- Adopting an external code-graph store (e.g. codebase-memory-mcp) as the graph or memory source — permitted only as a fenced, opt-in *comprehension* tool ([ADR-0028](adr/0028-code-graph-boundary-fenced-external-comprehension-and-no-query-language.md))
+
+See [ADR-0017](adr/0017-function-level-call-graph-python-first.md) for scope and alternatives, and [ADR-0028](adr/0028-code-graph-boundary-fenced-external-comprehension-and-no-query-language.md) for the external-tool / query-language boundary.
 
 ---
 
