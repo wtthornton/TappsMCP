@@ -16,6 +16,40 @@ Module-level import impact remains `tapps_impact_analysis` without `symbol`. Cal
 
 ---
 
+## Review path: `diff_impact` blast radius (TAP-4526)
+
+`tapps_validate_changed(include_impact=true)` — the reviewer's batch entry point —
+attaches a `diff_impact` block to its response. For each changed Python **symbol**
+it reports, reusing the existing call graph (no new analysis, no LLM, no network,
+per [ADR-0004](adr/0004-deterministic-tools-only-contract.md)):
+
+- `callers` — in-repo functions/methods that call the symbol (from static CALLS edges).
+- `affected_tests` — ranked `{test_file, test_symbol}` pairs that exercise it (TESTS edges).
+
+Shape:
+
+```json
+"diff_impact": {
+  "cache_status": "ready",
+  "degraded": false,
+  "symbols": {
+    "pkg.mod.changed_fn": {
+      "callers": ["pkg.mod.caller_a", "pkg.other.caller_b"],
+      "affected_tests": [{"test_file": "tests/test_mod.py", "test_symbol": "test_changed_fn"}]
+    }
+  },
+  "changed_files": ["pkg/mod.py"]
+}
+```
+
+**Graceful degradation:** when the call-graph cache is missing or stale, the block
+is still present with `degraded: true` and a `note` (empty `symbols`) rather than
+raising. Rebuild via `tapps_call_graph` or `tapps_diff_impact(force_rebuild=true)`,
+then re-review. This is distinct from the flat, cross-change-set `affected_tests`
+block: `diff_impact` is keyed **per symbol** and adds each symbol's callers.
+
+---
+
 ## Local cache (not in git)
 
 The index is written to:

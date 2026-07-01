@@ -5,6 +5,7 @@ from __future__ import annotations
 from dataclasses import asdict, dataclass
 from pathlib import Path
 
+from tapps_mcp.pipeline.agent_contract import CALL_GRAPH_STALE_HINT
 from tapps_mcp.project.call_graph import build_call_graph_index
 from tapps_mcp.project.call_graph_queries import resolve_symbol_name
 from tapps_mcp.project.impact_analyzer import analyze_impact, build_import_graph
@@ -175,6 +176,113 @@ def analyze_diff_impact(
     }
     if doc_drift_hints:
         payload["doc_drift_hints"] = doc_drift_hints
+    return payload
+
+
+def build_diff_impact_enrichment(
+    changed_files: list[Path],
+    project_root: Path,
+    *,
+    max_callers: int = 10,
+    max_tests: int = 10,
+) -> dict[str, object]:
+    """Per-changed-symbol callers + ranked affected tests for the review path (TAP-4526).
+
+    Deterministic (ADR-0004): reuses the cached call-graph index and TESTS edges.
+    Never rebuilds the index and never hits the network / an LLM. When the
+    call-graph cache is missing or stale, returns a ``degraded`` block with a
+    ``note`` and empty ``symbols`` — the caller must not crash.
+
+    Returns a dict shaped::
+
+        {
+            "degraded": bool,
+            "note": str,                # present only when degraded
+            "cache_status": str,        # missing | unreadable | stale | ready
+            "symbols": {
+                "<qualified_name>": {
+                    "callers": ["<qualified caller>", ...],   # in-repo only
+                    "affected_tests": [{"test_file", "test_symbol"}, ...],
+                },
+                ...,
+            },
+            "changed_files": ["...", ...],
+        }
+    """
+    from tapps_mcp.project.call_graph_cache import (
+        load_call_graph_index,
+        summarize_call_graph_cache,
+    )
+
+    changed_paths = [str(p) for p in changed_files]
+
+    cache = summarize_call_graph_cache(project_root)
+    status = str(cache.get("status", "missing"))
+    if status != "ready":
+        note = str(
+            cache.get("hint")
+            or "Call-graph cache is missing or stale — run tapps_call_graph or "
+            "tapps_diff_impact(force_rebuild=True) to enable diff-impact enrichment."
+        )
+        return {
+            "degraded": True,
+            "note": note,
+            "cache_status": status,
+            "symbols": {},
+            "changed_files": changed_paths,
+        }
+
+    index = load_call_graph_index(project_root)
+    if index is None:
+        return {
+            "degraded": True,
+            "note": CALL_GRAPH_STALE_HINT,
+            "cache_status": "unreadable",
+            "symbols": {},
+            "changed_files": changed_paths,
+        }
+
+    from tapps_mcp.project.test_linker import build_test_edges, get_tests_for_symbol
+
+    test_edges = build_test_edges(index, project_root=project_root)
+
+    symbols_out: dict[str, dict[str, object]] = {}
+    for changed in changed_files:
+        try:
+            rel = str(changed.resolve().relative_to(project_root.resolve()))
+        except ValueError:
+            rel = str(changed)
+        for sym in sorted(_symbols_in_file(index, rel.replace("\\", "/"))):
+            if sym in symbols_out:
+                continue
+            callers = [
+                edge.caller
+                for edge in index.callers_of(sym)[:max_callers]
+            ]
+            tests = get_tests_for_symbol(test_edges, sym, index=index)[:max_tests]
+            symbols_out[sym] = {
+                "callers": callers,
+                "affected_tests": [
+                    {
+                        "test_file": str(t.get("test_file", "")),
+                        "test_symbol": str(t.get("test_symbol", "")),
+                    }
+                    for t in tests
+                ],
+            }
+
+    degraded = bool(index.resolution_gaps or index.parse_failures)
+    payload: dict[str, object] = {
+        "degraded": degraded,
+        "cache_status": status,
+        "symbols": symbols_out,
+        "changed_files": changed_paths,
+    }
+    if degraded:
+        payload["note"] = (
+            f"Call graph has {len(index.resolution_gaps)} unresolved reference(s) and "
+            f"{len(index.parse_failures)} parse failure(s) — some callers/tests may be missing."
+        )
     return payload
 
 

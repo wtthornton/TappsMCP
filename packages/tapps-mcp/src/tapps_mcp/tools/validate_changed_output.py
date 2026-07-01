@@ -112,6 +112,37 @@ def _compute_affected_tests(
         return {"error": "affected tests analysis failed"}
 
 
+def _compute_diff_impact(
+    paths: list[Path],
+    project_root: Path,
+) -> dict[str, Any] | None:
+    """Per-changed-symbol callers + ranked affected tests (TAP-4526).
+
+    Deterministic reuse of the cached call graph. Degrades gracefully (a
+    ``degraded`` block with a ``note``) when the cache is missing or stale —
+    never raises. Only source (non-test) Python files are enriched.
+    """
+    from tapps_mcp.project.diff_impact import build_diff_impact_enrichment
+    from tapps_mcp.project.impact_analyzer import _is_test_file
+
+    py_sources = [
+        p
+        for p in paths
+        if p.suffix in {".py", ".pyi"} and p.exists() and not _is_test_file(p)
+    ]
+    if not py_sources:
+        return None
+    try:
+        return build_diff_impact_enrichment(py_sources, project_root)
+    except Exception:
+        _logger.debug("diff_impact_enrichment_failed", exc_info=True)
+        return {
+            "degraded": True,
+            "note": "diff-impact enrichment failed",
+            "symbols": {},
+        }
+
+
 def _build_structured_validation_output(
     results: list[dict[str, Any]],
     all_passed: bool,
@@ -372,6 +403,15 @@ def attach_affected_tests(
     """Add optional affected_tests block when diff-impact ranking is available."""
     if affected_tests_data is not None:
         resp_data["affected_tests"] = affected_tests_data
+
+
+def attach_diff_impact(
+    resp_data: dict[str, Any],
+    diff_impact_data: dict[str, Any] | None,
+) -> None:
+    """Add optional per-symbol diff_impact block (callers + affected tests, TAP-4526)."""
+    if diff_impact_data is not None:
+        resp_data["diff_impact"] = diff_impact_data
 
 
 def _build_judge_summary_rows(judge_results: list[dict[str, Any]]) -> list[str]:
