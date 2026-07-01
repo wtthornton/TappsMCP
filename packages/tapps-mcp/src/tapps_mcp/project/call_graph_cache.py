@@ -2,16 +2,13 @@
 
 from __future__ import annotations
 
-import contextlib
-import json
-import os
-import tempfile
 import time
 from dataclasses import asdict
 from pathlib import Path
 
 import structlog
 
+from tapps_core.cache import AtomicJsonCache, FingerprintStaleness, VersionStaleness
 from tapps_mcp.pipeline.agent_contract import (
     CALL_GRAPH_DEGRADED_HINT,
     CALL_GRAPH_STALE_HINT,
@@ -39,23 +36,6 @@ from tapps_mcp.project.call_graph_types import (
 logger = structlog.get_logger(__name__)
 
 
-def _write_atomic(target: Path, content: str) -> None:
-    """Write *content* to *target* atomically via tempfile + replace (TAP-4075)."""
-    fd, tmp_path = tempfile.mkstemp(
-        dir=str(target.parent),
-        prefix=".tmp_",
-        suffix=target.suffix,
-    )
-    try:
-        with os.fdopen(fd, "w", encoding="utf-8") as handle:
-            handle.write(content)
-        Path(tmp_path).replace(target)
-    except BaseException:
-        with contextlib.suppress(OSError):
-            Path(tmp_path).unlink()
-        raise
-
-
 def index_fingerprint(
     project_root: Path,
     exclude_patterns: list[str] | None,
@@ -74,10 +54,9 @@ def load_call_graph_index(project_root: Path) -> CallGraphIndex | None:
     path = project_root / CALL_GRAPH_CACHE_REL
     if not path.is_file():
         return None
-    try:
-        raw = json.loads(path.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError) as exc:
-        logger.warning("call_graph_cache_read_failed", path=str(path), error=str(exc))
+    raw = AtomicJsonCache.read_json(path)
+    if raw is None:
+        logger.warning("call_graph_cache_read_failed", path=str(path))
         return None
     if not isinstance(raw, dict):
         return None
@@ -88,8 +67,8 @@ def save_call_graph_index(project_root: Path, index: CallGraphIndex) -> None:
     path = project_root / CALL_GRAPH_CACHE_REL
     try:
         path.parent.mkdir(parents=True, exist_ok=True)
-        payload = json.dumps(index_to_dict(index), indent=2, sort_keys=True)
-        _write_atomic(path, payload)
+        # sort_keys/indent preserve the exact prior byte layout (ADR-0029 pilot).
+        AtomicJsonCache.write_json(path, index_to_dict(index), indent=2, sort_keys=True)
     except OSError as exc:
         logger.warning("call_graph_cache_write_failed", path=str(path), error=str(exc))
 
@@ -298,7 +277,7 @@ def summarize_call_graph_cache(
             "hint": CALL_GRAPH_STALE_HINT,
         }
 
-    if cached.version != INDEX_VERSION:
+    if VersionStaleness(INDEX_VERSION).is_stale(cached.version):
         return {
             "status": "stale",
             "ready": False,
@@ -312,7 +291,7 @@ def summarize_call_graph_cache(
         }
 
     current_fp = compute_index_fingerprint(settings, index_version=INDEX_VERSION)
-    stale = cached.fingerprint != current_fp
+    stale = FingerprintStaleness(current_fp).is_stale(cached.fingerprint)
     edge_count = len(cached.edges)
     gap_count = len(cached.resolution_gaps)
     parse_fail_count = len(cached.parse_failures)
