@@ -1,0 +1,104 @@
+# tapps-mcp curated, PINNED, OFFLINE semgrep ruleset (TAP-4529).
+#
+# This file is the ONLY config semgrep is ever pointed at during scoring
+# (`--config <this-file>`). It must never trigger a network fetch: no
+# `p/...` registry packs, no `--config auto`, no remote `extends`. The rules
+# below are hand-curated, small, and high-signal — a handful of taint/security
+# patterns that complement (not duplicate) bandit. Determinism is a hard
+# requirement of the scorer contract (ADR-0004): same input file => same
+# findings, every run, with zero network access.
+#
+# Rule ids are namespaced `tapps.python.<name>` so semgrep findings are
+# unambiguously distinguishable from bandit's `B###` codes when merged into
+# the security section of a score.
+rules:
+  # ---- Taint: command injection via shell=True on tainted input ----------
+  - id: tapps.python.dangerous-subprocess-shell-true
+    languages: [python]
+    severity: ERROR
+    message: >-
+      subprocess call with shell=True can enable OS command injection when any
+      argument is attacker-controlled. Prefer a list argv with shell=False.
+    metadata:
+      category: security
+      cwe: "CWE-78: OS Command Injection"
+      owasp: "A03:2021-Injection"
+    patterns:
+      - pattern-either:
+          - pattern: subprocess.$FUNC(..., shell=True, ...)
+          - pattern: subprocess.$FUNC(..., shell=$X, ...)
+      - metavariable-pattern:
+          metavariable: $FUNC
+          patterns:
+            - pattern-either:
+                - pattern: run
+                - pattern: call
+                - pattern: Popen
+                - pattern: check_call
+                - pattern: check_output
+
+  # ---- eval / exec on dynamic input --------------------------------------
+  - id: tapps.python.dangerous-eval-exec
+    languages: [python]
+    severity: ERROR
+    message: >-
+      Use of eval()/exec() on a non-constant value allows arbitrary code
+      execution. Avoid dynamic code evaluation; use safe parsers instead.
+    metadata:
+      category: security
+      cwe: "CWE-95: Eval Injection"
+      owasp: "A03:2021-Injection"
+    patterns:
+      - pattern-either:
+          - pattern: eval(...)
+          - pattern: exec(...)
+      - pattern-not: eval("...")
+      - pattern-not: exec("...")
+
+  # ---- Insecure deserialization -----------------------------------------
+  - id: tapps.python.insecure-pickle-load
+    languages: [python]
+    severity: ERROR
+    message: >-
+      Deserializing untrusted data with pickle can execute arbitrary code.
+      Use a safe format (json) for untrusted input.
+    metadata:
+      category: security
+      cwe: "CWE-502: Deserialization of Untrusted Data"
+      owasp: "A08:2021-Software and Data Integrity Failures"
+    pattern-either:
+      - pattern: pickle.load(...)
+      - pattern: pickle.loads(...)
+
+  # ---- yaml.load without SafeLoader --------------------------------------
+  - id: tapps.python.yaml-unsafe-load
+    languages: [python]
+    severity: WARNING
+    message: >-
+      yaml.load without an explicit SafeLoader can construct arbitrary Python
+      objects from untrusted input. Use yaml.safe_load(...) instead.
+    metadata:
+      category: security
+      cwe: "CWE-20: Improper Input Validation"
+      owasp: "A08:2021-Software and Data Integrity Failures"
+    patterns:
+      - pattern: yaml.load($X)
+      - pattern-not: yaml.load($X, Loader=yaml.SafeLoader)
+
+  # ---- Weak hash for security context ------------------------------------
+  - id: tapps.python.weak-hash-md5-sha1
+    languages: [python]
+    severity: WARNING
+    message: >-
+      MD5/SHA1 are cryptographically broken. Use SHA-256+ for security-relevant
+      hashing (or pass usedforsecurity=False when the hash is non-security).
+    metadata:
+      category: security
+      cwe: "CWE-327: Use of a Broken or Risky Cryptographic Algorithm"
+      owasp: "A02:2021-Cryptographic Failures"
+    patterns:
+      - pattern-either:
+          - pattern: hashlib.md5(...)
+          - pattern: hashlib.sha1(...)
+      - pattern-not: hashlib.md5(..., usedforsecurity=False)
+      - pattern-not: hashlib.sha1(..., usedforsecurity=False)

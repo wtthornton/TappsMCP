@@ -312,6 +312,7 @@ class CodeScorer(ScorerBase):
             cwd=cwd,
             timeout=timeout,
             run_vulture=self._settings.dead_code_enabled,
+            run_semgrep=self._settings.semgrep_enabled,
             vulture_whitelist_patterns=self._settings.dead_code_whitelist_patterns,
             mode=mode,
         )
@@ -339,6 +340,7 @@ class CodeScorer(ScorerBase):
             dependency_vuln_count=dep_vuln_count,
             degraded=parallel.degraded or bool(degraded_cats),
             missing_tools=parallel.missing_tools,
+            skipped_tools=parallel.skipped_tools,
             tool_errors=parallel.tool_errors,
             degraded_categories=degraded_cats,
         )
@@ -399,6 +401,13 @@ class CodeScorer(ScorerBase):
         """
         w = self._weights
         details: dict[str, object] = {"issue_count": len(parallel.security_issues)}
+        # Provenance breakdown so semgrep findings are visible next to bandit's.
+        if parallel.semgrep_issues:
+            details["semgrep_issue_count"] = sum(
+                1 for i in parallel.security_issues if i.source == "semgrep"
+            )
+        if "semgrep" in parallel.skipped_tools:
+            details["semgrep_skipped"] = True
         # Use the real bandit result unless: (a) bandit is missing/unavailable, or
         # (b) bandit ran but its output was empty/unparseable (parse failure).
         bandit_parse_failed = "bandit" in parallel.tool_parse_failures

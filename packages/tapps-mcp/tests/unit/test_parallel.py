@@ -355,5 +355,6 @@ class TestDirectMode:
                 run_radon=True,
                 run_vulture=True,
                 run_perflint=True,
+                run_semgrep=True,
                 vulture_whitelist_patterns=None,
             )
