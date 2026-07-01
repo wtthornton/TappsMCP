@@ -5,9 +5,19 @@ static call edges from ``.ts``/``.tsx`` files, mirroring the Python analyzer in
 ``call_graph_analyze.py`` (two-phase: register symbols, then collect calls with
 an explicit caller stack).
 
-Deterministic contract (ADR-0004): no LLM, no network. A call that does not
-resolve to an IN-MODULE symbol becomes a ``ResolutionGap`` — never a guessed
-edge. Cross-module resolution is deferred to S3.
+S3 (TAP-4539) adds v1 **cross-module** resolution via a lexical import-binding
+table, mirroring the Python analyzer's ``resolve_name`` / ``resolve_attribute``
+discipline in ``call_graph_resolve.py``. Resolved kinds: named imports, aliased
+imports (de-aliased), namespace imports (``import * as U`` → ``U.greet()``),
+plus the S2 in-module and intra-class ``this.method()`` cases. Everything else
+(default imports, typed-receiver instance methods, re-exports, tsconfig path
+aliases, external packages) becomes an honest ``ResolutionGap`` with a specific
+reason — NEVER a guessed edge. Full default-export / path-alias / re-export
+resolution is deferred to S4 (TAP-4540).
+
+Deterministic contract (ADR-0004): no LLM, no network. When resolution is not
+certain, emit a gap. Over-reaching resolution that fabricates an edge is the
+failure mode this file is written to avoid.
 
 Graceful degradation: a missing ``tree_sitter`` / ``tree_sitter_typescript``
 grammar yields an empty result (no crash); a genuine syntax error yields a
@@ -100,6 +110,36 @@ def analyze_file_ts(
     return analyzer.symbols, analyzer.edges, analyzer.gaps, []
 
 
+def _resolve_relative_module(module: str, specifier: str) -> str | None:
+    """Resolve a relative ES-module ``specifier`` against the importing ``module``.
+
+    Modules are slash-delimited names produced by ``_ts_file_to_module`` (S1),
+    e.g. ``a/b/consumer``. A specifier ``./util`` from ``a/b/consumer`` resolves
+    to ``a/b/util``; ``../shared/x`` walks up one directory. Returns ``None``
+    when the walk escapes above the module root (defensive — never guess).
+
+    Non-relative specifiers (``fs``, ``lodash``, ``@/util``) are not handled
+    here; the caller classifies those as external / path-alias gaps.
+    """
+    if not specifier.startswith("."):
+        return None
+    # Directory of the importing module (drop the file segment).
+    base_parts = module.split("/")[:-1]
+    spec_parts = specifier.split("/")
+    for part in spec_parts:
+        if part in ("", "."):
+            continue
+        if part == "..":
+            if not base_parts:
+                return None  # escaped above root — do not fabricate a target.
+            base_parts.pop()
+            continue
+        base_parts.append(part)
+    if not base_parts:
+        return None
+    return "/".join(base_parts)
+
+
 def _node_text(node: Any, source: bytes) -> str:
     """Decode a node's source span (mirrors treesitter_base helper)."""
     return source[node.start_byte : node.end_byte].decode("utf-8", errors="replace")
@@ -131,17 +171,93 @@ class _TsFileAnalyzer:
         self._local_functions: dict[str, str] = {}
         # "ClassName.method" -> qualified name.
         self._class_methods: dict[str, str] = {}
+        # Cross-module import bindings (TAP-4539). Each maps a local binding name
+        # to a resolution decision:
+        #  - _named_bindings: local -> qualified callee ("<module>.<realName>"),
+        #    a RESOLVABLE named/aliased import from an in-repo relative module.
+        #  - _namespace_bindings: local alias -> target module ("import * as U").
+        #  - _deferred_bindings: local -> gap reason for a binding we honestly
+        #    cannot resolve yet (default export, external pkg, path alias).
+        self._named_bindings: dict[str, str] = {}
+        self._namespace_bindings: dict[str, str] = {}
+        self._deferred_bindings: dict[str, str] = {}
 
     # ------------------------------------------------------------------
-    # Phase 1 — symbol registration
+    # Phase 0 — import binding table
     # ------------------------------------------------------------------
 
     def run(self, root: Any) -> None:
+        for node in _iter_statements(root):
+            self._scan_imports(node)
         for node in _iter_statements(root):
             self._register_top_level(node)
         # Phase 2 — collect calls per registered symbol body.
         for node in _iter_statements(root):
             self._collect_top_level(node)
+
+    def _scan_imports(self, node: Any) -> None:
+        """Record import/re-export bindings so phase 2 resolution is lexical.
+
+        Mirrors ``call_graph_resolve._apply_import_bindings``: a binding maps a
+        local name to a qualified target when it is a named/namespace import
+        from an in-repo relative module, and to a deferred gap reason otherwise.
+        """
+        if node.type == "export_statement" and _is_reexport(node):
+            # `export {x} from "./re"` — deferred to S4. Mark the point honestly.
+            self.gaps.append(
+                ResolutionGap(
+                    self.module,
+                    _node_text(node, self.source).strip(),
+                    _line_of(node),
+                    "reexport_unresolved",
+                    language="typescript",
+                )
+            )
+            return
+        if node.type != "import_statement":
+            return
+        specifier = _import_specifier(node, self.source)
+        if specifier is None:
+            return
+        clause = _first_child_of_type(node, "import_clause")
+        if clause is None:
+            return
+        self._bind_import_clause(clause, specifier)
+
+    def _bind_import_clause(self, clause: Any, specifier: str) -> None:
+        target_module = _resolve_relative_module(self.module, specifier)
+        is_relative = specifier.startswith(".")
+        is_path_alias = _is_path_alias(specifier)
+        for child in clause.children:
+            if child.type == "named_imports":
+                for local, real in _named_import_pairs(child, self.source):
+                    if target_module is not None:
+                        self._named_bindings[local] = f"{target_module}.{real}"
+                    elif is_path_alias:
+                        self._deferred_bindings[local] = "path_alias_unresolved"
+                    else:  # external package (fs, lodash, ...)
+                        self._deferred_bindings[local] = "import_unresolved"
+            elif child.type == "namespace_import":
+                alias = _namespace_alias(child, self.source)
+                if not alias:
+                    continue
+                if target_module is not None:
+                    self._namespace_bindings[alias] = target_module
+                elif is_path_alias:
+                    self._deferred_bindings[alias] = "path_alias_unresolved"
+                else:
+                    self._deferred_bindings[alias] = "import_unresolved"
+            elif child.type == "identifier":
+                # Default import: `import makeDefault from "./util"`.
+                # Default-export resolution is deferred to S4 regardless of
+                # whether the source module is in-repo — never guess.
+                local = _node_text(child, self.source)
+                if is_path_alias:
+                    self._deferred_bindings[local] = "path_alias_unresolved"
+                elif is_relative:
+                    self._deferred_bindings[local] = "unresolved_default_export"
+                else:
+                    self._deferred_bindings[local] = "import_unresolved"
 
     def _register_top_level(self, node: Any) -> None:
         node = _unwrap_export(node)
@@ -252,39 +368,69 @@ class _TsFileAnalyzer:
     def _record_call(self, call: Any, *, caller: str, class_name: str | None) -> None:
         func = call.child_by_field_name("function")
         if func is None:
-            self.gaps.append(
-                ResolutionGap(caller, _node_text(call, self.source), _line_of(call), "dynamic_dispatch")
-            )
+            self._gap(caller, _node_text(call, self.source), _line_of(call), "dynamic_dispatch")
             return
         expr = _node_text(func, self.source)
         line = _line_of(call)
         callee, reason = self._resolve(func, class_name)
         if callee is None:
-            self.gaps.append(ResolutionGap(caller, expr, line, reason))
+            self._gap(caller, expr, line, reason)
             return
         self.edges.append(CallEdge(caller, callee, expr, line, True))
 
+    def _gap(self, caller: str, expr: str, line: int, reason: str) -> None:
+        self.gaps.append(ResolutionGap(caller, expr, line, reason, language="typescript"))
+
     def _resolve(self, func: Any, class_name: str | None) -> tuple[str | None, str]:
-        """Resolve a call target to an in-module symbol, or return (None, reason)."""
+        """Resolve a call target to an in-repo symbol, or return (None, reason).
+
+        Resolution order mirrors ``call_graph_resolve.resolve_name``: local
+        module symbols first, then the lexical import-binding table. A binding
+        we cannot follow yet yields its recorded deferred reason — never a
+        guessed edge.
+        """
         if func.type == "identifier":
             name = _node_text(func, self.source)
             qname = self._local_functions.get(name)
             if qname is not None:
                 return qname, "unresolved_static_call"
-            # A bare name we do not own: could be an import or builtin.
+            # Named / aliased import from an in-repo relative module (resolved).
+            bound = self._named_bindings.get(name)
+            if bound is not None:
+                return bound, "unresolved_static_call"
+            # A binding we deliberately did not resolve (default / external / alias).
+            deferred = self._deferred_bindings.get(name)
+            if deferred is not None:
+                return None, deferred
+            # A bare name we do not own and never saw imported.
             return None, "import_unresolved"
         if func.type == "member_expression":
             obj = func.child_by_field_name("object")
             prop = func.child_by_field_name("property")
-            if obj is not None and prop is not None and obj.type == "this" and class_name:
+            if obj is None or prop is None:
+                return None, "unresolved_static_call"
+            if obj.type == "this" and class_name:
                 method_name = _node_text(prop, self.source)
                 qname = self._class_methods.get(f"{class_name}.{method_name}")
                 if qname is not None:
                     return qname, "unresolved_static_call"
                 # this.<something not a known method> — dynamic within class.
                 return None, "unresolved_static_call"
-            # obj.method() across a module boundary or external object.
-            return None, "unresolved_static_call"
+            if obj.type == "identifier":
+                obj_name = _node_text(obj, self.source)
+                # Namespace import: `import * as U from "./util"` -> U.greet().
+                ns_module = self._namespace_bindings.get(obj_name)
+                if ns_module is not None and prop.type == "property_identifier":
+                    return f"{ns_module}.{_node_text(prop, self.source)}", "unresolved_static_call"
+                # A namespace-like deferred binding (external `import * as fs`).
+                deferred = self._deferred_bindings.get(obj_name)
+                if deferred is not None:
+                    return None, deferred
+                # A local variable / typed receiver: `f.format()`. We cannot
+                # know the receiver's type without a type checker — defer.
+                return None, "receiver_untyped"
+            # obj.method() where obj is not a plain identifier (chained, etc.).
+            return None, "receiver_untyped"
         # call().foo(), (expr)(), tagged templates, etc.
         return None, "dynamic_dispatch"
 
@@ -364,3 +510,67 @@ def _first_child_text(node: Any, child_type: str, source: bytes) -> str:
         if child.type == child_type:
             return _node_text(child, source)
     return ""
+
+
+def _first_child_of_type(node: Any, child_type: str) -> Any | None:
+    for child in node.children:
+        if child.type == child_type:
+            return child
+    return None
+
+
+def _import_specifier(node: Any, source: bytes) -> str | None:
+    """The module specifier string of an ``import_statement`` (unquoted)."""
+    string_node = _first_child_of_type(node, "string")
+    if string_node is None:
+        return None
+    frag = _first_child_of_type(string_node, "string_fragment")
+    if frag is not None:
+        return _node_text(frag, source)
+    # Fallback: strip surrounding quotes from the raw string node.
+    raw = _node_text(string_node, source)
+    return raw.strip("\"'")
+
+
+def _named_import_pairs(named_imports: Any, source: bytes) -> list[tuple[str, str]]:
+    """Yield ``(local_name, real_name)`` for each ``import_specifier``.
+
+    De-aliases ``{shout as loud}`` to ``("loud", "shout")``. A plain
+    ``{greet}`` yields ``("greet", "greet")``.
+    """
+    out: list[tuple[str, str]] = []
+    for spec in named_imports.children:
+        if spec.type != "import_specifier":
+            continue
+        idents = [c for c in spec.children if c.type == "identifier"]
+        if not idents:
+            continue
+        real = _node_text(idents[0], source)
+        # `as` present -> the second identifier is the local binding name.
+        local = _node_text(idents[1], source) if len(idents) >= 2 else real
+        out.append((local, real))
+    return out
+
+
+def _namespace_alias(namespace_import: Any, source: bytes) -> str:
+    """Local alias of ``import * as U`` -> ``"U"`` (last identifier child)."""
+    idents = [c for c in namespace_import.children if c.type == "identifier"]
+    return _node_text(idents[-1], source) if idents else ""
+
+
+def _is_reexport(export_node: Any) -> bool:
+    """True for ``export {x} from "..."`` (a re-export, not a local export)."""
+    has_from = any(child.type == "from" for child in export_node.children)
+    has_clause = any(child.type == "export_clause" for child in export_node.children)
+    return has_from and has_clause
+
+
+def _is_path_alias(specifier: str) -> bool:
+    """True for a common tsconfig path alias (``@/util``, ``~/foo``).
+
+    Conservative on purpose: only the ``@/`` and ``~/`` (and bare ``~``) sigils
+    count. Scoped npm packages (``@angular/core``) start with ``@`` but are
+    external, not aliases — misclassifying them would distort the gap taxonomy,
+    so they fall through to the external ``import_unresolved`` branch.
+    """
+    return specifier.startswith(("@/", "~/")) or specifier == "~"
