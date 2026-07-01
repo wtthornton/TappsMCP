@@ -4,6 +4,9 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import pytest
+
+from tapps_mcp.project import call_graph_fingerprint
 from tapps_mcp.project.call_graph_fingerprint import (
     compute_index_fingerprint,
     fingerprint_settings,
@@ -56,3 +59,58 @@ class TestFingerprintSettings:
         settings = fingerprint_settings(tmp_path)
         fp = compute_index_fingerprint(settings, index_version=INDEX_VERSION)
         assert len(fp) == 16
+
+
+class TestTypeScriptFingerprint:
+    """TAP-4537: .ts/.tsx files and grammar version affect the fingerprint."""
+
+    def _write(self, root: Path, rel: str, body: str) -> Path:
+        path = root / rel
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(body, encoding="utf-8")
+        return path
+
+    def test_ts_file_presence_changes_fingerprint(self, tmp_path: Path) -> None:
+        _write_py(tmp_path, "demo/a.py")
+        settings = fingerprint_settings(tmp_path)
+        before = compute_index_fingerprint(settings, index_version=INDEX_VERSION)
+        self._write(tmp_path, "demo/widget.ts", "export const x = 1;\n")
+        after = compute_index_fingerprint(settings, index_version=INDEX_VERSION)
+        assert before != after
+
+    def test_ts_file_edit_changes_fingerprint(self, tmp_path: Path) -> None:
+        ts = self._write(tmp_path, "demo/widget.ts", "export const x = 1;\n")
+        settings = fingerprint_settings(tmp_path)
+        before = compute_index_fingerprint(settings, index_version=INDEX_VERSION)
+        ts.write_text("export const x = 2;\n", encoding="utf-8")
+        after = compute_index_fingerprint(settings, index_version=INDEX_VERSION)
+        assert before != after
+
+    def test_tsx_file_presence_changes_fingerprint(self, tmp_path: Path) -> None:
+        _write_py(tmp_path, "demo/a.py")
+        settings = fingerprint_settings(tmp_path)
+        before = compute_index_fingerprint(settings, index_version=INDEX_VERSION)
+        self._write(tmp_path, "demo/Comp.tsx", "export const C = () => null;\n")
+        after = compute_index_fingerprint(settings, index_version=INDEX_VERSION)
+        assert before != after
+
+    def test_grammar_version_change_changes_fingerprint(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        _write_py(tmp_path, "demo/a.py")
+        settings = fingerprint_settings(tmp_path)
+        monkeypatch.setattr(call_graph_fingerprint, "_ts_grammar_version", lambda: "0.23.2")
+        before = compute_index_fingerprint(settings, index_version=INDEX_VERSION)
+        monkeypatch.setattr(call_graph_fingerprint, "_ts_grammar_version", lambda: "0.24.0")
+        after = compute_index_fingerprint(settings, index_version=INDEX_VERSION)
+        assert before != after
+
+    def test_grammar_absent_sentinel_is_stable(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        _write_py(tmp_path, "demo/a.py")
+        settings = fingerprint_settings(tmp_path)
+        monkeypatch.setattr(call_graph_fingerprint, "_ts_grammar_version", lambda: "absent")
+        fp1 = compute_index_fingerprint(settings, index_version=INDEX_VERSION)
+        fp2 = compute_index_fingerprint(settings, index_version=INDEX_VERSION)
+        assert fp1 == fp2
