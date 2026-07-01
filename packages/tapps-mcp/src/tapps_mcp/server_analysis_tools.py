@@ -865,16 +865,19 @@ async def tapps_dead_code(
     project_root: str = "",
     ctx: Context[Any, Any, Any] | None = None,
 ) -> dict[str, Any]:
-    """[Preview] Reports unused Python code (functions, classes, imports, variables)
+    """Reports unused Python code (functions, classes, imports, variables)
     via vulture, with per-finding confidence and line numbers.
 
-    Preview tool — vulture findings are advisory and often false positives.
-    Call this during cleanup passes (after a refactor, before a release)
-    or as part of an audit campaign. Skip for routine per-edit checks
-    (use ``tapps_quick_check``) — vulture is slower and produces false
-    positives on dynamic dispatch, plugin entry points, and CLI entry
-    functions, so the output needs review. Use the ``min_confidence``
-    knob to filter the noise floor.
+    GA tool (TAP-4527). Accuracy caveat: vulture works from static
+    references only, so in repos with heavy dynamic dispatch (``getattr``,
+    plugin entry points, CLI registries, reflective calls) a symbol whose
+    only callers are dynamic can be reported as unused when it is not — a
+    false "unused" positive. Cross-check high ``in_repo_gap_rate`` repos
+    (where the call graph cannot resolve many in-repo callers) and treat
+    those dead-code results as advisory. Call this during cleanup passes
+    (after a refactor, before a release) or as part of an audit campaign.
+    Skip for routine per-edit checks (use ``tapps_quick_check``) — vulture
+    is slower. Use the ``min_confidence`` knob to filter the noise floor.
 
     Args:
         file_path: Path to a single Python file. Required when

@@ -119,6 +119,16 @@ Static analysis cannot resolve all Python dispatch. Gaps are honest uncertainty 
 
 ---
 
+## `tapps_dead_code` — GA, with an `in_repo_gap_rate` trust caveat (TAP-4527)
+
+`tapps_dead_code` (vulture-backed unused-code detection) is **GA** — a supported tool, no longer Preview.
+
+It reports unused functions, classes, imports, and variables with per-finding confidence and line numbers. Because vulture resolves references **statically**, it shares the same blind spot as the call graph: dynamic dispatch (`getattr`, plugin entry points, CLI/registry lookups, reflective calls) can hide a symbol's only callers, so a live symbol may be reported as **unused** — a false "unused" positive.
+
+Use `in_repo_gap_rate` (above) as the trust signal: when a repo's in-repo gap rate is high, the call graph cannot resolve many in-repo callers, which is exactly the condition under which vulture's dead-code output is least reliable. Treat dead-code findings from high-gap repos as **advisory** — cross-check before deleting, and raise `min_confidence` to trim the noise floor.
+
+---
+
 ## TDAD static test map (optional)
 
 Export a grep-friendly test map without MCP at runtime:
