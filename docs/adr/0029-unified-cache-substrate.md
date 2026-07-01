@@ -227,6 +227,26 @@ diff.
 - **Decision 4** (net-code-down) is the standing gate: a phase that cannot meet
   it does not proceed by exception; the boundary is re-opened here instead.
 
+## Outcome (2026-07-01, P1–P3 measured)
+
+The phases shipped (TAP-4560 / TAP-4561 / TAP-4562) and the Decision 4 metric
+was measured honestly: **cumulative net code went UP ~+287 lines (excl. tests),
+not down.** The design doc's deletion inventory did not survive contact with the
+code — only 2 real `_write_atomic` copies existed (not 5), 2 warmers (not 3),
+the "3 Linear gateways" are two deliberately distinct Agent-Gateway sentinel
+checks (TAP-2009 write-gate, TAP-2010 read-gate) plus one real cache and are
+**not collapsible**, and the content-hash / dependency-scan caches are
+in-memory (no file migration applies).
+
+What the +287 lines bought: metrics coverage 1/5 → 5/5 caches
+(`tapps_stats.caches`), zero hand-rolled atomic-write copies, three staleness
+models behind one protocol, one session-start warmer entry, byte-equivalent
+migrations throughout. Real consolidation value — but the Decision 4 gate is
+the gate: **further substrate phases (including the P3 unified
+context-retrieval layer) are STOPPED** and require a fresh ADR with a
+justification that does not lean on deletion volume, per this ADR's Revisiting
+clause.
+
 ## Alternatives considered
 
 1. **Merge all five caches into one `KBCache`-shaped cache.** Rejected
