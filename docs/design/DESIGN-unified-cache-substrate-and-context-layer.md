@@ -1,8 +1,8 @@
 # DESIGN — Unified cache substrate + context-retrieval layer
 
 Date: 2026-07-01
-Status: Draft (design-support for the cache-consolidation epic; not yet an ADR)
-Related: ADR-0004 (deterministic tools), ADR-0016 (needs-based MCP taxonomy), ADR-0017 (Python-first call graph), ADR-0026 (TS call graph), ADR-0027 (shareable artifact), ADR-0028 (code-graph boundary)
+Status: Ratified by [ADR-0029](../adr/0029-unified-cache-substrate.md) (2026-07-01, TAP-4556) — substrate boundary Accepted; P1–P3 code stays a per-phase go/no-go.
+Related: ADR-0004 (deterministic tools), ADR-0016 (needs-based MCP taxonomy), ADR-0017 (Python-first call graph), ADR-0026 (TS call graph), ADR-0027 (shareable artifact), ADR-0028 (code-graph boundary), ADR-0029 (unified cache substrate — ratifies this design)
 
 ## Why this exists
 

@@ -36,6 +36,7 @@ CLAUDE.md and per-package CLAUDE.md files point at ADRs by number rather than em
 | [0026](0026-typescript-call-graph-via-tree-sitter.md) | TypeScript call graph via tree-sitter (language dispatch + honesty boundary) | Accepted |
 | [0027](0027-shareable-call-graph-artifact.md) | Shareable call-graph artifact (CI build + load-on-session-start) | Proposed |
 | [0028](0028-code-graph-boundary-fenced-external-comprehension-and-no-query-language.md) | Code-graph boundary — fenced external comprehension tool + no query language | Accepted |
+| [0029](0029-unified-cache-substrate.md) | Unified cache substrate — one atomic primitive, pluggable staleness, no code-as-provider / no vector-RAG | Accepted |
 
 ## Adding a new ADR
 

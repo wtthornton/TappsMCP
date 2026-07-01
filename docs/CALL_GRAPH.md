@@ -163,8 +163,9 @@ Format: `code_symbol<TAB>test_file<TAB>test_symbol` — useful for CI scripts an
 
 - General graph-query language (Cypher/openCypher) — the graph is served by fixed, purpose-built tools only ([ADR-0028](adr/0028-code-graph-boundary-fenced-external-comprehension-and-no-query-language.md))
 - Adopting an external code-graph store (e.g. codebase-memory-mcp) as the graph or memory source — permitted only as a fenced, opt-in *comprehension* tool ([ADR-0028](adr/0028-code-graph-boundary-fenced-external-comprehension-and-no-query-language.md))
+- Vector/RAG retrieval over the repo, or modeling the code graph as a docs-cache (`KBCache`) provider — the graph's on-disk cache shares only the atomic primitive + metrics surface with the docs cache, never its staleness model or a vector retrieval path ([ADR-0029](adr/0029-unified-cache-substrate.md))
 
-See [ADR-0017](adr/0017-function-level-call-graph-python-first.md) for scope and alternatives, and [ADR-0028](adr/0028-code-graph-boundary-fenced-external-comprehension-and-no-query-language.md) for the external-tool / query-language boundary.
+See [ADR-0017](adr/0017-function-level-call-graph-python-first.md) for scope and alternatives, [ADR-0028](adr/0028-code-graph-boundary-fenced-external-comprehension-and-no-query-language.md) for the external-tool / query-language boundary, and [ADR-0029](adr/0029-unified-cache-substrate.md) for the unified cache-substrate boundary (shared atomic primitive vs domain-specific staleness/provider/retrieval).
 
 ---
 
