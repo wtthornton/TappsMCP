@@ -378,11 +378,13 @@ def check_vscode_config(project_root: Path) -> CheckResult:
 
 
 def _iter_http_fleet_endpoints(project_root: Path) -> list[tuple[str, str, str]]:
-    """Return ``(host_label, server_name, url)`` for ``streamableHttp`` entries.
+    """Return ``(host_label, server_name, url)`` for HTTP fleet entries.
 
-    Scans the host MCP configs for shared-fleet (ADR-0024) ``streamableHttp``
-    entries so doctor can probe whether their ports are actually listening.
+    Scans the host MCP configs for shared-fleet (ADR-0024) HTTP entries
+    (``streamableHttp`` on Cursor, ``http`` on Claude Code / VS Code) so
+    doctor can probe whether their ports are actually listening.
     """
+    from tapps_mcp.distribution.nlt_http_fleet import HTTP_FLEET_ENTRY_TYPES
     from tapps_mcp.distribution.setup_generator import _load_mcp_config_json
 
     sources = (
@@ -402,7 +404,7 @@ def _iter_http_fleet_endpoints(project_root: Path) -> list[tuple[str, str, str]]
         if not isinstance(servers, dict):
             continue
         for name, entry in servers.items():
-            if not isinstance(entry, dict) or entry.get("type") != "streamableHttp":
+            if not isinstance(entry, dict) or entry.get("type") not in HTTP_FLEET_ENTRY_TYPES:
                 continue
             url = entry.get("url")
             if isinstance(url, str) and url.startswith("http"):
@@ -1834,8 +1836,8 @@ def check_pipeline_enforce_recommendations(project_root: Path) -> CheckResult:
     skip_rate = float(stats.get("gate_skip_rate", 0.0))
     lookup_ratio = float(stats.get("lookup_docs_to_edit_ratio", 0.0))
     loops = int(stats.get("loops", 0))
-    skip_pct = int(round(skip_rate * 100))
-    lookup_pct = int(round(lookup_ratio * 100))
+    skip_pct = round(skip_rate * 100)
+    lookup_pct = round(lookup_ratio * 100)
     message = (
         f"7d gate_skip_rate={skip_pct}% lookup_docs_to_edit_ratio={lookup_pct}% "
         f"({loops} loops in loop-metrics)"
@@ -1946,7 +1948,7 @@ def check_lookup_docs_discipline(project_root: Path) -> CheckResult:
 
     stats = compute_rolling_stats(project_root, window_days=_PROMOTE_WINDOW_DAYS)
     lookup_ratio = float(stats.get("lookup_docs_to_edit_ratio", 0.0))
-    lookup_pct = int(round(lookup_ratio * 100))
+    lookup_pct = round(lookup_ratio * 100)
     loops = int(stats.get("loops", 0))
 
     parts = [f"7d lookup_docs_to_edit_ratio={lookup_pct}% ({loops} loops)"]

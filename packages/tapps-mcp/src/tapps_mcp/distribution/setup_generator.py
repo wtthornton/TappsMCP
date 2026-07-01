@@ -1054,6 +1054,7 @@ def _build_nlt_server_entry(
             server_id,
             project_root=project_root,
             fleet_host=fleet_host,
+            host=host,
         )
 
     spec = NLT_SERVER_SPECS[server_id]
