@@ -214,7 +214,7 @@ dev = [
     "pytest-asyncio>=1.4.0,<2",
     "pytest-cov>=7.1.0,<8",
     "mypy>=2.1.0,<3",
-    "ruff>=0.15.16,<1",
+    "ruff>=0.15.20,<1",
     "types-PyYAML>=6.0.12.20260518",
 ]
 report-studio = [
