@@ -9,6 +9,7 @@ import pytest
 from tapps_mcp.project import call_graph_fingerprint
 from tapps_mcp.project.call_graph_fingerprint import (
     compute_index_fingerprint,
+    compute_per_file_fingerprints,
     fingerprint_settings,
 )
 from tapps_mcp.project.call_graph_types import INDEX_VERSION
@@ -114,3 +115,44 @@ class TestTypeScriptFingerprint:
         fp1 = compute_index_fingerprint(settings, index_version=INDEX_VERSION)
         fp2 = compute_index_fingerprint(settings, index_version=INDEX_VERSION)
         assert fp1 == fp2
+
+
+class TestPerFileFingerprints:
+    """Per-file content fingerprints for incremental re-index (TAP-4533)."""
+
+    def test_maps_each_source_file(self, tmp_path: Path) -> None:
+        _write_py(tmp_path, "demo/a.py")
+        _write_py(tmp_path, "demo/b.py")
+        settings = fingerprint_settings(tmp_path)
+        fps = compute_per_file_fingerprints(settings)
+        assert set(fps) == {"demo/a.py", "demo/b.py"}
+        assert all(isinstance(v, str) and v for v in fps.values())
+
+    def test_only_changed_file_hash_differs(self, tmp_path: Path) -> None:
+        _write_py(tmp_path, "demo/a.py")
+        _write_py(tmp_path, "demo/b.py")
+        settings = fingerprint_settings(tmp_path)
+        before = compute_per_file_fingerprints(settings)
+        # Mutate only b.py — the changed subset must be exactly {"demo/b.py"}.
+        _write_py(tmp_path, "demo/b.py", body="def other():\n    return 9\n")
+        after = compute_per_file_fingerprints(settings)
+        changed = {k for k in after if after[k] != before.get(k)}
+        assert changed == {"demo/b.py"}
+        assert after["demo/a.py"] == before["demo/a.py"]
+
+    def test_content_hash_stable_across_touch(self, tmp_path: Path) -> None:
+        # Content-based (not mtime): rewriting identical bytes must not change it.
+        path = _write_py(tmp_path, "demo/a.py")
+        settings = fingerprint_settings(tmp_path)
+        first = compute_per_file_fingerprints(settings)
+        path.write_text(path.read_text(encoding="utf-8"), encoding="utf-8")
+        second = compute_per_file_fingerprints(settings)
+        assert first == second
+
+    def test_added_and_deleted_reflected(self, tmp_path: Path) -> None:
+        _write_py(tmp_path, "demo/a.py")
+        settings = fingerprint_settings(tmp_path)
+        assert set(compute_per_file_fingerprints(settings)) == {"demo/a.py"}
+        _write_py(tmp_path, "demo/c.py")
+        (tmp_path / "demo/a.py").unlink()
+        assert set(compute_per_file_fingerprints(settings)) == {"demo/c.py"}

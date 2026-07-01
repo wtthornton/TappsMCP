@@ -27,7 +27,10 @@ from tapps_mcp.project.call_graph_types import (
     INDEX_VERSION,
     CallEdge,
     CallGraphIndex,
+    DeferredCall,
+    ModuleExports,
     ParseFailure,
+    PerFileRaw,
     ResolutionGap,
     RouteEdge,
     SymbolRecord,
@@ -91,6 +94,42 @@ def save_call_graph_index(project_root: Path, index: CallGraphIndex) -> None:
         logger.warning("call_graph_cache_write_failed", path=str(path), error=str(exc))
 
 
+def _module_exports_to_dict(exports: ModuleExports) -> dict[str, object]:
+    return {
+        "module": exports.module,
+        "default_symbol": exports.default_symbol,
+        # tuple values (specifier, origin_name) serialize as JSON lists.
+        "reexports": {k: list(v) for k, v in exports.reexports.items()},
+        "star_reexports": list(exports.star_reexports),
+    }
+
+
+def _deferred_call_to_dict(deferred: DeferredCall) -> dict[str, object]:
+    return {
+        "gap": asdict(deferred.gap),
+        "kind": deferred.kind,
+        "imported_name": deferred.imported_name,
+        "target_module": deferred.target_module,
+        "specifier": deferred.specifier,
+        "caller": deferred.caller,
+    }
+
+
+def _per_file_raw_to_dict(raw: PerFileRaw) -> dict[str, object]:
+    return {
+        "symbols": [asdict(s) for s in raw.symbols],
+        "edges": [asdict(e) for e in raw.edges],
+        "gaps": [asdict(g) for g in raw.gaps],
+        "parse_failures": [asdict(p) for p in raw.parse_failures],
+        "routes": [asdict(r) for r in raw.routes],
+        "ts_module": raw.ts_module,
+        "ts_exports": (
+            _module_exports_to_dict(raw.ts_exports) if raw.ts_exports is not None else None
+        ),
+        "ts_deferred": [_deferred_call_to_dict(d) for d in raw.ts_deferred],
+    }
+
+
 def index_to_dict(index: CallGraphIndex) -> dict[str, object]:
     return {
         "version": index.version,
@@ -101,17 +140,118 @@ def index_to_dict(index: CallGraphIndex) -> dict[str, object]:
         "resolution_gaps": [asdict(g) for g in index.resolution_gaps],
         "parse_failures": [asdict(p) for p in index.parse_failures],
         "routes": [asdict(r) for r in index.routes],
+        # Incremental-reindex material (TAP-4533).
+        "per_file_fingerprints": dict(index.per_file_fingerprints),
+        "raw_by_file": {rel: _per_file_raw_to_dict(raw) for rel, raw in index.raw_by_file.items()},
     }
 
 
+def _module_exports_from_dict(raw: dict[str, object]) -> ModuleExports:
+    reexports_raw = raw.get("reexports", {})
+    reexports: dict[str, tuple[str, str]] = {}
+    if isinstance(reexports_raw, dict):
+        for key, value in reexports_raw.items():
+            if isinstance(value, (list, tuple)) and len(value) == 2:
+                reexports[str(key)] = (str(value[0]), str(value[1]))
+    star_raw = raw.get("star_reexports", [])
+    star = [str(s) for s in star_raw] if isinstance(star_raw, list) else []
+    default_symbol = raw.get("default_symbol")
+    return ModuleExports(
+        module=str(raw.get("module", "")),
+        default_symbol=str(default_symbol) if default_symbol is not None else None,
+        reexports=reexports,
+        star_reexports=star,
+    )
+
+
+def _deferred_call_from_dict(raw: dict[str, object]) -> DeferredCall | None:
+    gap_raw = raw.get("gap")
+    if not isinstance(gap_raw, dict):
+        return None
+    imported = raw.get("imported_name")
+    target = raw.get("target_module")
+    return DeferredCall(
+        gap=ResolutionGap(**gap_raw),
+        kind=str(raw.get("kind", "named")),  # type: ignore[arg-type]
+        imported_name=str(imported) if imported is not None else None,
+        target_module=str(target) if target is not None else None,
+        specifier=str(raw.get("specifier", "")),
+        caller=str(raw.get("caller", "")),
+    )
+
+
+def _as_int(value: object, default: int) -> int:
+    """Coerce an untyped JSON value to ``int``, falling back to *default*."""
+    if isinstance(value, bool):
+        return default
+    if isinstance(value, (int, str)):
+        try:
+            return int(value)
+        except ValueError:
+            return default
+    return default
+
+
+def _dict_items(value: object) -> list[dict[str, object]]:
+    """Return the ``dict`` elements of *value* if it is a list, else ``[]``.
+
+    Narrows an untyped JSON value (``object``) to an iterable of dicts so the
+    ``Cls(**d)`` reconstructors below are type-clean without per-line ignores.
+    """
+    if not isinstance(value, list):
+        return []
+    return [item for item in value if isinstance(item, dict)]
+
+
+def _per_file_raw_from_dict(raw: dict[str, object]) -> PerFileRaw:
+    symbols = [SymbolRecord(**s) for s in _dict_items(raw.get("symbols"))]  # type: ignore[arg-type]
+    edges = [CallEdge(**e) for e in _dict_items(raw.get("edges"))]  # type: ignore[arg-type]
+    gaps = [ResolutionGap(**g) for g in _dict_items(raw.get("gaps"))]  # type: ignore[arg-type]
+    failures = [ParseFailure(**p) for p in _dict_items(raw.get("parse_failures"))]  # type: ignore[arg-type]
+    routes = [RouteEdge(**r) for r in _dict_items(raw.get("routes"))]  # type: ignore[arg-type]
+    ts_module_raw = raw.get("ts_module")
+    ts_module = str(ts_module_raw) if ts_module_raw is not None else None
+    ts_exports_raw = raw.get("ts_exports")
+    ts_exports = (
+        _module_exports_from_dict(ts_exports_raw) if isinstance(ts_exports_raw, dict) else None
+    )
+    ts_deferred = [
+        d
+        for d in (_deferred_call_from_dict(item) for item in _dict_items(raw.get("ts_deferred")))
+        if d is not None
+    ]
+    return PerFileRaw(
+        symbols=symbols,
+        edges=edges,
+        gaps=gaps,
+        parse_failures=failures,
+        routes=routes,
+        ts_module=ts_module,
+        ts_exports=ts_exports,
+        ts_deferred=ts_deferred,
+    )
+
+
 def index_from_dict(raw: dict[str, object]) -> CallGraphIndex:
-    symbols = [SymbolRecord(**s) for s in raw.get("symbols", []) if isinstance(s, dict)]  # type: ignore[arg-type]
-    edges = [CallEdge(**e) for e in raw.get("edges", []) if isinstance(e, dict)]  # type: ignore[arg-type]
-    gaps = [ResolutionGap(**g) for g in raw.get("resolution_gaps", []) if isinstance(g, dict)]  # type: ignore[arg-type]
-    failures = [
-        ParseFailure(**p) for p in raw.get("parse_failures", []) if isinstance(p, dict)
-    ]  # type: ignore[arg-type]
-    routes = [RouteEdge(**r) for r in raw.get("routes", []) if isinstance(r, dict)]  # type: ignore[arg-type]
+    symbols = [SymbolRecord(**s) for s in _dict_items(raw.get("symbols"))]  # type: ignore[arg-type]
+    edges = [CallEdge(**e) for e in _dict_items(raw.get("edges"))]  # type: ignore[arg-type]
+    gaps = [ResolutionGap(**g) for g in _dict_items(raw.get("resolution_gaps"))]  # type: ignore[arg-type]
+    failures = [ParseFailure(**p) for p in _dict_items(raw.get("parse_failures"))]  # type: ignore[arg-type]
+    routes = [RouteEdge(**r) for r in _dict_items(raw.get("routes"))]  # type: ignore[arg-type]
+    per_file_raw = raw.get("per_file_fingerprints", {})
+    per_file_fingerprints = (
+        {str(k): str(v) for k, v in per_file_raw.items()} if isinstance(per_file_raw, dict) else {}
+    )
+    raw_by_file_raw = raw.get("raw_by_file", {})
+    raw_by_file = (
+        {
+            str(rel): _per_file_raw_from_dict(entry)
+            for rel, entry in raw_by_file_raw.items()
+            if isinstance(entry, dict)
+        }
+        if isinstance(raw_by_file_raw, dict)
+        else {}
+    )
     return CallGraphIndex(
         symbols=symbols,
         edges=edges,
@@ -120,7 +260,9 @@ def index_from_dict(raw: dict[str, object]) -> CallGraphIndex:
         routes=routes,
         project_root=str(raw.get("project_root", "")),
         fingerprint=str(raw.get("fingerprint", "")),
-        version=int(raw.get("version", INDEX_VERSION)),
+        version=_as_int(raw.get("version"), INDEX_VERSION),
+        per_file_fingerprints=per_file_fingerprints,
+        raw_by_file=raw_by_file,
     )
 
 

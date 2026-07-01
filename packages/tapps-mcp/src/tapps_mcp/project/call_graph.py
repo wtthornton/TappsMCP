@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from collections.abc import Callable
+from collections.abc import Callable, Iterable
 from pathlib import Path
 
 import structlog
@@ -14,7 +14,10 @@ from tapps_mcp.project.call_graph_cache import (
     load_call_graph_index,
     save_call_graph_index,
 )
-from tapps_mcp.project.call_graph_fingerprint import compute_index_fingerprint
+from tapps_mcp.project.call_graph_fingerprint import (
+    compute_index_fingerprint,
+    compute_per_file_fingerprints,
+)
 from tapps_mcp.project.call_graph_resolve_ts import resolve_ts_cross_file
 from tapps_mcp.project.call_graph_routes import (
     extract_fastapi_routes,
@@ -29,6 +32,7 @@ from tapps_mcp.project.call_graph_types import (
     DeferredCall,
     ModuleExports,
     ParseFailure,
+    PerFileRaw,
     ResolutionGap,
     RouteEdge,
     SymbolRecord,
@@ -90,95 +94,118 @@ __all__ = [
     "SymbolRecord",
     "build_call_graph_index",
     "load_call_graph_index",
+    "update_call_graph_index",
 ]
 
 
-def build_call_graph_index(
+def _collect_source_files(project_root: Path, excludes: set[str]) -> list[Path]:
+    """Return the sorted, filtered list of ``.py``/``.ts``/``.tsx`` source files."""
+    walk_suffixes = _PY_SUFFIXES + _TS_SUFFIXES
+    source_files = sorted(f for suffix in walk_suffixes for f in project_root.rglob(f"*{suffix}"))
+    return [
+        f for f in source_files if not (_should_skip(f, excludes) or f.name.endswith("_pb2.py"))
+    ]
+
+
+def _analyze_one_file(
+    source_file: Path,
     project_root: Path,
+    top_level_package: str,
+) -> tuple[str, PerFileRaw] | None:
+    """Analyze a single source file, returning ``(rel_posix_path, PerFileRaw)``.
+
+    Returns ``None`` when the suffix is unsupported or the module name resolves
+    empty (path escapes ``project_root``) — matching the build walk's skips.
+    This is the single expensive (parse) step the incremental update runs only
+    for changed files.
+    """
+    suffix = source_file.suffix
+    analyzer = _analyzer_for(suffix)
+    if analyzer is None:
+        return None
+    if suffix in _TS_SUFFIXES:
+        module = _ts_file_to_module(source_file, project_root)
+    else:
+        module = _file_to_module(source_file, project_root, top_level_package)
+    if not module:
+        return None
+    rel = source_file.relative_to(project_root).as_posix()
+    if suffix in _TS_SUFFIXES:
+        (
+            file_symbols,
+            file_edges,
+            file_gaps,
+            file_failures,
+            module_exports,
+            deferred,
+        ) = analyze_file_ts_full(source_file, module, project_root)
+        raw = PerFileRaw(
+            symbols=list(file_symbols),
+            edges=list(file_edges),
+            gaps=list(file_gaps),
+            parse_failures=list(file_failures),
+            routes=list(extract_react_router_routes(source_file, module, project_root)),
+            ts_module=module,
+            ts_exports=module_exports,
+            ts_deferred=list(deferred),
+        )
+    else:
+        file_symbols, file_edges, file_gaps, file_failures = analyzer(
+            source_file, module, project_root
+        )
+        raw = PerFileRaw(
+            symbols=list(file_symbols),
+            edges=list(file_edges),
+            gaps=list(file_gaps),
+            parse_failures=list(file_failures),
+            routes=list(extract_fastapi_routes(source_file, module, project_root)),
+        )
+    return rel, raw
+
+
+def _finalize_index(
+    project_root: Path,
+    raw_by_file: dict[str, PerFileRaw],
     *,
-    exclude_patterns: list[str] | None = None,
-    top_level_package: str = "",
-    force_rebuild: bool = False,
+    fingerprint: str,
+    per_file_fingerprints: dict[str, str],
 ) -> CallGraphIndex:
-    """Walk ``.py`` files, extract symbols and static CALLS edges."""
-    fp = fingerprint_settings(
-        project_root,
-        exclude_patterns=exclude_patterns,
-        top_level_package=top_level_package,
-    )
-    fingerprint = compute_index_fingerprint(fp, index_version=INDEX_VERSION)
-    if not force_rebuild:
-        cached = load_call_graph_index(project_root)
-        if cached is not None and cached.version == INDEX_VERSION and cached.fingerprint == fingerprint:
-            return cached
-        if cached is not None and cached.version != INDEX_VERSION:
-            logger.info(
-                "call_graph_cache_version_mismatch",
-                cached_version=cached.version,
-                current_version=INDEX_VERSION,
-            )
+    """Merge per-file raw results, run the TS post-pass, sort, and assemble.
 
-    excludes = set(_DEFAULT_EXCLUDES)
-    if exclude_patterns:
-        excludes.update(exclude_patterns)
+    This is the *single* deterministic assembly path shared by
+    ``build_call_graph_index`` and ``update_call_graph_index``. Feeding both
+    through it is what guarantees byte-equivalence (ADR-0004 / AC2): an
+    incremental update that reconstructs the same ``raw_by_file`` map yields an
+    identical ``CallGraphIndex`` to a from-scratch build.
 
+    Iteration follows sorted file order so merge order is deterministic
+    regardless of how ``raw_by_file`` was assembled.
+    """
     symbols: list[SymbolRecord] = []
     edges: list[CallEdge] = []
     gaps: list[ResolutionGap] = []
     parse_failures: list[ParseFailure] = []
-    # HTTP route -> handler edges (TAP-4532): FastAPI decorators (Python) and
-    # React Router JSX (TS). Deterministic; dynamic routes are omitted, not guessed.
     routes: list[RouteEdge] = []
-    # TS cross-file resolution material (S4, TAP-4540): each module's export
-    # surface plus the deferred call sites the per-file pass could not resolve.
     ts_exports: dict[str, ModuleExports] = {}
     ts_deferred: list[DeferredCall] = []
 
-    walk_suffixes = _PY_SUFFIXES + _TS_SUFFIXES
-    source_files = sorted(
-        f
-        for suffix in walk_suffixes
-        for f in project_root.rglob(f"*{suffix}")
-    )
-    for source_file in source_files:
-        if _should_skip(source_file, excludes) or source_file.name.endswith("_pb2.py"):
-            continue
-        suffix = source_file.suffix
-        analyzer = _analyzer_for(suffix)
-        if analyzer is None:
-            continue
-        if suffix in _TS_SUFFIXES:
-            module = _ts_file_to_module(source_file, project_root)
-        else:
-            module = _file_to_module(source_file, project_root, top_level_package)
-        if not module:
-            continue
-        if suffix in _TS_SUFFIXES:
-            (
-                file_symbols,
-                file_edges,
-                file_gaps,
-                file_failures,
-                module_exports,
-                deferred,
-            ) = analyze_file_ts_full(source_file, module, project_root)
-            ts_exports[module] = module_exports
-            ts_deferred.extend(deferred)
-            routes.extend(extract_react_router_routes(source_file, module, project_root))
-        else:
-            file_symbols, file_edges, file_gaps, file_failures = analyzer(
-                source_file, module, project_root
-            )
-            routes.extend(extract_fastapi_routes(source_file, module, project_root))
-        symbols.extend(file_symbols)
-        edges.extend(file_edges)
-        gaps.extend(file_gaps)
-        parse_failures.extend(file_failures)
+    for rel in sorted(raw_by_file):
+        raw = raw_by_file[rel]
+        symbols.extend(raw.symbols)
+        edges.extend(raw.edges)
+        gaps.extend(raw.gaps)
+        parse_failures.extend(raw.parse_failures)
+        routes.extend(raw.routes)
+        if raw.ts_module is not None and raw.ts_exports is not None:
+            ts_exports[raw.ts_module] = raw.ts_exports
+            ts_deferred.extend(raw.ts_deferred)
 
     # S4 cross-file post-pass (TAP-4540): promote deferred default-export /
     # path-alias / re-export calls to edges, and follow already-resolved edges
     # through re-export barrels to their origin symbol. Anything unresolved
-    # keeps its honest gap (ADR-0004 — never fabricate an edge).
+    # keeps its honest gap (ADR-0004 — never fabricate an edge). This ALWAYS
+    # re-runs in full on an incremental update (TAP-4533): it is cheap and
+    # cross-file, so a change to module B can flip module A's resolved edges.
     if ts_exports:
         symbol_names = {s.qualified_name for s in symbols}
         result = resolve_ts_cross_file(
@@ -229,13 +256,177 @@ def build_call_graph_index(
         routes=routes,
         project_root=str(project_root),
         fingerprint=fingerprint,
+        per_file_fingerprints=dict(per_file_fingerprints),
+        raw_by_file=dict(raw_by_file),
     )
     save_call_graph_index(project_root, index)
+    return index
+
+
+def build_call_graph_index(
+    project_root: Path,
+    *,
+    exclude_patterns: list[str] | None = None,
+    top_level_package: str = "",
+    force_rebuild: bool = False,
+) -> CallGraphIndex:
+    """Walk ``.py`` files, extract symbols and static CALLS edges."""
+    fp = fingerprint_settings(
+        project_root,
+        exclude_patterns=exclude_patterns,
+        top_level_package=top_level_package,
+    )
+    fingerprint = compute_index_fingerprint(fp, index_version=INDEX_VERSION)
+    if not force_rebuild:
+        cached = load_call_graph_index(project_root)
+        if (
+            cached is not None
+            and cached.version == INDEX_VERSION
+            and cached.fingerprint == fingerprint
+        ):
+            return cached
+        if cached is not None and cached.version != INDEX_VERSION:
+            logger.info(
+                "call_graph_cache_version_mismatch",
+                cached_version=cached.version,
+                current_version=INDEX_VERSION,
+            )
+
+    excludes = set(_DEFAULT_EXCLUDES)
+    if exclude_patterns:
+        excludes.update(exclude_patterns)
+
+    raw_by_file: dict[str, PerFileRaw] = {}
+    for source_file in _collect_source_files(project_root, excludes):
+        analyzed = _analyze_one_file(source_file, project_root, top_level_package)
+        if analyzed is not None:
+            rel, raw = analyzed
+            raw_by_file[rel] = raw
+
+    index = _finalize_index(
+        project_root,
+        raw_by_file,
+        fingerprint=fingerprint,
+        per_file_fingerprints=compute_per_file_fingerprints(fp),
+    )
     logger.info(
         "call_graph_index_built",
-        symbols=len(symbols),
-        edges=len(edges),
-        gaps=len(gaps),
-        routes=len(routes),
+        symbols=len(index.symbols),
+        edges=len(index.edges),
+        gaps=len(index.resolution_gaps),
+        routes=len(index.routes),
+    )
+    return index
+
+
+def update_call_graph_index(
+    project_root: Path,
+    changed_paths: Iterable[Path | str],
+    *,
+    deleted_paths: Iterable[Path | str] = (),
+    exclude_patterns: list[str] | None = None,
+    top_level_package: str = "",
+) -> CallGraphIndex:
+    """Incrementally re-index only the changed/deleted files (TAP-4533).
+
+    Loads the cached v5 index, drops the raw entries for the changed and deleted
+    files, re-parses ONLY the changed files, merges the fresh raw results back
+    into the persisted raw-per-file map, and re-runs the finalize step (TS
+    cross-file post-pass + route linking + sort + atomic save).
+
+    **Determinism (ADR-0004 / AC2):** the result is byte-equivalent to a full
+    ``build_call_graph_index`` for the same tree because both feed the identical
+    ``_finalize_index`` over the same ``raw_by_file`` map. Only *parsing* of
+    unchanged files is skipped; the cross-file post-pass ALWAYS re-runs in full,
+    since a change to module B can flip module A's resolved TS edges.
+
+    Falls back to a full rebuild when there is no usable v5 cache (missing,
+    unreadable, wrong version, or pre-v5 without a persisted raw map) — the
+    incremental path needs the raw material to reconstruct exactly.
+
+    A changed path that no longer exists on disk is treated as a deletion; a
+    "changed" path that is not a recognized source file (unsupported suffix or
+    outside ``project_root``) simply drops from the index, mirroring a rebuild.
+    """
+    fp = fingerprint_settings(
+        project_root,
+        exclude_patterns=exclude_patterns,
+        top_level_package=top_level_package,
+    )
+
+    cached = load_call_graph_index(project_root)
+    if cached is None or cached.version != INDEX_VERSION or not cached.raw_by_file:
+        # No usable incremental base — a full rebuild is the only exact option.
+        return build_call_graph_index(
+            project_root,
+            exclude_patterns=exclude_patterns,
+            top_level_package=top_level_package,
+            force_rebuild=True,
+        )
+
+    excludes = set(_DEFAULT_EXCLUDES)
+    if exclude_patterns:
+        excludes.update(exclude_patterns)
+
+    def _rel(path: Path | str) -> str:
+        """Normalize to a project-root-relative posix key.
+
+        Mirrors ``_analyze_one_file``'s key scheme (``relative_to(project_root)``
+        without resolving) so incremental keys collide exactly with build keys —
+        load-bearing for byte-equivalence, since finalize merges in sorted-key
+        order. Absolute paths under ``project_root`` are relativized directly;
+        relative paths are treated as already project-relative.
+        """
+        p = Path(path)
+        if p.is_absolute():
+            try:
+                return p.relative_to(project_root).as_posix()
+            except ValueError:
+                try:
+                    return p.resolve().relative_to(project_root.resolve()).as_posix()
+                except ValueError:
+                    return p.as_posix()
+        return p.as_posix()
+
+    raw_by_file: dict[str, PerFileRaw] = dict(cached.raw_by_file)
+
+    # Drop deleted files outright (AC4): their symbols/edges/routes vanish and
+    # any edge/route that pointed at/from them is re-derived by the post-pass as
+    # an honest gap or dropped — exactly as a full rebuild would produce, since
+    # a deleted module contributes no exports/symbols to resolve against.
+    for path in deleted_paths:
+        raw_by_file.pop(_rel(path), None)
+
+    # Re-analyze changed files. A changed path missing from disk is a deletion.
+    for path in changed_paths:
+        rel = _rel(path)
+        source_file = project_root / rel
+        if not source_file.is_file():
+            raw_by_file.pop(rel, None)
+            continue
+        if _should_skip(source_file, excludes) or source_file.name.endswith("_pb2.py"):
+            raw_by_file.pop(rel, None)
+            continue
+        analyzed = _analyze_one_file(source_file, project_root, top_level_package)
+        if analyzed is None:
+            # Unsupported suffix / empty module — drop from the index.
+            raw_by_file.pop(rel, None)
+            continue
+        new_rel, raw = analyzed
+        raw_by_file[new_rel] = raw
+
+    fingerprint = compute_index_fingerprint(fp, index_version=INDEX_VERSION)
+    index = _finalize_index(
+        project_root,
+        raw_by_file,
+        fingerprint=fingerprint,
+        per_file_fingerprints=compute_per_file_fingerprints(fp),
+    )
+    logger.info(
+        "call_graph_index_incremental_update",
+        symbols=len(index.symbols),
+        edges=len(index.edges),
+        gaps=len(index.resolution_gaps),
+        routes=len(index.routes),
     )
     return index
