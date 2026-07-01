@@ -6,7 +6,9 @@ from dataclasses import dataclass, field
 from typing import Literal
 
 CALL_GRAPH_CACHE_REL = ".tapps-mcp/call-graph-index.json"
-INDEX_VERSION = 2
+# v3 (TAP-4537): SymbolRecord gains a ``language`` tag for the TypeScript
+# language-dispatch scaffold. Bumping this invalidates any v2 cache on load.
+INDEX_VERSION = 3
 SymbolKind = Literal["function", "method"]
 
 # Stable taxonomy for resolution gaps (TAP-4092).
@@ -28,6 +30,9 @@ class SymbolRecord:
     file_path: str
     line: int
     kind: SymbolKind
+    # Source language of the symbol (TAP-4537). Defaults to "python" so cached
+    # v2 indexes (which lack the field) still deserialize via index_from_dict.
+    language: str = "python"
 
 
 @dataclass
