@@ -12,12 +12,18 @@ INDEX_VERSION = 3
 SymbolKind = Literal["function", "method"]
 
 # Stable taxonomy for resolution gaps (TAP-4092).
+# TAP-4539 adds the TypeScript-specific reasons for deferred-resolution cases
+# (default exports, untyped receivers, re-exports, tsconfig path aliases).
 ResolutionGapReason = Literal[
     "unresolved_static_call",
     "dynamic_dispatch",
     "callback_opaque",
     "import_unresolved",
     "framework_hof",
+    "receiver_untyped",
+    "unresolved_default_export",
+    "reexport_unresolved",
+    "path_alias_unresolved",
 ]
 
 PARSE_FAILURE_REASON = Literal["syntax_error", "decode_error", "io_error"]
@@ -50,6 +56,11 @@ class ResolutionGap:
     expr: str
     line: int
     reason: ResolutionGapReason | str
+    # Source language of the gap (TAP-4539). Lets the gap classifier apply
+    # language-aware external/in-repo rules (e.g. TS `fs`/`lodash` are external,
+    # not Python-stdlib misses). Defaults to "python" so older cached indexes
+    # and existing call sites keep working.
+    language: str = "python"
 
 
 @dataclass

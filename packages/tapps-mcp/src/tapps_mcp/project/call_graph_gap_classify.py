@@ -17,6 +17,24 @@ _EXTERNAL_REASONS = frozenset(
     }
 )
 
+# TypeScript (TAP-4539). A TS gap must NOT be run through the Python
+# stdlib/builtin name checks: `fs`/`lodash` are not in Python's stdlib set (so
+# they would wrongly count as in-repo), and Python stdlib names like `os`/`time`
+# are not TS externals. The reason field alone decides external vs in-repo:
+#  - external: an unresolvable import from outside the repo (`fs`, `lodash`) or
+#    an inherently non-static call.
+#  - in-repo (deferred to S4): default-export / re-export / path-alias / typed-
+#    receiver gaps — real in-repo edges we cannot draw yet. Counting them
+#    in-repo keeps `in_repo_gap_rate` honest about resolution debt.
+_TS_EXTERNAL_REASONS = frozenset(
+    {
+        "import_unresolved",
+        "dynamic_dispatch",
+        "callback_opaque",
+        "framework_hof",
+    }
+)
+
 
 @lru_cache(maxsize=1)
 def _stdlib_module_names() -> frozenset[str]:
@@ -68,7 +86,15 @@ def expr_root(expr: str) -> str:
 
 
 def is_external_gap(gap: ResolutionGap) -> bool:
-    """True when the gap is stdlib/builtin/third-party or expected dynamic dispatch."""
+    """True when the gap is stdlib/builtin/third-party or expected dynamic dispatch.
+
+    Language-aware (TAP-4539): a TypeScript gap is classified purely on its
+    ``reason`` — the Python stdlib/builtin name heuristics do not transfer to
+    TS and would misclassify both directions (see ``_TS_EXTERNAL_REASONS``).
+    """
+    language = getattr(gap, "language", "python")
+    if language == "typescript":
+        return gap.reason in _TS_EXTERNAL_REASONS
     if gap.reason in _EXTERNAL_REASONS:
         return True
     root = expr_root(gap.expr)
