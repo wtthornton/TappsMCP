@@ -187,6 +187,13 @@ testpaths = [
 # passed positionally (e.g. ``pytest packages/tapps-mcp``), which overrides
 # testpaths. Excluding src/ keeps that invocation hermetic.
 norecursedirs = ["src", ".venv", "*.egg", "build", "dist", "node_modules"]
+# TAP-4575: docs-mcp test modules import shared fixtures via ``from tests.helpers
+# import ...``. With the tests/__init__.py files removed (so the three packages'
+# identically named ``tests`` trees no longer collide under importlib), that
+# import resolves only if docs-mcp's package root is on the path and ``tests`` is
+# treated as a namespace package (consider_namespace_packages above). Only
+# docs-mcp ships tests/helpers.py, so this is unambiguous.
+pythonpath = ["packages/docs-mcp"]
 asyncio_mode = "auto"
 timeout = 60
 markers = [
@@ -195,7 +202,13 @@ markers = [
     "optional_deps: marks tests requiring optional dependencies (sentence-transformers, faiss-cpu, cohere)",
     "brain_contract: marks tests requiring a running tapps-brain HTTP server (3.18+)",
 ]
-addopts = "-v --tb=short -p randomly --randomly-seed=last"
+addopts = "-v --tb=short -p randomly --randomly-seed=last --import-mode=importlib"
+# TAP-4575: importlib import mode lets the three packages' identically named
+# ``tests`` trees (each ships tests/__init__.py) be collected together from the
+# repo root without pytest's rootdir-based ImportPathMismatchError. Namespace
+# packages must be considered so docs-mcp's ``from tests.helpers import ...``
+# still resolves under importlib mode.
+consider_namespace_packages = true
 filterwarnings = [
     "ignore:tapps_core\\.memory is deprecated:DeprecationWarning",
     "ignore:tapps_core\\.memory\\.gc is deprecated:DeprecationWarning",
