@@ -35,6 +35,25 @@ _UUID_SHORT_LEN = 8
 _SLUG_INVALID_RE = re.compile(r"[^a-zA-Z0-9_-]+")
 
 
+def is_real_writable_root(project_root: object) -> bool:
+    """Return True only when *project_root* is a real, absolute filesystem path.
+
+    TAP-4573 guard. Production callers always resolve ``project_root`` to an
+    absolute path (explicit arg, ``TAPPS_MCP_PROJECT_ROOT`` env, or ``cwd``).
+    A bare ``MagicMock()`` coerces via ``os.fspath`` to the *relative* string
+    ``MagicMock/mock.project_root/<id>`` (verified empirically), so ~70 test
+    call sites that pass unspec'd mocks were causing real ``mkdir`` trees under
+    the pytest CWD (the repo root). Rejecting non-absolute / non-coercible
+    roots blocks that leak at the single production write path without touching
+    the tests, and is a no-op for every real deployment (roots are absolute).
+    """
+    try:
+        raw = os.fspath(project_root)  # type: ignore[arg-type]
+    except (TypeError, ValueError):
+        return False
+    return Path(raw).is_absolute()
+
+
 def _slugify(value: str) -> str:
     """Reduce a string to a safe agent-id prefix (alnum/dash/underscore)."""
     cleaned = _SLUG_INVALID_RE.sub("-", value).strip("-_")
@@ -86,7 +105,16 @@ def get_stable_agent_id(settings: TappsMCPSettings) -> str:
     if override:
         return override
 
-    project_root = Path(getattr(settings, "project_root", Path.cwd()))
+    raw_root = getattr(settings, "project_root", Path.cwd())
+
+    # TAP-4573: never mkdir/write under a non-real (mock- or relative-coerced)
+    # project_root. A bare MagicMock() coerces to a relative "MagicMock/..."
+    # path, so writing it would create a real tree in the pytest CWD. Skip the
+    # persistence attempt but still return a valid in-memory agent id.
+    if not is_real_writable_root(raw_root):
+        return f"{_project_slug(settings)}-{uuid.uuid4().hex[:_UUID_SHORT_LEN]}"
+
+    project_root = Path(raw_root)
     id_path = project_root / _AGENT_ID_RELATIVE_PATH
 
     uuid_hex = _read_uuid(id_path)
@@ -113,4 +141,4 @@ def get_stable_agent_id(settings: TappsMCPSettings) -> str:
     return f"{_project_slug(settings)}-{short}"
 
 
-__all__ = ["get_stable_agent_id"]
+__all__ = ["get_stable_agent_id", "is_real_writable_root"]
