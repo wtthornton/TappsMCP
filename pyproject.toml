@@ -181,6 +181,12 @@ testpaths = [
     "packages/tapps-mcp/tests",
     "packages/docs-mcp/tests",
 ]
+# TAP-4571: never recurse into package src/ trees. Production modules such as
+# tapps_mcp.project.test_linker are named ``test_*.py`` (they link test edges to
+# code) and collide with pytest's default collection when a package dir is
+# passed positionally (e.g. ``pytest packages/tapps-mcp``), which overrides
+# testpaths. Excluding src/ keeps that invocation hermetic.
+norecursedirs = ["src", ".venv", "*.egg", "build", "dist", "node_modules"]
 asyncio_mode = "auto"
 timeout = 60
 markers = [

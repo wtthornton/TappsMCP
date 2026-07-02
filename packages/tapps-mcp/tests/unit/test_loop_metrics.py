@@ -142,19 +142,24 @@ class TestComputeGatePassRate7d:
 
     def test_computes_from_jsonl(self, tmp_path: Path, monkeypatch) -> None:
         monkeypatch.setenv("TAPPS_METRICS_STORAGE", "local")
-        from datetime import date
+        from datetime import UTC, date, datetime
 
         metrics_dir = tmp_path / ".tapps-mcp" / "metrics"
         metrics_dir.mkdir(parents=True)
         day = date.today().isoformat()
+        # Timestamps must fall inside the rolling 7-day window (TAP-4571): use
+        # today's date rather than a hardcoded past date that rots as the
+        # calendar advances.
+        now = datetime.now(tz=UTC).replace(microsecond=0)
+        ts = now.isoformat()
         rows = [
             {
                 "call_id": "1",
                 "tool_name": "tapps_quality_gate",
                 "status": "success",
                 "duration_ms": 1.0,
-                "started_at": "2026-06-11T00:00:00+00:00",
-                "completed_at": "2026-06-11T00:00:01+00:00",
+                "started_at": ts,
+                "completed_at": ts,
                 "gate_passed": True,
             },
             {
@@ -162,8 +167,8 @@ class TestComputeGatePassRate7d:
                 "tool_name": "tapps_quality_gate",
                 "status": "success",
                 "duration_ms": 1.0,
-                "started_at": "2026-06-11T00:00:02+00:00",
-                "completed_at": "2026-06-11T00:00:03+00:00",
+                "started_at": ts,
+                "completed_at": ts,
                 "gate_passed": False,
             },
         ]

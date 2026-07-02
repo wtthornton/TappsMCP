@@ -141,7 +141,8 @@ class TestSubagentTemplates:
         assert len(CLAUDE_AGENTS) == 5
 
     def test_cursor_agents_count(self) -> None:
-        assert len(CURSOR_AGENTS) == 4
+        # 5 = 4 + tapps-frontend-reviewer (ADR-0025, commit 19819af).
+        assert len(CURSOR_AGENTS) == 5
 
     def test_claude_agents_have_frontmatter(self) -> None:
         for name, content in CLAUDE_AGENTS.items():
@@ -153,12 +154,12 @@ class TestSubagentTemplates:
 
     def test_generate_claude_agents(self, tmp_path: Path) -> None:
         result = generate_subagent_definitions(tmp_path, "claude")
-        assert len(result["created"]) == 4
+        assert len(result["created"]) == 5  # ADR-0025 added tapps-frontend-reviewer
         assert (tmp_path / ".claude" / "agents" / "tapps-reviewer.md").exists()
 
     def test_generate_cursor_agents(self, tmp_path: Path) -> None:
         result = generate_subagent_definitions(tmp_path, "cursor")
-        assert len(result["created"]) == 4
+        assert len(result["created"]) == 5  # ADR-0025 added tapps-frontend-reviewer
         assert (tmp_path / ".cursor" / "agents" / "tapps-reviewer.md").exists()
 
     def test_generate_unknown_platform(self, tmp_path: Path) -> None:

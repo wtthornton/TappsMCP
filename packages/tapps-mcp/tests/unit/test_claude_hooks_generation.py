@@ -270,7 +270,8 @@ class TestReactiveHookTemplates:
         script = (
             tmp_path / ".claude" / "hooks" / "tapps-permission-denied.sh"
         ).read_text()
-        assert "mcp__tapps-mcp__" in script
+        # Server rebranded to nlt-build (commit f3b78b5, v3.12.43).
+        assert "mcp__nlt-build__" in script
         assert "'retry': True" in script or '"retry": True' in script or "'retry':" in script
         data = json.loads((tmp_path / ".claude" / "settings.json").read_text())
         assert "PermissionDenied" in data["hooks"]

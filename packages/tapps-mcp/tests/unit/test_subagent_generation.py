@@ -304,7 +304,8 @@ class TestSkipExisting:
 
     def test_result_dict_tracks_created_and_skipped(self, tmp_path):
         result = generate_subagent_definitions(tmp_path, "claude")
-        assert len(result["created"]) == 4
+        # 5 = 4 + tapps-frontend-reviewer (ADR-0025, commit 19819af).
+        assert len(result["created"]) == 5
         assert len(result["skipped"]) == 0
 
     def test_unknown_platform_returns_error(self, tmp_path):
