@@ -2428,27 +2428,36 @@ except Exception:
     limit = 50
 # Open-bucket alias: tapps-mcp's TTL bucket 'open' covers backlog, unstarted,
 # started, triage. The skill tells agents to snapshot_get(state='open') and
-# then list_issues with a concrete state. Without alias support the keys
-# differ and the gate self-trips (TAP-1374). Fix: derive a bucket alias and
-# emit additional sentinels for it. Same logic on both sides.
+# then list_issues with a concrete state. TAP-4588: canonicalize any open
+# alias ('' / 'open' / bucket member) to ONE token so the payload key and the
+# sentinel key converge — matching server _canonical_state. limit is dropped
+# from the hash (enforced at read time via the superset fallback). Same logic
+# on both sides — see server_linear_tools._resolve_cache_key.
 OPEN_BUCKET = ('backlog', 'unstarted', 'started', 'triage')
 state_lc = state.lower()
+def _canon_state(s):
+    s_lc = (s or '').strip().lower()
+    if s_lc == '' or s_lc == 'open' or s_lc in OPEN_BUCKET:
+        return 'open'
+    return s_lc
 def _key_for(state_part: str) -> str:
+    canon = _canon_state(state_part)
     filt = {k: v for k, v in sorted({
-        'state': state_part, 'label': label, 'limit': limit,
+        'state': canon, 'label': label,
     }.items()) if v not in (None, '')}
     payload = json.dumps(filt, sort_keys=True, default=str).encode('utf-8')
     fhash = hashlib.sha256(payload).hexdigest()[:16]
     parts = [
         (team.replace('/', '_') or '_'),
         (project.replace('/', '_') or '_'),
-        ((state_part or 'any').replace('/', '_')),
+        (canon.replace('/', '_') or 'any'),
         fhash,
     ]
     return '__'.join(parts)
 key = _key_for(state)
-# Bucket alias keys: when state is 'open' (a tapps-mcp alias), '' (any), or
-# any open-bucket member, every other open-bucket member should resolve.
+# With canonicalization every open-bucket alias resolves to the same key, so
+# the alias set is a singleton ({key}). We still emit the bucket variants and
+# de-dup so the set matches the Python _alias_keys contract byte-for-byte.
 alias_keys = []
 if not team or not project:
     key = ''
@@ -2658,15 +2667,24 @@ except Exception:
     limit = 50
 if not team or not project:
     sys.exit(0)
+# TAP-4588: canonicalize the open-bucket alias and drop limit from the hash so
+# this writer's key matches server _resolve_cache_key / the reader.
+OPEN_BUCKET = ('backlog', 'unstarted', 'started', 'triage')
+def _canon_state(s):
+    s_lc = (s or '').strip().lower()
+    if s_lc == '' or s_lc == 'open' or s_lc in OPEN_BUCKET:
+        return 'open'
+    return s_lc
+canon = _canon_state(state)
 filt = {k: v for k, v in sorted({
-    'state': state, 'label': label, 'limit': limit,
+    'state': canon, 'label': label,
 }.items()) if v not in (None, '')}
 payload = json.dumps(filt, sort_keys=True, default=str).encode('utf-8')
 fhash = hashlib.sha256(payload).hexdigest()[:16]
 key = '__'.join([
     team.replace('/', '_') or '_',
     project.replace('/', '_') or '_',
-    (state or 'any').replace('/', '_'),
+    (canon.replace('/', '_') or 'any'),
     fhash,
 ])
 resp = d.get('tool_response') or d.get('toolResponse') or {}
@@ -2695,8 +2713,17 @@ def _find_issues(o):
                 return r
     return None
 issues = _find_issues(resp) or []
-# TTL aligned with server-side _ttl_for_state defaults (5 min open, 1 h closed).
+# TAP-4588 poisoning guard: list_issues(state='open') (a tapps-mcp alias, not a
+# real Linear state) returns [] — caching that empty list under the canonical
+# 'open' key would make a later get falsely report 0 issues. Skip the write
+# when the raw request state was an alias/invalid AND the result is empty.
+VALID_LINEAR_STATES = (
+    'backlog', 'unstarted', 'started', 'triage', 'completed', 'canceled'
+)
 state_lc = state.lower()
+if not issues and state_lc and state_lc not in VALID_LINEAR_STATES:
+    sys.exit(0)
+# TTL aligned with server-side _ttl_for_state defaults (5 min open, 1 h closed).
 ttl = 3600 if state_lc in ('completed', 'canceled') else 300
 now = time.time()
 out = {
@@ -2707,6 +2734,7 @@ out = {
     'team': team,
     'project': project,
     'auto_populated': True,
+    'limit': limit,
 }
 root = os.environ.get('TAPPS_PROJECT_ROOT') or os.getcwd()
 cache_dir = os.path.join(root, '.tapps-mcp-cache', 'linear-snapshots')
@@ -2787,17 +2815,25 @@ if ($inp) {
 }
 $key = ''
 if ($team -and $project) {
+    # TAP-4588: canonicalize the open-bucket alias and drop limit from the hash
+    # so the PowerShell key matches server _resolve_cache_key / the reader.
+    $stateLc = $state.Trim().ToLower()
+    $openBucket = @('backlog', 'unstarted', 'started', 'triage')
+    if ($stateLc -eq '' -or $stateLc -eq 'open' -or $openBucket -contains $stateLc) {
+        $canon = 'open'
+    } else {
+        $canon = $stateLc
+    }
     $filtObj = [ordered]@{}
-    if ($state) { $filtObj['state'] = $state }
+    if ($canon) { $filtObj['state'] = $canon }
     if ($label) { $filtObj['label'] = $label }
-    if ($limit) { $filtObj['limit'] = $limit }
     $payload = ($filtObj | ConvertTo-Json -Compress)
     $sha = [System.Security.Cryptography.SHA256]::Create()
     $bytes = [System.Text.Encoding]::UTF8.GetBytes($payload)
     $hash = [BitConverter]::ToString($sha.ComputeHash($bytes)).Replace('-', '').ToLower().Substring(0, 16)
     $teamPart = if ($team) { $team.Replace('/', '_') } else { '_' }
     $projPart = if ($project) { $project.Replace('/', '_') } else { '_' }
-    $statePart = if ($state) { $state.Replace('/', '_') } else { 'any' }
+    $statePart = if ($canon) { $canon.Replace('/', '_') } else { 'any' }
     $key = "${teamPart}__${projPart}__${statePart}__${hash}"
 }
 """
