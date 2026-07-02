@@ -1977,16 +1977,20 @@ class TestCheckInstallGitHooksHint:
         )
         metrics_dir = tmp_path / ".tapps-mcp" / "metrics"
         metrics_dir.mkdir(parents=True)
+        from datetime import UTC, date, datetime
+
+        # Timestamp must fall inside the rolling 7-day pass-rate window
+        # (TAP-4571): use today rather than a hardcoded past date that rots.
+        ts = datetime.now(tz=UTC).replace(microsecond=0).isoformat()
         metric = {
             "call_id": "a",
             "tool_name": "tapps_quality_gate",
             "status": "success",
             "duration_ms": 1.0,
-            "started_at": "2026-06-11T00:00:00+00:00",
-            "completed_at": "2026-06-11T00:00:01+00:00",
+            "started_at": ts,
+            "completed_at": ts,
             "gate_passed": False,
         }
-        from datetime import date
 
         day = date.today().isoformat()
         (metrics_dir / f"tool_calls_{day}.jsonl").write_text(
@@ -2638,14 +2642,14 @@ class TestCheckMcpToolBudget:
         assert "9" in result.message
 
     def test_full_mode_warns_over_default_budget(self, tmp_path) -> None:  # type: ignore[no-untyped-def]
-        """tapps-mcp full has 9 eager tools, which is within default budget of 20."""
+        """tapps-mcp full has 10 eager tools, which is within default budget of 20."""
         self._mcp_json(tmp_path, {"tapps-mcp": {
             "command": "uv", "args": ["run", "tapps-mcp", "serve"],
         }})
         result = check_mcp_tool_budget(tmp_path)
-        # 9 eager tools ≤ 20 → OK (no WARN)
+        # 10 eager tools ≤ 20 → OK (no WARN)
         assert result.ok is True
-        assert "9" in result.message
+        assert "10" in result.message
 
     def test_admin_mode_within_default_budget(self, tmp_path) -> None:  # type: ignore[no-untyped-def]
         """tapps-admin has 1 eager tool (tapps_usage), well within budget."""
@@ -2816,7 +2820,9 @@ class TestCheckNltPartialEnablement:
         )
         result = check_nlt_partial_enablement(tmp_path)
         assert result.ok is False
-        assert "29 combined eager tools" in result.message
+        # 23 = 9 (nlt-build) + 2 (nlt-setup) + 7 (nlt-linear-issues)
+        # + 0 (nlt-project-docs) + 5 (nlt-release-ship); still > 20 → WARN.
+        assert "23 combined eager tools" in result.message
         assert "5 nlt-* servers enabled" in result.message
         assert "developer bundle" in (result.detail or "").lower()
         assert "mcp.json" in (result.detail or "")

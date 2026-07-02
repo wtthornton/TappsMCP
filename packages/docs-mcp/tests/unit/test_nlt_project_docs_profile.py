@@ -30,8 +30,9 @@ _RELEASE_DOCS_TOOLS = {
 
 
 class TestNltProjectDocsProfile:
-    def test_profile_has_twenty_seven_tools(self) -> None:
-        assert len(DOCS_TOOL_PRESET_NLT_PROJECT_DOCS) == 27
+    def test_profile_has_twenty_nine_tools(self) -> None:
+        # Epic 109 preset grew to 29 (runbook/postmortem generators added).
+        assert len(DOCS_TOOL_PRESET_NLT_PROJECT_DOCS) == 29
 
     def test_resolve_allowed_tools_matches_preset(self) -> None:
         allowed = _resolve_allowed_tools(None, [], "nlt-project-docs")

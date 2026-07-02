@@ -65,6 +65,10 @@ class TestTaskToolMap:
             "epic",
             "release",
             "document",
+            # ADR-0025 task types (qa / documentation / frontend).
+            "documentation",
+            "qa",
+            "frontend",
         }
         assert set(TASK_TOOL_MAP.keys()) == expected
 

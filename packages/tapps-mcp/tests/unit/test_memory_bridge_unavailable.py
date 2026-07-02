@@ -370,7 +370,8 @@ async def test_related_happy_path(store: MagicMock) -> None:
     assert out["max_hops"] == 4
     assert out["entries"] == [{"key": "k-near", "score": 0.9}]
     assert out["count"] == 1
-    bridge.find_related.assert_awaited_once_with("k1", max_hops=4)
+    # project_id threaded through for cross-project recall (commit 35cba38, #191).
+    bridge.find_related.assert_awaited_once_with("k1", max_hops=4, project_id=None)
 
 
 @pytest.mark.asyncio
@@ -874,7 +875,10 @@ async def test_auto_emit_fires_feedback_gap_on_empty_results(
     assert out is not None
     assert out["emitted"] is True
     assert out["trigger"] == "empty_results"
-    bridge.feedback_gap.assert_awaited_once_with("anything", session_id="sess-99")
+    # project_id threaded through for cross-project recall (commit 35cba38, #191).
+    bridge.feedback_gap.assert_awaited_once_with(
+        "anything", session_id="sess-99", project_id=None
+    )
 
 
 @pytest.mark.asyncio

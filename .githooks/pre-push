@@ -75,25 +75,6 @@ if ! python3 scripts/bump-versions.py --check >&2; then
   exit 1
 fi
 
-_CORE_PYPROJECT="${TAPPS_CORE_PYPROJECT:-packages/tapps-core/pyproject.toml}"
-_REQUIRED_BRAIN_FLOOR="3.18.0"
-if [[ -f "$_CORE_PYPROJECT" ]]; then
-  _BRAIN_LINE=$(grep 'tapps-brain>=' "$_CORE_PYPROJECT" 2>/dev/null | head -1)
-  if [[ -n "$_BRAIN_LINE" ]]; then
-    _BRAIN_FLOOR=$(echo "$_BRAIN_LINE" | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -1)
-    if [[ -n "$_BRAIN_FLOOR" ]]; then
-      _SORT_FIRST=$(printf '%s\n%s\n' "$_BRAIN_FLOOR" "$_REQUIRED_BRAIN_FLOOR" | sort -V | head -1)
-      if [[ "$_SORT_FIRST" != "$_REQUIRED_BRAIN_FLOOR" ]]; then
-        echo "[pre-push] BRAIN FLOOR REGRESSION: tapps-brain>=${_BRAIN_FLOOR} is below the required floor ${_REQUIRED_BRAIN_FLOOR}." >&2
-        echo "[pre-push] Offending line: $_BRAIN_LINE  (in $_CORE_PYPROJECT)" >&2
-        echo "[pre-push] Fix: restore tapps-brain>=${_REQUIRED_BRAIN_FLOOR} in $_CORE_PYPROJECT" >&2
-        echo "[pre-push] Bypass (emergency only): TAPPS_SKIP_PREPUSH=1 git push" >&2
-        exit 1
-      fi
-    fi
-  fi
-fi
-
 _HIVE_VIOLATIONS=0
 while IFS=: read -r _hf _hln _; do
   [[ -z "$_hf" ]] && continue
@@ -118,6 +99,38 @@ if ! python3 scripts/check-tool-budget.py \
   echo "[pre-push] tool-budget check failed. Update docs/architecture/tool-budget.md or add 'Tool-Budget: deferred' to the commit message." >&2
   echo "[pre-push] Bypass (emergency only): TAPPS_SKIP_PREPUSH=1 git push" >&2
   exit 1
+fi
+
+# --- tapps-brain version floor check (TAP-1923) ---
+# Refuse the push if the tapps-brain floor in packages/tapps-core/pyproject.toml
+# drops below 3.18.0. This prevents silent regression of the alias-removal
+# guard documented in ADR-0010 and CLAUDE.md.
+#
+# The check is intentionally lightweight: one grep + sort -V, no subprocess.
+# Override the TOML path via TAPPS_CORE_PYPROJECT (used by integration tests).
+#
+# NOTE (TAP-4571): this block MUST remain the last gate before the "# --- Smoke
+# gate ---" marker below. tests/integration/test_prepush_floor.py extracts the
+# text between this header and the smoke-gate marker and replays it in a
+# sandbox wrapper; keep the block self-contained (no subprocess / repo-wide
+# grep) so the replay stays hermetic.
+_CORE_PYPROJECT="${TAPPS_CORE_PYPROJECT:-packages/tapps-core/pyproject.toml}"
+_REQUIRED_BRAIN_FLOOR="3.18.0"
+if [[ -f "$_CORE_PYPROJECT" ]]; then
+  _BRAIN_LINE=$(grep 'tapps-brain>=' "$_CORE_PYPROJECT" 2>/dev/null | head -1)
+  if [[ -n "$_BRAIN_LINE" ]]; then
+    _BRAIN_FLOOR=$(echo "$_BRAIN_LINE" | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -1)
+    if [[ -n "$_BRAIN_FLOOR" ]]; then
+      _SORT_FIRST=$(printf '%s\n%s\n' "$_BRAIN_FLOOR" "$_REQUIRED_BRAIN_FLOOR" | sort -V | head -1)
+      if [[ "$_SORT_FIRST" != "$_REQUIRED_BRAIN_FLOOR" ]]; then
+        echo "[pre-push] BRAIN FLOOR REGRESSION: tapps-brain>=${_BRAIN_FLOOR} is below the required floor ${_REQUIRED_BRAIN_FLOOR}." >&2
+        echo "[pre-push] Offending line: $_BRAIN_LINE  (in $_CORE_PYPROJECT)" >&2
+        echo "[pre-push] Fix: restore tapps-brain>=${_REQUIRED_BRAIN_FLOOR} in $_CORE_PYPROJECT" >&2
+        echo "[pre-push] Bypass (emergency only): TAPPS_SKIP_PREPUSH=1 git push" >&2
+        exit 1
+      fi
+    fi
+  fi
 fi
 
 # --- Smoke gate ---

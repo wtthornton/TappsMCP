@@ -11,7 +11,9 @@ class TestResolveAllowedTools:
 
         allowed = _resolve_allowed_tools(None, [], None)
         assert allowed == ALL_DOCS_TOOL_NAMES
-        assert len(allowed) == 40
+        # 42 = 40 + docs_generate_runbook + docs_generate_postmortem (Epic 37333f8;
+        # 42+42 catalog aligned in dfbf91a).
+        assert len(allowed) == 42
 
     def test_enabled_tools_subset(self) -> None:
         from docs_mcp.server import _resolve_allowed_tools
@@ -85,7 +87,7 @@ class TestResolveAllowedTools:
 
         allowed = _resolve_allowed_tools(None, [], "nlt-project-docs")
         assert allowed == DOCS_TOOL_PRESET_NLT_PROJECT_DOCS
-        assert len(allowed) == 27
+        assert len(allowed) == 29
 
     def test_enabled_tools_invalid_names_ignored(self) -> None:
         from docs_mcp.server import _resolve_allowed_tools
@@ -163,7 +165,9 @@ class TestToolPresetConstants:
     def test_all_tool_names_count(self) -> None:
         from docs_mcp.server import ALL_DOCS_TOOL_NAMES
 
-        assert len(ALL_DOCS_TOOL_NAMES) == 40  # +docs_kg_query (TAP-1950)
+        # 42 = 40 (post docs_kg_query, TAP-1950) + docs_generate_runbook +
+        # docs_generate_postmortem (Epic 37333f8; 42+42 catalog aligned in dfbf91a).
+        assert len(ALL_DOCS_TOOL_NAMES) == 42
 
     def test_role_presets_are_subsets_of_all_tools(self) -> None:
         from docs_mcp.server import (
