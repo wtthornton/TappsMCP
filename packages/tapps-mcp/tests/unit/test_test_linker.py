@@ -1,11 +1,12 @@
-"""Tests for TESTS edge linker (TAP-4052)."""
+"""Tests for TESTS edge linker (TAP-4052, TAP-4080)."""
 
 from __future__ import annotations
 
 from pathlib import Path
 
 from tapps_mcp.project.call_graph import build_call_graph_index
-from tapps_mcp.project.test_linker import build_test_edges, edges_for_symbols, get_tests_for_symbol
+from tapps_mcp.project.test_linker import build_test_edges, edges_for_symbols, get_tests_for_symbol, load_or_build_test_edges
+from tapps_mcp.project.test_linker_cache import load_test_edges_cache, save_test_edges_cache
 
 
 def _write(root: Path, rel: str, source: str) -> None:
@@ -68,3 +69,96 @@ def test_support():
         ranked = get_tests_for_symbol(edges, "support", index=index)
         assert len(ranked) == 1
         assert ranked[0]["test_symbol"].endswith("test_support")
+
+    def test_test_edges_cache_save_and_load(self, tmp_path: Path) -> None:
+        _write(
+            tmp_path,
+            "demo/helper.py",
+            """
+def support():
+    return 1
+""",
+        )
+        _write(
+            tmp_path,
+            "tests/test_helper.py",
+            """
+from demo.helper import support
+
+def test_support():
+    assert support() == 1
+""",
+        )
+        # Build edges and save to cache.
+        index = build_call_graph_index(tmp_path, force_rebuild=True)
+        edges = build_test_edges(index, project_root=tmp_path)
+        save_test_edges_cache(tmp_path, edges)
+
+        # Verify cache file exists.
+        cache_path = tmp_path / ".tapps-mcp" / "test-edges.json"
+        assert cache_path.is_file()
+
+        # Load from cache and verify contents match.
+        cached_edges = load_test_edges_cache(tmp_path)
+        assert cached_edges is not None
+        assert len(cached_edges) == len(edges)
+        assert cached_edges[0].code_symbol == edges[0].code_symbol
+        assert cached_edges[0].test_symbol == edges[0].test_symbol
+
+    def test_load_or_build_uses_cache(self, tmp_path: Path) -> None:
+        _write(
+            tmp_path,
+            "demo/helper.py",
+            """
+def support():
+    return 1
+""",
+        )
+        _write(
+            tmp_path,
+            "tests/test_helper.py",
+            """
+from demo.helper import support
+
+def test_support():
+    assert support() == 1
+""",
+        )
+        # First call builds and caches.
+        edges1 = load_or_build_test_edges(tmp_path)
+        assert len(edges1) == 1
+        cache_path = tmp_path / ".tapps-mcp" / "test-edges.json"
+        assert cache_path.is_file()
+
+        # Second call loads from cache (not rebuilt).
+        edges2 = load_or_build_test_edges(tmp_path)
+        assert len(edges2) == 1
+        assert edges2[0].code_symbol == edges1[0].code_symbol
+
+    def test_load_or_build_force_rebuild_bypasses_cache(self, tmp_path: Path) -> None:
+        _write(
+            tmp_path,
+            "demo/helper.py",
+            """
+def support():
+    return 1
+""",
+        )
+        _write(
+            tmp_path,
+            "tests/test_helper.py",
+            """
+from demo.helper import support
+
+def test_support():
+    assert support() == 1
+""",
+        )
+        # First call builds and caches.
+        edges1 = load_or_build_test_edges(tmp_path)
+        assert len(edges1) == 1
+
+        # force_rebuild=True should rebuild regardless of cache.
+        edges2 = load_or_build_test_edges(tmp_path, force_rebuild=True)
+        assert len(edges2) == 1
+        assert edges2[0].code_symbol == edges1[0].code_symbol

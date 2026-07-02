@@ -107,8 +107,27 @@ def get_tests_for_symbol(
 
 
 def load_or_build_test_edges(project_root: Path, *, force_rebuild: bool = False) -> list[TestEdge]:
+    """Load cached test edges or build from call graph.
+
+    Unless *force_rebuild* is True, attempts to load from disk cache first
+    (TAP-4080: optional disk cache via AtomicJsonCache). Cache miss triggers
+    a full rebuild.
+    """
+    if not force_rebuild:
+        from tapps_mcp.project.test_linker_cache import load_test_edges_cache
+
+        cached = load_test_edges_cache(project_root)
+        if cached is not None:
+            return cached
+
     index = build_call_graph_index(project_root, force_rebuild=force_rebuild)
-    return build_test_edges(index, project_root=project_root)
+    edges = build_test_edges(index, project_root=project_root)
+
+    # Write cache for next call (TAP-4080).
+    from tapps_mcp.project.test_linker_cache import save_test_edges_cache
+
+    save_test_edges_cache(project_root, edges)
+    return edges
 
 
 def test_edges_to_dicts(edges: list[TestEdge]) -> list[dict[str, object]]:
