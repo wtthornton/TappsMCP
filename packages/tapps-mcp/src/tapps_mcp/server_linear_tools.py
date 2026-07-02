@@ -36,7 +36,7 @@ from typing import TYPE_CHECKING, Any
 
 import structlog
 
-from tapps_core.cache import AtomicJsonCache, register_cache_stats
+from tapps_core.cache import AtomicJsonCache, TTLStaleness, register_cache_stats
 from tapps_core.config.settings import load_settings
 from tapps_mcp.mcp_register import register_tool
 from tapps_mcp.server_helpers import error_response, success_response
@@ -146,7 +146,33 @@ def _ttl_for_state(state: str | None, ttl_open: int, ttl_closed: int) -> int:
 
 # ADR-0029 / TAP-4561: unified cache-stats counters (snapshot reads/writes).
 _snapshot_stats: dict[str, int] = {"hits": 0, "misses": 0, "writes": 0}
-register_cache_stats("linear_snapshot", lambda: dict(_snapshot_stats))
+# TAP-4558: wall-clock timestamp of the most recent snapshot write (0 == never).
+_snapshot_last_write_ts: float = 0.0
+
+
+def _linear_snapshot_stats() -> dict[str, Any]:
+    """Stats provider: counters + staleness/age of the freshest write (TAP-4558).
+
+    ``age_seconds`` is the age of the most-recently written snapshot (``None``
+    until the first write); ``stale`` reports whether that freshest write has
+    already aged past the open-bucket TTL — the conservative (shorter) bound, so
+    a freshest snapshot older than it is definitively stale. This gives the
+    unified ``tapps_stats.caches`` surface the same age/staleness signal the
+    code-graph cache already exposes.
+    """
+    out: dict[str, Any] = dict(_snapshot_stats)
+    if _snapshot_last_write_ts <= 0:
+        out["age_seconds"] = None
+        out["stale"] = None
+        return out
+    ttl_open = load_settings().linear_cache_ttl_open_seconds
+    age = time.time() - _snapshot_last_write_ts
+    out["age_seconds"] = round(age, 1)
+    out["stale"] = TTLStaleness(float(ttl_open)).is_stale(_snapshot_last_write_ts)
+    return out
+
+
+register_cache_stats("linear_snapshot", _linear_snapshot_stats)
 
 
 def _cache_read(cache_dir: Path, cache_key: str) -> dict[str, Any] | None:
@@ -179,6 +205,8 @@ def _cache_write(
         # indent=None keeps the compact json.dumps byte layout from before.
         AtomicJsonCache.write_json(cache_file, payload, indent=None)
         _snapshot_stats["writes"] += 1
+        global _snapshot_last_write_ts
+        _snapshot_last_write_ts = time.time()
     except OSError as exc:
         logger.debug("linear_cache_write_failed", key=cache_key, exc=str(exc))
 
