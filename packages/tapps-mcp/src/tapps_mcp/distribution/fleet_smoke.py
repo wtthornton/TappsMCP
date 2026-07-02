@@ -60,7 +60,7 @@ def _post_mcp(
     }
     if session_id:
         headers["mcp-session-id"] = session_id
-    req = urllib.request.Request(
+    req = urllib.request.Request(  # noqa: S310 — URL validated localhost-only above
         url,
         data=json.dumps(payload).encode(),
         headers=headers,
@@ -71,6 +71,11 @@ def _post_mcp(
             return resp.status, resp.headers.get("mcp-session-id"), resp.read().decode()
     except urllib.error.HTTPError as exc:
         return exc.code, exc.headers.get("mcp-session-id"), exc.read().decode()
+    except OSError as exc:
+        # Connection refused / reset / timeout (URLError is an OSError). A
+        # just-restarted fleet server that has not bound its port yet must
+        # surface as a failed probe stage, not crash the whole deploy.
+        return 0, None, f"connection failed: {exc}"
 
 
 def probe_fleet_mcp_session(

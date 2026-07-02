@@ -328,3 +328,27 @@ class TestProbeContext7Throttle:
         assert loaded is not None
         assert loaded.status == "unreachable"
         assert loaded.detail == "x"
+
+    def test_force_probe_from_within_running_event_loop_does_not_raise(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Regression: tapps_doctor(quick=False) crashed with
+        "asyncio.run() cannot be called from a running event loop" because
+        probe_context7 called asyncio.run() unconditionally from a sync call
+        site that MCP tool dispatch had already entered from a running loop.
+        """
+        import asyncio
+
+        import tapps_mcp.diagnostics as diag_mod
+
+        client = _FakeClient(result=[object()])
+        _patch_client(monkeypatch, client)
+
+        async def _probe_on_loop_thread() -> Context7Diagnostic:
+            # Calling the sync probe_context7 directly here reproduces the
+            # original crash context: the current thread already has a
+            # running event loop when probe_context7's asyncio.run() fires.
+            return diag_mod.probe_context7(tmp_path, SecretStr("k"), force=True)
+
+        result = asyncio.run(_probe_on_loop_thread())
+        assert result.status == "available"

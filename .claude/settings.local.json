@@ -23,7 +23,13 @@
   "enableAllProjectMcpServers": true,
   "enabledMcpjsonServers": [
     "tapps-mcp",
-    "docs-mcp"
+    "docs-mcp",
+    "nlt-build",
+    "nlt-linear-issues",
+    "nlt-memory",
+    "nlt-project-docs",
+    "nlt-release-ship",
+    "nlt-setup"
   ],
   "defaultMode": "acceptEdits"
 }

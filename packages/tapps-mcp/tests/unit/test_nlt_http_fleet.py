@@ -34,11 +34,26 @@ class TestNltHttpFleet:
         assert entry["url"] == "http://127.0.0.1:8761/mcp"
         assert entry["headers"][PROJECT_ROOT_HEADER] == str(tmp_path.resolve())
 
+    def test_http_mcp_entry_type_is_host_aware(self, tmp_path: Path) -> None:
+        """Claude Code / VS Code reject ``streamableHttp`` ("unknown MCP server
+        type") and silently drop the server — they require ``http``. Cursor
+        keeps its historical ``streamableHttp`` spelling.
+        """
+        for host in ("claude-code", "vscode"):
+            entry = build_nlt_http_mcp_entry("nlt-memory", project_root=tmp_path, host=host)
+            assert entry["type"] == "http", host
+        cursor = build_nlt_http_mcp_entry("nlt-memory", project_root=tmp_path, host="cursor")
+        assert cursor["type"] == "streamableHttp"
+
     def test_validates_http_entry(self, tmp_path: Path) -> None:
         from tapps_mcp.distribution.nlt_http_fleet import is_valid_http_fleet_mcp_entry
 
         entry = build_nlt_http_mcp_entry("nlt-build", project_root=tmp_path)
         assert is_valid_http_fleet_mcp_entry(entry) is True
+        claude_entry = build_nlt_http_mcp_entry(
+            "nlt-build", project_root=tmp_path, host="claude-code"
+        )
+        assert is_valid_http_fleet_mcp_entry(claude_entry) is True
         assert is_valid_http_fleet_mcp_entry({"type": "stdio", "command": "x"}) is False
 
     def test_resolve_transport_explicit(self) -> None:
