@@ -61,8 +61,7 @@ def build_test_edges(
             )
 
     edges.sort(key=lambda e: (e.code_symbol, e.test_symbol))
-    if project_root is not None:
-        _ = project_root  # reserved for future cache fingerprinting
+    _ = project_root  # accepted for signature symmetry with the cached path
     return edges
 
 
@@ -106,29 +105,58 @@ def get_tests_for_symbol(
     return sorted(ranked.values(), key=lambda item: str(item.get("test_file", "")))
 
 
-def load_or_build_test_edges(project_root: Path, *, force_rebuild: bool = False) -> list[TestEdge]:
-    """Load cached test edges or build from call graph.
+def load_or_build_test_edges_for_index(
+    project_root: Path,
+    index: CallGraphIndex,
+    *,
+    force_rebuild: bool = False,
+) -> list[TestEdge]:
+    """Return TESTS edges for an already-built *index*, using the disk cache.
 
-    Unless *force_rebuild* is True, attempts to load from disk cache first
-    (TAP-4080: optional disk cache via AtomicJsonCache). Cache miss triggers
-    a full rebuild.
+    The cache is keyed by ``index.fingerprint`` (TAP-4080): a hit is served only
+    when the cached fingerprint matches the current call graph; on a fingerprint
+    mismatch or ``force_rebuild`` the edges are rebuilt from *index* and the cache
+    is rewritten. This is the fast path for ``diff_impact`` call sites that
+    already hold the index, so it never re-parses the graph.
     """
-    if not force_rebuild:
-        from tapps_mcp.project.test_linker_cache import load_test_edges_cache
+    from tapps_mcp.project.test_linker_cache import (
+        load_test_edges_cache,
+        save_test_edges_cache,
+    )
 
-        cached = load_test_edges_cache(project_root)
+    fingerprint = index.fingerprint
+    if not force_rebuild and fingerprint:
+        cached = load_test_edges_cache(project_root, fingerprint)
         if cached is not None:
             return cached
 
-    index = build_call_graph_index(project_root, force_rebuild=force_rebuild)
     edges = build_test_edges(index, project_root=project_root)
-
-    # Write cache for next call (TAP-4080).
-    from tapps_mcp.project.test_linker_cache import save_test_edges_cache
-
-    save_test_edges_cache(project_root, edges)
+    if fingerprint:
+        save_test_edges_cache(project_root, fingerprint, edges)
     return edges
+
+
+def load_or_build_test_edges(project_root: Path, *, force_rebuild: bool = False) -> list[TestEdge]:
+    """Load cached test edges or build from the call graph.
+
+    Builds (or loads) the call-graph index, then delegates to
+    :func:`load_or_build_test_edges_for_index`, which serves the fingerprint-keyed
+    disk cache when fresh (TAP-4080) and rebuilds on a fingerprint mismatch.
+    """
+    index = build_call_graph_index(project_root, force_rebuild=force_rebuild)
+    return load_or_build_test_edges_for_index(
+        project_root, index, force_rebuild=force_rebuild
+    )
 
 
 def test_edges_to_dicts(edges: list[TestEdge]) -> list[dict[str, object]]:
     return [asdict(e) for e in edges]
+
+
+# Eager side-effect import so ``register_cache_stats("test_edges", ...)`` fires
+# on any import of this module (TAP-4080 criterion): ``test_linker`` is imported
+# on the ``diff_impact`` and call-graph paths that a normal ``tapps_stats`` run
+# exercises, so "test_edges" reliably appears in ``tapps_stats.caches`` — not
+# only after a lazy ``load_or_build`` call. Placed at module end to avoid a
+# definition-time cycle (``test_linker_cache`` imports ``TestEdge`` from here).
+from tapps_mcp.project import test_linker_cache as _test_linker_cache  # noqa: F401

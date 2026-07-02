@@ -9,7 +9,7 @@ from tapps_mcp.pipeline.agent_contract import CALL_GRAPH_STALE_HINT
 from tapps_mcp.project.call_graph import build_call_graph_index
 from tapps_mcp.project.call_graph_queries import resolve_symbol_name
 from tapps_mcp.project.impact_analyzer import analyze_impact, build_import_graph
-from tapps_mcp.project.test_linker import build_test_edges, edges_for_symbols
+from tapps_mcp.project.test_linker import edges_for_symbols, load_or_build_test_edges_for_index
 
 DEFAULT_AFFECTED_TESTS_LIMIT = 20
 DEFAULT_DOC_DRIFT_CALLER_THRESHOLD = 5
@@ -98,7 +98,7 @@ def analyze_diff_impact(
 ) -> dict[str, object]:
     """Rank tests affected by *changed_files* using TESTS edges and import impact."""
     index = build_call_graph_index(project_root)
-    test_edges = build_test_edges(index, project_root=project_root)
+    test_edges = load_or_build_test_edges_for_index(project_root, index)
     graph = build_import_graph(project_root)
 
     ranked: dict[str, RankedTest] = {}
@@ -250,9 +250,9 @@ def build_diff_impact_enrichment(
             "changed_files": changed_paths,
         }
 
-    from tapps_mcp.project.test_linker import build_test_edges, get_tests_for_symbol
+    from tapps_mcp.project.test_linker import get_tests_for_symbol
 
-    test_edges = build_test_edges(index, project_root=project_root)
+    test_edges = load_or_build_test_edges_for_index(project_root, index)
 
     symbols_out: dict[str, dict[str, object]] = {}
     for changed in changed_files:
@@ -393,7 +393,9 @@ def export_test_map(
 ) -> Path:
     """Write TDAD-style static test_map.txt from TESTS edges (TAP-4095)."""
     index = build_call_graph_index(project_root, force_rebuild=force_rebuild)
-    test_edges = build_test_edges(index, project_root=project_root)
+    test_edges = load_or_build_test_edges_for_index(
+        project_root, index, force_rebuild=force_rebuild
+    )
     target = output_path or (project_root / "test_map.txt")
     lines = [
         "# TappsMCP test_map — code symbol -> test file (TDAD static artifact)",
