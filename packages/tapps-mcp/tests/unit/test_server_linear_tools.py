@@ -88,13 +88,38 @@ def test_resolve_cache_key_is_deterministic() -> None:
     assert a == b
 
 
-def test_resolve_cache_key_differs_on_any_input() -> None:
+def test_resolve_cache_key_differs_on_identity_inputs() -> None:
+    # team, project, and label still change the key (slice identity).
     base = _resolve_cache_key("T", "P", "backlog", "", 50)
     assert _resolve_cache_key("OTHER", "P", "backlog", "", 50) != base
     assert _resolve_cache_key("T", "OTHER", "backlog", "", 50) != base
-    assert _resolve_cache_key("T", "P", "unstarted", "", 50) != base
     assert _resolve_cache_key("T", "P", "backlog", "bug", 50) != base
-    assert _resolve_cache_key("T", "P", "backlog", "", 100) != base
+
+
+def test_resolve_cache_key_collapses_open_aliases() -> None:
+    # TAP-4588: every open-bucket alias resolves to ONE canonical key so the
+    # payload cache self-hits regardless of which alias the caller used.
+    base = _resolve_cache_key("T", "P", "backlog", "", 50)
+    for alias in ("", "open", "unstarted", "started", "triage", "BACKLOG"):
+        assert _resolve_cache_key("T", "P", alias, "", 50) == base
+
+
+def test_resolve_cache_key_ignores_limit() -> None:
+    # TAP-4588: limit is enforced at read time (superset fallback), not baked
+    # into the key — so a larger-limit write and a smaller-limit read share it.
+    base = _resolve_cache_key("T", "P", "backlog", "", 50)
+    assert _resolve_cache_key("T", "P", "backlog", "", 100) == base
+    assert _resolve_cache_key("T", "P", "backlog", "", 25) == base
+
+
+def test_resolve_cache_key_isolates_closed_buckets() -> None:
+    # TAP-4588: completed / canceled stay distinct from open and each other.
+    open_key = _resolve_cache_key("T", "P", "open", "", 50)
+    completed = _resolve_cache_key("T", "P", "completed", "", 50)
+    canceled = _resolve_cache_key("T", "P", "canceled", "", 50)
+    assert completed != open_key
+    assert canceled != open_key
+    assert completed != canceled
 
 
 def test_ttl_for_state_picks_correct_bucket() -> None:
@@ -566,3 +591,160 @@ async def test_get_compact_byte_budget_50_issues(
     assert len(issues_json) < 48_000, (
         f"Compact 50-issue payload too large: {len(issues_json)} bytes (limit 48,000)"
     )
+
+
+# ---------------------------------------------------------------------------
+# TAP-4588: reader/writer key convergence (canonicalization, superset limit,
+# poisoning guard). These prove the payload cache actually self-hits.
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_get_open_hits_put_under_concrete_open_state(
+    tmp_path: Path, mock_load_settings: Any
+) -> None:
+    """get(state='open') HITS a put made under state='' / 'started'.
+
+    Before TAP-4588 each alias wrote a distinct file, so this missed.
+    """
+    stored = json.dumps([{"id": "LIN-1", "title": "open work"}])
+    # Writer uses the empty / concrete-open aliases the auto-populate hook and
+    # skills actually produce.
+    put_empty = await tapps_linear_snapshot_put(
+        team="T", project="P", issues_json=stored, state=""
+    )
+    assert put_empty["data"]["stored"] is True
+
+    got = await tapps_linear_snapshot_get(team="T", project="P", state="open")
+    assert got["data"]["cached"] is True
+    assert got["data"]["issues"] == [{"id": "LIN-1", "title": "open work"}]
+
+    # And the reverse: a put under a concrete open state also serves get('open').
+    put_started = await tapps_linear_snapshot_put(
+        team="T", project="P", issues_json=stored, state="started"
+    )
+    assert put_started["data"]["cache_key"] == got["data"]["cache_key"]
+
+
+@pytest.mark.asyncio
+async def test_get_smaller_limit_hits_larger_cached_superset(
+    tmp_path: Path, mock_load_settings: Any
+) -> None:
+    """get(limit=50) HITS a cached limit=150 snapshot, truncated."""
+    issues = [{"id": f"LIN-{i}"} for i in range(150)]
+    put = await tapps_linear_snapshot_put(
+        team="T", project="P", issues_json=json.dumps(issues), state="open", limit=150
+    )
+    assert put["data"]["stored"] is True
+
+    got = await tapps_linear_snapshot_get(
+        team="T", project="P", state="open", limit=50
+    )
+    assert got["data"]["cached"] is True
+    assert got["data"]["served_from_superset"] is True
+    assert len(got["data"]["issues"]) == 50
+    assert got["data"]["issues"][0]["id"] == "LIN-0"
+
+
+@pytest.mark.asyncio
+async def test_get_larger_limit_misses_smaller_cached(
+    tmp_path: Path, mock_load_settings: Any
+) -> None:
+    """get(limit=150) MISSES a cached limit=50 snapshot (can't serve larger)."""
+    issues = [{"id": f"LIN-{i}"} for i in range(50)]
+    await tapps_linear_snapshot_put(
+        team="T", project="P", issues_json=json.dumps(issues), state="open", limit=50
+    )
+
+    got = await tapps_linear_snapshot_get(
+        team="T", project="P", state="open", limit=150
+    )
+    assert got["data"]["cached"] is False
+
+
+@pytest.mark.asyncio
+async def test_get_exact_limit_hits_not_flagged_superset(
+    tmp_path: Path, mock_load_settings: Any
+) -> None:
+    """Equal stored/requested limit hits without the superset flag."""
+    issues = [{"id": f"LIN-{i}"} for i in range(50)]
+    await tapps_linear_snapshot_put(
+        team="T", project="P", issues_json=json.dumps(issues), state="open", limit=50
+    )
+    got = await tapps_linear_snapshot_get(
+        team="T", project="P", state="open", limit=50
+    )
+    assert got["data"]["cached"] is True
+    assert got["data"]["served_from_superset"] is False
+
+
+@pytest.mark.asyncio
+async def test_closed_buckets_isolated_from_open(
+    tmp_path: Path, mock_load_settings: Any
+) -> None:
+    """A completed-state snapshot never satisfies an open-slice get."""
+    closed = json.dumps([{"id": "LIN-done", "title": "done"}])
+    await tapps_linear_snapshot_put(
+        team="T", project="P", issues_json=closed, state="completed"
+    )
+    # get for the open slice must MISS — different canonical key.
+    got_open = await tapps_linear_snapshot_get(team="T", project="P", state="open")
+    assert got_open["data"]["cached"] is False
+    # completed and canceled are isolated from each other too.
+    got_canceled = await tapps_linear_snapshot_get(
+        team="T", project="P", state="canceled"
+    )
+    assert got_canceled["data"]["cached"] is False
+    # but the completed get itself hits.
+    got_completed = await tapps_linear_snapshot_get(
+        team="T", project="P", state="completed"
+    )
+    assert got_completed["data"]["cached"] is True
+
+
+@pytest.mark.asyncio
+async def test_auto_populated_empty_payload_is_miss_not_false_hit(
+    tmp_path: Path, mock_load_settings: Any
+) -> None:
+    """An auto_populated payload with issues==[] returns a miss, not 0 issues.
+
+    Guards against poisoning: list_issues(state='open') returns [] (invalid
+    Linear state); the hook may cache that empty list. A later get must not
+    report a confident empty hit off it.
+    """
+    cache_dir = _cache_dir(tmp_path)
+    key = _resolve_cache_key("T", "P", "open", "", 50)
+    _cache_write(
+        cache_dir,
+        key,
+        {
+            "issues": [],
+            "expires_at": time.time() + 600,
+            "cached_at": time.time() - 1,
+            "state": "open",
+            "team": "T",
+            "project": "P",
+            "auto_populated": True,
+            "limit": 50,
+        },
+    )
+    got = await tapps_linear_snapshot_get(team="T", project="P", state="open")
+    assert got["data"]["cached"] is False
+
+
+@pytest.mark.asyncio
+async def test_manual_empty_put_is_still_a_hit(
+    tmp_path: Path, mock_load_settings: Any
+) -> None:
+    """A manual (non-auto) empty put is a legitimate empty hit.
+
+    The poisoning guard only distrusts auto_populated empties — an agent that
+    explicitly put([]) for a genuinely-empty slice should still self-hit.
+    """
+    put = await tapps_linear_snapshot_put(
+        team="T", project="P", issues_json="[]", state="completed"
+    )
+    assert put["data"]["stored"] is True
+    got = await tapps_linear_snapshot_get(team="T", project="P", state="completed")
+    assert got["data"]["cached"] is True
+    assert got["data"]["issues"] == []
