@@ -654,6 +654,13 @@ def write_session_start_marker(project_root: Path | str) -> None:
     user prompt yields a reminder.
     """
     try:
+        # TAP-4573: refuse to mkdir/write under a non-real project_root. A bare
+        # MagicMock() coerces to a relative "MagicMock/..." path, which would
+        # otherwise create a real tree in the pytest CWD (the repo root).
+        from tapps_core.agent_identity import is_real_writable_root
+
+        if not is_real_writable_root(project_root):
+            return
         root = project_root if isinstance(project_root, Path) else Path(project_root)
         sidecar_dir = root / ".tapps-mcp"
         sidecar_dir.mkdir(parents=True, exist_ok=True)
