@@ -727,6 +727,63 @@ class TestDoMcpPost:
         mock_cls.assert_called_once()
         assert bridge._http_client is not None
 
+    @pytest.mark.asyncio
+    async def test_project_id_override_sent_on_post(self) -> None:
+        """Cross-project recall merges X-Project-Id on the tools/call POST."""
+        from tapps_core.brain_bridge import _tenant_override_headers
+
+        bridge = _make_http_bridge(
+            headers={
+                "Authorization": "Bearer test-token",
+                "X-Project-Id": "nlt-orchestrator",
+            }
+        )
+        bridge._session_id = "__test__"
+        bridge._negotiated = True
+        post_mock = _make_async_post(_mcp_response({"results": []}))
+        bridge._http_client = AsyncMock()
+        bridge._http_client.post = post_mock
+
+        await bridge._do_mcp_post(
+            "memory_search", {"query": "q"}, project_id="tapps-mcp"
+        )
+
+        headers = post_mock.call_args[1]["headers"]
+        assert headers["X-Project-Id"] == "tapps-mcp"
+        assert _tenant_override_headers(None) == {}
+        assert _tenant_override_headers("  tapps-mcp  ") == {"X-Project-Id": "tapps-mcp"}
+
+    @pytest.mark.asyncio
+    async def test_search_forwards_project_id(self) -> None:
+        bridge = _make_http_bridge()
+        bridge._session_id = "__test__"
+        bridge._negotiated = True
+        post_mock = _make_async_post(_mcp_response([]))
+        bridge._http_client = AsyncMock()
+        bridge._http_client.post = post_mock
+
+        await bridge.search("query", project_id="tapps-brain")
+
+        headers = post_mock.call_args[1]["headers"]
+        assert headers["X-Project-Id"] == "tapps-brain"
+
+    @pytest.mark.asyncio
+    async def test_project_id_override_includes_meta(self) -> None:
+        """Cross-project recall also sends ``params._meta.project_id`` for MCP."""
+        bridge = _make_http_bridge()
+        bridge._session_id = "__test__"
+        bridge._negotiated = True
+        post_mock = _make_async_post(_mcp_response([]))
+        bridge._http_client = AsyncMock()
+        bridge._http_client.post = post_mock
+
+        await bridge._do_mcp_post(
+            "memory_search", {"query": "q"}, project_id="tapps-mcp"
+        )
+
+        payload = post_mock.call_args[1]["json"]
+        assert payload["params"]["_meta"]["project_id"] == "tapps-mcp"
+
 
 # ---------------------------------------------------------------------------
 # Read operations

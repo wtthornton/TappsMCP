@@ -139,6 +139,18 @@ _MCP_ACCEPT_HEADERS: dict[str, str] = {"Accept": "application/json, text/event-s
 _HTTP_ERROR_BODY_MAX = 500
 
 
+def _tenant_override_headers(project_id: str | None) -> dict[str, str]:
+    """Per-request ``X-Project-Id`` when a caller overrides the bridge default tenant.
+
+    Cross-project recall (TAP-1257 / tapps-mcp #6) passes ``project_id`` on
+    ``tapps_memory`` actions; the HTTP fleet bridge keeps its session-scoped
+    default header but merges this override on individual ``tools/call`` posts
+    without mutating :attr:`HttpBrainBridge._http_headers`.
+    """
+    pid = (project_id or "").strip()
+    return {"X-Project-Id": pid} if pid else {}
+
+
 def _raise_with_body(response: httpx.Response, tool_name: str) -> None:
     """Like ``response.raise_for_status()`` but includes the response body.
 
@@ -1467,7 +1479,13 @@ class HttpBrainBridge(BrainBridge):
     # HTTP JSON-RPC call layer
     # -------------------------------------------------------------------------
 
-    async def _http_mcp_call(self, tool_name: str, arguments: dict[str, Any]) -> Any:
+    async def _http_mcp_call(
+        self,
+        tool_name: str,
+        arguments: dict[str, Any],
+        *,
+        project_id: str | None = None,
+    ) -> Any:
         """Call a tapps-brain MCP tool with circuit-breaker + retry semantics."""
         if self.circuit_open:
             raise BrainBridgeUnavailable("circuit open")
@@ -1475,7 +1493,9 @@ class HttpBrainBridge(BrainBridge):
         last_exc: Exception | None = None
         for attempt in range(_RETRY_ATTEMPTS):
             try:
-                result = await self._do_mcp_post(tool_name, arguments)
+                result = await self._do_mcp_post(
+                    tool_name, arguments, project_id=project_id
+                )
                 self._record_success()
                 return result
             except BrainBridgeUnavailable:
@@ -1703,7 +1723,13 @@ class HttpBrainBridge(BrainBridge):
             "negotiation_error": self._negotiation_error,
         }
 
-    async def _do_mcp_post(self, tool_name: str, arguments: dict[str, Any]) -> Any:
+    async def _do_mcp_post(
+        self,
+        tool_name: str,
+        arguments: dict[str, Any],
+        *,
+        project_id: str | None = None,
+    ) -> Any:
         """POST a single ``tools/call`` to ``{brain_http_url}/mcp``."""
         import json as _json
 
@@ -1728,14 +1754,18 @@ class HttpBrainBridge(BrainBridge):
         # but the wire is now authoritative — a genuinely gated tool still
         # surfaces as :class:`ToolNotInProfileError` from the brain's
         # ``-32602 INVALID_PARAMS`` response, just one round-trip later.
-        extra_headers: dict[str, str] = {}
+        extra_headers = _tenant_override_headers(project_id)
         if session_id and session_id != "__no_session__":
             extra_headers["Mcp-Session-Id"] = session_id
+        project_id = (project_id or "").strip()
+        params: dict[str, Any] = {"name": tool_name, "arguments": arguments}
+        if project_id:
+            params["_meta"] = {"project_id": project_id}
         payload = {
             "jsonrpc": "2.0",
             "id": 1,
             "method": "tools/call",
-            "params": {"name": tool_name, "arguments": arguments},
+            "params": params,
         }
         response = await self._http_client.post(
             f"{self._http_url}/mcp/", json=payload, headers=extra_headers
@@ -1747,7 +1777,9 @@ class HttpBrainBridge(BrainBridge):
         if response.status_code in (400, 404) and self._session_id:
             self._session_id = None
             session_id = await self._ensure_session()
-            extra_headers = {"Mcp-Session-Id": session_id} if session_id != "__no_session__" else {}
+            extra_headers = _tenant_override_headers(project_id)
+            if session_id != "__no_session__":
+                extra_headers["Mcp-Session-Id"] = session_id
             response = await self._http_client.post(
                 f"{self._http_url}/mcp/", json=payload, headers=extra_headers
             )
@@ -1849,17 +1881,26 @@ class HttpBrainBridge(BrainBridge):
         query: str,
         limit: int = 10,
         tier: str | None = None,
+        *,
+        project_id: str | None = None,
     ) -> list[dict[str, Any]]:
         args: dict[str, Any] = {"query": query, "limit": limit}
         if tier is not None:
             args["tier"] = tier
-        result = await self._http_mcp_call("memory_search", args)
+        result = await self._http_mcp_call("memory_search", args, project_id=project_id)
         if isinstance(result, list):
             return result
         return result.get("results", []) if isinstance(result, dict) else []
 
-    async def get(self, key: str) -> dict[str, Any] | None:
-        result = await self._http_mcp_call("memory_get", {"key": key})
+    async def get(
+        self,
+        key: str,
+        *,
+        project_id: str | None = None,
+    ) -> dict[str, Any] | None:
+        result = await self._http_mcp_call(
+            "memory_get", {"key": key}, project_id=project_id
+        )
         if isinstance(result, dict) and result.get("key") and not result.get("error"):
             return result
         return None
@@ -1868,11 +1909,13 @@ class HttpBrainBridge(BrainBridge):
         self,
         limit: int = 20,
         tier: str | None = None,
+        *,
+        project_id: str | None = None,
     ) -> list[dict[str, Any]]:
         args: dict[str, Any] = {"limit": limit}
         if tier is not None:
             args["tier"] = tier
-        result = await self._http_mcp_call("memory_list", args)
+        result = await self._http_mcp_call("memory_list", args, project_id=project_id)
         if isinstance(result, list):
             return result
         return result.get("entries", []) if isinstance(result, dict) else []
@@ -1914,13 +1957,21 @@ class HttpBrainBridge(BrainBridge):
     # Knowledge graph (TAP-1630)
     # -------------------------------------------------------------------------
 
-    async def find_related(self, key: str, max_hops: int = 2) -> list[dict[str, Any]]:
+    async def find_related(
+        self,
+        key: str,
+        max_hops: int = 2,
+        *,
+        project_id: str | None = None,
+    ) -> list[dict[str, Any]]:
         """Walk the knowledge graph from *key* outward and return related entries.
 
         Maps to the brain's ``memory_find_related`` tool.
         """
         args: dict[str, Any] = {"key": key, "max_hops": max_hops}
-        result = await self._http_mcp_call("memory_find_related", args)
+        result = await self._http_mcp_call(
+            "memory_find_related", args, project_id=project_id
+        )
         if isinstance(result, list):
             return result
         if isinstance(result, dict):
@@ -2163,6 +2214,7 @@ class HttpBrainBridge(BrainBridge):
         *,
         session_id: str = "",
         details_json: str = "",
+        project_id: str | None = None,
     ) -> dict[str, Any]:
         """Record an unmet-recall signal — the agent searched and got nothing.
 
@@ -2174,7 +2226,9 @@ class HttpBrainBridge(BrainBridge):
             args["session_id"] = session_id
         if details_json:
             args["details_json"] = details_json
-        result = await self._http_mcp_call("feedback_gap", args)
+        result = await self._http_mcp_call(
+            "feedback_gap", args, project_id=project_id
+        )
         return result if isinstance(result, dict) else {"recorded": True}
 
     async def flywheel_report(self, period_days: int = 7) -> dict[str, Any]:
@@ -2665,6 +2719,7 @@ class HttpBrainBridge(BrainBridge):
         tier: str = "pattern",
         scope: str = "project",
         tags: list[str] | None = None,
+        project_id: str | None = None,
         **kwargs: Any,
     ) -> dict[str, Any]:
         if self.circuit_open:
@@ -2682,12 +2737,16 @@ class HttpBrainBridge(BrainBridge):
         if tags:
             args["tags"] = tags
         args.update(kwargs)
-        result: dict[str, Any] = await self._http_mcp_call("memory_save", args)
+        result: dict[str, Any] = await self._http_mcp_call(
+            "memory_save", args, project_id=project_id
+        )
         self._maybe_start_drain()
         return result if isinstance(result, dict) else {"key": key, "success": True}
 
-    async def delete(self, key: str) -> bool:
-        result = await self._http_mcp_call("memory_delete", {"key": key})
+    async def delete(self, key: str, *, project_id: str | None = None) -> bool:
+        result = await self._http_mcp_call(
+            "memory_delete", {"key": key}, project_id=project_id
+        )
         if isinstance(result, bool):
             return result
         if isinstance(result, dict):
