@@ -521,7 +521,7 @@ class TestUpgradeDryRun:
         assert isinstance(tpl, dict)
         assert tpl["action"] == "would-write-managed-files"
         assert "PULL_REQUEST_TEMPLATE.md" in tpl["managed_files"]
-        assert "dependabot.yml" in tpl["managed_files"]
+        assert "dependabot.yml" not in tpl["managed_files"]
         assert any(m.startswith("ISSUE_TEMPLATE/") for m in tpl["managed_files"])
         assert "CODEOWNERS" in tpl["preserved_files"]
         assert "ISSUE_TEMPLATE/security-vulnerability.yml" in tpl["preserved_files"]

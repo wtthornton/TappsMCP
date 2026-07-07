@@ -1,4 +1,4 @@
-"""Tests for GitHub Issue forms, PR templates, and Dependabot configuration.
+"""Tests for GitHub Issue forms and PR templates.
 
 Epic 19: GitHub Issue & PR Templates.
 """
@@ -145,54 +145,6 @@ class TestPRTemplateGeneration:
         assert "PULL_REQUEST_TEMPLATE.md" in result["file"]
 
 
-class TestDependabotConfigGeneration:
-    """Tests for generate_dependabot_config (Story 19.4)."""
-
-    def test_creates_dependabot_yml(self, tmp_path):
-        from tapps_mcp.pipeline.github_templates import generate_dependabot_config
-
-        generate_dependabot_config(tmp_path)
-        assert (tmp_path / ".github" / "dependabot.yml").exists()
-
-    def test_dependabot_has_pip_ecosystem(self, tmp_path):
-        from tapps_mcp.pipeline.github_templates import generate_dependabot_config
-
-        generate_dependabot_config(tmp_path)
-        content = yaml.safe_load((tmp_path / ".github" / "dependabot.yml").read_text())
-        ecosystems = [u["package-ecosystem"] for u in content["updates"]]
-        assert "pip" in ecosystems
-
-    def test_dependabot_has_github_actions_ecosystem(self, tmp_path):
-        from tapps_mcp.pipeline.github_templates import generate_dependabot_config
-
-        generate_dependabot_config(tmp_path)
-        content = yaml.safe_load((tmp_path / ".github" / "dependabot.yml").read_text())
-        ecosystems = [u["package-ecosystem"] for u in content["updates"]]
-        assert "github-actions" in ecosystems
-
-    def test_dependabot_has_grouped_updates(self, tmp_path):
-        from tapps_mcp.pipeline.github_templates import generate_dependabot_config
-
-        generate_dependabot_config(tmp_path)
-        content = yaml.safe_load((tmp_path / ".github" / "dependabot.yml").read_text())
-        pip_update = next(u for u in content["updates"] if u["package-ecosystem"] == "pip")
-        assert "groups" in pip_update
-
-    def test_dependabot_version_2(self, tmp_path):
-        from tapps_mcp.pipeline.github_templates import generate_dependabot_config
-
-        generate_dependabot_config(tmp_path)
-        content = yaml.safe_load((tmp_path / ".github" / "dependabot.yml").read_text())
-        assert content["version"] == 2
-
-    def test_result_dict(self, tmp_path):
-        from tapps_mcp.pipeline.github_templates import generate_dependabot_config
-
-        result = generate_dependabot_config(tmp_path)
-        assert result["action"] == "created"
-        assert "dependabot.yml" in result["file"]
-
-
 class TestGenerateAllGithubTemplates:
     """Tests for generate_all_github_templates (Story 19.5)."""
 
@@ -201,7 +153,7 @@ class TestGenerateAllGithubTemplates:
 
         result = generate_all_github_templates(tmp_path)
         assert result["success"] is True
-        assert result["total_files"] == 6  # 4 issue + 1 PR + 1 dependabot
+        assert result["total_files"] == 5  # 4 issue + 1 PR
 
     def test_all_files_created(self, tmp_path):
         from tapps_mcp.pipeline.github_templates import generate_all_github_templates
@@ -212,7 +164,12 @@ class TestGenerateAllGithubTemplates:
         assert (tmp_path / ".github" / "ISSUE_TEMPLATE" / "task.yml").exists()
         assert (tmp_path / ".github" / "ISSUE_TEMPLATE" / "config.yml").exists()
         assert (tmp_path / ".github" / "PULL_REQUEST_TEMPLATE.md").exists()
-        assert (tmp_path / ".github" / "dependabot.yml").exists()
+
+    def test_does_not_generate_dependabot(self, tmp_path):
+        from tapps_mcp.pipeline.github_templates import generate_all_github_templates
+
+        generate_all_github_templates(tmp_path)
+        assert not (tmp_path / ".github" / "dependabot.yml").exists()
 
     def test_result_has_sub_results(self, tmp_path):
         from tapps_mcp.pipeline.github_templates import generate_all_github_templates
@@ -220,4 +177,4 @@ class TestGenerateAllGithubTemplates:
         result = generate_all_github_templates(tmp_path)
         assert "issue_templates" in result
         assert "pr_template" in result
-        assert "dependabot" in result
+        assert "dependabot" not in result

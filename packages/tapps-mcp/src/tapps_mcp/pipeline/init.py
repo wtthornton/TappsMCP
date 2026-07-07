@@ -1139,7 +1139,7 @@ def _setup_platform(cfg: BootstrapConfig, state: _BootstrapState) -> None:
 
 
 def _setup_github_templates(state: _BootstrapState) -> None:
-    """Generate GitHub Issue forms, PR template, and Dependabot config."""
+    """Generate GitHub Issue forms and PR template."""
     try:
         from tapps_mcp.pipeline.github_templates import generate_all_github_templates
 

@@ -187,12 +187,12 @@ class TestSetupGuideGeneration:
         content = (tmp_path / "docs" / "GITHUB_SETUP_GUIDE.md").read_text()
         assert "Secret Scanning" in content
 
-    def test_has_dependabot_section(self, tmp_path):
+    def test_does_not_have_dependabot_section(self, tmp_path):
         from tapps_mcp.pipeline.github_governance import generate_setup_guide
 
         generate_setup_guide(tmp_path)
         content = (tmp_path / "docs" / "GITHUB_SETUP_GUIDE.md").read_text()
-        assert "Dependabot" in content
+        assert "Dependabot" not in content
 
     def test_result_dict(self, tmp_path):
         from tapps_mcp.pipeline.github_governance import generate_setup_guide

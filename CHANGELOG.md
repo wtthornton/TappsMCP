@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Removed
+
+- **Dependabot generation** ([TAP-4624](https://linear.app/tappscodingagents/issue/TAP-4624)).
+  `tapps_init` / `tapps_upgrade` no longer create `.github/dependabot.yml`.
+  `dependabot.yml` was removed from `MANAGED_GITHUB_ROOT_FILES` (now just
+  `PULL_REQUEST_TEMPLATE.md`), and `generate_dependabot_config` /
+  `_DEPENDABOT_CONFIG` were deleted from
+  [`pipeline/github_templates.py`](packages/tapps-mcp/src/tapps_mcp/pipeline/github_templates.py).
+  `docs/GITHUB_SETUP_GUIDE.md` and `SECURITY.md` templates no longer reference
+  Dependabot. Root-cause fix — deleting the file in a consumer repo no longer
+  gets undone by the next `tapps_upgrade`.
+
 ## [3.12.49] - 2026-06-26
 
 Feature: light domain playbooks ([ADR-0025](docs/adr/0025-light-domain-playbooks-not-rag-experts.md)) — static checklists and skills instead of EPIC-94 RAG experts.

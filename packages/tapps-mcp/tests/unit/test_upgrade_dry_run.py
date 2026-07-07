@@ -1,7 +1,7 @@
 """Tests for tapps_upgrade dry-run: three states for managed root files.
 
 TAP-2201: ``upgrade_pipeline(dry_run=True)`` must distinguish three states
-for files in MANAGED_GITHUB_ROOT_FILES (e.g. ``dependabot.yml``):
+for files in MANAGED_GITHUB_ROOT_FILES (e.g. ``PULL_REQUEST_TEMPLATE.md``):
 
 1. **Fresh project** — file absent because tapps was never initialised.
    ``would_recreate_deleted_files`` stays empty; safe-to-run verdict unchanged.
@@ -93,18 +93,6 @@ class TestFreshProject:
 class TestOutdatedBaseline:
     """Managed file exists → not deleted → would_recreate_deleted_files is empty."""
 
-    def test_existing_dependabot_not_flagged(self, tmp_path: Path) -> None:
-        _seed_project(tmp_path)
-        github_dir = tmp_path / ".github"
-        github_dir.mkdir(parents=True, exist_ok=True)
-        # Write old / arbitrary content — file is present.
-        (github_dir / "dependabot.yml").write_text("version: 1\n", encoding="utf-8")
-
-        result = _run_dry(tmp_path)
-
-        flagged_files = [e["file"] for e in _would_recreate(result)]
-        assert ".github/dependabot.yml" not in flagged_files
-
     def test_existing_pr_template_not_flagged(self, tmp_path: Path) -> None:
         _seed_project(tmp_path)
         github_dir = tmp_path / ".github"
@@ -125,28 +113,16 @@ class TestOutdatedBaseline:
 class TestDeliberatelyDeleted:
     """Established project (AGENTS.md exists) + managed file absent → flagged."""
 
-    def test_missing_dependabot_flagged(self, tmp_path: Path) -> None:
+    def test_missing_pr_template_flagged(self, tmp_path: Path) -> None:
         _seed_project(tmp_path)
-        # .github/ exists but dependabot.yml was deleted.
+        # .github/ exists but PULL_REQUEST_TEMPLATE.md was deleted.
         (tmp_path / ".github").mkdir(parents=True, exist_ok=True)
 
         result = _run_dry(tmp_path)
 
         flagged = _would_recreate(result)
         flagged_files = [e["file"] for e in flagged]
-        assert ".github/dependabot.yml" in flagged_files
-
-    def test_missing_pr_template_flagged(self, tmp_path: Path) -> None:
-        _seed_project(tmp_path)
-        (tmp_path / ".github").mkdir(parents=True, exist_ok=True)
-        # Only dependabot.yml present; PR template is absent.
-        (tmp_path / ".github" / "dependabot.yml").write_text("version: 2\n", encoding="utf-8")
-
-        result = _run_dry(tmp_path)
-
-        flagged_files = [e["file"] for e in _would_recreate(result)]
         assert ".github/PULL_REQUEST_TEMPLATE.md" in flagged_files
-        assert ".github/dependabot.yml" not in flagged_files
 
     def test_entry_includes_upgrade_skip_hint(self, tmp_path: Path) -> None:
         _seed_project(tmp_path)
@@ -167,7 +143,7 @@ class TestDeliberatelyDeleted:
 
         summary_recreate = _summary_would_recreate(result)
         flagged_files = [e["file"] for e in summary_recreate]
-        assert ".github/dependabot.yml" in flagged_files
+        assert ".github/PULL_REQUEST_TEMPLATE.md" in flagged_files
 
     def test_deleted_files_not_in_review_flags(self, tmp_path: Path) -> None:
         """would_recreate_deleted_files must not add github_templates to review_recommended_for."""
@@ -184,7 +160,7 @@ class TestDeliberatelyDeleted:
         assert _summary_would_recreate(result), "expected entries in summary rollup"
 
     def test_all_managed_root_files_covered(self, tmp_path: Path) -> None:
-        """Every entry in MANAGED_GITHUB_ROOT_FILES is checked, not just dependabot.yml."""
+        """Every entry in MANAGED_GITHUB_ROOT_FILES is checked."""
         from tapps_mcp.pipeline.github_templates import MANAGED_GITHUB_ROOT_FILES
 
         _seed_project(tmp_path)

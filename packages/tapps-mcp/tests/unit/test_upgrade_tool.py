@@ -546,7 +546,7 @@ class TestUpgradePipeline:
         assert templates["success"] is True
         assert "issue_templates" in templates
         assert "pr_template" in templates
-        assert "dependabot" in templates
+        assert "dependabot" not in templates
 
     def test_result_includes_governance_component(self, tmp_path: Path) -> None:
         """Upgrade result includes governance component."""
@@ -568,7 +568,7 @@ class TestUpgradePipeline:
         assert isinstance(tpl, dict)
         assert tpl["action"] == "would-write-managed-files"
         assert "PULL_REQUEST_TEMPLATE.md" in tpl["managed_files"]
-        assert "dependabot.yml" in tpl["managed_files"]
+        assert "dependabot.yml" not in tpl["managed_files"]
 
     def test_dry_run_reports_would_regenerate_for_governance(self, tmp_path: Path) -> None:
         """Dry run reports would-regenerate for governance."""

@@ -58,7 +58,6 @@ This project uses automated security scanning:
 - **Secret scanning** — detection of hardcoded API keys, tokens, and passwords
 - **pip-audit** — dependency vulnerability scanning against the PyPI advisory database
 - **CodeQL** — GitHub's semantic code analysis engine
-- **Dependabot** — automated dependency updates with grouped security patches
 
 ## Scope
 
@@ -309,15 +308,7 @@ Enable GitHub's built-in secret scanning:
    - **Push protection** — blocks pushes containing secrets
    - **Validity checks** — verifies if detected secrets are active
 
-## 4. Dependabot
-
-The `dependabot.yml` configuration file has been generated. Additionally:
-
-1. Go to **Settings > Code security and analysis**
-2. Enable **Dependabot security updates** (auto-PRs for vulnerable dependencies)
-3. Enable **Dependabot version updates** (uses the generated config)
-
-## 5. Merge Queue (Optional)
+## 4. Merge Queue (Optional)
 
 For high-traffic repositories:
 
@@ -329,7 +320,7 @@ For high-traffic repositories:
    - Max group size: 5
    - Wait time: 5 minutes
 
-## 6. GitHub Projects (Optional)
+## 5. GitHub Projects (Optional)
 
 For project management with issue tracking:
 
@@ -341,7 +332,7 @@ gh project create --owner @me --title "Development Board"
 # (Configure in project Settings > Workflows)
 ```
 
-## 7. Issue Types (Optional)
+## 6. Issue Types (Optional)
 
 If your organization supports issue types:
 
