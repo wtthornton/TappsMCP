@@ -275,4 +275,5 @@ class TestHookIfMatchers:
     def test_post_tool_use_failure_has_if(self, tmp_path):
         hooks = self._hooks(tmp_path)
         for entry in hooks["PostToolUseFailure"]:
-            assert entry["if"] == "mcp__tapps-mcp__*"
+            # Server rebranded to nlt-build (commit f3b78b5, v3.12.43).
+            assert entry["if"] == "mcp__nlt-build__*"

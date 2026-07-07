@@ -16,6 +16,12 @@ from tapps_mcp.pipeline.agent_contract import (
     TOOL_REFERENCE_CALL_GRAPH_ROWS,
     finish_task_checklist_and_doc_gaps,
 )
+from tapps_mcp.pipeline.platform_skill_orchestration import (
+    ORCHESTRATION_PROMPT_COMPANION_FILES,
+    ORCHESTRATION_PROMPT_CREATE_ONLY_FILES,
+    ORCHESTRATION_PROMPT_SKILL_BODY,
+)
+from tapps_mcp.pipeline.skill_managed_block import install_or_refresh_skill
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -110,9 +116,13 @@ DEPRECATED_TAPPS_SKILLS: frozenset[str] = frozenset(
     {"tapps-score", "tapps-gate", "tapps-validate", "tapps-report"}
 )
 
-_FINISH_TASK_CHECKLIST_AND_DOC_GAPS_CURSOR = finish_task_checklist_and_doc_gaps(claude_nlt_prefix=False)
+_FINISH_TASK_CHECKLIST_AND_DOC_GAPS_CURSOR = finish_task_checklist_and_doc_gaps(
+    claude_nlt_prefix=False
+)
 
-_FINISH_TASK_CHECKLIST_AND_DOC_GAPS_CLAUDE = finish_task_checklist_and_doc_gaps(claude_nlt_prefix=True)
+_FINISH_TASK_CHECKLIST_AND_DOC_GAPS_CLAUDE = finish_task_checklist_and_doc_gaps(
+    claude_nlt_prefix=True
+)
 
 # ---------------------------------------------------------------------------
 # Skills templates (Story 12.8)
@@ -133,9 +143,13 @@ Close out the current task end-to-end. Run each step; do NOT skip one that faile
 
 1. **Validate changed files.** Identify the files you edited this session (git status, your edit history). Call `mcp__nlt-build__tapps_validate_changed` with explicit `file_paths` (comma-separated) scoped to those files. **Never call without `file_paths`.** Default is quick mode. If any file fails, list it with the top blocking issue and stop — the task is not complete. Do not proceed to step 2 until all changed files pass.
 
-   """ + FINISH_TASK_VALIDATE_CALL_GRAPH_NOTE + """
+   """
+    + FINISH_TASK_VALIDATE_CALL_GRAPH_NOTE
+    + """
 
-""" + _FINISH_TASK_CHECKLIST_AND_DOC_GAPS_CLAUDE + """
+"""
+    + _FINISH_TASK_CHECKLIST_AND_DOC_GAPS_CLAUDE
+    + """
 
 4. **Save learnings (conditional).** If this session produced a non-obvious architectural or pattern-level decision — a new convention, a subtle trade-off, a gotcha someone else would re-discover — run `uv run tapps-mcp memory save --key <slug> --tier <architectural|pattern> --value "<concise decision>"` (CLI via BrainBridge). Skip for routine fixes, refactors where the code documents the decision, or trivial bugfixes. Brain offline → skip silently.
 
@@ -160,7 +174,9 @@ disable-model-invocation: true
 
 End the session with a durable handoff the next chat can load via `/tapps-continue-session`.
 
-""" + _HANDOFF_PRE_GATE + """
+"""
+    + _HANDOFF_PRE_GATE
+    + """
 
 1. **Draft handoff (5–10 bullets).** From this session's work, write:
    - **Done** — what shipped or was verified
@@ -171,11 +187,17 @@ End the session with a durable handoff the next chat can load via `/tapps-contin
    - **Verify** — commands to run first in the next session
    - **Success criterion** — one line
 
-""" + _HANDOFF_P0_GATE + """
+"""
+    + _HANDOFF_P0_GATE
+    + """
 
-""" + _HANDOFF_MARKDOWN_SHAPE + """
+"""
+    + _HANDOFF_MARKDOWN_SHAPE
+    + """
 
-""" + _HANDOFF_PERSIST + """
+"""
+    + _HANDOFF_PERSIST
+    + """
 
 3. **Report.** One line: `Handoff written: .tapps-mcp/session-handoff.md. Linear P0: <id|none>. brain_mirror: ok|skipped. session_end: ok|skipped. Next session: invoke /tapps-continue-session`
 """,
@@ -199,13 +221,17 @@ Start work in a fresh context window by assembling structured state — not a us
    - **Preferred:** Call `mcp__nlt-build__tapps_session_start()`. If `data.compaction_rehydration` is present, summarize it in one sentence.
    - **CLI fallback** (MCP unavailable): Run `uv run tapps-mcp doctor --quick` and read `.tapps-mcp.yaml` for project context (quality preset, brain URL, engagement). Proceed without blocking.
 
-""" + _CONTINUE_LOAD_AND_CONTEXT + """
+"""
+    + _CONTINUE_LOAD_AND_CONTEXT
+    + """
 
 3. **Linear context.**
    - If the user passed `TAP-####` (argument or in handoff **Linear P0**), call `mcp__plugin_linear_linear__get_issue(id=...)`.
    - For backlog/triage without a known id, invoke the `linear-read` skill instead of raw `list_issues` (do not call `list_issues` directly — cache gate).
 
-""" + _CONTINUE_EMIT_AND_PROCEED + """
+"""
+    + _CONTINUE_EMIT_AND_PROCEED
+    + """
 """,
     "tapps-review-pipeline": """\
 ---
@@ -446,7 +472,9 @@ provide the full tool reference from this skill.
 | **tapps_security_scan** | Security-sensitive changes or before security review |
 | **tapps_validate_config** | When adding/changing Dockerfile, docker-compose, infra |
 | **tapps_impact_analysis** | Module-level import blast radius before API or layout changes |
-""" + TOOL_REFERENCE_CALL_GRAPH_ROWS + """
+"""
+    + TOOL_REFERENCE_CALL_GRAPH_ROWS
+    + """
 | **tapps_dead_code** | Find unused code during refactoring |
 | **tapps_dependency_scan** | Check for CVEs before releases |
 | **tapps_dependency_graph** | Understand module dependencies, circular imports |
@@ -1144,9 +1172,13 @@ Close out the current task end-to-end. Run each step; do NOT skip one that faile
 
 1. **Validate changed files.** Identify files edited this session (git status, edit history). Call `tapps_validate_changed` with explicit `file_paths` (comma-separated). Never call without `file_paths`. If any file fails, list it with the top blocking issue and stop.
 
-   """ + FINISH_TASK_VALIDATE_CALL_GRAPH_NOTE + """
+   """
+    + FINISH_TASK_VALIDATE_CALL_GRAPH_NOTE
+    + """
 
-""" + _FINISH_TASK_CHECKLIST_AND_DOC_GAPS_CURSOR + """
+"""
+    + _FINISH_TASK_CHECKLIST_AND_DOC_GAPS_CURSOR
+    + """
 
 4. **Save learnings (conditional).** If the session produced a non-obvious architectural or pattern-level decision, run `uv run tapps-mcp memory save --key <slug> --tier <architectural|pattern> --value "<decision>"` (CLI via BrainBridge). Skip for routine fixes. Brain offline → skip silently.
 5. **Report.** Emit a one-line summary: `Files validated: N pass. Checklist: <task_type> complete. Doc gaps: cleared|none. Memory saved: yes|no.`
@@ -1168,15 +1200,23 @@ mcp_tools:
 
 End the session with a durable handoff the next chat loads via `tapps-continue-session`.
 
-""" + _HANDOFF_PRE_GATE + """
+"""
+    + _HANDOFF_PRE_GATE
+    + """
 
 1. **Draft handoff (5–10 bullets):** Done, Open, Next (P0), Blockers (`- none` when clear), optional Changed files, Verify, Success criterion.
 
-""" + _HANDOFF_P0_GATE + """
+"""
+    + _HANDOFF_P0_GATE
+    + """
 
-""" + _HANDOFF_MARKDOWN_SHAPE + """
+"""
+    + _HANDOFF_MARKDOWN_SHAPE
+    + """
 
-""" + _HANDOFF_PERSIST + """
+"""
+    + _HANDOFF_PERSIST
+    + """
 
 3. **Report.** `Handoff: .tapps-mcp/session-handoff.md. Linear P0: <id|none>. brain_mirror: ok|skipped. session_end: ok|skipped. Next: tapps-continue-session`
 """,
@@ -1199,13 +1239,17 @@ Start work in a fresh context by assembling structured state.
    - **Preferred:** Call `tapps_session_start()`. Note `compaction_rehydration` if present.
    - **CLI fallback** (MCP unavailable): Run `uv run tapps-mcp doctor --quick` and read `.tapps-mcp.yaml` for project context. Proceed without blocking.
 
-""" + _CONTINUE_LOAD_AND_CONTEXT + """
+"""
+    + _CONTINUE_LOAD_AND_CONTEXT
+    + """
 
 3. **Linear context.**
    - If the user passed `TAP-####` (argument or handoff **Linear P0**), call `get_issue(id=...)`.
    - For backlog/triage without a known id, invoke the `linear-read` skill — do not call raw `list_issues` (cache gate).
 
-""" + _CONTINUE_EMIT_AND_PROCEED + """
+"""
+    + _CONTINUE_EMIT_AND_PROCEED
+    + """
 """,
     "tapps-review-pipeline": """\
 ---
@@ -1369,7 +1413,9 @@ tapps_validate_changed (before complete, always pass file_paths), tapps_checklis
 | **tapps_security_scan** | Security-sensitive changes or before security review |
 | **tapps_validate_config** | When adding/changing Dockerfile, docker-compose, infra |
 | **tapps_impact_analysis** | Module-level import blast radius before API or layout changes |
-""" + TOOL_REFERENCE_CALL_GRAPH_ROWS + """
+"""
+    + TOOL_REFERENCE_CALL_GRAPH_ROWS
+    + """
 | **tapps_dead_code** | Find unused code during refactoring |
 | **tapps_dependency_scan** | Check for CVEs before releases |
 | **tapps_dependency_graph** | Understand module dependencies, circular imports |
@@ -1726,13 +1772,55 @@ Post a structured Linear project update document when a new version is released.
 """,
 }
 
-from tapps_mcp.pipeline.platform_domain_skills import (  # noqa: E402
+from tapps_mcp.pipeline.platform_domain_skills import (
     CLAUDE_DOMAIN_SKILLS,
     CURSOR_DOMAIN_SKILLS,
 )
 
 CLAUDE_SKILLS.update(CLAUDE_DOMAIN_SKILLS)
 CURSOR_SKILLS.update(CURSOR_DOMAIN_SKILLS)
+
+# ---------------------------------------------------------------------------
+# Multi-file / smart-merge skills (orchestration-prompt platformisation)
+# ---------------------------------------------------------------------------
+# The body is host-agnostic prose (no tool grants), so the same text serves the
+# Claude and Cursor hosts.
+CLAUDE_SKILLS["orchestration-prompt"] = ORCHESTRATION_PROMPT_SKILL_BODY
+CURSOR_SKILLS["orchestration-prompt"] = ORCHESTRATION_PROMPT_SKILL_BODY
+
+# Skills whose SKILL.md is refreshed via the managed-block smart-merge instead of
+# the all-or-nothing skip/overwrite: the platform body is replaced surgically and
+# each project's customizations (outside the markers) are preserved.
+SMART_MERGE_SKILL_NAMES: frozenset[str] = frozenset({"orchestration-prompt"})
+
+# Companion files shipped alongside a skill's SKILL.md. Refreshed wholesale on
+# every init/upgrade — canonical platform docs, not customization points.
+SKILL_COMPANION_FILES: dict[str, dict[str, str]] = {
+    "orchestration-prompt": ORCHESTRATION_PROMPT_COMPANION_FILES,
+}
+
+# Companion files created once and NEVER overwritten (project-owned state).
+SKILL_CREATE_ONLY_FILES: dict[str, dict[str, str]] = {
+    "orchestration-prompt": ORCHESTRATION_PROMPT_CREATE_ONLY_FILES,
+}
+
+
+def _write_skill_companions(skill_dir: Path, skill_name: str) -> None:
+    """Write a skill's companion files: canonical docs (refresh) + seed-once state.
+
+    Canonical companion files (templates, references) are rewritten every call so
+    upgrades deliver doc fixes. Create-only files (``learnings.md``) are written
+    solely when absent so project-owned content is never clobbered.
+    """
+    for rel_path, content in SKILL_COMPANION_FILES.get(skill_name, {}).items():
+        target = skill_dir / rel_path
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_text(content, encoding="utf-8")
+    for rel_path, content in SKILL_CREATE_ONLY_FILES.get(skill_name, {}).items():
+        target = skill_dir / rel_path
+        if not target.exists():
+            target.parent.mkdir(parents=True, exist_ok=True)
+            target.write_text(content, encoding="utf-8")
 
 
 def generate_skills(
@@ -1777,6 +1865,21 @@ def generate_skills(
         skill_dir = skills_base / skill_name
         skill_dir.mkdir(parents=True, exist_ok=True)
         target = skill_dir / "SKILL.md"
+
+        if skill_name in SMART_MERGE_SKILL_NAMES:
+            # Managed-block smart-merge: refresh the platform body in place while
+            # preserving each project's customizations outside the markers. Runs
+            # every call (init and upgrade) — the merger itself is idempotent.
+            action = install_or_refresh_skill(target, content, skill_name)
+            _write_skill_companions(skill_dir, skill_name)
+            if action == "created":
+                created.append(skill_name)
+            elif action == "unchanged":
+                skipped.append(skill_name)
+            else:  # refreshed | migrated
+                updated.append(skill_name)
+            continue
+
         full_content = engagement_note + content
         if target.exists():
             refresh = overwrite or skill_name in SESSION_TRANSFER_SKILL_NAMES

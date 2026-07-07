@@ -520,6 +520,10 @@ def _clear_test_singleton_caches() -> None:
 
     _clear_content_cache()
 
+    from tapps_mcp.project.test_linker_cache import _reset_test_edges_stats
+
+    _reset_test_edges_stats()
+
 
 @pytest.fixture(autouse=True)
 def _reset_caches() -> Generator[None, None, None]:

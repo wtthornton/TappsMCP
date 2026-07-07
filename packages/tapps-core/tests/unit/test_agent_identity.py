@@ -5,8 +5,12 @@ from __future__ import annotations
 import re
 from pathlib import Path
 from typing import TYPE_CHECKING
+from unittest.mock import MagicMock
 
-from tapps_core.agent_identity import get_stable_agent_id
+from tapps_core.agent_identity import (
+    get_stable_agent_id,
+    is_real_writable_root,
+)
 from tapps_core.config.settings import TappsMCPSettings
 
 if TYPE_CHECKING:
@@ -115,3 +119,43 @@ def test_agent_id_slugifies_unsafe_project_id(
 
     assert agent_id.startswith("my-project-v2-")
     assert _AGENT_ID_RE.match(agent_id)
+
+
+# --------------------------------------------------------------------------- #
+# TAP-4573: mock/relative-root write guard
+# --------------------------------------------------------------------------- #
+
+
+def test_is_real_writable_root_rejects_mock_and_relative() -> None:
+    """The guard accepts only absolute filesystem paths."""
+    assert is_real_writable_root(Path("/abs/real/path")) is True
+    assert is_real_writable_root("/abs/real/path") is True
+    # A bare MagicMock coerces (via os.fspath) to a *relative* "MagicMock/..."
+    # path — the exact leak vector from TAP-4573.
+    assert is_real_writable_root(MagicMock().project_root) is False
+    assert is_real_writable_root(Path("relative/dir")) is False
+    assert is_real_writable_root(object()) is False
+
+
+def test_mock_settings_creates_no_files(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A bare MagicMock() settings must not mkdir/write under the CWD.
+
+    Regression guard for TAP-4573: ~70 call sites passed unspec'd mocks whose
+    ``project_root`` coerced to a relative ``MagicMock/...`` path, leaking real
+    directory trees into the repo root on every full-suite run.
+    """
+    monkeypatch.delenv("CLAUDE_AGENT_ID", raising=False)
+    monkeypatch.chdir(tmp_path)
+
+    settings = MagicMock()
+    settings.memory.project_id = ""
+
+    agent_id = get_stable_agent_id(settings)
+
+    # Still returns a well-formed id (in-memory UUID, no persistence).
+    assert _AGENT_ID_RE.match(agent_id), f"unexpected format: {agent_id!r}"
+    # And critically: no MagicMock/ tree was created under the CWD.
+    assert not (tmp_path / "MagicMock").exists()
+    assert list(tmp_path.iterdir()) == []

@@ -120,6 +120,10 @@ ignore = [
 "packages/docs-mcp/src/docs_mcp/generators/pattern_poster.py" = ["RUF002", "RUF003"]
 "packages/docs-mcp/src/docs_mcp/generators/diagrams.py" = ["RUF002", "RUF003"]
 "packages/docs-mcp/tests/unit/test_pattern_poster.py" = ["RUF002"]
+# The orchestration-prompt skill body is markdown prose shipped verbatim to
+# SKILL.md; it intentionally uses en dashes, → arrows, and … ellipses to match
+# the other platform skill templates.
+"packages/tapps-mcp/src/tapps_mcp/pipeline/platform_skill_orchestration.py" = ["RUF001", "RUF002", "RUF003"]
 "scripts/**/*.py" = ["T201", "E501", "PLR2004", "ANN", "PTH"]
 "tests/**/*.py" = ["S101", "S105", "S106", "S108", "ANN", "PLR2004", "TC001", "TC003", "RUF059", "B007", "B017", "F841", "N806"]
 
@@ -177,6 +181,19 @@ testpaths = [
     "packages/tapps-mcp/tests",
     "packages/docs-mcp/tests",
 ]
+# TAP-4571: never recurse into package src/ trees. Production modules such as
+# tapps_mcp.project.test_linker are named ``test_*.py`` (they link test edges to
+# code) and collide with pytest's default collection when a package dir is
+# passed positionally (e.g. ``pytest packages/tapps-mcp``), which overrides
+# testpaths. Excluding src/ keeps that invocation hermetic.
+norecursedirs = ["src", ".venv", "*.egg", "build", "dist", "node_modules"]
+# TAP-4575: docs-mcp test modules import shared fixtures via ``from tests.helpers
+# import ...``. With the tests/__init__.py files removed (so the three packages'
+# identically named ``tests`` trees no longer collide under importlib), that
+# import resolves only if docs-mcp's package root is on the path and ``tests`` is
+# treated as a namespace package (consider_namespace_packages above). Only
+# docs-mcp ships tests/helpers.py, so this is unambiguous.
+pythonpath = ["packages/docs-mcp"]
 asyncio_mode = "auto"
 timeout = 60
 markers = [
@@ -185,7 +202,13 @@ markers = [
     "optional_deps: marks tests requiring optional dependencies (sentence-transformers, faiss-cpu, cohere)",
     "brain_contract: marks tests requiring a running tapps-brain HTTP server (3.18+)",
 ]
-addopts = "-v --tb=short -p randomly --randomly-seed=last"
+addopts = "-v --tb=short -p randomly --randomly-seed=last --import-mode=importlib"
+# TAP-4575: importlib import mode lets the three packages' identically named
+# ``tests`` trees (each ships tests/__init__.py) be collected together from the
+# repo root without pytest's rootdir-based ImportPathMismatchError. Namespace
+# packages must be considered so docs-mcp's ``from tests.helpers import ...``
+# still resolves under importlib mode.
+consider_namespace_packages = true
 filterwarnings = [
     "ignore:tapps_core\\.memory is deprecated:DeprecationWarning",
     "ignore:tapps_core\\.memory\\.gc is deprecated:DeprecationWarning",

@@ -6,11 +6,8 @@ Uses ``filelock`` for cross-platform file locking (Windows compatible).
 
 from __future__ import annotations
 
-import contextlib
 import datetime
 import json
-import os
-import tempfile
 import time
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -19,6 +16,7 @@ from typing import Any, ClassVar
 import structlog
 from filelock import FileLock
 
+from tapps_core.cache import AtomicJsonCache, TTLStaleness, register_cache_stats
 from tapps_core.knowledge.models import CacheEntry
 
 logger = structlog.get_logger(__name__)
@@ -80,8 +78,17 @@ class KBCache:
     # Class-level lock timeout (seconds)
     LOCK_TIMEOUT: ClassVar[float] = 5.0
 
+    # ADR-0029 / TAP-4561: process-lifetime hit/miss counters for the unified
+    # cache-stats surface. Class-level because KBCache instances are created
+    # ad-hoc per lookup, so per-instance ``_stats`` never accumulates.
+    _process_stats: ClassVar[dict[str, int]] = {"hits": 0, "misses": 0}
+
     def __post_init__(self) -> None:
         self.cache_dir.mkdir(parents=True, exist_ok=True)
+
+    def _count_miss(self) -> None:
+        self._stats.misses += 1
+        KBCache._process_stats["misses"] += 1
 
     # ------------------------------------------------------------------
     # Public API
@@ -96,7 +103,7 @@ class KBCache:
         content_path = self._content_path(library, topic)
 
         if not meta_path.exists() or not content_path.exists():
-            self._stats.misses += 1
+            self._count_miss()
             return None
 
         lock = FileLock(str(self._lock_path(library, topic)), timeout=self.LOCK_TIMEOUT)
@@ -104,7 +111,7 @@ class KBCache:
             with lock:
                 meta = self._read_meta(meta_path)
                 if meta is None:
-                    self._stats.misses += 1
+                    self._count_miss()
                     return None
                 content = content_path.read_text(encoding="utf-8")
 
@@ -114,7 +121,7 @@ class KBCache:
                 self._write_meta_atomic(meta_path, meta)
         except TimeoutError:
             logger.warning("cache_lock_timeout", library=library, topic=topic)
-            self._stats.misses += 1
+            self._count_miss()
             return None
 
         # Record access timestamp for LRU eviction
@@ -137,6 +144,7 @@ class KBCache:
         )
 
         self._stats.hits += 1
+        KBCache._process_stats["hits"] += 1
         return entry
 
     def put(self, entry: CacheEntry) -> None:
@@ -163,7 +171,7 @@ class KBCache:
 
         try:
             with lock:
-                self._write_atomic(content_path, entry.content)
+                AtomicJsonCache.write_text(content_path, entry.content)
                 self._write_meta_atomic(meta_path, meta)
         except TimeoutError:
             logger.warning("cache_write_lock_timeout", library=entry.library, topic=entry.topic)
@@ -320,7 +328,7 @@ class KBCache:
 
     def _save_metadata(self, metadata: dict[str, float]) -> None:
         """Persist access-timestamp metadata to disk atomically."""
-        self._write_atomic(self._metadata_path, json.dumps(metadata, indent=2))
+        AtomicJsonCache.write_text(self._metadata_path, json.dumps(metadata, indent=2))
 
     def _check_size(self, max_mb: int = 100) -> int:
         """Evict LRU entries if total cache size exceeds *max_mb* MB.
@@ -411,8 +419,7 @@ class KBCache:
         """Check if *cached_at* ISO timestamp is past TTL for *library*."""
         try:
             ts = datetime.datetime.fromisoformat(cached_at.replace("Z", "+00:00"))
-            age = (datetime.datetime.now(datetime.UTC) - ts).total_seconds()
-            return age > self._ttl_for(library)
+            return TTLStaleness(self._ttl_for(library)).is_stale(ts.timestamp())
         except (ValueError, TypeError):
             return True
 
@@ -431,21 +438,8 @@ class KBCache:
     def _write_meta_atomic(meta_path: Path, meta: dict[str, Any]) -> None:
         """Write metadata via atomic temp-file + rename."""
         raw = json.dumps(meta, indent=2, default=str)
-        KBCache._write_atomic(meta_path, raw)
+        AtomicJsonCache.write_text(meta_path, raw)
 
-    @staticmethod
-    def _write_atomic(target: Path, content: str) -> None:
-        """Write *content* to *target* atomically via tempfile + replace."""
-        fd, tmp_path = tempfile.mkstemp(
-            dir=str(target.parent),
-            prefix=".tmp_",
-            suffix=target.suffix,
-        )
-        try:
-            with os.fdopen(fd, "w", encoding="utf-8") as f:
-                f.write(content)
-            Path(tmp_path).replace(target)
-        except BaseException:
-            with contextlib.suppress(OSError):
-                Path(tmp_path).unlink()
-            raise
+
+# ADR-0029 / TAP-4561: report into the unified cache-stats surface.
+register_cache_stats("kb_docs", lambda: dict(KBCache._process_stats))

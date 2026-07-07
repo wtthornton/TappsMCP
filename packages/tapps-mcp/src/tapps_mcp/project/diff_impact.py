@@ -5,13 +5,20 @@ from __future__ import annotations
 from dataclasses import asdict, dataclass
 from pathlib import Path
 
+from tapps_mcp.pipeline.agent_contract import CALL_GRAPH_STALE_HINT
 from tapps_mcp.project.call_graph import build_call_graph_index
 from tapps_mcp.project.call_graph_queries import resolve_symbol_name
 from tapps_mcp.project.impact_analyzer import analyze_impact, build_import_graph
-from tapps_mcp.project.test_linker import build_test_edges, edges_for_symbols
+from tapps_mcp.project.test_linker import edges_for_symbols, load_or_build_test_edges_for_index
 
 DEFAULT_AFFECTED_TESTS_LIMIT = 20
 DEFAULT_DOC_DRIFT_CALLER_THRESHOLD = 5
+
+# Blast-radius caveat: in-repo gap rate at or above this fraction of edges means
+# the impact analysis is materially incomplete and the review verdict should say so.
+# Below the threshold (a handful of stray unresolved refs) is normal and must NOT
+# raise a caveat — otherwise every healthy review gets a false alarm (TAP-4528).
+BLAST_RADIUS_GAP_RATE_THRESHOLD = 0.10
 
 
 @dataclass
@@ -91,12 +98,14 @@ def analyze_diff_impact(
 ) -> dict[str, object]:
     """Rank tests affected by *changed_files* using TESTS edges and import impact."""
     index = build_call_graph_index(project_root)
-    test_edges = build_test_edges(index, project_root=project_root)
+    test_edges = load_or_build_test_edges_for_index(project_root, index)
     graph = build_import_graph(project_root)
 
     ranked: dict[str, RankedTest] = {}
 
-    def bump(test_file: str, score: float, reason: str, test_sym: str = "", code_sym: str = "") -> None:
+    def bump(
+        test_file: str, score: float, reason: str, test_sym: str = "", code_sym: str = ""
+    ) -> None:
         entry = ranked.get(test_file)
         if entry is None:
             entry = RankedTest(test_file, 0.0, [], [], [])
@@ -178,6 +187,204 @@ def analyze_diff_impact(
     return payload
 
 
+def build_diff_impact_enrichment(
+    changed_files: list[Path],
+    project_root: Path,
+    *,
+    max_callers: int = 10,
+    max_tests: int = 10,
+) -> dict[str, object]:
+    """Per-changed-symbol callers + ranked affected tests for the review path (TAP-4526).
+
+    Deterministic (ADR-0004): reuses the cached call-graph index and TESTS edges.
+    Never rebuilds the index and never hits the network / an LLM. When the
+    call-graph cache is missing or stale, returns a ``degraded`` block with a
+    ``note`` and empty ``symbols`` — the caller must not crash.
+
+    Returns a dict shaped::
+
+        {
+            "degraded": bool,
+            "note": str,                # present only when degraded
+            "cache_status": str,        # missing | unreadable | stale | ready
+            "symbols": {
+                "<qualified_name>": {
+                    "callers": ["<qualified caller>", ...],   # in-repo only
+                    "affected_tests": [{"test_file", "test_symbol"}, ...],
+                },
+                ...,
+            },
+            "changed_files": ["...", ...],
+        }
+    """
+    from tapps_mcp.project.call_graph_cache import (
+        load_call_graph_index,
+        summarize_call_graph_cache,
+    )
+
+    changed_paths = [str(p) for p in changed_files]
+
+    cache = summarize_call_graph_cache(project_root)
+    status = str(cache.get("status", "missing"))
+    if status != "ready":
+        note = str(
+            cache.get("hint")
+            or "Call-graph cache is missing or stale — run tapps_call_graph or "
+            "tapps_diff_impact(force_rebuild=True) to enable diff-impact enrichment."
+        )
+        return {
+            "degraded": True,
+            "note": note,
+            "cache_status": status,
+            "symbols": {},
+            "changed_files": changed_paths,
+        }
+
+    index = load_call_graph_index(project_root)
+    if index is None:
+        return {
+            "degraded": True,
+            "note": CALL_GRAPH_STALE_HINT,
+            "cache_status": "unreadable",
+            "symbols": {},
+            "changed_files": changed_paths,
+        }
+
+    from tapps_mcp.project.test_linker import get_tests_for_symbol
+
+    test_edges = load_or_build_test_edges_for_index(project_root, index)
+
+    symbols_out: dict[str, dict[str, object]] = {}
+    for changed in changed_files:
+        try:
+            rel = str(changed.resolve().relative_to(project_root.resolve()))
+        except ValueError:
+            rel = str(changed)
+        for sym in sorted(_symbols_in_file(index, rel.replace("\\", "/"))):
+            if sym in symbols_out:
+                continue
+            callers = [edge.caller for edge in index.callers_of(sym)[:max_callers]]
+            tests = get_tests_for_symbol(test_edges, sym, index=index)[:max_tests]
+            symbols_out[sym] = {
+                "callers": callers,
+                "affected_tests": [
+                    {
+                        "test_file": str(t.get("test_file", "")),
+                        "test_symbol": str(t.get("test_symbol", "")),
+                    }
+                    for t in tests
+                ],
+            }
+
+    degraded = bool(index.resolution_gaps or index.parse_failures)
+    payload: dict[str, object] = {
+        "degraded": degraded,
+        "cache_status": status,
+        "symbols": symbols_out,
+        "changed_files": changed_paths,
+    }
+    if degraded:
+        payload["note"] = (
+            f"Call graph has {len(index.resolution_gaps)} unresolved reference(s) and "
+            f"{len(index.parse_failures)} parse failure(s) — some callers/tests may be missing."
+        )
+    return payload
+
+
+def caveat_from_call_graph_summary(
+    summary: dict[str, object],
+    *,
+    gap_rate_threshold: float = BLAST_RADIUS_GAP_RATE_THRESHOLD,
+) -> dict[str, object] | None:
+    """Map a ``summarize_call_graph_cache`` summary → optional blast-radius caveat.
+
+    Deterministic (ADR-0004): consumes the already-computed cache summary — no
+    new analysis pass, no index rebuild, no network / LLM. Returns ``None`` for a
+    healthy / low-gap region (no false alarms, TAP-4528 AC2) and a caveat dict
+    when the call graph is materially incomplete::
+
+        {
+            "degraded": True,
+            "in_repo_gap_rate": 0.42,
+            "parse_failures": 2,
+            "reason": "parse_failures" | "high_in_repo_gap_rate" | "cache_not_ready",
+            "note": "<human-readable caveat>",
+        }
+
+    A caveat is raised when ANY of:
+      * the cache is not ready (missing / stale / unreadable) — impact analysis
+        could not run at all, so the blast radius is unknown;
+      * one or more files failed to parse (``parse_failures > 0``);
+      * the in-repo gap rate meets ``gap_rate_threshold`` — enough unresolved
+        in-repo references that callers/tests are likely missing.
+    """
+    status = str(summary.get("status", "missing"))
+    raw_parse_failures = summary.get("parse_failures", 0) or 0
+    raw_gap_rate = summary.get("in_repo_gap_rate", 0.0) or 0.0
+    parse_failures = int(raw_parse_failures) if isinstance(raw_parse_failures, (int, float)) else 0
+    in_repo_gap_rate = float(raw_gap_rate) if isinstance(raw_gap_rate, (int, float)) else 0.0
+
+    if status != "ready":
+        note = str(
+            summary.get("hint")
+            or "Call-graph cache is not ready — the reviewed change's blast radius "
+            "could not be computed, so impact analysis may be partial. Run "
+            "tapps_call_graph or tapps_diff_impact(force_rebuild=True) to rebuild it."
+        )
+        return {
+            "degraded": True,
+            "in_repo_gap_rate": in_repo_gap_rate,
+            "parse_failures": parse_failures,
+            "reason": "cache_not_ready",
+            "note": note,
+        }
+
+    if parse_failures > 0:
+        return {
+            "degraded": True,
+            "in_repo_gap_rate": in_repo_gap_rate,
+            "parse_failures": parse_failures,
+            "reason": "parse_failures",
+            "note": (
+                f"{parse_failures} file(s) failed to parse — the call graph is "
+                "incomplete for those modules, so this change's blast radius "
+                "(callers / affected tests) may be partial."
+            ),
+        }
+
+    if in_repo_gap_rate >= gap_rate_threshold:
+        return {
+            "degraded": True,
+            "in_repo_gap_rate": in_repo_gap_rate,
+            "parse_failures": parse_failures,
+            "reason": "high_in_repo_gap_rate",
+            "note": (
+                f"In-repo call-graph gap rate is {in_repo_gap_rate:.0%} "
+                f"(threshold {gap_rate_threshold:.0%}) — many in-repo references "
+                "are unresolved, so this change's blast radius may be incomplete."
+            ),
+        }
+
+    return None
+
+
+def build_blast_radius_caveat(
+    project_root: Path,
+    *,
+    gap_rate_threshold: float = BLAST_RADIUS_GAP_RATE_THRESHOLD,
+) -> dict[str, object] | None:
+    """Load the call-graph cache summary and derive a blast-radius caveat (TAP-4528).
+
+    Thin convenience over :func:`caveat_from_call_graph_summary` for callers that
+    do not already hold a summary. Deterministic: reuses
+    ``summarize_call_graph_cache`` output only. Returns ``None`` when healthy.
+    """
+    from tapps_mcp.project.call_graph_cache import summarize_call_graph_cache
+
+    summary = summarize_call_graph_cache(project_root)
+    return caveat_from_call_graph_summary(summary, gap_rate_threshold=gap_rate_threshold)
+
+
 def export_test_map(
     project_root: Path,
     output_path: Path | None = None,
@@ -186,7 +393,9 @@ def export_test_map(
 ) -> Path:
     """Write TDAD-style static test_map.txt from TESTS edges (TAP-4095)."""
     index = build_call_graph_index(project_root, force_rebuild=force_rebuild)
-    test_edges = build_test_edges(index, project_root=project_root)
+    test_edges = load_or_build_test_edges_for_index(
+        project_root, index, force_rebuild=force_rebuild
+    )
     target = output_path or (project_root / "test_map.txt")
     lines = [
         "# TappsMCP test_map — code symbol -> test file (TDAD static artifact)",

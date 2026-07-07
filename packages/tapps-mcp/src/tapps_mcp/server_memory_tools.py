@@ -2508,7 +2508,9 @@ async def _handle_related(store: MemoryStore, p: _Params) -> dict[str, Any]:
         return _graph_transport_unavailable("related")
     max_hops = p.max_hops if p.max_hops > 0 else 2
     try:
-        entries = await bridge.find_related(p.key, max_hops=max_hops)
+        entries = await bridge.find_related(
+            p.key, max_hops=max_hops, project_id=_params_project_id(p)
+        )
     except BrainBridgeUnavailable as exc:
         return _bridge_call_failed_response("related", exc)
     return {
@@ -2819,6 +2821,7 @@ async def _maybe_emit_feedback_gap(
     results: int,
     top_score: float | None,
     session_id: str,
+    project_id: str | None = None,
 ) -> dict[str, Any] | None:
     """Emit a ``feedback_gap`` to the brain when a search came back empty
     (or below the configured similarity floor). No-op when:
@@ -2852,7 +2855,9 @@ async def _maybe_emit_feedback_gap(
         return {"emitted": False, "reason": "results_above_threshold"}
 
     try:
-        response = await bridge.feedback_gap(query, session_id=session_id or "")
+        response = await bridge.feedback_gap(
+            query, session_id=session_id or "", project_id=project_id
+        )
     except BrainBridgeUnavailable as exc:
         logger.warning("memory_feedback_gap_emit_failed", error=str(exc))
         return {"emitted": False, "reason": "bridge_call_failed", "error": str(exc)}
@@ -3512,6 +3517,12 @@ def _require_bridge() -> Any:
     return bridge
 
 
+def _params_project_id(p: _Params) -> str | None:
+    """Optional cross-project tenant override from ``tapps_memory(project_id=...)``."""
+    pid = (p.project_id or "").strip()
+    return pid or None
+
+
 async def _http_handle_save(p: _Params) -> dict[str, Any]:
     if not p.key:
         return {"error": "missing_key", "message": "Key is required for save."}
@@ -3532,6 +3543,7 @@ async def _http_handle_save(p: _Params) -> dict[str, Any]:
         tier=p.tier,
         scope=p.scope,
         tags=p.tag_list or None,
+        project_id=_params_project_id(p),
         **save_kwargs,
     )
     return {
@@ -3545,7 +3557,7 @@ async def _http_handle_get(p: _Params) -> dict[str, Any]:
     if not p.key:
         return {"error": "missing_key", "message": "Key is required for get."}
     bridge = _require_bridge()
-    entry = await bridge.get(p.key)
+    entry = await bridge.get(p.key, project_id=_params_project_id(p))
     if entry is None:
         return {
             "action": "get",
@@ -3565,7 +3577,7 @@ async def _http_handle_delete(p: _Params) -> dict[str, Any]:
     if not p.key:
         return {"error": "missing_key", "message": "Key is required for delete."}
     bridge = _require_bridge()
-    deleted = await bridge.delete(p.key)
+    deleted = await bridge.delete(p.key, project_id=_params_project_id(p))
     return {
         "action": "delete",
         "deleted": bool(deleted),
@@ -3583,7 +3595,12 @@ async def _http_handle_search(p: _Params) -> dict[str, Any]:
     effective_limit = p.limit if p.limit > 0 else _SEARCH_DEFAULT_LIMIT
     bridge = _require_bridge()
     tier = p.tier if p.tier and p.tier != "pattern" else None
-    results = await bridge.search(p.query, limit=effective_limit, tier=tier)
+    results = await bridge.search(
+        p.query,
+        limit=effective_limit,
+        tier=tier,
+        project_id=_params_project_id(p),
+    )
     payload: dict[str, Any] = {
         "action": "search",
         "query": p.query,
@@ -3598,6 +3615,7 @@ async def _http_handle_search(p: _Params) -> dict[str, Any]:
         results=len(results),
         top_score=_search_top_score(payload),
         session_id=p.session_id or "",
+        project_id=_params_project_id(p),
     )
     if feedback is not None:
         payload["feedback"] = feedback
@@ -3608,7 +3626,9 @@ async def _http_handle_list(p: _Params) -> dict[str, Any]:
     effective_limit = p.limit if p.limit > 0 else _LIST_DEFAULT_LIMIT
     bridge = _require_bridge()
     tier = p.tier if p.tier and p.tier != "pattern" else None
-    entries = await bridge.list_memories(limit=effective_limit, tier=tier)
+    entries = await bridge.list_memories(
+        limit=effective_limit, tier=tier, project_id=_params_project_id(p)
+    )
     return {
         "action": "list",
         "entries": entries,

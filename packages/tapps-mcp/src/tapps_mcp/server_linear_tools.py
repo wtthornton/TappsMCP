@@ -36,6 +36,7 @@ from typing import TYPE_CHECKING, Any
 
 import structlog
 
+from tapps_core.cache import AtomicJsonCache, TTLStaleness, register_cache_stats
 from tapps_core.config.settings import load_settings
 from tapps_mcp.mcp_register import register_tool
 from tapps_mcp.server_helpers import error_response, success_response
@@ -115,8 +116,40 @@ def _cache_dir(project_root: Path) -> Path:
     return cache_dir
 
 
+# Canonical token for the whole open-issue slice (TAP-4588). Any open-bucket
+# alias — ""/None, the tapps-mcp TTL alias "open", and every _OPEN_STATE_BUCKETS
+# member — collapses to this ONE token so the payload key converges regardless
+# of which alias the caller used. Mirrors the sentinel-collapse contract
+# (TAP-1374) at the payload layer.
+_CANONICAL_OPEN_STATE = "open"
+
+
+def _canonical_state(state: str | None) -> str:
+    """Canonicalize a Linear ``state`` for cache-key construction (TAP-4588).
+
+    Collapses every open-bucket alias — ``""``/``None``, the tapps-mcp TTL alias
+    ``"open"``, and each :data:`_OPEN_STATE_BUCKETS` member — to the single token
+    :data:`_CANONICAL_OPEN_STATE` so a ``get`` for the open slice hits a write
+    made under any of those aliases. Closed buckets
+    (``completed``/``canceled``) and any other named state are returned
+    lower-cased and unchanged, keeping them isolated from the open bucket and
+    from each other.
+    """
+    state_lc = (state or "").strip().lower()
+    if state_lc == "" or state_lc == _CANONICAL_OPEN_STATE or state_lc in _OPEN_STATE_BUCKETS:
+        return _CANONICAL_OPEN_STATE
+    return state_lc
+
+
 def _filter_hash(**kwargs: Any) -> str:
-    """Stable hash of filter kwargs for cache-key construction."""
+    """Stable hash of filter kwargs for cache-key construction.
+
+    ``limit`` is deliberately NOT part of the hash (TAP-4588): limit is
+    enforced at read time via the superset fallback in
+    :func:`tapps_linear_snapshot_get`, so a stored ``limit=150`` snapshot can
+    serve a ``limit=50`` read from the same key. Callers pass only the fields
+    that define the *slice identity* (``state``, ``label``).
+    """
     normalized = {k: v for k, v in sorted(kwargs.items()) if v not in (None, "")}
     payload = json.dumps(normalized, sort_keys=True, default=str).encode("utf-8")
     return hashlib.sha256(payload).hexdigest()[:16]
@@ -125,7 +158,12 @@ def _filter_hash(**kwargs: Any) -> str:
 def _cache_key(
     team: str, project: str, state: str | None, filter_hash: str
 ) -> str:
-    """Build the cache-file stem from slice identifiers."""
+    """Build the cache-file stem from slice identifiers.
+
+    ``state`` must already be canonicalized via :func:`_canonical_state` by the
+    caller (:func:`_resolve_cache_key`) so the filename segment matches the
+    hashed ``state`` field.
+    """
     parts = [
         team.replace("/", "_") or "_",
         project.replace("/", "_") or "_",
@@ -143,32 +181,69 @@ def _ttl_for_state(state: str | None, ttl_open: int, ttl_closed: int) -> int:
     return ttl_open
 
 
+# ADR-0029 / TAP-4561: unified cache-stats counters (snapshot reads/writes).
+_snapshot_stats: dict[str, int] = {"hits": 0, "misses": 0, "writes": 0}
+# TAP-4558: wall-clock timestamp of the most recent snapshot write (0 == never).
+_snapshot_last_write_ts: float = 0.0
+
+
+def _linear_snapshot_stats() -> dict[str, Any]:
+    """Stats provider: counters + staleness/age of the freshest write (TAP-4558).
+
+    ``age_seconds`` is the age of the most-recently written snapshot (``None``
+    until the first write); ``stale`` reports whether that freshest write has
+    already aged past the open-bucket TTL — the conservative (shorter) bound, so
+    a freshest snapshot older than it is definitively stale. This gives the
+    unified ``tapps_stats.caches`` surface the same age/staleness signal the
+    code-graph cache already exposes.
+    """
+    out: dict[str, Any] = dict(_snapshot_stats)
+    if _snapshot_last_write_ts <= 0:
+        out["age_seconds"] = None
+        out["stale"] = None
+        return out
+    ttl_open = load_settings().linear_cache_ttl_open_seconds
+    age = time.time() - _snapshot_last_write_ts
+    out["age_seconds"] = round(age, 1)
+    out["stale"] = TTLStaleness(float(ttl_open)).is_stale(_snapshot_last_write_ts)
+    return out
+
+
+register_cache_stats("linear_snapshot", _linear_snapshot_stats)
+
+
 def _cache_read(cache_dir: Path, cache_key: str) -> dict[str, Any] | None:
     """Return cached payload if present and unexpired; None otherwise."""
     cache_file = cache_dir / f"{cache_key}.json"
     if not cache_file.exists():
+        _snapshot_stats["misses"] += 1
         return None
     try:
         raw = cache_file.read_text(encoding="utf-8")
         payload = json.loads(raw)
     except (OSError, json.JSONDecodeError) as exc:
         logger.debug("linear_cache_read_failed", key=cache_key, exc=str(exc))
+        _snapshot_stats["misses"] += 1
         return None
     expires_at = float(payload.get("expires_at", 0))
     if expires_at <= time.time():
+        _snapshot_stats["misses"] += 1
         return None
+    _snapshot_stats["hits"] += 1
     return payload  # type: ignore[no-any-return]
 
 
 def _cache_write(
     cache_dir: Path, cache_key: str, payload: dict[str, Any]
 ) -> None:
-    """Write payload to the cache atomically (tmp + rename)."""
+    """Write payload to the cache atomically (ADR-0029 shared primitive)."""
     cache_file = cache_dir / f"{cache_key}.json"
-    tmp = cache_file.with_suffix(".json.tmp")
     try:
-        tmp.write_text(json.dumps(payload), encoding="utf-8")
-        tmp.replace(cache_file)
+        # indent=None keeps the compact json.dumps byte layout from before.
+        AtomicJsonCache.write_json(cache_file, payload, indent=None)
+        _snapshot_stats["writes"] += 1
+        global _snapshot_last_write_ts
+        _snapshot_last_write_ts = time.time()
     except OSError as exc:
         logger.debug("linear_cache_write_failed", key=cache_key, exc=str(exc))
 
@@ -244,9 +319,17 @@ def _cache_invalidate_prefix(cache_dir: Path, prefix: str) -> int:
 def _resolve_cache_key(
     team: str, project: str, state: str, label: str, limit: int
 ) -> str:
-    """Build the canonical cache key used by both _get and _put."""
-    fhash = _filter_hash(state=state, label=label, limit=limit)
-    return _cache_key(team, project, state or None, fhash)
+    """Build the canonical cache key used by both _get and _put.
+
+    State is canonicalized (TAP-4588) so every open-bucket alias resolves to
+    one key, and ``limit`` is excluded from the key entirely — it is enforced
+    at read time by the superset fallback in :func:`tapps_linear_snapshot_get`.
+    ``limit`` is still accepted for signature compatibility with the bash hooks
+    and the sentinel gateway, but does not affect the key.
+    """
+    canon = _canonical_state(state)
+    fhash = _filter_hash(state=canon, label=label)
+    return _cache_key(team, project, canon, fhash)
 
 
 async def tapps_linear_snapshot_get(
@@ -315,6 +398,38 @@ async def tapps_linear_snapshot_get(
     key = _resolve_cache_key(team, project, state, label, limit)
 
     cached = _cache_read(cache_dir, key)
+
+    # TAP-4588: superset-limit + poisoning guards. The key no longer embeds
+    # ``limit``, so an exact-key hit may carry a snapshot stored under a
+    # different limit; only a stored ``limit >= requested`` can serve the read
+    # (a smaller stored limit is an incomplete slice and must MISS). Also
+    # reject an auto-populated empty payload as a false empty hit: it most
+    # likely came from list_issues(state="<alias/invalid>") returning [].
+    served_from_superset = False
+    if cached is not None:
+        stored_limit_raw = cached.get("limit")
+        auto_populated = bool(cached.get("auto_populated"))
+        issue_list: list[dict[str, Any]] = cached.get("issues", []) or []
+
+        if auto_populated and not issue_list:
+            # Poisoning guard: an empty auto-populated payload is not a
+            # confident hit — undo the hit bookkeeping and fall through to MISS.
+            _snapshot_stats["hits"] -= 1
+            _snapshot_stats["misses"] += 1
+            cached = None
+        elif stored_limit_raw is not None:
+            try:
+                stored_limit = int(stored_limit_raw)
+            except (TypeError, ValueError):
+                stored_limit = limit
+            if stored_limit < limit:
+                # Smaller stored slice cannot satisfy a larger request.
+                _snapshot_stats["hits"] -= 1
+                _snapshot_stats["misses"] += 1
+                cached = None
+            elif stored_limit > limit:
+                served_from_superset = True
+
     elapsed_ms = (time.perf_counter_ns() - start_ns) // 1_000_000
 
     if cached is None:
@@ -334,6 +449,9 @@ async def tapps_linear_snapshot_get(
     now = time.time()
     cached_at = float(cached.get("cached_at", 0))
     issues: list[dict[str, Any]] = cached.get("issues", [])
+    if served_from_superset:
+        # Truncate the broader snapshot down to what the caller asked for.
+        issues = issues[:limit]
     if projection == "compact":
         issues = [_compact_issue(i) for i in issues]
     return success_response(
@@ -350,6 +468,7 @@ async def tapps_linear_snapshot_get(
             "team": team,
             "project": project,
             "state": state or None,
+            "served_from_superset": served_from_superset,
         },
     )
 
@@ -453,6 +572,9 @@ async def tapps_linear_snapshot_put(
         "state": state or None,
         "team": team,
         "project": project,
+        # TAP-4588: record the stored limit so snapshot_get's superset fallback
+        # can decide whether this snapshot can serve a smaller-limit read.
+        "limit": limit,
     }
     _cache_write(cache_dir, key, payload)
 

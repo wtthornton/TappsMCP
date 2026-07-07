@@ -21,6 +21,8 @@ from typing import TYPE_CHECKING, Any
 import structlog
 
 if TYPE_CHECKING:
+    from collections.abc import Callable, Coroutine
+
     from tapps_brain.models import MemorySnapshot
     from tapps_brain.store import MemoryStore
 
@@ -1197,6 +1199,45 @@ _CACHE_WARM_FLAG_NAME = ".cache-warm-marker"
 _BACKGROUND_TASKS: set[asyncio.Task[Any]] = set()
 
 
+def _fire_and_forget(
+    coro_factory: Callable[[], Coroutine[Any, Any, None]],
+    tasks: set[asyncio.Task[Any]],
+) -> bool:
+    """Schedule a background task if an event loop is running (ADR-0029).
+
+    The one scheduling envelope shared by every session-start warmer: create
+    the coroutine only once a loop exists, track the task so it isn't GC'd,
+    and report ``False`` (instead of raising) when called without a loop.
+    """
+    try:
+        loop = asyncio.get_running_loop()
+    except RuntimeError:
+        return False
+    task = loop.create_task(coro_factory())
+    tasks.add(task)
+    task.add_done_callback(tasks.discard)
+    return True
+
+
+def schedule_session_warm(
+    project_root: Path,
+    covered: list[dict[str, str]] | None = None,
+    call_graph_summary: dict[str, object] | None = None,
+) -> dict[str, Any]:
+    """The single session-start warmer (ADR-0029 / TAP-4561).
+
+    Schedules every derived-cache warm-up in one place: docs (when *covered*
+    libraries are known) and the call-graph rebuild (when a staleness summary
+    is available). Returns per-cache scheduling results keyed by cache name.
+    """
+    out: dict[str, Any] = {}
+    if covered is not None:
+        out["docs"] = _schedule_lookup_docs_warm(project_root, covered)
+    if call_graph_summary is not None:
+        out["call_graph"] = _schedule_call_graph_rebuild(project_root, call_graph_summary)
+    return out
+
+
 def _schedule_lookup_docs_warm(
     project_root: Path,
     covered: list[dict[str, str]],
@@ -1276,19 +1317,14 @@ def _schedule_lookup_docs_warm(
         except Exception:
             _logger.debug("cache_warm_runner_failed", exc_info=True)
 
-    try:
-        loop = asyncio.get_running_loop()
-        task = loop.create_task(_runner())
-        _BACKGROUND_TASKS.add(task)
-        task.add_done_callback(_BACKGROUND_TASKS.discard)
+    if _fire_and_forget(_runner, _BACKGROUND_TASKS):
         return {
             "scheduled": True,
             "libraries": libraries,
             "count": len(libraries),
             "via_brain": via_brain,
         }
-    except RuntimeError:
-        return {"scheduled": False, "skipped": "no_running_loop"}
+    return {"scheduled": False, "skipped": "no_running_loop"}
 
 
 # ---------------------------------------------------------------------------
@@ -1316,11 +1352,6 @@ def _schedule_call_graph_rebuild(
         except Exception:
             _logger.debug("call_graph_background_rebuild_failed", exc_info=True)
 
-    try:
-        loop = asyncio.get_running_loop()
-        task = loop.create_task(_runner())
-        _host._background_tasks.add(task)
-        task.add_done_callback(_host._background_tasks.discard)
+    if _fire_and_forget(_runner, _host._background_tasks):
         return {"scheduled": True, "reason": status or "stale"}
-    except RuntimeError:
-        return {"scheduled": False, "skipped": "no_running_loop"}
+    return {"scheduled": False, "skipped": "no_running_loop"}

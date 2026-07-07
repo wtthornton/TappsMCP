@@ -269,6 +269,11 @@ def tapps_stats(
         payload["docs_tools"] = docs_tools
         payload["docs_tool_calls"] = sum(int(t.get("call_count", 0)) for t in docs_tools)
 
+    # ADR-0029 / TAP-4561: unified per-cache hit/miss counters.
+    from tapps_core.cache import collect_cache_stats
+
+    payload["caches"] = collect_cache_stats()
+
     elapsed_ms = (time.perf_counter_ns() - start) // 1_000_000
     _record_execution("tapps_stats", start)
 

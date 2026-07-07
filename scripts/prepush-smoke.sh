@@ -5,8 +5,10 @@
 # Intentionally avoids pytest-xdist (-n auto): parallel runs starve live Cursor
 # MCP child processes during push and can flake unrelated integration tests.
 #
-# Each test path runs in its own pytest invocation to avoid conftest.py
-# ImportPathMismatchError across packages.
+# Each curated test path runs in its own serial pytest invocation for that
+# xdist-avoidance reason. (The cross-package conftest.py ImportPathMismatchError
+# that once forced separate invocations is fixed — TAP-4575 added
+# --import-mode=importlib so a single root run collects all three packages.)
 
 set -euo pipefail
 

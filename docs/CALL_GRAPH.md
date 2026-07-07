@@ -1,6 +1,6 @@
 # Call graph tools (consumer guide)
 
-TappsMCP v3.12.31+ ships **function-level call graph** tools for Python projects (Epic 114, [ADR-0017](adr/0017-function-level-call-graph-python-first.md)). Use them before refactors to see callers, callees, and affected tests — without grepping the repo.
+TappsMCP v3.12.31+ ships **function-level call graph** tools for Python projects (Epic 114, [ADR-0017](adr/0017-function-level-call-graph-python-first.md)). Use them before refactors to see callers, callees, and affected tests — without grepping the repo. TypeScript (`.ts`/`.tsx`) support via tree-sitter is described in [ADR-0026](adr/0026-typescript-call-graph-via-tree-sitter.md). Sharing a CI-built index across fresh checkouts (proposed) is designed in [ADR-0027](adr/0027-shareable-call-graph-artifact.md). The boundary — why this stays a single deterministic store with fixed tools (no Cypher/query language) and how an external comprehension tool must be fenced off from the graph/memory/review path — is set in [ADR-0028](adr/0028-code-graph-boundary-fenced-external-comprehension-and-no-query-language.md).
 
 ---
 
@@ -13,6 +13,70 @@ TappsMCP v3.12.31+ ships **function-level call graph** tools for Python projects
 | `tapps_diff_impact` | Git-changed files → ranked affected tests |
 
 Module-level import impact remains `tapps_impact_analysis` without `symbol`. Call-graph tools complement import graphs; they do not replace them.
+
+---
+
+## Review path: `diff_impact` blast radius (TAP-4526)
+
+`tapps_validate_changed(include_impact=true)` — the reviewer's batch entry point —
+attaches a `diff_impact` block to its response. For each changed Python **symbol**
+it reports, reusing the existing call graph (no new analysis, no LLM, no network,
+per [ADR-0004](adr/0004-deterministic-tools-only-contract.md)):
+
+- `callers` — in-repo functions/methods that call the symbol (from static CALLS edges).
+- `affected_tests` — ranked `{test_file, test_symbol}` pairs that exercise it (TESTS edges).
+
+Shape:
+
+```json
+"diff_impact": {
+  "cache_status": "ready",
+  "degraded": false,
+  "symbols": {
+    "pkg.mod.changed_fn": {
+      "callers": ["pkg.mod.caller_a", "pkg.other.caller_b"],
+      "affected_tests": [{"test_file": "tests/test_mod.py", "test_symbol": "test_changed_fn"}]
+    }
+  },
+  "changed_files": ["pkg/mod.py"]
+}
+```
+
+**Graceful degradation:** when the call-graph cache is missing or stale, the block
+is still present with `degraded: true` and a `note` (empty `symbols`) rather than
+raising. Rebuild via `tapps_call_graph` or `tapps_diff_impact(force_rebuild=true)`,
+then re-review. This is distinct from the flat, cross-change-set `affected_tests`
+block: `diff_impact` is keyed **per symbol** and adds each symbol's callers.
+
+### `blast_radius_caveat` — incomplete-impact trust signal (TAP-4528)
+
+When a reviewed change lands in a region where the call graph is **materially
+incomplete**, the review verdict carries a top-level `blast_radius_caveat` so
+agents know the impact analysis (callers / affected tests) may be partial:
+
+```json
+"blast_radius_caveat": {
+  "degraded": true,
+  "in_repo_gap_rate": 0.42,
+  "parse_failures": 0,
+  "reason": "high_in_repo_gap_rate",
+  "note": "In-repo call-graph gap rate is 42% (threshold 10%) — many in-repo references are unresolved, so this change's blast radius may be incomplete."
+}
+```
+
+- **`reason`** is one of `cache_not_ready` (cache missing / stale / unreadable —
+  impact could not be computed), `parse_failures` (≥ 1 file failed to parse), or
+  `high_in_repo_gap_rate` (in-repo gap rate `>=` the 10% threshold).
+- The caveat is **derived from `summarize_call_graph_cache` output** — it is a
+  read of the same health metrics below, not a new analysis pass (deterministic,
+  ADR-0004: no LLM / no network).
+- **Healthy / low-gap regions produce no caveat** — the field is absent, so
+  clean reviews stay clean (no false alarms). A handful of stray unresolved
+  external references (below the 10% in-repo threshold, zero parse failures) is
+  normal and does **not** trip it.
+
+The field sits beside `diff_impact` on `tapps_validate_changed` output when
+`include_impact=true` and source (non-test) Python files are in the change set.
 
 ---
 
@@ -55,6 +119,16 @@ Static analysis cannot resolve all Python dispatch. Gaps are honest uncertainty 
 
 ---
 
+## `tapps_dead_code` — GA, with an `in_repo_gap_rate` trust caveat (TAP-4527)
+
+`tapps_dead_code` (vulture-backed unused-code detection) is **GA** — a supported tool, no longer Preview.
+
+It reports unused functions, classes, imports, and variables with per-finding confidence and line numbers. Because vulture resolves references **statically**, it shares the same blind spot as the call graph: dynamic dispatch (`getattr`, plugin entry points, CLI/registry lookups, reflective calls) can hide a symbol's only callers, so a live symbol may be reported as **unused** — a false "unused" positive.
+
+Use `in_repo_gap_rate` (above) as the trust signal: when a repo's in-repo gap rate is high, the call graph cannot resolve many in-repo callers, which is exactly the condition under which vulture's dead-code output is least reliable. Treat dead-code findings from high-gap repos as **advisory** — cross-check before deleting, and raise `min_confidence` to trim the noise floor.
+
+---
+
 ## TDAD static test map (optional)
 
 Export a grep-friendly test map without MCP at runtime:
@@ -87,7 +161,11 @@ Format: `code_symbol<TAB>test_file<TAB>test_symbol` — useful for CI scripts an
 - Committing `call-graph-index.json` to git
 - Eliminating all `resolution_gaps`
 
-See [ADR-0017](adr/0017-function-level-call-graph-python-first.md) for scope and alternatives.
+- General graph-query language (Cypher/openCypher) — the graph is served by fixed, purpose-built tools only ([ADR-0028](adr/0028-code-graph-boundary-fenced-external-comprehension-and-no-query-language.md))
+- Adopting an external code-graph store (e.g. codebase-memory-mcp) as the graph or memory source — permitted only as a fenced, opt-in *comprehension* tool ([ADR-0028](adr/0028-code-graph-boundary-fenced-external-comprehension-and-no-query-language.md))
+- Vector/RAG retrieval over the repo, or modeling the code graph as a docs-cache (`KBCache`) provider — the graph's on-disk cache shares only the atomic primitive + metrics surface with the docs cache, never its staleness model or a vector retrieval path ([ADR-0029](adr/0029-unified-cache-substrate.md))
+
+See [ADR-0017](adr/0017-function-level-call-graph-python-first.md) for scope and alternatives, [ADR-0028](adr/0028-code-graph-boundary-fenced-external-comprehension-and-no-query-language.md) for the external-tool / query-language boundary, and [ADR-0029](adr/0029-unified-cache-substrate.md) for the unified cache-substrate boundary (shared atomic primitive vs domain-specific staleness/provider/retrieval).
 
 ---
 

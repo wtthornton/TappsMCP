@@ -9,6 +9,32 @@ from pathlib import Path
 
 from tapps_mcp.project.import_graph import _DEFAULT_EXCLUDES, _should_skip
 
+# Source-file suffixes folded into the fingerprint (TAP-4537). Python plus the
+# TypeScript pair so a new/edited .ts/.tsx invalidates the call-graph cache.
+_FINGERPRINT_SUFFIXES = (".py", ".ts", ".tsx")
+
+# Sentinel used when tree-sitter-typescript is not installed, so the fingerprint
+# stays stable across environments that lack the optional grammar (TAP-4537).
+_TS_GRAMMAR_ABSENT = "absent"
+
+
+def _ts_grammar_version() -> str:
+    """Return the installed ``tree_sitter_typescript`` version, or a sentinel.
+
+    Folded into the fingerprint so a grammar upgrade invalidates the cache.
+    Imported defensively: the grammar is an optional (``treesitter`` extra)
+    dependency and may be absent.
+    """
+    try:
+        from importlib.metadata import PackageNotFoundError, version
+
+        try:
+            return version("tree-sitter-typescript")
+        except PackageNotFoundError:
+            return _TS_GRAMMAR_ABSENT
+    except ImportError:  # pragma: no cover - importlib.metadata always present on 3.12
+        return _TS_GRAMMAR_ABSENT
+
 
 @dataclass(frozen=True)
 class CallGraphFingerprintSettings:
@@ -48,7 +74,7 @@ def _git_fingerprint_component(project_root: Path) -> str | None:
         if head.returncode != 0:
             return None
         dirty = subprocess.run(
-            ["git", "status", "--porcelain", "--", "*.py"],
+            ["git", "status", "--porcelain", "--", *[f"*{s}" for s in _FINGERPRINT_SUFFIXES]],
             cwd=project_root,
             capture_output=True,
             text=True,
@@ -61,7 +87,7 @@ def _git_fingerprint_component(project_root: Path) -> str | None:
                 if len(line) < 4:
                     continue
                 path = line[3:].strip()
-                if path.endswith(".py"):
+                if path.endswith(_FINGERPRINT_SUFFIXES):
                     dirty_paths.append(path.replace("\\", "/"))
         dirty_paths.sort()
         return f"{head.stdout.strip()}|{'|'.join(dirty_paths)}"
@@ -74,16 +100,50 @@ def _mtime_fingerprint_component(settings: CallGraphFingerprintSettings, index_v
     if settings.exclude_patterns:
         excludes.update(settings.exclude_patterns)
     parts = [f"v{index_version}", settings.top_level_package]
-    for py_file in sorted(settings.project_root.rglob("*.py")):
-        if _should_skip(py_file, excludes) or py_file.name.endswith("_pb2.py"):
+    source_files = sorted(
+        f for suffix in _FINGERPRINT_SUFFIXES for f in settings.project_root.rglob(f"*{suffix}")
+    )
+    for source_file in source_files:
+        if _should_skip(source_file, excludes) or source_file.name.endswith("_pb2.py"):
             continue
         try:
-            stat = py_file.stat()
+            stat = source_file.stat()
         except OSError:
             continue
-        rel = py_file.relative_to(settings.project_root)
+        rel = source_file.relative_to(settings.project_root)
         parts.append(f"{rel}:{stat.st_mtime_ns}:{stat.st_size}")
     return "|".join(parts)
+
+
+def compute_per_file_fingerprints(
+    settings: CallGraphFingerprintSettings,
+) -> dict[str, str]:
+    """Return a ``{relative_posix_path: content_hash}`` map for the source tree.
+
+    Per-file fingerprints (TAP-4533) let the incremental re-index compute the
+    *changed subset* without re-hashing every file semantically: compare this
+    map to the one persisted in the cached index and the differing keys are the
+    files to re-parse. The hash is content-based (sha256 of the file bytes) so
+    it is stable across checkouts and machines — unlike an mtime, which changes
+    on a no-op ``touch`` and would force a needless re-parse.
+    """
+    excludes = set(_DEFAULT_EXCLUDES)
+    if settings.exclude_patterns:
+        excludes.update(settings.exclude_patterns)
+    fingerprints: dict[str, str] = {}
+    source_files = sorted(
+        f for suffix in _FINGERPRINT_SUFFIXES for f in settings.project_root.rglob(f"*{suffix}")
+    )
+    for source_file in source_files:
+        if _should_skip(source_file, excludes) or source_file.name.endswith("_pb2.py"):
+            continue
+        try:
+            data = source_file.read_bytes()
+        except OSError:
+            continue
+        rel = source_file.relative_to(settings.project_root).as_posix()
+        fingerprints[rel] = hashlib.sha256(data).hexdigest()[:16]
+    return fingerprints
 
 
 def compute_index_fingerprint(
@@ -92,9 +152,12 @@ def compute_index_fingerprint(
     index_version: int,
 ) -> str:
     """Compute a stable fingerprint for call-graph cache invalidation."""
+    ts_grammar = _ts_grammar_version()
     git_part = _git_fingerprint_component(settings.project_root)
     if git_part is not None:
-        payload = f"git:{git_part}|pkg:{settings.top_level_package}|v{index_version}"
+        payload = (
+            f"git:{git_part}|pkg:{settings.top_level_package}|v{index_version}|ts:{ts_grammar}"
+        )
     else:
-        payload = _mtime_fingerprint_component(settings, index_version)
+        payload = f"{_mtime_fingerprint_component(settings, index_version)}|ts:{ts_grammar}"
     return hashlib.sha256(payload.encode()).hexdigest()[:16]

@@ -71,6 +71,32 @@ class TestProbeFleetMcpSession:
         assert result["ok"] is False
         assert result["stage"] == "initialize"
 
+    def test_connection_refused_is_a_failed_stage_not_a_crash(self) -> None:
+        """Regression: deploy-local crashed with an unhandled URLError when a
+        just-restarted fleet server had not bound its port yet. _post_mcp must
+        translate connection errors into a failed probe result instead.
+        """
+        import io
+        import urllib.error
+        import urllib.request
+
+        refused = urllib.error.URLError(OSError(111, "Connection refused"))
+        with patch.object(urllib.request, "urlopen", side_effect=refused):
+            result = fleet_smoke.probe_fleet_mcp_session("nlt-build")
+
+        assert result["ok"] is False
+        assert result["stage"] == "initialize"
+        assert "connection failed" in result["error"]
+
+        # HTTPError (has a real status) must keep flowing through unchanged.
+        http_err = urllib.error.HTTPError(
+            "http://127.0.0.1:8760/mcp", 500, "boom", {}, io.BytesIO(b"body")  # type: ignore[arg-type]
+        )
+        with patch.object(urllib.request, "urlopen", side_effect=http_err):
+            result = fleet_smoke.probe_fleet_mcp_session("nlt-build")
+        assert result["ok"] is False
+        assert result["http_status"] == 500
+
 
 class TestSmokeTestFleet:
     def test_aggregates_failures(self, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -109,10 +135,39 @@ class TestRestartFleetWithSmoke:
             lambda *, force: calls.append(f"start:{force}") or {"started": ["nlt-build"], "errors": []},
         )
         monkeypatch.setattr(
+            fleet_control,
+            "_wait_fleet_ports_listening",
+            lambda **_: calls.append("wait") or [],
+        )
+        monkeypatch.setattr(
             fleet_smoke,
             "smoke_test_fleet",
             lambda **_: {"ok": True, "passed": 6, "total": 6, "servers": {}, "failures": []},
         )
         report = fleet_control.restart_fleet_with_smoke()
-        assert calls == ["stop", "start:True"]
+        assert calls == ["stop", "start:True", "wait"]
         assert report["ok"] is True
+        assert report["not_ready"] == []
+
+    def test_restart_fails_when_ports_never_bind(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        from tapps_mcp.distribution import fleet_control
+
+        monkeypatch.setattr(fleet_control, "stop_fleet", lambda: {})
+        monkeypatch.setattr(
+            fleet_control,
+            "start_fleet",
+            lambda *, force: {"started": [], "errors": []},
+        )
+        monkeypatch.setattr(
+            fleet_control,
+            "_wait_fleet_ports_listening",
+            lambda **_: ["nlt-build"],
+        )
+        monkeypatch.setattr(
+            fleet_smoke,
+            "smoke_test_fleet",
+            lambda **_: {"ok": True, "passed": 6, "total": 6, "servers": {}, "failures": []},
+        )
+        report = fleet_control.restart_fleet_with_smoke()
+        assert report["ok"] is False
+        assert report["not_ready"] == ["nlt-build"]

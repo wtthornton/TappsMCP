@@ -112,15 +112,31 @@ def resolve_http_project_root_header(project_root: Path | None) -> str:
     return str(resolved)
 
 
+def http_entry_type_for_host(host: str) -> str:
+    """MCP entry ``type`` string for an HTTP fleet server on *host*.
+
+    Cursor names the Streamable HTTP transport ``streamableHttp``; Claude Code
+    and VS Code name it ``http`` and *reject* ``streamableHttp`` entries
+    outright ("unknown MCP server type"), silently dropping the server.
+    """
+    if host in ("claude-code", "vscode"):
+        return "http"
+    return "streamableHttp"
+
+
+HTTP_FLEET_ENTRY_TYPES: Final[frozenset[str]] = frozenset({"streamableHttp", "http"})
+
+
 def build_nlt_http_mcp_entry(
     server_id: str,
     *,
     project_root: Path | None = None,
     fleet_host: str | None = None,
+    host: str = "cursor",
 ) -> dict[str, Any]:
-    """Build one ``streamableHttp`` MCP config entry for *server_id*."""
+    """Build one HTTP fleet MCP config entry for *server_id* on *host*."""
     return {
-        "type": "streamableHttp",
+        "type": http_entry_type_for_host(host),
         "url": build_http_fleet_url(server_id, fleet_host=fleet_host),
         "headers": {
             PROJECT_ROOT_HEADER: resolve_http_project_root_header(project_root),
@@ -129,8 +145,8 @@ def build_nlt_http_mcp_entry(
 
 
 def is_valid_http_fleet_mcp_entry(entry: dict[str, Any]) -> bool:
-    """Return True when *entry* is a valid shared-fleet streamableHttp block."""
-    if entry.get("type") != "streamableHttp":
+    """Return True when *entry* is a valid shared-fleet HTTP block."""
+    if entry.get("type") not in HTTP_FLEET_ENTRY_TYPES:
         return False
     url = entry.get("url")
     if not isinstance(url, str) or not url.startswith("http"):

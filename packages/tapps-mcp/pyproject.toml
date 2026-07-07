@@ -36,6 +36,13 @@ dependencies = [
     "httpx>=0.28.1,<1",
     "filelock>=3.29.4,<4",
     "bandit>=1.8",
+    # NOTE (TAP-4529): semgrep is an OPTIONAL checker, deliberately NOT pinned
+    # here. Its transitive pins (click<8.2, tomli<2.1) conflict irreconcilably
+    # with this workspace's click>=8.4.1 and pip-audit's tomli>=2.2.1, so a hard
+    # dependency would make `uv sync` unresolvable. The scoring path degrades
+    # gracefully when semgrep is absent (records a skipped-checker note). To
+    # enable it, install the binary out-of-band, e.g. `pipx install semgrep` or
+    # `uv pip install semgrep`, and it is auto-detected via shutil.which.
     "defusedxml>=0.7.1,<1",
     "radon>=6.0",
     "vulture>=2.14",

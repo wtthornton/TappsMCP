@@ -26,6 +26,7 @@ from tapps_mcp.tools.bandit import run_bandit_check_async
 from tapps_mcp.tools.mypy import run_mypy_check_async
 from tapps_mcp.tools.radon import run_radon_cc_async, run_radon_hal_async, run_radon_mi_async
 from tapps_mcp.tools.ruff import run_ruff_check_async
+from tapps_mcp.tools.semgrep import run_semgrep_check_async, semgrep_available
 from tapps_mcp.tools.vulture import run_vulture_async
 
 logger = structlog.get_logger(__name__)
@@ -40,6 +41,8 @@ class ParallelResults:
     lint_issues: list[LintIssue] = field(default_factory=list)
     type_issues: list[TypeIssue] = field(default_factory=list)
     security_issues: list[SecurityIssue] = field(default_factory=list)
+    semgrep_issues: list[SecurityIssue] = field(default_factory=list)
+    skipped_tools: list[str] = field(default_factory=list)
     radon_cc: list[dict[str, Any]] = field(default_factory=list)
     radon_mi: float = 50.0
     radon_hal: list[dict[str, Any]] = field(default_factory=list)
@@ -71,6 +74,14 @@ def _assign_result(name: str, results: ParallelResults, value: object) -> None:
             results.tool_parse_failures.append("bandit")
         else:
             results.security_issues = value  # type: ignore[assignment]
+    elif name == "semgrep":
+        if value is None:
+            # semgrep unavailable or produced no usable output — graceful skip.
+            # Record a skipped-checker note (NOT a hard failure); the security
+            # category still scores from bandit + heuristics.
+            results.skipped_tools.append("semgrep")
+        else:
+            results.semgrep_issues = value  # type: ignore[assignment]
     elif name == "radon_cc":
         results.radon_cc = value  # type: ignore[assignment]
     elif name == "radon_mi":
@@ -94,10 +105,11 @@ async def run_all_tools(
     run_radon: bool = True,
     run_vulture: bool = True,
     run_perflint: bool = True,
+    run_semgrep: bool = True,
     vulture_whitelist_patterns: list[str] | None = None,
     mode: str = "subprocess",
 ) -> ParallelResults:
-    """Run ruff, mypy, bandit, radon, vulture, and perflint concurrently.
+    """Run ruff, mypy, bandit, semgrep, radon, vulture, and perflint concurrently.
 
     Args:
         file_path: Path to the Python file to analyse.
@@ -131,6 +143,7 @@ async def run_all_tools(
             run_radon=run_radon,
             run_vulture=run_vulture,
             run_perflint=run_perflint,
+            run_semgrep=run_semgrep,
             vulture_whitelist_patterns=vulture_whitelist_patterns,
         )
 
@@ -145,7 +158,24 @@ async def run_all_tools(
         run_radon=run_radon,
         run_vulture=run_vulture,
         run_perflint=run_perflint,
+        run_semgrep=run_semgrep,
         vulture_whitelist_patterns=vulture_whitelist_patterns,
+    )
+
+
+def _finalize_semgrep(results: ParallelResults) -> None:
+    """Merge semgrep findings into ``security_issues`` with cross-checker dedupe.
+
+    Bandit findings already live in ``results.security_issues``; semgrep findings
+    (if any) are merged in, deduping known overlaps (e.g. shell=True flagged by
+    both). Deterministic — bandit findings first, surviving semgrep after.
+    """
+    if not results.semgrep_issues:
+        return
+    from tapps_mcp.scoring.dependency_security import merge_security_findings
+
+    results.security_issues = merge_security_findings(
+        results.security_issues, results.semgrep_issues
     )
 
 
@@ -165,6 +195,7 @@ async def _run_subprocess(
     run_radon: bool = True,
     run_vulture: bool = True,
     run_perflint: bool = True,
+    run_semgrep: bool = True,
     vulture_whitelist_patterns: list[str] | None = None,
 ) -> ParallelResults:
     """Run tools via async subprocess (original behaviour)."""
@@ -186,6 +217,12 @@ async def _run_subprocess(
         tasks["bandit"] = asyncio.create_task(run_bandit_check_async(file_path, **kw))
     elif run_bandit:
         _mark_missing("bandit", results)
+
+    # Semgrep: deterministic offline static security scan (graceful skip if absent).
+    if run_semgrep and semgrep_available():
+        tasks["semgrep"] = asyncio.create_task(run_semgrep_check_async(file_path, **kw))
+    elif run_semgrep:
+        results.skipped_tools.append("semgrep")
 
     if run_radon and shutil.which("radon"):
         tasks["radon_cc"] = asyncio.create_task(run_radon_cc_async(file_path, **kw))
@@ -239,6 +276,7 @@ async def _run_subprocess(
                 continue
             _assign_result(name, results, result)
 
+    _finalize_semgrep(results)
     if results.missing_tools:
         results.degraded = True
 
@@ -261,6 +299,7 @@ async def _run_direct(
     run_radon: bool = True,
     run_vulture: bool = True,
     run_perflint: bool = True,
+    run_semgrep: bool = True,
     vulture_whitelist_patterns: list[str] | None = None,
 ) -> ParallelResults:
     """Run tools via direct library calls and sync subprocess in thread pool.
@@ -276,6 +315,7 @@ async def _run_direct(
     from tapps_mcp.tools.mypy import run_mypy_check
     from tapps_mcp.tools.radon_direct import cc_direct, hal_direct, is_available, mi_direct
     from tapps_mcp.tools.ruff_direct import run_ruff_check_direct
+    from tapps_mcp.tools.semgrep import run_semgrep_check
 
     results = ParallelResults()
     tasks: dict[str, asyncio.Task[Any]] = {}
@@ -302,6 +342,14 @@ async def _run_direct(
         )
     elif run_bandit:
         _mark_missing("bandit", results)
+
+    # Semgrep: sync subprocess in thread pool (graceful skip if absent)
+    if run_semgrep and semgrep_available():
+        tasks["semgrep"] = asyncio.create_task(
+            asyncio.to_thread(run_semgrep_check, file_path, cwd=cwd, timeout=timeout),
+        )
+    elif run_semgrep:
+        results.skipped_tools.append("semgrep")
 
     # Radon: direct library import (no subprocess)
     if run_radon:
@@ -370,6 +418,7 @@ async def _run_direct(
                 continue
             _assign_result(name, results, result)
 
+    _finalize_semgrep(results)
     if results.missing_tools:
         results.degraded = True
 

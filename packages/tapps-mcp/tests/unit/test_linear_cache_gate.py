@@ -221,12 +221,14 @@ class TestCacheGateScriptBehavior:
             cwd=tmp_path,
         )
         assert rc == 0
-        # TAP-1374: state='open' is a tapps-mcp bucket alias; we now also
-        # write sentinels for each open-bucket member (backlog, unstarted,
-        # started, triage) plus the empty-state alias so concrete
-        # list_issues calls don't self-trip the gate.
+        # TAP-4588: state='open' and every open-bucket member now canonicalize
+        # to ONE key (was: a distinct sentinel per alias, TAP-1374). The
+        # cross-alias unlock contract is unchanged — it is now satisfied by
+        # convergence rather than by emitting N sentinels (see
+        # TestAliasUnlock). So a single canonical 'open' sentinel is written.
         sentinels = list((tmp_path / ".tapps-mcp").glob(".linear-snapshot-sentinel-*"))
-        assert len(sentinels) >= 5
+        assert len(sentinels) == 1
+        assert "__open__" in sentinels[0].name
         assert all(int(s.read_text().strip()) > 0 for s in sentinels)
 
     def test_post_snapshot_writes_sentinel_on_miss(self, tmp_path: Path) -> None:

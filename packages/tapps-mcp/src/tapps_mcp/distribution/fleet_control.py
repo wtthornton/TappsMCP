@@ -170,7 +170,7 @@ def start_fleet(*, force: bool = False) -> dict[str, Any]:
                     f"\n--- fleet start {time.strftime('%Y-%m-%dT%H:%M:%S')} ---\n"
                 )
                 log_handle.flush()
-                proc = subprocess.Popen(  # noqa: S603
+                proc = subprocess.Popen(
                     cmd,
                     stdout=log_handle,
                     stderr=subprocess.STDOUT,
@@ -334,17 +334,38 @@ def fleet_any_running() -> bool:
     return fleet_status()["running"] > 0
 
 
+def _wait_fleet_ports_listening(*, timeout: float = 30.0, poll: float = 0.5) -> list[str]:
+    """Block until every fleet port accepts TCP, up to *timeout* seconds.
+
+    Freshly spawned ``serve`` processes need a moment to import and bind;
+    smoking them immediately after ``start_fleet`` reads as connection
+    refused. Returns the server ids still not listening at the deadline.
+    """
+    host = resolve_fleet_host()
+    deadline = time.monotonic() + timeout
+    pending = dict(NLT_HTTP_FLEET_PORTS)
+    while pending and time.monotonic() < deadline:
+        for server_id, port in list(pending.items()):
+            if _port_listening(host, port, timeout=1.0):
+                del pending[server_id]
+        if pending:
+            time.sleep(poll)
+    return sorted(pending)
+
+
 def restart_fleet_with_smoke(*, project_root: Path | None = None) -> dict[str, Any]:
-    """Stop, start, then run Cursor-style MCP smoke on every fleet server."""
+    """Stop, start, wait for readiness, then MCP-smoke every fleet server."""
     from tapps_mcp.distribution.fleet_smoke import smoke_test_fleet
 
     stop_fleet()
     started = start_fleet(force=True)
+    not_ready = _wait_fleet_ports_listening()
     smoke = smoke_test_fleet(project_root=project_root)
     return {
-        "ok": bool(smoke.get("ok")),
+        "ok": bool(smoke.get("ok")) and not not_ready,
         "started": started.get("started", []),
         "errors": started.get("errors", []),
+        "not_ready": not_ready,
         "smoke": smoke,
     }
 

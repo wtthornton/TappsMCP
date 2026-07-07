@@ -27,8 +27,27 @@ from tapps_mcp.distribution.setup_generator import (
 # ---------------------------------------------------------------------------
 
 
+@pytest.fixture
+def _hermetic_home(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
+    """Isolate ``Path.home()`` to a clean temp dir (TAP-4571).
+
+    ``_resolve_global_cli`` probes ``~/.local/bin/<command>`` on the real
+    filesystem *before* falling back to ``shutil.which``. On a machine with the
+    CLI installed that shim exists, short-circuiting the mocked ``shutil.which``
+    and making command-path assertions non-hermetic. Pointing HOME at an empty
+    temp dir removes the shim so the ``shutil.which`` mock is authoritative.
+    """
+    monkeypatch.setenv("HOME", str(tmp_path))
+    monkeypatch.setenv("USERPROFILE", str(tmp_path))  # Windows parity
+    return tmp_path
+
+
 class TestDetectCommandPath:
     """Tests for auto-detection of the tapps-mcp command path."""
+
+    @pytest.fixture(autouse=True)
+    def _isolate_home(self, _hermetic_home: Path) -> None:
+        """Apply hermetic HOME to every test in this class."""
 
     def test_frozen_exe_returns_sys_executable(self) -> None:
         """When running as a frozen exe, returns sys.executable."""
@@ -151,6 +170,10 @@ class TestIsValidTappsCommand:
 
 class TestMergeConfigUpgradeMode:
     """Tests for command preservation during upgrade."""
+
+    @pytest.fixture(autouse=True)
+    def _isolate_home(self, _hermetic_home: Path) -> None:
+        """Hermetic HOME so ``shutil.which`` mocks are authoritative (TAP-4571)."""
 
     def test_upgrade_mode_preserves_custom_command(self) -> None:
         """upgrade_mode=True keeps existing command and args."""

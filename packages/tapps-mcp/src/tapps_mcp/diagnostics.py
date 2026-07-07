@@ -9,8 +9,9 @@ import shutil
 import subprocess
 import tempfile
 import time
+from collections.abc import Coroutine
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from tapps_core.common.models import (
     CacheDiagnostic,
@@ -189,6 +190,25 @@ async def probe_context7_async(
         await client.close()
 
 
+def _run_coroutine_sync(coro: Coroutine[Any, Any, Context7Diagnostic]) -> Context7Diagnostic:
+    """Run ``coro`` to completion, tolerating a caller already inside a loop.
+
+    ``asyncio.run()`` raises ``RuntimeError`` when invoked from within a
+    running event loop (e.g. an MCP tool handler such as ``tapps_doctor``).
+    In that case the coroutine is driven to completion on its own event loop
+    in a dedicated worker thread instead of failing the caller.
+    """
+    try:
+        asyncio.get_running_loop()
+    except RuntimeError:
+        return asyncio.run(coro)  # no loop running here — safe to own one
+
+    import concurrent.futures
+
+    with concurrent.futures.ThreadPoolExecutor(max_workers=1) as pool:
+        return pool.submit(asyncio.run, coro).result()
+
+
 def probe_context7(
     project_root: Path,
     api_key: SecretStr | None,
@@ -196,18 +216,18 @@ def probe_context7(
     force: bool = False,
     timeout: float = 3.0,
 ) -> Context7Diagnostic:
-    """Throttled, synchronous live probe — safe to call from sync CLI paths.
+    """Throttled, synchronous live probe.
 
     Returns a cached verdict when a fresh marker (< ``_PROBE_TTL_SECONDS``)
-    exists unless ``force`` is set (init/upgrade just wrote the key). Must not
-    be called from within a running event loop — use
-    :func:`probe_context7_async` there.
+    exists unless ``force`` is set (init/upgrade just wrote the key).
+    Safe to call both from plain sync CLI paths and from within a running
+    event loop (e.g. an MCP tool handler) — see :func:`_run_coroutine_sync`.
     """
     if not force:
         cached = _read_probe_marker(project_root)
         if cached is not None:
             return cached
-    diagnostic = asyncio.run(probe_context7_async(api_key, timeout=timeout))
+    diagnostic = _run_coroutine_sync(probe_context7_async(api_key, timeout=timeout))
     _write_probe_marker(project_root, diagnostic)
     return diagnostic
 

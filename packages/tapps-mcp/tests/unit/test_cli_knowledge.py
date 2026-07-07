@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -61,22 +62,30 @@ def _mock_consultation_result(
     return result
 
 
-def _mock_settings() -> MagicMock:
+def _mock_settings(project_root: Path | None = None) -> MagicMock:
     settings = MagicMock()
-    settings.project_root = MagicMock()
-    settings.project_root.__truediv__ = MagicMock(return_value=MagicMock())
+    # TAP-4571: lookup-docs now records a telemetry event under
+    # project_root/.tapps-mcp-cache (record_lookup_event does a real
+    # ``path.stat().st_size > _MAX_BYTES`` check). A MagicMock project_root
+    # makes that comparison raise ``MagicMock > int``; use a real temp dir so
+    # the telemetry write is hermetic.
+    if project_root is not None:
+        settings.project_root = project_root
+    else:
+        settings.project_root = MagicMock()
+        settings.project_root.__truediv__ = MagicMock(return_value=MagicMock())
     return settings
 
 
 class TestLookupDocs:
-    def test_lookup_success(self, runner: CliRunner) -> None:
+    def test_lookup_success(self, runner: CliRunner, tmp_path: Path) -> None:
         mock_result = _mock_lookup_result()
         mock_engine = AsyncMock()
         mock_engine.lookup = AsyncMock(return_value=mock_result)
         mock_engine.close = AsyncMock()
 
         with (
-            patch("tapps_core.config.settings.load_settings", return_value=_mock_settings()),
+            patch("tapps_core.config.settings.load_settings", return_value=_mock_settings(tmp_path)),
             patch("tapps_core.knowledge.cache.KBCache"),
             patch("tapps_core.knowledge.lookup.LookupEngine", return_value=mock_engine),
         ):
@@ -105,7 +114,7 @@ class TestLookupDocs:
         assert result.exit_code == 1
         assert "No documentation found" in result.output
 
-    def test_lookup_truncation(self, runner: CliRunner) -> None:
+    def test_lookup_truncation(self, runner: CliRunner, tmp_path: Path) -> None:
         long_content = "x" * 3000
         mock_result = _mock_lookup_result(content=long_content)
         mock_engine = AsyncMock()
@@ -113,7 +122,7 @@ class TestLookupDocs:
         mock_engine.close = AsyncMock()
 
         with (
-            patch("tapps_core.config.settings.load_settings", return_value=_mock_settings()),
+            patch("tapps_core.config.settings.load_settings", return_value=_mock_settings(tmp_path)),
             patch("tapps_core.knowledge.cache.KBCache"),
             patch("tapps_core.knowledge.lookup.LookupEngine", return_value=mock_engine),
         ):
@@ -121,7 +130,7 @@ class TestLookupDocs:
         assert result.exit_code == 0
         assert "truncated" in result.output
 
-    def test_lookup_raw_no_truncation(self, runner: CliRunner) -> None:
+    def test_lookup_raw_no_truncation(self, runner: CliRunner, tmp_path: Path) -> None:
         long_content = "x" * 3000
         mock_result = _mock_lookup_result(content=long_content)
         mock_engine = AsyncMock()
@@ -129,7 +138,7 @@ class TestLookupDocs:
         mock_engine.close = AsyncMock()
 
         with (
-            patch("tapps_core.config.settings.load_settings", return_value=_mock_settings()),
+            patch("tapps_core.config.settings.load_settings", return_value=_mock_settings(tmp_path)),
             patch("tapps_core.knowledge.cache.KBCache"),
             patch("tapps_core.knowledge.lookup.LookupEngine", return_value=mock_engine),
         ):
@@ -137,14 +146,14 @@ class TestLookupDocs:
         assert result.exit_code == 0
         assert "truncated" not in result.output
 
-    def test_lookup_with_warning(self, runner: CliRunner) -> None:
+    def test_lookup_with_warning(self, runner: CliRunner, tmp_path: Path) -> None:
         mock_result = _mock_lookup_result(warning="Stale content returned.")
         mock_engine = AsyncMock()
         mock_engine.lookup = AsyncMock(return_value=mock_result)
         mock_engine.close = AsyncMock()
 
         with (
-            patch("tapps_core.config.settings.load_settings", return_value=_mock_settings()),
+            patch("tapps_core.config.settings.load_settings", return_value=_mock_settings(tmp_path)),
             patch("tapps_core.knowledge.cache.KBCache"),
             patch("tapps_core.knowledge.lookup.LookupEngine", return_value=mock_engine),
         ):
