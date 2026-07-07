@@ -196,6 +196,7 @@ a = Analysis(
         "tapps_mcp.project.call_graph_gap_classify",
         "tapps_mcp.project.diff_impact",
         "tapps_mcp.project.test_linker",
+        "tapps_mcp.project.test_linker_cache",
         "tapps_mcp.project.report",
         "tapps_mcp.project.import_graph",
         "tapps_mcp.project.cycle_detector",

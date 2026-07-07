@@ -54,7 +54,7 @@ tapps-brain (standalone)  <──  tapps-core (shared infra)  <──  tapps-mcp
 
 ### Key highlights
 
-- **84 deterministic MCP tools** (42 TappsMCP + 42 DocsMCP) — no LLM calls in the tool chain; same input always produces same output
+- **85 deterministic MCP tools** (43 TappsMCP + 42 DocsMCP) — no LLM calls in the tool chain; same input always produces same output
 - **Multi-language code scoring** - Python, TypeScript/JavaScript, Go, Rust across 7 categories (complexity, security, maintainability, test coverage, performance, structure, devex)
 - **Documentation lookup** via Context7 and LlmsTxt providers with local caching
 - **Persistent shared memory** via [tapps-brain](https://github.com/wtthornton/tapps-brain) — project decisions survive across sessions. TappsMCP accesses the Dockerized brain service over HTTP via BrainBridge; use `uv run tapps-mcp memory` (42 actions) or enable `nlt-memory` for MCP-exposed recall/save/handoff tools. See the [tapps-brain repo](https://github.com/wtthornton/tapps-brain) for retrieval, decay, consolidation, and federation internals.
@@ -101,7 +101,7 @@ Any MCP-capable client (Claude Code, Cursor, VS Code Copilot, Claude Desktop, cu
 
 ## Features
 
-The platform exposes **84 MCP tools** (42 TappsMCP + 42 DocsMCP) plus workflow prompts. All tools are **deterministic** (no LLM calls in the tool chain).
+The platform exposes **85 MCP tools** (43 TappsMCP + 42 DocsMCP) plus workflow prompts. All tools are **deterministic** (no LLM calls in the tool chain).
 
 ### Code quality & scoring
 
@@ -1072,7 +1072,7 @@ tapps-core (shared infrastructure)
     ^              ^
     |              |
 tapps-mcp      docs-mcp
-(42 tools)     (42 tools)
+(43 tools)     (42 tools)
 ```
 
 **[tapps-brain](https://github.com/wtthornton/tapps-brain)** is the standalone memory service extracted from tapps-core. It runs as a Dockerized Postgres-backed service that TappsMCP clients reach over HTTP at `localhost:8080`. Storage engine, retrieval (BM25 + boosts), time-based decay, contradiction detection, consolidation, federation, and GC internals all live in the [tapps-brain repo](https://github.com/wtthornton/tapps-brain) and its README/CHANGELOG — refer there for the authoritative description so this page doesn't drift. tapps-brain has its own release cycle and test suite.
@@ -1204,7 +1204,7 @@ packages/
 │       ├── metrics/                   # Collector, dashboard, alerts, trends, OTel export
 │       └── adaptive/                  # Adaptive scoring, expert voting, weight distribution
 │
-├── tapps-mcp/                         # Code quality MCP server (42 tools)
+├── tapps-mcp/                         # Code quality MCP server (43 tools)
 │   └── src/tapps_mcp/
 │       ├── server.py, cli.py          # Entry points and MCP server
 │       ├── server_*.py                # Tool modules (scoring, pipeline, metrics, memory, analysis)

@@ -59,6 +59,17 @@ class TestSidecarWriters:
         # Writer must not raise.
         write_session_start_marker("/dev/null/cannot-mkdir-here")
 
+    def test_session_start_marker_ignores_mock_root(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        # TAP-4573: a bare MagicMock().project_root coerces to a relative
+        # "MagicMock/..." path. The writer must refuse it rather than create a
+        # real tree under the pytest CWD.
+        monkeypatch.chdir(tmp_path)
+        write_session_start_marker(MagicMock().project_root)
+        assert not (tmp_path / "MagicMock").exists()
+        assert list(tmp_path.iterdir()) == []
+
     def test_checklist_state_marker_emits_brain_event(self, tmp_path: Path) -> None:
         mock_bridge = MagicMock()
         mock_bridge.record_kg_event = AsyncMock(return_value={"recorded": True})

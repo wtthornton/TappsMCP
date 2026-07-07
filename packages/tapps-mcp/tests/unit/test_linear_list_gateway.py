@@ -98,14 +98,22 @@ class TestSentinelIsFresh:
 
 
 class TestAliasKeys:
-    def test_open_state_returns_all_open_bucket_variants(self) -> None:
-        keys = _alias_keys("T", "P", "open", "", 50)
-        assert len(keys) >= 5  # open + backlog + unstarted + started + triage
+    def test_open_state_collapses_to_single_canonical_key(self) -> None:
+        # TAP-4588: every open-bucket alias now canonicalizes to ONE key, so
+        # the alias set is a singleton (was: 5 distinct variants under TAP-1374,
+        # which the payload cache could not converge on).
+        from tapps_mcp.server_linear_tools import _resolve_cache_key
 
-    def test_open_bucket_member_returns_aliases(self) -> None:
-        """state="backlog" should return alias keys including "open"."""
+        keys = _alias_keys("T", "P", "open", "", 50)
+        assert len(keys) == 1
+        assert keys == [_resolve_cache_key("T", "P", "open", "", 50)]
+
+    def test_open_bucket_member_collapses_to_open(self) -> None:
+        """state="backlog" resolves to the same canonical 'open' key."""
+        from tapps_mcp.server_linear_tools import _resolve_cache_key
+
         keys = _alias_keys("T", "P", "backlog", "", 50)
-        assert len(keys) >= 2
+        assert keys == [_resolve_cache_key("T", "P", "open", "", 50)]
 
     def test_non_open_state_returns_empty(self) -> None:
         keys = _alias_keys("T", "P", "completed", "", 50)
@@ -271,14 +279,19 @@ class TestGateLinearList:
         result = gate_linear_list(tmp_path, "T", "P", "backlog", "", 50)
         assert result is None
 
-    def test_different_limit_misses_gate(self, tmp_path: Path) -> None:
-        """A sentinel for limit=50 does NOT satisfy a limit=100 check."""
+    def test_different_limit_shares_gate(self, tmp_path: Path) -> None:
+        """TAP-4588: limit is no longer part of the key, so a sentinel for
+        limit=50 DOES satisfy a limit=100 check for the same slice.
+
+        Limit does not change slice identity; a snapshot_get for the slice
+        authorizes a list at any limit (payload-side superset truncation still
+        enforces smaller-can't-serve-larger for the returned issues)."""
         from tapps_mcp.server_linear_tools import _resolve_cache_key
 
         key50 = _resolve_cache_key("T", "P", "backlog", "", 50)
         _write_sentinel(tmp_path, key50, age_s=0.0)
         result = gate_linear_list(tmp_path, "T", "P", "backlog", "", 100)
-        assert result is not None
+        assert result is None
 
 
 # ---------------------------------------------------------------------------
