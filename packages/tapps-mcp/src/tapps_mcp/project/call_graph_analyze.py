@@ -88,12 +88,37 @@ def _load_imports(idx: FileIndex, tree: ast.Module) -> None:
                 bound = alias.asname or alias.name.split(".", maxsplit=1)[0]
                 idx.imports[bound] = alias.name
         elif isinstance(node, ast.ImportFrom):
-            base = node.module or ""
+            base = _import_from_base(idx.module, node.module, node.level)
             for alias in node.names:
                 if alias.name == "*":
                     continue
                 bound = alias.asname or alias.name
                 idx.imports[bound] = f"{base}.{alias.name}" if base else alias.name
+
+
+def _import_from_base(module: str, node_module: str | None, level: int) -> str:
+    """Resolve the dotted base for an ``ImportFrom``, honoring relative ``level``.
+
+    For an absolute import (``level == 0``) this is just ``node_module``. For a
+    relative import (``from .util import x`` / ``from ..pkg import y``) the leading
+    dots must be resolved against the current module's package: ``level`` trailing
+    path components are dropped from ``module`` to reach the anchor package, then
+    ``node_module`` (if any) is appended. Without this, ``from .util import compute``
+    in ``pkg.app`` bound to ``util.compute`` instead of ``pkg.util.compute`` and the
+    call never resolved to the in-repo definition.
+
+    Note: assumes ``module`` names a module, not a package ``__init__`` (whose
+    anchor would be the package itself). That matches how the indexer derives
+    module names for regular ``.py`` files.
+    """
+    if not level:
+        return node_module or ""
+    parts = module.split(".")
+    anchor = parts[:-level] if level <= len(parts) else []
+    pieces = [*anchor]
+    if node_module:
+        pieces.append(node_module)
+    return ".".join(pieces)
 
 
 def _register_class(idx: FileIndex, node: ast.ClassDef, outer: list[str]) -> None:
@@ -152,6 +177,11 @@ def _scan_function_calls(
             )
             _scan_function_calls(idx, stmt, nested, class_stack)
             _scan_framework_routes(idx, stmt, nested)
+            # The nested def owns its own caller scope (handled by the recursion
+            # above). Do NOT also let the outer collector walk into its body, or
+            # the nested function's calls get mis-attributed to ``caller`` (e.g.
+            # a spurious outer -> leaf edge for a leaf() call made inside inner()).
+            continue
         collector.visit(stmt)
 
 

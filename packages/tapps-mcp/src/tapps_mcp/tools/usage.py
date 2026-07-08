@@ -47,6 +47,12 @@ _CHECKLIST_TOOL = "tapps_checklist"
 _LOOKUP_TOOL = "tapps_lookup_docs"
 _IMPACT_TOOL = "tapps_impact_analysis"
 _SESSION_INIT_TOOL = "tapps_session_start"
+# Comprehension tools that check callers/blast-radius before a cross-cutting change.
+_COMPREHENSION_TOOLS: tuple[str, ...] = (
+    "tapps_call_graph",
+    "tapps_impact_analysis",
+    "tapps_dependency_graph",
+)
 _PRIORITY_GAPS: tuple[str, ...] = (
     "edits_without_validation",
     "checklist_skipped",
@@ -304,6 +310,27 @@ def compute_gaps(
             )
             if rec:
                 recs.append(rec)
+
+    # Comprehension-tool underuse: a cross-module edit set with no blast-radius
+    # check. Uses per-row ``tools_used`` telemetry (deterministic) plus the live
+    # CallTracker view so it fires whether driven from a tool session or a hook.
+    recent_tools = {
+        t for r in rows[-10:] for t in r.get("tools_used", []) if isinstance(t, str)
+    }
+    used_comprehension = any(
+        t in recent_tools or t in called for t in _COMPREHENSION_TOOLS
+    )
+    if has_recent_edits and not used_comprehension:
+        parent_dirs = {str(Path(p).parent) for p in edited_recent}
+        if len(edited_recent) >= 3 and len(parent_dirs) >= 2:
+            gaps.append("comprehension_tools_underused")
+            recs.append(
+                f"Edits span {len(parent_dirs)} modules ({len(edited_recent)} files) "
+                "but no call-graph / impact analysis was run. Call "
+                f'tapps_impact_analysis(file_path="{edited_recent[0]}") or '
+                "tapps_call_graph(symbol=...) to check callers and blast radius "
+                "before finishing."
+            )
 
     if not gaps:
         recs.append("No gaps detected. Pipeline coverage looks healthy.")

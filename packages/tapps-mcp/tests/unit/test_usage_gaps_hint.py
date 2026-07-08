@@ -250,6 +250,65 @@ class TestLibraryUsesWithoutLookupDocs:
         assert "library_uses_without_lookup_docs" not in report["gaps"]
 
 
+class TestComprehensionToolsUnderused:
+    def _write_cross_module_edit(self, tmp_path: Path, tools_used: list[str]) -> None:
+        metrics_dir = tmp_path / ".tapps-mcp"
+        metrics_dir.mkdir(parents=True, exist_ok=True)
+        (metrics_dir / "loop-metrics.jsonl").write_text(
+            json.dumps(
+                {
+                    "ts": int(time.time()),
+                    "files_edited": [
+                        str(tmp_path / "src/mod_a/x.py"),
+                        str(tmp_path / "src/mod_a/y.py"),
+                        str(tmp_path / "src/mod_b/z.py"),
+                    ],
+                    "gate_skipped_files": [],
+                    "lookup_docs_called": True,
+                    "checklist_called": True,
+                    "tools_used": ["tapps_validate_changed", "tapps_checklist", *tools_used],
+                }
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+
+    def test_fires_on_cross_module_edits_without_comprehension(self, tmp_path: Path) -> None:
+        self._write_cross_module_edit(tmp_path, tools_used=[])
+        report = compute_gaps(tmp_path, called_tools=set())
+        assert "comprehension_tools_underused" in report["gaps"]
+
+    def test_suppressed_when_impact_analysis_used(self, tmp_path: Path) -> None:
+        self._write_cross_module_edit(tmp_path, tools_used=["tapps_impact_analysis"])
+        report = compute_gaps(tmp_path, called_tools=set())
+        assert "comprehension_tools_underused" not in report["gaps"]
+
+    def test_suppressed_when_call_graph_in_called_set(self, tmp_path: Path) -> None:
+        self._write_cross_module_edit(tmp_path, tools_used=[])
+        report = compute_gaps(tmp_path, called_tools={"tapps_call_graph"})
+        assert "comprehension_tools_underused" not in report["gaps"]
+
+    def test_not_fired_for_single_module_edit(self, tmp_path: Path) -> None:
+        metrics_dir = tmp_path / ".tapps-mcp"
+        metrics_dir.mkdir(parents=True, exist_ok=True)
+        (metrics_dir / "loop-metrics.jsonl").write_text(
+            json.dumps(
+                {
+                    "ts": int(time.time()),
+                    "files_edited": [str(tmp_path / "src/mod_a/x.py")],
+                    "gate_skipped_files": [],
+                    "lookup_docs_called": True,
+                    "checklist_called": True,
+                    "tools_used": ["tapps_validate_changed"],
+                }
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+        report = compute_gaps(tmp_path, called_tools=set())
+        assert "comprehension_tools_underused" not in report["gaps"]
+
+
 class TestComputeGapsScopedEdits:
     def test_tmp_scratch_excluded_from_edits_without_validation(self, tmp_path: Path) -> None:
         metrics_dir = tmp_path / ".tapps-mcp"

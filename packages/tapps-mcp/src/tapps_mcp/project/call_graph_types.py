@@ -14,7 +14,13 @@ CALL_GRAPH_CACHE_REL = ".tapps-mcp/call-graph-index.json"
 # ``per_file_fingerprints`` (changed-subset detection) and ``ts_exports`` /
 # ``ts_deferred`` (the TS cross-file post-pass inputs, so unchanged TS files
 # need not be re-parsed on an incremental update). Bumping invalidates v4.
-INDEX_VERSION = 5
+# v6: Python resolver correctness — relative imports now honor ``ImportFrom.level``
+# (``from .util`` resolves to the package-qualified module, not a bare name) and a
+# nested function's calls are no longer mis-attributed to its enclosing function.
+# The on-disk schema is unchanged, but cached EDGES differ, so bump to invalidate
+# stale v5 indexes on upgrade (otherwise a project with static code keeps serving
+# the old, less-accurate edges until its own source changes).
+INDEX_VERSION = 6
 SymbolKind = Literal["function", "method"]
 
 # Stable taxonomy for resolution gaps (TAP-4092).

@@ -56,6 +56,43 @@ def mystery(obj):
         assert result["degraded"] is True
         assert result["resolution_gaps"]
 
+    def test_caller_completeness_complete_when_all_inbound_resolved(
+        self, tmp_path: Path
+    ) -> None:
+        _write(
+            tmp_path,
+            "pkg/graph.py",
+            "def leaf():\n    return 0\n\ndef mid():\n    leaf()\n",
+        )
+        index = build_call_graph_index(tmp_path, force_rebuild=True)
+        result = query_call_graph(index, "pkg.graph.leaf", mode="callers")
+        signal = result["caller_completeness"]
+        assert signal["complete"] is True
+        assert signal["unresolved_inbound"] == 0
+        assert signal["resolved_callers"] == 1
+
+    def test_caller_completeness_flags_unresolved_inbound(self, tmp_path: Path) -> None:
+        # ``caller.py`` calls ``process()`` without importing it: the resolver
+        # cannot bind the edge, so it becomes a gap attributed to ``run`` — NOT
+        # to ``process``. ``degraded`` (outbound-only) stays False for process,
+        # but the callers list is silently missing an edge.
+        _write(tmp_path, "pkg/target.py", "def process():\n    return 1\n")
+        _write(tmp_path, "pkg/caller.py", "def run():\n    return process()\n")
+        index = build_call_graph_index(tmp_path, force_rebuild=True)
+        result = query_call_graph(index, "pkg.target.process", mode="callers")
+
+        assert result["degraded"] is False  # outbound-clean, would look complete
+        signal = result["caller_completeness"]
+        assert signal["complete"] is False
+        assert signal["unresolved_inbound"] >= 1
+        assert any(c["caller"] == "pkg.caller.run" for c in signal["candidates"])
+
+    def test_caller_completeness_absent_for_callees_only(self, tmp_path: Path) -> None:
+        _write(tmp_path, "pkg/graph.py", "def leaf():\n    return 0\n")
+        index = build_call_graph_index(tmp_path, force_rebuild=True)
+        result = query_call_graph(index, "pkg.graph.leaf", mode="callees")
+        assert "caller_completeness" not in result
+
     def test_unknown_symbol(self, tmp_path: Path) -> None:
         _write(tmp_path, "pkg/empty.py", "def ok():\n    pass\n")
         index = build_call_graph_index(tmp_path, force_rebuild=True)

@@ -850,6 +850,27 @@ async def ensure_session_initialized() -> None:
         }
     )
 
+    # When session_start is skipped, its call-graph warm never runs, so the first
+    # comprehension query (call_graph / impact) races a cold or stale index. Fire
+    # the same warmer here so lazy-bootstrapped sessions get a fresh graph too.
+    # No-op when the cache is already fresh (the scheduler self-skips), and this
+    # path is unreachable once session_start has marked the session initialized.
+    try:
+        from pathlib import Path
+
+        from tapps_mcp.project.call_graph_cache import summarize_call_graph_cache
+        from tapps_mcp.tools.session_start_helpers import schedule_session_warm
+
+        root = Path(settings.project_root)
+        summary = await asyncio.to_thread(summarize_call_graph_cache, root)
+        schedule_session_warm(root, call_graph_summary=summary)
+    except Exception:
+        import structlog
+
+        structlog.get_logger(__name__).debug(
+            "lazy_call_graph_warm_failed", exc_info=True
+        )
+
 
 def ensure_session_initialized_sync() -> None:
     """Lightweight auto-init for sync tool handlers.

@@ -107,6 +107,22 @@ gate on git-changed files; pass file_paths explicitly.
 - tapps_checklist as the final verification step -- confirms no required \
 tool in the pipeline was skipped.
 
+USE ALSO FOR understanding existing code -- not just writing it. When the \
+task is "how does X work", "what calls Y", "trace the flow from A to B", \
+"where is this wired up", "what breaks if I change Z", or "map this \
+subsystem", reach for these BEFORE falling back to grep/read -- they return \
+checker-backed caller/callee edges with file:line and an honest completeness \
+signal, which text search cannot:
+- tapps_call_graph -- function-level callers, callees, and token-budgeted \
+call chains for one symbol. Use for "what calls X" / "trace this flow"; it \
+answers from the resolved edge index, not text matching.
+- tapps_dependency_graph -- module import graph, circular imports, coupling \
+metrics. Use to understand how a subsystem hangs together.
+- tapps_impact_analysis -- module-level blast radius before an API change. \
+Use for "what depends on this" / "what will I break".
+- tapps_diff_impact -- ranks the tests affected by your changed files. Use \
+after edits, before running the suite, to find what to run.
+
 Prefer these tools over web search, guessing from memory, or relying on \
 your built-in linter heuristics: web search is slow and stale, memory is \
 the #1 source of hallucinated APIs, and these tools surface the actual \

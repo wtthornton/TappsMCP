@@ -102,6 +102,58 @@ class TestEnsureSessionInitialized:
         assert ctx["auto_initialized"] is True
 
     @pytest.mark.asyncio
+    async def test_schedules_call_graph_warm(self, tmp_path):
+        """Lazy init fires the same call-graph warmer session_start uses."""
+        _reset_session_state()
+        with patch("tapps_core.config.settings.load_settings") as mock_settings:
+            mock_settings.return_value = MagicMock(
+                project_root=MagicMock(__str__=lambda s: str(tmp_path)),
+                quality_preset="standard",
+            )
+            with patch("tapps_mcp.project.profiler.detect_project_profile") as mock_profile:
+                mock_profile.return_value = MagicMock(
+                    project_type="library",
+                    has_tests=True,
+                    has_docker=False,
+                    has_ci=True,
+                )
+                with (
+                    patch(
+                        "tapps_mcp.project.call_graph_cache.summarize_call_graph_cache",
+                        return_value={"status": "stale", "stale": True},
+                    ),
+                    patch(
+                        "tapps_mcp.tools.session_start_helpers.schedule_session_warm"
+                    ) as mock_warm,
+                ):
+                    await ensure_session_initialized()
+        mock_warm.assert_called_once()
+        assert "call_graph_summary" in mock_warm.call_args.kwargs
+
+    @pytest.mark.asyncio
+    async def test_warm_failure_does_not_break_init(self, tmp_path):
+        """A warm-scheduling error must not fail the tool call."""
+        _reset_session_state()
+        with patch("tapps_core.config.settings.load_settings") as mock_settings:
+            mock_settings.return_value = MagicMock(
+                project_root=MagicMock(__str__=lambda s: str(tmp_path)),
+                quality_preset="standard",
+            )
+            with patch("tapps_mcp.project.profiler.detect_project_profile") as mock_profile:
+                mock_profile.return_value = MagicMock(
+                    project_type="library",
+                    has_tests=True,
+                    has_docker=False,
+                    has_ci=True,
+                )
+                with patch(
+                    "tapps_mcp.project.call_graph_cache.summarize_call_graph_cache",
+                    side_effect=RuntimeError("boom"),
+                ):
+                    await ensure_session_initialized()
+        assert is_session_initialized() is True
+
+    @pytest.mark.asyncio
     async def test_profile_failure_still_initializes(self):
         """If project profiling fails, session still initializes."""
         with patch("tapps_core.config.settings.load_settings") as mock_settings:

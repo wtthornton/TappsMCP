@@ -45,6 +45,51 @@ def _gaps_for_symbol(index: CallGraphIndex, qualified: str) -> list[dict[str, An
     return [asdict(g) for g in gaps]
 
 
+def _called_name(expr: str) -> str:
+    """Final called identifier of a call expression (``a.b.foo`` -> ``foo``)."""
+    head = expr.split("(", maxsplit=1)[0].strip()
+    return head.rsplit(".", maxsplit=1)[-1] if head else ""
+
+
+def _caller_completeness(
+    index: CallGraphIndex, qualified: str, *, sample_cap: int = 10
+) -> dict[str, Any]:
+    """Inbound-direction completeness signal for a "what calls X" query.
+
+    ``resolution_gaps`` are caller-attributed: an unresolved call site is recorded
+    against the function that *makes* the call, never against its intended target.
+    So the ``callers`` list for X is silently incomplete whenever some call site
+    that should resolve to X did not — those failures live under a different
+    ``caller`` and never surface when querying X.
+
+    This surfaces the risk honestly: it counts in-repo resolution gaps whose
+    called name matches X's short name (heuristic — a same-named call elsewhere
+    can over-count, which is the safe direction for a *completeness* warning).
+    ``complete=False`` tells the caller the resolved ``callers`` list may be
+    missing edges, distinct from ``degraded`` (which is outbound-only).
+    """
+    from tapps_mcp.project.call_graph_gap_classify import is_external_gap
+
+    short = qualified.rsplit(".", maxsplit=1)[-1]
+    resolved_callers = len(index.callers_of(qualified))
+    candidates: list[dict[str, Any]] = []
+    for gap in index.resolution_gaps:
+        if gap.caller == qualified:
+            continue  # outbound self-gap, not an inbound caller
+        if _called_name(gap.expr) != short:
+            continue
+        if is_external_gap(gap):
+            continue
+        candidates.append(asdict(gap))
+
+    return {
+        "resolved_callers": resolved_callers,
+        "unresolved_inbound": len(candidates),
+        "complete": not candidates,
+        "candidates": candidates[:sample_cap],
+    }
+
+
 def _estimate_tokens(payload: object) -> int:
     return max(1, len(json.dumps(payload, default=str)) // _CHARS_PER_TOKEN)
 
@@ -189,7 +234,7 @@ def query_call_graph(
         )
         truncated = truncated or t3
 
-    return {
+    result: dict[str, Any] = {
         "symbol": symbol,
         "qualified_name": qualified,
         "found": True,
@@ -201,6 +246,10 @@ def query_call_graph(
         "truncated": truncated,
         "token_budget": token_budget,
     }
+    # Inbound completeness only matters when the query asks who calls the symbol.
+    if mode in ("callers", "chain", "all"):
+        result["caller_completeness"] = _caller_completeness(index, qualified)
+    return result
 
 
 def compact_symbol_impact(
