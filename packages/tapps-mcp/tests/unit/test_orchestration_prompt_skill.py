@@ -61,6 +61,17 @@ class TestScaffold:
         assert "model tier" in tpl
         assert "verifier subagent" in tpl
 
+    def test_body_and_template_carry_harness_compatibility(self, tmp_path):
+        generate_skills(tmp_path, "claude")
+        d = _skill_dir(tmp_path)
+        content = (d / "SKILL.md").read_text().lower()
+        # method §6: the emitted prompt must survive the project's own hooks
+        # (PreToolUse gates) and MCP standing nudges — adopt or override each.
+        assert "harness-compatibility sweep" in content
+        assert "adopt or override" in content or "adopted or overridden" in content
+        tpl = (d / "assets" / "prompt-template.md").read_text().lower()
+        assert "harness compatibility" in tpl
+
     def test_cursor_host_also_gets_skill(self, tmp_path):
         generate_skills(tmp_path, "cursor")
         assert (_skill_dir(tmp_path, "cursor") / "SKILL.md").exists()
