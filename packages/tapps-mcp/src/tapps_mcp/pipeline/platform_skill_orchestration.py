@@ -169,6 +169,15 @@ The point is a prompt a **brand-new session** can run with zero hand-holding.
 - **Self-healing preconditions.** Anything the loop needs (a runtime up, a
   scorer/tool built, a branch, auth reachable) is a **Sub-goal 0** the loop
   *establishes itself* — never a "set this up first" note the user must action.
+- **Harness-compatibility sweep.** The runner session carries the *project's own*
+  harness: PreToolUse/PostToolUse hooks that gate tool calls (issue-tracker write
+  sentinels, prod guards) and MCP-server standing instructions that nudge per-edit
+  behavior (quality checks after every file edit, doc lookups). Enumerate the gates
+  and nudges the loop's tool calls will actually hit; bake each required
+  unlock/refresh step into Sub-goal 0 or the relevant loop step, and in Guardrails
+  explicitly **adopt or override** each standing nudge (e.g. "quality pipeline runs
+  at the epic gate, not per edit — this overrides the per-edit nudge"). A prompt
+  that fights its own project's hooks burns its budget on diagnose loops.
 - **Deploy-freshness + smoke/health gate** (any prompt that runs against a live or
   deployed target, not source): in Sub-goal 0, self-healing — (1) **merged ≠ live**:
   if the target is a baked image, compare latest merged commit to the build time and
@@ -199,6 +208,9 @@ The point is a prompt a **brand-new session** can run with zero hand-holding.
   Workflow `budget` to a token ceiling (≈ the autonomy cost gate) so it self-aborts.
 - **Memory** — recall at the start, record the outcome (incl. failures) at each
   checkpoint, so learning survives the session.
+- **Harness compatibility** — every tool call the loop makes that is gated by a
+  project hook has its unlock/refresh step in the prompt, and every MCP standing
+  nudge is explicitly adopted or overridden (method §6).
 
 ## Autonomy contract (every emitted prompt carries this)
 
@@ -248,7 +260,9 @@ no silent scope creep.
    return + per-agent contract; a memory recall+record step; an **Autonomy
    contract**; a **bounded diagnose-don't-repeat** path; a **context-hygiene** line;
    and the **Engineering discipline** line. For a live/deployed target, confirm
-   Sub-goal 0 has the deploy-freshness + smoke/health gate. Run the **cold-start
+   Sub-goal 0 has the deploy-freshness + smoke/health gate. Confirm **harness
+   compatibility**: every hook-gated tool call has its unlock/refresh step and every
+   MCP standing nudge is adopted-or-overridden. Run the **cold-start
    test**: a fresh session with nothing loaded can run it. Fix anything weak before
    saving.
 6. Tell the user exactly how to run it — the `/goal` line, the `/loop` cadence, the
@@ -294,6 +308,7 @@ artifact that proves it — exit code, test-count line, diff, pasted query resul
 0. **Establish preconditions (self-healing — the loop sets these up, NOT the user).** <runtime up, scorer/tool built, auth reachable, branch ready>
    - **Deploy freshness (live/deployed target only):** merged ≠ live. If baked image, compare latest merged commit to build time; rebuild/redeploy (preserve overlays) if `main` is newer. Stale image = required-fail cap.
    - **Smoke + health gate (after any deploy, before the real run):** `/health` is `ok|degraded` and one cheap end-to-end call succeeds.
+   - **Harness compatibility:** <PreToolUse gates + MCP standing nudges the loop's tool calls will hit → bake unlock/refresh steps here; adopt-or-override each nudge in Guardrails>
    - proof: <preconditions verified; for live targets — image no older than latest merged commit + a 200/non-error smoke pasted>
 1. <narrow, verifiable> — proof: <ground-truth artifact>
 2. <…>
@@ -323,6 +338,7 @@ artifact that proves it — exit code, test-count line, diff, pasted query resul
 - Context hygiene — targeted grep over full re-Read.
 - Scope: repos in play = <list>; reads fleet-wide, writes via owner.
 - Memory: recall at start; record outcome (incl. failures) at each checkpoint.
+- Harness compatibility: <gated tool calls → unlock/refresh steps; MCP standing nudges → adopted or overridden>.
 - Discipline: root-cause not workarounds; no green-by-suppression; right-sized; durable; match conventions; no scope creep.
 
 ## Autonomy
