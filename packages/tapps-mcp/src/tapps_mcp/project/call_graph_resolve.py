@@ -50,15 +50,59 @@ def _apply_import_bindings(
         bindings[bound] = f"{base}.{alias.name}" if base else alias.name
 
 
+def _annotation_target(idx: FileIndex, ann: ast.expr | None) -> str | None:
+    """Qualified class an annotation names, resolved via local classes / imports.
+
+    Conservative on purpose: only a bare ``Name`` (``x: Worker``), a dotted
+    ``Attribute`` (``x: mod.Worker``), or a string forward-ref (``x: "Worker"``).
+    Subscripted / union annotations (``Optional[Worker]``, ``list[Worker]``,
+    ``A | B``) are skipped — their runtime type is not a single obvious class, so
+    binding one would risk a wrong edge. Returns None unless the head resolves to
+    a known local class or an imported name (mirrors how ``x = Worker()`` binds).
+    """
+    name: str | None = None
+    if isinstance(ann, ast.Name):
+        name = ann.id
+    elif isinstance(ann, ast.Attribute):
+        unparsed = unparse_expr(ann)
+        name = unparsed if all(p.isidentifier() for p in unparsed.split(".")) else None
+    elif isinstance(ann, ast.Constant) and isinstance(ann.value, str):
+        candidate = ann.value.strip()
+        name = candidate if candidate and all(
+            p.isidentifier() for p in candidate.split(".")
+        ) else None
+    if not name:
+        return None
+    head, _, rest = name.partition(".")
+    if head in idx.classes:
+        base = idx.classes[head]
+    elif head in idx.imports:
+        base = idx.imports[head]
+    else:
+        return None
+    result = f"{base}.{rest}" if rest else base
+    return result if "." in result else None
+
+
 def local_bindings(
     idx: FileIndex,
     node: ast.FunctionDef | ast.AsyncFunctionDef,
     class_stack: list[str],
 ) -> dict[str, str]:
-    bindings = {a.arg: a.arg for a in node.args.args}
+    # Seed parameter bindings, resolving type annotations to their class so that
+    # ``def f(x: Worker): x.method()`` resolves the same as ``x = Worker()``.
+    bindings: dict[str, str] = {}
+    for arg in (*node.args.posonlyargs, *node.args.args, *node.args.kwonlyargs):
+        bindings[arg.arg] = _annotation_target(idx, arg.annotation) or arg.arg
     for child in ast.walk(node):
         if isinstance(child, ast.Import | ast.ImportFrom):
             _apply_import_bindings(idx, bindings, child)
+            continue
+        if isinstance(child, ast.AnnAssign) and isinstance(child.target, ast.Name):
+            # Annotated local: ``w: Worker`` / ``w: Worker = factory()``.
+            annotated = _annotation_target(idx, child.annotation)
+            if annotated:
+                bindings[child.target.id] = annotated
             continue
         if not isinstance(child, ast.Assign):
             continue

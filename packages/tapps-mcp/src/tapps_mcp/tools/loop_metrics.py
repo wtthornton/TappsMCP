@@ -487,6 +487,7 @@ def compute_rolling_stats(
             "mcp_call_ratio": 0.0,
             "gate_skip_rate": 0.0,
             "lookup_docs_to_edit_ratio": 0.0,
+            "comprehension_tool_use_ratio": 0.0,
             "window_days": window_days,
             "window_start_ts": cutoff,
         }
@@ -498,11 +499,22 @@ def compute_rolling_stats(
         1 for r in reliable_edit_rows if loop_row_gate_skipped(r, project_root)
     )
     lookup_loops = sum(1 for r in reliable_edit_rows if r.get("lookup_docs_called"))
+    # Adoption signal: fraction of loops in the window that used a comprehension
+    # tool. Watchable over time to confirm the instructions/nudge actually move
+    # behavior — an unused-but-correct tool is a failed tool.
+    from tapps_mcp.tools.pipeline_tool_sets import COMPREHENSION_SHORT_NAMES
+
+    comprehension_loops = sum(
+        1
+        for r in rows
+        if COMPREHENSION_SHORT_NAMES & {str(t) for t in r.get("tools_used", [])}
+    )
     return {
         "loops": loops,
         "mcp_call_ratio": (mcp_calls / total_calls) if total_calls else 0.0,
         "gate_skip_rate": (skipped_loops / edit_loops) if edit_loops else 0.0,
         "lookup_docs_to_edit_ratio": (lookup_loops / edit_loops) if edit_loops else 0.0,
+        "comprehension_tool_use_ratio": comprehension_loops / loops,
         "window_days": window_days,
         "window_start_ts": cutoff,
     }

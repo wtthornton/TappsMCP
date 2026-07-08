@@ -21,11 +21,13 @@ from pathlib import Path
 from tapps_mcp.project.call_graph_eval import GOLDEN_CASES, evaluate
 
 # Current measured floors (2026-07-08). Raise these as debt is paid down.
-# Relative-import prefix and nested-scope over-attribution were fixed in the
-# same change that added this harness, lifting precision 0.77->0.92 and recall
-# 0.83->0.92.
-_PRECISION_FLOOR = 0.91
-_RECALL_FLOOR = 0.91
+# History:
+#   - relative-import prefix + nested-scope over-attribution fixed: p0.77->0.92, r0.83->0.92
+#   - type-annotation binding (def f(x: C) / x: C = ...): corpus grown, p/r 0.93.
+#     Cleared ~44% of the genuinely-fixable in-repo unresolved_static_call bucket
+#     on the real repo (598->335 misses; edges 32315->34382; in_repo_gap_rate 0.61->0.51).
+_PRECISION_FLOOR = 0.93
+_RECALL_FLOOR = 0.93
 
 # Documented resolver debt. Each entry is a genuine resolver limitation, not a
 # fixture-labeling error (verified against the actual index). Shrink these sets

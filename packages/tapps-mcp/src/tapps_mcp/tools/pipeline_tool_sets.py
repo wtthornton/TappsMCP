@@ -18,6 +18,11 @@ GATE_SHORT_NAMES: Final[frozenset[str]] = frozenset(
 )
 CHECKLIST_SHORT_NAMES: Final[frozenset[str]] = frozenset({"tapps_checklist"})
 LOOKUP_SHORT_NAMES: Final[frozenset[str]] = frozenset({"tapps_lookup_docs"})
+# Code-comprehension tools (callers/blast-radius before a cross-cutting change).
+# Shared so both the usage-gap check and the rolling adoption metric agree.
+COMPREHENSION_SHORT_NAMES: Final[frozenset[str]] = frozenset(
+    {"tapps_call_graph", "tapps_impact_analysis", "tapps_dependency_graph"}
+)
 EDIT_TOOL_NAMES: Final[frozenset[str]] = frozenset(
     {"Edit", "Write", "MultiEdit", "NotebookEdit"}
 )
@@ -98,6 +103,7 @@ def is_lookup_tool(name: str) -> bool:
 
 __all__ = [
     "CHECKLIST_SHORT_NAMES",
+    "COMPREHENSION_SHORT_NAMES",
     "EDIT_TOOL_NAMES",
     "GATE_SHORT_NAMES",
     "LOOKUP_SHORT_NAMES",

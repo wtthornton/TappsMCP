@@ -20,7 +20,10 @@ CALL_GRAPH_CACHE_REL = ".tapps-mcp/call-graph-index.json"
 # The on-disk schema is unchanged, but cached EDGES differ, so bump to invalidate
 # stale v5 indexes on upgrade (otherwise a project with static code keeps serving
 # the old, less-accurate edges until its own source changes).
-INDEX_VERSION = 6
+# v7: type-annotation binding — ``def f(x: C): x.m()`` and ``x: C = ...`` now resolve
+# the method to ``C.m`` (previously an unresolved gap). Adds edges vs v6 (measured:
+# +2067 edges / in-repo gap rate 0.61->0.51 on this repo), so bump to invalidate v6.
+INDEX_VERSION = 7
 SymbolKind = Literal["function", "method"]
 
 # Stable taxonomy for resolution gaps (TAP-4092).

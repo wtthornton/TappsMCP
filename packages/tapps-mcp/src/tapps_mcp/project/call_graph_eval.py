@@ -279,6 +279,52 @@ GOLDEN_CASES: list[GoldenCase] = [
         hard=True,
     ),
     GoldenCase(
+        name="typed_param_method_call",
+        files={
+            "pkg/svc.py": (
+                "class Worker:\n"
+                "    def helper(self):\n"
+                "        return 0\n"
+            ),
+            "pkg/app.py": (
+                "from pkg.svc import Worker\n"
+                "\n"
+                "def handler(w: Worker):\n"
+                "    return w.helper()\n"
+            ),
+        },
+        expected_edges=frozenset({("pkg.app.handler", "pkg.svc.Worker.helper")}),
+        hard=True,
+    ),
+    GoldenCase(
+        name="annotated_local_method_call",
+        files={
+            "pkg/svc.py": (
+                "class Worker:\n"
+                "    def helper(self):\n"
+                "        return 0\n"
+                "\n"
+                "def make():\n"
+                "    return Worker()\n"
+            ),
+            "pkg/app.py": (
+                "from pkg.svc import Worker, make\n"
+                "\n"
+                "def handler():\n"
+                "    w: Worker = make()\n"
+                "    return w.helper()\n"
+            ),
+        },
+        # handler -> make (call) and handler -> Worker.helper (annotated local).
+        expected_edges=frozenset(
+            {
+                ("pkg.app.handler", "pkg.svc.make"),
+                ("pkg.app.handler", "pkg.svc.Worker.helper"),
+            }
+        ),
+        hard=True,
+    ),
+    GoldenCase(
         name="relative_import_call",
         files={
             "pkg/util.py": "def compute():\n    return 42\n",

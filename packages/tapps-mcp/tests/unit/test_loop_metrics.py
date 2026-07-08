@@ -86,6 +86,26 @@ class TestComputeRollingStats:
         assert stats["gate_skip_rate"] == pytest.approx(0.5)
         assert stats["lookup_docs_to_edit_ratio"] == pytest.approx(0.5)
 
+    def test_comprehension_tool_use_ratio(self, tmp_path: Path) -> None:
+        now = int(time.time())
+        metrics = tmp_path / ".tapps-mcp" / "loop-metrics.jsonl"
+        _write_metrics(
+            metrics,
+            [
+                {"ts": now - 100, "tools_used": ["tapps_call_graph"]},
+                {"ts": now - 200, "tools_used": ["tapps_validate_changed"]},
+                {"ts": now - 300, "tools_used": ["tapps_impact_analysis", "tapps_checklist"]},
+                {"ts": now - 400, "tools_used": []},
+            ],
+        )
+        stats = compute_rolling_stats(tmp_path, window_days=7)
+        # 2 of 4 loops used a comprehension tool.
+        assert stats["comprehension_tool_use_ratio"] == pytest.approx(0.5)
+
+    def test_comprehension_ratio_zero_on_empty(self, tmp_path: Path) -> None:
+        stats = compute_rolling_stats(tmp_path, window_days=7)
+        assert stats["comprehension_tool_use_ratio"] == 0.0
+
     def test_excludes_legacy_unparsed_callmcptool_rows(self, tmp_path: Path) -> None:
         now = int(time.time())
         metrics = tmp_path / ".tapps-mcp" / "loop-metrics.jsonl"

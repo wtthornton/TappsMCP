@@ -29,6 +29,7 @@ from tapps_mcp.tools.loop_metrics import (
     read_loop_metrics,
 )
 from tapps_mcp.tools.pipeline_tool_sets import (
+    COMPREHENSION_SHORT_NAMES,
     GATE_SHORT_NAMES,
     LOOKUP_SHORT_NAMES,
     SOURCE_FILE_SUFFIXES,
@@ -47,12 +48,6 @@ _CHECKLIST_TOOL = "tapps_checklist"
 _LOOKUP_TOOL = "tapps_lookup_docs"
 _IMPACT_TOOL = "tapps_impact_analysis"
 _SESSION_INIT_TOOL = "tapps_session_start"
-# Comprehension tools that check callers/blast-radius before a cross-cutting change.
-_COMPREHENSION_TOOLS: tuple[str, ...] = (
-    "tapps_call_graph",
-    "tapps_impact_analysis",
-    "tapps_dependency_graph",
-)
 _PRIORITY_GAPS: tuple[str, ...] = (
     "edits_without_validation",
     "checklist_skipped",
@@ -318,7 +313,7 @@ def compute_gaps(
         t for r in rows[-10:] for t in r.get("tools_used", []) if isinstance(t, str)
     }
     used_comprehension = any(
-        t in recent_tools or t in called for t in _COMPREHENSION_TOOLS
+        t in recent_tools or t in called for t in COMPREHENSION_SHORT_NAMES
     )
     if has_recent_edits and not used_comprehension:
         parent_dirs = {str(Path(p).parent) for p in edited_recent}
