@@ -1,6 +1,6 @@
 # TappsMCP Memory Reference
 
-Complete reference for TappsMCP **shared brain memory** — **42 actions** when accessed via CLI or the `nlt-memory` MCP facade (TAP-3895).
+Complete reference for TappsMCP **shared brain memory** — **44 actions** when accessed via CLI or the `nlt-memory` MCP facade (TAP-3895).
 
 ## How to access memory (CLI vs MCP)
 

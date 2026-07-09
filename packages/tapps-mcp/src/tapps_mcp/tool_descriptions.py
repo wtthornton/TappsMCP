@@ -50,7 +50,7 @@ TOOL_DESCRIPTIONS: dict[str, str] = {
         "Save or recall short-lived session notes in the local KV store."
     ),
     "tapps_memory": (
-        "Slim brain memory on nlt-memory: search, save, get, health, related (not full 42-action catalog)."
+        "Slim brain memory on nlt-memory: search, save, get, health, related (not full 44-action catalog)."
     ),
     "tapps_impact_analysis": (
         "Module-level import blast radius before API changes (symbol callers: tapps_call_graph, ADR-0017)."

@@ -57,7 +57,7 @@ tapps-brain (standalone)  <──  tapps-core (shared infra)  <──  tapps-mcp
 - **85 deterministic MCP tools** (43 TappsMCP + 42 DocsMCP) — no LLM calls in the tool chain; same input always produces same output
 - **Multi-language code scoring** - Python, TypeScript/JavaScript, Go, Rust across 7 categories (complexity, security, maintainability, test coverage, performance, structure, devex)
 - **Documentation lookup** via Context7 and LlmsTxt providers with local caching
-- **Persistent shared memory** via [tapps-brain](https://github.com/wtthornton/tapps-brain) — project decisions survive across sessions. TappsMCP accesses the Dockerized brain service over HTTP via BrainBridge; use `uv run tapps-mcp memory` (42 actions) or enable `nlt-memory` for MCP-exposed recall/save/handoff tools. See the [tapps-brain repo](https://github.com/wtthornton/tapps-brain) for retrieval, decay, consolidation, and federation internals.
+- **Persistent shared memory** via [tapps-brain](https://github.com/wtthornton/tapps-brain) — project decisions survive across sessions. TappsMCP accesses the Dockerized brain service over HTTP via BrainBridge; use `uv run tapps-mcp memory` (44 actions) or enable `nlt-memory` for MCP-exposed recall/save/handoff tools. See the [tapps-brain repo](https://github.com/wtthornton/tapps-brain) for retrieval, decay, consolidation, and federation internals.
 - **Unified feature flags** - optional dependency detection (faiss, numpy, radon) with graceful degradation
 - **Platform generation** - auto-generates hooks, agents, skills, and rules for Claude Code, Cursor, and VS Code
 - **Self-bootstrapping** - `tapps_init` sets up quality infrastructure in any project with one call
@@ -130,7 +130,7 @@ The platform exposes **85 MCP tools** (43 TappsMCP + 42 DocsMCP) plus workflow p
 |--------|-------------|
 | **Documentation lookup** | Up-to-date library docs via Context7 (when `TAPPS_MCP_CONTEXT7_API_KEY` is set) and LlmsTxt (always available as fallback). Fuzzy matching, local cache. |
 | **Project context** | Detect project type, tech stack, structure for context-aware analysis. |
-| **Shared memory** | Powered by [tapps-brain](https://github.com/wtthornton/tapps-brain) — BM25 retrieval, decay, contradiction detection, federation, Hive (Agent Teams). **42 actions** on `tapps_memory` (CRUD, search, federation, profiles, security, maintenance, Hive, knowledge graph, batch ops, feedback, native session memory). Shipped defaults turn on pipeline integrations and hooks; see [docs/MEMORY_REFERENCE.md](docs/MEMORY_REFERENCE.md). For local wiring and the VSCode/GUI-launch env-var gotcha, see [Local setup guide](docs/operations/TAPPS-BRAIN-LOCAL-SETUP.md). |
+| **Shared memory** | Powered by [tapps-brain](https://github.com/wtthornton/tapps-brain) — BM25 retrieval, decay, contradiction detection, federation, Hive (Agent Teams). **44 actions** on `tapps_memory` (CRUD, search, federation, profiles, security, maintenance, Hive, knowledge graph, batch ops, feedback, native session memory). Shipped defaults turn on pipeline integrations and hooks; see [docs/MEMORY_REFERENCE.md](docs/MEMORY_REFERENCE.md). For local wiring and the VSCode/GUI-launch env-var gotcha, see [Local setup guide](docs/operations/TAPPS-BRAIN-LOCAL-SETUP.md). |
 | **Session notes** | In-memory decisions and constraints for a single session. Promotable to shared memory for persistence. |
 | **Impact analysis** | File dependencies and blast radius before refactoring or API changes. |
 | **Quality reports** | JSON, Markdown, or HTML summaries. |
@@ -725,7 +725,7 @@ Quick index:
 
 **Removed MCP tool:** `tapps_memory` left the MCP surface in v3.12.0. Use **`uv run tapps-mcp memory`** or enable **`nlt-memory`** for recall/save/handoff tools.
 
-**What it does:** Persistent, project-scoped shared memory via [tapps-brain](https://github.com/wtthornton/tapps-brain) (Docker + Postgres, HTTP at `localhost:8080`) and **BrainBridge**. The CLI exposes **42 actions** (CRUD, search, federation, knowledge graph, batch ops, feedback, session memory, and more). Tiers: **architectural**, **pattern**, **procedural**, **context** with configurable half-lives. Shipped defaults also enable expert/research auto-save, recurring `tapps_quick_check` procedural memory, **tapps_impact_analysis** `memory_context`, and **memory_hooks** auto-recall/auto-capture — all overridable in `.tapps-mcp.yaml`. See [docs/MEMORY_REFERENCE.md](docs/MEMORY_REFERENCE.md) for the action list and [tapps-brain](https://github.com/wtthornton/tapps-brain) for storage internals.
+**What it does:** Persistent, project-scoped shared memory via [tapps-brain](https://github.com/wtthornton/tapps-brain) (Docker + Postgres, HTTP at `localhost:8080`) and **BrainBridge**. The CLI exposes **44 actions** (CRUD, search, federation, knowledge graph, batch ops, feedback, session memory, and more). Tiers: **architectural**, **pattern**, **procedural**, **context** with configurable half-lives. Shipped defaults also enable expert/research auto-save, recurring `tapps_quick_check` procedural memory, **tapps_impact_analysis** `memory_context`, and **memory_hooks** auto-recall/auto-capture — all overridable in `.tapps-mcp.yaml`. See [docs/MEMORY_REFERENCE.md](docs/MEMORY_REFERENCE.md) for the action list and [tapps-brain](https://github.com/wtthornton/tapps-brain) for storage internals.
 
 **Why use it:** Agents start every session without project context unless you persist it. Shared memory holds decisions, patterns, and workflows across sessions, with decay and contradiction checks to reduce stale answers.
 
@@ -1083,7 +1083,7 @@ tapps-mcp      docs-mcp
 
 ### Memory subsystem
 
-The memory system lives in tapps-brain and exposes **42 actions** through **`uv run tapps-mcp memory`** or the **`nlt-memory`** MCP profile (see [docs/MEMORY_REFERENCE.md](docs/MEMORY_REFERENCE.md)):
+The memory system lives in tapps-brain and exposes **44 actions** through **`uv run tapps-mcp memory`** or the **`nlt-memory`** MCP profile (see [docs/MEMORY_REFERENCE.md](docs/MEMORY_REFERENCE.md)):
 
 | Tier | Half-life | Use for |
 |------|-----------|---------|
@@ -1364,7 +1364,7 @@ DocsMCP is feature-complete with 32 MCP tools covering README generation, API do
 | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | Full architecture documentation. |
 | [docs/DOCKER_DEPLOYMENT.md](docs/DOCKER_DEPLOYMENT.md) | Docker build, run, env vars, and client connection. |
 | [docs/DOCKER_MCP_TOOLKIT.md](docs/DOCKER_MCP_TOOLKIT.md) | Docker image distribution. |
-| [docs/MEMORY_REFERENCE.md](docs/MEMORY_REFERENCE.md) | Full memory system reference (42 actions, configuration, defaults). |
+| [docs/MEMORY_REFERENCE.md](docs/MEMORY_REFERENCE.md) | Full memory system reference (44 actions, configuration, defaults). |
 | [CHANGELOG.md](CHANGELOG.md) | Release history following Keep a Changelog format. |
 | [SECURITY.md](SECURITY.md) | Security policy and vulnerability reporting. |
 

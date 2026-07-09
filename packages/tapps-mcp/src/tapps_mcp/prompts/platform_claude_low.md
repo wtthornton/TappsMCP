@@ -50,7 +50,7 @@ Consider calling `tapps_validate_config(file_path)` when changing Dockerfile, do
 
 ## Memory System
 
-`tapps_memory` provides persistent cross-session knowledge with **42 actions** (save, search, consolidate, federation, profiles, hive, health, knowledge graph, batch ops, feedback, native session memory, and more). Tiers: architectural/pattern/procedural/context. Scopes: project/branch/session. Max 1500 entries. Memory is manual at low engagement: call `search` at session start and `save` before end. Auto-recall/capture hooks are disabled.
+`tapps_memory` provides persistent cross-session knowledge with **44 actions** (save, search, consolidate, federation, profiles, hive, health, knowledge graph, batch ops, feedback, native session memory, and more). Tiers: architectural/pattern/procedural/context. Scopes: project/branch/session. Max 1500 entries. Memory is manual at low engagement: call `search` at session start and `save` before end. Auto-recall/capture hooks are disabled.
 
 **Cross-session handoff:** use `/tapps-handoff-session` and `/tapps-continue-session`, or `tapps-mcp memory save/get` for short payloads.
 
