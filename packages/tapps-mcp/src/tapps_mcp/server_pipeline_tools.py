@@ -941,6 +941,7 @@ async def tapps_init(
     destructive_guard: bool | None = None,
     linear_enforce_gate: bool | None = None,
     linear_enforce_cache_gate: str | None = None,
+    session_start_gate: str | None = None,
     install_git_hooks: bool | None = None,
     linear_sdlc: bool = False,
     with_report_studio: bool = False,
@@ -1022,6 +1023,10 @@ async def tapps_init(
     if lcg is None:
         # TAP-1224: engagement-aware default — "warn" at high/medium, "off" at low.
         lcg = settings.linear_enforce_cache_gate_resolved()
+    ssg = session_start_gate
+    if ssg is None:
+        # Engagement-aware default — "warn" at high/medium, "off" at low.
+        ssg = settings.session_start_gate_resolved()
     igh = install_git_hooks
     if igh is None:
         # TAP-979: opt-in git pre-commit hook.
@@ -1046,6 +1051,7 @@ async def tapps_init(
         destructive_guard=dg,
         linear_enforce_gate=leg,
         linear_enforce_cache_gate=lcg,
+        session_start_gate=ssg,
         install_git_hooks=igh,
         linear_sdlc=linear_sdlc,
         with_report_studio=with_report_studio,

@@ -829,6 +829,7 @@ class TappsMCPSettings(BaseSettings):
                 "real absolute path in your environment."
             )
         return value
+
     host_project_root: str | None = Field(
         default=None,
         description=(
@@ -1106,6 +1107,30 @@ class TappsMCPSettings(BaseSettings):
         ),
     )
 
+    # Session-start enforcement gate — opt-in PreToolUse + PostToolUse pair.
+    # The SessionStart hook can only *prompt* the agent to call
+    # tapps_session_start; a hook cannot execute an MCP tool. This gate makes
+    # the call enforceable: the PostToolUse writer proves the tool ran (per
+    # Claude session) and the PreToolUse gate blocks TappsMCP quality tools
+    # until it has. Engagement-aware default via session_start_gate_resolved().
+    session_start_gate: Literal["off", "warn", "block"] | None = Field(
+        default=None,
+        description=(
+            "Mode for the session-start enforcement gate. 'off' installs "
+            "nothing. 'warn' installs the hooks but only logs violations to "
+            ".tapps-mcp/.session-start-gate-violations.jsonl and allows the "
+            "call — telemetry-first. 'block' rejects (exit 2) any TappsMCP "
+            "quality tool called before tapps_session_start has run this "
+            "Claude session (proven by a tool-written .session-start-done-<SID> "
+            "sentinel, not merely the SessionStart hook firing); "
+            "tapps_session_start / server_info / doctor / usage / stats are "
+            "always allowed so the gate cannot deadlock a fresh or broken "
+            "session. Bypass with TAPPS_SKIP_SESSION_START_GATE=1 (logged to "
+            ".tapps-mcp/.bypass-log.jsonl). When unset, defaults from "
+            "llm_engagement_level: high/medium='warn', low='off'."
+        ),
+    )
+
     # Cursor stop completion gate (TAP-3921) — warn-mode telemetry + optional followup
     cursor_stop_completion_gate: Literal["off", "warn", "block"] | None = Field(
         default=None,
@@ -1350,6 +1375,22 @@ class TappsMCPSettings(BaseSettings):
         """
         if "linear_enforce_cache_gate" in self.model_fields_set:
             return self.linear_enforce_cache_gate
+        if self.llm_engagement_level in ("high", "medium"):
+            return "warn"
+        return "off"
+
+    def session_start_gate_resolved(self) -> Literal["off", "warn", "block"]:
+        """Resolve session_start_gate with engagement-aware defaulting.
+
+        When the user explicitly sets ``session_start_gate`` in
+        ``.tapps-mcp.yaml`` (or env), that value wins. Otherwise the default is
+        ``"warn"`` for ``high`` / ``medium`` engagement (telemetry-first, so
+        the mechanism deploys fleet-wide without blocking) and ``"off"`` for
+        ``low`` — low-engagement consumers don't carry the hook overhead.
+        Projects that want the hard guarantee set ``session_start_gate: block``.
+        """
+        if self.session_start_gate is not None:
+            return self.session_start_gate
         if self.llm_engagement_level in ("high", "medium"):
             return "warn"
         return "off"

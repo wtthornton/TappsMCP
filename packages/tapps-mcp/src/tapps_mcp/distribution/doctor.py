@@ -1463,16 +1463,31 @@ def check_pretooluse_matchers(project_root: Path) -> CheckResult:
         else "Linear cache-first read gate: NOT enabled (set linear_enforce_cache_gate: warn|block in .tapps-mcp.yaml)"
     )
 
+    # Session-start enforcement gate state + violation count. Detected from the
+    # baked MODE in the installed pre-gate script rather than the matcher list,
+    # since its matcher is a regex over the TappsMCP tool family.
+    session_gate_mode = _detect_session_start_gate_mode(project_root)
+    session_gate_active = session_gate_mode in ("warn", "block")
+    session_viol_24h = (
+        _count_session_start_gate_violations_24h(project_root) if session_gate_active else 0
+    )
+    session_status = (
+        f"Session-start gate: {session_gate_mode} ({session_viol_24h} violations in last 24h)"
+        if session_gate_active
+        else "Session-start gate: NOT enabled (set session_start_gate: warn|block in .tapps-mcp.yaml)"
+    )
+
     if not matchers:
         return CheckResult(
             "PreToolUse matchers",
             True,
-            f"no PreToolUse matchers wired (no opt-in gates enabled). {linear_status}. {cache_status}",
+            f"no PreToolUse matchers wired (no opt-in gates enabled). "
+            f"{linear_status}. {cache_status}. {session_status}",
         )
     return CheckResult(
         "PreToolUse matchers",
         True,
-        f"wired: {', '.join(matchers)}. {linear_status}. {cache_status}",
+        f"wired: {', '.join(matchers)}. {linear_status}. {cache_status}. {session_status}",
     )
 
 
@@ -1496,6 +1511,65 @@ def _detect_cache_gate_mode(project_root: Path) -> str:
     if 'MODE="warn"' in head:
         return "warn"
     return "off"
+
+
+def _detect_session_start_gate_mode(project_root: Path) -> str:
+    """Read the baked MODE from the installed session-start pre-gate script.
+
+    Returns "warn" or "block" when the script is present and parseable; "off"
+    otherwise. Reads the first 20 lines so the file need not be loaded in full.
+    """
+    script = project_root / ".claude" / "hooks" / "tapps-pre-session-start-gate.sh"
+    if not script.exists():
+        return "off"
+    try:
+        with script.open(encoding="utf-8") as f:
+            head = "".join(f.readline() for _ in range(20))
+    except OSError:
+        return "off"
+    if 'MODE="block"' in head:
+        return "block"
+    if 'MODE="warn"' in head:
+        return "warn"
+    return "off"
+
+
+def _count_session_start_gate_violations_24h(project_root: Path) -> int:
+    """Count session-start gate violations logged in the last 24 h.
+
+    Reads ``.tapps-mcp/.session-start-gate-violations.jsonl`` and counts entries
+    whose ``ts`` is within 24 hours of now. Returns 0 when the log is missing or
+    unparseable — a doctor-time signal, not a gate, so failures degrade
+    silently. A non-zero count means the agent reached for TappsMCP quality
+    tools before tapps_session_start ran that session.
+    """
+    log_path = project_root / ".tapps-mcp" / ".session-start-gate-violations.jsonl"
+    if not log_path.exists():
+        return 0
+    cutoff = datetime.now(UTC) - timedelta(hours=24)
+    count = 0
+    try:
+        with log_path.open(encoding="utf-8") as f:
+            for line in f:
+                line = line.strip()
+                if not line:
+                    continue
+                try:
+                    entry = json.loads(line)
+                except json.JSONDecodeError:
+                    continue
+                ts_raw = entry.get("ts", "")
+                if not isinstance(ts_raw, str):
+                    continue
+                try:
+                    ts = datetime.fromisoformat(ts_raw.replace("Z", "+00:00"))
+                except ValueError:
+                    continue
+                if ts >= cutoff:
+                    count += 1
+    except OSError:
+        return 0
+    return count
 
 
 def _count_cache_gate_violations_24h(project_root: Path) -> int:

@@ -122,30 +122,32 @@ _AGENTS_MD_OPT_OUT_SENTINEL = "<!-- tapps:agents-md-disabled -->"
 # `.claude/hooks/`. Drift between projects (AgentForge vs external consumers on
 # the same TappsMCP version) was caused by silent opt-in install paths; this
 # manifest is authoritative for verification reporting.
-_CANONICAL_HOOK_MANIFEST: frozenset[str] = frozenset({
-    "tapps-session-start.sh",
-    "tapps-session-compact.sh",
-    "tapps-user-prompt-submit.sh",
-    "tapps-pre-bash.sh",
-    "tapps-pre-compact.sh",
-    "tapps-post-edit.sh",
-    "tapps-post-validate.sh",
-    "tapps-post-report.sh",
-    "tapps-post-docs-validate.sh",
-    "tapps-post-linear-snapshot-get.sh",
-    "tapps-post-linear-list.sh",
-    "tapps-pre-linear-write.sh",
-    "tapps-pre-linear-list.sh",
-    "tapps-stop.sh",
-    "tapps-task-completed.sh",
-    "tapps-subagent-start.sh",
-    "tapps-subagent-stop.sh",
-    "tapps-memory-auto-capture.sh",
-    # NOTE: tapps-session-end.sh and tapps-tool-failure.sh deploy ONLY at
-    # engagement_level=high (SessionEnd / PostToolUseFailure events live in
-    # ENGAGEMENT_HOOK_EVENTS["high"] only). They are intentionally omitted
-    # from the canonical manifest so medium/low projects don't false-positive.
-})
+_CANONICAL_HOOK_MANIFEST: frozenset[str] = frozenset(
+    {
+        "tapps-session-start.sh",
+        "tapps-session-compact.sh",
+        "tapps-user-prompt-submit.sh",
+        "tapps-pre-bash.sh",
+        "tapps-pre-compact.sh",
+        "tapps-post-edit.sh",
+        "tapps-post-validate.sh",
+        "tapps-post-report.sh",
+        "tapps-post-docs-validate.sh",
+        "tapps-post-linear-snapshot-get.sh",
+        "tapps-post-linear-list.sh",
+        "tapps-pre-linear-write.sh",
+        "tapps-pre-linear-list.sh",
+        "tapps-stop.sh",
+        "tapps-task-completed.sh",
+        "tapps-subagent-start.sh",
+        "tapps-subagent-stop.sh",
+        "tapps-memory-auto-capture.sh",
+        # NOTE: tapps-session-end.sh and tapps-tool-failure.sh deploy ONLY at
+        # engagement_level=high (SessionEnd / PostToolUseFailure events live in
+        # ENGAGEMENT_HOOK_EVENTS["high"] only). They are intentionally omitted
+        # from the canonical manifest so medium/low projects don't false-positive.
+    }
+)
 
 
 def _verify_hook_manifest(project_root: Path) -> dict[str, Any]:
@@ -489,9 +491,7 @@ def _upgrade_agents_md(
 
     if dry_run:
         return {"action": "needs-update", "detail": detail}
-    action, merge_detail = update_agents_md(
-        agents_path, template_content, force_merge=force_merge
-    )
+    action, merge_detail = update_agents_md(agents_path, template_content, force_merge=force_merge)
     return {"action": action, "detail": merge_detail or detail}
 
 
@@ -786,12 +786,11 @@ def _build_dry_run_summary(result: dict[str, Any]) -> dict[str, Any]:
     if isinstance(agents_md, dict) and agents_md.get("action", "").startswith("would"):
         review_flags.append("agents_md")
 
-    verdict = "blocked" if parse_errors else ("review-recommended" if review_flags else "safe-to-run")
+    verdict = (
+        "blocked" if parse_errors else ("review-recommended" if review_flags else "safe-to-run")
+    )
     if verdict == "blocked":
-        message = (
-            "Managed JSON parse failure — repair before upgrading: "
-            + "; ".join(parse_errors)
-        )
+        message = "Managed JSON parse failure — repair before upgrading: " + "; ".join(parse_errors)
     elif verdict == "safe-to-run":
         message = (
             f"Upgrade is additive: {managed} tapps-managed files would be "
@@ -885,6 +884,7 @@ def _upgrade_claude_code_dry_run(
     destructive_guard: bool = False,
     linear_enforce_gate: bool = False,
     linear_enforce_cache_gate: str = "off",
+    session_start_gate: str = "off",
 ) -> None:
     """Populate dry-run component hints for the claude-code host.
 
@@ -940,6 +940,13 @@ def _upgrade_claude_code_dry_run(
                     "tapps-post-linear-list.sh",
                 ]
             )
+        if session_start_gate in ("warn", "block"):
+            conditional_managed.extend(
+                [
+                    "tapps-pre-session-start-gate.sh",
+                    "tapps-post-session-start.sh",
+                ]
+            )
         hooks_component: dict[str, Any] = {
             "action": "would-write-managed-scripts",
             "note": "settings.json hooks merged by matcher — existing entries preserved",
@@ -950,6 +957,7 @@ def _upgrade_claude_code_dry_run(
         hooks_component["destructive_guard"] = destructive_guard
         hooks_component["linear_enforce_gate"] = linear_enforce_gate
         hooks_component["linear_enforce_cache_gate"] = linear_enforce_cache_gate
+        hooks_component["session_start_gate"] = session_start_gate
         result["components"]["hooks"] = hooks_component
 
     if _skipped("claude_agents", skip):
@@ -1059,6 +1067,7 @@ def _upgrade_claude_code_live(
     destructive_guard: bool = False,
     linear_enforce_gate: bool = False,
     linear_enforce_cache_gate: str = "off",
+    session_start_gate: str = "off",
 ) -> None:
     """Run live (non-dry-run) artifact upgrades for the claude-code host."""
     from tapps_mcp.pipeline.init import _bootstrap_claude, _bootstrap_claude_settings
@@ -1122,15 +1131,15 @@ def _upgrade_claude_code_live(
                 destructive_guard=destructive_guard,
                 linear_enforce_gate=linear_enforce_gate,
                 linear_enforce_cache_gate=linear_enforce_cache_gate,
+                session_start_gate=session_start_gate,
             )
             result["components"]["hooks"] = {
                 "scripts_created": hooks_result.get("scripts_created", []),
                 "hooks_added": hooks_result.get("hooks_added", 0),
                 "destructive_guard": hooks_result.get("destructive_guard", False),
                 "linear_enforce_gate": hooks_result.get("linear_enforce_gate", False),
-                "linear_enforce_cache_gate": hooks_result.get(
-                    "linear_enforce_cache_gate", "off"
-                ),
+                "linear_enforce_cache_gate": hooks_result.get("linear_enforce_cache_gate", "off"),
+                "session_start_gate": hooks_result.get("session_start_gate", "off"),
                 "manifest_verification": _verify_hook_manifest(project_root),
             }
             # Migrate retired hook wiring: rename the fail-open destructive guard
@@ -1215,8 +1224,8 @@ def _upgrade_claude_code_live(
     if _skipped("integration_hygiene_rule", skip):
         result["components"]["integration_hygiene_rule"] = "skipped (upgrade_skip_files)"
     else:
-        result["components"]["integration_hygiene_rule"] = (
-            generate_claude_integration_hygiene_rule(project_root)
+        result["components"]["integration_hygiene_rule"] = generate_claude_integration_hygiene_rule(
+            project_root
         )
 
     if _skipped("pipeline_rule", skip):
@@ -1424,6 +1433,7 @@ def _upgrade_platform(
     destructive_guard: bool = False,
     linear_enforce_gate: bool = False,
     linear_enforce_cache_gate: str = "off",
+    session_start_gate: str = "off",
     mcp_bundle: str = "full",
 ) -> dict[str, Any]:
     """Upgrade platform-specific files for a single host.
@@ -1505,6 +1515,7 @@ def _upgrade_platform(
                 destructive_guard=destructive_guard,
                 linear_enforce_gate=linear_enforce_gate,
                 linear_enforce_cache_gate=linear_enforce_cache_gate,
+                session_start_gate=session_start_gate,
             )
         else:
             _upgrade_claude_code_live(
@@ -1518,6 +1529,7 @@ def _upgrade_platform(
                 destructive_guard=destructive_guard,
                 linear_enforce_gate=linear_enforce_gate,
                 linear_enforce_cache_gate=linear_enforce_cache_gate,
+                session_start_gate=session_start_gate,
             )
     elif host == "cursor":
         if dry_run:
@@ -1900,7 +1912,9 @@ def _dry_run_github_artifacts(project_root: Path, result: dict[str, Any]) -> Non
     result["components"]["governance"] = {"action": "would-regenerate"}
 
 
-def _run_github_artifacts(project_root: Path, result: dict[str, Any], *, force: bool = False) -> None:
+def _run_github_artifacts(
+    project_root: Path, result: dict[str, Any], *, force: bool = False
+) -> None:
     """Run GitHub-hosted artifact generators (CI, Copilot, templates, governance).
 
     Each generator is called independently; failures are recorded in
@@ -2156,9 +2170,7 @@ def upgrade_pipeline(
     from tapps_mcp.tools.session_start_helpers import _infer_mcp_bundle
 
     mcp_bundle = normalize_mcp_bundle(
-        settings.mcp_bundle
-        if settings.mcp_bundle is not None
-        else _infer_mcp_bundle(project_root)
+        settings.mcp_bundle if settings.mcp_bundle is not None else _infer_mcp_bundle(project_root)
     )
     result["mcp_bundle"] = mcp_bundle
 
@@ -2254,6 +2266,7 @@ def upgrade_pipeline(
                 destructive_guard=settings.destructive_guard,
                 linear_enforce_gate=settings.linear_enforce_gate_resolved(),
                 linear_enforce_cache_gate=settings.linear_enforce_cache_gate_resolved(),
+                session_start_gate=settings.session_start_gate_resolved(),
                 mcp_bundle=mcp_bundle,
             )
             platform_results.append(host_result)

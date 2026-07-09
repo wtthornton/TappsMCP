@@ -69,6 +69,7 @@ class BootstrapConfig:
     destructive_guard: bool = False
     linear_enforce_gate: bool = False
     linear_enforce_cache_gate: str = "off"
+    session_start_gate: str = "off"
     install_git_hooks: bool = False
     linear_sdlc: bool = False
     with_report_studio: bool = False
@@ -251,6 +252,7 @@ def bootstrap_pipeline(
     destructive_guard: bool = False,
     linear_enforce_gate: bool = False,
     linear_enforce_cache_gate: str = "off",
+    session_start_gate: str = "off",
     install_git_hooks: bool = False,
     linear_sdlc: bool = False,
     linear_issue_prefix: str = "TAP",
@@ -300,6 +302,7 @@ def bootstrap_pipeline(
             destructive_guard=destructive_guard,
             linear_enforce_gate=linear_enforce_gate,
             linear_enforce_cache_gate=linear_enforce_cache_gate,
+            session_start_gate=session_start_gate,
             install_git_hooks=install_git_hooks,
             linear_sdlc=linear_sdlc,
             linear_issue_prefix=linear_issue_prefix,
@@ -483,9 +486,7 @@ def _ensure_memory_hooks_config(
             existing = yaml.safe_load(raw) or {}
         except Exception as exc:
             if warnings is not None:
-                warnings.append(
-                    f"Could not parse .tapps-mcp.yaml for memory_hooks wiring: {exc}"
-                )
+                warnings.append(f"Could not parse .tapps-mcp.yaml for memory_hooks wiring: {exc}")
             return "skipped"
 
     if "memory_hooks" not in existing:
@@ -543,8 +544,7 @@ def _ensure_cursor_stop_completion_gate_config(
         except Exception as exc:
             if warnings is not None:
                 warnings.append(
-                    "Could not parse .tapps-mcp.yaml for cursor_stop_completion_gate: "
-                    f"{exc}"
+                    f"Could not parse .tapps-mcp.yaml for cursor_stop_completion_gate: {exc}"
                 )
             return "skipped"
 
@@ -873,8 +873,7 @@ def _generate_platform_file_ops(cfg: BootstrapConfig, state: _BootstrapState) ->
     ]
     if missing_handoff:
         state.warnings.append(
-            "Content-return manifest missing session handoff skills: "
-            + ", ".join(missing_handoff)
+            "Content-return manifest missing session handoff skills: " + ", ".join(missing_handoff)
         )
         state.result["session_handoff_skills"] = {
             "ok": False,
@@ -966,6 +965,7 @@ def _setup_platform(cfg: BootstrapConfig, state: _BootstrapState) -> None:
                 destructive_guard=cfg.destructive_guard,
                 linear_enforce_gate=cfg.linear_enforce_gate,
                 linear_enforce_cache_gate=cfg.linear_enforce_cache_gate,
+                session_start_gate=cfg.session_start_gate,
             )
             if cfg.install_git_hooks:
                 from tapps_mcp.pipeline.git_hooks import install_git_pre_commit

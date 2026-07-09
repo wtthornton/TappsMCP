@@ -145,9 +145,7 @@ def maybe_write_mcp_config(
         result["brain_mcp_stripped"] = True
 
 
-async def emit_init_progress(
-    ctx: Context[Any, Any, Any] | None, result: dict[str, Any]
-) -> None:
+async def emit_init_progress(ctx: Context[Any, Any, Any] | None, result: dict[str, Any]) -> None:
     """Emit ctx.info() for each created file and warning."""
     for filename in result.get("created", []):
         await emit_ctx_info(ctx, f"Created {filename}")
@@ -175,6 +173,7 @@ def build_init_bootstrap_config(
     destructive_guard: bool,
     linear_enforce_gate: bool,
     linear_enforce_cache_gate: str,
+    session_start_gate: str,
     install_git_hooks: bool,
     linear_sdlc: bool,
     with_report_studio: bool,
@@ -215,6 +214,7 @@ def build_init_bootstrap_config(
         destructive_guard=destructive_guard,
         linear_enforce_gate=linear_enforce_gate,
         linear_enforce_cache_gate=linear_enforce_cache_gate,
+        session_start_gate=session_start_gate,
         install_git_hooks=install_git_hooks,
         linear_sdlc=linear_sdlc,
         with_report_studio=with_report_studio,
