@@ -28,9 +28,7 @@ from tapps_mcp.tools.pipeline_tool_sets import (
 
 _METRICS_NAME = "loop-metrics.jsonl"
 
-_FINISH_SKILL_NAMES = frozenset(
-    {"tapps-finish-task", "/tapps-finish-task", "finish-task"}
-)
+_FINISH_SKILL_NAMES = frozenset({"tapps-finish-task", "/tapps-finish-task", "finish-task"})
 _VIOLATIONS_NAME = ".completion-gate-violations.jsonl"
 _ROTATE_BYTES = 10 * 1024 * 1024
 _DAY_SECONDS = 86_400
@@ -278,9 +276,7 @@ def resolve_cursor_transcript_path(
         return None
     if conversation_id:
         matched = [
-            p
-            for p in candidates
-            if conversation_id in p.name or conversation_id in str(p.parent)
+            p for p in candidates if conversation_id in p.name or conversation_id in str(p.parent)
         ]
         if matched:
             return max(matched, key=lambda p: p.stat().st_mtime)
@@ -453,10 +449,7 @@ def aggregate_skills_used(
         ):
             if not skills:
                 direct_validate_loops += 1
-    top_skills = [
-        {"name": name, "count": count}
-        for name, count in skill_counts.most_common(10)
-    ]
+    top_skills = [{"name": name, "count": count} for name, count in skill_counts.most_common(10)]
     return {
         "window_days": window_days,
         "loops": len(rows),
@@ -495,9 +488,7 @@ def compute_rolling_stats(
     mcp_calls = sum(int(r.get("mcp_calls", 0)) for r in rows)
     reliable_edit_rows = [r for r in rows if is_reliable_edit_loop_row(r, project_root)]
     edit_loops = len(reliable_edit_rows)
-    skipped_loops = sum(
-        1 for r in reliable_edit_rows if loop_row_gate_skipped(r, project_root)
-    )
+    skipped_loops = sum(1 for r in reliable_edit_rows if loop_row_gate_skipped(r, project_root))
     lookup_loops = sum(1 for r in reliable_edit_rows if r.get("lookup_docs_called"))
     # Adoption signal: fraction of loops in the window that used a comprehension
     # tool. Watchable over time to confirm the instructions/nudge actually move
@@ -505,9 +496,7 @@ def compute_rolling_stats(
     from tapps_mcp.tools.pipeline_tool_sets import COMPREHENSION_SHORT_NAMES
 
     comprehension_loops = sum(
-        1
-        for r in rows
-        if COMPREHENSION_SHORT_NAMES & {str(t) for t in r.get("tools_used", [])}
+        1 for r in rows if COMPREHENSION_SHORT_NAMES & {str(t) for t in r.get("tools_used", [])}
     )
     return {
         "loops": loops,
@@ -585,6 +574,90 @@ def should_auto_promote_cache_gate(
     return True, {**stats, "reason": "ready_to_promote"}
 
 
+_SESSION_START_GATE_VIOLATIONS_NAME = ".session-start-gate-violations.jsonl"
+
+
+def count_session_start_gate_violations(
+    project_root: Path,
+    *,
+    window_days: int = _PROMOTE_WINDOW_DAYS,
+) -> int:
+    """Count session-start gate violations logged in the trailing window.
+
+    Reads ``.tapps-mcp/.session-start-gate-violations.jsonl`` and counts entries
+    whose ``ts`` is within ``window_days`` of now. Returns 0 when the log is
+    missing or unparseable — a telemetry signal, not a gate, so failures degrade
+    silently. Each entry is one time the agent reached for a TappsMCP quality
+    tool before ``tapps_session_start`` ran that session.
+    """
+    from datetime import UTC, datetime, timedelta
+
+    log_path = project_root / ".tapps-mcp" / _SESSION_START_GATE_VIOLATIONS_NAME
+    if not log_path.exists():
+        return 0
+    cutoff = datetime.now(tz=UTC) - timedelta(days=window_days)
+    count = 0
+    try:
+        with log_path.open(encoding="utf-8") as f:
+            for line in f:
+                line = line.strip()
+                if not line:
+                    continue
+                try:
+                    entry = json.loads(line)
+                except json.JSONDecodeError:
+                    continue
+                ts_raw = entry.get("ts", "")
+                if not isinstance(ts_raw, str):
+                    continue
+                try:
+                    ts = datetime.fromisoformat(ts_raw.replace("Z", "+00:00"))
+                except ValueError:
+                    continue
+                if ts >= cutoff:
+                    count += 1
+    except OSError:
+        return 0
+    return count
+
+
+def should_auto_promote_session_start_gate(
+    project_root: Path,
+    *,
+    current_mode: str,
+    auto_promote_enabled: bool,
+) -> tuple[bool, dict[str, Any]]:
+    """warn → block for the session-start gate when the repo is disciplined.
+
+    Mirrors :func:`should_auto_promote_cache_gate` (TAP-1333): promote only from
+    ``warn``, only when auto-promote is enabled, only once there is enough
+    activity in the window (``loops >= _PROMOTE_WINDOW_DAYS``), and only when the
+    session-start skip signal is below threshold. The skip signal is
+    ``session_start_gate_violations / loops`` over the trailing 7 days — the
+    fraction of agent activity that reached for a quality tool before
+    ``tapps_session_start`` ran. Returns ``(should_promote, telemetry)`` with a
+    ``reason`` string so callers can log the decision.
+    """
+    stats = compute_rolling_stats(project_root)
+    violations = count_session_start_gate_violations(project_root)
+    loops = int(stats.get("loops", 0))
+    skip_rate = (violations / loops) if loops else 0.0
+    telemetry = {
+        **stats,
+        "session_start_gate_violations": violations,
+        "session_start_skip_rate": skip_rate,
+    }
+    if not auto_promote_enabled:
+        return False, {**telemetry, "reason": "auto_promote_disabled"}
+    if current_mode != "warn":
+        return False, {**telemetry, "reason": f"current_mode={current_mode}"}
+    if loops < _PROMOTE_WINDOW_DAYS:
+        return False, {**telemetry, "reason": "insufficient_loops"}
+    if skip_rate >= _PROMOTE_THRESHOLD:
+        return False, {**telemetry, "reason": "skip_rate_above_threshold"}
+    return True, {**telemetry, "reason": "ready_to_promote"}
+
+
 def compute_gate_pass_rate_7d(project_root: Path) -> float | None:
     """Return 7-day quality gate pass rate from execution metrics JSONL.
 
@@ -611,6 +684,7 @@ __all__ = [
     "compute_gate_pass_rate_7d",
     "compute_recent_edit_loop_stats",
     "compute_rolling_stats",
+    "count_session_start_gate_violations",
     "extract_skill_name",
     "is_reliable_edit_loop_row",
     "is_scoped_gate_edit",
@@ -623,4 +697,5 @@ __all__ = [
     "resolve_transcript_from_payload",
     "scoped_source_edits",
     "should_auto_promote_cache_gate",
+    "should_auto_promote_session_start_gate",
 ]
