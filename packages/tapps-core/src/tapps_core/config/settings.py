@@ -1131,6 +1131,19 @@ class TappsMCPSettings(BaseSettings):
         ),
     )
 
+    # Auto-promote the session-start gate warn→block on clean telemetry.
+    session_start_gate_auto_promote: bool = Field(
+        default=True,
+        description=(
+            "When true (default), tapps_upgrade promotes session_start_gate "
+            "from 'warn' to 'block' once a project's rolling 7-day session-start "
+            "skip rate falls below 5% (telemetry from "
+            ".tapps-mcp/.session-start-gate-violations.jsonl over loop-metrics "
+            "activity). Set false to disable auto-promotion. Mirrors "
+            "linear_enforce_cache_gate_auto_promote (TAP-1333)."
+        ),
+    )
+
     # Cursor stop completion gate (TAP-3921) — warn-mode telemetry + optional followup
     cursor_stop_completion_gate: Literal["off", "warn", "block"] | None = Field(
         default=None,

@@ -12,11 +12,13 @@ from tapps_mcp.tools.loop_metrics import (
     aggregate_skills_used,
     compute_gate_pass_rate_7d,
     compute_rolling_stats,
+    count_session_start_gate_violations,
     extract_skill_name,
     parse_transcript_loop_metrics,
     read_loop_metrics,
     record_loop_metrics_from_hook_payload,
     should_auto_promote_cache_gate,
+    should_auto_promote_session_start_gate,
 )
 
 
@@ -154,6 +156,86 @@ class TestShouldAutoPromoteCacheGate:
         )
         assert promote is False
         assert telemetry["reason"] == "insufficient_loops"
+
+
+def _write_ss_violations(path: Path, count: int, *, iso_ts: str) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    lines = [
+        json.dumps({"ts": iso_ts, "tool": "mcp__nlt-build__tapps_quick_check", "mode": "warn"})
+        for _ in range(count)
+    ]
+    path.write_text("\n".join(lines) + ("\n" if lines else ""), encoding="utf-8")
+
+
+class TestCountSessionStartGateViolations:
+    def test_missing_log_returns_zero(self, tmp_path: Path) -> None:
+        assert count_session_start_gate_violations(tmp_path) == 0
+
+    def test_counts_recent_only(self, tmp_path: Path) -> None:
+        from datetime import UTC, datetime, timedelta
+
+        log = tmp_path / ".tapps-mcp" / ".session-start-gate-violations.jsonl"
+        log.parent.mkdir(parents=True, exist_ok=True)
+        recent = datetime.now(tz=UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
+        old = (datetime.now(tz=UTC) - timedelta(days=30)).strftime("%Y-%m-%dT%H:%M:%SZ")
+        log.write_text(
+            json.dumps({"ts": recent}) + "\n" + json.dumps({"ts": old}) + "\n",
+            encoding="utf-8",
+        )
+        assert count_session_start_gate_violations(tmp_path) == 1
+
+
+class TestShouldAutoPromoteSessionStartGate:
+    def test_disabled_when_flag_off(self, tmp_path: Path) -> None:
+        promote, telemetry = should_auto_promote_session_start_gate(
+            tmp_path, current_mode="warn", auto_promote_enabled=False
+        )
+        assert promote is False
+        assert telemetry["reason"] == "auto_promote_disabled"
+
+    def test_not_promoted_from_block(self, tmp_path: Path) -> None:
+        promote, telemetry = should_auto_promote_session_start_gate(
+            tmp_path, current_mode="block", auto_promote_enabled=True
+        )
+        assert promote is False
+        assert telemetry["reason"] == "current_mode=block"
+
+    def test_insufficient_loops(self, tmp_path: Path) -> None:
+        now = int(time.time())
+        metrics = tmp_path / ".tapps-mcp" / "loop-metrics.jsonl"
+        _write_metrics(metrics, [{"ts": now, "mcp_calls": 1}])
+        promote, telemetry = should_auto_promote_session_start_gate(
+            tmp_path, current_mode="warn", auto_promote_enabled=True
+        )
+        assert promote is False
+        assert telemetry["reason"] == "insufficient_loops"
+
+    def test_promotes_when_clean(self, tmp_path: Path) -> None:
+        now = int(time.time())
+        metrics = tmp_path / ".tapps-mcp" / "loop-metrics.jsonl"
+        # 20 loops in-window, zero session-start violations → clean.
+        _write_metrics(metrics, [{"ts": now - i, "mcp_calls": 1} for i in range(20)])
+        promote, telemetry = should_auto_promote_session_start_gate(
+            tmp_path, current_mode="warn", auto_promote_enabled=True
+        )
+        assert promote is True
+        assert telemetry["reason"] == "ready_to_promote"
+        assert telemetry["session_start_gate_violations"] == 0
+
+    def test_stays_warn_when_skip_rate_high(self, tmp_path: Path) -> None:
+        from datetime import UTC, datetime
+
+        now = int(time.time())
+        metrics = tmp_path / ".tapps-mcp" / "loop-metrics.jsonl"
+        _write_metrics(metrics, [{"ts": now - i, "mcp_calls": 1} for i in range(10)])
+        # 5 violations / 10 loops = 50% skip rate → above 5% threshold.
+        log = tmp_path / ".tapps-mcp" / ".session-start-gate-violations.jsonl"
+        _write_ss_violations(log, 5, iso_ts=datetime.now(tz=UTC).strftime("%Y-%m-%dT%H:%M:%SZ"))
+        promote, telemetry = should_auto_promote_session_start_gate(
+            tmp_path, current_mode="warn", auto_promote_enabled=True
+        )
+        assert promote is False
+        assert telemetry["reason"] == "skip_rate_above_threshold"
 
 
 class TestComputeGatePassRate7d:

@@ -1124,6 +1124,29 @@ def _upgrade_claude_code_live(
                 result["auto_promote"]["cache_gate"]["to"] = "block"
         except Exception:
             pass
+        # Same auto-promote for the session-start gate: warn → block once the
+        # 7-day session-start skip rate is clean.
+        try:
+            from tapps_core.config.settings import load_settings as _ls
+            from tapps_mcp.tools.loop_metrics import (
+                should_auto_promote_session_start_gate,
+            )
+
+            _settings = _ls()
+            _auto_ss = getattr(_settings, "session_start_gate_auto_promote", True)
+            promote_ss, telemetry_ss = should_auto_promote_session_start_gate(
+                project_root,
+                current_mode=session_start_gate,
+                auto_promote_enabled=_auto_ss,
+            )
+            result.setdefault("auto_promote", {})["session_start_gate"] = telemetry_ss
+            if promote_ss:
+                session_start_gate = "block"
+                result["auto_promote"]["session_start_gate"]["promoted"] = True
+                result["auto_promote"]["session_start_gate"]["from"] = "warn"
+                result["auto_promote"]["session_start_gate"]["to"] = "block"
+        except Exception:
+            pass
         try:
             hooks_result = generate_claude_hooks(
                 project_root,
