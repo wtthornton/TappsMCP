@@ -30,7 +30,7 @@ The MCP server is split across ten files (server.py + 9 modules) sharing the sam
 - **`server_scoring_tools.py`** -- `tapps_score_file`, `tapps_quality_gate`, `tapps_quick_check`
 - **`server_pipeline_tools.py`** -- `tapps_validate_changed`, `tapps_session_start`, `tapps_init`, `tapps_set_engagement_level`, `tapps_upgrade`, `tapps_doctor`, `tapps_pipeline`, `tapps_decompose`
 - **`server_metrics_tools.py`** -- `tapps_dashboard`, `tapps_stats`, `tapps_feedback`
-- **`server_memory_tools.py`** -- `tapps_memory` (42 actions)
+- **`server_memory_tools.py`** -- `tapps_memory` (44 actions)
 - **`server_analysis_tools.py`** -- `tapps_session_notes`, `tapps_impact_analysis`, `tapps_report`, `tapps_dead_code`, `tapps_dependency_scan`, `tapps_dependency_graph`, `tapps_audit_campaign`
 - **`server_linear_tools.py`** -- `tapps_linear_snapshot_get`, `tapps_linear_snapshot_put`, `tapps_linear_snapshot_invalidate`, `tapps_linear_count` (cache-first Linear read path; see [`.claude/rules/linear-standards.md`](../.claude/rules/linear-standards.md))
 - **`server_release_tools.py`** -- `tapps_release_update` (builds release-update payload for the `linear-release-update` skill)

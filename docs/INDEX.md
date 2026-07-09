@@ -21,7 +21,7 @@
 - [Configuration Reference](CONFIG_REFERENCE.md) — TappsMCP is configured via `.tapps-mcp.yaml` in the project root. Settings can also be overridden with environment va... *(updated 2026-06-22)*
 - [Field Report: TappsMCP + DocsMCP Full-Session Usage](FEEDBACK_2026-04-06_agentforge-cleanup-session.md) — **Date:** 2026-04-06 *(updated 2026-04-06)*
 - [tapps-mcp — Documentation Index](INDEX.md) — **138 documents** across **9 categories** *(updated 2026-06-22)*
-- [TappsMCP Memory Reference](MEMORY_REFERENCE.md) — Complete reference for TappsMCP **shared brain memory** — **42 actions** when accessed via CLI or the `nlt-memory` MC... *(updated 2026-06-16)*
+- [TappsMCP Memory Reference](MEMORY_REFERENCE.md) — Complete reference for TappsMCP **shared brain memory** — **44 actions** when accessed via CLI or the `nlt-memory` MC... *(updated 2026-06-16)*
 - [Skill Authoring Conventions](SKILL_AUTHORING.md) — Reference commit: mattpocock/skills@b8be62f *(updated 2026-05-27)*
 - [TAP-967: 2-Week `list_issues` Call-Count Measurement Report](TAP-967-measurement.md) — **Measurement date:** 2026-05-07 *(updated 2026-06-13)*
 - [`packages.docs-mcp.src.docs_mcp`](api/docs-mcp.md) — Docs MCP: Documentation MCP server for the Tapps platform. *(updated 2026-06-22)*

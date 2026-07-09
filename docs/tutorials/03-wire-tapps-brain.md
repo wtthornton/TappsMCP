@@ -119,5 +119,5 @@ The four pieces that have to line up: brain HTTP service running (or in-process 
 ## Going further
 
 - [docs/operations/CONSUMER-REPO-BRAIN-WIRING.md](../operations/CONSUMER-REPO-BRAIN-WIRING.md) — per-repo wiring checklist (bootstrap, registration, verification).
-- [docs/MEMORY_REFERENCE.md](../MEMORY_REFERENCE.md) — full memory reference (42 actions, tier and scope rules, federation).
+- [docs/MEMORY_REFERENCE.md](../MEMORY_REFERENCE.md) — full memory reference (44 actions, tier and scope rules, federation).
 - [docs/operations/TAPPS-BRAIN-LOCAL-SETUP.md](../operations/TAPPS-BRAIN-LOCAL-SETUP.md) — production-grade setup, multi-project federation, operational notes.

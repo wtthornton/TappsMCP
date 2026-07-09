@@ -141,7 +141,7 @@ Your project may have two complementary memory systems:
 
 REQUIRED: Use `uv run tapps-mcp memory save|get|search` for architecture decisions and quality patterns. Pin scope keys under `memory_hooks.auto_recall.recall_keys`.
 
-### Memory action reference (42 actions)
+### Memory action reference (44 actions)
 
 **Core:** `save` (key, value, tier, scope, tags), `save_bulk` (up to 50 entries), `get` (by key), `list` (filter by scope/tier/tags), `delete` (by key)
 
@@ -266,7 +266,7 @@ Sixteen core tapps-* SKILL.md files per platform in `.claude/skills/` or `.curso
 - **tapps-review-pipeline** - Orchestrate a parallel review-fix-validate pipeline
 - **tapps-research** - Look up library documentation and research best practices
 - **tapps-security** - Run a comprehensive security audit with vulnerability scanning
-- **tapps-memory** - Manage shared project memory (42 actions, cross-session)
+- **tapps-memory** - Manage shared project memory (44 actions, cross-session)
 - **tapps-tool-reference** - Full per-tool reference and when-to-use guidance
 - **tapps-init** - Bootstrap TappsMCP scaffolding in a project
 - **tapps-upgrade** - Reinstall global CLIs from latest source, restart MCP, run `tapps-mcp upgrade` + doctor + checklist
