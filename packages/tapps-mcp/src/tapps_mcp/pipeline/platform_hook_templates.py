@@ -220,9 +220,9 @@ fi
 # accumulation. Claude Code spawns a new tapps-mcp/docsmcp process per session
 # but does not consistently reap old children — after several sessions this
 # becomes a significant resource and Postgres connection leak.
-""" + _mcp_zombie_cleanup_bash(
-    reap_nlt_duplicates=True, reap_stale_nlt_profiles=True
-) + """\
+"""
+    + _mcp_zombie_cleanup_bash(reap_nlt_duplicates=True, reap_stale_nlt_profiles=True)
+    + """\
 # TAP-1927: Pre-warm the brain tools-list cache so _negotiate_profile_locked
 # can skip the live MCP tools/list round-trip on the first bridge call.
 # Runs in the background (does not block session start) and is best-effort
@@ -261,6 +261,10 @@ exit 0
 # Re-injects TappsMCP context after context compaction.
 INPUT=$(cat)
 echo "[TappsMCP] Context was compacted — re-injecting TappsMCP awareness."
+# Compaction can drop the original session_start result from context. Re-prompt
+# so the agent re-establishes it; the session-start gate (if enabled) already
+# has its per-session sentinel from the initial run, so no gate re-trip occurs.
+echo "If tapps_session_start context was lost in compaction, call tapps_session_start() again."
 echo "Remember: use tapps_quick_check after editing Python files."
 echo "Run tapps_validate_changed before declaring work complete."
 PROJECT="${TAPPS_PROJECT_ROOT:-${CLAUDE_PROJECT_DIR:-.}}"
@@ -293,10 +297,10 @@ case "$FILE" in
   *.py|*.pyi|*.ts|*.tsx|*.js|*.jsx|*.go|*.rs)
 """
         + f'    echo "{POST_EDIT_QUICK_CHECK_BASH}" >&2\n'
-        + "    if [ -n \"$LIBS\" ]; then\n"
+        + '    if [ -n "$LIBS" ]; then\n'
         + f'      echo "{POST_EDIT_IMPORT_LOOKUP_BASH}" >&2\n'
         + "    fi\n"
-        + "    if [ \"$API\" = \"1\" ]; then\n"
+        + '    if [ "$API" = "1" ]; then\n'
         + f'      echo "{POST_EDIT_PUBLIC_API_DRIFT_BASH}" >&2\n'
         + f'      echo "{POST_EDIT_PUBLIC_API_CALL_GRAPH_BASH}" >&2\n'
         + """    fi
@@ -1473,15 +1477,15 @@ if ($py) {{
 }}
 switch -Regex ($file) {{
     '\\.(py|pyi|ts|tsx|js|jsx|go|rs)$' {{
-        Write-Output "{POST_EDIT_QUICK_CHECK_BASH.replace('$FILE', '$file')}"
+        Write-Output "{POST_EDIT_QUICK_CHECK_BASH.replace("$FILE", "$file")}"
         if ($libs) {{
             [Console]::Error.WriteLine(
-                "{POST_EDIT_IMPORT_LOOKUP_BASH.replace('$LIBS', '$libs')}"
+                "{POST_EDIT_IMPORT_LOOKUP_BASH.replace("$LIBS", "$libs")}"
             )
         }}
         if ($api -eq '1') {{
-            [Console]::Error.WriteLine("{POST_EDIT_PUBLIC_API_DRIFT_BASH.replace('$FILE', '$file')}")
-            [Console]::Error.WriteLine("{POST_EDIT_PUBLIC_API_CALL_GRAPH_BASH.replace('$FILE', '$file')}")
+            [Console]::Error.WriteLine("{POST_EDIT_PUBLIC_API_DRIFT_BASH.replace("$FILE", "$file")}")
+            [Console]::Error.WriteLine("{POST_EDIT_PUBLIC_API_CALL_GRAPH_BASH.replace("$FILE", "$file")}")
         }}
     }}
     default {{
@@ -1550,10 +1554,10 @@ case "$FILE" in
   *.py|*.pyi|*.ts|*.tsx|*.js|*.jsx|*.go|*.rs)
 """
         + f'    echo "{POST_EDIT_QUICK_CHECK_BASH}" >&2\n'
-        + "    if [ -n \"$LIBS\" ]; then\n"
+        + '    if [ -n "$LIBS" ]; then\n'
         + f'      echo "{POST_EDIT_IMPORT_LOOKUP_BASH}" >&2\n'
         + "    fi\n"
-        + "    if [ \"$API\" = \"1\" ]; then\n"
+        + '    if [ "$API" = "1" ]; then\n'
         + f'      echo "{POST_EDIT_PUBLIC_API_DRIFT_BASH}" >&2\n'
         + f'      echo "{POST_EDIT_PUBLIC_API_CALL_GRAPH_BASH}" >&2\n'
         + """    fi
@@ -1745,9 +1749,7 @@ def _format_recall_key_cli_args(recall_keys: list[str] | None) -> str:
     """Shell-safe ``--recall-key`` flags embedded in generated hook scripts."""
     if not recall_keys:
         return ""
-    return " ".join(
-        f"--recall-key {shlex.quote(k.strip())}" for k in recall_keys if k.strip()
-    )
+    return " ".join(f"--recall-key {shlex.quote(k.strip())}" for k in recall_keys if k.strip())
 
 
 def _memory_auto_recall_script(
@@ -1756,7 +1758,7 @@ def _memory_auto_recall_script(
     min_prompt_length: int = 50,
     recall_keys: list[str] | None = None,
     *,
-    project_dir_expr: str = '${CLAUDE_PROJECT_DIR:-.}',
+    project_dir_expr: str = "${CLAUDE_PROJECT_DIR:-.}",
 ) -> str:
     """Return the bash script for memory auto-recall (Epic 65.4)."""
     recall_key_args = _format_recall_key_cli_args(recall_keys)
@@ -1806,7 +1808,7 @@ def _memory_auto_recall_script_ps(
     min_prompt_length: int = 50,
     recall_keys: list[str] | None = None,
     *,
-    project_dir_expr: str = '$env:CLAUDE_PROJECT_DIR',
+    project_dir_expr: str = "$env:CLAUDE_PROJECT_DIR",
 ) -> str:
     """Return the PowerShell script for memory auto-recall (Epic 65.4)."""
     recall_key_args = _format_recall_key_cli_args(recall_keys)
@@ -2633,8 +2635,7 @@ exit 2
 # the snapshot tools use, extracts the issues array from tool_response, and
 # writes the cache file directly. The cooperating server-side
 # tapps_linear_snapshot_get reads it on the next call.
-LINEAR_CACHE_GATE_POST_LIST_SCRIPT = (
-    """\
+LINEAR_CACHE_GATE_POST_LIST_SCRIPT = """\
 #!/usr/bin/env bash
 # TappsMCP PostToolUse hook — Linear list_issues auto-populate (TAP-1412)
 # After a successful mcp__plugin_linear_linear__list_issues call, write the
@@ -2756,7 +2757,6 @@ except OSError:
 " 2>/dev/null
 exit 0
 """
-)
 
 LINEAR_CACHE_GATE_HOOKS_CONFIG: dict[str, list[dict[str, Any]]] = {
     "PreToolUse": [
@@ -2967,6 +2967,244 @@ def render_cache_gate_scripts(
     chosen = mode if mode in ("warn", "block") else "warn"
     src = LINEAR_CACHE_GATE_SCRIPTS_PS if win else LINEAR_CACHE_GATE_SCRIPTS
     return {name: body.replace("__CACHE_GATE_MODE__", chosen) for name, body in src.items()}
+
+
+# ---------------------------------------------------------------------------
+# Session-start enforcement gate — opt-in via session_start_gate (off|warn|block)
+# ---------------------------------------------------------------------------
+#
+# The SessionStart hook can only *prompt* the agent to call tapps_session_start;
+# a hook cannot execute an MCP tool. When the agent ignores the prompt, every
+# downstream quality tool runs in degraded mode. This gate makes the call
+# enforceable:
+#   * tapps-post-session-start.sh (PostToolUse) writes a per-Claude-session
+#     ".session-start-done-<SID>" sentinel AFTER tapps_session_start actually
+#     returns — proving the *tool* ran, not merely that the hook fired.
+#   * tapps-pre-session-start-gate.sh (PreToolUse) blocks the TappsMCP quality
+#     tool family until that tool-written sentinel exists for the current SID.
+# session_start itself + cheap discovery/diagnostic tools are always allowed so
+# the gate can never deadlock a fresh or broken session.
+
+SESSION_START_GATE_POST_SCRIPT = """\
+#!/usr/bin/env bash
+# TappsMCP PostToolUse hook — session-start sentinel writer.
+# Writes .session-start-done-<SID> AFTER tapps_session_start actually returns,
+# proving the tool ran (not merely that the SessionStart hook fired). The
+# pre-session-start gate reads this sentinel to release TappsMCP quality tools.
+INPUT=$(cat)
+TOOL=$(printf '%s' "$INPUT" | sed -n 's/.*"tool_name"[[:space:]]*:[[:space:]]*"\\([^"]*\\)".*/\\1/p' | head -n1)
+case "$TOOL" in
+  *tapps_session_start) ;;
+  *) exit 0 ;;
+esac
+SID=$(printf '%s' "$INPUT" | sed -n 's/.*"session_id"[[:space:]]*:[[:space:]]*"\\([^"]*\\)".*/\\1/p' | head -n1)
+[ -z "$SID" ] && exit 0
+ROOT="${CLAUDE_PROJECT_DIR:-$PWD}"
+mkdir -p "$ROOT/.tapps-mcp" 2>/dev/null
+: > "$ROOT/.tapps-mcp/.session-start-done-$SID" 2>/dev/null
+# Best-effort GC of sentinels left by prior Claude sessions (older than 1 day).
+find "$ROOT/.tapps-mcp" -maxdepth 1 -name '.session-start-done-*' -mtime +1 -delete 2>/dev/null || true
+exit 0
+"""
+
+SESSION_START_GATE_PRE_SCRIPT = """\
+#!/usr/bin/env bash
+# TappsMCP PreToolUse hook — session-start enforcement gate.
+# Blocks TappsMCP quality tools until tapps_session_start has actually run this
+# Claude session (proven by a tool-written .session-start-done-<SID> sentinel,
+# not merely the SessionStart hook firing). Mode is baked in at install time:
+# "warn" logs to .session-start-gate-violations.jsonl and allows; "block"
+# exits 2. Bypass with TAPPS_SKIP_SESSION_START_GATE=1 (logged to
+# .tapps-mcp/.bypass-log.jsonl).
+MODE="__SESSION_START_GATE_MODE__"
+INPUT=$(cat)
+TOOL=$(printf '%s' "$INPUT" | sed -n 's/.*"tool_name"[[:space:]]*:[[:space:]]*"\\([^"]*\\)".*/\\1/p' | head -n1)
+SID=$(printf '%s' "$INPUT" | sed -n 's/.*"session_id"[[:space:]]*:[[:space:]]*"\\([^"]*\\)".*/\\1/p' | head -n1)
+# Never gate session_start itself or cheap discovery/diagnostic tools — they
+# establish the context or must stay reachable to repair a broken setup.
+case "$TOOL" in
+  *tapps_session_start|*tapps_server_info|*tapps_doctor|*tapps_usage|*tapps_stats) exit 0 ;;
+esac
+# Only gate the TappsMCP quality tool family (the matcher already scopes this;
+# re-checked so a stray broad matcher can't over-block foreign tools).
+case "$TOOL" in
+  mcp__nlt-build__*|mcp__nlt-memory__*|mcp__nlt-setup__*|mcp__nlt-code-quality__*|mcp__nlt-platform-admin__*|mcp__tapps-mcp__*) ;;
+  *) exit 0 ;;
+esac
+[ "$MODE" = "off" ] && exit 0
+ROOT="${CLAUDE_PROJECT_DIR:-$PWD}"
+if [ "${TAPPS_SKIP_SESSION_START_GATE:-0}" = "1" ]; then
+  mkdir -p "$ROOT/.tapps-mcp" 2>/dev/null
+  echo "{\\"ts\\":\\"$(date -u +%FT%TZ)\\",\\"bypass\\":\\"TAPPS_SKIP_SESSION_START_GATE\\",\\"tool\\":\\"${TOOL}\\"}" \\
+    >> "$ROOT/.tapps-mcp/.bypass-log.jsonl" 2>/dev/null
+  exit 0
+fi
+# Unidentifiable session — cannot prove state; fail open rather than deadlock.
+if [ -z "$SID" ]; then
+  exit 0
+fi
+if [ -f "$ROOT/.tapps-mcp/.session-start-done-$SID" ]; then
+  exit 0
+fi
+mkdir -p "$ROOT/.tapps-mcp" 2>/dev/null
+echo "{\\"ts\\":\\"$(date -u +%FT%TZ)\\",\\"tool\\":\\"${TOOL}\\",\\"mode\\":\\"${MODE}\\",\\"sid\\":\\"${SID}\\"}" \\
+  >> "$ROOT/.tapps-mcp/.session-start-gate-violations.jsonl" 2>/dev/null
+if [ "$MODE" = "warn" ]; then
+  cat >&2 <<MSG
+[TappsMCP refusal layer=hook-only/defense-in-depth] session-start gate (warn) — ${TOOL} was called before tapps_session_start ran this session.
+Call tapps_session_start() first: it bootstraps project context, the checker matrix, and brain auth. Without it, quality verdicts are degraded.
+This call is allowed (warn mode) but logged to .tapps-mcp/.session-start-gate-violations.jsonl.
+MSG
+  exit 0
+fi
+cat >&2 <<MSG
+[TappsMCP refusal layer=hook-only/defense-in-depth] session-start gate (block) — ${TOOL} was called before tapps_session_start ran this session.
+Call tapps_session_start() NOW, then retry: it bootstraps project context, the checker matrix, and brain auth. TappsMCP tools run degraded without it.
+Emergency bypass: TAPPS_SKIP_SESSION_START_GATE=1 (logged to .tapps-mcp/.bypass-log.jsonl).
+MSG
+exit 2
+"""
+
+SESSION_START_GATE_SCRIPTS: dict[str, str] = {
+    "tapps-pre-session-start-gate.sh": SESSION_START_GATE_PRE_SCRIPT,
+    "tapps-post-session-start.sh": SESSION_START_GATE_POST_SCRIPT,
+}
+
+SESSION_START_GATE_HOOKS_CONFIG: dict[str, list[dict[str, Any]]] = {
+    "PreToolUse": [
+        {
+            "matcher": "mcp__(nlt-build|nlt-memory|nlt-setup|nlt-code-quality|nlt-platform-admin|tapps-mcp)__.*",
+            "hooks": [
+                {
+                    "type": "command",
+                    "command": ".claude/hooks/tapps-pre-session-start-gate.sh",
+                },
+            ],
+        },
+    ],
+    "PostToolUse": [
+        {
+            "matcher": "mcp__.*__tapps_session_start",
+            "hooks": [
+                {
+                    "type": "command",
+                    "command": ".claude/hooks/tapps-post-session-start.sh",
+                },
+            ],
+        },
+    ],
+}
+
+SESSION_START_GATE_POST_SCRIPT_PS = """\
+# TappsMCP PostToolUse hook — session-start sentinel writer.
+$stdin = [Console]::In.ReadToEnd()
+$tool = ''; $sid = ''
+try {
+    $d = $stdin | ConvertFrom-Json
+    if ($d.tool_name) { $tool = [string]$d.tool_name }
+    elseif ($d.toolName) { $tool = [string]$d.toolName }
+    if ($d.session_id) { $sid = [string]$d.session_id }
+    elseif ($d.sessionId) { $sid = [string]$d.sessionId }
+} catch { exit 0 }
+if ($tool -notmatch 'tapps_session_start$') { exit 0 }
+if (-not $sid) { exit 0 }
+$root = if ($env:CLAUDE_PROJECT_DIR) { $env:CLAUDE_PROJECT_DIR } else { $PWD.Path }
+$dir = Join-Path $root '.tapps-mcp'
+if (-not (Test-Path $dir)) { New-Item -ItemType Directory -Force -Path $dir | Out-Null }
+Set-Content -Path (Join-Path $dir ".session-start-done-${sid}") -Value '' -Encoding UTF8
+Get-ChildItem -Path $dir -Filter '.session-start-done-*' -ErrorAction SilentlyContinue |
+    Where-Object { $_.LastWriteTime -lt (Get-Date).AddDays(-1) } |
+    Remove-Item -Force -ErrorAction SilentlyContinue
+exit 0
+"""
+
+SESSION_START_GATE_PRE_SCRIPT_PS = """\
+# TappsMCP PreToolUse hook — session-start enforcement gate.
+$mode = '__SESSION_START_GATE_MODE__'
+$stdin = [Console]::In.ReadToEnd()
+$tool = ''; $sid = ''
+try {
+    $d = $stdin | ConvertFrom-Json
+    if ($d.tool_name) { $tool = [string]$d.tool_name }
+    elseif ($d.toolName) { $tool = [string]$d.toolName }
+    if ($d.session_id) { $sid = [string]$d.session_id }
+    elseif ($d.sessionId) { $sid = [string]$d.sessionId }
+} catch { exit 0 }
+if ($tool -match 'tapps_(session_start|server_info|doctor|usage|stats)$') { exit 0 }
+if ($tool -notmatch '^mcp__(nlt-build|nlt-memory|nlt-setup|nlt-code-quality|nlt-platform-admin|tapps-mcp)__') { exit 0 }
+if ($mode -eq 'off') { exit 0 }
+$root = if ($env:CLAUDE_PROJECT_DIR) { $env:CLAUDE_PROJECT_DIR } else { $PWD.Path }
+$dir = Join-Path $root '.tapps-mcp'
+if ($env:TAPPS_SKIP_SESSION_START_GATE -eq '1') {
+    if (-not (Test-Path $dir)) { New-Item -ItemType Directory -Force -Path $dir | Out-Null }
+    Add-Content -Path (Join-Path $dir '.bypass-log.jsonl') -Value ("{`"ts`":`"" + (Get-Date -Format o) + "`",`"bypass`":`"TAPPS_SKIP_SESSION_START_GATE`",`"tool`":`"$tool`"}")
+    exit 0
+}
+if (-not $sid) { exit 0 }
+if (Test-Path (Join-Path $dir ".session-start-done-${sid}")) { exit 0 }
+if (-not (Test-Path $dir)) { New-Item -ItemType Directory -Force -Path $dir | Out-Null }
+Add-Content -Path (Join-Path $dir '.session-start-gate-violations.jsonl') -Value ("{`"ts`":`"" + (Get-Date -Format o) + "`",`"tool`":`"$tool`",`"mode`":`"$mode`",`"sid`":`"$sid`"}")
+if ($mode -eq 'warn') {
+    [Console]::Error.WriteLine("[TappsMCP refusal layer=hook-only/defense-in-depth] session-start gate (warn) — $tool called before tapps_session_start ran this session. Call tapps_session_start() first (logged to .session-start-gate-violations.jsonl).")
+    exit 0
+}
+[Console]::Error.WriteLine("[TappsMCP refusal layer=hook-only/defense-in-depth] session-start gate (block) — $tool called before tapps_session_start ran this session. Call tapps_session_start() NOW, then retry. Bypass: TAPPS_SKIP_SESSION_START_GATE=1.")
+exit 2
+"""
+
+SESSION_START_GATE_SCRIPTS_PS: dict[str, str] = {
+    "tapps-pre-session-start-gate.ps1": SESSION_START_GATE_PRE_SCRIPT_PS,
+    "tapps-post-session-start.ps1": SESSION_START_GATE_POST_SCRIPT_PS,
+}
+
+SESSION_START_GATE_HOOKS_CONFIG_PS: dict[str, list[dict[str, Any]]] = {
+    "PreToolUse": [
+        {
+            "matcher": "mcp__(nlt-build|nlt-memory|nlt-setup|nlt-code-quality|nlt-platform-admin|tapps-mcp)__.*",
+            "hooks": [
+                {
+                    "type": "command",
+                    "command": (
+                        "powershell -NoProfile -ExecutionPolicy Bypass"
+                        " -File .claude/hooks/tapps-pre-session-start-gate.ps1"
+                    ),
+                },
+            ],
+        },
+    ],
+    "PostToolUse": [
+        {
+            "matcher": "mcp__.*__tapps_session_start",
+            "hooks": [
+                {
+                    "type": "command",
+                    "command": (
+                        "powershell -NoProfile -ExecutionPolicy Bypass"
+                        " -File .claude/hooks/tapps-post-session-start.ps1"
+                    ),
+                },
+            ],
+        },
+    ],
+}
+
+
+def render_session_start_gate_scripts(
+    mode: str,
+    *,
+    win: bool = False,
+) -> dict[str, str]:
+    """Return the session-start gate script set with the mode baked in.
+
+    ``mode`` must be ``"warn"`` or ``"block"``. ``"off"`` should be handled by
+    the caller (skip the install entirely); passing it here renders a safe
+    ``"warn"`` variant so a stray render call cannot accidentally produce a
+    block. Only the PreToolUse gate carries the ``__SESSION_START_GATE_MODE__``
+    placeholder; the sentinel writer is mode-independent.
+    """
+    chosen = mode if mode in ("warn", "block") else "warn"
+    src = SESSION_START_GATE_SCRIPTS_PS if win else SESSION_START_GATE_SCRIPTS
+    return {name: body.replace("__SESSION_START_GATE_MODE__", chosen) for name, body in src.items()}
 
 
 DESTRUCTIVE_GUARD_HOOKS_CONFIG_PS: dict[str, list[dict[str, Any]]] = {

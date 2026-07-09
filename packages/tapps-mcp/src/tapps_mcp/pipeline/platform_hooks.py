@@ -103,6 +103,12 @@ from tapps_mcp.pipeline.platform_hook_templates import (
     PS1_PREFIX,
 )
 from tapps_mcp.pipeline.platform_hook_templates import (
+    SESSION_START_GATE_HOOKS_CONFIG as _SESSION_START_GATE_HOOKS_CONFIG,
+)
+from tapps_mcp.pipeline.platform_hook_templates import (
+    SESSION_START_GATE_HOOKS_CONFIG_PS as _SESSION_START_GATE_HOOKS_CONFIG_PS,
+)
+from tapps_mcp.pipeline.platform_hook_templates import (
     SUPPORTED_CURSOR_HOOK_KEYS as _SUPPORTED_CURSOR_HOOK_KEYS,
 )
 from tapps_mcp.pipeline.platform_hook_templates import (
@@ -125,6 +131,9 @@ from tapps_mcp.pipeline.platform_hook_templates import (
 )
 from tapps_mcp.pipeline.platform_hook_templates import (
     render_cache_gate_scripts as _render_cache_gate_scripts,
+)
+from tapps_mcp.pipeline.platform_hook_templates import (
+    render_session_start_gate_scripts as _render_session_start_gate_scripts,
 )
 
 
@@ -255,6 +264,9 @@ def _filter_scripts(
         "tapps-post-linear-snapshot-get": "PostToolUse",
         # TAP-1412 Linear list_issues auto-populate
         "tapps-post-linear-list": "PostToolUse",
+        # Session-start enforcement gate
+        "tapps-pre-session-start-gate": "PreToolUse",
+        "tapps-post-session-start": "PostToolUse",
         # TAP-956 reactive-event scripts
         "tapps-cwd-changed": "CwdChanged",
         "tapps-permission-denied": "PermissionDenied",
@@ -274,9 +286,7 @@ def _filter_scripts(
 
 
 _HOOK_VERSION_MARKER_PREFIX = "# tapps-mcp-hook-version:"
-_HOOK_VERSION_MARKER_RE = re.compile(
-    r"^\s*#\s*tapps-mcp-hook-version:\s*([\w.+-]+)", re.MULTILINE
-)
+_HOOK_VERSION_MARKER_RE = re.compile(r"^\s*#\s*tapps-mcp-hook-version:\s*([\w.+-]+)", re.MULTILINE)
 _HOOK_CONTENT_SHA_RE = re.compile(
     r"^\s*#\s*tapps-mcp-hook-content-sha:\s*([0-9a-f]{8})", re.MULTILINE
 )
@@ -309,8 +319,7 @@ def _inject_hook_version_marker(content: str, version: str) -> str:
         content = "".join(out)
 
     marker_line = (
-        f"{_HOOK_VERSION_MARKER_PREFIX} {version}\n"
-        f"# tapps-mcp-hook-content-sha: {content_sha}\n"
+        f"{_HOOK_VERSION_MARKER_PREFIX} {version}\n# tapps-mcp-hook-content-sha: {content_sha}\n"
     )
     # Preserve shebang on line 1 if present; marker goes right after.
     lines = content.splitlines(keepends=True)
@@ -671,6 +680,7 @@ def generate_claude_hooks(
     destructive_guard: bool = False,
     linear_enforce_gate: bool = False,
     linear_enforce_cache_gate: str = "off",
+    session_start_gate: str = "off",
     reactive_hooks: dict[str, bool] | None = None,
 ) -> dict[str, Any]:
     """Generate Claude Code hook scripts and settings.json hooks config.
@@ -715,9 +725,24 @@ def generate_claude_hooks(
     # TAP-1224: cache-first read gate. "off" (default) installs nothing;
     # "warn" / "block" install the post-snapshot-get sentinel writer + the
     # pre-list gate, with the mode baked into the pre-list script.
-    cache_gate_mode = linear_enforce_cache_gate if linear_enforce_cache_gate in ("off", "warn", "block") else "off"
+    cache_gate_mode = (
+        linear_enforce_cache_gate
+        if linear_enforce_cache_gate in ("off", "warn", "block")
+        else "off"
+    )
     cache_gate_active = cache_gate_mode in ("warn", "block")
     if cache_gate_active:
+        allowed_events.add("PreToolUse")
+        allowed_events.add("PostToolUse")
+    # Session-start enforcement gate. "off" (default) installs nothing; "warn"
+    # logs violations and allows; "block" exits 2 on any TappsMCP quality tool
+    # called before tapps_session_start ran this session. The mode is baked
+    # into the pre-gate script; the sentinel writer is mode-independent.
+    session_gate_mode = (
+        session_start_gate if session_start_gate in ("off", "warn", "block") else "off"
+    )
+    session_gate_active = session_gate_mode in ("warn", "block")
+    if session_gate_active:
         allowed_events.add("PreToolUse")
         allowed_events.add("PostToolUse")
 
@@ -743,6 +768,12 @@ def generate_claude_hooks(
         base_scripts = {**base_scripts, **cg_scripts}
         for event, entries in cg_config.items():
             hooks_config.setdefault(event, []).extend(entries)
+    if session_gate_active:
+        sg_scripts = _render_session_start_gate_scripts(session_gate_mode, win=win)
+        sg_config = _SESSION_START_GATE_HOOKS_CONFIG_PS if win else _SESSION_START_GATE_HOOKS_CONFIG
+        base_scripts = {**base_scripts, **sg_scripts}
+        for event, entries in sg_config.items():
+            hooks_config.setdefault(event, []).extend(entries)
 
     # TAP-956: opt-in reactive-event hooks (CwdChanged, PermissionDenied,
     # sessionTitle, Worktree*). Each flag independently ships its script +
@@ -760,9 +791,7 @@ def generate_claude_hooks(
             **base_scripts,
             **_reactive_hook_scripts(reactive_flags, win=win),
         }
-        for event, entries in _reactive_hooks_config(
-            reactive_flags, win=win
-        ).items():
+        for event, entries in _reactive_hooks_config(reactive_flags, win=win).items():
             hooks_config.setdefault(event, []).extend(entries)
             allowed_events.add(event)
 
@@ -814,6 +843,7 @@ def generate_claude_hooks(
         "destructive_guard": destructive_guard,
         "linear_enforce_gate": linear_gate_active,
         "linear_enforce_cache_gate": cache_gate_mode,
+        "session_start_gate": session_gate_mode,
     }
 
 
@@ -931,9 +961,7 @@ def generate_cursor_hooks(
     config = _parse_cursor_hooks_file(hooks_file)
 
     existing_hooks = _normalize_cursor_hooks_raw(config)
-    existing_hooks, merge_stats = merge_cursor_hooks_config(
-        existing_hooks, hooks_config, win=win
-    )
+    existing_hooks, merge_stats = merge_cursor_hooks_config(existing_hooks, hooks_config, win=win)
     hooks_added = merge_stats["hooks_added"]
     hooks_migrated = merge_stats["hooks_migrated"]
 
@@ -1085,9 +1113,7 @@ def _merge_cursor_hook_command_entries(
             and not _is_wrong_platform_command(entry.get("command", ""), win=win)
         ]
         existing_cmds = {
-            entry.get("command", "")
-            for entry in existing_hooks[event]
-            if isinstance(entry, dict)
+            entry.get("command", "") for entry in existing_hooks[event] if isinstance(entry, dict)
         }
         for entry in entries:
             cmd = entry.get("command", "")
@@ -1146,7 +1172,9 @@ def _generate_cursor_memory_auto_recall_hook(
             min_prompt_length=min_prompt_length,
             recall_keys=recall_keys,
         )
-        zombie_script_content = "# TappsMCP MCP zombie cleanup (Windows stub — run upgrade on Windows)\nexit 0\n"
+        zombie_script_content = (
+            "# TappsMCP MCP zombie cleanup (Windows stub — run upgrade on Windows)\nexit 0\n"
+        )
         hooks_config = _CURSOR_MEMORY_AUTO_RECALL_HOOKS_CONFIG_PS
     else:
         script_name = "tapps-memory-auto-recall.sh"

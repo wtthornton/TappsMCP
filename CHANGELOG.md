@@ -7,6 +7,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **Session-start enforcement gate** (`session_start_gate`, off|warn|block).
+  The `SessionStart` hook can only *prompt* the agent to call
+  `tapps_session_start` — a hook cannot execute an MCP tool — so the call was
+  effectively optional and often skipped, leaving downstream quality tools in
+  degraded mode. This adds an opt-in enforceable gate:
+  - `tapps-post-session-start.sh` (PostToolUse) writes a per-Claude-session
+    `.session-start-done-<session_id>` sentinel *after* `tapps_session_start`
+    returns — proving the tool ran, not merely that the hook fired.
+  - `tapps-pre-session-start-gate.sh` (PreToolUse) blocks the TappsMCP quality
+    tool family until that sentinel exists. `warn` logs to
+    `.tapps-mcp/.session-start-gate-violations.jsonl` and allows; `block` exits
+    2. `tapps_session_start` / `server_info` / `doctor` / `usage` / `stats` are
+    always allowed and unidentifiable sessions fail open, so the gate can never
+    deadlock a session. Bypass with `TAPPS_SKIP_SESSION_START_GATE=1` (logged).
+  - The `compact` SessionStart hook now re-prompts for `tapps_session_start`
+    after context compaction.
+  - Wired through `tapps_init`, `tapps_upgrade` (live + dry-run), and
+    `tapps doctor` (mode + 24-h violation count in the PreToolUse-matchers
+    check). Engagement-aware default: `warn` at high/medium, `off` at low.
+    New setting `session_start_gate` in `.tapps-mcp.yaml`; bash + PowerShell
+    variants ship together.
+
 ### Removed
 
 - **Dependabot generation** ([TAP-4624](https://linear.app/tappscodingagents/issue/TAP-4624)).
