@@ -152,7 +152,8 @@ def actual_hook_manifest() -> set[str]:
     src_path = REPO_ROOT / "packages/tapps-mcp/src/tapps_mcp/pipeline/upgrade.py"
     src = src_path.read_text(encoding="utf-8")
     match = re.search(
-        r"_CANONICAL_HOOK_MANIFEST:\s*frozenset\[str\]\s*=\s*frozenset\(\{(.*?)\}\)",
+        # Tolerate ruff's formatting: frozenset( <newline+indent> { ... } <newline> )
+        r"_CANONICAL_HOOK_MANIFEST:\s*frozenset\[str\]\s*=\s*frozenset\(\s*\{(.*?)\}\s*\)",
         src,
         re.DOTALL,
     )

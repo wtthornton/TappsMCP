@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [3.12.50] - 2026-07-09
+
 ### Added
 
 - **Session-start enforcement gate** (`session_start_gate`, off|warn|block).
@@ -30,6 +32,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     check). Engagement-aware default: `warn` at high/medium, `off` at low.
     New setting `session_start_gate` in `.tapps-mcp.yaml`; bash + PowerShell
     variants ship together.
+- **Session-start gate auto-promote** (`session_start_gate_auto_promote`,
+  default `true`). `tapps_upgrade` tightens `session_start_gate` from `warn` to
+  `block` once a project's rolling 7-day session-start skip rate
+  (violations/loops from `.session-start-gate-violations.jsonl`) falls below
+  5% — parity with `linear_enforce_cache_gate_auto_promote` (TAP-1333). Makes
+  the telemetry-first rollout self-completing. New helpers
+  `should_auto_promote_session_start_gate` /
+  `count_session_start_gate_violations` in `tools/loop_metrics.py`.
+
+### Fixed
+
+- **`scripts/bump-versions.py` manifest parser** — the `_CANONICAL_HOOK_MANIFEST`
+  regex assumed `frozenset({…})` on one line, but ruff reformats it to
+  `frozenset(\n    {…}\n)`, so `--patch` / `--check` failed with "Could not
+  locate _CANONICAL_HOOK_MANIFEST". Regex now tolerates the whitespace.
 
 ### Removed
 
