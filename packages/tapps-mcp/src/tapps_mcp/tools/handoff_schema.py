@@ -153,6 +153,15 @@ def parse_handoff_markdown(text: str) -> HandoffDocument:
     return doc
 
 
+# A success criterion that CLAIMS achievement ("MET", "criterion is met.")
+# while Open items remain is contradictory — that is what this warning catches.
+# Word-boundary match: the previous bare substring check tripped on ordinary
+# words containing "met" ("geometry >= 0.65", "metrics"). Forward-looking
+# conditional phrasing ("is met when X passes") describes the target, not a
+# claim, so "met" followed by a conditional connective is excluded.
+_MET_CLAIM = re.compile(r"\bmet\b(?!\s+(?:when|if|once|after|by|upon)\b)")
+
+
 def lint_handoff(
     doc: HandoffDocument,
     *,
@@ -178,7 +187,7 @@ def lint_handoff(
             result.warnings.append(f"Handoff Updated is older than {stale_days} days")
 
     success_text = " ".join(doc.success_criterion).lower()
-    if doc.open_items and "met" in success_text:
+    if doc.open_items and _MET_CLAIM.search(success_text):
         result.warnings.append("Success criterion says MET but Open items remain")
 
     return result
@@ -212,9 +221,9 @@ def load_and_lint_handoff(project_root: Path) -> tuple[HandoffDocument | None, H
 
 
 __all__ = [
+    "SESSION_HANDOFF_MEMORY_KEY",
     "HandoffDocument",
     "HandoffLintResult",
-    "SESSION_HANDOFF_MEMORY_KEY",
     "handoff_path",
     "handoff_sections_from_doc",
     "lint_handoff",
