@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [3.12.51] - 2026-07-10
+
+### Fixed
+
+- **Handoff MET-lint false positive** (#210): `lint_handoff`'s "Success
+  criterion says MET but Open items remain" warning used a bare substring
+  check (`"met" in success_text`), so criteria containing ordinary words like
+  "geo**met**ry" or "**met**rics" warned falsely (hit live: a handoff whose
+  success criterion was `geometry >= 0.65` required `allow_lint_warnings=true`
+  to save). Now a word-boundary claim matcher that also excludes
+  forward-looking conditional phrasing ("is met when the suite passes");
+  genuine achievement claims ("MET", "success criterion is met.") still warn.
+
 ## [3.12.50] - 2026-07-09
 
 ### Added
