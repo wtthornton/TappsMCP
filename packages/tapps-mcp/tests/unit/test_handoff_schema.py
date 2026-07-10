@@ -114,3 +114,49 @@ class TestHandoffSchemaDoctorIntegration:
         doc, lint = load_and_lint_handoff(tmp_path)
         assert doc is not None
         assert not lint.ok
+
+
+class TestMetClaimFalsePositives:
+    """The MET warning must not trip on substrings or conditional phrasing."""
+
+    def _doc(self, criterion: str):
+        from tapps_mcp.tools.handoff_schema import parse_handoff_markdown
+
+        return parse_handoff_markdown(
+            "# Session handoff\n"
+            "**Updated:** 2026-07-10T00:00:00Z\n\n"
+            "## Open\n- something in flight\n\n"
+            "## Next (P0)\n- do the thing\n\n"
+            "## Success criterion\n"
+            f"- {criterion}\n"
+        )
+
+    def test_geometry_substring_does_not_warn(self) -> None:
+        from tapps_mcp.tools.handoff_schema import lint_handoff
+
+        doc = self._doc("pawvlov3 ships a gate-passing .glb (geometry >= 0.65)")
+        assert not any("MET" in w for w in lint_handoff(doc).warnings)
+
+    def test_metrics_substring_does_not_warn(self) -> None:
+        from tapps_mcp.tools.handoff_schema import lint_handoff
+
+        doc = self._doc("dashboard metrics land in the report")
+        assert not any("MET" in w for w in lint_handoff(doc).warnings)
+
+    def test_conditional_is_met_when_does_not_warn(self) -> None:
+        from tapps_mcp.tools.handoff_schema import lint_handoff
+
+        doc = self._doc("criterion is met when the full suite passes")
+        assert not any("MET" in w for w in lint_handoff(doc).warnings)
+
+    def test_bare_met_claim_still_warns(self) -> None:
+        from tapps_mcp.tools.handoff_schema import lint_handoff
+
+        doc = self._doc("MET")
+        assert any("MET" in w for w in lint_handoff(doc).warnings)
+
+    def test_criterion_is_met_claim_still_warns(self) -> None:
+        from tapps_mcp.tools.handoff_schema import lint_handoff
+
+        doc = self._doc("success criterion is met.")
+        assert any("MET" in w for w in lint_handoff(doc).warnings)
