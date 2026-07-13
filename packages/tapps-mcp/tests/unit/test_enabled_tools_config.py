@@ -176,7 +176,10 @@ class TestResolveAllowedTools:
         settings.tool_preset = "nlt-setup"
         allowed = _resolve_allowed_tools(settings)
         assert allowed == TOOL_PROFILE_NLT_SETUP
-        assert len(allowed) == 7
+        # 7 setup/bootstrap tools + tapps_session_start (shared bootstrap tool
+        # so a bare session_start() resolves on nlt-setup, not just nlt-build).
+        assert len(allowed) == 8
+        assert "tapps_session_start" in allowed
 
     def test_preset_nlt_code_quality_alias(self) -> None:
         from tapps_mcp.server import TOOL_PROFILE_NLT_BUILD, _resolve_allowed_tools
@@ -199,15 +202,21 @@ class TestResolveAllowedTools:
         assert allowed == TOOL_PROFILE_NLT_SETUP
 
     def test_nlt_profiles_disjoint(self) -> None:
+        # The three tapps-mcp profiles are disjoint EXCEPT for tapps_session_start,
+        # which is intentionally shared: the server banner + session_start_gate
+        # require it to be callable first on whichever profile the agent reaches,
+        # so it is registered on build, memory, and setup. Any OTHER overlap is
+        # still a bug this guard should catch.
         from tapps_mcp.server import (
             TOOL_PROFILE_NLT_BUILD,
             TOOL_PROFILE_NLT_MEMORY,
             TOOL_PROFILE_NLT_SETUP,
         )
 
-        assert TOOL_PROFILE_NLT_BUILD.isdisjoint(TOOL_PROFILE_NLT_MEMORY)
-        assert TOOL_PROFILE_NLT_BUILD.isdisjoint(TOOL_PROFILE_NLT_SETUP)
-        assert TOOL_PROFILE_NLT_MEMORY.isdisjoint(TOOL_PROFILE_NLT_SETUP)
+        shared = {"tapps_session_start"}
+        assert (TOOL_PROFILE_NLT_BUILD & TOOL_PROFILE_NLT_MEMORY) == shared
+        assert (TOOL_PROFILE_NLT_BUILD & TOOL_PROFILE_NLT_SETUP) == shared
+        assert (TOOL_PROFILE_NLT_MEMORY & TOOL_PROFILE_NLT_SETUP) == shared
 
 
 class TestConditionalRegistration:

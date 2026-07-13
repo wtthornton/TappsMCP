@@ -412,6 +412,13 @@ TOOL_PROFILE_NLT_BUILD: frozenset[str] = frozenset(
 
 TOOL_PROFILE_NLT_MEMORY: frozenset[str] = frozenset(
     {
+        # Bootstrap tool: the shared server banner instructs the agent to call
+        # tapps_session_start first on every tapps-mcp profile, and the
+        # session_start_gate blocks all tools until it runs. Register it here so
+        # a bare tapps_session_start() resolves on nlt-memory too, instead of
+        # 404-ing when the agent reaches this server first (TAP session-start
+        # routing fix).
+        "tapps_session_start",
         "tapps_memory",
         "tapps_session_notes",
         "tapps_session_end",
@@ -421,6 +428,11 @@ TOOL_PROFILE_NLT_MEMORY: frozenset[str] = frozenset(
 
 TOOL_PROFILE_NLT_SETUP: frozenset[str] = frozenset(
     {
+        # Bootstrap tool: session_start is the canonical first-call and belongs
+        # with the setup/bootstrap family (init, doctor, server_info). Without it
+        # here, the banner's "call tapps_session_start" instruction is a broken
+        # promise on nlt-setup and the agent's natural guess 404s.
+        "tapps_session_start",
         "tapps_init",
         "tapps_upgrade",
         "tapps_doctor",
