@@ -6,9 +6,10 @@ SessionStart hook re-fires on resume/compact, and agents defensively re-call
 the tool. Both layers are addressed:
 
 - Tool layer (TAP-1379, TestSessionStartMemoization): per-process cache keyed
-  by MetricsHub _SESSION_ID. Repeat calls within the same process return the
-  cached response with a ``cached: true`` marker. ``force=True`` bypasses the
-  cache.
+  by MetricsHub _SESSION_ID + project root + quick. Repeat calls within the
+  same process+root return the cached response with a ``cached: true`` marker.
+  ``force=True`` bypasses the cache. Project root is required so the shared
+  HTTP fleet does not cross-contaminate Cursor windows (ADR-0024).
 - File sentinel layer (TAP-1928, TestSessionStartSentinel): persists across
   MCP server restarts. Sub-agents that start a fresh process skip the full
   bootstrap when ``.tapps-mcp/.tapps-session-id`` is younger than 3600 s.
@@ -72,7 +73,7 @@ class TestSessionStartMemoization:
         full = await tapps_session_start()
         quick = await tapps_session_start(quick=True)
 
-        # Each is the first call for its (session_id, quick) key, so neither
+        # Each is the first call for its (session_id, quick, root) key, so neither
         # should be marked cached.
         assert full["data"].get("cached") is not True
         assert quick["data"].get("cached") is not True
@@ -82,6 +83,52 @@ class TestSessionStartMemoization:
         quick2 = await tapps_session_start(quick=True)
         assert full2["data"].get("cached") is True
         assert quick2["data"].get("cached") is True
+
+    @pytest.mark.asyncio
+    async def test_different_project_roots_cache_independently(
+        self, tmp_path: Path
+    ) -> None:
+        """ADR-0024 fleet: Marketing must not steal LabsPE's session_start cache."""
+        from tapps_core.http.request_context import (
+            reset_request_project_root,
+            set_request_project_root,
+        )
+        from tapps_mcp.server_pipeline_tools import tapps_session_start
+
+        project_a = tmp_path / "project-a"
+        project_b = tmp_path / "project-b"
+        project_a.mkdir()
+        project_b.mkdir()
+
+        token_a = set_request_project_root(project_a)
+        try:
+            first_a = await tapps_session_start(quick=True)
+            assert first_a["success"] is True
+            assert first_a["data"].get("cached") is not True
+            assert Path(first_a["data"]["project_root"]) == project_a.resolve()
+        finally:
+            reset_request_project_root(token_a)
+
+        token_b = set_request_project_root(project_b)
+        try:
+            first_b = await tapps_session_start(quick=True)
+            assert first_b["success"] is True
+            assert first_b["data"].get("cached") is not True
+            assert Path(first_b["data"]["project_root"]) == project_b.resolve()
+            # Second call for B still hits B's slot — not A's.
+            second_b = await tapps_session_start(quick=True)
+            assert second_b["data"].get("cached") is True
+            assert Path(second_b["data"]["project_root"]) == project_b.resolve()
+        finally:
+            reset_request_project_root(token_b)
+
+        token_a2 = set_request_project_root(project_a)
+        try:
+            second_a = await tapps_session_start(quick=True)
+            assert second_a["data"].get("cached") is True
+            assert Path(second_a["data"]["project_root"]) == project_a.resolve()
+        finally:
+            reset_request_project_root(token_a2)
 
     @pytest.mark.asyncio
     async def test_cached_response_is_fast(self) -> None:
