@@ -5,8 +5,6 @@ members = ["packages/*"]
 # tapps-brain 3.24.0 (brain_query_events + docs_lookup). ADR-0015: pin at d893fc1
 # (TAP-3865/3866 docs_lookup + import-dir). Switch to tag = "v3.24.0" when released.
 tapps-brain = { git = "https://github.com/wtthornton/tapps-brain.git", rev = "d893fc1cbf0df77112c29fdd321e690068c0985f" }
-# TAP-3445 / TAP-3487 — nlt-report-studio consumer reports (git tag pin)
-nlt-report-studio = { git = "https://github.com/wtthornton/ReportLab.git", tag = "v0.1.5" }
 
 [tool.uv]
 dev-dependencies = [
@@ -239,7 +237,4 @@ dev = [
     "mypy>=2.1.0,<3",
     "ruff>=0.15.16,<1",
     "types-PyYAML>=6.0.12.20260518",
-]
-report-studio = [
-    "nlt-report-studio>=0.1.5,<0.2",
 ]
