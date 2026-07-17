@@ -388,7 +388,7 @@ async def tapps_quality_gate(
             Rust) inside the project root. Returns
             ``error.code=path_denied`` for paths outside the root.
         preset: Quality threshold preset. ``"standard"`` (overall ≥70,
-            security floor ≥50), ``"strict"`` (overall ≥85), or
+            security floor ≥50), ``"strict"`` (overall ≥80), or
             ``"framework"`` (overall ≥75, relaxed test coverage for
             library code). Empty string triggers an MCP elicitation
             prompt to the user when the host supports it; otherwise
@@ -851,7 +851,7 @@ async def tapps_quick_check(
         file_path: Single source-file path inside the project root.
             Ignored when ``file_paths`` is non-empty.
         preset: Quality gate threshold. ``"standard"`` (default,
-            ≥70/100), ``"strict"`` (≥85), or ``"framework"`` (≥75,
+            ≥70/100), ``"strict"`` (≥80), or ``"framework"`` (≥75,
             relaxed for library code).
         fix: Apply ruff auto-fixes before scoring (Python only).
             Default ``False``. Enables in-place rewrites by ruff; the

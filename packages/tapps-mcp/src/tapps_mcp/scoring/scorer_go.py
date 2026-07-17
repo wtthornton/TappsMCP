@@ -276,7 +276,7 @@ class GoScorer(ScorerBase):
 
         # Find all functions and calculate their complexity
         for node in self._walk_tree(root):
-            if node.type in ("function_declaration", "method_declaration"):
+            if node.type in ("function_declaration", "method_declaration", "func_literal"):
                 cc = 1 + count_branches(node)
                 function_complexities.append(cc)
 

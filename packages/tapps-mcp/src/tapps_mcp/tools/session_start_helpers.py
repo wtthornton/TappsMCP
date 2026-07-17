@@ -1284,6 +1284,7 @@ def _schedule_lookup_docs_warm(
             from tapps_core.knowledge.brain_docs import warm_via_brain
             from tapps_core.knowledge.cache import KBCache
             from tapps_core.knowledge.warming import warm_cache
+            from tapps_mcp.common.cache_paths import resolve_kb_cache_dir
 
             s = _ls(project_root=project_root)
             if docs_via_brain_enabled(s):
@@ -1301,8 +1302,9 @@ def _schedule_lookup_docs_warm(
             api_key = getattr(s, "context7_api_key", None)
             if not api_key or not api_key.get_secret_value():
                 return
+            cache_dir, _ = resolve_kb_cache_dir(project_root)
             cache = KBCache(
-                project_root / ".tapps-mcp-cache",
+                cache_dir,
                 max_mb=s.cache_max_mb,
             )
             await warm_cache(

@@ -154,10 +154,12 @@ def is_reliable_edit_loop_row(row: dict[str, Any], project_root: Path) -> bool:
 
 
 def loop_row_gate_skipped(row: dict[str, Any], project_root: Path) -> bool:
-    """True when a reliable edit loop lacks gate/checklist compliance signals."""
+    """True when a reliable edit loop lacks gate compliance signals.
+
+    Checklist alone does **not** count as gate compliance — agents must call
+    ``tapps_quick_check`` / ``tapps_validate_changed`` / ``tapps_quality_gate``.
+    """
     if not is_reliable_edit_loop_row(row, project_root):
-        return False
-    if row.get("checklist_called"):
         return False
     for tool in row.get("tools_used") or []:
         if is_gate_tool(str(tool)):

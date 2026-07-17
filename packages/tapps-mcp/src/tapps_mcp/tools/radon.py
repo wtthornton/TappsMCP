@@ -70,10 +70,17 @@ _BLEND_AVG: float = 0.3
 def run_radon_cc(
     file_path: str, *, cwd: str | None = None, timeout: int = 30
 ) -> list[dict[str, object]]:
-    """Run ``radon cc -j`` on a single file synchronously."""
+    """Run ``radon cc -j`` on a single file synchronously.
+
+    Falls back to the in-process radon library on timeout or empty stdout so
+    callers never treat a tool failure as a clean zero-complexity result.
+    """
     result = run_command(["radon", "cc", "-j", file_path], cwd=cwd, timeout=timeout)
-    if result.timed_out or not result.stdout.strip():
-        return []
+    if result.timed_out:
+        logger.warning("radon_cc_timeout", file=file_path, timeout=timeout)
+        return _radon_cc_direct(file_path)
+    if not result.stdout.strip():
+        return _radon_cc_direct(file_path)
     return parse_radon_cc_json(result.stdout)
 
 
@@ -133,14 +140,19 @@ def calculate_maintainability_score(mi_value: float) -> float:
 def run_radon_mi(file_path: str, *, cwd: str | None = None, timeout: int = 30) -> float:
     """Run ``radon mi -j`` and return the MI value for the file.
 
-    Returns 50.0 (neutral) if radon is unavailable or fails.
+    Falls back to the in-process radon library on timeout or empty/unparseable
+    output (same behaviour as the async path). Returns 50.0 only when both the
+    subprocess and the direct library path are unavailable.
     """
     result = run_command(["radon", "mi", "-j", file_path], cwd=cwd, timeout=timeout)
-    if result.timed_out or not result.stdout.strip():
-        return 50.0
+    if result.timed_out:
+        logger.warning("radon_mi_timeout", file=file_path, timeout=timeout)
+        return _radon_mi_direct(file_path)
+    if not result.stdout.strip():
+        return _radon_mi_direct(file_path)
     mi_map = parse_radon_mi_json(result.stdout)
     if not mi_map:
-        return 50.0
+        return _radon_mi_direct(file_path)
     # Return the first (and typically only) value
     return next(iter(mi_map.values()), 50.0)
 

@@ -328,7 +328,10 @@ def _finalize_outcome(
     from tapps_mcp.server import _record_call, _record_execution
 
     results = [*task_results, *bc.cached_results]
-    all_passed = all(r.get("gate_passed", False) for r in results)
+    all_passed = all(r.get("gate_passed", False) for r in results) if results else False
+    incomplete = timeout_info.timed_out or bc.capped
+    if incomplete:
+        all_passed = False
     total_sec = sum(r.get("security_issues", 0) for r in results)
     impact_data = (
         _host._compute_impact_analysis(bc.paths, bc.settings.project_root)
@@ -429,6 +432,9 @@ async def _assemble_response(
     attach_affected_tests(resp_data, outcome.affected_tests_data)
     attach_diff_impact(resp_data, outcome.diff_impact_data)
     attach_blast_radius_caveat(resp_data, outcome.blast_radius_caveat)
+    if bc.capped:
+        resp_data["capped"] = True
+        resp_data["files_not_validated"] = bc.extra_count
     _attach_optional_payload(
         resp_data,
         paths=bc.paths,
@@ -575,7 +581,7 @@ async def tapps_validate_changed(
             ``"HEAD"`` (unstaged + staged). Use ``"main"`` /
             ``"master"`` for "everything on this branch".
         preset: Quality gate threshold. ``"standard"`` (default,
-            ≥70/100 overall, security floor 50), ``"strict"`` (≥85),
+            ≥70/100 overall, security floor 50), ``"strict"`` (≥80),
             ``"framework"`` (relaxed for library projects).
         include_security: Run a security scan on each Python file.
             Ignored when ``quick=True`` and ``security_depth='basic'``.

@@ -277,7 +277,7 @@ class RustScorer(ScorerBase):
 
         # Find all functions and calculate their complexity
         for node in self._walk_tree(root):
-            if node.type == "function_item":
+            if node.type in ("function_item", "closure_expression"):
                 cc = 1 + count_branches(node)
                 function_complexities.append(cc)
 

@@ -111,6 +111,9 @@ class CodeScorer(ScorerBase):
         """Quick mode: ruff-only scoring (< 500 ms target)."""
         resolved = file_path.resolve()
         issues = run_ruff_check(str(resolved), cwd=str(resolved.parent))
+        ruff_failed = issues is None
+        if issues is None:
+            issues = []
         lint_score = calculate_lint_score(issues)
 
         categories = {
@@ -118,7 +121,7 @@ class CodeScorer(ScorerBase):
                 name="linting",
                 score=lint_score,
                 weight=1.0,
-                details={"issue_count": len(issues)},
+                details={"issue_count": len(issues), "fallback": ruff_failed},
             ),
         }
 
@@ -127,7 +130,8 @@ class CodeScorer(ScorerBase):
             categories=categories,
             overall_score=clamp_overall(lint_score * 10.0),
             lint_issues=issues,
-            degraded=False,
+            degraded=ruff_failed,
+            missing_tools=["ruff"] if ruff_failed else [],
         )
 
     def score_file_quick_enriched(self, file_path: Path) -> ScoreResult:
@@ -147,7 +151,11 @@ class CodeScorer(ScorerBase):
         resolved = file_path.resolve()
         str_path = str(resolved)
         cwd = str(resolved.parent)
+        missing: list[str] = []
         issues = run_ruff_check(str_path, cwd=cwd)
+        if issues is None:
+            missing.append("ruff")
+            issues = []
         lint_score = calculate_lint_score(issues)
 
         try:
@@ -158,7 +166,6 @@ class CodeScorer(ScorerBase):
 
         w = self._weights
         cats: dict[str, CategoryScore] = {}
-        missing: list[str] = []
 
         # 1) Complexity — radon CC direct (in-process, ~1ms) or AST fallback
         radon_cc = _radon_cc_direct(str_path)

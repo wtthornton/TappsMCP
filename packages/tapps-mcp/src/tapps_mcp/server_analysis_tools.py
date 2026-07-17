@@ -982,6 +982,9 @@ async def tapps_dead_code(
             whitelist_patterns=settings.dead_code_whitelist_patterns,
             cwd=str(resolved.parent),
         )
+        if findings is None:
+            degraded = True
+            findings = []
         files_scanned = 1
         display_path = str(resolved)
     else:

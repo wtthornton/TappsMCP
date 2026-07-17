@@ -129,7 +129,7 @@ class TestRunAllTools:
                 return_value=radon_mi,
             ),
         ):
-            result = await run_all_tools("test.py")
+            result = await run_all_tools("test.py", run_perflint=False, run_vulture=False)
             assert result.lint_issues == lint_issues
             assert result.type_issues == type_issues
             assert result.security_issues == sec_issues
@@ -286,7 +286,9 @@ class TestDirectMode:
             patch("tapps_mcp.tools.radon_direct.cc_direct", return_value=radon_cc),
             patch("tapps_mcp.tools.radon_direct.mi_direct", return_value=radon_mi),
         ):
-            result = await run_all_tools("test.py", mode="direct")
+            result = await run_all_tools(
+                "test.py", mode="direct", run_perflint=False, run_vulture=False
+            )
             assert result.lint_issues == lint_issues
             assert result.radon_cc == radon_cc
             assert result.radon_mi == radon_mi
@@ -357,4 +359,5 @@ class TestDirectMode:
                 run_perflint=True,
                 run_semgrep=True,
                 vulture_whitelist_patterns=None,
+                vulture_min_confidence=80,
             )

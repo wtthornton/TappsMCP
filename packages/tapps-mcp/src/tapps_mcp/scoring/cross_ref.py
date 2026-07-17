@@ -198,33 +198,78 @@ def _resolve_module_file(module_path: str, search_root: Path) -> Path | None:
     return None
 
 
+def _params_from_function(node: ast.FunctionDef | ast.AsyncFunctionDef) -> list[str] | None:
+    """Extract parameter names from a function node (excluding self/cls).
+
+    Returns ``None`` when the function accepts ``**kwargs`` (any kwarg is valid).
+    """
+    params: list[str] = []
+    for arg in node.args.args:
+        name = arg.arg
+        if name not in ("self", "cls"):
+            params.append(name)
+    if node.args.kwarg is not None:
+        return None
+    return params
+
+
 def _extract_function_params(
     tree: ast.Module,
     func_name: str,
+    *,
+    class_name: str | None = None,
 ) -> list[str] | None:
     """Extract parameter names from a function/method definition.
 
     Returns None if the function is not found.
     Returns parameter names excluding 'self' and 'cls'.
+
+    When *class_name* is set, only methods on that class are considered — this
+    avoids matching the wrong ``process`` when multiple classes define it.
     """
+    if class_name is not None:
+        for node in tree.body:
+            if isinstance(node, ast.ClassDef) and node.name == class_name:
+                for item in node.body:
+                    if (
+                        isinstance(item, (ast.FunctionDef, ast.AsyncFunctionDef))
+                        and item.name == func_name
+                    ):
+                        return _params_from_function(item)
+        return None
+
+    # Prefer module-level defs so nested helpers with the same name do not win.
+    for node in tree.body:
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)) and node.name == func_name:
+            return _params_from_function(node)
+
+    # Fall back: first matching method in any class (legacy single-match path).
     for node in ast.walk(tree):
         if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
             if node.name != func_name:
                 continue
-            params: list[str] = []
-            for arg in node.args.args:
-                name = arg.arg
-                if name not in ("self", "cls"):
-                    params.append(name)
-            # Check for **kwargs — if present, any kwarg is valid
-            if node.args.kwarg is not None:
-                return None  # Signals "accepts any kwargs"
-            return params
+            return _params_from_function(node)
     return None
 
 
-def _has_var_keyword(tree: ast.Module, func_name: str) -> bool:
+def _has_var_keyword(
+    tree: ast.Module,
+    func_name: str,
+    *,
+    class_name: str | None = None,
+) -> bool:
     """Check if a function accepts **kwargs."""
+    if class_name is not None:
+        for node in tree.body:
+            if isinstance(node, ast.ClassDef) and node.name == class_name:
+                for item in node.body:
+                    if (
+                        isinstance(item, (ast.FunctionDef, ast.AsyncFunctionDef))
+                        and item.name == func_name
+                        and item.args.kwarg is not None
+                    ):
+                        return True
+        return False
     for node in ast.walk(tree):
         if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
             if node.name == func_name and node.args.kwarg is not None:
@@ -341,8 +386,20 @@ def analyze_cross_references(
         if callee_tree is None:
             continue
 
+        # When the import binding is ``from mod import Class`` and the call is
+        # ``Class.method(...)``, resolve params on that class — not the first
+        # same-named method elsewhere in the file.
+        class_name: str | None = None
+        if len(parts) > 1:
+            imported_path = imports.get(base_name, "")
+            imported_tail = imported_path.rsplit(".", 1)[-1] if imported_path else ""
+            for node in callee_tree.body:
+                if isinstance(node, ast.ClassDef) and node.name in {base_name, imported_tail}:
+                    class_name = node.name
+                    break
+
         # Extract the function/method parameters
-        params = _extract_function_params(callee_tree, method_name)
+        params = _extract_function_params(callee_tree, method_name, class_name=class_name)
 
         if params is None:
             # Function not found or accepts **kwargs — skip

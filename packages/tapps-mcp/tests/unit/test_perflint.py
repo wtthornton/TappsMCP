@@ -115,16 +115,16 @@ class TestParsePerflintJson:
         assert findings[0].code == "W8101"
 
     def test_empty_string(self):
-        assert parse_perflint_json("") == []
+        assert parse_perflint_json("") is None
 
     def test_whitespace(self):
-        assert parse_perflint_json("   ") == []
+        assert parse_perflint_json("   ") is None
 
     def test_invalid_json(self):
-        assert parse_perflint_json("not json") == []
+        assert parse_perflint_json("not json") is None
 
     def test_non_list_json(self):
-        assert parse_perflint_json('{"key": "value"}') == []
+        assert parse_perflint_json('{"key": "value"}') is None
 
     def test_empty_list(self):
         assert parse_perflint_json("[]") == []
@@ -169,7 +169,7 @@ class TestRunPerflintCheck:
     def test_timeout_returns_empty(self, mock_cmd):
         mock_cmd.return_value = CommandResult(returncode=-1, stdout="", stderr="", timed_out=True)
         findings = run_perflint_check("test.py")
-        assert findings == []
+        assert findings is None
 
 
 class TestRunPerflintCheckAsync:
@@ -185,4 +185,4 @@ class TestRunPerflintCheckAsync:
     async def test_empty_output(self, mock_cmd):
         mock_cmd.return_value = CommandResult(returncode=0, stdout="", stderr="")
         findings = await run_perflint_check_async("test.py")
-        assert findings == []
+        assert findings is None

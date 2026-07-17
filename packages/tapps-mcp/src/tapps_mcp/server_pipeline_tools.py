@@ -1484,7 +1484,7 @@ async def tapps_pipeline(
             pipeline. One of ``"feature"`` (default), ``"bugfix"``,
             ``"refactor"``, ``"security"``, ``"review"``, ``"epic"``.
         preset: Quality gate threshold preset: ``"standard"`` (default,
-            ≥70/100 overall), ``"strict"`` (≥85), or ``"framework"``
+            ≥70/100 overall), ``"strict"`` (≥80), or ``"framework"``
             (relaxed for library/framework projects).
         skip_session_start: Skip the leading ``tapps_session_start``
             call. Default ``False``. Enable only when you already ran

@@ -148,16 +148,20 @@ class TestRunRadonCc:
         assert len(entries) == 2
 
     @patch("tapps_mcp.tools.radon.run_command")
-    def test_timeout(self, mock_cmd):
+    @patch("tapps_mcp.tools.radon._radon_cc_direct", return_value=[{"name": "f", "complexity": 3}])
+    def test_timeout(self, mock_direct, mock_cmd):
         mock_cmd.return_value = CommandResult(returncode=-1, stdout="", stderr="", timed_out=True)
         entries = run_radon_cc("test.py")
-        assert entries == []
+        assert entries == [{"name": "f", "complexity": 3}]
+        mock_direct.assert_called_once_with("test.py")
 
     @patch("tapps_mcp.tools.radon.run_command")
-    def test_empty_output(self, mock_cmd):
+    @patch("tapps_mcp.tools.radon._radon_cc_direct", return_value=[])
+    def test_empty_output(self, mock_direct, mock_cmd):
         mock_cmd.return_value = CommandResult(returncode=0, stdout="", stderr="")
         entries = run_radon_cc("test.py")
         assert entries == []
+        mock_direct.assert_called_once_with("test.py")
 
 
 class TestRunRadonMi:
@@ -168,22 +172,28 @@ class TestRunRadonMi:
         assert abs(mi - 72.5) < 0.01
 
     @patch("tapps_mcp.tools.radon.run_command")
-    def test_timeout_returns_default(self, mock_cmd):
+    @patch("tapps_mcp.tools.radon._radon_mi_direct", return_value=61.0)
+    def test_timeout_returns_default(self, mock_direct, mock_cmd):
         mock_cmd.return_value = CommandResult(returncode=-1, stdout="", stderr="", timed_out=True)
         mi = run_radon_mi("test.py")
-        assert mi == 50.0
+        assert mi == 61.0
+        mock_direct.assert_called_once_with("test.py")
 
     @patch("tapps_mcp.tools.radon.run_command")
-    def test_empty_output_returns_default(self, mock_cmd):
+    @patch("tapps_mcp.tools.radon._radon_mi_direct", return_value=50.0)
+    def test_empty_output_returns_default(self, mock_direct, mock_cmd):
         mock_cmd.return_value = CommandResult(returncode=0, stdout="", stderr="")
         mi = run_radon_mi("test.py")
         assert mi == 50.0
+        mock_direct.assert_called_once_with("test.py")
 
     @patch("tapps_mcp.tools.radon.run_command")
-    def test_empty_json_returns_default(self, mock_cmd):
+    @patch("tapps_mcp.tools.radon._radon_mi_direct", return_value=50.0)
+    def test_empty_json_returns_default(self, mock_direct, mock_cmd):
         mock_cmd.return_value = CommandResult(returncode=0, stdout="{}", stderr="")
         mi = run_radon_mi("test.py")
         assert mi == 50.0
+        mock_direct.assert_called_once_with("test.py")
 
 
 class TestBlendedComplexity:

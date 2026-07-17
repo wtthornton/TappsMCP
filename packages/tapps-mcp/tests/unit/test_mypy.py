@@ -152,10 +152,7 @@ class TestRunMypyCheck:
     def test_timeout(self, mock_cmd):
         mock_cmd.return_value = CommandResult(returncode=-1, stdout="", stderr="", timed_out=True)
         issues = run_mypy_check("test.py")
-        assert issues == []
-
-    @patch("tapps_mcp.tools.mypy.run_command")
-    def test_clean_file(self, mock_cmd):
+        assert issues is None
         mock_cmd.return_value = CommandResult(
             returncode=0, stdout="Success: no issues found\n", stderr=""
         )

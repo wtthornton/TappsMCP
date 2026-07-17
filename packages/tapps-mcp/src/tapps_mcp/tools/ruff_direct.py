@@ -28,10 +28,12 @@ def _run_ruff_sync(
     *,
     cwd: str | None = None,
     timeout: int = 30,
-) -> list[LintIssue]:
+) -> list[LintIssue] | None:
     """Run ``ruff check --output-format=json`` synchronously.
 
     Uses ``subprocess.run`` for reliable, blocking execution.
+    Returns ``None`` when ruff is missing, times out, or yields no usable JSON
+    (callers must mark degraded — never treat as a clean empty finding list).
     """
     try:
         result = subprocess.run(
@@ -44,13 +46,13 @@ def _run_ruff_sync(
         )
     except FileNotFoundError:
         logger.debug("ruff_direct_not_found")
-        return []
+        return None
     except subprocess.TimeoutExpired:
         logger.warning("ruff_direct_timeout", file=file_path, timeout=timeout)
-        return []
+        return None
 
     if not result.stdout.strip():
-        return []
+        return None
     return parse_ruff_json(result.stdout)
 
 
@@ -59,7 +61,7 @@ async def run_ruff_check_direct(
     *,
     cwd: str | None = None,
     timeout: int = 30,
-) -> list[LintIssue]:
+) -> list[LintIssue] | None:
     """Async wrapper that runs ruff synchronously in a thread pool.
 
     More reliable than ``asyncio.create_subprocess_exec`` in MCP async

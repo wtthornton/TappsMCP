@@ -390,10 +390,15 @@ class ToolCallMetricsCollector:
     @staticmethod
     def _compute_duration_stats(metrics: list[ToolCallMetric]) -> tuple[float, float]:
         """Return ``(avg_duration_ms, p95_duration_ms)`` for the given metrics."""
+        import math
+
         durations = [m.duration_ms for m in metrics]
         avg_dur = sum(durations) / len(durations)
         sorted_dur = sorted(durations)
-        p95_idx = max(0, int(len(sorted_dur) * 0.95) - 1)
+        n = len(sorted_dur)
+        # Nearest-rank: ceil(0.95 * n) - 1, clamped — avoids reporting the
+        # minimum as "p95" for tiny samples (e.g. n=2 with int(n*0.95)-1).
+        p95_idx = min(n - 1, max(0, math.ceil(n * 0.95) - 1))
         return avg_dur, sorted_dur[p95_idx]
 
     @staticmethod

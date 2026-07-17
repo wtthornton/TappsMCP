@@ -9,7 +9,7 @@ import sys
 from datetime import UTC, datetime, timedelta
 from importlib.metadata import requires as _requires
 from pathlib import Path
-from typing import Any, cast
+from typing import Any, Callable, cast
 
 import click
 import httpx
@@ -4971,6 +4971,15 @@ def check_context7_live(root: Path, *, quick: bool = False) -> CheckResult:
     return CheckResult("context7_live", True, f"Context7 status: {diag.status}")
 
 
+def _safe_check(name: str, fn: Callable[[], CheckResult]) -> CheckResult:
+    """Run one doctor check; convert crashes into a failed CheckResult."""
+    try:
+        return fn()
+    except Exception as exc:
+        log.exception("doctor_check_crashed", check=name)
+        return CheckResult(name, False, f"Check crashed: {type(exc).__name__}: {exc}")
+
+
 def _collect_checks(root: Path, *, quick: bool = False) -> list[CheckResult]:
     """Collect all diagnostic checks for the given project root.
 
@@ -4978,81 +4987,103 @@ def _collect_checks(root: Path, *, quick: bool = False) -> list[CheckResult]:
         root: Project root directory.
         quick: When True, skip quality tool version checks for faster results.
     """
-    checks: list[CheckResult] = []
-    checks.append(check_binary_on_path())
-    checks.append(check_binary_version_mismatch())
-    checks.append(check_docsmcp_binary_version_mismatch())
-    checks.append(check_blue_green_deploy())
-    checks.append(check_global_local_install())
-    checks.append(check_claude_code_user(project_root=root))
-    checks.append(check_claude_code_project(root))
-    checks.append(check_cursor_config(root))
-    checks.append(check_vscode_config(root))
-    checks.append(check_mcp_transport_drift(root))
-    checks.append(check_http_fleet_liveness(root))
-    checks.append(check_fleet_crash_loop(root))
-    checks.append(check_mcp_client_config(root))
-    checks.append(check_mcp_tool_budget(root))
-    checks.append(check_call_graph_tools_profile(root))
-    checks.append(check_call_graph_index_cache(root, quick=quick))
-    checks.append(check_nlt_partial_enablement(root))
-    checks.append(check_mcp_config_unresolved_project_root(root))
-    checks.append(check_brain_mcp_entry(root))
-    checks.append(check_scope_recommendation(root))
-    checks.append(check_claude_md(root))
-    checks.append(check_claude_md_stamp(root))
-    checks.append(check_cursor_rules(root))
-    checks.append(check_linear_standards_rule(root))
-    checks.append(check_retired_hooks(root))
-    checks.append(check_autonomy_rule(root))
-    # TAP-978: scoped quality rules — report presence + gate status.
-    checks.append(check_security_rule(root))
-    checks.append(check_test_quality_rule(root))
-    checks.append(check_config_files_rule(root))
-    checks.append(check_linear_issue_skill_current(root))
-    checks.append(check_orchestration_prompt_skill_current(root))
-    checks.append(check_finish_task_skill(root))
-    checks.append(check_deprecated_wrapper_skills(root))
-    checks.append(check_tapps_memory_skill(root))
-    checks.append(check_session_handoff_skills(root))
-    checks.append(check_session_handoff_schema(root))
-    checks.append(check_cache_gate_block_hint(root))
-    checks.append(check_install_git_hooks_hint(root))
-    checks.append(check_pipeline_enforce_recommendations(root))
-    checks.append(check_lookup_docs_discipline(root))
-    checks.append(check_cursor_loop_metrics_telemetry(root))
-    checks.append(check_cursor_stop_completion_gate(root))
-    checks.append(check_continuous_learning_v2_skill(root))
-    checks.append(check_pretooluse_matchers(root))
-    checks.append(check_agents_md(root))
-    checks.append(check_karpathy_guidelines(root))
-    checks.append(check_tapps_mcp_yaml(root))
-    checks.append(check_claude_settings(root))
-    checks.append(check_managed_json_parseable(root))
-    checks.append(check_claude_hook_scripts(root))
-    checks.append(check_hooks(root))
-    checks.append(check_cursor_mcp_zombie_cleanup(root))
-    checks.append(check_stale_exe_backups())
-    checks.append(check_tapps_brain())
-    checks.append(check_brain_http_auth(root))
-    checks.append(check_brain_profile(root))
-    checks.append(check_brain_probe_latency(root))
-    checks.append(check_brain_health(root))
-    checks.append(check_brain_version_floor(root))
-    checks.append(check_brain_version_delta(root))
-    checks.append(check_session_sentinel(root))
-    checks.append(check_memory_pipeline_config(root))
-    checks.append(check_memory_cli_http_mode(root))
-    checks.append(check_dual_memory_server(root))
-    checks.append(check_plaintext_secrets(root))
-    checks.append(check_uv_path_mismatch(root))
-    checks.append(check_linear_sdlc(root))
-    checks.append(check_report_studio(root))
-    checks.append(check_legacy_doc_cache(root))
-    checks.append(check_brain_docs_tools(root))
-    checks.append(check_mcp_operator_secrets(root))
-    checks.append(check_consumer_context7_env(root))
-    checks.append(check_context7_live(root, quick=quick))
+    specs: list[tuple[str, Callable[[], CheckResult]]] = [
+        ("tapps-mcp binary", check_binary_on_path),
+        ("tapps-mcp binary version", check_binary_version_mismatch),
+        ("docsmcp binary version", check_docsmcp_binary_version_mismatch),
+        ("blue-green deploy", check_blue_green_deploy),
+        ("global/local install", check_global_local_install),
+        ("Claude Code (user)", lambda: check_claude_code_user(project_root=root)),
+        ("Claude Code (project)", lambda: check_claude_code_project(root)),
+        ("Cursor config", lambda: check_cursor_config(root)),
+        ("VS Code config", lambda: check_vscode_config(root)),
+        ("MCP transport drift", lambda: check_mcp_transport_drift(root)),
+        ("HTTP fleet liveness", lambda: check_http_fleet_liveness(root)),
+        ("Fleet crash loop", lambda: check_fleet_crash_loop(root)),
+        ("MCP client config", lambda: check_mcp_client_config(root)),
+        ("MCP tool budget", lambda: check_mcp_tool_budget(root)),
+        ("Call graph tools profile", lambda: check_call_graph_tools_profile(root)),
+        (
+            "Call graph index cache",
+            lambda: check_call_graph_index_cache(root, quick=quick),
+        ),
+        ("NLT partial enablement", lambda: check_nlt_partial_enablement(root)),
+        (
+            "MCP unresolved project_root",
+            lambda: check_mcp_config_unresolved_project_root(root),
+        ),
+        ("Brain MCP entry", lambda: check_brain_mcp_entry(root)),
+        ("Scope recommendation", lambda: check_scope_recommendation(root)),
+        ("CLAUDE.md rules", lambda: check_claude_md(root)),
+        ("CLAUDE.md stamp", lambda: check_claude_md_stamp(root)),
+        ("Cursor rules", lambda: check_cursor_rules(root)),
+        ("Linear standards rule", lambda: check_linear_standards_rule(root)),
+        ("Retired hooks", lambda: check_retired_hooks(root)),
+        ("Autonomy rule", lambda: check_autonomy_rule(root)),
+        ("Security rule", lambda: check_security_rule(root)),
+        ("Test quality rule", lambda: check_test_quality_rule(root)),
+        ("Config files rule", lambda: check_config_files_rule(root)),
+        ("linear-issue skill", lambda: check_linear_issue_skill_current(root)),
+        (
+            "orchestration-prompt skill",
+            lambda: check_orchestration_prompt_skill_current(root),
+        ),
+        ("finish-task skill", lambda: check_finish_task_skill(root)),
+        ("Deprecated wrapper skills", lambda: check_deprecated_wrapper_skills(root)),
+        ("tapps-memory skill", lambda: check_tapps_memory_skill(root)),
+        ("Session handoff skills", lambda: check_session_handoff_skills(root)),
+        ("Session handoff schema", lambda: check_session_handoff_schema(root)),
+        ("Cache gate block hint", lambda: check_cache_gate_block_hint(root)),
+        ("Install git hooks hint", lambda: check_install_git_hooks_hint(root)),
+        (
+            "Pipeline enforce recommendations",
+            lambda: check_pipeline_enforce_recommendations(root),
+        ),
+        ("lookup_docs discipline", lambda: check_lookup_docs_discipline(root)),
+        (
+            "Cursor loop metrics telemetry",
+            lambda: check_cursor_loop_metrics_telemetry(root),
+        ),
+        (
+            "Cursor stop completion gate",
+            lambda: check_cursor_stop_completion_gate(root),
+        ),
+        (
+            "continuous-learning-v2 skill",
+            lambda: check_continuous_learning_v2_skill(root),
+        ),
+        ("PreToolUse matchers", lambda: check_pretooluse_matchers(root)),
+        ("AGENTS.md", lambda: check_agents_md(root)),
+        ("Karpathy guidelines", lambda: check_karpathy_guidelines(root)),
+        (".tapps-mcp.yaml", lambda: check_tapps_mcp_yaml(root)),
+        ("Claude settings", lambda: check_claude_settings(root)),
+        ("Managed JSON parseable", lambda: check_managed_json_parseable(root)),
+        ("Claude hook scripts", lambda: check_claude_hook_scripts(root)),
+        ("Hooks", lambda: check_hooks(root)),
+        ("Cursor MCP zombie cleanup", lambda: check_cursor_mcp_zombie_cleanup(root)),
+        ("Stale exe backups", check_stale_exe_backups),
+        ("tapps-brain", check_tapps_brain),
+        ("Brain HTTP auth", lambda: check_brain_http_auth(root)),
+        ("Brain profile", lambda: check_brain_profile(root)),
+        ("Brain probe latency", lambda: check_brain_probe_latency(root)),
+        ("Brain health", lambda: check_brain_health(root)),
+        ("Brain version floor", lambda: check_brain_version_floor(root)),
+        ("Brain version delta", lambda: check_brain_version_delta(root)),
+        ("Session sentinel", lambda: check_session_sentinel(root)),
+        ("Memory pipeline config", lambda: check_memory_pipeline_config(root)),
+        ("Memory CLI HTTP mode", lambda: check_memory_cli_http_mode(root)),
+        ("Dual memory server", lambda: check_dual_memory_server(root)),
+        ("Plaintext secrets", lambda: check_plaintext_secrets(root)),
+        ("uv path mismatch", lambda: check_uv_path_mismatch(root)),
+        ("Linear SDLC", lambda: check_linear_sdlc(root)),
+        ("report_studio", lambda: check_report_studio(root)),
+        ("Legacy doc cache", lambda: check_legacy_doc_cache(root)),
+        ("Brain docs tools", lambda: check_brain_docs_tools(root)),
+        ("MCP operator secrets", lambda: check_mcp_operator_secrets(root)),
+        ("Consumer Context7 env", lambda: check_consumer_context7_env(root)),
+        ("Context7 live", lambda: check_context7_live(root, quick=quick)),
+    ]
+    checks = [_safe_check(name, fn) for name, fn in specs]
     if quick:
         checks.append(
             CheckResult(
@@ -5063,7 +5094,13 @@ def _collect_checks(root: Path, *, quick: bool = False) -> list[CheckResult]:
             )
         )
     else:
-        checks.extend(check_quality_tools())
+        for result in check_quality_tools():
+            checks.append(
+                _safe_check(
+                    result.name,
+                    lambda r=result: r,
+                )
+            )
     return checks
 
 

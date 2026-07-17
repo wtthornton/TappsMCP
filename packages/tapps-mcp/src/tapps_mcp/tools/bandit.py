@@ -85,7 +85,9 @@ def parse_bandit_json(raw: str) -> list[SecurityIssue] | None:
         return None
     results = data.get("results", [])
     if not isinstance(results, list):
-        return []
+        # Malformed payload (e.g. ``{"results": "boom"}``) — parse failure,
+        # not a clean zero-issue scan.
+        return None
     issues: list[SecurityIssue] = []
     for r in results:
         if not isinstance(r, dict):

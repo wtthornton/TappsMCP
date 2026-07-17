@@ -26,7 +26,7 @@ class TestRunRuffSync:
         assert issues[0].code == "E501"
 
     @patch("tapps_mcp.tools.ruff_direct.subprocess.run")
-    def test_returns_empty_on_no_output(self, mock_run):
+    def test_returns_none_on_no_output(self, mock_run):
         import subprocess
 
         mock_run.return_value = subprocess.CompletedProcess(
@@ -36,20 +36,20 @@ class TestRunRuffSync:
             stderr="",
         )
         issues = _run_ruff_sync("test.py")
-        assert issues == []
+        assert issues is None
 
     @patch("tapps_mcp.tools.ruff_direct.subprocess.run", side_effect=FileNotFoundError)
-    def test_returns_empty_when_not_found(self, _mock):
+    def test_returns_none_when_not_found(self, _mock):
         issues = _run_ruff_sync("test.py")
-        assert issues == []
+        assert issues is None
 
     @patch("tapps_mcp.tools.ruff_direct.subprocess.run")
-    def test_returns_empty_on_timeout(self, mock_run):
+    def test_returns_none_on_timeout(self, mock_run):
         import subprocess
 
         mock_run.side_effect = subprocess.TimeoutExpired(cmd="ruff", timeout=30)
         issues = _run_ruff_sync("test.py")
-        assert issues == []
+        assert issues is None
 
 
 class TestRunRuffCheckDirect:

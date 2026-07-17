@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 from pathlib import Path
 
 import structlog
@@ -10,6 +11,13 @@ from tapps_mcp.scoring.models import TypeIssue
 from tapps_mcp.tools.subprocess_runner import run_command, run_command_async
 
 logger = structlog.get_logger(__name__)
+
+# Match ``path:line: severity: message``, including Windows drive-letter paths
+# like ``C:\\foo\\bar.py:10: error: …`` (naive ``split(":", 3)`` breaks those).
+_MYPY_LINE_RE = re.compile(
+    r"^(?P<file>.+?):(?P<line>\d+):\s*(?P<severity>error|warning|note)\s*:\s*(?P<message>.*)$",
+    re.IGNORECASE,
+)
 
 
 def parse_mypy_output(raw: str, target_file: str | None = None) -> list[TypeIssue]:
@@ -30,11 +38,10 @@ def parse_mypy_output(raw: str, target_file: str | None = None) -> list[TypeIssu
             and "note:" not in line.lower()
         ):
             continue
-        parts = line.split(":", 3)
-        min_parts = 4
-        if len(parts) < min_parts:
+        m = _MYPY_LINE_RE.match(line)
+        if m is None:
             continue
-        filename = parts[0].strip()
+        filename = m.group("file").strip()
         # Filter to target file if specified.
         # Use Path.resolve() for robust comparison that handles absolute/relative
         # mismatches: mypy may emit a relative path (e.g. "src/foo.py") even when
@@ -57,12 +64,9 @@ def parse_mypy_output(raw: str, target_file: str | None = None) -> list[TypeIssu
                     target_str.endswith("/" + filename_norm) or target_str == filename_norm
                 ):
                     continue
-        try:
-            line_num = int(parts[1].strip())
-        except ValueError:
-            continue
-        severity_raw = parts[2].strip().lower()
-        message = parts[3].strip()
+        line_num = int(m.group("line"))
+        severity_raw = m.group("severity").strip().lower()
+        message = m.group("message").strip()
 
         # Extract error code from brackets
         error_code: str | None = None
@@ -111,8 +115,14 @@ _MYPY_ARGS: list[str] = [
 ]
 
 
-def run_mypy_check(file_path: str, *, cwd: str | None = None, timeout: int = 30) -> list[TypeIssue]:
-    """Run scoped mypy on a single file synchronously."""
+def run_mypy_check(
+    file_path: str, *, cwd: str | None = None, timeout: int = 30
+) -> list[TypeIssue] | None:
+    """Run scoped mypy on a single file synchronously.
+
+    Returns ``None`` on timeout or when the tool cannot produce usable output
+    (callers must treat that as degraded, not as a clean zero-issue result).
+    """
     result = run_command(
         [*_MYPY_ARGS, file_path],
         cwd=cwd,
@@ -120,14 +130,17 @@ def run_mypy_check(file_path: str, *, cwd: str | None = None, timeout: int = 30)
     )
     if result.timed_out:
         logger.warning("mypy_timeout", file=file_path, timeout=timeout)
-        return []
+        return None
     return parse_mypy_output(result.stdout, target_file=file_path)
 
 
 async def run_mypy_check_async(
     file_path: str, *, cwd: str | None = None, timeout: int = 30
-) -> list[TypeIssue]:
-    """Run scoped mypy on a single file asynchronously."""
+) -> list[TypeIssue] | None:
+    """Run scoped mypy on a single file asynchronously.
+
+    Returns ``None`` on timeout (degraded signal for callers).
+    """
     result = await run_command_async(
         [*_MYPY_ARGS, file_path],
         cwd=cwd,
@@ -135,5 +148,5 @@ async def run_mypy_check_async(
     )
     if result.timed_out:
         logger.warning("mypy_timeout_async", file=file_path, timeout=timeout)
-        return []
+        return None
     return parse_mypy_output(result.stdout, target_file=file_path)

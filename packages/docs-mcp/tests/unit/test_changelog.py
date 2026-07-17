@@ -164,8 +164,9 @@ class TestKeepAChangelog:
         assert "### Added" in result
         assert "### Fixed" in result
         assert "### Changed" in result
-        assert "### Removed" in result
+        assert "undo change" in result  # revert maps to Changed, not Removed
         assert "### Security" in result
+        assert "### Removed" not in result
 
     def test_unreleased_section_included(self, generator: ChangelogGenerator) -> None:
         unreleased = [
