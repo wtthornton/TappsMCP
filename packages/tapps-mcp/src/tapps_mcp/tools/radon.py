@@ -7,6 +7,7 @@ direct-library fallback produces accurate results in-process.
 
 from __future__ import annotations
 
+import asyncio
 import json
 
 import structlog
@@ -95,7 +96,7 @@ async def run_radon_cc_async(
     result = await run_command_async(["radon", "cc", "-j", file_path], cwd=cwd, timeout=timeout)
     if result.timed_out:
         logger.warning("radon_cc_timeout", file=file_path, timeout=timeout)
-        return _radon_cc_direct(file_path)
+        return await asyncio.to_thread(_radon_cc_direct, file_path)
     if not result.stdout.strip():
         logger.info(
             "radon_cc_empty_subprocess",
@@ -103,7 +104,7 @@ async def run_radon_cc_async(
             returncode=result.returncode,
             stderr=result.stderr[:200] if result.stderr else "",
         )
-        return _radon_cc_direct(file_path)
+        return await asyncio.to_thread(_radon_cc_direct, file_path)
     return parse_radon_cc_json(result.stdout)
 
 
@@ -166,7 +167,7 @@ async def run_radon_mi_async(file_path: str, *, cwd: str | None = None, timeout:
     result = await run_command_async(["radon", "mi", "-j", file_path], cwd=cwd, timeout=timeout)
     if result.timed_out:
         logger.warning("radon_mi_timeout", file=file_path, timeout=timeout)
-        return _radon_mi_direct(file_path)
+        return await asyncio.to_thread(_radon_mi_direct, file_path)
     if not result.stdout.strip():
         logger.info(
             "radon_mi_empty_subprocess",
@@ -174,10 +175,10 @@ async def run_radon_mi_async(file_path: str, *, cwd: str | None = None, timeout:
             returncode=result.returncode,
             stderr=result.stderr[:200] if result.stderr else "",
         )
-        return _radon_mi_direct(file_path)
+        return await asyncio.to_thread(_radon_mi_direct, file_path)
     mi_map = parse_radon_mi_json(result.stdout)
     if not mi_map:
-        return _radon_mi_direct(file_path)
+        return await asyncio.to_thread(_radon_mi_direct, file_path)
     return next(iter(mi_map.values()), 50.0)
 
 
@@ -332,7 +333,7 @@ async def run_radon_hal_async(
     result = await run_command_async(["radon", "hal", "-j", file_path], cwd=cwd, timeout=timeout)
     if result.timed_out:
         logger.warning("radon_hal_timeout", file=file_path, timeout=timeout)
-        return _radon_hal_direct(file_path)
+        return await asyncio.to_thread(_radon_hal_direct, file_path)
     if not result.stdout.strip():
         logger.info(
             "radon_hal_empty_subprocess",
@@ -340,7 +341,7 @@ async def run_radon_hal_async(
             returncode=result.returncode,
             stderr=result.stderr[:200] if result.stderr else "",
         )
-        return _radon_hal_direct(file_path)
+        return await asyncio.to_thread(_radon_hal_direct, file_path)
     return parse_radon_hal_json(result.stdout)
 
 

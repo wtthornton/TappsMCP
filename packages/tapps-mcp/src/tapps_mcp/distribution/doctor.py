@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import os
 import re
 import shutil
 import sys
@@ -3323,12 +3324,26 @@ def check_brain_probe_latency(root: Path) -> CheckResult:
         )
 
     headers: dict[str, str] = {}
-    try:
-        from tapps_core.config.settings import load_settings
+    # Prefer TAPPS_BRAIN_METRICS_TOKEN for /metrics (TAP-547); auth token is rejected with 403.
+    # Resolve from process env, then ~/.tapps-operator.env / project .env — CLI doctor often
+    # runs without direnv; MCP serve wrappers already source those files (TAP-3255).
+    metrics_token = (os.environ.get("TAPPS_BRAIN_METRICS_TOKEN") or "").strip()
+    if not metrics_token:
+        metrics_token = (
+            _env_file_get_value(Path.home() / ".tapps-operator.env", "TAPPS_BRAIN_METRICS_TOKEN")
+            or _env_file_get_value(root / ".env", "TAPPS_BRAIN_METRICS_TOKEN")
+            or ""
+        ).strip()
+    if metrics_token:
+        headers = {"Authorization": f"Bearer {metrics_token}"}
+        os.environ.setdefault("TAPPS_BRAIN_METRICS_TOKEN", metrics_token)
+    else:
+        try:
+            from tapps_core.config.settings import load_settings
 
-        headers = _doctor_brain_headers(load_settings(project_root=root))
-    except Exception:
-        headers = {}
+            headers = _doctor_brain_headers(load_settings(project_root=root))
+        except Exception:
+            headers = {}
 
     metrics_url = http_url.rstrip("/") + "/metrics"
     try:
@@ -4674,10 +4689,10 @@ def _mcp_configs_set_context7(root: Path) -> list[str]:
     return hits
 
 
-def _env_file_sets_key(path: Path, key: str) -> bool:
-    """Return True when *path* defines *key* with a non-empty, non-placeholder value."""
+def _env_file_get_value(path: Path, key: str) -> str | None:
+    """Return the value for *key* from a dotenv-style file, or None."""
     if not path.is_file():
-        return False
+        return None
     try:
         for raw_line in path.read_text(encoding="utf-8").splitlines():
             line = raw_line.strip()
@@ -4688,10 +4703,15 @@ def _env_file_sets_key(path: Path, key: str) -> bool:
                 continue
             val = value.strip().strip("'\"")
             if val and not _is_unsubstituted_placeholder(val):
-                return True
+                return val
     except OSError:
-        return False
-    return False
+        return None
+    return None
+
+
+def _env_file_sets_key(path: Path, key: str) -> bool:
+    """Return True when *path* defines *key* with a non-empty, non-placeholder value."""
+    return _env_file_get_value(path, key) is not None
 
 
 def _operator_secret_available(key: str, *, project_root: Path) -> bool:

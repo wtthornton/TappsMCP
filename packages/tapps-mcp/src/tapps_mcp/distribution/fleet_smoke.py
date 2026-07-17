@@ -78,6 +78,63 @@ def _post_mcp(
         return 0, None, f"connection failed: {exc}"
 
 
+def probe_fleet_mcp_initialize(
+    server_id: str,
+    *,
+    project_root: Path | None = None,
+    fleet_host: str | None = None,
+    timeout: float = 3.0,
+) -> dict[str, Any]:
+    """Cheap liveness probe: ``initialize`` only (no tools/list).
+
+    Detects event-loop starvation on shared HTTP fleet servers where TCP still
+    accepts connections but ``/mcp`` never completes a handshake (Cursor stuck
+    on "Loading tools"). Prefer this for the watchdog; use
+    :func:`probe_fleet_mcp_session` for full deploy smoke.
+    """
+    if server_id not in NLT_HTTP_FLEET_PORTS:
+        return {"ok": False, "server_id": server_id, "error": f"unknown server: {server_id}"}
+
+    root_header = resolve_http_project_root_header(project_root)
+    url = build_http_fleet_url(server_id, fleet_host=fleet_host)
+
+    status, session_id, body = _post_mcp(
+        url,
+        {
+            "jsonrpc": "2.0",
+            "id": 1,
+            "method": "initialize",
+            "params": {
+                "protocolVersion": _INIT_PROTOCOL,
+                "capabilities": {},
+                "clientInfo": {"name": "tapps-mcp-fleet-liveness", "version": "1"},
+            },
+        },
+        project_root=root_header,
+        timeout=timeout,
+    )
+    if status != 200 or not session_id:
+        return {
+            "ok": False,
+            "server_id": server_id,
+            "url": url,
+            "stage": "initialize",
+            "http_status": status,
+            "error": body[:500],
+        }
+
+    init_payload = parse_sse_json(body)
+    if init_payload is None or "result" not in init_payload:
+        return {
+            "ok": False,
+            "server_id": server_id,
+            "url": url,
+            "stage": "initialize",
+            "error": f"invalid SSE payload: {body[:200]!r}",
+        }
+    return {"ok": True, "server_id": server_id, "url": url, "stage": "initialize"}
+
+
 def probe_fleet_mcp_session(
     server_id: str,
     *,

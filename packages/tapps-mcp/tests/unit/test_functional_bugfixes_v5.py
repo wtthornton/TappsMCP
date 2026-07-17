@@ -9,6 +9,8 @@ from textwrap import dedent
 from types import SimpleNamespace
 from unittest.mock import MagicMock
 
+import pytest
+
 from tapps_core.metrics.execution_metrics import ToolCallMetric, ToolCallMetricsCollector
 from tapps_core.metrics.trends import calculate_trend
 from tapps_mcp.common.cache_paths import resolve_kb_cache_dir
@@ -159,7 +161,8 @@ class TestFormatBatchSummary:
 
 
 class TestValidateChangedIncomplete:
-    def test_timeout_forces_fail(self, monkeypatch: object, tmp_path: Path) -> None:
+    @pytest.mark.asyncio()
+    async def test_timeout_forces_fail(self, monkeypatch: object, tmp_path: Path) -> None:
         monkeypatch.setattr(
             "tapps_mcp.server._record_call",
             lambda *a, **k: None,
@@ -197,14 +200,15 @@ class TestValidateChangedIncomplete:
             timed_out=True,
             files_remaining=[tmp_path / "a.py", tmp_path / "b.py"],
         )
-        outcome = _finalize_outcome(
+        outcome = await _finalize_outcome(
             bc,
             [{"gate_passed": True, "security_issues": 0}],
             timeout,
         )
         assert outcome.all_passed is False
 
-    def test_cap_forces_fail(self, monkeypatch: object, tmp_path: Path) -> None:
+    @pytest.mark.asyncio()
+    async def test_cap_forces_fail(self, monkeypatch: object, tmp_path: Path) -> None:
         monkeypatch.setattr("tapps_mcp.server._record_call", lambda *a, **k: None)
         monkeypatch.setattr("tapps_mcp.server._record_execution", lambda *a, **k: None)
         wrote = {"marker": False}
@@ -237,7 +241,7 @@ class TestValidateChangedIncomplete:
             cached_results=[],
             uncached_paths=[],
         )
-        outcome = _finalize_outcome(
+        outcome = await _finalize_outcome(
             bc,
             [{"gate_passed": True, "security_issues": 0}],
             _TimedOutInfo(),

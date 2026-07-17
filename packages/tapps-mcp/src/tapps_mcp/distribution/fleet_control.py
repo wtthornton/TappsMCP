@@ -128,11 +128,67 @@ def _http_reachable(server_id: str, fleet_host: str | None = None) -> bool:
 
     Platform servers (``tapps-platform``, ``docsmcp``) return 404 on ``/`` with
     MCP at ``/mcp``; an HTTP GET probe would misread that as down (``urlopen``
-    raises on 404). Match the watchdog and doctor: TCP listen check only.
+    raises on 404). Match status display: TCP listen check only.
+
+    Watchdog liveness uses :func:`_mcp_initialize_ok` in addition to TCP so a
+    starved event loop (TCP up, ``/mcp`` hung) is not reported healthy.
     """
     host = fleet_host or resolve_fleet_host()
     port = NLT_HTTP_FLEET_PORTS[server_id]
     return _port_listening(host, port, timeout=1.5)
+
+
+def _mcp_initialize_ok(
+    server_id: str,
+    fleet_host: str | None = None,
+    *,
+    timeout: float = 3.0,
+) -> bool:
+    """Return ``True`` when ``initialize`` against ``/mcp`` completes in time."""
+    from tapps_mcp.distribution.fleet_smoke import probe_fleet_mcp_initialize
+
+    result = probe_fleet_mcp_initialize(
+        server_id,
+        fleet_host=fleet_host,
+        timeout=timeout,
+    )
+    return bool(result.get("ok"))
+
+
+def _mcp_persistently_unresponsive(
+    server_id: str,
+    host: str,
+    *,
+    attempts: int = 3,
+    backoff: float = 0.5,
+    timeout: float = 3.0,
+) -> bool:
+    """Return ``True`` only when every MCP initialize probe fails.
+
+    Mirrors :func:`_port_persistently_down`: a single slow probe during host
+    overload must not mark the server unhealthy.
+    """
+    for attempt in range(attempts):
+        if _mcp_initialize_ok(server_id, fleet_host=host, timeout=timeout):
+            return False
+        if attempt < attempts - 1:
+            time.sleep(backoff)
+    return True
+
+
+def _collect_unhealthy_servers(host: str) -> set[str]:
+    """TCP-down servers plus TCP-up servers whose ``/mcp`` handshake is hung."""
+    down = {
+        server_id
+        for server_id, port in NLT_HTTP_FLEET_PORTS.items()
+        if _port_persistently_down(host, port)
+    }
+    for server_id in NLT_HTTP_FLEET_PORTS:
+        if server_id in down:
+            continue
+        if _mcp_persistently_unresponsive(server_id, host):
+            down.add(server_id)
+    return down
 
 
 def start_fleet(*, force: bool = False) -> dict[str, Any]:
@@ -166,9 +222,7 @@ def start_fleet(*, force: bool = False) -> dict[str, Any]:
         ]
         try:
             with log_path.open("a", encoding="utf-8") as log_handle:
-                log_handle.write(
-                    f"\n--- fleet start {time.strftime('%Y-%m-%dT%H:%M:%S')} ---\n"
-                )
+                log_handle.write(f"\n--- fleet start {time.strftime('%Y-%m-%dT%H:%M:%S')} ---\n")
                 log_handle.flush()
                 proc = subprocess.Popen(
                     cmd,
@@ -284,13 +338,12 @@ def ensure_fleet_running() -> dict[str, Any]:
     When the canonical ``tapps-mcp-fleet.service`` is available we delegate to
     ``systemctl --user restart`` so the servers land in *that* unit's surviving
     cgroup; only outside systemd do we fall back to a direct start.
+
+    Unhealthy means TCP not listening **or** TCP up but ``/mcp`` ``initialize``
+    fails persistently (event-loop starvation — Cursor "Loading tools").
     """
     host = resolve_fleet_host()
-    down_now = {
-        server_id
-        for server_id, port in NLT_HTTP_FLEET_PORTS.items()
-        if _port_persistently_down(host, port)
-    }
+    down_now = _collect_unhealthy_servers(host)
 
     if not down_now:
         _write_prev_unhealthy(set())
