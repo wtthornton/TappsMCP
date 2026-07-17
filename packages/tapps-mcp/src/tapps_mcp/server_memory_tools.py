@@ -3813,7 +3813,10 @@ async def _handle_validate(store: MemoryStore, params: _Params) -> dict[str, Any
     from tapps_core.knowledge.lookup import LookupEngine
 
     settings = load_settings()
-    _cache = KBCache(settings.project_root / ".tapps-mcp-cache")
+    _cache = KBCache(
+        settings.project_root / ".tapps-mcp-cache",
+        max_mb=settings.cache_max_mb,
+    )
     lookup = LookupEngine(_cache, settings=settings)
     validator = MemoryDocValidator(lookup)  # type: ignore[arg-type]  # LookupEngine has extra kwargs vs LookupEngineLike Protocol
 

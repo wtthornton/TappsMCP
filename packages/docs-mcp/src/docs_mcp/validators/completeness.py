@@ -16,6 +16,20 @@ from docs_mcp.validators._scan_filters import (
 logger = structlog.get_logger(__name__)
 
 
+def _is_test_path(rel_path: str) -> bool:
+    """True for test layouts, not paths that merely contain the substring 'test'."""
+    low = rel_path.replace("\\", "/").lower()
+    parts = low.split("/")
+    name = parts[-1] if parts else low
+    if any(p in {"tests", "test", "__tests__", "testing"} for p in parts[:-1]):
+        return True
+    if name.startswith("test_") or name.endswith("_test.py") or name.endswith("_tests.py"):
+        return True
+    if name in {"conftest.py", "conftest.pyi"}:
+        return True
+    return False
+
+
 class CompletenessCategory(BaseModel):
     """A single category in the completeness report."""
 
@@ -315,7 +329,7 @@ def _check_api_documentation(
     for py_file in py_files:
         # Skip test files and __init__.py with no content
         rel_path = str(py_file.relative_to(project_root)).replace("\\", "/")
-        if "test" in rel_path.lower():
+        if _is_test_path(rel_path):
             continue
 
         try:
@@ -376,7 +390,7 @@ def _check_inline_docs(
 
     for py_file in py_files:
         rel_path = str(py_file.relative_to(project_root)).replace("\\", "/")
-        if "test" in rel_path.lower():
+        if _is_test_path(rel_path):
             continue
 
         try:

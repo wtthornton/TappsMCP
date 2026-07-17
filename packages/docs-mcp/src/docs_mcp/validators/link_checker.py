@@ -378,7 +378,10 @@ def _check_file_links(
                 continue
 
             try:
-                target_path = (file_dir / file_part).resolve()
+                if file_part.startswith("/"):
+                    target_path = (project_root / file_part.lstrip("/")).resolve()
+                else:
+                    target_path = (file_dir / file_part).resolve()
             except (OSError, ValueError):
                 broken.append(
                     BrokenLink(

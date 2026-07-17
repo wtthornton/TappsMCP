@@ -142,7 +142,9 @@ def _resolve_module_file(module_path: str, search_root: Path) -> Path | None:
     # Try importlib first (works when package is installed/importable)
     try:
         spec = importlib.util.find_spec(module_path)
-        if spec and spec.origin and spec.origin.endswith(".py"):
+        if spec and spec.origin and (
+            spec.origin.endswith(".py") or spec.origin.endswith(".pyi")
+        ):
             return Path(spec.origin)
     except (ModuleNotFoundError, ValueError, AttributeError):
         pass

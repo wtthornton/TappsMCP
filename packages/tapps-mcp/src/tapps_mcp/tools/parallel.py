@@ -107,6 +107,7 @@ async def run_all_tools(
     run_perflint: bool = True,
     run_semgrep: bool = True,
     vulture_whitelist_patterns: list[str] | None = None,
+    vulture_min_confidence: int = 80,
     mode: str = "subprocess",
 ) -> ParallelResults:
     """Run ruff, mypy, bandit, semgrep, radon, vulture, and perflint concurrently.
@@ -145,6 +146,7 @@ async def run_all_tools(
             run_perflint=run_perflint,
             run_semgrep=run_semgrep,
             vulture_whitelist_patterns=vulture_whitelist_patterns,
+            vulture_min_confidence=vulture_min_confidence,
         )
 
     # "subprocess" or "auto" — start with async subprocess
@@ -160,6 +162,7 @@ async def run_all_tools(
         run_perflint=run_perflint,
         run_semgrep=run_semgrep,
         vulture_whitelist_patterns=vulture_whitelist_patterns,
+        vulture_min_confidence=vulture_min_confidence,
     )
 
 
@@ -197,6 +200,7 @@ async def _run_subprocess(
     run_perflint: bool = True,
     run_semgrep: bool = True,
     vulture_whitelist_patterns: list[str] | None = None,
+    vulture_min_confidence: int = 80,
 ) -> ParallelResults:
     """Run tools via async subprocess (original behaviour)."""
     results = ParallelResults()
@@ -238,6 +242,7 @@ async def _run_subprocess(
                 file_path,
                 cwd=cwd,
                 timeout=timeout,
+                min_confidence=vulture_min_confidence,
                 whitelist_patterns=vulture_whitelist_patterns,
             )
         )
@@ -301,6 +306,7 @@ async def _run_direct(
     run_perflint: bool = True,
     run_semgrep: bool = True,
     vulture_whitelist_patterns: list[str] | None = None,
+    vulture_min_confidence: int = 80,
 ) -> ParallelResults:
     """Run tools via direct library calls and sync subprocess in thread pool.
 
@@ -379,6 +385,7 @@ async def _run_direct(
                 file_path,
                 cwd=cwd,
                 timeout=timeout,
+                min_confidence=vulture_min_confidence,
                 whitelist_patterns=vulture_whitelist_patterns,
             )
         )

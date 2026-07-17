@@ -366,11 +366,27 @@ class TestSinceFilter:
             paths = _get_files_changed_since(tmp_path, "HEAD~1")
         assert paths == {"src/app.py", "src/utils.py"}
 
-    def test_get_files_changed_since_falls_back_to_log(self, tmp_path: Path) -> None:
-        """When git diff returns nothing, git log --since is tried."""
+    def test_get_files_changed_since_empty_diff_no_fallback(self, tmp_path: Path) -> None:
+        """Successful empty git diff returns empty set (does not fall through to log)."""
         diff_result = MagicMock()
         diff_result.returncode = 0
-        diff_result.stdout = ""  # empty → try date fallback
+        diff_result.stdout = ""
+        log_result = MagicMock()
+        log_result.returncode = 0
+        log_result.stdout = "src/changed.py\n\n"
+        with patch(
+            "docs_mcp.validators.drift.subprocess.run",
+            side_effect=[diff_result, log_result],
+        ) as mock_run:
+            paths = _get_files_changed_since(tmp_path, "HEAD~1")
+        assert paths == set()
+        assert mock_run.call_count == 1
+
+    def test_get_files_changed_since_falls_back_to_log(self, tmp_path: Path) -> None:
+        """When git diff fails (e.g. ISO date is not a ref), git log --since is tried."""
+        diff_result = MagicMock()
+        diff_result.returncode = 128
+        diff_result.stdout = ""
         log_result = MagicMock()
         log_result.returncode = 0
         log_result.stdout = "src/changed.py\n\n"
@@ -382,10 +398,10 @@ class TestSinceFilter:
         assert paths == {"src/changed.py"}
 
     def test_get_files_changed_since_empty_on_error(self, tmp_path: Path) -> None:
-        """Returns empty set when git is unavailable."""
+        """Returns None when git is unavailable (caller falls back to full scan)."""
         with patch("docs_mcp.validators.drift.subprocess.run", side_effect=FileNotFoundError):
             paths = _get_files_changed_since(tmp_path, "HEAD~1")
-        assert paths == set()
+        assert paths is None
 
     def test_detector_since_filters_to_changed_files(self, tmp_path: Path) -> None:
         """When `since` returns specific files, only those files are analyzed."""
@@ -409,8 +425,8 @@ class TestSinceFilter:
         assert report.total_items == 1
         assert report.items[0].file_path == "changed.py"
 
-    def test_detector_since_empty_result_scans_all(self, tmp_path: Path) -> None:
-        """When git returns no changed files, all files are scanned."""
+    def test_detector_since_empty_result_skips_scan(self, tmp_path: Path) -> None:
+        """Successful empty git diff means no changes — do not scan the whole tree."""
         (tmp_path / "app.py").write_text(
             '"""Mod."""\n\ndef some_func() -> None:\n    pass\n', encoding="utf-8"
         )
@@ -424,7 +440,26 @@ class TestSinceFilter:
                 tmp_path, since="HEAD~1", docstring_coverage_counts=False
             )
 
-        assert report.checked_files == 1  # fell back to scanning all
+        assert report.checked_files == 0
+        assert report.total_items == 0
+
+    def test_detector_since_none_falls_back_to_all(self, tmp_path: Path) -> None:
+        """When git cannot resolve *since*, fall back to scanning all files."""
+        (tmp_path / "app.py").write_text(
+            '"""Mod."""\n\ndef some_func() -> None:\n    pass\n', encoding="utf-8"
+        )
+        (tmp_path / "README.md").write_text("# Project\n", encoding="utf-8")
+
+        with patch(
+            "docs_mcp.validators.drift._get_files_changed_since",
+            return_value=None,
+        ):
+            report = DriftDetector().check(
+                tmp_path, since="HEAD~1", docstring_coverage_counts=False
+            )
+
+        assert report.checked_files == 1
+        assert report.total_items == 1
 
 
 # ---------------------------------------------------------------------------

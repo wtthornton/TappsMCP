@@ -496,7 +496,7 @@ async def _maybe_validate_memories(
         cache_dir = settings.project_root / ".tapps-mcp-cache"
         if docs_via_brain_enabled(settings):
             cache_dir.mkdir(parents=True, exist_ok=True)
-        _cache = KBCache(cache_dir)
+        _cache = KBCache(cache_dir, max_mb=settings.cache_max_mb)
         lookup = LookupEngine(_cache, settings=settings)
         validator = MemoryDocValidator(lookup)  # type: ignore[arg-type]  # LookupEngine has extra kwargs vs LookupEngineLike Protocol
 
@@ -1301,7 +1301,10 @@ def _schedule_lookup_docs_warm(
             api_key = getattr(s, "context7_api_key", None)
             if not api_key or not api_key.get_secret_value():
                 return
-            cache = KBCache(project_root / ".tapps-mcp-cache")
+            cache = KBCache(
+                project_root / ".tapps-mcp-cache",
+                max_mb=s.cache_max_mb,
+            )
             await warm_cache(
                 project_root,
                 cache,

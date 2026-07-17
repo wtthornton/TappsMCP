@@ -1410,7 +1410,7 @@ def _run_cache_warming(
         }
 
     cache_dir = project_root / ".tapps-mcp-cache"
-    cache = KBCache(cache_dir)
+    cache = KBCache(cache_dir, max_mb=settings.cache_max_mb)
 
     error: str | None = None
     try:

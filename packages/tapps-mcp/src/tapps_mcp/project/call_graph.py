@@ -80,7 +80,10 @@ def _ts_file_to_module(file_path: Path, project_root: Path) -> str:
     parts = list(rel.with_suffix("").parts)
     if not parts:
         return ""
-    if parts[0] == "src":
+    # Monorepo: packages/<pkg>/src/...
+    if parts[0] == "packages" and len(parts) >= 3 and parts[2] == "src":
+        parts = parts[3:]
+    elif parts[0] == "src":
         parts = parts[1:]
     return "/".join(parts) if parts else ""
 

@@ -22,6 +22,13 @@ import time
 from pathlib import Path
 from typing import Any, Literal
 
+from tapps_mcp.pipeline.agent_contract import (
+    CALL_GRAPH_STOP_FOLLOWUP,
+    CHECKLIST_SKIPPED_REC,
+    SESSION_START_CHECKLIST_GAP_HINT,
+    STOP_GAP_FOLLOWUP_DEFAULT,
+    lookup_gap_recommendation,
+)
 from tapps_mcp.tools.loop_metrics import (
     compute_recent_edit_loop_stats,
     compute_rolling_stats,
@@ -34,13 +41,6 @@ from tapps_mcp.tools.pipeline_tool_sets import (
     LOOKUP_SHORT_NAMES,
     SOURCE_FILE_SUFFIXES,
     matches_pipeline_tool,
-)
-from tapps_mcp.pipeline.agent_contract import (
-    CALL_GRAPH_STOP_FOLLOWUP,
-    CHECKLIST_SKIPPED_REC,
-    SESSION_START_CHECKLIST_GAP_HINT,
-    STOP_GAP_FOLLOWUP_DEFAULT,
-    lookup_gap_recommendation,
 )
 
 _VIOLATIONS_NAME = ".completion-gate-violations.jsonl"
@@ -200,7 +200,7 @@ def _lookup_gap_libraries(project_root: Path, edited_paths: list[str]) -> list[s
     try:
         cache = KBCache(project_root / ".tapps-mcp-cache")
         return find_uncached_libraries(sorted(external), cache)
-    except Exception:  # noqa: BLE001
+    except Exception:
         return sorted(external)
 
 
@@ -313,7 +313,9 @@ def compute_gaps(
         t for r in rows[-10:] for t in r.get("tools_used", []) if isinstance(t, str)
     }
     used_comprehension = any(
-        t in recent_tools or t in called for t in COMPREHENSION_SHORT_NAMES
+        matches_pipeline_tool(t, COMPREHENSION_SHORT_NAMES) for t in recent_tools
+    ) or any(
+        matches_pipeline_tool(t, COMPREHENSION_SHORT_NAMES) for t in called
     )
     if has_recent_edits and not used_comprehension:
         parent_dirs = {str(Path(p).parent) for p in edited_recent}

@@ -1147,10 +1147,21 @@ async def docs_release_gate(
 
     drift_score = int(drift_data.get("drift_score", 0))
     items_count = int(drift_data.get("items_count") or len(drift_data.get("items", []) or []))
-    stale_count = int(fresh_data.get("stale_count", 0))
-    ancient_count = int(fresh_data.get("ancient_count", 0))
-    broken_count = int(links_data.get("broken_count", 0))
-    total_links = int(links_data.get("total_links", 0))
+    cc = fresh_data.get("category_counts") or {}
+    stale_count = int(cc.get("stale", 0) if isinstance(cc, dict) else 0)
+    ancient_count = int(cc.get("ancient", 0) if isinstance(cc, dict) else 0)
+    # LinkReport has broken_links (list), not broken_count. Prefer the
+    # pre-truncation total when present so summary_only / max_items cannot hide
+    # failures from the release gate.
+    broken_count = int(links_data.get("broken_count", 0) or 0)
+    if broken_count <= 0:
+        avail = int(links_data.get("total_available_broken_links", 0) or 0)
+        if avail > 0:
+            broken_count = avail
+        else:
+            broken_list = links_data.get("broken_links") or []
+            broken_count = len(broken_list) if isinstance(broken_list, list) else 0
+    total_links = int(links_data.get("total_links", 0) or 0)
 
     recommendations: list[str] = []
     if drift_score >= 30:
