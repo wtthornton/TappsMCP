@@ -949,8 +949,8 @@ async def tapps_quick_check(
                 # gate failures must still decrement the success counter, the
                 # structured output and next_steps must still ride along, and
                 # _record_execution must run so timings stay calibrated.
-                cached_gate_passed = bool(cached.get("gate_passed", True))
-                cached_security_passed = bool(cached.get("security_passed", True))
+                cached_gate_passed = bool(cached.get("gate_passed", False))
+                cached_security_passed = bool(cached.get("security_passed", False))
                 if not cached_gate_passed or not cached_security_passed:
                     _record_call("tapps_quick_check", success=False)
 

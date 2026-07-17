@@ -82,13 +82,16 @@ def analyze_file(
 
 
 def _load_imports(idx: FileIndex, tree: ast.Module) -> None:
+    is_package = Path(idx.rel_path).name == "__init__.py"
     for node in tree.body:
         if isinstance(node, ast.Import):
             for alias in node.names:
                 bound = alias.asname or alias.name.split(".", maxsplit=1)[0]
                 idx.imports[bound] = alias.name
         elif isinstance(node, ast.ImportFrom):
-            base = _import_from_base(idx.module, node.module, node.level)
+            base = _import_from_base(
+                idx.module, node.module, node.level, is_package=is_package
+            )
             for alias in node.names:
                 if alias.name == "*":
                     continue
@@ -96,29 +99,23 @@ def _load_imports(idx: FileIndex, tree: ast.Module) -> None:
                 idx.imports[bound] = f"{base}.{alias.name}" if base else alias.name
 
 
-def _import_from_base(module: str, node_module: str | None, level: int) -> str:
+def _import_from_base(
+    module: str,
+    node_module: str | None,
+    level: int,
+    *,
+    is_package: bool = False,
+) -> str:
     """Resolve the dotted base for an ``ImportFrom``, honoring relative ``level``.
 
     For an absolute import (``level == 0``) this is just ``node_module``. For a
-    relative import (``from .util import x`` / ``from ..pkg import y``) the leading
-    dots must be resolved against the current module's package: ``level`` trailing
-    path components are dropped from ``module`` to reach the anchor package, then
-    ``node_module`` (if any) is appended. Without this, ``from .util import compute``
-    in ``pkg.app`` bound to ``util.compute`` instead of ``pkg.util.compute`` and the
-    call never resolved to the in-repo definition.
-
-    Note: assumes ``module`` names a module, not a package ``__init__`` (whose
-    anchor would be the package itself). That matches how the indexer derives
-    module names for regular ``.py`` files.
+    relative import the leading dots are resolved against the containing package
+    (PEP 328): regular modules use the parent package; package ``__init__``
+    modules use themselves as the anchor.
     """
-    if not level:
-        return node_module or ""
-    parts = module.split(".")
-    anchor = parts[:-level] if level <= len(parts) else []
-    pieces = [*anchor]
-    if node_module:
-        pieces.append(node_module)
-    return ".".join(pieces)
+    from tapps_mcp.project.import_graph import resolve_relative_import
+
+    return resolve_relative_import(module, node_module, level, is_package=is_package)
 
 
 def _register_class(idx: FileIndex, node: ast.ClassDef, outer: list[str]) -> None:

@@ -122,7 +122,7 @@ class TestDependencyScanTool:
 
         settings = load_settings()
         cached = get_dependency_findings(str(settings.project_root))
-        assert cached == []
+        assert cached is None
 
     @pytest.mark.asyncio
     async def test_disabled_returns_early(self):

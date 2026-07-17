@@ -402,7 +402,12 @@ TASK_TYPE_REASONS: dict[str, str] = {
 }
 
 # Primary tool -> checklist tool names satisfied by calling the primary (success only).
-_TOOL_EQUIVALENTS: dict[str, frozenset[str]] = {}
+# Composite tools that satisfy score + gate. Security is NOT implied: quick mode
+# and validate_changed(quick=True) often skip bandit / full security scans.
+_TOOL_EQUIVALENTS: dict[str, frozenset[str]] = {
+    "tapps_quick_check": frozenset({"tapps_score_file", "tapps_quality_gate"}),
+    "tapps_validate_changed": frozenset({"tapps_score_file", "tapps_quality_gate"}),
+}
 
 _engagement_maps_cache: dict[str, dict[str, dict[str, list[str]]]] | None = None
 _engagement_maps_version: str = ""
@@ -595,8 +600,6 @@ def _base_successful_tools(states: dict[str, bool], *, require_success: bool) ->
 def _compute_effective_tools(base_successful: set[str]) -> set[str]:
     """Expand successful tools with composite / equivalent coverage."""
     effective = set(base_successful)
-    if "tapps_quick_check" in base_successful or "tapps_validate_changed" in base_successful:
-        effective.update({"tapps_score_file", "tapps_quality_gate", "tapps_security_scan"})
     for primary, implied in _TOOL_EQUIVALENTS.items():
         if primary in base_successful:
             effective.update(implied)
@@ -638,6 +641,7 @@ class CallTracker:
         with cls._lock:
             cls._persist_path = Path(path)
             cls._load_active_session_id()
+            cls._calls.clear()
             cls._load_persisted()
 
     @classmethod
@@ -803,6 +807,11 @@ class CallTracker:
         required, recommended, optional = _get_tool_lists(tool_map)
 
         with cls._lock:
+            # Reload JSONL so tools recorded by other NLT MCP processes
+            # (nlt-release-ship, nlt-linear-issues, …) satisfy this checklist.
+            if cls._persist_path is not None:
+                cls._calls.clear()
+                cls._load_persisted()
             sub = cls._filtered_calls()
             call_count = len(sub)
         states = _call_states_ordered(sub)

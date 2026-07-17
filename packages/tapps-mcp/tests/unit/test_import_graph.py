@@ -348,3 +348,40 @@ class TestImportGraphMethods:
         )
 
         assert graph.get_dependents("a") == []
+
+
+class TestPackageInitRelativeImports:
+    """Relative imports inside package __init__.py use the package as anchor."""
+
+    def test_init_relative_from_dot_module(self, tmp_path):
+        """from .foo in pkg/__init__.py resolves to pkg.foo (not top-level foo)."""
+        from tapps_mcp.project.import_graph import _extract_imports
+
+        pkg = tmp_path / "mypkg"
+        pkg.mkdir()
+        init = pkg / "__init__.py"
+        init.write_text("from .util import helper\n")
+        (pkg / "util.py").write_text("def helper():\n    return 1\n")
+
+        project_modules = {"mypkg", "mypkg.util"}
+        edges, _ = _extract_imports(init, "mypkg", project_modules)
+
+        assert len(edges) == 1
+        assert edges[0].target_module == "mypkg.util"
+
+    def test_nested_init_relative(self, tmp_path):
+        """from .foo in pkg/sub/__init__.py resolves to pkg.sub.foo."""
+        from tapps_mcp.project.import_graph import _extract_imports
+
+        sub = tmp_path / "mypkg" / "sub"
+        sub.mkdir(parents=True)
+        (tmp_path / "mypkg" / "__init__.py").write_text("")
+        init = sub / "__init__.py"
+        init.write_text("from .helpers import x\n")
+        (sub / "helpers.py").write_text("x = 1\n")
+
+        project_modules = {"mypkg", "mypkg.sub", "mypkg.sub.helpers"}
+        edges, _ = _extract_imports(init, "mypkg.sub", project_modules)
+
+        assert len(edges) == 1
+        assert edges[0].target_module == "mypkg.sub.helpers"

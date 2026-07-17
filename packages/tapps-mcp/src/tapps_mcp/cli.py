@@ -1316,12 +1316,20 @@ def _echo_validate_changed_data(data: dict[str, object]) -> None:
     help="Comma-separated file paths (default: git auto-detect changed files).",
 )
 @click.option(
+    "--security-depth",
+    type=click.Choice(["none", "basic", "full"]),
+    default=None,
+    help="Security scan depth (overrides --quick/--full default).",
+)
+@click.option(
     "--project-root",
     default=".",
     type=click.Path(exists=True, file_okay=False, path_type=str),
     help="Project root (default: current directory).",
 )
-def validate_changed_cmd(quick: bool, file_paths: str, project_root: str) -> None:
+def validate_changed_cmd(
+    quick: bool, file_paths: str, security_depth: str | None, project_root: str
+) -> None:
     """Validate changed Python files (same logic as the MCP tool).
 
     Run this before ending a session to confirm changed files pass quality gates.
@@ -1336,11 +1344,14 @@ def validate_changed_cmd(quick: bool, file_paths: str, project_root: str) -> Non
         os.chdir(project_root)
 
     async def _run() -> None:
-        result = await tapps_validate_changed(
-            file_paths=file_paths,
-            quick=quick,
-            include_security=not quick,
-        )
+        kwargs: dict[str, object] = {
+            "file_paths": file_paths,
+            "quick": quick,
+            "include_security": not quick if security_depth is None else security_depth != "none",
+        }
+        if security_depth is not None:
+            kwargs["security_depth"] = security_depth
+        result = await tapps_validate_changed(**kwargs)  # type: ignore[arg-type]
         if not result.get("success"):
             click.echo(result.get("error", "Validation failed."), err=True)
             raise SystemExit(1)
@@ -1745,35 +1756,57 @@ def memory() -> None:
 
 
 @memory.command("list")
-@click.option("--tier", type=click.Choice(["architectural", "pattern", "context"]), default=None)
+@click.option(
+    "--tier",
+    type=click.Choice(["architectural", "pattern", "procedural", "context"]),
+    default=None,
+)
 @click.option("--scope", type=click.Choice(["project", "branch", "session"]), default=None)
 @click.option("--json", "as_json", is_flag=True, help="Output as JSON.")
 def memory_list(tier: str | None, scope: str | None, as_json: bool) -> None:
-    """List all memory entries with optional filters."""
+    """List all memory entries with optional filters (via BrainBridge)."""
+    import asyncio
     import json
 
-    from tapps_brain.store import MemoryStore
+    async def _list() -> list[dict[str, object]]:
+        bridge = _create_cli_brain_bridge()
+        if bridge is None:
+            raise RuntimeError("bridge_unavailable")
+        try:
+            # BrainBridge.list_memories filters by tier; scope is client-side.
+            entries = await bridge.list_memories(limit=500, tier=tier)  # type: ignore[attr-defined]
+            if scope:
+                entries = [e for e in entries if e.get("scope") == scope]
+            return entries
+        finally:
+            bridge.close()  # type: ignore[attr-defined]
 
-    store = MemoryStore(_get_project_root(), store_dir=".tapps-mcp")
     try:
-        entries = store.list_all(tier=tier, scope=scope)
-        if as_json:
-            click.echo(json.dumps([e.model_dump(mode="json") for e in entries], indent=2))
-            return
-        if not entries:
-            click.echo("No memories found.")
-            return
-        click.echo(f"{'Key':<30} {'Tier':<15} {'Scope':<10} {'Confidence':<12} Value")
-        click.echo("-" * 90)
-        for e in entries:
-            value_preview = e.value[:40].replace("\n", " ")
-            if len(e.value) > 40:
-                value_preview += "..."
-            click.echo(
-                f"{e.key:<30} {e.tier:<15} {e.scope:<10} {e.confidence:<12.2f} {value_preview}"
-            )
-    finally:
-        store.close()
+        entries = asyncio.run(_list())
+    except RuntimeError as exc:
+        if str(exc) == "bridge_unavailable":
+            click.echo(_brain_bridge_unavailable_message(), err=True)
+            raise SystemExit(1) from exc
+        raise
+    if as_json:
+        click.echo(json.dumps(entries, indent=2, default=str))
+        return
+    if not entries:
+        click.echo("No memories found.")
+        return
+    click.echo(f"{'Key':<30} {'Tier':<15} {'Scope':<10} {'Confidence':<12} Value")
+    click.echo("-" * 90)
+    for e in entries:
+        value = str(e.get("value", ""))
+        value_preview = value[:40].replace("\n", " ")
+        if len(value) > 40:
+            value_preview += "..."
+        conf = e.get("confidence", 0.0)
+        conf_s = f"{float(conf):.2f}" if isinstance(conf, (int, float)) else str(conf)
+        click.echo(
+            f"{e.get('key', '')!s:<30} {e.get('tier', '')!s:<15} "
+            f"{e.get('scope', '')!s:<10} {conf_s:<12} {value_preview}"
+        )
 
 
 @memory.command("save")
@@ -1781,7 +1814,7 @@ def memory_list(tier: str | None, scope: str | None, as_json: bool) -> None:
 @click.option("--value", required=True, help="Memory content.")
 @click.option(
     "--tier",
-    type=click.Choice(["architectural", "pattern", "context"]),
+    type=click.Choice(["architectural", "pattern", "procedural", "context"]),
     default="pattern",
 )
 @click.option("--tags", default="", help="Comma-separated tags.")
@@ -2057,18 +2090,29 @@ def memory_search(query: str, limit: int, as_json: bool) -> None:
 @memory.command("delete")
 @click.option("--key", required=True, help="Memory key to delete.")
 def memory_delete(key: str) -> None:
-    """Delete a memory entry."""
-    from tapps_brain.store import MemoryStore
+    """Delete a memory entry via BrainBridge."""
+    import asyncio
 
-    store = MemoryStore(_get_project_root(), store_dir=".tapps-mcp")
+    async def _delete() -> bool:
+        bridge = _create_cli_brain_bridge()
+        if bridge is None:
+            raise RuntimeError("bridge_unavailable")
+        try:
+            return bool(await bridge.delete(key))  # type: ignore[attr-defined]
+        finally:
+            bridge.close()  # type: ignore[attr-defined]
+
     try:
-        deleted = store.delete(key)
-        if not deleted:
-            click.echo(f"Memory '{key}' not found.", err=True)
-            raise SystemExit(1)
-        click.echo(f"Deleted memory '{key}'.")
-    finally:
-        store.close()
+        deleted = asyncio.run(_delete())
+    except RuntimeError as exc:
+        if str(exc) == "bridge_unavailable":
+            click.echo(_brain_bridge_unavailable_message(), err=True)
+            raise SystemExit(1) from exc
+        raise
+    if not deleted:
+        click.echo(f"Memory '{key}' not found.", err=True)
+        raise SystemExit(1)
+    click.echo(f"Deleted memory '{key}'.")
 
 
 @memory.command("import-file")
@@ -2121,7 +2165,7 @@ def memory_import(file_path: str, overwrite: bool) -> None:
 )
 @click.option(
     "--scope",
-    type=click.Choice(["project", "branch", "session", "shared"]),
+    type=click.Choice(["project", "branch", "session"]),
     default=None,
     help="Filter by memory scope.",
 )
