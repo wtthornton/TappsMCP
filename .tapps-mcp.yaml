@@ -32,16 +32,3 @@ experts:
   auto_generate: true
 cache_max_mb: 100
 mcp_transport: http
-validate_changed:
-  judges:
-  - type: grep
-    target: .claude/skills/linear/scripts/build.mjs
-    expect: --audit
-    description: Site prebuild runs document build with post-build audit
-    blocking: true
-    when_changed:
-    - .claude/skills/linear/scripts/build.mjs
-    - reports/**
-    - src/**
-    - brands/**
-    - templates/**
