@@ -105,6 +105,10 @@ class TestSemverSortKey:
     def test_prerelease_before_release(self) -> None:
         assert _semver_sort_key("1.0.0-rc.1") < _semver_sort_key("1.0.0")
 
+    def test_build_metadata_ignored_for_sort(self) -> None:
+        assert _semver_sort_key("1.0.0+build.1") == _semver_sort_key("1.0.0")
+        assert _semver_sort_key("1.0.0+build.1") < _semver_sort_key("1.0.1")
+
     def test_non_semver_fallback(self) -> None:
         key = _semver_sort_key("not-a-version")
         assert key == (0, 0, 0, "not-a-version")

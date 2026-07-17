@@ -38,9 +38,14 @@ def _file_exists_case_insensitive(project_root: Path, filename: str) -> str | No
     """Check if a file exists (case-insensitive) in the project root.
 
     Returns the actual filename if found, or None.
+
+    Exact name matches always win. Stem-only matches allow ``LICENSE`` ↔
+    ``LICENSE.md`` (extensionless ↔ extension) but never different
+    extensions (``CHANGELOG.md`` must not match ``CHANGELOG.rst``).
     """
     target_lower = filename.lower()
-    target_stem = target_lower.rsplit(".", 1)[0] if "." in target_lower else target_lower
+    target_has_ext = "." in target_lower
+    target_stem = target_lower.rsplit(".", 1)[0] if target_has_ext else target_lower
     try:
         for entry in project_root.iterdir():
             if not entry.is_file():
@@ -48,9 +53,12 @@ def _file_exists_case_insensitive(project_root: Path, filename: str) -> str | No
             name_lower = entry.name.lower()
             if name_lower == target_lower:
                 return entry.name
-            # Also match without extension (e.g., LICENSE vs LICENSE.md)
-            entry_stem = name_lower.rsplit(".", 1)[0] if "." in name_lower else name_lower
-            if entry_stem == target_stem:
+            entry_has_ext = "." in name_lower
+            entry_stem = name_lower.rsplit(".", 1)[0] if entry_has_ext else name_lower
+            if entry_stem != target_stem:
+                continue
+            # Only allow stem match across extensionless ↔ with-extension.
+            if target_has_ext != entry_has_ext:
                 return entry.name
     except OSError:
         pass
@@ -86,7 +94,7 @@ def _find_python_files(
         dirnames[:] = kept
 
         for fname in filenames:
-            if not fname.endswith(".py"):
+            if not fname.lower().endswith(".py"):
                 continue
             fpath = current / fname
             file_rel = str(fpath.relative_to(project_root)).replace("\\", "/")

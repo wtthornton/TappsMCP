@@ -36,7 +36,7 @@ class VersionBoundary(BaseModel):
 # ---------------------------------------------------------------------------
 
 _SEMVER_SORT_RE = re.compile(
-    r"^(\d+)\.(\d+)\.(\d+)(?:[-+](.+))?$",
+    r"^(\d+)\.(\d+)\.(\d+)(?:-([^+]+))?(?:\+(.+))?$",
 )
 
 
@@ -44,6 +44,7 @@ def _semver_sort_key(version: str) -> tuple[int, int, int, str]:
     """Return a sortable tuple for a semver string.
 
     Pre-release versions sort before their release (e.g. 1.0.0-rc.1 < 1.0.0).
+    Build metadata is ignored for ordering (e.g. 1.0.0+build.1 == 1.0.0).
     """
     m = _SEMVER_SORT_RE.match(version)
     if not m:

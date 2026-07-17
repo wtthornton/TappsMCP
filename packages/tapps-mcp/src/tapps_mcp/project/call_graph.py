@@ -51,10 +51,10 @@ AnalyzeResult = tuple[
 # A file analyzer takes (file_path, module, project_root) and returns AnalyzeResult.
 FileAnalyzer = Callable[[Path, str, Path], AnalyzeResult]
 
-# Suffixes we collect during the walk. Python routes to the real Python
-# analyzer; TypeScript routes to the tree-sitter TS analyzer (S2, TAP-4538).
-_PY_SUFFIXES = (".py",)
-_TS_SUFFIXES = (".ts", ".tsx")
+# Suffixes we collect during the walk. Python/``.pyi`` route to the Python
+# analyzer; TS/JS routes to the tree-sitter TS analyzer (S2, TAP-4538).
+_PY_SUFFIXES = (".py", ".pyi")
+_TS_SUFFIXES = (".ts", ".tsx", ".js", ".jsx", ".mjs", ".cjs")
 
 
 def _analyzer_for(suffix: str) -> FileAnalyzer | None:
@@ -67,11 +67,11 @@ def _analyzer_for(suffix: str) -> FileAnalyzer | None:
 
 
 def _ts_file_to_module(file_path: Path, project_root: Path) -> str:
-    """Convert a ``.ts``/``.tsx`` path to a slash-delimited module name (TAP-4537).
+    """Convert a TS/JS path to a slash-delimited module name (TAP-4537).
 
     Mirrors ``import_graph._file_to_module`` for the Python side but keeps the
-    TS convention: strip a leading ``src/`` segment and drop the ``.ts``/``.tsx``
-    suffix. Returns "" when the path escapes ``project_root``.
+    TS convention: strip a leading ``src/`` segment and drop the file suffix.
+    Returns "" when the path escapes ``project_root``.
     """
     try:
         rel = file_path.relative_to(project_root)
@@ -99,7 +99,7 @@ __all__ = [
 
 
 def _collect_source_files(project_root: Path, excludes: set[str]) -> list[Path]:
-    """Return the sorted, filtered list of ``.py``/``.ts``/``.tsx`` source files."""
+    """Return the sorted, filtered list of Python and TS/JS source files."""
     walk_suffixes = _PY_SUFFIXES + _TS_SUFFIXES
     source_files = sorted(f for suffix in walk_suffixes for f in project_root.rglob(f"*{suffix}"))
     return [

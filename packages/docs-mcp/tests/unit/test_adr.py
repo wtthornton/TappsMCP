@@ -90,6 +90,23 @@ class TestADRGeneratorNumbering:
         )
         assert filename == "0001-new-decision.md"
 
+    def test_legacy_three_digit_numbering(self, tmp_path: Path) -> None:
+        """Legacy 001-*.md files are counted when assigning the next number."""
+        adr_dir = tmp_path / "decisions"
+        adr_dir.mkdir()
+        (adr_dir / "001-legacy-decision.md").write_text(
+            "# 1. Legacy Decision\n\n## Status\n\naccepted\n",
+            encoding="utf-8",
+        )
+
+        gen = ADRGenerator()
+        _, filename = gen.generate(
+            "Next Decision",
+            project_root=tmp_path,
+            adr_dir=adr_dir,
+        )
+        assert filename == "0002-next-decision.md"
+
     def test_continues_from_existing_adrs(self, tmp_path: Path) -> None:
         """Numbering continues after the highest existing ADR number."""
         adr_dir = tmp_path / "decisions"
@@ -244,7 +261,27 @@ class TestADRGeneratorSupersedes:
         )
         content = gen._render_madr(record)
         assert "Supersedes [ADR 1]" in content
-        assert "0001-*.md" in content
+        assert "0001.md" in content
+
+    def test_supersedes_resolves_existing_filename(self, tmp_path: Path) -> None:
+        """Supersedes link uses the actual filename when the ADR exists."""
+        adr_dir = tmp_path / "decisions"
+        adr_dir.mkdir()
+        (adr_dir / "0001-use-sqlite.md").write_text(
+            "# 1. Use SQLite\n\n## Status\n\naccepted\n",
+            encoding="utf-8",
+        )
+
+        gen = ADRGenerator()
+        record = ADRRecord(
+            number=2,
+            title="Use Postgres",
+            status="accepted",
+            date="2026-03-01",
+            supersedes=1,
+        )
+        content = gen._render_madr(record, adr_dir)
+        assert "Supersedes [ADR 1](0001-use-sqlite.md)" in content
 
     def test_no_supersedes_when_none(self, tmp_path: Path) -> None:
         """When supersedes is None, no supersedes link appears."""

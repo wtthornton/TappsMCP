@@ -230,7 +230,7 @@ class DocsMCPSettings(BaseSettings):
             "'release' = changelog, release notes/update, release_gate, drift/links/freshness; "
             "'auditor' = project_scan + check_drift/completeness/links/freshness/diataxis/"
             "cross_refs/style + validate_epic; "
-            "'nlt-project-docs' = Epic 109 NLT project-docs server (27 tools). "
+            "'nlt-project-docs' = Epic 109 NLT project-docs server (29 tools). "
             "Used when enabled_tools is not set. Env: DOCS_MCP_TOOL_PRESET."
         ),
     )

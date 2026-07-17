@@ -147,22 +147,34 @@ def _resolve_module_file(module_path: str, search_root: Path) -> Path | None:
     except (ModuleNotFoundError, ValueError, AttributeError):
         pass
 
-    # Fall back to file-system heuristic
+    # Fall back to file-system heuristic (flat layout, then src/lib layouts)
     parts = module_path.split(".")
-    # Try as a direct module file
-    candidate = search_root / Path(*parts[:-1]) / f"{parts[-1]}.py" if len(parts) > 1 else None
-    if candidate and candidate.is_file():
-        return candidate
 
-    # Try the module path as a package
-    for i in range(len(parts), 0, -1):
-        candidate = search_root / Path(*parts[:i]).with_suffix(".py")
-        if candidate.is_file():
+    def _try_under(base: Path) -> Path | None:
+        # Try as a direct module file
+        candidate = base / Path(*parts[:-1]) / f"{parts[-1]}.py" if len(parts) > 1 else None
+        if candidate and candidate.is_file():
             return candidate
-        # Try as __init__.py inside package dir
-        candidate = search_root / Path(*parts[:i]) / "__init__.py"
-        if candidate.is_file():
-            return candidate
+
+        # Try the module path as a package
+        for i in range(len(parts), 0, -1):
+            candidate = base / Path(*parts[:i]).with_suffix(".py")
+            if candidate.is_file():
+                return candidate
+            # Try as __init__.py inside package dir
+            candidate = base / Path(*parts[:i]) / "__init__.py"
+            if candidate.is_file():
+                return candidate
+
+        return None
+
+    found = _try_under(search_root)
+    if found is not None:
+        return found
+    for subdir in ("src", "lib"):
+        found = _try_under(search_root / subdir)
+        if found is not None:
+            return found
 
     return None
 
@@ -216,7 +228,7 @@ def analyze_cross_references(
     """
     result = CrossRefResult()
 
-    if not file_path.suffix == ".py" or not file_path.is_file():
+    if file_path.suffix.lower() not in {".py", ".pyi"} or not file_path.is_file():
         result.status = "degraded"
         return result
 

@@ -672,6 +672,11 @@ class CallTracker:
         """Start a new checklist session boundary (call from tapps_session_start)."""
         sid = session_id or uuid.uuid4().hex[:16]
         with cls._lock:
+            # Adopt pre-session records (empty session_id) so early tool calls
+            # are not dropped after begin_session.
+            for rec in cls._calls:
+                if not rec.session_id:
+                    rec.session_id = sid
             cls._active_session_id = sid
             cls._persist_active_session()
         return sid

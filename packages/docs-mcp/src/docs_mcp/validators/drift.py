@@ -119,7 +119,7 @@ def _find_python_files(project_root: Path) -> list[Path]:
         dirnames[:] = [d for d in dirnames if not _should_skip_dir(d)]
         current = Path(dirpath)
         for fname in filenames:
-            if fname.endswith(".py"):
+            if fname.lower().endswith(".py"):
                 py_files.append(current / fname)
     return py_files
 
@@ -409,7 +409,7 @@ def _qualify(rel_path: str, name: str) -> str:
     path = rel_path.replace("\\", "/")
     if path.endswith("/__init__.py"):
         path = path[: -len("/__init__.py")]
-    elif path.endswith(".py"):
+    elif path.lower().endswith(".py"):
         path = path[:-3]
     # Strip src-layout prefixes so logical package names are used in qualified names.
     for prefix in ("src/", "lib/"):

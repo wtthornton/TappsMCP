@@ -16,6 +16,7 @@ import structlog
 from pydantic import BaseModel
 
 from docs_mcp.validators._scan_filters import matches_any_pattern
+from docs_mcp.validators.link_checker import _normalize_link_destination
 
 logger: structlog.stdlib.BoundLogger = structlog.get_logger()
 
@@ -467,7 +468,7 @@ class CrossRefValidator:
             if in_code_block:
                 continue
             for match in _LINK_RE.finditer(line):
-                target = match.group(2)
+                target = _normalize_link_destination(match.group(2))
                 # Skip external URLs, images, anchors-only
                 if target.startswith(("http://", "https://", "mailto:", "#")):
                     continue

@@ -357,17 +357,10 @@ def _should_skip(path: Path) -> bool:
 
 
 def _file_to_module(file_path: Path, project_root: Path) -> str:
-    """Mirror :func:`tapps_mcp.project.import_graph._file_to_module`."""
-    try:
-        rel = file_path.relative_to(project_root)
-    except ValueError:
-        return ""
-    parts = list(rel.with_suffix("").parts)
-    if not parts:
-        return ""
-    if parts and parts[-1] == "__init__":
-        parts = parts[:-1]
-    return ".".join(parts) if parts else ""
+    """Delegate to :func:`tapps_mcp.project.import_graph._file_to_module`."""
+    from tapps_mcp.project.import_graph import _file_to_module as _ig_file_to_module
+
+    return _ig_file_to_module(file_path, project_root, "")
 
 
 def _rel(file_path: Path, project_root: Path) -> str:

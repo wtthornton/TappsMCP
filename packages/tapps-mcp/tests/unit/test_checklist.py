@@ -181,9 +181,24 @@ class TestCallTracker:
                 strict_unknown_task_type=True,
             )
 
-    def test_begin_session_filters_calls(self):
+    def test_begin_session_adopts_pre_session_calls(self):
+        """Calls recorded before begin_session (empty session_id) are kept.
+
+        Agents sometimes invoke tools before ``tapps_session_start``; dropping
+        those records caused checklist false negatives.
+        """
         CallTracker.record("tapps_score_file")
         CallTracker.begin_session()
+        CallTracker.record("tapps_quality_gate")
+        r = self._evaluate("feature")
+        assert "tapps_score_file" in r.called
+        assert "tapps_quality_gate" in r.called
+
+    def test_begin_session_isolates_prior_session_calls(self):
+        """Calls from a previous checklist session stay filtered out."""
+        CallTracker.begin_session("sess-a")
+        CallTracker.record("tapps_score_file")
+        CallTracker.begin_session("sess-b")
         CallTracker.record("tapps_quality_gate")
         r = self._evaluate("feature")
         assert "tapps_score_file" not in r.called

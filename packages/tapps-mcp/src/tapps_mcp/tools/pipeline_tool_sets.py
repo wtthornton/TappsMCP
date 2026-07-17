@@ -33,6 +33,8 @@ SOURCE_FILE_SUFFIXES: Final[tuple[str, ...]] = (
     ".tsx",
     ".js",
     ".jsx",
+    ".mjs",
+    ".cjs",
     ".go",
     ".rs",
 )

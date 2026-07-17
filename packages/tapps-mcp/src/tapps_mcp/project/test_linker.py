@@ -149,7 +149,7 @@ def load_or_build_test_edges(project_root: Path, *, force_rebuild: bool = False)
     )
 
 
-def test_edges_to_dicts(edges: list[TestEdge]) -> list[dict[str, object]]:
+def edges_to_dicts(edges: list[TestEdge]) -> list[dict[str, object]]:
     return [asdict(e) for e in edges]
 
 

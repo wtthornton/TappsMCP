@@ -10,12 +10,11 @@ Epic 84 -- Doc Style & Tone Validation.
 from __future__ import annotations
 
 import contextlib
+import os
 import re
 from abc import ABC, abstractmethod
-from typing import TYPE_CHECKING, ClassVar, Literal
-
-if TYPE_CHECKING:
-    from pathlib import Path
+from pathlib import Path
+from typing import ClassVar, Literal
 
 import structlog
 from pydantic import BaseModel, Field
@@ -431,8 +430,9 @@ class JargonRule(RuleBase):
         for line_num, line in enumerate(_content_lines(content), start=1):
             if _is_code_or_frontmatter(line):
                 continue
+            line_for_jargon = re.sub(r"`[^`]+`", "", line)
             for term, pat in patterns:
-                for match in pat.finditer(line):
+                for match in pat.finditer(line_for_jargon):
                     issues.append(
                         StyleIssue(
                             rule=self.name,
@@ -972,12 +972,14 @@ class StyleChecker:
         for dir_name in scan_dirs:
             doc_dir = project_root / dir_name
             if doc_dir.is_dir():
-                for f in sorted(doc_dir.rglob("*.md")):
-                    if not any(p in _SKIP_DIRS for p in f.parts):
-                        files.append(f)
-                for f in sorted(doc_dir.rglob("*.mdx")):
-                    if not any(p in _SKIP_DIRS for p in f.parts):
-                        files.append(f)
+                for dirpath, dirnames, filenames in os.walk(doc_dir):
+                    dirnames[:] = [d for d in dirnames if d not in _SKIP_DIRS]
+                    for fname in filenames:
+                        if Path(fname).suffix.lower() not in (".md", ".mdx"):
+                            continue
+                        f = Path(dirpath) / fname
+                        if not any(p in _SKIP_DIRS for p in f.parts):
+                            files.append(f)
 
         return files
 

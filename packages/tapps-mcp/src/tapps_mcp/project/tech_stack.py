@@ -28,6 +28,8 @@ logger = structlog.get_logger(__name__)
 _LANGUAGE_EXTENSIONS: dict[str, str] = {
     ".py": "python",
     ".js": "javascript",
+    ".mjs": "javascript",
+    ".cjs": "javascript",
     ".ts": "typescript",
     ".tsx": "typescript",
     ".jsx": "javascript",
