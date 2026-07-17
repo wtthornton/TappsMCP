@@ -10,7 +10,7 @@ cd "$ROOT"
 # export TAPPS_FLEET_ROOTS="$HOME/code/tapps-mcp,$HOME/code/AgentForge,$HOME/NewCompanyIdeas"
 : "${TAPPS_FLEET_ROOTS:=}"
 
-BUNDLE="${TAPPS_FLEET_BUNDLE:-developer}"
+BUNDLE="${TAPPS_FLEET_BUNDLE:-full}"
 REINSTALL="${TAPPS_FLEET_REINSTALL_CLIS:-1}"
 DRY_RUN=0
 for arg in "$@"; do
@@ -43,6 +43,10 @@ else
 fi
 
 uv run tapps-mcp "${ARGS[@]}"
+
+echo ""
+echo "==> Consumer MCP config audit (shared HTTP fleet)"
+uv run tapps-mcp fleet audit-consumers --scan-parent "${TAPPS_FLEET_SCAN_PARENT:-$HOME/code}" || true
 
 echo ""
 echo "Reload MCP in Cursor when you want new server code; live servers are not killed by blue/green deploy."

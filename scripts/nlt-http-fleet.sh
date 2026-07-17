@@ -16,11 +16,11 @@ else
 fi
 
 case "$_cmd" in
-  start|stop|status|restart|install-systemd)
+  start|stop|status|restart|smoke|ensure|install-systemd|audit-consumers|repair-consumers)
     exec "$TAPPS_MCP_BIN" fleet "$_cmd" "$@"
     ;;
   *)
-    echo "Usage: $0 {start|stop|status|restart|install-systemd}" >&2
+    echo "Usage: $0 {start|stop|status|restart|smoke|ensure|install-systemd|audit-consumers|repair-consumers}" >&2
     exit 2
     ;;
 esac

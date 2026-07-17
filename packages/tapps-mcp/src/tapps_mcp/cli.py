@@ -205,6 +205,87 @@ def fleet_install_systemd() -> None:
     click.echo("  systemctl --user enable --now tapps-mcp-fleet-watch.timer")
 
 
+@fleet.command("audit-consumers")
+@click.option(
+    "--scan-parent",
+    default="",
+    help="Parent directory to scan for consumers (default: ~/code).",
+)
+@click.option(
+    "--roots",
+    default="",
+    help="Comma-separated project roots (skips scan-parent when set).",
+)
+@click.option("--json", "as_json", is_flag=True, help="Emit machine-readable JSON.")
+def fleet_audit_consumers(scan_parent: str, roots: str, as_json: bool) -> None:
+    """Audit Cursor/VS Code/Claude MCP configs against the shared HTTP fleet."""
+    import json as json_lib
+
+    from tapps_mcp.distribution.fleet_consumers import audit_consumers
+
+    root_list = [Path(p.strip()) for p in roots.split(",") if p.strip()] or None
+    parent = Path(scan_parent).expanduser() if scan_parent.strip() else None
+    report = audit_consumers(scan_parent=parent, roots=root_list)
+    if as_json:
+        click.echo(json_lib.dumps(report, indent=2))
+    else:
+        click.echo(
+            f"package={report['package_version']} projects={report['total']} "
+            f"ok={report['ok']} fail={report['fail']}"
+        )
+        for row in report["projects"]:
+            status = "OK" if row["ok"] else f"FAIL({len(row['issues'])})"
+            color = "green" if row["ok"] else "red"
+            click.echo(click.style(f"  {row['project']:<28} {status}", fg=color))
+            for issue in row["issues"]:
+                click.echo(f"    - {issue}")
+    if report["fail"]:
+        raise SystemExit(1)
+
+
+@fleet.command("repair-consumers")
+@click.option(
+    "--scan-parent",
+    default="",
+    help="Parent directory to scan for consumers (default: ~/code).",
+)
+@click.option(
+    "--roots",
+    default="",
+    help="Comma-separated project roots (skips scan-parent when set).",
+)
+@click.option(
+    "--audit/--no-audit",
+    default=True,
+    show_default=True,
+    help="Re-audit after repair and exit non-zero on remaining failures.",
+)
+def fleet_repair_consumers(scan_parent: str, roots: str, audit: bool) -> None:
+    """Repair consumer MCP configs to match the shared HTTP fleet (ADR-0024)."""
+    from tapps_mcp.distribution.fleet_consumers import audit_consumers, repair_consumers
+
+    root_list = [Path(p.strip()) for p in roots.split(",") if p.strip()] or None
+    parent = Path(scan_parent).expanduser() if scan_parent.strip() else None
+    result = repair_consumers(scan_parent=parent, roots=root_list)
+    click.echo(
+        f"repaired={result['repaired_count']} unchanged={result['unchanged_count']}"
+    )
+    for row in result["repaired"]:
+        click.echo(click.style(f"  {row['project']}: {', '.join(row['changes'])}", fg="green"))
+    if not audit:
+        return
+    report = audit_consumers(scan_parent=parent, roots=root_list)
+    click.echo(f"post-audit ok={report['ok']} fail={report['fail']}")
+    for row in report["projects"]:
+        if row["ok"]:
+            continue
+        click.echo(click.style(f"  FAIL {row['project']}", fg="red"))
+        for issue in row["issues"]:
+            click.echo(f"    - {issue}")
+    if report["fail"]:
+        raise SystemExit(1)
+
+
 @main.command()
 @click.option(
     "--transport",
