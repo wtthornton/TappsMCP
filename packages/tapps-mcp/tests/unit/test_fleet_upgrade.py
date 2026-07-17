@@ -13,6 +13,7 @@ from tapps_mcp.tools.fleet_upgrade import (
     FleetUpgradeProjectResult,
     _reinstall_global_clis,
     format_fleet_upgrade_markdown,
+    resolve_cli_binary,
     resolve_fleet_roots,
     run_fleet_upgrade,
     upgrade_project_root,
@@ -61,7 +62,33 @@ class TestFleetUpgradeHelpers:
         assert result.success is True
         assert result.upgrade_ok is True
         assert result.init_ok is True
+        assert result.upgrade_binary
         assert any("[dry-run]" in msg for msg in result.messages)
+        assert any("upgrade_binary=" in msg for msg in result.messages)
+
+    def test_resolve_cli_binary_prefers_exe_adjacent_over_path(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """TAP-4836: stale PATH shim must not win over the invoking release bin."""
+        import sys
+
+        release_bin = tmp_path / "release" / "bin"
+        release_bin.mkdir(parents=True)
+        good = release_bin / "tapps-mcp"
+        good.write_text("#!/bin/sh\necho good\n", encoding="utf-8")
+        good.chmod(0o755)
+
+        stale_dir = tmp_path / "stale"
+        stale_dir.mkdir()
+        stale = stale_dir / "tapps-mcp"
+        stale.write_text("#!/bin/sh\necho stale\n", encoding="utf-8")
+        stale.chmod(0o755)
+
+        monkeypatch.setattr(sys, "executable", str(release_bin / "python"))
+        monkeypatch.setenv("PATH", f"{stale_dir}{os.pathsep}{os.environ.get('PATH', '')}")
+
+        resolved = resolve_cli_binary("tapps-mcp")
+        assert resolved == str(good)
 
     def test_strip_context7_env_sets_docs_via_brain_during_init(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch,

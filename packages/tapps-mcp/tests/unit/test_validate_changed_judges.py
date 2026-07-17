@@ -110,7 +110,10 @@ class TestHandleNoChangedFilesWithJudges:
         mock_marker.assert_not_called()
 
     @pytest.mark.asyncio
-    async def test_writes_marker_when_judges_pass(self, tmp_path: Path) -> None:
+    async def test_does_not_write_marker_when_no_files_even_if_judges_pass(
+        self, tmp_path: Path
+    ) -> None:
+        """Zero files gated is inconclusive — never write the validate-ok marker."""
         judges = [{"type": "exists", "target": "x"}]
         with (
             patch(
@@ -124,7 +127,7 @@ class TestHandleNoChangedFilesWithJudges:
             ),
             patch("tapps_mcp.server_pipeline_tools._write_validate_ok_marker") as mock_marker,
         ):
-            await _handle_no_changed_files(
+            resp = await _handle_no_changed_files(
                 0,
                 TappsMCPSettings(project_root=tmp_path),
                 lambda *_a, **_k: None,
@@ -132,7 +135,8 @@ class TestHandleNoChangedFilesWithJudges:
                 judges=judges,
             )
 
-        mock_marker.assert_called_once_with(tmp_path)
+        assert resp["data"]["all_gates_passed"] is False
+        mock_marker.assert_not_called()
 
 
 class TestRunJudgesExceptionPayload:

@@ -366,14 +366,20 @@ async def tapps_impact_analysis(
             return error_response("tapps_impact_analysis", "path_denied", str(exc))
 
     from tapps_mcp.project.impact_analyzer import analyze_impact, analyze_symbol_impact
+    from tapps_mcp.tools.event_loop_guard import heavy_cpu
 
-    report = analyze_impact(resolved, root, change_type)
+    # Offload sync AST/import-graph work so the HTTP event loop can still
+    # service Cursor initialize/tools/list on the shared nlt-build fleet
+    # (ADR-0024 event-loop starvation). Cap concurrency via heavy_cpu.
+    async with heavy_cpu():
+        report = await asyncio.to_thread(analyze_impact, resolved, root, change_type)
     mem_ctx = build_impact_memory_context(resolved, root, settings)
 
     symbol_granularity = granularity.strip().lower() or "module"
     symbol_block: dict[str, object] | None = None
     if symbol.strip() and symbol_granularity in {"symbol", "both"}:
-        symbol_block = analyze_symbol_impact(symbol.strip(), root)
+        async with heavy_cpu():
+            symbol_block = await asyncio.to_thread(analyze_symbol_impact, symbol.strip(), root)
 
     # TAP-2007: write procedural refactor-sequence memory on completion.
     from tapps_mcp.tools.procedural_patterns import fire_refactor_sequence
@@ -515,20 +521,25 @@ async def tapps_call_graph(
         query_route_handler,
         query_routes_for_handler,
     )
+    from tapps_mcp.tools.event_loop_guard import heavy_cpu
 
-    index = build_call_graph_index(root, force_rebuild=force_rebuild)
-    if mode == "route_handler":
-        result = query_route_handler(index, symbol)
-    elif mode == "handler_routes":
-        result = query_routes_for_handler(index, symbol)
-    else:
-        result = query_call_graph(
+    def _query_sync() -> dict[str, Any]:
+        index = build_call_graph_index(root, force_rebuild=force_rebuild)
+        if mode == "route_handler":
+            return query_route_handler(index, symbol)
+        if mode == "handler_routes":
+            return query_routes_for_handler(index, symbol)
+        return query_call_graph(
             index,
             symbol,
             mode=mode,  # type: ignore[arg-type]
             max_depth=max(1, max_depth),
             token_budget=max(256, token_budget),
         )
+
+    # Index rebuild walks the tree — keep it off the HTTP event loop.
+    async with heavy_cpu():
+        result = await asyncio.to_thread(_query_sync)
 
     elapsed_ms = (time.perf_counter_ns() - start) // 1_000_000
     _record_execution(
@@ -591,14 +602,18 @@ async def tapps_diff_impact(
         except (ValueError, FileNotFoundError) as exc:
             return error_response("tapps_diff_impact", "path_denied", str(exc))
 
-    if force_rebuild:
-        from tapps_mcp.project.call_graph import build_call_graph_index
-
-        build_call_graph_index(root, force_rebuild=True)
-
+    from tapps_mcp.project.call_graph import build_call_graph_index
     from tapps_mcp.project.diff_impact import analyze_diff_impact
+    from tapps_mcp.tools.event_loop_guard import heavy_cpu
 
-    data = analyze_diff_impact(resolved, root)
+    def _diff_impact_sync() -> dict[str, Any]:
+        if force_rebuild:
+            build_call_graph_index(root, force_rebuild=True)
+        return analyze_diff_impact(resolved, root)
+
+    # Call-graph + TESTS edge walk is sync CPU — offload for shared HTTP fleet.
+    async with heavy_cpu():
+        data = await asyncio.to_thread(_diff_impact_sync)
     elapsed_ms = (time.perf_counter_ns() - start) // 1_000_000
     _record_execution(
         "tapps_diff_impact",
@@ -2033,7 +2048,10 @@ def register(mcp_instance: FastMCP, allowed_tools: frozenset[str]) -> None:
     """
     if "tapps_session_notes" in allowed_tools:
         register_tool(
-            mcp_instance, tapps_session_notes, annotations=_ANNOTATIONS_READ_ONLY, meta=_META_DEFERRED
+            mcp_instance,
+            tapps_session_notes,
+            annotations=_ANNOTATIONS_READ_ONLY,
+            meta=_META_DEFERRED,
         )
     if "tapps_impact_analysis" in allowed_tools:
         register_tool(

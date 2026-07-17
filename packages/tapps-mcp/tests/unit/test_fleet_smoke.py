@@ -26,6 +26,35 @@ class TestParseSseJson:
         assert fleet_smoke.parse_sse_json("not sse") is None
 
 
+class TestProbeFleetMcpInitialize:
+    def test_happy_path(self) -> None:
+        init_body = _sse(
+            {
+                "jsonrpc": "2.0",
+                "id": 1,
+                "result": {"serverInfo": {"name": "TappsMCP"}},
+            }
+        )
+        with patch.object(
+            fleet_smoke,
+            "_post_mcp",
+            return_value=(200, "sess-1", init_body),
+        ):
+            result = fleet_smoke.probe_fleet_mcp_initialize("nlt-build")
+        assert result["ok"] is True
+        assert result["stage"] == "initialize"
+
+    def test_timeout_style_failure(self) -> None:
+        with patch.object(
+            fleet_smoke,
+            "_post_mcp",
+            return_value=(0, None, "connection failed: timed out"),
+        ):
+            result = fleet_smoke.probe_fleet_mcp_initialize("nlt-build")
+        assert result["ok"] is False
+        assert result["stage"] == "initialize"
+
+
 class TestProbeFleetMcpSession:
     def test_happy_path(self) -> None:
         init_body = _sse(
@@ -90,7 +119,11 @@ class TestProbeFleetMcpSession:
 
         # HTTPError (has a real status) must keep flowing through unchanged.
         http_err = urllib.error.HTTPError(
-            "http://127.0.0.1:8760/mcp", 500, "boom", {}, io.BytesIO(b"body")  # type: ignore[arg-type]
+            "http://127.0.0.1:8760/mcp",
+            500,
+            "boom",
+            {},
+            io.BytesIO(b"body"),  # type: ignore[arg-type]
         )
         with patch.object(urllib.request, "urlopen", side_effect=http_err):
             result = fleet_smoke.probe_fleet_mcp_session("nlt-build")
@@ -132,7 +165,9 @@ class TestRestartFleetWithSmoke:
         monkeypatch.setattr(
             fleet_control,
             "start_fleet",
-            lambda *, force: calls.append(f"start:{force}") or {"started": ["nlt-build"], "errors": []},
+            lambda *, force: (
+                calls.append(f"start:{force}") or {"started": ["nlt-build"], "errors": []}
+            ),
         )
         monkeypatch.setattr(
             fleet_control,

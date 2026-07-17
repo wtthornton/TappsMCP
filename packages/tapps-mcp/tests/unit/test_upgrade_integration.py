@@ -829,8 +829,8 @@ class TestUpgradeWorkspaceFolderSelfHeal:
         assert '"nlt-build"' in raw
         assert '"nlt-memory"' in raw
         assert '"nlt-linear-issues"' in raw
-        assert "// Opt-in:" in raw
-        data = _load_mcp_config_json(tmp_path / ".cursor" / "mcp.json")
+        assert "// Opt-in:" not in raw
+        data = json.loads(raw)
         enabled = set(data["mcpServers"].keys())
         assert enabled == {"nlt-build", "nlt-memory", "nlt-linear-issues"}
 

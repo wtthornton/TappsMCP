@@ -51,6 +51,17 @@ jobs:
       - name: Checkout tapps-mcp
         uses: actions/checkout@v7
 
+      - name: Auth private git deps
+        # Fine-grained PAT: contents:read on wtthornton/ReportLab (TAP-4837).
+        env:
+          REPORTLAB_READ_PAT: ${{ secrets.REPORTLAB_READ_PAT }}
+        run: |
+          if [ -z "$REPORTLAB_READ_PAT" ]; then
+            echo "::error::REPORTLAB_READ_PAT secret is required for uv sync (private nlt-report-studio git dep). See TAP-4837."
+            exit 1
+          fi
+          git config --global url."https://x-access-token:${REPORTLAB_READ_PAT}@github.com/".insteadOf "https://github.com/"
+
       - name: Assert deployment config is present
         env:
           BRAIN_URL: ${{ secrets.TAPPS_BRAIN_HTTP_URL || vars.TAPPS_BRAIN_HTTP_URL }}

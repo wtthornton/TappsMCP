@@ -192,7 +192,12 @@ def mcp_config_servers_for_bundle(bundle: NltBundle) -> tuple[str, ...]:
 
 
 def commented_servers_for_bundle(bundle: NltBundle) -> tuple[str, ...]:
-    """Servers emitted as commented opt-in blocks in mcp.json (ADR-0016)."""
+    """Servers omitted from mcp.json for a partial bundle (CLI opt-in hints).
+
+    Historically these were written as ``//`` JSONC blocks (ADR-0016). That
+    broke strict-JSON hosts (TAP-4811); callers now surface them on stdout /
+    doctor remediation only — never inside the config file.
+    """
     if bundle == "full":
         return ()
     enabled = set(enabled_servers_for_bundle(bundle))

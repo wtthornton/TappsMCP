@@ -318,7 +318,7 @@ async def _run_with_progress(
         await _stop_progress_task(progress_task, stop_progress)
 
 
-def _finalize_outcome(
+async def _finalize_outcome(
     bc: _BatchContext,
     task_results: list[dict[str, Any]],
     timeout_info: _TimedOutInfo,
@@ -326,6 +326,7 @@ def _finalize_outcome(
     """Combine cached + task results and run post-batch bookkeeping."""
     from tapps_mcp import server_pipeline_tools as _host
     from tapps_mcp.server import _record_call, _record_execution
+    from tapps_mcp.tools.event_loop_guard import heavy_cpu
 
     results = [*task_results, *bc.cached_results]
     all_passed = all(r.get("gate_passed", False) for r in results) if results else False
@@ -333,26 +334,27 @@ def _finalize_outcome(
     if incomplete:
         all_passed = False
     total_sec = sum(r.get("security_issues", 0) for r in results)
-    impact_data = (
-        _host._compute_impact_analysis(bc.paths, bc.settings.project_root)
-        if bc.include_impact and bc.paths
-        else None
-    )
-    affected_tests_data = (
-        _host._compute_affected_tests(bc.paths, bc.settings.project_root)
-        if bc.include_impact and bc.paths
-        else None
-    )
-    diff_impact_data = (
-        _compute_diff_impact(bc.paths, bc.settings.project_root)
-        if bc.include_impact and bc.paths
-        else None
-    )
-    blast_radius_caveat = (
-        _compute_blast_radius_caveat(bc.paths, bc.settings.project_root)
-        if bc.include_impact and bc.paths
-        else None
-    )
+
+    impact_data = None
+    affected_tests_data = None
+    diff_impact_data = None
+    blast_radius_caveat = None
+    if bc.include_impact and bc.paths:
+        # Impact / call-graph work is sync CPU — must not run on the HTTP
+        # event loop (shared nlt-build fleet starves Cursor handshakes).
+        async with heavy_cpu():
+            impact_data = await asyncio.to_thread(
+                _host._compute_impact_analysis, bc.paths, bc.settings.project_root
+            )
+            affected_tests_data = await asyncio.to_thread(
+                _host._compute_affected_tests, bc.paths, bc.settings.project_root
+            )
+            diff_impact_data = await asyncio.to_thread(
+                _compute_diff_impact, bc.paths, bc.settings.project_root
+            )
+            blast_radius_caveat = await asyncio.to_thread(
+                _compute_blast_radius_caveat, bc.paths, bc.settings.project_root
+            )
 
     if not all_passed:
         _record_call("tapps_validate_changed", success=False)
@@ -673,7 +675,7 @@ async def tapps_validate_changed(
         paths=paths,
     )
     task_results, timeout_info = await _run_with_progress(bc)
-    outcome = _finalize_outcome(bc, task_results, timeout_info)
+    outcome = await _finalize_outcome(bc, task_results, timeout_info)
     resp = await _assemble_response(bc, outcome)
 
     try:

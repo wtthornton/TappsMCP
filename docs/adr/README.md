@@ -37,6 +37,7 @@ CLAUDE.md and per-package CLAUDE.md files point at ADRs by number rather than em
 | [0027](0027-shareable-call-graph-artifact.md) | Shareable call-graph artifact (CI build + load-on-session-start) | Proposed |
 | [0028](0028-code-graph-boundary-fenced-external-comprehension-and-no-query-language.md) | Code-graph boundary — fenced external comprehension tool + no query language | Accepted |
 | [0029](0029-unified-cache-substrate.md) | Unified cache substrate — one atomic primitive, pluggable staleness, no code-as-provider / no vector-RAG | Accepted |
+| [0030](0030-unified-research-entry-point-brain-backed-cache.md) | Unified research entry point with brain-backed external-data cache | Accepted |
 
 ## Adding a new ADR
 

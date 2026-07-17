@@ -15,18 +15,31 @@ _DOCUMENT_PATH_MARKERS = ("reports/", "templates/", "brands/")
 
 
 def is_document_consumer(project_root: Path) -> bool:
-    """Return True when the project looks like a document-shipping consumer."""
+    """Return True when the project looks like a document-shipping consumer.
+
+    Requires a stronger signal than a bare ``reports/`` directory (TAP-4810):
+    report-studio installed, or both ``brands/`` and ``templates/`` present.
+    """
     root = project_root.resolve()
     if check_report_studio(root).get("installed"):
         return True
-    return (root / "reports").is_dir()
+    return (root / "brands").is_dir() and (root / "templates").is_dir()
+
+
+_SKIP_BUILD_SCRIPT_PARTS = ("node_modules", ".venv", "venv", "dist", "build", ".git")
 
 
 def _find_build_script(project_root: Path) -> Path | None:
+    """Locate a document build script, skipping generated/vendor trees (TAP-4836)."""
     candidates = sorted(project_root.glob("**/build-pdfs.mjs"))
     if not candidates:
         candidates = sorted(project_root.glob("**/build*.mjs"))
-    return candidates[0] if candidates else None
+    for candidate in candidates:
+        parts = set(candidate.parts)
+        if parts.intersection(_SKIP_BUILD_SCRIPT_PARTS):
+            continue
+        return candidate
+    return None
 
 
 _WHEN_CHANGED_DOC_PATHS = ["reports/**", "src/**", "brands/**", "templates/**"]
@@ -201,41 +214,39 @@ DOCUMENT_BUILDER_PROFILE = "document-builder"
 
 
 def merge_document_memory_profile(project_root: Path, *, dry_run: bool = False) -> dict[str, Any]:
-    """Set memory.profile to document-builder when document tooling is detected."""
+    """No-op document memory profile merge (TAP-4810).
+
+    Previously wrote ``memory.profile: document-builder``, which is not a
+    tapps-brain builtin and raised ``FileNotFoundError`` on resolve. Document
+    consumers keep the default ``repo-brain`` (or whatever is already set).
+    """
+    del dry_run
     root = project_root.resolve()
-    config_path = root / ".tapps-mcp.yaml"
     result: dict[str, Any] = {
         "merged": False,
-        "profile": DOCUMENT_BUILDER_PROFILE,
+        "profile": None,
         "messages": [],
     }
     if not is_document_consumer(root):
         result["messages"].append("Not a document consumer — memory profile unchanged")
         return result
 
-    existing: dict[str, Any] = {}
+    config_path = root / ".tapps-mcp.yaml"
     if config_path.is_file():
         loaded = yaml.safe_load(config_path.read_text(encoding="utf-8"))
         if isinstance(loaded, dict):
-            existing = loaded
+            memory = loaded.get("memory", {})
+            if isinstance(memory, dict) and memory.get("profile"):
+                result["profile"] = memory.get("profile")
+                result["messages"].append(
+                    f"memory.profile already set to {memory.get('profile')!r} — preserved"
+                )
+                return result
 
-    memory = existing.get("memory", {})
-    if isinstance(memory, dict) and memory.get("profile"):
-        result["messages"].append(
-            f"memory.profile already set to {memory.get('profile')!r} — preserved"
-        )
-        return result
-
-    merged_memory = {**(memory if isinstance(memory, dict) else {}), "profile": DOCUMENT_BUILDER_PROFILE}
-    merged = {**existing, "memory": merged_memory}
-    if dry_run:
-        result["merged"] = True
-        result["messages"].append(f"Would set memory.profile to {DOCUMENT_BUILDER_PROFILE!r}")
-        return result
-
-    config_path.write_text(yaml.safe_dump(merged, sort_keys=False), encoding="utf-8")
-    result["merged"] = True
-    result["messages"].append(f"Set memory.profile to {DOCUMENT_BUILDER_PROFILE!r}")
+    result["messages"].append(
+        "Document consumer detected — leaving memory.profile unset "
+        f"(do not write {DOCUMENT_BUILDER_PROFILE!r}; use a real brain builtin)"
+    )
     return result
 
 

@@ -38,7 +38,9 @@ _logger = structlog.get_logger(__name__)
 
 
 # Maximum files to validate concurrently (balances speed vs subprocess pressure).
-_VALIDATE_CONCURRENCY = 10
+# Kept at 2 so shared HTTP fleet (nlt-build) cannot spawn a GIL stampede that
+# starves Cursor initialize/tools/list — see tools.event_loop_guard.
+_VALIDATE_CONCURRENCY = 2
 
 
 async def _run_security_scan(
@@ -67,11 +69,7 @@ async def _run_security_scan(
         # may still hold bandit/heuristic findings from scoring — surface them
         # instead of always claiming security_passed=True.
         issues = getattr(score, "security_issues", None) or []
-        crit_high = sum(
-            1
-            for i in issues
-            if getattr(i, "severity", "") in ("critical", "high")
-        )
+        crit_high = sum(1 for i in issues if getattr(i, "severity", "") in ("critical", "high"))
         return {
             "security_passed": crit_high == 0,
             "security_issues": len(issues),
@@ -101,6 +99,7 @@ async def _validate_single_file(
     """
     from tapps_mcp.gates.evaluator import evaluate_gate
     from tapps_mcp.server_helpers import _get_scorer_for_file
+    from tapps_mcp.tools.event_loop_guard import heavy_cpu
 
     async with sem:
         file_result: dict[str, Any] = {"file_path": str(path)}
@@ -115,10 +114,11 @@ async def _validate_single_file(
 
             file_result["language"] = scorer.language
 
-            if quick:
-                score = await asyncio.to_thread(scorer.score_file_quick, path)
-            else:
-                score = await scorer.score_file(path)
+            async with heavy_cpu():
+                if quick:
+                    score = await asyncio.to_thread(scorer.score_file_quick, path)
+                else:
+                    score = await scorer.score_file(path)
             file_result["overall_score"] = round(score.overall_score, 2)
 
             gate = evaluate_gate(score, preset=preset)

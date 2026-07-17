@@ -1186,9 +1186,16 @@ def _serialize_nlt_mcp_config(
     host: str,
     *,
     enabled: tuple[str, ...],
-    commented: tuple[str, ...],
+    commented: tuple[str, ...] = (),
 ) -> str:
-    """Serialize MCP config with commented opt-in NLT server blocks (JSONC)."""
+    """Serialize MCP config as strict JSON (enabled NLT servers only).
+
+    Disabled / opt-in servers are omitted from the file (TAP-4811). Hosts
+    require strict JSON; commented JSONC blocks broke ``json.loads`` and
+    prevented MCP servers from loading. Callers surface opt-in hints on
+    CLI stdout via ``commented`` / ``commented_servers_for_bundle``.
+    """
+    del commented  # Kept for call-site compatibility; never written to disk.
     servers_key = _get_servers_key(host)
     servers = merged.get(servers_key)
     if not isinstance(servers, dict):
@@ -1203,43 +1210,9 @@ def _serialize_nlt_mcp_config(
         if isinstance(entry, dict):
             enabled_servers[name] = entry
 
-    inner_parts: list[str] = []
-    if enabled_servers:
-        enabled_json = json.dumps(enabled_servers, indent=2)
-        enabled_body = enabled_json.strip()[1:-1].strip()
-        inner_parts.append(enabled_body)
-
-    comment_parts: list[str] = []
-    for server_id in commented:
-        entry = servers.get(server_id)
-        if not isinstance(entry, dict):
-            continue
-        spec = NLT_SERVER_SPECS[server_id]
-        header = (
-            f"// Opt-in: {spec['display_name']} — {spec['tagline']}\n"
-            f"// Uncomment the block below to enable this server."
-        )
-        block_json = json.dumps({server_id: entry}, indent=2)
-        commented_body = "\n".join(f"// {line}" for line in block_json.splitlines())
-        comment_parts.append(f"{header}\n{commented_body}")
-
-    inner_text = "\n\n".join([*inner_parts, *comment_parts])
-    lines: list[str] = ["{"]
-    for key, value in merged.items():
-        if key == servers_key:
-            continue
-        block = json.dumps({key: value}, indent=2).splitlines()
-        for line in block:
-            lines.append("  " + line.lstrip())
-        lines[-1] += ","
-
-    lines.append(f'  "{servers_key}": {{')
-    for line in inner_text.splitlines():
-        lines.append(f"    {line}" if line else "")
-    lines.append("  }")
-    lines.append("}")
-    lines.append("")
-    return "\n".join(lines)
+    out: dict[str, Any] = {k: v for k, v in merged.items() if k != servers_key}
+    out[servers_key] = enabled_servers
+    return json.dumps(out, indent=2) + "\n"
 
 
 def _config_has_tapps_or_nlt(servers: dict[str, Any]) -> bool:
@@ -1666,6 +1639,16 @@ def _generate_config(
                 fg="cyan",
             )
         )
+        if nlt_commented:
+            click.echo(
+                click.style(
+                    "  Opt-in servers omitted from this JSON (strict JSON only): "
+                    f"{', '.join(nlt_commented)}. "
+                    "Re-run with a broader --bundle (e.g. --bundle full) or enable "
+                    "them in your IDE MCP settings.",
+                    fg="cyan",
+                )
+            )
 
     _warn_plaintext_secrets(config_path, merged, host, project_root, scope)
 

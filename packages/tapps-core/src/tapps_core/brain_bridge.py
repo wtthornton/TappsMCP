@@ -413,6 +413,17 @@ BRAIN_PROFILES_DEFERRED_OK: frozenset[str] = frozenset(
     {BRAIN_PROFILE_SERVER, BRAIN_PROFILE_OPERATOR}
 )
 
+# Intentionally narrow capability profiles — missing bridge tools vs eager
+# tools/list is expected; do not warn at session start (TAP-4810).
+BRAIN_PROFILES_NARROW_OK: frozenset[str] = frozenset(
+    {
+        BRAIN_PROFILE_READONLY,
+        BRAIN_PROFILE_HOOKS,
+        "seeder",
+        BRAIN_PROFILE_FACADE,
+    }
+)
+
 
 def _classify_mcp_error(exc: BaseException) -> str:
     """Return one of ``"gated"`` / ``"removed"`` / ``"other"`` for a brain failure.
@@ -1663,9 +1674,15 @@ class HttpBrainBridge(BrainBridge):
         if self._exposed_tools is not None:
             gated_used = sorted(get_bridge_used_tools() - self._exposed_tools)
             if gated_used:
-                logger.warning(
+                declared = self._http_headers.get("X-Brain-Profile") or None
+                log_fn = (
+                    logger.debug
+                    if declared in BRAIN_PROFILES_NARROW_OK
+                    else logger.warning
+                )
+                log_fn(
                     "brain_bridge.profile_mismatch",
-                    declared_profile=self._http_headers.get("X-Brain-Profile") or None,
+                    declared_profile=declared,
                     gated_used_tools=gated_used,
                 )
 

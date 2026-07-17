@@ -15,10 +15,8 @@ from tapps_mcp.distribution.nlt_mcp_config import (
 )
 from tapps_mcp.distribution.setup_generator import (
     _generate_config,
-    _load_mcp_config_json,
     _merge_nlt_config,
     _serialize_nlt_mcp_config,
-    _strip_jsonc_comments,
 )
 
 
@@ -84,14 +82,14 @@ class TestNltMcpJsonGeneration:
         assert config_path.exists()
         raw = config_path.read_text(encoding="utf-8")
         assert "nlt-build" in raw
-        assert "// Opt-in:" in raw
-        assert "nlt-setup" in raw
+        assert "// Opt-in:" not in raw
+        assert "nlt-setup" not in raw
+        assert "nlt-project-docs" not in raw
+        assert "nlt-release-ship" not in raw
         assert "nlt-memory" in raw
         assert "nlt-linear-issues" in raw
-        assert "nlt-project-docs" in raw
-        assert "nlt-release-ship" in raw
 
-        data = _load_mcp_config_json(config_path)
+        data = json.loads(raw)
         servers = data["mcpServers"]
         assert set(servers.keys()) == {
             "nlt-build",
@@ -102,6 +100,38 @@ class TestNltMcpJsonGeneration:
         assert servers["nlt-build"]["args"] == []
         assert str(servers["nlt-build"]["command"]).endswith("nlt-build-serve.sh")
 
+    def test_partial_bundles_write_strict_json_all_hosts(self, tmp_path: Path) -> None:
+        """TAP-4811: every partial bundle must produce json.loads-valid host configs."""
+        hosts = ("cursor", "claude-code", "vscode")
+        bundles = ("developer", "minimal", "planning", "docs", "release")
+        with patch(
+            "tapps_mcp.distribution.setup_generator.shutil.which",
+            return_value="/bin/tapps-mcp",
+        ):
+            for bundle in bundles:
+                for host in hosts:
+                    root = tmp_path / f"{bundle}-{host}"
+                    ok = _generate_config(
+                        host,
+                        root,
+                        force=True,
+                        mcp_bundle=bundle,
+                        use_nlt_plugin=True,
+                    )
+                    assert ok is True, f"{bundle}/{host}"
+                    if host == "cursor":
+                        path = root / ".cursor" / "mcp.json"
+                    elif host == "vscode":
+                        path = root / ".vscode" / "mcp.json"
+                    else:
+                        path = root / ".mcp.json"
+                    raw = path.read_text(encoding="utf-8")
+                    assert "// Opt-in:" not in raw, f"{bundle}/{host} still has comments"
+                    parsed = json.loads(raw)
+                    servers_key = "servers" if host == "vscode" else "mcpServers"
+                    enabled = set(enabled_servers_for_bundle(bundle))
+                    assert set(parsed[servers_key].keys()) == enabled
+
     def test_planning_bundle_enables_linear(self, tmp_path: Path) -> None:
         with patch(
             "tapps_mcp.distribution.setup_generator.shutil.which",
@@ -109,7 +139,7 @@ class TestNltMcpJsonGeneration:
         ):
             ok = _generate_config("cursor", tmp_path, force=True, mcp_bundle="planning", use_nlt_plugin=True)
         assert ok is True
-        data = _load_mcp_config_json(tmp_path / ".cursor" / "mcp.json")
+        data = json.loads((tmp_path / ".cursor" / "mcp.json").read_text(encoding="utf-8"))
         servers = data["mcpServers"]
         assert "nlt-linear-issues" in servers
         assert "nlt-project-docs" not in servers
@@ -131,16 +161,17 @@ class TestNltMcpJsonGeneration:
         assert "tapps-mcp" in data["mcpServers"]
         assert "nlt-build" not in data["mcpServers"]
 
-    def test_jsonc_roundtrip(self, tmp_path: Path) -> None:
+    def test_serialize_omits_commented_servers(self) -> None:
         merged, enabled, commented = _merge_nlt_config({}, "cursor", mcp_bundle="developer")
+        assert commented  # opt-in list still computed for CLI hints
         text = _serialize_nlt_mcp_config(
             merged,
             "cursor",
             enabled=enabled,
             commented=commented,
         )
-        stripped = _strip_jsonc_comments(text)
-        parsed = json.loads(stripped)
+        assert "// Opt-in:" not in text
+        parsed = json.loads(text)
         assert set(parsed["mcpServers"].keys()) == {
             "nlt-build",
             "nlt-memory",

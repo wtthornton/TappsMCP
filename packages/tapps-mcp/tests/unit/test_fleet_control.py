@@ -71,6 +71,12 @@ class TestEnsureFleetRunning:
             fleet_control, "FLEET_WATCH_STATE_FILE", tmp_path / ".watch-unhealthy.json"
         )
 
+    @pytest.fixture(autouse=True)
+    def _mcp_ok_by_default(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        # TCP-focused tests must not hit a real /mcp; assume handshake OK unless
+        # a test explicitly patches _mcp_initialize_ok / _mcp_persistently_*.
+        monkeypatch.setattr(fleet_control, "_mcp_initialize_ok", lambda *_a, **_k: True)
+
     @staticmethod
     def _seed_prev_unhealthy(*server_ids: str) -> None:
         # Simulate a prior watchdog poll that already saw these servers down,
@@ -82,9 +88,49 @@ class TestEnsureFleetRunning:
         result = fleet_control.ensure_fleet_running()
         assert result == {"action": "none", "healthy": True, "unhealthy": []}
 
-    def test_transient_single_miss_does_not_restart(
+    def test_mcp_starved_but_tcp_up_defers_then_restarts(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
+        # Regression: event-loop starvation left TCP listening while Cursor
+        # timed out on initialize ("Loading tools"). Watchdog must see that.
+        monkeypatch.setattr(fleet_control, "_port_listening", _listening(set()))
+        monkeypatch.setattr(
+            fleet_control,
+            "_mcp_initialize_ok",
+            lambda server_id, **_k: server_id != "nlt-build",
+        )
+        monkeypatch.setattr(fleet_control, "_systemd_unit_available", lambda _unit: True)
+
+        def _no_restart(*_a: Any, **_kw: Any) -> Any:  # pragma: no cover - first poll
+            raise AssertionError("first MCP-starve strike must defer")
+
+        monkeypatch.setattr(fleet_control.subprocess, "run", _no_restart)
+        monkeypatch.setattr(fleet_control, "start_fleet", _no_restart)
+
+        first = fleet_control.ensure_fleet_running()
+        assert first["action"] == "defer"
+        assert first["unhealthy"] == ["nlt-build"]
+
+        class _Proc:
+            returncode = 0
+
+        calls: list[list[str]] = []
+
+        def _run(cmd: list[str], **_kw: Any) -> _Proc:
+            calls.append(cmd)
+            return _Proc()
+
+        monkeypatch.setattr(fleet_control.subprocess, "run", _run)
+        monkeypatch.setattr(
+            fleet_control, "start_fleet", lambda **_k: (_ for _ in ()).throw(AssertionError())
+        )
+
+        second = fleet_control.ensure_fleet_running()
+        assert second["action"] == "systemd_restart"
+        assert second["unhealthy"] == ["nlt-build"]
+        assert calls == [["systemctl", "--user", "restart", "tapps-mcp-fleet.service"]]
+
+    def test_transient_single_miss_does_not_restart(self, monkeypatch: pytest.MonkeyPatch) -> None:
         # One failed probe followed by success must NOT trip a fleet-wide restart
         # (that would sever every client's HTTP session). Regression for the
         # watchdog restarting a healthy fleet mid-commit (ADR-0024).

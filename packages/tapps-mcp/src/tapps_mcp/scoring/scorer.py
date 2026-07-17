@@ -325,8 +325,14 @@ class CodeScorer(ScorerBase):
             mode=mode,
         )
 
-        # Build category scores
-        categories, dep_vuln_count = self._build_categories(code, resolved, parallel)
+        # Category AST/heuristic work is sync — offload so shared HTTP fleet
+        # (nlt-build) can still answer Cursor initialize/tools/list.
+        from tapps_mcp.tools.event_loop_guard import heavy_cpu
+
+        async with heavy_cpu():
+            categories, dep_vuln_count = await asyncio.to_thread(
+                self._build_categories, code, resolved, parallel
+            )
         overall = self._calculate_overall(categories)
 
         # Derive degraded_categories: any non-informational category that fell back
@@ -419,9 +425,8 @@ class CodeScorer(ScorerBase):
         # Use the real bandit result unless: (a) bandit is missing/unavailable, or
         # (b) bandit ran but its output was empty/unparseable (parse failure).
         bandit_parse_failed = "bandit" in parallel.tool_parse_failures
-        using_bandit = (
-            not bandit_parse_failed
-            and (parallel.security_issues or "bandit" not in parallel.missing_tools)
+        using_bandit = not bandit_parse_failed and (
+            parallel.security_issues or "bandit" not in parallel.missing_tools
         )
         if using_bandit:
             score = calculate_security_score(parallel.security_issues)

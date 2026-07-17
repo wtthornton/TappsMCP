@@ -56,6 +56,7 @@ Consumer projects opt in with `mcp_transport: http` in `.tapps-mcp.yaml` or `tap
 - All consumer repos must regenerate MCP config (`init --mcp-transport http` or yaml).
 - Fleet code root must cover all repos (default `~/code`; override in `fleet.env`).
 - Claude Code / remote hosts: HTTP fleet is localhost-first; remote dev needs port forwarding or stays on stdio.
+- **Shared event loop (mitigated):** `nlt-build` serves every window from one uvicorn loop. Sync CPU work inside async tool handlers (impact/call-graph, radon direct fallbacks, score category build) previously starved `/mcp` handshakes so Cursor stuck on "Loading tools" while TCP still accepted connections. Handlers now offload that work with `asyncio.to_thread`; `fleet ensure` additionally probes `initialize` (not just TCP) so a starved loop is restarted after debounce.
 
 ## Alternatives considered
 

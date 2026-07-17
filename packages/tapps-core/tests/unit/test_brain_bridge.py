@@ -627,6 +627,7 @@ class TestBrainProfileRoleConstants:
             BRAIN_PROFILE_READONLY,
             BRAIN_PROFILE_SERVER,
             BRAIN_PROFILES_DEFERRED_OK,
+            BRAIN_PROFILES_NARROW_OK,
         )
 
         assert BRAIN_PROFILE_SERVER in BRAIN_PROFILES_DEFERRED_OK
@@ -635,3 +636,8 @@ class TestBrainProfileRoleConstants:
         assert BRAIN_PROFILE_HOOKS not in BRAIN_PROFILES_DEFERRED_OK
         assert BRAIN_PROFILE_READONLY not in BRAIN_PROFILES_DEFERRED_OK
         assert BRAIN_PROFILE_FACADE not in BRAIN_PROFILES_DEFERRED_OK
+        # TAP-4810: narrow profiles demote profile_mismatch to debug.
+        assert BRAIN_PROFILE_HOOKS in BRAIN_PROFILES_NARROW_OK
+        assert BRAIN_PROFILE_READONLY in BRAIN_PROFILES_NARROW_OK
+        assert BRAIN_PROFILE_FACADE in BRAIN_PROFILES_NARROW_OK
+        assert BRAIN_PROFILE_SERVER not in BRAIN_PROFILES_NARROW_OK
