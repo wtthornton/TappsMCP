@@ -70,6 +70,7 @@ class KBCache:
 
     cache_dir: Path
     default_ttl: float = DEFAULT_TTL_SECONDS
+    max_mb: int = 100
     staleness_policies: dict[str, float] = field(
         default_factory=lambda: dict(DEFAULT_STALENESS_POLICIES)
     )
@@ -191,7 +192,7 @@ class KBCache:
         )
 
         # Check size and evict if over limit
-        self._check_size()
+        self._check_size(self.max_mb)
 
     def has(self, library: str, topic: str = "overview") -> bool:
         """Check whether a cache entry exists (does not check staleness)."""

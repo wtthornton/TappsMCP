@@ -7,6 +7,7 @@ transcript tool calls count as pipeline compliance.
 
 from __future__ import annotations
 
+import re
 from typing import Any, Final
 
 from tapps_mcp.distribution.nlt_mcp_config import LEGACY_NLT_SERVER_IDS, NLT_SERVER_ORDER
@@ -63,10 +64,12 @@ def resolve_callmcptool_tool_name(tool_input: dict[str, Any]) -> str | None:
 
 def is_tapps_mcp_server(server: str) -> bool:
     """True when *server* looks like a TappsMCP or NLT MCP host identifier."""
-    lowered = server.lower()
-    if lowered in MCP_SERVER_PREFIXES:
+    lowered = server.lower().rsplit("/", 1)[-1]
+    # Cursor project-prefixed: project-0-tapps-mcp-nlt-build
+    name = re.sub(r"^project-\d+-", "", lowered)
+    if name in MCP_SERVER_PREFIXES:
         return True
-    return any(marker in lowered for marker in MCP_SERVER_PREFIXES)
+    return any(name == marker or name.endswith("-" + marker) for marker in MCP_SERVER_PREFIXES)
 
 
 def resolve_transcript_tool_name(name: str, tool_input: dict[str, Any]) -> str:

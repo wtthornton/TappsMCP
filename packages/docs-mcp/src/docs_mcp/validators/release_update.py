@@ -29,6 +29,7 @@ _LINKS_RE = re.compile(r"### Links", re.MULTILINE)
 _TAP_REF_RE = re.compile(r"\bTAP-\d+\b")
 _HIGHLIGHT_ITEM_RE = re.compile(r"^- (?!No highlights)", re.MULTILINE)
 _ISSUES_ITEM_RE = re.compile(r"^- (?!None\.)", re.MULTILINE)
+_NONE_PLACEHOLDER_RE = re.compile(r"^- None\.\s*$", re.MULTILINE)
 
 
 class ReleaseUpdateFinding(BaseModel):
@@ -114,6 +115,8 @@ def validate_release_update(body: str) -> ReleaseUpdateReport:
                 message="Body must have a '### Issues Closed' section.",
             )
         )
+    elif _NONE_PLACEHOLDER_RE.search(issues_section):
+        pass  # explicit empty placeholder is OK
     elif not _ISSUES_ITEM_RE.search(issues_section):
         findings.append(
             ReleaseUpdateFinding(
@@ -126,7 +129,11 @@ def validate_release_update(body: str) -> ReleaseUpdateReport:
             )
         )
 
-    if issues_section is not None and not _TAP_REF_RE.search(issues_section):
+    if (
+        issues_section is not None
+        and not _NONE_PLACEHOLDER_RE.search(issues_section)
+        and not _TAP_REF_RE.search(issues_section)
+    ):
         findings.append(
             ReleaseUpdateFinding(
                 severity=SEVERITY_MEDIUM,

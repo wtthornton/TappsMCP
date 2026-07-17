@@ -1495,10 +1495,10 @@ class EpicGenerator:
                 stories.append(
                     EpicStoryStub(
                         title=str(item.get("title", "Untitled")),
-                        points=int(item.get("points", 0)),
+                        points=int(item.get("points") or 0),
                         description=str(item.get("description", "")),
                         tasks=tasks,
-                        ac_count=int(item.get("ac_count", 0)),
+                        ac_count=int(item.get("ac_count") or 0),
                     )
                 )
         return stories

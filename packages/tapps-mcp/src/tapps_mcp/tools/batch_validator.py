@@ -160,7 +160,7 @@ def format_batch_summary(results: list[dict[str, Any]]) -> str:
     """Format a human-readable summary of batch validation results."""
     total = len(results)
     passed = sum(1 for r in results if r.get("gate_passed") is True)
-    failed = sum(1 for r in results if r.get("gate_passed") is not True)
+    failed = sum(1 for r in results if r.get("gate_passed") is False)
     security_issues = sum(r.get("security_issues", 0) for r in results)
 
     parts = [f"{total} files validated"]

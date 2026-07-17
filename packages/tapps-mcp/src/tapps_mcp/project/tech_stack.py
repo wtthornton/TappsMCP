@@ -74,6 +74,7 @@ _FRAMEWORK_PATTERNS: dict[str, str] = {
     "nuxt": "nuxt.js",
     "svelte": "svelte",
     "nest": "nestjs",
+    "nestjs": "nestjs",
     "pytest": "pytest",
     "unittest": "unittest",
     "jest": "jest",
@@ -138,7 +139,7 @@ class TechStackDetector:
         counts: Counter[str] = Counter()
         patterns = [f"**/*{ext}" for ext in _LANGUAGE_EXTENSIONS]
         for fp in _walk_project_files(self.project_root, patterns, self.max_files):
-            lang = _LANGUAGE_EXTENSIONS.get(fp.suffix)
+            lang = _LANGUAGE_EXTENSIONS.get(fp.suffix.lower())
             if lang:
                 counts[lang] += 1
         self._languages = {lang for lang, n in counts.items() if n >= _MIN_LANGUAGE_FILE_COUNT}
@@ -262,9 +263,14 @@ class TechStackDetector:
             pass
 
     def _match_framework(self, module: str) -> None:
+        # Compare against the raw name and an unscoped form (@nestjs → nestjs).
         low = module.lower()
+        candidates = {low, low.lstrip("@")}
         for pattern, fw in _FRAMEWORK_PATTERNS.items():
-            if pattern in low:
+            if any(
+                c == pattern or c.startswith(pattern + ".") or c.startswith(pattern + "/")
+                for c in candidates
+            ):
                 self._frameworks.add(fw)
 
     def _context7_priority(self) -> list[str]:

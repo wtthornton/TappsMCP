@@ -40,19 +40,31 @@ _SEMVER_SORT_RE = re.compile(
 )
 
 
-def _semver_sort_key(version: str) -> tuple[int, int, int, str]:
+def _prerelease_parts(pre: str | None) -> tuple[object, ...]:
+    """Parse prerelease into a comparable tuple; release sorts after any prerelease."""
+    if not pre:
+        return (1,)  # release sorts after prerelease
+    parts: list[object] = [0]
+    for seg in pre.split("."):
+        if seg.isdigit():
+            parts.append(int(seg))
+        else:
+            parts.append(seg)
+    return tuple(parts)
+
+
+def _semver_sort_key(version: str) -> tuple[object, ...]:
     """Return a sortable tuple for a semver string.
 
     Pre-release versions sort before their release (e.g. 1.0.0-rc.1 < 1.0.0).
     Build metadata is ignored for ordering (e.g. 1.0.0+build.1 == 1.0.0).
+    Numeric prerelease segments compare numerically (e.g. rc.2 < rc.10).
     """
     m = _SEMVER_SORT_RE.match(version)
     if not m:
-        return (0, 0, 0, version)
+        return (0, 0, 0, (0, version))
     major, minor, patch = int(m.group(1)), int(m.group(2)), int(m.group(3))
-    # Pre-release sorts before release: "~" is after all printable ASCII
-    pre = m.group(4) if m.group(4) else "~"
-    return (major, minor, patch, pre)
+    return (major, minor, patch, _prerelease_parts(m.group(4)))
 
 
 # ---------------------------------------------------------------------------

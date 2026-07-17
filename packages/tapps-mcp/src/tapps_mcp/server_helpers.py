@@ -113,7 +113,10 @@ def _get_lookup_engine() -> _LookupEngineType:
         from tapps_core.knowledge.lookup import LookupEngine
 
         settings = load_settings()
-        cache = KBCache(settings.project_root / ".tapps-mcp-cache")
+        cache = KBCache(
+            settings.project_root / ".tapps-mcp-cache",
+            max_mb=settings.cache_max_mb,
+        )
         _lookup_engine = LookupEngine(cache, settings=settings)
     return _lookup_engine
 

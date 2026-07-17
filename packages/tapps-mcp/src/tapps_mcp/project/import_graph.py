@@ -167,7 +167,9 @@ def _build_context_map(tree: ast.Module) -> dict[int, str]:
     ctx: dict[int, str] = {}
     for node in ast.walk(tree):
         if isinstance(node, ast.If) and _is_tc_guard(node.test):
-            ctx.update(dict.fromkeys(map(id, ast.walk(node)), "type_checking"))
+            # Only mark the true-branch body — not orelse (else / non-TC elif).
+            for child in node.body:
+                ctx.update(dict.fromkeys(map(id, ast.walk(child)), "type_checking"))
         elif isinstance(node, ast.Try) and _has_import_error_handler(node):
             ctx.update(dict.fromkeys(map(id, ast.walk(node)), "conditional"))
     return ctx

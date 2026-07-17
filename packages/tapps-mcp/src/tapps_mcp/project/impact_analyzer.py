@@ -25,6 +25,22 @@ _SEVERITY_CRITICAL = 10
 _SEVERITY_HIGH = 5
 
 
+def _norm_path(path: Path, project_root: Path) -> str:
+    """Normalize *path* for stable graph storage and comparison."""
+    try:
+        return path.resolve().relative_to(project_root.resolve()).as_posix()
+    except ValueError:
+        return path.resolve().as_posix()
+
+
+def _path_from_graph(fp: str, project_root: Path) -> Path:
+    """Reconstitute a filesystem path from a graph-stored key."""
+    p = Path(fp)
+    if p.is_absolute():
+        return p
+    return project_root / p
+
+
 # ---------------------------------------------------------------------------
 # Import graph builder
 # ---------------------------------------------------------------------------
@@ -109,7 +125,7 @@ def _build_import_graph(
         source_mod = _module_for_file(py, project_root)
         imports = _extract_imports(py, source_mod)
         for mod in imports:
-            graph.setdefault(mod, set()).add(str(py))
+            graph.setdefault(mod, set()).add(_norm_path(py, project_root))
     return graph, truncated
 
 
@@ -182,14 +198,15 @@ def analyze_impact(
 
     # Direct dependents
     direct_files: set[str] = set()
+    changed_norm = _norm_path(file_path, project_root)
     for mod, importers in graph.items():
         if mod == changed_module or mod.startswith(changed_module + "."):
             direct_files.update(importers)
-    direct_files.discard(str(file_path))
+    direct_files.discard(changed_norm)
 
     for fp in sorted(direct_files):
         reason = f"imports {changed_module}"
-        if _is_test_file(Path(fp)):
+        if _is_test_file(_path_from_graph(fp, project_root)):
             tests.append(
                 FileImpact(
                     file_path=fp,
@@ -208,17 +225,17 @@ def analyze_impact(
     for _depth in range(1, max_depth):
         next_frontier: set[str] = set()
         for fp in frontier:
-            fp_module = _module_for_file(Path(fp), project_root)
+            fp_module = _module_for_file(_path_from_graph(fp, project_root), project_root)
             if fp_module is None:
                 continue
             for mod, importers in graph.items():
                 if mod == fp_module or mod.startswith(fp_module + "."):
                     for imp in importers:
-                        if imp not in visited and imp != str(file_path):
+                        if imp not in visited and imp != changed_norm:
                             next_frontier.add(imp)
         visited.update(next_frontier)
         for fp in sorted(next_frontier):
-            if _is_test_file(Path(fp)):
+            if _is_test_file(_path_from_graph(fp, project_root)):
                 tests.append(
                     FileImpact(
                         file_path=fp,
@@ -239,7 +256,7 @@ def analyze_impact(
             break
 
     # Heuristic: discover test files by naming convention
-    visited = {str(file_path)} | direct_files
+    visited = {changed_norm} | direct_files
     for dep in transitive:
         visited.add(dep.file_path)
     for tf in tests:
@@ -304,7 +321,7 @@ def _find_test_files_by_name(
         if _should_skip(py):
             continue
         if py.stem in candidates:
-            found.append(str(py))
+            found.append(_norm_path(py, project_root))
     return sorted(found)
 
 

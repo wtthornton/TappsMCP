@@ -690,7 +690,11 @@ class CallTracker:
     def _filtered_calls(cls) -> list[ToolCallRecord]:
         if cls._active_session_id is None:
             return list(cls._calls)
-        return [c for c in cls._calls if c.session_id == cls._active_session_id]
+        return [
+            c
+            for c in cls._calls
+            if c.session_id == cls._active_session_id or not c.session_id
+        ]
 
     @classmethod
     def _load_persisted(cls) -> None:

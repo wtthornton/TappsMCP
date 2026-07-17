@@ -2259,7 +2259,10 @@ def lookup_docs_cmd(library: str, topic: str, mode: str, raw: bool) -> None:
     from tapps_core.knowledge.lookup import LookupEngine
 
     settings = load_settings()
-    cache = KBCache(settings.project_root / ".tapps-mcp-cache")
+    cache = KBCache(
+        settings.project_root / ".tapps-mcp-cache",
+        max_mb=settings.cache_max_mb,
+    )
 
     async def _run() -> None:
         engine = LookupEngine(cache, settings=settings)

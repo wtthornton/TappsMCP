@@ -68,7 +68,7 @@ class TestDirectDependents:
         )
 
         direct_paths = [d.file_path for d in report.direct_dependents]
-        assert str(tmp_path / "src" / "service.py") in direct_paths
+        assert "src/service.py" in direct_paths
         assert report.total_affected >= 1
 
     def test_test_file_categorized_separately(self, tmp_path: Path) -> None:
@@ -89,8 +89,8 @@ class TestDirectDependents:
         test_paths = [t.file_path for t in report.test_files]
         direct_paths = [d.file_path for d in report.direct_dependents]
 
-        assert str(tmp_path / "tests" / "test_models.py") in test_paths
-        assert str(tmp_path / "tests" / "test_models.py") not in direct_paths
+        assert "tests/test_models.py" in test_paths
+        assert "tests/test_models.py" not in direct_paths
 
 
 class TestTransitiveDependents:
@@ -117,8 +117,8 @@ class TestTransitiveDependents:
         direct_paths = [d.file_path for d in report.direct_dependents]
         transitive_paths = [t.file_path for t in report.transitive_dependents]
 
-        assert str(tmp_path / "pkg" / "b.py") in direct_paths
-        assert str(tmp_path / "pkg" / "c.py") in transitive_paths
+        assert "pkg/b.py" in direct_paths
+        assert "pkg/c.py" in transitive_paths
         assert report.total_affected >= 2
 
 
@@ -162,7 +162,7 @@ class TestModuleMapping:
 
         # sub.py imports 'mypkg' which is the module name for __init__.py
         direct_paths = [d.file_path for d in report.direct_dependents]
-        assert str(tmp_path / "mypkg" / "sub.py") in direct_paths
+        assert "mypkg/sub.py" in direct_paths
 
 
 class TestRecommendations:
@@ -204,7 +204,7 @@ class TestBuildImportGraph:
 
         assert isinstance(graph, dict)
         assert "pkg.core" in graph
-        assert str(tmp_path / "pkg" / "consumer.py") in graph["pkg.core"]
+        assert "pkg/consumer.py" in graph["pkg.core"]
 
     def test_graph_reuse_gives_same_results(self, tmp_path: Path) -> None:
         """Passing a prebuilt graph to analyze_impact produces the same results."""
@@ -269,7 +269,7 @@ class TestSkipDirs:
             assert ".venv" not in p, f"Unexpected .venv file in results: {p}"
 
         # The normal consumer SHOULD appear
-        assert str(tmp_path / "pkg" / "consumer.py") in all_paths
+        assert "pkg/consumer.py" in all_paths
 
 
 class TestMonorepoModuleNames:
@@ -288,7 +288,7 @@ class TestMonorepoModuleNames:
         )
 
         direct_paths = [d.file_path for d in report.direct_dependents]
-        assert str(pkg_src / "service.py") in direct_paths
+        assert "packages/foo/src/foo/service.py" in direct_paths
 
     def test_relative_import_finds_dependents(self, tmp_path: Path) -> None:
         pkg = tmp_path / "pkg"
@@ -302,4 +302,4 @@ class TestMonorepoModuleNames:
         )
 
         direct_paths = [d.file_path for d in report.direct_dependents]
-        assert str(pkg / "service.py") in direct_paths
+        assert "pkg/service.py" in direct_paths

@@ -154,19 +154,19 @@ def _client_supports_elicitation(ctx: Context) -> bool:  # type: ignore[type-arg
     try:
         session = getattr(ctx, "session", None)
         if session is None:
-            return True
+            return False
         caps = getattr(session, "client_capabilities", None) or getattr(
             session, "_client_capabilities", None
         )
         if caps is None:
-            return True
+            return False
         # The MCP spec uses ``elicitation`` as a capability key.
         if hasattr(caps, "elicitation"):
             return caps.elicitation is not None
         # Dict-style fallback
         if isinstance(caps, dict):
             return caps.get("elicitation") is not None
-        return True
+        return False
     except Exception:
         return False
 

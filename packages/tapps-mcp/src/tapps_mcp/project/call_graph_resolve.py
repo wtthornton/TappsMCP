@@ -81,7 +81,7 @@ def _annotation_target(idx: FileIndex, ann: ast.expr | None) -> str | None:
     else:
         return None
     result = f"{base}.{rest}" if rest else base
-    return result if "." in result else None
+    return result
 
 
 def local_bindings(

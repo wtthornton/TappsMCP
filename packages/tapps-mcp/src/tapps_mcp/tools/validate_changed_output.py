@@ -244,7 +244,7 @@ def _build_file_entry(
         "file": file_name,
         "file_path": str(file_path),
         "status": status,
-        "score": round(float(score), 1) if score else 0.0,
+        "score": round(float(score if score is not None else 0.0), 1),
         "gate_passed": gate_passed,
         "security_passed": security_issues == 0,
         "issue_count": issue_count,

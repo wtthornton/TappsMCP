@@ -41,7 +41,6 @@ _SKIP_DIRS: frozenset[str] = frozenset(
         ".tapps-mcp",
         ".tapps-mcp-cache",
         ".claude",
-        ".tapps-mcp",
     }
 )
 
@@ -310,8 +309,10 @@ class CrossRefValidator:
     ) -> int:
         """Find orphan documents (not linked from any other doc). Returns orphan count."""
         linked_files: set[str] = set()
-        for targets in ref_graph.values():
-            linked_files.update(targets)
+        for source, targets in ref_graph.items():
+            for target in targets:
+                if target != source:
+                    linked_files.add(target)
 
         orphan_count = 0
         for rel_path in doc_files:

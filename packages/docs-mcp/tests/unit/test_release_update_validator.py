@@ -273,3 +273,40 @@ class TestNoHighlightsPlaceholder:
         report = validate_release_update(_NO_HIGHLIGHTS_PLACEHOLDER)
         highlight_findings = [f for f in report.findings if f.rule == RULE_MISSING_HIGHLIGHTS]
         assert len(highlight_findings) == 1
+
+
+_NONE_ISSUES_PLACEHOLDER = """\
+## Release v1.5.0 (2026-04-29)
+
+**Health:** On Track
+
+### Highlights
+
+- Maintenance release only
+
+### Issues Closed
+
+- None.
+
+### Links
+
+- Changelog: https://example.com/CHANGELOG.md
+"""
+
+
+class TestNoneIssuesPlaceholder:
+    """Explicit '- None.' in Issues Closed is a valid empty-release placeholder."""
+
+    def test_agent_ready(self) -> None:
+        report = validate_release_update(_NONE_ISSUES_PLACEHOLDER)
+        assert report.agent_ready is True
+
+    def test_no_missing_issues_finding(self) -> None:
+        report = validate_release_update(_NONE_ISSUES_PLACEHOLDER)
+        issues_findings = [f for f in report.findings if f.rule == RULE_MISSING_ISSUES_CLOSED]
+        assert issues_findings == []
+
+    def test_no_tap_ref_finding(self) -> None:
+        report = validate_release_update(_NONE_ISSUES_PLACEHOLDER)
+        tap_findings = [f for f in report.findings if f.rule == RULE_NO_TAP_REF]
+        assert tap_findings == []

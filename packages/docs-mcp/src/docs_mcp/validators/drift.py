@@ -17,6 +17,21 @@ if TYPE_CHECKING:
 
 logger = structlog.get_logger(__name__)
 
+
+def _is_test_path(rel_path: str) -> bool:
+    """True for test layouts, not paths that merely contain the substring 'test'."""
+    low = rel_path.replace("\\", "/").lower()
+    parts = low.split("/")
+    name = parts[-1] if parts else low
+    if any(p in {"tests", "test", "__tests__", "testing"} for p in parts[:-1]):
+        return True
+    if name.startswith("test_") or name.endswith("_test.py") or name.endswith("_tests.py"):
+        return True
+    if name in {"conftest.py", "conftest.pyi"}:
+        return True
+    return False
+
+
 # Directories to skip when scanning for Python source files (extends shared constants).
 from docs_mcp.constants import SKIP_DIRS as _BASE_SKIP_DIRS
 
@@ -222,8 +237,7 @@ def _get_relevant_doc_mtime(names: list[str], token_mtime_map: dict[str, float])
             if len(token) < _MIN_FUZZY_TOKEN_LEN:
                 continue
             mtime = token_mtime_map.get(token.lower(), 0.0)
-            if mtime > best:
-                best = mtime
+            best = max(best, mtime)
     return best
 
 
@@ -343,13 +357,18 @@ def _collect_docstrings_from_source(source: str) -> str:
     return "\n".join(parts).lower()
 
 
-def _get_files_changed_since(project_root: Path, since: str) -> set[str]:
+def _get_files_changed_since(project_root: Path, since: str) -> set[str] | None:
     """Return relative paths of files changed since the given git ref or ISO date.
 
     Tries ``git diff --name-only <since>`` first (works for refs, branches, tags,
     and ``HEAD~N`` expressions), then falls back to ``git log --since=<since>
-    --name-only`` for ISO date strings. Returns an empty set on any error so the
-    caller can fall back to scanning all files.
+    --name-only`` for ISO date strings.
+
+    Returns:
+        A set of paths (possibly empty) when git resolved *since* successfully.
+        An empty set means "no files changed" — callers must not scan the whole
+        tree. Returns ``None`` on error so callers can fall back to scanning all
+        files.
 
     Paths are returned with forward slashes to match the convention used elsewhere
     in the drift detector.
@@ -363,9 +382,7 @@ def _get_files_changed_since(project_root: Path, since: str) -> set[str]:
             timeout=15,
         )
         if result.returncode == 0:
-            paths = {p.strip().replace("\\", "/") for p in result.stdout.splitlines() if p.strip()}
-            if paths:
-                return paths
+            return {p.strip().replace("\\", "/") for p in result.stdout.splitlines() if p.strip()}
     except Exception:
         pass
 
@@ -383,7 +400,7 @@ def _get_files_changed_since(project_root: Path, since: str) -> set[str]:
     except Exception:
         pass
 
-    return set()
+    return None
 
 
 def _matches_any_pattern(qualified_name: str, patterns: list[str]) -> bool:
@@ -469,9 +486,15 @@ class DriftDetector:
         doc_files = _find_doc_files(project_root, doc_dirs)
 
         # Pre-filter by `since` git ref/date: only changed files need drift analysis.
+        # None → git unavailable / unresolved ref → scan all files.
+        # Empty set → resolved successfully with no changes → skip analysis.
         if since:
             changed_paths = _get_files_changed_since(project_root, since)
-            if changed_paths:
+            if changed_paths is None:
+                pass  # fall back to full scan
+            elif not changed_paths:
+                return DriftReport()
+            else:
                 py_files = [
                     f for f in py_files
                     if str(f.relative_to(project_root)).replace("\\", "/") in changed_paths
@@ -516,7 +539,7 @@ class DriftDetector:
         for py_file in py_files:
             rel_path = str(py_file.relative_to(project_root)).replace("\\", "/")
             # Skip test files — test helpers/fixtures are not public API
-            if "test" in rel_path.lower():
+            if _is_test_path(rel_path):
                 continue
 
             # Single file read shared across empty-check, API analysis, and docstrings.

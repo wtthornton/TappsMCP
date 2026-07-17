@@ -14,7 +14,7 @@ from __future__ import annotations
 import ast
 import asyncio
 import math
-from collections.abc import Sequence
+from collections.abc import Iterator, Sequence
 from pathlib import Path
 from typing import TYPE_CHECKING, ClassVar
 
@@ -314,6 +314,7 @@ class CodeScorer(ScorerBase):
             run_vulture=self._settings.dead_code_enabled,
             run_semgrep=self._settings.semgrep_enabled,
             vulture_whitelist_patterns=self._settings.dead_code_whitelist_patterns,
+            vulture_min_confidence=self._settings.dead_code_min_confidence,
             mode=mode,
         )
 
@@ -649,11 +650,13 @@ class CodeScorer(ScorerBase):
             return 5.0
 
         # Count CC per function and use the maximum (like radon).
+        # Skip nested FunctionDef/AsyncFunctionDef/ClassDef so nested bodies
+        # do not inflate the enclosing function's cyclomatic complexity.
         func_ccs: list[int] = []
         for node in ast.walk(tree):
             if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
                 cc = 1
-                for child in ast.walk(node):
+                for child in _walk_skip_nested_defs(node):
                     if isinstance(child, (ast.If, ast.For, ast.While, ast.ExceptHandler)):
                         cc += 1
                 func_ccs.append(cc)
@@ -918,6 +921,21 @@ def _check_expensive_comp(node: ast.ListComp, seen: set[str]) -> None:
         seen.add("expensive_comprehension")
 
 
+def _walk_skip_nested_defs(node: ast.AST) -> Iterator[ast.AST]:
+    """Yield descendants of *node*, skipping nested function/class defs."""
+    for child in ast.iter_child_nodes(node):
+        if isinstance(child, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
+            continue
+        yield child
+        yield from _walk_skip_nested_defs(child)
+
+
+def _stem_token_in_name(name: str, stem: str) -> bool:
+    """True when *stem* appears as a full underscore-delimited token in *name*."""
+    base = name.removesuffix(".py")
+    return stem in base.split("_")
+
+
 def _count_test_files(root: Path, stem: str) -> tuple[int, int]:
     """Count exact and fuzzy test file matches for a module stem.
 
@@ -935,7 +953,7 @@ def _count_test_files(root: Path, stem: str) -> tuple[int, int]:
             if (td_path / pat).exists():
                 exact_count += 1
         for match in td_path.glob(f"test_*{stem}*.py"):
-            if match.name not in exact_patterns:
+            if match.name not in exact_patterns and _stem_token_in_name(match.name, stem):
                 fuzzy_count += 1
     return exact_count, fuzzy_count
 

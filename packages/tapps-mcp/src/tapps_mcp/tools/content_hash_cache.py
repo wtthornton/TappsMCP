@@ -22,6 +22,7 @@ per-server-process accelerator, not a durable store.
 
 from __future__ import annotations
 
+import copy
 import hashlib
 import threading
 import time
@@ -78,14 +79,14 @@ def get(kind: str, sha: str, *, ttl: float = _DEFAULT_TTL) -> dict[str, Any] | N
         _stats["hits"] += 1
         # Move to end (LRU-ish behavior for eviction).
         _cache.move_to_end((kind, sha))
-        return dict(value)
+        return copy.deepcopy(value)
 
 
 def set(kind: str, sha: str, value: dict[str, Any]) -> None:  # noqa: A001
     """Store ``value`` under ``(kind, sha)``. Evicts LRU when over cap."""
     with _lock:
         # Copy so callers cannot mutate the live cache entry after set.
-        _cache[(kind, sha)] = (dict(value), time.monotonic())
+        _cache[(kind, sha)] = (copy.deepcopy(value), time.monotonic())
         _cache.move_to_end((kind, sha))
         _stats["sets"] += 1
         while len(_cache) > _MAX_ENTRIES:
