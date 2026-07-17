@@ -1085,8 +1085,8 @@ class TestTappsValidateChanged:
         assert result["data"]["impact_summary"]["max_severity"] == "low"
 
     @pytest.mark.asyncio
-    async def test_no_files_writes_marker(self, tmp_path: Path) -> None:
-        """When no files found, marker is still written (all passed)."""
+    async def test_no_files_does_not_write_marker(self, tmp_path: Path) -> None:
+        """Zero files gated is inconclusive — never write the validate-ok marker."""
         from tapps_mcp.server_pipeline_tools import tapps_validate_changed
 
         with (
@@ -1100,7 +1100,7 @@ class TestTappsValidateChanged:
             ms.return_value = _make_mock_settings(tmp_path)
             await tapps_validate_changed()
 
-        mock_marker.assert_called_once()
+        mock_marker.assert_not_called()
 
     @pytest.mark.asyncio
     async def test_multiple_files(self, tmp_path: Path) -> None:
@@ -1958,7 +1958,9 @@ class TestBuildSearchFirst:
     def test_document_quality_added_for_document_consumer(self, tmp_path: Path) -> None:
         from tapps_mcp.server_pipeline_tools import _build_search_first
 
-        (tmp_path / "reports").mkdir()
+        # TAP-4810: a bare reports/ dir is no longer enough — needs brands/ + templates/.
+        (tmp_path / "brands").mkdir()
+        (tmp_path / "templates").mkdir()
         (tmp_path / "pyproject.toml").write_text("[project]\ndependencies = []\n")
         result = _build_search_first(tmp_path)
         assert result is not None
