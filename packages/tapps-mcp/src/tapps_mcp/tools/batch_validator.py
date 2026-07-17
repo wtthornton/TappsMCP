@@ -45,6 +45,26 @@ def _git_diff_names(project_root: Path, *args: str) -> set[str]:
     return set()
 
 
+def _git_untracked_names(project_root: Path) -> set[str]:
+    """Return untracked (but not ignored) files via ``git ls-files --others``."""
+    result = run_command(
+        ["git", "ls-files", "--others", "--exclude-standard"],
+        cwd=str(project_root),
+        timeout=_GIT_DIFF_TIMEOUT,
+    )
+    if result.returncode == 0 and result.stdout:
+        return set(result.stdout.strip().splitlines())
+    if result.timed_out:
+        logger.debug("git_ls_files_timed_out", project_root=str(project_root))
+    elif result.returncode != 0:
+        logger.debug(
+            "git_ls_files_failed",
+            returncode=result.returncode,
+            project_root=str(project_root),
+        )
+    return set()
+
+
 @dataclass
 class FileValidationResult:
     """Result of validating a single file."""
@@ -101,9 +121,10 @@ def detect_changed_scorable_files(
         extensions = set(get_supported_extensions())
 
     files: set[str] = set()
-    with ThreadPoolExecutor(max_workers=2) as executor:
+    with ThreadPoolExecutor(max_workers=3) as executor:
         fut_unstaged = executor.submit(_git_diff_names, project_root, base_ref)
         fut_staged = executor.submit(_git_diff_names, project_root, "--cached")
+        fut_untracked = executor.submit(_git_untracked_names, project_root)
         try:
             files.update(fut_unstaged.result(timeout=_GIT_DIFF_TIMEOUT + 1))
         except (FuturesTimeoutError, OSError):
@@ -112,6 +133,10 @@ def detect_changed_scorable_files(
             files.update(fut_staged.result(timeout=_GIT_DIFF_TIMEOUT + 1))
         except (FuturesTimeoutError, OSError):
             logger.warning("git_diff_staged_failed")
+        try:
+            files.update(fut_untracked.result(timeout=_GIT_DIFF_TIMEOUT + 1))
+        except (FuturesTimeoutError, OSError):
+            logger.warning("git_ls_files_untracked_failed")
 
     scorable_files: list[Path] = []
     for raw_name in sorted(files):
@@ -134,8 +159,8 @@ def detect_changed_scorable_files(
 def format_batch_summary(results: list[dict[str, Any]]) -> str:
     """Format a human-readable summary of batch validation results."""
     total = len(results)
-    passed = sum(1 for r in results if r.get("gate_passed"))
-    failed = sum(1 for r in results if r.get("gate_passed") is False)
+    passed = sum(1 for r in results if r.get("gate_passed") is True)
+    failed = sum(1 for r in results if r.get("gate_passed") is not True)
     security_issues = sum(r.get("security_issues", 0) for r in results)
 
     parts = [f"{total} files validated"]

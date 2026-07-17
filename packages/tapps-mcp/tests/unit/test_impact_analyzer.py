@@ -270,3 +270,36 @@ class TestSkipDirs:
 
         # The normal consumer SHOULD appear
         assert str(tmp_path / "pkg" / "consumer.py") in all_paths
+
+
+class TestMonorepoModuleNames:
+    """Impact analysis must strip packages/*/src/ so imports match."""
+
+    def test_monorepo_layout_finds_dependents(self, tmp_path: Path) -> None:
+        pkg_src = tmp_path / "packages" / "foo" / "src" / "foo"
+        pkg_src.mkdir(parents=True)
+        _write_file(pkg_src / "__init__.py", "")
+        _write_file(pkg_src / "models.py", "x = 1\n")
+        _write_file(pkg_src / "service.py", "from foo.models import x\n")
+
+        report = analyze_impact(
+            file_path=pkg_src / "models.py",
+            project_root=tmp_path,
+        )
+
+        direct_paths = [d.file_path for d in report.direct_dependents]
+        assert str(pkg_src / "service.py") in direct_paths
+
+    def test_relative_import_finds_dependents(self, tmp_path: Path) -> None:
+        pkg = tmp_path / "pkg"
+        _write_file(pkg / "__init__.py", "")
+        _write_file(pkg / "models.py", "x = 1\n")
+        _write_file(pkg / "service.py", "from .models import x\n")
+
+        report = analyze_impact(
+            file_path=pkg / "models.py",
+            project_root=tmp_path,
+        )
+
+        direct_paths = [d.file_path for d in report.direct_dependents]
+        assert str(pkg / "service.py") in direct_paths

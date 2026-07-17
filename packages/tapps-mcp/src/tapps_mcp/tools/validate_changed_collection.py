@@ -108,7 +108,7 @@ def _cache_hit_as_file_result(path: Path) -> dict[str, Any] | None:
         "file_path": str(path),
         "overall_score": cached.get("overall_score", 0.0),
         "gate_passed": cached.get("gate_passed", False),
-        "security_passed": cached.get("security_passed", True),
+        "security_passed": cached.get("security_passed", False),
         "security_issues": cached.get("security_issue_count", 0),
         "cache_hit": True,
     }

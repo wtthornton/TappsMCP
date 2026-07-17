@@ -78,13 +78,14 @@ def get(kind: str, sha: str, *, ttl: float = _DEFAULT_TTL) -> dict[str, Any] | N
         _stats["hits"] += 1
         # Move to end (LRU-ish behavior for eviction).
         _cache.move_to_end((kind, sha))
-        return value
+        return dict(value)
 
 
 def set(kind: str, sha: str, value: dict[str, Any]) -> None:  # noqa: A001
     """Store ``value`` under ``(kind, sha)``. Evicts FIFO when over cap."""
     with _lock:
-        _cache[(kind, sha)] = (value, time.monotonic())
+        # Copy so callers cannot mutate the live cache entry after set.
+        _cache[(kind, sha)] = (dict(value), time.monotonic())
         _cache.move_to_end((kind, sha))
         _stats["sets"] += 1
         while len(_cache) > _MAX_ENTRIES:

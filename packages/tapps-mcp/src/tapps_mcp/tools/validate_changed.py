@@ -616,6 +616,7 @@ async def tapps_validate_changed(
     settings = _host.load_settings()
     root_result = resolve_effective_project_root(settings.project_root, project_root)
     if root_result.error_code:
+        _record_call("tapps_validate_changed", success=False)
         return _host.error_response(
             "tapps_validate_changed",
             root_result.error_code,

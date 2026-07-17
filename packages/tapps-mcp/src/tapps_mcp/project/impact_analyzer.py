@@ -34,33 +34,56 @@ def _should_skip(path: Path) -> bool:
     return any(part in SKIP_DIRS for part in path.parts)
 
 
-def _extract_imports(file_path: Path) -> list[str]:
-    """Return top-level module names imported by *file_path*."""
+def _extract_imports(file_path: Path, source_module: str | None = None) -> list[str]:
+    """Return module names imported by *file_path* (absolute + resolved relative)."""
     try:
         tree = ast.parse(file_path.read_text(encoding="utf-8"))
     except (SyntaxError, UnicodeDecodeError, OSError):
         return []
 
+    from tapps_mcp.project.import_graph import resolve_relative_import
+
+    is_package = file_path.name == "__init__.py"
     modules: list[str] = []
     for node in ast.walk(tree):
         if isinstance(node, ast.Import):
             for alias in node.names:
                 modules.append(alias.name)
-        elif isinstance(node, ast.ImportFrom) and node.module:
-            modules.append(node.module)
+        elif isinstance(node, ast.ImportFrom):
+            level = node.level or 0
+            if level > 0 and source_module:
+                base = resolve_relative_import(
+                    source_module,
+                    node.module,
+                    level,
+                    is_package=is_package,
+                )
+                if node.module:
+                    if base:
+                        modules.append(base)
+                else:
+                    # from . import util  →  pkg.util (not just pkg)
+                    for alias in node.names:
+                        if alias.name == "*":
+                            if base:
+                                modules.append(base)
+                            continue
+                        modules.append(f"{base}.{alias.name}" if base else alias.name)
+            elif node.module:
+                modules.append(node.module)
     return modules
 
 
 def _module_for_file(file_path: Path, project_root: Path) -> str | None:
-    """Convert a file path to a dotted module name relative to *project_root*."""
-    try:
-        rel = file_path.relative_to(project_root)
-    except ValueError:
-        return None
-    parts = list(rel.with_suffix("").parts)
-    if parts and parts[-1] == "__init__":
-        parts = parts[:-1]
-    return ".".join(parts) if parts else None
+    """Convert a file path to a dotted module name relative to *project_root*.
+
+    Delegates to :func:`import_graph._file_to_module` so monorepo
+    (``packages/*/src``) and ``src/`` layouts match real import paths.
+    """
+    from tapps_mcp.project.import_graph import _file_to_module
+
+    mod = _file_to_module(file_path, project_root, "")
+    return mod or None
 
 
 def _build_import_graph(
@@ -77,7 +100,8 @@ def _build_import_graph(
         if count >= max_files:
             break
         count += 1
-        imports = _extract_imports(py)
+        source_mod = _module_for_file(py, project_root)
+        imports = _extract_imports(py, source_mod)
         for mod in imports:
             graph.setdefault(mod, set()).add(str(py))
     return graph

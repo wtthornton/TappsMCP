@@ -199,7 +199,7 @@ def _maybe_warm_dependency_cache(
         return
     from tapps_mcp.tools.dependency_scan_cache import get_dependency_findings
 
-    if not get_dependency_findings(str(settings.project_root)):
+    if get_dependency_findings(str(settings.project_root)) is None:
         task = asyncio.create_task(_warm_dependency_cache(settings))
         _host._background_tasks.add(task)
         task.add_done_callback(_host._background_tasks.discard)

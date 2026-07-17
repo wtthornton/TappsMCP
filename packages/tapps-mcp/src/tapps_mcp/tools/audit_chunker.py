@@ -160,7 +160,9 @@ def _is_trivial_file(path: Path) -> bool:
     try:
         text = path.read_text(encoding="utf-8")
     except (OSError, UnicodeDecodeError):
-        return True
+        # Unreadable files are not "trivial" — keep them in the audit so
+        # permission/encoding failures are visible rather than silently dropped.
+        return False
     if not text.strip():
         return True
     try:

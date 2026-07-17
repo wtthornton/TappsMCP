@@ -196,6 +196,7 @@ def _extract_imports(
         return [], set()
 
     ctx = _build_context_map(tree)
+    is_package = file_path.name == "__init__.py"
     edges: list[ImportEdge] = []
     external: set[str] = set()
 
@@ -210,6 +211,7 @@ def _extract_imports(
                 project_modules,
                 edges,
                 external,
+                is_package=is_package,
             )
     return edges, external
 
@@ -247,9 +249,11 @@ def _collect_from_import(
     project_modules: set[str],
     edges: list[ImportEdge],
     external: set[str],
+    *,
+    is_package: bool = False,
 ) -> None:
     """Collect edges from ``from X import Y`` statements."""
-    base = _resolve_from_base(node, source_module)
+    base = _resolve_from_base(node, source_module, is_package=is_package)
     if not base:
         return
     if not _is_project_module(base, project_modules):
@@ -274,16 +278,45 @@ def _collect_from_import(
         )
 
 
-def _resolve_from_base(node: ast.ImportFrom, source_module: str) -> str:
+def resolve_relative_import(
+    source_module: str,
+    node_module: str | None,
+    level: int,
+    *,
+    is_package: bool = False,
+) -> str:
+    """Resolve a relative ``ImportFrom`` to a dotted module name (PEP 328).
+
+    Relative imports are resolved against the *containing package*, not the
+    module file itself. For a regular module ``pkg.mod`` (``pkg/mod.py``) the
+    containing package is ``pkg``. For a package ``__init__`` module ``pkg.sub``
+    (``pkg/sub/__init__.py``) the containing package *is* ``pkg.sub``.
+    """
+    if level <= 0:
+        return node_module or ""
+    parts = source_module.split(".") if source_module else []
+    package_parts = parts if is_package else parts[:-1]
+    if level > len(package_parts):
+        return node_module or ""
+    anchor = package_parts[: len(package_parts) - (level - 1)]
+    if node_module:
+        return ".".join([*anchor, node_module]) if anchor else node_module
+    return ".".join(anchor)
+
+
+def _resolve_from_base(
+    node: ast.ImportFrom,
+    source_module: str,
+    *,
+    is_package: bool = False,
+) -> str:
     """Resolve the base module of a ``from`` import (handles relative)."""
-    base = node.module or ""
-    if not node.level or node.level <= 0:
-        return base
-    parts = source_module.split(".")
-    if node.level >= len(parts):
-        return base
-    pkg = parts[: len(parts) - node.level]
-    return ".".join([*pkg, base]) if base else ".".join(pkg)
+    return resolve_relative_import(
+        source_module,
+        node.module,
+        node.level or 0,
+        is_package=is_package,
+    )
 
 
 def _merge_externals(

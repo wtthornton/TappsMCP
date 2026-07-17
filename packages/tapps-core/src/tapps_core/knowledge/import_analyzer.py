@@ -99,7 +99,7 @@ def extract_external_imports(
         if isinstance(node, ast.Import):
             for alias in node.names:
                 top_modules.add(alias.name.split(".")[0])
-        elif isinstance(node, ast.ImportFrom) and node.module:
+        elif isinstance(node, ast.ImportFrom) and node.module and not node.level:
             top_modules.add(node.module.split(".")[0])
 
     project_package = _detect_project_package(project_root)

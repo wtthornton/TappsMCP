@@ -46,22 +46,30 @@ register_cache_stats("dependency_scan", _dependency_scan_stats)
 
 def set_dependency_findings(project_root: str, findings: list[VulnerabilityFinding]) -> None:
     """Store dependency scan results for the given project root."""
-    _cache[str(project_root)] = (findings, time.monotonic())
+    _cache[str(project_root)] = (list(findings), time.monotonic())
 
 
-def get_dependency_findings(project_root: str, ttl: int = _CACHE_TTL) -> list[VulnerabilityFinding]:
-    """Return cached dependency findings if present and not expired."""
+def get_dependency_findings(
+    project_root: str, ttl: int = _CACHE_TTL
+) -> list[VulnerabilityFinding] | None:
+    """Return cached dependency findings if present and not expired.
+
+    Returns:
+        A *copy* of the findings list on hit (including an empty list when
+        the last scan found zero CVEs). Returns ``None`` on miss / expiry so
+        callers can distinguish "clean scan cached" from "never scanned".
+    """
     entry = _cache.get(str(project_root))
     if entry is None:
         _stats["misses"] += 1
-        return []
+        return None
     findings, ts = entry
     if TTLStaleness(float(ttl), now_fn=time.monotonic).is_stale(ts):
         _cache.pop(str(project_root), None)
         _stats["misses"] += 1
-        return []
+        return None
     _stats["hits"] += 1
-    return findings
+    return list(findings)
 
 
 def clear_dependency_cache(project_root: str | None = None) -> None:

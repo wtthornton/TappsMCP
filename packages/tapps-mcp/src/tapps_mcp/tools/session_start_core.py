@@ -172,6 +172,19 @@ def build_session_start_data(
         "path_mapping": path_mapping,
         "cache": info["data"].get("cache"),
     }
+    try:
+        from tapps_core.config.settings import get_last_yaml_load_error
+
+        yaml_err = get_last_yaml_load_error()
+        if yaml_err:
+            data["config_yaml_error"] = yaml_err
+            data["config_yaml_warning"] = (
+                f".tapps-mcp.yaml failed to parse ({yaml_err.get('path', '?')}): "
+                f"{yaml_err.get('reason', 'unknown')}. Settings fell back to defaults — "
+                "gate flags and weights were not applied. Fix the YAML and restart."
+            )
+    except Exception:
+        _logger.debug("yaml_load_error_check_failed", exc_info=True)
     return data
 
 

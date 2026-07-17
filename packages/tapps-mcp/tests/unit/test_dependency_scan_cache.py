@@ -54,10 +54,24 @@ class TestSetAndGetDependencyFindings:
         assert len(b) == 1
         assert b[0].package == "pkg-b"
 
-    def test_missing_project_returns_empty(self):
-        """Querying an unknown project root returns empty list."""
+    def test_missing_project_returns_none(self):
+        """Querying an unknown project root returns None (cache miss)."""
         result = get_dependency_findings("/nonexistent")
-        assert result == []
+        assert result is None
+
+    def test_empty_hit_distinct_from_miss(self):
+        """Cached empty list is a hit; unknown project is a miss."""
+        set_dependency_findings("/clean-project", [])
+        assert get_dependency_findings("/clean-project") == []
+        assert get_dependency_findings("/never-scanned") is None
+
+    def test_get_returns_copy(self):
+        """Mutating the returned list must not corrupt the cache."""
+        set_dependency_findings("/project", [_make_finding()])
+        result = get_dependency_findings("/project")
+        assert result is not None
+        result.clear()
+        assert len(get_dependency_findings("/project") or []) == 1
 
 
 class TestTTLExpiry:
@@ -68,7 +82,7 @@ class TestTTLExpiry:
         assert len(result) == 1
 
     def test_expired_entry_returns_empty(self):
-        """Entry past TTL is evicted and returns empty."""
+        """Entry past TTL is evicted and returns None (miss)."""
         set_dependency_findings("/project", [_make_finding()])
 
         # Simulate time passing beyond TTL
@@ -76,7 +90,7 @@ class TestTTLExpiry:
             mock_time.monotonic.return_value = 99999999.0
             result = get_dependency_findings("/project", ttl=300)
 
-        assert result == []
+        assert result is None
 
 
     def test_concurrent_expiry_no_exception(self) -> None:
@@ -119,8 +133,8 @@ class TestClearDependencyCache:
 
         clear_dependency_cache("/project-a")
 
-        assert get_dependency_findings("/project-a") == []
-        assert len(get_dependency_findings("/project-b")) == 1
+        assert get_dependency_findings("/project-a") is None
+        assert len(get_dependency_findings("/project-b") or []) == 1
 
     def test_clear_all(self):
         """Clearing without project root empties entire cache."""
@@ -129,5 +143,5 @@ class TestClearDependencyCache:
 
         clear_dependency_cache()
 
-        assert get_dependency_findings("/project-a") == []
-        assert get_dependency_findings("/project-b") == []
+        assert get_dependency_findings("/project-a") is None
+        assert get_dependency_findings("/project-b") is None
