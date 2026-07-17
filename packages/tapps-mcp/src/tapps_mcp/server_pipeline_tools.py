@@ -327,19 +327,37 @@ def _reset_background_tasks() -> None:
 
 
 # TAP-1379: Per-process cache of tapps_session_start responses keyed by the
-# MetricsHub _SESSION_ID (process-lifetime UUID). Same session_id + same
-# quick mode + not force => return the cached response untouched. Audit
-# (2026-05-04) showed agents calling tapps_session_start ~23 times per
+# MetricsHub _SESSION_ID (process-lifetime UUID) + project root + quick.
+# Shared HTTP fleet (ADR-0024) serves many Cursor windows from one process;
+# the key MUST include X-Tapps-Project-Root so project A never gets project B's
+# cached bootstrap. Same session_id + root + quick + not force => cached hit.
+# Audit (2026-05-04) showed agents calling tapps_session_start ~23 times per
 # Claude session; a defensive re-call is cheap, but a full re-init burns
 # ~270ms on subprocess + Brain probes.
-_SESSION_START_CACHE: dict[tuple[str, bool], dict[str, Any]] = {}
+_SESSION_START_CACHE: dict[tuple[str, bool, str], dict[str, Any]] = {}
 
 
-def _session_start_cache_key(quick: bool) -> tuple[str, bool]:
-    """Build a cache key from the MCP server's process session id + quick flag."""
+def _session_start_cache_root() -> str:
+    """Resolved project root for the current request (fleet) or process (stdio)."""
+    import os
+    from pathlib import Path
+
+    from tapps_core.http.request_context import get_request_project_root
+
+    request_root = get_request_project_root()
+    if request_root is not None:
+        return str(request_root.resolve())
+    env_root = os.environ.get("TAPPS_MCP_PROJECT_ROOT", "").strip()
+    if env_root:
+        return str(Path(env_root).expanduser().resolve())
+    return str(Path.cwd().resolve())
+
+
+def _session_start_cache_key(quick: bool) -> tuple[str, bool, str]:
+    """Build a cache key: process session id + quick flag + project root."""
     from tapps_core.metrics.collector import _SESSION_ID
 
-    return (_SESSION_ID, quick)
+    return (_SESSION_ID, quick, _session_start_cache_root())
 
 
 def _reset_session_start_cache() -> None:
@@ -564,9 +582,9 @@ async def tapps_session_start(
     checker install).
 
     Args:
-        project_root: Currently unused; reserved for future remote-host
-            workflows. The server resolves the project root from its
-            launch CWD and ``TAPPS_MCP_PROJECT_ROOT`` env var.
+        project_root: Reserved override (stdio / remote hosts). On the
+            shared HTTP fleet, prefer ``X-Tapps-Project-Root``; that header
+            scopes the memoization cache and ``load_settings()`` root.
         quick: Return a minimal payload from cached checker versions
             without subprocess probes, diagnostics, or memory GC.
             Target latency < 1s. Use for fast liveness probes; the full
