@@ -7,6 +7,12 @@ from tapps_core.metrics.trends import (
 
 
 class TestCalculateTrend:
+    def test_latency_improving(self):
+        values = [100.0, 80.0, 60.0, 40.0, 20.0]
+        trend = calculate_trend("avg_latency_ms", values)
+        assert trend.direction == "improving"
+        assert trend.slope < 0
+
     def test_improving_trend(self):
         values = [1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0]
         trend = calculate_trend("test_metric", values)

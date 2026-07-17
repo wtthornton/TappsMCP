@@ -195,7 +195,7 @@ following tools to maintain code quality throughout development.
 - `tapps_quick_check` - Run a quick quality check on a single file after
   editing. Returns score and top issues.
 - `tapps_quality_gate` - Run a pass/fail quality gate against a configurable
-  preset (development, staging, or production).
+  preset (standard, strict, or framework).
 - `tapps_validate_changed` - Validate all changed files against the quality
   gate. Call this before declaring work complete (pass explicit `file_paths`).
 - `tapps_lookup_docs` - Look up library documentation and API references
@@ -256,7 +256,7 @@ analysis. The following standards are enforced during PR review.
 ## Code Quality Standards
 
 All Python files must meet TappsMCP scoring thresholds:
-- Overall score: >= 70 (development), >= 80 (staging), >= 90 (production)
+- Overall score: >= 70 (standard), >= 80 (strict), >= 75 (framework)
 - No individual category score below 50
 
 ### Scoring Categories

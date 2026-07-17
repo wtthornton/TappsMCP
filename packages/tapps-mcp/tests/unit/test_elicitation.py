@@ -25,8 +25,8 @@ class TestPresetElicitationSchema:
     """Tests for the PresetElicitation Pydantic model."""
 
     def test_valid_preset(self):
-        model = PresetElicitation(preset="staging")
-        assert model.preset == "staging"
+        model = PresetElicitation(preset="strict")
+        assert model.preset == "strict"
 
     def test_schema_has_enum_info(self):
         schema = PresetElicitation.model_json_schema()
@@ -53,11 +53,11 @@ class TestElicitPreset:
         ctx = MagicMock()
         result_mock = MagicMock()
         result_mock.action = "accept"
-        result_mock.data = PresetElicitation(preset="production")
+        result_mock.data = PresetElicitation(preset="framework")
         ctx.elicit = AsyncMock(return_value=result_mock)
 
         result = await elicit_preset(ctx)
-        assert result == "production"
+        assert result == "framework"
 
     @pytest.mark.asyncio
     async def test_decline_returns_none(self):
@@ -95,7 +95,7 @@ class TestElicitPreset:
         ctx = MagicMock()
         result_mock = MagicMock()
         result_mock.action = "accept"
-        result_mock.data = PresetElicitation(preset="staging")
+        result_mock.data = PresetElicitation(preset="strict")
         ctx.elicit = AsyncMock(return_value=result_mock)
 
         await elicit_preset(ctx)

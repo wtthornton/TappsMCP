@@ -231,7 +231,7 @@ class TestRunVultureAsync:
             returncode=-1, stdout="", stderr="Timed out", timed_out=True
         )
         result = await run_vulture_async("test.py")
-        assert result == []
+        assert result is None
 
     @pytest.mark.asyncio
     @patch("tapps_mcp.tools.vulture.run_command_async")
@@ -241,6 +241,7 @@ class TestRunVultureAsync:
             returncode=1, stdout=SAMPLE_VULTURE_OUTPUT, stderr=""
         )
         result = await run_vulture_async("test.py", min_confidence=60)
+        assert result is not None
         assert len(result) == 5
         assert result[0].name == "helper"
         assert result[0].finding_type == "function"
@@ -381,6 +382,7 @@ class TestCollectChangedPythonFiles:
         mock_run.side_effect = [  # type: ignore[union-attr]
             CommandResult(returncode=0, stdout="changed.py\n", stderr="", command=["git"]),
             CommandResult(returncode=0, stdout="", stderr="", command=["git"]),
+            CommandResult(returncode=0, stdout="", stderr="", command=["git"]),
         ]
         result = collect_changed_python_files(tmp_path)
         assert result == ["changed.py"]
@@ -394,6 +396,7 @@ class TestCollectChangedPythonFiles:
         mock_run.side_effect = [  # type: ignore[union-attr]
             CommandResult(returncode=0, stdout="dup.py\n", stderr="", command=["git"]),
             CommandResult(returncode=0, stdout="dup.py\n", stderr="", command=["git"]),
+            CommandResult(returncode=0, stdout="", stderr="", command=["git"]),
         ]
         result = collect_changed_python_files(tmp_path)
         assert result == ["dup.py"]
@@ -410,9 +413,23 @@ class TestCollectChangedPythonFiles:
                 command=["git"],
             ),
             CommandResult(returncode=0, stdout="", stderr="", command=["git"]),
+            CommandResult(returncode=0, stdout="", stderr="", command=["git"]),
         ]
         result = collect_changed_python_files(tmp_path)
         assert result == []
+
+    @patch("tapps_mcp.tools.vulture.run_command")
+    def test_includes_untracked_py(self, mock_run: object, tmp_path: Path) -> None:
+        from tapps_mcp.tools.subprocess_utils import CommandResult
+
+        (tmp_path / "new.py").write_text("pass")
+        mock_run.side_effect = [  # type: ignore[union-attr]
+            CommandResult(returncode=0, stdout="", stderr="", command=["git"]),
+            CommandResult(returncode=0, stdout="", stderr="", command=["git"]),
+            CommandResult(returncode=0, stdout="new.py\n", stderr="", command=["git"]),
+        ]
+        result = collect_changed_python_files(tmp_path)
+        assert result == ["new.py"]
 
     @patch("tapps_mcp.tools.vulture.run_command")
     def test_git_not_available(self, mock_run: object, tmp_path: Path) -> None:
@@ -469,6 +486,7 @@ class TestRunVultureMultiAsync:
         result = await run_vulture_multi_async(["a.py"])
         assert result.files_scanned == 1
         assert result.findings == []
+        assert result.degraded is True
 
     @pytest.mark.asyncio
     @patch("tapps_mcp.tools.vulture.run_command_async")

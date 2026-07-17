@@ -39,6 +39,51 @@ class TrendData:
 _SLOPE_THRESHOLD = 0.001
 # R-squared threshold: below this, the trend is too noisy to be meaningful
 _R_SQUARED_THRESHOLD = 0.1
+# Large magnitude change still surfaces even when R² is low (noisy but real)
+_LARGE_CHANGE_PCT = 20.0
+
+# Metric names (and substrings) where a *decreasing* value is an improvement.
+_LOWER_IS_BETTER_EXACT: frozenset[str] = frozenset(
+    {
+        "latency",
+        "latency_ms",
+        "avg_latency",
+        "avg_latency_ms",
+        "p50_latency_ms",
+        "p95_latency_ms",
+        "p99_latency_ms",
+        "error_rate",
+        "failure_rate",
+        "errors",
+        "cost",
+        "duration",
+        "duration_ms",
+        "ttft",
+        "ttft_ms",
+    }
+)
+_LOWER_IS_BETTER_SUBSTR: tuple[str, ...] = (
+    "latency",
+    "error_rate",
+    "failure_rate",
+    "duration",
+    "ttft",
+)
+
+
+def _is_lower_better(metric_name: str) -> bool:
+    """Return True when a decreasing series means the metric is improving."""
+    name = metric_name.lower()
+    if name in _LOWER_IS_BETTER_EXACT:
+        return True
+    return any(token in name for token in _LOWER_IS_BETTER_SUBSTR)
+
+
+def _direction_from_slope(metric_name: str, slope: float) -> str:
+    """Map regression slope to improving/degrading using metric polarity."""
+    if _is_lower_better(metric_name):
+        return "improving" if slope < 0 else "degrading"
+    return "improving" if slope > 0 else "degrading"
 
 
 def calculate_trend(
@@ -92,18 +137,19 @@ def calculate_trend(
     ss_tot = sum((y - y_mean) ** 2 for y in values)
     r_squared = max(0.0, 1.0 - (ss_res / ss_tot)) if ss_tot > 0 else 1.0
 
-    # Determine direction
-    if abs(slope) < slope_threshold or r_squared < _R_SQUARED_THRESHOLD:
-        direction = "stable"
-    elif slope > 0:
-        direction = "improving"
-    else:
-        direction = "degrading"
-
-    # Change percentage
+    # Change percentage (computed before direction so large swings can override
+    # a low R² "stable" classification).
     change_pct = 0.0
     if values[0] != 0:
         change_pct = ((values[-1] - values[0]) / abs(values[0])) * 100.0
+
+    # Determine direction (polarity-aware; large |change_pct| survives noisy R²)
+    if abs(slope) < slope_threshold:
+        direction = "stable"
+    elif r_squared < _R_SQUARED_THRESHOLD and abs(change_pct) < _LARGE_CHANGE_PCT:
+        direction = "stable"
+    else:
+        direction = _direction_from_slope(metric_name, slope)
 
     return TrendData(
         metric_name=metric_name,

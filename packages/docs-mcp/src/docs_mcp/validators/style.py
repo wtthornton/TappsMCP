@@ -1008,8 +1008,8 @@ def _content_lines(content: str) -> list[str]:
             result.append("")
             continue
 
-        # Code block detection
-        if line.strip().startswith("```"):
+        # Code block detection (``` and ~~~ fences)
+        if re.match(r"^\s*(`{3,}|~{3,})", line):
             in_code_block = not in_code_block
             result.append("")
             continue

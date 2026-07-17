@@ -52,10 +52,17 @@ def parse_conventional_commit(message: str) -> ParsedCommit:
     if not message:
         return ParsedCommit(raw=message)
 
-    # Split header from body (separated by blank line)
-    parts = message.split("\n\n", 1)
-    header = parts[0].strip()
-    body = parts[1].strip() if len(parts) > 1 else ""
+    # Split subject from body. Conventional Commits use a blank line, but many
+    # tools emit a single newline after the subject — accept either so footers
+    # like ``BREAKING CHANGE:`` are not left on the header remainder.
+    if "\n\n" in message:
+        header, body = message.split("\n\n", 1)
+    elif "\n" in message:
+        header, body = message.split("\n", 1)
+    else:
+        header, body = message, ""
+    header = header.strip()
+    body = body.strip()
 
     m = _CONVENTIONAL_RE.match(header)
     if not m:
@@ -99,9 +106,9 @@ def _has_breaking_change_footer(body: str) -> bool:
 _KEYWORD_RULES: list[tuple[str, list[str]]] = [
     ("fix", ["fix", "bug", "patch", "hotfix", "resolve"]),
     ("feat", ["add", "feature", "implement", "introduce"]),
-    ("docs", ["doc", "readme", "changelog"]),
+    ("docs", ["documentation", "docs", "doc", "readme", "changelog"]),
     ("refactor", ["refactor", "clean", "restructure"]),
-    ("test", ["test"]),
+    ("test", ["tests", "test"]),
 ]
 
 
@@ -119,10 +126,15 @@ def classify_commit(message: str) -> ParsedCommit:
     if not message:
         return ParsedCommit(raw=message)
 
-    # Split header/body for non-conventional as well
-    parts = message.split("\n\n", 1)
-    header = parts[0].strip()
-    body = parts[1].strip() if len(parts) > 1 else ""
+    # Split header/body for non-conventional as well (single or double newline)
+    if "\n\n" in message:
+        header, body = message.split("\n\n", 1)
+    elif "\n" in message:
+        header, body = message.split("\n", 1)
+    else:
+        header, body = message, ""
+    header = header.strip()
+    body = body.strip()
 
     lower = header.lower()
 
@@ -131,7 +143,7 @@ def classify_commit(message: str) -> ParsedCommit:
         for kw in keywords:
             # Use word-boundary-ish check: keyword at start, preceded by
             # space/punctuation, or as a standalone word.
-            if re.search(rf"\b{re.escape(kw)}", lower):
+            if re.search(rf"\b{re.escape(kw)}\b", lower):
                 commit_type = ctype
                 break
         else:

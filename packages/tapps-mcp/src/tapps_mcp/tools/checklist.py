@@ -1653,23 +1653,63 @@ class TDDCheckResult(BaseModel):
     summary: str = Field(default="", description="One-line summary.")
 
 
+_COMPILE_SKIP_DIRS = frozenset(
+    {
+        ".venv",
+        "__pycache__",
+        ".git",
+        "node_modules",
+        ".tox",
+        "site-packages",
+        "dist",
+        "build",
+        ".mypy_cache",
+        ".ruff_cache",
+        "vendor",
+        ".eggs",
+        ".pytest_cache",
+    }
+)
+
+
+def _compile_scan_roots(repo_root: Path) -> list[Path]:
+    """Prefer project source trees over a full-repo rglob."""
+    roots: list[Path] = []
+    src = repo_root / "src"
+    if src.is_dir():
+        roots.append(src)
+    packages = repo_root / "packages"
+    if packages.is_dir():
+        for pkg in packages.iterdir():
+            pkg_src = pkg / "src"
+            if pkg_src.is_dir():
+                roots.append(pkg_src)
+    return roots or [repo_root]
+
+
 def _check_compile_time_red(repo_root: Path) -> TDDStageCheck:
     """Validate that RED state is runtime RED (test failure) not compile-time RED.
 
     Compile-time RED means a syntax/import error that prevents even running
     pytest — that is invalid TDD RED state.  We check whether any Python file
-    in the repo is unparseable.
+    under project source roots is unparseable (skipping venv/vendor caches).
     """
     import ast
 
     broken: list[str] = []
-    for py_file in repo_root.rglob("*.py"):
-        if ".venv" in py_file.parts or "__pycache__" in py_file.parts:
-            continue
-        try:
-            ast.parse(py_file.read_text(encoding="utf-8", errors="replace"))
-        except SyntaxError:
-            broken.append(py_file.name)
+    for scan_root in _compile_scan_roots(repo_root):
+        for py_file in scan_root.rglob("*.py"):
+            if any(part in _COMPILE_SKIP_DIRS for part in py_file.parts):
+                continue
+            try:
+                ast.parse(py_file.read_text(encoding="utf-8", errors="replace"))
+            except SyntaxError:
+                try:
+                    broken.append(str(py_file.relative_to(repo_root)))
+                except ValueError:
+                    broken.append(py_file.name)
+            if len(broken) >= 3:
+                break
         if len(broken) >= 3:
             break
 

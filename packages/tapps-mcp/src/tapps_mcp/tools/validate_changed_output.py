@@ -350,10 +350,10 @@ async def _handle_no_changed_files(
 
     resp_data: dict[str, Any] = {
         "files_validated": 0,
-        "all_gates_passed": True,
+        "all_gates_passed": False,
         "total_security_issues": 0,
         "results": [],
-        "summary": "No changed scorable files found.",
+        "summary": "No changed scorable files found — inconclusive, nothing was gated.",
     }
 
     summary = resp_data["summary"]
@@ -365,9 +365,6 @@ async def _handle_no_changed_files(
             base_ref=base_ref,
         )
         summary = apply_judge_payload(resp_data, judge_payload, summary=summary)
-
-    if resp_data.get("all_gates_passed", True):
-        _host._write_validate_ok_marker(settings.project_root)
 
     warnings = _no_changed_warnings(explicit_paths, base_ref)
     if explicit_paths:

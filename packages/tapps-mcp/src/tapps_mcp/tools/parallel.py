@@ -78,9 +78,21 @@ def _mark_tool_failure(name: str, results: ParallelResults) -> None:
 def _assign_result(name: str, results: ParallelResults, value: object) -> None:
     """Assign a completed tool result to the correct field."""
     if name == "ruff":
-        results.lint_issues = value  # type: ignore[assignment]
+        if value is None:
+            results.tool_parse_failures.append("ruff")
+            if "ruff" not in results.missing_tools:
+                results.missing_tools.append("ruff")
+            results.degraded = True
+        else:
+            results.lint_issues = value  # type: ignore[assignment]
     elif name == "mypy":
-        results.type_issues = value  # type: ignore[assignment]
+        if value is None:
+            results.tool_parse_failures.append("mypy")
+            if "mypy" not in results.missing_tools:
+                results.missing_tools.append("mypy")
+            results.degraded = True
+        else:
+            results.type_issues = value  # type: ignore[assignment]
     elif name == "bandit":
         if value is None:
             # Tool ran but produced empty/unparseable output — record parse failure.
@@ -104,9 +116,21 @@ def _assign_result(name: str, results: ParallelResults, value: object) -> None:
     elif name == "radon_hal":
         results.radon_hal = value  # type: ignore[assignment]
     elif name == "perflint":
-        results.perflint = value  # type: ignore[assignment]
+        if value is None:
+            results.tool_parse_failures.append("perflint")
+            if "perflint" not in results.missing_tools:
+                results.missing_tools.append("perflint")
+            results.degraded = True
+        else:
+            results.perflint = value  # type: ignore[assignment]
     elif name == "vulture":
-        results.dead_code = value  # type: ignore[assignment]
+        if value is None:
+            results.tool_parse_failures.append("vulture")
+            if "vulture" not in results.missing_tools:
+                results.missing_tools.append("vulture")
+            results.degraded = True
+        else:
+            results.dead_code = value  # type: ignore[assignment]
 
 
 async def run_all_tools(

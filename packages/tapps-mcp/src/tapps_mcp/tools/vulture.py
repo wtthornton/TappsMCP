@@ -158,7 +158,7 @@ async def run_vulture_async(
     whitelist_patterns: list[str] | None = None,
     cwd: str | None = None,
     timeout: int = 30,
-) -> list[DeadCodeFinding]:
+) -> list[DeadCodeFinding] | None:
     """Run vulture on a single file asynchronously.
 
     Args:
@@ -169,8 +169,8 @@ async def run_vulture_async(
         timeout: Timeout in seconds.
 
     Returns:
-        List of dead-code findings, or empty list if vulture
-        is not installed or an error occurs.
+        List of dead-code findings, empty list if vulture is not installed,
+        or ``None`` on timeout (callers must treat as degraded, not clean).
     """
     if not is_vulture_available():
         logger.debug("vulture_not_installed")
@@ -187,7 +187,7 @@ async def run_vulture_async(
 
     if result.timed_out:
         logger.warning("vulture_timeout", file=file_path, timeout=timeout)
-        return []
+        return None
 
     # vulture exits 0 when no dead code found, non-zero when findings exist.
     # Both are valid; we just parse stdout.
@@ -297,6 +297,16 @@ def collect_changed_python_files(project_root: Path) -> list[str]:
                 stderr=result.stderr,
             )
 
+    # Include untracked .py files (same contract as validate-changed) so
+    # newly added sources are not silently skipped under scope="changed".
+    untracked = run_command(
+        ["git", "ls-files", "--others", "--exclude-standard"],
+        cwd=str(project_root),
+        timeout=_GIT_DIFF_TIMEOUT,
+    )
+    if untracked.returncode == 0 and untracked.stdout:
+        files.update(untracked.stdout.strip().splitlines())
+
     py_files: list[str] = []
     for f in sorted(files):
         if f.endswith(".py") and (project_root / f).is_file():
@@ -349,7 +359,7 @@ async def run_vulture_multi_async(
 
     if result.timed_out:
         logger.warning("vulture_timeout_multi", file_count=len(file_paths), timeout=timeout)
-        return DeadCodeResult(files_scanned=len(file_paths))
+        return DeadCodeResult(files_scanned=len(file_paths), degraded=True)
 
     findings = parse_vulture_output(result.stdout, min_confidence=min_confidence)
 

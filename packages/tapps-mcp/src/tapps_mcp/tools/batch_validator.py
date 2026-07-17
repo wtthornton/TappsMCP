@@ -121,10 +121,18 @@ def detect_changed_scorable_files(
         extensions = set(get_supported_extensions())
 
     files: set[str] = set()
-    with ThreadPoolExecutor(max_workers=3) as executor:
+    with ThreadPoolExecutor(max_workers=5) as executor:
         fut_unstaged = executor.submit(_git_diff_names, project_root, base_ref)
         fut_staged = executor.submit(_git_diff_names, project_root, "--cached")
         fut_untracked = executor.submit(_git_untracked_names, project_root)
+        # When base_ref is HEAD, also include commits on this branch vs
+        # main/master so a clean working tree after commits is not invisible.
+        branch_futs = []
+        if base_ref.strip().upper() == "HEAD":
+            for branch in ("main", "master", "origin/main", "origin/master"):
+                branch_futs.append(
+                    executor.submit(_git_diff_names, project_root, f"{branch}...HEAD")
+                )
         try:
             files.update(fut_unstaged.result(timeout=_GIT_DIFF_TIMEOUT + 1))
         except (FuturesTimeoutError, OSError):
@@ -137,6 +145,11 @@ def detect_changed_scorable_files(
             files.update(fut_untracked.result(timeout=_GIT_DIFF_TIMEOUT + 1))
         except (FuturesTimeoutError, OSError):
             logger.warning("git_ls_files_untracked_failed")
+        for fut in branch_futs:
+            try:
+                files.update(fut.result(timeout=_GIT_DIFF_TIMEOUT + 1))
+            except (FuturesTimeoutError, OSError):
+                logger.debug("git_diff_branch_range_failed")
 
     scorable_files: list[Path] = []
     for raw_name in sorted(files):
@@ -160,7 +173,8 @@ def format_batch_summary(results: list[dict[str, Any]]) -> str:
     """Format a human-readable summary of batch validation results."""
     total = len(results)
     passed = sum(1 for r in results if r.get("gate_passed") is True)
-    failed = sum(1 for r in results if r.get("gate_passed") is False)
+    # Missing / None gate_passed is an error path — count as failed, not omitted.
+    failed = sum(1 for r in results if r.get("gate_passed") is not True)
     security_issues = sum(r.get("security_issues", 0) for r in results)
 
     parts = [f"{total} files validated"]

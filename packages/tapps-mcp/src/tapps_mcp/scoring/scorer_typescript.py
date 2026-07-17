@@ -304,6 +304,8 @@ class TypeScriptScorer(ScorerBase):
                 "function",
                 "arrow_function",
                 "method_definition",
+                "generator_function",
+                "generator_function_declaration",
             ):
                 cc = 1 + count_branches(node)
                 function_complexities.append(cc)

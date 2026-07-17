@@ -73,20 +73,22 @@ class PerflintFinding:
             self.label = _CODE_TO_LABEL.get(self.code, f"perflint_{self.symbol}")
 
 
-def parse_perflint_json(raw: str) -> list[PerflintFinding]:
+def parse_perflint_json(raw: str) -> list[PerflintFinding] | None:
     """Parse pylint ``--output-format=json`` output into findings.
 
     Filters out pylint's own diagnostic messages (non-W8xxx codes) so
     only perflint-specific findings are returned.
+
+    Returns ``None`` on empty or unparseable output (degraded signal).
     """
     if not raw.strip():
-        return []
+        return None
     try:
         data = json.loads(raw)
     except json.JSONDecodeError:
-        return []
+        return None
     if not isinstance(data, list):
-        return []
+        return None
     findings: list[PerflintFinding] = []
     for entry in data:
         if not isinstance(entry, dict):
@@ -110,24 +112,36 @@ def parse_perflint_json(raw: str) -> list[PerflintFinding]:
 
 def run_perflint_check(
     file_path: str, *, cwd: str | None = None, timeout: int = 30
-) -> list[PerflintFinding]:
-    """Run perflint on a single file synchronously."""
+) -> list[PerflintFinding] | None:
+    """Run perflint on a single file synchronously.
+
+    Returns ``None`` on timeout or unparseable output.
+    """
     result = run_command(
         [*_PERFLINT_ARGS, file_path],
         cwd=cwd,
         timeout=timeout,
     )
+    if result.timed_out:
+        logger.warning("perflint_timeout", file=file_path, timeout=timeout)
+        return None
     # pylint exits non-zero when issues found — that's expected
     return parse_perflint_json(result.stdout)
 
 
 async def run_perflint_check_async(
     file_path: str, *, cwd: str | None = None, timeout: int = 30
-) -> list[PerflintFinding]:
-    """Run perflint on a single file asynchronously."""
+) -> list[PerflintFinding] | None:
+    """Run perflint on a single file asynchronously.
+
+    Returns ``None`` on timeout or unparseable output.
+    """
     result = await run_command_async(
         [*_PERFLINT_ARGS, file_path],
         cwd=cwd,
         timeout=timeout,
     )
+    if result.timed_out:
+        logger.warning("perflint_timeout_async", file=file_path, timeout=timeout)
+        return None
     return parse_perflint_json(result.stdout)

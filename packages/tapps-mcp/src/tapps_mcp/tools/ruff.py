@@ -12,16 +12,22 @@ from tapps_mcp.tools.subprocess_runner import run_command, run_command_async
 logger = structlog.get_logger(__name__)
 
 
-def parse_ruff_json(raw: str) -> list[LintIssue]:
-    """Parse ruff ``--output-format=json`` output into ``LintIssue`` models."""
+def parse_ruff_json(raw: str) -> list[LintIssue] | None:
+    """Parse ruff ``--output-format=json`` output into ``LintIssue`` models.
+
+    Returns ``None`` when the output is unparseable (callers must treat that as
+    a tool failure / degraded score, not as a clean empty finding list).
+    An empty string still returns ``[]`` so callers that already verified the
+    tool succeeded with no diagnostics can pass through.
+    """
     if not raw.strip():
         return []
     try:
         diagnostics = json.loads(raw)
     except json.JSONDecodeError:
-        return []
+        return None
     if not isinstance(diagnostics, list):
-        return []
+        return None
     issues: list[LintIssue] = []
     for d in diagnostics:
         if not isinstance(d, dict):
@@ -68,30 +74,47 @@ def calculate_lint_score(issues: list[LintIssue]) -> float:
     return clamp_individual(score)
 
 
-def run_ruff_check(file_path: str, *, cwd: str | None = None, timeout: int = 30) -> list[LintIssue]:
-    """Run ``ruff check --output-format=json`` synchronously."""
+def run_ruff_check(
+    file_path: str, *, cwd: str | None = None, timeout: int = 30
+) -> list[LintIssue] | None:
+    """Run ``ruff check --output-format=json`` synchronously.
+
+    Returns ``None`` on timeout, crash, or unparseable output — never conflate
+    those with a genuine clean ``[]`` result (ruff always emits ``[]`` when
+    the file is clean).
+    """
     result = run_command(
         ["ruff", "check", "--output-format=json", file_path],
         cwd=cwd,
         timeout=timeout,
     )
-    if not result.success and not result.stdout.strip():
+    if result.timed_out:
+        logger.warning("ruff_check_timeout", file=file_path, timeout=timeout)
+        return None
+    if not result.stdout.strip():
+        # Clean runs emit ``[]``; empty stdout means the tool failed.
         logger.debug("ruff_check_no_output", stderr=result.stderr)
-        return []
+        return None
     return parse_ruff_json(result.stdout)
 
 
 async def run_ruff_check_async(
     file_path: str, *, cwd: str | None = None, timeout: int = 30
-) -> list[LintIssue]:
-    """Run ``ruff check --output-format=json`` asynchronously."""
+) -> list[LintIssue] | None:
+    """Run ``ruff check --output-format=json`` asynchronously.
+
+    Returns ``None`` on timeout / empty / unparseable output (degraded signal).
+    """
     result = await run_command_async(
         ["ruff", "check", "--output-format=json", file_path],
         cwd=cwd,
         timeout=timeout,
     )
-    if not result.success and not result.stdout.strip():
-        return []
+    if result.timed_out:
+        logger.warning("ruff_check_timeout_async", file=file_path, timeout=timeout)
+        return None
+    if not result.stdout.strip():
+        return None
     return parse_ruff_json(result.stdout)
 
 
@@ -116,6 +139,8 @@ def run_ruff_fix(file_path: str, *, cwd: str | None = None, timeout: int = 30) -
         before = json.loads(before_result.stdout) if before_result.stdout.strip() else []
     except json.JSONDecodeError:
         before = []
+    if not isinstance(before, list):
+        before = []
 
     run_command(
         ["ruff", "check", "--fix", file_path],
@@ -132,6 +157,8 @@ def run_ruff_fix(file_path: str, *, cwd: str | None = None, timeout: int = 30) -
         after = json.loads(after_result.stdout) if after_result.stdout.strip() else []
     except json.JSONDecodeError:
         after = []
+    if not isinstance(after, list):
+        after = []
     return max(0, len(before) - len(after))
 
 
@@ -145,6 +172,8 @@ async def run_ruff_fix_async(file_path: str, *, cwd: str | None = None, timeout:
     try:
         before = json.loads(before_result.stdout) if before_result.stdout.strip() else []
     except json.JSONDecodeError:
+        before = []
+    if not isinstance(before, list):
         before = []
 
     await run_command_async(
@@ -161,5 +190,7 @@ async def run_ruff_fix_async(file_path: str, *, cwd: str | None = None, timeout:
     try:
         after = json.loads(after_result.stdout) if after_result.stdout.strip() else []
     except json.JSONDecodeError:
+        after = []
+    if not isinstance(after, list):
         after = []
     return max(0, len(before) - len(after))

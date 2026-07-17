@@ -35,11 +35,11 @@ class PresetElicitation(BaseModel):
     preset: str = Field(
         description="Quality gate preset",
         json_schema_extra={
-            "enum": ["development", "staging", "production"],
+            "enum": ["standard", "strict", "framework"],
             "enumNames": [
-                "Development (lenient — score >= 60)",
-                "Staging (moderate — score >= 75)",
-                "Production (strict — score >= 90)",
+                "Standard (70+ score, recommended for most projects)",
+                "Strict (80+ score, for production codebases)",
+                "Framework (75+ score, for library/framework development)",
             ],
         },
     )
@@ -171,10 +171,17 @@ def _client_supports_elicitation(ctx: Context) -> bool:  # type: ignore[type-arg
         return False
 
 
+_LEGACY_PRESET_ALIASES = {
+    "development": "standard",
+    "staging": "strict",
+    "production": "framework",
+}
+
+
 async def elicit_preset(ctx: Context) -> str | None:  # type: ignore[type-arg]
     """Ask the user to select a quality gate preset via elicitation.
 
-    Returns the selected preset string (e.g. ``"staging"``) if the user
+    Returns the selected preset string (e.g. ``"strict"``) if the user
     accepted, or ``None`` if declined, cancelled, or unsupported.
     """
     if not _client_supports_elicitation(ctx):
@@ -188,7 +195,8 @@ async def elicit_preset(ctx: Context) -> str | None:  # type: ignore[type-arg]
             timeout=_ELICITATION_TIMEOUT_SEC,
         )
         if result.action == "accept" and result.data is not None:
-            return result.data.preset
+            preset = result.data.preset
+            return _LEGACY_PRESET_ALIASES.get(preset, preset)
         return None
     except Exception:  # pragma: no cover — graceful degradation
         return None

@@ -88,7 +88,7 @@ class ChangelogGenerator:
         "style": "Changed",
         "ci": "Changed",
         "build": "Changed",
-        "revert": "Removed",
+        "revert": "Changed",
         "deprecate": "Deprecated",
         "security": "Security",
     }

@@ -18,7 +18,6 @@ from __future__ import annotations
 import asyncio
 import os
 import sys
-import tempfile
 import time
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
@@ -151,26 +150,13 @@ def _bootstrap_cache_dir(project_root: Path) -> tuple[Path, bool]:
     1. ``TAPPS_CACHE_DIR`` env var (if set)
     2. ``<project_root>/.tapps-mcp-cache``
     3. ``<tempdir>/.tapps-mcp-cache`` (fallback when project root not writable)
+
+    Delegates to :func:`tapps_mcp.common.cache_paths.resolve_kb_cache_dir` so
+    every caller in the codebase resolves the same cache directory (Fix E).
     """
-    cache_dir = (
-        Path(os.environ["TAPPS_CACHE_DIR"])
-        if os.environ.get("TAPPS_CACHE_DIR")
-        else (project_root / ".tapps-mcp-cache")
-    )
-    fallback_used = False
+    from tapps_mcp.common.cache_paths import resolve_kb_cache_dir
 
-    try:
-        cache_dir.mkdir(parents=True, exist_ok=True)
-    except (PermissionError, OSError):
-        # Fall back to temp directory if primary path not writable
-        cache_dir = Path(tempfile.gettempdir()) / ".tapps-mcp-cache"
-        try:
-            cache_dir.mkdir(parents=True, exist_ok=True)
-            fallback_used = True
-        except (PermissionError, OSError):
-            logger.debug("cache_dir_creation_failed", cache_dir=str(cache_dir))
-
-    return cache_dir, fallback_used
+    return resolve_kb_cache_dir(project_root)
 
 
 def _cache_info_dict(cache_dir: Path, fallback_used: bool) -> dict[str, object]:

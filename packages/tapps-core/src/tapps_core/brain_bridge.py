@@ -2946,7 +2946,8 @@ class HttpBrainBridge(BrainBridge):
             err = f"brain_degraded: {', '.join(offending)}=false"
         return {
             "ok": False,
-            "dsn_reachable": False,
+            # HTTP responded (503 body received) — transport reached the brain.
+            "dsn_reachable": True,
             "pool_config_valid": True,
             "native_health_ok": False,
             "errors": [err],

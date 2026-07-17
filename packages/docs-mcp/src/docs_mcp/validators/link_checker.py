@@ -152,32 +152,40 @@ def _extract_headings(content: str) -> set[str]:
     - Lowercase
     - Replace spaces with hyphens
     - Remove non-alphanumeric characters (except hyphens)
+
+    Fenced code blocks (``` / ~~~) are skipped so language comments like
+    ``# shell`` are not treated as heading anchors.
     """
     anchors: set[str] = set()
     slug_counts: dict[str, int] = {}
-    for line in content.splitlines():
+    fenced_lines = _find_fenced_blocks(content)
+    for line_idx, line in enumerate(content.splitlines(), start=1):
+        if line_idx in fenced_lines:
+            continue
         stripped = line.strip()
-        if stripped.startswith("#"):
-            # Remove leading # characters and whitespace
-            heading_text = stripped.lstrip("#").strip()
-            # Strip Pandoc/GitHub custom-id attribute blocks: `{#custom-id}`
-            heading_text = re.sub(r"\s*\{#[^}]*\}\s*$", "", heading_text).strip()
-            # Convert to slug
-            slug = heading_text.lower()
-            slug = re.sub(r"[^\w\s-]", "", slug)
-            # GitHub maps each space to a hyphen WITHOUT collapsing repeats,
-            # so "Spacing & Layout" -> "spacing--layout" (after & is stripped).
-            # Collapsing here would produce "spacing-layout" and falsely flag
-            # the GitHub-style anchor as broken.
-            slug = slug.replace(" ", "-")
-            slug = slug.strip("-")
-            if slug:
-                count = slug_counts.get(slug, 0)
-                if count == 0:
-                    anchors.add(slug)
-                else:
-                    anchors.add(f"{slug}-{count}")
-                slug_counts[slug] = count + 1
+        # Require ATX heading syntax: one or more # followed by whitespace.
+        if not re.match(r"^#{1,6}\s+\S", stripped):
+            continue
+        # Remove leading # characters and whitespace
+        heading_text = stripped.lstrip("#").strip()
+        # Strip Pandoc/GitHub custom-id attribute blocks: `{#custom-id}`
+        heading_text = re.sub(r"\s*\{#[^}]*\}\s*$", "", heading_text).strip()
+        # Convert to slug
+        slug = heading_text.lower()
+        slug = re.sub(r"[^\w\s-]", "", slug)
+        # GitHub maps each space to a hyphen WITHOUT collapsing repeats,
+        # so "Spacing & Layout" -> "spacing--layout" (after & is stripped).
+        # Collapsing here would produce "spacing-layout" and falsely flag
+        # the GitHub-style anchor as broken.
+        slug = slug.replace(" ", "-")
+        slug = slug.strip("-")
+        if slug:
+            count = slug_counts.get(slug, 0)
+            if count == 0:
+                anchors.add(slug)
+            else:
+                anchors.add(f"{slug}-{count}")
+            slug_counts[slug] = count + 1
     return anchors
 
 
@@ -426,7 +434,16 @@ def _check_file_links(
                         )
                         continue
                 except OSError:
-                    pass  # Can't read target file; treat as valid
+                    broken.append(
+                        BrokenLink(
+                            source_file=rel_source,
+                            line=line_num,
+                            link_text=link_text,
+                            link_target=link_target,
+                            reason="unreadable_target",
+                        )
+                    )
+                    continue
 
             valid += 1
 

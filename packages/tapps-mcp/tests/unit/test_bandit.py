@@ -78,6 +78,9 @@ class TestParseBanditJson:
         # Valid JSON with empty results list → genuinely zero findings
         assert parse_bandit_json('{"results": []}') == []
 
+    def test_non_list_results_is_parse_failure(self):
+        assert parse_bandit_json('{"results": "boom"}') is None
+
     def test_owasp_mapping_applied(self):
         issues = parse_bandit_json(SAMPLE_BANDIT_JSON)
         assert issues[0].owasp == "A05:2021-Security Misconfiguration"

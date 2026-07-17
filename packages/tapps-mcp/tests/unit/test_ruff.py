@@ -58,7 +58,10 @@ class TestParseRuffJson:
         assert parse_ruff_json("   \n  ") == []
 
     def test_invalid_json(self):
-        assert parse_ruff_json("not json at all") == []
+        assert parse_ruff_json("not json at all") is None
+
+    def test_non_list_json(self):
+        assert parse_ruff_json('{"code": "E501"}') is None
 
     def test_empty_array(self):
         assert parse_ruff_json("[]") == []
@@ -147,7 +150,15 @@ class TestRunRuffCheck:
     def test_no_output(self, mock_cmd):
         mock_cmd.return_value = CommandResult(returncode=1, stdout="", stderr="error")
         issues = run_ruff_check("test.py")
-        assert issues == []
+        assert issues is None
+
+    @patch("tapps_mcp.tools.ruff.run_command")
+    def test_timeout(self, mock_cmd):
+        mock_cmd.return_value = CommandResult(
+            returncode=-1, stdout="", stderr="", timed_out=True
+        )
+        issues = run_ruff_check("test.py")
+        assert issues is None
 
     @patch("tapps_mcp.tools.ruff.run_command")
     def test_clean_file(self, mock_cmd):

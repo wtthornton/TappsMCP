@@ -175,6 +175,7 @@ def _lookup_gap_libraries(project_root: Path, edited_paths: list[str]) -> list[s
     here — callers fall back to a generic recommendation.
     """
     try:
+        from tapps_mcp.common.cache_paths import resolve_kb_cache_dir
         from tapps_mcp.knowledge.cache import KBCache
         from tapps_mcp.knowledge.import_analyzer import (
             extract_external_imports,
@@ -198,7 +199,8 @@ def _lookup_gap_libraries(project_root: Path, edited_paths: list[str]) -> list[s
         return []
 
     try:
-        cache = KBCache(project_root / ".tapps-mcp-cache")
+        cache_dir, _ = resolve_kb_cache_dir(project_root)
+        cache = KBCache(cache_dir)
         return find_uncached_libraries(sorted(external), cache)
     except Exception:
         return sorted(external)
@@ -441,10 +443,12 @@ def append_call_graph_stop_followup(
     files_edited: list[str],
     called_tools: set[str],
 ) -> str | None:
-    """Append stale call-graph note when Python was edited but graph tools were skipped."""
-    if not any(str(path).endswith((".py", ".pyi")) for path in files_edited):
+    """Append stale call-graph note when source was edited but graph tools were skipped."""
+    if not any(str(path).endswith(SOURCE_FILE_SUFFIXES) for path in files_edited):
         return followup
-    if {"tapps_call_graph", "tapps_diff_impact", "tapps_validate_changed"} & called_tools:
+    # validate_changed does not rebuild/query the call graph by default — only
+    # the dedicated graph tools suppress the stale-graph nudge.
+    if {"tapps_call_graph", "tapps_diff_impact"} & called_tools:
         return followup
     from tapps_mcp.project.call_graph_cache import summarize_call_graph_cache
 

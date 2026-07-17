@@ -179,10 +179,20 @@ def _build_context_map(tree: ast.Module) -> dict[int, str]:
 
 
 def _is_tc_guard(test: ast.expr) -> bool:
-    """Check if a test expression is ``TYPE_CHECKING``."""
-    return (isinstance(test, ast.Name) and test.id == "TYPE_CHECKING") or (
-        isinstance(test, ast.Attribute) and test.attr == "TYPE_CHECKING"
-    )
+    """Check if a test expression is (or contains) ``TYPE_CHECKING``.
+
+    Handles bare names, attributes (``typing.TYPE_CHECKING``), and boolean
+    combinations such as ``TYPE_CHECKING and sys.version_info >= (3, 12)``.
+    """
+    if isinstance(test, ast.Name) and test.id == "TYPE_CHECKING":
+        return True
+    if isinstance(test, ast.Attribute) and test.attr == "TYPE_CHECKING":
+        return True
+    if isinstance(test, ast.UnaryOp) and isinstance(test.op, ast.Not):
+        return _is_tc_guard(test.operand)
+    if isinstance(test, ast.BoolOp):
+        return any(_is_tc_guard(v) for v in test.values)
+    return False
 
 
 def _has_import_error_handler(node: ast.Try) -> bool:
@@ -318,7 +328,9 @@ def resolve_relative_import(
     parts = source_module.split(".") if source_module else []
     package_parts = parts if is_package else parts[:-1]
     if level > len(package_parts):
-        return node_module or ""
+        # Relative import escapes the package root — reject rather than invent
+        # a false module name from ``node_module`` alone.
+        return ""
     anchor = package_parts[: len(package_parts) - (level - 1)]
     if node_module:
         return ".".join([*anchor, node_module]) if anchor else node_module
