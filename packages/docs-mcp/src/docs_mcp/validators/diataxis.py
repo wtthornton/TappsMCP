@@ -7,6 +7,7 @@ recommendations for underrepresented quadrants.
 
 from __future__ import annotations
 
+import os
 from pathlib import Path
 from typing import ClassVar
 
@@ -218,12 +219,14 @@ class DiataxisValidator:
         for dir_name in scan_dirs:
             doc_dir = project_root / dir_name
             if doc_dir.is_dir():
-                for f in sorted(doc_dir.rglob("*.md")):
-                    if not any(p in self.SKIP_DIRS for p in f.parts):
-                        files.append(f)
-                for f in sorted(doc_dir.rglob("*.mdx")):
-                    if not any(p in self.SKIP_DIRS for p in f.parts):
-                        files.append(f)
+                for dirpath, dirnames, filenames in os.walk(doc_dir):
+                    dirnames[:] = [d for d in dirnames if d not in self.SKIP_DIRS]
+                    for fname in filenames:
+                        if Path(fname).suffix.lower() not in (".md", ".mdx"):
+                            continue
+                        f = Path(dirpath) / fname
+                        if not any(p in self.SKIP_DIRS for p in f.parts):
+                            files.append(f)
 
         return files
 

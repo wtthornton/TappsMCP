@@ -44,7 +44,7 @@ class ADRGenerator:
         }
     )
 
-    _NUMBER_PATTERN: ClassVar[re.Pattern[str]] = re.compile(r"^(\d{4})-.*\.md$")
+    _NUMBER_PATTERN: ClassVar[re.Pattern[str]] = re.compile(r"^(\d+)-.*\.md$")
 
     def generate(
         self,
@@ -105,7 +105,11 @@ class ADRGenerator:
             consequences=consequences,
         )
 
-        content = self._render_nygard(record) if template == "nygard" else self._render_madr(record)
+        content = (
+            self._render_nygard(record, adr_dir)
+            if template == "nygard"
+            else self._render_madr(record, adr_dir)
+        )
 
         slug = self._slugify(title)
         filename = f"{number:04d}-{slug}.md"
@@ -144,7 +148,30 @@ class ADRGenerator:
 
         return max_number + 1
 
-    def _render_madr(self, record: ADRRecord) -> str:
+    @staticmethod
+    def _find_adr_filename(adr_dir: Path, number: int) -> str | None:
+        """Return the first ADR filename whose numeric prefix equals *number*.
+
+        Accepts both zero-padded (``0001-foo.md``) and legacy unpadded
+        (``001-foo.md``) names via :attr:`_NUMBER_PATTERN`.
+        """
+        if not adr_dir.is_dir():
+            return None
+        for path in sorted(adr_dir.iterdir()):
+            match = ADRGenerator._NUMBER_PATTERN.match(path.name)
+            if match and int(match.group(1)) == number:
+                return path.name
+        return None
+
+    def _supersedes_link(self, adr_dir: Path | None, supersedes: int) -> str:
+        """Build a markdown link to the superseded ADR."""
+        filename: str | None = None
+        if adr_dir is not None:
+            filename = self._find_adr_filename(adr_dir, supersedes)
+        resolved = filename if filename is not None else f"{supersedes:04d}.md"
+        return f"Supersedes [ADR {supersedes}]({resolved})"
+
+    def _render_madr(self, record: ADRRecord, adr_dir: Path | None = None) -> str:
         """Render an ADR using MADR (Markdown Any Decision Records) format.
 
         Args:
@@ -165,7 +192,7 @@ class ADRGenerator:
 
         if record.supersedes is not None:
             lines.append("")
-            lines.append(f"Supersedes [ADR {record.supersedes}]({record.supersedes:04d}-*.md)")
+            lines.append(self._supersedes_link(adr_dir, record.supersedes))
 
         lines.extend(
             [
@@ -187,7 +214,7 @@ class ADRGenerator:
 
         return "\n".join(lines)
 
-    def _render_nygard(self, record: ADRRecord) -> str:
+    def _render_nygard(self, record: ADRRecord, adr_dir: Path | None = None) -> str:
         """Render an ADR using Nygard (Michael Nygard) format.
 
         Args:
@@ -204,6 +231,14 @@ class ADRGenerator:
             "## Status",
             "",
             record.status,
+        ]
+
+        if record.supersedes is not None:
+            lines.append("")
+            lines.append(self._supersedes_link(adr_dir, record.supersedes))
+
+        lines.extend(
+            [
             "",
             "## Context",
             "",
@@ -217,7 +252,8 @@ class ADRGenerator:
             "",
             record.consequences or "What becomes easier or more difficult...",
             "",
-        ]
+            ]
+        )
 
         return "\n".join(lines)
 

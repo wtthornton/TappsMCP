@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import ast
+import sys
 from collections import defaultdict
 from typing import TYPE_CHECKING, ClassVar
 
@@ -58,71 +59,7 @@ class ImportGraphBuilder:
         }
     )
 
-    STDLIB_TOP_LEVEL: ClassVar[frozenset[str]] = frozenset(
-        {
-            "abc",
-            "ast",
-            "asyncio",
-            "base64",
-            "collections",
-            "contextlib",
-            "copy",
-            "csv",
-            "dataclasses",
-            "datetime",
-            "enum",
-            "functools",
-            "glob",
-            "hashlib",
-            "html",
-            "http",
-            "importlib",
-            "inspect",
-            "io",
-            "itertools",
-            "json",
-            "logging",
-            "math",
-            "multiprocessing",
-            "operator",
-            "os",
-            "pathlib",
-            "pickle",
-            "platform",
-            "pprint",
-            "queue",
-            "random",
-            "re",
-            "secrets",
-            "shlex",
-            "shutil",
-            "signal",
-            "socket",
-            "sqlite3",
-            "string",
-            "struct",
-            "subprocess",
-            "sys",
-            "tempfile",
-            "textwrap",
-            "threading",
-            "time",
-            "timeit",
-            "tomllib",
-            "traceback",
-            "types",
-            "typing",
-            "unittest",
-            "urllib",
-            "uuid",
-            "warnings",
-            "weakref",
-            "xml",
-            "zipfile",
-            "__future__",
-            "typing_extensions",
-        }
-    )
+    STDLIB_TOP_LEVEL: ClassVar[frozenset[str]] = frozenset(sys.stdlib_module_names)
 
     def build(
         self,
@@ -593,7 +530,7 @@ class ImportGraphBuilder:
     def _handler_catches_import_error(handler: ast.ExceptHandler) -> bool:
         """Check if an except handler catches ImportError or ModuleNotFoundError."""
         if handler.type is None:
-            return True
+            return False
         if isinstance(handler.type, ast.Name):
             return handler.type.id in {"ImportError", "ModuleNotFoundError"}
         if isinstance(handler.type, ast.Tuple):

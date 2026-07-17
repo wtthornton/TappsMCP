@@ -16,6 +16,7 @@ from docs_mcp.validators.link_checker import (
     _find_fenced_blocks,
     _is_anchor_only,
     _is_external_link,
+    _normalize_link_destination,
 )
 
 # ---------------------------------------------------------------------------
@@ -123,6 +124,19 @@ class TestHelpers:
         content = "Just some text.\nMore text.\n"
         anchors = _extract_headings(content)
         assert anchors == set()
+
+    def test_extract_headings_duplicate_slugs(self) -> None:
+        content = "## Overview\n\n## Overview\n\n## Overview\n"
+        anchors = _extract_headings(content)
+        assert anchors == {"overview", "overview-1", "overview-2"}
+
+    def test_normalize_link_destination_title(self) -> None:
+        assert _normalize_link_destination('guide.md "User guide"') == "guide.md"
+        assert _normalize_link_destination("guide.md 'User guide'") == "guide.md"
+
+    def test_normalize_link_destination_angle_brackets(self) -> None:
+        assert _normalize_link_destination("<guide.md>") == "guide.md"
+        assert _normalize_link_destination('<guide.md "title">') == "guide.md"
 
 
 # ---------------------------------------------------------------------------
@@ -293,6 +307,51 @@ class TestLinkChecker:
         report = checker.check(tmp_path)
         assert report.total_links == 1
         assert report.valid_links == 1
+
+    def test_titled_link_resolves(self, tmp_path: Path) -> None:
+        (tmp_path / "guide.md").write_text("# Guide\n", encoding="utf-8")
+        (tmp_path / "README.md").write_text(
+            '# Project\n\nSee [guide](guide.md "The guide").\n',
+            encoding="utf-8",
+        )
+
+        checker = LinkChecker()
+        report = checker.check(tmp_path)
+        assert report.total_links == 1
+        assert report.valid_links == 1
+
+    def test_angle_bracket_link_resolves(self, tmp_path: Path) -> None:
+        (tmp_path / "guide.md").write_text("# Guide\n", encoding="utf-8")
+        (tmp_path / "README.md").write_text(
+            "# Project\n\nSee [guide](<guide.md>).\n",
+            encoding="utf-8",
+        )
+
+        checker = LinkChecker()
+        report = checker.check(tmp_path)
+        assert report.total_links == 1
+        assert report.valid_links == 1
+
+    def test_duplicate_heading_anchor(self, tmp_path: Path) -> None:
+        (tmp_path / "README.md").write_text(
+            "## Overview\n\n## Overview\n\n[second](#overview-1)\n",
+            encoding="utf-8",
+        )
+
+        checker = LinkChecker()
+        report = checker.check(tmp_path)
+        assert report.total_links == 1
+        assert report.valid_links == 1
+
+    def test_fenced_code_links_skipped(self, tmp_path: Path) -> None:
+        (tmp_path / "README.md").write_text(
+            "# Project\n\n```\n[broken](missing.md)\n```\n",
+            encoding="utf-8",
+        )
+
+        checker = LinkChecker()
+        report = checker.check(tmp_path)
+        assert report.total_links == 0
 
 
 # ---------------------------------------------------------------------------

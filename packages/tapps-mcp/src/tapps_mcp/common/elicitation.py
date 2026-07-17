@@ -148,8 +148,8 @@ class WizardConfigScope(BaseModel):
 def _client_supports_elicitation(ctx: Context) -> bool:  # type: ignore[type-arg]
     """Return ``True`` if the connected MCP client advertises elicitation.
 
-    Falls back to ``True`` (optimistic) if capabilities cannot be inspected
-    so that supported clients aren't accidentally excluded.
+    On inspection failure, returns ``False`` (fail closed) so callers skip
+    elicitation rather than blocking on elicit timeouts.
     """
     try:
         session = getattr(ctx, "session", None)
@@ -168,7 +168,7 @@ def _client_supports_elicitation(ctx: Context) -> bool:  # type: ignore[type-arg
             return caps.get("elicitation") is not None
         return True
     except Exception:
-        return True
+        return False
 
 
 async def elicit_preset(ctx: Context) -> str | None:  # type: ignore[type-arg]

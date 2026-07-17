@@ -240,7 +240,7 @@ def compute_gaps(
     gaps: list[str] = []
     recs: list[str] = []
 
-    if _SESSION_INIT_TOOL not in called and rows:
+    if _SESSION_INIT_TOOL not in called:
         gaps.append("session_start_skipped")
         recs.append(
             "Call tapps_session_start() at the top of every session — checker "
@@ -440,7 +440,7 @@ def append_call_graph_stop_followup(
     called_tools: set[str],
 ) -> str | None:
     """Append stale call-graph note when Python was edited but graph tools were skipped."""
-    if not any(str(path).endswith(".py") for path in files_edited):
+    if not any(str(path).endswith((".py", ".pyi")) for path in files_edited):
         return followup
     if {"tapps_call_graph", "tapps_diff_impact", "tapps_validate_changed"} & called_tools:
         return followup

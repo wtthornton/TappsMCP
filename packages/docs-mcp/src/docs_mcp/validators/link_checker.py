@@ -51,7 +51,6 @@ _SKIP_DIRS: frozenset[str] = frozenset(
         ".tapps-mcp",
         ".tapps-mcp-cache",
         ".claude",
-        ".tapps-mcp",
     }
 )
 
@@ -134,6 +133,18 @@ def _is_anchor_only(target: str) -> bool:
     return target.startswith("#")
 
 
+def _normalize_link_destination(raw: str) -> str:
+    """Normalize a markdown link destination (strip title, unwrap <>)."""
+    dest = raw.strip()
+    # Angle-bracket destination: [text](<foo.md>)
+    if dest.startswith("<") and dest.endswith(">"):
+        dest = dest[1:-1].strip()
+    # CommonMark optional title: space + "..." or '...'
+    dest = re.sub(r'\s+"(?:[^"\\]|\\.)*"\s*$', "", dest)
+    dest = re.sub(r"\s+'(?:[^'\\]|\\.)*'\s*$", "", dest)
+    return dest
+
+
 def _extract_headings(content: str) -> set[str]:
     """Extract markdown heading anchors from content.
 
@@ -143,11 +154,14 @@ def _extract_headings(content: str) -> set[str]:
     - Remove non-alphanumeric characters (except hyphens)
     """
     anchors: set[str] = set()
+    slug_counts: dict[str, int] = {}
     for line in content.splitlines():
         stripped = line.strip()
         if stripped.startswith("#"):
             # Remove leading # characters and whitespace
             heading_text = stripped.lstrip("#").strip()
+            # Strip Pandoc/GitHub custom-id attribute blocks: `{#custom-id}`
+            heading_text = re.sub(r"\s*\{#[^}]*\}\s*$", "", heading_text).strip()
             # Convert to slug
             slug = heading_text.lower()
             slug = re.sub(r"[^\w\s-]", "", slug)
@@ -158,7 +172,12 @@ def _extract_headings(content: str) -> set[str]:
             slug = slug.replace(" ", "-")
             slug = slug.strip("-")
             if slug:
-                anchors.add(slug)
+                count = slug_counts.get(slug, 0)
+                if count == 0:
+                    anchors.add(slug)
+                else:
+                    anchors.add(f"{slug}-{count}")
+                slug_counts[slug] = count + 1
     return anchors
 
 
@@ -301,11 +320,14 @@ def _check_file_links(
 
     # Pre-extract headings from this file for same-file anchor checks
     local_anchors = _extract_headings(content)
+    fenced_lines = _find_fenced_blocks(content)
 
     for line_num, line in enumerate(content.splitlines(), start=1):
+        if line_num in fenced_lines:
+            continue
         for match in _MARKDOWN_LINK_RE.finditer(line):
             link_text = match.group(1)
-            link_target = match.group(2).strip()
+            link_target = _normalize_link_destination(match.group(2))
 
             # Skip empty links and external URLs
             if not link_target:
@@ -341,9 +363,18 @@ def _check_file_links(
 
             # Resolve the target path relative to the source file's directory
             if not file_part:
-                # Just an anchor but with a file prefix like "file.md#anchor"
-                # This case is handled above; file_part is empty means anchor-only
-                valid += 1
+                if anchor_part and anchor_part in local_anchors:
+                    valid += 1
+                else:
+                    broken.append(
+                        BrokenLink(
+                            source_file=rel_source,
+                            line=line_num,
+                            link_text=link_text,
+                            link_target=link_target,
+                            reason="anchor_not_found",
+                        )
+                    )
                 continue
 
             try:

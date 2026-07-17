@@ -12,7 +12,7 @@ Design:
 - Values are opaque ``dict[str, Any]`` (the tool's response or a sub-slice
   of it — the caller decides what to store).
 - Bounded by ``_MAX_ENTRIES`` to prevent unbounded memory growth in
-  long-lived servers; eviction is simple FIFO.
+  long-lived servers; eviction is LRU (least-recently-used).
 - Optional TTL so stale entries from a previous day's session can be
   purged. TTL is checked lazily on ``get``.
 
@@ -82,7 +82,7 @@ def get(kind: str, sha: str, *, ttl: float = _DEFAULT_TTL) -> dict[str, Any] | N
 
 
 def set(kind: str, sha: str, value: dict[str, Any]) -> None:  # noqa: A001
-    """Store ``value`` under ``(kind, sha)``. Evicts FIFO when over cap."""
+    """Store ``value`` under ``(kind, sha)``. Evicts LRU when over cap."""
     with _lock:
         # Copy so callers cannot mutate the live cache entry after set.
         _cache[(kind, sha)] = (dict(value), time.monotonic())

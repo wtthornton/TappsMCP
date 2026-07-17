@@ -134,7 +134,9 @@ def _file_to_module(
       path starts with ``packages/<anything>/src/``; the three-component prefix
       is stripped so module names match the actual import path used in source.
     * **Simple src layout** (``src/<top>/...``) — prefix ``src/`` stripped when
-      ``top_level`` is explicitly provided.
+      ``top_level`` is set **or** the path has a package under ``src/``
+      (``src/pkg/mod.py`` → ``pkg.mod``). Flat ``src/models.py`` keeps the
+      ``src.`` prefix so it matches ``from src.models`` imports.
     * **Flat layout** (``<top>/...``) — no stripping needed.
     """
     try:
@@ -147,10 +149,13 @@ def _file_to_module(
     # Monorepo layout: packages/<pkg>/src/<top>/...
     # Strip the three-component prefix so the resulting name matches the
     # import path used inside the package (e.g. `tapps_mcp.tools.bandit`).
-    if len(parts) >= 3 and parts[0] == "packages" and parts[2] == "src":
+    # ``top_level`` is retained for API compatibility with callers.
+    if parts[0] == "packages" and len(parts) >= 3 and parts[2] == "src":
         parts = parts[3:]
-    elif parts[0] == "src" and top_level:
-        # Simple src layout with explicit top_level hint
+    elif parts[0] == "src" and (top_level or len(parts) > 2):
+        # Standard src layout: src/pkg/mod.py → pkg.mod
+        # Flat src/models.py keeps src.models unless top_level is set
+        # (imports in that layout usually say ``from src.models``).
         parts = parts[1:]
     if parts and parts[-1] == "__init__":
         parts = parts[:-1]
@@ -176,10 +181,21 @@ def _is_tc_guard(test: ast.expr) -> bool:
 
 
 def _has_import_error_handler(node: ast.Try) -> bool:
-    """Check if a try node catches ImportError."""
+    """Check if a try node catches ImportError or ModuleNotFoundError."""
+
+    def _names(exc: ast.expr | None) -> list[str]:
+        if exc is None:
+            return []
+        if isinstance(exc, ast.Name):
+            return [exc.id]
+        if isinstance(exc, ast.Tuple):
+            return [elt.id for elt in exc.elts if isinstance(elt, ast.Name)]
+        return []
+
     return any(
-        h.type is not None and isinstance(h.type, ast.Name) and h.type.id == "ImportError"
+        name in {"ImportError", "ModuleNotFoundError"}
         for h in node.handlers
+        for name in _names(h.type)
     )
 
 

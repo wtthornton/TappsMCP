@@ -90,21 +90,27 @@ def _build_import_graph(
     project_root: Path,
     *,
     max_files: int = 2000,
-) -> dict[str, set[str]]:
-    """Build ``module -> set[files that import it]``."""
+) -> tuple[dict[str, set[str]], bool]:
+    """Build ``module -> set[files that import it]``.
+
+    Returns ``(graph, truncated)`` where ``truncated`` is True when the walk
+    stopped early because ``max_files`` was hit.
+    """
     graph: dict[str, set[str]] = {}
     count = 0
+    truncated = False
     for py in project_root.rglob("*.py"):
         if _should_skip(py):
             continue
         if count >= max_files:
+            truncated = True
             break
         count += 1
         source_mod = _module_for_file(py, project_root)
         imports = _extract_imports(py, source_mod)
         for mod in imports:
             graph.setdefault(mod, set()).add(str(py))
-    return graph
+    return graph, truncated
 
 
 # ---------------------------------------------------------------------------
@@ -123,7 +129,8 @@ def build_import_graph(
     ``tapps_validate_changed``) can build the graph once and pass it to
     multiple :func:`analyze_impact` calls.
     """
-    return _build_import_graph(project_root, max_files=max_files)
+    graph, _truncated = _build_import_graph(project_root, max_files=max_files)
+    return graph
 
 
 def analyze_impact(
@@ -154,8 +161,9 @@ def analyze_impact(
         change_type=change_type,
     )
 
+    graph_truncated = False
     if graph is None:
-        graph = _build_import_graph(project_root)
+        graph, graph_truncated = _build_import_graph(project_root)
     changed_module = _module_for_file(file_path, project_root)
 
     direct: list[FileImpact] = []
@@ -251,6 +259,10 @@ def analyze_impact(
     total = len(direct) + len(transitive) + len(tests)
     severity = _assess_severity(total, change_type)
     recs = _recommendations(total, change_type, tests)
+    if graph_truncated:
+        recs.append(
+            "Import graph was truncated at max_files — blast radius may be incomplete."
+        )
 
     report = ImpactReport(
         changed_file=str(file_path),
@@ -302,7 +314,6 @@ def _is_test_file(path: Path) -> bool:
         name.startswith("test_")
         or name.endswith("_test.py")
         or "tests" in path.parts
-        or "test" in path.parts
     )
 
 
