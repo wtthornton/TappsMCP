@@ -133,6 +133,24 @@ class TestParsePerflintJson:
         raw = json.dumps(["not a dict", 42])
         assert parse_perflint_json(raw) == []
 
+    def test_null_line_and_column(self):
+        raw = json.dumps(
+            [
+                {
+                    "message-id": "W8201",
+                    "symbol": "loop-invariant-statement",
+                    "message": "x",
+                    "path": "f.py",
+                    "line": None,
+                    "column": None,
+                }
+            ]
+        )
+        findings = parse_perflint_json(raw)
+        assert len(findings) == 1
+        assert findings[0].line == 0
+        assert findings[0].column == 0
+
 
 class TestRunPerflintCheck:
     @patch("tapps_mcp.tools.perflint.run_command")

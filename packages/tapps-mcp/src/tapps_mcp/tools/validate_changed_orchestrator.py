@@ -63,9 +63,22 @@ async def _run_security_scan(
             "security_issues": bandit_count + secret_count,
         }
     if is_python and quick:
-        return {"security_passed": True, "security_issues": 0}
+        # Quick mode skips the dedicated secret scan, but score.security_issues
+        # may still hold bandit/heuristic findings from scoring — surface them
+        # instead of always claiming security_passed=True.
+        issues = getattr(score, "security_issues", None) or []
+        crit_high = sum(
+            1
+            for i in issues
+            if getattr(i, "severity", "") in ("critical", "high")
+        )
+        return {
+            "security_passed": crit_high == 0,
+            "security_issues": len(issues),
+            "security_scan_skipped": True,
+        }
     # Non-Python files: no security scanning yet
-    return {"security_passed": True, "security_issues": 0}
+    return {"security_passed": True, "security_issues": 0, "security_scan_skipped": True}
 
 
 async def _validate_single_file(

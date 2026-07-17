@@ -159,6 +159,7 @@ _ASYNC_HTTP_OK_ACTIONS = {
     "verify_integrity",
     "maintain",
     "health",
+    "consolidate",
     "hive_status",
     "hive_search",
     "hive_propagate",
@@ -1660,7 +1661,7 @@ def _handle_export(store: MemoryStore, p: _Params) -> dict[str, Any]:
     }
 
 
-async def _handle_consolidate(store: MemoryStore, p: _Params) -> dict[str, Any]:
+async def _handle_consolidate(store: MemoryStore | None, p: _Params) -> dict[str, Any]:
     """Handle the consolidate action via BrainBridge (TAP-412).
 
     Consolidates related memory entries into a single entry with provenance.
@@ -1681,9 +1682,9 @@ async def _handle_consolidate(store: MemoryStore, p: _Params) -> dict[str, Any]:
 
     # Auto-discovery path.
     if not p.entry_ids and not p.query:
-        # tapps-brain's run_periodic_consolidation_scan has no dry_run mode;
-        # preview the discovered groups locally before delegating.
-        if p.dry_run:
+        # In-process dry_run can preview groups locally; HTTP mode (store=None)
+        # must use the bridge's dry_run instead of store.list_all().
+        if p.dry_run and store is not None:
             all_entries = store.list_all()
             active_entries = [
                 e
@@ -1716,12 +1717,12 @@ async def _handle_consolidate(store: MemoryStore, p: _Params) -> dict[str, Any]:
             }
 
         try:
-            scan = await bridge.consolidate(dry_run=False)
+            scan = await bridge.consolidate(dry_run=bool(p.dry_run))
         except BrainBridgeUnavailable as exc:
             return _bridge_call_failed_response(
                 "consolidate",
                 exc,
-                extra={"store_metadata": _store_metadata(store)},
+                extra={"store_metadata": _store_metadata(store) if store else {}},
             )
         groups_found = int(scan.get("groups_found", 0))
         consolidated_flag = groups_found > 0
@@ -1745,14 +1746,16 @@ async def _handle_consolidate(store: MemoryStore, p: _Params) -> dict[str, Any]:
             "groups_found": groups_found,
             "entries_consolidated": int(scan.get("entries_consolidated", 0)),
             "consolidated_entries": list(scan.get("consolidated_entries", [])),
-            "dry_run": False,
+            "dry_run": bool(p.dry_run),
             "discovery_method": "auto",
             "reason": reason,
             "skipped_reason": skipped_reason,
-            "store_metadata": _store_metadata(store),
+            "store_metadata": _store_metadata(store) if store else {},
         }
 
     # Explicit entry_ids or query: orchestrate via store primitives.
+    if store is None:
+        return _requires_in_process_store_response("consolidate")
     if p.entry_ids:
         entries_to_consolidate = _get_entries_by_ids(store, p.entry_ids)
         if isinstance(entries_to_consolidate, dict):
@@ -3931,7 +3934,7 @@ _ACTION_BRAIN_TOOLS: dict[str, tuple[str, ...]] = {
     "list": ("memory_list",),
     "reinforce": ("memory_reinforce",),
     "save_bulk": ("memory_save_many",),
-    "health": ("flywheel_report", "flywheel_process", "diagnostics_report"),
+    "health": ("brain_status",),
     "hive_status": ("hive_status",),
     "hive_search": ("hive_search",),
     "hive_propagate": ("hive_propagate",),

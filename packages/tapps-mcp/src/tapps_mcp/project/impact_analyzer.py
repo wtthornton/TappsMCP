@@ -331,6 +331,7 @@ def _is_test_file(path: Path) -> bool:
         name.startswith("test_")
         or name.endswith("_test.py")
         or "tests" in path.parts
+        or "test" in path.parts
     )
 
 

@@ -1141,8 +1141,10 @@ def _cc_for_node(child: ast.AST) -> int:
 
 def _function_cc(node: ast.FunctionDef | ast.AsyncFunctionDef) -> int:
     """Compute cyclomatic complexity for a single function node."""
+    from tapps_mcp.scoring.scorer import _walk_skip_nested_defs
+
     cc = 1
-    for child in ast.walk(node):
+    for child in _walk_skip_nested_defs(node):
         cc += _cc_for_node(child)
     return cc
 

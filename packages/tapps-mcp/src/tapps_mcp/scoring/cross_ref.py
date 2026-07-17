@@ -76,11 +76,20 @@ class CrossRefResult:
         }
 
 
-def _extract_imports(tree: ast.Module) -> dict[str, str]:
+def _extract_imports(
+    tree: ast.Module,
+    source_module: str = "",
+    *,
+    is_package: bool = False,
+) -> dict[str, str]:
     """Extract import mappings: name -> module path.
 
     Handles both ``import foo`` and ``from foo import bar`` forms.
+    Relative imports (``from .foo import bar``) are resolved against
+    *source_module* via PEP 328 rules.
     """
+    from tapps_mcp.project.import_graph import resolve_relative_import
+
     imports: dict[str, str] = {}
     for node in ast.walk(tree):
         if isinstance(node, ast.Import):
@@ -88,7 +97,15 @@ def _extract_imports(tree: ast.Module) -> dict[str, str]:
                 name = alias.asname or alias.name
                 imports[name] = alias.name
         elif isinstance(node, ast.ImportFrom):
-            module = node.module or ""
+            if node.level and node.level > 0:
+                module = resolve_relative_import(
+                    source_module,
+                    node.module,
+                    node.level,
+                    is_package=is_package,
+                )
+            else:
+                module = node.module or ""
             for alias in node.names:
                 name = alias.asname or alias.name
                 imports[name] = f"{module}.{alias.name}" if module else alias.name
@@ -244,7 +261,17 @@ def analyze_cross_references(
         result.status = "degraded"
         return result
 
-    imports = _extract_imports(tree)
+    # Derive dotted module name for relative-import resolution.
+    source_module = ""
+    is_package = file_path.name == "__init__.py"
+    try:
+        from tapps_mcp.project.import_graph import _file_to_module
+
+        source_module = _file_to_module(file_path, search_root, "")
+    except Exception:
+        logger.debug("cross_ref_module_name_failed", file=str(file_path), exc_info=True)
+
+    imports = _extract_imports(tree, source_module, is_package=is_package)
     calls = _extract_call_kwargs(tree)
 
     if not calls:

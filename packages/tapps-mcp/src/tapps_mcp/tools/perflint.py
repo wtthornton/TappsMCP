@@ -101,8 +101,8 @@ def parse_perflint_json(raw: str) -> list[PerflintFinding]:
                 symbol=str(entry.get("symbol", "")),
                 message=str(entry.get("message", "")),
                 file=str(entry.get("path", "")),
-                line=int(entry.get("line", 0)),
-                column=int(entry.get("column", 0)),
+                line=int(entry.get("line") or 0),
+                column=int(entry.get("column") or 0),
             )
         )
     return findings

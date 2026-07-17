@@ -268,9 +268,17 @@ class TypeScriptScorer(ScorerBase):
         }
 
         function_complexities: list[int] = []
+        nested_fn_types = {
+            "function_declaration",
+            "function",
+            "arrow_function",
+            "method_definition",
+            "generator_function",
+            "generator_function_declaration",
+        }
 
         def count_branches(node: Any) -> int:
-            """Count branches in a node recursively."""
+            """Count branches in a node, skipping nested function bodies."""
             count = 0
             if node.type in branch_types:
                 # For binary expressions, only count && and ||
@@ -283,6 +291,9 @@ class TypeScriptScorer(ScorerBase):
                 else:
                     count = 1
             for child in node.children:
+                # Nested defs own their own CC — do not inflate the outer function.
+                if child.type in nested_fn_types:
+                    continue
                 count += count_branches(child)
             return count
 

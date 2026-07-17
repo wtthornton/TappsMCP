@@ -501,7 +501,8 @@ class TestTappsValidateChanged:
         warnings = result["data"].get("warnings", [])
         assert len(warnings) >= 1
         assert "base_ref=HEAD" in warnings[0]
-        assert "staged-but-uncommitted" in warnings[0]
+        assert "unstaged" in warnings[0]
+        assert "staged" in warnings[0]
 
     @pytest.mark.asyncio
     async def test_base_ref_non_head_no_warning(self, tmp_path: Path) -> None:
@@ -1140,8 +1141,13 @@ class TestChecklistEquivalence:
     def test_validate_changed_satisfies_review(self) -> None:
         CallTracker.record("tapps_validate_changed")
         result = CallTracker.evaluate("review", engagement_level="medium")
-        # review (medium) requires: tapps_score_file, tapps_security_scan, tapps_quality_gate
-        assert result.complete is True
+        # review (medium) requires score + security + gate; validate_changed
+        # satisfies score + gate only (security is a dedicated scan — quick
+        # validate often skips bandit / full security).
+        assert "tapps_score_file" in result.satisfied_required_tools
+        assert "tapps_quality_gate" in result.satisfied_required_tools
+        assert "tapps_security_scan" in result.missing_required
+        assert result.complete is False
 
 
 # ---------------------------------------------------------------------------

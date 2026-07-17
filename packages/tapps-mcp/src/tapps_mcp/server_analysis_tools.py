@@ -1874,7 +1874,9 @@ async def tapps_finding_to_story(
         "section_count": story.body.count("\n## ") + 1,
         "should_file": should_file,
         "duplicate_found": not should_file,
-        "duplicate_of": duplicate.get("id") if duplicate else None,
+        "duplicate_of": (
+            (duplicate.get("identifier") or duplicate.get("id")) if duplicate else None
+        ),
     }
     if should_file:
         next_steps = [
@@ -1884,8 +1886,9 @@ async def tapps_finding_to_story(
             "the Linear issue and agents can select it.",
         ]
     else:
+        dup_id = (duplicate or {}).get("identifier") or (duplicate or {}).get("id")
         next_steps = [
-            f"Issue {duplicate.get('id')!r} already covers this finding — "
+            f"Issue {dup_id!r} already covers this finding — "
             "skip filing or link to it instead of creating a duplicate.",
             "Set data['should_file']=false in your filing logic to suppress the write.",
         ]

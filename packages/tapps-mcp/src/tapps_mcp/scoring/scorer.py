@@ -907,8 +907,8 @@ def _classify_threshold(
 
 
 def _check_nested_for(node: ast.For | ast.AsyncFor, seen: set[str]) -> None:
-    """Flag nested for-loops (sync or async)."""
-    for child in ast.walk(node):
+    """Flag nested for-loops (sync or async) within the same function scope."""
+    for child in _walk_skip_nested_defs(node):
         if isinstance(child, (ast.For, ast.AsyncFor)) and child is not node:
             seen.add("nested_loops")
             break
