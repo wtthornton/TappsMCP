@@ -71,10 +71,12 @@ def derive_failure_reason(file_result: dict[str, Any]) -> FailureReason | None:
 
     score_val = file_result.get("overall_score", file_result.get("score"))
     lint_issues = file_result.get("lint_issues") or []
-    gate_passed = file_result.get("gate_passed", True)
+    # Missing gate_passed means the file never completed a gate evaluation
+    # (error / unsupported paths) — treat as failed, not passed.
+    gate_passed = file_result.get("gate_passed", False)
 
     if score_val == 0.0:
-        return "lint_blocker" if lint_issues else "lint_blocker"
+        return "lint_blocker" if lint_issues else "scoring_error"
 
     if not gate_passed:
         if file_result.get("gate_failures"):

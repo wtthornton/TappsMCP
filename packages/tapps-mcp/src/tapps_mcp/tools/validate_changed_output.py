@@ -198,7 +198,7 @@ def _build_structured_validation_output(
                 file_path=r.get("file_path", ""),
                 score=r.get("overall_score", 0.0),
                 gate_passed=r.get("gate_passed", False),
-                security_passed=r.get("security_passed", True),
+                security_passed=r.get("security_passed", False),
             )
             for r in results
         ]
@@ -316,9 +316,10 @@ def _no_changed_warnings(
     if not explicit_paths and base_ref.strip().upper() == "HEAD":
         warnings.append(
             "Zero changed files detected with base_ref=HEAD. "
-            "If you have staged-but-uncommitted changes, diff against HEAD "
-            "will not include them. Consider committing first or using a "
-            "different base_ref (e.g. base_ref='HEAD~1')."
+            "Auto-detect already checks unstaged, staged (--cached), and "
+            "untracked scorable files. Pass explicit file_paths=... or a "
+            "different base_ref (e.g. base_ref='main') if you expected "
+            "committed-on-branch changes."
         )
     return warnings
 

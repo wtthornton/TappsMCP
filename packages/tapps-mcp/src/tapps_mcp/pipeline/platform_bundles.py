@@ -607,17 +607,17 @@ TappsMCP can run in CI without an interactive session:
 # Install TappsMCP
 pip install tapps-mcp
 
-# Validate changed files
+# Validate changed files (quick mode by default)
 TAPPS_MCP_PROJECT_ROOT=/workspace \\
-  tapps-mcp validate-changed --preset staging
+  tapps-mcp validate-changed --quick
 ```
 
 ### Claude Code headless mode
 
 ```bash
 claude --headless \\
-  --allowedTools "mcp__tapps-mcp__tapps_validate_changed" \\
-  "Run tapps_validate_changed with preset=staging"
+  --allowedTools "mcp__nlt-build__tapps_validate_changed" \\
+  "Run tapps_validate_changed with quick=true"
 ```
 
 ### VS Code / headless - enableAllProjectMcpServers
@@ -629,7 +629,7 @@ In headless or non-interactive VS Code contexts, set:
 
 ```bash
 claude --init-only \\
-  --allowedTools "mcp__tapps-mcp__*" \\
+  --allowedTools "mcp__nlt-build__*" \\
   --project-root /workspace
 ```
 """
@@ -1068,7 +1068,7 @@ consider designating one teammate as a **quality watchdog**. To enable Agent Tea
 
 ## CI Integration
 
-TappsMCP can run in CI. Use `TAPPS_MCP_PROJECT_ROOT` and `tapps-mcp validate-changed --preset staging`, or Claude Code headless mode with `tapps_validate_changed`.
+TappsMCP can run in CI. Use `TAPPS_MCP_PROJECT_ROOT` and `tapps-mcp validate-changed --quick`, or Claude Code headless mode with `tapps_validate_changed`.
 """
     )
 

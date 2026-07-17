@@ -466,9 +466,12 @@ _HEAVY_ISSUE: dict[str, Any] = {
 
 def test_compact_issue_returns_only_allowed_fields() -> None:
     result = _compact_issue(_HEAVY_ISSUE)
-    assert set(result.keys()) == _COMPACT_FIELDS & set(_HEAVY_ISSUE.keys())
+    # statusType is normalized from state.type when absent on the source issue.
+    expected = (_COMPACT_FIELDS & set(_HEAVY_ISSUE.keys())) | {"statusType"}
+    assert set(result.keys()) == expected
     for key in result:
         assert key in _COMPACT_FIELDS
+    assert result["statusType"] == "backlog"
 
 
 def test_compact_issue_preserves_allowed_field_values() -> None:

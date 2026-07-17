@@ -257,9 +257,10 @@ class RustScorer(ScorerBase):
         }
 
         function_complexities: list[int] = []
+        nested_fn_types = {"function_item", "closure_expression"}
 
         def count_branches(node: Any) -> int:
-            """Count branches in a node recursively."""
+            """Count branches in a node, skipping nested function/closure bodies."""
             count = 0
             if node.type in branch_types:
                 count = 1
@@ -269,6 +270,8 @@ class RustScorer(ScorerBase):
                     if hasattr(child, "type") and child.type in ("&&", "||"):
                         count += 1
             for child in node.children:
+                if child.type in nested_fn_types:
+                    continue
                 count += count_branches(child)
             return count
 

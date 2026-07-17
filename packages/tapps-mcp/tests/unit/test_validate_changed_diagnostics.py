@@ -24,6 +24,25 @@ class TestDeriveFailureReason:
         )
         assert reason == "lint_blocker"
 
+    def test_scoring_error_on_zero_score_without_lint(self) -> None:
+        reason = derive_failure_reason(
+            {
+                "overall_score": 0.0,
+                "gate_passed": False,
+                "lint_issues": [],
+            }
+        )
+        assert reason == "scoring_error"
+
+    def test_missing_gate_passed_defaults_to_failure(self) -> None:
+        reason = derive_failure_reason(
+            {
+                "overall_score": 65.0,
+                "gate_failures": [{"category": "overall"}],
+            }
+        )
+        assert reason == "gate_threshold"
+
     def test_gate_threshold(self) -> None:
         reason = derive_failure_reason(
             {

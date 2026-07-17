@@ -171,7 +171,10 @@ def _build_context_map(tree: ast.Module) -> dict[int, str]:
             for child in node.body:
                 ctx.update(dict.fromkeys(map(id, ast.walk(child)), "type_checking"))
         elif isinstance(node, ast.Try) and _has_import_error_handler(node):
-            ctx.update(dict.fromkeys(map(id, ast.walk(node)), "conditional"))
+            # Only mark try-body + ImportError handlers as conditional — not
+            # orelse/finally, which always run when entered and are not optional.
+            for child in [*node.body, *node.handlers]:
+                ctx.update(dict.fromkeys(map(id, ast.walk(child)), "conditional"))
     return ctx
 
 

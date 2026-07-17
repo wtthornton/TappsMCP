@@ -135,6 +135,9 @@ def _target_to_module(base_url: str, target: str) -> str:
             combined = combined[: -len(suffix)]
             break
     parts = [p for p in combined.split("/") if p not in ("", ".")]
-    if parts and parts[0] == "src":
+    # Monorepo: packages/<pkg>/src/... — match _ts_file_to_module.
+    if len(parts) >= 3 and parts[0] == "packages" and parts[2] == "src":
+        parts = parts[3:]
+    elif parts and parts[0] == "src":
         parts = parts[1:]
     return "/".join(parts)

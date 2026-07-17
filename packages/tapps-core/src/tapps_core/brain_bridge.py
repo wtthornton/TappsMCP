@@ -1890,7 +1890,9 @@ class HttpBrainBridge(BrainBridge):
         result = await self._http_mcp_call("memory_search", args, project_id=project_id)
         if isinstance(result, list):
             return result
-        return result.get("results", []) if isinstance(result, dict) else []
+        if isinstance(result, dict):
+            return result.get("results") or result.get("entries") or []
+        return []
 
     async def get(
         self,
@@ -1918,7 +1920,9 @@ class HttpBrainBridge(BrainBridge):
         result = await self._http_mcp_call("memory_list", args, project_id=project_id)
         if isinstance(result, list):
             return result
-        return result.get("entries", []) if isinstance(result, dict) else []
+        if isinstance(result, dict):
+            return result.get("entries") or result.get("results") or []
+        return []
 
     async def recall_for_prompt(
         self,

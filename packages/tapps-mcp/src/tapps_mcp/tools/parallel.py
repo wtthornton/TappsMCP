@@ -56,8 +56,23 @@ class ParallelResults:
 
 def _mark_missing(name: str, results: ParallelResults) -> None:
     """Record a tool as missing (not installed)."""
-    results.missing_tools.append(name)
+    if name not in results.missing_tools:
+        results.missing_tools.append(name)
     results.tool_errors[name] = "not_found"
+
+
+def _mark_tool_failure(name: str, results: ParallelResults) -> None:
+    """Record a tool exception so scorers fall back instead of treating empty as clean.
+
+    Bandit exceptions without this mark yield a perfect security score (empty
+    findings + bandit still considered available). Radon exceptions leave the
+    default ``radon_mi=50.0`` and inflate maintainability.
+    """
+    tool_key = "radon" if name.startswith("radon") else name
+    if tool_key not in results.missing_tools:
+        results.missing_tools.append(tool_key)
+    if tool_key == "bandit" and "bandit" not in results.tool_parse_failures:
+        results.tool_parse_failures.append("bandit")
 
 
 def _assign_result(name: str, results: ParallelResults, value: object) -> None:
@@ -268,8 +283,9 @@ async def _run_subprocess(
             logger.warning("parallel_gather_timeout", timeout=overall_timeout)
             results.degraded = True
             results.tool_errors["_gather"] = f"timeout after {overall_timeout}s"
-            for t in tasks.values():
+            for name, t in tasks.items():
                 t.cancel()
+                _mark_tool_failure(name, results)
             return results
         task_names = list(tasks.keys())
         for name, result in zip(task_names, done, strict=True):
@@ -278,6 +294,7 @@ async def _run_subprocess(
                 logger.warning("tool_failed", tool=name, error=error_msg)
                 results.tool_errors[name] = error_msg
                 results.degraded = True
+                _mark_tool_failure(name, results)
                 continue
             _assign_result(name, results, result)
 
@@ -412,8 +429,9 @@ async def _run_direct(
             logger.warning("parallel_direct_gather_timeout", timeout=overall_timeout)
             results.degraded = True
             results.tool_errors["_gather"] = f"timeout after {overall_timeout}s"
-            for t in tasks.values():
+            for name, t in tasks.items():
                 t.cancel()
+                _mark_tool_failure(name, results)
             return results
         task_names = list(tasks.keys())
         for name, result in zip(task_names, done, strict=True):
@@ -422,6 +440,7 @@ async def _run_direct(
                 logger.warning("tool_direct_failed", tool=name, error=error_msg)
                 results.tool_errors[name] = error_msg
                 results.degraded = True
+                _mark_tool_failure(name, results)
                 continue
             _assign_result(name, results, result)
 

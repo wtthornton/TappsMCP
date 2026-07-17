@@ -88,8 +88,21 @@ _FETCH_HINT = (
 
 # Fields returned in compact projection — covers triage/backlog reads without
 # pulling in description, comments, attachments, history, or audit fields.
+# Include status/statusType so agents following AGENTS.md field names work;
+# state is kept for GraphQL-shaped payloads.
 _COMPACT_FIELDS: frozenset[str] = frozenset(
-    {"id", "identifier", "title", "state", "priority", "estimate", "assignee", "parent"}
+    {
+        "id",
+        "identifier",
+        "title",
+        "state",
+        "status",
+        "statusType",
+        "priority",
+        "estimate",
+        "assignee",
+        "parent",
+    }
 )
 
 
@@ -98,8 +111,17 @@ def _compact_issue(issue: dict[str, Any]) -> dict[str, Any]:
 
     Drops heavy fields (description, comments, attachments, history, etc.) so
     that a 50-issue backlog serialises to well under the 25 k-token Read cap.
+    Normalizes ``state.type`` → ``statusType`` when the latter is absent so
+    compact consumers see a stable shape.
     """
-    return {k: v for k, v in issue.items() if k in _COMPACT_FIELDS}
+    out = {k: v for k, v in issue.items() if k in _COMPACT_FIELDS}
+    if "statusType" not in out:
+        state = out.get("state")
+        if isinstance(state, dict) and state.get("type"):
+            out["statusType"] = state["type"]
+        elif isinstance(out.get("status"), dict) and out["status"].get("type"):
+            out["statusType"] = out["status"]["type"]
+    return out
 
 
 def _record_call(tool_name: str) -> None:
@@ -733,6 +755,14 @@ async def tapps_linear_count(
             status_type = issue.get("statusType") or (
                 raw_status.get("type", "") if isinstance(raw_status, dict) else ""
             )
+            # Compact / GraphQL snapshots often keep state as {type, name}
+            # without a separate statusType field.
+            if not status_type:
+                state = issue.get("state")
+                if isinstance(state, dict):
+                    status_type = state.get("type") or state.get("name") or ""
+                elif isinstance(state, str):
+                    status_type = state
             seen_ids[issue_id] = status_type.lower() if status_type else ""
 
     elapsed_ms = (time.perf_counter_ns() - start_ns) // 1_000_000

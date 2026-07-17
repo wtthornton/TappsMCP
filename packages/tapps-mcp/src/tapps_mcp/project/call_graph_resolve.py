@@ -94,7 +94,18 @@ def local_bindings(
     bindings: dict[str, str] = {}
     for arg in (*node.args.posonlyargs, *node.args.args, *node.args.kwonlyargs):
         bindings[arg.arg] = _annotation_target(idx, arg.annotation) or arg.arg
-    for child in ast.walk(node):
+
+    def _walk_outer_scope(root: ast.AST) -> list[ast.AST]:
+        """Descendants of *root*, skipping nested function/class bodies."""
+        out: list[ast.AST] = []
+        for child in ast.iter_child_nodes(root):
+            if isinstance(child, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
+                continue
+            out.append(child)
+            out.extend(_walk_outer_scope(child))
+        return out
+
+    for child in _walk_outer_scope(node):
         if isinstance(child, ast.Import | ast.ImportFrom):
             _apply_import_bindings(idx, bindings, child)
             continue

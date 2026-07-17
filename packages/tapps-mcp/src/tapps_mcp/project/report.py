@@ -75,7 +75,17 @@ def _build_summary(
     gates: list[GateResult] | None,
 ) -> dict[str, Any]:
     if not scores:
-        return {"files_scored": 0}
+        return {
+            "files_scored": 0,
+            "avg_score": 0.0,
+            "min_score": 0.0,
+            "max_score": 0.0,
+            "gate_pass_rate": None,
+            "total_lint_issues": 0,
+            "total_type_issues": 0,
+            "total_security_issues": 0,
+            "generated_at": datetime.now(tz=UTC).isoformat(),
+        }
 
     overall_scores = [s.overall_score for s in scores]
     avg = sum(overall_scores) / len(overall_scores)

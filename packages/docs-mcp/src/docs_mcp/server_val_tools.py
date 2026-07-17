@@ -1146,7 +1146,11 @@ async def docs_release_gate(
     links_data = _data(links)
 
     drift_score = int(drift_data.get("drift_score", 0))
-    items_count = int(drift_data.get("items_count") or len(drift_data.get("items", []) or []))
+    items_count = int(
+        drift_data.get("total_items")
+        or drift_data.get("items_count")
+        or len(drift_data.get("items", []) or [])
+    )
     cc = fresh_data.get("category_counts") or {}
     stale_count = int(cc.get("stale", 0) if isinstance(cc, dict) else 0)
     ancient_count = int(cc.get("ancient", 0) if isinstance(cc, dict) else 0)

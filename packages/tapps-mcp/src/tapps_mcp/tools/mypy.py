@@ -50,8 +50,12 @@ def parse_mypy_output(raw: str, target_file: str | None = None) -> list[TypeIssu
                 # Fallback: suffix match for when the mypy-emitted filename is a
                 # relative path whose CWD differs from the Python process CWD.
                 # Example: target="/abs/src/foo.py", mypy emits "src/foo.py".
-                target_str = str(_target_resolved)
-                if not (target_str.endswith("/" + filename) or target_str == filename):
+                # Normalize separators so Windows ``\`` paths still match.
+                target_str = str(_target_resolved).replace("\\", "/")
+                filename_norm = filename.replace("\\", "/")
+                if not (
+                    target_str.endswith("/" + filename_norm) or target_str == filename_norm
+                ):
                     continue
         try:
             line_num = int(parts[1].strip())

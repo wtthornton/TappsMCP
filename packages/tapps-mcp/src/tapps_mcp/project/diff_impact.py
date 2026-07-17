@@ -9,7 +9,11 @@ from tapps_mcp.pipeline.agent_contract import CALL_GRAPH_STALE_HINT
 from tapps_mcp.project.call_graph import build_call_graph_index
 from tapps_mcp.project.call_graph_queries import resolve_symbol_name
 from tapps_mcp.project.impact_analyzer import analyze_impact, build_import_graph
-from tapps_mcp.project.test_linker import edges_for_symbols, load_or_build_test_edges_for_index
+from tapps_mcp.project.test_linker import (
+    edges_for_symbols,
+    is_test_path,
+    load_or_build_test_edges_for_index,
+)
 
 DEFAULT_AFFECTED_TESTS_LIMIT = 20
 DEFAULT_DOC_DRIFT_CALLER_THRESHOLD = 5
@@ -144,7 +148,7 @@ def analyze_diff_impact(
                     (s.file_path for s in index.symbols if s.qualified_name == caller_sym),
                     "",
                 )
-                if "test" in caller_file.replace("\\", "/").lower():
+                if is_test_path(caller_file):
                     bump(
                         caller_file.replace("\\", "/"),
                         5.0,

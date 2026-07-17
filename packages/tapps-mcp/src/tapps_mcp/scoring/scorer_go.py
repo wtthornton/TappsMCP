@@ -256,9 +256,10 @@ class GoScorer(ScorerBase):
         }
 
         function_complexities: list[int] = []
+        nested_fn_types = {"function_declaration", "method_declaration", "func_literal"}
 
         def count_branches(node: Any) -> int:
-            """Count branches in a node recursively."""
+            """Count branches in a node, skipping nested function bodies."""
             count = 0
             if node.type in branch_types:
                 count = 1
@@ -268,6 +269,8 @@ class GoScorer(ScorerBase):
                     if child.type in ("&&", "||"):
                         count += 1
             for child in node.children:
+                if child.type in nested_fn_types:
+                    continue
                 count += count_branches(child)
             return count
 
