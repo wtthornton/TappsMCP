@@ -371,12 +371,11 @@ Run `tapps-mcp doctor` to list wired matchers.
 
 ### Subagents (auto-generated)
 
-Four core quality subagents plus one domain reviewer per platform in `.claude/agents/` or `.cursor/agents/`:
+Four agent definitions per platform in `.claude/agents/` or `.cursor/agents/`:
 - **tapps-reviewer** (sonnet) - Reviews code quality and runs security scans after edits
 - **tapps-researcher** (sonnet) - Looks up documentation and researches best practices
 - **tapps-validator** (haiku) - Runs pre-completion validation on all changed files
 - **tapps-review-fixer** (sonnet, isolated worktree) - Combined score-fix-validate pass; designed for parallel multi-file pipelines
-- **tapps-frontend-reviewer** (sonnet) - UI/UX review via `tapps_domain_playbook` + lookup docs; closes with `/tapps-finish-task`
 
 ### Skills (auto-generated)
 
