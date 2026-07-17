@@ -20,8 +20,13 @@ from tapps_mcp.pipeline.document_judges import (
 
 
 class TestDocumentConsumerDetection:
-    def test_reports_dir_marks_consumer(self, tmp_path: Path) -> None:
+    def test_bare_reports_dir_is_not_consumer(self, tmp_path: Path) -> None:
         (tmp_path / "reports").mkdir()
+        assert is_document_consumer(tmp_path) is False
+
+    def test_brands_and_templates_mark_consumer(self, tmp_path: Path) -> None:
+        (tmp_path / "brands").mkdir()
+        (tmp_path / "templates").mkdir()
         assert is_document_consumer(tmp_path) is True
 
     def test_non_consumer_without_markers(self, tmp_path: Path) -> None:
@@ -30,7 +35,8 @@ class TestDocumentConsumerDetection:
 
 class TestJudgePresetDiscovery:
     def test_discovers_build_script_grep_judge(self, tmp_path: Path) -> None:
-        (tmp_path / "reports").mkdir()
+        (tmp_path / "brands").mkdir()
+        (tmp_path / "templates").mkdir()
         build = tmp_path / "scripts" / "build-pdfs.mjs"
         build.parent.mkdir()
         build.write_text('import { exec } from "node:child_process";\nexec("node build --audit");\n')
@@ -38,8 +44,23 @@ class TestJudgePresetDiscovery:
         assert any(j["type"] == "grep" and "--audit" in j["expect"] for j in judges)
         assert all(j.get("blocking") is True for j in judges)
 
+    def test_skips_node_modules_build_scripts(self, tmp_path: Path) -> None:
+        (tmp_path / "brands").mkdir()
+        (tmp_path / "templates").mkdir()
+        junk = tmp_path / "node_modules" / "pkg" / "build-pdfs.mjs"
+        junk.parent.mkdir(parents=True)
+        junk.write_text("// --audit\n")
+        real = tmp_path / "scripts" / "build-pdfs.mjs"
+        real.parent.mkdir()
+        real.write_text("// --audit\n")
+        judges = discover_document_judge_preset(tmp_path)
+        targets = [j.get("target", "") for j in judges if j["type"] == "grep"]
+        assert any("scripts/build-pdfs.mjs" in t or str(real) in t for t in targets)
+        assert not any("node_modules" in t for t in targets)
+
     def test_discovers_shell_audit_when_pdf_and_report_studio(self, tmp_path: Path) -> None:
-        (tmp_path / "reports").mkdir()
+        (tmp_path / "brands").mkdir()
+        (tmp_path / "templates").mkdir()
         (tmp_path / "pyproject.toml").write_text(
             '[project]\ndependencies = ["nlt-report-studio>=0.1.3"]\n',
             encoding="utf-8",
@@ -56,7 +77,8 @@ class TestJudgePresetDiscovery:
         assert shell[0]["when_changed"] == ["reports/**", "src/**", "brands/**", "templates/**"]
 
     def test_skips_shell_audit_without_reference_pdf(self, tmp_path: Path) -> None:
-        (tmp_path / "reports").mkdir()
+        (tmp_path / "brands").mkdir()
+        (tmp_path / "templates").mkdir()
         (tmp_path / "pyproject.toml").write_text(
             '[project]\ndependencies = ["nlt-report-studio>=0.1.3"]\n',
             encoding="utf-8",
@@ -67,7 +89,8 @@ class TestJudgePresetDiscovery:
 
 class TestMergeDocumentJudges:
     def test_merges_when_empty(self, tmp_path: Path) -> None:
-        (tmp_path / "reports").mkdir()
+        (tmp_path / "brands").mkdir()
+        (tmp_path / "templates").mkdir()
         build = tmp_path / "build-pdfs.mjs"
         build.write_text("// --audit\n")
         result = merge_document_judges_into_yaml(tmp_path)
@@ -76,7 +99,8 @@ class TestMergeDocumentJudges:
         assert len(config["validate_changed"]["judges"]) >= 1
 
     def test_preserves_existing_judges(self, tmp_path: Path) -> None:
-        (tmp_path / "reports").mkdir()
+        (tmp_path / "brands").mkdir()
+        (tmp_path / "templates").mkdir()
         (tmp_path / ".tapps-mcp.yaml").write_text(
             yaml.safe_dump({"validate_changed": {"judges": [{"type": "exists", "target": "x"}]}})
         )
@@ -87,15 +111,18 @@ class TestMergeDocumentJudges:
 
 
 class TestMemoryProfile:
-    def test_sets_document_builder_profile(self, tmp_path: Path) -> None:
-        (tmp_path / "reports").mkdir()
+    def test_does_not_write_document_builder_profile(self, tmp_path: Path) -> None:
+        (tmp_path / "brands").mkdir()
+        (tmp_path / "templates").mkdir()
         result = merge_document_memory_profile(tmp_path)
-        assert result["merged"] is True
-        config = yaml.safe_load((tmp_path / ".tapps-mcp.yaml").read_text())
-        assert config["memory"]["profile"] == DOCUMENT_BUILDER_PROFILE
+        assert result["merged"] is False
+        assert not (tmp_path / ".tapps-mcp.yaml").is_file()
+        assert result["profile"] is None
+        assert "leaving memory.profile unset" in " ".join(result["messages"])
 
     def test_preserves_existing_profile(self, tmp_path: Path) -> None:
-        (tmp_path / "reports").mkdir()
+        (tmp_path / "brands").mkdir()
+        (tmp_path / "templates").mkdir()
         (tmp_path / ".tapps-mcp.yaml").write_text(
             yaml.safe_dump({"memory": {"profile": "repo-brain"}})
         )

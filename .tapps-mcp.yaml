@@ -15,7 +15,7 @@ memory:
   brain_project_id: tapps-mcp
   brain_http_url: http://localhost:8080
   brain_profile: full
-  profile: document-builder
+  profile: repo-brain
 linear_enforce_gate: true
 thresholds:
   overall: 70

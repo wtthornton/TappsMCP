@@ -3935,7 +3935,9 @@ def _nlt_partial_enablement_remediation() -> str:
         f"Developer bundle ({developer}) stays within the ≤3-server budget; "
         f"use minimal ({minimal}) for build-only sessions. "
         "Run: tapps-mcp init --host cursor --force --allow-package-init --no-uv "
-        "to regenerate mcp.json with commented opt-in servers. "
+        "--bundle developer to regenerate strict-JSON mcp.json with only the "
+        "bundle's servers (opt-in servers are omitted; use --bundle full or IDE "
+        "toggles to enable more). "
         "See docs/architecture/nlt-mcp-plugin-spec.yaml."
     )
 
@@ -4166,6 +4168,74 @@ def check_memory_pipeline_config(root: Path) -> CheckResult:
             True,
             f"Could not load settings ({exc})",
             "See docs/MEMORY_REFERENCE.md",
+        )
+
+
+def check_memory_profile_resolvable(root: Path) -> CheckResult:
+    """Warn when ``memory.profile`` names a profile the brain cannot load (TAP-4810)."""
+    try:
+        from tapps_core.config.settings import load_settings
+
+        settings = load_settings(project_root=root)
+        profile_name = str(getattr(settings.memory, "profile", "") or "").strip()
+    except Exception as exc:
+        return CheckResult(
+            "Memory profile resolvable",
+            True,
+            f"Could not load settings ({exc})",
+            "",
+        )
+
+    if not profile_name:
+        return CheckResult(
+            "Memory profile resolvable",
+            True,
+            "memory.profile unset (brain default applies)",
+            "",
+        )
+
+    if profile_name == "document-builder":
+        return CheckResult(
+            "Memory profile resolvable",
+            False,
+            "memory.profile is 'document-builder' which is not a tapps-brain builtin",
+            "Remove memory.profile or set it to a real builtin (e.g. repo-brain). "
+            "TAP-4810: init/upgrade no longer write document-builder.",
+        )
+
+    try:
+        from tapps_brain.profile import get_builtin_profile, list_builtin_profiles
+
+        available = set(list_builtin_profiles())
+        if profile_name not in available:
+            return CheckResult(
+                "Memory profile resolvable",
+                False,
+                f"memory.profile={profile_name!r} is not a known builtin "
+                f"(available: {', '.join(sorted(available))})",
+                "Set memory.profile to a tapps-brain builtin (e.g. repo-brain) or remove it.",
+            )
+        get_builtin_profile(profile_name)
+        return CheckResult(
+            "Memory profile resolvable",
+            True,
+            f"memory.profile={profile_name!r} resolves",
+            "",
+        )
+    except ImportError:
+        # Offline / brain not importable — only flag known-bad names above.
+        return CheckResult(
+            "Memory profile resolvable",
+            True,
+            f"memory.profile={profile_name!r} (brain profile module unavailable to verify)",
+            "",
+        )
+    except Exception as exc:
+        return CheckResult(
+            "Memory profile resolvable",
+            False,
+            f"memory.profile={profile_name!r} does not resolve: {exc}",
+            "Set memory.profile to a tapps-brain builtin (e.g. repo-brain) or remove it.",
         )
 
 
@@ -5091,6 +5161,7 @@ def _collect_checks(root: Path, *, quick: bool = False) -> list[CheckResult]:
         ("Brain version delta", lambda: check_brain_version_delta(root)),
         ("Session sentinel", lambda: check_session_sentinel(root)),
         ("Memory pipeline config", lambda: check_memory_pipeline_config(root)),
+        ("Memory profile resolvable", lambda: check_memory_profile_resolvable(root)),
         ("Memory CLI HTTP mode", lambda: check_memory_cli_http_mode(root)),
         ("Dual memory server", lambda: check_dual_memory_server(root)),
         ("Plaintext secrets", lambda: check_plaintext_secrets(root)),

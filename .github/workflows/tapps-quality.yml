@@ -33,12 +33,16 @@ jobs:
           fetch-depth: 0
 
       - name: Auth private git deps
+        # Fine-grained PAT: contents:read on wtthornton/ReportLab (and tapps-brain
+        # if that git source is also private). Required for clean/cache-miss runners.
         env:
           REPORTLAB_READ_PAT: ${{ secrets.REPORTLAB_READ_PAT }}
         run: |
-          if [ -n "$REPORTLAB_READ_PAT" ]; then
-            git config --global url."https://x-access-token:${REPORTLAB_READ_PAT}@github.com/".insteadOf "https://github.com/"
+          if [ -z "$REPORTLAB_READ_PAT" ]; then
+            echo "::error::REPORTLAB_READ_PAT secret is required for uv sync (private nlt-report-studio git dep). See TAP-4837."
+            exit 1
           fi
+          git config --global url."https://x-access-token:${REPORTLAB_READ_PAT}@github.com/".insteadOf "https://github.com/"
 
       - name: Set up uv
         uses: astral-sh/setup-uv@v7
@@ -71,10 +75,11 @@ jobs:
         env:
           REPORTLAB_READ_PAT: ${{ secrets.REPORTLAB_READ_PAT }}
         run: |
-          if [ -n "$REPORTLAB_READ_PAT" ]; then
-            git config --global url."https://x-access-token:${REPORTLAB_READ_PAT}@github.com/".insteadOf "https://github.com/"
+          if [ -z "$REPORTLAB_READ_PAT" ]; then
+            echo "::error::REPORTLAB_READ_PAT secret is required for uv sync (private nlt-report-studio git dep). See TAP-4837."
+            exit 1
           fi
-
+          git config --global url."https://x-access-token:${REPORTLAB_READ_PAT}@github.com/".insteadOf "https://github.com/"
       - name: Set up uv
         uses: astral-sh/setup-uv@v7
         with:

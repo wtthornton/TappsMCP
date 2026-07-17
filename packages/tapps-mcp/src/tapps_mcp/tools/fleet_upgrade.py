@@ -27,6 +27,8 @@ class FleetUpgradeProjectResult:
     upgrade_ok: bool = False
     init_ok: bool | None = None
     doctor_ok: bool | None = None
+    upgrade_binary: str = ""
+    upgrade_binary_version: str = ""
     messages: list[str] = field(default_factory=list)
     errors: list[str] = field(default_factory=list)
 
@@ -67,10 +69,11 @@ def _run_cli(
     command_prefix: str = "tapps-mcp",
 ) -> tuple[bool, str]:
     """Run ``tapps-mcp`` (or *command_prefix*) subprocess; return (ok, combined output)."""
+    binary = resolve_cli_binary(command_prefix)
     if dry_run:
-        return True, f"[dry-run] {command_prefix} {' '.join(args)}"
+        return True, f"[dry-run] {binary} {' '.join(args)}"
     proc = subprocess.run(
-        [command_prefix, *args],
+        [binary, *args],
         cwd=cwd,
         capture_output=True,
         text=True,
@@ -78,6 +81,50 @@ def _run_cli(
     )
     output = (proc.stdout or "") + (proc.stderr or "")
     return proc.returncode == 0, output.strip()
+
+
+def resolve_cli_binary(name: str) -> str:
+    """Resolve a CLI binary without trusting a stale PATH shim (TAP-4836).
+
+    Preference order:
+    1. ``sys.executable``-adjacent bin (release / uv tool venv that launched us)
+    2. ``sys.argv[0]`` when its basename matches *name*
+    3. ``~/.tapps-mcp/current/bin/<name>`` (blue/green current symlink)
+    4. ``shutil.which`` / bare *name* as last resort
+    """
+    import shutil
+    import sys
+
+    exe_adjacent = Path(sys.executable).resolve().parent / name
+    if exe_adjacent.is_file() and os.access(exe_adjacent, os.X_OK):
+        return str(exe_adjacent)
+
+    argv0 = Path(sys.argv[0]).resolve()
+    if argv0.is_file() and (argv0.name == name or argv0.stem == name):
+        return str(argv0)
+
+    current = Path.home() / ".tapps-mcp" / "current" / "bin" / name
+    if current.is_file() and os.access(current, os.X_OK):
+        return str(current)
+
+    found = shutil.which(name)
+    return found or name
+
+
+def _cli_binary_version(binary: str) -> str:
+    """Best-effort ``--version`` for fleet report visibility."""
+    try:
+        proc = subprocess.run(
+            [binary, "--version"],
+            capture_output=True,
+            text=True,
+            check=False,
+            timeout=10,
+        )
+        text = ((proc.stdout or "") + (proc.stderr or "")).strip()
+        return text.splitlines()[0] if text else "unknown"
+    except (OSError, subprocess.TimeoutExpired):
+        return "unknown"
 
 
 def upgrade_project_root(
@@ -95,6 +142,10 @@ def upgrade_project_root(
 ) -> FleetUpgradeProjectResult:
     """Upgrade one bootstrapped consumer project."""
     result = FleetUpgradeProjectResult(root=root.resolve(), success=False)
+    binary = resolve_cli_binary("tapps-mcp")
+    result.upgrade_binary = binary
+    result.upgrade_binary_version = _cli_binary_version(binary) if not dry_run else "(dry-run)"
+    result.messages.append(f"upgrade_binary={binary} version={result.upgrade_binary_version}")
 
     upgrade_args = [
         "upgrade",
@@ -260,6 +311,8 @@ def run_fleet_upgrade(
                 "upgrade_ok": r.upgrade_ok,
                 "init_ok": r.init_ok,
                 "doctor_ok": r.doctor_ok,
+                "upgrade_binary": r.upgrade_binary,
+                "upgrade_binary_version": r.upgrade_binary_version,
                 "errors": r.errors,
             }
             for r in project_results
