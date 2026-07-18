@@ -11,9 +11,9 @@ from typing import Any
 import structlog
 
 from tapps_mcp.tools.handoff_schema import (
+    SESSION_HANDOFF_MEMORY_KEY,
     HandoffDocument,
     HandoffLintResult,
-    SESSION_HANDOFF_MEMORY_KEY,
     handoff_path,
     handoff_sections_from_doc,
     lint_handoff,

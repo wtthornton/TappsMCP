@@ -39,11 +39,7 @@ def _aggregate_fleet_top_tools(
     for project in projects:
         for entry in project.get("top_tools", []):
             counts[str(entry.get("name", ""))] += int(entry.get("count", 0))
-    return [
-        {"name": name, "count": count}
-        for name, count in counts.most_common(limit)
-        if name
-    ]
+    return [{"name": name, "count": count} for name, count in counts.most_common(limit) if name]
 
 
 def _aggregate_fleet_skills(
@@ -107,13 +103,13 @@ def discover_project_roots(
     if _is_bootstrapped(parent):
         return [parent]
 
-    discovered: list[Path] = []
     if not parent.is_dir():
-        return discovered
-    for child in sorted(parent.iterdir()):
-        if child.is_dir() and _is_bootstrapped(child):
-            discovered.append(child.resolve())
-    return discovered
+        return []
+    return [
+        child.resolve()
+        for child in sorted(parent.iterdir())
+        if child.is_dir() and _is_bootstrapped(child)
+    ]
 
 
 def _normalize_root(root: Path) -> Path:
@@ -150,8 +146,8 @@ def load_jsonl_metrics(
             text = path.read_text(encoding="utf-8")
         except OSError:
             continue
-        for line in text.splitlines():
-            line = line.strip()
+        for raw_line in text.splitlines():
+            line = raw_line.strip()
             if not line:
                 continue
             try:
@@ -277,16 +273,15 @@ def run_fleet_audit(
     since = period_cutoff(period)
     project_roots = discover_project_roots(explicit_roots=roots, scan_parent=scan_parent)
 
-    projects: list[dict[str, Any]] = []
-    for root in project_roots:
-        projects.append(
-            audit_project_root(
-                root,
-                since=since,
-                include_brain=include_brain,
-                window_days=window_days,
-            )
+    projects: list[dict[str, Any]] = [
+        audit_project_root(
+            root,
+            since=since,
+            include_brain=include_brain,
+            window_days=window_days,
         )
+        for root in project_roots
+    ]
 
     totals = sum(p["metrics"]["total_calls"] for p in projects)
     return {
@@ -329,8 +324,9 @@ def format_fleet_audit_markdown(report: dict[str, Any]) -> str:
     fleet_tools = report.get("fleet_top_tools") or []
     if fleet_tools:
         lines.extend(["", "## Fleet top tools", ""])
-        for entry in fleet_tools[:10]:
-            lines.append(f"- `{entry.get('name', '?')}`: {entry.get('count', 0)}")
+        lines.extend(
+            f"- `{entry.get('name', '?')}`: {entry.get('count', 0)}" for entry in fleet_tools[:10]
+        )
 
     for project in report.get("projects", []):
         top_tools = project.get("top_tools") or []
@@ -338,8 +334,9 @@ def format_fleet_audit_markdown(report: dict[str, Any]) -> str:
             continue
         name = Path(project.get("project_root", "?")).name
         lines.extend(["", f"### Top tools — {name}", ""])
-        for entry in top_tools[:10]:
-            lines.append(f"- `{entry.get('name', '?')}`: {entry.get('count', 0)}")
+        lines.extend(
+            f"- `{entry.get('name', '?')}`: {entry.get('count', 0)}" for entry in top_tools[:10]
+        )
 
     fleet_skills = report.get("fleet_skills") or {}
     if fleet_skills.get("top_skills"):
@@ -360,8 +357,10 @@ def format_fleet_audit_markdown(report: dict[str, Any]) -> str:
                 "",
             ]
         )
-        for entry in fleet_skills.get("top_skills", [])[:10]:
-            lines.append(f"- `{entry.get('name', '?')}`: {entry.get('count', 0)}")
+        lines.extend(
+            f"- `{entry.get('name', '?')}`: {entry.get('count', 0)}"
+            for entry in fleet_skills.get("top_skills", [])[:10]
+        )
 
     return "\n".join(lines) + "\n"
 
@@ -378,16 +377,19 @@ def format_tool_usage_fleet_markdown(report: dict[str, Any]) -> str:
         "## Fleet leaderboard",
         "",
     ]
-    for entry in report.get("fleet_top_tools", []):
-        lines.append(f"- `{entry.get('name', '?')}`: {entry.get('count', 0)}")
+    lines.extend(
+        f"- `{entry.get('name', '?')}`: {entry.get('count', 0)}"
+        for entry in report.get("fleet_top_tools", [])
+    )
     for project in report.get("projects", []):
         top_tools = project.get("top_tools") or []
         if not top_tools:
             continue
         name = Path(project.get("project_root", "?")).name
         lines.extend(["", f"## {name}", ""])
-        for entry in top_tools:
-            lines.append(f"- `{entry.get('name', '?')}`: {entry.get('count', 0)}")
+        lines.extend(
+            f"- `{entry.get('name', '?')}`: {entry.get('count', 0)}" for entry in top_tools
+        )
     return "\n".join(lines) + "\n"
 
 

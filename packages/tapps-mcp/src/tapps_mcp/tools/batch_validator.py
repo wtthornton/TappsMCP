@@ -129,10 +129,10 @@ def detect_changed_scorable_files(
         # main/master so a clean working tree after commits is not invisible.
         branch_futs = []
         if base_ref.strip().upper() == "HEAD":
-            for branch in ("main", "master", "origin/main", "origin/master"):
-                branch_futs.append(
-                    executor.submit(_git_diff_names, project_root, f"{branch}...HEAD")
-                )
+            branch_futs = [
+                executor.submit(_git_diff_names, project_root, f"{branch}...HEAD")
+                for branch in ("main", "master", "origin/main", "origin/master")
+            ]
         try:
             files.update(fut_unstaged.result(timeout=_GIT_DIFF_TIMEOUT + 1))
         except (FuturesTimeoutError, OSError):

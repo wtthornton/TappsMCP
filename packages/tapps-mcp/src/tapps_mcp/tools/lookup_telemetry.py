@@ -60,8 +60,8 @@ def _read_recent_events(project_root: Path, *, limit: int = 200) -> list[dict[st
     rows: list[dict[str, Any]] = []
     try:
         with path.open(encoding="utf-8") as fh:
-            for line in fh:
-                line = line.strip()
+            for raw_line in fh:
+                line = raw_line.strip()
                 if not line:
                     continue
                 try:

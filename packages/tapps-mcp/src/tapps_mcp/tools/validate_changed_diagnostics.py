@@ -37,7 +37,9 @@ def is_near_miss_score(score: float | None) -> bool:
     return _NEAR_MISS_MIN_SCORE <= float(score) < _NEAR_MISS_MAX_SCORE
 
 
-def collect_improvement_hints(score: ScoreResult, *, max_hints: int = _MAX_IMPROVEMENT_HINTS) -> list[str]:
+def collect_improvement_hints(
+    score: ScoreResult, *, max_hints: int = _MAX_IMPROVEMENT_HINTS
+) -> list[str]:
     """Collect category suggestions (same source as tapps_quick_check)."""
     hints: list[str] = []
     for cat in score.categories.values():
@@ -124,7 +126,7 @@ def build_top_findings(file_result: dict[str, Any]) -> list[dict[str, Any]]:
 
 
 def attach_improvement_hints(file_result: dict[str, Any], score: ScoreResult) -> None:
-    """Store near-miss improvement hints when the file passed in the 70–79 band."""
+    """Store near-miss improvement hints when the file passed in the 70-79 band."""
     if not file_result.get("gate_passed", False):
         return
     overall = file_result.get("overall_score", score.overall_score)
@@ -158,7 +160,7 @@ def build_multi_file_memory_hint(src_file_count: int) -> str | None:
         return None
     return (
         f"Multi-file engine work ({src_file_count} files under src/ validated): "
-        "consider `uv run tapps-mcp memory save --key <slug> --tier pattern --value \"...\"` "
+        'consider `uv run tapps-mcp memory save --key <slug> --tier pattern --value "..."` '
         "for conventions learned this session, or invoke /tapps-finish-task to bundle "
         "validation + optional memory save."
     )
@@ -202,9 +204,9 @@ def enrich_file_entry(
 
 
 __all__ = [
-    "FailureReason",
     "_MAX_NEAR_MISS_FILES",
     "_MULTI_FILE_MEMORY_SRC_THRESHOLD",
+    "FailureReason",
     "attach_improvement_hints",
     "attach_score_diagnostics",
     "build_multi_file_memory_hint",

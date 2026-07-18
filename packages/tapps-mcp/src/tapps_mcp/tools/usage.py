@@ -68,8 +68,8 @@ def read_recent_violations(project_root: Path, *, limit: int = 10) -> list[dict[
     rows: list[dict[str, Any]] = []
     try:
         with path.open() as fh:
-            for line in fh:
-                line = line.strip()
+            for raw_line in fh:
+                line = raw_line.strip()
                 if not line:
                     continue
                 try:
@@ -234,9 +234,7 @@ def compute_gaps(
 
     rows = read_loop_metrics(project_root, limit=50)
     rolling = compute_rolling_stats(project_root, window_days=rolling_window_days)
-    recent_edits = compute_recent_edit_loop_stats(
-        project_root, window_days=rolling_window_days
-    )
+    recent_edits = compute_recent_edit_loop_stats(project_root, window_days=rolling_window_days)
     violations = read_recent_violations(project_root, limit=5)
 
     gaps: list[str] = []
@@ -278,7 +276,7 @@ def compute_gaps(
         skip_rate = float(recent_edits.get("gate_skip_rate", 0.0))
         if skip_rate >= 0.5:
             gaps.append("recurring_validation_skips")
-            pct = int(round(skip_rate * 100))
+            pct = round(skip_rate * 100)
             recs.append(
                 f"Quality gate has been skipped on {pct}% of recent edit loops "
                 f"({recent_edit_loops} loops, last {rolling_window_days}d). "
@@ -311,14 +309,10 @@ def compute_gaps(
     # Comprehension-tool underuse: a cross-module edit set with no blast-radius
     # check. Uses per-row ``tools_used`` telemetry (deterministic) plus the live
     # CallTracker view so it fires whether driven from a tool session or a hook.
-    recent_tools = {
-        t for r in rows[-10:] for t in r.get("tools_used", []) if isinstance(t, str)
-    }
+    recent_tools = {t for r in rows[-10:] for t in r.get("tools_used", []) if isinstance(t, str)}
     used_comprehension = any(
         matches_pipeline_tool(t, COMPREHENSION_SHORT_NAMES) for t in recent_tools
-    ) or any(
-        matches_pipeline_tool(t, COMPREHENSION_SHORT_NAMES) for t in called
-    )
+    ) or any(matches_pipeline_tool(t, COMPREHENSION_SHORT_NAMES) for t in called)
     if has_recent_edits and not used_comprehension:
         parent_dirs = {str(Path(p).parent) for p in edited_recent}
         if len(edited_recent) >= 3 and len(parent_dirs) >= 2:
@@ -357,19 +351,27 @@ def format_session_start_gap_hint(project_root: Path) -> str | None:
     violations = read_recent_violations(project_root, limit=20)
     violation_tags: list[str] = []
     for row in violations:
-        for reason in row.get("reasons", []):
-            if isinstance(reason, str):
-                violation_tags.append(reason.split(":", 1)[0])
+        violation_tags.extend(
+            reason.split(":", 1)[0] for reason in row.get("reasons", []) if isinstance(reason, str)
+        )
 
     report = compute_gaps(project_root, called_tools=set())
-    gaps = list(report.get("gaps", []))
-    recs = [r for r in report.get("recommendations", []) if "No gaps detected" not in r]
+    # A SessionStart hook fires before any tool call, so "session_start_skipped"
+    # is always present with called_tools=set() and carries no signal here.
+    gaps = [g for g in report.get("gaps", []) if g != "session_start_skipped"]
+    recs = [
+        r
+        for r in report.get("recommendations", [])
+        if "No gaps detected" not in r and not r.startswith("Call tapps_session_start()")
+    ]
 
     if "CHECKLIST_MISSING" in violation_tags and "checklist_skipped" not in gaps:
         gaps.insert(0, "checklist_skipped")
-    if any(t.startswith("QUALITY_GATE_SKIP") for t in violation_tags):
-        if "edits_without_validation" not in gaps:
-            gaps.insert(0, "edits_without_validation")
+    if (
+        any(t.startswith("QUALITY_GATE_SKIP") for t in violation_tags)
+        and "edits_without_validation" not in gaps
+    ):
+        gaps.insert(0, "edits_without_validation")
 
     if not gaps:
         return None
@@ -395,9 +397,11 @@ def format_stop_gap_followup(
     report = compute_gaps(project_root, called_tools=called_tools)
     gaps = list(report.get("gaps", []))
     if fresh_violations:
-        if any("QUALITY_GATE_SKIP" in reason for reason in fresh_violations):
-            if "edits_without_validation" not in gaps:
-                gaps.insert(0, "edits_without_validation")
+        if (
+            any("QUALITY_GATE_SKIP" in reason for reason in fresh_violations)
+            and "edits_without_validation" not in gaps
+        ):
+            gaps.insert(0, "edits_without_validation")
         if "CHECKLIST_MISSING" in fresh_violations and "checklist_skipped" not in gaps:
             gaps.insert(0, "checklist_skipped")
 
@@ -468,8 +472,8 @@ def render_markdown(report: dict[str, Any]) -> str:
         f"- Session calls: {report.get('called_tools_count', 0)} unique tools | "
         f"Window: last {rolling.get('window_days', 7)}d ({rolling.get('loops', 0)} loops)"
     )
-    skip_pct = int(round(rolling.get("gate_skip_rate", 0.0) * 100))
-    lookup_pct = int(round(rolling.get("lookup_docs_to_edit_ratio", 0.0) * 100))
+    skip_pct = round(rolling.get("gate_skip_rate", 0.0) * 100)
+    lookup_pct = round(rolling.get("lookup_docs_to_edit_ratio", 0.0) * 100)
     lines.append(
         f"- Rolling gate-skip rate: {skip_pct}% | lookup-docs-to-edit ratio: {lookup_pct}%"
     )
@@ -484,8 +488,7 @@ def render_markdown(report: dict[str, Any]) -> str:
     if report.get("recommendations"):
         lines.append("")
         lines.append("### Recommendations")
-        for rec in report["recommendations"]:
-            lines.append(f"- {rec}")
+        lines.extend(f"- {rec}" for rec in report["recommendations"])
     return "\n".join(lines)
 
 

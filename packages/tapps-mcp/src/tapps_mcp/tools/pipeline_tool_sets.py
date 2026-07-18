@@ -24,9 +24,7 @@ LOOKUP_SHORT_NAMES: Final[frozenset[str]] = frozenset({"tapps_lookup_docs"})
 COMPREHENSION_SHORT_NAMES: Final[frozenset[str]] = frozenset(
     {"tapps_call_graph", "tapps_impact_analysis", "tapps_dependency_graph"}
 )
-EDIT_TOOL_NAMES: Final[frozenset[str]] = frozenset(
-    {"Edit", "Write", "MultiEdit", "NotebookEdit"}
-)
+EDIT_TOOL_NAMES: Final[frozenset[str]] = frozenset({"Edit", "Write", "MultiEdit", "NotebookEdit"})
 SOURCE_FILE_SUFFIXES: Final[tuple[str, ...]] = (
     ".py",
     ".pyi",

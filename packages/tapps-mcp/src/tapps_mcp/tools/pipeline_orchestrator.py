@@ -95,8 +95,7 @@ async def pipeline_validate_stage(
         "success": vc_passed,
         "elapsed_ms": (time.perf_counter_ns() - stage_start) // 1_000_000,
         "summary": (
-            f"{vc_data.get('passed_count', 0)} passed / "
-            f"{vc_data.get('failed_count', 0)} failed"
+            f"{vc_data.get('passed_count', 0)} passed / {vc_data.get('failed_count', 0)} failed"
         ),
     }
     return stage, vc_passed

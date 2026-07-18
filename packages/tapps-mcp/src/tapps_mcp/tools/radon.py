@@ -39,7 +39,7 @@ def parse_radon_cc_json(raw: str) -> list[dict[str, object]]:
         return []
     # data is ``{"path": [{...}, ...]}``
     entries: list[dict[str, object]] = []
-    for _path, funcs in data.items():
+    for funcs in data.values():
         if isinstance(funcs, list):
             entries.extend(funcs)
     return entries
@@ -213,18 +213,17 @@ def _radon_cc_direct(file_path: str) -> list[dict[str, object]]:
         if code is None:
             return []
         blocks = cc_visit(code)
-        entries: list[dict[str, object]] = []
-        for block in blocks:
-            entries.append(
-                {
-                    "name": block.name,
-                    "type": block.letter,
-                    "complexity": block.complexity,
-                    "lineno": block.lineno,
-                    "endline": block.endline,
-                    "rank": cc_rank(block.complexity),
-                }
-            )
+        entries: list[dict[str, object]] = [
+            {
+                "name": block.name,
+                "type": block.letter,
+                "complexity": block.complexity,
+                "lineno": block.lineno,
+                "endline": block.endline,
+                "rank": cc_rank(block.complexity),
+            }
+            for block in blocks
+        ]
         logger.info("radon_cc_direct_success", file=file_path, functions=len(entries))
         return entries
     except Exception as exc:
@@ -273,7 +272,7 @@ def parse_radon_hal_json(raw: str) -> list[dict[str, object]]:
     except json.JSONDecodeError:
         return []
     entries: list[dict[str, object]] = []
-    for _path, content in data.items():
+    for content in data.values():
         if not isinstance(content, dict):
             continue
         # radon hal -j produces {"path": {"total": [...], "functions": [...]}}
@@ -362,10 +361,11 @@ def _radon_hal_direct(file_path: str) -> list[dict[str, object]]:
         hal_result = h_visit(code)
         # h_visit returns Halstead(total_report, [("func_name", report), ...])
         per_func = hal_result[1] if len(hal_result) > 1 else []
-        entries: list[dict[str, object]] = []
-        for func in per_func:
-            if isinstance(func, (list, tuple)) and len(func) >= 2:
-                entries.append(_hal_report_to_dict(str(func[0]), func[1]))
+        entries: list[dict[str, object]] = [
+            _hal_report_to_dict(str(func[0]), func[1])
+            for func in per_func
+            if isinstance(func, (list, tuple)) and len(func) >= 2
+        ]
         logger.info("radon_hal_direct_success", file=file_path, functions=len(entries))
         return entries
     except Exception as exc:

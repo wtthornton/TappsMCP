@@ -78,15 +78,13 @@ def _is_real_bullet(line: str) -> bool:
         return False
     if stripped.startswith("<") and stripped.endswith(">"):
         return False
-    if stripped.endswith("..."):
-        return False
-    return True
+    return not stripped.endswith("...")
 
 
 def _extract_bullets(block: str) -> list[str]:
     items: list[str] = []
-    for line in block.splitlines():
-        line = line.strip()
+    for raw_line in block.splitlines():
+        line = raw_line.strip()
         if not line.startswith(("-", "*")):
             continue
         bullet = line.lstrip("-* ").strip()

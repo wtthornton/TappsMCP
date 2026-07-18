@@ -43,9 +43,7 @@ _AUDIT_TO_FIX_CATEGORY: dict[str, str] = {
 }
 
 
-def finalize_session_bodies(
-    spec_dict: dict[str, Any], epic_ref: str
-) -> dict[str, Any]:
+def finalize_session_bodies(spec_dict: dict[str, Any], epic_ref: str) -> dict[str, Any]:
     """Substitute the real epic ref into every session body.
 
     Returns a new spec dict with the placeholder replaced. Idempotent:
@@ -299,8 +297,7 @@ def render_fix_epic(
     cats_display = ", ".join(sorted(categories))
     story_count = len(stories)
     accept_lines = "\n".join(
-        f"- [ ] Fix story #{s.session_index}: `{s.title}` — {len(s.files)} file(s)"
-        for s in stories
+        f"- [ ] Fix story #{s.session_index}: `{s.title}` — {len(s.files)} file(s)" for s in stories
     )
 
     body = (

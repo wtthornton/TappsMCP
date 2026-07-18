@@ -275,22 +275,21 @@ def run_fleet_upgrade(
                     wrapper_refresh.append({"root": str(root), "ok": False, "error": str(exc)})
             cli_reinstall["wrapper_refresh"] = wrapper_refresh
 
-    project_results: list[FleetUpgradeProjectResult] = []
-    for root in resolved:
-        project_results.append(
-            upgrade_project_root(
-                root,
-                force=force,
-                dry_run=dry_run,
-                mcp_host=mcp_host,
-                mcp_bundle=mcp_bundle,
-                refresh_mcp=refresh_mcp,
-                uv_mode=uv_mode,
-                run_doctor=run_doctor,
-                import_legacy_doc_cache=import_legacy_doc_cache,
-                strip_context7_env=strip_context7_env,
-            )
+    project_results: list[FleetUpgradeProjectResult] = [
+        upgrade_project_root(
+            root,
+            force=force,
+            dry_run=dry_run,
+            mcp_host=mcp_host,
+            mcp_bundle=mcp_bundle,
+            refresh_mcp=refresh_mcp,
+            uv_mode=uv_mode,
+            run_doctor=run_doctor,
+            import_legacy_doc_cache=import_legacy_doc_cache,
+            strip_context7_env=strip_context7_env,
         )
+        for root in resolved
+    ]
 
     ok_count = sum(1 for r in project_results if r.success)
     return {
@@ -369,7 +368,12 @@ def _reinstall_global_clis(
         )[-500:]
         shared = {"ok": ok, "output": summary}
         if not ok:
-            err = deploy.get("quiescence_gate") or deploy.get("build") or deploy.get("smoke_test") or deploy
+            err = (
+                deploy.get("quiescence_gate")
+                or deploy.get("build")
+                or deploy.get("smoke_test")
+                or deploy
+            )
             shared["error"] = json.dumps(err, default=str)[-500:]
         return {
             **meta,

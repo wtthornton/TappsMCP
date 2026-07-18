@@ -140,12 +140,8 @@ TOOL_REASONS: dict[str, str] = {
         "Generate and validate a release update document body from CHANGELOG or git log."
         " Call before posting a version release to Linear via the linear-release-update skill."
     ),
-    "tapps_impact_analysis": (
-        "Map module-level import blast radius before API or layout changes."
-    ),
-    "tapps_call_graph": (
-        "Query function-level callers/callees before changing a specific symbol."
-    ),
+    "tapps_impact_analysis": ("Map module-level import blast radius before API or layout changes."),
+    "tapps_call_graph": ("Query function-level callers/callees before changing a specific symbol."),
     "tapps_diff_impact": (
         "Rank affected tests for a set of changed Python files before declaring done."
     ),
@@ -690,11 +686,7 @@ class CallTracker:
     def _filtered_calls(cls) -> list[ToolCallRecord]:
         if cls._active_session_id is None:
             return list(cls._calls)
-        return [
-            c
-            for c in cls._calls
-            if c.session_id == cls._active_session_id or not c.session_id
-        ]
+        return [c for c in cls._calls if c.session_id == cls._active_session_id or not c.session_id]
 
     @classmethod
     def _load_persisted(cls) -> None:
@@ -843,7 +835,9 @@ class CallTracker:
 
             available = tools_on_enabled_nlt_servers(project_root)
             try:
-                enabled_servers = frozenset(list_nlt_server_ids_in_config(_load_enabled_mcp_servers(project_root)))
+                enabled_servers = frozenset(
+                    list_nlt_server_ids_in_config(_load_enabled_mcp_servers(project_root))
+                )
             except Exception:
                 enabled_servers = frozenset({"nlt-build"})
 
@@ -861,7 +855,8 @@ class CallTracker:
                 extra_hints = [
                     ChecklistHint(
                         tool=t,
-                        reason=tool_unavailable_reason(t, enabled_servers) or f"{t} requires another NLT server",
+                        reason=tool_unavailable_reason(t, enabled_servers)
+                        or f"{t} requires another NLT server",
                     )
                     for t in server_unavailable
                 ]
@@ -1241,14 +1236,14 @@ def _check_required_sections(
 ) -> None:
     """Check that required top-level sections exist."""
     normalized = {s.lower().strip() for s in section_names}
-    for req in _REQUIRED_SECTIONS:
-        if req.lower() not in normalized:
-            findings.append(
-                EpicFinding(
-                    severity="error",
-                    message=f"Missing required section: '{req}'",
-                )
-            )
+    findings.extend(
+        EpicFinding(
+            severity="error",
+            message=f"Missing required section: '{req}'",
+        )
+        for req in _REQUIRED_SECTIONS
+        if req.lower() not in normalized
+    )
 
 
 def _check_story_completeness(
@@ -1397,18 +1392,17 @@ def _check_files_table_coverage(
         return  # No table present, skip check
     table_set = set(files_affected)
     for story in stories:
-        for f in story.files:
-            if f not in table_set:
-                findings.append(
-                    EpicFinding(
-                        severity="warning",
-                        message=(
-                            f"Story {story.story_id} references '{f}' "
-                            f"not found in files-affected table"
-                        ),
-                        story_id=story.story_id,
-                    )
-                )
+        findings.extend(
+            EpicFinding(
+                severity="warning",
+                message=(
+                    f"Story {story.story_id} references '{f}' not found in files-affected table"
+                ),
+                story_id=story.story_id,
+            )
+            for f in story.files
+            if f not in table_set
+        )
 
 
 def _check_story_file_structure(

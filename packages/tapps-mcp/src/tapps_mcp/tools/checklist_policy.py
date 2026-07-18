@@ -81,7 +81,7 @@ def merge_engagement_maps(
     merged = copy.deepcopy(base)
     if extras is None:
         return merged
-    for _engagement, task_map in merged.items():
+    for task_map in merged.values():
         for task_name, tier_lists in task_map.items():
             if not isinstance(tier_lists, dict):
                 continue

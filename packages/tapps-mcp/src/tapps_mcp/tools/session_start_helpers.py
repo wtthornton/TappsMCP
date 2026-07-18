@@ -101,9 +101,12 @@ def _maybe_auto_gc(
 def _enrich_memory_status_hints(
     memory_status: dict[str, Any],
     entries: list[Any],
-    settings: TappsMCPSettings,
 ) -> None:
-    """Add consolidation and federation hints to memory_status when applicable (Epic 65.1)."""
+    """Add consolidation hints to memory_status when applicable (Epic 65.1).
+
+    The federation hint was removed with ``tapps_brain.federation``
+    (dropped in tapps-brain v3, ADR-007).
+    """
     try:
         from tapps_core.metrics.dashboard import DashboardGenerator
 
@@ -113,14 +116,6 @@ def _enrich_memory_status_hints(
                 f"{consolidation['consolidated_count']} groups, "
                 f"{consolidation['source_entries_count']} source entries"
             )
-
-        from tapps_brain.federation import load_federation_config
-
-        config = load_federation_config()
-        project_root_str = str(settings.project_root)
-        if any(p.project_root == project_root_str for p in config.projects):
-            synced = sum(1 for e in entries if "federated" in (e.tags or []))
-            memory_status["federation_hint"] = f"hub_registered, {synced} synced entries"
     except Exception:
         _logger.debug("memory_status_hints_failed", exc_info=True)
 
@@ -775,7 +770,7 @@ def _collect_memory_status(settings: Any) -> dict[str, Any]:
         }
 
         _enrich_memory_profile_status(status, mem_store, settings)
-        _enrich_memory_status_hints(status, snapshot.entries, settings)
+        _enrich_memory_status_hints(status, snapshot.entries)
         _schedule_background_maintenance(mem_store, snapshot, settings)
     except Exception:
         _logger.debug("memory_status_check_failed", exc_info=True)
@@ -860,45 +855,28 @@ def _strip_version_specifier(dep: str) -> str:
         return _VERSION_OP_RE.split(dep, maxsplit=1)[0].strip()
 
 
-def _load_tomllib() -> Any:
-    """Return tomllib module (stdlib in 3.11+, fallback to tomli)."""
-    try:
-        import tomllib
-
-        return tomllib
-    except ImportError:
-        try:
-            import tomli
-
-            return tomli
-        except ImportError:
-            return None
-
-
-def _collect_raw_deps(project_root: Path, tomllib_mod: Any) -> list[str]:
+def _collect_raw_deps(project_root: Path) -> list[str]:
     """Collect dependency names from pyproject.toml and workspace members."""
     pyproject = project_root / "pyproject.toml"
     try:
         with pyproject.open("rb") as fh:
-            data = tomllib_mod.load(fh)
+            data = tomllib.load(fh)
     except Exception:
         _logger.debug("search_first_pyproject_parse_failed", exc_info=True)
         return []
 
-    raw_deps: list[str] = []
     project_section = data.get("project", {})
-    for dep in project_section.get("dependencies", []):
-        raw_deps.append(_strip_version_specifier(dep))
+    raw_deps: list[str] = [
+        _strip_version_specifier(dep) for dep in project_section.get("dependencies", [])
+    ]
 
     for group_deps in project_section.get("optional-dependencies", {}).values():
         if isinstance(group_deps, list):
-            for dep in group_deps:
-                raw_deps.append(_strip_version_specifier(str(dep)))
+            raw_deps.extend(_strip_version_specifier(str(dep)) for dep in group_deps)
 
     for group_deps in data.get("dependency-groups", {}).values():
         if isinstance(group_deps, list):
-            for dep in group_deps:
-                raw_deps.append(_strip_version_specifier(str(dep)))
+            raw_deps.extend(_strip_version_specifier(str(dep)) for dep in group_deps)
 
     # workspace members — scan their pyproject.tomls too (best-effort)
     ws_members = data.get("tool", {}).get("uv", {}).get("workspace", {}).get("members", [])
@@ -906,9 +884,11 @@ def _collect_raw_deps(project_root: Path, tomllib_mod: Any) -> list[str]:
         for member_pyproject in project_root.glob(f"{member_glob}/pyproject.toml"):
             try:
                 with member_pyproject.open("rb") as fh:
-                    member_data = tomllib_mod.load(fh)
-                for dep in member_data.get("project", {}).get("dependencies", []):
-                    raw_deps.append(_strip_version_specifier(dep))
+                    member_data = tomllib.load(fh)
+                raw_deps.extend(
+                    _strip_version_specifier(dep)
+                    for dep in member_data.get("project", {}).get("dependencies", [])
+                )
             except (OSError, tomllib.TOMLDecodeError) as exc:
                 _logger.warning(
                     "workspace_pyproject_unreadable",
@@ -929,11 +909,7 @@ def _build_search_first(project_root: Path) -> dict[str, Any] | None:
     if not pyproject.exists():
         return None
 
-    tomllib_mod = _load_tomllib()
-    if tomllib_mod is None:
-        return None
-
-    raw_deps = _collect_raw_deps(project_root, tomllib_mod)
+    raw_deps = _collect_raw_deps(project_root)
 
     covered: list[dict[str, str]] = []
     unknown: list[str] = []
@@ -956,9 +932,7 @@ def _build_search_first(project_root: Path) -> dict[str, Any] | None:
         if is_document_consumer(project_root):
             topic, reason = _DOCS_COVERED["document-quality"]
             if not any(entry.get("library") == "document-quality" for entry in covered):
-                covered.append(
-                    {"library": "document-quality", "topic": topic, "reason": reason}
-                )
+                covered.append({"library": "document-quality", "topic": topic, "reason": reason})
     except Exception:
         _logger.debug("search_first_document_quality_failed", exc_info=True)
 
@@ -984,21 +958,22 @@ def _build_repo_orientation(project_root: Path) -> dict[str, Any] | None:
     workspace_members: list[str] = []
 
     pyproject = project_root / "pyproject.toml"
-    tomllib_mod = _load_tomllib()
-    if pyproject.exists() and tomllib_mod is not None:
+    if pyproject.exists():
         try:
             with pyproject.open("rb") as fh:
-                data = tomllib_mod.load(fh)
+                data = tomllib.load(fh)
             project = data.get("project", {})
             packages = project.get("packages", [])
-            for pkg in packages:
-                if isinstance(pkg, dict) and pkg.get("include"):
-                    package_roots.append(str(pkg["include"]))
+            package_roots.extend(
+                str(pkg["include"])
+                for pkg in packages
+                if isinstance(pkg, dict) and pkg.get("include")
+            )
             ws = data.get("tool", {}).get("uv", {}).get("workspace", {})
             members = ws.get("members", [])
             if isinstance(members, list):
                 workspace_members = [str(m) for m in members[:12]]
-        except (OSError, tomllib_mod.TOMLDecodeError):
+        except (OSError, tomllib.TOMLDecodeError):
             _logger.debug("repo_orientation_pyproject_failed", exc_info=True)
 
     for candidate in (

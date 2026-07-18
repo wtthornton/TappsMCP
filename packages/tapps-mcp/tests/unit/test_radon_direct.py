@@ -23,7 +23,7 @@ def _mock_radon_modules():
 
     # Default implementations (overridden per-test via patch)
     radon_complexity.cc_visit = MagicMock(return_value=[])  # type: ignore[attr-defined]
-    radon_complexity.SCORE = ["A", "A", "A", "B", "B", "C", "C", "D", "E", "F"]  # type: ignore[attr-defined]
+    radon_complexity.cc_rank = MagicMock(return_value="A")  # type: ignore[attr-defined]
     radon_metrics.mi_visit = MagicMock(return_value=50.0)  # type: ignore[attr-defined]
 
     originals = {
@@ -89,10 +89,7 @@ class TestCcDirect:
         mock_block.complexity = 2
         mock_block.lineno = 1
         mock_block.endline = 3
-        with (
-            patch("radon.complexity.cc_visit", return_value=[mock_block]),
-            patch("radon.complexity.SCORE", ["A", "A", "A", "B", "B"]),
-        ):
+        with patch("radon.complexity.cc_visit", return_value=[mock_block]):
             entries = cc_direct("test.py")
             assert isinstance(entries, list)
             assert len(entries) >= 1
@@ -118,10 +115,7 @@ class TestCcDirect:
         mock_block.complexity = 1
         mock_block.lineno = 1
         mock_block.endline = 2
-        with (
-            patch("radon.complexity.cc_visit", return_value=[mock_block]),
-            patch("radon.complexity.SCORE", ["A", "A", "A", "B", "B"]),
-        ):
+        with patch("radon.complexity.cc_visit", return_value=[mock_block]):
             entries = cc_direct("test.py")
             assert len(entries) >= 1
             for entry in entries:

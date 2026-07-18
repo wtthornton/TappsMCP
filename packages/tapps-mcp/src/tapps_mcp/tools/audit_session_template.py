@@ -31,9 +31,7 @@ class _SessionLike(Protocol):
     files: list[str]
 
 
-VALID_CATEGORIES: frozenset[str] = frozenset(
-    {"quality", "security", "dead_code", "docs"}
-)
+VALID_CATEGORIES: frozenset[str] = frozenset({"quality", "security", "dead_code", "docs"})
 
 # Matches a trailing line-range reference ":N" or ":N-N" (N = digits).
 # Used to ensure digest-ticket file anchors satisfy the docs-mcp linter.
@@ -75,9 +73,7 @@ class DigestTicket:
 
     title: str
     body: str
-    labels: list[str] = field(
-        default_factory=lambda: ["not-implementable", "audit-readonly"]
-    )
+    labels: list[str] = field(default_factory=lambda: ["not-implementable", "audit-readonly"])
 
 
 def render_session_ticket(
@@ -113,7 +109,6 @@ def render_session_ticket(
         campaign_id=campaign_id,
         epic_ref=epic_ref,
         commit_sha=commit_sha,
-        categories=categories,
         cats_set=cats_set,
         file_line_counts=file_line_counts,
     )
@@ -137,7 +132,6 @@ def _render_body(
     campaign_id: str,
     epic_ref: str,
     commit_sha: str,
-    categories: list[str],
     cats_set: set[str],
     file_line_counts: dict[str, int],
 ) -> str:
@@ -156,11 +150,7 @@ def _render_body(
         "**Do not edit or fix anything in this scope.**"
     )
 
-    sections.append(
-        "## Where\n\n"
-        f"Audited at commit `{commit_sha}`:\n\n"
-        f"{where_anchors}"
-    )
+    sections.append(f"## Where\n\nAudited at commit `{commit_sha}`:\n\n{where_anchors}")
 
     sections.append(
         "## Why\n\n"
@@ -186,7 +176,7 @@ def _render_body(
         "- [ ] Session note saved via `tapps_session_notes`\n"
         "- [ ] No source file in `## Where` modified by this session\n"
         "- [ ] After findings filed, set this ticket to **Done** in Linear "
-        "(`save_issue(id=<this-ticket-id>, state=\"Done\")`) with a summary comment — "
+        '(`save_issue(id=<this-ticket-id>, state="Done")`) with a summary comment — '
         "**do NOT leave it In Progress** (causes re-selection and duplicate digests)"
     )
 
@@ -217,7 +207,7 @@ def _render_body(
         "P0, priority = High (2)\n"
         "3. **P2** (style, minor refactor, low-impact dead code): bundle all "
         "P2 findings in ONE digest issue per session, parent = this ticket, "
-        f'priority = Normal (3), title `audit-digest session #{chunk.session_index}: '
+        f"priority = Normal (3), title `audit-digest session #{chunk.session_index}: "
         "K P2 findings`\n"
         "4. **P3** (informational, suggestions): bundle in the same digest "
         "issue as P2\n"
@@ -227,7 +217,7 @@ def _render_body(
         "- **Do not** edit any file in `## Where`\n"
         "- **Do not** run formatters, `ruff --fix`, or any auto-fixer\n"
         "- After findings are filed, set this ticket to **Done** in Linear "
-        "(`save_issue(id=<this-ticket-id>, state=\"Done\")`) with a summary "
+        '(`save_issue(id=<this-ticket-id>, state="Done")`) with a summary '
         "comment. **Do NOT leave it In Progress** — that causes agents to "
         "re-select and re-run the session on the next campaign loop, filing "
         "duplicate digest issues. The `audit-readonly` label on this ticket "
@@ -268,21 +258,14 @@ def _render_per_file_tools(cats_set: set[str]) -> str:
     letter = ord("c")
     if "security" in cats_set:
         lines.append(
-            f"   {chr(letter)}. `tapps_security_scan(file)` "
-            "— bandit + pip-audit findings\n"
+            f"   {chr(letter)}. `tapps_security_scan(file)` — bandit + pip-audit findings\n"
         )
         letter += 1
     if "dead_code" in cats_set:
-        lines.append(
-            f"   {chr(letter)}. `tapps_dead_code(file)` "
-            "— vulture-confirmed dead code\n"
-        )
+        lines.append(f"   {chr(letter)}. `tapps_dead_code(file)` — vulture-confirmed dead code\n")
         letter += 1
     if "docs" in cats_set:
-        lines.append(
-            f"   {chr(letter)}. `docs_check_drift(file)` "
-            "— code-vs-docs drift\n"
-        )
+        lines.append(f"   {chr(letter)}. `docs_check_drift(file)` — code-vs-docs drift\n")
         letter += 1
     return "".join(lines)
 
@@ -290,17 +273,11 @@ def _render_per_file_tools(cats_set: set[str]) -> str:
 def _render_acceptance_category_lines(cats_set: set[str]) -> str:
     extra: list[str] = []
     if "security" in cats_set:
-        extra.append(
-            "- [ ] `tapps_security_scan(file)` run on every file\n"
-        )
+        extra.append("- [ ] `tapps_security_scan(file)` run on every file\n")
     if "dead_code" in cats_set:
-        extra.append(
-            "- [ ] `tapps_dead_code(file)` run on every file\n"
-        )
+        extra.append("- [ ] `tapps_dead_code(file)` run on every file\n")
     if "docs" in cats_set:
-        extra.append(
-            "- [ ] `docs_check_drift` run on the cluster\n"
-        )
+        extra.append("- [ ] `docs_check_drift` run on the cluster\n")
     return "".join(extra)
 
 
@@ -374,9 +351,7 @@ def render_digest_ticket(
             seen[fp] = None
     all_files = list(seen.keys())
 
-    where_lines = [
-        f"{i}. `{_normalise_anchor(p)}`" for i, p in enumerate(all_files, start=1)
-    ]
+    where_lines = [f"{i}. `{_normalise_anchor(p)}`" for i, p in enumerate(all_files, start=1)]
     where_block = "\n".join(where_lines)
 
     # Build per-finding summary for ## Why.
@@ -444,8 +419,7 @@ def render_campaign_epic(
     cats_display = ", ".join(sorted(categories))
     session_count = len(sessions)
     accept_lines = "\n".join(
-        f"- [ ] Session #{s.session_index}: `{s.title}` — "
-        f"{len(s.files)} files filed and reviewed"
+        f"- [ ] Session #{s.session_index}: `{s.title}` — {len(s.files)} files filed and reviewed"
         for s in sessions
     )
     skipped_count = len(skipped_trivial)

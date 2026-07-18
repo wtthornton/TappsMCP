@@ -60,9 +60,7 @@ def parse_mypy_output(raw: str, target_file: str | None = None) -> list[TypeIssu
                 # Normalize separators so Windows ``\`` paths still match.
                 target_str = str(_target_resolved).replace("\\", "/")
                 filename_norm = filename.replace("\\", "/")
-                if not (
-                    target_str.endswith("/" + filename_norm) or target_str == filename_norm
-                ):
+                if not (target_str.endswith("/" + filename_norm) or target_str == filename_norm):
                     continue
         line_num = int(m.group("line"))
         severity_raw = m.group("severity").strip().lower()

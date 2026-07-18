@@ -238,13 +238,10 @@ def _update_action_dict(comp_val: Any) -> bool:
     """Check whether a platform component dict indicates an update."""
     if isinstance(comp_val, str) and comp_val in ("created", "updated", "regenerated"):
         return True
-    if isinstance(comp_val, dict) and comp_val.get("action") in (
-        "created",
-        "updated",
-        "regenerated",
-    ):
-        return True
-    return False
+    return bool(
+        isinstance(comp_val, dict)
+        and comp_val.get("action") in ("created", "updated", "regenerated")
+    )
 
 
 async def emit_upgrade_progress(

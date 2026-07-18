@@ -307,11 +307,7 @@ def collect_changed_python_files(project_root: Path) -> list[str]:
     if untracked.returncode == 0 and untracked.stdout:
         files.update(untracked.stdout.strip().splitlines())
 
-    py_files: list[str] = []
-    for f in sorted(files):
-        if f.endswith(".py") and (project_root / f).is_file():
-            py_files.append(f)
-    return py_files
+    return [f for f in sorted(files) if f.endswith(".py") and (project_root / f).is_file()]
 
 
 def clamp_confidence(value: int) -> int:

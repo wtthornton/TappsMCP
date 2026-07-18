@@ -65,8 +65,8 @@ def _iter_transcript_tool_blocks(transcript_path: Path) -> list[tuple[str, dict[
     blocks: list[tuple[str, dict[str, Any]]] = []
     try:
         with transcript_path.open(encoding="utf-8") as fh:
-            for line in fh:
-                line = line.strip()
+            for raw_line in fh:
+                line = raw_line.strip()
                 if not line:
                     continue
                 try:
@@ -413,8 +413,8 @@ def read_loop_metrics(project_root: Path, *, limit: int = 1000) -> list[dict[str
     rows: list[dict[str, Any]] = []
     try:
         with path.open(encoding="utf-8") as fh:
-            for line in fh:
-                line = line.strip()
+            for raw_line in fh:
+                line = raw_line.strip()
                 if not line:
                     continue
                 try:
@@ -446,11 +446,12 @@ def aggregate_skills_used(
                     if skill in _FINISH_SKILL_NAMES or "finish-task" in skill:
                         finish_skill_loops += 1
         tools = row.get("tools_used") or []
-        if isinstance(tools, list) and any(
-            is_gate_tool(str(t)) or is_checklist_tool(str(t)) for t in tools
+        if (
+            isinstance(tools, list)
+            and any(is_gate_tool(str(t)) or is_checklist_tool(str(t)) for t in tools)
+            and not skills
         ):
-            if not skills:
-                direct_validate_loops += 1
+            direct_validate_loops += 1
     top_skills = [{"name": name, "count": count} for name, count in skill_counts.most_common(10)]
     return {
         "window_days": window_days,
@@ -601,8 +602,8 @@ def count_session_start_gate_violations(
     count = 0
     try:
         with log_path.open(encoding="utf-8") as f:
-            for line in f:
-                line = line.strip()
+            for raw_line in f:
+                line = raw_line.strip()
                 if not line:
                     continue
                 try:

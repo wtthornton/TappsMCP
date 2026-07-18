@@ -113,9 +113,7 @@ def chunk_scope(
     stash: list[list[str]] = []
     for comp in components:
         if len(comp) > max_size:
-            chunks_modules.extend(
-                _split_oversized(comp, adjacency, max_size, target_size)
-            )
+            chunks_modules.extend(_split_oversized(comp, adjacency, max_size, target_size))
         elif len(comp) < min_size:
             stash.append(comp)
         else:
@@ -199,9 +197,7 @@ def _connected_components(
                 continue
             visited.add(cur)
             comp.append(cur)
-            for neighbor in adjacency.get(cur, ()):
-                if neighbor not in visited:
-                    stack.append(neighbor)
+            stack.extend(n for n in adjacency.get(cur, ()) if n not in visited)
         components.append(sorted(comp))
     return components
 
@@ -252,9 +248,7 @@ def _pack_stash(stash: list[list[str]], max_size: int) -> list[list[str]]:
     current: list[str] = []
     current_prefix: str | None = None
     for prefix, comp in items:
-        if current and (
-            len(current) + len(comp) > max_size or prefix != current_prefix
-        ):
+        if current and (len(current) + len(comp) > max_size or prefix != current_prefix):
             out.append(sorted(current))
             current = []
             current_prefix = None
@@ -296,11 +290,7 @@ def _common_package_prefix(modules: list[str]) -> str:
 
 def _count_intra_edges(modules: list[str], graph: ImportGraph) -> int:
     mset = set(modules)
-    return sum(
-        1
-        for e in graph.edges
-        if e.source_module in mset and e.target_module in mset
-    )
+    return sum(1 for e in graph.edges if e.source_module in mset and e.target_module in mset)
 
 
 def _count_boundary_edges(
@@ -325,8 +315,7 @@ def _build_rationale(modules: list[str], intra: int, boundary: int) -> str:
             f"({intra} internal imports, {boundary} boundary imports)"
         )
     return (
-        f"{len(modules)} disconnected files "
-        f"({intra} internal imports, {boundary} boundary imports)"
+        f"{len(modules)} disconnected files ({intra} internal imports, {boundary} boundary imports)"
     )
 
 
