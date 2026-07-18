@@ -112,7 +112,7 @@ def _read_tools_warm_cache(cache_path: Path) -> frozenset[str] | None:
             if isinstance(t, dict) and isinstance(t.get("name"), str) and t["name"]
         )
         return names if names else None
-    except Exception:  # noqa: BLE001
+    except Exception:
         return None
 
 
@@ -126,7 +126,7 @@ def _write_tools_warm_cache(cache_path: Path, tools: frozenset[str]) -> None:
         cache_path.parent.mkdir(parents=True, exist_ok=True)
         payload = {"tools": [{"name": n} for n in sorted(tools)]}
         cache_path.write_text(json.dumps(payload), encoding="utf-8")
-    except Exception:  # noqa: BLE001
+    except Exception:
         pass
 
 
@@ -1080,12 +1080,28 @@ class BrainBridge:
         return await self._call(_fn)
 
     async def consolidate(self, dry_run: bool = False) -> dict[str, Any]:
-        """Scan for similar entries and merge them (periodic consolidation scan)."""
+        """Scan for similar entries and merge them (periodic consolidation scan).
+
+        With ``dry_run=True``, only report how many consolidation groups would
+        be merged without mutating the store (``run_periodic_consolidation_scan``
+        has no dry-run mode, so the group scan is performed directly).
+        """
         from tapps_brain.auto_consolidation import run_periodic_consolidation_scan
+        from tapps_brain.similarity import find_consolidation_groups
 
         project_root = Path(str(self._brain.store.project_root or "."))
 
         def _fn() -> dict[str, Any]:
+            if dry_run:
+                active = [e for e in self._brain.store.list_all() if not e.contradicted]
+                groups = find_consolidation_groups(active, min_group_size=3)
+                return {
+                    "scanned": True,
+                    "groups_found": len(groups),
+                    "entries_consolidated": 0,
+                    "consolidated_entries": [],
+                    "skipped_reason": "dry_run",
+                }
             result = run_periodic_consolidation_scan(
                 self._brain.store,
                 project_root,
@@ -1455,7 +1471,7 @@ class HttpBrainBridge(BrainBridge):
         #   3. This env-var fallback — covers direct construction without a
         #      factory (tests, CLI one-shots with ``settings=None``).
         #
-        # When the factory already set the header (steps 1–2), the check below
+        # When the factory already set the header (steps 1-2), the check below
         # is False and the env var is NOT re-read, avoiding a double-resolution.
         if "X-Brain-Profile" not in self._http_headers:
             env_profile = os.environ.get("TAPPS_BRAIN_PROFILE", "").strip()
@@ -1661,10 +1677,8 @@ class HttpBrainBridge(BrainBridge):
             if not result.get("isError"):
                 content_items = result.get("content", [])
                 if content_items and content_items[0].get("type") == "text":
-                    import json as _json
-
                     text = content_items[0]["text"]
-                    parsed = _json.loads(text)
+                    parsed = json.loads(text)
                     if isinstance(parsed, dict):
                         self._memory_profile = parsed
         except Exception as exc:
@@ -1748,8 +1762,6 @@ class HttpBrainBridge(BrainBridge):
         project_id: str | None = None,
     ) -> Any:
         """POST a single ``tools/call`` to ``{brain_http_url}/mcp``."""
-        import json as _json
-
         if self._http_client is None:
             self._http_client = httpx.AsyncClient(
                 headers={**self._http_headers, **_MCP_ACCEPT_HEADERS},
@@ -1884,8 +1896,8 @@ class HttpBrainBridge(BrainBridge):
         if content_items and content_items[0].get("type") == "text":
             text = content_items[0]["text"]
             try:
-                return _json.loads(text)
-            except _json.JSONDecodeError:
+                return json.loads(text)
+            except json.JSONDecodeError:
                 return {"value": text}
         return result
 
@@ -2051,10 +2063,8 @@ class HttpBrainBridge(BrainBridge):
         The brain expects ``entity_ids_json`` as a JSON-encoded array of
         string ids on the wire; this method takes a Python list and serialises.
         """
-        import json as _json
-
         args: dict[str, Any] = {
-            "entity_ids_json": _json.dumps(entity_ids),
+            "entity_ids_json": json.dumps(entity_ids),
             "hops": hops,
             "limit": limit,
         }
@@ -2290,8 +2300,6 @@ class HttpBrainBridge(BrainBridge):
         The brain stores the event as a KG entity + edge. Results are
         queryable via ``brain_get_neighbors(entity_ids=["tapps_memory:save"])``.
         """
-        import json
-
         payload = {
             "event_type": event_type,
             "entities": [entity_spec("tool", entity_id)],
@@ -2331,8 +2339,6 @@ class HttpBrainBridge(BrainBridge):
         Payload reads (dashboard, stats) require ``brain_query_events`` once
         shipped; ``brain_get_neighbors`` returns KG structure only, not payloads.
         """
-        import json
-
         event_payload: dict[str, Any] = {
             "event_type": event_type,
             "entities": entities,
@@ -2527,8 +2533,6 @@ class HttpBrainBridge(BrainBridge):
         bridge calls.  Does **not** enqueue when the circuit is open —
         feedback loss is preferable to stale queue growth.
         """
-        import json
-
         args: dict[str, Any] = {
             "feedback_type": feedback_type,
             "edge_id": edge_id,

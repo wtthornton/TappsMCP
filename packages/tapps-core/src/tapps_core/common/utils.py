@@ -91,10 +91,8 @@ def get_path_mapping() -> dict[str, Any]:
     Returns a dict with keys:
         container_root, host_root, mapping_available
     """
-    import os as _os
-
     container_root = str(Path.cwd())
-    host_root = _os.environ.get("TAPPS_HOST_ROOT", "")
+    host_root = os.environ.get("TAPPS_HOST_ROOT", "")
     return {
         "container_root": container_root,
         "host_root": host_root,

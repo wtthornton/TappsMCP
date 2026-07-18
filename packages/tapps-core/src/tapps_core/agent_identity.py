@@ -48,7 +48,7 @@ def is_real_writable_root(project_root: object) -> bool:
     the tests, and is a no-op for every real deployment (roots are absolute).
     """
     try:
-        raw = os.fspath(project_root)  # type: ignore[arg-type]
+        raw = os.fspath(project_root)  # type: ignore[call-overload]
     except (TypeError, ValueError):
         return False
     return Path(raw).is_absolute()

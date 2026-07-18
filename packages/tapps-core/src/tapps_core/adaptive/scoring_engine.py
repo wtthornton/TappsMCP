@@ -136,8 +136,7 @@ class AdaptiveScoringEngine:
             return outcomes
         base = self._tracker.load_outcomes(limit=1000)
         if self._metrics_dir is not None:
-            merged = self._merge_feedback_outcomes(base, self._metrics_dir)
-            return merged
+            return self._merge_feedback_outcomes(base, self._metrics_dir)
         return base
 
     def _merge_feedback_outcomes(

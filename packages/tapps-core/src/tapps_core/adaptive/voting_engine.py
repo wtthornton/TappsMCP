@@ -184,12 +184,11 @@ class AdaptiveVotingEngine:
 
         primary = matrix.get_primary_expert(domain)
         if primary and len(experts) > 1 and weights[primary][domain] < _PRIMARY_WEIGHT_FLOOR:
-            AdaptiveVotingEngine._enforce_primary_floor(weights, matrix, domain, primary, experts)
+            AdaptiveVotingEngine._enforce_primary_floor(weights, domain, primary, experts)
 
     @staticmethod
     def _enforce_primary_floor(
         weights: dict[str, dict[str, float]],
-        matrix: ExpertWeightMatrix,
         domain: str,
         primary: str,
         experts: list[str],

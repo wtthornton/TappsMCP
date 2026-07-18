@@ -98,7 +98,7 @@ def _extract_topic(content: str, topic: str) -> str:
                 in_section = True
                 section_lines.append(line)
                 continue
-            elif in_section:
+            if in_section:
                 break  # hit next heading, stop
         if in_section:
             section_lines.append(line)

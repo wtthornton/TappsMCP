@@ -419,7 +419,7 @@ class KBCache:
     def _is_expired(self, library: str, cached_at: str) -> bool:
         """Check if *cached_at* ISO timestamp is past TTL for *library*."""
         try:
-            ts = datetime.datetime.fromisoformat(cached_at.replace("Z", "+00:00"))
+            ts = datetime.datetime.fromisoformat(cached_at)
             return TTLStaleness(self._ttl_for(library)).is_stale(ts.timestamp())
         except (ValueError, TypeError):
             return True

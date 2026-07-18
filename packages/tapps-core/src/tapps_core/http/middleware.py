@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import contextlib
 import json
 from collections.abc import Awaitable, Callable
 from pathlib import Path
@@ -45,10 +46,8 @@ class TappsProjectRootMiddleware:
         header_value = _header_value(scope, PROJECT_ROOT_HEADER)
         token = None
         if header_value:
-            try:
+            with contextlib.suppress(OSError):
                 token = set_request_project_root(Path(header_value))
-            except OSError:
-                pass
 
         response_started = False
 

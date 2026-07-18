@@ -144,9 +144,9 @@ def calculate_trend(
         change_pct = ((values[-1] - values[0]) / abs(values[0])) * 100.0
 
     # Determine direction (polarity-aware; large |change_pct| survives noisy R²)
-    if abs(slope) < slope_threshold:
-        direction = "stable"
-    elif r_squared < _R_SQUARED_THRESHOLD and abs(change_pct) < _LARGE_CHANGE_PCT:
+    if abs(slope) < slope_threshold or (
+        r_squared < _R_SQUARED_THRESHOLD and abs(change_pct) < _LARGE_CHANGE_PCT
+    ):
         direction = "stable"
     else:
         direction = _direction_from_slope(metric_name, slope)

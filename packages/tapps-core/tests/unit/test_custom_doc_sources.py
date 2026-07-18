@@ -142,8 +142,8 @@ def _mock_httpx_stream(
     else:
         response.raise_for_status = MagicMock()
 
-    async def _aiter_bytes() -> "object":  # noqa: D401 - test helper
-        for chunk in (body[i : i + 4096] for i in range(0, len(body), 4096)) or [b""]:
+    async def _aiter_bytes() -> object:
+        for chunk in [body[i : i + 4096] for i in range(0, len(body), 4096)] or [b""]:
             yield chunk
 
     response.aiter_bytes = _aiter_bytes

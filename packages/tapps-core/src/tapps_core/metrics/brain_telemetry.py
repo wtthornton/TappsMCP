@@ -9,6 +9,7 @@ See ``docs/handoff/BRAIN-wave2-capabilities.md``.
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import os
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any, Literal
@@ -95,10 +96,8 @@ def emit_quality_metric_event(metric: ToolCallMetric) -> None:
         loop = asyncio.get_running_loop()
     except RuntimeError:
         return
-    try:
+    with contextlib.suppress(Exception):
         loop.create_task(_emit())  # noqa: RUF006
-    except Exception:
-        pass
 
 
 async def _emit_kg_event(bridge: Any, metric: ToolCallMetric) -> None:

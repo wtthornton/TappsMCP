@@ -1566,8 +1566,6 @@ def load_settings(project_root: Path | None = None) -> TappsMCPSettings:
     if project_root:
         root = Path(project_root)
     else:
-        import os
-
         env_root = os.environ.get("TAPPS_MCP_PROJECT_ROOT")
         root = Path(env_root) if env_root else Path.cwd()
 

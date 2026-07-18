@@ -32,6 +32,7 @@ class CodeOutcome:
     expert_consultations: list[str] = field(default_factory=list)
     time_to_quality: float = 0.0  # seconds
     first_pass_success: bool = False
+    gate_passed: bool = False
     gate_preset: str = "standard"
     timestamp: str = ""
     finalized: bool = False
@@ -132,6 +133,7 @@ class OutcomeTracker:
                 return None
 
             outcome.finalized = True
+            outcome.gate_passed = gate_passed
 
             # Calculate time_to_quality if we have a timestamp
             if outcome.timestamp:

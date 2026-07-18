@@ -46,18 +46,6 @@ if TYPE_CHECKING:
 
 logger = structlog.get_logger(__name__)
 
-# Libraries where expert knowledge is preferred over Context7 for operational topics.
-# These typically return generic API reference from Context7 instead of operational patterns.
-_OPS_FIRST_LIBRARIES: frozenset[str] = frozenset(
-    {
-        "docker",
-        "docker-compose",
-        "kubernetes",
-        "github-actions",
-        "ci",
-    }
-)
-
 # Minimum prose characters to consider content substantive (not just a TOC).
 _TOC_PROSE_THRESHOLD = 500
 # Minimum ratio of link/heading lines to total lines to be considered TOC-like.
@@ -206,6 +194,7 @@ class LookupEngine:
         )
 
         # 1. Exact cache hit (skipped when docs_via_brain routes through brain only)
+        known_libs: list[str] = []
         if use_local_doc_cache:
             cache_result = self._check_exact_cache(lib_clean, topic, mode, start)
             if cache_result is not None:
@@ -217,19 +206,11 @@ class LookupEngine:
             fuzzy_result = self._check_fuzzy_cache(lib_clean, topic, known_libs, start)
             if fuzzy_result is not None:
                 return fuzzy_result
-        else:
-            known_libs: list[str] = []
 
         # 2b. Custom doc sources (take priority over providers)
         custom_result = await self._check_custom_doc_source(lib_clean, topic, start)
         if custom_result is not None:
             return custom_result
-
-        # 2c. Ops-first routing — for operational libraries, try expert system first
-        if lib_clean in _OPS_FIRST_LIBRARIES:
-            ops_result = await self._try_expert_first(lib_clean, topic, start)
-            if ops_result is not None:
-                return ops_result
 
         # 3. API resolve + fetch — try provider chain first, then legacy Context7
         content, provider_source = await self._fetch_from_providers(lib_clean, topic, mode, start)
@@ -506,15 +487,6 @@ class LookupEngine:
             warning=toc_warning,
         )
 
-    async def _try_expert_first(
-        self,
-        library: str,
-        topic: str,
-        start: float,
-    ) -> LookupResult | None:
-        """Expert system removed (EPIC-94). Always returns None."""
-        return None
-
     async def _check_custom_doc_source(
         self,
         library: str,
@@ -633,39 +605,41 @@ class LookupEngine:
             return None
 
         try:
-            async with httpx.AsyncClient(timeout=15.0, follow_redirects=False) as client:
-                async with client.stream("GET", url) as resp:
-                    resp.raise_for_status()
-                    declared = resp.headers.get("content-length")
-                    if declared is not None:
-                        try:
-                            if int(declared) > guard.max_bytes:
-                                logger.warning(
-                                    "custom_doc_source_url_too_large",
-                                    library=library,
-                                    url=url,
-                                    declared_bytes=int(declared),
-                                    max_bytes=guard.max_bytes,
-                                )
-                                return None
-                        except ValueError:
-                            pass
-                    chunks: list[bytes] = []
-                    total = 0
-                    async for chunk in resp.aiter_bytes():
-                        total += len(chunk)
-                        if total > guard.max_bytes:
+            async with (
+                httpx.AsyncClient(timeout=15.0, follow_redirects=False) as client,
+                client.stream("GET", url) as resp,
+            ):
+                resp.raise_for_status()
+                declared = resp.headers.get("content-length")
+                if declared is not None:
+                    try:
+                        if int(declared) > guard.max_bytes:
                             logger.warning(
                                 "custom_doc_source_url_too_large",
                                 library=library,
                                 url=url,
-                                received_bytes=total,
+                                declared_bytes=int(declared),
                                 max_bytes=guard.max_bytes,
                             )
                             return None
-                        chunks.append(chunk)
-                    body = b"".join(chunks)
-                    encoding = resp.encoding or "utf-8"
+                    except ValueError:
+                        pass
+                chunks: list[bytes] = []
+                total = 0
+                async for chunk in resp.aiter_bytes():
+                    total += len(chunk)
+                    if total > guard.max_bytes:
+                        logger.warning(
+                            "custom_doc_source_url_too_large",
+                            library=library,
+                            url=url,
+                            received_bytes=total,
+                            max_bytes=guard.max_bytes,
+                        )
+                        return None
+                    chunks.append(chunk)
+                body = b"".join(chunks)
+                encoding = resp.encoding or "utf-8"
             content = body.decode(encoding, errors="replace")
             logger.debug(
                 "custom_doc_source_url",
