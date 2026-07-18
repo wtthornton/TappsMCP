@@ -440,8 +440,7 @@ def _list_stale_pre_upgrade_backups(storage_dir: Path, *, keep: int = 2) -> list
     stale_names: list[str] = []
     for paths in groups.values():
         paths.sort(key=lambda p: p.stat().st_mtime, reverse=True)
-        for stale in paths[keep:]:
-            stale_names.append(stale.name)
+        stale_names.extend(stale.name for stale in paths[keep:])
     return stale_names
 
 

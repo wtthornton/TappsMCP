@@ -302,9 +302,7 @@ def run_migration_sync(
 ) -> MigrationResult:
     """Sync wrapper for :func:`run_migration`."""
     return asyncio.run(
-        run_migration(
-            project_root, bridge, dry_run=dry_run, validate_only=validate_only
-        )
+        run_migration(project_root, bridge, dry_run=dry_run, validate_only=validate_only)
     )
 
 

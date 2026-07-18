@@ -18,14 +18,14 @@ from tapps_mcp.pipeline.agent_contract import (
     CURSOR_PYTHON_QUALITY_ACTIONS,
     MEMORY_RECALL_SESSION_START,
     MEMORY_SYSTEMS_BULLET,
-    PYTHON_QUALITY_SCORING_SECTION,
 )
 
 # ---------------------------------------------------------------------------
 # Cursor rule types (Story 12.11)
 # ---------------------------------------------------------------------------
 
-_CURSOR_RULE_PIPELINE = f"""\
+_CURSOR_RULE_PIPELINE = (
+    f"""\
 ---
 alwaysApply: true
 ---
@@ -40,7 +40,9 @@ Call `tapps_session_start()` as the FIRST action in every session.
 {MEMORY_RECALL_SESSION_START}
 Read `.tapps-mcp/session-handoff.md` when continuing work.
 
-""" + CURSOR_PIPELINE_BEFORE_EDIT_LOOKUP + """\
+"""
+    + CURSOR_PIPELINE_BEFORE_EDIT_LOOKUP
+    + """\
 ## After Editing Python Files (REQUIRED)
 
 Call `tapps_quick_check(file_path)` after editing any Python file.
@@ -53,8 +55,10 @@ The quality gate MUST pass before work is declared complete.
 Call `tapps_checklist(task_type)` as the FINAL verification step.
 
 """
+)
 
-_CURSOR_RULE_PYTHON_QUALITY = """\
+_CURSOR_RULE_PYTHON_QUALITY = (
+    """\
 ---
 globs: "*.py"
 alwaysApply: false
@@ -76,7 +80,9 @@ TappsMCP scores Python code across 7 categories (0-100 each):
 6. **Structure** - Project layout (pyproject.toml, tests/, README, .git)
 7. **DevEx** - Developer experience (docs, AGENTS.md, tooling config)
 
-""" + CURSOR_PYTHON_QUALITY_ACTIONS
+"""
+    + CURSOR_PYTHON_QUALITY_ACTIONS
+)
 
 _CURSOR_RULE_EXPERT = """\
 ---

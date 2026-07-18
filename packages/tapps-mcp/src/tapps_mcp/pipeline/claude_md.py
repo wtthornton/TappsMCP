@@ -196,7 +196,9 @@ def render_fresh_claude_md(obligations_content: str) -> str:
     """Return the content for a fresh CLAUDE.md (no existing file)."""
     from tapps_mcp.pipeline.tapps_obligations_block import wrap_with_markers
 
-    return f"<!-- tapps-claude-version: {__version__} -->\n{wrap_with_markers(obligations_content)}\n"
+    return (
+        f"<!-- tapps-claude-version: {__version__} -->\n{wrap_with_markers(obligations_content)}\n"
+    )
 
 
 def validate_claude_md(claude_path: Path) -> ClaudeValidation:

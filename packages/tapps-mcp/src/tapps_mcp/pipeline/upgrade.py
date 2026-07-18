@@ -377,12 +377,12 @@ def _has_infra_signals(project_root: Path) -> bool:
 _CONSENT_HOSTS = ("claude-code", "cursor")
 
 
-def _mcp_json_has_tapps_entry(project_root: Path, host: str) -> bool:
+def _mcp_json_has_tapps_entry(project_root: Path) -> bool:
     """True if the user has previously opted in to TappsMCP on *any* host.
 
     Consent is about intent to use TappsMCP, not about a specific host.
     A user who added tapps-mcp to Cursor and is now running a Claude Code
-    upgrade should be treated as opted in — checking only ``host`` would
+    upgrade should be treated as opted in — checking a single host would
     refuse to regenerate the Claude Code config even though they clearly want
     it.  We accept an entry on any configured host as proof of consent.
 
@@ -587,10 +587,12 @@ def _upgrade_mcp_config(
     *,
     force: bool,
     dry_run: bool,
-    skip: set[str],
     mcp_bundle: str = "full",
 ) -> None:
     """Populate result["components"]["mcp_config"] for one host.
+
+    The ``mcp_config`` skip token is handled by the caller before this
+    function is invoked.
 
     Consent gate: only regenerates ``.mcp.json`` when the user has previously
     opted in (entry exists) or ``force=True``.  Missing entries are not
@@ -634,7 +636,7 @@ def _upgrade_mcp_config(
     use_uv, extra_auto, _ = _should_use_uv_launch(project_root, uv_mode=None)
     uv_launch = _build_uv_run_tapps_launch(extra_auto) if use_uv else None
     error = _validate_config_file(config_path, servers_key)
-    already_opted_in = _mcp_json_has_tapps_entry(project_root, host)
+    already_opted_in = _mcp_json_has_tapps_entry(project_root)
     needs_heal = _mcp_json_has_unresolved_workspacefolder(project_root, host)
     raw_servers = existing.get(servers_key)
     servers_dict = raw_servers if isinstance(raw_servers, dict) else {}
@@ -758,10 +760,11 @@ def _build_dry_run_summary(result: dict[str, Any]) -> dict[str, Any]:
             managed_skills = value.get("managed_skills", [])
             nonlocal managed
             managed += len(managed_files) + len(managed_skills)
-            for item in value.get("preserved_files", []):
-                preserved_items.append(f"{scope}:{name}/{item}")
-            for item in value.get("preserved_skills", []):
-                preserved_items.append(f"{scope}:{name}/{item}")
+            preserved_items.extend(
+                f"{scope}:{name}/{item}"
+                for key in ("preserved_files", "preserved_skills")
+                for item in value.get(key, [])
+            )
         elif isinstance(value, str):
             if value.startswith("skipped"):
                 skipped.append(f"{scope}:{name}")
@@ -1496,7 +1499,6 @@ def _upgrade_platform(
             result,
             force=force,
             dry_run=dry_run,
-            skip=_skip,
             mcp_bundle=mcp_bundle,
         )
 
@@ -1901,18 +1903,18 @@ def _dry_run_github_artifacts(project_root: Path, result: dict[str, Any]) -> Non
     is_established = (project_root / "AGENTS.md").exists()
     would_recreate_deleted: list[dict[str, str]] = []
     if is_established:
-        for fname in MANAGED_GITHUB_ROOT_FILES:
-            if not (github_root_dir / fname).exists():
-                would_recreate_deleted.append(
-                    {
-                        "file": f".github/{fname}",
-                        "note": (
-                            "File is absent from repo. If deleted intentionally, "
-                            f"add '{fname}' to upgrade_skip_files in "
-                            ".tapps-mcp.yaml to suppress recreation."
-                        ),
-                    }
-                )
+        would_recreate_deleted.extend(
+            {
+                "file": f".github/{fname}",
+                "note": (
+                    "File is absent from repo. If deleted intentionally, "
+                    f"add '{fname}' to upgrade_skip_files in "
+                    ".tapps-mcp.yaml to suppress recreation."
+                ),
+            }
+            for fname in MANAGED_GITHUB_ROOT_FILES
+            if not (github_root_dir / fname).exists()
+        )
 
     result["components"]["github_templates"] = {
         "action": "would-write-managed-files",
@@ -2033,14 +2035,16 @@ def _collect_upgrade_targets(project_root: Path) -> list[Path]:
     # Hook scripts
     hooks_dir = project_root / ".claude" / "hooks"
     if hooks_dir.is_dir():
-        for f in hooks_dir.iterdir():
-            if f.is_file() and _is_managed_hook_filename(f.name):
-                targets.append(f)
+        targets.extend(
+            f for f in hooks_dir.iterdir() if f.is_file() and _is_managed_hook_filename(f.name)
+        )
     cursor_hooks_dir = project_root / ".cursor" / "hooks"
     if cursor_hooks_dir.is_dir():
-        for f in cursor_hooks_dir.iterdir():
-            if f.is_file() and _is_managed_hook_filename(f.name):
-                targets.append(f)
+        targets.extend(
+            f
+            for f in cursor_hooks_dir.iterdir()
+            if f.is_file() and _is_managed_hook_filename(f.name)
+        )
     # Skills
     skills_dir = project_root / ".claude" / "skills"
     if skills_dir.is_dir():
@@ -2052,20 +2056,15 @@ def _collect_upgrade_targets(project_root: Path) -> list[Path]:
     # Agents
     agents_dir = project_root / ".claude" / "agents"
     if agents_dir.is_dir():
-        for f in agents_dir.iterdir():
-            if f.name.startswith("tapps-"):
-                targets.append(f)
+        targets.extend(f for f in agents_dir.iterdir() if f.name.startswith("tapps-"))
     # TAP-689: rule files that the upgrade regenerates. Without backing
     # these up, a consumer's hand-edits to python-quality.md / agent-scope.md
     # / tapps-pipeline.md are lost with no rollback path.
     for rules_subdir in (".claude/rules", ".cursor/rules"):
         rules_dir = project_root / rules_subdir
         if rules_dir.is_dir():
-            for f in rules_dir.glob("*.md"):
-                targets.append(f)
-    for c in candidates:
-        if c.exists():
-            targets.append(c)
+            targets.extend(rules_dir.glob("*.md"))
+    targets.extend(c for c in candidates if c.exists())
     return targets
 
 

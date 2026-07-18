@@ -10,7 +10,7 @@ from tapps_mcp import __version__
 if TYPE_CHECKING:
     from pathlib import Path
 
-    from tapps_mcp.project.models import ProjectProfile, TechStack
+    from tapps_mcp.project.models import ProjectProfile
 
 from tapps_core.common.file_operations import (
     AgentInstructions,
@@ -1212,10 +1212,7 @@ def _warm_caches(cfg: BootstrapConfig, state: _BootstrapState) -> None:
         }
 
     if cfg.warm_expert_rag_from_tech_stack and state.profile is not None:
-        rag_result = _run_expert_rag_warming(
-            state.project_root,
-            state.profile.tech_stack,
-        )
+        rag_result = _run_expert_rag_warming()
         state.result["expert_rag_warming"] = rag_result
         failed = rag_result.get("failed_domains") or []
         if failed:
@@ -1304,8 +1301,7 @@ def _render_list_section(
 ) -> list[str]:
     """Render a markdown section with a heading and bullet list."""
     lines = ["", f"## {heading}"]
-    for item in items or [fallback]:
-        lines.append(f"- {item}")
+    lines.extend(f"- {item}" for item in items or [fallback])
     return lines
 
 
@@ -1359,8 +1355,7 @@ def _render_tech_stack_md(profile: ProjectProfile) -> str:
     lines.extend(_render_list_section("Domains", ts.domains))
     # Context7 priority renders no fallback text when empty
     lines.extend(["", "## Context7 Priority (for doc lookups)"])
-    for p in ts.context7_priority or []:
-        lines.append(f"- {p}")
+    lines.extend(f"- {p}" for p in ts.context7_priority or [])
     lines.extend(_render_infrastructure_section(profile))
     lines.extend(
         _render_list_section("Recommendations", profile.quality_recommendations, fallback="(none)")
@@ -1446,10 +1441,7 @@ def _run_cache_warming(
     }
 
 
-def _run_expert_rag_warming(
-    project_root: Path,
-    tech_stack: TechStack,
-) -> dict[str, Any]:
+def _run_expert_rag_warming() -> dict[str, Any]:
     """Expert RAG removed (EPIC-94). Returns empty result."""
     return {"status": "removed", "note": "Expert RAG warming removed (EPIC-94)"}
 

@@ -87,21 +87,21 @@ class TestHelpers:
         assert _has_infra_signals(tmp_path) is True
 
     def test_mcp_json_has_tapps_entry_missing_file(self, tmp_path: Path) -> None:
-        assert _mcp_json_has_tapps_entry(tmp_path, "claude-code") is False
+        assert _mcp_json_has_tapps_entry(tmp_path) is False
 
     def test_mcp_json_has_tapps_entry_no_entry(self, tmp_path: Path) -> None:
         (tmp_path / ".mcp.json").write_text(
             json.dumps({"mcpServers": {"other": {"command": "x"}}}),
             encoding="utf-8",
         )
-        assert _mcp_json_has_tapps_entry(tmp_path, "claude-code") is False
+        assert _mcp_json_has_tapps_entry(tmp_path) is False
 
     def test_mcp_json_has_tapps_entry_present(self, tmp_path: Path) -> None:
         (tmp_path / ".mcp.json").write_text(
             json.dumps({"mcpServers": {"tapps-mcp": {"command": "tapps-mcp"}}}),
             encoding="utf-8",
         )
-        assert _mcp_json_has_tapps_entry(tmp_path, "claude-code") is True
+        assert _mcp_json_has_tapps_entry(tmp_path) is True
 
     def test_mcp_json_has_tapps_entry_nlt_servers(self, tmp_path: Path) -> None:
         (tmp_path / ".cursor" / "mcp.json").parent.mkdir(parents=True)
@@ -109,11 +109,11 @@ class TestHelpers:
             json.dumps({"mcpServers": {"nlt-build": {"command": "tapps-mcp", "args": ["serve"]}}}),
             encoding="utf-8",
         )
-        assert _mcp_json_has_tapps_entry(tmp_path, "cursor") is True
+        assert _mcp_json_has_tapps_entry(tmp_path) is True
 
     def test_mcp_json_has_tapps_entry_corrupt(self, tmp_path: Path) -> None:
         (tmp_path / ".mcp.json").write_text("{not json", encoding="utf-8")
-        assert _mcp_json_has_tapps_entry(tmp_path, "claude-code") is False
+        assert _mcp_json_has_tapps_entry(tmp_path) is False
 
     def test_mcp_json_has_tapps_entry_cross_host_cursor_to_claude(self, tmp_path: Path) -> None:
         # User opted in via Cursor; Claude Code upgrade should still be treated as opted in.
@@ -123,7 +123,7 @@ class TestHelpers:
             json.dumps({"mcpServers": {"tapps-mcp": {"command": "tapps-mcp"}}}),
             encoding="utf-8",
         )
-        assert _mcp_json_has_tapps_entry(tmp_path, "claude-code") is True
+        assert _mcp_json_has_tapps_entry(tmp_path) is True
 
     def test_mcp_json_has_tapps_entry_neither_host(self, tmp_path: Path) -> None:
         # Neither host has tapps-mcp — consent not given.
@@ -137,7 +137,7 @@ class TestHelpers:
             json.dumps({"mcpServers": {"other-tool": {}}}),
             encoding="utf-8",
         )
-        assert _mcp_json_has_tapps_entry(tmp_path, "claude-code") is False
+        assert _mcp_json_has_tapps_entry(tmp_path) is False
 
     def test_agents_md_opt_out_disabled_flag(self, tmp_path: Path) -> None:
         assert _agents_md_opt_out(tmp_path, create_flag=False) == "upgrade_create_agents_md=false"

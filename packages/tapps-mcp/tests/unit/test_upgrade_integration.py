@@ -187,7 +187,7 @@ class TestUpgradeSubagents:
 
         content = (agents_dir / "tapps-reviewer.md").read_text(encoding="utf-8")
         assert "mcpServers:" in content
-        assert "tapps-mcp:" in content
+        assert "nlt-build:" in content
 
     def test_subagents_have_max_turns_after_upgrade(self, tmp_path: Path) -> None:
         """Old-style agents get ``maxTurns`` after upgrade."""

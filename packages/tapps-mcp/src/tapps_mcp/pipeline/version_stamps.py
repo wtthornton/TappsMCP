@@ -16,9 +16,7 @@ _STAMP_RE_CACHE: dict[str, re.Pattern[str]] = {}
 def stamp_regex(stamp_key: str) -> re.Pattern[str]:
     """Return a regex matching ``<!-- <stamp_key>: X.Y.Z -->``."""
     if stamp_key not in _STAMP_RE_CACHE:
-        _STAMP_RE_CACHE[stamp_key] = re.compile(
-            rf"<!--\s*{re.escape(stamp_key)}:\s*([\d.]+)\s*-->"
-        )
+        _STAMP_RE_CACHE[stamp_key] = re.compile(rf"<!--\s*{re.escape(stamp_key)}:\s*([\d.]+)\s*-->")
     return _STAMP_RE_CACHE[stamp_key]
 
 

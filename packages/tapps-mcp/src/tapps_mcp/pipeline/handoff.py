@@ -16,8 +16,7 @@ def _render_list_section(lines: list[str], header: str, items: list[str]) -> Non
     """Append a bold-header + bulleted list to *lines* if *items* is non-empty."""
     if items:
         lines.append(f"**{header}:**")
-        for item in items:
-            lines.append(f"- {item}")
+        lines.extend(f"- {item}" for item in items)
         lines.append("")
 
 

@@ -8,9 +8,7 @@ See ADR-0022 for lookup timing and validation semantics.
 from __future__ import annotations
 
 # Post-edit (Claude PostToolUse + Cursor afterFileEdit)
-POST_EDIT_QUICK_CHECK_MSG = (
-    "Edited: {file} — run tapps_quick_check after this edit."
-)
+POST_EDIT_QUICK_CHECK_MSG = "Edited: {file} — run tapps_quick_check after this edit."
 POST_EDIT_IMPORT_LOOKUP_MSG = (
     "Imports detected ({libs}) — call tapps_lookup_docs(library=..., topic=...) "
     "**before editing** code that uses those APIs. Retrospective lookups at "
@@ -45,9 +43,7 @@ CALL_GRAPH_STALE_NUDGE = (
     "NEXT: Call graph index is stale — tapps_call_graph or tapps_diff_impact "
     "rebuilds automatically on first use (force_rebuild=true optional)."
 )
-CALL_GRAPH_STALE_DOCTOR = (
-    "stale — auto-rebuilds on tapps_call_graph or tapps_diff_impact"
-)
+CALL_GRAPH_STALE_DOCTOR = "stale — auto-rebuilds on tapps_call_graph or tapps_diff_impact"
 CALL_GRAPH_DEGRADED_HINT = (
     "High gap_rate is expected for dynamic Python — graph is usable for static "
     "callers/callees; see docs/CALL_GRAPH.md."
@@ -75,9 +71,7 @@ POST_EDIT_IMPORT_LOOKUP_BASH = (
     "**before editing** code that uses those APIs (TAP-1330). Retrospective "
     "lookups at finish-task do not excuse skipped pre-edit lookups."
 )
-POST_EDIT_QUICK_CHECK_BASH = (
-    "Edited: $FILE — run tapps_quick_check after this edit."
-)
+POST_EDIT_QUICK_CHECK_BASH = "Edited: $FILE — run tapps_quick_check after this edit."
 
 # Stop / TaskCompleted reminders (warn-only telemetry; not hard blocks unless opt-in gates)
 STOP_FINISH_REMINDER = (
@@ -98,9 +92,7 @@ CHECKLIST_SKIPPED_REC = (
 )
 
 # Lookup gap remediation (ADR-0021 telemetry vs cache — ADR-0022 timing)
-LOOKUP_GAP_RETRO_NOTE = (
-    "retrospective MCP lookups clear telemetry gaps; cache hits are fine"
-)
+LOOKUP_GAP_RETRO_NOTE = "retrospective MCP lookups clear telemetry gaps; cache hits are fine"
 LOOKUP_TIMING_RULE = (
     "Call tapps_lookup_docs **before the first edit** that uses each external "
     "library in a session; retrospective lookups only clear telemetry gaps "
@@ -166,7 +158,7 @@ VALIDATION_QUICK_VS_BATCH = (
 
 # Session start memory (bridge-only default; slim tapps_memory MCP on nlt-memory — TAP-3895)
 MEMORY_RECALL_SESSION_START = (
-    "Brain memory is bridge-only: use `uv run tapps-mcp memory search --query \"...\"` "
+    'Brain memory is bridge-only: use `uv run tapps-mcp memory search --query "..."` '
     "or pinned keys in `.tapps-mcp.yaml` → `memory_hooks.auto_recall.recall_keys`. "
     "When `nlt-memory` is enabled, `tapps_memory` MCP is a slim facade on that server."
 )
@@ -252,9 +244,7 @@ def lookup_gap_recommendation(libraries: list[str], *, generic: bool) -> str:
             f' Call tapps_lookup_docs(library="{libraries[0]}", topic="<api>") '
             f"for each ({LOOKUP_GAP_RETRO_NOTE})."
         )
-        return (
-            f"No tapps_lookup_docs this session; edited files reference: {sample}.{suffix}"
-        )
+        return f"No tapps_lookup_docs this session; edited files reference: {sample}.{suffix}"
     if generic:
         return (
             "No tapps_lookup_docs calls this session despite recent edits. "
@@ -279,7 +269,7 @@ def finish_task_doc_gaps_step(*, claude_nlt_prefix: bool) -> str:
 
 
 def finish_task_checklist_and_doc_gaps(*, claude_nlt_prefix: bool) -> str:
-    """Steps 2–3 for finish-task skills."""
+    """Steps 2-3 for finish-task skills."""
     if claude_nlt_prefix:
         checklist_line = (
             "2. **Verify the checklist.** Call "
@@ -299,25 +289,24 @@ def finish_task_checklist_and_doc_gaps(*, claude_nlt_prefix: bool) -> str:
 
 __all__ = [
     "AGENTS_TEMPLATE_TOOL_COUNT_PLACEHOLDER",
-    "CHECKLIST_SKIPPED_REC",
-    "COPILOT_PROJECT_SCOPE_SECTION",
-    "DOC_GAP_TELEMETRY_NOTE",
-    "LOOKUP_GAP_RETRO_NOTE",
-    "LOOKUP_DOCS_UNDERUSED_GAP",
-    "LOOKUP_FIRST_RULE_MARKERS",
-    "LOOKUP_TIMING_RULE",
-    "CURSOR_PIPELINE_BEFORE_EDIT_LOOKUP",
-    "CURSOR_PYTHON_QUALITY_ACTIONS",
-    "PYTHON_QUALITY_SCORING_SECTION",
-    "MEMORY_ACTIONS_ACCESS_NOTE",
-    "MEMORY_RECALL_SESSION_START",
-    "MEMORY_SYSTEMS_BULLET",
     "CALL_GRAPH_DEGRADED_HINT",
     "CALL_GRAPH_STALE_DOCTOR",
     "CALL_GRAPH_STALE_HINT",
     "CALL_GRAPH_STALE_NUDGE",
     "CALL_GRAPH_STOP_FOLLOWUP",
+    "CHECKLIST_SKIPPED_REC",
+    "COPILOT_PROJECT_SCOPE_SECTION",
+    "CURSOR_PIPELINE_BEFORE_EDIT_LOOKUP",
+    "CURSOR_PYTHON_QUALITY_ACTIONS",
+    "DOC_GAP_TELEMETRY_NOTE",
     "FINISH_TASK_VALIDATE_CALL_GRAPH_NOTE",
+    "LOOKUP_DOCS_UNDERUSED_GAP",
+    "LOOKUP_FIRST_RULE_MARKERS",
+    "LOOKUP_GAP_RETRO_NOTE",
+    "LOOKUP_TIMING_RULE",
+    "MEMORY_ACTIONS_ACCESS_NOTE",
+    "MEMORY_RECALL_SESSION_START",
+    "MEMORY_SYSTEMS_BULLET",
     "POST_EDIT_IMPORT_LOOKUP_BASH",
     "POST_EDIT_IMPORT_LOOKUP_MSG",
     "POST_EDIT_PUBLIC_API_CALL_GRAPH_BASH",
@@ -326,6 +315,7 @@ __all__ = [
     "POST_EDIT_PUBLIC_API_DRIFT_MSG",
     "POST_EDIT_QUICK_CHECK_BASH",
     "POST_EDIT_QUICK_CHECK_MSG",
+    "PYTHON_QUALITY_SCORING_SECTION",
     "SESSION_START_CHECKLIST_GAP_HINT",
     "STOP_FINISH_REMINDER",
     "STOP_GAP_FOLLOWUP_DEFAULT",

@@ -139,9 +139,7 @@ def generate_all_ci_workflows(
     is forwarded so a user-deleted workflow is not silently re-added.
     """
     results: dict[str, Any] = {}
-    results["codeql_workflow"] = generate_codeql_workflow(
-        project_root, upgrade_mode=upgrade_mode
-    )
+    results["codeql_workflow"] = generate_codeql_workflow(project_root, upgrade_mode=upgrade_mode)
     results["total_workflows"] = 1
     results["success"] = True
     return results

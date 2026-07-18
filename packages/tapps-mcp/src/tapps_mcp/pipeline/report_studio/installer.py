@@ -163,9 +163,7 @@ def install_report_studio(
     result["messages"].append(
         "Next: uv sync --group reports  # or --extra reports / --group dev per pyproject"
     )
-    result["messages"].append(
-        "CI: copy templates/consumer/report-studio-verify.yml from ReportLab"
-    )
+    result["messages"].append("CI: copy templates/consumer/report-studio-verify.yml from ReportLab")
     return result
 
 

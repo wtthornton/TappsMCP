@@ -352,8 +352,7 @@ def generate_all_github_templates(project_root: Path) -> dict[str, Any]:
     results["pr_template"] = generate_pr_template(project_root)
 
     total_files = (
-        results["issue_templates"]["count"]
-        + 1  # PR template
+        results["issue_templates"]["count"] + 1  # PR template
     )
     results["total_files"] = total_files
     results["success"] = True

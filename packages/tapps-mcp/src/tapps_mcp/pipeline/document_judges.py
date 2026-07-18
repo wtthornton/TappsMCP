@@ -207,7 +207,10 @@ def is_document_layout_path(file_path: Path, project_root: Path) -> bool:
         rel = file_path.resolve().relative_to(project_root.resolve()).as_posix()
     except ValueError:
         return False
-    return any(marker in f"{rel}/" or rel.startswith(marker.rstrip("/")) for marker in _DOCUMENT_PATH_MARKERS)
+    return any(
+        marker in f"{rel}/" or rel.startswith(marker.rstrip("/"))
+        for marker in _DOCUMENT_PATH_MARKERS
+    )
 
 
 DOCUMENT_BUILDER_PROFILE = "document-builder"

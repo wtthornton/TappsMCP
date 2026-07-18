@@ -52,11 +52,7 @@ def _extract_version(content: str) -> str | None:
 def wrap_with_markers(obligations: str, *, version: str = __version__) -> str:
     """Return *obligations* wrapped in BEGIN/END markers stamped with *version*."""
     body = obligations.strip("\n")
-    return (
-        f"<!-- BEGIN: tapps-obligations v{version} -->\n"
-        f"{body}\n"
-        f"{MARKER_END}"
-    )
+    return f"<!-- BEGIN: tapps-obligations v{version} -->\n{body}\n{MARKER_END}"
 
 
 def _find_legacy_tapps_section(content: str) -> tuple[int, int] | None:
@@ -140,9 +136,9 @@ def install_or_refresh(
 
 
 __all__ = [
-    "Action",
     "MARKER_BEGIN_PREFIX",
     "MARKER_END",
+    "Action",
     "install_or_refresh",
     "wrap_with_markers",
 ]

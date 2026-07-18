@@ -33,7 +33,6 @@ from tapps_mcp.pipeline.platform_hook_templates import (
     CURSOR_HOOK_SCRIPTS,
     CURSOR_HOOKS_CONFIG,
     INVALID_CLAUDE_HOOK_KEYS,
-    SUPPORTED_CLAUDE_HOOK_KEYS,  # noqa: F401  (re-export for external callers)
 )
 from tapps_mcp.pipeline.platform_rules import (
     CURSOR_RULE_TEMPLATES,
@@ -66,9 +65,9 @@ def _posix_shim(subcommand: list[str]) -> str:
     return (
         "#!/usr/bin/env bash\n"
         "set -e\n"
-        f'if command -v tapps-mcp >/dev/null 2>&1; then\n'
+        f"if command -v tapps-mcp >/dev/null 2>&1; then\n"
         f'  exec tapps-mcp {args} "$@"\n'
-        f'fi\n'
+        f"fi\n"
         f'exec uvx tapps-mcp {args} "$@"\n'
     )
 
@@ -103,19 +102,13 @@ _MONITORS_CONFIG: dict[str, Any] = {
         {
             "name": "tapps-brain-health",
             "when": "always",
-            "command": (
-                "${CLAUDE_PLUGIN_ROOT}/bin/tapps-doctor-cli --brain-only --watch"
-            ),
-            "description": (
-                "Polls tapps-brain /health every 30s and surfaces status drift."
-            ),
+            "command": ("${CLAUDE_PLUGIN_ROOT}/bin/tapps-doctor-cli --brain-only --watch"),
+            "description": ("Polls tapps-brain /health every 30s and surfaces status drift."),
         },
         {
             "name": "quality-gate-watch",
             "when": "always",
-            "command": (
-                "${CLAUDE_PLUGIN_ROOT}/bin/tapps-quick-lint --watch --summary"
-            ),
+            "command": ("${CLAUDE_PLUGIN_ROOT}/bin/tapps-quick-lint --watch --summary"),
             "description": (
                 "Aggregates recent tapps_quality_gate failures and emits one-line "
                 "notifications when a new failure appears."
@@ -404,12 +397,7 @@ def generate_claude_plugin_bundle(
     for shim_name, subcommand in _BIN_SHIMS.items():
         posix_path = bin_dir / shim_name
         posix_path.write_text(_posix_shim(subcommand), encoding="utf-8")
-        posix_path.chmod(
-            posix_path.stat().st_mode
-            | stat.S_IXUSR
-            | stat.S_IXGRP
-            | stat.S_IXOTH
-        )
+        posix_path.chmod(posix_path.stat().st_mode | stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH)
         files_created.append(f"bin/{shim_name}")
 
         cmd_path = bin_dir / f"{shim_name}.cmd"
@@ -649,7 +637,8 @@ def get_ci_claude_md_section() -> str:
 # Path-scoped Python quality rules for Claude Code (Epic 33.3)
 # ---------------------------------------------------------------------------
 
-_PYTHON_QUALITY_RULE_HIGH = """\
+_PYTHON_QUALITY_RULE_HIGH = (
+    """\
 ---
 paths:
   - "**/*.py"
@@ -665,11 +654,15 @@ REQUIRED: Call `tapps_validate_changed(file_paths="file1.py,file2.py")` with exp
 
 Do NOT mark tasks complete if quality gate has not passed or `usage_gaps` lists `lookup_docs_underused`.
 
-""" + PYTHON_QUALITY_SCORING_SECTION + """
+"""
+    + PYTHON_QUALITY_SCORING_SECTION
+    + """
 Any category scoring below 70 MUST be addressed immediately.
 """
+)
 
-_PYTHON_QUALITY_RULE_MEDIUM = """\
+_PYTHON_QUALITY_RULE_MEDIUM = (
+    """\
 ---
 paths:
   - "**/*.py"
@@ -685,11 +678,15 @@ Run tools in this order when editing Python:
 
 Do not guess API signatures from training data.
 
-""" + PYTHON_QUALITY_SCORING_SECTION + """
+"""
+    + PYTHON_QUALITY_SCORING_SECTION
+    + """
 Any category scoring below 70 should be addressed.
 """
+)
 
-_PYTHON_QUALITY_RULE_LOW = """\
+_PYTHON_QUALITY_RULE_LOW = (
+    """\
 ---
 paths:
   - "**/*.py"
@@ -702,9 +699,12 @@ Consider this order when editing Python:
 2. **`tapps_quick_check(file_path)` after edits**
 3. **`tapps_validate_changed(file_paths="file1.py,file2.py")`** before declaring work complete
 
-""" + PYTHON_QUALITY_SCORING_SECTION + """
+"""
+    + PYTHON_QUALITY_SCORING_SECTION
+    + """
 Categories scoring below 70 may benefit from attention.
 """
+)
 
 _PYTHON_QUALITY_RULES: dict[str, str] = {
     "high": _PYTHON_QUALITY_RULE_HIGH,
