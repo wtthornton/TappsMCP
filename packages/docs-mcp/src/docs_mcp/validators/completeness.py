@@ -25,9 +25,7 @@ def _is_test_path(rel_path: str) -> bool:
         return True
     if name.startswith("test_") or name.endswith("_test.py") or name.endswith("_tests.py"):
         return True
-    if name in {"conftest.py", "conftest.pyi"}:
-        return True
-    return False
+    return name in {"conftest.py", "conftest.pyi"}
 
 
 class CompletenessCategory(BaseModel):
@@ -546,11 +544,9 @@ class CompletenessChecker:
         for cat in categories:
             if cat.missing:
                 if cat.name == "essential_docs":
-                    for m in cat.missing:
-                        recommendations.append(f"Add essential document: {m}")
+                    recommendations.extend(f"Add essential document: {m}" for m in cat.missing)
                 elif cat.name == "development_docs":
-                    for m in cat.missing:
-                        recommendations.append(f"Add development document: {m}")
+                    recommendations.extend(f"Add development document: {m}" for m in cat.missing)
                 elif cat.name == "api_documentation":
                     count = len(cat.missing)
                     if count > 0:

@@ -75,7 +75,7 @@ async def _emit_drift_events(report: Any) -> None:
             return
 
 
-async def _flywheel_block(threshold: int) -> dict[str, Any]:
+async def _flywheel_block() -> dict[str, Any]:
     """Cross-session gap signal for the release gate (TAP-1952).
 
     Reads the brain's ``flywheel_report`` (gap detection over the last 7 days)
@@ -96,11 +96,11 @@ async def _flywheel_block(threshold: int) -> dict[str, Any]:
     raw_gaps = report.get("gaps") or []
     top_gaps: list[dict[str, Any]] = []
     if isinstance(raw_gaps, list):
-        for gap in raw_gaps[:3]:
-            if isinstance(gap, dict):
-                top_gaps.append(
-                    {"name": gap.get("name", ""), "count": int(gap.get("count", 0) or 0)}
-                )
+        top_gaps.extend(
+            {"name": gap.get("name", ""), "count": int(gap.get("count", 0) or 0)}
+            for gap in raw_gaps[:3]
+            if isinstance(gap, dict)
+        )
     return {"available": True, "gaps_total": gaps_total, "top_gaps": top_gaps}
 
 
@@ -212,8 +212,7 @@ async def docs_check_drift(
     if search_names.strip():
         names_lower = {n.strip().lower() for n in search_names.split(",") if n.strip()}
         items = [
-            it for it in items
-            if any(nm in sym.lower() for nm in names_lower for sym in it.symbols)
+            it for it in items if any(nm in sym.lower() for nm in names_lower for sym in it.symbols)
         ]
 
     total_filtered = len(items)
@@ -998,17 +997,16 @@ async def docs_check_style(
 
 def _style_report_structured(report: StyleReport) -> dict[str, Any]:
     """Build structured response data from a StyleReport."""
-    files_data: list[dict[str, Any]] = []
-    for fr in report.files:
-        if fr.issues:
-            files_data.append(
-                {
-                    "file_path": fr.file_path,
-                    "score": fr.score,
-                    "issue_count": len(fr.issues),
-                    "issues": [i.model_dump() for i in fr.issues[:20]],
-                }
-            )
+    files_data: list[dict[str, Any]] = [
+        {
+            "file_path": fr.file_path,
+            "score": fr.score,
+            "issue_count": len(fr.issues),
+            "issues": [i.model_dump() for i in fr.issues[:20]],
+        }
+        for fr in report.files
+        if fr.issues
+    ]
 
     return {
         "total_files": report.total_files,
@@ -1173,9 +1171,7 @@ async def docs_release_gate(
             f"Drift score {drift_score} >= 30 — run docs_generate_api / update prose to close the gap."
         )
     if ancient_count > 0:
-        recommendations.append(
-            f"{ancient_count} ancient docs — refresh or archive before release."
-        )
+        recommendations.append(f"{ancient_count} ancient docs — refresh or archive before release.")
     if broken_count > 0:
         recommendations.append(
             f"{broken_count} broken links — fix or remove. Run docs_check_links for details."
@@ -1185,7 +1181,7 @@ async def docs_release_gate(
 
     # TAP-1952: fold the brain's cross-session gap signal into the verdict.
     threshold = _get_settings().release_gate_flywheel_gap_threshold
-    flywheel = await _flywheel_block(threshold)
+    flywheel = await _flywheel_block()
     verdict = "pass" if agent_ready else "warn"
     reason = ""
     if (

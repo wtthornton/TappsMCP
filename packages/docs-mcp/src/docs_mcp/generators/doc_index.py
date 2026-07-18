@@ -302,9 +302,7 @@ class DocIndexGenerator:
         # When the caller did not pass output_path, fall back to the historic
         # project-root-relative behaviour by anchoring at project_root itself.
         index_dir_abs = (
-            (project_root / output_path).parent.resolve()
-            if output_path
-            else project_root
+            (project_root / output_path).parent.resolve() if output_path else project_root
         )
 
         lines: list[str] = []

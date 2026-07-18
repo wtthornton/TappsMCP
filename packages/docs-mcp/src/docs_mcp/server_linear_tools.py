@@ -52,7 +52,7 @@ def _reset_pr_shape_written() -> None:
         _pr_shape_written = False
 
 
-async def _write_pr_shape_to_brain(score: int, common_rules: list[str]) -> None:
+async def _write_pr_shape_to_brain(common_rules: list[str]) -> None:
     """Write a procedural PR-shape memory via the tapps_core brain bridge.
 
     Best-effort — never raises.  Uses the supersede-then-save pattern so
@@ -117,12 +117,10 @@ def _fire_pr_shape_pattern(lint_result_dict: dict[str, Any]) -> None:
             return
         _pr_shape_written = True
 
-    score: int = lint_result_dict.get("score", 0)
     common_rules = [f["rule"] for f in lint_result_dict.get("findings", [])[:5]]
     try:
-        asyncio.create_task(  # noqa: RUF006
-            _write_pr_shape_to_brain(score, common_rules)
-        )
+        # Fire-and-forget best-effort write; no reference kept on purpose.
+        asyncio.create_task(_write_pr_shape_to_brain(common_rules))  # noqa: RUF006
     except Exception:
         pass
     _logger.info("pr_shape_pattern_scheduled")
@@ -529,9 +527,7 @@ def register(mcp_instance: FastMCP, allowed_tools: frozenset[str]) -> None:
     if "docs_lint_linear_issue" in allowed_tools:
         register_tool(mcp_instance, docs_lint_linear_issue, annotations=_ANNOTATIONS_READ_ONLY)
     if "docs_validate_linear_issue" in allowed_tools:
-        register_tool(
-            mcp_instance, docs_validate_linear_issue, annotations=_ANNOTATIONS_READ_ONLY
-        )
+        register_tool(mcp_instance, docs_validate_linear_issue, annotations=_ANNOTATIONS_READ_ONLY)
     if "docs_linear_triage" in allowed_tools:
         register_tool(
             mcp_instance,

@@ -141,8 +141,7 @@ def _normalize_link_destination(raw: str) -> str:
         dest = dest[1:-1].strip()
     # CommonMark optional title: space + "..." or '...'
     dest = re.sub(r'\s+"(?:[^"\\]|\\.)*"\s*$', "", dest)
-    dest = re.sub(r"\s+'(?:[^'\\]|\\.)*'\s*$", "", dest)
-    return dest
+    return re.sub(r"\s+'(?:[^'\\]|\\.)*'\s*$", "", dest)
 
 
 def _extract_headings(content: str) -> set[str]:
@@ -266,16 +265,16 @@ def _check_backtick_refs(
     for line_num, line in enumerate(content.splitlines(), start=1):
         if line_num in fenced_lines:
             # Record matches inside fenced blocks as skipped
-            for match in _BACKTICK_REF_RE.finditer(line):
-                refs.append(
-                    BacktickReference(
-                        source_file=rel_source,
-                        line=line_num,
-                        reference=match.group(1),
-                        exists=False,
-                        reason="skipped_code_block",
-                    )
+            refs.extend(
+                BacktickReference(
+                    source_file=rel_source,
+                    line=line_num,
+                    reference=match.group(1),
+                    exists=False,
+                    reason="skipped_code_block",
                 )
+                for match in _BACKTICK_REF_RE.finditer(line)
+            )
             continue
 
         for match in _BACKTICK_REF_RE.finditer(line):

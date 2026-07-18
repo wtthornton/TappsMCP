@@ -145,9 +145,7 @@ class FreshnessChecker:
         rel_base = relative_to if relative_to is not None else project_root
 
         gitignore_root = relative_to if relative_to is not None else project_root
-        gitignore_patterns = (
-            load_gitignore_patterns(gitignore_root) if respect_gitignore else []
-        )
+        gitignore_patterns = load_gitignore_patterns(gitignore_root) if respect_gitignore else []
         extras = list(exclude) if exclude else []
 
         doc_files = _find_doc_files(

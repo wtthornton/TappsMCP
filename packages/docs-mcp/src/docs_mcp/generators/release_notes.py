@@ -147,43 +147,37 @@ class ReleaseNotesGenerator:
             lines.append("")
             lines.append("## Highlights")
             lines.append("")
-            for highlight in notes.highlights:
-                lines.append(f"- {highlight}")
+            lines.extend(f"- {highlight}" for highlight in notes.highlights)
 
         if notes.breaking_changes:
             lines.append("")
             lines.append("## Breaking Changes")
             lines.append("")
-            for change in notes.breaking_changes:
-                lines.append(f"- {change}")
+            lines.extend(f"- {change}" for change in notes.breaking_changes)
 
         if notes.features:
             lines.append("")
             lines.append("## New Features")
             lines.append("")
-            for feature in notes.features:
-                lines.append(f"- {feature}")
+            lines.extend(f"- {feature}" for feature in notes.features)
 
         if notes.fixes:
             lines.append("")
             lines.append("## Bug Fixes")
             lines.append("")
-            for fix in notes.fixes:
-                lines.append(f"- {fix}")
+            lines.extend(f"- {fix}" for fix in notes.fixes)
 
         if notes.other_changes:
             lines.append("")
             lines.append("## Other Changes")
             lines.append("")
-            for change in notes.other_changes:
-                lines.append(f"- {change}")
+            lines.extend(f"- {change}" for change in notes.other_changes)
 
         if notes.contributors:
             lines.append("")
             lines.append("## Contributors")
             lines.append("")
-            for contributor in notes.contributors:
-                lines.append(f"- {contributor}")
+            lines.extend(f"- {contributor}" for contributor in notes.contributors)
 
         return "\n".join(lines) + "\n"
 

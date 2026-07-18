@@ -96,7 +96,7 @@ class PRDGenerator:
         lines.extend(self._render_executive_summary(config, enrichment))
         lines.extend(self._render_problem_statement(config))
         lines.extend(self._render_user_personas(config))
-        lines.extend(self._render_solution_overview(config, enrichment))
+        lines.extend(self._render_solution_overview(enrichment))
         lines.extend(self._render_phased_requirements(config))
         lines.extend(self._render_acceptance_criteria(config))
         lines.extend(self._render_technical_constraints(config, enrichment))
@@ -173,11 +173,7 @@ class PRDGenerator:
         lines.extend(["", "<!-- docsmcp:end:user-personas -->", ""])
         return lines
 
-    def _render_solution_overview(
-        self,
-        config: PRDConfig,
-        enrichment: dict[str, Any],
-    ) -> list[str]:
+    def _render_solution_overview(self, enrichment: dict[str, Any]) -> list[str]:
         """Render the Solution Overview section."""
         lines = [
             "<!-- docsmcp:start:solution-overview -->",
@@ -212,8 +208,7 @@ class PRDGenerator:
                     lines.append(phase.description)
                     lines.append("")
                 if phase.requirements:
-                    for req in phase.requirements:
-                        lines.append(f"- {req}")
+                    lines.extend(f"- {req}" for req in phase.requirements)
                     lines.append("")
         else:
             for i in range(1, 4):
@@ -274,8 +269,7 @@ class PRDGenerator:
         ]
 
         if config.constraints:
-            for constraint in config.constraints:
-                lines.append(f"- {constraint}")
+            lines.extend(f"- {constraint}" for constraint in config.constraints)
         else:
             lines.append("- Define technical constraints...")
 
@@ -297,8 +291,7 @@ class PRDGenerator:
         ]
 
         if config.non_goals:
-            for item in config.non_goals:
-                lines.append(f"- {item}")
+            lines.extend(f"- {item}" for item in config.non_goals)
         else:
             lines.append("- Define what is explicitly out of scope...")
 
@@ -307,7 +300,7 @@ class PRDGenerator:
 
     def _render_boundary_system(self) -> list[str]:
         """Render the three-tier Boundary System section (comprehensive only)."""
-        lines = [
+        return [
             "<!-- docsmcp:start:boundary-system -->",
             "## Boundary System",
             "",
@@ -326,7 +319,6 @@ class PRDGenerator:
             "<!-- docsmcp:end:boundary-system -->",
             "",
         ]
-        return lines
 
     def _render_architecture_overview(
         self,
@@ -481,14 +473,12 @@ class PRDGenerator:
             msg = "Phases JSON must be a list of objects"
             raise ValueError(msg)
 
-        phases: list[PRDPhase] = []
-        for item in raw:
-            if isinstance(item, dict):
-                phases.append(
-                    PRDPhase(
-                        name=str(item.get("name", "Unnamed")),
-                        description=str(item.get("description", "")),
-                        requirements=[str(r) for r in item.get("requirements", [])],
-                    )
-                )
-        return phases
+        return [
+            PRDPhase(
+                name=str(item.get("name", "Unnamed")),
+                description=str(item.get("description", "")),
+                requirements=[str(r) for r in item.get("requirements", [])],
+            )
+            for item in raw
+            if isinstance(item, dict)
+        ]

@@ -125,9 +125,13 @@ class _Context:
     findings: list[Finding] = field(default_factory=list)
     noise_bytes: int = 0
 
-    def add(self, rule: str, severity: str, message: str, location: str, fix_hint: str = "") -> None:
+    def add(
+        self, rule: str, severity: str, message: str, location: str, fix_hint: str = ""
+    ) -> None:
         self.findings.append(
-            Finding(rule=rule, severity=severity, message=message, location=location, fix_hint=fix_hint)
+            Finding(
+                rule=rule, severity=severity, message=message, location=location, fix_hint=fix_hint
+            )
         )
 
 
@@ -168,7 +172,7 @@ def lint_issue(
     _check_autolink_mangle(ctx)
     _check_uuid_wrapped_refs(ctx)
     _check_file_anchor(ctx, is_epic=is_epic)
-    _check_acceptance(ctx, is_epic=is_epic)
+    _check_acceptance(ctx)
     _check_code_block_anchors(ctx)
     _check_metadata(ctx, is_epic=is_epic)
 
@@ -249,7 +253,7 @@ def _check_file_anchor(ctx: _Context, *, is_epic: bool) -> None:
         )
 
 
-def _check_acceptance(ctx: _Context, *, is_epic: bool) -> None:
+def _check_acceptance(ctx: _Context) -> None:
     # Look for `## Acceptance` heading (case-insensitive, allow trailing words like "Criteria").
     heading_re = re.compile(r"^##\s+Acceptance\b.*$", re.MULTILINE | re.IGNORECASE)
     heading_match = heading_re.search(ctx.description)

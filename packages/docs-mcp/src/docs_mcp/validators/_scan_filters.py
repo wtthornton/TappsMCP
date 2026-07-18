@@ -139,9 +139,7 @@ def _pattern_matches(rel_path: str, pattern: str) -> bool:
     if anchored:
         if fnmatch.fnmatchcase(rel_path, pattern):
             return True
-        if dir_only and _under_prefix(rel_path, pattern):
-            return True
-        return False
+        return bool(dir_only and _under_prefix(rel_path, pattern))
 
     # Case 2: pattern contains a slash -- treat as a path-style glob.
     if "/" in pattern:
@@ -152,15 +150,10 @@ def _pattern_matches(rel_path: str, pattern: str) -> bool:
         # literal prefix (everything up to the first ``*``).
         if _prefix_match(rel_path, pattern):
             return True
-        if dir_only and _under_prefix(rel_path, pattern):
-            return True
-        return False
+        return bool(dir_only and _under_prefix(rel_path, pattern))
 
     # Case 3: simple segment pattern -- match any path component.
-    for part in parts:
-        if fnmatch.fnmatchcase(part, pattern):
-            return True
-    return False
+    return any(fnmatch.fnmatchcase(part, pattern) for part in parts)
 
 
 def _glob_match(rel_path: str, pattern: str) -> bool:
@@ -224,10 +217,7 @@ def matches_any_pattern(rel_path: str, patterns: list[str]) -> bool:
     if not rel_path or not patterns:
         return False
     normalized = rel_path.replace("\\", "/")
-    for pattern in patterns:
-        if _pattern_matches(normalized, pattern):
-            return True
-    return False
+    return any(_pattern_matches(normalized, pattern) for pattern in patterns)
 
 
 def should_exclude(
@@ -266,8 +256,4 @@ def should_exclude(
         if _pattern_matches(normalized, pattern):
             return True
 
-    for pattern in extra_exclude:
-        if _pattern_matches(normalized, pattern):
-            return True
-
-    return False
+    return any(_pattern_matches(normalized, pattern) for pattern in extra_exclude)

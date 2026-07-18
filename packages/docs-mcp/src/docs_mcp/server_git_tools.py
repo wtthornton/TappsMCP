@@ -94,15 +94,15 @@ async def docs_git_summary(
     if include_versions:
         detector = VersionDetector()
         boundaries = detector.detect_versions(root, include_commits=False)
-        for boundary in boundaries:
-            versions_data.append(
-                {
-                    "version": boundary.version,
-                    "tag": boundary.tag,
-                    "date": boundary.date,
-                    "commit_count": boundary.commit_count,
-                }
-            )
+        versions_data.extend(
+            {
+                "version": boundary.version,
+                "tag": boundary.tag,
+                "date": boundary.date,
+                "commit_count": boundary.commit_count,
+            }
+            for boundary in boundaries
+        )
 
     # Active contributors (sorted by commit count descending)
     contributors: list[dict[str, Any]] = [

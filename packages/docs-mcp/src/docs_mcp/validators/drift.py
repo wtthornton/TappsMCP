@@ -27,9 +27,7 @@ def _is_test_path(rel_path: str) -> bool:
         return True
     if name.startswith("test_") or name.endswith("_test.py") or name.endswith("_tests.py"):
         return True
-    if name in {"conftest.py", "conftest.pyi"}:
-        return True
-    return False
+    return name in {"conftest.py", "conftest.pyi"}
 
 
 # Directories to skip when scanning for Python source files (extends shared constants).
@@ -133,9 +131,7 @@ def _find_python_files(project_root: Path) -> list[Path]:
     for dirpath, dirnames, filenames in os.walk(project_root):
         dirnames[:] = [d for d in dirnames if not _should_skip_dir(d)]
         current = Path(dirpath)
-        for fname in filenames:
-            if fname.lower().endswith(".py"):
-                py_files.append(current / fname)
+        py_files.extend(current / fname for fname in filenames if fname.lower().endswith(".py"))
     return py_files
 
 
@@ -380,6 +376,7 @@ def _get_files_changed_since(project_root: Path, since: str) -> set[str] | None:
             capture_output=True,
             text=True,
             timeout=15,
+            check=False,
         )
         if result.returncode == 0:
             return {p.strip().replace("\\", "/") for p in result.stdout.splitlines() if p.strip()}
@@ -394,6 +391,7 @@ def _get_files_changed_since(project_root: Path, since: str) -> set[str] | None:
             capture_output=True,
             text=True,
             timeout=15,
+            check=False,
         )
         if result.returncode == 0:
             return {p.strip().replace("\\", "/") for p in result.stdout.splitlines() if p.strip()}
@@ -431,7 +429,7 @@ def _qualify(rel_path: str, name: str) -> str:
     # Strip src-layout prefixes so logical package names are used in qualified names.
     for prefix in ("src/", "lib/"):
         if path.startswith(prefix):
-            path = path[len(prefix):]
+            path = path[len(prefix) :]
             break
     module = path.replace("/", ".")
     return f"{module}.{name}" if module else name
@@ -496,7 +494,8 @@ class DriftDetector:
                 return DriftReport()
             else:
                 py_files = [
-                    f for f in py_files
+                    f
+                    for f in py_files
                     if str(f.relative_to(project_root)).replace("\\", "/") in changed_paths
                 ]
 
@@ -504,7 +503,8 @@ class DriftDetector:
         if source_files:
             normalised_sf = {sf.replace("\\", "/").lower() for sf in source_files}
             py_files = [
-                f for f in py_files
+                f
+                for f in py_files
                 if any(
                     str(f.relative_to(project_root)).replace("\\", "/").lower().endswith(sf)
                     for sf in normalised_sf
@@ -575,7 +575,9 @@ class DriftDetector:
             doc_iso = _iso_from_mtime(effective_doc_mtime) if effective_doc_mtime > 0 else ""
 
             # Docstring corpus from pre-read source (no third file read or AST re-parse).
-            docstring_corpus = _collect_docstrings_from_source(content) if docstring_coverage_counts else ""
+            docstring_corpus = (
+                _collect_docstrings_from_source(content) if docstring_coverage_counts else ""
+            )
 
             # Check each public name against doc content + optional docstring + ignores
             undocumented: list[str] = []

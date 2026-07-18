@@ -43,24 +43,21 @@ class ReleaseUpdateGenerator:
 
         lines.append("### Highlights\n")
         if config.highlights:
-            for h in config.highlights:
-                lines.append(f"- {h}")
+            lines.extend(f"- {h}" for h in config.highlights)
         else:
             lines.append("- No highlights recorded.")
         lines.append("")
 
         lines.append("### Issues Closed\n")
         if config.issues_closed:
-            for issue in config.issues_closed:
-                lines.append(f"- {issue}")
+            lines.extend(f"- {issue}" for issue in config.issues_closed)
         else:
             lines.append("- None.")
         lines.append("")
 
         if config.bump_type in ("minor", "major") and config.breaking_changes:
             lines.append("### Breaking Changes\n")
-            for change in config.breaking_changes:
-                lines.append(f"- {change}")
+            lines.extend(f"- {change}" for change in config.breaking_changes)
             lines.append("")
 
         if config.links:
@@ -96,6 +93,7 @@ def infer_bump_type(version: str, prev_version: str) -> str:
 
     Returns "patch" when parsing fails or versions are equal.
     """
+
     def _parse(v: str) -> tuple[int, int, int] | None:
         v = v.lstrip("v")
         parts = v.split(".")

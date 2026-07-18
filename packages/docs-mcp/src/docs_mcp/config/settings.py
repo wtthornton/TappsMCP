@@ -214,14 +214,17 @@ class DocsMCPSettings(BaseSettings):
             "Env: DOCS_MCP_DISABLED_TOOLS (comma-separated)."
         ),
     )
-    tool_preset: Literal[
-        "full",
-        "core",
-        "planner",
-        "release",
-        "auditor",
-        "nlt-project-docs",
-    ] | None = Field(
+    tool_preset: (
+        Literal[
+            "full",
+            "core",
+            "planner",
+            "release",
+            "auditor",
+            "nlt-project-docs",
+        ]
+        | None
+    ) = Field(
         default=None,
         description=(
             "Predefined tool set: 'full' = all tools; 'core' = session_start, "
@@ -343,7 +346,9 @@ class DocsMCPSettings(BaseSettings):
             return [str(s) for s in v]
         return []
 
-    @field_validator("completeness_exclude", "freshness_exclude", "cross_ref_exclude", mode="before")
+    @field_validator(
+        "completeness_exclude", "freshness_exclude", "cross_ref_exclude", mode="before"
+    )
     @classmethod
     def _parse_validator_exclude(cls, v: Any) -> list[str]:
         if v is None:

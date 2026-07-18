@@ -722,7 +722,7 @@ class EpicGenerator:
 
     def _render_definition_of_done(self, config: EpicConfig) -> list[str]:
         """Render a Definition of Done section (minimal style)."""
-        lines = [
+        return [
             "<!-- docsmcp:start:definition-of-done -->",
             "## Definition of Done",
             "",
@@ -733,7 +733,6 @@ class EpicGenerator:
             "<!-- docsmcp:end:definition-of-done -->",
             "",
         ]
-        return lines
 
     # -- comprehensive-only sections ----------------------------------------
 
@@ -920,7 +919,6 @@ class EpicGenerator:
                 probability, impact, _score = classifier.classify(risk)
                 # Try to find relevant expert advice for mitigation.
                 mitigation = classifier.derive_mitigation(
-                    risk,
                     expert_advice=self._find_risk_expert_advice(risk, risk_experts),
                 )
                 lines.append(f"| {risk} | {probability} | {impact} | {mitigation} |")
@@ -930,7 +928,7 @@ class EpicGenerator:
             if suggested_risks:
                 for risk in suggested_risks:
                     probability, impact, _score = classifier.classify(risk)
-                    mitigation = classifier.derive_mitigation(risk, expert_advice=None)
+                    mitigation = classifier.derive_mitigation(expert_advice=None)
                     lines.append(f"| {risk} | {probability} | {impact} | {mitigation} |")
             else:
                 lines.append(

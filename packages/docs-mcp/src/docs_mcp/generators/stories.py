@@ -102,9 +102,7 @@ class StoryGenerator:
     VALID_AUDIENCES: ClassVar[frozenset[str]] = frozenset({"agent", "human"})
 
     _AGENT_TITLE_MAX: ClassVar[int] = 80
-    _AGENT_FILE_ANCHOR_RE: ClassVar[re.Pattern[str]] = re.compile(
-        r"[\w./\\-]+\.\w+:\d+(?:-\d+)?"
-    )
+    _AGENT_FILE_ANCHOR_RE: ClassVar[re.Pattern[str]] = re.compile(r"[\w./\\-]+\.\w+:\d+(?:-\d+)?")
     _TAP_REF_RE: ClassVar[re.Pattern[str]] = re.compile(r"\bTAP-\d+\b")
 
     # Minimum confidence threshold for including expert guidance.
@@ -383,13 +381,9 @@ class StoryGenerator:
         if not config.title.strip():
             errors.append("title is empty")
         elif len(config.title) > self._AGENT_TITLE_MAX:
-            errors.append(
-                f"title is {len(config.title)} chars (limit {self._AGENT_TITLE_MAX})"
-            )
+            errors.append(f"title is {len(config.title)} chars (limit {self._AGENT_TITLE_MAX})")
         if not self._has_file_anchor(config.files):
-            errors.append(
-                "files[] must include at least one `path/to/file.ext:LINE-RANGE` anchor"
-            )
+            errors.append("files[] must include at least one `path/to/file.ext:LINE-RANGE` anchor")
         if not config.acceptance_criteria:
             errors.append("acceptance_criteria[] must be non-empty")
         if errors:
@@ -418,8 +412,7 @@ class StoryGenerator:
 
     def _render_agent_where(self, config: StoryConfig) -> list[str]:
         lines = ["## Where", ""]
-        for path in config.files:
-            lines.append(f"- `{path}`")
+        lines.extend(f"- `{path}`" for path in config.files)
         lines.append("")
         return lines
 
@@ -430,8 +423,7 @@ class StoryGenerator:
 
     def _render_agent_acceptance(self, config: StoryConfig) -> list[str]:
         lines = ["## Acceptance", ""]
-        for criterion in config.acceptance_criteria:
-            lines.append(f"- [ ] {criterion}")
+        lines.extend(f"- [ ] {criterion}" for criterion in config.acceptance_criteria)
         lines.append("")
         return lines
 
@@ -446,7 +438,11 @@ class StoryGenerator:
         # Then, include any dependency that isn't a TAP-### ref verbatim.
         for dep in config.dependencies:
             dep_stripped = dep.strip()
-            if dep_stripped and not self._TAP_REF_RE.search(dep_stripped) and dep_stripped not in refs:
+            if (
+                dep_stripped
+                and not self._TAP_REF_RE.search(dep_stripped)
+                and dep_stripped not in refs
+            ):
                 refs.append(dep_stripped)
         if config.epic_path.strip() and config.epic_path.strip() not in refs:
             refs.append(config.epic_path.strip())
@@ -582,8 +578,7 @@ class StoryGenerator:
             "",
         ]
 
-        for file_path in config.files:
-            lines.append(f"- `{file_path}`")
+        lines.extend(f"- `{file_path}`" for file_path in config.files)
 
         lines.extend(["", "<!-- docsmcp:end:files -->", ""])
         return lines
@@ -649,8 +644,7 @@ class StoryGenerator:
         lines: list[str] = []
 
         if config.acceptance_criteria:
-            for criterion in config.acceptance_criteria:
-                lines.append(f"- [ ] {criterion}")
+            lines.extend(f"- [ ] {criterion}" for criterion in config.acceptance_criteria)
         else:
             title = config.title.strip()
             if title:
@@ -664,7 +658,7 @@ class StoryGenerator:
         return lines
 
     @staticmethod
-    def _derive_given(role: str, ac_text: str) -> str:
+    def _derive_given(role: str) -> str:
         """Derive a Gherkin Given clause from the story role.
 
         Returns the derived clause text (without the ``Given`` keyword), or an
@@ -734,7 +728,7 @@ class StoryGenerator:
         if config.acceptance_criteria:
             for criterion in config.acceptance_criteria:
                 slug = self._slugify(criterion)
-                given = self._derive_given(config.role, criterion)
+                given = self._derive_given(config.role)
                 when = self._derive_when(config.role, config.want, criterion)
                 then = self._derive_then(criterion, config.so_that)
 
@@ -864,8 +858,7 @@ class StoryGenerator:
         ]
 
         if config.technical_notes:
-            for note in config.technical_notes:
-                lines.append(f"- {note}")
+            lines.extend(f"- {note}" for note in config.technical_notes)
         else:
             lines.append("- Document implementation hints, API contracts, data formats...")
 
@@ -885,8 +878,10 @@ class StoryGenerator:
             lines.append("")
             lines.append("### Expert Recommendations")
             lines.append("")
-            for item in rendered_guidance:
-                lines.append(f"- **{item['expert']}** ({item['confidence']}): {item['advice']}")
+            lines.extend(
+                f"- **{item['expert']}** ({item['confidence']}): {item['advice']}"
+                for item in rendered_guidance
+            )
 
         lines.extend(["", "<!-- docsmcp:end:technical-notes -->", ""])
         return lines
@@ -900,8 +895,7 @@ class StoryGenerator:
         ]
 
         if config.dependencies:
-            for dep in config.dependencies:
-                lines.append(f"- {dep}")
+            lines.extend(f"- {dep}" for dep in config.dependencies)
         else:
             lines.append("- List stories or external dependencies that must complete first...")
 

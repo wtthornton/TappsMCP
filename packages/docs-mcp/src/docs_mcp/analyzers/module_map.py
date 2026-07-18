@@ -403,9 +403,7 @@ class ModuleMapAnalyzer:
             return True
         if name.startswith("."):
             return True
-        if any(name.endswith(suffix) for suffix in self.SKIP_SUFFIXES):
-            return True
-        return False
+        return bool(any(name.endswith(suffix) for suffix in self.SKIP_SUFFIXES))
 
     @staticmethod
     def _count_public_names(info: ModuleInfo) -> int:

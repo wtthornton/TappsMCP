@@ -239,19 +239,19 @@ class ADRGenerator:
 
         lines.extend(
             [
-            "",
-            "## Context",
-            "",
-            record.context or "What is the issue...",
-            "",
-            "## Decision",
-            "",
-            record.decision or "What is the change...",
-            "",
-            "## Consequences",
-            "",
-            record.consequences or "What becomes easier or more difficult...",
-            "",
+                "",
+                "## Context",
+                "",
+                record.context or "What is the issue...",
+                "",
+                "## Decision",
+                "",
+                record.decision or "What is the change...",
+                "",
+                "## Consequences",
+                "",
+                record.consequences or "What becomes easier or more difficult...",
+                "",
             ]
         )
 

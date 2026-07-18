@@ -83,7 +83,9 @@ class RunbookGenerator:
             "## When to use this runbook",
             "",
         ]
-        lines.extend(self._paragraph_or_placeholder(when_to_use, "Describe the symptoms or triggers."))
+        lines.extend(
+            self._paragraph_or_placeholder(when_to_use, "Describe the symptoms or triggers.")
+        )
         lines.extend(["", "## Prerequisites and access", ""])
         lines.extend(
             self._paragraph_or_placeholder(

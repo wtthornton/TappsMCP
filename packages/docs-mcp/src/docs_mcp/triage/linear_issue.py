@@ -141,7 +141,7 @@ def triage_issues(issues: list[dict[str, Any]]) -> TriageReport:
 
     label_proposals = _build_label_proposals(per_issue)
     parent_groupings = _build_parent_groupings(per_issue)
-    metadata_gaps = _collect_metadata_gaps(per_issue, issues)
+    metadata_gaps = _collect_metadata_gaps(issues)
     summary = _summarize(per_issue)
 
     return TriageReport(
@@ -286,10 +286,7 @@ def _build_parent_groupings(results: list[IssueTriageResult]) -> list[ParentGrou
     return groupings
 
 
-def _collect_metadata_gaps(
-    results: list[IssueTriageResult],
-    raw_issues: list[dict[str, Any]],
-) -> MetadataGaps:
+def _collect_metadata_gaps(raw_issues: list[dict[str, Any]]) -> MetadataGaps:
     no_priority: list[str] = []
     no_estimate: list[str] = []
     # Walk raw_issues to get priority/estimate (validator mutates to None internally).
@@ -300,9 +297,7 @@ def _collect_metadata_gaps(
         is_epic = bool(raw.get("is_epic", False))
         if not isinstance(priority, int) or priority == 0:
             no_priority.append(issue_id)
-        if not is_epic and (
-            not isinstance(estimate, (int, float)) or estimate <= 0
-        ):
+        if not is_epic and (not isinstance(estimate, (int, float)) or estimate <= 0):
             no_estimate.append(issue_id)
     return MetadataGaps(no_priority=no_priority, no_estimate=no_estimate)
 

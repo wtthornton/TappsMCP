@@ -164,10 +164,10 @@ class APISurfaceAnalyzer:
 
     def analyze_from_source(
         self,
-        file_path: "Path",
+        file_path: Path,
         source: str,
         *,
-        project_root: "Path | None" = None,
+        project_root: Path | None = None,
         depth: str = "public",
         include_types: bool = True,
     ) -> APISurface:
@@ -180,7 +180,9 @@ class APISurfaceAnalyzer:
 
         extractor = self._get_extractor(file_path)
         if isinstance(extractor, PythonExtractor):
-            module_info = extractor.extract_from_source(source, file_path, project_root=project_root)
+            module_info = extractor.extract_from_source(
+                source, file_path, project_root=project_root
+            )
         else:
             module_info = extractor.extract(file_path, project_root=project_root)
 

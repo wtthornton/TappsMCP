@@ -178,9 +178,7 @@ class ArchPatternPosterGenerator:
 </div>"""
         return self._html_page(title=f"{label} Architecture", body=body, detected=arch)
 
-    def generate_comparison(
-        self, detected_archetype: str = "", *, motion: str = "off"
-    ) -> str:
+    def generate_comparison(self, detected_archetype: str = "", *, motion: str = "off") -> str:
         """Return a self-contained HTML page with all six archetypes in a 2×3 grid.
 
         ``motion`` is forwarded to per-panel SVG renderers; only the
@@ -263,9 +261,7 @@ class ArchPatternPosterGenerator:
     # SVG topology renderers
     # ------------------------------------------------------------------
 
-    def _svg_layered(
-        self, packages: list[tuple[str, str]], *, motion: str = "off"
-    ) -> str:
+    def _svg_layered(self, packages: list[tuple[str, str]], *, motion: str = "off") -> str:
         """Four horizontal bands stacked top-to-bottom.
 
         When ``motion`` is enabled (``"subtle"`` / ``"particles"``), each
@@ -668,9 +664,7 @@ class ArchPatternPosterGenerator:
         )
         return "\n".join(lines)
 
-    def _svg_pipeline(
-        self, packages: list[tuple[str, str]], *, motion: str = "off"
-    ) -> str:
+    def _svg_pipeline(self, packages: list[tuple[str, str]], *, motion: str = "off") -> str:
         """Left-to-right sequential stages.
 
         When ``motion`` is enabled, each stage-to-stage edge is rendered as

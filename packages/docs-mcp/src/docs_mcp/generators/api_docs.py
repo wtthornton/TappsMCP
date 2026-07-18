@@ -664,9 +664,7 @@ class APIDocGenerator:
         if not name.startswith("_") or name == "__init__":
             return True
         # Private symbol — include if include_private and has docstring
-        if include_private and docstring:
-            return True
-        return False
+        return bool(include_private and docstring)
 
     @staticmethod
     def _convert_params(
@@ -1310,9 +1308,7 @@ def _is_noise_constant(name: str, value: str | None) -> bool:
     if name_lower in _LOGGER_PATTERNS:
         return True
     # Check value for common logger factory calls
-    if value and ("get_logger" in value or "getLogger" in value):
-        return True
-    return False
+    return bool(value and ("get_logger" in value or "getLogger" in value))
 
 
 def _format_returns(parsed: object) -> str:

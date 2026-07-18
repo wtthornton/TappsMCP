@@ -37,6 +37,7 @@ def safe_slug(text: str, *, max_length: int = 60) -> str:
         collapsed = collapsed[:max_length].rstrip("-")
     return collapsed
 
+
 if TYPE_CHECKING:
     from docs_mcp.validators.style import StyleChecker
 
@@ -376,9 +377,9 @@ async def finalize_output(
             # raw root parameter (which may be a relative Path). TAP-1079:
             # passing a relative root crashes Path.relative_to() with
             # "is not in the subpath of '.'".
-            fragment["written_to"] = str(
-                write_path.relative_to(validator.project_root)
-            ).replace("\\", "/")
+            fragment["written_to"] = str(write_path.relative_to(validator.project_root)).replace(
+                "\\", "/"
+            )
         except (ValueError, FileNotFoundError, OSError) as exc:
             return error_response(tool_name, "WRITE_ERROR", f"Failed to write: {exc}")
     elif len(content) < _INLINE_THRESHOLD:

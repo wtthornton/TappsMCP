@@ -18,15 +18,9 @@ TOOL_DESCRIPTIONS: dict[str, str] = {
     ),
     "docs_config": ("View or update DocsMCP configuration (.docsmcp.yaml)."),
     "docs_module_map": ("Build hierarchical module tree with public API counts."),
-    "docs_api_surface": (
-        "Analyze public API surface of a source file (Python, TS, Go, Rust)."
-    ),
-    "docs_git_summary": (
-        "Summarize git history with conventional commits and version boundaries."
-    ),
-    "docs_generate_readme": (
-        "Generate or smart-merge README.md (minimal/standard/comprehensive)."
-    ),
+    "docs_api_surface": ("Analyze public API surface of a source file (Python, TS, Go, Rust)."),
+    "docs_git_summary": ("Summarize git history with conventional commits and version boundaries."),
+    "docs_generate_readme": ("Generate or smart-merge README.md (minimal/standard/comprehensive)."),
     "docs_generate_changelog": ("Generate CHANGELOG.md from git tags and commits."),
     "docs_generate_release_notes": ("Generate structured release notes for one version."),
     "docs_generate_api": (
@@ -35,34 +29,26 @@ TOOL_DESCRIPTIONS: dict[str, str] = {
     "docs_generate_adr": ("Create an auto-numbered Architecture Decision Record."),
     "docs_generate_onboarding": ("Generate a getting-started / onboarding guide."),
     "docs_generate_contributing": ("Generate CONTRIBUTING.md with dev setup and PR workflow."),
-    "docs_generate_runbook": (
-        "Generate an operational runbook (procedure, rollback, escalation)."
-    ),
+    "docs_generate_runbook": ("Generate an operational runbook (procedure, rollback, escalation)."),
     "docs_generate_postmortem": (
         "Generate an incident postmortem (timeline, impact, root cause, action items)."
     ),
     "docs_generate_prd": ("Generate a Product Requirements Document with phased requirements."),
-    "docs_generate_diagram": (
-        "Generate Mermaid, PlantUML, or D2 diagrams from code analysis."
-    ),
+    "docs_generate_diagram": ("Generate Mermaid, PlantUML, or D2 diagrams from code analysis."),
     "docs_generate_architecture": (
         "Generate a self-contained HTML architecture report with SVG diagrams."
     ),
     "docs_generate_epic": (
         "Generate an epic planning document with stories and acceptance criteria."
     ),
-    "docs_generate_story": (
-        "Generate a user story document with tasks and acceptance criteria."
-    ),
+    "docs_generate_story": ("Generate a user story document with tasks and acceptance criteria."),
     "docs_generate_prompt": ("Generate a reusable LLM prompt artifact from project context."),
     "docs_check_drift": ("Detect code changes not yet reflected in documentation."),
     "docs_check_completeness": (
         "Score documentation completeness across critical categories (0-100)."
     ),
     "docs_check_links": ("Validate internal links across markdown documentation files."),
-    "docs_check_freshness": (
-        "Classify documentation freshness from file modification times."
-    ),
+    "docs_check_freshness": ("Classify documentation freshness from file modification times."),
     "docs_validate_epic": ("Validate an epic document for required sections and consistency."),
     "docs_generate_llms_txt": ("Generate machine-readable llms.txt project summary."),
     "docs_generate_frontmatter": ("Add or update YAML frontmatter in a markdown file."),

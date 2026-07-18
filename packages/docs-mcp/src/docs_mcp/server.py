@@ -276,7 +276,10 @@ def _register_core_tools(mcp_instance: FastMCP, allowed_tools: frozenset[str]) -
     """
     if "docs_session_start" in allowed_tools:
         register_tool(
-            mcp_instance, docs_session_start, annotations=_ANNOTATIONS_READ_ONLY, meta=_META_DEFERRED
+            mcp_instance,
+            docs_session_start,
+            annotations=_ANNOTATIONS_READ_ONLY,
+            meta=_META_DEFERRED,
         )
     if "docs_project_scan" in allowed_tools:
         register_tool(
@@ -350,9 +353,7 @@ def _should_skip_dir(dirname: str) -> bool:
     """Check if a directory should be skipped during scanning."""
     if dirname in _SKIP_DIRS:
         return True
-    if dirname.endswith(".egg-info"):
-        return True
-    return False
+    return bool(dirname.endswith(".egg-info"))
 
 
 def _categorize_doc(path: Path, project_root: Path) -> str:

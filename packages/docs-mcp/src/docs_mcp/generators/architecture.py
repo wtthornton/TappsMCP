@@ -162,6 +162,7 @@ def _animate_motion_circle(edge_id: str) -> str:
         f"</circle>"
     )
 
+
 # Directories to exclude from architecture analysis beyond SKIP_DIRS.
 _ARCH_SKIP_DIRS: frozenset[str] = frozenset(
     {
@@ -656,8 +657,7 @@ class ArchitectureGenerator:
                 tech = "Node.js"
             src_dir = subdir / "src"
             file_count = (
-                sum(1 for _ in src_dir.rglob("*.ts"))
-                + sum(1 for _ in src_dir.rglob("*.tsx"))
+                sum(1 for _ in src_dir.rglob("*.ts")) + sum(1 for _ in src_dir.rglob("*.tsx"))
                 if src_dir.is_dir()
                 else 0
             )
@@ -840,9 +840,7 @@ class ArchitectureGenerator:
                     break
         return list(seen.values())
 
-    def _extract_business_context(
-        self, project_root: Path, metadata: ProjectMetadata
-    ) -> str:
+    def _extract_business_context(self, project_root: Path, metadata: ProjectMetadata) -> str:
         """Extract business context narrative from README.md or metadata description."""
         for readme_name in ("README.md", "readme.md", "README.rst"):
             readme = project_root / readme_name
@@ -923,11 +921,11 @@ class ArchitectureGenerator:
             "executive-summary",
             "architecture-diagram",
             "data-flow",
-            *( ["polyglot-layer"] if _polyglot else []),
+            *(["polyglot-layer"] if _polyglot else []),
             "component-details",
             "dependency-flow",
-            *( ["integration-catalog"] if _integrations else []),
-            *( ["deployment"] if _deployment else []),
+            *(["integration-catalog"] if _integrations else []),
+            *(["deployment"] if _deployment else []),
             "api-surface",
             "tech-stack",
             "health-insights",
@@ -2337,8 +2335,7 @@ class ArchitectureGenerator:
             ' aria-labelledby="polyglot-heading">'
         )
         parts.append(
-            '<h2 class="section-title" id="polyglot-heading">'
-            "Application &amp; Agent Layer</h2>"
+            '<h2 class="section-title" id="polyglot-heading">Application &amp; Agent Layer</h2>'
         )
         parts.append(
             "<p>Beyond the Python core, this system includes application frontends, "
@@ -2363,12 +2360,10 @@ class ArchitectureGenerator:
             stats = html.escape(str(comp.get("stats", "")))
             subcomponents: list[str] = list(comp.get("subcomponents", []))
 
-            parts.append(
-                f'<div class="polyglot-card" style="animation-delay:{i * 0.05:.2f}s">'
-            )
+            parts.append(f'<div class="polyglot-card" style="animation-delay:{i * 0.05:.2f}s">')
             parts.append(
                 f'  <div class="polyglot-header" style="background:'
-                f" linear-gradient(135deg, {c1}, {c2});\">"
+                f' linear-gradient(135deg, {c1}, {c2});">'
             )
             parts.append(f'    <span class="polyglot-name">{name}</span>')
             parts.append(f'    <span class="polyglot-stats">{stats}</span>')
@@ -2411,9 +2406,7 @@ class ArchitectureGenerator:
             '<section class="section" id="integration-catalog" role="region"'
             ' aria-labelledby="integration-heading">'
         )
-        parts.append(
-            '<h2 class="section-title" id="integration-heading">Integration Points</h2>'
-        )
+        parts.append('<h2 class="section-title" id="integration-heading">Integration Points</h2>')
         parts.append(
             "<p><strong>Why this matters:</strong> External integrations create runtime "
             "dependencies on third-party services. Understanding the integration surface "

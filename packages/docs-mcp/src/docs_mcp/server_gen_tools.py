@@ -1689,14 +1689,14 @@ async def docs_generate_story(
                     "INVALID_TASKS",
                     "Tasks JSON must be a list of objects",
                 )
-            for item in raw:
-                if isinstance(item, dict):
-                    task_list.append(
-                        StoryTask(
-                            description=str(item.get("description", "")),
-                            file_path=str(item.get("file_path", "")),
-                        )
-                    )
+            task_list.extend(
+                StoryTask(
+                    description=str(item.get("description", "")),
+                    file_path=str(item.get("file_path", "")),
+                )
+                for item in raw
+                if isinstance(item, dict)
+            )
         except json_mod.JSONDecodeError as exc:
             return error_response(
                 "docs_generate_story",

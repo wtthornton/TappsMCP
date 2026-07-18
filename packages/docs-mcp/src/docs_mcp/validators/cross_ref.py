@@ -272,7 +272,7 @@ class CrossRefValidator:
             except OSError:
                 continue
 
-            refs = self._extract_refs(content, rel_path, project_root)
+            refs = self._extract_refs(content)
             ref_graph[rel_path] = set()
             per_file_refs.setdefault(rel_path, 0)
             per_file_broken.setdefault(rel_path, 0)
@@ -457,7 +457,7 @@ class CrossRefValidator:
         except PermissionError:
             pass
 
-    def _extract_refs(self, content: str, source_path: str, project_root: Path) -> list[str]:
+    def _extract_refs(self, content: str) -> list[str]:
         """Extract documentation references from content."""
         refs: list[str] = []
         in_code_block = False

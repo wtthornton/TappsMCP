@@ -125,8 +125,7 @@ class DiataxisValidator:
                 unclassified.append(_rel(md_file))
 
         # Files beyond the scan cap are also unclassified.
-        for md_file in md_files[_MAX_FILES:]:
-            unclassified.append(_rel(md_file))
+        unclassified.extend(_rel(md_file) for md_file in md_files[_MAX_FILES:])
 
         classified_count = len(results)
         unclassified_count = total_scanned - classified_count

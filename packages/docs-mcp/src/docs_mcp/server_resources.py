@@ -161,8 +161,7 @@ def _docs_coverage_resource() -> str:
     if report.recommendations:
         lines.append("## Recommendations")
         lines.append("")
-        for rec in report.recommendations:
-            lines.append(f"- {rec}")
+        lines.extend(f"- {rec}" for rec in report.recommendations)
 
     return "\n".join(lines)
 

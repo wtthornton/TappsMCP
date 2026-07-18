@@ -293,7 +293,13 @@ class ArchitectureBrainWriter:
             return 0
         entity_type = _ENTITY_PACKAGE if node.is_package else _ENTITY_MODULE
         module_id = await self._get_or_upsert_entity(
-            bridge, br, seen, node.name, entity_type, sha, node.path,
+            bridge,
+            br,
+            seen,
+            node.name,
+            entity_type,
+            sha,
+            node.path,
             metadata=self._node_metadata(node),
         )
         budget -= 1
@@ -301,16 +307,30 @@ class ArchitectureBrainWriter:
         exports = node.all_exports or []
         if len(exports) > _MAX_SYMBOLS_PER_NODE:
             logger.info(
-                "kg_symbols_capped", module=node.name, total=len(exports),
+                "kg_symbols_capped",
+                module=node.name,
+                total=len(exports),
                 cap=_MAX_SYMBOLS_PER_NODE,
             )
         for symbol in exports[:_MAX_SYMBOLS_PER_NODE]:
             symbol_id = await self._get_or_upsert_entity(
-                bridge, br, seen, f"{node.name}.{symbol}", _ENTITY_SYMBOL, sha, node.path,
+                bridge,
+                br,
+                seen,
+                f"{node.name}.{symbol}",
+                _ENTITY_SYMBOL,
+                sha,
+                node.path,
             )
             if module_id and symbol_id:
                 await self._upsert_edge(
-                    bridge, br, module_id, "exports", symbol_id, node.path, sha,
+                    bridge,
+                    br,
+                    module_id,
+                    "exports",
+                    symbol_id,
+                    node.path,
+                    sha,
                 )
 
         for submodule in node.submodules:
@@ -343,14 +363,32 @@ class ArchitectureBrainWriter:
             if not edge.source or not edge.target:
                 continue
             source_id = await self._get_or_upsert_entity(
-                bridge, br, seen, edge.source, _ENTITY_MODULE, sha, edge.source,
+                bridge,
+                br,
+                seen,
+                edge.source,
+                _ENTITY_MODULE,
+                sha,
+                edge.source,
             )
             target_id = await self._get_or_upsert_entity(
-                bridge, br, seen, edge.target, _ENTITY_MODULE, sha, edge.target,
+                bridge,
+                br,
+                seen,
+                edge.target,
+                _ENTITY_MODULE,
+                sha,
+                edge.target,
             )
             if source_id and target_id:
                 await self._upsert_edge(
-                    bridge, br, source_id, "depends_on", target_id, edge.source, sha,
+                    bridge,
+                    br,
+                    source_id,
+                    "depends_on",
+                    target_id,
+                    edge.source,
+                    sha,
                     line_range=str(edge.line),
                 )
 
@@ -372,7 +410,13 @@ class ArchitectureBrainWriter:
         if cached is not None:
             return cached
         entity_id = await self._upsert_entity(
-            bridge, br, canonical_name, entity_type, sha, file_path, metadata=metadata,
+            bridge,
+            br,
+            canonical_name,
+            entity_type,
+            sha,
+            file_path,
+            metadata=metadata,
         )
         seen[cache_key] = entity_id
         return entity_id
@@ -392,7 +436,9 @@ class ArchitectureBrainWriter:
         failure)."""
         try:
             result = await bridge.upsert_entity(
-                canonical_name, entity_type, metadata=metadata,
+                canonical_name,
+                entity_type,
+                metadata=metadata,
             )
         except Exception:
             logger.warning("kg_entity_upsert_failed", name=canonical_name, exc_info=True)
@@ -421,7 +467,10 @@ class ArchitectureBrainWriter:
         evidence = {"file_path": file_path, "line_range": line_range, "commit_sha": sha}
         try:
             result = await bridge.upsert_edge(
-                subject_id, predicate, object_id, evidence=evidence,
+                subject_id,
+                predicate,
+                object_id,
+                evidence=evidence,
             )
         except ValueError:
             # ADR-012 evidence-required — unreachable (file_path always passed),
@@ -451,8 +500,11 @@ class ArchitectureBrainWriter:
         """Attach a standalone evidence row to an entity or edge."""
         try:
             result = await bridge.add_evidence(
-                file_path=file_path, line_range=line_range, commit_sha=sha,
-                entity_id=entity_id, edge_id=edge_id,
+                file_path=file_path,
+                line_range=line_range,
+                commit_sha=sha,
+                entity_id=entity_id,
+                edge_id=edge_id,
             )
         except Exception:
             logger.warning("kg_evidence_failed", file_path=file_path, exc_info=True)

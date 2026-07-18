@@ -432,18 +432,18 @@ class JargonRule(RuleBase):
                 continue
             line_for_jargon = re.sub(r"`[^`]+`", "", line)
             for term, pat in patterns:
-                for match in pat.finditer(line_for_jargon):
-                    issues.append(
-                        StyleIssue(
-                            rule=self.name,
-                            severity=self.default_severity,
-                            line=line_num,
-                            column=match.start() + 1,
-                            message=f"Jargon: '{match.group(0)}'.",
-                            suggestion=f"Replace '{term}' with a simpler alternative.",
-                            context=line.strip()[:120],
-                        )
+                issues.extend(
+                    StyleIssue(
+                        rule=self.name,
+                        severity=self.default_severity,
+                        line=line_num,
+                        column=match.start() + 1,
+                        message=f"Jargon: '{match.group(0)}'.",
+                        suggestion=f"Replace '{term}' with a simpler alternative.",
+                        context=line.strip()[:120],
                     )
+                    for match in pat.finditer(line_for_jargon)
+                )
         return issues
 
 
@@ -755,21 +755,21 @@ class TenseConsistencyRule(RuleBase):
                 minority_lines = declarative_lines
 
             # Only flag up to 5 lines
-            for line_num in minority_lines[:5]:
-                issues.append(
-                    StyleIssue(
-                        rule=self.name,
-                        severity=self.default_severity,
-                        line=line_num,
-                        column=1,
-                        message=(
-                            f"Tense inconsistency: document is primarily "
-                            f"{dominant} but this line uses "
-                            f"{'imperative' if minority_is_imperative else 'declarative'}."
-                        ),
-                        suggestion=(f"Use {dominant} tense consistently throughout."),
-                    )
+            issues.extend(
+                StyleIssue(
+                    rule=self.name,
+                    severity=self.default_severity,
+                    line=line_num,
+                    column=1,
+                    message=(
+                        f"Tense inconsistency: document is primarily "
+                        f"{dominant} but this line uses "
+                        f"{'imperative' if minority_is_imperative else 'declarative'}."
+                    ),
+                    suggestion=(f"Use {dominant} tense consistently throughout."),
                 )
+                for line_num in minority_lines[:5]
+            )
         return issues
 
 
@@ -1157,11 +1157,12 @@ def _shape_detail_files(
                 truncated = True
             shaped.append(FileStyleResult(file_path=r.file_path, issues=[], score=r.score))
             continue
-        if len(kept) > remaining:
+        kept_capped = kept
+        if len(kept_capped) > remaining:
             truncated = True
-            kept = kept[:remaining]
-        remaining -= len(kept)
-        shaped.append(FileStyleResult(file_path=r.file_path, issues=kept, score=r.score))
+            kept_capped = kept_capped[:remaining]
+        remaining -= len(kept_capped)
+        shaped.append(FileStyleResult(file_path=r.file_path, issues=kept_capped, score=r.score))
 
     # Only surface total_available when truncation actually occurred,
     # so the field is meaningful for the "cap hit" dashboard signal.

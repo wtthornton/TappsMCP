@@ -122,15 +122,10 @@ class RiskClassifier:
         score = self._compute_score(probability, impact)
         return probability, impact, score
 
-    def derive_mitigation(
-        self,
-        risk_text: str,
-        expert_advice: str | None = None,
-    ) -> str:
+    def derive_mitigation(self, expert_advice: str | None = None) -> str:
         """Derive a mitigation strategy from expert advice or flag the gap.
 
         Args:
-            risk_text: The risk description (used for context if needed).
             expert_advice: Expert-provided advice text, if available.
 
         Returns:
@@ -169,7 +164,4 @@ class RiskClassifier:
     @staticmethod
     def _matches_keywords(text: str, keywords: list[str]) -> bool:
         """Check if text contains any of the keywords (word-boundary aware)."""
-        for keyword in keywords:
-            if re.search(r"\b" + re.escape(keyword) + r"\b", text):
-                return True
-        return False
+        return any(re.search(r"\b" + re.escape(keyword) + r"\b", text) for keyword in keywords)

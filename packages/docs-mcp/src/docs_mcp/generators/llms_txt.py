@@ -49,10 +49,7 @@ def _is_vendored(path: Path, project_root: Path) -> bool:
         rel = path.relative_to(project_root)
     except ValueError:
         rel = path
-    for part in rel.parts:
-        if part in _VENDORED_PATH_SEGMENTS or part.startswith(".venv"):
-            return True
-    return False
+    return any(part in _VENDORED_PATH_SEGMENTS or part.startswith(".venv") for part in rel.parts)
 
 
 class LlmsTxtSection(BaseModel):
