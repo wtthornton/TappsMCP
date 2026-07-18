@@ -33,7 +33,8 @@ def _make_50_edge_diagram() -> tuple[str, list[tuple[str, str]]]:
     return ("Dependency Graph", [("Dependency Graph", mermaid_src)])
 
 
-_FPS_MEASURE_JS = """
+_FPS_MEASURE_JS = (
+    """
 async () => {
     return new Promise((resolve) => {
         let frames = 0;
@@ -41,7 +42,9 @@ async () => {
         function tick() {
             frames++;
             const elapsed = performance.now() - start;
-            if (elapsed >= """ + str(int(_SOAK_SECONDS * 1000)) + """) {
+            if (elapsed >= """
+    + str(int(_SOAK_SECONDS * 1000))
+    + """) {
                 resolve(frames / (elapsed / 1000));
                 return;
             }
@@ -51,6 +54,7 @@ async () => {
     });
 }
 """
+)
 
 
 @pytest.mark.asyncio

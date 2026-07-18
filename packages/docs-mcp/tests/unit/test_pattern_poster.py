@@ -241,9 +241,7 @@ class TestPanelMotion:
     """
 
     def _svg(self, arch: str, *, motion: str = "off") -> str:
-        return ArchPatternPosterGenerator()._panel_svg(
-            arch, [], w=280, h=200, motion=motion
-        )
+        return ArchPatternPosterGenerator()._panel_svg(arch, [], w=280, h=200, motion=motion)
 
     def test_layered_motion_subtle_emits_path_id_and_animatemotion(self) -> None:
         svg = self._svg("layered", motion="subtle")
@@ -314,16 +312,12 @@ class TestPanelMotion:
 
     def test_generate_single_motion_subtle_emits_animatemotion(self) -> None:
         gen = ArchPatternPosterGenerator()
-        html = gen.generate_single(
-            [], _mock_result("layered", 0.9), motion="subtle"
-        )
+        html = gen.generate_single([], _mock_result("layered", 0.9), motion="subtle")
         assert "<animateMotion" in html
 
     def test_reduced_motion_css_contains_smil_pause_hook(self) -> None:
         gen = ArchPatternPosterGenerator()
-        html = gen.generate_single(
-            [], _mock_result("layered", 0.9), motion="subtle"
-        )
+        html = gen.generate_single([], _mock_result("layered", 0.9), motion="subtle")
         # Find the @media (prefers-reduced-motion: reduce) block. The body
         # must mention the SMIL host class so reduced-motion users see no
         # particle.

@@ -31,37 +31,51 @@ def base_config() -> ReleaseUpdateConfig:
 
 
 class TestReleaseUpdateGenerator:
-    def test_version_header_present(self, gen: ReleaseUpdateGenerator, base_config: ReleaseUpdateConfig) -> None:
+    def test_version_header_present(
+        self, gen: ReleaseUpdateGenerator, base_config: ReleaseUpdateConfig
+    ) -> None:
         body = gen.generate(base_config)
         assert "## Release v1.5.0 (2026-04-29)" in body
 
-    def test_health_present(self, gen: ReleaseUpdateGenerator, base_config: ReleaseUpdateConfig) -> None:
+    def test_health_present(
+        self, gen: ReleaseUpdateGenerator, base_config: ReleaseUpdateConfig
+    ) -> None:
         body = gen.generate(base_config)
         assert "**Health:** On Track" in body
 
-    def test_highlights_rendered(self, gen: ReleaseUpdateGenerator, base_config: ReleaseUpdateConfig) -> None:
+    def test_highlights_rendered(
+        self, gen: ReleaseUpdateGenerator, base_config: ReleaseUpdateConfig
+    ) -> None:
         body = gen.generate(base_config)
         assert "### Highlights" in body
         assert "- Added tapps_release_update tool" in body
         assert "- Improved changelog parsing" in body
 
-    def test_issues_closed_rendered(self, gen: ReleaseUpdateGenerator, base_config: ReleaseUpdateConfig) -> None:
+    def test_issues_closed_rendered(
+        self, gen: ReleaseUpdateGenerator, base_config: ReleaseUpdateConfig
+    ) -> None:
         body = gen.generate(base_config)
         assert "### Issues Closed" in body
         assert "- TAP-1112: tapps_release_update MCP tool" in body
 
-    def test_links_rendered(self, gen: ReleaseUpdateGenerator, base_config: ReleaseUpdateConfig) -> None:
+    def test_links_rendered(
+        self, gen: ReleaseUpdateGenerator, base_config: ReleaseUpdateConfig
+    ) -> None:
         body = gen.generate(base_config)
         assert "### Links" in body
         assert "- Changelog: https://example.com/CHANGELOG.md" in body
 
-    def test_breaking_changes_included_for_minor(self, gen: ReleaseUpdateGenerator, base_config: ReleaseUpdateConfig) -> None:
+    def test_breaking_changes_included_for_minor(
+        self, gen: ReleaseUpdateGenerator, base_config: ReleaseUpdateConfig
+    ) -> None:
         base_config.breaking_changes = ["Removed legacy tapps_report_v1 endpoint"]
         body = gen.generate(base_config)
         assert "### Breaking Changes" in body
         assert "- Removed legacy tapps_report_v1 endpoint" in body
 
-    def test_breaking_changes_included_for_major(self, gen: ReleaseUpdateGenerator, base_config: ReleaseUpdateConfig) -> None:
+    def test_breaking_changes_included_for_major(
+        self, gen: ReleaseUpdateGenerator, base_config: ReleaseUpdateConfig
+    ) -> None:
         base_config.bump_type = "major"
         base_config.breaking_changes = ["Dropped Python 3.11 support"]
         body = gen.generate(base_config)
@@ -80,7 +94,9 @@ class TestReleaseUpdateGenerator:
         body = gen.generate(config)
         assert "### Breaking Changes" not in body
 
-    def test_breaking_changes_omitted_when_empty_for_minor(self, gen: ReleaseUpdateGenerator, base_config: ReleaseUpdateConfig) -> None:
+    def test_breaking_changes_omitted_when_empty_for_minor(
+        self, gen: ReleaseUpdateGenerator, base_config: ReleaseUpdateConfig
+    ) -> None:
         base_config.breaking_changes = []
         body = gen.generate(base_config)
         assert "### Breaking Changes" not in body
@@ -109,12 +125,16 @@ class TestReleaseUpdateGenerator:
         body = gen.generate(config)
         assert "None." in body
 
-    def test_custom_health(self, gen: ReleaseUpdateGenerator, base_config: ReleaseUpdateConfig) -> None:
+    def test_custom_health(
+        self, gen: ReleaseUpdateGenerator, base_config: ReleaseUpdateConfig
+    ) -> None:
         base_config.health = "At Risk"
         body = gen.generate(base_config)
         assert "**Health:** At Risk" in body
 
-    def test_no_links_section_when_empty(self, gen: ReleaseUpdateGenerator, base_config: ReleaseUpdateConfig) -> None:
+    def test_no_links_section_when_empty(
+        self, gen: ReleaseUpdateGenerator, base_config: ReleaseUpdateConfig
+    ) -> None:
         base_config.links = {}
         body = gen.generate(base_config)
         assert "### Links" not in body
@@ -129,6 +149,7 @@ class TestReleaseUpdateGenerator:
         )
         body = gen.generate(config)
         import re
+
         assert re.search(r"## Release v1\.5\.0 \(\d{4}-\d{2}-\d{2}\)", body)
 
 

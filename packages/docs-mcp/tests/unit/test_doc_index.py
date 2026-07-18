@@ -134,6 +134,7 @@ def test_long_epic_filename_preserved_in_link_target(tmp_path: Path) -> None:
 
     # No link target should contain '...' from a truncated path.
     import re as _re
+
     truncated_targets = _re.findall(r"\]\([^)]*\.\.\.[^)]*\)", result.content)
     assert not truncated_targets, f"truncated link targets found: {truncated_targets}"
 
@@ -142,9 +143,7 @@ def test_long_epic_filename_preserved_in_link_target(tmp_path: Path) -> None:
         open_count = line.count("(")
         close_count = line.count(")")
         # Allow extra ')' (e.g. from *(updated DATE)*) but never unclosed '('.
-        assert open_count <= close_count, (
-            f"unclosed '(' on line: {line!r}"
-        )
+        assert open_count <= close_count, f"unclosed '(' on line: {line!r}"
 
 
 def test_story_epic_backlink_stripped_from_description(tmp_path: Path) -> None:
@@ -188,7 +187,5 @@ def test_entries_deduped_by_path(tmp_path: Path) -> None:
     paths = [e.path for e in result.entries]
     assert len(paths) == len(set(paths)), f"duplicates in entries: {paths}"
     # Rendered content should not list any link twice either
-    link_lines = [
-        line for line in result.content.splitlines() if re.search(r"\]\([^)]+\)", line)
-    ]
+    link_lines = [line for line in result.content.splitlines() if re.search(r"\]\([^)]+\)", line)]
     assert len(link_lines) == len(set(link_lines))

@@ -21,9 +21,7 @@ def _clean_issue(id_: str, path: str = "packages/foo/foo.py") -> dict[str, Any]:
         "id": id_,
         "title": f"{path}: short symptom",
         "description": (
-            f"## What\nbreaks\n\n"
-            f"## Where\n`{path}:12-20`\n\n"
-            f"## Acceptance\n- [ ] pytest passes\n"
+            f"## What\nbreaks\n\n## Where\n`{path}:12-20`\n\n## Acceptance\n- [ ] pytest passes\n"
         ),
         "labels": [],
         "priority": 2,
@@ -77,9 +75,7 @@ class TestExtractFilePaths:
 
 class TestPerIssueResults:
     def test_returns_result_per_input(self) -> None:
-        report = triage_issues(
-            [_clean_issue("TAP-1"), _clean_issue("TAP-2"), _bad_issue("TAP-3")]
-        )
+        report = triage_issues([_clean_issue("TAP-1"), _clean_issue("TAP-2"), _bad_issue("TAP-3")])
         assert [r.id for r in report.per_issue] == ["TAP-1", "TAP-2", "TAP-3"]
 
     def test_clean_issue_is_agent_ready(self) -> None:
@@ -222,9 +218,7 @@ class TestMetadataGaps:
 
 class TestSummary:
     def test_summary_counts_match(self) -> None:
-        report = triage_issues(
-            [_clean_issue("TAP-1"), _clean_issue("TAP-2"), _bad_issue("TAP-3")]
-        )
+        report = triage_issues([_clean_issue("TAP-1"), _clean_issue("TAP-2"), _bad_issue("TAP-3")])
         assert report.summary.total == 3
         assert report.summary.agent_ready == 2
         assert report.summary.needs_clarification == 1

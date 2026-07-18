@@ -29,9 +29,7 @@ def _make_repo(tmp_path: Path) -> Path:
         "# Reference\n\n## Parameters\n\n- name: str\n", encoding="utf-8"
     )
     (tmp_path / "docs" / "archive" / "OLD_PRD.md").write_text(
-        "# Old PRD\n\n"
-        + "This sentence will be utilized to leverage some jargon. " * 30
-        + "\n",
+        "# Old PRD\n\n" + "This sentence will be utilized to leverage some jargon. " * 30 + "\n",
         encoding="utf-8",
     )
     (tmp_path / "docs" / "archive" / "OLD_API.md").write_text(

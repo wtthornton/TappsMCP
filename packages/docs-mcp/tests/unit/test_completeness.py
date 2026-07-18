@@ -219,8 +219,7 @@ class TestCompletenessChecker:
         assert api_cat.missing == []
 
     def test_find_api_doc_file_matches_common_names(self, tmp_path: Path) -> None:
-        """_find_api_doc_file recognizes api*/reference* in root, docs/, docs/*/.
-        """
+        """_find_api_doc_file recognizes api*/reference* in root, docs/, docs/*/."""
         # Root-level API.md
         root_project = tmp_path / "root"
         root_project.mkdir()

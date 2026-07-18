@@ -96,7 +96,7 @@ async def test_pr_shape_writes_procedural_tier() -> None:
             return {"error": "not_found"}
 
     with patch("tapps_core.brain_bridge.create_brain_bridge", return_value=_LocalBridge()):
-        await _write_pr_shape_to_brain(score=95, common_rules=["missing-estimate"])
+        await _write_pr_shape_to_brain(common_rules=["missing-estimate"])
 
     assert len(saved) == 1
     kw = saved[0]
@@ -122,10 +122,8 @@ async def test_pr_shape_supersedes_on_existing_key() -> None:
             superseded.append({"key": key, "new_value": new_value})
             return {"success": True}  # key exists
 
-    with patch(
-        "tapps_core.brain_bridge.create_brain_bridge", return_value=_BridgeWithSupersede()
-    ):
-        await _write_pr_shape_to_brain(score=80, common_rules=[])
+    with patch("tapps_core.brain_bridge.create_brain_bridge", return_value=_BridgeWithSupersede()):
+        await _write_pr_shape_to_brain(common_rules=[])
 
     assert len(superseded) == 1
     assert superseded[0]["key"] == "procedural.pr-shape.session"
@@ -136,5 +134,5 @@ async def test_pr_shape_supersedes_on_existing_key() -> None:
 async def test_pr_shape_no_write_when_bridge_unavailable() -> None:
     with patch("tapps_core.brain_bridge.create_brain_bridge", return_value=None):
         # Should not raise
-        await _write_pr_shape_to_brain(score=95, common_rules=[])
+        await _write_pr_shape_to_brain(common_rules=[])
     assert True

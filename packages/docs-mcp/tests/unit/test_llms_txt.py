@@ -334,7 +334,7 @@ class TestEntryPointDetection:
         # Pyproject without scripts
         _write(
             tmp_path / "pyproject.toml",
-            "[project]\nname = \"x\"\nversion = \"0\"\n",
+            '[project]\nname = "x"\nversion = "0"\n',
         )
         # Vendored decoy that the old code would have surfaced
         _write(tmp_path / ".venv/lib/python3.12/site-packages/foo/cli.py", "")

@@ -263,9 +263,7 @@ class TestModuleMapStructure:
 
 
 class TestImportEdges:
-    async def test_imports_become_depends_on_edges_with_line_evidence(
-        self, tmp_path: Path
-    ) -> None:
+    async def test_imports_become_depends_on_edges_with_line_evidence(self, tmp_path: Path) -> None:
         bridge = FakeBridge()
         writer = _writer(tmp_path, bridge)
         graph = ImportGraph(edges=[ImportEdge(source="pkg.a", target="pkg.b", line=12)])

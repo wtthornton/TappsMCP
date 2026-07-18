@@ -24,4 +24,6 @@ class TestDomainEnrichment:
     def test_enrich_skips_when_existing(self) -> None:
         enrichment = {"expert_guidance": [{"domain": "X", "advice": "keep", "confidence": "100%"}]}
         enrich_expert_guidance("security auth", enrichment)
-        assert enrichment["expert_guidance"] == [{"domain": "X", "advice": "keep", "confidence": "100%"}]
+        assert enrichment["expert_guidance"] == [
+            {"domain": "X", "advice": "keep", "confidence": "100%"}
+        ]

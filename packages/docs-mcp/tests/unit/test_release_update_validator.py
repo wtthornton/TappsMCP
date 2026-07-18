@@ -135,19 +135,25 @@ class TestNoTapRef:
 
 class TestMissingLinks:
     def test_detected(self) -> None:
-        body = _COMPLIANT_BODY.replace("### Links\n\n- Changelog: https://example.com/CHANGELOG.md\n", "")
+        body = _COMPLIANT_BODY.replace(
+            "### Links\n\n- Changelog: https://example.com/CHANGELOG.md\n", ""
+        )
         report = validate_release_update(body)
         rules = [f.rule for f in report.findings]
         assert RULE_MISSING_LINKS in rules
 
     def test_is_medium_severity(self) -> None:
-        body = _COMPLIANT_BODY.replace("### Links\n\n- Changelog: https://example.com/CHANGELOG.md\n", "")
+        body = _COMPLIANT_BODY.replace(
+            "### Links\n\n- Changelog: https://example.com/CHANGELOG.md\n", ""
+        )
         report = validate_release_update(body)
         finding = next(f for f in report.findings if f.rule == RULE_MISSING_LINKS)
         assert finding.severity == SEVERITY_MEDIUM
 
     def test_does_not_block_agent_ready(self) -> None:
-        body = _COMPLIANT_BODY.replace("### Links\n\n- Changelog: https://example.com/CHANGELOG.md\n", "")
+        body = _COMPLIANT_BODY.replace(
+            "### Links\n\n- Changelog: https://example.com/CHANGELOG.md\n", ""
+        )
         report = validate_release_update(body)
         assert report.agent_ready is True
 
@@ -159,7 +165,9 @@ class TestScoring:
         assert report.score == 75
 
     def test_one_medium_finding_reduces_score_by_10(self) -> None:
-        body = _COMPLIANT_BODY.replace("### Links\n\n- Changelog: https://example.com/CHANGELOG.md\n", "")
+        body = _COMPLIANT_BODY.replace(
+            "### Links\n\n- Changelog: https://example.com/CHANGELOG.md\n", ""
+        )
         report = validate_release_update(body)
         assert report.score == 90
 

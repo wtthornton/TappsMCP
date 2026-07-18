@@ -406,12 +406,11 @@ class TestEpicGeneratorStyles:
 
         report = EpicValidator().validate(epic_file)
         missing_ac = [
-            i for i in report.issues
+            i
+            for i in report.issues
             if i.severity == "error" and "acceptance criteria" in i.message.lower()
         ]
-        assert not missing_ac, (
-            f"In-epic story stub with ac_count=2 still flagged: {missing_ac}"
-        )
+        assert not missing_ac, f"In-epic story stub with ac_count=2 still flagged: {missing_ac}"
         # The heading itself must be present.
         assert "#### Acceptance Criteria" in content
 
@@ -431,8 +430,7 @@ class TestEpicGeneratorStyles:
 
         report = EpicValidator().validate(epic_file)
         missing_motivation = [
-            i for i in report.issues
-            if i.severity == "error" and "motivation" in i.message.lower()
+            i for i in report.issues if i.severity == "error" and "motivation" in i.message.lower()
         ]
         assert not missing_motivation, (
             f"Minimal-style epic still missing Motivation per validator: {missing_motivation}"
@@ -1605,7 +1603,7 @@ class TestStripWireTagsEpic:
             )
 
         content = self._read(tmp_path, result)
-        assert '<parameter name=' not in content
+        assert "<parameter name=" not in content
         assert "</parameter>" not in content
         # The actual goal value survives in its own section.
         assert "Real goal value" in content

@@ -177,9 +177,7 @@ class TestTitleLength:
         long_title = "foo.py: " + ("x" * 100)
         result = lint_issue(
             title=long_title,
-            description=(
-                "## What\nd\n## Where\n`foo.py:1`\n## Acceptance\n- [ ] done\n"
-            ),
+            description=("## What\nd\n## Where\n`foo.py:1`\n## Acceptance\n- [ ] done\n"),
             priority=3,
             estimate=1.0,
         )
@@ -207,10 +205,7 @@ class TestMissingFileAnchor:
     def test_missing_anchor_flagged_high(self) -> None:
         result = lint_issue(
             title="foo: broken",
-            description=(
-                "## What\nsomething is broken\n\n"
-                "## Acceptance\n- [ ] fix it\n"
-            ),
+            description=("## What\nsomething is broken\n\n## Acceptance\n- [ ] fix it\n"),
             priority=3,
             estimate=1.0,
         )
@@ -243,17 +238,13 @@ class TestMissingFileAnchor:
         ):
             result = lint_issue(
                 title="x",
-                description=(
-                    f"## What\nthing\n## Where\n`{anchor}`\n"
-                    "## Acceptance\n- [ ] done\n"
-                ),
+                description=(f"## What\nthing\n## Where\n`{anchor}`\n## Acceptance\n- [ ] done\n"),
                 priority=3,
                 estimate=1.0,
             )
             rules = [f.rule for f in result.findings]
             assert RULE_MISSING_FILE_ANCHOR not in rules, (
-                f"shell anchor {anchor!r} should satisfy file-anchor rule, "
-                f"got findings={rules}"
+                f"shell anchor {anchor!r} should satisfy file-anchor rule, got findings={rules}"
             )
 
     def test_frontend_extension_anchor_passes(self) -> None:
@@ -272,17 +263,13 @@ class TestMissingFileAnchor:
         ):
             result = lint_issue(
                 title="x",
-                description=(
-                    f"## What\nthing\n## Where\n`{anchor}`\n"
-                    "## Acceptance\n- [ ] done\n"
-                ),
+                description=(f"## What\nthing\n## Where\n`{anchor}`\n## Acceptance\n- [ ] done\n"),
                 priority=3,
                 estimate=1.0,
             )
             rules = [f.rule for f in result.findings]
             assert RULE_MISSING_FILE_ANCHOR not in rules, (
-                f"frontend anchor {anchor!r} should satisfy file-anchor rule, "
-                f"got findings={rules}"
+                f"frontend anchor {anchor!r} should satisfy file-anchor rule, got findings={rules}"
             )
 
     def test_prose_colon_numbers_still_fail(self) -> None:
@@ -292,17 +279,13 @@ class TestMissingFileAnchor:
         for prose in ("aspect ratio 3.5:1", "16:9 at 12:30"):
             result = lint_issue(
                 title="x",
-                description=(
-                    f"## What\n{prose}\n## Where\nsee above\n"
-                    "## Acceptance\n- [ ] done\n"
-                ),
+                description=(f"## What\n{prose}\n## Where\nsee above\n## Acceptance\n- [ ] done\n"),
                 priority=3,
                 estimate=1.0,
             )
             rules = [f.rule for f in result.findings]
             assert RULE_MISSING_FILE_ANCHOR in rules, (
-                f"prose {prose!r} must not be mistaken for a file anchor, "
-                f"got findings={rules}"
+                f"prose {prose!r} must not be mistaken for a file anchor, got findings={rules}"
             )
 
 
@@ -326,9 +309,7 @@ class TestAcceptance:
     def test_empty_acceptance_section_flagged(self) -> None:
         result = lint_issue(
             title="foo.py: x",
-            description=(
-                "## What\nd\n## Where\n`foo.py:1`\n## Acceptance\n\n## Refs\nTAP-1\n"
-            ),
+            description=("## What\nd\n## Where\n`foo.py:1`\n## Acceptance\n\n## Refs\nTAP-1\n"),
             priority=3,
             estimate=1.0,
         )
@@ -340,10 +321,7 @@ class TestAcceptance:
         """`## Acceptance Criteria` should satisfy the check."""
         result = lint_issue(
             title="foo.py: x",
-            description=(
-                "## What\nd\n## Where\n`foo.py:1`\n"
-                "## Acceptance Criteria\n- [ ] done\n"
-            ),
+            description=("## What\nd\n## Where\n`foo.py:1`\n## Acceptance Criteria\n- [ ] done\n"),
             priority=3,
             estimate=1.0,
         )
@@ -463,7 +441,9 @@ class TestScoring:
 
 
 class TestLabelAndStatusSuggestion:
-    def test_clean_issue_suggests_empty_label_and_backlog(self, clean_issue: dict[str, object]) -> None:
+    def test_clean_issue_suggests_empty_label_and_backlog(
+        self, clean_issue: dict[str, object]
+    ) -> None:
         result = lint_issue(**clean_issue)  # type: ignore[arg-type]
         assert result.suggested_label == ""
         assert result.suggested_status == STATUS_BACKLOG
@@ -482,9 +462,7 @@ class TestLabelAndStatusSuggestion:
         result = lint_issue(
             title="foo.py: change",
             description=(
-                "## What\nblocked by TAP-999\n"
-                "## Where\n`foo.py:1`\n"
-                "## Acceptance\n- [ ] done\n"
+                "## What\nblocked by TAP-999\n## Where\n`foo.py:1`\n## Acceptance\n- [ ] done\n"
             ),
             priority=3,
             estimate=1.0,

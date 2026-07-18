@@ -32,9 +32,7 @@ class TestDriftSettingsFallback:
         with (
             patch(
                 "docs_mcp.server_val_tools._get_settings",
-                return_value=_settings_with(
-                    tmp_path, drift_ignore_patterns=["pkg.internal.*"]
-                ),
+                return_value=_settings_with(tmp_path, drift_ignore_patterns=["pkg.internal.*"]),
             ),
             patch("docs_mcp.validators.drift.DriftDetector") as mock_cls,
         ):
@@ -47,9 +45,7 @@ class TestDriftSettingsFallback:
         assert passed == ["pkg.internal.*"]
 
     @pytest.mark.asyncio
-    async def test_empty_call_uses_settings_defaults_sentinel(
-        self, tmp_path: Path
-    ) -> None:
+    async def test_empty_call_uses_settings_defaults_sentinel(self, tmp_path: Path) -> None:
         with (
             patch(
                 "docs_mcp.server_val_tools._get_settings",
@@ -70,9 +66,7 @@ class TestDriftSettingsFallback:
         with (
             patch(
                 "docs_mcp.server_val_tools._get_settings",
-                return_value=_settings_with(
-                    tmp_path, drift_ignore_patterns=["pkg.internal.*"]
-                ),
+                return_value=_settings_with(tmp_path, drift_ignore_patterns=["pkg.internal.*"]),
             ),
             patch("docs_mcp.validators.drift.DriftDetector") as mock_cls,
         ):
@@ -118,9 +112,7 @@ class TestCompletenessSettingsFallback:
                     tmp_path, completeness_exclude=["vendored/**", "third_party/**"]
                 ),
             ),
-            patch(
-                "docs_mcp.validators.completeness.CompletenessChecker"
-            ) as mock_cls,
+            patch("docs_mcp.validators.completeness.CompletenessChecker") as mock_cls,
         ):
             mock_cls.return_value.check.return_value = CompletenessReport()
             from docs_mcp.server_val_tools import docs_check_completeness
@@ -135,13 +127,9 @@ class TestCompletenessSettingsFallback:
         with (
             patch(
                 "docs_mcp.server_val_tools._get_settings",
-                return_value=_settings_with(
-                    tmp_path, completeness_exclude=["vendored/**"]
-                ),
+                return_value=_settings_with(tmp_path, completeness_exclude=["vendored/**"]),
             ),
-            patch(
-                "docs_mcp.validators.completeness.CompletenessChecker"
-            ) as mock_cls,
+            patch("docs_mcp.validators.completeness.CompletenessChecker") as mock_cls,
         ):
             mock_cls.return_value.check.return_value = CompletenessReport()
             from docs_mcp.server_val_tools import docs_check_completeness
@@ -164,9 +152,7 @@ class TestFreshnessSettingsFallback:
         with (
             patch(
                 "docs_mcp.server_val_tools._get_settings",
-                return_value=_settings_with(
-                    tmp_path, freshness_exclude=["docs/legacy/**"]
-                ),
+                return_value=_settings_with(tmp_path, freshness_exclude=["docs/legacy/**"]),
             ),
             patch("docs_mcp.validators.freshness.FreshnessChecker") as mock_cls,
         ):
@@ -183,9 +169,7 @@ class TestFreshnessSettingsFallback:
         with (
             patch(
                 "docs_mcp.server_val_tools._get_settings",
-                return_value=_settings_with(
-                    tmp_path, freshness_exclude=["docs/legacy/**"]
-                ),
+                return_value=_settings_with(tmp_path, freshness_exclude=["docs/legacy/**"]),
             ),
             patch("docs_mcp.validators.freshness.FreshnessChecker") as mock_cls,
         ):

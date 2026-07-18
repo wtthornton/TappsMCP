@@ -31,8 +31,7 @@ from tests.helpers import make_settings as _make_settings
 class TestSafeSlug:
     def test_strips_colons_semicolons_slashes_and_dots(self) -> None:
         result = safe_slug(
-            "docs_generate epic/story leaves .md drafts on disk; "
-            "filename slug allows colons"
+            "docs_generate epic/story leaves .md drafts on disk; filename slug allows colons"
         )
         for forbidden in ("/", ":", ";", "."):
             assert forbidden not in result, f"slug retained {forbidden!r}: {result!r}"
@@ -83,9 +82,7 @@ class TestGenerateEpicDefaultsToNoDiskWrite:
         return await docs_generate_epic(**kwargs)
 
     @pytest.mark.asyncio
-    async def test_default_does_not_write_draft_to_disk(
-        self, tmp_path: Path
-    ) -> None:
+    async def test_default_does_not_write_draft_to_disk(self, tmp_path: Path) -> None:
         with patch(
             "docs_mcp.server_gen_tools._get_settings",
             return_value=_make_settings(tmp_path),
@@ -160,9 +157,7 @@ class TestGenerateStoryDefaultsToNoDiskWrite:
         return await docs_generate_story(**kwargs)
 
     @pytest.mark.asyncio
-    async def test_default_does_not_write_draft_to_disk(
-        self, tmp_path: Path
-    ) -> None:
+    async def test_default_does_not_write_draft_to_disk(self, tmp_path: Path) -> None:
         with patch(
             "docs_mcp.server_gen_tools._get_settings",
             return_value=_make_settings(tmp_path),
@@ -183,9 +178,7 @@ class TestGenerateStoryDefaultsToNoDiskWrite:
         assert leftovers == [], f"unexpected drafts on disk: {leftovers}"
 
     @pytest.mark.asyncio
-    async def test_uses_safe_slug_for_default_path_when_numbers_unset(
-        self, tmp_path: Path
-    ) -> None:
+    async def test_uses_safe_slug_for_default_path_when_numbers_unset(self, tmp_path: Path) -> None:
         with patch(
             "docs_mcp.server_gen_tools._get_settings",
             return_value=_make_settings(tmp_path),

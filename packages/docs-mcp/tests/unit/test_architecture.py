@@ -350,9 +350,7 @@ class TestDependencyFlowMotion:
 
     def test_circular_motion_off_emits_no_animatemotion(self) -> None:
         gen = ArchitectureGenerator()
-        svg = gen._build_circular_dep_svg(
-            self._packages(4), self._edges(4), motion="off"
-        )
+        svg = gen._build_circular_dep_svg(self._packages(4), self._edges(4), motion="off")
         assert "<animateMotion" not in svg
         # Path IDs are still present — gating only suppresses the particle.
         assert 'id="dep-edge-0"' in svg
@@ -369,58 +367,42 @@ class TestDependencyFlowMotion:
 
     def test_grid_motion_off_emits_no_animatemotion(self) -> None:
         gen = ArchitectureGenerator()
-        svg = gen._build_grid_dep_svg(
-            self._packages(12), self._edges(12), motion="off"
-        )
+        svg = gen._build_grid_dep_svg(self._packages(12), self._edges(12), motion="off")
         assert "<animateMotion" not in svg
 
     def test_dur_is_module_constant(self) -> None:
         from docs_mcp.generators.architecture import _ANIMATE_MOTION_DUR_S
 
         gen = ArchitectureGenerator()
-        svg = gen._build_circular_dep_svg(
-            self._packages(3), self._edges(3), motion="subtle"
-        )
+        svg = gen._build_circular_dep_svg(self._packages(3), self._edges(3), motion="subtle")
         assert f'dur="{_ANIMATE_MOTION_DUR_S}s"' in svg
 
     def test_invalid_motion_emits_no_animatemotion(self) -> None:
         gen = ArchitectureGenerator()
-        svg = gen._build_circular_dep_svg(
-            self._packages(3), self._edges(3), motion="bogus"
-        )
+        svg = gen._build_circular_dep_svg(self._packages(3), self._edges(3), motion="bogus")
         assert "<animateMotion" not in svg
 
     def test_particles_value_treated_as_subtle(self) -> None:
         gen = ArchitectureGenerator()
-        svg = gen._build_circular_dep_svg(
-            self._packages(3), self._edges(3), motion="particles"
-        )
+        svg = gen._build_circular_dep_svg(self._packages(3), self._edges(3), motion="particles")
         assert "<animateMotion" in svg
 
     def test_two_runs_produce_identical_svg(self) -> None:
         gen = ArchitectureGenerator()
-        a = gen._build_circular_dep_svg(
-            self._packages(3), self._edges(3), motion="subtle"
-        )
-        b = gen._build_circular_dep_svg(
-            self._packages(3), self._edges(3), motion="subtle"
-        )
+        a = gen._build_circular_dep_svg(self._packages(3), self._edges(3), motion="subtle")
+        b = gen._build_circular_dep_svg(self._packages(3), self._edges(3), motion="subtle")
         assert a == b
 
 
 class TestArchitectureGenerateMotionDefault:
     """Top-level ``generate(motion=...)`` defaults to ``"off"``."""
 
-    def test_generate_default_motion_off_emits_no_animatemotion(
-        self, arch_project: Path
-    ) -> None:
+    def test_generate_default_motion_off_emits_no_animatemotion(self, arch_project: Path) -> None:
         gen = ArchitectureGenerator()
         result = gen.generate(arch_project)
         assert "<animateMotion" not in result.content
 
-    def test_reduced_motion_css_block_contains_smil_pause_hook(
-        self, arch_project: Path
-    ) -> None:
+    def test_reduced_motion_css_block_contains_smil_pause_hook(self, arch_project: Path) -> None:
         gen = ArchitectureGenerator()
         result = gen.generate(arch_project)
         # Find the @media (prefers-reduced-motion: reduce) block. The body

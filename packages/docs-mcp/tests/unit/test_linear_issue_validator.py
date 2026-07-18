@@ -60,9 +60,7 @@ class TestMissingAcceptance:
             priority=3,
             estimate=1.0,
         )
-        assert any(
-            i.severity == "error" and i.rule == "missing-acceptance" for i in report.issues
-        )
+        assert any(i.severity == "error" and i.rule == "missing-acceptance" for i in report.issues)
 
 
 class TestMissingFileAnchor:
@@ -100,9 +98,7 @@ class TestNonBlockingFindingsNotInMissing:
         """Missing estimate is LOW — validator should NOT surface it as blocking."""
         report = validate_issue(
             title="foo.py: x",
-            description=(
-                "## What\nd\n## Where\n`foo.py:1`\n## Acceptance\n- [ ] done\n"
-            ),
+            description=("## What\nd\n## Where\n`foo.py:1`\n## Acceptance\n- [ ] done\n"),
             priority=3,
             estimate=None,
         )

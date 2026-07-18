@@ -314,6 +314,7 @@ class TestDocTokenMtimeMap:
         a.write_text("scorer", encoding="utf-8")
         b.write_text("scorer reranker", encoding="utf-8")
         import os
+
         os.utime(a, (1_000_000, 1_000_000))
         os.utime(b, (2_000_000, 2_000_000))
         result = _build_doc_token_mtime_map([a, b])
@@ -329,12 +330,11 @@ class TestDocTokenMtimeMap:
         tmap = {"unrelated": 9_999_999.0}
         assert _get_relevant_doc_mtime(["BM25Scorer"], tmap) == 0.0
 
-    def test_per_file_mtime_reduces_false_positive_errors(
-        self, tmp_path: Path
-    ) -> None:
+    def test_per_file_mtime_reduces_false_positive_errors(self, tmp_path: Path) -> None:
         """Touching an unrelated doc should not escalate severity for code with
         unrelated public names."""
         import os
+
         # Code file with an unrelated public name.
         (tmp_path / "app.py").write_text(
             '"""Mod."""\n\ndef zzzz_unrelated_func() -> None:\n    pass\n',
@@ -666,9 +666,7 @@ class TestDriftDetector:
 
     def test_symbols_not_truncated_beyond_five(self, tmp_path: Path) -> None:
         """symbols must include all names even when > 5 (description truncates to 5)."""
-        funcs = "\n".join(
-            f"def func_{i}() -> None:\n    pass" for i in range(8)
-        )
+        funcs = "\n".join(f"def func_{i}() -> None:\n    pass" for i in range(8))
         (tmp_path / "app.py").write_text(f'"""Mod."""\n\n{funcs}\n', encoding="utf-8")
         (tmp_path / "README.md").write_text("# Project\n", encoding="utf-8")
         report = DriftDetector().check(tmp_path, docstring_coverage_counts=False)

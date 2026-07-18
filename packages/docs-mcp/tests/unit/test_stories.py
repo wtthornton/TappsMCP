@@ -575,15 +575,15 @@ class TestImprovedGherkinScaffolding:
     # -- _derive_given -------------------------------------------------------
 
     def test_derive_given_with_role(self) -> None:
-        result = StoryGenerator._derive_given("developer", "Login validates credentials")
+        result = StoryGenerator._derive_given("developer")
         assert result == "a developer is ready to perform the action"
 
     def test_derive_given_empty_role_returns_empty(self) -> None:
-        result = StoryGenerator._derive_given("", "Login validates credentials")
+        result = StoryGenerator._derive_given("")
         assert result == ""
 
     def test_derive_given_whitespace_role_returns_empty(self) -> None:
-        result = StoryGenerator._derive_given("   ", "Login validates credentials")
+        result = StoryGenerator._derive_given("   ")
         assert result == ""
 
     # -- _derive_when --------------------------------------------------------

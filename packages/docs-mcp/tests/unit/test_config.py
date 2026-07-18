@@ -300,13 +300,13 @@ class TestResolveWorkspaceRoot:
         workspace = tmp_path / "ws"
         workspace.mkdir()
         (workspace / "pyproject.toml").write_text(
-            "[tool.uv.workspace]\nmembers = [\"packages/*\"]\n",
+            '[tool.uv.workspace]\nmembers = ["packages/*"]\n',
             encoding="utf-8",
         )
         member = workspace / "packages" / "docs-mcp"
         member.mkdir(parents=True)
         (member / "pyproject.toml").write_text(
-            "[project]\nname = \"docs-mcp\"\nversion = \"0.0.0\"\n",
+            '[project]\nname = "docs-mcp"\nversion = "0.0.0"\n',
             encoding="utf-8",
         )
         return workspace, member
@@ -323,7 +323,7 @@ class TestResolveWorkspaceRoot:
         plain = tmp_path / "plain"
         plain.mkdir()
         (plain / "pyproject.toml").write_text(
-            "[project]\nname = \"plain\"\nversion = \"0.0.0\"\n",
+            '[project]\nname = "plain"\nversion = "0.0.0"\n',
             encoding="utf-8",
         )
         assert _resolve_workspace_root(plain) == plain

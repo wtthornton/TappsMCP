@@ -94,17 +94,16 @@ class TestMitigationDerivation:
 
     def test_mitigation_from_expert_advice(self) -> None:
         mitigation = self.clf.derive_mitigation(
-            "SQL injection risk",
             expert_advice="Use input validation against SQL injection. Also sanitize outputs.",
         )
         assert mitigation == "Use input validation against SQL injection."
 
     def test_mitigation_no_expert(self) -> None:
-        mitigation = self.clf.derive_mitigation("some risk", expert_advice=None)
+        mitigation = self.clf.derive_mitigation(expert_advice=None)
         assert "Mitigation required" in mitigation
 
     def test_mitigation_empty_expert(self) -> None:
-        mitigation = self.clf.derive_mitigation("some risk", expert_advice="")
+        mitigation = self.clf.derive_mitigation(expert_advice="")
         assert "Mitigation required" in mitigation
 
 

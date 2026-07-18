@@ -16,11 +16,29 @@ def _write_index(root: Path) -> None:
     payload = {
         "version": 2,
         "symbols": [
-            {"qualified_name": "app.core.compute", "module": "app.core", "file_path": "app/core.py", "line": 1, "kind": "function"},
-            {"qualified_name": "app.api.run", "module": "app.api", "file_path": "app/api.py", "line": 1, "kind": "function"},
+            {
+                "qualified_name": "app.core.compute",
+                "module": "app.core",
+                "file_path": "app/core.py",
+                "line": 1,
+                "kind": "function",
+            },
+            {
+                "qualified_name": "app.api.run",
+                "module": "app.api",
+                "file_path": "app/api.py",
+                "line": 1,
+                "kind": "function",
+            },
         ],
         "edges": [
-            {"caller": "app.api.run", "callee": "app.core.compute", "callee_expr": "compute()", "line": 2, "resolved": True},
+            {
+                "caller": "app.api.run",
+                "callee": "app.core.compute",
+                "callee_expr": "compute()",
+                "line": 2,
+                "resolved": True,
+            },
         ],
         "resolution_gaps": [],
         "parse_failures": [],

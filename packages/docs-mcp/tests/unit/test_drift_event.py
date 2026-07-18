@@ -34,9 +34,7 @@ class FakeBridge:
     async def get_neighbors(
         self, entity_ids: list[str], *, hops: int = 1, limit: int = 20, predicate_filter: str = ""
     ) -> dict[str, Any]:
-        hits = [
-            e for e in self.events if any(en["id"] in entity_ids for en in e["entities"])
-        ]
+        hits = [e for e in self.events if any(en["id"] in entity_ids for en in e["entities"])]
         return {"neighbors": hits}
 
 
