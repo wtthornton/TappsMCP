@@ -641,13 +641,16 @@ class BrainBridge:
         await self.save(**entry)
 
     def _maybe_start_drain(self) -> None:
-        if not self.circuit_open and not self._write_queue.empty():
-            if self._drain_task is None or self._drain_task.done():
-                try:
-                    loop = asyncio.get_running_loop()
-                    self._drain_task = loop.create_task(self._drain_write_queue())
-                except RuntimeError:
-                    pass
+        if (
+            not self.circuit_open
+            and not self._write_queue.empty()
+            and (self._drain_task is None or self._drain_task.done())
+        ):
+            try:
+                loop = asyncio.get_running_loop()
+                self._drain_task = loop.create_task(self._drain_write_queue())
+            except RuntimeError:
+                pass
 
     # -------------------------------------------------------------------------
     # Helpers
@@ -858,11 +861,13 @@ class BrainBridge:
                 else:
                     key = ""
                 if key and not guard(key):
-                    refused.append({
-                        "key": key,
-                        "refused": True,
-                        "reason": "elevation_approval_required",
-                    })
+                    refused.append(
+                        {
+                            "key": key,
+                            "refused": True,
+                            "reason": "elevation_approval_required",
+                        }
+                    )
                     logger.warning(
                         "hive_propagate.refused_no_approval",
                         memory_key=key,
@@ -1442,7 +1447,9 @@ class HttpBrainBridge(BrainBridge):
 
     is_http_mode: bool = True
 
-    def __init__(self, http_url: str, headers: dict[str, str], *, cache_dir: Path | None = None) -> None:
+    def __init__(
+        self, http_url: str, headers: dict[str, str], *, cache_dir: Path | None = None
+    ) -> None:
         # Initialise shared resilience state without a local AgentBrain.
         self._failures: int = 0
         self._open_at: float | None = None
@@ -1520,9 +1527,7 @@ class HttpBrainBridge(BrainBridge):
         last_exc: Exception | None = None
         for attempt in range(_RETRY_ATTEMPTS):
             try:
-                result = await self._do_mcp_post(
-                    tool_name, arguments, project_id=project_id
-                )
+                result = await self._do_mcp_post(tool_name, arguments, project_id=project_id)
                 self._record_success()
                 return result
             except BrainBridgeUnavailable:
@@ -1689,11 +1694,7 @@ class HttpBrainBridge(BrainBridge):
             gated_used = sorted(get_bridge_used_tools() - self._exposed_tools)
             if gated_used:
                 declared = self._http_headers.get("X-Brain-Profile") or None
-                log_fn = (
-                    logger.debug
-                    if declared in BRAIN_PROFILES_NARROW_OK
-                    else logger.warning
-                )
+                log_fn = logger.debug if declared in BRAIN_PROFILES_NARROW_OK else logger.warning
                 log_fn(
                     "brain_bridge.profile_mismatch",
                     declared_profile=declared,
@@ -1826,8 +1827,7 @@ class HttpBrainBridge(BrainBridge):
                 bad_field = err_data.get("field") or ""
                 bad_detail = err_data.get("detail") or ""
                 raise BadJsonError(
-                    f"tapps-brain rejected malformed JSON argument "
-                    f"{bad_field!r}: {bad_detail}",
+                    f"tapps-brain rejected malformed JSON argument {bad_field!r}: {bad_detail}",
                     code=err_code,
                     data=err_data,
                     tool_name=tool_name,
@@ -1929,9 +1929,7 @@ class HttpBrainBridge(BrainBridge):
         *,
         project_id: str | None = None,
     ) -> dict[str, Any] | None:
-        result = await self._http_mcp_call(
-            "memory_get", {"key": key}, project_id=project_id
-        )
+        result = await self._http_mcp_call("memory_get", {"key": key}, project_id=project_id)
         if isinstance(result, dict) and result.get("key") and not result.get("error"):
             return result
         return None
@@ -2002,9 +2000,7 @@ class HttpBrainBridge(BrainBridge):
         Maps to the brain's ``memory_find_related`` tool.
         """
         args: dict[str, Any] = {"key": key, "max_hops": max_hops}
-        result = await self._http_mcp_call(
-            "memory_find_related", args, project_id=project_id
-        )
+        result = await self._http_mcp_call("memory_find_related", args, project_id=project_id)
         if isinstance(result, list):
             return result
         if isinstance(result, dict):
@@ -2257,9 +2253,7 @@ class HttpBrainBridge(BrainBridge):
             args["session_id"] = session_id
         if details_json:
             args["details_json"] = details_json
-        result = await self._http_mcp_call(
-            "feedback_gap", args, project_id=project_id
-        )
+        result = await self._http_mcp_call("feedback_gap", args, project_id=project_id)
         return result if isinstance(result, dict) else {"recorded": True}
 
     async def flywheel_report(self, period_days: int = 7) -> dict[str, Any]:
@@ -2481,9 +2475,7 @@ class HttpBrainBridge(BrainBridge):
         ``entity_id`` / ``edge_id`` is given.
         """
         if bool(entity_id) == bool(edge_id):
-            raise ValueError(
-                "add_evidence requires exactly one of entity_id or edge_id"
-            )
+            raise ValueError("add_evidence requires exactly one of entity_id or edge_id")
         target_kind = "entity" if entity_id else "edge"
         target_id = entity_id or edge_id
         entities = [{"type": f"{target_kind}_ref", "id": target_id}]
@@ -2671,11 +2663,13 @@ class HttpBrainBridge(BrainBridge):
             # TAP-2014: check elevation guard before propagating.
             if guard is not None and not guard(key):
                 refused_no_approval += 1
-                details.append({
-                    "key": key,
-                    "refused": True,
-                    "reason": "elevation_approval_required",
-                })
+                details.append(
+                    {
+                        "key": key,
+                        "refused": True,
+                        "reason": "elevation_approval_required",
+                    }
+                )
                 logger.warning(
                     "hive_propagate.refused_no_approval",
                     memory_key=key,
@@ -2769,9 +2763,7 @@ class HttpBrainBridge(BrainBridge):
         return result if isinstance(result, dict) else {"key": key, "success": True}
 
     async def delete(self, key: str, *, project_id: str | None = None) -> bool:
-        result = await self._http_mcp_call(
-            "memory_delete", {"key": key}, project_id=project_id
-        )
+        result = await self._http_mcp_call("memory_delete", {"key": key}, project_id=project_id)
         if isinstance(result, bool):
             return result
         if isinstance(result, dict):
@@ -2881,9 +2873,7 @@ class HttpBrainBridge(BrainBridge):
         """
         details: dict[str, Any] = {"http_url": self._http_url, "mode": "http"}
         try:
-            response = httpx.get(
-                f"{self._http_url}/healthz", timeout=_BRAIN_HEALTH_TIMEOUT_SECONDS
-            )
+            response = httpx.get(f"{self._http_url}/healthz", timeout=_BRAIN_HEALTH_TIMEOUT_SECONDS)
         except Exception as exc:
             return self._health_check_failure(details, exc)
         if response.status_code == 404:
@@ -2938,9 +2928,7 @@ class HttpBrainBridge(BrainBridge):
             "details": details,
         }
 
-    def _health_check_failure(
-        self, details: dict[str, Any], exc: BaseException
-    ) -> dict[str, Any]:
+    def _health_check_failure(self, details: dict[str, Any], exc: BaseException) -> dict[str, Any]:
         return {
             "ok": False,
             "dsn_reachable": False,
@@ -2959,9 +2947,7 @@ class HttpBrainBridge(BrainBridge):
         """
         offending: list[str] = []
         if isinstance(body, dict):
-            for key in ("db_ok", "mcp_ok"):
-                if body.get(key) is False:
-                    offending.append(key)
+            offending.extend(key for key in ("db_ok", "mcp_ok") if body.get(key) is False)
         err = "brain_degraded"
         if offending:
             err = f"brain_degraded: {', '.join(offending)}=false"
@@ -2979,9 +2965,7 @@ class HttpBrainBridge(BrainBridge):
     def _health_check_legacy(self, details: dict[str, Any]) -> dict[str, Any]:
         """Fallback for pre-v3.19.0 brains that don't expose ``/healthz``."""
         try:
-            response = httpx.get(
-                f"{self._http_url}/health", timeout=_BRAIN_HEALTH_TIMEOUT_SECONDS
-            )
+            response = httpx.get(f"{self._http_url}/health", timeout=_BRAIN_HEALTH_TIMEOUT_SECONDS)
             response.raise_for_status()
         except Exception as exc:
             return self._health_check_failure(details, exc)
@@ -3409,9 +3393,7 @@ def check_brain_version(
 # -----------------------------------------------------------------------------
 
 
-def create_brain_bridge(
-    settings: Any = None, *, default_profile: str = ""
-) -> BrainBridge | None:
+def create_brain_bridge(settings: Any = None, *, default_profile: str = "") -> BrainBridge | None:
     """Create a :class:`BrainBridge` from settings or environment.
 
     Dispatch order:

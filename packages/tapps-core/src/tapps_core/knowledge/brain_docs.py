@@ -79,9 +79,7 @@ def _brain_docs_unavailable(exc: BaseException) -> bool:
     if isinstance(exc, ToolNotInProfileError):
         return True
     msg = str(exc)
-    return "Unknown tool" in msg or (
-        "docs_lookup" in msg and "not available" in msg
-    )
+    return "Unknown tool" in msg or ("docs_lookup" in msg and "not available" in msg)
 
 
 async def lookup_via_brain(

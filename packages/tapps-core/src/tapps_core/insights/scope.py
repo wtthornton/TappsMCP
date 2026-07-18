@@ -65,19 +65,21 @@ def enforce_scope(
         scope = MemoryScope.project
 
     # Rule 2: shared scope requires explicit opt-in or user origin
-    if scope == MemoryScope.shared:
-        if not allow_shared and entry.server_origin != InsightOrigin.user:
-            entry = entry.model_copy(update={"scope": MemoryScope.project})
-            scope = MemoryScope.project
+    if (
+        scope == MemoryScope.shared
+        and not allow_shared
+        and entry.server_origin != InsightOrigin.user
+    ):
+        entry = entry.model_copy(update={"scope": MemoryScope.project})
+        scope = MemoryScope.project
 
     # Rule 3: branch scope requires branch name
-    if scope == MemoryScope.branch:
-        if not entry.branch:
-            msg = (
-                f"InsightEntry '{entry.key}' has scope=branch but no branch name. "
-                "Set entry.branch or change scope to 'project'."
-            )
-            raise ScopeViolation(msg)
+    if scope == MemoryScope.branch and not entry.branch:
+        msg = (
+            f"InsightEntry '{entry.key}' has scope=branch but no branch name. "
+            "Set entry.branch or change scope to 'project'."
+        )
+        raise ScopeViolation(msg)
 
     return entry
 

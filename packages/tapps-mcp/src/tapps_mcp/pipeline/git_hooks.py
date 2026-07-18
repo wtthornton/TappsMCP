@@ -47,7 +47,10 @@ else
 fi
 
 echo "tapps-mcp pre-commit: validating $(echo \"$STAGED_PY\" | wc -l | tr -d ' ') staged Python file(s)..." >&2
-if ! "${RUNNER[@]}" validate-changed --quick; then
+# Validate exactly the staged files -- without --file-paths the CLI
+# auto-detects all branch-changed files and can trip the validation cap.
+STAGED_CSV=$(echo "$STAGED_PY" | paste -sd, -)
+if ! "${RUNNER[@]}" validate-changed --quick --file-paths "$STAGED_CSV"; then
   echo "" >&2
   echo "tapps-mcp pre-commit: quality gate failed. Fix the issues above, or bypass with TAPPS_SKIP_GATE=1 git commit ..." >&2
   exit 1

@@ -309,13 +309,6 @@ class DashboardGenerator:
                 f"- Consolidation: {mem.get('consolidated_count', 0)} groups, "
                 f"{mem.get('source_entries_count', 0)} sources"
             )
-        fed = mem.get("federation")
-        if fed:
-            lines.append(
-                f"- Federation: registered={fed.get('hub_registered', False)}, "
-                f"published={fed.get('published_count', 0)}, "
-                f"synced={fed.get('synced_count', 0)}"
-            )
         lines.append("")
 
     def _render_md_recommendations(self, json_data: dict[str, Any], lines: list[str]) -> None:
@@ -326,8 +319,7 @@ class DashboardGenerator:
         if not recs:
             return
         lines.append("## Recommendations")
-        for rec in recs:
-            lines.append(f"- {rec}")
+        lines.extend(f"- {rec}" for rec in recs)
         lines.append("")
 
     def generate_html_dashboard(
@@ -478,9 +470,7 @@ class DashboardGenerator:
         session_ends = sum(1 for m in metrics if m.tool_name == "tapps_session_end")
         checklists = sum(1 for m in metrics if m.tool_name == "tapps_checklist")
 
-        checklist_ratio = (
-            round(checklists / session_starts, 4) if session_starts > 0 else None
-        )
+        checklist_ratio = round(checklists / session_starts, 4) if session_starts > 0 else None
         handoff_ratio = round(session_ends / session_starts, 4) if session_starts > 0 else None
 
         project_root = self._metrics_dir.parent.parent
@@ -669,7 +659,7 @@ class DashboardGenerator:
         """Build memory subsystem metrics from live MemoryStore data.
 
         Epic 65.1: Adds consolidation stats (consolidated_count, source_entries_count,
-        consolidation_groups) and optional federation subsection.
+        consolidation_groups).
         """
         if self._memory_store is None:
             return {
@@ -729,11 +719,6 @@ class DashboardGenerator:
             # Epic 65.1: Consolidation stats
             result.update(self._compute_consolidation_stats(entries))
 
-            # Epic 65.1: Federation stats (optional, when federation available)
-            fed = self._build_federation_stats(settings.project_root, entries)
-            if fed:
-                result["federation"] = fed
-
             return result
         except Exception:
             logger.debug("memory_metrics_build_failed", exc_info=True)
@@ -784,64 +769,6 @@ class DashboardGenerator:
             "source_entries_count": source_entries_count,
             "consolidation_groups": consolidation_groups,
         }
-
-    def _build_federation_stats(
-        self, project_root: Path, entries: list[Any]
-    ) -> dict[str, Any] | None:
-        """Build federation subsection when federation is available (Epic 65.1)."""
-        try:
-            from tapps_brain.federation import (
-                FederatedStore,
-                load_federation_config,
-            )
-
-            config = load_federation_config()
-            project_root_str = str(project_root)
-
-            # Find if this project is registered
-            matching = next(
-                (p for p in config.projects if p.project_root == project_root_str),
-                None,
-            )
-            hub_registered = matching is not None
-            project_id = matching.project_id if matching else ""
-
-            if not hub_registered:
-                return {
-                    "hub_registered": False,
-                    "published_count": 0,
-                    "subscribed_projects": 0,
-                    "synced_count": 0,
-                }
-
-            hub = FederatedStore()
-            try:
-                stats = hub.get_stats()
-                projects_counts = stats.get("projects", {})
-                published_count = projects_counts.get(project_id, 0)
-            finally:
-                hub.close()
-
-            subs = [s for s in config.subscriptions if s.subscriber == project_id]
-            if subs:
-                sub = subs[0]
-                subscribed_projects = (
-                    len(sub.sources) if sub.sources else max(0, len(config.projects) - 1)
-                )
-            else:
-                subscribed_projects = 0
-
-            synced_count = sum(1 for e in entries if "federated" in (e.tags or []))
-
-            return {
-                "hub_registered": True,
-                "published_count": published_count,
-                "subscribed_projects": subscribed_projects,
-                "synced_count": synced_count,
-            }
-        except Exception:
-            logger.debug("federation_stats_build_failed", exc_info=True)
-            return None
 
     def _build_alerts(self) -> list[dict[str, Any]]:
         current_metrics = self._current_alert_metrics()

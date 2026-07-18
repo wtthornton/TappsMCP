@@ -210,12 +210,10 @@ class FileManifest(BaseModel):
         lines.append(f"**Tool Preference:** {instr.tool_preference}")
         if instr.verification_steps:
             lines.append("**Verification Steps:**")
-            for step in instr.verification_steps:
-                lines.append(f"  - {step}")
+            lines.extend(f"  - {step}" for step in instr.verification_steps)
         if instr.warnings:
             lines.append("**Warnings:**")
-            for w in instr.warnings:
-                lines.append(f"  - {w}")
+            lines.extend(f"  - {w}" for w in instr.warnings)
         lines.append("")
 
         # File listing

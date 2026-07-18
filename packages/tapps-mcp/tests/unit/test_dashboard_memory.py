@@ -178,37 +178,21 @@ class TestDashboardMemoryMetrics:
         assert mem["source_entries_count"] == 0
         assert mem["consolidation_groups"] == 0
 
-    def test_dashboard_memory_federation_stats(
+    def test_dashboard_memory_no_federation_section(
         self,
         tmp_path: Path,
         metrics_dir: Path,
     ) -> None:
-        """Epic 65.1: memory_metrics includes federation when available."""
+        """Federation stats were removed with tapps_brain.federation (v3, ADR-007)."""
         from tapps_brain.store import MemoryStore
 
         store = MemoryStore(tmp_path / "memory")
         store.save(key="k1", value="v1", tier="pattern")
 
         gen = DashboardGenerator(metrics_dir, memory_store=store)
+        data = gen.generate_json_dashboard(sections=["memory_metrics"])
 
-        with patch(
-            "tapps_core.metrics.dashboard.DashboardGenerator._build_federation_stats",
-            return_value={
-                "hub_registered": True,
-                "published_count": 5,
-                "subscribed_projects": 2,
-                "synced_count": 3,
-            },
-        ):
-            data = gen.generate_json_dashboard(sections=["memory_metrics"])
-        mem = data["memory_metrics"]
-
-        assert "federation" in mem
-        fed = mem["federation"]
-        assert fed["hub_registered"] is True
-        assert fed["published_count"] == 5
-        assert fed["subscribed_projects"] == 2
-        assert fed["synced_count"] == 3
+        assert "federation" not in data["memory_metrics"]
 
 
 @pytest.mark.asyncio()

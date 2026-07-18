@@ -176,16 +176,15 @@ class FeedbackTracker:
         """
         scoring_tools = {"tapps_score_file", "tapps_quality_gate", "tapps_quick_check"}
         records = self._load_all()
-        outcomes: list[dict[str, Any]] = []
-        for r in records:
-            if r.tool_name in scoring_tools:
-                outcomes.append(
-                    {
-                        "first_pass_success": r.helpful,
-                        "initial_scores": {},
-                        "source": "feedback",
-                        "session_id": r.session_id,
-                        "timestamp": r.timestamp,
-                    }
-                )
+        outcomes: list[dict[str, Any]] = [
+            {
+                "first_pass_success": r.helpful,
+                "initial_scores": {},
+                "source": "feedback",
+                "session_id": r.session_id,
+                "timestamp": r.timestamp,
+            }
+            for r in records
+            if r.tool_name in scoring_tools
+        ]
         return outcomes

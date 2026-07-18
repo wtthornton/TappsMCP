@@ -188,10 +188,7 @@ class LookupEngine:
                     if brain_result is not None:
                         return brain_result
 
-        use_local_doc_cache = (
-            self._settings is None
-            or not docs_via_brain_enabled(self._settings)
-        )
+        use_local_doc_cache = self._settings is None or not docs_via_brain_enabled(self._settings)
 
         # 1. Exact cache hit (skipped when docs_via_brain routes through brain only)
         known_libs: list[str] = []

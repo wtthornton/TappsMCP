@@ -713,9 +713,12 @@ class DomainWeightStore:
     def _persist(self, snapshot: DomainWeightsSnapshot) -> None:
         """Persist snapshot to brain profile KV or local YAML fallback."""
         bridge = self._get_brain_bridge()
-        if bridge is not None and hasattr(bridge, "profile_set"):
-            if self._persist_to_brain(bridge, snapshot):
-                return
+        if (
+            bridge is not None
+            and hasattr(bridge, "profile_set")
+            and self._persist_to_brain(bridge, snapshot)
+        ):
+            return
         data = snapshot.model_dump(mode="json")
         # Convert DomainWeightEntry dicts for cleaner YAML
         for section in ("technical", "business"):

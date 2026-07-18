@@ -276,11 +276,7 @@ class ToolCallMetricsCollector:
             if mode == "brain" or metrics:
                 filtered = self._apply_filters(metrics, None, None, None)
                 if since or until:
-                    filtered = [
-                        m
-                        for m in filtered
-                        if self._metric_in_time_window(m, since, until)
-                    ]
+                    filtered = [m for m in filtered if self._metric_in_time_window(m, since, until)]
                 return filtered
 
         metrics = []
