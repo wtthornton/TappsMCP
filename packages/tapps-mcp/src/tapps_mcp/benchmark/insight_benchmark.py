@@ -117,12 +117,12 @@ class InsightBenchmarkResult(BaseModel):
             "| Operation | Count | p50 ms | p95 ms | p99 ms | Mean ms | Throughput/s |",
             "|-----------|-------|--------|--------|--------|---------|-------------|",
         ]
-        for lat in self.latencies:
-            lines.append(
-                f"| {lat.operation} | {lat.count} | {lat.p50_ms} "
-                f"| {lat.p95_ms} | {lat.p99_ms} | {lat.mean_ms} "
-                f"| {lat.throughput_per_s} |"
-            )
+        lines.extend(
+            f"| {lat.operation} | {lat.count} | {lat.p50_ms} "
+            f"| {lat.p95_ms} | {lat.p99_ms} | {lat.mean_ms} "
+            f"| {lat.throughput_per_s} |"
+            for lat in self.latencies
+        )
         return "\n".join(lines) + "\n"
 
 

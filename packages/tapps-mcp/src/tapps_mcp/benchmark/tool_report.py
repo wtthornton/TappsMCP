@@ -96,15 +96,15 @@ def _generate_markdown_report(
         "|------|------|--------|--------|------|---------|----------------|",
     ]
 
-    for i, ranking in enumerate(tool_report.tool_rankings, 1):
-        lines.append(
-            f"| {i} | {ranking.tool_name} "
-            f"| {ranking.impact_score:+.1%} "
-            f"| {ranking.tasks_helped} "
-            f"| {ranking.tasks_hurt} "
-            f"| {ranking.tasks_neutral} "
-            f"| {ranking.avg_token_cost:,} |"
-        )
+    lines.extend(
+        f"| {i} | {ranking.tool_name} "
+        f"| {ranking.impact_score:+.1%} "
+        f"| {ranking.tasks_helped} "
+        f"| {ranking.tasks_hurt} "
+        f"| {ranking.tasks_neutral} "
+        f"| {ranking.avg_token_cost:,} |"
+        for i, ranking in enumerate(tool_report.tool_rankings, 1)
+    )
 
     lines.append("")
 
@@ -139,30 +139,19 @@ def _generate_markdown_report(
         bottom = [r for r in tool_report.tool_rankings if r.impact_score <= 0]
 
         if top:
+            lines.extend(["## High-Impact Tools", ""])
             lines.extend(
-                [
-                    "## High-Impact Tools",
-                    "",
-                ]
+                f"- **{r.tool_name}**: {r.impact_score:+.1%} impact, helped {r.tasks_helped} tasks"
+                for r in top[:5]
             )
-            for r in top[:5]:
-                lines.append(
-                    f"- **{r.tool_name}**: {r.impact_score:+.1%} impact, "
-                    f"helped {r.tasks_helped} tasks"
-                )
             lines.append("")
 
         if bottom:
+            lines.extend(["## Low-Impact Tools", ""])
             lines.extend(
-                [
-                    "## Low-Impact Tools",
-                    "",
-                ]
+                f"- **{r.tool_name}**: {r.impact_score:+.1%} impact, hurt {r.tasks_hurt} tasks"
+                for r in bottom[:5]
             )
-            for r in bottom[:5]:
-                lines.append(
-                    f"- **{r.tool_name}**: {r.impact_score:+.1%} impact, hurt {r.tasks_hurt} tasks"
-                )
             lines.append("")
 
     return "\n".join(lines)

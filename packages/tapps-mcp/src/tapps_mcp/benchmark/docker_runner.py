@@ -61,18 +61,18 @@ class DockerRunner:
             self._client = docker.from_env()
             # Test connectivity
             self._client.ping()
-            return self._client
         except ImportError as exc:
             msg = (
                 "Docker SDK for Python is required for benchmark "
                 "evaluation. Install with: uv add docker"
             )
             raise DockerNotAvailableError(msg) from exc
+        except DockerNotAvailableError:
+            raise
         except Exception as exc:
-            if isinstance(exc, DockerNotAvailableError):
-                raise
             msg = f"Docker daemon not available: {exc}"
             raise DockerNotAvailableError(msg) from exc
+        return self._client
 
     async def prepare_container(
         self,
@@ -93,7 +93,7 @@ class DockerRunner:
         effective_workdir = work_dir or "/workspace"
 
         # Pull image
-        loop = asyncio.get_event_loop()
+        loop = asyncio.get_running_loop()
         try:
             await loop.run_in_executor(None, client.images.pull, image)
         except Exception:
@@ -141,7 +141,7 @@ class DockerRunner:
 
         try:
             escaped = patch.replace("'", "'\\''")
-            exit_code, output = await asyncio.get_event_loop().run_in_executor(
+            exit_code, output = await asyncio.get_running_loop().run_in_executor(
                 None,
                 lambda: container.exec_run(
                     [
@@ -159,10 +159,10 @@ class DockerRunner:
                     output=output.decode(errors="replace")[:500],
                 )
                 return False
-            return True
-        except Exception as exc:
-            logger.error("patch_apply_error", error=str(exc))
+        except Exception:
+            logger.exception("patch_apply_error")
             return False
+        return True
 
     async def run_tests(
         self,
@@ -193,7 +193,7 @@ class DockerRunner:
         for cmd in commands:
             try:
                 exit_code, output = await asyncio.wait_for(
-                    asyncio.get_event_loop().run_in_executor(
+                    asyncio.get_running_loop().run_in_executor(
                         None,
                         lambda c=cmd: container.exec_run(  # type: ignore[misc]
                             ["sh", "-c", c],
@@ -233,7 +233,7 @@ class DockerRunner:
         try:
             client = self._get_client()
             container = client.containers.get(container_id)
-            await asyncio.get_event_loop().run_in_executor(
+            await asyncio.get_running_loop().run_in_executor(
                 None,
                 lambda: container.remove(force=True, v=True),
             )
@@ -256,7 +256,7 @@ class DockerRunner:
         """
         client = self._get_client()
         container = client.containers.get(container_id)
-        exit_code, output = await asyncio.get_event_loop().run_in_executor(
+        exit_code, output = await asyncio.get_running_loop().run_in_executor(
             None,
             lambda: container.exec_run(["sh", "-c", cmd], workdir="/workspace"),
         )

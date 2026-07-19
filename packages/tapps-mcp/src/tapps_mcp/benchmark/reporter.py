@@ -180,7 +180,7 @@ class ResultsPersistence:
                 raw = meta_path.read_text(encoding="utf-8")
                 metadata = RunMetadata.model_validate_json(raw)
                 runs.append(metadata)
-            except Exception as exc:
+            except (OSError, ValueError) as exc:
                 logger.debug(
                     "benchmark_metadata_parse_failed",
                     path=str(meta_path),

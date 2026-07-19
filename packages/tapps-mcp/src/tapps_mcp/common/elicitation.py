@@ -166,9 +166,9 @@ def _client_supports_elicitation(ctx: Context) -> bool:  # type: ignore[type-arg
         # Dict-style fallback
         if isinstance(caps, dict):
             return caps.get("elicitation") is not None
-        return False
     except Exception:
         return False
+    return False
 
 
 _LEGACY_PRESET_ALIASES = {
@@ -194,12 +194,12 @@ async def elicit_preset(ctx: Context) -> str | None:  # type: ignore[type-arg]
             ),
             timeout=_ELICITATION_TIMEOUT_SEC,
         )
-        if result.action == "accept" and result.data is not None:
-            preset = result.data.preset
-            return _LEGACY_PRESET_ALIASES.get(preset, preset)
-        return None
     except Exception:  # pragma: no cover — graceful degradation
         return None
+    if result.action == "accept" and result.data is not None:
+        preset = result.data.preset
+        return _LEGACY_PRESET_ALIASES.get(preset, preset)
+    return None
 
 
 async def elicit_init_confirmation(
@@ -225,11 +225,11 @@ async def elicit_init_confirmation(
             ),
             timeout=_ELICITATION_TIMEOUT_SEC,
         )
-        if result.action == "accept" and result.data is not None:
-            return result.data.confirm
-        return None
     except Exception:  # pragma: no cover — graceful degradation
         return None
+    if result.action == "accept" and result.data is not None:
+        return result.data.confirm
+    return None
 
 
 # ---------------------------------------------------------------------------

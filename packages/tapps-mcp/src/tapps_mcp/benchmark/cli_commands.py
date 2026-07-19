@@ -125,7 +125,7 @@ async def _run_benchmark_async(
     real evaluator, persists results, and prints a summary.
     """
     from tapps_mcp.benchmark.analyzer import ResultsAnalyzer
-    from tapps_mcp.benchmark.dataset import DatasetLoader
+    from tapps_mcp.benchmark.dataset import DatasetLoader, DatasetLoadError
     from tapps_mcp.benchmark.mock_evaluator import MockEvaluator
     from tapps_mcp.benchmark.models import ContextMode
     from tapps_mcp.benchmark.reporter import ResultsPersistence
@@ -135,7 +135,7 @@ async def _run_benchmark_async(
     loader = DatasetLoader(config)
     try:
         instances = await loader.load()
-    except Exception as exc:
+    except (DatasetLoadError, OSError, ValueError) as exc:
         click.echo(f"Error loading dataset: {exc}", err=True)
         sys.exit(1)
     click.echo(f"  Loaded {len(instances)} instances")
@@ -352,12 +352,10 @@ def generate_report(
     lines.append("")
     lines.append("| Run ID | Timestamp | Instances | Mode |")
     lines.append("|--------|-----------|-----------|------|")
-    for run in runs:
-        lines.append(
-            f"| {run.run_id} | {run.timestamp[:19]} "
-            f"| {run.instance_count} "
-            f"| {run.context_mode.value} |",
-        )
+    lines.extend(
+        f"| {run.run_id} | {run.timestamp[:19]} | {run.instance_count} | {run.context_mode.value} |"
+        for run in runs
+    )
 
     if include_redundancy:
         lines.append("")
@@ -650,12 +648,12 @@ async def _run_template_benchmark(
         },
     )
 
-    from tapps_mcp.benchmark.dataset import DatasetLoader
+    from tapps_mcp.benchmark.dataset import DatasetLoader, DatasetLoadError
 
     loader = DatasetLoader(config)
     try:
         instances = await loader.load()
-    except Exception as exc:
+    except (DatasetLoadError, OSError, ValueError) as exc:
         click.echo(f"  Error loading dataset: {exc}", err=True)
         return
 

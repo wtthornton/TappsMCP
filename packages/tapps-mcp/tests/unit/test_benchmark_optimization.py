@@ -827,7 +827,7 @@ class TestFailureAnalyzerPatterns:
         instances = [_make_instance(instance_id=f"pass-{i}") for i in range(5)]
 
         analyzer = FailureAnalyzer()
-        patterns = analyzer.analyze_failures(results, instances)
+        patterns = analyzer.analyze_failures(results)
 
         assert patterns == []
 
@@ -855,7 +855,7 @@ class TestFailureAnalyzerPatterns:
         instances.append(_make_instance(instance_id="fail-timeout"))
 
         analyzer = FailureAnalyzer()
-        patterns = analyzer.analyze_failures(results, instances)
+        patterns = analyzer.analyze_failures(results)
 
         assert len(patterns) >= 2
         pattern_types = {p.pattern_type for p in patterns}
@@ -885,7 +885,7 @@ class TestFailureAnalyzerPatterns:
         instances = [_make_instance(instance_id=r.instance_id) for r in results]
 
         analyzer = FailureAnalyzer()
-        patterns = analyzer.analyze_failures(results, instances)
+        patterns = analyzer.analyze_failures(results)
 
         assert patterns[0].frequency >= patterns[-1].frequency
 
@@ -908,7 +908,7 @@ class TestFailureAnalyzerPatterns:
         instances = [_make_instance(instance_id=r.instance_id) for r in results]
 
         analyzer = FailureAnalyzer()
-        patterns = analyzer.analyze_failures(results, instances)
+        patterns = analyzer.analyze_failures(results)
 
         assert len(patterns) <= 5
 
@@ -920,7 +920,7 @@ class TestFailureAnalyzerPatterns:
         instances = [_make_instance(instance_id="err-1")]
 
         analyzer = FailureAnalyzer()
-        patterns = analyzer.analyze_failures(results, instances)
+        patterns = analyzer.analyze_failures(results)
 
         for pattern in patterns:
             assert len(pattern.suggested_fix) > 0

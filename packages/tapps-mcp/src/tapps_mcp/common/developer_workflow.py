@@ -61,8 +61,7 @@ def render_workflow_md() -> str:
         "## Setup (once per project)",
         "",
     ]
-    for step in SETUP_STEPS:
-        lines.append(f"- {step}")
+    lines.extend(f"- {step}" for step in SETUP_STEPS)
     lines.extend(
         [
             "",
@@ -76,8 +75,7 @@ def render_workflow_md() -> str:
             "",
         ]
     )
-    for step in DAILY_STEPS:
-        lines.append(f"- {step}")
+    lines.extend(f"- {step}" for step in DAILY_STEPS)
     lines.extend(
         [
             "",
@@ -87,7 +85,6 @@ def render_workflow_md() -> str:
             "",
         ]
     )
-    for tool, when in WHEN_TO_USE:
-        lines.append(f"- **{tool}** — {when}")
+    lines.extend(f"- **{tool}** — {when}" for tool, when in WHEN_TO_USE)
     lines.append("")
     return "\n".join(lines)

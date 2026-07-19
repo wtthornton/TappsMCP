@@ -38,7 +38,7 @@ def _load_yaml_benchmark_section(project_root: Path) -> dict[str, Any]:
     try:
         with config_path.open(encoding="utf-8-sig") as f:
             data = yaml.safe_load(f)
-    except Exception as exc:
+    except (OSError, yaml.YAMLError) as exc:
         logger.debug(
             "benchmark_config_load_failed",
             path=str(config_path),
@@ -84,15 +84,14 @@ def load_benchmark_config(
     root = Path(project_root) if project_root else Path.cwd()
 
     yaml_values = _load_yaml_benchmark_section(root)
-    yaml_values = _coerce_context_mode(yaml_values)
 
     effective_overrides = overrides or {}
     merged: dict[str, Any] = {**yaml_values, **effective_overrides}
-    merged = _coerce_context_mode(merged)
 
     try:
+        merged = _coerce_context_mode(merged)
         config = BenchmarkConfig(**merged)
-    except Exception as exc:
+    except (TypeError, ValueError) as exc:
         logger.warning(
             "benchmark_config_validation_failed",
             reason=str(exc),

@@ -15,7 +15,7 @@ import structlog
 from pydantic import BaseModel, ConfigDict, Field
 
 if TYPE_CHECKING:
-    from tapps_mcp.benchmark.models import BenchmarkInstance, BenchmarkResult
+    from tapps_mcp.benchmark.models import BenchmarkResult
 
 __all__ = [
     "FailureAnalyzer",
@@ -196,7 +196,6 @@ class FailureAnalyzer:
     def analyze_failures(
         self,
         results: list[BenchmarkResult],
-        instances: list[BenchmarkInstance],
     ) -> list[FailurePattern]:
         """Identify recurring failure patterns.
 
@@ -206,7 +205,6 @@ class FailureAnalyzer:
 
         Args:
             results: Benchmark results to analyze.
-            instances: Benchmark instances for context.
 
         Returns:
             List of failure patterns sorted by frequency (descending).

@@ -10,6 +10,7 @@ CallTracker is not loaded and nudges/pipeline progress are omitted.
 
 from __future__ import annotations
 
+import contextlib
 from typing import Any
 
 from tapps_core.common.pipeline_models import STAGE_ORDER, STAGE_TOOLS, PipelineStage
@@ -27,12 +28,11 @@ def _get_call_tracker() -> type[Any] | None:
         return val if isinstance(val, type) else None
     try:
         from tapps_mcp.tools.checklist import CallTracker
-
-        _call_tracker_cache.append(CallTracker)
-        return CallTracker
     except ImportError:
         _call_tracker_cache.append(False)
         return None
+    _call_tracker_cache.append(CallTracker)
+    return CallTracker
 
 
 # STORY-101.5: Return only the single highest-impact nudge per response.
@@ -294,12 +294,11 @@ def compute_next_steps(
         if condition(called, context):
             # Templated nudges (e.g. "Call tapps_security_scan(file_path='{file_path}')")
             # render with the call context when a placeholder is present.
+            rendered = text
             if "{" in text and context:
-                try:
-                    text = text.format(**context)
-                except (KeyError, IndexError):
-                    pass
-            candidates.append((impact, text))
+                with contextlib.suppress(KeyError, IndexError):
+                    rendered = text.format(**context)
+            candidates.append((impact, rendered))
 
     # Global nudge: session-init guard for scoring/validation tools.
     if tool_name in _SESSION_DEPENDENT_TOOLS and not _SESSION_INIT_TOOLS.intersection(called):
