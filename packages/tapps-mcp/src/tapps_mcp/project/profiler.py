@@ -123,9 +123,7 @@ def detect_project_signals(project_root: Path) -> tuple[bool, bool, bool]:
         packages_dir = project_root / "packages"
         if packages_dir.is_dir():
             test_found = any(
-                (pkg / "tests").is_dir()
-                for pkg in packages_dir.iterdir()
-                if pkg.is_dir()
+                (pkg / "tests").is_dir() for pkg in packages_dir.iterdir() if pkg.is_dir()
             )
 
     return has_ci, has_docker, test_found

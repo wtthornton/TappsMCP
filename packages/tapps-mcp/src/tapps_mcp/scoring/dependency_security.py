@@ -58,9 +58,7 @@ def merge_security_findings(
     first (input order), then surviving semgrep findings (input order).
     """
     merged: list[SecurityIssue] = list(bandit_issues)
-    seen: set[tuple[str, str, int]] = {
-        (_category_of(i), i.file, i.line) for i in bandit_issues
-    }
+    seen: set[tuple[str, str, int]] = {(_category_of(i), i.file, i.line) for i in bandit_issues}
     for issue in semgrep_issues:
         key = (_category_of(issue), issue.file, issue.line)
         if key in seen:
@@ -68,6 +66,7 @@ def merge_security_findings(
         seen.add(key)
         merged.append(issue)
     return merged
+
 
 # ---------------------------------------------------------------------------
 # Penalty constants per severity level

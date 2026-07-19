@@ -89,9 +89,7 @@ def _load_imports(idx: FileIndex, tree: ast.Module) -> None:
                 bound = alias.asname or alias.name.split(".", maxsplit=1)[0]
                 idx.imports[bound] = alias.name
         elif isinstance(node, ast.ImportFrom):
-            base = _import_from_base(
-                idx.module, node.module, node.level, is_package=is_package
-            )
+            base = _import_from_base(idx.module, node.module, node.level, is_package=is_package)
             for alias in node.names:
                 if alias.name == "*":
                     continue

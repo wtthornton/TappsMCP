@@ -180,11 +180,7 @@ class SessionNoteStore:
                 )
                 return
 
-            if (
-                snap.host != current_host
-                or snap.os != current_os
-                or snap.cwd != current_cwd
-            ):
+            if snap.host != current_host or snap.os != current_os or snap.cwd != current_cwd:
                 logger.warning(
                     "session_notes_recovery_mismatch_discarded",
                     file=str(latest),

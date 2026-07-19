@@ -84,6 +84,7 @@ class _DeferredMeta:
     target_module: str | None
     specifier: str
 
+
 AnalyzeResult = tuple[
     list[SymbolRecord],
     list[CallEdge],
@@ -353,9 +354,7 @@ class _TsFileAnalyzer:
                     elif is_path_alias:
                         # Path-alias named import — resolvable later via tsconfig.
                         self._deferred_bindings[local] = "path_alias_unresolved"
-                        self._deferred_meta[local] = _DeferredMeta(
-                            "named", real, None, specifier
-                        )
+                        self._deferred_meta[local] = _DeferredMeta("named", real, None, specifier)
                     else:  # external package (fs, lodash, ...)
                         self._deferred_bindings[local] = "import_unresolved"
             elif child.type == "namespace_import":
@@ -369,9 +368,7 @@ class _TsFileAnalyzer:
                     # known only at the call site, so imported_name stays None
                     # here and is filled in when the deferred call is recorded.
                     self._deferred_bindings[alias] = "path_alias_unresolved"
-                    self._deferred_meta[alias] = _DeferredMeta(
-                        "namespace", None, None, specifier
-                    )
+                    self._deferred_meta[alias] = _DeferredMeta("namespace", None, None, specifier)
                 else:
                     self._deferred_bindings[alias] = "import_unresolved"
             elif child.type == "identifier":
@@ -381,9 +378,7 @@ class _TsFileAnalyzer:
                 local = _node_text(child, self.source)
                 if is_path_alias:
                     self._deferred_bindings[local] = "path_alias_unresolved"
-                    self._deferred_meta[local] = _DeferredMeta(
-                        "default", None, None, specifier
-                    )
+                    self._deferred_meta[local] = _DeferredMeta("default", None, None, specifier)
                 elif is_relative:
                     self._deferred_bindings[local] = "unresolved_default_export"
                     self._deferred_meta[local] = _DeferredMeta(
@@ -684,9 +679,7 @@ class _TsFileAnalyzer:
             if obj.type == "identifier":
                 obj_name = _node_text(obj, self.source)
                 member = (
-                    _node_text(prop, self.source)
-                    if prop.type == "property_identifier"
-                    else None
+                    _node_text(prop, self.source) if prop.type == "property_identifier" else None
                 )
                 # Namespace import: `import * as U from "./util"` -> U.greet().
                 ns_module = self._namespace_bindings.get(obj_name)

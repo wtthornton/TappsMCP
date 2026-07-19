@@ -61,9 +61,10 @@ async def run_auto_capture(
         Dict with saved, skipped, errors, and extracted keys. Includes
         ``degraded=True`` when no bridge is available.
     """
+    from tapps_brain.extraction import extract_durable_facts
+
     from tapps_core.brain_bridge import create_brain_bridge
     from tapps_core.config.settings import load_settings
-    from tapps_brain.extraction import extract_durable_facts
 
     result: dict[str, Any] = {
         "saved": 0,

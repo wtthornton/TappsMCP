@@ -129,9 +129,7 @@ def evaluate_case(root: Path, case: GoldenCase) -> CaseResult:
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(source, encoding="utf-8")
     index = build_call_graph_index(case_dir, force_rebuild=True)
-    resolved: frozenset[Edge] = frozenset(
-        (e.caller, e.callee) for e in index.edges if e.resolved
-    )
+    resolved: frozenset[Edge] = frozenset((e.caller, e.callee) for e in index.edges if e.resolved)
     _external, in_repo_gaps, _reasons = split_gap_counts(index.resolution_gaps)
     return CaseResult(
         name=case.name,
@@ -157,13 +155,7 @@ GOLDEN_CASES: list[GoldenCase] = [
     GoldenCase(
         name="direct_call",
         files={
-            "pkg/mod.py": (
-                "def callee():\n"
-                "    return 1\n"
-                "\n"
-                "def caller():\n"
-                "    return callee()\n"
-            )
+            "pkg/mod.py": ("def callee():\n    return 1\n\ndef caller():\n    return callee()\n")
         },
         expected_edges=frozenset({("pkg.mod.caller", "pkg.mod.callee")}),
     ),
@@ -186,10 +178,7 @@ GOLDEN_CASES: list[GoldenCase] = [
         files={
             "pkg/util.py": "def compute():\n    return 42\n",
             "pkg/app.py": (
-                "from pkg.util import compute\n"
-                "\n"
-                "def handler():\n"
-                "    return compute()\n"
+                "from pkg.util import compute\n\ndef handler():\n    return compute()\n"
             ),
         },
         expected_edges=frozenset({("pkg.app.handler", "pkg.util.compute")}),
@@ -200,10 +189,7 @@ GOLDEN_CASES: list[GoldenCase] = [
         files={
             "pkg/util.py": "def compute():\n    return 42\n",
             "pkg/app.py": (
-                "from pkg.util import compute as run_it\n"
-                "\n"
-                "def handler():\n"
-                "    return run_it()\n"
+                "from pkg.util import compute as run_it\n\ndef handler():\n    return run_it()\n"
             ),
         },
         expected_edges=frozenset({("pkg.app.handler", "pkg.util.compute")}),
@@ -213,12 +199,7 @@ GOLDEN_CASES: list[GoldenCase] = [
         name="module_attribute_call",
         files={
             "pkg/util.py": "def compute():\n    return 42\n",
-            "pkg/app.py": (
-                "from pkg import util\n"
-                "\n"
-                "def handler():\n"
-                "    return util.compute()\n"
-            ),
+            "pkg/app.py": ("from pkg import util\n\ndef handler():\n    return util.compute()\n"),
         },
         expected_edges=frozenset({("pkg.app.handler", "pkg.util.compute")}),
         hard=True,
@@ -227,12 +208,7 @@ GOLDEN_CASES: list[GoldenCase] = [
         name="module_import_alias_attr",
         files={
             "pkg/util.py": "def compute():\n    return 42\n",
-            "pkg/app.py": (
-                "import pkg.util as u\n"
-                "\n"
-                "def handler():\n"
-                "    return u.compute()\n"
-            ),
+            "pkg/app.py": ("import pkg.util as u\n\ndef handler():\n    return u.compute()\n"),
         },
         expected_edges=frozenset({("pkg.app.handler", "pkg.util.compute")}),
         hard=True,
@@ -242,12 +218,7 @@ GOLDEN_CASES: list[GoldenCase] = [
         files={
             "pkg/core.py": "def engine():\n    return 1\n",
             "pkg/api.py": "from pkg.core import engine\n",
-            "pkg/app.py": (
-                "from pkg.api import engine\n"
-                "\n"
-                "def handler():\n"
-                "    return engine()\n"
-            ),
+            "pkg/app.py": ("from pkg.api import engine\n\ndef handler():\n    return engine()\n"),
         },
         # Correct binding is the definition site, regardless of the re-export hop.
         expected_edges=frozenset({("pkg.app.handler", "pkg.core.engine")}),
@@ -256,11 +227,7 @@ GOLDEN_CASES: list[GoldenCase] = [
     GoldenCase(
         name="instance_method_call",
         files={
-            "pkg/svc.py": (
-                "class Worker:\n"
-                "    def helper(self):\n"
-                "        return 0\n"
-            ),
+            "pkg/svc.py": ("class Worker:\n    def helper(self):\n        return 0\n"),
             "pkg/app.py": (
                 "from pkg.svc import Worker\n"
                 "\n"
@@ -281,16 +248,9 @@ GOLDEN_CASES: list[GoldenCase] = [
     GoldenCase(
         name="typed_param_method_call",
         files={
-            "pkg/svc.py": (
-                "class Worker:\n"
-                "    def helper(self):\n"
-                "        return 0\n"
-            ),
+            "pkg/svc.py": ("class Worker:\n    def helper(self):\n        return 0\n"),
             "pkg/app.py": (
-                "from pkg.svc import Worker\n"
-                "\n"
-                "def handler(w: Worker):\n"
-                "    return w.helper()\n"
+                "from pkg.svc import Worker\n\ndef handler(w: Worker):\n    return w.helper()\n"
             ),
         },
         expected_edges=frozenset({("pkg.app.handler", "pkg.svc.Worker.helper")}),
@@ -328,12 +288,7 @@ GOLDEN_CASES: list[GoldenCase] = [
         name="relative_import_call",
         files={
             "pkg/util.py": "def compute():\n    return 42\n",
-            "pkg/app.py": (
-                "from .util import compute\n"
-                "\n"
-                "def handler():\n"
-                "    return compute()\n"
-            ),
+            "pkg/app.py": ("from .util import compute\n\ndef handler():\n    return compute()\n"),
         },
         expected_edges=frozenset({("pkg.app.handler", "pkg.util.compute")}),
         hard=True,

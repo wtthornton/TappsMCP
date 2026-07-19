@@ -101,7 +101,7 @@ def _parse_updated(raw: str) -> datetime | None:
     if lowered in _PLACEHOLDER_UPDATED or value.startswith("<"):
         return None
     try:
-        ts = datetime.fromisoformat(value.replace("Z", "+00:00"))
+        ts = datetime.fromisoformat(value)
     except ValueError:
         return None
     if ts.tzinfo is None:

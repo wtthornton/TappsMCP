@@ -17,7 +17,7 @@ import time
 from pathlib import Path
 from typing import Any
 
-from tapps_mcp import __version__ as _TAPPS_VERSION
+from tapps_mcp import __version__ as _tapps_version
 from tapps_mcp.pipeline.platform_hook_templates import (
     CLAUDE_HOOK_SCRIPTS as _CLAUDE_HOOK_SCRIPTS,
 )
@@ -539,7 +539,7 @@ def _write_hook_scripts(
             on_disk_version = _hook_marker_version(script_path)
             template_sha = _hook_content_sha_for_template(content)
             on_disk_sha = _hook_content_sha_on_disk(script_path)
-            if on_disk_version == _TAPPS_VERSION and on_disk_sha == template_sha:
+            if on_disk_version == _tapps_version and on_disk_sha == template_sha:
                 continue
             # No marker → user-authored, fall through to the user-edits path
             # below. Marker present but stale → back up before rewriting.
@@ -549,7 +549,7 @@ def _write_hook_scripts(
         if script_path.exists() and _hook_has_user_edits(script_path):
             _backup_hook_file(script_path, project_root=project_root)
         text = _hook_content_for_engagement(content, engagement_level)
-        text = _inject_hook_version_marker(text, _TAPPS_VERSION)
+        text = _inject_hook_version_marker(text, _tapps_version)
         script_path.write_text(text, encoding="utf-8")
         if not win:
             script_path.chmod(script_path.stat().st_mode | stat.S_IXUSR | stat.S_IXGRP)

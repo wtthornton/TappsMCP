@@ -174,7 +174,7 @@ def refresh_linear_sdlc(
     if not stale:
         return result
 
-    ts = datetime.datetime.now(tz=datetime.timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+    ts = datetime.datetime.now(tz=datetime.UTC).strftime("%Y%m%dT%H%M%SZ")
     backup_dir = project_root / ".tapps-mcp" / "backups" / f"linear-sdlc-{ts}"
     try:
         backup_dir.mkdir(parents=True, exist_ok=True)

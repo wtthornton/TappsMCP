@@ -128,9 +128,7 @@ def evaluate_gate(
 
     # TAP-1796: priority weights come from the per-file score result so
     # consumer-configured weights actually drive the failure ordering.
-    weights: dict[str, float] = {
-        name: cat.weight for name, cat in cats.items()
-    }
+    weights: dict[str, float] = {name: cat.weight for name, cat in cats.items()}
     weights.setdefault("overall", 1.0)  # overall failures always sort first
 
     overall = score_result.overall_score

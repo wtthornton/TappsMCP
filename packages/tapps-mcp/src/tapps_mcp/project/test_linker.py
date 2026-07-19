@@ -144,9 +144,7 @@ def load_or_build_test_edges(project_root: Path, *, force_rebuild: bool = False)
     disk cache when fresh (TAP-4080) and rebuilds on a fingerprint mismatch.
     """
     index = build_call_graph_index(project_root, force_rebuild=force_rebuild)
-    return load_or_build_test_edges_for_index(
-        project_root, index, force_rebuild=force_rebuild
-    )
+    return load_or_build_test_edges_for_index(project_root, index, force_rebuild=force_rebuild)
 
 
 def edges_to_dicts(edges: list[TestEdge]) -> list[dict[str, object]]:

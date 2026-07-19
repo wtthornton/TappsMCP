@@ -76,7 +76,9 @@ class _ReexportResolver:
         """
         return self._resolve(module, name, depth=0, seen=set())
 
-    def _resolve(self, module: str, name: str, *, depth: int, seen: set[tuple[str, str]]) -> str | None:
+    def _resolve(
+        self, module: str, name: str, *, depth: int, seen: set[tuple[str, str]]
+    ) -> str | None:
         if depth > _MAX_REEXPORT_DEPTH:
             return None
         key = (module, name)

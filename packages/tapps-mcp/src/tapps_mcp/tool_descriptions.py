@@ -43,12 +43,8 @@ TOOL_DESCRIPTIONS: dict[str, str] = {
     "tapps_quick_check": (
         "Fast post-edit bundle: score + gate + basic security for one Python file."
     ),
-    "tapps_checklist": (
-        "Verify required TAPPS pipeline tools ran for the current task type."
-    ),
-    "tapps_session_notes": (
-        "Save or recall short-lived session notes in the local KV store."
-    ),
+    "tapps_checklist": ("Verify required TAPPS pipeline tools ran for the current task type."),
+    "tapps_session_notes": ("Save or recall short-lived session notes in the local KV store."),
     "tapps_memory": (
         "Slim brain memory on nlt-memory: search, save, get, health, related (not full 44-action catalog)."
     ),
@@ -67,56 +63,38 @@ TOOL_DESCRIPTIONS: dict[str, str] = {
     "tapps_init": (
         "Bootstrap TAPPS scaffolding: AGENTS.md, hooks, agents, skills, and MCP config."
     ),
-    "tapps_upgrade": (
-        "Refresh tapps-managed generated files after a tapps-mcp version upgrade."
-    ),
-    "tapps_doctor": (
-        "Diagnose MCP config, checker install, brain connectivity, and hook wiring."
-    ),
+    "tapps_upgrade": ("Refresh tapps-managed generated files after a tapps-mcp version upgrade."),
+    "tapps_doctor": ("Diagnose MCP config, checker install, brain connectivity, and hook wiring."),
     "tapps_set_engagement_level": (
         "Persist engagement level (high/medium/low) to .tapps-mcp.yaml."
     ),
-    "tapps_dashboard": (
-        "Render TappsMCP metrics dashboard: usage, gate pass rate, and trends."
-    ),
+    "tapps_dashboard": ("Render TappsMCP metrics dashboard: usage, gate pass rate, and trends."),
     "tapps_stats": (
         "Per-tool usage statistics: call counts, success rates, and latency percentiles."
     ),
-    "tapps_feedback": (
-        "Record thumbs-up/down on a tool response for adaptive learning."
-    ),
-    "tapps_usage": (
-        "Session gap report: tools called vs TAPPS pipeline expectations."
-    ),
+    "tapps_feedback": ("Record thumbs-up/down on a tool response for adaptive learning."),
+    "tapps_usage": ("Session gap report: tools called vs TAPPS pipeline expectations."),
     "tapps_dead_code": (
         "Find unused Python functions, classes, imports, and variables (vulture-backed). "
         "GA; accuracy caveat: dynamic dispatch can hide callers, so treat results from "
         "high in_repo_gap_rate repos as advisory (potential false 'unused' positives)."
     ),
-    "tapps_dependency_scan": (
-        "Scan project dependencies for known CVEs via pip-audit."
-    ),
+    "tapps_dependency_scan": ("Scan project dependencies for known CVEs via pip-audit."),
     "tapps_dependency_graph": (
         "Build import graph, report circular imports, and module coupling metrics."
     ),
     "tapps_audit_campaign": (
         "Plan, dispatch, or convert a file-scope audit campaign to a fix plan."
     ),
-    "tapps_pipeline": (
-        "Show TAPPS pipeline stage progress and the next recommended tool call."
-    ),
-    "tapps_decompose": (
-        "Break a vague task into ordered, verifiable TAPPS tool-call steps."
-    ),
+    "tapps_pipeline": ("Show TAPPS pipeline stage progress and the next recommended tool call."),
+    "tapps_decompose": ("Break a vague task into ordered, verifiable TAPPS tool-call steps."),
     "tapps_domain_playbook": (
         "Return a bundled domain checklist and suggested TAPPS tool order (deterministic)."
     ),
     "tapps_linear_snapshot_get": (
         "Cache-first Linear read: return cached issues or signal a cache miss."
     ),
-    "tapps_linear_snapshot_put": (
-        "Write a Linear issue list into the local snapshot cache."
-    ),
+    "tapps_linear_snapshot_put": ("Write a Linear issue list into the local snapshot cache."),
     "tapps_linear_snapshot_invalidate": (
         "Evict cached Linear snapshots for a team/project prefix."
     ),
@@ -129,9 +107,7 @@ TOOL_DESCRIPTIONS: dict[str, str] = {
     "brain_propose_hive_elevation": (
         "Propose promoting a memory key to hive scope (operator approval required)."
     ),
-    "brain_approve_hive_elevation": (
-        "Approve a pending hive elevation proposal by proposal_id."
-    ),
+    "brain_approve_hive_elevation": ("Approve a pending hive elevation proposal by proposal_id."),
     "tapps_linear_list_issues": (
         "Pre-list gate: verify a recent snapshot_get before Linear list_issues."
     ),

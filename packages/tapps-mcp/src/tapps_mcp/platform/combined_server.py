@@ -144,9 +144,7 @@ def create_combined_server(profile: str | None = None) -> FastMCP:
             combined._prompt_manager._prompts,
         )
         docs_tool_count = sum(
-            1
-            for name in combined._tool_manager._tools
-            if name.startswith("docs_")
+            1 for name in combined._tool_manager._tools if name.startswith("docs_")
         )
 
     total_tools = len(combined._tool_manager._tools)

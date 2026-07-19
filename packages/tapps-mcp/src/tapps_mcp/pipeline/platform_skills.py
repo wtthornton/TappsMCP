@@ -178,7 +178,7 @@ End the session with a durable handoff the next chat can load via `/tapps-contin
     + _HANDOFF_PRE_GATE
     + """
 
-1. **Draft handoff (5–10 bullets).** From this session's work, write:
+1. **Draft handoff (5-10 bullets).** From this session's work, write:
    - **Done** — what shipped or was verified
    - **Open** — in-progress or untested
    - **Next (P0)** — one concrete next action (plain prose)
@@ -1204,7 +1204,7 @@ End the session with a durable handoff the next chat loads via `tapps-continue-s
     + _HANDOFF_PRE_GATE
     + """
 
-1. **Draft handoff (5–10 bullets):** Done, Open, Next (P0), Blockers (`- none` when clear), optional Changed files, Verify, Success criterion.
+1. **Draft handoff (5-10 bullets):** Done, Open, Next (P0), Blockers (`- none` when clear), optional Changed files, Verify, Success criterion.
 
 """
     + _HANDOFF_P0_GATE

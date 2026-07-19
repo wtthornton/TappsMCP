@@ -12,6 +12,7 @@ import os
 import re
 import signal
 import subprocess
+import sys
 from typing import Any
 
 _SERVE_CMD = re.compile(r"serve --profile nlt-|/(tapps-mcp|docsmcp|tapps-platform)( |$).*serve")
@@ -125,10 +126,12 @@ def reap_orphan_mcp_serves(*, dry_run: bool = False) -> dict[str, Any]:
 def main() -> None:
     result = reap_orphan_mcp_serves()
     if result["reaped"]:
-        print(f"[TappsMCP] Reaped orphaned MCP serve PIDs: {result['reaped']}", flush=True)
+        sys.stdout.write(f"[TappsMCP] Reaped orphaned MCP serve PIDs: {result['reaped']}\n")
+        sys.stdout.flush()
     if result["errors"]:
         for err in result["errors"]:
-            print(f"[TappsMCP] reap error: {err}", flush=True)
+            sys.stderr.write(f"[TappsMCP] reap error: {err}\n")
+        sys.stderr.flush()
         raise SystemExit(1)
 
 

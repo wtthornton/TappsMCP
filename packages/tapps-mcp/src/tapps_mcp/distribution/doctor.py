@@ -7,10 +7,11 @@ import os
 import re
 import shutil
 import sys
+from collections.abc import Callable
 from datetime import UTC, datetime, timedelta
 from importlib.metadata import requires as _requires
 from pathlib import Path
-from typing import Any, Callable, cast
+from typing import Any, cast
 
 import click
 import httpx

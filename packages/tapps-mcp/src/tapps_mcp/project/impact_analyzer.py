@@ -277,9 +277,7 @@ def analyze_impact(
     severity = _assess_severity(total, change_type)
     recs = _recommendations(total, change_type, tests)
     if graph_truncated:
-        recs.append(
-            "Import graph was truncated at max_files — blast radius may be incomplete."
-        )
+        recs.append("Import graph was truncated at max_files — blast radius may be incomplete.")
 
     report = ImpactReport(
         changed_file=str(file_path),
@@ -401,9 +399,13 @@ def analyze_symbol_impact(
     severity = _assess_severity(total, "modified")
     recs: list[str] = []
     if caller_count:
-        recs.append(f"{caller_count} direct/indirect caller edge(s) — review before changing signature.")
+        recs.append(
+            f"{caller_count} direct/indirect caller edge(s) — review before changing signature."
+        )
     if callee_count:
-        recs.append(f"{callee_count} callee edge(s) — changing behavior may affect downstream calls.")
+        recs.append(
+            f"{callee_count} callee edge(s) — changing behavior may affect downstream calls."
+        )
     if query.get("resolution_gaps"):
         recs.append("Unresolved static calls exist; see resolution_gaps (degraded mode).")
     if query.get("truncated"):

@@ -75,9 +75,7 @@ def load_test_edges_cache(project_root: Path, fingerprint: str) -> list[TestEdge
     return edges
 
 
-def save_test_edges_cache(
-    project_root: Path, fingerprint: str, edges: list[TestEdge]
-) -> None:
+def save_test_edges_cache(project_root: Path, fingerprint: str, edges: list[TestEdge]) -> None:
     """Persist *edges* keyed by *fingerprint*, atomically.
 
     On write failure, logs a warning and leaves the cache untouched.

@@ -68,9 +68,9 @@ def _annotation_target(idx: FileIndex, ann: ast.expr | None) -> str | None:
         name = unparsed if all(p.isidentifier() for p in unparsed.split(".")) else None
     elif isinstance(ann, ast.Constant) and isinstance(ann.value, str):
         candidate = ann.value.strip()
-        name = candidate if candidate and all(
-            p.isidentifier() for p in candidate.split(".")
-        ) else None
+        name = (
+            candidate if candidate and all(p.isidentifier() for p in candidate.split(".")) else None
+        )
     if not name:
         return None
     head, _, rest = name.partition(".")

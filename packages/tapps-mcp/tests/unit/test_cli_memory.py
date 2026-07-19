@@ -72,36 +72,36 @@ def _mock_bridge(
     return bridge
 
 
+def _mock_list_bridge(entries: list[dict[str, object]] | None = None) -> MagicMock:
+    """Bridge mock for the list/delete commands (migrated off local MemoryStore)."""
+    bridge = MagicMock()
+    bridge.list_memories = AsyncMock(return_value=entries or [])
+    bridge.delete = AsyncMock(return_value=True)
+    bridge.close = MagicMock()
+    return bridge
+
+
 class TestMemoryList:
     def test_list_empty(self, runner: CliRunner) -> None:
-        store = _mock_store()
-        with (
-            patch(_ROOT_PATCH, return_value=Path("/fake")),
-            patch(_STORE_PATCH, return_value=store),
-        ):
+        bridge = _mock_list_bridge()
+        with patch(_BRIDGE_PATCH, return_value=bridge):
             result = runner.invoke(main, ["memory", "list"])
         assert result.exit_code == 0
         assert "No memories found" in result.output
 
     def test_list_with_entries(self, runner: CliRunner) -> None:
-        entries = [_make_entry(key="arch-decision", tier="architectural")]
-        store = _mock_store(entries)
-        with (
-            patch(_ROOT_PATCH, return_value=Path("/fake")),
-            patch(_STORE_PATCH, return_value=store),
-        ):
+        entries = [{"key": "arch-decision", "tier": "architectural", "confidence": 0.8}]
+        bridge = _mock_list_bridge(entries)
+        with patch(_BRIDGE_PATCH, return_value=bridge):
             result = runner.invoke(main, ["memory", "list"])
         assert result.exit_code == 0
         assert "arch-decision" in result.output
         assert "architectural" in result.output
 
     def test_list_json_output(self, runner: CliRunner) -> None:
-        entries = [_make_entry()]
-        store = _mock_store(entries)
-        with (
-            patch(_ROOT_PATCH, return_value=Path("/fake")),
-            patch(_STORE_PATCH, return_value=store),
-        ):
+        entries = [{"key": "test-key", "tier": "pattern", "confidence": 0.8}]
+        bridge = _mock_list_bridge(entries)
+        with patch(_BRIDGE_PATCH, return_value=bridge):
             result = runner.invoke(main, ["memory", "list", "--json"])
         assert result.exit_code == 0
         data = json.loads(result.output)
@@ -110,24 +110,23 @@ class TestMemoryList:
         assert data[0]["key"] == "test-key"
 
     def test_list_with_tier_filter(self, runner: CliRunner) -> None:
-        store = _mock_store()
-        with (
-            patch(_ROOT_PATCH, return_value=Path("/fake")),
-            patch(_STORE_PATCH, return_value=store),
-        ):
+        bridge = _mock_list_bridge()
+        with patch(_BRIDGE_PATCH, return_value=bridge):
             result = runner.invoke(main, ["memory", "list", "--tier", "architectural"])
         assert result.exit_code == 0
-        store.list_all.assert_called_once_with(tier="architectural", scope=None)
+        bridge.list_memories.assert_awaited_once_with(limit=500, tier="architectural")
 
     def test_list_with_scope_filter(self, runner: CliRunner) -> None:
-        store = _mock_store()
-        with (
-            patch(_ROOT_PATCH, return_value=Path("/fake")),
-            patch(_STORE_PATCH, return_value=store),
-        ):
+        entries = [
+            {"key": "keep", "scope": "branch", "tier": "pattern", "confidence": 0.8},
+            {"key": "drop", "scope": "project", "tier": "pattern", "confidence": 0.8},
+        ]
+        bridge = _mock_list_bridge(entries)
+        with patch(_BRIDGE_PATCH, return_value=bridge):
             result = runner.invoke(main, ["memory", "list", "--scope", "branch"])
         assert result.exit_code == 0
-        store.list_all.assert_called_once_with(tier=None, scope="branch")
+        assert "keep" in result.output
+        assert "drop" not in result.output
 
 
 class TestMemorySave:
@@ -296,22 +295,16 @@ class TestMemorySearch:
 
 class TestMemoryDelete:
     def test_delete_success(self, runner: CliRunner) -> None:
-        store = _mock_store()
-        with (
-            patch(_ROOT_PATCH, return_value=Path("/fake")),
-            patch(_STORE_PATCH, return_value=store),
-        ):
+        bridge = _mock_list_bridge()
+        with patch(_BRIDGE_PATCH, return_value=bridge):
             result = runner.invoke(main, ["memory", "delete", "--key", "test-key"])
         assert result.exit_code == 0
         assert "Deleted" in result.output
 
     def test_delete_not_found(self, runner: CliRunner) -> None:
-        store = _mock_store()
-        store.delete.return_value = False
-        with (
-            patch(_ROOT_PATCH, return_value=Path("/fake")),
-            patch(_STORE_PATCH, return_value=store),
-        ):
+        bridge = _mock_list_bridge()
+        bridge.delete = AsyncMock(return_value=False)
+        with patch(_BRIDGE_PATCH, return_value=bridge):
             result = runner.invoke(main, ["memory", "delete", "--key", "missing"])
         assert result.exit_code == 1
         assert "not found" in result.output
