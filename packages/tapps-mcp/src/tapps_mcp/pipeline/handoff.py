@@ -32,23 +32,25 @@ def render_handoff(state: HandoffState) -> str:
     ]
 
     for result in state.stage_results:
-        lines.append(f"## Stage: {result.stage.value.capitalize()}")
-        lines.append("")
-        lines.append(f"**Completed:** {result.completed_at.isoformat()}")
-        lines.append(f"**Tools called:** {', '.join(result.tools_called) or 'none'}")
-        lines.append("")
+        lines.extend(
+            (
+                f"## Stage: {result.stage.value.capitalize()}",
+                "",
+                f"**Completed:** {result.completed_at.isoformat()}",
+                f"**Tools called:** {', '.join(result.tools_called) or 'none'}",
+                "",
+            )
+        )
 
         _render_list_section(lines, "Findings", result.findings)
         _render_list_section(lines, "Decisions", result.decisions)
         _render_list_section(lines, "Files in scope", result.files_in_scope)
         _render_list_section(lines, "Open questions", result.open_questions)
 
-        lines.append("---")
-        lines.append("")
+        lines.extend(("---", ""))
 
     if state.next_stage_instructions:
-        lines.append(f"**Next:** {state.next_stage_instructions}")
-        lines.append("")
+        lines.extend((f"**Next:** {state.next_stage_instructions}", ""))
 
     return "\n".join(lines)
 
@@ -65,6 +67,7 @@ def parse_handoff(content: str) -> HandoffState:
     This parser handles the standard format produced by ``render_handoff``.
     Non-standard content is silently skipped.
     """
+    from datetime import UTC
     from datetime import datetime as _dt
 
     objective = ""
@@ -91,7 +94,7 @@ def parse_handoff(content: str) -> HandoffState:
 
         current_stage = stage
 
-        completed_at: datetime = _dt.now()
+        completed_at: datetime = _dt.now(UTC)
         ts_match = re.search(r"\*\*Completed:\*\*\s*(.+)", body)
         if ts_match:
             ts_str = ts_match.group(1).strip()

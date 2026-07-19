@@ -55,8 +55,9 @@ def render_install_step(
         f'{indent}      "{core_url}" \\',
     ]
     if include_checkers:
-        lines.append(f'{indent}      "{mcp_url}" \\')
-        lines.append(f"{indent}      ruff mypy bandit radon vulture")
+        lines.extend(
+            (f'{indent}      "{mcp_url}" \\', f"{indent}      ruff mypy bandit radon vulture")
+        )
     else:
         lines.append(f'{indent}      "{mcp_url}"')
     return "\n".join(lines) + "\n"

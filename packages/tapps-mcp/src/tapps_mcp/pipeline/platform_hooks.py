@@ -365,7 +365,7 @@ def _hook_content_sha_on_disk(path: Path) -> str | None:
 
 def _project_root_from_hooks_dir(hooks_dir: Path) -> Path:
     """Return the repo root for ``.claude/hooks`` or ``.cursor/hooks``."""
-    if hooks_dir.parent.name in (".claude", ".cursor"):
+    if hooks_dir.parent.name in {".claude", ".cursor"}:
         return hooks_dir.parent.parent
     return hooks_dir.parent
 
@@ -726,10 +726,10 @@ def generate_claude_hooks(
     # pre-list gate, with the mode baked into the pre-list script.
     cache_gate_mode = (
         linear_enforce_cache_gate
-        if linear_enforce_cache_gate in ("off", "warn", "block")
+        if linear_enforce_cache_gate in {"off", "warn", "block"}
         else "off"
     )
-    cache_gate_active = cache_gate_mode in ("warn", "block")
+    cache_gate_active = cache_gate_mode in {"warn", "block"}
     if cache_gate_active:
         allowed_events.add("PreToolUse")
         allowed_events.add("PostToolUse")
@@ -738,9 +738,9 @@ def generate_claude_hooks(
     # called before tapps_session_start ran this session. The mode is baked
     # into the pre-gate script; the sentinel writer is mode-independent.
     session_gate_mode = (
-        session_start_gate if session_start_gate in ("off", "warn", "block") else "off"
+        session_start_gate if session_start_gate in {"off", "warn", "block"} else "off"
     )
-    session_gate_active = session_gate_mode in ("warn", "block")
+    session_gate_active = session_gate_mode in {"warn", "block"}
     if session_gate_active:
         allowed_events.add("PreToolUse")
         allowed_events.add("PostToolUse")
@@ -891,7 +891,7 @@ def merge_cursor_hooks_config(
         for i, entry in enumerate(entries):
             cmd = entry.get("command", "")
             if _is_wrong_platform_command(cmd, win=win) and event in hooks_config:
-                merged[event][i] = hooks_config[event][0]
+                entries[i] = hooks_config[event][0]
                 hooks_migrated += 1
 
     third_party_keys = sorted(k for k in merged if k not in _TAPPS_MANAGED_CURSOR_HOOK_KEYS)

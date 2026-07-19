@@ -416,8 +416,6 @@ def bootstrap_pipeline(
             "domains": [],
         }
 
-    _load_business_experts(cfg, state)
-
     if state.content_return:
         manifest = state.build_manifest()
         result = state.finalize()
@@ -426,14 +424,6 @@ def bootstrap_pipeline(
         return result
 
     return state.finalize()
-
-
-def _load_business_experts(cfg: BootstrapConfig, state: _BootstrapState) -> None:
-    """Expert system removed (EPIC-94). No-op."""
-
-
-def _suggest_auto_generate(state: _BootstrapState) -> None:
-    """Expert system removed (EPIC-94). No-op."""
 
 
 def _memory_hooks_defaults_for_engagement(engagement_level: str) -> dict[str, Any]:
@@ -936,7 +926,7 @@ def _setup_platform(cfg: BootstrapConfig, state: _BootstrapState) -> None:
             docsmcp_detected=state.result.get("docsmcp_detected", False),
         )
         state.result["claude_settings"] = {"action": settings_action}
-        if settings_action in ("created", "updated"):
+        if settings_action in {"created", "updated"}:
             state.warnings.append(
                 "MCP servers are only connected at session start. "
                 "Restart your Claude Code session for tapps-mcp tools to become available."

@@ -320,7 +320,7 @@ def merge_agents_md(
         return _VERSION_RE.sub("", text, count=1).strip()
 
     if _body_without_stamp(original_content) == _body_without_stamp(merged):
-        changes = [c for c in changes if c in ("updated_version_marker", "added_version_marker")]
+        changes = [c for c in changes if c in {"updated_version_marker", "added_version_marker"}]
 
     return merged, changes
 

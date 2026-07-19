@@ -2964,7 +2964,7 @@ def render_cache_gate_scripts(
     caller (skip the install entirely) — passing it here renders a no-op safe
     "warn" variant so a stray render call cannot accidentally produce a block.
     """
-    chosen = mode if mode in ("warn", "block") else "warn"
+    chosen = mode if mode in {"warn", "block"} else "warn"
     src = LINEAR_CACHE_GATE_SCRIPTS_PS if win else LINEAR_CACHE_GATE_SCRIPTS
     return {name: body.replace("__CACHE_GATE_MODE__", chosen) for name, body in src.items()}
 
@@ -3202,7 +3202,7 @@ def render_session_start_gate_scripts(
     block. Only the PreToolUse gate carries the ``__SESSION_START_GATE_MODE__``
     placeholder; the sentinel writer is mode-independent.
     """
-    chosen = mode if mode in ("warn", "block") else "warn"
+    chosen = mode if mode in {"warn", "block"} else "warn"
     src = SESSION_START_GATE_SCRIPTS_PS if win else SESSION_START_GATE_SCRIPTS
     return {name: body.replace("__SESSION_START_GATE_MODE__", chosen) for name, body in src.items()}
 

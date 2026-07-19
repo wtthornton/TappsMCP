@@ -768,7 +768,7 @@ def _build_dry_run_summary(result: dict[str, Any]) -> dict[str, Any]:
         elif isinstance(value, str):
             if value.startswith("skipped"):
                 skipped.append(f"{scope}:{name}")
-            elif value.startswith("would-refresh") or value.startswith("would-merge"):
+            elif value.startswith(("would-refresh", "would-merge")):
                 review_flags.append(f"{scope}:{name}")
 
     platforms = result.get("components", {}).get("platforms", [])
@@ -935,7 +935,7 @@ def _upgrade_claude_code_dry_run(
             conditional_managed.append("tapps-pre-bash.sh")
         if linear_enforce_gate:
             conditional_managed.extend(["tapps-pre-linear-write.sh", "tapps-post-docs-validate.sh"])
-        if linear_enforce_cache_gate in ("warn", "block"):
+        if linear_enforce_cache_gate in {"warn", "block"}:
             conditional_managed.extend(
                 [
                     "tapps-pre-linear-list.sh",
@@ -943,7 +943,7 @@ def _upgrade_claude_code_dry_run(
                     "tapps-post-linear-list.sh",
                 ]
             )
-        if session_start_gate in ("warn", "block"):
+        if session_start_gate in {"warn", "block"}:
             conditional_managed.extend(
                 [
                     "tapps-pre-session-start-gate.sh",
@@ -1564,7 +1564,7 @@ def _upgrade_platform(
     elif host == "vscode":
         result["components"]["note"] = "no platform rules to upgrade"
 
-    if not dry_run and host in ("claude-code", "cursor"):
+    if not dry_run and host in {"claude-code", "cursor"}:
         from tapps_mcp.distribution.doctor import check_session_handoff_skills
 
         handoff_check = check_session_handoff_skills(project_root)
@@ -1806,9 +1806,9 @@ def _upgrade_content_return(
     result["detected_platform"] = detected
 
     hosts: list[str] = []
-    if detected in ("claude", "both"):
+    if detected in {"claude", "both"}:
         hosts.append("claude-code")
-    if detected in ("cursor", "both"):
+    if detected in {"cursor", "both"}:
         hosts.append("cursor")
 
     settings = load_settings(project_root=project_root)
@@ -2265,9 +2265,9 @@ def upgrade_pipeline(
     result["detected_platform"] = detected
 
     hosts: list[str] = []
-    if detected in ("claude", "both"):
+    if detected in {"claude", "both"}:
         hosts.append("claude-code")
-    if detected in ("cursor", "both"):
+    if detected in {"cursor", "both"}:
         hosts.append("cursor")
 
     engagement_level = settings.llm_engagement_level
