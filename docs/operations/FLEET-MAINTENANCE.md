@@ -133,8 +133,9 @@ AgentForge pins `AGENTS.md` and `CLAUDE.md` in `.tapps-mcp.yaml` `upgrade_skip_f
 
 | Field | Value |
 |-------|-------|
-| Date | 2026-06-16 |
+| Date | 2026-07-18 |
 | Bundle | `full` |
-| CLI version | tapps-mcp / docsmcp 3.12.43 (tagged v3.12.43; global `-e` from checkout; blue/green `current` = `3.12.43-4082bec`) |
-| Brain | 3.24.0 @ `http://localhost:8080` |
+| CLI version | tapps-mcp / docsmcp 3.12.52 (global `-e` from checkout; blue/green `current` = `3.12.52-a9d37d5e`) |
+| Brain | 3.25.0 @ `http://localhost:8080` |
 | Projects | 4/4 upgrade + MCP init OK (tapps-mcp, AgentForge, NLTlabsPE, NewCompanyIdeas) |
+| Doctor | tapps-mcp 75/75 PASS. Consumer FAILs are pre-existing config, not upgrade regressions: `memory.profile: document-builder` not a tapps-brain builtin (AgentForge, NLTlabsPE, NewCompanyIdeas); NLTlabsPE session-handoff missing Next (P0). |
