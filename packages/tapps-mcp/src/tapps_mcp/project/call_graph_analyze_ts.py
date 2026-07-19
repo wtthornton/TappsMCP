@@ -225,7 +225,7 @@ def _resolve_relative_module(module: str, specifier: str) -> str | None:
     base_parts = module.split("/")[:-1]
     spec_parts = specifier.split("/")
     for part in spec_parts:
-        if part in ("", "."):
+        if part in {"", "."}:
             continue
         if part == "..":
             if not base_parts:
@@ -464,7 +464,7 @@ class _TsFileAnalyzer:
         """Resolve ``export default <target>`` to a qualified in-module symbol."""
         # `export default function foo() {}` / `export default class C {}`
         for child in node.children:
-            if child.type in (_FUNCTION_DECL_TYPE, "class_declaration"):
+            if child.type in {_FUNCTION_DECL_TYPE, "class_declaration"}:
                 name = self._decl_name(child, field="name") or _first_child_text(
                     child, "type_identifier", self.source
                 )
@@ -585,16 +585,19 @@ class _TsFileAnalyzer:
         for child in node.children:
             if not skip_root and child.type == "call_expression":
                 out.append(child)
-            if child.type in (
-                _ARROW_TYPE,
-                _FUNCTION_DECL_TYPE,
-                "function_expression",
-                _METHOD_TYPE,
+            # Stop only at a registered symbol body (its own scope); descend
+            # through an anonymous closure to attribute its calls upward.
+            if (
+                child.type
+                in {
+                    _ARROW_TYPE,
+                    _FUNCTION_DECL_TYPE,
+                    "function_expression",
+                    _METHOD_TYPE,
+                }
+                and id(child) in self._symbol_bodies
             ):
-                # Stop only at a registered symbol body (its own scope); descend
-                # through an anonymous closure to attribute its calls upward.
-                if id(child) in self._symbol_bodies:
-                    continue
+                continue
             out.extend(self._walk_calls(child, skip_root=False))
         return out
 
@@ -739,14 +742,14 @@ def _unwrap_export(node: Any) -> Any | None:
     """Return the declaration wrapped by an ``export_statement``, or the node itself."""
     if node.type == "export_statement":
         for child in node.children:
-            if child.type in (
+            if child.type in {
                 _FUNCTION_DECL_TYPE,
                 "lexical_declaration",
                 "class_declaration",
-            ):
+            }:
                 return child
         return None
-    if node.type in (_FUNCTION_DECL_TYPE, "lexical_declaration", "class_declaration"):
+    if node.type in {_FUNCTION_DECL_TYPE, "lexical_declaration", "class_declaration"}:
         return node
     return None
 

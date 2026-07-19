@@ -140,8 +140,8 @@ def analyze_diff_impact(
             )
 
         for sym in changed_symbols:
-            for edge in index.callers_of(sym):
-                caller_sym = resolve_symbol_name(index, edge.caller)
+            for call_edge in index.callers_of(sym):
+                caller_sym = resolve_symbol_name(index, call_edge.caller)
                 if caller_sym is None:
                     continue
                 caller_file = next(
@@ -407,7 +407,9 @@ def export_test_map(
         f"# tests_edges: {len(test_edges)}",
         "",
     ]
-    for edge in sorted(test_edges, key=lambda e: (e.code_symbol, e.test_file)):
-        lines.append(f"{edge.code_symbol}\t{edge.test_file}\t{edge.test_symbol}")
+    lines.extend(
+        f"{edge.code_symbol}\t{edge.test_file}\t{edge.test_symbol}"
+        for edge in sorted(test_edges, key=lambda e: (e.code_symbol, e.test_file))
+    )
     target.write_text("\n".join(lines) + "\n", encoding="utf-8")
     return target

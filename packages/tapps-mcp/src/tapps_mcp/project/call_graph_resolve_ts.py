@@ -89,11 +89,10 @@ class _ReexportResolver:
         exports = self._exports.get(module)
         # Direct hit: the module owns a symbol with this qualified name.
         candidate = f"{module}.{name}"
-        if candidate in self._symbols:
-            # If the module also re-exports this name from elsewhere, the local
-            # symbol wins (a same-name local definition shadows a re-export).
-            if exports is None or name not in exports.reexports:
-                return candidate
+        # If the module also re-exports this name from elsewhere, the local
+        # symbol wins (a same-name local definition shadows a re-export).
+        if candidate in self._symbols and (exports is None or name not in exports.reexports):
+            return candidate
 
         if exports is None:
             return None

@@ -1139,7 +1139,7 @@ async def tapps_dependency_scan(
 
     from tapps_mcp.tools.pip_audit import run_pip_audit_async
 
-    root = project_root if project_root else str(settings.project_root)
+    root = project_root or str(settings.project_root)
 
     # Heartbeat task for dependency scan progress
     _stop_event = asyncio.Event()

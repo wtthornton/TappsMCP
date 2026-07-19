@@ -78,7 +78,7 @@ def _quality_recommendations(profile: ProjectProfile) -> list[str]:
         (not profile.has_ci, "Add CI/CD pipeline (e.g. GitHub Actions) for automated testing."),
         (
             not profile.has_docker
-            and profile.project_type in ("api-service", "microservice", "web-app"),
+            and profile.project_type in {"api-service", "microservice", "web-app"},
             "Add Dockerfile for consistent deployment environments.",
         ),
         (not profile.has_tests, "Add a test suite (pytest for Python, jest for JS/TS)."),
@@ -161,14 +161,16 @@ def detect_project_profile(project_root: Path) -> ProjectProfile:
 
     # Add "documentation" domain for docs-heavy projects
     _source_langs = {"python", "javascript", "typescript", "go", "java", "rust"}
-    if ptype == "documentation" or (
-        "markdown" in tech_stack.languages
-        and not any(lang in tech_stack.languages for lang in _source_langs)
-    ):
-        if "documentation" not in tech_stack.domains:
-            tech_stack = tech_stack.model_copy(
-                update={"domains": sorted([*tech_stack.domains, "documentation"])}
-            )
+    if (
+        ptype == "documentation"
+        or (
+            "markdown" in tech_stack.languages
+            and not any(lang in tech_stack.languages for lang in _source_langs)
+        )
+    ) and "documentation" not in tech_stack.domains:
+        tech_stack = tech_stack.model_copy(
+            update={"domains": sorted([*tech_stack.domains, "documentation"])}
+        )
 
     profile = ProjectProfile(
         tech_stack=tech_stack,

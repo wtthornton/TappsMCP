@@ -268,8 +268,7 @@ class TechStackDetector:
         candidates = {low, low.lstrip("@")}
         for pattern, fw in _FRAMEWORK_PATTERNS.items():
             if any(
-                c == pattern or c.startswith(pattern + ".") or c.startswith(pattern + "/")
-                for c in candidates
+                c == pattern or c.startswith((pattern + ".", pattern + "/")) for c in candidates
             ):
                 self._frameworks.add(fw)
 

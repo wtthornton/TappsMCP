@@ -86,12 +86,10 @@ class ASTParser:
 
         for node in ast.walk(tree):
             if isinstance(node, ast.Import):
-                for alias in node.names:
-                    imports.append(alias.name)
+                imports.extend(alias.name for alias in node.names)
             elif isinstance(node, ast.ImportFrom):
                 mod = node.module or ""
-                for alias in node.names:
-                    imports.append(f"{mod}.{alias.name}" if mod else alias.name)
+                imports.extend(f"{mod}.{alias.name}" if mod else alias.name for alias in node.names)
             elif isinstance(node, ast.FunctionDef | ast.AsyncFunctionDef):
                 functions.append(self._extract_func(node))
             elif isinstance(node, ast.ClassDef):

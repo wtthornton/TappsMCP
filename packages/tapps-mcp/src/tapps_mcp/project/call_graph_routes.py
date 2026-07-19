@@ -253,7 +253,7 @@ def _walk_jsx_routes(
     routes: list[RouteEdge],
 ) -> None:
     """Depth-first walk collecting ``<Route>`` JSX elements."""
-    if node.type in ("jsx_self_closing_element", "jsx_opening_element"):
+    if node.type in {"jsx_self_closing_element", "jsx_opening_element"}:
         name = _jsx_element_name(node, source)
         if name == "Route":
             edge = _route_edge_from_jsx(node, source, rel_path, component_modules)
@@ -361,7 +361,7 @@ def _component_name_from_jsx_node(node: Any, source: bytes) -> str | None:
     (``<Comp>...</Comp>``) node directly. A non-JSX value (``member_expression``,
     spread, etc.) yields ``None`` -> the route is skipped, never guessed.
     """
-    if node.type not in ("jsx_self_closing_element", "jsx_element"):
+    if node.type not in {"jsx_self_closing_element", "jsx_element"}:
         return None
     target = node
     if node.type == "jsx_element":
@@ -390,13 +390,16 @@ def _walk_object_router_calls(
     """Depth-first walk collecting ``createBrowserRouter``/``createHashRouter`` calls."""
     if node.type == "call_expression":
         callee = node.child_by_field_name("function")
-        if callee is not None and callee.type == "identifier":
-            if _node_text(callee, source) in _OBJECT_ROUTER_FACTORIES:
-                route_array = _first_array_argument(node)
-                if route_array is not None:
-                    _collect_route_objects(
-                        route_array, source, rel_path, component_modules, routes, parent_path=None
-                    )
+        if (
+            callee is not None
+            and callee.type == "identifier"
+            and _node_text(callee, source) in _OBJECT_ROUTER_FACTORIES
+        ):
+            route_array = _first_array_argument(node)
+            if route_array is not None:
+                _collect_route_objects(
+                    route_array, source, rel_path, component_modules, routes, parent_path=None
+                )
     for child in node.children:
         _walk_object_router_calls(child, source, rel_path, component_modules, routes)
 
@@ -409,7 +412,7 @@ def _first_array_argument(call: Any) -> Any | None:
     for child in args.children:
         if child.type == "array":
             return child
-        if child.type in ("(", ")", ","):
+        if child.type in {"(", ")", ","}:
             continue
         # First real argument is not an array literal -> nothing to extract.
         return None
@@ -505,7 +508,7 @@ def _compose_route_path(parent_path: str | None, child_path: str | None) -> str 
     left = parent_path.rstrip("/")
     right = child_path.lstrip("/")
     if not right:
-        return left if left else "/"
+        return left or "/"
     if not left:
         return f"/{right}" if parent_path.startswith("/") else right
     return f"{left}/{right}"

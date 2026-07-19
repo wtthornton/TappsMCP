@@ -105,25 +105,23 @@ def suggest_coupling_fixes(
     if not metrics:
         return ["No modules analysed - no coupling suggestions."]
 
-    suggestions: list[str] = []
-
     # Hub modules
     hubs = [m for m in metrics if m.is_hub]
-    for hub in hubs[:limit]:
-        suggestions.append(
-            f"Module '{hub.module}' is a hub: imported by {hub.afferent} modules"
-            f" and imports {hub.efferent} modules - consider splitting"
-            " into smaller, focused modules."
-        )
+    suggestions: list[str] = [
+        f"Module '{hub.module}' is a hub: imported by {hub.afferent} modules"
+        f" and imports {hub.efferent} modules - consider splitting"
+        " into smaller, focused modules."
+        for hub in hubs[:limit]
+    ]
 
     # High efferent coupling (not already flagged as hub)
     high_efferent = [m for m in metrics if m.efferent >= HUB_THRESHOLD and not m.is_hub]
     remaining = limit - len(suggestions)
-    for mod in high_efferent[:remaining]:
-        suggestions.append(
-            f"Module '{mod.module}' depends on {mod.efferent} modules"
-            " - reduce by extracting shared logic into utility modules."
-        )
+    suggestions.extend(
+        f"Module '{mod.module}' depends on {mod.efferent} modules"
+        " - reduce by extracting shared logic into utility modules."
+        for mod in high_efferent[:remaining]
+    )
 
     if not suggestions:
         suggestions.append("Coupling levels are within acceptable thresholds.")

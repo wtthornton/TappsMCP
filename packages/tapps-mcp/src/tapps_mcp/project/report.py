@@ -154,21 +154,28 @@ def _render_markdown(
     lines: list[str] = [f"# {title}", ""]
 
     # Summary
-    lines.append("## Summary")
-    lines.append(f"- **Files scored:** {summary['files_scored']}")
-    lines.append(f"- **Avg score:** {summary['avg_score']}")
-    lines.append(f"- **Min / Max:** {summary['min_score']} / {summary['max_score']}")
+    lines.extend(
+        (
+            "## Summary",
+            f"- **Files scored:** {summary['files_scored']}",
+            f"- **Avg score:** {summary['avg_score']}",
+            f"- **Min / Max:** {summary['min_score']} / {summary['max_score']}",
+        )
+    )
     if summary.get("gate_pass_rate") is not None:
         lines.append(f"- **Gate pass rate:** {summary['gate_pass_rate']:.0%}")
-    lines.append(f"- **Lint issues:** {summary['total_lint_issues']}")
-    lines.append(f"- **Type issues:** {summary['total_type_issues']}")
-    lines.append(f"- **Security issues:** {summary['total_security_issues']}")
-    lines.append("")
-
-    # Per-file table
-    lines.append("## Files")
-    lines.append("| File | Score | Gate | Lint | Type | Security |")
-    lines.append("|------|------:|:----:|-----:|-----:|---------:|")
+    lines.extend(
+        (
+            f"- **Lint issues:** {summary['total_lint_issues']}",
+            f"- **Type issues:** {summary['total_type_issues']}",
+            f"- **Security issues:** {summary['total_security_issues']}",
+            "",
+            # Per-file table
+            "## Files",
+            "| File | Score | Gate | Lint | Type | Security |",
+            "|------|------:|:----:|-----:|-----:|---------:|",
+        )
+    )
     for i, s in enumerate(scores):
         gate_str = ""
         if gates and i < len(gates):
@@ -177,8 +184,7 @@ def _render_markdown(
             f"| {s.file_path} | {s.overall_score:.1f} | {gate_str} "
             f"| {len(s.lint_issues)} | {len(s.type_issues)} | {len(s.security_issues)} |"
         )
-    lines.append("")
-    lines.append(f"*Generated {summary.get('generated_at', '')}*")
+    lines.extend(("", f"*Generated {summary.get('generated_at', '')}*"))
     return "\n".join(lines)
 
 

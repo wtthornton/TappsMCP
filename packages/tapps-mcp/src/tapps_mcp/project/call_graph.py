@@ -10,13 +10,13 @@ import structlog
 from tapps_mcp.project.call_graph_analyze import analyze_file
 from tapps_mcp.project.call_graph_analyze_ts import analyze_file_ts, analyze_file_ts_full
 from tapps_mcp.project.call_graph_cache import (
-    fingerprint_settings,
     load_call_graph_index,
     save_call_graph_index,
 )
 from tapps_mcp.project.call_graph_fingerprint import (
     compute_index_fingerprint,
     compute_per_file_fingerprints,
+    fingerprint_settings,
 )
 from tapps_mcp.project.call_graph_resolve_ts import resolve_ts_cross_file
 from tapps_mcp.project.call_graph_routes import (

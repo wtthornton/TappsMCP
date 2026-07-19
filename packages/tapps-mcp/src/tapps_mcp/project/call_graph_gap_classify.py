@@ -102,9 +102,7 @@ def is_external_gap(gap: ResolutionGap) -> bool:
         return True
     if root in _builtin_names():
         return True
-    if root in _stdlib_module_names():
-        return True
-    return False
+    return root in _stdlib_module_names()
 
 
 def split_gap_counts(gaps: list[ResolutionGap]) -> tuple[int, int, dict[str, int]]:

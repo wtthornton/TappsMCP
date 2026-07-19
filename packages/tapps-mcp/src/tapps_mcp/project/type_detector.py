@@ -148,7 +148,7 @@ def _has_shell_scripts(root: Path) -> bool:
         dirnames[:] = [
             d
             for d in dirnames
-            if not d.startswith(".") and d not in ("node_modules", "__pycache__", "venv", ".venv")
+            if not d.startswith(".") and d not in {"node_modules", "__pycache__", "venv", ".venv"}
         ]
         for f in filenames:
             if f.endswith(".sh"):
@@ -229,7 +229,7 @@ def _has_heavy_docs(root: Path) -> bool:
         dirnames[:] = [
             d
             for d in dirnames
-            if not d.startswith(".") and d not in ("node_modules", "__pycache__", "venv", ".venv")
+            if not d.startswith(".") and d not in {"node_modules", "__pycache__", "venv", ".venv"}
         ]
         for f in filenames:
             if f.lower().endswith((".md", ".rst")):
@@ -257,7 +257,7 @@ def _has_few_source_files(root: Path) -> bool:
         dirnames[:] = [
             d
             for d in dirnames
-            if not d.startswith(".") and d not in ("node_modules", "__pycache__", "venv", ".venv")
+            if not d.startswith(".") and d not in {"node_modules", "__pycache__", "venv", ".venv"}
         ]
         for f in filenames:
             if any(f.endswith(ext) for ext in code_exts):

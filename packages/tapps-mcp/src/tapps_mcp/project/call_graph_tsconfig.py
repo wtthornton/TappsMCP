@@ -128,13 +128,13 @@ def _match_alias(alias: str, targets: list[str], specifier: str) -> str | None:
 
 def _target_to_module(base_url: str, target: str) -> str:
     """Normalize a ``baseUrl``-relative target path to a module name."""
-    combined = target if base_url in (".", "") else f"{base_url.rstrip('/')}/{target}"
+    combined = target if base_url in {".", ""} else f"{base_url.rstrip('/')}/{target}"
     # Drop a recognized TS/JS suffix.
     for suffix in (".tsx", ".ts", ".jsx", ".js"):
         if combined.endswith(suffix):
             combined = combined[: -len(suffix)]
             break
-    parts = [p for p in combined.split("/") if p not in ("", ".")]
+    parts = [p for p in combined.split("/") if p not in {"", "."}]
     # Monorepo: packages/<pkg>/src/... — match _ts_file_to_module.
     if len(parts) >= 3 and parts[0] == "packages" and parts[2] == "src":
         parts = parts[3:]

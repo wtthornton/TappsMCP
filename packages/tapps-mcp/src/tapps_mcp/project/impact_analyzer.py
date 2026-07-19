@@ -63,8 +63,7 @@ def _extract_imports(file_path: Path, source_module: str | None = None) -> list[
     modules: list[str] = []
     for node in ast.walk(tree):
         if isinstance(node, ast.Import):
-            for alias in node.names:
-                modules.append(alias.name)
+            modules.extend(alias.name for alias in node.names)
         elif isinstance(node, ast.ImportFrom):
             level = node.level or 0
             if level > 0 and source_module:

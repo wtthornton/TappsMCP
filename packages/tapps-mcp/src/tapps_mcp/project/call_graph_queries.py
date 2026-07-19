@@ -8,7 +8,7 @@ from dataclasses import asdict
 from typing import Any, Literal
 
 from tapps_mcp.project.call_graph_routes import handlers_for_path, routes_for_handler
-from tapps_mcp.project.call_graph_types import CallGraphIndex, ResolutionGap
+from tapps_mcp.project.call_graph_types import CallGraphIndex
 
 DEFAULT_TOKEN_BUDGET = 4000
 _CHARS_PER_TOKEN = 4
@@ -38,11 +38,11 @@ def _edge_payload(edge: Any) -> dict[str, Any]:
 
 
 def _gaps_for_symbol(index: CallGraphIndex, qualified: str) -> list[dict[str, Any]]:
-    gaps: list[ResolutionGap] = []
-    for gap in index.resolution_gaps:
-        if gap.caller == qualified or gap.caller.startswith(f"{qualified}."):
-            gaps.append(gap)
-    return [asdict(g) for g in gaps]
+    return [
+        asdict(gap)
+        for gap in index.resolution_gaps
+        if gap.caller == qualified or gap.caller.startswith(f"{qualified}.")
+    ]
 
 
 def _called_name(expr: str) -> str:
@@ -216,18 +216,18 @@ def query_call_graph(
     callees: list[dict[str, Any]] = []
     chain: list[dict[str, Any]] = []
 
-    if mode in ("callers", "all"):
+    if mode in {"callers", "all"}:
         callers, t1 = _collect_callers(
             index, qualified, max_depth=max_depth, token_budget=token_budget
         )
         truncated = truncated or t1
-    if mode in ("callees", "all") and not truncated:
+    if mode in {"callees", "all"} and not truncated:
         remaining = token_budget - _estimate_tokens({"callers": callers})
         callees, t2 = _collect_callees(
             index, qualified, max_depth=max_depth, token_budget=max(remaining, 1)
         )
         truncated = truncated or t2
-    if mode in ("chain", "all") and not truncated:
+    if mode in {"chain", "all"} and not truncated:
         remaining = token_budget - _estimate_tokens({"callers": callers, "callees": callees})
         chain, t3 = _collect_chain(
             index, qualified, max_depth=max_depth, token_budget=max(remaining, 1)
@@ -247,7 +247,7 @@ def query_call_graph(
         "token_budget": token_budget,
     }
     # Inbound completeness only matters when the query asks who calls the symbol.
-    if mode in ("callers", "chain", "all"):
+    if mode in {"callers", "chain", "all"}:
         result["caller_completeness"] = _caller_completeness(index, qualified)
     return result
 
@@ -265,7 +265,7 @@ def compact_symbol_impact(
     file_symbols = [
         s
         for s in index.symbols
-        if s.file_path.replace("\\", "/") == normalized and s.kind in ("function", "method")
+        if s.file_path.replace("\\", "/") == normalized and s.kind in {"function", "method"}
     ]
     if not file_symbols:
         return None
