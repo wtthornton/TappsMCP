@@ -100,6 +100,32 @@ Check status anytime via `tapps_session_start` (`call_graph` block) or `tapps_do
 
 ---
 
+## Index scope
+
+The walk covers source files under the project root, minus built-in excludes
+(`.git`, `.venv`, `node_modules`, `worktrees`, …). Two additional scope rules
+apply (index v8):
+
+- **Nested git checkouts are skipped automatically.** Any directory below the
+  project root with its own `.git` entry (directory or file) is another repo's
+  checkout — e.g. a sibling project vendored under `projects/` — and its
+  symbols never enter the graph.
+- **`graph_exclude_patterns`** in `.tapps-mcp.yaml` (or env
+  `TAPPS_MCP_GRAPH_EXCLUDE_PATTERNS`, comma-separated) excludes additional
+  directory names — use it for vendored source that is not a git checkout:
+
+```yaml
+graph_exclude_patterns:
+  - vendored
+  - third_party
+```
+
+Both rules apply uniformly to the call graph, import graph, impact analysis,
+and cache fingerprints; changing `graph_exclude_patterns` invalidates the
+cached index.
+
+---
+
 ## Health metrics (read these, not raw gap counts)
 
 | Metric | Meaning |

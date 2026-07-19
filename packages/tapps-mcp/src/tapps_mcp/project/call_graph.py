@@ -105,8 +105,14 @@ def _collect_source_files(project_root: Path, excludes: set[str]) -> list[Path]:
     """Return the sorted, filtered list of Python and TS/JS source files."""
     walk_suffixes = _PY_SUFFIXES + _TS_SUFFIXES
     source_files = sorted(f for suffix in walk_suffixes for f in project_root.rglob(f"*{suffix}"))
+    nested_repo_cache: dict[Path, bool] = {}
     return [
-        f for f in source_files if not (_should_skip(f, excludes) or f.name.endswith("_pb2.py"))
+        f
+        for f in source_files
+        if not (
+            _should_skip(f, excludes, project_root, nested_repo_cache)
+            or f.name.endswith("_pb2.py")
+        )
     ]
 
 
@@ -295,9 +301,10 @@ def build_call_graph_index(
                 current_version=INDEX_VERSION,
             )
 
+    # fp.exclude_patterns already merges caller patterns with the project's
+    # configured graph_exclude_patterns — walk and fingerprint must agree.
     excludes = set(_DEFAULT_EXCLUDES)
-    if exclude_patterns:
-        excludes.update(exclude_patterns)
+    excludes.update(fp.exclude_patterns)
 
     raw_by_file: dict[str, PerFileRaw] = {}
     for source_file in _collect_source_files(project_root, excludes):
@@ -368,8 +375,8 @@ def update_call_graph_index(
         )
 
     excludes = set(_DEFAULT_EXCLUDES)
-    if exclude_patterns:
-        excludes.update(exclude_patterns)
+    excludes.update(fp.exclude_patterns)
+    nested_repo_cache: dict[Path, bool] = {}
 
     def _rel(path: Path | str) -> str:
         """Normalize to a project-root-relative posix key.
@@ -407,7 +414,10 @@ def update_call_graph_index(
         if not source_file.is_file():
             raw_by_file.pop(rel, None)
             continue
-        if _should_skip(source_file, excludes) or source_file.name.endswith("_pb2.py"):
+        if (
+            _should_skip(source_file, excludes, project_root, nested_repo_cache)
+            or source_file.name.endswith("_pb2.py")
+        ):
             raw_by_file.pop(rel, None)
             continue
         analyzed = _analyze_one_file(source_file, project_root, top_level_package)

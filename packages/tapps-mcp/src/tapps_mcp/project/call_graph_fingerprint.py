@@ -7,7 +7,11 @@ import subprocess
 from dataclasses import dataclass
 from pathlib import Path
 
-from tapps_mcp.project.import_graph import _DEFAULT_EXCLUDES, _should_skip
+from tapps_mcp.project.import_graph import (
+    _DEFAULT_EXCLUDES,
+    _configured_graph_excludes,
+    _should_skip,
+)
 
 # Source-file suffixes folded into the fingerprint (TAP-4537). Python plus the
 # TypeScript pair so a new/edited .ts/.tsx invalidates the call-graph cache.
@@ -51,11 +55,19 @@ def fingerprint_settings(
     exclude_patterns: list[str] | None = None,
     top_level_package: str = "",
 ) -> CallGraphFingerprintSettings:
-    """Build fingerprint settings used by build, summarize, and doctor."""
-    patterns = tuple(exclude_patterns or ())
+    """Build fingerprint settings used by build, summarize, and doctor.
+
+    Merges caller-passed patterns with the project's configured
+    ``graph_exclude_patterns`` (``.tapps-mcp.yaml`` / env) and sorts for a
+    deterministic fingerprint. Resolving config here keeps the build walk and
+    the staleness fingerprint on the exact same file set.
+    """
+    resolved_root = project_root.resolve()
+    merged = set(exclude_patterns or ())
+    merged.update(_configured_graph_excludes(resolved_root))
     return CallGraphFingerprintSettings(
-        project_root=project_root.resolve(),
-        exclude_patterns=patterns,
+        project_root=resolved_root,
+        exclude_patterns=tuple(sorted(merged)),
         top_level_package=top_level_package,
     )
 
@@ -103,8 +115,12 @@ def _mtime_fingerprint_component(settings: CallGraphFingerprintSettings, index_v
     source_files = sorted(
         f for suffix in _FINGERPRINT_SUFFIXES for f in settings.project_root.rglob(f"*{suffix}")
     )
+    nested_repo_cache: dict[Path, bool] = {}
     for source_file in source_files:
-        if _should_skip(source_file, excludes) or source_file.name.endswith("_pb2.py"):
+        if (
+            _should_skip(source_file, excludes, settings.project_root, nested_repo_cache)
+            or source_file.name.endswith("_pb2.py")
+        ):
             continue
         try:
             stat = source_file.stat()
@@ -134,8 +150,12 @@ def compute_per_file_fingerprints(
     source_files = sorted(
         f for suffix in _FINGERPRINT_SUFFIXES for f in settings.project_root.rglob(f"*{suffix}")
     )
+    nested_repo_cache: dict[Path, bool] = {}
     for source_file in source_files:
-        if _should_skip(source_file, excludes) or source_file.name.endswith("_pb2.py"):
+        if (
+            _should_skip(source_file, excludes, settings.project_root, nested_repo_cache)
+            or source_file.name.endswith("_pb2.py")
+        ):
             continue
         try:
             data = source_file.read_bytes()
@@ -153,11 +173,19 @@ def compute_index_fingerprint(
 ) -> str:
     """Compute a stable fingerprint for call-graph cache invalidation."""
     ts_grammar = _ts_grammar_version()
+    # Exclude patterns change which files are indexed, so they must be part of
+    # the fingerprint — the git component tracks HEAD/dirty paths only and
+    # would otherwise miss a graph_exclude_patterns config change.
+    excludes_part = ",".join(settings.exclude_patterns)
     git_part = _git_fingerprint_component(settings.project_root)
     if git_part is not None:
         payload = (
-            f"git:{git_part}|pkg:{settings.top_level_package}|v{index_version}|ts:{ts_grammar}"
+            f"git:{git_part}|pkg:{settings.top_level_package}|v{index_version}"
+            f"|ts:{ts_grammar}|ex:{excludes_part}"
         )
     else:
-        payload = f"{_mtime_fingerprint_component(settings, index_version)}|ts:{ts_grammar}"
+        payload = (
+            f"{_mtime_fingerprint_component(settings, index_version)}"
+            f"|ts:{ts_grammar}|ex:{excludes_part}"
+        )
     return hashlib.sha256(payload.encode()).hexdigest()[:16]

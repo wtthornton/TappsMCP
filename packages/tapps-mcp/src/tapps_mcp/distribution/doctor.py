@@ -3885,13 +3885,23 @@ def check_call_graph_index_cache(root: Path) -> CheckResult:
         raw_gaps = summary.get("resolution_gaps", 0)
         gap_count = raw_gaps if isinstance(raw_gaps, int) else 0
         if gap_count:
-            gap_reasons = summary.get("gap_reasons")
+            # Lead with the external/in-repo split (TAP-4269 classifier): the
+            # external share is expected noise (builtins, stdlib, dynamic
+            # dispatch) and must not read as resolution debt.
+            external = summary.get("external_gaps")
+            in_repo = summary.get("in_repo_gaps")
             in_repo_rate = summary.get("in_repo_gap_rate")
-            if isinstance(gap_reasons, dict) and gap_reasons:
-                reason_bits = ", ".join(f"{k}={v}" for k, v in gap_reasons.items())
-                parts.append(f"{gap_count} resolution gaps ({reason_bits})")
+            if isinstance(external, int) and isinstance(in_repo, int):
+                parts.append(
+                    f"{gap_count} resolution gaps "
+                    f"({external} external/expected noise, {in_repo} in-repo)"
+                )
             else:
                 parts.append(f"{gap_count} resolution gaps")
+            gap_reasons = summary.get("in_repo_gap_reasons") or summary.get("gap_reasons")
+            if isinstance(gap_reasons, dict) and gap_reasons:
+                reason_bits = ", ".join(f"{k}={v}" for k, v in gap_reasons.items())
+                parts.append(f"in-repo reasons: {reason_bits}")
             if in_repo_rate is not None:
                 parts.append(f"in_repo_gap_rate={in_repo_rate}")
         raw_parse_failures = summary.get("parse_failures", 0)

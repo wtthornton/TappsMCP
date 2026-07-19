@@ -46,8 +46,12 @@ def _path_from_graph(fp: str, project_root: Path) -> Path:
 # ---------------------------------------------------------------------------
 
 
-def _should_skip(path: Path) -> bool:
-    return any(part in SKIP_DIRS for part in path.parts)
+def _should_skip(path: Path, extra_excludes: set[str] | None = None) -> bool:
+    if any(part in SKIP_DIRS for part in path.parts):
+        return True
+    if not extra_excludes:
+        return False
+    return any(part in extra_excludes for part in path.parts)
 
 
 def _extract_imports(file_path: Path, source_module: str | None = None) -> list[str]:
@@ -111,11 +115,15 @@ def _build_import_graph(
     Returns ``(graph, truncated)`` where ``truncated`` is True when the walk
     stopped early because ``max_files`` was hit.
     """
+    from tapps_mcp.project.import_graph import _configured_graph_excludes, _in_nested_repo
+
+    extra_excludes = set(_configured_graph_excludes(project_root))
+    nested_repo_cache: dict[Path, bool] = {}
     graph: dict[str, set[str]] = {}
     count = 0
     truncated = False
     for py in project_root.rglob("*.py"):
-        if _should_skip(py):
+        if _should_skip(py, extra_excludes) or _in_nested_repo(py, project_root, nested_repo_cache):
             continue
         if count >= max_files:
             truncated = True
@@ -311,11 +319,15 @@ def _find_test_files_by_name(
     Looks for ``test_<stem>.py`` and ``<stem>_test.py`` patterns anywhere
     under *project_root*.
     """
+    from tapps_mcp.project.import_graph import _configured_graph_excludes, _in_nested_repo
+
     stem = file_path.stem
     candidates = {f"test_{stem}", f"{stem}_test"}
+    extra_excludes = set(_configured_graph_excludes(project_root))
+    nested_repo_cache: dict[Path, bool] = {}
     found: list[str] = []
     for py in project_root.rglob("*.py"):
-        if _should_skip(py):
+        if _should_skip(py, extra_excludes) or _in_nested_repo(py, project_root, nested_repo_cache):
             continue
         if py.stem in candidates:
             found.append(_norm_path(py, project_root))

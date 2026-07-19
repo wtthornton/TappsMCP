@@ -3082,6 +3082,22 @@ class TestCheckCallGraph:
         assert "Cache present" in result.message
         assert "fresh" in result.message
 
+    def test_index_gaps_report_external_in_repo_split(self, tmp_path: Path) -> None:
+        """Gap count leads with the external/in-repo split so external noise
+        (builtins, stdlib, dynamic dispatch) doesn't read as resolution debt."""
+        from tapps_mcp.distribution.doctor import check_call_graph_index_cache
+        from tapps_mcp.project.call_graph import build_call_graph_index
+
+        # print() -> external (builtin); missing() -> in-repo unresolved.
+        (tmp_path / "mod.py").write_text(
+            "def f():\n    print('x')\n    missing()\n"
+        )
+        build_call_graph_index(tmp_path, force_rebuild=True)
+        result = check_call_graph_index_cache(tmp_path)
+        assert result.ok is True
+        assert "external/expected noise" in result.message
+        assert "in-repo" in result.message
+
 
 class TestMcpOperatorSecrets:
     """Doctor warns when GUI MCP cannot resolve operator secrets."""

@@ -82,13 +82,18 @@ def build_import_graph(
 ) -> ImportGraph:
     """Walk ``.py`` files and build an import graph."""
     excludes = set(_DEFAULT_EXCLUDES)
+    excludes.update(_configured_graph_excludes(project_root))
     if exclude_patterns:
         excludes.update(exclude_patterns)
 
     project_modules: set[str] = set()
     file_module_map: dict[Path, str] = {}
+    nested_repo_cache: dict[Path, bool] = {}
     for py_file in project_root.rglob("*.py"):
-        if _should_skip(py_file, excludes) or py_file.name.endswith("_pb2.py"):
+        if (
+            _should_skip(py_file, excludes, project_root, nested_repo_cache)
+            or py_file.name.endswith("_pb2.py")
+        ):
             continue
         mod = _file_to_module(py_file, project_root, top_level_package)
         if mod:
@@ -117,8 +122,65 @@ def build_import_graph(
     return graph
 
 
-def _should_skip(path: Path, excludes: set[str]) -> bool:
-    return any(part in excludes for part in path.parts)
+def _should_skip(
+    path: Path,
+    excludes: set[str],
+    project_root: Path | None = None,
+    nested_repo_cache: dict[Path, bool] | None = None,
+) -> bool:
+    if any(part in excludes for part in path.parts):
+        return True
+    if project_root is None:
+        return False
+    return _in_nested_repo(path, project_root, nested_repo_cache)
+
+
+def _in_nested_repo(
+    path: Path,
+    project_root: Path,
+    cache: dict[Path, bool] | None = None,
+) -> bool:
+    """True when *path* lives inside a nested git checkout below *project_root*.
+
+    A directory strictly below the project root that carries its own ``.git``
+    entry (a directory for clones, a file for worktrees/submodules) is another
+    repo's checkout: indexing it leaks foreign symbols into this project's
+    graphs — e.g. a sibling repo vendored under ``projects/`` resolving symbol
+    queries to its modules. Generalizes the TAP-613 ``worktrees`` exclusion so
+    it no longer depends on the directory's name.
+
+    *cache* memoizes per-directory verdicts for the duration of one walk.
+    """
+    if cache is None:
+        cache = {}
+    directory = path.parent
+    chain: list[Path] = []
+    result = False
+    while directory != project_root and directory != directory.parent:
+        cached = cache.get(directory)
+        if cached is not None:
+            result = cached
+            break
+        chain.append(directory)
+        if (directory / ".git").exists():
+            result = True
+            break
+        directory = directory.parent
+    for d in chain:
+        cache[d] = result
+    return result
+
+
+def _configured_graph_excludes(project_root: Path) -> tuple[str, ...]:
+    """Return ``graph_exclude_patterns`` from project settings (.tapps-mcp.yaml / env).
+
+    Resolved here so every graph walker (call graph, import graph, fingerprint)
+    honors the same consumer-configured exclusions without each tool handler
+    having to plumb them through.
+    """
+    from tapps_core.config.settings import load_settings
+
+    return tuple(load_settings(project_root).graph_exclude_patterns)
 
 
 def _file_to_module(

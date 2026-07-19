@@ -907,6 +907,29 @@ class TappsMCPSettings(BaseSettings):
         description="Timeout for individual external tool invocations (seconds).",
     )
 
+    # Graph walkers (call graph, import graph, diff impact)
+    graph_exclude_patterns: list[str] = Field(
+        default_factory=list,
+        description=(
+            "Directory names excluded from call-graph / import-graph / "
+            "fingerprint walks, in addition to the built-in defaults "
+            "(.git, .venv, node_modules, ...). Use for vendored source that "
+            "is not a nested git checkout (those are skipped automatically). "
+            "Env: TAPPS_MCP_GRAPH_EXCLUDE_PATTERNS (comma-separated)."
+        ),
+    )
+
+    @field_validator("graph_exclude_patterns", mode="before")
+    @classmethod
+    def _parse_graph_exclude_patterns(cls, v: Any) -> list[str]:
+        if v is None:
+            return []
+        if isinstance(v, str):
+            return [s.strip() for s in v.split(",") if s.strip()]
+        if isinstance(v, list):
+            return list(v)
+        return []
+
     # Dead code detection
     dead_code_enabled: bool = Field(
         default=True,

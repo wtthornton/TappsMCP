@@ -23,7 +23,11 @@ CALL_GRAPH_CACHE_REL = ".tapps-mcp/call-graph-index.json"
 # v7: type-annotation binding — ``def f(x: C): x.m()`` and ``x: C = ...`` now resolve
 # the method to ``C.m`` (previously an unresolved gap). Adds edges vs v6 (measured:
 # +2067 edges / in-repo gap rate 0.61->0.51 on this repo), so bump to invalidate v6.
-INDEX_VERSION = 7
+# v8: index scope fix — nested git checkouts below project_root (sibling repos
+# vendored under e.g. ``projects/``) and consumer-configured
+# ``graph_exclude_patterns`` are now excluded from the walk. Cached v7 indexes
+# may contain foreign-repo symbols/edges, so bump to force a rebuild.
+INDEX_VERSION = 8
 SymbolKind = Literal["function", "method"]
 
 # Stable taxonomy for resolution gaps (TAP-4092).
