@@ -154,9 +154,11 @@ async def write_handoff(
 
     session_end_result: dict[str, Any] | None = None
     if run_session_end:
-        from tapps_mcp.tools.session_end_helpers import run_session_end
+        from tapps_mcp.tools.session_end_helpers import (
+            run_session_end as _run_session_end,
+        )
 
-        session_end_result = await run_session_end(
+        session_end_result = await _run_session_end(
             session_start_iso,
             project_root=project_root,
         )

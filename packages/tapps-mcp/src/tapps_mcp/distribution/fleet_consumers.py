@@ -191,7 +191,8 @@ def audit_consumer(project_root: Path, *, package_version: str | None = None) ->
             want_url = f"http://127.0.0.1:{NLT_HTTP_FLEET_PORTS[server_id]}/mcp"
             if entry.get("url") != want_url:
                 issues.append(f"{label}: {server_id} url={entry.get('url')!r}")
-            headers = entry.get("headers") if isinstance(entry.get("headers"), dict) else {}
+            raw_headers = entry.get("headers")
+            headers = raw_headers if isinstance(raw_headers, dict) else {}
             root_hdr = headers.get(PROJECT_ROOT_HEADER)
             if root_hdr != str(root):
                 issues.append(

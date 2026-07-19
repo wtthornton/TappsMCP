@@ -223,6 +223,7 @@ __all__ = [
     "_write_validate_ok_marker",
     "attach_affected_tests",
     "call_memory_index_session_start",
+    "error_response",
     "load_settings",
     "register",
     "tapps_decompose",

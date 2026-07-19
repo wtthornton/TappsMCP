@@ -99,9 +99,10 @@ def _compute_affected_tests(
     cap = max(1, limit if limit > 0 else DEFAULT_AFFECTED_TESTS_LIMIT)
     try:
         data = analyze_diff_impact(py_sources, project_root, max_tests=cap)
+        affected = data.get("affected_tests", [])
         return {
             "total_affected_tests": data.get("total_affected_tests", 0),
-            "affected_tests": list(data.get("affected_tests", [])),
+            "affected_tests": list(affected) if isinstance(affected, list) else [],
             "max_tests": data.get("max_tests", cap),
             "degraded": bool(data.get("degraded")),
         }

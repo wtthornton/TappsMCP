@@ -384,7 +384,8 @@ def ensure_fleet_running() -> dict[str, Any]:
 
 def fleet_any_running() -> bool:
     """Return True when at least one supervised fleet server has a live PID."""
-    return fleet_status()["running"] > 0
+    running = fleet_status()["running"]
+    return isinstance(running, int) and running > 0
 
 
 def _wait_fleet_ports_listening(*, timeout: float = 30.0, poll: float = 0.5) -> list[str]:

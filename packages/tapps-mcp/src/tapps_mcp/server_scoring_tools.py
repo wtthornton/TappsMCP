@@ -59,7 +59,7 @@ _CC_HIGH_THRESHOLD = 15
 # ---------------------------------------------------------------------------
 
 
-def _fire_quality_gate_events(file_path: str, failures: list[GateFailure]) -> None:  # type: ignore[name-defined]
+def _fire_quality_gate_events(file_path: str, failures: list[GateFailure]) -> None:
     """Fire brain KG events for every quality gate failure (fire-and-forget).
 
     Each failure emits a ``quality_gate_fail`` event with file + rule entities
@@ -80,7 +80,7 @@ def _fire_quality_gate_events(file_path: str, failures: list[GateFailure]) -> No
             if bridge is None or not hasattr(bridge, "record_kg_event"):
                 return
             for failure in failures:
-                await bridge.record_kg_event(  # type: ignore[union-attr]
+                await bridge.record_kg_event(
                     event_type="quality_gate_fail",
                     entities=[
                         entity_spec("file", file_path),

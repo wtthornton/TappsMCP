@@ -56,9 +56,9 @@ class DockerRunner:
         if self._client is not None:
             return self._client
         try:
-            import docker  # type: ignore[import-untyped]
+            import docker
 
-            self._client = docker.from_env()
+            self._client = docker.from_env()  # type: ignore[attr-defined]
             # Test connectivity
             self._client.ping()
         except ImportError as exc:

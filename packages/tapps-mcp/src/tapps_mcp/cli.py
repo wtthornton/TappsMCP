@@ -4,10 +4,14 @@ from __future__ import annotations
 
 import os
 from pathlib import Path
+from typing import TYPE_CHECKING, Any, Literal, cast
 
 import click
 
 from tapps_mcp import __version__
+
+if TYPE_CHECKING:
+    from tapps_core.brain_bridge import BrainBridge
 
 
 @click.group()
@@ -1238,6 +1242,7 @@ def auto_capture(project_root: str, max_facts: int) -> None:
     Read JSON from stdin (Claude Code Stop event), extract decision-like facts,
     and save to project memory. Invoked by memory_auto_capture Stop hook.
     """
+    import asyncio
     import sys
     from pathlib import Path
 
@@ -1249,7 +1254,7 @@ def auto_capture(project_root: str, max_facts: int) -> None:
     raw = sys.stdin.read()
     from tapps_mcp.memory.auto_capture import run_auto_capture
 
-    run_auto_capture(raw, project_root_path, max_facts=max_facts)
+    asyncio.run(run_auto_capture(raw, project_root_path, max_facts=max_facts))
 
 
 @main.command("compact-index")
@@ -1288,9 +1293,11 @@ def _echo_validate_changed_data(data: dict[str, object]) -> None:
     summary = data.get("summary", "")
     if summary:
         click.echo(str(summary))
-    for row in data.get("summary_rows") or []:
+    rows = data.get("summary_rows")
+    for row in rows if isinstance(rows, list) else []:
         click.echo(str(row))
-    for entry in data.get("per_file_results") or []:
+    per_file = data.get("per_file_results")
+    for entry in per_file if isinstance(per_file, list) else []:
         if not isinstance(entry, dict) or entry.get("status") != "FAIL":
             continue
         for finding in entry.get("top_findings") or []:
@@ -1737,7 +1744,7 @@ def _brain_bridge_unavailable_message() -> str:
     )
 
 
-def _create_cli_brain_bridge() -> object | None:
+def _create_cli_brain_bridge() -> BrainBridge | None:
     """Create a BrainBridge for CLI memory save/get (HTTP or in-process DSN)."""
     from tapps_core.brain_bridge import BRAIN_PROFILE_SERVER, create_brain_bridge
     from tapps_core.config.settings import load_settings
@@ -1775,12 +1782,12 @@ def memory_list(tier: str | None, scope: str | None, as_json: bool) -> None:
             raise RuntimeError("bridge_unavailable")
         try:
             # BrainBridge.list_memories filters by tier; scope is client-side.
-            entries = await bridge.list_memories(limit=500, tier=tier)  # type: ignore[attr-defined]
+            entries = await bridge.list_memories(limit=500, tier=tier)
             if scope:
                 entries = [e for e in entries if e.get("scope") == scope]
             return entries
         finally:
-            bridge.close()  # type: ignore[attr-defined]
+            bridge.close()
 
     try:
         entries = asyncio.run(_list())
@@ -1836,7 +1843,7 @@ def memory_save(key: str, value: str, tier: str, tags: str, memory_group: str | 
         bridge = _create_cli_brain_bridge()
         if bridge is None:
             raise RuntimeError("bridge_unavailable")
-        save_kwargs: dict[str, object] = {}
+        save_kwargs: dict[str, Any] = {}
         if memory_group:
             save_kwargs["memory_group"] = memory_group
         try:
@@ -1947,7 +1954,7 @@ def memory_recall(
     max_results = max(1, min(max_results, 10))
     min_score = max(0.0, min(min_score, 1.0))
 
-    async def _recall() -> list[dict[str, object]]:
+    async def _recall() -> tuple[list[dict[str, object]], list[dict[str, Any]]]:
         settings = load_settings(project_root=root)
         # Read-only auto-recall calls only ``memory_search``; ``reviewer`` is
         # the least-privilege profile that exposes it (ADR-0012). ``coder``
@@ -2007,7 +2014,7 @@ def memory_recall(
 
 
 def _emit_memory_search_rows(
-    hits: list[dict[str, object]],
+    hits: list[dict[str, Any]],
     *,
     as_json: bool,
 ) -> None:
@@ -2099,9 +2106,9 @@ def memory_delete(key: str) -> None:
         if bridge is None:
             raise RuntimeError("bridge_unavailable")
         try:
-            return bool(await bridge.delete(key))  # type: ignore[attr-defined]
+            return bool(await bridge.delete(key))
         finally:
-            bridge.close()  # type: ignore[attr-defined]
+            bridge.close()
 
     try:
         deleted = asyncio.run(_delete())
@@ -2202,7 +2209,7 @@ def memory_export(
             tier=tier,
             scope=scope,
             min_confidence=min_confidence if min_confidence >= 0 else None,
-            export_format=export_format,
+            export_format=cast("Literal['json', 'markdown']", export_format),
         )
         click.echo(f"Exported {result['exported_count']} memories to {result['file_path']}")
     finally:

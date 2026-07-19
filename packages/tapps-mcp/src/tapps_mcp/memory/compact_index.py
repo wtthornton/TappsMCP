@@ -140,7 +140,7 @@ async def run_compact_index(
         if bridge is not None:
             try:
                 if hasattr(bridge, "index_session"):
-                    await bridge.index_session(session_id, chunks)  # type: ignore[misc]
+                    await bridge.index_session(session_id, chunks)
                     indexed = True
                 else:
                     brain_error = "index_session_not_supported"

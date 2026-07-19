@@ -2050,7 +2050,7 @@ def check_lookup_docs_discipline(project_root: Path) -> CheckResult:
         "Lookup-docs discipline",
         ok,
         "; ".join(parts),
-        "\n".join(detail_parts) if detail_parts else None,
+        "\n".join(detail_parts) if detail_parts else "",
     )
 
 
@@ -2098,7 +2098,7 @@ def check_cursor_loop_metrics_telemetry(project_root: Path) -> CheckResult:
         "Cursor loop-metrics telemetry",
         ok,
         "; ".join(parts),
-        "\n".join(detail_parts) if detail_parts else None,
+        "\n".join(detail_parts) if detail_parts else "",
     )
 
 
@@ -2147,7 +2147,7 @@ def check_cursor_stop_completion_gate(project_root: Path) -> CheckResult:
             ".tapps-mcp.yaml or run tapps-mcp upgrade",
         )
 
-    detail = None
+    detail = ""
     if explicit is None:
         detail = (
             "cursor_stop_completion_gate not pinned in .tapps-mcp.yaml — "
@@ -2166,6 +2166,7 @@ def check_cache_gate_block_hint(project_root: Path) -> CheckResult:
     """Recommend ``linear_enforce_cache_gate: block`` on high-traffic projects (TAP-3577)."""
     from tapps_core.config.settings import load_settings
 
+    resolved_mode: str
     try:
         settings = load_settings(project_root=project_root)
         resolved_mode = settings.linear_enforce_cache_gate_resolved()
@@ -3881,7 +3882,8 @@ def check_call_graph_index_cache(root: Path) -> CheckResult:
             parts.append(CALL_GRAPH_STALE_DOCTOR)
         else:
             parts.append("fresh")
-        gap_count = int(summary.get("resolution_gaps", 0))
+        raw_gaps = summary.get("resolution_gaps", 0)
+        gap_count = raw_gaps if isinstance(raw_gaps, int) else 0
         if gap_count:
             gap_reasons = summary.get("gap_reasons")
             in_repo_rate = summary.get("in_repo_gap_rate")
@@ -3892,7 +3894,8 @@ def check_call_graph_index_cache(root: Path) -> CheckResult:
                 parts.append(f"{gap_count} resolution gaps")
             if in_repo_rate is not None:
                 parts.append(f"in_repo_gap_rate={in_repo_rate}")
-        parse_failures = int(summary.get("parse_failures", 0))
+        raw_parse_failures = summary.get("parse_failures", 0)
+        parse_failures = raw_parse_failures if isinstance(raw_parse_failures, int) else 0
         if parse_failures:
             parts.append(f"{parse_failures} parse failure(s)")
 
@@ -5192,9 +5195,9 @@ def _collect_checks(root: Path, *, quick: bool = False) -> list[CheckResult]:
             )
         )
     else:
-        checks.extend(
-            _safe_check(result.name, lambda r=result: r) for result in check_quality_tools()
-        )
+        # check_quality_tools() already ran to completion here, so wrapping each
+        # pre-computed result in _safe_check added no protection.
+        checks.extend(check_quality_tools())
     return checks
 
 

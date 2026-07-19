@@ -179,7 +179,7 @@ NLT_TOOL_SERVER: Final[dict[str, str]] = {
 def normalize_mcp_bundle(bundle: str | None) -> NltBundle:
     """Return a valid bundle name; default ``full`` (ADR-0018)."""
     if bundle in NLT_BUNDLES:
-        return bundle  # type: ignore[return-value]
+        return bundle
     return DEFAULT_NLT_BUNDLE
 
 

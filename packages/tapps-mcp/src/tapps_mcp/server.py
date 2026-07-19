@@ -795,7 +795,7 @@ def _fire_security_scan_events(
                 if issue.severity not in _SECURITY_EMISSION_SEVERITIES:
                     continue
                 finding_id = f"bandit:{issue.code}"
-                await bridge.record_kg_event(  # type: ignore[union-attr]
+                await bridge.record_kg_event(
                     event_type="security_finding",
                     entities=[
                         entity_spec("file", file_path),
@@ -814,7 +814,7 @@ def _fire_security_scan_events(
                 if finding.severity not in _SECURITY_EMISSION_SEVERITIES:
                     continue
                 finding_id = f"secret:{finding.secret_type}"
-                await bridge.record_kg_event(  # type: ignore[union-attr]
+                await bridge.record_kg_event(
                     event_type="security_finding",
                     entities=[
                         entity_spec("file", file_path),
@@ -1896,8 +1896,8 @@ def run_server(
             )
 
         mcp_app.routes.insert(0, Route("/", _root))
-        mcp_app = wrap_streamable_http_app(mcp_app)
-        uvicorn.run(mcp_app, host=host, port=port)
+        wrapped_app = wrap_streamable_http_app(mcp_app)
+        uvicorn.run(wrapped_app, host=host, port=port)
     else:
         msg = f"Unsupported transport: {transport}"
         raise ValueError(msg)

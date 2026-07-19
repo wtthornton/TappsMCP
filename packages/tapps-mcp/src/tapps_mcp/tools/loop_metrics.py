@@ -690,6 +690,7 @@ __all__ = [
     "compute_rolling_stats",
     "count_session_start_gate_violations",
     "extract_skill_name",
+    "is_gate_tool",
     "is_reliable_edit_loop_row",
     "is_scoped_gate_edit",
     "loop_row_gate_skipped",

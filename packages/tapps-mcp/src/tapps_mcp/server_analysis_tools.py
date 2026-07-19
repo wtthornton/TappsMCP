@@ -415,8 +415,9 @@ async def tapps_impact_analysis(
         data["symbol"] = symbol.strip()
         data["granularity"] = symbol_granularity
         data["symbol_impact"] = symbol_block
-        if symbol_block.get("recommendations"):
-            for rec in symbol_block["recommendations"]:
+        symbol_recs = symbol_block.get("recommendations")
+        if isinstance(symbol_recs, list):
+            for rec in symbol_recs:
                 if isinstance(rec, str) and rec not in recommendations:
                     recommendations.append(rec)
         data["recommendations"] = recommendations
@@ -941,7 +942,7 @@ async def tapps_dead_code(
 
             async def _fire_dead_code_event() -> None:
                 with contextlib.suppress(Exception):
-                    await _dc_bridge.record_event("tool_call", "tapps_dead_code")  # type: ignore[union-attr]
+                    await _dc_bridge.record_event("tool_call", "tapps_dead_code")
 
             # Fire-and-forget telemetry; no reference kept on purpose.
             asyncio.create_task(_fire_dead_code_event())  # noqa: RUF006

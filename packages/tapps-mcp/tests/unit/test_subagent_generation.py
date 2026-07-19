@@ -57,7 +57,7 @@ class TestClaudeAgents:
         generate_subagent_definitions(tmp_path, "claude")
         content = (tmp_path / ".claude" / "agents" / "tapps-reviewer.md").read_text()
         assert "mcpServers:" in content
-        assert "  tapps-mcp: {}" in content
+        assert "  nlt-build: {}" in content
 
     def test_researcher_has_model_sonnet(self, tmp_path):
         generate_subagent_definitions(tmp_path, "claude")
@@ -83,7 +83,7 @@ class TestClaudeAgents:
         generate_subagent_definitions(tmp_path, "claude")
         content = (tmp_path / ".claude" / "agents" / "tapps-researcher.md").read_text()
         assert "mcpServers:" in content
-        assert "  tapps-mcp: {}" in content
+        assert "  nlt-build: {}" in content
 
     def test_validator_has_model_haiku(self, tmp_path):
         generate_subagent_definitions(tmp_path, "claude")
@@ -104,7 +104,7 @@ class TestClaudeAgents:
         generate_subagent_definitions(tmp_path, "claude")
         content = (tmp_path / ".claude" / "agents" / "tapps-validator.md").read_text()
         assert "mcpServers:" in content
-        assert "  tapps-mcp: {}" in content
+        assert "  nlt-build: {}" in content
 
     def test_validator_has_memory_project(self, tmp_path):
         generate_subagent_definitions(tmp_path, "claude")
@@ -114,7 +114,7 @@ class TestClaudeAgents:
     def test_reviewer_body_references_mcp_tools(self, tmp_path):
         generate_subagent_definitions(tmp_path, "claude")
         content = (tmp_path / ".claude" / "agents" / "tapps-reviewer.md").read_text()
-        assert "mcp__tapps-mcp__tapps_quick_check" in content
+        assert "mcp__nlt-build__tapps_quick_check" in content
 
     def test_agents_have_yaml_frontmatter(self, tmp_path):
         generate_subagent_definitions(tmp_path, "claude")
@@ -173,7 +173,7 @@ class TestClaudeAgents:
         generate_subagent_definitions(tmp_path, "claude")
         content = (tmp_path / ".claude" / "agents" / "tapps-review-fixer.md").read_text()
         assert "mcpServers:" in content
-        assert "  tapps-mcp: {}" in content
+        assert "  nlt-build: {}" in content
 
     def test_review_fixer_has_memory_project(self, tmp_path):
         generate_subagent_definitions(tmp_path, "claude")
@@ -192,7 +192,7 @@ class TestClaudeAgents:
         ]:
             content = (agents_dir / name).read_text()
             assert "mcpServers:" in content, f"{name} missing mcpServers"
-            assert "  tapps-mcp: {}" in content, f"{name} missing tapps-mcp entry"
+            assert "  nlt-build: {}" in content, f"{name} missing nlt-build entry"
 
     def test_all_claude_agents_have_max_turns(self, tmp_path):
         """All 4 Claude subagents must declare maxTurns."""

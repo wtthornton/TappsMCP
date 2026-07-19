@@ -378,7 +378,7 @@ async def _check_compaction_rehydration(
 
         bridge = _get_brain_bridge_fn()
         if bridge is not None and hasattr(bridge, "search_sessions"):
-            search_result = await bridge.search_sessions(  # type: ignore[misc]
+            search_result = await bridge.search_sessions(
                 f"compaction_boundary:{session_id}", limit=5
             )
             if isinstance(search_result, dict):

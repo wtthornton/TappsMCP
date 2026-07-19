@@ -712,7 +712,7 @@ def write_checklist_state_marker(
             bridge = _get_brain_bridge()
             if bridge is None or not hasattr(bridge, "record_kg_event"):
                 return
-            await bridge.record_kg_event(  # type: ignore[union-attr]
+            await bridge.record_kg_event(
                 event_type="checklist_outcome",
                 entities=[entity_spec("project", entity_id)],
                 payload_data=payload_data,
@@ -764,7 +764,7 @@ async def fetch_prior_checklist_outcome(project_root: Path | str) -> dict[str, A
         bridge = _get_brain_bridge()
         if bridge is None or not hasattr(bridge, "query_events"):
             return None
-        events = await bridge.query_events(  # type: ignore[union-attr]
+        events = await bridge.query_events(
             "checklist_outcome",
             entity_id=entity_id,
             limit=50,

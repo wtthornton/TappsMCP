@@ -527,7 +527,7 @@ def _fire_validate_events(
             }
             if path_strs:
                 payload_data["subject_key"] = path_strs[0]
-            await bridge.record_kg_event(  # type: ignore[union-attr]
+            await bridge.record_kg_event(
                 event_type="validate_completed",
                 entities=[entity_spec("file", p) for p in path_strs],
                 edges=None,
