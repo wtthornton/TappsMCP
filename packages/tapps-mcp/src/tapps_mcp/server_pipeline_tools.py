@@ -186,8 +186,8 @@ __all__ = [
     "_collect_brain_bridge_health",
     "_collect_memory_status",
     "_collect_results",
-    "_compute_impact_analysis",
     "_compute_affected_tests",
+    "_compute_impact_analysis",
     "_current_docs_provider",
     "_decompose_task",
     "_discover_changed_files",
@@ -221,20 +221,20 @@ __all__ = [
     "_validate_single_file",
     "_warm_dependency_cache",
     "_write_validate_ok_marker",
+    "attach_affected_tests",
     "call_memory_index_session_start",
     "load_settings",
     "register",
     "tapps_decompose",
     "tapps_doctor",
+    "tapps_handoff_save",
     "tapps_init",
     "tapps_pipeline",
-    "tapps_handoff_save",
     "tapps_session_end",
     "tapps_session_start",
     "tapps_set_engagement_level",
     "tapps_upgrade",
     "tapps_validate_changed",
-    "attach_affected_tests",
 ]
 
 _logger = structlog.get_logger(__name__)
@@ -340,7 +340,6 @@ _SESSION_START_CACHE: dict[tuple[str, bool, str], dict[str, Any]] = {}
 def _session_start_cache_root() -> str:
     """Resolved project root for the current request (fleet) or process (stdio)."""
     import os
-    from pathlib import Path
 
     from tapps_core.http.request_context import get_request_project_root
 
@@ -363,6 +362,7 @@ def _session_start_cache_key(quick: bool) -> tuple[str, bool, str]:
 def _reset_session_start_cache() -> None:
     """Clear the tapps_session_start memoization cache (for testing)."""
     _SESSION_START_CACHE.clear()
+
 
 _ANNOTATIONS_READ_ONLY = ToolAnnotations(
     readOnlyHint=True,
@@ -474,7 +474,7 @@ def _detect_brain_auth_failure(
         "to keep the degraded behavior"
     )
 
-    if token_state == "unsubstituted":
+    if token_state == "unsubstituted":  # noqa: S105  (state label, not a secret)
         code = "brain_auth_token_unsubstituted"
         message = (
             f"tapps-brain auth probe returned HTTP {http_status}, and the MCP "
@@ -496,7 +496,7 @@ def _detect_brain_auth_failure(
             ),
             tolerate_step,
         ]
-    elif token_state == "missing":
+    elif token_state == "missing":  # noqa: S105  (state label, not a secret)
         code = "brain_auth_token_missing"
         message = (
             f"tapps-brain auth probe returned HTTP {http_status} and no "
@@ -1369,13 +1369,13 @@ def tapps_doctor(
         if push_log.exists():
             raw_lines = push_log.read_text(encoding="utf-8").splitlines()
             entries: list[dict[str, object]] = []
-            for line in raw_lines[-5:]:
-                line = line.strip()
-                if line:
+            for raw_line in raw_lines[-5:]:
+                stripped = raw_line.strip()
+                if stripped:
                     try:
-                        entries.append(_json.loads(line))
+                        entries.append(_json.loads(stripped))
                     except _json.JSONDecodeError:
-                        entries.append({"raw": line})
+                        entries.append({"raw": stripped})
             last_status = entries[-1].get("status", "UNKNOWN") if entries else "NO_RESULTS"
             result["push_test_log"] = {
                 "last_5_entries": entries,
@@ -1631,8 +1631,6 @@ async def tapps_session_end() -> dict[str, Any]:
 
     start = time.perf_counter_ns()
     _record_call("tapps_session_end")
-
-    from tapps_core.config.settings import load_settings
 
     settings = load_settings()
     data = await run_session_end(

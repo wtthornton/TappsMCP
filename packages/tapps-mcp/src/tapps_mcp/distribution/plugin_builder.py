@@ -202,12 +202,7 @@ class PluginBuilder:
         for shim_name, subcommand in _BIN_SHIMS.items():
             posix_path = bin_dir / shim_name
             posix_path.write_text(_posix_shim(subcommand), encoding="utf-8")
-            posix_path.chmod(
-                posix_path.stat().st_mode
-                | stat.S_IXUSR
-                | stat.S_IXGRP
-                | stat.S_IXOTH
-            )
+            posix_path.chmod(posix_path.stat().st_mode | stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH)
             created.append(shim_name)
 
             cmd_path = bin_dir / f"{shim_name}.cmd"

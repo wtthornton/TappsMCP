@@ -71,9 +71,7 @@ _ANNOTATIONS_INVALIDATE = ToolAnnotations(
 _META_DEFERRED: dict[str, Any] = {"defer_loading": True}
 
 # State values that indicate an open workflow (short TTL).
-_OPEN_STATE_BUCKETS: frozenset[str] = frozenset(
-    {"backlog", "unstarted", "started", "triage"}
-)
+_OPEN_STATE_BUCKETS: frozenset[str] = frozenset({"backlog", "unstarted", "started", "triage"})
 # State values that indicate a closed workflow (long TTL).
 _CLOSED_STATE_BUCKETS: frozenset[str] = frozenset({"completed", "canceled"})
 
@@ -177,9 +175,7 @@ def _filter_hash(**kwargs: Any) -> str:
     return hashlib.sha256(payload).hexdigest()[:16]
 
 
-def _cache_key(
-    team: str, project: str, state: str | None, filter_hash: str
-) -> str:
+def _cache_key(team: str, project: str, state: str | None, filter_hash: str) -> str:
     """Build the cache-file stem from slice identifiers.
 
     ``state`` must already be canonicalized via :func:`_canonical_state` by the
@@ -255,9 +251,7 @@ def _cache_read(cache_dir: Path, cache_key: str) -> dict[str, Any] | None:
     return payload  # type: ignore[no-any-return]
 
 
-def _cache_write(
-    cache_dir: Path, cache_key: str, payload: dict[str, Any]
-) -> None:
+def _cache_write(cache_dir: Path, cache_key: str, payload: dict[str, Any]) -> None:
     """Write payload to the cache atomically (ADR-0029 shared primitive)."""
     cache_file = cache_dir / f"{cache_key}.json"
     try:
@@ -278,14 +272,14 @@ def _prune_linear_snapshot_cache(
 ) -> int:
     """Remove stale snapshot files and LRU-evict when over the file cap (TAP-1766).
 
-    Deletes entries whose mtime age exceeds ``max(ttl_open, ttl_closed) × 10``
+    Deletes entries whose mtime age exceeds ``max(ttl_open, ttl_closed) x 10``
     and trims the directory to :data:`_CACHE_MAX_FILES` by oldest mtime.
     """
     if not cache_dir.is_dir():
         return 0
 
     # Use the shorter bucket TTL so open-state snapshots are not kept for
-    # closed-state TTL × 10 (which would be hours on default settings).
+    # closed-state TTL x 10 (which would be hours on default settings).
     positive = [t for t in (ttl_open, ttl_closed) if t > 0]
     base_ttl = min(positive) if positive else 1
     stale_age = base_ttl * _CACHE_STALE_TTL_MULTIPLIER
@@ -338,9 +332,7 @@ def _cache_invalidate_prefix(cache_dir: Path, prefix: str) -> int:
     return count
 
 
-def _resolve_cache_key(
-    team: str, project: str, state: str, label: str, limit: int
-) -> str:
+def _resolve_cache_key(team: str, project: str, state: str, label: str, limit: int) -> str:
     """Build the canonical cache key used by both _get and _put.
 
     State is canonicalized (TAP-4588) so every open-bucket alias resolves to

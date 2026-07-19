@@ -71,7 +71,6 @@ def _fire_quality_gate_events(file_path: str, failures: list[GateFailure]) -> No
 
     async def _emit() -> None:
         try:
-            from tapps_core.config.settings import load_settings
             from tapps_mcp.server_helpers import brain_kg_events_enabled
 
             if not brain_kg_events_enabled(load_settings()):
@@ -99,6 +98,7 @@ def _fire_quality_gate_events(file_path: str, failures: list[GateFailure]) -> No
             pass  # best-effort: never block quality gate for telemetry
 
     try:
+        # Fire-and-forget telemetry; no reference kept on purpose.
         asyncio.create_task(_emit())  # noqa: RUF006
     except Exception:
         pass

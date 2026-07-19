@@ -168,9 +168,7 @@ def _get_brain_bridge() -> _BrainBridgeType | None:
                 # the ``full`` profile (ADR-0012) — ``coder`` gates ~18 of the
                 # bridge's tools (memory_save/get/search/list/supersede, hive_*,
                 # batch ops, …) and would fail those calls on brain v3.20.0+.
-                _brain_bridge = create_brain_bridge(
-                    settings, default_profile=BRAIN_PROFILE_SERVER
-                )
+                _brain_bridge = create_brain_bridge(settings, default_profile=BRAIN_PROFILE_SERVER)
 
                 # TAP-2014: wire elevation guard after bridge creation.
                 if _brain_bridge is not None:
@@ -193,10 +191,10 @@ def _reset_brain_bridge_cache() -> None:
 
 def _brain_http_url_configured(settings: TappsMCPSettings) -> bool:
     """True when HTTP brain-bridge mode is active for *settings*."""
-    import os
-
     return bool(
-        (settings.memory.brain_http_url or os.environ.get("TAPPS_MCP_MEMORY_BRAIN_HTTP_URL", "")).strip()
+        (
+            settings.memory.brain_http_url or os.environ.get("TAPPS_MCP_MEMORY_BRAIN_HTTP_URL", "")
+        ).strip()
     )
 
 
@@ -208,9 +206,7 @@ def brain_kg_events_enabled(settings: TappsMCPSettings | None = None) -> bool:
     cfg = settings or load_settings()
     if not getattr(cfg.memory, "enabled", True):
         return False
-    if _brain_http_url_configured(cfg) and resolve_brain_auth_token(cfg) is None:
-        return False
-    return True
+    return not (_brain_http_url_configured(cfg) and resolve_brain_auth_token(cfg) is None)
 
 
 def sync_memory_store_available(settings: TappsMCPSettings) -> bool:
@@ -384,7 +380,7 @@ def _reset_hive_store_cache() -> None:
     and call it from the autouse cache-reset fixture without needing a
     coordinated change.
     """
-    return None
+    return
 
 
 def initial_session_hive_status() -> dict[str, Any]:
@@ -669,9 +665,7 @@ def write_session_start_marker(project_root: Path | str) -> None:
         root = project_root if isinstance(project_root, Path) else Path(project_root)
         sidecar_dir = root / ".tapps-mcp"
         sidecar_dir.mkdir(parents=True, exist_ok=True)
-        (sidecar_dir / ".session-start-marker").write_text(
-            str(int(time.time())), encoding="utf-8"
-        )
+        (sidecar_dir / ".session-start-marker").write_text(str(int(time.time())), encoding="utf-8")
     except Exception:
         pass
 
@@ -727,6 +721,7 @@ def write_checklist_state_marker(
             pass
 
     try:
+        # Fire-and-forget telemetry; no reference kept on purpose.
         asyncio.create_task(_emit())  # noqa: RUF006
     except Exception:
         pass
@@ -812,8 +807,6 @@ async def ensure_session_initialized() -> None:
     if _session_initialized:
         return
 
-    import asyncio
-
     from tapps_core.config.settings import load_settings
 
     settings = load_settings()
@@ -861,8 +854,6 @@ async def ensure_session_initialized() -> None:
     # No-op when the cache is already fresh (the scheduler self-skips), and this
     # path is unreachable once session_start has marked the session initialized.
     try:
-        from pathlib import Path
-
         from tapps_mcp.project.call_graph_cache import summarize_call_graph_cache
         from tapps_mcp.tools.session_start_helpers import schedule_session_warm
 
@@ -872,9 +863,7 @@ async def ensure_session_initialized() -> None:
     except Exception:
         import structlog
 
-        structlog.get_logger(__name__).debug(
-            "lazy_call_graph_warm_failed", exc_info=True
-        )
+        structlog.get_logger(__name__).debug("lazy_call_graph_warm_failed", exc_info=True)
 
 
 def ensure_session_initialized_sync() -> None:

@@ -112,10 +112,14 @@ def _read_short_sha(checkout: Path) -> str:
 def _release_ref(checkout: Path) -> ReleaseRef:
     version = _read_package_version(checkout)
     short_sha = _read_short_sha(checkout)
-    return ReleaseRef(version=version, short_sha=short_sha, path=RELEASES_DIR / f"{version}-{short_sha}")
+    return ReleaseRef(
+        version=version, short_sha=short_sha, path=RELEASES_DIR / f"{version}-{short_sha}"
+    )
 
 
-def _run(cmd: list[str], *, cwd: Path | None = None, timeout: int = 600) -> subprocess.CompletedProcess[str]:
+def _run(
+    cmd: list[str], *, cwd: Path | None = None, timeout: int = 600
+) -> subprocess.CompletedProcess[str]:
     logger.info("blue_green.run", cmd=cmd, cwd=str(cwd) if cwd else None)
     return subprocess.run(
         cmd,
@@ -316,7 +320,9 @@ def _deploy_under_lock(
     return report
 
 
-def gc_releases(*, keep: int = DEFAULT_KEEP_RELEASES, protect: Path | None = None) -> dict[str, Any]:
+def gc_releases(
+    *, keep: int = DEFAULT_KEEP_RELEASES, protect: Path | None = None
+) -> dict[str, Any]:
     """Delete old release dirs not referenced by live processes."""
     current = current_release_path()
     protected = {current.resolve()} if current is not None else set()

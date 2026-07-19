@@ -82,9 +82,13 @@ async def tapps_release_update(
     start = time.perf_counter_ns()
 
     if not version.strip():
-        return error_response("tapps_release_update", "MISSING_VERSION", "Parameter 'version' is required.")
+        return error_response(
+            "tapps_release_update", "MISSING_VERSION", "Parameter 'version' is required."
+        )
     if not prev_version.strip():
-        return error_response("tapps_release_update", "MISSING_PREV_VERSION", "Parameter 'prev_version' is required.")
+        return error_response(
+            "tapps_release_update", "MISSING_PREV_VERSION", "Parameter 'prev_version' is required."
+        )
 
     try:
         from tapps_core.config.settings import load_settings
@@ -187,7 +191,7 @@ def _today() -> str:
     return datetime.now(UTC).strftime("%Y-%m-%d")
 
 
-def register(mcp_instance: "FastMCP", allowed_tools: frozenset[str]) -> None:
+def register(mcp_instance: FastMCP, allowed_tools: frozenset[str]) -> None:
     """Register release update tool on the shared mcp instance.
 
     TAP-1986: tapps_release_update is deferred (not a daily driver).

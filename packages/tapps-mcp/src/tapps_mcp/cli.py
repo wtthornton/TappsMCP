@@ -77,7 +77,6 @@ def fleet_status_cmd() -> None:
 
 
 @fleet.command("restart")
-@click.option("--force", is_flag=True, help="Force restart even when PIDs look healthy.")
 @click.option(
     "--skip-smoke",
     is_flag=True,
@@ -90,8 +89,12 @@ def fleet_status_cmd() -> None:
     show_default=True,
     help="Project root sent as X-Tapps-Project-Root during smoke probes.",
 )
-def fleet_restart(force: bool, skip_smoke: bool, project_root: str) -> None:
-    """Stop then start the HTTP fleet and verify MCP handshakes."""
+def fleet_restart(skip_smoke: bool, project_root: str) -> None:
+    """Stop then start the HTTP fleet and verify MCP handshakes.
+
+    Restart always stops the fleet first, so a fresh start is implied —
+    the old ``--force`` flag was a no-op and has been removed.
+    """
     from tapps_mcp.distribution.fleet_control import (
         restart_fleet_with_smoke,
         start_fleet,
@@ -267,9 +270,7 @@ def fleet_repair_consumers(scan_parent: str, roots: str, audit: bool) -> None:
     root_list = [Path(p.strip()) for p in roots.split(",") if p.strip()] or None
     parent = Path(scan_parent).expanduser() if scan_parent.strip() else None
     result = repair_consumers(scan_parent=parent, roots=root_list)
-    click.echo(
-        f"repaired={result['repaired_count']} unchanged={result['unchanged_count']}"
-    )
+    click.echo(f"repaired={result['repaired_count']} unchanged={result['unchanged_count']}")
     for row in result["repaired"]:
         click.echo(click.style(f"  {row['project']}: {', '.join(row['changes'])}", fg="green"))
     if not audit:
@@ -2370,8 +2371,7 @@ def migrate_memory_cmd(
     if rollback_run_id:
         result = rollback_migration_sync(bridge, rollback_run_id)
         click.echo(
-            f"rollback run_id={rollback_run_id} deleted={result['deleted']} "
-            f"ok={result['ok']}"
+            f"rollback run_id={rollback_run_id} deleted={result['deleted']} ok={result['ok']}"
         )
         if result.get("errors"):
             click.echo(click.style(f"errors: {result['errors']}", fg="yellow"))
@@ -2398,7 +2398,9 @@ def migrate_memory_cmd(
 @click.option("--bump-type", default="", help="patch | minor | major (inferred if blank)")
 @click.option("--team", default="", help="Linear team name/ID")
 @click.option("--project", default="", help="Linear project name/slug")
-@click.option("--dry-run", is_flag=True, default=False, help="Return body without requiring validation pass")
+@click.option(
+    "--dry-run", is_flag=True, default=False, help="Return body without requiring validation pass"
+)
 def release_update_cmd(
     version: str,
     prev_version: str,

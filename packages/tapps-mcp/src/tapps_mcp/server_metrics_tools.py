@@ -442,11 +442,7 @@ def tapps_feedback(
     # the response surfaced `domain` without ever moving DomainWeightStore.
     domain_weight_adjusted = False
     domain_weight_type: str | None = None
-    if (
-        not duplicate_skipped
-        and sanitized_domain
-        and tool_name in _EXPERT_TOOLS
-    ):
+    if not duplicate_skipped and sanitized_domain and tool_name in _EXPERT_TOOLS:
         domain_weight_adjusted, domain_weight_type = _adjust_domain_weights(
             sanitized_domain, helpful
         )

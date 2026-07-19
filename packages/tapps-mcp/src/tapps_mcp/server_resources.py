@@ -33,8 +33,9 @@ def _get_scoring_weights() -> str:
     w = settings.scoring_weights
 
     lines = ["# Scoring Weights\n"]
-    for field_name in ScoringWeights.model_fields:
-        lines.append(f"  {field_name}: {getattr(w, field_name)}")
+    lines.extend(
+        f"  {field_name}: {getattr(w, field_name)}" for field_name in ScoringWeights.model_fields
+    )
     return "\n".join(lines)
 
 

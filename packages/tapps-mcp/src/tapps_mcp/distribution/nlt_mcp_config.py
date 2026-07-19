@@ -125,12 +125,14 @@ NLT_SERVER_TOTAL_COUNTS: Final[dict[str, int]] = {
 NLT_MAX_ENABLED_SERVERS: Final[int] = 3
 NLT_MAX_COMBINED_EAGER: Final[int] = 20
 
-_LEGACY_MCP_SERVER_IDS: Final[frozenset[str]] = frozenset({
-    "tapps-mcp",
-    "docs-mcp",
-    "nlt-code-quality",
-    "nlt-platform-admin",
-})
+_LEGACY_MCP_SERVER_IDS: Final[frozenset[str]] = frozenset(
+    {
+        "tapps-mcp",
+        "docs-mcp",
+        "nlt-code-quality",
+        "nlt-platform-admin",
+    }
+)
 
 # Tool → owning NLT server (for server-aware checklist — TAP-3899).
 NLT_TOOL_SERVER: Final[dict[str, str]] = {

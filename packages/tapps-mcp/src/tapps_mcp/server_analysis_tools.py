@@ -192,8 +192,6 @@ async def _promote_note_to_memory(note: SessionNote, tier: str = "context") -> d
     session-scoped tapps-brain entries.
     """
     try:
-        from tapps_mcp.server_helpers import _get_brain_bridge
-
         bridge = _get_brain_bridge()
         if bridge is None:
             return {
@@ -949,6 +947,7 @@ async def tapps_dead_code(
                 except Exception:
                     pass
 
+            # Fire-and-forget telemetry; no reference kept on purpose.
             asyncio.create_task(_fire_dead_code_event())  # noqa: RUF006
     except Exception:
         pass  # never block tapps_dead_code for telemetry
@@ -1269,9 +1268,7 @@ async def tapps_dependency_graph(
     settings = load_settings()
     root = settings.project_root
     if project_root:
-        from pathlib import Path
-
-        root = Path(project_root).resolve()
+        root = _Path(project_root).resolve()
 
     def _build_graph_sync() -> dict[str, Any]:
         """Run graph building, cycle detection, and coupling analysis synchronously."""
@@ -1863,8 +1860,6 @@ async def tapps_finding_to_story(
     )
 
     # --- TAP-2721: Dedup against cached Linear snapshot ---
-    import json as _json
-
     from tapps_mcp.tools.finding_to_story import find_duplicate_in_snapshot
 
     duplicate: dict[str, Any] | None = None

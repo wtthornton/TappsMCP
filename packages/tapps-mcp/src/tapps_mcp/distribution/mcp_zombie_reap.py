@@ -14,9 +14,7 @@ import signal
 import subprocess
 from typing import Any
 
-_SERVE_CMD = re.compile(
-    r"serve --profile nlt-|/(tapps-mcp|docsmcp|tapps-platform)( |$).*serve"
-)
+_SERVE_CMD = re.compile(r"serve --profile nlt-|/(tapps-mcp|docsmcp|tapps-platform)( |$).*serve")
 
 
 def _parent_alive(ppid: int) -> bool:

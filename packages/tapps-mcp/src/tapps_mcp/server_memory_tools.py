@@ -797,6 +797,7 @@ async def tapps_memory(
                 except Exception:
                     pass
 
+            # Fire-and-forget telemetry; no reference kept on purpose.
             asyncio.create_task(_fire_deprecation_event())  # noqa: RUF006
     except Exception:
         pass  # never block tapps_memory for telemetry

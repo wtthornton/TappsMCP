@@ -832,6 +832,7 @@ def _fire_security_scan_events(
             pass  # best-effort: never block security scan for telemetry
 
     try:
+        # Fire-and-forget telemetry; no reference kept on purpose.
         asyncio.create_task(_emit())  # noqa: RUF006
     except Exception:
         pass
@@ -982,29 +983,28 @@ def tapps_security_scan(
             SecurityScanOutput,
         )
 
-        sec_findings: list[SecurityFindingOutput] = []
-        for i in result.bandit_issues[:_SECURITY_SCAN_FINDING_LIMIT]:
-            sec_findings.append(
-                SecurityFindingOutput(
-                    code=i.code,
-                    message=i.message,
-                    file=i.file,
-                    line=i.line,
-                    severity=i.severity,
-                    confidence=i.confidence,
-                )
+        sec_findings: list[SecurityFindingOutput] = [
+            SecurityFindingOutput(
+                code=i.code,
+                message=i.message,
+                file=i.file,
+                line=i.line,
+                severity=i.severity,
+                confidence=i.confidence,
             )
-        for f in result.secret_findings[:_SECURITY_SCAN_FINDING_LIMIT]:
-            sec_findings.append(
-                SecurityFindingOutput(
-                    code=f.secret_type,
-                    message=f.context or f.secret_type,
-                    file=f.file_path,
-                    line=f.line_number,
-                    severity=f.severity,
-                    confidence="medium",
-                )
+            for i in result.bandit_issues[:_SECURITY_SCAN_FINDING_LIMIT]
+        ]
+        sec_findings.extend(
+            SecurityFindingOutput(
+                code=f.secret_type,
+                message=f.context or f.secret_type,
+                file=f.file_path,
+                line=f.line_number,
+                severity=f.severity,
+                confidence="medium",
             )
+            for f in result.secret_findings[:_SECURITY_SCAN_FINDING_LIMIT]
+        )
         structured = SecurityScanOutput(
             file_path=str(resolved),
             passed=result.passed,
@@ -1524,8 +1524,7 @@ async def tapps_checklist(
         def _eval_checklist() -> ChecklistResult:
             epic = epic_file_path.strip()
             if epic:
-                epic_res = CallTracker.evaluate_epic(file_path=epic, **eval_kw)
-                return epic_res
+                return CallTracker.evaluate_epic(file_path=epic, **eval_kw)
             return CallTracker.evaluate(task_type, **eval_kw)
 
         try:
@@ -1642,12 +1641,10 @@ async def tapps_checklist(
                 "gaps": usage.get("gaps", []),
                 "recommendations": usage.get("recommendations", []),
                 "libraries_without_lookup": usage.get("libraries_without_lookup", []),
-                "rolling_gate_skip_rate": usage.get("rolling_stats", {}).get(
-                    "gate_skip_rate", 0.0
-                ),
+                "rolling_gate_skip_rate": usage.get("rolling_stats", {}).get("gate_skip_rate", 0.0),
                 "rolling_loops": usage.get("rolling_stats", {}).get("loops", 0),
             }
-        except Exception:  # noqa: BLE001
+        except Exception:
             logger.debug("usage_gaps_inline_failed", exc_info=True)
 
         # Epic 66.2: Surface validation_note in next_steps
