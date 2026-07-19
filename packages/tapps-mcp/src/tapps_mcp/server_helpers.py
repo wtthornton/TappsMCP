@@ -720,11 +720,9 @@ def write_checklist_state_marker(
         except Exception:
             pass
 
-    try:
-        # Fire-and-forget telemetry; no reference kept on purpose.
+    # Fire-and-forget telemetry; no reference kept on purpose.
+    with contextlib.suppress(Exception):
         asyncio.create_task(_emit())  # noqa: RUF006
-    except Exception:
-        pass
 
 
 def _extract_checklist_outcome_payload(event: dict[str, Any]) -> dict[str, Any] | None:

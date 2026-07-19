@@ -156,7 +156,7 @@ def _canonical_state(state: str | None) -> str:
     from each other.
     """
     state_lc = (state or "").strip().lower()
-    if state_lc == "" or state_lc == _CANONICAL_OPEN_STATE or state_lc in _OPEN_STATE_BUCKETS:
+    if state_lc in ("", _CANONICAL_OPEN_STATE) or state_lc in _OPEN_STATE_BUCKETS:
         return _CANONICAL_OPEN_STATE
     return state_lc
 

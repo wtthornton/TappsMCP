@@ -7,6 +7,7 @@ registered on the ``mcp`` instance via :func:`register`.
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import dataclasses
 import json
 import os
@@ -789,13 +790,11 @@ async def tapps_memory(
         if _ev_bridge is not None and hasattr(_ev_bridge, "record_event"):
 
             async def _fire_deprecation_event() -> None:
-                try:
+                with contextlib.suppress(Exception):
                     await _ev_bridge.record_event(
                         "deprecated_tool_call",
                         f"tapps_memory:{action}",
                     )
-                except Exception:
-                    pass
 
             # Fire-and-forget telemetry; no reference kept on purpose.
             asyncio.create_task(_fire_deprecation_event())  # noqa: RUF006

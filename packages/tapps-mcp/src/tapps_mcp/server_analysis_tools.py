@@ -209,11 +209,6 @@ async def _promote_note_to_memory(note: SessionNote, tier: str = "context") -> d
             source_agent="session-promote",
             tags=["promoted-from-session-notes"],
         )
-        return {
-            "action": "promote",
-            "promoted": True,
-            "memory_entry": entry,
-        }
     except Exception as exc:
         logger.debug("promote_to_memory_failed", key=note.key, error=str(exc))
         return {
@@ -221,6 +216,11 @@ async def _promote_note_to_memory(note: SessionNote, tier: str = "context") -> d
             "promoted": False,
             "error": str(exc),
         }
+    return {
+        "action": "promote",
+        "promoted": True,
+        "memory_entry": entry,
+    }
 
 
 # ---------------------------------------------------------------------------
@@ -684,10 +684,8 @@ class _ReportProgressTracker:
             "results": list(self._results),
         }
         data.update(extra)
-        try:
+        with contextlib.suppress(Exception):
             self._sidecar_path.write_text(_json.dumps(data, indent=2), encoding="utf-8")
-        except Exception:
-            pass
 
 
 # ---------------------------------------------------------------------------
@@ -942,10 +940,8 @@ async def tapps_dead_code(
         if _dc_bridge is not None and hasattr(_dc_bridge, "record_event"):
 
             async def _fire_dead_code_event() -> None:
-                try:
+                with contextlib.suppress(Exception):
                     await _dc_bridge.record_event("tool_call", "tapps_dead_code")  # type: ignore[union-attr]
-                except Exception:
-                    pass
 
             # Fire-and-forget telemetry; no reference kept on purpose.
             asyncio.create_task(_fire_dead_code_event())  # noqa: RUF006

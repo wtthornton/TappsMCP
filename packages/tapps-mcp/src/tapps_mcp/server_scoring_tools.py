@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import ast
 import asyncio
+import contextlib
 import time
 from typing import TYPE_CHECKING, Any
 
@@ -97,11 +98,9 @@ def _fire_quality_gate_events(file_path: str, failures: list[GateFailure]) -> No
         except Exception:
             pass  # best-effort: never block quality gate for telemetry
 
-    try:
-        # Fire-and-forget telemetry; no reference kept on purpose.
+    # Fire-and-forget telemetry; no reference kept on purpose.
+    with contextlib.suppress(Exception):
         asyncio.create_task(_emit())  # noqa: RUF006
-    except Exception:
-        pass
 
 
 def _build_score_file_data(
@@ -257,7 +256,7 @@ async def tapps_score_file(
         else:
             result = await scorer.score_file(resolved, mode=mode)
     except Exception as exc:
-        logger.error("scoring_failed", file_path=str(resolved), error=str(exc))
+        logger.exception("scoring_failed", file_path=str(resolved))
         _record_call("tapps_score_file", success=False)
         return error_response("tapps_score_file", "scoring_failed", str(exc))
 
@@ -426,7 +425,7 @@ async def tapps_quality_gate(
     try:
         score_result = await scorer.score_file(resolved)
     except Exception as exc:
-        logger.error("scoring_failed", file_path=str(resolved), error=str(exc))
+        logger.exception("scoring_failed", file_path=str(resolved))
         _record_call("tapps_quality_gate", success=False)
         return error_response("tapps_quality_gate", "scoring_failed", str(exc))
     gate_result = evaluate_gate(score_result, preset=preset)
@@ -892,11 +891,7 @@ async def tapps_quick_check(
                 try:
                     return await _quick_check_single(resolved, preset, fix, settings)
                 except Exception as exc:
-                    logger.error(
-                        "quick_check_batch_file_failed",
-                        file_path=fp,
-                        error=str(exc),
-                    )
+                    logger.exception("quick_check_batch_file_failed", file_path=fp)
                     return {
                         "file_path": fp,
                         "success": False,
@@ -1024,14 +1019,14 @@ async def tapps_quick_check(
         try:
             score_result, sec_result = await asyncio.gather(score_coro, sec_coro)
         except Exception as exc:
-            logger.error("quick_check_failed", file_path=str(resolved), error=str(exc))
+            logger.exception("quick_check_failed", file_path=str(resolved))
             _record_call("tapps_quick_check", success=False)
             return error_response("tapps_quick_check", "scoring_failed", str(exc))
     else:
         try:
             score_result = await score_coro
         except Exception as exc:
-            logger.error("quick_check_failed", file_path=str(resolved), error=str(exc))
+            logger.exception("quick_check_failed", file_path=str(resolved))
             _record_call("tapps_quick_check", success=False)
             return error_response("tapps_quick_check", "scoring_failed", str(exc))
 

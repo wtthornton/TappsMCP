@@ -504,13 +504,12 @@ def _adjust_scoring_weights(helpful: bool) -> bool:
         # Update the cached settings scoring weights
         for k, v in adjusted.items():
             setattr(settings.scoring_weights, k, v)
-
-        return True
     except Exception:
         import structlog as _structlog
 
         _structlog.get_logger(__name__).debug("weight_adjustment_failed", exc_info=True)
         return False
+    return True
 
 
 def _adjust_domain_weights(domain: str, helpful: bool) -> tuple[bool, str | None]:
@@ -548,9 +547,6 @@ def _adjust_domain_weights(domain: str, helpful: bool) -> tuple[bool, str | None
             domain=domain,
             helpful=helpful,
         )
-
-        return True, "technical"
-
     except Exception:
         import structlog as _structlog
 
@@ -558,6 +554,7 @@ def _adjust_domain_weights(domain: str, helpful: bool) -> tuple[bool, str | None
             "domain_weight_adjustment_failed", domain=domain, exc_info=True
         )
         return False, None
+    return True, "technical"
 
 
 def tapps_usage(

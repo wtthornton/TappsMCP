@@ -30,9 +30,11 @@ def _extract_context_from_payload(payload: dict[str, Any]) -> str:
                 if isinstance(content, str):
                     parts.append(content.strip())
                 elif isinstance(content, list):
-                    for c in content:
-                        if isinstance(c, dict) and isinstance(c.get("text"), str):
-                            parts.append(c["text"].strip())
+                    parts.extend(
+                        c["text"].strip()
+                        for c in content
+                        if isinstance(c, dict) and isinstance(c.get("text"), str)
+                    )
     # Fallback: use raw payload as string for structured data
     if not parts:
         raw = json.dumps(payload, default=str)[:8000]

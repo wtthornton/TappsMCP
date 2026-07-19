@@ -16,6 +16,7 @@ Tool handlers are split across modules for maintainability:
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import os
 import sys
 import time
@@ -831,11 +832,9 @@ def _fire_security_scan_events(
         except Exception:
             pass  # best-effort: never block security scan for telemetry
 
-    try:
-        # Fire-and-forget telemetry; no reference kept on purpose.
+    # Fire-and-forget telemetry; no reference kept on purpose.
+    with contextlib.suppress(Exception):
         asyncio.create_task(_emit())  # noqa: RUF006
-    except Exception:
-        pass
 
 
 def tapps_security_scan(
