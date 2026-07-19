@@ -71,6 +71,7 @@ so consumers can audit exactly which paths would change:
 
 from __future__ import annotations
 
+import contextlib
 import re
 from typing import TYPE_CHECKING, Any
 
@@ -283,10 +284,8 @@ def _migrate_retired_hooks(project_root: Path) -> dict[str, Any]:
                 del hooks[event]
                 changed = True
         if changed:
-            try:
+            with contextlib.suppress(OSError):  # disk errors are non-fatal here
                 _write_managed_json(settings_file, config)
-            except OSError:  # pragma: no cover - disk error
-                pass
 
     hooks_dir = project_root / ".claude" / "hooks"
     for name in sorted(_RETIRED_HOOK_DELETE):
@@ -2172,7 +2171,7 @@ def upgrade_pipeline(
             else:
                 result["backup"] = "skipped (no targets)"
         except Exception as exc:
-            log.error("backup_failed", error=str(exc))
+            log.exception("backup_failed")
             result["backup"] = f"failed: {exc}"
             result["errors"].append(
                 f"Upgrade aborted: backup failed ({exc}). "

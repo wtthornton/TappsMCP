@@ -204,10 +204,10 @@ def _read_disk_cache() -> list[InstalledTool] | None:
 
         tools = [InstalledTool(**t) for t in data["tools"]]
         _logger.debug("disk_cache_hit", tool_count=len(tools))
-        return tools
     except Exception:
         _logger.debug("disk_cache_read_failed", exc_info=True)
         return None
+    return tools
 
 
 def detect_installed_tools(*, force_refresh: bool = False) -> list[InstalledTool]:

@@ -100,7 +100,7 @@ def resolve_cli_binary(name: str) -> str:
         return str(exe_adjacent)
 
     argv0 = Path(sys.argv[0]).resolve()
-    if argv0.is_file() and (argv0.name == name or argv0.stem == name):
+    if argv0.is_file() and name in (argv0.name, argv0.stem):
         return str(argv0)
 
     current = Path.home() / ".tapps-mcp" / "current" / "bin" / name

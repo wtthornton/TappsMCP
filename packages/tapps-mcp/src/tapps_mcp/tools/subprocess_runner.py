@@ -85,7 +85,7 @@ def run_command(
             timed_out=True,
         )
     except FileNotFoundError:
-        logger.error("command_not_found", cmd=cmd[0] if cmd else "<empty>")
+        logger.exception("command_not_found", cmd=cmd[0] if cmd else "<empty>")
         return CommandResult(
             returncode=-1,
             stdout="",
@@ -162,7 +162,7 @@ async def run_command_async(
             timed_out=True,
         )
     except (FileNotFoundError, OSError) as exc:
-        logger.error("command_not_found_async", cmd=cmd[0] if cmd else "<empty>", error=str(exc))
+        logger.exception("command_not_found_async", cmd=cmd[0] if cmd else "<empty>")
         return CommandResult(
             returncode=-1,
             stdout="",
@@ -170,7 +170,7 @@ async def run_command_async(
             command=cmd,
         )
     except UnicodeEncodeError as exc:
-        logger.error("stdin_encode_error", cmd=cmd[0] if cmd else "<empty>", error=str(exc))
+        logger.exception("stdin_encode_error", cmd=cmd[0] if cmd else "<empty>")
         with contextlib.suppress(Exception):
             if proc is not None:
                 proc.kill()

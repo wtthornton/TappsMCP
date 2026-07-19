@@ -118,7 +118,6 @@ async def pipeline_checklist_stage(
             "elapsed_ms": (time.perf_counter_ns() - stage_start) // 1_000_000,
             "summary": cl_data.get("compact_summary") or str(cl_data.get("status", "")),
         }
-        return stage, cl_passed
     except Exception as exc:
         return (
             {
@@ -129,6 +128,7 @@ async def pipeline_checklist_stage(
             },
             False,
         )
+    return stage, cl_passed
 
 
 __all__ = [

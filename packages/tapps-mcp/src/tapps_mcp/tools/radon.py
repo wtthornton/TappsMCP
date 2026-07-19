@@ -225,10 +225,10 @@ def _radon_cc_direct(file_path: str) -> list[dict[str, object]]:
             for block in blocks
         ]
         logger.info("radon_cc_direct_success", file=file_path, functions=len(entries))
-        return entries
     except Exception as exc:
         logger.warning("radon_cc_direct_failed", file=file_path, error=str(exc))
         return []
+    return entries
 
 
 def _radon_mi_direct(file_path: str) -> float:
@@ -247,10 +247,10 @@ def _radon_mi_direct(file_path: str) -> float:
             return 50.0
         mi_value: float = mi_visit(code, multi=True)
         logger.info("radon_mi_direct_success", file=file_path, mi=round(mi_value, 2))
-        return mi_value
     except Exception as exc:
         logger.warning("radon_mi_direct_failed", file=file_path, error=str(exc))
         return 50.0
+    return mi_value
 
 
 # ---------------------------------------------------------------------------
@@ -367,10 +367,10 @@ def _radon_hal_direct(file_path: str) -> list[dict[str, object]]:
             if isinstance(func, (list, tuple)) and len(func) >= 2
         ]
         logger.info("radon_hal_direct_success", file=file_path, functions=len(entries))
-        return entries
     except Exception as exc:
         logger.warning("radon_hal_direct_failed", file=file_path, error=str(exc))
         return []
+    return entries
 
 
 def _read_source(file_path: str) -> str | None:

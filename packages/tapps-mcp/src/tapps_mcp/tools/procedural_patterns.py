@@ -16,6 +16,7 @@ using ``tier="procedural"`` (30-day decay per brain tier definitions).
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import re
 import threading
 from pathlib import Path
@@ -137,10 +138,8 @@ async def _write_procedural(key: str, value: str, tags: list[str]) -> None:
 
 def _fire(coro: Any) -> None:
     """Schedule *coro* as a fire-and-forget asyncio task.  Never raises."""
-    try:
+    with contextlib.suppress(Exception):
         asyncio.create_task(coro)  # noqa: RUF006
-    except Exception:
-        pass
 
 
 # ---------------------------------------------------------------------------

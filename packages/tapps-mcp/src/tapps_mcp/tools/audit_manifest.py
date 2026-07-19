@@ -479,10 +479,7 @@ def _extract_value(entry: Any) -> str:
     """Pull the ``value`` field out of a bridge entry, handling both dict
     and pydantic-model shapes.
     """
-    if isinstance(entry, dict):
-        raw = entry.get("value", "")
-    else:
-        raw = getattr(entry, "value", "")
+    raw = entry.get("value", "") if isinstance(entry, dict) else getattr(entry, "value", "")
     return raw if isinstance(raw, str) else ""
 
 

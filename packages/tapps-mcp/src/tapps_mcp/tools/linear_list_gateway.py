@@ -55,9 +55,9 @@ def _sentinel_is_fresh(project_dir: Path, key: str) -> bool:
         return False
     try:
         age = time.time() - float(sentinel.read_text(encoding="utf-8").strip())
-        return 0 <= age <= _SENTINEL_MAX_AGE_S
     except (ValueError, OSError):
         return False
+    return 0 <= age <= _SENTINEL_MAX_AGE_S
 
 
 def _alias_keys(

@@ -569,10 +569,11 @@ def _detect_docsmcp(state: _BootstrapState) -> bool:
         import importlib
 
         importlib.import_module("docs_mcp")
-        state.result["docsmcp_detected"] = True
-        return True
     except ImportError:
         pass
+    else:
+        state.result["docsmcp_detected"] = True
+        return True
 
     # Check project dependencies
     from pathlib import Path as _Path

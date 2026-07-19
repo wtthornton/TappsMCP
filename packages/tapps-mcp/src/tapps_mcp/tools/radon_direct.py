@@ -68,10 +68,10 @@ def cc_direct(file_path: str) -> list[dict[str, object]]:
             for block in blocks
         ]
         logger.info("radon_cc_direct_success", file=file_path, functions=len(entries))
-        return entries
     except Exception as exc:
         logger.warning("radon_cc_direct_failed", file=file_path, error=str(exc))
         return []
+    return entries
 
 
 def mi_direct(file_path: str) -> float:
@@ -90,10 +90,10 @@ def mi_direct(file_path: str) -> float:
             return 50.0
         mi_value: float = mi_visit(code, multi=True)
         logger.info("radon_mi_direct_success", file=file_path, mi=round(mi_value, 2))
-        return mi_value
     except Exception as exc:
         logger.warning("radon_mi_direct_failed", file=file_path, error=str(exc))
         return 50.0
+    return mi_value
 
 
 def hal_direct(file_path: str) -> list[dict[str, object]]:
@@ -130,7 +130,7 @@ def hal_direct(file_path: str) -> list[dict[str, object]]:
                     }
                 )
         logger.info("radon_hal_direct_success", file=file_path, functions=len(entries))
-        return entries
     except Exception as exc:
         logger.warning("radon_hal_direct_failed", file=file_path, error=str(exc))
         return []
+    return entries

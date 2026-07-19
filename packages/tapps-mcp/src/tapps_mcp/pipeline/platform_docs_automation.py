@@ -441,9 +441,10 @@ def detect_docsmcp(project_root: Path) -> bool:
         import importlib
 
         importlib.import_module("docs_mcp")
-        return True
     except ImportError:
         pass
+    else:
+        return True
 
     pyproject = project_root / "pyproject.toml"
     if pyproject.exists():

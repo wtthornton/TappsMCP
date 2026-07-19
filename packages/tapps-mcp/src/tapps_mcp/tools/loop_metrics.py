@@ -102,9 +102,10 @@ def is_scoped_gate_edit(path_str: str, project_root: Path | None) -> bool:
             path = Path(path_str)
             resolved = path.resolve() if path.is_absolute() else (project_root / path).resolve()
             resolved.relative_to(project_root.resolve())
-            return True
         except (ValueError, OSError):
             pass
+        else:
+            return True
     normalized = path_str.replace("\\", "/")
     tmp_root = Path(tempfile.gettempdir()).resolve().as_posix()
     if normalized == tmp_root or normalized.startswith(f"{tmp_root}/"):
@@ -137,7 +138,7 @@ def _legacy_cursor_unparsed_callmcptool(row: dict[str, Any]) -> bool:
     tools = [str(t) for t in row.get("tools_used") or []]
     if "CallMcpTool" not in tools:
         return False
-    return not any(t.startswith("tapps_") or t.startswith("mcp__") for t in tools)
+    return not any(t.startswith(("tapps_", "mcp__")) for t in tools)
 
 
 def is_reliable_edit_loop_row(row: dict[str, Any], project_root: Path) -> bool:

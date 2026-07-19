@@ -8,6 +8,11 @@ from unittest.mock import AsyncMock, patch
 
 import pytest
 
+# Import the server module eagerly so tool registration runs against the real
+# handlers. The tests below patch handlers with AsyncMock; if registration ran
+# lazily inside the patch context it would see the mock and fail with
+# "Missing TOOL_DESCRIPTIONS entry for 'AsyncMock'".
+import tapps_mcp.server  # noqa: F401
 from tapps_mcp.server_pipeline_tools import tapps_pipeline
 
 

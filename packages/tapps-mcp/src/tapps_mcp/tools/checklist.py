@@ -62,16 +62,15 @@ async def _get_git_context(commit_sha: str = "") -> dict[str, Any] | None:
         if commit_sha.strip():
             head_sha = commit_sha.strip()[:8]
             head_sha_full = commit_sha.strip()
-
-        return {
-            "branch": branch,
-            "head_sha": head_sha,
-            "head_sha_full": head_sha_full,
-            "dirty": dirty,
-        }
     except Exception:
         logger.debug("git_context_retrieval_failed", exc_info=True)
         return None
+    return {
+        "branch": branch,
+        "head_sha": head_sha,
+        "head_sha_full": head_sha_full,
+        "dirty": dirty,
+    }
 
 
 class ToolCallRecord(BaseModel):

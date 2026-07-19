@@ -71,14 +71,14 @@ def _compute_impact_analysis(
             ir.get("direct_dependents", 0) + ir.get("transitive_dependents", 0)
             for ir in impact_results
         )
-        return {
-            "max_severity": max_severity,
-            "total_affected_files": total_affected,
-            "per_file": impact_results,
-        }
     except Exception:
         _logger.debug("impact_analysis_failed", exc_info=True)
         return {"error": "impact analysis failed"}
+    return {
+        "max_severity": max_severity,
+        "total_affected_files": total_affected,
+        "per_file": impact_results,
+    }
 
 
 def _compute_affected_tests(

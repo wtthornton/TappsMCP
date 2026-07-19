@@ -14,6 +14,7 @@ HTTP adapter.
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import json
 import sqlite3
 import uuid
@@ -273,12 +274,10 @@ async def rollback_migration(bridge: Any, run_id: str) -> dict[str, Any]:
             deleted += 1
 
     marker_key = f"{MIGRATION_MARKER_KEY_PREFIX}{run_id}"
-    try:
+    # Marker deletion is best-effort; the tagged entries are the
+    # authoritative record.
+    with contextlib.suppress(Exception):
         await bridge.delete(marker_key)
-    except Exception:
-        # Marker deletion is best-effort; the tagged entries are the
-        # authoritative record.
-        pass
 
     return {
         "run_id": run_id,

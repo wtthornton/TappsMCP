@@ -195,11 +195,10 @@ def _maybe_consolidation_scan(
                 reason=result.skipped_reason,
             )
             return {"skipped": True, "reason": result.skipped_reason}
-
-        return None
     except Exception:
         _logger.debug("session_consolidation_scan_failed", exc_info=True)
         return {"ran": False, "error": "consolidation scan failed"}
+    return None
 
 
 async def call_memory_index_session_start(
@@ -299,17 +298,17 @@ def _process_session_capture(
             validated=validated,
             files_edited=files_edited,
         )
-        return {
-            "date": date_str,
-            "validated": validated,
-            "files_edited": files_edited,
-        }
     except Exception:
         _logger.debug("session_capture_processing_failed", exc_info=True)
         # Clean up even on failure to avoid re-processing bad data
         with contextlib.suppress(OSError):
             capture_path.unlink(missing_ok=True)
         return None
+    return {
+        "date": date_str,
+        "validated": validated,
+        "files_edited": files_edited,
+    }
 
 
 async def _check_compaction_rehydration(
@@ -354,10 +353,8 @@ async def _check_compaction_rehydration(
     finally:
         # Always delete the marker — even on read failure — to avoid infinite
         # rehydration loops on subsequent session starts.
-        try:
+        with contextlib.suppress(OSError):
             marker_path.unlink(missing_ok=True)
-        except OSError:
-            pass
 
     session_id = marker.get("session_id", "")
     compacted_at = marker.get("compacted_at", 0.0)
@@ -447,11 +444,11 @@ def _cleanup_legacy_learning_dir(project_root: Path) -> bool:
 
     try:
         learning_dir.rmdir()
-        _logger.info("legacy_learning_dir_removed", directory=str(learning_dir))
-        return True
     except OSError:
         _logger.debug("legacy_learning_dir_rmdir_failed", exc_info=True)
         return False
+    _logger.info("legacy_learning_dir_removed", directory=str(learning_dir))
+    return True
 
 
 async def _maybe_validate_memories(
