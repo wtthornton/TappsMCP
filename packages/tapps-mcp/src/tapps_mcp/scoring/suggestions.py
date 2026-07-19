@@ -26,7 +26,6 @@ _SCORE_LOW = 5
 
 
 def suggest_complexity(
-    score: float,
     details: dict[str, object],
     using_radon: bool,
 ) -> list[str]:
@@ -51,10 +50,7 @@ def suggest_complexity(
     return tips
 
 
-def suggest_security(
-    score: float,
-    details: dict[str, object],
-) -> list[str]:
+def suggest_security(details: dict[str, object]) -> list[str]:
     """Actionable suggestions for the security category."""
     tips: list[str] = []
     if not isinstance(details, dict):
@@ -69,10 +65,7 @@ def suggest_security(
     return tips
 
 
-def suggest_maintainability(
-    score: float,
-    details: dict[str, object],
-) -> list[str]:
+def suggest_maintainability(details: dict[str, object]) -> list[str]:
     """Actionable suggestions for the maintainability category."""
     tips: list[str] = []
     if not isinstance(details, dict):
@@ -165,10 +158,7 @@ _PERFORMANCE_SUGGESTIONS: dict[str, str] = {
 }
 
 
-def suggest_performance(
-    score: float,
-    details: dict[str, object],
-) -> list[str]:
+def suggest_performance(details: dict[str, object]) -> list[str]:
     """Actionable suggestions for the performance category."""
     if not isinstance(details, dict):
         return []

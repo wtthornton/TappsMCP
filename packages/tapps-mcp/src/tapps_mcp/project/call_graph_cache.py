@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import contextlib
 import time
 from dataclasses import asdict
 from pathlib import Path
@@ -310,10 +311,8 @@ def summarize_call_graph_cache(
     parse_fail_count = len(cached.parse_failures)
 
     age_hours: float | None = None
-    try:
+    with contextlib.suppress(OSError):
         age_hours = round((time.time() - cache_path.stat().st_mtime) / 3600, 1)
-    except OSError:
-        pass
 
     external_gaps, in_repo_gaps, in_repo_gap_reasons = split_gap_counts(cached.resolution_gaps)
     in_repo_gap_rate = round(in_repo_gaps / max(edge_count, 1), 3)

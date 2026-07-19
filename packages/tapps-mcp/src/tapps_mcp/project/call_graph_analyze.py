@@ -218,10 +218,7 @@ def _record_call(
             reason = "framework_hof"
     else:
         callee = None
-        if isinstance(call_node.func, ast.Lambda):
-            reason = "callback_opaque"
-        else:
-            reason = "dynamic_dispatch"
+        reason = "callback_opaque" if isinstance(call_node.func, ast.Lambda) else "dynamic_dispatch"
     if callee is None:
         idx.gaps.append(ResolutionGap(caller, expr, call_node.lineno, reason))
         return

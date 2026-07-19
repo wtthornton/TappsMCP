@@ -32,7 +32,6 @@ def unparse_expr(node: ast.expr) -> str:
 
 
 def _apply_import_bindings(
-    idx: FileIndex,
     bindings: dict[str, str],
     node: ast.Import | ast.ImportFrom,
 ) -> None:
@@ -106,7 +105,7 @@ def local_bindings(
 
     for child in _walk_outer_scope(node):
         if isinstance(child, ast.Import | ast.ImportFrom):
-            _apply_import_bindings(idx, bindings, child)
+            _apply_import_bindings(bindings, child)
             continue
         if isinstance(child, ast.AnnAssign) and isinstance(child.target, ast.Name):
             # Annotated local: ``w: Worker`` / ``w: Worker = factory()``.

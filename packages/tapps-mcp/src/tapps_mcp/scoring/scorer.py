@@ -160,8 +160,8 @@ class CodeScorer(ScorerBase):
 
         try:
             code = resolved.read_text(encoding="utf-8", errors="replace")
-        except (OSError, PermissionError) as exc:
-            logger.error("file_read_failed", path=str_path, error=str(exc))
+        except (OSError, PermissionError):
+            logger.exception("file_read_failed", path=str_path)
             return self._error_result(str_path)
 
         w = self._weights
@@ -301,7 +301,7 @@ class CodeScorer(ScorerBase):
             mode: Execution mode for external tools - ``"subprocess"``,
                 ``"direct"``, or ``"auto"``.
         """
-        resolved = file_path.resolve()
+        resolved = await asyncio.to_thread(file_path.resolve)
         str_path = str(resolved)
         cwd = str(resolved.parent)
         timeout = self._settings.tool_timeout
@@ -309,8 +309,8 @@ class CodeScorer(ScorerBase):
         # Read code for AST-based analysis
         try:
             code = await asyncio.to_thread(resolved.read_text, encoding="utf-8", errors="replace")
-        except (OSError, PermissionError) as exc:
-            logger.error("file_read_failed", path=str_path, error=str(exc))
+        except (OSError, PermissionError):
+            logger.exception("file_read_failed", path=str_path)
             return self._error_result(str_path)
 
         # Run external tools in parallel
@@ -403,7 +403,7 @@ class CodeScorer(ScorerBase):
             score=score,
             weight=w.complexity,
             details=details,
-            suggestions=_suggest_complexity(score, details, using_radon_cc),
+            suggestions=_suggest_complexity(details, using_radon_cc),
         )
 
     def _score_security_category(
@@ -437,7 +437,7 @@ class CodeScorer(ScorerBase):
 
         score, dep_findings = self._apply_dependency_penalty(score, details)
 
-        suggestions = _suggest_security(score, details)
+        suggestions = _suggest_security(details)
         if dep_findings:
             from tapps_mcp.scoring.dependency_security import suggest_dependency_fixes
 
@@ -506,7 +506,7 @@ class CodeScorer(ScorerBase):
             score=score,
             weight=w.maintainability,
             details=details,
-            suggestions=_suggest_maintainability(score, details) + extra_suggestions,
+            suggestions=_suggest_maintainability(details) + extra_suggestions,
         ), dc_struct_penalty
 
     @staticmethod
@@ -588,7 +588,7 @@ class CodeScorer(ScorerBase):
             score=combined_score,
             weight=w.performance,
             details=details,
-            suggestions=_suggest_performance(combined_score, details),
+            suggestions=_suggest_performance(details),
         )
 
     def _score_structure_category(
@@ -904,9 +904,9 @@ def _check_function_size(node: ast.FunctionDef | ast.AsyncFunctionDef, seen: set
 
 
 def _classify_threshold(
-    value: int | float,
-    moderate_threshold: int | float,
-    severe_threshold: int | float,
+    value: float,
+    moderate_threshold: float,
+    severe_threshold: float,
     moderate_label: str,
     severe_label: str,
     seen: set[str],

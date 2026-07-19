@@ -423,7 +423,7 @@ class TestOverallCalculation:
 class TestSuggestComplexity:
     def test_high_cc_with_radon(self):
         tips = _suggest_complexity(
-            8.0, {"max_cc": 15, "max_cc_function": "parse_data"}, using_radon=True
+            {"max_cc": 15, "max_cc_function": "parse_data"}, using_radon=True
         )
         assert len(tips) == 1
         assert "parse_data" in tips[0]
@@ -431,70 +431,56 @@ class TestSuggestComplexity:
         assert "below 10" in tips[0]
 
     def test_moderate_cc_with_radon(self):
-        tips = _suggest_complexity(
-            4.0, {"max_cc": 7, "max_cc_function": "process"}, using_radon=True
-        )
+        tips = _suggest_complexity({"max_cc": 7, "max_cc_function": "process"}, using_radon=True)
         assert len(tips) == 1
         assert "simplifying" in tips[0]
 
     def test_low_cc_no_suggestions(self):
-        tips = _suggest_complexity(
-            1.0, {"max_cc": 3, "max_cc_function": "simple"}, using_radon=True
-        )
+        tips = _suggest_complexity({"max_cc": 3, "max_cc_function": "simple"}, using_radon=True)
         assert tips == []
 
     def test_fallback_without_radon(self):
-        tips = _suggest_complexity(5.0, {"fallback": True}, using_radon=False)
+        tips = _suggest_complexity({"fallback": True}, using_radon=False)
         assert len(tips) == 1
         assert "radon" in tips[0].lower()
 
 
 class TestSuggestSecurity:
     def test_issues_found(self):
-        tips = _suggest_security(6.0, {"issue_count": 3})
+        tips = _suggest_security({"issue_count": 3})
         assert len(tips) == 1
         assert "3 security issue" in tips[0]
 
     def test_patterns_found(self):
-        tips = _suggest_security(6.0, {"issue_count": 0, "patterns_found": ["eval(", "exec("]})
+        tips = _suggest_security({"issue_count": 0, "patterns_found": ["eval(", "exec("]})
         assert len(tips) == 1
         assert "eval(" in tips[0]
 
     def test_clean_no_suggestions(self):
-        tips = _suggest_security(10.0, {"issue_count": 0})
+        tips = _suggest_security({"issue_count": 0})
         assert tips == []
 
 
 class TestSuggestMaintainability:
     def test_very_low_mi(self):
-        tips = _suggest_maintainability(
-            2.0, {"mi_value": 15, "has_docstring": True, "line_count": 100}
-        )
+        tips = _suggest_maintainability({"mi_value": 15, "has_docstring": True, "line_count": 100})
         assert any("MI=15" in t for t in tips)
         assert any("very low" in t for t in tips)
 
     def test_low_mi(self):
-        tips = _suggest_maintainability(
-            3.5, {"mi_value": 35, "has_docstring": True, "line_count": 100}
-        )
+        tips = _suggest_maintainability({"mi_value": 35, "has_docstring": True, "line_count": 100})
         assert any("MI=35" in t for t in tips)
 
     def test_no_docstring(self):
-        tips = _suggest_maintainability(
-            7.0, {"mi_value": 80, "has_docstring": False, "line_count": 50}
-        )
+        tips = _suggest_maintainability({"mi_value": 80, "has_docstring": False, "line_count": 50})
         assert any("docstring" in t.lower() for t in tips)
 
     def test_long_file(self):
-        tips = _suggest_maintainability(
-            6.0, {"mi_value": 60, "has_docstring": True, "line_count": 400}
-        )
+        tips = _suggest_maintainability({"mi_value": 60, "has_docstring": True, "line_count": 400})
         assert any("400 lines" in t for t in tips)
 
     def test_good_score_no_suggestions(self):
-        tips = _suggest_maintainability(
-            9.0, {"mi_value": 90, "has_docstring": True, "line_count": 50}
-        )
+        tips = _suggest_maintainability({"mi_value": 90, "has_docstring": True, "line_count": 50})
         assert tips == []
 
 
@@ -516,28 +502,28 @@ class TestSuggestTestCoverage:
 
 class TestSuggestPerformance:
     def test_nested_loops(self):
-        tips = _suggest_performance(8.5, {"issues_found": ["nested_loops"]})
+        tips = _suggest_performance({"issues_found": ["nested_loops"]})
         assert len(tips) == 1
         assert "Nested for-loops" in tips[0]
 
     def test_very_large_function(self):
-        tips = _suggest_performance(8.5, {"issues_found": ["very_large_function"]})
+        tips = _suggest_performance({"issues_found": ["very_large_function"]})
         assert len(tips) == 1
         assert "100 lines" in tips[0]
 
     def test_deep_nesting(self):
-        tips = _suggest_performance(9.0, {"issues_found": ["deep_nesting"]})
+        tips = _suggest_performance({"issues_found": ["deep_nesting"]})
         assert len(tips) == 1
         assert "depth" in tips[0].lower()
 
     def test_multiple_issues(self):
         tips = _suggest_performance(
-            6.0, {"issues_found": ["large_function", "nested_loops", "expensive_comprehension"]}
+            {"issues_found": ["large_function", "nested_loops", "expensive_comprehension"]}
         )
         assert len(tips) == 3
 
     def test_clean_no_suggestions(self):
-        tips = _suggest_performance(10.0, {"issues_found": []})
+        tips = _suggest_performance({"issues_found": []})
         assert tips == []
 
 
@@ -1004,28 +990,27 @@ class TestSuggestPerformanceWithHalsteadAndPerflint:
     """Tests for suggestions including Halstead and perflint issues."""
 
     def test_halstead_high_volume_suggestion(self):
-        tips = _suggest_performance(7.0, {"issues_found": ["halstead_high_volume"]})
+        tips = _suggest_performance({"issues_found": ["halstead_high_volume"]})
         assert len(tips) == 1
         assert "volume" in tips[0].lower()
 
     def test_halstead_high_bugs_suggestion(self):
-        tips = _suggest_performance(7.0, {"issues_found": ["halstead_high_bugs"]})
+        tips = _suggest_performance({"issues_found": ["halstead_high_bugs"]})
         assert len(tips) == 1
         assert "bug" in tips[0].lower()
 
     def test_perflint_loop_invariant_suggestion(self):
-        tips = _suggest_performance(7.0, {"issues_found": ["perflint_loop_invariant"]})
+        tips = _suggest_performance({"issues_found": ["perflint_loop_invariant"]})
         assert len(tips) == 1
         assert "loop" in tips[0].lower()
 
     def test_perflint_comprehension_suggestion(self):
-        tips = _suggest_performance(7.0, {"issues_found": ["perflint_use_comprehension"]})
+        tips = _suggest_performance({"issues_found": ["perflint_use_comprehension"]})
         assert len(tips) == 1
         assert "comprehension" in tips[0].lower()
 
     def test_mixed_ast_halstead_perflint(self):
         tips = _suggest_performance(
-            5.0,
             {
                 "issues_found": [
                     "nested_loops",

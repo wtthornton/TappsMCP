@@ -112,6 +112,6 @@ def _test_edges_from_list(raw: list[object]) -> list[TestEdge] | None:
                 line=int(item.get("line", 0)),
             )
             edges.append(edge)
-        return edges
     except (TypeError, ValueError, KeyError):
         return None
+    return edges

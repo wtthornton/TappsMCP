@@ -125,8 +125,8 @@ class GoScorer(ScorerBase):
         resolved = file_path.resolve()
         try:
             code = resolved.read_text(encoding="utf-8", errors="replace")
-        except (OSError, PermissionError) as exc:
-            logger.error("file_read_failed", path=str(resolved), error=str(exc))
+        except (OSError, PermissionError):
+            logger.exception("file_read_failed", path=str(resolved))
             return self._error_result(str(resolved))
 
         # Quick mode: regex-based lint check
@@ -162,12 +162,12 @@ class GoScorer(ScorerBase):
         Returns:
             A ScoreResult with full scoring.
         """
-        resolved = file_path.resolve()
+        resolved = await asyncio.to_thread(file_path.resolve)
         str_path = str(resolved)
 
         # Check file size
         try:
-            size = resolved.stat().st_size
+            size = (await asyncio.to_thread(resolved.stat)).st_size
             if size > _MAX_FILE_SIZE:
                 logger.warning("file_too_large", path=str_path, size=size)
                 return self._error_result(str_path)
@@ -177,8 +177,8 @@ class GoScorer(ScorerBase):
         # Read file content
         try:
             code = await asyncio.to_thread(resolved.read_text, encoding="utf-8", errors="replace")
-        except (OSError, PermissionError) as exc:
-            logger.error("file_read_failed", path=str_path, error=str(exc))
+        except (OSError, PermissionError):
+            logger.exception("file_read_failed", path=str_path)
             return self._error_result(str_path)
 
         # Build category scores
