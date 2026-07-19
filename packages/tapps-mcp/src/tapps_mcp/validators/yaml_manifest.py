@@ -31,7 +31,7 @@ def validate_yaml_manifest(
         try:
             rel = rel.relative_to(root)
         except ValueError:
-            rel = Path(file_path).name
+            rel = Path(Path(file_path).name)
     rel_str = rel.as_posix()
 
     globs = path_globs or ["brands/**/*.yaml", "brands/**/*.yml", "templates/**/*.yaml"]
@@ -80,15 +80,15 @@ def validate_yaml_manifest(
             )
         )
     else:
-        for key in required_keys or []:
-            if key not in data:
-                findings.append(
-                    ValidationFinding(
-                        severity="critical",
-                        message=f"Missing required key: {key!r}",
-                        category="schema",
-                    )
-                )
+        findings.extend(
+            ValidationFinding(
+                severity="critical",
+                message=f"Missing required key: {key!r}",
+                category="schema",
+            )
+            for key in required_keys or []
+            if key not in data
+        )
 
     valid = not any(f.severity == "critical" for f in findings)
     return ConfigValidationResult(

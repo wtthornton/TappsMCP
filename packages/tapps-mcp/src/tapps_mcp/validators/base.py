@@ -59,12 +59,12 @@ def detect_config_type(file_path: str, content: str | None = None) -> str | None
     path_str = path.as_posix()
 
     # MCP config detection - covers mcp.json, .mcp.json, .cursor/mcp.json, etc.
-    if name.lower() in ("mcp.json", ".mcp.json"):
+    if name.lower() in {"mcp.json", ".mcp.json"}:
         return "mcp"
 
     # Filename-based detection (definitive for Dockerfile / docker-compose)
     for config_type, patterns in CONFIG_PATTERNS.items():
-        if config_type in ("websocket", "mqtt", "influxdb"):
+        if config_type in {"websocket", "mqtt", "influxdb"}:
             continue  # These need content signatures
         search_target = path_str if config_type == "yaml_manifest" else name
         for pattern in patterns:

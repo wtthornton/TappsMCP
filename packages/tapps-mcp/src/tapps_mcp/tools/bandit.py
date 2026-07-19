@@ -111,7 +111,7 @@ def calculate_security_score(issues: list[SecurityIssue]) -> float:
     """Convert bandit issues into a 0-10 security score."""
     from tapps_mcp.scoring.constants import clamp_individual
 
-    high = sum(1 for i in issues if i.severity in ("high", "critical"))
+    high = sum(1 for i in issues if i.severity in {"high", "critical"})
     medium = sum(1 for i in issues if i.severity == "medium")
     score = 10.0 - (high * 3.0 + medium * 1.0)
     return clamp_individual(score)

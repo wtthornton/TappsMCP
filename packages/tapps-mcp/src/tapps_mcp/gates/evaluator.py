@@ -109,7 +109,8 @@ def evaluate_gate(
 
     Args:
         score_result: The scoring output to evaluate.
-        preset: Named preset (``"standard"``, ``"strict"``, ``"framework"``).
+        preset: Named preset (``"standard"``, ``"strict"``, ``"framework"``,
+            ``"report_authoring"``).
         thresholds: Explicit thresholds; if provided, *preset* is ignored.
 
     Returns:
@@ -185,8 +186,7 @@ def evaluate_gate(
     failing_cats = {f.category for f in failures}
     for name, cat in cats.items():
         if name in failing_cats and cat.suggestions:
-            for tip in cat.suggestions:
-                warnings.append(f"[{name}] {tip}")
+            warnings.extend(f"[{name}] {tip}" for tip in cat.suggestions)
 
     # Priority fix suggestion when multiple failures exist
     if len(failures) > 1:

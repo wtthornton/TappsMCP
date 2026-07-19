@@ -266,7 +266,7 @@ class GoScorer(ScorerBase):
             # Count && and || in binary expressions
             if node.type == "binary_expression":
                 for child in node.children:
-                    if child.type in ("&&", "||"):
+                    if child.type in {"&&", "||"}:
                         count += 1
             for child in node.children:
                 if child.type in nested_fn_types:
@@ -276,7 +276,7 @@ class GoScorer(ScorerBase):
 
         # Find all functions and calculate their complexity
         for node in self._walk_tree(root):
-            if node.type in ("function_declaration", "method_declaration", "func_literal"):
+            if node.type in {"function_declaration", "method_declaration", "func_literal"}:
                 cc = 1 + count_branches(node)
                 function_complexities.append(cc)
 
@@ -317,9 +317,10 @@ class GoScorer(ScorerBase):
             # Detect unsafe package usage
             if node.type == "selector_expression":
                 text = source[node.start_byte : node.end_byte].decode()
+                # The regex pass may already have recorded "unsafe.Pointer usage";
+                # "unsafe" not in str(issues_found) covers that and any duplicate.
                 if text.startswith("unsafe.") and "unsafe" not in str(issues_found):
-                    if "unsafe.Pointer usage" not in issues_found:
-                        issues_found.append("unsafe package usage")
+                    issues_found.append("unsafe package usage")
 
         penalty = len(issues_found) * 2.0
         score = clamp_individual(10.0 - penalty)
@@ -345,7 +346,7 @@ class GoScorer(ScorerBase):
         documented_exported = 0
 
         for node in self._walk_tree(root):
-            if node.type in ("function_declaration", "method_declaration", "type_declaration"):
+            if node.type in {"function_declaration", "method_declaration", "type_declaration"}:
                 name_node = node.child_by_field_name("name")
                 if name_node:
                     name = source[name_node.start_byte : name_node.end_byte].decode()
@@ -727,22 +728,26 @@ class GoScorer(ScorerBase):
         """Generate complexity improvement suggestions."""
         suggestions: list[str] = []
         if max_cc > 15:
-            suggestions.append("Consider breaking down complex functions")
-            suggestions.append("Extract conditional logic into separate functions")
+            suggestions.extend(
+                (
+                    "Consider breaking down complex functions",
+                    "Extract conditional logic into separate functions",
+                )
+            )
         elif max_cc > 10:
             suggestions.append("Consider simplifying control flow")
         return suggestions
 
     def _suggest_security(self, issues: list[str]) -> list[str]:
         """Generate security improvement suggestions."""
+        lowered = [issue.lower() for issue in issues]
         suggestions: list[str] = []
-        for issue in issues:
-            if "unsafe" in issue.lower():
-                suggestions.append("Avoid unsafe package unless absolutely necessary")
-            if "sql" in issue.lower():
-                suggestions.append("Use parameterized queries to prevent SQL injection")
-            if "exec" in issue.lower():
-                suggestions.append("Validate and sanitize inputs before exec")
+        if any("unsafe" in issue for issue in lowered):
+            suggestions.append("Avoid unsafe package unless absolutely necessary")
+        if any("sql" in issue for issue in lowered):
+            suggestions.append("Use parameterized queries to prevent SQL injection")
+        if any("exec" in issue for issue in lowered):
+            suggestions.append("Validate and sanitize inputs before exec")
         return suggestions[:3]
 
     def _suggest_maintainability(self, doc_ratio: float, exported_count: int) -> list[str]:
@@ -754,22 +759,22 @@ class GoScorer(ScorerBase):
 
     def _suggest_performance(self, issues: list[str]) -> list[str]:
         """Generate performance improvement suggestions."""
+        lowered = [issue.lower() for issue in issues]
         suggestions: list[str] = []
-        for issue in issues:
-            if "defer" in issue.lower():
-                suggestions.append("Move defer outside of loops")
-            if "goroutine" in issue.lower():
-                suggestions.append("Use context for goroutine cancellation")
+        if any("defer" in issue for issue in lowered):
+            suggestions.append("Move defer outside of loops")
+        if any("goroutine" in issue for issue in lowered):
+            suggestions.append("Use context for goroutine cancellation")
         return suggestions[:3]
 
     def _suggest_devex(self, issues: list[str]) -> list[str]:
         """Generate developer experience improvement suggestions."""
+        lowered = [issue.lower() for issue in issues]
         suggestions: list[str] = []
-        for issue in issues:
-            if "error" in issue.lower():
-                suggestions.append("Handle all errors explicitly")
-            if "blank" in issue.lower():
-                suggestions.append("Avoid discarding values with blank identifier")
-            if "snake" in issue.lower():
-                suggestions.append("Use MixedCaps naming convention")
+        if any("error" in issue for issue in lowered):
+            suggestions.append("Handle all errors explicitly")
+        if any("blank" in issue for issue in lowered):
+            suggestions.append("Avoid discarding values with blank identifier")
+        if any("snake" in issue for issue in lowered):
+            suggestions.append("Use MixedCaps naming convention")
         return suggestions

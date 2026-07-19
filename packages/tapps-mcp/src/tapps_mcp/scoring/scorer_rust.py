@@ -267,7 +267,7 @@ class RustScorer(ScorerBase):
             # Count && and || in binary expressions
             if node.type == "binary_expression":
                 for child in node.children:
-                    if hasattr(child, "type") and child.type in ("&&", "||"):
+                    if hasattr(child, "type") and child.type in {"&&", "||"}:
                         count += 1
             for child in node.children:
                 if child.type in nested_fn_types:
@@ -277,7 +277,7 @@ class RustScorer(ScorerBase):
 
         # Find all functions and calculate their complexity
         for node in self._walk_tree(root):
-            if node.type in ("function_item", "closure_expression"):
+            if node.type in {"function_item", "closure_expression"}:
                 cc = 1 + count_branches(node)
                 function_complexities.append(cc)
 
@@ -368,7 +368,7 @@ class RustScorer(ScorerBase):
         documented_pub = 0
 
         for node in self._walk_tree(root):
-            if node.type in ("function_item", "struct_item", "enum_item", "trait_item"):
+            if node.type in {"function_item", "struct_item", "enum_item", "trait_item"}:
                 # Check for pub visibility
                 is_pub = False
                 for child in node.children:
@@ -466,7 +466,7 @@ class RustScorer(ScorerBase):
 
         # AST-based detection for clone() in loops
         for node in self._walk_tree(root):
-            if node.type in ("for_expression", "while_expression", "loop_expression"):
+            if node.type in {"for_expression", "while_expression", "loop_expression"}:
                 for child in self._walk_tree(node):
                     if child.type == "call_expression":
                         func_node = child.child_by_field_name("function")
@@ -787,22 +787,26 @@ class RustScorer(ScorerBase):
         """Generate complexity improvement suggestions."""
         suggestions: list[str] = []
         if max_cc > 15:
-            suggestions.append("Consider breaking down complex functions")
-            suggestions.append("Extract match arms into separate functions")
+            suggestions.extend(
+                (
+                    "Consider breaking down complex functions",
+                    "Extract match arms into separate functions",
+                )
+            )
         elif max_cc > 10:
             suggestions.append("Consider simplifying control flow")
         return suggestions
 
     def _suggest_security(self, issues: list[str], unwrap_count: int) -> list[str]:
         """Generate security improvement suggestions."""
+        lowered = [issue.lower() for issue in issues]
         suggestions: list[str] = []
         if unwrap_count > 3:
             suggestions.append("Replace .unwrap() with .expect() or ? operator")
-        for issue in issues:
-            if "unsafe" in issue.lower():
-                suggestions.append("Document why unsafe is needed, minimize unsafe scope")
-            if "transmute" in issue.lower():
-                suggestions.append("Avoid transmute - use safer alternatives")
+        if any("unsafe" in issue for issue in lowered):
+            suggestions.append("Document why unsafe is needed, minimize unsafe scope")
+        if any("transmute" in issue for issue in lowered):
+            suggestions.append("Avoid transmute - use safer alternatives")
         return suggestions[:3]
 
     def _suggest_maintainability(self, doc_ratio: float, pub_count: int) -> list[str]:
@@ -814,23 +818,26 @@ class RustScorer(ScorerBase):
 
     def _suggest_performance(self, issues: list[str]) -> list[str]:
         """Generate performance improvement suggestions."""
+        lowered = [issue.lower() for issue in issues]
         suggestions: list[str] = []
-        for issue in issues:
-            if "clone" in issue.lower():
-                suggestions.append("Consider borrowing instead of cloning")
-            if "collect" in issue.lower():
-                suggestions.append("Use iterators directly when possible")
-            if "Box::new" in issue:
-                suggestions.append("Pre-allocate outside loops")
+        if any("clone" in issue for issue in lowered):
+            suggestions.append("Consider borrowing instead of cloning")
+        if any("collect" in issue for issue in lowered):
+            suggestions.append("Use iterators directly when possible")
+        if any("Box::new" in issue for issue in issues):
+            suggestions.append("Pre-allocate outside loops")
         return suggestions[:3]
 
     def _suggest_devex(self, issues: list[str], unwrap_count: int) -> list[str]:
         """Generate developer experience improvement suggestions."""
         suggestions: list[str] = []
         if unwrap_count > 3:
-            suggestions.append("Use ? operator for error propagation")
-            suggestions.append("Use .expect('reason') for panics that should never happen")
-        for issue in issues:
-            if "snake_case" in issue:
-                suggestions.append("Rust convention: use snake_case for functions/variables")
+            suggestions.extend(
+                (
+                    "Use ? operator for error propagation",
+                    "Use .expect('reason') for panics that should never happen",
+                )
+            )
+        if any("snake_case" in issue for issue in issues):
+            suggestions.append("Rust convention: use snake_case for functions/variables")
         return suggestions

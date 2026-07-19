@@ -204,7 +204,7 @@ def _params_from_function(node: ast.FunctionDef | ast.AsyncFunctionDef) -> list[
     params: list[str] = []
     for arg in node.args.args:
         name = arg.arg
-        if name not in ("self", "cls"):
+        if name not in {"self", "cls"}:
             params.append(name)
     if node.args.kwarg is not None:
         return None
@@ -242,11 +242,11 @@ def _extract_function_params(
             return _params_from_function(node)
 
     # Fall back: first matching method in any class (legacy single-match path).
-    for node in ast.walk(tree):
-        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
-            if node.name != func_name:
+    for walked in ast.walk(tree):
+        if isinstance(walked, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            if walked.name != func_name:
                 continue
-            return _params_from_function(node)
+            return _params_from_function(walked)
     return None
 
 
@@ -268,10 +268,13 @@ def _has_var_keyword(
                     ):
                         return True
         return False
-    for node in ast.walk(tree):
-        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
-            if node.name == func_name and node.args.kwarg is not None:
-                return True
+    for walked in ast.walk(tree):
+        if (
+            isinstance(walked, (ast.FunctionDef, ast.AsyncFunctionDef))
+            and walked.name == func_name
+            and walked.args.kwarg is not None
+        ):
+            return True
     return False
 
 

@@ -286,7 +286,7 @@ class TypeScriptScorer(ScorerBase):
                     op_node = node.child_by_field_name("operator")
                     if op_node:
                         op = source[op_node.start_byte : op_node.end_byte].decode()
-                        if op in ("&&", "||", "??"):
+                        if op in {"&&", "||", "??"}:
                             count = 1
                 else:
                     count = 1
@@ -299,14 +299,14 @@ class TypeScriptScorer(ScorerBase):
 
         # Find all functions and calculate their complexity
         for node in self._walk_tree(root):
-            if node.type in (
+            if node.type in {
                 "function_declaration",
                 "function",
                 "arrow_function",
                 "method_definition",
                 "generator_function",
                 "generator_function_declaration",
-            ):
+            }:
                 cc = 1 + count_branches(node)
                 function_complexities.append(cc)
 
@@ -379,12 +379,12 @@ class TypeScriptScorer(ScorerBase):
         # Count functions to calculate documentation ratio
         function_count = 0
         for node in self._walk_tree(root):
-            if node.type in (
+            if node.type in {
                 "function_declaration",
                 "function",
                 "arrow_function",
                 "method_definition",
-            ):
+            }:
                 function_count += 1
 
         doc_ratio = jsdoc_count / max(function_count, 1)
@@ -475,14 +475,14 @@ class TypeScriptScorer(ScorerBase):
 
         # AST-based detection for nested loops
         for node in self._walk_tree(root):
-            if node.type in ("for_statement", "for_in_statement", "while_statement"):
+            if node.type in {"for_statement", "for_in_statement", "while_statement"}:
                 # Check for nested loops
                 for child in self._walk_tree(node):
-                    if child is not node and child.type in (
+                    if child is not node and child.type in {
                         "for_statement",
                         "for_in_statement",
                         "while_statement",
-                    ):
+                    }:
                         if "nested loops" not in issues_found:
                             issues_found.append("nested loops")
                         break
@@ -767,8 +767,12 @@ class TypeScriptScorer(ScorerBase):
         """Generate complexity improvement suggestions."""
         suggestions: list[str] = []
         if max_cc > 15:
-            suggestions.append("Consider breaking down complex functions")
-            suggestions.append("Extract conditional logic into separate functions")
+            suggestions.extend(
+                (
+                    "Consider breaking down complex functions",
+                    "Extract conditional logic into separate functions",
+                )
+            )
         elif max_cc > 10:
             suggestions.append("Consider simplifying control flow")
         return suggestions
@@ -776,13 +780,12 @@ class TypeScriptScorer(ScorerBase):
     def _suggest_security(self, issues: list[str]) -> list[str]:
         """Generate security improvement suggestions."""
         suggestions: list[str] = []
-        for issue in issues:
-            if "eval" in issue:
-                suggestions.append("Replace eval() with safer alternatives")
-            if "innerHTML" in issue:
-                suggestions.append("Use textContent or sanitize HTML input")
-            if "dangerouslySetInnerHTML" in issue:
-                suggestions.append("Sanitize content before using dangerouslySetInnerHTML")
+        if any("eval" in issue for issue in issues):
+            suggestions.append("Replace eval() with safer alternatives")
+        if any("innerHTML" in issue for issue in issues):
+            suggestions.append("Use textContent or sanitize HTML input")
+        if any("dangerouslySetInnerHTML" in issue for issue in issues):
+            suggestions.append("Sanitize content before using dangerouslySetInnerHTML")
         return suggestions[:3]
 
     def _suggest_maintainability(
@@ -801,11 +804,10 @@ class TypeScriptScorer(ScorerBase):
     def _suggest_performance(self, issues: list[str]) -> list[str]:
         """Generate performance improvement suggestions."""
         suggestions: list[str] = []
-        for issue in issues:
-            if "nested" in issue.lower():
-                suggestions.append("Consider using Map or Set to avoid nested iterations")
-            if "JSON" in issue:
-                suggestions.append("Use structuredClone() for deep cloning")
+        if any("nested" in issue.lower() for issue in issues):
+            suggestions.append("Consider using Map or Set to avoid nested iterations")
+        if any("JSON" in issue for issue in issues):
+            suggestions.append("Use structuredClone() for deep cloning")
         return suggestions[:3]
 
     def _suggest_devex(self, any_count: int, type_coverage: float) -> list[str]:
