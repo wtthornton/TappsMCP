@@ -78,7 +78,7 @@ class LlmsTxtProvider:
                         content = resp.text
                         if topic != "overview":
                             content = _extract_topic(content, topic)
-                        return content if content else None
+                        return content or None
                 except httpx.HTTPError:
                     continue
         return None

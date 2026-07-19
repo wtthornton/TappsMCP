@@ -193,21 +193,28 @@ class FileManifest(BaseModel):
         ``structuredContent``.
         """
         lines: list[str] = []
-        lines.append(f"## {self.summary or 'File Operations'}")
-        lines.append("")
-        lines.append(f"**Mode:** {self.mode}")
-        lines.append(f"**Reason:** {self.reason}")
+        lines.extend(
+            (
+                f"## {self.summary or 'File Operations'}",
+                "",
+                f"**Mode:** {self.mode}",
+                f"**Reason:** {self.reason}",
+            )
+        )
         if self.source_version:
             lines.append(f"**Version:** {self.source_version}")
-        lines.append(f"**Files:** {len(self.files)}")
-        lines.append("")
+        lines.extend((f"**Files:** {len(self.files)}", ""))
 
         # Agent instructions
         instr = self.agent_instructions
-        lines.append("### Agent Instructions")
-        lines.append("")
-        lines.append(f"**Persona:** {instr.persona}")
-        lines.append(f"**Tool Preference:** {instr.tool_preference}")
+        lines.extend(
+            (
+                "### Agent Instructions",
+                "",
+                f"**Persona:** {instr.persona}",
+                f"**Tool Preference:** {instr.tool_preference}",
+            )
+        )
         if instr.verification_steps:
             lines.append("**Verification Steps:**")
             lines.extend(f"  - {step}" for step in instr.verification_steps)
@@ -223,10 +230,7 @@ class FileManifest(BaseModel):
             lines.append(f"#### [{f.priority}] `{f.path}` ({f.mode})")
             if f.description:
                 lines.append(f.description)
-            lines.append("```")
-            lines.append(f.content)
-            lines.append("```")
-            lines.append("")
+            lines.extend(("```", f.content, "```", ""))
 
         return "\n".join(lines)
 

@@ -190,7 +190,7 @@ def _grep_searchable_text(text: str) -> str:
             if "*/" not in stripped:
                 in_block = True
             continue
-        if stripped.startswith("//") or stripped.startswith("#"):
+        if stripped.startswith(("//", "#")):
             continue
         if "//" in line:
             line = line[: line.index("//")]

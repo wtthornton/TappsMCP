@@ -674,7 +674,7 @@ class LookupEngine:
             topic=topic,
             mode=mode,
         )
-        return content if content else None
+        return content or None
 
     def _schedule_background_refresh(
         self,

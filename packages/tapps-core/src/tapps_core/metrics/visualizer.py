@@ -34,8 +34,7 @@ class AnalyticsVisualizer:
 
         lines: list[str] = []
         if title:
-            lines.append(title)
-            lines.append("-" * len(title))
+            lines.extend((title, "-" * len(title)))
 
         max_val = max(data.values()) if data.values() else 1.0
         max_label = max(len(k) for k in data) if data else 0
@@ -110,13 +109,11 @@ class AnalyticsVisualizer:
         # Build table
         lines: list[str] = []
         if title:
-            lines.append(title)
-            lines.append("")
+            lines.extend((title, ""))
 
         # Header
         header_line = " | ".join(h.ljust(col_widths[i]) for i, h in enumerate(headers))
-        lines.append(header_line)
-        lines.append("-+-".join("-" * w for w in col_widths))
+        lines.extend((header_line, "-+-".join("-" * w for w in col_widths)))
 
         # Rows
         for row in rows:

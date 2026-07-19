@@ -748,7 +748,7 @@ def _extra_mode() -> Literal["ignore", "forbid"]:
     with forward-compat settings don't break. CI and doctor flows can
     opt in to catch typos like ``upgrade_create_agent_md`` (missing 's').
     """
-    if os.environ.get("TAPPS_MCP_STRICT_CONFIG", "").lower() in ("1", "true", "yes"):
+    if os.environ.get("TAPPS_MCP_STRICT_CONFIG", "").lower() in {"1", "true", "yes"}:
         return "forbid"
     return "ignore"
 
@@ -1348,9 +1348,9 @@ class TappsMCPSettings(BaseSettings):
             return None
         if isinstance(v, str):
             v = [s.strip() for s in v.split(",") if s.strip()]
-            return v if v else None
+            return v or None
         if isinstance(v, list):
-            return v if v else None
+            return v or None
         return None
 
     @field_validator("disabled_tools", mode="before")
@@ -1375,7 +1375,7 @@ class TappsMCPSettings(BaseSettings):
         """
         if "linear_enforce_gate" in self.model_fields_set:
             return self.linear_enforce_gate
-        return self.llm_engagement_level in ("high", "medium")
+        return self.llm_engagement_level in {"high", "medium"}
 
     def linear_enforce_cache_gate_resolved(self) -> Literal["off", "warn", "block"]:
         """Resolve linear_enforce_cache_gate with engagement-aware defaulting (TAP-1224).
@@ -1388,7 +1388,7 @@ class TappsMCPSettings(BaseSettings):
         """
         if "linear_enforce_cache_gate" in self.model_fields_set:
             return self.linear_enforce_cache_gate
-        if self.llm_engagement_level in ("high", "medium"):
+        if self.llm_engagement_level in {"high", "medium"}:
             return "warn"
         return "off"
 
@@ -1404,7 +1404,7 @@ class TappsMCPSettings(BaseSettings):
         """
         if self.session_start_gate is not None:
             return self.session_start_gate
-        if self.llm_engagement_level in ("high", "medium"):
+        if self.llm_engagement_level in {"high", "medium"}:
             return "warn"
         return "off"
 
@@ -1412,7 +1412,7 @@ class TappsMCPSettings(BaseSettings):
         """Resolve Cursor stop completion gate with engagement-aware default (TAP-3921)."""
         if self.cursor_stop_completion_gate is not None:
             return self.cursor_stop_completion_gate
-        if self.llm_engagement_level in ("high", "medium"):
+        if self.llm_engagement_level in {"high", "medium"}:
             return "warn"
         return "off"
 

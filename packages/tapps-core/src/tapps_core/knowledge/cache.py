@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import datetime
 import json
+import operator
 import time
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -343,7 +344,7 @@ class KBCache:
 
         metadata = self._load_metadata()
         # Build list of (key, timestamp) sorted oldest-first
-        sorted_entries = sorted(metadata.items(), key=lambda kv: kv[1])
+        sorted_entries = sorted(metadata.items(), key=operator.itemgetter(1))
 
         evicted = 0
         for key, _ts in sorted_entries:

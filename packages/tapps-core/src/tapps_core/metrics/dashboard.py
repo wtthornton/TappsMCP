@@ -156,8 +156,7 @@ class DashboardGenerator:
         json_data = self.generate_json_dashboard(sections, since=since)
         lines: list[str] = []
 
-        lines.append("# TappsMCP Dashboard")
-        lines.append(f"\nGenerated: {json_data.get('timestamp', '')}\n")
+        lines.extend(("# TappsMCP Dashboard", f"\nGenerated: {json_data.get('timestamp', '')}\n"))
 
         self._render_md_summary(json_data, lines)
         self._render_md_tool_metrics(json_data, lines)
@@ -176,14 +175,18 @@ class DashboardGenerator:
         if "summary" not in json_data:
             return
         summary = json_data["summary"]
-        lines.append("## Summary")
-        lines.append(f"- Total tool calls: {summary.get('total_tool_calls', 0)}")
-        lines.append(f"- Gate pass rate: {summary.get('gate_pass_rate', 0):.1%}")
-        lines.append(f"- Average score: {summary.get('avg_score', 0):.1f}")
-        lines.append(f"- Cache hit rate: {summary.get('cache_hit_rate', 0):.1%}")
-        lines.append(f"- Expert confidence avg: {summary.get('expert_confidence_avg', 0):.2f}")
-        lines.append(f"- Active alerts: {summary.get('active_alerts', 0)}")
-        lines.append("")
+        lines.extend(
+            (
+                "## Summary",
+                f"- Total tool calls: {summary.get('total_tool_calls', 0)}",
+                f"- Gate pass rate: {summary.get('gate_pass_rate', 0):.1%}",
+                f"- Average score: {summary.get('avg_score', 0):.1f}",
+                f"- Cache hit rate: {summary.get('cache_hit_rate', 0):.1%}",
+                f"- Expert confidence avg: {summary.get('expert_confidence_avg', 0):.2f}",
+                f"- Active alerts: {summary.get('active_alerts', 0)}",
+                "",
+            )
+        )
 
     def _render_md_tool_metrics(self, json_data: dict[str, Any], lines: list[str]) -> None:
         """Append tool metrics bar-chart section lines to *lines*."""
@@ -193,8 +196,7 @@ class DashboardGenerator:
         if tool_data:
             chart_data = {t["tool_name"]: float(t["call_count"]) for t in tool_data}
             chart = self._visualizer.create_bar_chart(chart_data, title="## Tool Usage")
-            lines.append(chart)
-            lines.append("")
+            lines.extend((chart, ""))
 
     def _render_md_docs_metrics(self, json_data: dict[str, Any], lines: list[str]) -> None:
         """Append DocsMCP tool usage section lines to *lines*."""
@@ -203,8 +205,9 @@ class DashboardGenerator:
         docs = json_data["docs_metrics"]
         if not docs.get("available"):
             return
-        lines.append("## DocsMCP Tool Usage")
-        lines.append(f"- Total docs tool calls: {docs.get('total_calls', 0)}")
+        lines.extend(
+            ("## DocsMCP Tool Usage", f"- Total docs tool calls: {docs.get('total_calls', 0)}")
+        )
         for tool in docs.get("tools", []):
             if not isinstance(tool, dict):
                 continue
@@ -220,10 +223,14 @@ class DashboardGenerator:
         if "session_funnel" not in json_data:
             return
         funnel = json_data["session_funnel"]
-        lines.append("## Session Handoff Funnel")
-        lines.append(f"- Session starts: {funnel.get('session_start_calls', 0)}")
-        lines.append(f"- Session ends (handoff proxy): {funnel.get('session_end_calls', 0)}")
-        lines.append(f"- Checklist completions: {funnel.get('checklist_calls', 0)}")
+        lines.extend(
+            (
+                "## Session Handoff Funnel",
+                f"- Session starts: {funnel.get('session_start_calls', 0)}",
+                f"- Session ends (handoff proxy): {funnel.get('session_end_calls', 0)}",
+                f"- Checklist completions: {funnel.get('checklist_calls', 0)}",
+            )
+        )
         ratio = funnel.get("checklist_per_session_start")
         if ratio is not None:
             lines.append(f"- Checklist / session_start ratio: {ratio:.0%}")
@@ -273,13 +280,17 @@ class DashboardGenerator:
         if "coverage_metrics" not in json_data:
             return
         cov = json_data["coverage_metrics"]
-        lines.append("## Coverage Metrics")
-        lines.append(f"- Files scored: {cov.get('files_scored', 0)}")
-        lines.append(f"- Files gated: {cov.get('files_gated', 0)}")
-        lines.append(f"- Files scanned: {cov.get('files_scanned', 0)}")
-        lines.append(f"- Gate skip rate: {cov.get('gate_skip_rate', 0):.1%}")
-        lines.append(f"- Docs lookup calls: {cov.get('docs_lookup_calls', 0)}")
-        lines.append(f"- Checklist calls: {cov.get('checklist_calls', 0)}")
+        lines.extend(
+            (
+                "## Coverage Metrics",
+                f"- Files scored: {cov.get('files_scored', 0)}",
+                f"- Files gated: {cov.get('files_gated', 0)}",
+                f"- Files scanned: {cov.get('files_scanned', 0)}",
+                f"- Gate skip rate: {cov.get('gate_skip_rate', 0):.1%}",
+                f"- Docs lookup calls: {cov.get('docs_lookup_calls', 0)}",
+                f"- Checklist calls: {cov.get('checklist_calls', 0)}",
+            )
+        )
         unused = cov.get("core_tools_unused", [])
         if unused:
             lines.append(f"- Unused core tools: {', '.join(unused)}")
@@ -292,8 +303,7 @@ class DashboardGenerator:
         mem = json_data["memory_metrics"]
         if not mem.get("available", False):
             return
-        lines.append("## Memory Metrics")
-        lines.append(f"- Total entries: {mem.get('total_entries', 0)}")
+        lines.extend(("## Memory Metrics", f"- Total entries: {mem.get('total_entries', 0)}"))
         by_tier = mem.get("by_tier", {})
         if by_tier:
             lines.append(
@@ -301,9 +311,13 @@ class DashboardGenerator:
                 f"pattern={by_tier.get('pattern', 0)}, "
                 f"context={by_tier.get('context', 0)}"
             )
-        lines.append(f"- Stale count: {mem.get('stale_count', 0)}")
-        lines.append(f"- Avg confidence: {mem.get('avg_confidence', 0):.4f}")
-        lines.append(f"- Capacity: {mem.get('capacity_pct', 0):.1f}%")
+        lines.extend(
+            (
+                f"- Stale count: {mem.get('stale_count', 0)}",
+                f"- Avg confidence: {mem.get('avg_confidence', 0):.4f}",
+                f"- Capacity: {mem.get('capacity_pct', 0):.1f}%",
+            )
+        )
         if mem.get("consolidation_groups", 0) > 0:
             lines.append(
                 f"- Consolidation: {mem.get('consolidated_count', 0)} groups, "

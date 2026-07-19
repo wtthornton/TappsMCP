@@ -97,8 +97,7 @@ def extract_external_imports(
     top_modules: set[str] = set()
     for node in ast.walk(tree):
         if isinstance(node, ast.Import):
-            for alias in node.names:
-                top_modules.add(alias.name.split(".")[0])
+            top_modules.update(alias.name.split(".")[0] for alias in node.names)
         elif isinstance(node, ast.ImportFrom) and node.module and not node.level:
             top_modules.add(node.module.split(".")[0])
 

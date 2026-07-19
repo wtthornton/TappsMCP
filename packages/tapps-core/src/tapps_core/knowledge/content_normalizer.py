@@ -169,7 +169,7 @@ def rank_snippets(
             score += 0.3 * (hits / len(query_words))
 
         # Language preference.
-        if snippet.language in ("python", "py", "javascript", "js", "typescript", "ts"):
+        if snippet.language in {"python", "py", "javascript", "js", "typescript", "ts"}:
             score += 0.1
 
         # Penalise very short or very long snippets.

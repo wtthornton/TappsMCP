@@ -113,7 +113,7 @@ def _parse_requirements(path: Path) -> list[str]:
     for line in content.splitlines():
         stripped = line.strip()
         # Skip comments and empty lines
-        if not stripped or stripped.startswith("#") or stripped.startswith("-"):
+        if not stripped or stripped.startswith(("#", "-")):
             continue
         name = _clean_package_name(stripped)
         if name:

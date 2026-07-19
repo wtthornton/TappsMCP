@@ -44,7 +44,7 @@ class Context7Provider:
     async def fetch(self, library_id: str, topic: str = "overview") -> str | None:
         client = self._get_client()
         content = await client.fetch_docs(library_id, topic=topic)
-        return content if content else None
+        return content or None
 
     def _get_client(self) -> Context7Client:
         if self._client is None:

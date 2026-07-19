@@ -75,7 +75,7 @@ def bootstrap_logging_from_env(
     structlog's default logger writes to stdout and breaks the MCP handshake.
     """
     level = os.environ.get(level_env, "INFO")
-    json_output = os.environ.get(json_env, "").lower() in ("1", "true", "yes")
+    json_output = os.environ.get(json_env, "").lower() in {"1", "true", "yes"}
     setup_logging(level=level, json_output=json_output)
     return level, json_output
 

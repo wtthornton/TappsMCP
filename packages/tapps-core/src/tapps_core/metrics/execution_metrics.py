@@ -11,7 +11,7 @@ import threading
 import uuid
 from collections import deque
 from dataclasses import asdict, dataclass
-from datetime import date, datetime, timedelta
+from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
@@ -105,7 +105,7 @@ class ToolCallMetricsCollector:
         with self._write_lock:
             self._buffer.append(metric)
             mode = metrics_storage_mode()
-            if mode in ("local", "dual"):
+            if mode in {"local", "dual"}:
                 self._append_to_file(metric)
         emit_quality_metric_event(metric)
 
@@ -214,7 +214,7 @@ class ToolCallMetricsCollector:
 
     def cleanup_old_metrics(self, days_to_keep: int = _DEFAULT_RETENTION_DAYS) -> int:
         """Remove JSONL files older than *days_to_keep*."""
-        cutoff = date.today() - timedelta(days=days_to_keep)
+        cutoff = datetime.now(UTC).date() - timedelta(days=days_to_keep)
         removed = 0
         for f in self._metrics_dir.glob("tool_calls_*.jsonl"):
             # Extract date from filename
@@ -232,7 +232,7 @@ class ToolCallMetricsCollector:
 
     def _append_to_file(self, metric: ToolCallMetric) -> None:
         """Append a metric record to the daily JSONL file."""
-        today = date.today().isoformat()
+        today = datetime.now(UTC).date().isoformat()
         path = self._metrics_dir / f"tool_calls_{today}.jsonl"
         line = json.dumps(metric.to_dict(), ensure_ascii=False)
         try:

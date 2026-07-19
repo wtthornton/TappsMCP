@@ -98,7 +98,7 @@ def validate_origin_scope(entry: InsightEntry) -> list[str]:
     scope = str(entry.scope)
     origin = entry.server_origin
 
-    if scope == "shared" and origin not in (InsightOrigin.user, InsightOrigin.unknown):
+    if scope == "shared" and origin not in {InsightOrigin.user, InsightOrigin.unknown}:
         warnings.append(
             f"scope=shared with server_origin={origin}: "
             "shared insights may propagate across projects via federation."

@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import json
 import uuid
-from datetime import date, datetime
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
@@ -36,7 +36,7 @@ def _status_code(status: str) -> int:
     """Map tool call status to OTEL status code."""
     if status == "success":
         return 1  # STATUS_CODE_OK
-    if status in ("failed", "timeout"):
+    if status in {"failed", "timeout"}:
         return 2  # STATUS_CODE_ERROR
     return 0  # STATUS_CODE_UNSET
 
@@ -135,7 +135,7 @@ def export_to_file(
     traces_dir.mkdir(parents=True, exist_ok=True)
     trace_data = export_otel_trace(metrics)
 
-    today = date.today().isoformat()
+    today = datetime.now(UTC).date().isoformat()
     path = traces_dir / f"trace_{today}.json"
 
     try:

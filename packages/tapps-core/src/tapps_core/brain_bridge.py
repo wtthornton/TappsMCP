@@ -111,7 +111,7 @@ def _read_tools_warm_cache(cache_path: Path) -> frozenset[str] | None:
             for t in tools
             if isinstance(t, dict) and isinstance(t.get("name"), str) and t["name"]
         )
-        return names if names else None
+        return names or None
     except Exception:
         return None
 
@@ -1804,7 +1804,7 @@ class HttpBrainBridge(BrainBridge):
         # fresh handshake. 404 = session not found (common after brain
         # restart); 400 with "Missing session ID" indicates we never got
         # an Mcp-Session-Id header in the first place.
-        if response.status_code in (400, 404) and self._session_id:
+        if response.status_code in {400, 404} and self._session_id:
             self._session_id = None
             session_id = await self._ensure_session()
             extra_headers = _tenant_override_headers(project_id)
@@ -3022,7 +3022,7 @@ class HttpBrainBridge(BrainBridge):
             )
         except Exception as exc:
             return {"ok": False, "error": f"probe_failed: {exc}"}
-        if init_response.status_code in (401, 403):
+        if init_response.status_code in {401, 403}:
             return {
                 "ok": False,
                 "http_status": init_response.status_code,
@@ -3089,7 +3089,7 @@ class HttpBrainBridge(BrainBridge):
             )
         except Exception as exc:
             return {"ok": False, "error": f"probe_failed: {exc}"}
-        if init_response.status_code in (401, 403):
+        if init_response.status_code in {401, 403}:
             return {
                 "ok": False,
                 "http_status": init_response.status_code,

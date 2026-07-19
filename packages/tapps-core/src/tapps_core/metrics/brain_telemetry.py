@@ -46,7 +46,7 @@ def metrics_storage_mode() -> Literal["local", "dual", "brain"]:
 
 def should_read_metrics_from_brain() -> bool:
     """True when reads should prefer ``brain_query_events`` over local JSONL."""
-    return metrics_storage_mode() in ("dual", "brain")
+    return metrics_storage_mode() in {"dual", "brain"}
 
 
 def brain_metrics_bridge_available() -> bool:
