@@ -364,9 +364,9 @@ def is_deploy_lock_held() -> bool:
     try:
         probe.acquire(timeout=0)
         probe.release()
-        return False
     except filelock.Timeout:
         return True
+    return False
 
 
 def quiescence_gate(checkout: Path) -> dict[str, Any]:

@@ -3077,7 +3077,7 @@ class TestCheckCallGraph:
 
         (tmp_path / "mod.py").write_text("def f():\n    pass\n")
         build_call_graph_index(tmp_path, force_rebuild=True)
-        result = check_call_graph_index_cache(tmp_path, quick=True)
+        result = check_call_graph_index_cache(tmp_path)
         assert result.ok is True
         assert "Cache present" in result.message
         assert "fresh" in result.message

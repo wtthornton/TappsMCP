@@ -449,7 +449,7 @@ def fleet_status() -> dict[str, Any]:
     }
 
 
-def install_systemd_user_unit(*, script_path: Path | None = None) -> list[Path]:
+def install_systemd_user_unit() -> list[Path]:
     """Write the systemd user units that supervise the shared HTTP fleet.
 
     Single source of truth for all fleet units (ADR-0024). Three files are

@@ -114,11 +114,12 @@ def _cursor_uses_http_fleet(project_root: Path) -> bool:
     servers = _load_servers(project_root / ".cursor" / "mcp.json", "mcpServers")
     if not servers or "__parse_error__" in servers:
         return False
-    for server_id, entry in servers.items():
-        if server_id in NLT_HTTP_FLEET_PORTS and isinstance(entry, dict):
-            if entry.get("type") in _HTTP_TYPES:
-                return True
-    return False
+    return any(
+        server_id in NLT_HTTP_FLEET_PORTS
+        and isinstance(entry, dict)
+        and entry.get("type") in _HTTP_TYPES
+        for server_id, entry in servers.items()
+    )
 
 
 def discover_http_fleet_consumers(

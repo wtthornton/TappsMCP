@@ -45,10 +45,10 @@ def _iter_mcp_serve_processes() -> list[tuple[int, int, str]]:
 
     rows: list[tuple[int, int, str]] = []
     for line in proc.stdout.splitlines():
-        line = line.strip()
-        if not line:
+        stripped = line.strip()
+        if not stripped:
             continue
-        parts = line.split(None, 2)
+        parts = stripped.split(None, 2)
         if len(parts) < 3:
             continue
         try:

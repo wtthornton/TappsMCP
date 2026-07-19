@@ -948,6 +948,7 @@ def _strip_jsonc_comments(raw: str) -> str:
         stripped = line.strip()
         if stripped.startswith("//"):
             continue
+        kept = line
         if "//" in line:
             in_string = False
             escaped = False
@@ -965,8 +966,8 @@ def _strip_jsonc_comments(raw: str) -> str:
                 if not in_string and line[idx : idx + 2] == "//":
                     cut = idx
                     break
-            line = line[:cut].rstrip()
-        lines.append(line)
+            kept = line[:cut].rstrip()
+        lines.append(kept)
     text = "\n".join(lines)
     return re.sub(r",(\s*[}\]])", r"\1", text)
 
@@ -1253,8 +1254,7 @@ def _value_is_plaintext_secret(value: Any) -> bool:
     if not isinstance(value, str) or not value.strip():
         return False
     # ${VAR} or $VAR references → not plaintext secret (interpolation)
-    stripped = value.strip()
-    return not (stripped.startswith("${") or stripped.startswith("$"))
+    return not value.strip().startswith("$")
 
 
 def _collect_plaintext_secrets(entry: dict[str, Any]) -> list[str]:
@@ -1993,7 +1993,7 @@ def _configure_multiple_hosts(
             if ok and rules and not dry_run:
                 _generate_rules(host, project_root, engagement_level=engagement_level)
             elif ok and rules and dry_run:
-                _preview_rules(host, project_root, engagement_level=engagement_level)
+                _preview_rules(host)
         if not ok:
             all_ok = False
     if all_ok and not check and not dry_run:
@@ -2005,6 +2005,8 @@ def _generate_rules(
     host: str,
     project_root: Path,
     engagement_level: str | None = None,
+    *,
+    overwrite_tech_stack: bool = False,
 ) -> None:
     """Generate platform rule files, hooks, agents, and skills for the given host.
 
@@ -2034,7 +2036,11 @@ def _generate_rules(
     )
 
     # Always generate AGENTS.md and TECH_STACK.md (core bootstrap files).
-    _generate_core_docs(project_root, engagement_level=engagement_level)
+    _generate_core_docs(
+        project_root,
+        engagement_level=engagement_level,
+        overwrite_tech_stack=overwrite_tech_stack,
+    )
 
     if host == "claude-code":
         action = _bootstrap_claude(project_root, engagement_level=engagement_level)
@@ -2088,11 +2094,14 @@ def _generate_core_docs(
     project_root: Path,
     *,
     engagement_level: str | None = None,
+    overwrite_tech_stack: bool = False,
 ) -> None:
     """Generate AGENTS.md and TECH_STACK.md if they don't already exist.
 
     Called from ``_generate_rules`` so that CLI ``init`` produces the same
-    core docs that the MCP ``tapps_init`` tool creates.
+    core docs that the MCP ``tapps_init`` tool creates. When
+    *overwrite_tech_stack* is True, an existing TECH_STACK.md is regenerated
+    from the detected project profile.
     """
     from tapps_mcp.pipeline.agents_md import update_agents_md
     from tapps_mcp.prompts.prompt_loader import load_agents_template
@@ -2115,7 +2124,8 @@ def _generate_core_docs(
         click.echo(click.style("  Created AGENTS.md", fg="green"))
 
     tech_stack_path = project_root / "TECH_STACK.md"
-    if not tech_stack_path.exists():
+    if overwrite_tech_stack or not tech_stack_path.exists():
+        existed = tech_stack_path.exists()
         try:
             from tapps_mcp.project.profiler import detect_project_profile
 
@@ -2124,18 +2134,15 @@ def _generate_core_docs(
 
             content = _render_tech_stack_md(profile)
             tech_stack_path.write_text(content, encoding="utf-8")
-            click.echo(click.style("  Created TECH_STACK.md", fg="green"))
+            verb = "Overwrote" if existed else "Created"
+            click.echo(click.style(f"  {verb} TECH_STACK.md", fg="green"))
         except Exception:
             click.echo("  TECH_STACK.md generation failed (skipped)")
     else:
         click.echo("  TECH_STACK.md already exists (skipped)")
 
 
-def _preview_rules(
-    host: str,
-    project_root: Path,
-    engagement_level: str | None = None,
-) -> None:
+def _preview_rules(host: str) -> None:
     """Preview which rule/hook/agent/skill files would be generated (dry-run).
 
     Enumerates the same files as :func:`_generate_rules` without writing
@@ -2209,10 +2216,12 @@ def _read_engagement_level_from_project(project_root: Path) -> str:
     try:
         with config_path.open(encoding="utf-8-sig") as f:
             data = yaml.safe_load(f)
-        level = (data or {}).get("llm_engagement_level", "medium")
-        return level if level in ("high", "medium", "low") else "medium"
-    except Exception:
+    except (OSError, yaml.YAMLError):
         return "medium"
+    if not isinstance(data, dict):
+        return "medium"
+    level = data.get("llm_engagement_level", "medium")
+    return level if level in ("high", "medium", "low") else "medium"
 
 
 def _write_engagement_level_to_yaml(project_root: Path, level: str) -> None:
@@ -2469,9 +2478,14 @@ def run_init(
         mcp_transport=mcp_transport,
     )
     if ok and rules and not dry_run:
-        _generate_rules(mcp_host, root, engagement_level=engagement_level)
+        _generate_rules(
+            mcp_host,
+            root,
+            engagement_level=engagement_level,
+            overwrite_tech_stack=overwrite_tech_stack,
+        )
     elif ok and rules and dry_run:
-        _preview_rules(mcp_host, root, engagement_level=engagement_level)
+        _preview_rules(mcp_host)
     if ok and not dry_run:
         _ensure_project_yaml_defaults(root)
     return ok

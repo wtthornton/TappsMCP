@@ -236,7 +236,7 @@ class TestDoctorCrashLoopCheck:
     def test_no_pid_files_passes(self, pid_dir: Path) -> None:
         from tapps_mcp.distribution.doctor import check_fleet_crash_loop
 
-        result = check_fleet_crash_loop(Path.cwd())
+        result = check_fleet_crash_loop()
         assert result.ok is True
         assert "not supervised" in result.message
 
@@ -249,7 +249,7 @@ class TestDoctorCrashLoopCheck:
         (pid_dir / "nlt-memory.pid").write_text("124", encoding="utf-8")
         monkeypatch.setattr(doctor, "_probe_tcp", lambda _url, **_kw: False)
 
-        result = doctor.check_fleet_crash_loop(Path.cwd())
+        result = doctor.check_fleet_crash_loop()
         assert result.ok is False
         assert "started-then-died" in result.message
         assert "install-systemd" in result.detail
@@ -262,5 +262,5 @@ class TestDoctorCrashLoopCheck:
         (pid_dir / "nlt-build.pid").write_text("123", encoding="utf-8")
         monkeypatch.setattr(doctor, "_probe_tcp", lambda _url, **_kw: True)
 
-        result = doctor.check_fleet_crash_loop(Path.cwd())
+        result = doctor.check_fleet_crash_loop()
         assert result.ok is True

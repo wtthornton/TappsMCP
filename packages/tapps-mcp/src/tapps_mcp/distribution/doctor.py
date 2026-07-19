@@ -455,7 +455,7 @@ def check_http_fleet_liveness(project_root: Path) -> CheckResult:
     )
 
 
-def check_fleet_crash_loop(project_root: Path) -> CheckResult:
+def check_fleet_crash_loop() -> CheckResult:
     """Detect the ADR-0024 crash-loop: PID files recorded but ports not listening.
 
     ``check_http_fleet_liveness`` reports ports being down, but cannot tell
@@ -888,8 +888,9 @@ def _hook_paths_from_claude_settings(data: dict[str, object]) -> list[str]:
                 cmd = hook.get("command", "")
                 if not isinstance(cmd, str) or "tapps-" not in cmd:
                     continue
-                for m in _HOOK_SCRIPT_PATH_RE.finditer(cmd):
-                    out.append(m.group(1).replace("\\", "/"))
+                out.extend(
+                    m.group(1).replace("\\", "/") for m in _HOOK_SCRIPT_PATH_RE.finditer(cmd)
+                )
     return out
 
 
@@ -1553,11 +1554,11 @@ def _count_session_start_gate_violations_24h(project_root: Path) -> int:
     try:
         with log_path.open(encoding="utf-8") as f:
             for line in f:
-                line = line.strip()
-                if not line:
+                stripped = line.strip()
+                if not stripped:
                     continue
                 try:
-                    entry = json.loads(line)
+                    entry = json.loads(stripped)
                 except json.JSONDecodeError:
                     continue
                 ts_raw = entry.get("ts", "")
@@ -1603,11 +1604,11 @@ def _categorize_cache_gate_violations_24h(project_root: Path) -> dict[str, int]:
     try:
         with log_path.open(encoding="utf-8") as f:
             for line in f:
-                line = line.strip()
-                if not line:
+                stripped = line.strip()
+                if not stripped:
                     continue
                 try:
-                    entry = json.loads(line)
+                    entry = json.loads(stripped)
                 except json.JSONDecodeError:
                     continue
                 ts_raw = entry.get("ts", "")
@@ -1695,9 +1696,11 @@ def check_deprecated_wrapper_skills(project_root: Path) -> CheckResult:
 
     found: list[str] = []
     for host_label, base in _tapps_skill_bases(project_root):
-        for skill_name in DEPRECATED_TAPPS_SKILLS:
-            if (base / skill_name / "SKILL.md").is_file():
-                found.append(f"{host_label}/{skill_name}")
+        found.extend(
+            f"{host_label}/{skill_name}"
+            for skill_name in DEPRECATED_TAPPS_SKILLS
+            if (base / skill_name / "SKILL.md").is_file()
+        )
     if found:
         return CheckResult(
             "Deprecated wrapper skills",
@@ -3760,7 +3763,7 @@ def _project_uses_nlt_build(servers: dict[str, dict[str, object]]) -> bool:
     """True when MCP config enables nlt-build (or legacy nlt-code-quality)."""
     if "nlt-build" in servers or "nlt-code-quality" in servers:
         return True
-    for _name, cfg in servers.items():
+    for cfg in servers.values():
         raw_args = cfg.get("args", [])
         args: list[str] = list(raw_args) if isinstance(raw_args, list) else []
         if "--profile" in args:
@@ -3837,7 +3840,7 @@ def check_call_graph_tools_profile(root: Path) -> CheckResult:
     )
 
 
-def check_call_graph_index_cache(root: Path, *, quick: bool = False) -> CheckResult:
+def check_call_graph_index_cache(root: Path) -> CheckResult:
     """Epic 114: informational call-graph cache status (never fails on missing cache)."""
     from tapps_mcp.project.call_graph_cache import (
         load_call_graph_index,
@@ -4353,13 +4356,11 @@ def _build_combined_install_hint(missing_tools: list[str]) -> str:
             try:
                 content = receipt.read_text()
                 for line in content.splitlines():
-                    if "editable" in line.lower() or "path" in line.lower():
-                        # Extract the path value
-                        if "=" in line:
-                            val = line.split("=", 1)[1].strip().strip("'\"")
-                            if val and Path(val).exists():
-                                source = f"--editable {val}"
-                                break
+                    if ("editable" in line.lower() or "path" in line.lower()) and "=" in line:
+                        val = line.split("=", 1)[1].strip().strip("'\"")
+                        if val and Path(val).exists():
+                            source = f"--editable {val}"
+                            break
             except Exception:
                 pass
 
@@ -4847,18 +4848,23 @@ def check_mcp_operator_secrets(root: Path) -> CheckResult:
         )
 
     missing: list[str] = []
-    if _mcp_configs_set_context7(root) and not docs_via_brain_enabled(settings):
-        if not _operator_secret_available("TAPPS_MCP_CONTEXT7_API_KEY", project_root=root):
-            if not _operator_secret_available("CONTEXT7_API_KEY", project_root=root):
-                missing.append("TAPPS_MCP_CONTEXT7_API_KEY")
+    if (
+        _mcp_configs_set_context7(root)
+        and not docs_via_brain_enabled(settings)
+        and not _operator_secret_available("TAPPS_MCP_CONTEXT7_API_KEY", project_root=root)
+        and not _operator_secret_available("CONTEXT7_API_KEY", project_root=root)
+    ):
+        missing.append("TAPPS_MCP_CONTEXT7_API_KEY")
 
     brain_configured = bool(_brain_http_url_for_checks(root)) or _mcp_configs_reference_brain_auth(
         root
     )
-    if brain_configured:
-        if not _operator_secret_available("TAPPS_MCP_MEMORY_BRAIN_AUTH_TOKEN", project_root=root):
-            if not _operator_secret_available("TAPPS_BRAIN_AUTH_TOKEN", project_root=root):
-                missing.append("TAPPS_BRAIN_AUTH_TOKEN")
+    if (
+        brain_configured
+        and not _operator_secret_available("TAPPS_MCP_MEMORY_BRAIN_AUTH_TOKEN", project_root=root)
+        and not _operator_secret_available("TAPPS_BRAIN_AUTH_TOKEN", project_root=root)
+    ):
+        missing.append("TAPPS_BRAIN_AUTH_TOKEN")
 
     if not missing:
         operator_env = Path.home() / ".tapps-operator.env"
@@ -5090,13 +5096,13 @@ def _collect_checks(root: Path, *, quick: bool = False) -> list[CheckResult]:
         ("VS Code config", lambda: check_vscode_config(root)),
         ("MCP transport drift", lambda: check_mcp_transport_drift(root)),
         ("HTTP fleet liveness", lambda: check_http_fleet_liveness(root)),
-        ("Fleet crash loop", lambda: check_fleet_crash_loop(root)),
+        ("Fleet crash loop", check_fleet_crash_loop),
         ("MCP client config", lambda: check_mcp_client_config(root)),
         ("MCP tool budget", lambda: check_mcp_tool_budget(root)),
         ("Call graph tools profile", lambda: check_call_graph_tools_profile(root)),
         (
             "Call graph index cache",
-            lambda: check_call_graph_index_cache(root, quick=quick),
+            lambda: check_call_graph_index_cache(root),
         ),
         ("NLT partial enablement", lambda: check_nlt_partial_enablement(root)),
         (
@@ -5186,13 +5192,9 @@ def _collect_checks(root: Path, *, quick: bool = False) -> list[CheckResult]:
             )
         )
     else:
-        for result in check_quality_tools():
-            checks.append(
-                _safe_check(
-                    result.name,
-                    lambda r=result: r,
-                )
-            )
+        checks.extend(
+            _safe_check(result.name, lambda r=result: r) for result in check_quality_tools()
+        )
     return checks
 
 

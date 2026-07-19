@@ -169,10 +169,7 @@ def fleet_server_launch_specs() -> list[tuple[str, str, list[str], int]]:
         serve_args = [str(a) for a in spec["serve_args"]]
         port = NLT_HTTP_FLEET_PORTS[server_id]
         bin_path = CURRENT_LINK / "bin" / serve_cmd
-        if bin_path.is_file():
-            command = str(bin_path)
-        else:
-            command = serve_cmd
+        command = str(bin_path) if bin_path.is_file() else serve_cmd
         rows.append((server_id, command, serve_args, port))
     return rows
 
