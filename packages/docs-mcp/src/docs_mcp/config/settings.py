@@ -245,9 +245,9 @@ class DocsMCPSettings(BaseSettings):
             return None
         if isinstance(v, str):
             v = [s.strip() for s in v.split(",") if s.strip()]
-            return v if v else None
+            return v or None
         if isinstance(v, list):
-            return v if v else None
+            return v or None
         return None
 
     @field_validator("disabled_tools", mode="before")

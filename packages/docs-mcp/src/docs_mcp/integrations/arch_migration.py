@@ -38,7 +38,7 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass, field
-from datetime import date
+from datetime import UTC, date, datetime
 from pathlib import Path
 from typing import Any
 
@@ -290,7 +290,7 @@ class ArchMigrator:
     async def migrate(self, *, execute: bool, today: date | None = None) -> MigrationResult:
         """Run the migration. ``execute=False`` plans only (writes nothing)."""
         result = MigrationResult(dry_run=not execute)
-        stamp = (today or date.today()).isoformat()
+        stamp = (today or datetime.now(UTC).date()).isoformat()
         reader = self._reader_bridge()
         if reader is None:
             result.available = False
@@ -390,7 +390,7 @@ class ArchMigrator:
             result.errors.append("brain bridge unavailable (no transport configured)")
             return result
 
-        now = today or date.today()
+        now = today or datetime.now(UTC).date()
         for entry in await self._collect():
             tags = [str(t) for t in (entry.get("tags") or [])]
             if MIGRATED_TAG not in tags:

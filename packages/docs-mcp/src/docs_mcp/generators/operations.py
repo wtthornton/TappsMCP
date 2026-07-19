@@ -225,7 +225,7 @@ class PostmortemGenerator:
             lines.append(f"## {heading}")
             lines.append("")
             text = body.strip()
-            lines.append(text if text else f"<!-- {placeholder} -->")
+            lines.append(text or f"<!-- {placeholder} -->")
             lines.append("")
 
         lines.extend(["## Lessons learned", "", "<!-- What went well / what to improve -->", ""])

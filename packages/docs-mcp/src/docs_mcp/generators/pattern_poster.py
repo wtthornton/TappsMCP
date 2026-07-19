@@ -589,9 +589,7 @@ class ArchPatternPosterGenerator:
             ("Repo", "data"),
             ("DB", "infra"),
         ]
-        modules: list[tuple[str, str]] = (
-            packages[:6] if packages else module_defaults  # type: ignore[assignment]
-        )
+        modules: list[tuple[str, str]] = packages[:6] if packages else module_defaults
         mw, mh = 54, 26
         positions = [
             (cx_cont + 12, cy_cont + 22),

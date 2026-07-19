@@ -93,7 +93,7 @@ def _has_breaking_change_footer(body: str) -> bool:
         return False
     for line in body.splitlines():
         stripped = line.strip()
-        if stripped.startswith("BREAKING CHANGE:") or stripped.startswith("BREAKING-CHANGE:"):
+        if stripped.startswith(("BREAKING CHANGE:", "BREAKING-CHANGE:")):
             return True
     return False
 

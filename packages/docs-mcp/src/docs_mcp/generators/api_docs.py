@@ -347,10 +347,8 @@ class APIDocGenerator:
         try:
             rel = file_path.relative_to(project_root)
             module_name = str(rel).replace("\\", "/").replace("/", ".")
-            if module_name.endswith(".py"):
-                module_name = module_name[:-3]
-            if module_name.endswith(".__init__"):
-                module_name = module_name[:-9]
+            module_name = module_name.removesuffix(".py")
+            module_name = module_name.removesuffix(".__init__")
         except ValueError:
             module_name = file_path.stem
 
@@ -1274,7 +1272,7 @@ def _generation_date() -> str:
     """Return the current date as an ISO string for freshness hints."""
     import datetime
 
-    return datetime.date.today().isoformat()
+    return datetime.datetime.now(datetime.UTC).date().isoformat()
 
 
 def _full_description(parsed: object) -> str:
@@ -1428,7 +1426,7 @@ def _extract_doctest(content: str, func_name: str) -> str:
     block: list[str] = []
     for line in lines:
         stripped = line.strip()
-        if stripped.startswith(">>>") or stripped.startswith("..."):
+        if stripped.startswith((">>>", "...")):
             block.append(line)
         elif block and stripped:
             # Output line following a doctest

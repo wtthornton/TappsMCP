@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import contextlib
 import json
-from collections.abc import Awaitable, Callable
+from collections.abc import Awaitable, Callable, MutableMapping
 from pathlib import Path
 from typing import Any
 
@@ -18,9 +18,12 @@ from tapps_core.http.request_context import (
 
 logger = structlog.get_logger(__name__)
 
-Send = Callable[[dict[str, Any]], Awaitable[None]]
-Receive = Callable[[], Awaitable[dict[str, Any]]]
-ASGIApp = Callable[[dict[str, Any], Receive, Send], Awaitable[None]]
+# Match the ASGI spec (and Starlette): messages and scope are MutableMapping,
+# not dict — using dict here makes real ASGI apps fail contravariance checks.
+Message = MutableMapping[str, Any]
+Send = Callable[[Message], Awaitable[None]]
+Receive = Callable[[], Awaitable[Message]]
+ASGIApp = Callable[[Message, Receive, Send], Awaitable[None]]
 
 # Substrings (lower-cased) that identify a request landing on the MCP SDK's
 # StreamableHTTP session manager outside its lifespan window -- i.e. before
@@ -38,7 +41,7 @@ class TappsProjectRootMiddleware:
     def __init__(self, app: ASGIApp) -> None:
         self.app = app
 
-    async def __call__(self, scope: dict[str, Any], receive: Receive, send: Send) -> None:
+    async def __call__(self, scope: Message, receive: Receive, send: Send) -> None:
         if scope.get("type") != "http":
             await self.app(scope, receive, send)
             return
@@ -51,7 +54,7 @@ class TappsProjectRootMiddleware:
 
         response_started = False
 
-        async def _send(message: dict[str, Any]) -> None:
+        async def _send(message: Message) -> None:
             nonlocal response_started
             if message.get("type") == "http.response.start":
                 response_started = True
@@ -99,7 +102,7 @@ async def _send_retryable_503(send: Send) -> None:
     await send({"type": "http.response.body", "body": body})
 
 
-def _header_value(scope: dict[str, Any], name: str) -> str | None:
+def _header_value(scope: Message, name: str) -> str | None:
     target = name.lower().encode("ascii")
     for raw_key, raw_value in scope.get("headers", ()):
         if raw_key.lower() == target:

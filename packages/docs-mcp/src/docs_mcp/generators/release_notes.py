@@ -70,9 +70,7 @@ class ReleaseNotesGenerator:
 
         for commit in version_boundary.commits:
             parsed = classify_commit(commit.message)
-            description = (
-                parsed.description if parsed.description else commit.message.split("\n")[0]
-            )
+            description = parsed.description or commit.message.split("\n")[0]
 
             # Track contributor
             if commit.author:

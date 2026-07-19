@@ -236,7 +236,7 @@ def collect_identifier_terms(
             dm = _DEF_RE.match(line)
             if dm:
                 name = dm.group(1)
-                if name.startswith("_") or name.startswith("test"):
+                if name.startswith(("_", "test")):
                     continue
                 if len(name) < _MIN_DEF_NAME_LEN:
                     continue

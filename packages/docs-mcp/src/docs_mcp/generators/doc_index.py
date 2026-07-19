@@ -252,7 +252,7 @@ class DocIndexGenerator:
                 continue
             if in_frontmatter:
                 continue
-            if not stripped or stripped.startswith("#") or stripped.startswith(">"):
+            if not stripped or stripped.startswith(("#", ">")):
                 continue
             if stripped.startswith("```"):
                 break

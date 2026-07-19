@@ -258,7 +258,7 @@ class StoryGenerator:
             ]
 
         if not config.acceptance_criteria:
-            ac_title = title if title else "Feature"
+            ac_title = title or "Feature"
             updates["acceptance_criteria"] = [
                 f"{ac_title} works as specified",
                 "Unit tests pass",
@@ -732,11 +732,9 @@ class StoryGenerator:
                 when = self._derive_when(config.role, config.want, criterion)
                 then = self._derive_then(criterion, config.so_that)
 
-                given_line = given if given else "[describe the precondition]"
-                when_line = (
-                    when if when else f"[describe the action that triggers: {criterion.lower()}]"
-                )
-                then_line = then if then else "[describe the expected observable outcome]"
+                given_line = given or "[describe the precondition]"
+                when_line = when or f"[describe the action that triggers: {criterion.lower()}]"
+                then_line = then or "[describe the expected observable outcome]"
 
                 lines.append(f"### AC: {criterion}")
                 lines.append("")

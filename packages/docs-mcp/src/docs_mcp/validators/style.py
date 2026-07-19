@@ -418,7 +418,7 @@ class JargonRule(RuleBase):
 
     def check(self, content: str, config: StyleConfig) -> list[StyleIssue]:
         issues: list[StyleIssue] = []
-        terms = config.jargon_terms if config.jargon_terms else _DEFAULT_JARGON
+        terms = config.jargon_terms or _DEFAULT_JARGON
         custom_lower = {t.lower() for t in config.custom_terms}
 
         patterns: list[tuple[str, re.Pattern[str]]] = []
@@ -468,7 +468,7 @@ class SentenceLengthRule(RuleBase):
         for line_num, line in enumerate(_content_lines(content), start=1):
             if _is_code_or_frontmatter(line):
                 continue
-            if line.startswith("#") or line.startswith("|"):
+            if line.startswith(("#", "|")):
                 continue
 
             sentences = _SENTENCE_END_RE.split(line)
@@ -726,7 +726,7 @@ class TenseConsistencyRule(RuleBase):
         for line_num, line in enumerate(_content_lines(content), start=1):
             if _is_code_or_frontmatter(line):
                 continue
-            if line.startswith("#") or line.startswith("|"):
+            if line.startswith(("#", "|")):
                 continue
 
             stripped = re.sub(r"^[-\s*>0-9.)]+", "", line).strip()
@@ -964,7 +964,7 @@ class StyleChecker:
             for f in sorted(project_root.iterdir()):
                 if f.is_file() and f.suffix.lower() in (".md", ".mdx"):
                     name_lower = f.name.lower()
-                    if name_lower not in ("license.md",):
+                    if name_lower != "license.md":
                         files.append(f)
 
         # Documentation directories

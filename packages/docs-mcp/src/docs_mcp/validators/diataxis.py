@@ -210,7 +210,7 @@ class DiataxisValidator:
         for f in sorted(project_root.iterdir()):
             if f.is_file() and f.suffix.lower() in (".md", ".mdx"):
                 name_lower = f.name.lower()
-                if name_lower not in ("license.md",):
+                if name_lower != "license.md":
                     files.append(f)
 
         # Documentation directories

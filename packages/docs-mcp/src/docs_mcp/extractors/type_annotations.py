@@ -204,19 +204,19 @@ def _resolve_subscript(node: ast.Subscript, raw: str) -> TypeInfo:
     normalized_base = _normalize_base_name(base_name)
 
     # Handle special forms
-    if normalized_base in ("Optional",):
+    if normalized_base == "Optional":
         return _resolve_optional(node.slice, raw)
 
-    if normalized_base in ("Union",):
+    if normalized_base == "Union":
         return _resolve_union(node.slice, raw)
 
-    if normalized_base in ("ClassVar",):
+    if normalized_base == "ClassVar":
         return _resolve_classvar(node.slice, raw)
 
-    if normalized_base in ("Callable",):
+    if normalized_base == "Callable":
         return _resolve_callable(node.slice, raw)
 
-    if normalized_base in ("Literal",):
+    if normalized_base == "Literal":
         return _resolve_literal(node.slice, raw)
 
     # Regular generic type

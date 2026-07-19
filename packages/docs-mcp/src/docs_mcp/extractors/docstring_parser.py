@@ -176,7 +176,7 @@ def _split_google_sections(docstring: str) -> dict[str, str]:
             name = "args"
         if name == "return":
             name = "returns"
-        if name in ("example",):
+        if name == "example":
             name = "examples"
         if name == "note":
             name = "notes"

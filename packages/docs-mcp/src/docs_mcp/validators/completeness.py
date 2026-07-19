@@ -23,7 +23,7 @@ def _is_test_path(rel_path: str) -> bool:
     name = parts[-1] if parts else low
     if any(p in {"tests", "test", "__tests__", "testing"} for p in parts[:-1]):
         return True
-    if name.startswith("test_") or name.endswith("_test.py") or name.endswith("_tests.py"):
+    if name.startswith("test_") or name.endswith(("_test.py", "_tests.py")):
         return True
     return name in {"conftest.py", "conftest.pyi"}
 

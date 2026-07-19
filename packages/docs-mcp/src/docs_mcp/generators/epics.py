@@ -50,12 +50,11 @@ def _derive_non_goal_hints(title: str) -> list[str]:
     seen: set[str] = set()
     hints: list[str] = []
     for keyword, hint in _NON_GOAL_KEYWORD_HINTS.items():
-        if keyword in tokens or keyword in title_lower:
-            if hint not in seen:
-                seen.add(hint)
-                hints.append(hint)
-                if len(hints) >= 3:
-                    break
+        if (keyword in tokens or keyword in title_lower) and hint not in seen:
+            seen.add(hint)
+            hints.append(hint)
+            if len(hints) >= 3:
+                break
     return hints
 
 

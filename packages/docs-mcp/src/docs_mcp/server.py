@@ -368,7 +368,7 @@ def _categorize_doc(path: Path, project_root: Path) -> str:
         return "changelog"
     if name_lower.startswith("contributing"):
         return "contributing"
-    if name_lower.startswith("license") or name_lower.startswith("licence"):
+    if name_lower.startswith(("license", "licence")):
         return "license"
     if name_lower.startswith("security"):
         return "security"

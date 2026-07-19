@@ -175,7 +175,7 @@ async def docs_generate_changelog(
                         if c.hash == latest_tag_hash:
                             break
                         unreleased.append(c)
-                    unreleased_commits = unreleased if unreleased else None
+                    unreleased_commits = unreleased or None
 
         generator = ChangelogGenerator()
         content = generator.generate(
@@ -613,7 +613,7 @@ async def docs_generate_adr(
         )
 
     # Resolve the target path
-    write_target = output_path if output_path else filename
+    write_target = output_path or filename
     if not Path(write_target).is_absolute():
         adr_base = str(adr_dir) if adr_dir else "docs/decisions"
         adr_rel = f"{adr_base}/{write_target}"
@@ -1175,7 +1175,7 @@ async def docs_generate_diagram(
 
     from docs_mcp.generators.diagrams import DiagramGenerator
 
-    output_format = format if format else getattr(settings, "diagram_format", "mermaid")
+    output_format = format or getattr(settings, "diagram_format", "mermaid")
 
     generator = DiagramGenerator()
     try:
@@ -1916,7 +1916,7 @@ async def docs_generate_prompt(
         success_brief=None,
         rules=rules.strip(),
         conversation_first=conversation_first,
-        plan_steps=plan_steps if plan_steps else False,
+        plan_steps=plan_steps or False,
         alignment_required=alignment_required,
         allowed_tools=tools_list,
         output_format=output_format.strip(),

@@ -553,7 +553,7 @@ class ArchitectureGenerator:
                 if in_paragraph:
                     break
                 continue
-            if stripped.startswith("#") or stripped.startswith("---") or stripped.startswith("==="):
+            if stripped.startswith(("#", "---", "===")):
                 if in_paragraph:
                     break
                 continue

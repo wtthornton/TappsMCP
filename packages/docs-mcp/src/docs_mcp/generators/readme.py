@@ -144,7 +144,7 @@ class ReadmeGenerator:
                     for line in lines:
                         stripped = line.strip()
                         if not past_title:
-                            if stripped.startswith("#") or stripped.startswith("="):
+                            if stripped.startswith(("#", "=")):
                                 continue
                             if not stripped:
                                 continue
@@ -417,6 +417,7 @@ class ReadmeGenerator:
                     text=True,
                     timeout=5,
                     cwd=project_root,
+                    check=False,
                 )
                 if result.returncode == 0 and result.stdout.strip():
                     clone_url = result.stdout.strip()

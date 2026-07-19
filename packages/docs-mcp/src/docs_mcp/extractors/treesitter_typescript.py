@@ -243,7 +243,7 @@ class TypeScriptExtractor(TreeSitterExtractor):
         """Parse a single parameter node."""
         # The pattern node holds the parameter name (may be identifier or rest).
         pattern = self._child_by_field(node, "pattern")
-        name_node = pattern if pattern else self._child_by_field(node, "name")
+        name_node = pattern or self._child_by_field(node, "name")
         if name_node is None:
             return None
         name = self._node_text(name_node, source)

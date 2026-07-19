@@ -199,6 +199,7 @@ class OnboardingGuideGenerator:
                     text=True,
                     timeout=5,
                     cwd=project_root,
+                    check=False,
                 )
                 if result.returncode == 0 and result.stdout.strip():
                     clone_url = result.stdout.strip()

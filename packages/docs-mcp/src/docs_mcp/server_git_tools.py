@@ -60,8 +60,8 @@ async def docs_git_summary(
     # Fetch commits
     commits = analyzer.get_commits(
         limit=limit,
-        since=since if since else None,
-        path=path if path else None,
+        since=since or None,
+        path=path or None,
     )
 
     # Parse each commit

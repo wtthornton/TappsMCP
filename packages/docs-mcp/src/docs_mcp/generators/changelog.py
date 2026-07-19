@@ -313,7 +313,7 @@ class ChangelogGenerator:
                     "version": vb.version,
                     "date": self._format_date(vb.date),
                     "grouped_entries": grouped,
-                    "breaking_entries": breaking if breaking else None,
+                    "breaking_entries": breaking or None,
                 }
             )
 
@@ -406,9 +406,7 @@ class ChangelogGenerator:
             category = type_map.get(
                 parsed.type, "Changed" if format == "keep-a-changelog" else "Chores"
             )
-            description = (
-                parsed.description if parsed.description else commit.message.split("\n")[0]
-            )
+            description = parsed.description or commit.message.split("\n")[0]
             entries.append(
                 ChangelogEntry(
                     type=category,

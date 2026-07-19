@@ -299,7 +299,7 @@ class GenericExtractor:
                         line=line_no,
                         signature=sig,
                         parameters=parameters,
-                        return_annotation=ret if ret else None,
+                        return_annotation=ret or None,
                         is_async=is_async,
                         docstring=doc,
                     )
@@ -484,7 +484,7 @@ def _extract_python_all(content: str) -> list[str] | None:
         return None
     raw = m.group(1)
     names = re.findall(r"""['"](\w+)['"]""", raw)
-    return names if names else None
+    return names or None
 
 
 def _extract_docstring_after(lines: list[str], def_line_idx: int) -> str | None:
@@ -523,8 +523,8 @@ def _parse_python_params(raw: str) -> list[ParameterInfo]:
     params: list[ParameterInfo] = []
     if not raw.strip():
         return params
-    for part in raw.split(","):
-        part = part.strip()
+    for raw_part in raw.split(","):
+        part = raw_part.strip()
         if not part:
             continue
         # Skip *args, **kwargs markers for now.

@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import re
-from datetime import date
+from datetime import UTC, datetime
 from typing import TYPE_CHECKING, ClassVar
 
 import structlog
@@ -93,7 +93,7 @@ class ADRGenerator:
             adr_dir = project_root / "docs" / "decisions"
 
         number = self._next_number(adr_dir)
-        adr_date = date.today().isoformat()
+        adr_date = datetime.now(UTC).date().isoformat()
 
         record = ADRRecord(
             number=number,

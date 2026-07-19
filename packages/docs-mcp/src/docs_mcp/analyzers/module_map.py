@@ -138,7 +138,7 @@ class ModuleMapAnalyzer:
                     resolved.append(candidate)
                 else:
                     logger.warning("source_dir_not_found", path=sd)
-            return resolved if resolved else [project_root]
+            return resolved or [project_root]
 
         # Auto-detect: prefer src/ layout
         src_dir = project_root / "src"

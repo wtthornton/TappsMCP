@@ -1152,9 +1152,9 @@ class DiagramGenerator:
         # External actors
         for actor_name, actor_desc in actors:
             aid = self._sanitize_id(actor_name)
-            if actor_name in ("Database",):
+            if actor_name == "Database":
                 lines.append(f'    SystemDb({aid}, "{actor_name}", "{actor_desc}")')
-            elif actor_name in ("ExternalAPI",):
+            elif actor_name == "ExternalAPI":
                 lines.append(f'    System_Ext({aid}, "{actor_name}", "{actor_desc}")')
             else:
                 lines.append(f'    Person({aid}, "{actor_name}", "{actor_desc}")')
@@ -1204,9 +1204,9 @@ class DiagramGenerator:
 
         for actor_name, actor_desc in actors:
             aid = self._sanitize_id(actor_name)
-            if actor_name in ("Database",):
+            if actor_name == "Database":
                 lines.append(f'SystemDb({aid}, "{actor_name}", "{actor_desc}")')
-            elif actor_name in ("ExternalAPI",):
+            elif actor_name == "ExternalAPI":
                 lines.append(f'System_Ext({aid}, "{actor_name}", "{actor_desc}")')
             else:
                 lines.append(f'Person({aid}, "{actor_name}", "{actor_desc}")')
@@ -2090,9 +2090,9 @@ class DiagramGenerator:
 
         for actor_name, _actor_desc in actors:
             aid = self._sanitize_id(actor_name)
-            if actor_name in ("Database",):
+            if actor_name == "Database":
                 lines.append(f"{aid}: {actor_name} {{shape: cylinder}}")
-            elif actor_name in ("ExternalAPI",):
+            elif actor_name == "ExternalAPI":
                 lines.append(f"{aid}: {actor_name} {{shape: cloud}}")
             else:
                 lines.append(f"{aid}: {actor_name} {{shape: person}}")
