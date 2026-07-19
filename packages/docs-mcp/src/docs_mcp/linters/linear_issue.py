@@ -289,8 +289,8 @@ def _check_code_block_anchors(ctx: _Context) -> None:
     """Flag fenced code blocks not near a `file.py:LINE` anchor.
 
     Heuristic: for each opening ``` fence, require an anchor within 10 lines
-    before or after. Skips blocks labeled ```markdown (templates) and ```python
-    inside examples where the surrounding context supplies intent.
+    before or after (language labels are not special-cased — the nearby-anchor
+    window is the only signal).
     """
     lines = ctx.description.splitlines()
     fence_line_indices: list[int] = []
