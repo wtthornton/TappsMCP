@@ -388,8 +388,10 @@ def _reinstall_global_clis(
         ("packages/tapps-mcp", "tapps-mcp"),
         ("packages/docs-mcp", "docsmcp"),
     ):
+        # [treesitter] keeps the installed env's tree-sitter grammars in sync
+        # with the dev venv so the call-graph fingerprint (TAP-4537) matches.
         proc = subprocess.run(
-            ["uv", "tool", "install", "-e", "--reinstall", str(checkout / package)],
+            ["uv", "tool", "install", "-e", "--reinstall", f"{checkout / package}[treesitter]"],
             capture_output=True,
             text=True,
             check=False,

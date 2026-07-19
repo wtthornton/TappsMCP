@@ -113,6 +113,37 @@ class TestDeployBlueGreenDryRun:
         assert not bg.CURRENT_LINK.exists()
 
 
+class TestBuildRelease:
+    def test_installs_packages_with_treesitter_extra(
+        self, bg_home: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """TAP-4537: the release env needs the treesitter extra, otherwise its
+        call-graph fingerprint (which folds in the grammar version) never
+        matches the dev venv's and the index reports permanently stale."""
+        checkout = tmp_path / "checkout"
+        checkout.mkdir()
+        commands: list[list[str]] = []
+
+        def _fake_run(cmd: list[str], **_kwargs: object) -> object:
+            commands.append(cmd)
+            if cmd[:2] == ["uv", "venv"]:
+                (bg.RELEASES_DIR / "3.12.35-abc1234").mkdir(parents=True, exist_ok=True)
+            return type("P", (), {"returncode": 0, "stdout": "", "stderr": ""})()
+
+        monkeypatch.setattr(bg, "_run", _fake_run)
+        ref = bg.ReleaseRef("3.12.35", "abc1234", bg.RELEASES_DIR / "3.12.35-abc1234")
+        result = bg.build_release(checkout, ref)
+        assert result["ok"] is True
+
+        install_cmd = next(c for c in commands if c[:3] == ["uv", "pip", "install"])
+        specs = install_cmd[install_cmd.index("--python") + 2 :]
+        assert specs == [
+            str(checkout / "packages" / "tapps-core"),
+            f"{checkout / 'packages' / 'docs-mcp'}[treesitter]",
+            f"{checkout / 'packages' / 'tapps-mcp'}[treesitter]",
+        ]
+
+
 class TestSmokeTestRelease:
     def test_smoke_passes_for_stub_binaries(self, bg_home: Path) -> None:
         release_dir = _make_release(bg_home / "releases", "3.12.35-smoke01")

@@ -152,10 +152,14 @@ def build_release(checkout: Path, release: ReleaseRef, *, force: bool = False) -
         }
 
     python = release.path / "bin" / "python"
+    # Include the treesitter extra so the release env parses TS/Go/Rust with
+    # tree-sitter like the dev venv. Without it the call-graph fingerprint
+    # (which folds in the tree-sitter-typescript version, TAP-4537) never
+    # matches across envs and doctor reports the index as permanently stale.
     pkg_specs = [
         str(checkout / "packages" / "tapps-core"),
-        str(checkout / "packages" / "docs-mcp"),
-        str(checkout / "packages" / "tapps-mcp"),
+        f"{checkout / 'packages' / 'docs-mcp'}[treesitter]",
+        f"{checkout / 'packages' / 'tapps-mcp'}[treesitter]",
     ]
     proc = _run(
         ["uv", "pip", "install", "--python", str(python), *pkg_specs],

@@ -294,3 +294,10 @@ class TestFleetUpgradeHelpers:
         assert run_mock.called
         assert result["strategy"] == "inplace_forced"
         assert result["ok"] is True
+        # TAP-4537: installs must include the treesitter extra so the tool env
+        # computes the same call-graph fingerprint as the dev venv.
+        specs = [call.args[0][-1] for call in run_mock.call_args_list]
+        assert specs == [
+            f"{tmp_path / 'packages' / 'tapps-mcp'}[treesitter]",
+            f"{tmp_path / 'packages' / 'docs-mcp'}[treesitter]",
+        ]
