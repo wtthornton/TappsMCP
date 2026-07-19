@@ -141,96 +141,96 @@ def _render_body(
     acceptance_extra = _render_acceptance_category_lines(cats_set)
     sections: list[str] = []
 
-    sections.append(
-        "<!-- audit-readonly -->\n\n"
-        "## What\n\n"
-        f"Read-only quality audit of the {chunk.size} files listed in `## Where`. "
-        "Score every file, then file any findings as **new** Linear issues "
-        "under this ticket per the protocol in `## Refs`. "
-        "**Do not edit or fix anything in this scope.**"
-    )
-
-    sections.append(f"## Where\n\nAudited at commit `{commit_sha}`:\n\n{where_anchors}")
-
-    sections.append(
-        "## Why\n\n"
-        f"These {chunk.size} files form an import cluster "
-        f"({chunk.intra_edges} internal imports, {chunk.boundary_edges} boundary "
-        "imports out of scope) — they are coupled tightly enough that bugs in "
-        "one often involve the others, so they are reviewed as one session "
-        "rather than in isolation.\n\n"
-        f"Categories in scope for this session: **{cats_display}**."
-    )
-
-    sections.append(
-        "## Acceptance\n\n"
-        "- [ ] `tapps_session_start()` called at session start\n"
-        "- [ ] `tapps_quick_check(file)` run on every file in `## Where`\n"
-        f"{acceptance_extra}"
-        "- [ ] `tapps_impact_analysis` run on any file scoring under 60\n"
-        "- [ ] Findings filed per the protocol in `## Refs` "
-        "(P0/P1 each = one issue with `parent_id` = this ticket; "
-        "P2/P3 = one digest issue per session, parent = this ticket)\n"
-        '- [ ] If zero findings: comment "no findings, session clean" '
-        "on this ticket — do not file empty issues\n"
-        "- [ ] Session note saved via `tapps_session_notes`\n"
-        "- [ ] No source file in `## Where` modified by this session\n"
-        "- [ ] After findings filed, set this ticket to **Done** in Linear "
-        '(`save_issue(id=<this-ticket-id>, state="Done")`) with a summary comment — '
-        "**do NOT leave it In Progress** (causes re-selection and duplicate digests)"
-    )
-
-    sections.append(
-        "## Refs\n\n"
-        "### Tool sequence (exact)\n\n"
-        "1. `tapps_session_start()`\n"
-        "2. For each file in `## Where`:\n"
-        f"{tool_per_file}"
-        "3. `tapps_impact_analysis(file)` for any file with `overall_score < 60`\n"
-        "4. Compile findings per the schema below\n\n"
-        "### Finding output schema (per issue body)\n\n"
-        "```json\n"
-        "{\n"
-        '  "severity": "P0|P1|P2|P3",\n'
-        '  "category": "security|correctness|performance|style|docs|deadcode",\n'
-        '  "files": ["path/file.py:LINE-RANGE", ...],\n'
-        '  "evidence": "one-line description with tool-output reference",\n'
-        '  "recommendation": "one-line fix direction (informational only — '
-        'DO NOT apply)"\n'
-        "}\n"
-        "```\n\n"
-        "### Finding-filing protocol\n\n"
-        "1. **P0** (security holes, broken correctness): one Linear issue per "
-        "finding via the `linear-issue` skill, `parent_id` = this ticket, "
-        "priority = Urgent (1)\n"
-        "2. **P1** (likely correctness, missing types in hot paths): same as "
-        "P0, priority = High (2)\n"
-        "3. **P2** (style, minor refactor, low-impact dead code): bundle all "
-        "P2 findings in ONE digest issue per session, parent = this ticket, "
-        f"priority = Normal (3), title `audit-digest session #{chunk.session_index}: "
-        "K P2 findings`\n"
-        "4. **P3** (informational, suggestions): bundle in the same digest "
-        "issue as P2\n"
-        "5. **Zero findings**: comment on this ticket — do not file any "
-        "issues\n\n"
-        "### Constraints\n\n"
-        "- **Do not** edit any file in `## Where`\n"
-        "- **Do not** run formatters, `ruff --fix`, or any auto-fixer\n"
-        "- After findings are filed, set this ticket to **Done** in Linear "
-        '(`save_issue(id=<this-ticket-id>, state="Done")`) with a summary '
-        "comment. **Do NOT leave it In Progress** — that causes agents to "
-        "re-select and re-run the session on the next campaign loop, filing "
-        "duplicate digest issues. The `audit-readonly` label on this ticket "
-        "signals the contract to compatible runners.\n"
-        "- If understanding a finding requires reading files outside "
-        "`## Where`, note that in the digest body and stop — escalate rather "
-        "than scope-creep\n\n"
-        "### Campaign context\n\n"
-        f"- Parent epic: {epic_ref}\n"
-        f"- Campaign id: `{campaign_id}`\n"
-        f"- Cohesion rationale: {chunk.rationale}\n"
-        "- Coverage manifest: brain memory keys `audit.coverage.<file>` "
-        "(via `coverage_key(rel_path)` — slug-safe encoding)"
+    sections.extend(
+        (
+            (
+                "<!-- audit-readonly -->\n\n"
+                "## What\n\n"
+                f"Read-only quality audit of the {chunk.size} files listed in `## Where`. "
+                "Score every file, then file any findings as **new** Linear issues "
+                "under this ticket per the protocol in `## Refs`. "
+                "**Do not edit or fix anything in this scope.**"
+            ),
+            f"## Where\n\nAudited at commit `{commit_sha}`:\n\n{where_anchors}",
+            (
+                "## Why\n\n"
+                f"These {chunk.size} files form an import cluster "
+                f"({chunk.intra_edges} internal imports, {chunk.boundary_edges} boundary "
+                "imports out of scope) — they are coupled tightly enough that bugs in "
+                "one often involve the others, so they are reviewed as one session "
+                "rather than in isolation.\n\n"
+                f"Categories in scope for this session: **{cats_display}**."
+            ),
+            (
+                "## Acceptance\n\n"
+                "- [ ] `tapps_session_start()` called at session start\n"
+                "- [ ] `tapps_quick_check(file)` run on every file in `## Where`\n"
+                f"{acceptance_extra}"
+                "- [ ] `tapps_impact_analysis` run on any file scoring under 60\n"
+                "- [ ] Findings filed per the protocol in `## Refs` "
+                "(P0/P1 each = one issue with `parent_id` = this ticket; "
+                "P2/P3 = one digest issue per session, parent = this ticket)\n"
+                '- [ ] If zero findings: comment "no findings, session clean" '
+                "on this ticket — do not file empty issues\n"
+                "- [ ] Session note saved via `tapps_session_notes`\n"
+                "- [ ] No source file in `## Where` modified by this session\n"
+                "- [ ] After findings filed, set this ticket to **Done** in Linear "
+                '(`save_issue(id=<this-ticket-id>, state="Done")`) with a summary comment — '
+                "**do NOT leave it In Progress** (causes re-selection and duplicate digests)"
+            ),
+            (
+                "## Refs\n\n"
+                "### Tool sequence (exact)\n\n"
+                "1. `tapps_session_start()`\n"
+                "2. For each file in `## Where`:\n"
+                f"{tool_per_file}"
+                "3. `tapps_impact_analysis(file)` for any file with `overall_score < 60`\n"
+                "4. Compile findings per the schema below\n\n"
+                "### Finding output schema (per issue body)\n\n"
+                "```json\n"
+                "{\n"
+                '  "severity": "P0|P1|P2|P3",\n'
+                '  "category": "security|correctness|performance|style|docs|deadcode",\n'
+                '  "files": ["path/file.py:LINE-RANGE", ...],\n'
+                '  "evidence": "one-line description with tool-output reference",\n'
+                '  "recommendation": "one-line fix direction (informational only — '
+                'DO NOT apply)"\n'
+                "}\n"
+                "```\n\n"
+                "### Finding-filing protocol\n\n"
+                "1. **P0** (security holes, broken correctness): one Linear issue per "
+                "finding via the `linear-issue` skill, `parent_id` = this ticket, "
+                "priority = Urgent (1)\n"
+                "2. **P1** (likely correctness, missing types in hot paths): same as "
+                "P0, priority = High (2)\n"
+                "3. **P2** (style, minor refactor, low-impact dead code): bundle all "
+                "P2 findings in ONE digest issue per session, parent = this ticket, "
+                f"priority = Normal (3), title `audit-digest session #{chunk.session_index}: "
+                "K P2 findings`\n"
+                "4. **P3** (informational, suggestions): bundle in the same digest "
+                "issue as P2\n"
+                "5. **Zero findings**: comment on this ticket — do not file any "
+                "issues\n\n"
+                "### Constraints\n\n"
+                "- **Do not** edit any file in `## Where`\n"
+                "- **Do not** run formatters, `ruff --fix`, or any auto-fixer\n"
+                "- After findings are filed, set this ticket to **Done** in Linear "
+                '(`save_issue(id=<this-ticket-id>, state="Done")`) with a summary '
+                "comment. **Do NOT leave it In Progress** — that causes agents to "
+                "re-select and re-run the session on the next campaign loop, filing "
+                "duplicate digest issues. The `audit-readonly` label on this ticket "
+                "signals the contract to compatible runners.\n"
+                "- If understanding a finding requires reading files outside "
+                "`## Where`, note that in the digest body and stop — escalate rather "
+                "than scope-creep\n\n"
+                "### Campaign context\n\n"
+                f"- Parent epic: {epic_ref}\n"
+                f"- Campaign id: `{campaign_id}`\n"
+                f"- Cohesion rationale: {chunk.rationale}\n"
+                "- Coverage manifest: brain memory keys `audit.coverage.<file>` "
+                "(via `coverage_key(rel_path)` — slug-safe encoding)"
+            ),
+        )
     )
 
     return "\n\n".join(sections) + "\n"

@@ -329,19 +329,27 @@ def _validate_next_steps(data: dict[str, Any]) -> list[str]:
     steps: list[str] = []
     if data["missing"]:
         items = ", ".join(data["missing"][:2])
-        steps.append(f"Add before creating: {items}.")
-        steps.append(
-            f"Until resolved, the issue belongs in `{data['suggested_status']}` status. "
-            "For deeper cleanup, call docs_lint_linear_issue."
+        steps.extend(
+            (
+                f"Add before creating: {items}.",
+                (
+                    f"Until resolved, the issue belongs in `{data['suggested_status']}` status. "
+                    "For deeper cleanup, call docs_lint_linear_issue."
+                ),
+            )
         )
     else:
-        steps.append(
-            f"Issue is spec-ready (score {data['score']}). "
-            "Call docs_save_linear_issue(title, description), then save_issue."
-        )
-        steps.append(
-            f"Create in `{data['suggested_status']}` status "
-            f"(label `{data['suggested_label']}` when applicable)."
+        steps.extend(
+            (
+                (
+                    f"Issue is spec-ready (score {data['score']}). "
+                    "Call docs_save_linear_issue(title, description), then save_issue."
+                ),
+                (
+                    f"Create in `{data['suggested_status']}` status "
+                    f"(label `{data['suggested_label']}` when applicable)."
+                ),
+            )
         )
     return steps[:2]
 

@@ -76,7 +76,7 @@ def _alias_keys(
     ``snapshot_get(state="open")`` or vice-versa.
     """
     state_lc = state.lower() if state else ""
-    if state_lc not in _OPEN_BUCKET_STATES and state_lc not in ("open", ""):
+    if state_lc not in _OPEN_BUCKET_STATES and state_lc not in {"open", ""}:
         return []
 
     from tapps_mcp.server_linear_tools import _resolve_cache_key

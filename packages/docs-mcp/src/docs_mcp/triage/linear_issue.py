@@ -161,7 +161,7 @@ def _triage_one(raw: dict[str, Any]) -> IssueTriageResult:
     priority = raw.get("priority")
     estimate = raw.get("estimate")
     parent_id = str(raw.get("parent_id", ""))
-    is_epic = bool(raw.get("is_epic", False))
+    is_epic = bool(raw.get("is_epic"))
 
     report = validate_issue(
         title=title,
@@ -216,8 +216,12 @@ def _extract_file_paths(description: str) -> list[str]:
 
 def _normalize_path(path: str) -> str:
     """Normalize a captured file path: strip leading ./, collapse backslashes."""
-    stripped = path.replace("\\", "/").lstrip("./")
-    return stripped.strip()
+    stripped = path.replace("\\", "/").strip()
+    # NOT lstrip("./") — that is a char-set strip and would mangle dotfile
+    # paths like ".github/workflows/ci.yaml" into "github/workflows/ci.yaml".
+    while stripped.startswith("./"):
+        stripped = stripped[2:]
+    return stripped
 
 
 def _is_noise_path(path: str) -> bool:

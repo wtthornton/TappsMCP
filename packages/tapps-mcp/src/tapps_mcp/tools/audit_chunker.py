@@ -9,6 +9,7 @@ the dependency graph; no MCP wiring, Linear writes, or brain memory.
 from __future__ import annotations
 
 import ast
+import operator
 from collections import defaultdict
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -242,7 +243,7 @@ def _pack_stash(stash: list[list[str]], max_size: int) -> list[list[str]]:
     if not stash:
         return []
     items = [(_bin_key(comp), comp) for comp in stash]
-    items.sort(key=lambda x: (x[0], x[1]))
+    items.sort(key=operator.itemgetter(0, 1))
 
     out: list[list[str]] = []
     current: list[str] = []

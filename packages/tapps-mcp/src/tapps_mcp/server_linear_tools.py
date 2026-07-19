@@ -44,6 +44,8 @@ from tapps_mcp.server_helpers import error_response, success_response
 if TYPE_CHECKING:
     from mcp.server.fastmcp import FastMCP
 
+import operator
+
 from mcp.types import ToolAnnotations
 
 logger = structlog.get_logger(__name__)
@@ -156,7 +158,7 @@ def _canonical_state(state: str | None) -> str:
     from each other.
     """
     state_lc = (state or "").strip().lower()
-    if state_lc in ("", _CANONICAL_OPEN_STATE) or state_lc in _OPEN_STATE_BUCKETS:
+    if state_lc in {"", _CANONICAL_OPEN_STATE} or state_lc in _OPEN_STATE_BUCKETS:
         return _CANONICAL_OPEN_STATE
     return state_lc
 
@@ -170,7 +172,7 @@ def _filter_hash(**kwargs: Any) -> str:
     serve a ``limit=50`` read from the same key. Callers pass only the fields
     that define the *slice identity* (``state``, ``label``).
     """
-    normalized = {k: v for k, v in sorted(kwargs.items()) if v not in (None, "")}
+    normalized = {k: v for k, v in sorted(kwargs.items()) if v not in {None, ""}}
     payload = json.dumps(normalized, sort_keys=True, default=str).encode("utf-8")
     return hashlib.sha256(payload).hexdigest()[:16]
 
@@ -307,7 +309,7 @@ def _prune_linear_snapshot_cache(
         survivors.append((entry, mtime))
 
     if len(survivors) > _CACHE_MAX_FILES:
-        survivors.sort(key=lambda item: item[1])
+        survivors.sort(key=operator.itemgetter(1))
         for entry, _ in survivors[: len(survivors) - _CACHE_MAX_FILES]:
             try:
                 entry.unlink()
@@ -320,10 +322,10 @@ def _prune_linear_snapshot_cache(
     return removed
 
 
-def _cache_invalidate_prefix(cache_dir: Path, prefix: str) -> int:
-    """Remove cache files whose stems start with *prefix*. Return count removed."""
+def _cache_invalidate_glob(cache_dir: Path, pattern: str) -> int:
+    """Remove cache files whose stems match glob *pattern*. Return count removed."""
     count = 0
-    for entry in cache_dir.glob(f"{prefix}*.json"):
+    for entry in cache_dir.glob(f"{pattern}.json"):
         try:
             entry.unlink()
             count += 1
@@ -373,7 +375,8 @@ async def tapps_linear_snapshot_get(
         state: Optional Linear state type (``"backlog"``, ``"unstarted"``,
             ``"started"``, ``"completed"``, ``"canceled"``). Empty = any.
         label: Optional label name to filter by. Empty = any.
-        limit: Max issues the caller requested (part of the cache key).
+        limit: Max issues the caller requested. Not part of the cache key
+            (TAP-4588); enforced at read time via the superset fallback.
         projection: ``"compact"`` returns only triage-relevant fields
             ``{id, identifier, title, state, priority, estimate, assignee,
             parent}``, dropping description, comments, attachments, and
@@ -638,20 +641,24 @@ async def tapps_linear_snapshot_invalidate(
     cache_dir = _cache_dir(settings.project_root)
 
     if team and project:
-        prefix = f"{team.replace('/', '_')}__{project.replace('/', '_')}__"
+        pattern = f"{team.replace('/', '_')}__{project.replace('/', '_')}__*"
     elif team:
-        prefix = f"{team.replace('/', '_')}__"
+        pattern = f"{team.replace('/', '_')}__*"
+    elif project:
+        # Project-only: match the project segment across all teams instead of
+        # silently wiping every cached snapshot (cache keys are team__project__…).
+        pattern = f"*__{project.replace('/', '_')}__*"
     else:
-        prefix = ""
+        pattern = "*"
 
-    removed = _cache_invalidate_prefix(cache_dir, prefix)
+    removed = _cache_invalidate_glob(cache_dir, pattern)
     elapsed_ms = (time.perf_counter_ns() - start_ns) // 1_000_000
     return success_response(
         "tapps_linear_snapshot_invalidate",
         elapsed_ms,
         {
             "removed": removed,
-            "prefix": prefix,
+            "prefix": pattern,
             "team": team or None,
             "project": project or None,
         },
@@ -826,7 +833,7 @@ async def tapps_linear_list_issues(
         project: Linear project name — same as above.
         state: Linear state filter (e.g. ``"backlog"``, ``"open"``).
         label: Optional label filter.
-        limit: Max results requested — part of the cache key.
+        limit: Max results requested. Not part of the cache key (TAP-4588).
     """
     _record_call("tapps_linear_list_issues")
     start_ns = time.perf_counter_ns()
