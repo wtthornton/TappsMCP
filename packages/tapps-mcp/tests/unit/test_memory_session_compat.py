@@ -29,7 +29,7 @@ class TestPromoteNoteToMemory:
         mock_bridge = MagicMock()
         mock_bridge.save = AsyncMock(return_value={"key": "my-note", "value": "important info"})
 
-        with patch("tapps_mcp.server_helpers._get_brain_bridge", return_value=mock_bridge):
+        with patch("tapps_mcp.server_analysis_tools._get_brain_bridge", return_value=mock_bridge):
             result = await _promote_note_to_memory(note, "pattern")
 
         assert result["action"] == "promote"
@@ -57,7 +57,7 @@ class TestPromoteNoteToMemory:
         )
 
         with patch(
-            "tapps_mcp.server_helpers._get_brain_bridge",
+            "tapps_mcp.server_analysis_tools._get_brain_bridge",
             side_effect=RuntimeError("bridge unavailable"),
         ):
             result = await _promote_note_to_memory(note)
@@ -76,7 +76,7 @@ class TestPromoteNoteToMemory:
         mock_bridge = MagicMock()
         mock_bridge.save = AsyncMock(return_value={})
 
-        with patch("tapps_mcp.server_helpers._get_brain_bridge", return_value=mock_bridge):
+        with patch("tapps_mcp.server_analysis_tools._get_brain_bridge", return_value=mock_bridge):
             await _promote_note_to_memory(note)
 
         call_kwargs = mock_bridge.save.await_args.kwargs
@@ -89,7 +89,7 @@ class TestPromoteNoteToMemory:
         from tapps_mcp.server import _promote_note_to_memory
 
         note = SessionNote(key="my-note", value="test")
-        with patch("tapps_mcp.server_helpers._get_brain_bridge", return_value=None):
+        with patch("tapps_mcp.server_analysis_tools._get_brain_bridge", return_value=None):
             result = await _promote_note_to_memory(note)
 
         assert result["promoted"] is False
