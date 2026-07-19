@@ -244,7 +244,7 @@ async def run_pip_audit_async(
         )
 
     args, resolved_source = _build_pip_audit_args(source, project_root, ignore_ids)
-    cwd = project_root if project_root else None
+    cwd = project_root or None
 
     logger.info(
         "running_pip_audit",

@@ -1565,7 +1565,7 @@ def _count_session_start_gate_violations_24h(project_root: Path) -> int:
                 if not isinstance(ts_raw, str):
                     continue
                 try:
-                    ts = datetime.fromisoformat(ts_raw.replace("Z", "+00:00"))
+                    ts = datetime.fromisoformat(ts_raw)
                 except ValueError:
                     continue
                 if ts >= cutoff:
@@ -1615,7 +1615,7 @@ def _categorize_cache_gate_violations_24h(project_root: Path) -> dict[str, int]:
                 if not isinstance(ts_raw, str):
                     continue
                 try:
-                    ts = datetime.fromisoformat(ts_raw.replace("Z", "+00:00"))
+                    ts = datetime.fromisoformat(ts_raw)
                 except ValueError:
                     continue
                 if ts < cutoff:
@@ -3001,11 +3001,11 @@ def _fetch_exposed_tools_rest(
             follow_redirects=True,
         )
     except Exception:
-        raise _ProfileProbeFallbackError() from None
+        raise _ProfileProbeFallbackError from None
     if response.status_code == 304 and cached is not None:
         return set(cached[1]), "rest-cached"
     if response.status_code == 404:
-        raise _ProfileProbeFallbackError()
+        raise _ProfileProbeFallbackError
     if response.status_code != 200:
         raise _ProfileProbeError(
             f"/v1/tools/list returned {response.status_code}",
@@ -3738,7 +3738,7 @@ def _detect_server_tool_count(server_name: str, server_cfg: dict[str, object]) -
                 mode = args[idx + 1]
         return _TAPPS_MCP_MODE_TOOL_COUNTS.get(mode, _TAPPS_MCP_MODE_TOOL_COUNTS["full"])
     # uvx tapps-mcp serve (no explicit "run")
-    if command in ("uvx",) and "tapps-mcp" in args:
+    if command == "uvx" and "tapps-mcp" in args:
         return _TAPPS_MCP_MODE_TOOL_COUNTS["full"]
     # docs-mcp family: "docsmcp" in args or command
     if "docsmcp" in args or "docsmcp" in command:

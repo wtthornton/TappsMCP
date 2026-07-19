@@ -1045,7 +1045,9 @@ def _handle_save(store: MemoryStore, p: _Params) -> dict[str, Any]:
             pass  # Safety module not available; proceed without check
 
     supersede_old_key: str | None = None
-    group_kwargs = {"memory_group": p.memory_group} if p.memory_group else {}
+    # Typed as Any-valued: unpacked into MemoryStore.save(), whose memory_group
+    # parameter uses the MEMORY_GROUP_UNSET sentinel when the key is omitted.
+    group_kwargs: dict[str, Any] = {"memory_group": p.memory_group} if p.memory_group else {}
     use_supersede = (
         settings.memory.enabled
         and settings.memory.auto_supersede_architectural
@@ -1417,7 +1419,7 @@ def _handle_reinforce(store: MemoryStore, p: _Params) -> dict[str, Any]:
             from tapps_brain.promotion import PromotionEngine
 
             engine = PromotionEngine(config)
-            target_entry = updated_entry if updated_entry else entry
+            target_entry = updated_entry or entry
             promoted_to = engine.check_promotion(target_entry, profile)
             if promoted_to:
                 store.update_fields(p.key, tier=promoted_to)
@@ -3071,7 +3073,7 @@ async def _handle_hive_search(store: MemoryStore, p: _Params) -> dict[str, Any]:
         }
 
     limit = p.limit if p.limit > 0 else _HIVE_SEARCH_DEFAULT_LIMIT
-    namespaces = p.tag_list if p.tag_list else None
+    namespaces = p.tag_list or None
 
     try:
         raw = await bridge.hive_search(
@@ -4039,7 +4041,7 @@ async def brain_propose_hive_elevation(
 
     # Best-effort: fire a brain KG event for telemetry.
     bridge = _get_brain_bridge()
-    if bridge is not None:
+    if bridge is not None and hasattr(bridge, "record_kg_event"):
         try:
             await bridge.record_kg_event(
                 event_type="hive_elevation_proposed",
@@ -4121,7 +4123,7 @@ async def brain_approve_hive_elevation(
 
     # Best-effort: fire a brain KG event for the approval.
     bridge = _get_brain_bridge()
-    if bridge is not None:
+    if bridge is not None and hasattr(bridge, "record_kg_event"):
         try:
             await bridge.record_kg_event(
                 event_type="hive_elevation_approved",

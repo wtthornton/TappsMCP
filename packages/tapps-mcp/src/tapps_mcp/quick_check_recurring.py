@@ -88,6 +88,10 @@ def _persist_recurring_procedural(
         from tapps_mcp.server_helpers import _get_memory_store
 
         store = _get_memory_store()
+        if store is None:
+            # HTTP-bridge mode has no in-process store; skip the recurring
+            # memory capture rather than crashing the quick_check response.
+            return None, "store_unavailable_http_mode"
         existing = store.get(key)
         if existing is not None:
             store.reinforce(key, confidence_boost=0.1)
@@ -104,7 +108,6 @@ def _persist_recurring_procedural(
         )
         if isinstance(save_res, dict) and save_res.get("error"):
             return None, str(save_res.get("message", "save_rejected"))[:200]
-        return "saved", None
     except Exception as exc:
         import structlog
 
@@ -112,6 +115,7 @@ def _persist_recurring_procedural(
             "recurring_quick_check_memory_failed", key=key, error=str(exc)[:200], exc_info=True
         )
         return None, str(exc)[:200]
+    return "saved", None
 
 
 def _clear_path_entries(path_fp: str) -> None:

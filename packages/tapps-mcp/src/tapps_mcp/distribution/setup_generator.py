@@ -404,8 +404,7 @@ def _parse_cursor_wrapper_launch(wrapper_path: Path) -> tuple[str, list[str]] | 
             continue
         launch_part = stripped[5:]
         suffix = ' "$@"'
-        if launch_part.endswith(suffix):
-            launch_part = launch_part[: -len(suffix)]
+        launch_part = launch_part.removesuffix(suffix)
         if "_blue_green" in launch_part:
             continue
         parts = shlex.split(launch_part)
@@ -1938,7 +1937,7 @@ def _filter_hosts_for_check(
     exists yet, fall back to checking every detected host.
     """
     configured = [h for h in hosts if _host_config_exists(h, project_root, scope=scope)]
-    return configured if configured else hosts
+    return configured or hosts
 
 
 def _ensure_project_yaml_defaults(project_root: Path) -> None:

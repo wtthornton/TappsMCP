@@ -615,7 +615,7 @@ def count_session_start_gate_violations(
                 if not isinstance(ts_raw, str):
                     continue
                 try:
-                    ts = datetime.fromisoformat(ts_raw.replace("Z", "+00:00"))
+                    ts = datetime.fromisoformat(ts_raw)
                 except ValueError:
                     continue
                 if ts >= cutoff:
