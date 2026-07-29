@@ -244,7 +244,7 @@ class TestDocsWorkflowOverviewPrompt:
 
         result = _docs_workflow_overview()
         assert "Tool Reference" in result
-        assert "18 tools" in result
+        assert "42 tools" in result
 
     def test_overview_mentions_config_tool(self) -> None:
         from docs_mcp.server_resources import _docs_workflow_overview

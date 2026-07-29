@@ -98,6 +98,19 @@ NLT_BUNDLES: Final[dict[NltBundle, tuple[str, ...]]] = {
 # ``.tapps-mcp.yaml`` or ``--bundle``.
 DEFAULT_NLT_BUNDLE: Final[NltBundle] = "full"
 
+# All named bundles for CLI Choice lists (init/upgrade/mcp-bundle set).
+NLT_BUNDLE_CHOICES: Final[tuple[str, ...]] = (
+    "developer",
+    "minimal",
+    "memory",
+    "planning",
+    "docs",
+    "release",
+    "security",
+    "audit",
+    "full",
+)
+
 # Eager / total tool counts per spec (Epic 109.5 / ADR-0016 doctor thresholds).
 NLT_SERVER_EAGER_COUNTS: Final[dict[str, int]] = {
     "nlt-build": 9,

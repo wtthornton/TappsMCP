@@ -2509,6 +2509,19 @@ def _format_upgrade_result(result: dict[str, Any], *, dry_run: bool = False) -> 
     click.echo(click.style(f"{prefix}=== TappsMCP Upgrade (v{version}) ===", bold=True))
     click.echo("")
 
+    mcp_bundle = result.get("mcp_bundle")
+    mcp_bundle_note = result.get("mcp_bundle_note")
+    if mcp_bundle is not None or mcp_bundle_note:
+        click.echo(click.style("--- MCP bundle ---", bold=True))
+        if mcp_bundle is not None:
+            click.echo(f"  mcp_bundle: {mcp_bundle}")
+        if mcp_bundle_note:
+            click.echo(f"  note: {mcp_bundle_note}")
+        click.echo(
+            "  opt-down: tapps-mcp mcp-bundle set developer|minimal|… then reload MCP"
+        )
+        click.echo("")
+
     # AGENTS.md
     click.echo(click.style("--- AGENTS.md ---", bold=True))
     agents = result.get("components", {}).get("agents_md", {})

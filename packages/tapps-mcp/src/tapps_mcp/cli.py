@@ -527,9 +527,24 @@ def serve(
 @click.option(
     "--bundle",
     "mcp_bundle",
-    type=click.Choice(["developer", "minimal", "planning", "docs", "release", "full"]),
+    type=click.Choice(
+        [
+            "developer",
+            "minimal",
+            "memory",
+            "planning",
+            "docs",
+            "release",
+            "security",
+            "audit",
+            "full",
+        ]
+    ),
     default="full",
-    help="NLT MCP plugin bundle to enable (default: full = all six nlt-* servers; ADR-0018).",
+    help=(
+        "NLT MCP plugin bundle to enable (default: full = all six nlt-* servers; "
+        "ADR-0018). Later opt-down: tapps-mcp mcp-bundle set <bundle>."
+    ),
 )
 @click.option(
     "--legacy-monolith/--no-legacy-monolith",
@@ -1127,10 +1142,25 @@ def deploy_local_cmd(
 @click.option(
     "--bundle",
     "mcp_bundle",
-    type=click.Choice(["developer", "minimal", "planning", "docs", "release", "full"]),
+    type=click.Choice(
+        [
+            "developer",
+            "minimal",
+            "memory",
+            "planning",
+            "docs",
+            "release",
+            "security",
+            "audit",
+            "full",
+        ]
+    ),
     default="full",
     show_default=True,
-    help="NLT MCP bundle to write per project (full = all six nlt-* servers; developer = build+memory+linear).",
+    help=(
+        "NLT MCP bundle to write per project (default full = all six; "
+        "later opt-down: tapps-mcp mcp-bundle set <bundle>)."
+    ),
 )
 @click.option(
     "--uv-mode",

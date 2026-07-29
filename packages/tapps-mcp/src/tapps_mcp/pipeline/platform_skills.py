@@ -514,16 +514,17 @@ argument-hint: "[project-root]"
 
 Bootstrap TappsMCP in a new or existing project:
 
-1. Call `mcp__nlt-setup__tapps_init` to run the full bootstrap pipeline (`mcp_config` defaults true)
+1. Call `mcp__nlt-setup__tapps_init` to run the full bootstrap pipeline (`mcp_config` defaults true; **ADR-0018 default bundle is `full`** — all six `nlt-*` servers)
 2. Check the response for `content_return: true` — if present, the server could not
    write files directly (Docker / read-only mount).  Apply the files from
    `file_manifest.files[]` using the Write tool.  See `/tapps-apply-files` for details.
 3. If files were written directly, review the created files (AGENTS.md, TECH_STACK.md, platform rules, hooks, MCP config)
-4. Confirm MCP config lists tapps-mcp only (no direct tapps-brain entry — bridge-only)
+4. Confirm MCP config lists NLT `nlt-*` servers only (no direct tapps-brain entry — bridge-only)
 5. If any issues are reported, call `mcp__nlt-setup__tapps_doctor` to diagnose
 6. Verify that `.claude/settings.json` has MCP tool auto-approval rules
 7. For shared-brain HTTP wiring, see docs/operations/CONSUMER-REPO-BRAIN-WIRING.md
 8. Confirm the project is ready for the TappsMCP quality workflow
+9. **Token-tight opt-down (optional):** `tapps-mcp mcp-bundle set developer` (or `minimal`), then reload MCP. Cursor catalogs **listed** tools; eager counts are Claude Tool Search only.
 
 **If `tapps_init` is not available** (server not in available MCP servers), use the CLI:
 1. Run from the project root: `tapps-mcp upgrade --force --host auto`
@@ -562,10 +563,12 @@ Upgrade tapps-mcp / docs-mcp end-to-end. The user's request to upgrade is standi
 1. **Reinstall global CLIs.** Run both `uv tool install --reinstall ...` commands. Verify: `uv tool list | grep -E '(tapps-mcp|docs-mcp)'` — both must show the same version.
 2. **Restart MCP servers.** The running processes still hold old code. Tell the user to exit/reopen (or `/mcp` reconnect), then re-invoke this skill. Stop here on the first invocation.
 3. **Verify new version is live.** Call `mcp__nlt-build__tapps_session_start(force=true)`. Confirm `server.version` matches target and `diagnostics.install_drift.drift_detected == false`. If drift persists, the server wasn't restarted — go back to step 2.
-4. **Dry-run the scaffolding refresh.** Run `tapps-mcp upgrade --dry-run`. Review the diff for AGENTS.md, CLAUDE.md, .claude/hooks/, .claude/rules/, .claude/agents/, .claude/skills/, .mcp.json. The smart-merge preserves customizations in non-canonical sections; canonical sections are replaced wholesale. Pause if a customized canonical section will be overwritten.
+4. **Dry-run the scaffolding refresh.** Run `tapps-mcp upgrade --dry-run`. Review the diff for AGENTS.md, CLAUDE.md, .claude/hooks/, .claude/rules/, .claude/agents/, .claude/skills/, .mcp.json. Note `mcp_bundle` / `mcp_bundle_note` in the result — custom trimmed Cursor sets are preserved; explicit yaml wins. The smart-merge preserves customizations in non-canonical sections; canonical sections are replaced wholesale. Pause if a customized canonical section will be overwritten.
 5. **Apply the upgrade.** Run `tapps-mcp upgrade` (writes timestamped backup to `.tapps-mcp/backups/<ts>/`).
-6. **Verify.** Run `tapps-mcp doctor` AND `mcp__nlt-build__tapps_checklist(task_type="upgrade")`. Surface any problems — do not declare done on a failure.
-7. **Report.** One-line summary: `Upgraded: tapps-mcp X.Y.Z, docs-mcp X.Y.Z. Scaffolding: N files. Doctor: OK. Checklist: complete. Backup: .tapps-mcp/backups/<ts>/`.
+6. **Verify.** Run `tapps-mcp doctor` AND `mcp__nlt-build__tapps_checklist(task_type="upgrade")`. Surface any problems — do not declare done on a failure. Doctor NLT row shows eager (Claude) vs listed (Cursor).
+7. **Report.** One-line summary: `Upgraded: tapps-mcp X.Y.Z, docs-mcp X.Y.Z. Scaffolding: N files. Bundle: <mcp_bundle>. Doctor: OK. Checklist: complete. Backup: .tapps-mcp/backups/<ts>/`.
+
+**Bundle opt-down after upgrade:** `tapps-mcp mcp-bundle set developer|minimal|…` then reload MCP (do not hand-edit mcp.json and expect upgrade to keep a yaml=`full` mismatch).
 
 **Rollback (only if step 5/6 broke something):** `tapps-mcp rollback` restores from the most recent backup. Do NOT roll back "to be safe" after a clean run.
 
@@ -1446,16 +1449,17 @@ mcp_tools:
 
 Bootstrap TappsMCP in a new or existing project:
 
-1. Call `tapps_init` to run the full bootstrap pipeline (`mcp_config` defaults true)
+1. Call `tapps_init` to run the full bootstrap pipeline (`mcp_config` defaults true; **ADR-0018 default bundle is `full`**)
 2. Check the response for `content_return: true` — if present, the server could not
    write files directly (Docker / read-only mount).  Apply the files from
    `file_manifest.files[]` using the Write tool.  See `/tapps-apply-files` for details.
 3. If files were written directly, review the created files (AGENTS.md, TECH_STACK.md, platform rules, hooks, MCP config)
-4. Confirm MCP config lists tapps-mcp only (no direct tapps-brain entry — bridge-only)
+4. Confirm MCP config lists NLT `nlt-*` servers only (no direct tapps-brain entry — bridge-only)
 5. If any issues are reported, call `tapps_doctor` to diagnose
 6. Verify that MCP config has tool auto-approval rules
 7. For shared-brain HTTP wiring, see docs/operations/CONSUMER-REPO-BRAIN-WIRING.md
 8. Confirm the project is ready for the TappsMCP quality workflow
+9. **Token-tight opt-down (optional):** `tapps-mcp mcp-bundle set developer` (or `minimal`), then reload MCP.
 
 **If `tapps_init` is not available** (server not in available MCP servers), use the CLI:
 1. Run from the project root: `tapps-mcp upgrade --force --host auto`
@@ -1491,10 +1495,12 @@ If unspecified, ask once.
 1. Reinstall both CLIs. Verify with `uv tool list | grep -E '(tapps-mcp|docs-mcp)'`.
 2. Restart MCP servers (exit + reopen Cursor, or reconnect). Stop on first invocation; resume after restart.
 3. `tapps_session_start(force=true)`. Confirm `server.version` matches and `install_drift.drift_detected == false`.
-4. `tapps-mcp upgrade --dry-run`. Review diff for AGENTS.md, hooks, rules, skills, .mcp.json. Pause if a customized canonical section will be overwritten.
+4. `tapps-mcp upgrade --dry-run`. Review diff + `mcp_bundle` / `mcp_bundle_note` (custom trimmed sets preserved). Pause if a customized canonical section will be overwritten.
 5. `tapps-mcp upgrade` (writes timestamped backup to `.tapps-mcp/backups/<ts>/`).
-6. `tapps-mcp doctor` AND `tapps_checklist(task_type="upgrade")`. Stop on failure.
-7. One-line summary: versions, files refreshed, doctor + checklist status, backup path.
+6. `tapps-mcp doctor` AND `tapps_checklist(task_type="upgrade")`. Stop on failure. Doctor shows eager (Claude) vs listed (Cursor).
+7. One-line summary: versions, files refreshed, bundle, doctor + checklist status, backup path.
+
+**Bundle opt-down:** `tapps-mcp mcp-bundle set developer|minimal|…` then reload MCP.
 
 **Rollback:** `tapps-mcp rollback` (only if step 5/6 reveals a regression).
 

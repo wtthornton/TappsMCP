@@ -45,7 +45,7 @@ $HOME/NewCompanyIdeas
 | `full` (default) | All 6 | Default deployment ([ADR-0018](../adr/0018-deploy-all-six-nlt-mcp-servers-by-default.md)); doctor NLT **PASS** when `mcp_bundle=full` is resolved |
 | `developer` | 3 — build, memory, linear-issues | Opt-down for token-tight sessions; doctor NLT **PASS** |
 
-The default deployment enables all six servers ([ADR-0018](../adr/0018-deploy-all-six-nlt-mcp-servers-by-default.md)). Set `mcp_bundle: developer` (or `minimal`) in `.tapps-mcp.yaml`, or run `TAPPS_FLEET_BUNDLE=developer ./scripts/fleet-upgrade.sh`, to opt a repo or the maintainer fleet down to a smaller surface.
+The default deployment enables all six servers ([ADR-0018](../adr/0018-deploy-all-six-nlt-mcp-servers-by-default.md)). Opt a single repo down with `tapps-mcp mcp-bundle set developer` (writes yaml + host MCP configs; then reload MCP), set `mcp_bundle: developer` in `.tapps-mcp.yaml`, or run `TAPPS_FLEET_BUNDLE=developer ./scripts/fleet-upgrade.sh` for the whole fleet.
 
 Custom non-NLT entries (e.g. NewCompanyIdeas `agentforge`) are **preserved** during `init` / fleet upgrade.
 
@@ -102,7 +102,7 @@ Two install stories coexist; pick by **whether the machine has the tapps-mcp che
 
 > **Claude Code gap:** because `.mcp.json` launches the raw `~/.local/bin` shim, a `deploy-local` flip alone never reaches Claude Code — only Cursor wrappers probe `current`. To upgrade Claude Code you must bring the `~/.local` global to the target version (the drift guard enforces this) and reload. Tracked for a generator fix so Claude `.mcp.json` also probes `current`.
 
-`tapps-mcp doctor` warns when globals were installed from a local path (`Global CLI install source`) — expected on the dev-monorepo machine. The default deployment is `full` (all six servers, [ADR-0018](../adr/0018-deploy-all-six-nlt-mcp-servers-by-default.md)); set `mcp_bundle: developer` in `.tapps-mcp.yaml` (build + memory + linear-issues) for token-tight sessions.
+`tapps-mcp doctor` warns when globals were installed from a local path (`Global CLI install source`) — expected on the dev-monorepo machine. The default deployment is `full` (all six servers, [ADR-0018](../adr/0018-deploy-all-six-nlt-mcp-servers-by-default.md)); opt down with `tapps-mcp mcp-bundle set developer` (build + memory + linear-issues) for token-tight sessions. Doctor reports **eager (Claude)** vs **listed (Cursor)** on the NLT row.
 
 ---
 

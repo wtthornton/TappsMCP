@@ -233,15 +233,20 @@ tapps-mcp upgrade-fleet \
 
 | Bundle | Servers enabled in host MCP config |
 |--------|-------------------------------------|
-| `developer` (default) | `nlt-build`, `nlt-memory`, `nlt-linear-issues` |
+| `full` (default, [ADR-0018](adr/0018-deploy-all-six-nlt-mcp-servers-by-default.md)) | all six NLT servers |
+| `developer` (opt-down) | `nlt-build`, `nlt-memory`, `nlt-linear-issues` |
 | `minimal` | `nlt-build` only |
 | `memory` | `nlt-build`, `nlt-memory` |
 | `planning` | `nlt-build`, `nlt-linear-issues` |
 | `docs` | `nlt-build`, `nlt-project-docs` |
 | `release` | `nlt-build`, `nlt-release-ship` |
-| `full` | all six NLT servers (power-user / maintainer repos) |
 
-After fleet upgrade, **reload MCP** in each IDE session. With `--bundle full`, `tapps-mcp doctor` reports an **NLT partial enablement WARN** — that is expected when all six servers are active.
+After fleet upgrade, **reload MCP** in each IDE session. With `mcp_bundle=full`, `tapps-mcp doctor` **PASS**es NLT partial enablement (intentional full bundle). To opt down later without re-running fleet upgrade:
+
+```bash
+tapps-mcp mcp-bundle set developer   # or minimal / docs / …
+# then reload MCP in the IDE
+```
 
 ### Fleet audit
 

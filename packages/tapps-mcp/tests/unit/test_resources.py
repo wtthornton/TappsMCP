@@ -138,3 +138,27 @@ class TestTappsWorkflow:
         """Calling with no arguments should return the general workflow."""
         result = tapps_workflow()
         assert "General" in result
+
+
+class TestRegisterIncludePipeline:
+    """Pipeline prompts/resources are build-owned (skip on memory/setup)."""
+
+    def test_include_pipeline_false_registers_nothing(self) -> None:
+        from mcp.server.fastmcp import FastMCP
+
+        from tapps_mcp.server_resources import register
+
+        mcp = FastMCP("test-skip-pipeline")
+        register(mcp, include_pipeline=False)
+        assert mcp._prompt_manager._prompts == {}
+        assert mcp._resource_manager._resources == {}
+
+    def test_include_pipeline_true_registers_prompts_and_resources(self) -> None:
+        from mcp.server.fastmcp import FastMCP
+
+        from tapps_mcp.server_resources import register
+
+        mcp = FastMCP("test-with-pipeline")
+        register(mcp, include_pipeline=True)
+        assert len(mcp._prompt_manager._prompts) >= 3
+        assert len(mcp._resource_manager._resources) >= 2

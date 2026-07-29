@@ -54,7 +54,7 @@ registers 29 tools with **all** `defer_loading=True` (loaded via Tool Search).
 
 > **Note:** Full-catalog sizes are `ALL_TOOL_NAMES` / `ALL_DOCS_TOOL_NAMES` (43 / 42, 85
 > combined). NLT profiles expose subsets — e.g. `nlt-build` (19 tools, 9 eager),
-> `nlt-memory` (4 tools), `nlt-project-docs` (29 tools, 0 eager).
+> `nlt-memory` (5 tools, including bootstrap `tapps_session_start`), `nlt-project-docs` (29 tools, 0 eager). Cursor catalogs all **listed** tools; eager counts are Claude Tool Search only.
 
 ## Updating the budget
 

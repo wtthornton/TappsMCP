@@ -38,13 +38,13 @@ Seven rules every agent in this project should follow.
 
 ## NLT MCP session modes (ADR-0016, ADR-0018)
 
-Default after `tapps_init` is the **`full`** bundle — all six `nlt-*` servers ([ADR-0018](docs/adr/0018-deploy-all-six-nlt-mcp-servers-by-default.md)). Opt **down** for token-tight sessions with `--bundle developer` (Build + Memory + Linear, ~18 eager) or `--bundle minimal` (build-only).
+Default after `tapps_init` is the **`full`** bundle — all six `nlt-*` servers ([ADR-0018](docs/adr/0018-deploy-all-six-nlt-mcp-servers-by-default.md)). Opt **down** for token-tight sessions with `tapps-mcp mcp-bundle set developer` (Build + Memory + Linear, ~39 listed / ~18 eager) or `tapps-mcp mcp-bundle set minimal` (build-only), then reload MCP. Init/upgrade also accept `--bundle`.
 
 | Mode | Enable these MCP servers | When |
 |------|--------------------------|------|
 | **Full (default)** | all six `nlt-*` servers | Full tool surface; no mid-task "enable the other server" gaps |
-| **Developer** | `nlt-build`, `nlt-memory`, `nlt-linear-issues` | Daily coding + recall + backlog, opt down (`--bundle developer`) |
-| **Build only** | `nlt-build` | Token-tight sessions (`--bundle minimal`) |
+| **Developer** | `nlt-build`, `nlt-memory`, `nlt-linear-issues` | Daily coding + recall + backlog (`mcp-bundle set developer`) |
+| **Build only** | `nlt-build` | Token-tight sessions (`mcp-bundle set minimal`) |
 | **Build + Memory** | `nlt-build`, `nlt-memory` | Need `tapps_memory` search/save or session handoff |
 | **Build + Plan** | `nlt-build`, `nlt-linear-issues` | Linear backlog / issue workflow |
 | **Build + Docs** | `nlt-build`, `nlt-project-docs` | Doc generation / drift audit |

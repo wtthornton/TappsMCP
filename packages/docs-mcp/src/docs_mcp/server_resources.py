@@ -171,7 +171,7 @@ def _docs_coverage_resource() -> str:
 # ---------------------------------------------------------------------------
 
 _TOOL_REFERENCE = """\
-## DocsMCP Tool Reference (18 tools)
+## DocsMCP Tool Reference (42 tools; core workflow below)
 
 ### Discovery & Setup
 - **docs_session_start** - Initialize a session; detects project type, scans existing docs, returns config and recommendations
@@ -201,7 +201,7 @@ _TOOL_REFERENCE = """\
 _WORKFLOW_OVERVIEW = f"""\
 # DocsMCP Workflow Guide
 
-DocsMCP provides 18 MCP tools organized into three phases: Discovery, Generation, and Validation. Follow this workflow for comprehensive documentation management.
+DocsMCP provides 42 MCP tools organized into Discovery, Generation, Validation, Linear, and Release phases. The core workflow below covers the daily path; see AGENTS.md for the full inventory.
 
 ## Recommended Workflow
 
@@ -307,7 +307,7 @@ Prepare documentation for a release.
 
 @mcp.prompt("docs_workflow_overview")
 def _docs_workflow_overview() -> str:
-    """Full DocsMCP workflow guide explaining all 18 tools and recommended usage order."""
+    """Full DocsMCP workflow guide (42 tools; core path + recommended usage order)."""
     return _WORKFLOW_OVERVIEW
 
 
