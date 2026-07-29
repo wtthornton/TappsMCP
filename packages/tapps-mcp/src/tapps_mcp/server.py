@@ -1799,7 +1799,15 @@ def _register_tool_modules() -> None:
     server_analysis_tools.register(mcp, allowed_tools)
     server_linear_tools.register(mcp, allowed_tools)
     server_release_tools.register(mcp, allowed_tools)
-    server_resources.register(mcp)
+    # Pipeline prompts/resources are build-owned; skip on memory/setup profiles
+    # so they do not spam every tapps-mcp process catalog.
+    _skip_pipeline_resources = frozenset(
+        {"nlt-memory", "nlt-setup", "nlt-platform-admin"}
+    )
+    server_resources.register(
+        mcp,
+        include_pipeline=settings.tool_preset not in _skip_pipeline_resources,
+    )
 
 
 _register_tool_modules()

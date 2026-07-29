@@ -1064,12 +1064,17 @@ _LOW_ENGAGEMENT_WORKFLOWS: frozenset[str] = frozenset(
 
 
 def _infer_mcp_bundle(project_root: Path) -> str:
-    """Best-effort bundle name from YAML or enabled NLT MCP servers."""
+    """Best-effort bundle name from YAML or enabled NLT MCP servers.
+
+    When on-disk servers are a nonempty custom mix that matches no named
+    bundle, return ``\"full\"`` only for workflow-hint purposes — upgrade
+    uses :func:`resolve_upgrade_mcp_bundle` and will not rewrite that set.
+    """
     from tapps_mcp.distribution.nlt_mcp_config import (
         DEFAULT_NLT_BUNDLE,
-        NLT_BUNDLES,
         _load_enabled_mcp_servers,
         list_nlt_server_ids_in_config,
+        match_bundle_for_servers,
         normalize_mcp_bundle,
     )
 
@@ -1088,16 +1093,17 @@ def _infer_mcp_bundle(project_root: Path) -> str:
 
     try:
         servers = _load_enabled_mcp_servers(project_root)
-        enabled = frozenset(list_nlt_server_ids_in_config(servers))
     except Exception:
         return DEFAULT_NLT_BUNDLE
 
-    if not enabled:
+    matched = match_bundle_for_servers(servers)
+    if matched is not None:
+        return matched
+    if not list_nlt_server_ids_in_config(servers):
         return DEFAULT_NLT_BUNDLE
-    for bundle_name, server_ids in NLT_BUNDLES.items():
-        if frozenset(server_ids) == enabled:
-            return bundle_name
-    return DEFAULT_NLT_BUNDLE
+    # Custom nonempty set — workflows still need a label; prefer developer
+    # hints over implying all six servers are intentional.
+    return "developer"
 
 
 def build_recommended_workflows(

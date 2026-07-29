@@ -11,10 +11,12 @@
 #   - Target ≤20 tools per server; ≤9 eager tools per server (defer_loading for the rest).
 #
 # CORE ASSUMPTION (load-bearing):
-#   Users enable 1–3 nlt-* servers per session, NOT all five at once.
-#   Token budgets, tool-selection accuracy, and doctor WARN thresholds are
-#   computed for PARTIAL enablement. The "full" bundle is escape hatch only.
-#   tapps_init MUST NOT enable all servers by default.
+#   Install/deploy default is the full bundle (all six servers) — ADR-0018.
+#   Token-tight sessions opt DOWN via `mcp_bundle` in `.tapps-mcp.yaml` or
+#   `tapps-mcp mcp-bundle set developer|minimal|…` (then reload MCP).
+#   Doctor WARN thresholds still target partial enablement (≤3 servers).
+#   Cursor catalogs all *listed* tools on enabled servers; eager counts are
+#   Claude Tool Search math only (defer_loading does not shrink Cursor).
 
 schema_version: "1.0"
 
@@ -62,9 +64,13 @@ core_assumption:
       Avoid. Use only for power users or short diagnostic sessions. tapps_doctor
       should WARN when >3 nlt-* servers are enabled or eager total exceeds 20.
   init_defaults:
-    write_all_servers: true # all six nlt-* entries in mcp.json for IDE toggles
-    recommended_bundle: developer # enable build+memory+linear in Cursor UI (~18 eager)
-    comment_disabled_servers: false # deprecated — use real entries + IDE toggles
+    write_all_servers: true # ADR-0018: all six nlt-* entries by default
+    default_bundle: full # ADR-0018 supersedes ADR-0016 developer default
+    opt_down_bundle: developer # token-tight: build+memory+linear (~39 listed / ~18 eager)
+    comment_disabled_servers: false # deprecated — strict JSON; omit opt-outs (TAP-4811)
+  prompts_and_resources:
+    tapps_pipeline_prompts: nlt-build # _tapps_* + tapps://config/* — not memory/setup
+    docs_workflow_prompts: nlt-project-docs # docs://* — not linear/release hitchhikers
 plugin_id: nlt-tapps-plugin
 plugin_display_name: "NLT Tapps Quality Plugin"
 plugin_version: "1.0.0"
@@ -124,7 +130,7 @@ default_bundles:
       - nlt-build
       - nlt-linear-issues
   full:
-    description: "ESCAPE HATCH ONLY — all six servers. Not recommended for daily use."
+    description: "ADR-0018 deploy default — all six servers. Opt down with mcp-bundle set."
     enabled_servers:
       - nlt-build
       - nlt-memory
@@ -132,7 +138,7 @@ default_bundles:
       - nlt-linear-issues
       - nlt-project-docs
       - nlt-release-ship
-    warn_in_doctor: true
+    warn_in_doctor: false # intentional PASS when mcp_bundle=full (ADR-0018)
 
 # ---------------------------------------------------------------------------
 # MCP servers (6 — ADR-0016)
@@ -192,7 +198,7 @@ servers:
     serve_command: tapps-mcp
     serve_args: ["serve", "--profile", "nlt-memory"]
     default_enabled: false
-    tool_count: 4
+    tool_count: 5
     eager_count: 2
     skills:
       - tapps-memory
@@ -200,14 +206,16 @@ servers:
     hooks: []
     tools:
       eager:
+        - tapps_session_start # bootstrap routing (intentional dupe with build/setup)
         - tapps_memory
-        - tapps_session_notes
       deferred:
+        - tapps_session_notes
         - tapps_session_end
         - tapps_handoff_save
     notes: |
       tapps_memory exposes search, save, get, health, related only (TAP-3895).
       Full 42-action catalog remains CLI-only (TAP-1994).
+      No _tapps_* prompts / tapps:// resources (owned by nlt-build).
 
   nlt-linear-issues:
     display_name: "Linear Issues"
@@ -323,8 +331,8 @@ servers:
     serve_args: ["serve", "--profile", "nlt-setup"]
     legacy_profile_alias: nlt-platform-admin
     default_enabled: false
-    tool_count: 7
-    eager_count: 2
+    tool_count: 8
+    eager_count: 1
     skills:
       - tapps-init
       - tapps-upgrade
@@ -338,14 +346,17 @@ servers:
       - tapps-user-prompt-submit
     tools:
       eager:
+        - tapps_session_start # bootstrap routing (intentional dupe with build/memory)
+      deferred:
         - tapps_doctor
         - tapps_server_info
-      deferred:
         - tapps_init
         - tapps_upgrade
         - tapps_set_engagement_level
         - tapps_pipeline
         - tapps_stats
+    notes: |
+      No _tapps_* prompts / tapps:// resources (owned by nlt-build).
 
 # ---------------------------------------------------------------------------
 # Cross-server workflows (skills — NOT duplicate tool registration)

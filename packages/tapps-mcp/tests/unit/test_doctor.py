@@ -2705,9 +2705,10 @@ class TestCheckNltPartialEnablement:
         result = check_nlt_partial_enablement(tmp_path)
         assert result.ok is True
         assert "combined eager=18" in result.message
-        assert "nlt-build: 9 eager / 18 total" in result.message
-        assert "nlt-memory: 2 eager / 4 total" in result.message
-        assert "nlt-linear-issues: 7 eager / 15 total" in result.message
+        assert "nlt-build: 9 eager / 19 listed" in result.message
+        assert "nlt-memory: 2 eager / 5 listed" in result.message
+        assert "nlt-linear-issues: 7 eager / 15 listed" in result.message
+        assert "combined listed=39" in result.message
 
     def test_all_six_servers_in_config_passes_when_inferred_full(self, tmp_path) -> None:  # type: ignore[no-untyped-def]
         self._cursor_mcp_json(
@@ -2820,13 +2821,13 @@ class TestCheckNltPartialEnablement:
         )
         result = check_nlt_partial_enablement(tmp_path)
         assert result.ok is False
-        # 23 = 9 (nlt-build) + 2 (nlt-setup) + 7 (nlt-linear-issues)
+        # 22 = 9 (nlt-build) + 1 (nlt-setup) + 7 (nlt-linear-issues)
         # + 0 (nlt-project-docs) + 5 (nlt-release-ship); still > 20 → WARN.
-        assert "23 combined eager tools" in result.message
+        assert "22 combined eager tools" in result.message
         assert "5 nlt-* servers enabled" in result.message
-        assert "developer bundle" in (result.detail or "").lower()
-        assert "mcp.json" in (result.detail or "")
-        assert "recommended bundle" in (result.detail or "").lower()
+        assert "listed" in result.message
+        assert "mcp-bundle set" in (result.detail or "")
+        assert "developer" in (result.detail or "").lower()
 
 
 _SAMPLE_PROBE_METRICS = """\

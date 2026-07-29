@@ -291,6 +291,98 @@ def fleet_repair_consumers(scan_parent: str, roots: str, audit: bool) -> None:
         raise SystemExit(1)
 
 
+@main.group("mcp-bundle")
+def mcp_bundle_group() -> None:
+    """Show or set the NLT MCP server bundle (``.tapps-mcp.yaml`` + host configs)."""
+
+
+@mcp_bundle_group.command("show")
+@click.option(
+    "--project-root",
+    default=".",
+    show_default=True,
+    type=click.Path(exists=True, file_okay=False, dir_okay=True, path_type=Path),
+    help="Project root containing .tapps-mcp.yaml / host MCP configs.",
+)
+def mcp_bundle_show(project_root: Path) -> None:
+    """Print yaml ``mcp_bundle``, on-disk ``nlt-*`` servers, and resolved name."""
+    from tapps_mcp.distribution.mcp_bundle_cli import show_mcp_bundle
+
+    info = show_mcp_bundle(project_root.resolve())
+    click.echo(f"project_root: {info['project_root']}")
+    click.echo(f"yaml mcp_bundle: {info['yaml_mcp_bundle'] or '(unset)'}")
+    enabled = info["on_disk_servers"]
+    click.echo(
+        "on-disk nlt-* servers: "
+        + (", ".join(enabled) if enabled else "(none)")
+    )
+    click.echo(f"on-disk matches bundle: {info['on_disk_matches_bundle'] or '(custom/none)'}")
+    click.echo(f"resolved: {info['resolved']}")
+    click.echo(
+        "Flip with: tapps-mcp mcp-bundle set developer|minimal|full|… then reload MCP."
+    )
+
+
+@mcp_bundle_group.command("set")
+@click.argument(
+    "bundle",
+    type=click.Choice(
+        [
+            "developer",
+            "minimal",
+            "memory",
+            "planning",
+            "docs",
+            "release",
+            "security",
+            "audit",
+            "full",
+        ]
+    ),
+)
+@click.option(
+    "--project-root",
+    default=".",
+    show_default=True,
+    type=click.Path(exists=True, file_okay=False, dir_okay=True, path_type=Path),
+    help="Project root to update.",
+)
+@click.option(
+    "--dry-run",
+    is_flag=True,
+    help="Show what would change without writing files.",
+)
+def mcp_bundle_set(bundle: str, project_root: Path, dry_run: bool) -> None:
+    """Write ``mcp_bundle`` to yaml and rewrite host MCP configs to that set.
+
+    Opt down (e.g. ``developer``) or opt up (``full``) in one command, then
+    reload MCP in the IDE. Upgrade will no longer re-expand a matching yaml.
+    """
+    from tapps_mcp.distribution.mcp_bundle_cli import set_mcp_bundle
+
+    try:
+        result = set_mcp_bundle(project_root.resolve(), bundle, dry_run=dry_run)
+    except ValueError as exc:
+        raise SystemExit(str(exc)) from exc
+
+    prefix = "Would set" if dry_run else "Set"
+    click.echo(
+        click.style(
+            f"{prefix} mcp_bundle={result['bundle']!r} "
+            f"({len(result['enabled_servers'])} servers)",
+            fg="green",
+        )
+    )
+    click.echo("servers: " + ", ".join(result["enabled_servers"]))
+    if result.get("yaml_written") or result.get("yaml_would_write"):
+        click.echo("yaml: .tapps-mcp.yaml")
+    if result["hosts_updated"]:
+        click.echo("hosts: " + ", ".join(result["hosts_updated"]))
+    if result["hosts_skipped"]:
+        click.echo("skipped: " + ", ".join(result["hosts_skipped"]))
+    click.echo(click.style(result["reload_hint"], fg="yellow"))
+
+
 @main.command()
 @click.option(
     "--transport",

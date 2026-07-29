@@ -122,8 +122,17 @@ def _tapps_workflow(
 # ---------------------------------------------------------------------------
 
 
-def register(mcp_instance: FastMCP) -> None:
-    """Register MCP resources and prompts on the shared *mcp_instance*."""
+def register(mcp_instance: FastMCP, *, include_pipeline: bool = True) -> None:
+    """Register MCP resources and prompts on the shared *mcp_instance*.
+
+    Pipeline prompts (``_tapps_*``) and ``tapps://config/*`` resources belong on
+    ``nlt-build`` (and non-NLT monolith presets). Narrow profiles such as
+    ``nlt-memory`` / ``nlt-setup`` pass ``include_pipeline=False`` so Cursor and
+    Claude do not see duplicated prompts/resources on every tapps process.
+    """
+    if not include_pipeline:
+        return
+
     # Resources
     mcp_instance.resource("tapps://config/quality-presets")(_get_quality_presets)
     mcp_instance.resource("tapps://config/scoring-weights")(_get_scoring_weights)

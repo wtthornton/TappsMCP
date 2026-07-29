@@ -108,15 +108,20 @@ def create_combined_server(profile: str | None = None) -> FastMCP:
     tapps_tool_count = len(combined._tool_manager._tools)
     docs_tool_count = 0
 
-    # Copy TappsMCP resources and prompts (unchanged by profile)
-    _copy_resources(
-        tapps_server._resource_manager._resources,
-        combined._resource_manager._resources,
-    )
-    _copy_prompts(
-        tapps_server._prompt_manager._prompts,
-        combined._prompt_manager._prompts,
-    )
+    # Prompts/resources are owned by nlt-build (tapps://, _tapps_*) and
+    # nlt-project-docs (docs://, docs_workflow*). NLT platform profiles
+    # (linear/release) copy tools only — copying prompts/resources here was
+    # accidental catalog duplication on every tapps-platform process.
+    # Legacy full mode (profile=None) keeps the monolith catalog.
+    if profile is None:
+        _copy_resources(
+            tapps_server._resource_manager._resources,
+            combined._resource_manager._resources,
+        )
+        _copy_prompts(
+            tapps_server._prompt_manager._prompts,
+            combined._prompt_manager._prompts,
+        )
 
     # Graceful degradation: skip DocsMCP if not installed
     if not _DOCS_MCP_AVAILABLE or docs_server is None:
@@ -135,14 +140,15 @@ def create_combined_server(profile: str | None = None) -> FastMCP:
             msg = f"Tool name collisions detected: {', '.join(collisions)}"
             raise RuntimeError(msg)
 
-        _copy_resources(
-            docs_server._resource_manager._resources,
-            combined._resource_manager._resources,
-        )
-        _copy_prompts(
-            docs_server._prompt_manager._prompts,
-            combined._prompt_manager._prompts,
-        )
+        if profile is None:
+            _copy_resources(
+                docs_server._resource_manager._resources,
+                combined._resource_manager._resources,
+            )
+            _copy_prompts(
+                docs_server._prompt_manager._prompts,
+                combined._prompt_manager._prompts,
+            )
         docs_tool_count = sum(
             1 for name in combined._tool_manager._tools if name.startswith("docs_")
         )

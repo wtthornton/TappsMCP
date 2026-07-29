@@ -3948,13 +3948,12 @@ def _nlt_partial_enablement_remediation() -> str:
     developer = ", ".join(enabled_servers_for_bundle("developer"))
     minimal = ", ".join(enabled_servers_for_bundle("minimal"))
     return (
-        f"Enable only the recommended bundle in your IDE MCP settings. "
-        f"Developer bundle ({developer}) stays within the ≤3-server budget; "
-        f"use minimal ({minimal}) for build-only sessions. "
-        "Run: tapps-mcp init --host cursor --force --allow-package-init --no-uv "
-        "--bundle developer to regenerate strict-JSON mcp.json with only the "
-        "bundle's servers (opt-in servers are omitted; use --bundle full or IDE "
-        "toggles to enable more). "
+        f"Opt down with one command (writes yaml + host MCP configs): "
+        f"`tapps-mcp mcp-bundle set developer` ({developer}) or "
+        f"`tapps-mcp mcp-bundle set minimal` ({minimal}), then reload MCP. "
+        "Cursor catalogs every listed tool on an enabled server (eager counts "
+        "are Claude Tool Search math only). "
+        "ADR-0018 keeps install default at full; use mcp-bundle set to opt down. "
         "See docs/architecture/nlt-mcp-plugin-spec.yaml."
     )
 
@@ -3994,9 +3993,17 @@ def check_nlt_partial_enablement(root: Path) -> CheckResult:
         total = nlt_total_tool_count(server_id)
         combined_eager += eager
         total_label = str(total) if total is not None else "?"
-        lines.append(f"{server_id}: {eager} eager / {total_label} total")
+        # "listed" = tools/list size Cursor shows; "eager" = Claude Tool Search.
+        lines.append(f"{server_id}: {eager} eager / {total_label} listed")
 
-    summary = f"{len(nlt_ids)} server(s); combined eager={combined_eager}; " + "; ".join(lines)
+    combined_listed = sum(
+        (nlt_total_tool_count(sid) or 0) for sid in nlt_ids
+    )
+    summary = (
+        f"{len(nlt_ids)} server(s); combined eager={combined_eager} "
+        f"(Claude); combined listed={combined_listed} (Cursor); "
+        + "; ".join(lines)
+    )
     if set(nlt_ids) == set(NLT_SERVER_ORDER):
         bundle = _resolved_mcp_bundle(root)
         if bundle == "full":

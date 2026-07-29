@@ -79,9 +79,18 @@ class TestCreateCombinedServerProfiles:
         assert names == set(TOOL_PROFILE_NLT_RELEASE_SHIP)
         assert len(names) == 6
 
-    def test_full_mode_registers_more_than_nlt_profiles(self) -> None:
+    def test_nlt_profiles_have_no_prompts_or_resources(self) -> None:
+        """Prompts/resources stay on nlt-build / nlt-project-docs — not hitchhikers."""
+        for profile in ("nlt-linear-issues", "nlt-release-ship"):
+            combined = create_combined_server(profile=profile)
+            assert combined._prompt_manager._prompts == {}
+            assert combined._resource_manager._resources == {}
+
+    def test_full_mode_still_copies_prompts_and_resources(self) -> None:
         combined = create_combined_server(profile=None)
         assert len(combined._tool_manager._tools) > len(TOOL_PROFILE_NLT_LINEAR_ISSUES)
+        assert len(combined._prompt_manager._prompts) > 0
+        assert len(combined._resource_manager._resources) > 0
 
     def test_platform_profiles_match_yaml_keys(self) -> None:
         assert set(PLATFORM_NLT_PROFILES) == {"nlt-linear-issues", "nlt-release-ship"}

@@ -586,7 +586,7 @@ def _upgrade_mcp_config(
     *,
     force: bool,
     dry_run: bool,
-    mcp_bundle: str = "full",
+    mcp_bundle: str | None = "full",
 ) -> None:
     """Populate result["components"]["mcp_config"] for one host.
 
@@ -597,6 +597,10 @@ def _upgrade_mcp_config(
     opted in (entry exists) or ``force=True``.  Missing entries are not
     treated as broken — greenfield projects should go through ``tapps_init``.
 
+    When *mcp_bundle* is ``None``, a custom on-disk ``nlt-*`` set is preserved
+    (no rewrite to ``full``). Use ``tapps-mcp mcp-bundle set <name>`` to opt in
+    to a named bundle sync.
+
     TAP-2199: when the on-disk env block still contains the literal
     ``${workspaceFolder}`` we self-heal by forcing a regen regardless of
     ``_validate_config_file`` verdict. The merge in :func:`_generate_config`
@@ -604,7 +608,9 @@ def _upgrade_mcp_config(
     customizations on other keys survive.
     """
     from tapps_mcp.distribution.nlt_mcp_config import (
+        DEFAULT_NLT_BUNDLE,
         bundle_matches_mcp_config,
+        match_bundle_for_servers,
         needs_legacy_nlt_migration,
         normalize_mcp_bundle,
     )
@@ -640,12 +646,29 @@ def _upgrade_mcp_config(
     raw_servers = existing.get(servers_key)
     servers_dict = raw_servers if isinstance(raw_servers, dict) else {}
     needs_nlt_migration = needs_legacy_nlt_migration(servers_dict)
-    normalized_bundle = normalize_mcp_bundle(mcp_bundle)
-    bundle_mismatch = already_opted_in and not bundle_matches_mcp_config(
-        servers_dict, normalized_bundle
+    # None = preserve custom on-disk set (do not sync / re-expand to full).
+    sync_bundle = mcp_bundle is not None
+    normalized_bundle = (
+        normalize_mcp_bundle(mcp_bundle) if sync_bundle else DEFAULT_NLT_BUNDLE
+    )
+    bundle_mismatch = (
+        sync_bundle
+        and already_opted_in
+        and not bundle_matches_mcp_config(servers_dict, normalized_bundle)
+    )
+    # When preserving a custom set, only regenerate when on-disk matches a
+    # named bundle (heal/migrate); never silently expand custom → full.
+    on_disk_bundle = match_bundle_for_servers(servers_dict)
+    generate_bundle = (
+        normalized_bundle if sync_bundle else (on_disk_bundle or DEFAULT_NLT_BUNDLE)
     )
     if needs_heal and already_opted_in:
-        if dry_run:
+        if not sync_bundle and on_disk_bundle is None:
+            result["components"]["mcp_config"] = (
+                "needs-heal deferred: custom nlt-* set with ${workspaceFolder}; "
+                "run: tapps-mcp mcp-bundle set <bundle> (or fix env paths manually)"
+            )
+        elif dry_run:
             result["components"]["mcp_config"] = (
                 "needs-heal: ${workspaceFolder} in env block "
                 "(TAP-2199 — rerun without dry_run to fix)"
@@ -659,7 +682,7 @@ def _upgrade_mcp_config(
                 with_docs_mcp=include_docs_mcp,
                 uv_launch=uv_launch,
                 use_nlt_plugin=True,
-                mcp_bundle=mcp_bundle,
+                mcp_bundle=generate_bundle,
             )
             result["components"]["mcp_config"] = (
                 "healed: rewrote ${workspaceFolder} to absolute project root (TAP-2199)"
@@ -678,11 +701,16 @@ def _upgrade_mcp_config(
                 with_docs_mcp=include_docs_mcp,
                 uv_launch=uv_launch,
                 use_nlt_plugin=True,
-                mcp_bundle=mcp_bundle,
+                mcp_bundle=generate_bundle,
             )
             result["components"]["mcp_config"] = (
                 "migrated: legacy monolith → NLT plugin (nlt-code-quality + nlt-platform-admin)"
             )
+    elif not sync_bundle and already_opted_in:
+        result["components"]["mcp_config"] = (
+            "ok (custom nlt-* set preserved; "
+            "run: tapps-mcp mcp-bundle set <bundle> to sync)"
+        )
     elif bundle_mismatch and already_opted_in:
         if dry_run:
             result["components"]["mcp_config"] = (
@@ -697,7 +725,7 @@ def _upgrade_mcp_config(
                 with_docs_mcp=include_docs_mcp,
                 uv_launch=uv_launch,
                 use_nlt_plugin=True,
-                mcp_bundle=mcp_bundle,
+                mcp_bundle=normalized_bundle,
             )
             result["components"]["mcp_config"] = (
                 f"synced: rewrote MCP config for mcp_bundle={normalized_bundle!r}"
@@ -721,7 +749,7 @@ def _upgrade_mcp_config(
             with_docs_mcp=include_docs_mcp,
             uv_launch=uv_launch,
             use_nlt_plugin=True,
-            mcp_bundle=mcp_bundle,
+            mcp_bundle=generate_bundle,
         )
         result["components"]["mcp_config"] = "regenerated"
     else:
@@ -1459,7 +1487,7 @@ def _upgrade_platform(
     linear_enforce_gate: bool = False,
     linear_enforce_cache_gate: str = "off",
     session_start_gate: str = "off",
-    mcp_bundle: str = "full",
+    mcp_bundle: str | None = "full",
 ) -> dict[str, Any]:
     """Upgrade platform-specific files for a single host.
 
@@ -2187,13 +2215,30 @@ def upgrade_pipeline(
 
     settings = load_settings(project_root=project_root)
 
-    from tapps_mcp.distribution.nlt_mcp_config import normalize_mcp_bundle
-    from tapps_mcp.tools.session_start_helpers import _infer_mcp_bundle
-
-    mcp_bundle = normalize_mcp_bundle(
-        settings.mcp_bundle if settings.mcp_bundle is not None else _infer_mcp_bundle(project_root)
+    from tapps_mcp.distribution.nlt_mcp_config import (
+        persist_mcp_bundle_yaml,
+        resolve_upgrade_mcp_bundle,
     )
-    result["mcp_bundle"] = mcp_bundle
+
+    mcp_bundle, bundle_explicit, bundle_note = resolve_upgrade_mcp_bundle(
+        project_root,
+        settings_bundle=settings.mcp_bundle,
+    )
+    # Persist inferred named bundles so the next upgrade does not fall through
+    # to full and re-expand a trimmed Cursor/Claude set.
+    if (
+        not dry_run
+        and not bundle_explicit
+        and mcp_bundle is not None
+        and settings.mcp_bundle is None
+    ):
+        try:
+            persist_mcp_bundle_yaml(project_root, mcp_bundle)
+            bundle_note = f"{bundle_note}; persisted mcp_bundle={mcp_bundle!r}"
+        except Exception:
+            log.debug("persist_mcp_bundle_yaml_failed", exc_info=True)
+    result["mcp_bundle"] = mcp_bundle if mcp_bundle is not None else "custom"
+    result["mcp_bundle_note"] = bundle_note
 
     # Load skip list from settings (Issue #86)
     skip_files: set[str] = set(settings.upgrade_skip_files)

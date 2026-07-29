@@ -101,25 +101,28 @@ DEFAULT_NLT_BUNDLE: Final[NltBundle] = "full"
 # Eager / total tool counts per spec (Epic 109.5 / ADR-0016 doctor thresholds).
 NLT_SERVER_EAGER_COUNTS: Final[dict[str, int]] = {
     "nlt-build": 9,
+    # session_start (eager bootstrap) + tapps_memory; remaining deferred
     "nlt-memory": 2,
-    "nlt-setup": 2,
+    # session_start only (doctor/server_info carry defer_loading)
+    "nlt-setup": 1,
     "nlt-linear-issues": 7,
     "nlt-project-docs": 0,
     "nlt-release-ship": 5,
     # Legacy profile names in --profile args map to same counts
     "nlt-code-quality": 9,
-    "nlt-platform-admin": 2,
+    "nlt-platform-admin": 1,
 }
 
+# Listed tools/list counts (Cursor catalogs all of these; eager is Claude Tool Search).
 NLT_SERVER_TOTAL_COUNTS: Final[dict[str, int]] = {
-    "nlt-build": 18,
-    "nlt-memory": 4,
-    "nlt-setup": 7,
+    "nlt-build": 19,
+    "nlt-memory": 5,  # includes bootstrap tapps_session_start
+    "nlt-setup": 8,  # includes bootstrap tapps_session_start
     "nlt-linear-issues": 15,
     "nlt-project-docs": 29,
     "nlt-release-ship": 6,
-    "nlt-code-quality": 18,
-    "nlt-platform-admin": 7,
+    "nlt-code-quality": 19,
+    "nlt-platform-admin": 8,
 }
 
 NLT_MAX_ENABLED_SERVERS: Final[int] = 3
@@ -154,6 +157,7 @@ NLT_TOOL_SERVER: Final[dict[str, str]] = {
     "tapps_dependency_scan": "nlt-build",
     "tapps_report": "nlt-build",
     "tapps_audit_campaign": "nlt-build",
+    "tapps_domain_playbook": "nlt-build",
     "tapps_memory": "nlt-memory",
     "tapps_session_notes": "nlt-memory",
     "tapps_session_end": "nlt-memory",
@@ -181,6 +185,77 @@ def normalize_mcp_bundle(bundle: str | None) -> NltBundle:
     if bundle in NLT_BUNDLES:
         return bundle
     return DEFAULT_NLT_BUNDLE
+
+
+def match_bundle_for_servers(servers: dict[str, Any]) -> NltBundle | None:
+    """Return the named bundle that exactly matches enabled ``nlt-*`` servers.
+
+    Returns ``None`` when the set is empty or does not match any known bundle
+    (custom opt-in mix). Callers must not treat ``None`` as ``full``.
+    """
+    enabled = frozenset(list_nlt_server_ids_in_config(servers))
+    if not enabled:
+        return None
+    for bundle_name, server_ids in NLT_BUNDLES.items():
+        if frozenset(server_ids) == enabled:
+            return bundle_name
+    return None
+
+
+def persist_mcp_bundle_yaml(project_root: Path, bundle: NltBundle) -> None:
+    """Write ``mcp_bundle`` into ``.tapps-mcp.yaml`` (create or update)."""
+    import yaml
+
+    config_path = project_root / ".tapps-mcp.yaml"
+    data: dict[str, Any] = {}
+    if config_path.exists():
+        raw = config_path.read_text(encoding="utf-8-sig")
+        loaded = yaml.safe_load(raw) if raw.strip() else {}
+        if isinstance(loaded, dict):
+            data = loaded
+    data["mcp_bundle"] = bundle
+    config_path.write_text(
+        yaml.dump(data, default_flow_style=False, sort_keys=False),
+        encoding="utf-8",
+    )
+
+
+def resolve_upgrade_mcp_bundle(
+    project_root: Path,
+    *,
+    settings_bundle: str | None,
+) -> tuple[NltBundle | None, bool, str]:
+    """Resolve which bundle upgrade should sync MCP configs to.
+
+    Returns ``(bundle, explicit, note)`` where:
+    - *bundle* is the target to sync, or ``None`` to leave on-disk servers alone
+    - *explicit* is True when ``.tapps-mcp.yaml`` (or caller) set ``mcp_bundle``
+    - *note* is a short reason for logs / upgrade report
+
+    Rules (Cursor opt-down safety):
+    1. Explicit yaml/settings ``mcp_bundle`` wins (sync to that).
+    2. Else if on-disk servers match a named bundle, use it (and callers may
+       persist yaml so future upgrades do not re-expand to ``full``).
+    3. Else if no nlt-* servers, default to ``full`` (greenfield).
+    4. Else custom nonempty set → ``None`` (do not re-expand to ``full``).
+    """
+    if settings_bundle is not None:
+        return normalize_mcp_bundle(settings_bundle), True, "from settings/yaml"
+
+    try:
+        servers = _load_enabled_mcp_servers(project_root)
+    except Exception:
+        return DEFAULT_NLT_BUNDLE, False, "fallback full (mcp config unreadable)"
+
+    matched = match_bundle_for_servers(servers)
+    if matched is not None:
+        return matched, False, f"inferred from enabled servers ({matched})"
+
+    enabled = list_nlt_server_ids_in_config(servers)
+    if not enabled:
+        return DEFAULT_NLT_BUNDLE, False, "greenfield default full"
+
+    return None, False, "custom nlt-* set preserved (no sync)"
 
 
 def enabled_servers_for_bundle(bundle: NltBundle) -> tuple[str, ...]:
