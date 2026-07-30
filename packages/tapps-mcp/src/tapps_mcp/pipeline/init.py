@@ -83,6 +83,7 @@ class BootstrapConfig:
     dry_run: bool = False
     verify_only: bool = False
     llm_engagement_level: str = "medium"
+    skill_tier: str = "full"
     scaffold_experts: bool = False
     docs_automation: bool = True
     include_karpathy: bool = True
@@ -93,19 +94,28 @@ class BootstrapConfig:
         cls,
         *,
         llm_engagement_level: str | None = None,
+        skill_tier: str | None = None,
         **kwargs: Any,
     ) -> BootstrapConfig:
-        """Construct with optional ``llm_engagement_level`` fallback.
+        """Construct with optional ``llm_engagement_level`` / ``skill_tier`` fallback.
 
-        When *llm_engagement_level* is ``None``, reads the value from
-        :func:`~tapps_core.config.settings.load_settings`.  All other
-        keyword arguments are forwarded to the dataclass constructor.
+        When *llm_engagement_level* or *skill_tier* is ``None``, reads the
+        value from :func:`~tapps_core.config.settings.load_settings`.  All
+        other keyword arguments are forwarded to the dataclass constructor.
         """
-        if llm_engagement_level is None:
+        if llm_engagement_level is None or skill_tier is None:
             from tapps_core.config.settings import load_settings
 
-            llm_engagement_level = load_settings().llm_engagement_level
-        return cls(llm_engagement_level=llm_engagement_level or "medium", **kwargs)
+            settings = load_settings()
+            if llm_engagement_level is None:
+                llm_engagement_level = settings.llm_engagement_level
+            if skill_tier is None:
+                skill_tier = settings.skill_tier
+        return cls(
+            llm_engagement_level=llm_engagement_level or "medium",
+            skill_tier=skill_tier if skill_tier in {"core", "full"} else "full",
+            **kwargs,
+        )
 
 
 @dataclass
@@ -262,6 +272,7 @@ def bootstrap_pipeline(
     dry_run: bool = False,
     verify_only: bool = False,
     llm_engagement_level: str | None = None,
+    skill_tier: str | None = None,
     scaffold_experts: bool = False,
     include_karpathy: bool = True,
 ) -> dict[str, Any]:
@@ -312,6 +323,7 @@ def bootstrap_pipeline(
             dry_run=dry_run,
             verify_only=verify_only,
             llm_engagement_level=llm_engagement_level,
+            skill_tier=skill_tier,
             scaffold_experts=scaffold_experts,
             include_karpathy=include_karpathy,
         )
@@ -716,14 +728,40 @@ def _create_agents_md(cfg: BootstrapConfig, state: _BootstrapState) -> None:
         state.result["agents_md"] = {"action": "created", "version": __version__}
 
 
-def _install_karpathy_blocks(cfg: BootstrapConfig, state: _BootstrapState) -> None:
-    """Install or refresh the Karpathy guidelines block in AGENTS.md and CLAUDE.md.
+def _karpathy_primary_home(project_root: Path) -> str | None:
+    """Return the single Karpathy home filename, preferring AGENTS.md."""
+    if (project_root / "AGENTS.md").exists():
+        return "AGENTS.md"
+    if (project_root / "CLAUDE.md").exists():
+        return "CLAUDE.md"
+    return None
 
-    Both files are only ever appended-to (between BEGIN/END markers); content
-    outside the markers is preserved. Skips files that don't exist — this
-    function runs after ``_create_templates`` (which may create AGENTS.md)
-    and ``_setup_platform`` (which may create CLAUDE.md), so whichever
-    file(s) the consumer's project has will be covered.
+
+def _persist_skill_tier(project_root: Path, skill_tier: str, *, dry_run: bool = False) -> None:
+    """Merge ``skill_tier`` into ``.tapps-mcp.yaml``."""
+    if dry_run or skill_tier not in {"core", "full"}:
+        return
+    import yaml
+
+    config_path = project_root / ".tapps-mcp.yaml"
+    data: dict[str, Any] = {}
+    if config_path.exists():
+        try:
+            with config_path.open(encoding="utf-8") as fh:
+                loaded = yaml.safe_load(fh) or {}
+            if isinstance(loaded, dict):
+                data = loaded
+        except Exception:
+            data = {}
+    data["skill_tier"] = skill_tier
+    config_path.write_text(yaml.dump(data, default_flow_style=False), encoding="utf-8")
+
+
+def _install_karpathy_blocks(cfg: BootstrapConfig, state: _BootstrapState) -> None:
+    """Install or refresh Karpathy guidelines into a single primary home.
+
+    Prefers ``AGENTS.md`` when present, otherwise ``CLAUDE.md``. Content
+    outside BEGIN/END markers is preserved. Does not newly dual-write.
     """
     if not cfg.include_karpathy:
         state.result["karpathy_guidelines"] = {"action": "skipped", "reason": "disabled"}
@@ -734,11 +772,23 @@ def _install_karpathy_blocks(cfg: BootstrapConfig, state: _BootstrapState) -> No
 
     from tapps_mcp.pipeline import karpathy_block
 
+    primary = _karpathy_primary_home(state.project_root)
     per_file: dict[str, str] = {}
+    if primary is None:
+        state.result["karpathy_guidelines"] = {
+            "source_sha": karpathy_block.KARPATHY_GUIDELINES_SOURCE_SHA,
+            "files": {"AGENTS.md": "skipped_file_missing", "CLAUDE.md": "skipped_file_missing"},
+            "primary": None,
+        }
+        return
+
     for rel in ("AGENTS.md", "CLAUDE.md"):
         target = state.project_root / rel
         if not target.exists():
             per_file[rel] = "skipped_file_missing"
+            continue
+        if rel != primary:
+            per_file[rel] = "skipped (single-home)"
             continue
         try:
             per_file[rel] = karpathy_block.install_or_refresh(target, dry_run=cfg.dry_run)
@@ -749,6 +799,7 @@ def _install_karpathy_blocks(cfg: BootstrapConfig, state: _BootstrapState) -> No
     state.result["karpathy_guidelines"] = {
         "source_sha": karpathy_block.KARPATHY_GUIDELINES_SOURCE_SHA,
         "files": per_file,
+        "primary": primary,
     }
 
 
@@ -1015,8 +1066,12 @@ def _setup_platform(cfg: BootstrapConfig, state: _BootstrapState) -> None:
                 )
             state.result["agents"] = generate_subagent_definitions(state.project_root, "claude")
             state.result["skills"] = generate_skills(
-                state.project_root, "claude", engagement_level=engagement
+                state.project_root,
+                "claude",
+                engagement_level=engagement,
+                skill_tier=cfg.skill_tier,
             )
+            _persist_skill_tier(state.project_root, cfg.skill_tier, dry_run=cfg.dry_run)
             state.result["python_quality_rule"] = generate_claude_python_quality_rule(
                 state.project_root, engagement_level=engagement
             )
@@ -1098,8 +1153,12 @@ def _setup_platform(cfg: BootstrapConfig, state: _BootstrapState) -> None:
             )
             state.result["agents"] = generate_subagent_definitions(state.project_root, "cursor")
             state.result["skills"] = generate_skills(
-                state.project_root, "cursor", engagement_level=engagement
+                state.project_root,
+                "cursor",
+                engagement_level=engagement,
+                skill_tier=cfg.skill_tier,
             )
+            _persist_skill_tier(state.project_root, cfg.skill_tier, dry_run=cfg.dry_run)
             # Epic 86: Doc automation when DocsMCP is detected
             if cfg.docs_automation and state.result.get("docsmcp_detected", False):
                 from tapps_mcp.pipeline.platform_docs_automation import (

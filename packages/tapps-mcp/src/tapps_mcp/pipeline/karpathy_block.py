@@ -91,6 +91,43 @@ def install_or_refresh(path: Path, *, dry_run: bool = False) -> Action:
     return action
 
 
+def has_block(path: Path) -> bool:
+    """Return True when *path* exists and contains a Karpathy guidelines block."""
+    if not path.is_file():
+        return False
+    try:
+        content = path.read_text(encoding="utf-8", errors="replace")
+    except OSError:
+        return False
+    return _find_block_span(content) is not None
+
+
+def remove_block(path: Path, *, dry_run: bool = False) -> Action:
+    """Remove the Karpathy block from *path* if present.
+
+    Returns ``"unchanged"`` when the file or block is missing, otherwise
+    ``"refreshed"`` after stripping the block (reuses Action literals).
+    """
+    if not path.is_file():
+        return "skipped_file_missing"
+    original = path.read_text(encoding="utf-8")
+    span = _find_block_span(original)
+    if span is None:
+        return "unchanged"
+    begin, end = span
+    before = original[:begin].rstrip("\n")
+    after = original[end:].lstrip("\n")
+    if before and after:
+        updated = f"{before}\n\n{after}"
+    elif before:
+        updated = f"{before}\n"
+    else:
+        updated = f"{after}" if after.endswith("\n") or not after else f"{after}\n"
+    if not dry_run:
+        path.write_text(updated, encoding="utf-8")
+    return "refreshed"
+
+
 def check(path: Path) -> dict[str, str | None]:
     """Return a doctor-style report on the block in *path*.
 
@@ -141,5 +178,7 @@ __all__ = [
     "Action",
     "DoctorState",
     "check",
+    "has_block",
     "install_or_refresh",
+    "remove_block",
 ]

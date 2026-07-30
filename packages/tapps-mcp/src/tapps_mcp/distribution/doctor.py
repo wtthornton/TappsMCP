@@ -4149,6 +4149,7 @@ def check_mcp_tool_budget(root: Path) -> CheckResult:
     return CheckResult("MCP tool budget", True, f"All servers within budget. {summary}")
 
 
+
 def check_session_sentinel(root: Path) -> CheckResult:
     """TAP-1928: report the presence and age of the tapps_session_start sentinel.
 
@@ -5130,6 +5131,8 @@ def _safe_check(name: str, fn: Callable[[], CheckResult]) -> CheckResult:
 
 
 def _collect_checks(root: Path, *, quick: bool = False) -> list[CheckResult]:
+    from tapps_mcp.distribution import context_budget as _cb
+
     """Collect all diagnostic checks for the given project root.
 
     Args:
@@ -5151,6 +5154,11 @@ def _collect_checks(root: Path, *, quick: bool = False) -> list[CheckResult]:
         ("Fleet crash loop", check_fleet_crash_loop),
         ("MCP client config", lambda: check_mcp_client_config(root)),
         ("MCP tool budget", lambda: check_mcp_tool_budget(root)),
+        ("CLAUDE.md size", lambda: _cb.check_claude_md_size(root)),
+        ("AGENTS.md size", lambda: _cb.check_agents_md_size(root)),
+        ("alwaysApply rules weight", lambda: _cb.check_always_apply_rules_weight(root)),
+        ("Skill inventory budget", lambda: _cb.check_skill_inventory_budget(root)),
+        ("Karpathy dual install", lambda: _cb.check_karpathy_dual_install(root)),
         ("Call graph tools profile", lambda: check_call_graph_tools_profile(root)),
         (
             "Call graph index cache",

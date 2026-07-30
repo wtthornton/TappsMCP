@@ -104,8 +104,10 @@ class WizardSkillTier(BaseModel):
         json_schema_extra={
             "enum": ["core", "full"],
             "enumNames": [
-                "Core only (score, gate, validate, security — 4 skills)",
-                "Full (all 7 skills including research, memory, review pipeline)",
+                "Core (finish-task, handoff/continue, memory, tool-reference, "
+                "research, security, init/upgrade, linear-issue/read — ~13 skills)",
+                "Full (all platform skills including review-pipeline, refactor, "
+                "domain playbooks, continuous-learning)",
             ],
         },
     )

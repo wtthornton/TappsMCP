@@ -784,6 +784,45 @@ class ValidateChangedSettings(BaseModel):
     )
 
 
+class DoctorContextBudgetSettings(BaseModel):
+    """Advisory ceilings for always-on agent context (doctor WARN only)."""
+
+    claude_md_max_bytes: int = Field(
+        default=12288,
+        ge=1024,
+        description="WARN when CLAUDE.md exceeds this many bytes (default 12 KiB).",
+    )
+    agents_md_max_bytes: int = Field(
+        default=24576,
+        ge=1024,
+        description="WARN when AGENTS.md exceeds this many bytes (default 24 KiB).",
+    )
+    always_apply_max_bytes: int = Field(
+        default=16384,
+        ge=1024,
+        description=(
+            "WARN when the sum of alwaysApply rules under .claude/rules and "
+            ".cursor/rules exceeds this many bytes (default 16 KiB)."
+        ),
+    )
+    skill_count_max: int = Field(
+        default=20,
+        ge=1,
+        description=(
+            "WARN when either host (.claude/skills or .cursor/skills) deploys "
+            "more than this many SKILL.md directories (default 20)."
+        ),
+    )
+    skill_body_max_lines: int = Field(
+        default=120,
+        ge=20,
+        description=(
+            "WARN when a registry skill's SKILL.md exceeds this many lines "
+            "without companion files (default 120)."
+        ),
+    )
+
+
 class TappsMCPSettings(BaseSettings):
     """Root settings for TappsMCP server."""
 
@@ -980,6 +1019,24 @@ class TappsMCPSettings(BaseSettings):
         description=(
             "How intensely the LLM should use TappsMCP tools. "
             "'high' = mandatory enforcement, 'medium' = balanced, 'low' = optional guidance."
+        ),
+    )
+
+    skill_tier: Literal["core", "full"] = Field(
+        default="full",
+        description=(
+            "Which TappsMCP skills init/upgrade deploy. "
+            "'core' = finish-task, handoff/continue, memory, tool-reference, "
+            "research, security, init/upgrade/engagement, apply-files, linear-issue/read. "
+            "'full' = entire platform skill registry (default; backward compatible)."
+        ),
+    )
+
+    doctor_context_budget: DoctorContextBudgetSettings = Field(
+        default_factory=DoctorContextBudgetSettings,
+        description=(
+            "Advisory always-on context ceilings for tapps_doctor WARN checks "
+            "(CLAUDE.md / AGENTS.md size, alwaysApply weight, skill inventory)."
         ),
     )
 

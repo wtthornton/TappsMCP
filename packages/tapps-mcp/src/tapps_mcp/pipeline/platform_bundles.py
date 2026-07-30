@@ -819,7 +819,7 @@ def generate_claude_agent_scope_rule(
 
 _CLAUDE_INTEGRATION_HYGIENE_RULE = """\
 ---
-alwaysApply: true
+alwaysApply: false
 ---
 # Integration Hygiene (TappsMCP)
 
@@ -885,8 +885,9 @@ def generate_claude_integration_hygiene_rule(
 ) -> dict[str, Any]:
     """Generate ``.claude/rules/integration-hygiene.md``.
 
-    Always-apply rule that bounds how the agent integrates with external
-    services, sibling repos, and subagent reports. Mirrors the deployment
+    On-demand rule (``alwaysApply: false``) that bounds how the agent
+    integrates with external services, sibling repos, and subagent reports.
+    Mirrors the deployment
     shape of :func:`generate_claude_agent_scope_rule`. Idempotent — re-running
     overwrites with the same content. TAP-1215.
 
@@ -1079,7 +1080,7 @@ TappsMCP can run in CI. Use `TAPPS_MCP_PROJECT_ROOT` and `tapps-mcp validate-cha
 
 _CLAUDE_LINEAR_STANDARDS_RULE = """\
 ---
-alwaysApply: true
+alwaysApply: false
 ---
 # Linear Issue Standards (TappsMCP)
 
@@ -1187,12 +1188,12 @@ def generate_claude_linear_standards_rule(
 ) -> dict[str, Any]:
     """Generate ``.claude/rules/linear-standards.md``.
 
-    Always-apply rule that requires Linear epic/story/issue writes to route
-    through the docs-mcp generator and validator tools (via the
-    ``linear-issue`` skill) rather than raw plugin ``save_issue`` calls.
-    Captures the Linear markdown-rendering workarounds discovered during
-    the TAP-971 fleet audit so agents reproduce compliant issues.
-    Idempotent — re-running overwrites with the same content.
+    On-demand rule (``alwaysApply: false``) that requires Linear
+    epic/story/issue writes to route through the docs-mcp generator and
+    validator tools (via the ``linear-issue`` skill) rather than raw plugin
+    ``save_issue`` calls. Captures the Linear markdown-rendering workarounds
+    discovered during the TAP-971 fleet audit so agents reproduce compliant
+    issues. Idempotent — re-running overwrites with the same content.
 
     Args:
         project_root: Target project root directory.

@@ -500,37 +500,50 @@ def _refresh_karpathy_blocks(
     dry_run: bool = False,
     include_karpathy: bool = True,
     skip_files: set[str] | None = None,
+    force: bool = False,
 ) -> dict[str, Any]:
-    """Install or refresh the Karpathy guidelines block in AGENTS.md and CLAUDE.md.
+    """Install or refresh Karpathy guidelines into a single primary home.
 
-    Appends between BEGIN/END markers, preserving content outside them.
-    Files that don't exist are skipped (they aren't owned by this upgrade
-    step; ``tapps_init`` creates them).
-
-    When ``include_karpathy=False`` (or ``karpathy`` appears in ``skip_files``),
-    we skip *installing* the block into files that don't already have it but
-    still refresh files that do — opting out must never silently strip user
-    content that prior runs added.
+    Prefers ``AGENTS.md`` when present, otherwise ``CLAUDE.md``. Dual installs
+    are reported; the secondary copy is removed only when ``force=True`` and
+    ``karpathy`` is not in ``upgrade_skip_files``.
     """
     from tapps_mcp.pipeline import karpathy_block
+    from tapps_mcp.pipeline.init import _karpathy_primary_home
 
     skip = skip_files or set()
     opted_out = (not include_karpathy) or _skipped("karpathy", skip)
+    primary = _karpathy_primary_home(project_root)
 
     per_file: dict[str, str] = {}
+    dual_homes: list[str] = [
+        name for name in ("AGENTS.md", "CLAUDE.md") if karpathy_block.has_block(project_root / name)
+    ]
+
     for rel in ("AGENTS.md", "CLAUDE.md"):
         target = project_root / rel
         if not target.exists():
             per_file[rel] = "skipped_file_missing"
             continue
         try:
-            if opted_out:
-                # Only act if already present; never install new blocks.
-                existing = target.read_text(encoding="utf-8")
-                if karpathy_block._find_block_span(existing) is None:
+            is_primary = primary is not None and rel == primary
+            has = karpathy_block.has_block(target)
+            if is_primary:
+                if opted_out and not has:
                     per_file[rel] = "skipped (opt-out)"
                     continue
-            per_file[rel] = karpathy_block.install_or_refresh(target, dry_run=dry_run)
+                per_file[rel] = karpathy_block.install_or_refresh(target, dry_run=dry_run)
+                continue
+            if not has:
+                per_file[rel] = "skipped (single-home)"
+                continue
+            if force and not opted_out:
+                action = karpathy_block.remove_block(target, dry_run=dry_run)
+                per_file[rel] = (
+                    "would_remove (dual-home)" if dry_run else f"removed (dual-home): {action}"
+                )
+            else:
+                per_file[rel] = "WARN dual-home (use upgrade --force to strip)"
         except (OSError, ValueError) as exc:
             log.exception("karpathy_block_failed", file=rel)
             per_file[rel] = f"error: {exc}"
@@ -539,6 +552,8 @@ def _refresh_karpathy_blocks(
         "source_sha": karpathy_block.KARPATHY_GUIDELINES_SOURCE_SHA,
         "files": per_file,
         "opted_out": opted_out,
+        "primary": primary,
+        "dual_homes": dual_homes if len(dual_homes) >= 2 else [],
     }
 
 
@@ -915,6 +930,7 @@ def _upgrade_claude_code_dry_run(
     linear_enforce_gate: bool = False,
     linear_enforce_cache_gate: str = "off",
     session_start_gate: str = "off",
+    skill_tier: str = "full",
 ) -> None:
     """Populate dry-run component hints for the claude-code host.
 
@@ -1004,14 +1020,26 @@ def _upgrade_claude_code_dry_run(
     if _skipped("claude_skills", skip):
         result["components"]["skills"] = "skipped (upgrade_skip_files)"
     else:
+        from tapps_mcp.pipeline.platform_skills import CORE_SKILL_NAMES, prune_skills_for_tier
+
         skills_dir = project_root / ".claude" / "skills"
-        managed_skills = frozenset(CLAUDE_SKILLS.keys())
+        managed_skills = (
+            frozenset(name for name in CLAUDE_SKILLS if name in CORE_SKILL_NAMES)
+            if skill_tier == "core"
+            else frozenset(CLAUDE_SKILLS.keys())
+        )
+        prune_preview = prune_skills_for_tier(
+            project_root, "claude", skill_tier=skill_tier, dry_run=True
+        )
         result["components"]["skills"] = {
             "action": "would-write-managed-skills",
+            "skill_tier": skill_tier,
             "managed_skills": sorted(managed_skills),
             "preserved_skills": _enumerate_preserved(
-                skills_dir, managed_skills, is_dir_target=True
+                skills_dir, frozenset(CLAUDE_SKILLS.keys()), is_dir_target=True
             ),
+            "would_prune": prune_preview.get("would_prune", []),
+            "bytes_freed": prune_preview.get("bytes_freed", 0),
         }
 
     if _skipped("docs_automation", skip):
@@ -1098,6 +1126,7 @@ def _upgrade_claude_code_live(
     linear_enforce_gate: bool = False,
     linear_enforce_cache_gate: str = "off",
     session_start_gate: str = "off",
+    skill_tier: str = "full",
 ) -> None:
     """Run live (non-dry-run) artifact upgrades for the claude-code host."""
     from tapps_mcp.pipeline.init import _bootstrap_claude, _bootstrap_claude_settings
@@ -1219,7 +1248,21 @@ def _upgrade_claude_code_live(
     if _skipped("claude_skills", skip):
         result["components"]["skills"] = "skipped (upgrade_skip_files)"
     else:
-        result["components"]["skills"] = generate_skills(project_root, "claude", overwrite=True)
+        from tapps_mcp.pipeline.platform_skills import prune_skills_for_tier
+
+        skills_result = generate_skills(
+            project_root,
+            "claude",
+            overwrite=True,
+            engagement_level=engagement_level,
+            skill_tier=skill_tier,
+        )
+        prune_result = prune_skills_for_tier(
+            project_root, "claude", skill_tier=skill_tier, dry_run=False
+        )
+        skills_result["pruned"] = prune_result.get("pruned", [])
+        skills_result["bytes_freed"] = prune_result.get("bytes_freed", 0)
+        result["components"]["skills"] = skills_result
 
     if _skipped("docs_automation", skip):
         result["components"]["docs_automation"] = "skipped (upgrade_skip_files)"
@@ -1350,6 +1393,7 @@ def _upgrade_cursor_dry_run(
     result: dict[str, Any],
     *,
     force: bool,
+    skill_tier: str = "full",
 ) -> None:
     """Populate dry-run component hints for the cursor host.
 
@@ -1398,12 +1442,26 @@ def _upgrade_cursor_dry_run(
         "preserved_files": _enumerate_preserved(agents_dir, managed_agents),
     }
 
+    from tapps_mcp.pipeline.platform_skills import CORE_SKILL_NAMES, prune_skills_for_tier
+
     skills_dir = project_root / ".cursor" / "skills"
-    managed_skills = frozenset(CURSOR_SKILLS.keys())
+    managed_skills = (
+        frozenset(name for name in CURSOR_SKILLS if name in CORE_SKILL_NAMES)
+        if skill_tier == "core"
+        else frozenset(CURSOR_SKILLS.keys())
+    )
+    prune_preview = prune_skills_for_tier(
+        project_root, "cursor", skill_tier=skill_tier, dry_run=True
+    )
     result["components"]["skills"] = {
         "action": "would-write-managed-skills",
+        "skill_tier": skill_tier,
         "managed_skills": sorted(managed_skills),
-        "preserved_skills": _enumerate_preserved(skills_dir, managed_skills, is_dir_target=True),
+        "preserved_skills": _enumerate_preserved(
+            skills_dir, frozenset(CURSOR_SKILLS.keys()), is_dir_target=True
+        ),
+        "would_prune": prune_preview.get("would_prune", []),
+        "bytes_freed": prune_preview.get("bytes_freed", 0),
     }
 
     from tapps_mcp.pipeline.platform_docs_automation import (
@@ -1425,6 +1483,7 @@ def _upgrade_cursor_live(
     result: dict[str, Any],
     *,
     force: bool,
+    skill_tier: str = "full",
 ) -> None:
     """Run live (non-dry-run) artifact upgrades for the cursor host."""
     from tapps_mcp.pipeline.init import _bootstrap_cursor
@@ -1456,7 +1515,17 @@ def _upgrade_cursor_live(
     result["components"]["agents"] = generate_subagent_definitions(
         project_root, "cursor", overwrite=True
     )
-    result["components"]["skills"] = generate_skills(project_root, "cursor", overwrite=True)
+    from tapps_mcp.pipeline.platform_skills import prune_skills_for_tier
+
+    skills_result = generate_skills(
+        project_root, "cursor", overwrite=True, skill_tier=skill_tier
+    )
+    prune_result = prune_skills_for_tier(
+        project_root, "cursor", skill_tier=skill_tier, dry_run=False
+    )
+    skills_result["pruned"] = prune_result.get("pruned", [])
+    skills_result["bytes_freed"] = prune_result.get("bytes_freed", 0)
+    result["components"]["skills"] = skills_result
 
     from tapps_mcp.pipeline.platform_docs_automation import (
         detect_docsmcp,
@@ -1480,6 +1549,7 @@ def _upgrade_platform(
     force: bool = False,
     dry_run: bool = False,
     engagement_level: str = "medium",
+    skill_tier: str = "full",
     skip_files: set[str] | None = None,
     mcp_only: bool = False,
     force_python_rule: bool = False,
@@ -1568,6 +1638,7 @@ def _upgrade_platform(
                 linear_enforce_gate=linear_enforce_gate,
                 linear_enforce_cache_gate=linear_enforce_cache_gate,
                 session_start_gate=session_start_gate,
+                skill_tier=skill_tier,
             )
         else:
             _upgrade_claude_code_live(
@@ -1582,12 +1653,13 @@ def _upgrade_platform(
                 linear_enforce_gate=linear_enforce_gate,
                 linear_enforce_cache_gate=linear_enforce_cache_gate,
                 session_start_gate=session_start_gate,
+                skill_tier=skill_tier,
             )
     elif host == "cursor":
         if dry_run:
-            _upgrade_cursor_dry_run(project_root, result, force=force)
+            _upgrade_cursor_dry_run(project_root, result, force=force, skill_tier=skill_tier)
         else:
-            _upgrade_cursor_live(project_root, result, force=force)
+            _upgrade_cursor_live(project_root, result, force=force, skill_tier=skill_tier)
     elif host == "vscode":
         result["components"]["note"] = "no platform rules to upgrade"
 
@@ -2315,6 +2387,7 @@ def upgrade_pipeline(
         hosts.append("cursor")
 
     engagement_level = settings.llm_engagement_level
+    skill_tier = settings.skill_tier if settings.skill_tier in {"core", "full"} else "full"
 
     # Per-host upgrades
     platform_results: list[dict[str, Any]] = []
@@ -2326,6 +2399,7 @@ def upgrade_pipeline(
                 force=force,
                 dry_run=dry_run,
                 engagement_level=engagement_level,
+                skill_tier=skill_tier,
                 skip_files=skip_files,
                 mcp_only=mcp_only,
                 force_python_rule=settings.force_python_quality_rule,
@@ -2364,6 +2438,7 @@ def upgrade_pipeline(
                 dry_run=dry_run,
                 include_karpathy=settings.include_karpathy_guidelines,
                 skip_files=skip_files,
+                force=force,
             )
         except Exception as exc:
             result["errors"].append(f"Karpathy guidelines: {exc}")
