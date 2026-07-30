@@ -512,3 +512,28 @@ class TestGraphDegradedIgnored:
         )
         report = compute_gaps(tmp_path, called_tools={"tapps_session_start", "tapps_call_graph"})
         assert "graph_degraded_ignored" not in report["gaps"]
+
+    def test_stop_followup_omits_graph_degraded_to_avoid_loops(self, tmp_path: Path) -> None:
+        """Chronic-gap repos must not get a stop re-query followup (AgentForge loop)."""
+        metrics = tmp_path / ".tapps-mcp" / "metrics"
+        metrics.mkdir(parents=True)
+        (metrics / "tool_calls_2026-07-30.jsonl").write_text(
+            json.dumps(
+                {
+                    "tool_name": "tapps_call_graph",
+                    "status": "success",
+                    "degraded": True,
+                    "started_at": "2026-07-30T10:00:00",
+                }
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+        report = compute_gaps(tmp_path, called_tools={"tapps_session_start", "tapps_call_graph"})
+        assert "graph_degraded_ignored" in report["gaps"]
+        followup = format_stop_gap_followup(
+            tmp_path,
+            called_tools={"tapps_session_start", "tapps_call_graph"},
+            mode="warn",
+        )
+        assert followup is None

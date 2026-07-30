@@ -403,7 +403,9 @@ def compute_gaps(
         recs.append(
             f"Recent {tools} call(s) returned degraded=true. Do not treat the "
             "result as authoritative blast-radius — read data.completeness / "
-            "gap_taxonomy, narrow the symbol or file_paths, and re-query."
+            "gap_taxonomy. Narrowing the symbol may help for local gaps; if "
+            "session_start in_repo_gap_rate is already high, re-querying will "
+            "not clear degraded (index-level debt)."
         )
 
     if not gaps:
@@ -485,6 +487,11 @@ def format_stop_gap_followup(
             gaps.insert(0, "edits_without_validation")
         if "CHECKLIST_MISSING" in fresh_violations and "checklist_skipped" not in gaps:
             gaps.insert(0, "checklist_skipped")
+
+    # Never stop-followup on graph_degraded_ignored: on high in_repo_gap_rate
+    # repos (e.g. AgentForge) every call_graph/diff_impact is degraded, so a
+    # "re-query" followup loops forever. Keep the gap in checklist/usage only.
+    gaps = [g for g in gaps if g != "graph_degraded_ignored"]
 
     if not gaps:
         return None
