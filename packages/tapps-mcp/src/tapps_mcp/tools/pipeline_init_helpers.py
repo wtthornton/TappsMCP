@@ -100,6 +100,16 @@ async def run_init_wizard_if_needed(
     return wizard_answers, llm_engagement_level, platform, agent_teams, add_other_mcps_hint
 
 
+def skill_tier_from_wizard(wizard_answers: Any, settings: Any) -> str:
+    """Resolve skill_tier from wizard answers or settings (default full)."""
+    if wizard_answers is not None:
+        tier = getattr(wizard_answers, "skill_tier", None)
+        if tier in {"core", "full"}:
+            return str(tier)
+    tier = getattr(settings, "skill_tier", "full")
+    return tier if tier in {"core", "full"} else "full"
+
+
 def maybe_write_mcp_config(
     result: dict[str, Any],
     settings: Any,
@@ -191,10 +201,13 @@ def build_init_bootstrap_config(
     include_karpathy: bool,
     mcp_bundle: str,
     settings: Any,
+    skill_tier: str | None = None,
+    wizard_answers: Any = None,
 ) -> Any:
     """Assemble the :class:`BootstrapConfig` used by :func:`bootstrap_pipeline`."""
     from tapps_mcp.pipeline.init import BootstrapConfig
 
+    resolved_tier = skill_tier or skill_tier_from_wizard(wizard_answers, settings)
     return BootstrapConfig(
         create_handoff=create_handoff,
         create_runlog=create_runlog,
@@ -228,6 +241,7 @@ def build_init_bootstrap_config(
         dry_run=dry_run,
         verify_only=verify_only,
         llm_engagement_level=llm_engagement_level or settings.llm_engagement_level,
+        skill_tier=resolved_tier,
         scaffold_experts=scaffold_experts,
         include_karpathy=include_karpathy,
         mcp_bundle=mcp_bundle,

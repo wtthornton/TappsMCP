@@ -1088,6 +1088,7 @@ async def tapps_init(
         include_karpathy=include_karpathy,
         mcp_bundle=mcp_bundle,
         settings=settings,
+        wizard_answers=_wizard,
     )
 
     prev_write_mode = _pih.resolve_write_mode_env(output_mode)

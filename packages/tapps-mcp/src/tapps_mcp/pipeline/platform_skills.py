@@ -116,6 +116,25 @@ DEPRECATED_TAPPS_SKILLS: frozenset[str] = frozenset(
     {"tapps-score", "tapps-gate", "tapps-validate", "tapps-report"}
 )
 
+# Core skill tier for init/upgrade when ``skill_tier: core`` (context budget).
+CORE_SKILL_NAMES: frozenset[str] = frozenset(
+    {
+        "tapps-finish-task",
+        "tapps-handoff-session",
+        "tapps-continue-session",
+        "tapps-memory",
+        "tapps-tool-reference",
+        "tapps-research",
+        "tapps-security",
+        "tapps-init",
+        "tapps-upgrade",
+        "tapps-engagement",
+        "tapps-apply-files",
+        "linear-issue",
+        "linear-read",
+    }
+)
+
 _FINISH_TASK_CHECKLIST_AND_DOC_GAPS_CURSOR = finish_task_checklist_and_doc_gaps(
     claude_nlt_prefix=False
 )
@@ -1835,6 +1854,7 @@ def generate_skills(
     *,
     engagement_level: str = "medium",
     overwrite: bool = False,
+    skill_tier: str = "full",
 ) -> dict[str, Any]:
     """Generate SKILL.md files for the given platform.
 
@@ -1846,8 +1866,11 @@ def generate_skills(
     :data:`SESSION_TRANSFER_SKILL_NAMES` (always refreshed so handoff
     workflows stay aligned with doctor checks).
     When *engagement_level* is set, prepends a note (MANDATORY vs optional).
+    When *skill_tier* is ``"core"``, only :data:`CORE_SKILL_NAMES` are written;
+    other registry skills are listed under ``skipped_tier``.
 
-    Returns a summary dict with ``created``, ``updated``, and ``skipped`` lists.
+    Returns a summary dict with ``created``, ``updated``, ``skipped``,
+    and ``skipped_tier`` lists.
     """
     if platform == "claude":
         skills_base = project_root / ".claude" / "skills"
@@ -1856,7 +1879,12 @@ def generate_skills(
         skills_base = project_root / ".cursor" / "skills"
         templates = CURSOR_SKILLS
     else:
-        return {"created": [], "skipped": [], "error": f"Unknown platform: {platform}"}
+        return {
+            "created": [],
+            "skipped": [],
+            "skipped_tier": [],
+            "error": f"Unknown platform: {platform}",
+        }
 
     engagement_note = ""
     if engagement_level == "high":
@@ -1864,18 +1892,20 @@ def generate_skills(
     elif engagement_level == "low":
         engagement_note = "*Engagement: Optional for low-enforcement projects.*\n\n"
 
+    tier = skill_tier if skill_tier in {"core", "full"} else "full"
     created: list[str] = []
     updated: list[str] = []
     skipped: list[str] = []
+    skipped_tier: list[str] = []
     for skill_name, content in templates.items():
+        if tier == "core" and skill_name not in CORE_SKILL_NAMES:
+            skipped_tier.append(skill_name)
+            continue
         skill_dir = skills_base / skill_name
         skill_dir.mkdir(parents=True, exist_ok=True)
         target = skill_dir / "SKILL.md"
 
         if skill_name in SMART_MERGE_SKILL_NAMES:
-            # Managed-block smart-merge: refresh the platform body in place while
-            # preserving each project's customizations outside the markers. Runs
-            # every call (init and upgrade) — the merger itself is idempotent.
             action = install_or_refresh_skill(target, content, skill_name)
             _write_skill_companions(skill_dir, skill_name)
             if action == "created":
@@ -1898,4 +1928,64 @@ def generate_skills(
             target.write_text(full_content, encoding="utf-8")
             created.append(skill_name)
 
-    return {"created": created, "updated": updated, "skipped": skipped}
+    return {
+        "created": created,
+        "updated": updated,
+        "skipped": skipped,
+        "skipped_tier": skipped_tier,
+        "skill_tier": tier,
+    }
+
+
+def prune_skills_for_tier(
+    project_root: Path,
+    platform: str,
+    *,
+    skill_tier: str = "full",
+    dry_run: bool = False,
+) -> dict[str, Any]:
+    """Remove managed non-core registry skills when ``skill_tier == "core"``.
+
+    Only deletes skill directories whose names appear in the platform registry
+    (or :data:`DEPRECATED_TAPPS_SKILLS`) and are outside :data:`CORE_SKILL_NAMES`.
+    Unknown user skills are never removed.
+    """
+    import shutil
+
+    if platform == "claude":
+        skills_base = project_root / ".claude" / "skills"
+        registry = set(CLAUDE_SKILLS) | set(DEPRECATED_TAPPS_SKILLS)
+    elif platform == "cursor":
+        skills_base = project_root / ".cursor" / "skills"
+        registry = set(CURSOR_SKILLS) | set(DEPRECATED_TAPPS_SKILLS)
+    else:
+        return {"pruned": [], "would_prune": [], "error": f"Unknown platform: {platform}"}
+
+    tier = skill_tier if skill_tier in {"core", "full"} else "full"
+    if tier != "core" or not skills_base.is_dir():
+        return {"pruned": [], "would_prune": [], "skill_tier": tier, "bytes_freed": 0}
+
+    would_prune: list[str] = []
+    pruned: list[str] = []
+    bytes_freed = 0
+    for child in sorted(skills_base.iterdir()):
+        if not child.is_dir() or not (child / "SKILL.md").is_file():
+            continue
+        if child.name not in registry:
+            continue
+        if child.name in CORE_SKILL_NAMES:
+            continue
+        size = sum(p.stat().st_size for p in child.rglob("*") if p.is_file())
+        bytes_freed += size
+        would_prune.append(child.name)
+        if not dry_run:
+            shutil.rmtree(child)
+            pruned.append(child.name)
+
+    return {
+        "pruned": pruned,
+        "would_prune": would_prune,
+        "skill_tier": tier,
+        "bytes_freed": bytes_freed,
+        "dry_run": dry_run,
+    }

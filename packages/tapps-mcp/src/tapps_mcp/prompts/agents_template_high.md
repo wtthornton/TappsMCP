@@ -141,171 +141,21 @@ Your project may have two complementary memory systems:
 
 REQUIRED: Use `uv run tapps-mcp memory save|get|search` for architecture decisions and quality patterns. Pin scope keys under `memory_hooks.auto_recall.recall_keys`.
 
-### Memory action reference (44 actions)
+**Progressive disclosure:** full action catalog, tiers/scopes, brain health fields, and federation details live in the **tapps-memory** skill and [docs/MEMORY_REFERENCE.md](docs/MEMORY_REFERENCE.md). Do not paste the full action list into always-on context.
 
-**Core:** `save` (key, value, tier, scope, tags), `save_bulk` (up to 50 entries), `get` (by key), `list` (filter by scope/tier/tags), `delete` (by key)
-
-**Search:** `search` (ranked BM25 with composite scoring: 40% relevance + 30% confidence + 15% recency + 15% frequency)
-
-**Intelligence:** `reinforce` (reset decay clock, boost confidence), `gc` (archive stale entries), `contradictions` (detect stale claims vs project state), `reseed` (re-populate from project profile)
-
-**Consolidation:** `consolidate` (merge related entries with provenance tracking, `dry_run=True` to preview), `unconsolidate` (undo a merge, restore sources)
-
-**Import/export:** `import` (from JSON, up to 500 entries), `export` (to JSON or Markdown with Obsidian frontmatter)
-
-**Federation:** `federate_register` (register project in hub), `federate_publish` (publish `shared`-scope entries), `federate_subscribe` (subscribe to other projects), `federate_sync` (pull subscribed entries), `federate_search` (search local + federated), `federate_status` (hub overview)
-
-**Maintenance:** `index_session` (index current session notes into memory), `validate` (check store integrity), `maintain` (run GC + consolidation + contradiction detection in one call)
-
-**Security:** `safety_check`, `verify_integrity`
-
-**Profiles:** `profile_info`, `profile_list`, `profile_switch`
-
-**Diagnostics:** `health`
-
-**Brain health (`brain_bridge_health`):** every `tapps_session_start` response carries a `data.brain_bridge_health` block — `enabled`, `ok`, `dsn_reachable`, `pool_config_valid`, `native_health_ok`, `errors`, `warnings`, plus `details` (mode, `http_url`, `brain_version`, `brain_status`). `tapps doctor` mirrors the same probe. See [docs/MEMORY_REFERENCE.md](docs/MEMORY_REFERENCE.md#brain-health-diagnostics) for troubleshooting.
-
-**Hive / Agent Teams:** `hive_status`, `hive_search`, `hive_propagate`, `agent_register`
-
-Shipped defaults enable expert auto-save, recurring quick_check memory, architectural supersede, impact enrichment, and memory_hooks — override in `.tapps-mcp.yaml`. See `docs/MEMORY_REFERENCE.md`.
-
-### Memory tiers
-
-| Tier | Half-life | Use for |
-|------|-----------|---------|
-| **architectural** | 180 days | Stable decisions: DB choice, project structure, auth strategy |
-| **pattern** | 60 days | Conventions: coding style, recurring solutions, test patterns |
-| **procedural** | 30 days | Workflows: deploy steps, migration procedures |
-| **context** | 14 days | Short-lived facts: current sprint focus, recent bugs |
-
-### Memory scopes
-
-| Scope | Visibility | Use for |
-|-------|-----------|---------|
-| **project** | All sessions (default) | Architecture, patterns, decisions |
-| **branch** | Current git branch only | Branch-specific WIP |
-| **session** | Current session (expires 7 days) | Temporary notes |
-| **shared** | Federation-eligible (cross-project) | Reusable knowledge across projects |
-
-### Cross-session handoff
-
-When transferring work between chats in the same project, use this workflow:
-1. **End chat:** invoke `/tapps-handoff-session` — writes `.tapps-mcp/session-handoff.md` and calls `tapps_session_end`.
-2. **Fresh chat:** invoke `/tapps-continue-session` — reads the handoff, optional `TAP-####`, and calls `tapps_session_start`.
-
-For ad-hoc key/value payloads (tokens, IDs), use `tapps-mcp memory save/get --key <slug>` or brain recall. Cross-agent: `action="hive_propagate"` (Hive section above); cross-project: federation actions (`federate_publish` + `federate_subscribe` + `federate_sync`).
-
-### Memory configuration (`.tapps-mcp.yaml`)
-
-```yaml
-memory:
-  max_memories: 1500           # Hard cap per project
-  gc_auto_threshold: 0.8       # Auto-GC at 80% capacity
-  capture_prompt: |             # Guide auto-capture
-    Store durable memories: architectural, pattern, context.
-    Skip: raw logs, transient state, sensitive data.
-  write_rules:
-    block_sensitive_keywords: ["password", "secret", "api_key", "token"]
-memory_hooks:
-  auto_recall:
-    enabled: true               # Inject relevant memories before turns
-    min_score: 0.3              # Tune coverage vs noise
-  auto_capture:
-    enabled: true               # Extract facts on session end
-```
+**Cross-session handoff:** `/tapps-handoff-session` at chat end and `/tapps-continue-session` at chat start (`.tapps-mcp/session-handoff.md` is canonical).
 
 ---
 
 ## Platform hooks and automation
 
-When `tapps_init` generates platform-specific files, it also creates **hooks**, **subagents**, and **skills** that automate parts of the workflow:
+`tapps_init` / `tapps_upgrade` deploy hooks, subagents, and skills. Keep this file thin — load details on demand:
 
-### Hooks (auto-generated)
+- **Skills:** invoke `/tapps-finish-task`, `/tapps-memory`, `/tapps-tool-reference`, `linear-issue`, `linear-read` as needed. Set `skill_tier: core` in `.tapps-mcp.yaml` for a smaller inventory.
+- **Hooks / subagents / CI:** run `tapps-mcp doctor` for what is wired; high engagement enables denser hooks and blocking Stop/TaskCompleted reminders.
+- **Linear writes:** always use the `linear-issue` skill (never raw `save_issue`). Multi-issue reads: `linear-read`.
 
-**Claude Code** (`.claude/hooks/`): 10 advisory hook scripts at `high` engagement that fire on lifecycle events:
-- **SessionStart** - Injects TappsMCP awareness on session start and after compaction
-- **PostToolUse (Edit/Write)** - Reminds you to run `tapps_quick_check` after Python edits
-- **Stop** - Reminds you to run `tapps_validate_changed` before session end (blocking at high engagement)
-- **TaskCompleted** - Reminds you to validate before marking task complete (blocking at high engagement)
-- **PreCompact** - Backs up scoring context before context window compaction
-- **SubagentStart / SubagentStop** - Injects TappsMCP awareness into spawned subagents
-- **SessionEnd** - End-of-session memory capture
-- **PostToolUseFailure** - Logs tool-failure context for diagnostics
-- **UserPromptSubmit** - Per-prompt pipeline-state reminder (self-silences when fresh)
-
-#### Opt-in PreToolUse gates (independent flags in `.tapps-mcp.yaml`)
-
-These add blocking `PreToolUse` matchers. They're independent — enable each based on what you want blocked.
-
-- **`destructive_guard: true`** — installs `tapps-pre-bash.sh`, blocks Bash commands containing `rm -rf`, `format c:`, fork-bomb patterns, etc. Exit 2 blocks the command.
-- **`linear_enforce_gate: true`** — installs `tapps-pre-linear-write.sh` + `tapps-post-docs-validate.sh` (TAP-981). Blocks `mcp__plugin_linear_linear__save_issue` unless a `mcp__docs-mcp__docs_validate_linear_issue` call happened in the last 30 minutes. Steers Linear writes through the `linear-issue` skill's generator/validator pipeline. Emergency bypass: `TAPPS_LINEAR_SKIP_VALIDATE=1` (logged to `.tapps-mcp/.bypass-log.jsonl`). Bash on Linux/macOS, PowerShell `.ps1` on Windows (TAP-986). Default: on at high/medium engagement, off at low. Update-only `save_issue` calls (with `id` and no `title`/`description`) skip the sentinel — status, label, priority, and assignee edits pass through without re-validation.
-- **`linear_enforce_cache_gate: "off" | "warn" | "block"`** — installs `tapps-pre-linear-list.sh` + `tapps-post-linear-snapshot-get.sh` (TAP-1224). Gates `mcp__plugin_linear_linear__list_issues` behind a recent (< 300 s) `tapps_linear_snapshot_get` for the same `(team, project, state, label, limit)` slice. Sentinel hash includes all five filter dimensions, so a snapshot for project A does NOT unlock list_issues for project B. **Warn mode** (default at high/medium engagement) logs each violation to `.tapps-mcp/.cache-gate-violations.jsonl` and lets the call through — telemetry-first rollout. **Block mode** rejects with exit 2 and emits a remediation message pointing at the `linear-read` skill (TAP-1260) and `mcp__plugin_linear_linear__get_issue` for single-issue lookups. Zero exempt parameters: no `query=` / `parentId=` / `cycle=` carve-out — every multi-issue read goes through `tapps_linear_snapshot_get` first. Emergency bypass: `TAPPS_LINEAR_SKIP_CACHE_GATE=1` (logged to `.tapps-mcp/.bypass-log.jsonl`). Bash on Linux/macOS, PowerShell `.ps1` on Windows. Default: `"warn"` at high/medium engagement, `"off"` at low. `tapps doctor` reports current mode + 24-h violation count.
-- **`install_git_hooks: true`** — writes `.githooks/pre-commit` and points `core.hooksPath` at it (TAP-979). The hook runs `uv run tapps-mcp validate-changed --quick` on staged Python files and fails the commit on quality-gate failure, closing the git boundary so commits made outside Claude Code (human shell, scripts, non-Claude tools) still go through the pipeline. Emergency bypass: `TAPPS_SKIP_GATE=1 git commit ...`. Default: off.
-
-Run `tapps-mcp doctor` to see which `PreToolUse` matchers are wired in your project.
-
-**Cursor** (`.cursor/hooks/`): 3 hook scripts:
-- **beforeMCPExecution** - Logs MCP tool invocations for observability
-- **afterFileEdit** - Fire-and-forget reminder to run quality checks
-- **stop** - Prompts validation via followup_message before session ends
-
-### Subagents (auto-generated)
-
-Four agent definitions per platform in `.claude/agents/` or `.cursor/agents/`:
-- **tapps-reviewer** (sonnet) - Reviews code quality and runs security scans after edits
-- **tapps-researcher** (sonnet) - Looks up documentation and researches best practices
-- **tapps-validator** (haiku) - Runs pre-completion validation on all changed files
-- **tapps-review-fixer** (sonnet, isolated worktree) - Combined score-fix-validate pass; designed for parallel multi-file pipelines
-
-### Skills (auto-generated)
-
-Sixteen core tapps-* SKILL.md files per platform in `.claude/skills/` or `.cursor/skills/` (plus linear-* and optional continuous-learning-v2):
-- **tapps-finish-task** - End-of-task pipeline: validate_changed + checklist + optional memory save
-- **tapps-handoff-session** - Write `.tapps-mcp/session-handoff.md` and call `tapps_session_end` before ending a chat
-- **tapps-continue-session** - Bootstrap a fresh chat from the last handoff + optional Linear issue
-- **tapps-review-pipeline** - Orchestrate a parallel review-fix-validate pipeline
-- **tapps-research** - Look up library documentation and research best practices
-- **tapps-security** - Run a comprehensive security audit with vulnerability scanning
-- **tapps-memory** - Manage shared project memory (44 actions, cross-session)
-- **tapps-tool-reference** - Full per-tool reference and when-to-use guidance
-- **tapps-init** - Bootstrap TappsMCP scaffolding in a project
-- **tapps-upgrade** - Reinstall global CLIs from latest source, restart MCP, run `tapps-mcp upgrade` + doctor + checklist
-- **tapps-engagement** - Switch enforcement intensity (high/medium/low)
-- **tapps-apply-files** - Apply content-return file operations (Docker fallback)
-
-> **Removed in v3.12.0:** `tapps-score`, `tapps-gate`, `tapps-validate`, and `tapps-report` wrapper skills were deleted. You MUST prefer direct MCP tool calls or `/tapps-finish-task` for the end-of-task bundle.
-
-### Agent Teams (opt-in, Claude Code only)
-
-When `tapps_init` is called with `agent_teams=True`, additional hooks enable a quality watchdog teammate pattern:
-- **TeammateIdle** - Keeps the quality watchdog active while issues remain
-- **TaskCompleted** - Reminds about quality gate validation on task completion
-
-Set `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1` to enable Agent Teams.
-
-### VS Code / Copilot Instructions (auto-generated)
-
-`.github/copilot-instructions.md` - Provides GitHub Copilot in VS Code with
-TappsMCP tool guidance, recommended workflow, and scoring category reference.
-
-### Cursor BugBot Rules (auto-generated, Cursor only)
-
-`.cursor/BUGBOT.md` - Quality standards for Cursor BugBot automated PR review:
-security requirements, style rules, testing requirements, and scoring thresholds.
-
-### CI Integration (auto-generated)
-
-`.github/workflows/tapps-quality.yml` - GitHub Actions workflow that validates
-changed Python files on every pull request using TappsMCP quality gates.
-
-### MCP Elicitation
-
-When the MCP client supports elicitation (e.g. Cursor), TappsMCP can prompt
-the user interactively:
-- `tapps_quality_gate` prompts for preset selection when none is provided
-- `tapps_init` asks for confirmation before writing configuration files
-
-On unsupported clients, tools fall back to default behavior silently.
+> **Removed in v3.12.0:** `tapps-score`, `tapps-gate`, `tapps-validate`, and `tapps-report` wrapper skills were deleted. You MUST prefer direct MCP tool calls or `/tapps-finish-task`.
 
 ---
 

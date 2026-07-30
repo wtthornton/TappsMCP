@@ -3192,3 +3192,111 @@ class TestMcpOperatorSecrets:
         assert result.ok is False
         assert "TAPPS_MCP_CONTEXT7_API_KEY" in result.message
         assert "OPERATOR-SECRETS" in (result.detail or "")
+
+
+# ---------------------------------------------------------------------------
+# Context-budget advisory WARNs
+# ---------------------------------------------------------------------------
+
+
+class TestContextBudgetChecks:
+    """Always-on markdown / skill inventory doctor WARNs."""
+
+    def test_claude_md_size_ok_under_ceiling(self, tmp_path: Path) -> None:
+        from tapps_mcp.distribution.context_budget import check_claude_md_size
+
+        (tmp_path / "CLAUDE.md").write_text("x" * 100, encoding="utf-8")
+        result = check_claude_md_size(tmp_path)
+        assert result.ok is True
+        assert "100 bytes" in result.message
+
+    def test_claude_md_size_warns_over_ceiling(self, tmp_path: Path) -> None:
+        from tapps_mcp.distribution.context_budget import check_claude_md_size
+
+        (tmp_path / ".tapps-mcp.yaml").write_text(
+            "doctor_context_budget:\n  claude_md_max_bytes: 50\n",
+            encoding="utf-8",
+        )
+        (tmp_path / "CLAUDE.md").write_text("x" * 80, encoding="utf-8")
+        result = check_claude_md_size(tmp_path)
+        assert result.ok is False
+        assert "WARN" in result.message
+
+    def test_agents_md_size_absent_skips(self, tmp_path: Path) -> None:
+        from tapps_mcp.distribution.context_budget import check_agents_md_size
+
+        result = check_agents_md_size(tmp_path)
+        assert result.ok is True
+        assert "absent" in result.message
+
+    def test_always_apply_weight_warns(self, tmp_path: Path) -> None:
+        from tapps_mcp.distribution.context_budget import check_always_apply_rules_weight
+
+        rules = tmp_path / ".claude" / "rules"
+        rules.mkdir(parents=True)
+        (rules / "heavy.md").write_text(
+            "---\nalwaysApply: true\n---\n" + ("rule\n" * 200),
+            encoding="utf-8",
+        )
+        (tmp_path / ".tapps-mcp.yaml").write_text(
+            "doctor_context_budget:\n  always_apply_max_bytes: 100\n",
+            encoding="utf-8",
+        )
+        result = check_always_apply_rules_weight(tmp_path)
+        assert result.ok is False
+        assert "heavy.md" in result.message
+
+    def test_skill_inventory_flags_orphan_and_count(self, tmp_path: Path) -> None:
+        from tapps_mcp.distribution.context_budget import check_skill_inventory_budget
+
+        skills = tmp_path / ".claude" / "skills"
+        orphan = skills / "custom-orphan"
+        orphan.mkdir(parents=True)
+        (orphan / "SKILL.md").write_text("# orphan\n", encoding="utf-8")
+        (tmp_path / ".mcp.json").write_text("{}", encoding="utf-8")
+        (tmp_path / ".tapps-mcp.yaml").write_text(
+            "doctor_context_budget:\n  skill_count_max: 0\n",
+            encoding="utf-8",
+        )
+        result = check_skill_inventory_budget(tmp_path)
+        assert result.ok is False
+        assert "orphan" in result.message.lower() or "custom-orphan" in result.message
+
+    def test_skill_inventory_flags_oversized_without_companions(self, tmp_path: Path) -> None:
+        from tapps_mcp.distribution.context_budget import check_skill_inventory_budget
+
+        skills = tmp_path / ".claude" / "skills" / "tapps-finish-task"
+        skills.mkdir(parents=True)
+        (skills / "SKILL.md").write_text("line\n" * 200, encoding="utf-8")
+        (tmp_path / ".mcp.json").write_text("{}", encoding="utf-8")
+        (tmp_path / ".tapps-mcp.yaml").write_text(
+            "doctor_context_budget:\n  skill_body_max_lines: 50\n  skill_count_max: 100\n",
+            encoding="utf-8",
+        )
+        result = check_skill_inventory_budget(tmp_path)
+        assert result.ok is False
+        assert "tapps-finish-task" in result.message
+
+    def test_karpathy_dual_install_warns(self, tmp_path: Path) -> None:
+        from tapps_mcp.distribution.context_budget import check_karpathy_dual_install
+        from tapps_mcp.pipeline import karpathy_block
+
+        for name in ("CLAUDE.md", "AGENTS.md"):
+            path = tmp_path / name
+            path.write_text("# header\n", encoding="utf-8")
+            karpathy_block.install_or_refresh(path)
+        result = check_karpathy_dual_install(tmp_path)
+        assert result.ok is False
+        assert "both" in result.message.lower()
+
+    def test_karpathy_single_home_ok(self, tmp_path: Path) -> None:
+        from tapps_mcp.distribution.context_budget import check_karpathy_dual_install
+        from tapps_mcp.pipeline import karpathy_block
+
+        path = tmp_path / "AGENTS.md"
+        path.write_text("# header\n", encoding="utf-8")
+        karpathy_block.install_or_refresh(path)
+        result = check_karpathy_dual_install(tmp_path)
+        assert result.ok is True
+        assert "AGENTS.md" in result.message
+
