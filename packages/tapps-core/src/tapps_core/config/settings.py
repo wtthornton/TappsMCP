@@ -782,6 +782,24 @@ class ValidateChangedSettings(BaseModel):
             "optional when_changed globs, optional timeout_s for shell judges."
         ),
     )
+    require_explicit_paths_above: int = Field(
+        default=50,
+        ge=0,
+        description=(
+            "When file_paths is omitted and the project has at least this many "
+            "tracked scorable files, apply missing_file_paths_mode. 0 disables "
+            "the size check (always apply mode). Env via .tapps-mcp.yaml "
+            "validate_changed.require_explicit_paths_above."
+        ),
+    )
+    missing_file_paths_mode: Literal["off", "warn", "error"] = Field(
+        default="warn",
+        description=(
+            "Behavior when file_paths is empty in a large repo: off (legacy "
+            "auto-detect only), warn (auto-detect + loud warning/next_steps), "
+            "error (refuse with missing_file_paths). Default warn (TAP-5271)."
+        ),
+    )
 
 
 class DoctorContextBudgetSettings(BaseModel):
@@ -1233,6 +1251,24 @@ class TappsMCPSettings(BaseSettings):
             "followup_message when pipeline gaps are detected. 'block' uses a "
             "stronger followup_message (Cursor cannot exit-2). When unset, "
             "defaults from llm_engagement_level: high=warn, medium=warn, low=off."
+        ),
+    )
+    ralph_mode: bool = Field(
+        default=False,
+        description=(
+            "When True, completion-gate consecutive skips may escalate warn→block "
+            "after ralph_consecutive_skip_threshold (TAP-5274). Interactive "
+            "sessions leave this False so the default stays warn. "
+            "Env: TAPPS_RALPH_MODE."
+        ),
+    )
+    ralph_consecutive_skip_threshold: int = Field(
+        default=3,
+        ge=1,
+        description=(
+            "In ralph_mode, escalate completion-gate followup to block after this "
+            "many consecutive CHECKLIST_MISSING / QUALITY_GATE_SKIP loops "
+            "(TAP-5274). Interactive defaults remain warn."
         ),
     )
 

@@ -306,8 +306,10 @@ def append_completion_gate_violations(
     project_root: Path,
     violations: list[str],
     files_edited: list[str],
+    *,
+    mode: str = "warn",
 ) -> None:
-    """Warn-mode completion-gate violation log (TAP-1327)."""
+    """Warn-mode completion-gate violation log (TAP-1327 / TAP-5274)."""
     if not violations:
         return
     metrics_dir = project_root / ".tapps-mcp"
@@ -319,13 +321,52 @@ def append_completion_gate_violations(
             json.dumps(
                 {
                     "ts": int(time.time()),
-                    "mode": "warn",
+                    "mode": mode,
                     "reasons": violations,
                     "files_edited": files_edited[:16],
                 }
             )
             + "\n"
         )
+
+
+def count_consecutive_gate_skips(project_root: Path, *, limit: int = 50) -> int:
+    """Count trailing consecutive edit loops that skipped gate or checklist (TAP-5274)."""
+    rows = read_loop_metrics(project_root, limit=limit)
+    consecutive = 0
+    for row in reversed(rows):
+        if not isinstance(row, dict):
+            continue
+        files = row.get("files_edited") or []
+        if not files:
+            continue
+        skipped = bool(row.get("gate_skipped_files")) or not bool(row.get("checklist_called"))
+        # Also honor explicit violations list when present
+        reasons = row.get("violations") or []
+        if any(
+            isinstance(r, str) and (r.startswith("QUALITY_GATE_SKIP") or r == "CHECKLIST_MISSING")
+            for r in reasons
+        ):
+            skipped = True
+        if not skipped:
+            break
+        consecutive += 1
+    return consecutive
+
+
+def resolve_completion_gate_mode(settings: object, project_root: Path) -> str:
+    """Resolve effective completion-gate mode, escalating in ralph_mode (TAP-5274)."""
+    resolved = "warn"
+    resolve = getattr(settings, "cursor_stop_completion_gate_resolved", None)
+    if callable(resolve):
+        resolved = str(resolve())
+    ralph = bool(getattr(settings, "ralph_mode", False))
+    if not ralph or resolved == "off":
+        return resolved
+    threshold = int(getattr(settings, "ralph_consecutive_skip_threshold", 3) or 3)
+    if count_consecutive_gate_skips(project_root) >= threshold:
+        return "block"
+    return resolved
 
 
 def resolve_project_root_from_payload(payload: dict[str, Any]) -> Path:
@@ -371,21 +412,22 @@ def record_loop_metrics_from_hook_payload(payload: dict[str, Any]) -> dict[str, 
     row = parse_transcript_loop_metrics(transcript, project_root=project_root)
     append_loop_metrics_row(project_root, row)
     violations = list(row.get("violations") or [])
+
+    settings = load_settings(project_root)
+    gate_mode = resolve_completion_gate_mode(settings, project_root)
+    called_tools = {str(t) for t in row.get("tools_used", []) if t}
+    usage_gaps = compute_gaps(project_root, called_tools=called_tools)
     if violations:
         append_completion_gate_violations(
             project_root,
             violations,
             list(row.get("files_edited") or []),
+            mode=gate_mode if gate_mode in {"warn", "block"} else "warn",
         )
-
-    settings = load_settings(project_root)
-    gate_mode = settings.cursor_stop_completion_gate_resolved()
-    called_tools = {str(t) for t in row.get("tools_used", []) if t}
-    usage_gaps = compute_gaps(project_root, called_tools=called_tools)
     followup = format_stop_gap_followup(
         project_root,
         called_tools=called_tools,
-        mode=gate_mode,
+        mode=gate_mode,  # type: ignore[arg-type]
         fresh_violations=violations,
     )
     followup = append_call_graph_stop_followup(

@@ -177,12 +177,26 @@ _TOOL_NUDGES: dict[str, list[NudgeRule]] = {
     ],
     "tapps_call_graph": [
         (
+            lambda _called, ctx: (ctx or {}).get("degraded") is True,
+            "WARNING: call_graph result is degraded — do NOT treat callers/callees as "
+            "authoritative blast-radius. Read data.completeness (gap_reasons); narrow "
+            "the symbol or re-query after fixing resolution gaps / rebuilding the index.",
+            _IMPACT_CRITICAL,
+        ),
+        (
             lambda called, _ctx: "tapps_diff_impact" not in called,
             "NEXT: After edits, call tapps_diff_impact(file_paths='...') for ranked affected tests.",
             _IMPACT_MEDIUM,
         ),
     ],
     "tapps_diff_impact": [
+        (
+            lambda _called, ctx: (ctx or {}).get("degraded") is True,
+            "WARNING: diff_impact result is degraded — do NOT treat affected_tests as "
+            "complete blast-radius. Read data.completeness / gap_taxonomy; narrow "
+            "file_paths or rebuild the call graph, then re-query.",
+            _IMPACT_CRITICAL,
+        ),
         (
             lambda called, _ctx: "tapps_validate_changed" not in called,
             "NEXT: Call tapps_validate_changed(file_paths='...') to gate changed files.",

@@ -87,6 +87,75 @@ def save_call_graph_index(project_root: Path, index: CallGraphIndex) -> None:
         logger.warning("call_graph_cache_write_failed", path=str(path), error=str(exc))
 
 
+# Default TTL for on-disk call-graph indexes (TAP-5276). Operators can override
+# via prune_call_graph_cache(max_age_hours=...).
+CALL_GRAPH_CACHE_MAX_AGE_HOURS: float = 24.0 * 14  # 14 days
+
+
+def prune_call_graph_cache(
+    project_root: Path,
+    *,
+    max_age_hours: float = CALL_GRAPH_CACHE_MAX_AGE_HOURS,
+    remove_empty: bool = True,
+    dry_run: bool = True,
+) -> dict[str, object]:
+    """TTL/GC for call-graph-index.json and empty session markers (TAP-5276).
+
+    Returns a report with ``would_remove`` / ``removed`` paths. Never raises.
+    """
+    import time as _time
+
+    report: dict[str, object] = {
+        "dry_run": dry_run,
+        "would_remove": [],
+        "removed": [],
+        "kept": [],
+        "max_age_hours": max_age_hours,
+    }
+    would: list[str] = []
+    removed: list[str] = []
+    kept: list[str] = []
+
+    cache_path = project_root / CALL_GRAPH_CACHE_REL
+    if cache_path.is_file():
+        try:
+            age_h = (_time.time() - cache_path.stat().st_mtime) / 3600.0
+            empty = False
+            if remove_empty:
+                idx = load_call_graph_index(project_root)
+                if idx is not None and not idx.symbols and not idx.edges:
+                    empty = True
+            expired = age_h >= max_age_hours
+            if empty or expired:
+                reason = "empty" if empty else f"age_hours={age_h:.1f}"
+                would.append(f"{cache_path} ({reason})")
+                if not dry_run:
+                    cache_path.unlink(missing_ok=True)
+                    removed.append(str(cache_path))
+            else:
+                kept.append(str(cache_path))
+        except OSError as exc:
+            logger.warning("call_graph_cache_prune_failed", path=str(cache_path), error=str(exc))
+
+    # Empty Cursor MCP session markers (`.cursor-mcp-session-*` under .tapps-mcp)
+    tapps_dir = project_root / ".tapps-mcp"
+    if tapps_dir.is_dir():
+        for marker in tapps_dir.glob(".cursor-mcp-session-*"):
+            try:
+                if marker.is_file() and marker.stat().st_size == 0:
+                    would.append(str(marker))
+                    if not dry_run:
+                        marker.unlink(missing_ok=True)
+                        removed.append(str(marker))
+            except OSError:
+                continue
+
+    report["would_remove"] = would
+    report["removed"] = removed
+    report["kept"] = kept
+    return report
+
+
 def _module_exports_to_dict(exports: ModuleExports) -> dict[str, object]:
     return {
         "module": exports.module,

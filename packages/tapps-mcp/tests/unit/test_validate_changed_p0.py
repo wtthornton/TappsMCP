@@ -430,8 +430,8 @@ class TestValidateChangedP0:
     async def test_backward_compat_no_new_params(self, tmp_path: Path) -> None:
         """Calling with no new params should produce the same shape as before.
 
-        Since include_impact now defaults to True, the response includes
-        impact_summary with default values.
+        Since include_impact defaults to False (TAP-5271 hot-path), impact_summary
+        is omitted unless explicitly requested.
         """
         from tapps_mcp.server_pipeline_tools import tapps_validate_changed
 
@@ -440,21 +440,12 @@ class TestValidateChangedP0:
 
         scorer = _mock_scorer()
         mock_gate = MagicMock(passed=True, failures=[])
-        mock_report = _mock_impact_report(str(f), severity="low", direct=0, transitive=0, tests=0)
 
         with (
             patch("tapps_mcp.server_pipeline_tools.load_settings") as mock_settings,
             patch("tapps_mcp.server._validate_file_path", side_effect=Path),
             patch("tapps_mcp.scoring.scorer.CodeScorer", return_value=scorer),
             patch("tapps_mcp.gates.evaluator.evaluate_gate", return_value=mock_gate),
-            patch(
-                "tapps_mcp.project.impact_analyzer.build_import_graph",
-                return_value={},
-            ),
-            patch(
-                "tapps_mcp.project.impact_analyzer.analyze_impact",
-                return_value=mock_report,
-            ),
         ):
             mock_settings.return_value.project_root = tmp_path
             mock_settings.return_value.tool_timeout = 30
@@ -469,9 +460,8 @@ class TestValidateChangedP0:
         assert "total_security_issues" in data
         assert "results" in data
         assert "summary" in data
-        # include_impact defaults to True so impact_summary is present
-        assert "impact_summary" in data
-
+        # include_impact defaults to False — no impact_summary on hot path
+        assert "impact_summary" not in data
     @pytest.mark.asyncio
     async def test_graph_reuse_builds_once(self, tmp_path: Path) -> None:
         """When include_impact=True and multiple files are validated,

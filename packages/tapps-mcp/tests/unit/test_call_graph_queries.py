@@ -55,6 +55,38 @@ def mystery(obj):
         result = query_call_graph(index, "pkg.dynamic.mystery", mode="all")
         assert result["degraded"] is True
         assert result["resolution_gaps"]
+        completeness = result["completeness"]
+        assert completeness["complete"] is False
+        assert completeness["authoritative"] is False
+        assert completeness["reason"] == "outbound_resolution_gaps"
+        assert completeness["gap_count"] >= 1
+        assert completeness["gap_reasons"]
+
+    def test_unknown_symbol_includes_completeness(self, tmp_path: Path) -> None:
+        _write(tmp_path, "pkg/empty.py", "def ok():\n    pass\n")
+        index = build_call_graph_index(tmp_path, force_rebuild=True)
+        result = query_call_graph(index, "missing.fn")
+        assert result["found"] is False
+        assert result["degraded"] is True
+        completeness = result["completeness"]
+        assert completeness["authoritative"] is False
+        assert completeness["reason"] == "symbol_not_found"
+        assert completeness["complete"] is False
+
+    def test_clean_symbol_completeness_authoritative(self, tmp_path: Path) -> None:
+        _write(
+            tmp_path,
+            "pkg/graph.py",
+            "def leaf():\n    return 0\n\ndef mid():\n    leaf()\n",
+        )
+        index = build_call_graph_index(tmp_path, force_rebuild=True)
+        result = query_call_graph(index, "pkg.graph.leaf", mode="callers")
+        assert result["degraded"] is False
+        completeness = result["completeness"]
+        assert completeness["complete"] is True
+        assert completeness["authoritative"] is True
+        assert completeness["reason"] is None
+        assert completeness["gap_count"] == 0
 
     def test_caller_completeness_complete_when_all_inbound_resolved(
         self, tmp_path: Path

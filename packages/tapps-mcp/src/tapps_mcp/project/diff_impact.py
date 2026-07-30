@@ -93,6 +93,99 @@ def _symbols_in_file(index: object, rel_path: str) -> set[str]:
     return {s.qualified_name for s in index.symbols if s.file_path.replace("\\", "/") == normalized}
 
 
+def _diff_impact_gap_health(
+    index: object,
+    *,
+    gap_rate_threshold: float = BLAST_RADIUS_GAP_RATE_THRESHOLD,
+) -> dict[str, object]:
+    """Map call-graph gaps → degraded + taxonomy (TAP-5269).
+
+    Aligns ``analyze_diff_impact`` / enrichment with ``caveat_from_call_graph_summary``:
+    expected external/dynamic gaps alone must NOT flip ``degraded`` (July metrics
+    showed 100% degraded when any ``resolution_gaps`` counted). Degrade only for
+    ``parse_failures`` or ``in_repo_gap_rate >=`` threshold.
+    """
+    from tapps_mcp.project.call_graph_gap_classify import split_gap_counts
+    from tapps_mcp.project.call_graph_types import CallGraphIndex
+
+    if not isinstance(index, CallGraphIndex):
+        return {
+            "degraded": True,
+            "parse_failures": 0,
+            "completeness": {
+                "complete": False,
+                "edges": 0,
+                "in_repo_gap_rate": 0.0,
+                "reason": "cache_not_ready",
+            },
+            "gap_taxonomy": {
+                "resolution_gaps": 0,
+                "external_gaps": 0,
+                "in_repo_gaps": 0,
+                "gap_rate": 0.0,
+                "in_repo_gap_rate": 0.0,
+                "in_repo_gap_reasons": {},
+            },
+        }
+
+    edge_count = len(index.edges)
+    external, in_repo, in_repo_reasons = split_gap_counts(index.resolution_gaps)
+    parse_failures = len(index.parse_failures)
+    total_gaps = len(index.resolution_gaps)
+    in_repo_gap_rate = round(in_repo / max(edge_count, 1), 3)
+    gap_rate = round(total_gaps / max(edge_count, 1), 3)
+
+    reason: str | None
+    if parse_failures > 0:
+        reason = "parse_failures"
+    elif in_repo_gap_rate >= gap_rate_threshold:
+        reason = "high_in_repo_gap_rate"
+    else:
+        reason = None
+
+    degraded = reason is not None
+    return {
+        "degraded": degraded,
+        "parse_failures": parse_failures,
+        "completeness": {
+            "complete": not degraded,
+            "edges": edge_count,
+            "in_repo_gap_rate": in_repo_gap_rate,
+            "reason": reason,
+        },
+        "gap_taxonomy": {
+            "resolution_gaps": total_gaps,
+            "external_gaps": external,
+            "in_repo_gaps": in_repo,
+            "gap_rate": gap_rate,
+            "in_repo_gap_rate": in_repo_gap_rate,
+            "in_repo_gap_reasons": in_repo_reasons,
+        },
+    }
+
+
+def _degraded_note_for_reason(
+    reason: str | None,
+    *,
+    parse_failures: int,
+    in_repo_gap_rate: float,
+    gap_rate_threshold: float = BLAST_RADIUS_GAP_RATE_THRESHOLD,
+) -> str | None:
+    """Human-readable note when diff-impact is degraded (TAP-5269)."""
+    if reason == "parse_failures":
+        return (
+            f"{parse_failures} file(s) failed to parse — the call graph is "
+            "incomplete for those modules, so affected tests may be partial."
+        )
+    if reason == "high_in_repo_gap_rate":
+        return (
+            f"In-repo call-graph gap rate is {in_repo_gap_rate:.0%} "
+            f"(threshold {gap_rate_threshold:.0%}) — many in-repo references "
+            "are unresolved, so affected tests may be incomplete."
+        )
+    return None
+
+
 def analyze_diff_impact(
     changed_files: list[Path],
     project_root: Path,
@@ -163,7 +256,7 @@ def analyze_diff_impact(
 
     ordered = sorted(ranked.values(), key=lambda r: (-r.score, r.test_file))
     cap = max(1, max_tests)
-    degraded = bool(index.resolution_gaps or index.parse_failures)
+    health = _diff_impact_gap_health(index)
     all_changed_symbols: set[str] = set()
     for changed in changed_files:
         try:
@@ -177,15 +270,32 @@ def analyze_diff_impact(
         all_changed_symbols,
         caller_threshold=doc_drift_caller_threshold,
     )
+    completeness = health["completeness"]
+    reason = (
+        completeness.get("reason") if isinstance(completeness, dict) else None
+    )
+    note = _degraded_note_for_reason(
+        str(reason) if reason else None,
+        parse_failures=int(health["parse_failures"]),
+        in_repo_gap_rate=float(
+            completeness.get("in_repo_gap_rate", 0.0)
+            if isinstance(completeness, dict)
+            else 0.0
+        ),
+    )
     payload: dict[str, object] = {
         "changed_files": [str(p) for p in changed_files],
         "affected_tests": [asdict(r) for r in ordered[:cap]],
         "total_affected_tests": len(ordered),
         "tests_edges_used": len(test_edges),
         "max_tests": cap,
-        "degraded": degraded,
-        "parse_failures": len(index.parse_failures),
+        "degraded": bool(health["degraded"]),
+        "parse_failures": health["parse_failures"],
+        "completeness": completeness,
+        "gap_taxonomy": health["gap_taxonomy"],
     }
+    if note:
+        payload["note"] = note
     if doc_drift_hints:
         payload["doc_drift_hints"] = doc_drift_hints
     return payload
@@ -280,18 +390,31 @@ def build_diff_impact_enrichment(
                 ],
             }
 
-    degraded = bool(index.resolution_gaps or index.parse_failures)
+    health = _diff_impact_gap_health(index)
+    completeness = health["completeness"]
+    reason = (
+        completeness.get("reason") if isinstance(completeness, dict) else None
+    )
+    note = _degraded_note_for_reason(
+        str(reason) if reason else None,
+        parse_failures=int(health["parse_failures"]),
+        in_repo_gap_rate=float(
+            completeness.get("in_repo_gap_rate", 0.0)
+            if isinstance(completeness, dict)
+            else 0.0
+        ),
+    )
     payload: dict[str, object] = {
-        "degraded": degraded,
+        "degraded": bool(health["degraded"]),
         "cache_status": status,
         "symbols": symbols_out,
         "changed_files": changed_paths,
+        "parse_failures": health["parse_failures"],
+        "completeness": completeness,
+        "gap_taxonomy": health["gap_taxonomy"],
     }
-    if degraded:
-        payload["note"] = (
-            f"Call graph has {len(index.resolution_gaps)} unresolved reference(s) and "
-            f"{len(index.parse_failures)} parse failure(s) — some callers/tests may be missing."
-        )
+    if note:
+        payload["note"] = note
     return payload
 
 

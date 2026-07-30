@@ -3878,6 +3878,7 @@ def check_call_graph_index_cache(root: Path) -> CheckResult:
     """Epic 114: informational call-graph cache status (never fails on missing cache)."""
     from tapps_mcp.project.call_graph_cache import (
         load_call_graph_index,
+        prune_call_graph_cache,
         summarize_call_graph_cache,
     )
     from tapps_mcp.project.call_graph_types import CALL_GRAPH_CACHE_REL
@@ -3903,6 +3904,10 @@ def check_call_graph_index_cache(root: Path) -> CheckResult:
     parts = [
         f"Cache present ({len(cached.symbols)} symbols, {len(cached.edges)} edges)",
     ]
+    prune = prune_call_graph_cache(root, dry_run=True)
+    would = prune.get("would_remove") or []
+    if would:
+        parts.append(f"GC would remove {len(would)} artifact(s) (run maintain/upgrade)")
     if summary is not None:
         if summary.get("reason") == "index_version_mismatch":
             parts.append(

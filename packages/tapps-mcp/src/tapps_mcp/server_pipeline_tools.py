@@ -1247,7 +1247,12 @@ def tapps_set_engagement_level(level: str) -> dict[str, Any]:
 
     valid = ("high", "medium", "low")
     if level not in valid:
-        _record_execution("tapps_set_engagement_level", start, status="failed")
+        _record_execution(
+            "tapps_set_engagement_level",
+            start,
+            status="failed",
+            error_code="invalid_level",
+        )
         return error_response(
             "tapps_set_engagement_level",
             "invalid_level",
@@ -1257,11 +1262,29 @@ def tapps_set_engagement_level(level: str) -> dict[str, Any]:
     settings = load_settings()
     root = Path(settings.project_root)
     validator = PathValidator(root)
-    config_path = validator.validate_write_path(".tapps-mcp.yaml")
+    try:
+        config_path = validator.validate_write_path(".tapps-mcp.yaml")
+    except Exception as exc:
+        _record_execution(
+            "tapps_set_engagement_level",
+            start,
+            status="failed",
+            error_code="path_denied",
+        )
+        return error_response(
+            "tapps_set_engagement_level",
+            "path_denied",
+            str(exc),
+        )
 
     loaded = _el.read_engagement_yaml(config_path)
     if isinstance(loaded, str):
-        _record_execution("tapps_set_engagement_level", start, status="failed")
+        _record_execution(
+            "tapps_set_engagement_level",
+            start,
+            status="failed",
+            error_code="config_read_error",
+        )
         return error_response("tapps_set_engagement_level", "config_read_error", loaded)
 
     data = loaded
@@ -1273,7 +1296,12 @@ def tapps_set_engagement_level(level: str) -> dict[str, Any]:
     if write_mode == WriteMode.DIRECT_WRITE:
         err = _el.write_engagement_yaml(config_path, yaml_content)
         if err is not None:
-            _record_execution("tapps_set_engagement_level", start, status="failed")
+            _record_execution(
+                "tapps_set_engagement_level",
+                start,
+                status="failed",
+                error_code="config_write_error",
+            )
             return error_response("tapps_set_engagement_level", "config_write_error", err)
 
     elapsed_ms = (time.perf_counter_ns() - start) // 1_000_000

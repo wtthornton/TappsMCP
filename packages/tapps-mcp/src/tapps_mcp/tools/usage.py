@@ -48,11 +48,13 @@ _CHECKLIST_TOOL = "tapps_checklist"
 _LOOKUP_TOOL = "tapps_lookup_docs"
 _IMPACT_TOOL = "tapps_impact_analysis"
 _SESSION_INIT_TOOL = "tapps_session_start"
+_GRAPH_TOOLS = frozenset({"tapps_call_graph", "tapps_diff_impact"})
 _PRIORITY_GAPS: tuple[str, ...] = (
     "edits_without_validation",
     "checklist_skipped",
     "lookup_docs_underused",
     "library_uses_without_lookup_docs",
+    "graph_degraded_ignored",
 )
 
 
@@ -79,6 +81,49 @@ def read_recent_violations(project_root: Path, *, limit: int = 10) -> list[dict[
     except Exception:
         return []
     return rows[-limit:]
+
+
+def _recent_degraded_graph_tools(
+    project_root: Path, *, limit_files: int = 3, limit_rows: int = 200
+) -> list[str]:
+    """Return graph tool names whose most recent metric row was degraded (TAP-5270).
+
+    Scans ``.tapps-mcp/metrics/tool_calls_*.jsonl`` newest-first. A tool is
+    reported when its latest observed call has ``degraded=true`` — agents that
+    treat that success payload as authoritative blast-radius should see a
+    usage_gaps recommendation.
+    """
+    metrics_dir = project_root / ".tapps-mcp" / "metrics"
+    if not metrics_dir.is_dir():
+        return []
+    files = sorted(metrics_dir.glob("tool_calls_*.jsonl"), reverse=True)[:limit_files]
+    latest_by_tool: dict[str, bool] = {}
+    scanned = 0
+    for path in files:
+        try:
+            lines = path.read_text(encoding="utf-8").splitlines()
+        except OSError:
+            continue
+        for raw in reversed(lines):
+            if scanned >= limit_rows:
+                break
+            line = raw.strip()
+            if not line:
+                continue
+            scanned += 1
+            try:
+                row = json.loads(line)
+            except json.JSONDecodeError:
+                continue
+            if not isinstance(row, dict):
+                continue
+            name = str(row.get("tool_name") or "")
+            if name not in _GRAPH_TOOLS or name in latest_by_tool:
+                continue
+            latest_by_tool[name] = bool(row.get("degraded"))
+        if scanned >= limit_rows:
+            break
+    return sorted(name for name, degraded in latest_by_tool.items() if degraded)
 
 
 def _session_called_tools() -> set[str]:
@@ -290,14 +335,40 @@ def compute_gaps(
                 "any external library API to avoid hallucinated calls."
             )
 
+    # TAP-5273: strengthen — Python edit loops with lookup_docs_called=false and
+    # uncached external libs should flag even with <3 loops / ratio still quiet.
+    # Workspace-only / cached-lib edits stay suppressed (existing tests).
+    if "lookup_docs_underused" not in gaps and uncached_libs_in_edits:
+        py_edit_loops_without_lookup = 0
+        for row in rows[-10:]:
+            if not isinstance(row, dict):
+                continue
+            edited = [
+                p
+                for p in row.get("files_edited", [])
+                if isinstance(p, str) and p.endswith((".py", ".pyi"))
+            ]
+            if not edited:
+                continue
+            if row.get("lookup_docs_called") is False:
+                py_edit_loops_without_lookup += 1
+        if py_edit_loops_without_lookup >= 1:
+            gaps.append("lookup_docs_underused")
+            libs = ", ".join(uncached_libs_in_edits[:5])
+            recs.append(
+                f"{py_edit_loops_without_lookup} recent Python edit loop(s) never "
+                f"called tapps_lookup_docs for external libs ({libs}). Call "
+                "tapps_lookup_docs before using those APIs."
+            )
+
     used_lookup = _LOOKUP_TOOL in called or _telemetry_used_lookup(rows, project_root)
     libraries_without_lookup: list[str] = []
-    if not used_lookup and has_recent_edits and "lookup_docs_underused" not in gaps:
+    if not used_lookup and has_recent_edits:
         libraries_without_lookup = uncached_libs_in_edits
         py_edits = [p for p in edited_recent if str(p).endswith((".py", ".pyi"))]
         non_py_edits = [p for p in edited_recent if not str(p).endswith((".py", ".pyi"))]
         should_gap = bool(libraries_without_lookup) or bool(non_py_edits and not py_edits)
-        if should_gap:
+        if should_gap and "library_uses_without_lookup_docs" not in gaps:
             gaps.append("library_uses_without_lookup_docs")
             rec = _lookup_gap_recommendation(
                 libraries_without_lookup,
@@ -324,6 +395,16 @@ def compute_gaps(
                 "tapps_call_graph(symbol=...) to check callers and blast radius "
                 "before finishing."
             )
+
+    degraded_graph = _recent_degraded_graph_tools(project_root)
+    if degraded_graph:
+        gaps.append("graph_degraded_ignored")
+        tools = ", ".join(degraded_graph)
+        recs.append(
+            f"Recent {tools} call(s) returned degraded=true. Do not treat the "
+            "result as authoritative blast-radius — read data.completeness / "
+            "gap_taxonomy, narrow the symbol or file_paths, and re-query."
+        )
 
     if not gaps:
         recs.append("No gaps detected. Pipeline coverage looks healthy.")
