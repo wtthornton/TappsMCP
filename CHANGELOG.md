@@ -7,6 +7,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [3.12.54] - 2026-07-30
+
+### Fixed
+
+- **Web-Store-DNA consumer feedback** (`4a99922e`): upgrade/doctor/scoring honesty
+  for AgentForge-style fleets.
+  - Init/upgrade gitignore runtime artifacts (`.tapps-mcp/backups/`,
+    `hook-backups/`, sentinels, metrics, cache indexes).
+  - Doctor: real `WARN` severity (separate tally from FAIL); skip `*_FILE` /
+    `*_PATH` MCP secret false-positives; third-party skills labeled
+    `external` (not orphans) without recommending `skill_tier: core`.
+  - Scoring: `"mode": "quick"|"full"` + `categories_scored` on score /
+    quick_check / validate_changed; import-aware `test_coverage` fallback.
+  - Session start: `user_invocable_only` on handoff slash skill; upgrade
+    reports `alwaysApply` demotions explicitly.
+
 ## [3.12.53] - 2026-07-30
 
 ### Added
