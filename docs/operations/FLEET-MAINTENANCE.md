@@ -140,9 +140,11 @@ AgentForge pins `AGENTS.md` and `CLAUDE.md` in `.tapps-mcp.yaml` `upgrade_skip_f
 
 | Field | Value |
 |-------|-------|
-| Date | 2026-07-18 |
+| Date | 2026-07-30 |
 | Bundle | `full` |
-| CLI version | tapps-mcp / docsmcp 3.12.52 (global `-e` from checkout; blue/green `current` = `3.12.52-a9d37d5e`) |
-| Brain | 3.25.0 @ `http://localhost:8080` |
-| Projects | 4/4 upgrade + MCP init OK (tapps-mcp, AgentForge, NLTlabsPE, NewCompanyIdeas) |
-| Doctor | tapps-mcp 75/75 PASS. Consumer FAILs are pre-existing config, not upgrade regressions: `memory.profile: document-builder` not a tapps-brain builtin (AgentForge, NLTlabsPE, NewCompanyIdeas); NLTlabsPE session-handoff missing Next (P0). |
+| CLI version | tapps-mcp / docsmcp **3.12.53** (global `-e` from checkout; blue/green `current` = `3.12.53-943e313c`) |
+| Brain | 3.27.0 @ `http://localhost:8080` |
+| Projects | 5/5 upgrade + MCP init OK (tapps-mcp, AgentForge, NLTlabsPE, NewCompanyIdeas, ReportLab). Doctor exit non-zero on intentional budget WARNs (CLAUDE.md / skill inventory ceilings) — not upgrade regressions. Binary version mismatch cleared after editable `uv tool install -e --reinstall`. |
+| Gate rollup (7d, local JSONL) | completion_gate_violations=311; cache_gate_violations=800; loop_metrics_rows=5353 |
+| Call-graph GC | Empty `.cursor-mcp-session-*` markers pruned across 5 projects; doctor no longer reports pending GC on tapps-mcp |
+| Notes | One `http_client_close_failed` / Event loop closed at fleet restart (11:08Z) during deploy-local cutover — expected; pre-deploy hits remain in rotated logs. Reload Cursor stdio MCP if a window still pins an old release dir. Consumer repos may have uncommitted scaffolding diffs from this upgrade. |

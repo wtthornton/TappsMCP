@@ -7,7 +7,6 @@ install_git_hooks: true
 docs_via_brain: true
 linear_team: TAP
 linear_project: TappsMCP Platform
-# Fat monorepo + skill_tier: full (ADR-0031) — accept live always-on surfaces.
 doctor_context_budget:
   claude_md_max_bytes: 16384
   agents_md_max_bytes: 28672
