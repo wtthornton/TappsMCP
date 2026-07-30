@@ -189,9 +189,30 @@ class TestFleetUpgradeHelpers:
         )
         result = _reinstall_global_clis(tmp_path)
         assert deploy_called == [True]
-        assert skip_gate_flags == [True]
+        assert skip_gate_flags == [False]
         assert result["strategy"] == "blue_green"
         assert result["ok"] is True
+
+    def test_reinstall_skip_deploy_gate_when_requested(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        monkeypatch.setattr(
+            "tapps_mcp.distribution.mcp_zombie_reap.find_live_mcp_serve_pids",
+            lambda: [],
+        )
+        skip_gate_flags: list[bool] = []
+
+        def _fake_deploy(checkout: Path, *, skip_gate: bool = False) -> dict[str, object]:
+            skip_gate_flags.append(skip_gate)
+            return {"ok": True, "release": "3.12.42-deadbeef", "current": str(checkout)}
+
+        monkeypatch.setattr(
+            "tapps_mcp.distribution.blue_green.deploy_blue_green",
+            _fake_deploy,
+        )
+        result = _reinstall_global_clis(tmp_path, skip_deploy_gate=True)
+        assert skip_gate_flags == [True]
+        assert result["skip_deploy_gate"] is True
 
     def test_reinstall_auto_promotes_when_live_mcp(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setattr(
@@ -212,7 +233,7 @@ class TestFleetUpgradeHelpers:
         )
         result = _reinstall_global_clis(tmp_path, use_blue_green=False)
         assert deploy_called == [True]
-        assert skip_gate_flags == [True]
+        assert skip_gate_flags == [False]
         assert result["strategy"] == "blue_green_auto"
         assert result["auto_promoted"] is True
         assert result["live_mcp_pids"] == [4242]
@@ -244,7 +265,7 @@ class TestFleetUpgradeHelpers:
             _fake_deploy,
         )
         monkeypatch.setattr(
-            "tapps_mcp.distribution.setup_generator.regenerate_cursor_nlt_wrappers",
+            "tapps_mcp.distribution.setup_generator.regenerate_nlt_stdio_wrappers",
             _fake_regenerate,
         )
         monkeypatch.setattr(

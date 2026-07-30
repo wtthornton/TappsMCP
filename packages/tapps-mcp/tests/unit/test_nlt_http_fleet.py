@@ -6,11 +6,15 @@ from pathlib import Path
 
 from tapps_core.http.request_context import PROJECT_ROOT_HEADER
 from tapps_mcp.distribution.nlt_http_fleet import (
+    DEFAULT_FLEET_EXTRA_ROOTS_ENV,
     NLT_HTTP_FLEET_PORTS,
     build_http_fleet_url,
     build_nlt_http_mcp_entry,
+    resolve_fleet_consumer_roots,
+    resolve_fleet_extra_roots,
     resolve_http_project_root_header,
     resolve_mcp_transport,
+    sample_fleet_env_content,
 )
 
 
@@ -63,3 +67,17 @@ class TestNltHttpFleet:
         value = resolve_http_project_root_header(tmp_path)
         assert value == str(tmp_path.resolve())
         assert "${" not in value
+
+    def test_extra_roots_from_env(self, tmp_path: Path, monkeypatch) -> None:
+        outside = tmp_path / "NewCompanyIdeas"
+        outside.mkdir()
+        monkeypatch.setenv(DEFAULT_FLEET_EXTRA_ROOTS_ENV, str(outside))
+        assert resolve_fleet_extra_roots() == [outside.resolve()]
+        roots = resolve_fleet_consumer_roots()
+        assert outside.resolve() in roots
+        assert roots[0] == roots[0]  # code root first
+
+    def test_sample_fleet_env_documents_extra_roots(self) -> None:
+        sample = sample_fleet_env_content()
+        assert DEFAULT_FLEET_EXTRA_ROOTS_ENV in sample
+        assert "NewCompanyIdeas" in sample

@@ -532,7 +532,7 @@ class TestGenerateConfig:
         assert raw.endswith("\n")
 
     def test_claude_code_project_scope_writes_mcp_json(self, tmp_path):
-        """Project scope writes .mcp.json in project root."""
+        """Project scope writes .mcp.json in project root with current-probe wrapper."""
         project = tmp_path / "project"
         project.mkdir()
         with patch(
@@ -543,7 +543,13 @@ class TestGenerateConfig:
         config_path = project / ".mcp.json"
         assert config_path.exists()
         data = json.loads(config_path.read_text(encoding="utf-8"))
-        assert data["mcpServers"]["tapps-mcp"]["command"] == "/bin/tapps-mcp"
+        command = data["mcpServers"]["tapps-mcp"]["command"]
+        assert command.endswith(".claude/bin/tapps-mcp-serve.sh")
+        wrapper = Path(command)
+        assert wrapper.is_file()
+        text = wrapper.read_text(encoding="utf-8")
+        assert "_blue_green=" in text
+        assert "${HOME}/.tapps-mcp/current/bin/tapps-mcp" in text
 
     def test_claude_code_project_scope_merges_existing(self, tmp_path):
         """Project scope merges with existing .mcp.json."""
@@ -555,6 +561,56 @@ class TestGenerateConfig:
         data = json.loads((project / ".mcp.json").read_text(encoding="utf-8"))
         assert "other" in data["mcpServers"]
         assert "tapps-mcp" in data["mcpServers"]
+
+    def test_claude_nlt_stdio_writes_current_probe_wrappers(self, tmp_path: Path) -> None:
+        """TAP-5155: Claude NLT stdio configs use .claude/bin wrappers with current probe."""
+        from tapps_mcp.distribution.setup_generator import (
+            _stdio_wrapper_rel,
+            regenerate_nlt_stdio_wrappers,
+        )
+
+        project = tmp_path / "proj"
+        project.mkdir()
+        with patch(
+            "tapps_mcp.distribution.setup_generator.shutil.which",
+            side_effect=lambda name: f"/home/user/.local/bin/{name}",
+        ):
+            _generate_config(
+                "claude-code",
+                project,
+                scope="project",
+                force=True,
+                use_nlt_plugin=True,
+                mcp_bundle="minimal",
+            )
+        data = json.loads((project / ".mcp.json").read_text(encoding="utf-8"))
+        entry = data["mcpServers"]["nlt-build"]
+        assert "url" not in entry
+        command = entry["command"]
+        assert command.endswith(str(_stdio_wrapper_rel("claude-code", "nlt-build")))
+        script = Path(command).read_text(encoding="utf-8")
+        assert "_blue_green=" in script
+        assert 'exec "$_blue_green"' in script
+
+        # HTTP Claude configs must not grow wrappers on regenerate.
+        http_proj = tmp_path / "http-proj"
+        http_proj.mkdir()
+        (http_proj / ".mcp.json").write_text(
+            json.dumps(
+                {
+                    "mcpServers": {
+                        "nlt-build": {
+                            "type": "http",
+                            "url": "http://127.0.0.1:8760/mcp",
+                            "headers": {"X-Tapps-Project-Root": str(http_proj)},
+                        }
+                    }
+                }
+            ),
+            encoding="utf-8",
+        )
+        assert regenerate_nlt_stdio_wrappers(http_proj) == []
+        assert not (http_proj / ".claude" / "bin").exists()
 
 
 # ---------------------------------------------------------------------------

@@ -245,6 +245,7 @@ def run_fleet_upgrade(
     reinstall_clis: bool = False,
     blue_green_deploy: bool = True,
     force_inplace_cli_reinstall: bool = False,
+    skip_deploy_gate: bool = False,
     tapps_checkout: Path | None = None,
     import_legacy_doc_cache: bool = False,
     strip_context7_env: bool = False,
@@ -259,17 +260,22 @@ def run_fleet_upgrade(
             checkout,
             use_blue_green=blue_green_deploy,
             force_inplace=force_inplace_cli_reinstall,
+            skip_deploy_gate=skip_deploy_gate,
         )
         if cli_reinstall.get("ok") and cli_reinstall.get("strategy", "").startswith("blue_green"):
-            from tapps_mcp.distribution.setup_generator import regenerate_cursor_nlt_wrappers
+            from tapps_mcp.distribution.setup_generator import regenerate_nlt_stdio_wrappers
 
             wrapper_refresh: list[dict[str, Any]] = []
             for root in resolved:
-                cursor_mcp = root / ".cursor" / "mcp.json"
-                if not cursor_mcp.is_file():
+                has_stdio_host = (root / ".cursor" / "mcp.json").is_file() or (
+                    root / ".mcp.json"
+                ).is_file()
+                if not has_stdio_host:
                     continue
                 try:
-                    written = regenerate_cursor_nlt_wrappers(root)
+                    written = regenerate_nlt_stdio_wrappers(root)
+                    if not written:
+                        continue
                     wrapper_refresh.append({"root": str(root), "ok": True, "written": written})
                 except Exception as exc:
                     wrapper_refresh.append({"root": str(root), "ok": False, "error": str(exc)})
@@ -324,6 +330,7 @@ def _reinstall_global_clis(
     *,
     use_blue_green: bool = True,
     force_inplace: bool = False,
+    skip_deploy_gate: bool = False,
 ) -> dict[str, Any]:
     """Reinstall global tapps-mcp + docs-mcp from *checkout*.
 
@@ -331,6 +338,9 @@ def _reinstall_global_clis(
     ``uv tool install --reinstall`` mutates ``~/.local/share/uv/tools/*`` under
     live MCP stdio servers and corrupts them — only allowed with
     *force_inplace* when the operator accepts killing every MCP window.
+
+    Quiescence (pytest-in-checkout) runs by default; pass *skip_deploy_gate* to
+    bypass (TAP-5157).
     """
     from tapps_mcp.distribution.mcp_zombie_reap import find_live_mcp_serve_pids
 
@@ -351,12 +361,13 @@ def _reinstall_global_clis(
         "live_mcp_pids": live_pids,
         "strategy": strategy,
         "auto_promoted": auto_promoted,
+        "skip_deploy_gate": skip_deploy_gate,
     }
 
     if use_blue_green and not force_inplace:
         from tapps_mcp.distribution.blue_green import deploy_blue_green
 
-        deploy = deploy_blue_green(checkout, skip_gate=True)
+        deploy = deploy_blue_green(checkout, skip_gate=skip_deploy_gate)
         ok = bool(deploy.get("ok"))
         summary = json.dumps(
             {
