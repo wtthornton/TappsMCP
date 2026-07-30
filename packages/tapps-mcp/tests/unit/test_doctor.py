@@ -3255,12 +3255,31 @@ class TestContextBudgetChecks:
         (orphan / "SKILL.md").write_text("# orphan\n", encoding="utf-8")
         (tmp_path / ".mcp.json").write_text("{}", encoding="utf-8")
         (tmp_path / ".tapps-mcp.yaml").write_text(
-            "doctor_context_budget:\n  skill_count_max: 0\n",
+            "skill_tier: core\ndoctor_context_budget:\n  skill_count_max: 100\n",
             encoding="utf-8",
         )
         result = check_skill_inventory_budget(tmp_path)
         assert result.ok is False
         assert "orphan" in result.message.lower() or "custom-orphan" in result.message
+
+    def test_skill_inventory_full_tier_notes_orphans_without_fail(
+        self, tmp_path: Path
+    ) -> None:
+        from tapps_mcp.distribution.context_budget import check_skill_inventory_budget
+
+        skills = tmp_path / ".claude" / "skills"
+        orphan = skills / "custom-orphan"
+        orphan.mkdir(parents=True)
+        (orphan / "SKILL.md").write_text("# orphan\n", encoding="utf-8")
+        (tmp_path / ".mcp.json").write_text("{}", encoding="utf-8")
+        (tmp_path / ".tapps-mcp.yaml").write_text(
+            "skill_tier: full\ndoctor_context_budget:\n  skill_count_max: 100\n",
+            encoding="utf-8",
+        )
+        result = check_skill_inventory_budget(tmp_path)
+        assert result.ok is True
+        assert "custom-orphan" in result.message
+        assert "skill_tier=full" in result.message
 
     def test_skill_inventory_flags_oversized_without_companions(self, tmp_path: Path) -> None:
         from tapps_mcp.distribution.context_budget import check_skill_inventory_budget

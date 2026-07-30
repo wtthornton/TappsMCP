@@ -314,7 +314,9 @@ def test_init_skips_block_when_include_karpathy_false(tmp_path: Path) -> None:
     assert result["karpathy_guidelines"]["action"] == "skipped"
 
 
-def test_upgrade_refreshes_stale_block_in_both_files(tmp_path: Path) -> None:
+def test_upgrade_refreshes_primary_and_strips_secondary_with_force(
+    tmp_path: Path,
+) -> None:
     from tapps_mcp.pipeline.upgrade import _refresh_karpathy_blocks
 
     stale = (
@@ -326,15 +328,21 @@ def test_upgrade_refreshes_stale_block_in_both_files(tmp_path: Path) -> None:
     (tmp_path / "AGENTS.md").write_text(f"# AGENTS\n\n{stale}", encoding="utf-8")
     (tmp_path / "CLAUDE.md").write_text(f"# CLAUDE\n\n{stale}", encoding="utf-8")
 
-    result = _refresh_karpathy_blocks(tmp_path, dry_run=False)
-    assert result["source_sha"] == KARPATHY_GUIDELINES_SOURCE_SHA
-    assert result["files"]["AGENTS.md"] == "refreshed"
-    assert result["files"]["CLAUDE.md"] == "refreshed"
+    warn = _refresh_karpathy_blocks(tmp_path, dry_run=False, force=False)
+    assert warn["files"]["AGENTS.md"] == "refreshed"
+    assert "WARN dual-home" in warn["files"]["CLAUDE.md"]
 
-    for name in ("AGENTS.md", "CLAUDE.md"):
-        content = (tmp_path / name).read_text(encoding="utf-8")
-        assert "deadbee" not in content
-        assert KARPATHY_GUIDELINES_SOURCE_SHA[:7] in content
+    result = _refresh_karpathy_blocks(tmp_path, dry_run=False, force=True)
+    assert result["source_sha"] == KARPATHY_GUIDELINES_SOURCE_SHA
+    assert result["files"]["AGENTS.md"] == "unchanged"
+    assert result["files"]["CLAUDE.md"].startswith("removed (dual-home)")
+
+    agents = (tmp_path / "AGENTS.md").read_text(encoding="utf-8")
+    assert "deadbee" not in agents
+    assert KARPATHY_GUIDELINES_SOURCE_SHA[:7] in agents
+    assert KARPATHY_GUIDELINES_MARKER_BEGIN not in (tmp_path / "CLAUDE.md").read_text(
+        encoding="utf-8"
+    )
 
 
 def test_upgrade_skips_missing_files(tmp_path: Path) -> None:
@@ -369,20 +377,25 @@ def test_doctor_check_passes_when_both_files_have_block(tmp_path: Path) -> None:
     assert "CLAUDE.md" in result.message
 
 
-def test_doctor_check_fails_when_one_file_missing_block(tmp_path: Path) -> None:
+def test_doctor_check_passes_single_home_when_claude_omits_block(
+    tmp_path: Path,
+) -> None:
+    """ADR-0031: preferred AGENTS.md home is enough; secondary may omit."""
     agents = tmp_path / "AGENTS.md"
     agents.write_text("# AGENTS\n", encoding="utf-8")
     karpathy_block.install_or_refresh(agents)
     (tmp_path / "CLAUDE.md").write_text("# CLAUDE\n", encoding="utf-8")
 
     result = check_karpathy_guidelines(tmp_path)
-    assert not result.ok
-    assert "CLAUDE.md" in result.message
-    assert "missing" in result.message
-    assert "tapps_upgrade" in result.detail
+    assert result.ok
+    assert "AGENTS.md" in result.message
+    assert "preferred home: AGENTS.md" in result.message
 
 
-def test_doctor_check_fails_when_one_file_stale(tmp_path: Path) -> None:
+def test_doctor_check_ignores_stale_secondary_when_preferred_ok(
+    tmp_path: Path,
+) -> None:
+    """Stale secondary copy is dual-install noise; preferred home gates pass."""
     agents = tmp_path / "AGENTS.md"
     agents.write_text("# AGENTS\n", encoding="utf-8")
     karpathy_block.install_or_refresh(agents)
@@ -395,6 +408,19 @@ def test_doctor_check_fails_when_one_file_stale(tmp_path: Path) -> None:
     )
 
     result = check_karpathy_guidelines(tmp_path)
+    assert result.ok
+    assert "AGENTS.md" in result.message
+
+
+def test_doctor_check_fails_when_preferred_home_missing_block(
+    tmp_path: Path,
+) -> None:
+    (tmp_path / "AGENTS.md").write_text("# AGENTS\n", encoding="utf-8")
+    claude = tmp_path / "CLAUDE.md"
+    claude.write_text("# CLAUDE\n", encoding="utf-8")
+    karpathy_block.install_or_refresh(claude)
+
+    result = check_karpathy_guidelines(tmp_path)
     assert not result.ok
-    assert "stale" in result.message
-    assert "CLAUDE.md@deadbee" in result.message
+    assert "preferred home: AGENTS.md" in result.message
+    assert "tapps_upgrade" in result.detail
