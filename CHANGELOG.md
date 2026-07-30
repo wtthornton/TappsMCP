@@ -7,6 +7,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [3.12.53] - 2026-07-30
+
+### Added
+
+- **Metrics Epics A/B/C** (#229, TAP-5265..5278): graph-tool honesty and
+  hot-path / fleet ops follow-through from the July cross-project metrics review.
+  - `tapps_diff_impact` / `tapps_call_graph`: agent-visible `completeness` +
+    blast-radius gap taxonomy; hard `next_steps` when degraded; usage gap
+    `graph_degraded_ignored`.
+  - `tapps_validate_changed`: `missing_file_paths_mode` (warn|error|off),
+    warm timing budget / `timing_profile`, safer defaults for large repos.
+  - Ralph consecutive-skip escalate (`ralph_mode` + threshold); stronger
+    `lookup_docs_underused` on Python edit loops with uncached libs.
+  - `HttpBrainBridge.close` closed-loop teardown; engagement failures always
+    set `error_code`; call-graph index TTL/GC + empty `.cursor-mcp-session-*`
+    prune (doctor dry-run); `tapps-mcp audit-fleet` gate rollup.
+- **Progressive-disclosure skill companions** (#228): fat skills
+  (`python-patterns`, `continuous-learning-v2`) split into slim SKILL.md +
+  reference companions for lower always-on context.
+
 ## [3.12.51] - 2026-07-10
 
 ### Fixed
