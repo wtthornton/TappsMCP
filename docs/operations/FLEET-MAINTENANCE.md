@@ -140,13 +140,13 @@ AgentForge pins `AGENTS.md` and `CLAUDE.md` in `.tapps-mcp.yaml` `upgrade_skip_f
 
 | Field | Value |
 |-------|-------|
-| Date | 2026-07-30 (redeploy + fleet fix) |
+| Date | 2026-07-30 (3.12.55 consumer-feedback + Karpathy Cursor rule) |
 | Bundle | `full` |
-| CLI version | tapps-mcp / docsmcp **3.12.53** · blue/green `current` = `3.12.53-982da987` (stop-followup loop fix) |
+| CLI version | tapps-mcp / docsmcp **3.12.55** · blue/green `current` = `3.12.55-8a2ada9e` |
 | Brain | 3.27.0 @ `http://localhost:8080` |
-| Projects | 5/5 upgrade + MCP init OK. Doctor: tapps-mcp PASS; consumers fail on intentional budget WARNs only. Binary versions PASS everywhere. |
+| Projects | Prefer **v3.12.55** (skip incomplete v3.12.54 doctor Karpathy crash). Consumer upgrade: pin tag then `tapps-mcp upgrade`. |
 | Stop gate | `cursor_stop_completion_gate: "warn"` (quoted) on all five — safe after `graph_degraded_ignored` excluded from stop followups |
 | Gate rollup (7d) | See `tapps-mcp audit-fleet` — ~1828 tool calls; AgentForge still heaviest |
 | Call-graph GC | Re-pruned empty session markers; indexes intact |
-| Commits | Scaffolding pushed: tapps-mcp `master`, AgentForge `main`, NLTlabsPE `docs/af-mcp-runtime-profile`, NewCompanyIdeas `main`, ReportLab `main` |
-| Operator action | **Reload MCP in Cursor** — client still showed Not connected in agent session until reload |
+| Commits | `4a99922e` feedback fixes → `28705eb9` v3.12.54 → `8a2ada9e` v3.12.55 |
+| Operator action | **Reload MCP in Cursor** so stdio/HTTP children pick up `3.12.55-8a2ada9e` |
