@@ -2009,6 +2009,13 @@ class TestPlaintextSecretDetection:
         assert not _looks_like_secret_key("VIRTUAL_ENV")
         assert not _looks_like_secret_key("FOO")
 
+    def test_looks_like_secret_key_ignores_file_and_path_suffixes(self):
+        assert not _looks_like_secret_key("AGENTFORGE_API_KEY_FILE")
+        assert not _looks_like_secret_key("OPENAI_API_KEY_PATH")
+        assert not _looks_like_secret_key("db_password_file")
+        # Still flags real secrets without the suffix.
+        assert _looks_like_secret_key("AGENTFORGE_API_KEY")
+
     def test_value_is_plaintext_secret_excludes_interpolation(self):
         assert _value_is_plaintext_secret("ctx7sk-abc123")
         assert not _value_is_plaintext_secret("${CONTEXT7_API_KEY}")
@@ -2026,6 +2033,17 @@ class TestPlaintextSecretDetection:
         }
         secrets = _collect_plaintext_secrets(entry)
         assert secrets == ["CONTEXT7_API_KEY"]
+
+    def test_collect_plaintext_secrets_skips_file_pointer_and_path_values(self):
+        entry = {
+            "env": {
+                "AGENTFORGE_API_KEY_FILE": "/home/user/WebStoreDNA/.env",
+                "CONTEXT7_API_KEY": "/home/user/keys/ctx7.secret",
+                "REAL_API_KEY": "sk-live-plain",
+            }
+        }
+        secrets = _collect_plaintext_secrets(entry)
+        assert secrets == ["REAL_API_KEY"]
 
     def test_generate_config_warns_on_plaintext_secret(self, tmp_path, capsys):
         """_generate_config prints a warning when env has plaintext secrets."""
@@ -2064,6 +2082,27 @@ class TestPlaintextSecretDetection:
 
     def test_ensure_gitignore_entry_returns_none_when_missing(self, tmp_path):
         assert _ensure_gitignore_entry(tmp_path, ".mcp.json") is None
+
+    def test_ensure_tapps_runtime_gitignore_adds_backups(self, tmp_path):
+        from tapps_mcp.distribution.setup_generator import ensure_tapps_runtime_gitignore
+
+        gi = tmp_path / ".gitignore"
+        gi.write_text("node_modules\n", encoding="utf-8")
+        added = ensure_tapps_runtime_gitignore(tmp_path)
+        text = gi.read_text(encoding="utf-8")
+        assert ".tapps-mcp/backups/" in added
+        assert ".tapps-mcp/hook-backups/" in added
+        assert ".tapps-mcp/backups/" in text
+        assert ".tapps-mcp-cache/" in text
+
+    def test_ensure_tapps_runtime_gitignore_skips_when_tree_ignored(self, tmp_path):
+        from tapps_mcp.distribution.setup_generator import ensure_tapps_runtime_gitignore
+
+        gi = tmp_path / ".gitignore"
+        gi.write_text(".tapps-mcp/\n.tapps-mcp-cache/\n", encoding="utf-8")
+        added = ensure_tapps_runtime_gitignore(tmp_path)
+        assert added == []
+        assert gi.read_text(encoding="utf-8").count(".tapps-mcp/backups/") == 0
 
 
 # ---------------------------------------------------------------------------

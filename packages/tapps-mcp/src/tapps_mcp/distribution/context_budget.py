@@ -214,12 +214,9 @@ def check_skill_inventory_budget(root: Path) -> CheckResult:
         if orphans:
             preview = ", ".join(orphans[:8])
             more = f" (+{len(orphans) - 8} more)" if len(orphans) > 8 else ""
-            orphan_msg = f"{host_label} orphan skills: {preview}{more}"
-            # Under skill_tier: full, non-registry skills are expected extras.
-            if tier == "core":
-                warns.append(orphan_msg)
-            else:
-                notes.append(orphan_msg)
+            # Third-party / AgentForge / user skills are expected extras — never
+            # labeled "orphans" (that implies tapps should remove them).
+            notes.append(f"{host_label} external skills: {preview}{more}")
 
         oversized: list[str] = []
         for skill_dir in skill_dirs:
@@ -259,8 +256,9 @@ def check_skill_inventory_budget(root: Path) -> CheckResult:
             "Skill inventory budget",
             False,
             f"WARN: {'; '.join(warns)}. {summary}",
-            "Set skill_tier: core and run tapps-mcp upgrade, split long skills into "
-            "companions, or raise doctor_context_budget.* in .tapps-mcp.yaml.",
+            "Split long skills into companions, raise doctor_context_budget.skill_count_max "
+            "/ skill_body_max_lines in .tapps-mcp.yaml, or keep skill_tier: full for "
+            "AgentForge and other third-party skills (unknown skills are never deleted).",
         )
     return CheckResult("Skill inventory budget", True, summary)
 

@@ -265,6 +265,19 @@ class TestCoverageHeuristic:
         src.write_text("pass", encoding="utf-8")
         assert CodeScorer._coverage_heuristic(src) == 5.0
 
+    def test_import_match_scores_4_when_filename_mismatches(self, tmp_path):
+        (tmp_path / "pyproject.toml").write_text("", encoding="utf-8")
+        scripts = tmp_path / "scripts"
+        scripts.mkdir()
+        src = scripts / "kit_checks.py"
+        src.write_text("def check():\n    return 1\n", encoding="utf-8")
+        (tmp_path / "tests").mkdir()
+        (tmp_path / "tests" / "test_validate.py").write_text(
+            "from scripts.kit_checks import check\n\ndef test_check():\n    assert check() == 1\n",
+            encoding="utf-8",
+        )
+        assert CodeScorer._coverage_heuristic(src) == 4.0
+
 
 class TestStructureScore:
     def test_full_project(self, tmp_path):

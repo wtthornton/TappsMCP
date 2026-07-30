@@ -435,6 +435,15 @@ def bootstrap_pipeline(
         result["content_return"] = True
         return result
 
+    if not cfg.dry_run:
+        from tapps_mcp.distribution.setup_generator import ensure_tapps_runtime_gitignore
+
+        added = ensure_tapps_runtime_gitignore(project_root)
+        state.result["runtime_gitignore"] = {
+            "action": "updated" if added else "unchanged",
+            "added": added,
+        }
+
     return state.finalize()
 
 
@@ -762,6 +771,7 @@ def _install_karpathy_blocks(cfg: BootstrapConfig, state: _BootstrapState) -> No
 
     Prefers ``AGENTS.md`` when present, otherwise ``CLAUDE.md``. Content
     outside BEGIN/END markers is preserved. Does not newly dual-write.
+    When ``.cursor/rules/`` exists, also installs the Cursor ``.mdc`` rule.
     """
     if not cfg.include_karpathy:
         state.result["karpathy_guidelines"] = {"action": "skipped", "reason": "disabled"}
@@ -779,6 +789,9 @@ def _install_karpathy_blocks(cfg: BootstrapConfig, state: _BootstrapState) -> No
             "source_sha": karpathy_block.KARPATHY_GUIDELINES_SOURCE_SHA,
             "files": {"AGENTS.md": "skipped_file_missing", "CLAUDE.md": "skipped_file_missing"},
             "primary": None,
+            "cursor_rule": karpathy_block.install_or_refresh_cursor_rule(
+                state.project_root, dry_run=cfg.dry_run
+            ),
         }
         return
 
@@ -796,10 +809,20 @@ def _install_karpathy_blocks(cfg: BootstrapConfig, state: _BootstrapState) -> No
             per_file[rel] = "error"
             state.errors.append(f"Karpathy guidelines install failed for {rel}: {exc}")
 
+    cursor_action = "skipped_no_cursor"
+    try:
+        cursor_action = karpathy_block.install_or_refresh_cursor_rule(
+            state.project_root, dry_run=cfg.dry_run
+        )
+    except Exception as exc:
+        cursor_action = "error"
+        state.errors.append(f"Karpathy Cursor rule install failed: {exc}")
+
     state.result["karpathy_guidelines"] = {
         "source_sha": karpathy_block.KARPATHY_GUIDELINES_SOURCE_SHA,
         "files": per_file,
         "primary": primary,
+        "cursor_rule": cursor_action,
     }
 
 

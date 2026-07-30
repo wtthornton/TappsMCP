@@ -200,6 +200,7 @@ def _build_structured_validation_output(
                 score=r.get("overall_score", 0.0),
                 gate_passed=r.get("gate_passed", False),
                 security_passed=r.get("security_passed", False),
+                mode=str(r.get("mode") or "quick"),
             )
             for r in results
         ]

@@ -29,7 +29,7 @@ class TestRuleContent:
 
     def test_always_apply(self) -> None:
         fm = _parse_frontmatter(_CLAUDE_LINEAR_STANDARDS_RULE)
-        assert fm.get("alwaysApply") is True
+        assert fm.get("alwaysApply") is False
 
     def test_mentions_docs_generate_epic(self) -> None:
         assert "docs_generate_epic" in _CLAUDE_LINEAR_STANDARDS_RULE
@@ -75,6 +75,19 @@ class TestGenerateClaudeLinearStandardsRule:
         generate_claude_linear_standards_rule(tmp_path)
         result = generate_claude_linear_standards_rule(tmp_path)
         assert result["action"] == "updated"
+
+    def test_reports_always_apply_demotion(self, tmp_path: Path) -> None:
+        rules = tmp_path / ".claude" / "rules"
+        rules.mkdir(parents=True)
+        target = rules / "linear-standards.md"
+        target.write_text(
+            "---\nalwaysApply: true\n---\n# old\n",
+            encoding="utf-8",
+        )
+        result = generate_claude_linear_standards_rule(tmp_path)
+        assert result["action"] == "updated"
+        assert result.get("alwaysApply_demoted") is True
+        assert result["alwaysApply_changed"] == {"from": True, "to": False}
 
     def test_result_contains_file_path(self, tmp_path: Path) -> None:
         result = generate_claude_linear_standards_rule(tmp_path)

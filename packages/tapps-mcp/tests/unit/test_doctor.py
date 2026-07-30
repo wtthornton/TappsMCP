@@ -59,10 +59,22 @@ class TestCheckResult:
         assert r.ok is True
         assert r.message == "ok"
         assert r.detail == ""
+        assert r.severity == "pass"
 
     def test_detail(self):
         r = CheckResult("test", False, "fail", "hint")
         assert r.detail == "hint"
+        assert r.severity == "fail"
+
+    def test_warn_prefix_sets_severity_warn(self):
+        r = CheckResult("budget", False, "WARN: too big", "raise ceiling")
+        assert r.severity == "warn"
+        assert r.ok is False
+
+    def test_explicit_severity_overrides_ok(self):
+        r = CheckResult("x", False, "note", severity="pass")
+        assert r.severity == "pass"
+        assert r.ok is True
 
 
 # ---------------------------------------------------------------------------
@@ -1350,6 +1362,25 @@ class TestCheckPlaintextSecrets:
         result = check_plaintext_secrets(tmp_path)
         assert result.ok is False
         assert "CONTEXT7_API_KEY" in result.message
+
+    def test_api_key_file_pointer_passes(self, tmp_path):
+        (tmp_path / ".mcp.json").write_text(
+            json.dumps(
+                {
+                    "mcpServers": {
+                        "agentforge": {
+                            "command": "agentforge",
+                            "env": {
+                                "AGENTFORGE_API_KEY_FILE": str(tmp_path / ".env"),
+                            },
+                        }
+                    }
+                }
+            ),
+            encoding="utf-8",
+        )
+        result = check_plaintext_secrets(tmp_path)
+        assert result.ok is True
 
     def test_interpolated_value_passes(self, tmp_path):
         (tmp_path / ".mcp.json").write_text(
@@ -3220,6 +3251,7 @@ class TestContextBudgetChecks:
         (tmp_path / "CLAUDE.md").write_text("x" * 80, encoding="utf-8")
         result = check_claude_md_size(tmp_path)
         assert result.ok is False
+        assert result.severity == "warn"
         assert "WARN" in result.message
 
     def test_agents_md_size_absent_skips(self, tmp_path: Path) -> None:
@@ -3244,25 +3276,29 @@ class TestContextBudgetChecks:
         )
         result = check_always_apply_rules_weight(tmp_path)
         assert result.ok is False
+        assert result.severity == "warn"
         assert "heavy.md" in result.message
 
-    def test_skill_inventory_flags_orphan_and_count(self, tmp_path: Path) -> None:
+    def test_skill_inventory_notes_external_skills_under_core(self, tmp_path: Path) -> None:
         from tapps_mcp.distribution.context_budget import check_skill_inventory_budget
 
         skills = tmp_path / ".claude" / "skills"
-        orphan = skills / "custom-orphan"
+        orphan = skills / "af-author-agent"
         orphan.mkdir(parents=True)
-        (orphan / "SKILL.md").write_text("# orphan\n", encoding="utf-8")
+        (orphan / "SKILL.md").write_text("# af\n", encoding="utf-8")
         (tmp_path / ".mcp.json").write_text("{}", encoding="utf-8")
         (tmp_path / ".tapps-mcp.yaml").write_text(
             "skill_tier: core\ndoctor_context_budget:\n  skill_count_max: 100\n",
             encoding="utf-8",
         )
         result = check_skill_inventory_budget(tmp_path)
-        assert result.ok is False
-        assert "orphan" in result.message.lower() or "custom-orphan" in result.message
+        assert result.ok is True
+        assert "external skills" in result.message
+        assert "af-author-agent" in result.message
+        assert "orphan" not in result.message.lower()
+        assert "skill_tier: core" not in result.detail
 
-    def test_skill_inventory_full_tier_notes_orphans_without_fail(
+    def test_skill_inventory_full_tier_notes_external_without_fail(
         self, tmp_path: Path
     ) -> None:
         from tapps_mcp.distribution.context_budget import check_skill_inventory_budget
@@ -3279,6 +3315,7 @@ class TestContextBudgetChecks:
         result = check_skill_inventory_budget(tmp_path)
         assert result.ok is True
         assert "custom-orphan" in result.message
+        assert "external skills" in result.message
         assert "skill_tier=full" in result.message
 
     def test_skill_inventory_flags_oversized_without_companions(self, tmp_path: Path) -> None:
@@ -3294,7 +3331,10 @@ class TestContextBudgetChecks:
         )
         result = check_skill_inventory_budget(tmp_path)
         assert result.ok is False
+        assert result.severity == "warn"
         assert "tapps-finish-task" in result.message
+        assert "skill_tier: core" not in result.detail
+        assert "third-party" in result.detail.lower() or "AgentForge" in result.detail
 
     def test_karpathy_dual_install_warns(self, tmp_path: Path) -> None:
         from tapps_mcp.distribution.context_budget import check_karpathy_dual_install
@@ -3306,6 +3346,7 @@ class TestContextBudgetChecks:
             karpathy_block.install_or_refresh(path)
         result = check_karpathy_dual_install(tmp_path)
         assert result.ok is False
+        assert result.severity == "warn"
         assert "both" in result.message.lower()
 
     def test_karpathy_single_home_ok(self, tmp_path: Path) -> None:

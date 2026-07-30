@@ -120,6 +120,8 @@ async def _validate_single_file(
                 else:
                     score = await scorer.score_file(path)
             file_result["overall_score"] = round(score.overall_score, 2)
+            file_result["mode"] = "quick" if quick else "full"
+            file_result["categories_scored"] = list(score.categories.keys())
 
             gate = evaluate_gate(score, preset=preset)
             file_result["gate_passed"] = gate.passed

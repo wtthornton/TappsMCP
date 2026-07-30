@@ -58,9 +58,16 @@ def _resolved_mcp_bundle(project_root: Path) -> str:
 
 
 class CheckResult:
-    """A single diagnostic check result."""
+    """A single diagnostic check result.
 
-    __slots__ = ("detail", "message", "name", "ok")
+    ``severity`` is ``pass``, ``warn``, or ``fail``. Advisory context-budget and
+    tool-budget checks that prefix their message with ``WARN:`` are classified
+    as ``warn`` automatically (ADR-0031 — non-blocking). ``ok`` is ``True`` only
+    for ``pass``; warn and fail both have ``ok=False`` so existing callers that
+    treat ``ok`` as "clean" keep working, while doctor tally/exit use severity.
+    """
+
+    __slots__ = ("detail", "message", "name", "ok", "severity")
 
     def __init__(
         self,
@@ -68,11 +75,27 @@ class CheckResult:
         ok: bool,
         message: str,
         detail: str = "",
+        *,
+        severity: str | None = None,
     ) -> None:
         self.name = name
-        self.ok = ok
         self.message = message
         self.detail = detail
+        if severity is not None:
+            if severity not in ("pass", "warn", "fail"):
+                msg = f"invalid CheckResult severity: {severity!r}"
+                raise ValueError(msg)
+            self.severity = severity
+            self.ok = severity == "pass"
+        elif ok:
+            self.severity = "pass"
+            self.ok = True
+        elif message.lstrip().startswith("WARN:"):
+            self.severity = "warn"
+            self.ok = False
+        else:
+            self.severity = "fail"
+            self.ok = False
 
 
 # ---------------------------------------------------------------------------
@@ -2367,8 +2390,13 @@ def check_karpathy_guidelines(project_root: Path) -> CheckResult:
     The secondary file may omit the block (upgrade ``--force`` strips dual
     installs). Dual presence is reported by ``check_karpathy_dual_install``.
 
-    - Passes when the preferred home has the block pinned to the vendored SHA.
-    - Fails when neither file exists, or the preferred home is missing/stale.
+    When ``.cursor/rules/`` exists, also requires
+    ``karpathy-guidelines.mdc`` pinned to the vendored SHA.
+
+    - Passes when the preferred home has the block pinned to the vendored SHA
+      (and the Cursor rule is ok / not applicable).
+    - Fails when neither file exists, or the preferred home is missing/stale,
+      or the Cursor rule is missing/stale while ``.cursor/rules/`` exists.
     """
     from tapps_mcp.pipeline import karpathy_block
 
@@ -2391,17 +2419,38 @@ def check_karpathy_guidelines(project_root: Path) -> CheckResult:
     pref = existing[preferred]
     pref_state = pref["state"]
 
+    cursor = karpathy_block.check_cursor_rule(project_root)
+    cursor_state = cursor["state"]
+
     if pref_state == "ok":
         homes = [preferred]
         secondary = "CLAUDE.md" if preferred == "AGENTS.md" else "AGENTS.md"
         if secondary in existing and existing[secondary]["state"] == "ok":
             homes.append(secondary)
-        return CheckResult(
-            "Karpathy guidelines",
-            True,
+        msg = (
             f"Karpathy guidelines block present in {', '.join(homes)}; "
-            f"pinned to {expected_short} (preferred home: {preferred})",
+            f"pinned to {expected_short} (preferred home: {preferred})"
         )
+        if cursor_state == "ok":
+            msg += f"; Cursor rule ok ({karpathy_block.KARPATHY_CURSOR_RULE_REL})"
+        elif cursor_state == "skipped_no_cursor":
+            pass
+        elif cursor_state == "missing":
+            return CheckResult(
+                "Karpathy guidelines",
+                False,
+                f"{msg}; Cursor rule missing",
+                "Run: tapps_upgrade (or tapps_init with include_karpathy=True)",
+            )
+        else:
+            current = cursor["current_sha"] or "unknown"
+            return CheckResult(
+                "Karpathy guidelines",
+                False,
+                f"{msg}; Cursor rule stale (@{current}; expected {expected_short})",
+                "Run: tapps_upgrade (or tapps_init with include_karpathy=True)",
+            )
+        return CheckResult("Karpathy guidelines", True, msg)
 
     if pref_state == "missing":
         return CheckResult(
@@ -4514,7 +4563,11 @@ def _build_requirements_summary(
 
     Returns a list of dicts with keys: requirement, name, status, checks.
     """
-    check_by_name: dict[str, bool] = {c.name: c.ok for c in checks}
+    check_by_name: dict[str, bool] = {
+        # Treat advisory WARNs as non-blocking for the requirements roll-up.
+        c.name: c.severity != "fail"
+        for c in checks
+    }
 
     summary: list[dict[str, Any]] = []
 
@@ -5300,17 +5353,21 @@ def run_doctor_structured(*, project_root: str = ".", quick: bool = False) -> di
     results: list[dict[str, str | bool]] = []
     pass_count = 0
     fail_count = 0
+    warn_count = 0
     for check in checks:
         entry: dict[str, str | bool] = {
             "name": check.name,
             "ok": check.ok,
+            "severity": check.severity,
             "message": check.message,
         }
         if check.detail:
             entry["detail"] = check.detail
         results.append(entry)
-        if check.ok:
+        if check.severity == "pass":
             pass_count += 1
+        elif check.severity == "warn":
+            warn_count += 1
         else:
             fail_count += 1
 
@@ -5318,6 +5375,7 @@ def run_doctor_structured(*, project_root: str = ".", quick: bool = False) -> di
         "checks": results,
         "pass_count": pass_count,
         "fail_count": fail_count,
+        "warn_count": warn_count,
         "all_passed": fail_count == 0,
         "quick_mode": quick,
     }
@@ -5355,10 +5413,16 @@ def run_doctor(*, project_root: str = ".", quick: bool = False) -> bool:
 
     pass_count = 0
     fail_count = 0
+    warn_count = 0
     for check in checks:
-        if check.ok:
+        if check.severity == "pass":
             click.echo(click.style(f"  PASS  {check.name}: {check.message}", fg="green"))
             pass_count += 1
+        elif check.severity == "warn":
+            click.echo(click.style(f"  WARN  {check.name}: {check.message}", fg="yellow"))
+            if check.detail:
+                click.echo(f"        {check.detail}")
+            warn_count += 1
         else:
             click.echo(click.style(f"  FAIL  {check.name}: {check.message}", fg="red"))
             if check.detail:
@@ -5370,10 +5434,17 @@ def run_doctor(*, project_root: str = ".", quick: bool = False) -> bool:
         click.echo(click.style(f"  Config  llm_engagement_level: {engagement}", fg="cyan"))
 
     click.echo("")
-    click.echo(f"Results: {pass_count} passed, {fail_count} failed")
+    click.echo(f"Results: {pass_count} passed, {fail_count} failed, {warn_count} warnings")
 
-    if fail_count == 0:
+    if fail_count == 0 and warn_count == 0:
         click.echo(click.style("All checks passed!", fg="green"))
+    elif fail_count == 0:
+        click.echo(
+            click.style(
+                f"{warn_count} warning(s) (advisory — non-blocking).",
+                fg="yellow",
+            )
+        )
     else:
         click.echo(
             click.style(
@@ -5392,6 +5463,8 @@ def run_doctor(*, project_root: str = ".", quick: bool = False) -> bool:
             styled = click.style("PASS", fg="green")
         elif status == "fail":
             styled = click.style("FAIL", fg="red")
+        elif status == "warn":
+            styled = click.style("WARN", fg="yellow")
         elif status == "n/a":
             styled = click.style("N/A", fg="cyan")
         else:

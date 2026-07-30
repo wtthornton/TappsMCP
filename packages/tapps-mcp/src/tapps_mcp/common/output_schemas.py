@@ -38,6 +38,8 @@ class ScoreFileOutput(StructuredOutput):
 
     file_path: str
     overall_score: float = Field(ge=0.0, le=100.0)
+    mode: str = Field(default="full", description="Scoring mode: quick (ruff-only) or full.")
+    categories_scored: list[str] = Field(default_factory=list)
     categories: dict[str, CategoryScoreOutput] = Field(default_factory=dict)
     lint_issue_count: int = 0
     type_issue_count: int = 0
@@ -120,6 +122,7 @@ class FileValidationResult(BaseModel):
     score: float = 0.0
     gate_passed: bool = False
     security_passed: bool = True
+    mode: str = "quick"
 
 
 class ValidateChangedOutput(StructuredOutput):

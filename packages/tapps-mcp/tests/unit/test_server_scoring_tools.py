@@ -679,6 +679,8 @@ class TestBuildScoreFileData:
 
         assert data["file_path"] == "test.py"
         assert data["overall_score"] == 85.0
+        assert data["mode"] == "full"
+        assert "linting" in data["categories_scored"]
         assert "linting" in data["categories"]
         assert "Fix X" in suggestions
 
@@ -687,12 +689,14 @@ class TestBuildScoreFileData:
         data, _ = _build_score_file_data(score, quick=True, fix=True, fixes_applied=7)
 
         assert data["fixes_applied"] == 7
+        assert data["mode"] == "quick"
 
     def test_no_fixes_applied_without_quick_fix(self) -> None:
         score = _make_score_result()
         data, _ = _build_score_file_data(score, quick=False, fix=False, fixes_applied=0)
 
         assert "fixes_applied" not in data
+        assert data["mode"] == "full"
 
 
 # ---------------------------------------------------------------------------

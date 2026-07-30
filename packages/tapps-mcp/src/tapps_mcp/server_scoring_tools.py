@@ -117,6 +117,8 @@ def _build_score_file_data(
     data: dict[str, Any] = {
         "file_path": result.file_path,
         "overall_score": round(result.overall_score, 2),
+        "mode": "quick" if quick else "full",
+        "categories_scored": list(result.categories.keys()),
         "categories": {
             name: {
                 "score": round(cat.score, 2),
@@ -150,6 +152,8 @@ def _attach_score_file_structured_output(
     resp: dict[str, Any],
     result: ScoreResult,
     all_suggestions: list[str],
+    *,
+    quick: bool = False,
 ) -> None:
     """Attach structured output to the score_file response in-place."""
     try:
@@ -158,6 +162,8 @@ def _attach_score_file_structured_output(
         structured = ScoreFileOutput(
             file_path=result.file_path,
             overall_score=round(result.overall_score, 2),
+            mode="quick" if quick else "full",
+            categories_scored=list(result.categories.keys()),
             categories={
                 name: CategoryScoreOutput(
                     name=name,
@@ -275,7 +281,7 @@ async def tapps_score_file(
     )
 
     resp = success_response("tapps_score_file", elapsed_ms, data, degraded=result.degraded)
-    _attach_score_file_structured_output(resp, result, all_suggestions)
+    _attach_score_file_structured_output(resp, result, all_suggestions, quick=quick)
 
     return _with_nudges(
         "tapps_score_file",
@@ -519,6 +525,8 @@ def _build_quick_check_data(
     data: dict[str, Any] = {
         "file_path": str(resolved),
         "overall_score": round(score_result.overall_score, 2),
+        "mode": "quick",
+        "categories_scored": list(score_result.categories.keys()),
         "gate_passed": gate_result.passed,
         "gate_preset": preset,
         "security_passed": sec_result.passed,

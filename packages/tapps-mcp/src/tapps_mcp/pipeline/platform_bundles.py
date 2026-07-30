@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import base64
 import json
+import re
 import stat
 from typing import TYPE_CHECKING, Any
 
@@ -42,6 +43,46 @@ from tapps_mcp.pipeline.platform_subagents import CLAUDE_AGENTS, CURSOR_AGENTS
 
 if TYPE_CHECKING:
     from pathlib import Path
+
+_ALWAYS_APPLY_FM_RE = re.compile(
+    r"(?im)^alwaysApply\s*:\s*(true|false|yes|no|1|0)\s*$",
+)
+
+
+def _parse_always_apply(text: str) -> bool | None:
+    """Parse ``alwaysApply`` from YAML frontmatter. ``None`` if absent/unparseable."""
+    if not text.startswith("---"):
+        return None
+    end = text.find("\n---", 3)
+    if end < 0:
+        return None
+    fm = text[3:end]
+    match = _ALWAYS_APPLY_FM_RE.search(fm)
+    if match is None:
+        return None
+    return match.group(1).lower() in {"true", "yes", "1"}
+
+
+def _write_claude_rule_file(target: Path, content: str) -> dict[str, Any]:
+    """Write a managed Claude rule and report ``alwaysApply`` flips explicitly."""
+    existed = target.exists()
+    prev_aa: bool | None = None
+    if existed:
+        try:
+            prev_aa = _parse_always_apply(target.read_text(encoding="utf-8"))
+        except OSError:
+            prev_aa = None
+    new_aa = _parse_always_apply(content)
+    target.write_text(content, encoding="utf-8")
+    out: dict[str, Any] = {
+        "file": str(target),
+        "action": "updated" if existed else "created",
+    }
+    if prev_aa is not None and new_aa is not None and prev_aa != new_aa:
+        out["alwaysApply_changed"] = {"from": prev_aa, "to": new_aa}
+        if prev_aa and not new_aa:
+            out["alwaysApply_demoted"] = True
+    return out
 
 
 # ---------------------------------------------------------------------------
@@ -900,9 +941,7 @@ def generate_claude_integration_hygiene_rule(
     rules_dir = project_root / ".claude" / "rules"
     rules_dir.mkdir(parents=True, exist_ok=True)
     target = rules_dir / "integration-hygiene.md"
-    existed = target.exists()
-    target.write_text(_CLAUDE_INTEGRATION_HYGIENE_RULE, encoding="utf-8")
-    return {"file": str(target), "action": "updated" if existed else "created"}
+    return _write_claude_rule_file(target, _CLAUDE_INTEGRATION_HYGIENE_RULE)
 
 
 _CLAUDE_AUTONOMY_RULE = """\
@@ -1204,9 +1243,7 @@ def generate_claude_linear_standards_rule(
     rules_dir = project_root / ".claude" / "rules"
     rules_dir.mkdir(parents=True, exist_ok=True)
     target = rules_dir / "linear-standards.md"
-    existed = target.exists()
-    target.write_text(_CLAUDE_LINEAR_STANDARDS_RULE, encoding="utf-8")
-    return {"file": str(target), "action": "updated" if existed else "created"}
+    return _write_claude_rule_file(target, _CLAUDE_LINEAR_STANDARDS_RULE)
 
 
 # ---------------------------------------------------------------------------

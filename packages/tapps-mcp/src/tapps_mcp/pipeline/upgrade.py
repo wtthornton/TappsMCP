@@ -73,10 +73,8 @@ from __future__ import annotations
 
 import contextlib
 import re
-from typing import TYPE_CHECKING, Any
-
-if TYPE_CHECKING:
-    from pathlib import Path
+from pathlib import Path
+from typing import Any
 
 from tapps_core.common.file_operations import (
     AgentInstructions,
@@ -507,6 +505,9 @@ def _refresh_karpathy_blocks(
     Prefers ``AGENTS.md`` when present, otherwise ``CLAUDE.md``. Dual installs
     are reported; the secondary copy is removed only when ``force=True`` and
     ``karpathy`` is not in ``upgrade_skip_files``.
+
+    When ``.cursor/rules/`` exists, also refreshes the Cursor ``.mdc`` rule
+    (or removes it when opted out and ``force=True``).
     """
     from tapps_mcp.pipeline import karpathy_block
     from tapps_mcp.pipeline.init import _karpathy_primary_home
@@ -548,9 +549,29 @@ def _refresh_karpathy_blocks(
             log.exception("karpathy_block_failed", file=rel)
             per_file[rel] = f"error: {exc}"
 
+    cursor_rule: str
+    try:
+        cursor_path = karpathy_block.cursor_rule_path(project_root)
+        has_cursor = cursor_path.is_file()
+        if opted_out:
+            if has_cursor and force:
+                cursor_rule = karpathy_block.remove_cursor_rule(project_root, dry_run=dry_run)
+            elif has_cursor:
+                cursor_rule = "unchanged (opt-out keeps existing)"
+            else:
+                cursor_rule = "skipped (opt-out)"
+        else:
+            cursor_rule = karpathy_block.install_or_refresh_cursor_rule(
+                project_root, dry_run=dry_run
+            )
+    except (OSError, ValueError) as exc:
+        log.exception("karpathy_cursor_rule_failed")
+        cursor_rule = f"error: {exc}"
+
     return {
         "source_sha": karpathy_block.KARPATHY_GUIDELINES_SOURCE_SHA,
         "files": per_file,
+        "cursor_rule": cursor_rule,
         "opted_out": opted_out,
         "primary": primary,
         "dual_homes": dual_homes if len(dual_homes) >= 2 else [],
@@ -2522,6 +2543,27 @@ def upgrade_pipeline(
         result["components"]["hook_sidecar_cleanup"] = cleanup_legacy_hook_sidecars(
             project_root,
             dry_run=False,
+        )
+
+    if not dry_run:
+        from tapps_mcp.distribution.setup_generator import ensure_tapps_runtime_gitignore
+
+        added = ensure_tapps_runtime_gitignore(project_root)
+        result["components"]["runtime_gitignore"] = {
+            "action": "updated" if added else "unchanged",
+            "added": added,
+        }
+
+    demoted: list[str] = []
+    for _key, val in result.get("components", {}).items():
+        if isinstance(val, dict) and val.get("alwaysApply_demoted"):
+            name = Path(str(val.get("file", _key))).name
+            demoted.append(name)
+    if demoted:
+        result["always_apply_demotions"] = demoted
+        result["always_apply_demotion_note"] = (
+            f"demoted {len(demoted)} rule(s) from alwaysApply to satisfy the "
+            f"context budget: {', '.join(demoted)}"
         )
 
     if dry_run:

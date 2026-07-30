@@ -1296,10 +1296,16 @@ _NON_SECRET_ENV_KEYS = frozenset(
 
 
 def _looks_like_secret_key(name: str) -> bool:
-    """Return ``True`` if env var *name* looks like a secret (case-insensitive)."""
+    """Return ``True`` if env var *name* looks like a secret (case-insensitive).
+
+    Keys ending in ``_FILE`` / ``_PATH`` are treated as path pointers (e.g.
+    ``AGENTFORGE_API_KEY_FILE=/path/to/.env``), not as secret values themselves.
+    """
     if name in _NON_SECRET_ENV_KEYS:
         return False
     lowered = name.lower()
+    if lowered.endswith(("_file", "_path")):
+        return False
     return any(pat in lowered for pat in _SECRET_KEY_PATTERNS)
 
 
@@ -1311,6 +1317,21 @@ def _value_is_plaintext_secret(value: Any) -> bool:
     return not value.strip().startswith("$")
 
 
+def _value_looks_like_filesystem_path(value: Any) -> bool:
+    """Return ``True`` when *value* looks like an absolute or relative filesystem path."""
+    if not isinstance(value, str):
+        return False
+    stripped = value.strip()
+    if not stripped or stripped.startswith("$"):
+        return False
+    if stripped.startswith(("/", "~/", "./", "../")):
+        return True
+    # Windows drive path (C:\...) or UNC
+    if len(stripped) >= 3 and stripped[1] == ":" and stripped[2] in ("\\", "/"):
+        return True
+    return False
+
+
 def _collect_plaintext_secrets(entry: dict[str, Any]) -> list[str]:
     """Return env var names in *entry*'s ``env`` block that look like plaintext secrets."""
     env = entry.get("env")
@@ -1318,8 +1339,15 @@ def _collect_plaintext_secrets(entry: dict[str, Any]) -> list[str]:
         return []
     found: list[str] = []
     for key, value in env.items():
-        if _looks_like_secret_key(str(key)) and _value_is_plaintext_secret(value):
-            found.append(str(key))
+        key_str = str(key)
+        if not _looks_like_secret_key(key_str):
+            continue
+        if not _value_is_plaintext_secret(value):
+            continue
+        # Path-like values are pointers, not embedded secrets.
+        if _value_looks_like_filesystem_path(value):
+            continue
+        found.append(key_str)
     return found
 
 
@@ -1400,6 +1428,69 @@ def _ensure_gitignore_entry(project_root: Path, entry: str) -> bool | None:
     except OSError:
         return None
     return True
+
+
+# Runtime / upgrade artifacts that must not clutter ``git status``. Backups are
+# for local rollback only — git already versions the originals.
+_TAPPS_RUNTIME_GITIGNORE_ENTRIES: tuple[str, ...] = (
+    ".tapps-mcp/backups/",
+    ".tapps-mcp/hook-backups/",
+    ".tapps-mcp/.session-start-*",
+    ".tapps-mcp/.tapps-session-id",
+    ".tapps-mcp/.linear-snapshot-sentinel-*",
+    ".tapps-mcp/.linear-validate-sentinel",
+    ".tapps-mcp/.validation-marker",
+    ".tapps-mcp/.validation-progress.json",
+    ".tapps-mcp/.lookup-docs-events.jsonl",
+    ".tapps-mcp/.brain-tools-list.full.json",
+    ".tapps-mcp/metrics/",
+    ".tapps-mcp/sessions/",
+    ".tapps-mcp/profile-cache.json",
+    ".tapps-mcp/call-graph-index.json",
+    ".tapps-mcp/test-edges-index.json",
+    ".tapps-mcp-cache/",
+)
+
+# Broader ignores that already cover the runtime entries above.
+_TAPPS_RUNTIME_GITIGNORE_COVERED_BY: frozenset[str] = frozenset(
+    {
+        ".tapps-mcp/",
+        ".tapps-mcp/*",
+        "/.tapps-mcp/",
+    }
+)
+
+
+def ensure_tapps_runtime_gitignore(project_root: Path) -> list[str]:
+    """Ensure ``.gitignore`` covers TappsMCP runtime/upgrade artifacts.
+
+    Appends missing entries from :data:`_TAPPS_RUNTIME_GITIGNORE_ENTRIES`.
+    When ``.tapps-mcp/`` (or equivalent) is already ignored, skips individual
+    entries under that tree. Does not create ``.gitignore`` if absent.
+
+    Returns:
+        List of entries newly appended (empty when nothing changed).
+    """
+    gitignore = project_root / ".gitignore"
+    if not gitignore.exists():
+        return []
+    try:
+        text = gitignore.read_text(encoding="utf-8")
+    except OSError:
+        return []
+    lines = {line.strip() for line in text.splitlines() if line.strip()}
+    whole_tree_ignored = bool(lines & _TAPPS_RUNTIME_GITIGNORE_COVERED_BY)
+    added: list[str] = []
+    for entry in _TAPPS_RUNTIME_GITIGNORE_ENTRIES:
+        if whole_tree_ignored and entry.startswith(".tapps-mcp/"):
+            continue
+        if entry in lines:
+            continue
+        result = _ensure_gitignore_entry(project_root, entry)
+        if result is True:
+            added.append(entry)
+            lines.add(entry)
+    return added
 
 
 # ---------------------------------------------------------------------------
