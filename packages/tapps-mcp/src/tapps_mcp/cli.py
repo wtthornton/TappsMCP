@@ -1198,6 +1198,13 @@ def deploy_local_cmd(
     "(kills stdio servers — avoid unless MCP is stopped).",
 )
 @click.option(
+    "--skip-deploy-gate",
+    is_flag=True,
+    default=False,
+    help="With --reinstall-clis blue/green, skip the pytest quiescence gate "
+    "(default: gate runs — TAP-5157).",
+)
+@click.option(
     "--tapps-checkout",
     default=".",
     show_default=True,
@@ -1256,6 +1263,7 @@ def upgrade_fleet_cmd(
     reinstall_clis: bool,
     blue_green_deploy: bool,
     force_inplace_cli_reinstall: bool,
+    skip_deploy_gate: bool,
     tapps_checkout: str,
     skip_mcp_refresh: bool,
     skip_doctor: bool,
@@ -1306,6 +1314,7 @@ def upgrade_fleet_cmd(
         reinstall_clis=reinstall_clis,
         blue_green_deploy=blue_green_deploy,
         force_inplace_cli_reinstall=force_inplace_cli_reinstall,
+        skip_deploy_gate=skip_deploy_gate,
         tapps_checkout=Path(tapps_checkout),
         import_legacy_doc_cache=import_legacy_doc_cache,
         strip_context7_env=strip_context7_env,

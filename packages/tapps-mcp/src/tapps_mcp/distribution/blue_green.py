@@ -64,13 +64,20 @@ def current_release_path() -> Path | None:
 
 
 def blue_green_enabled() -> bool:
-    """Return True when blue/green ``current`` launches are explicitly opted in.
+    """Return True when blue/green ``current`` should be preferred for CLI probes.
 
-    Default is **off** (global ``uv tool install`` shims). Set
-    ``TAPPS_MCP_USE_BLUE_GREEN=1`` for ``deploy-local`` / zero-downtime dev deploys.
+    ADR-0023: shell wrappers always probe ``~/.tapps-mcp/current`` at runtime.
+    Python drift/resolve match that when the layout exists, unless the operator
+    explicitly disables with ``TAPPS_MCP_USE_BLUE_GREEN=0`` (or false/off/no).
+    Explicit ``=1``/true/on forces on even before the first deploy creates
+    ``current``.
     """
     raw = os.environ.get("TAPPS_MCP_USE_BLUE_GREEN", "").strip().lower()
-    return raw in {"1", "true", "yes", "on"}
+    if raw in {"0", "false", "no", "off"}:
+        return False
+    if raw in {"1", "true", "yes", "on"}:
+        return True
+    return (CURRENT_LINK / "bin").is_dir()
 
 
 def resolve_blue_green_binary(command: str) -> str | None:
@@ -313,14 +320,17 @@ def _deploy_under_lock(
     try:
         from tapps_mcp.distribution.setup_generator import (
             is_tapps_mcp_dev_monorepo,
-            regenerate_cursor_nlt_wrappers,
+            regenerate_nlt_stdio_wrappers,
         )
 
         if is_tapps_mcp_dev_monorepo(checkout):
-            wrappers = regenerate_cursor_nlt_wrappers(checkout)
-            report["cursor_wrappers"] = {"ok": True, "written": wrappers}
+            wrappers = regenerate_nlt_stdio_wrappers(checkout)
+            report["stdio_wrappers"] = {"ok": True, "written": wrappers}
+            # Backward-compatible key for older consumers of the deploy report.
+            report["cursor_wrappers"] = report["stdio_wrappers"]
     except Exception as exc:
-        report["cursor_wrappers"] = {"ok": False, "error": str(exc)}
+        report["stdio_wrappers"] = {"ok": False, "error": str(exc)}
+        report["cursor_wrappers"] = report["stdio_wrappers"]
     return report
 
 

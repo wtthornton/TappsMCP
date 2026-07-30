@@ -430,28 +430,60 @@ def _probe_tcp(url: str, *, timeout: float = 0.5) -> bool:
 
 
 def check_http_fleet_liveness(project_root: Path) -> CheckResult:
-    """Probe shared HTTP MCP fleet ports referenced by host configs (ADR-0024).
+    """Probe shared HTTP MCP fleet ports + MCP initialize (ADR-0024 / TAP-5158).
 
     ``check_*_config`` only validates the *shape* of a ``streamableHttp`` entry.
     When the fleet was never started (``tapps-mcp fleet start``), every host
     server fails with an opaque transport error and no remediation. This probes
     each configured fleet port so the failure surfaces with a fix.
+
+    TCP alone is insufficient: a starved uvicorn loop still accepts connections
+    while Cursor sticks on "Loading tools". After TCP passes, reuse
+    :func:`probe_fleet_mcp_initialize` (same path as ``fleet ensure``).
     """
     name = "HTTP MCP fleet liveness"
     endpoints = _iter_http_fleet_endpoints(project_root)
     if not endpoints:
         return CheckResult(name, True, "No streamableHttp MCP entries (stdio transport)")
     down = [(srv, url) for _label, srv, url in endpoints if not _probe_tcp(url)]
-    if not down:
-        return CheckResult(name, True, f"All {len(endpoints)} fleet endpoint(s) reachable")
-    preview = ", ".join(f"{srv} ({url})" for srv, url in down[:4])
+    if down:
+        preview = ", ".join(f"{srv} ({url})" for srv, url in down[:4])
+        return CheckResult(
+            name,
+            False,
+            f"{len(down)}/{len(endpoints)} fleet endpoint(s) not listening: {preview}",
+            "Start the shared HTTP MCP fleet with `tapps-mcp fleet start` (ADR-0024), "
+            "or switch this repo to stdio: set `mcp_transport: stdio` in "
+            ".tapps-mcp.yaml and re-run `tapps-mcp upgrade --host cursor`.",
+        )
+
+    from tapps_mcp.distribution.fleet_smoke import probe_fleet_mcp_initialize
+
+    seen: set[str] = set()
+    init_fail: list[str] = []
+    for _label, srv, _url in endpoints:
+        if srv in seen:
+            continue
+        seen.add(srv)
+        probe = probe_fleet_mcp_initialize(srv, project_root=project_root)
+        if not probe.get("ok"):
+            err = probe.get("error") or probe.get("stage") or "initialize failed"
+            init_fail.append(f"{srv} ({err})")
+    if init_fail:
+        preview = ", ".join(init_fail[:4])
+        return CheckResult(
+            name,
+            False,
+            f"{len(init_fail)}/{len(seen)} fleet endpoint(s) accept TCP but MCP "
+            f"initialize failed: {preview}",
+            "Restart the fleet: `tapps-mcp fleet restart` (or "
+            "`systemctl --user restart tapps-mcp-fleet.service`). "
+            "Event-loop starvation leaves ports open while /mcp hangs.",
+        )
     return CheckResult(
         name,
-        False,
-        f"{len(down)}/{len(endpoints)} fleet endpoint(s) not listening: {preview}",
-        "Start the shared HTTP MCP fleet with `tapps-mcp fleet start` (ADR-0024), "
-        "or switch this repo to stdio: set `mcp_transport: stdio` in "
-        ".tapps-mcp.yaml and re-run `tapps-mcp upgrade --host cursor`.",
+        True,
+        f"All {len(endpoints)} fleet endpoint(s) reachable (TCP + initialize)",
     )
 
 

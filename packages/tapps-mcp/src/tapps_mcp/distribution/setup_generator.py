@@ -54,13 +54,30 @@ _TAPPS_MCP_UV_ROOT_PLACEHOLDER = "<PATH_TO_TAPPS_MCP_MONOREPO_ROOT>"
 # Operator-wide secrets (Context7, brain bearer) live in ~/.tapps-operator.env (one per machine).
 _OPERATOR_ENV_REL = Path(".tapps-operator.env")
 _CURSOR_MCP_WRAPPER_REL = Path(".cursor/bin/tapps-mcp-serve.sh")
+_CLAUDE_MCP_WRAPPER_REL = Path(".claude/bin/tapps-mcp-serve.sh")
+_STDIO_WRAPPER_HOSTS = frozenset({"cursor", "claude-code"})
+
+
+def _stdio_wrapper_rel(host: str, server_id: str = "tapps-mcp") -> Path:
+    """Return the stdio wrapper script path for *host* (Cursor or Claude Code).
+
+    Cursor: ``.cursor/bin/<server_id>-serve.sh`` (legacy tapps-mcp name kept).
+    Claude Code: ``.claude/bin/<server_id>-serve.sh`` — same ``../..`` project-root
+    walk as Cursor so deploy-local flips of ``~/.tapps-mcp/current`` are picked up
+    on MCP reload (TAP-5155 / ADR-0023).
+    """
+    if host == "claude-code":
+        if server_id == "tapps-mcp":
+            return _CLAUDE_MCP_WRAPPER_REL
+        return Path(f".claude/bin/{server_id}-serve.sh")
+    if server_id == "tapps-mcp":
+        return _CURSOR_MCP_WRAPPER_REL
+    return Path(f".cursor/bin/{server_id}-serve.sh")
 
 
 def _cursor_wrapper_rel(server_id: str = "tapps-mcp") -> Path:
     """Return the Cursor wrapper script path for an MCP server entry."""
-    if server_id == "tapps-mcp":
-        return _CURSOR_MCP_WRAPPER_REL
-    return Path(f".cursor/bin/{server_id}-serve.sh")
+    return _stdio_wrapper_rel("cursor", server_id)
 
 
 # Literal emitted in mcp.json env; wrapper treats this as "unset" when mapping tokens.
@@ -513,25 +530,62 @@ def _write_cursor_mcp_wrapper(
     return wrapper_path.resolve()
 
 
-def regenerate_cursor_nlt_wrappers(project_root: Path) -> list[str]:
-    """Rewrite all NLT Cursor wrapper scripts for *project_root*.
+def _mcp_config_has_stdio_entries(config_path: Path) -> bool:
+    """True when *config_path* has NLT/tapps stdio entries (not HTTP fleet URLs)."""
+    if not config_path.is_file():
+        return False
+    data = _load_mcp_config_json(config_path)
+    if not isinstance(data, dict):
+        return False
+    servers = data.get("mcpServers")
+    if not isinstance(servers, dict):
+        return False
+    for entry in servers.values():
+        if not isinstance(entry, dict):
+            continue
+        entry_type = entry.get("type")
+        if entry_type in {"http", "streamableHttp"}:
+            continue
+        if isinstance(entry.get("command"), str) and entry["command"]:
+            return True
+    return False
+
+
+def regenerate_nlt_stdio_wrappers(project_root: Path) -> list[str]:
+    """Rewrite NLT stdio wrappers for Cursor and/or Claude Code under *project_root*.
 
     Used after ``deploy-local`` flips ``~/.tapps-mcp/current`` so new MCP launches
-    pick up the symlink target without a full ``tapps-mcp init``.
+    pick up the symlink target without a full ``tapps-mcp init``. Skips hosts whose
+    MCP config is HTTP-only (ADR-0024).
     """
     from tapps_mcp.distribution.nlt_mcp_config import NLT_SERVER_ORDER
 
     root = project_root.resolve()
+    hosts: list[str] = []
+    if _mcp_config_has_stdio_entries(root / ".cursor" / "mcp.json"):
+        hosts.append("cursor")
+    if _mcp_config_has_stdio_entries(root / ".mcp.json"):
+        hosts.append("claude-code")
     written: list[str] = []
-    for server_id in NLT_SERVER_ORDER:
-        command, args = _build_nlt_launch(server_id, None, project_root=root)
-        wrapper = _write_cursor_mcp_wrapper(
-            root,
-            uv_launch=(command, args),
-            wrapper_rel=_cursor_wrapper_rel(server_id),
-        )
-        written.append(str(wrapper.relative_to(root)))
+    for host in hosts:
+        for server_id in NLT_SERVER_ORDER:
+            command, args = _build_nlt_launch(server_id, None, project_root=root)
+            wrapper = _write_cursor_mcp_wrapper(
+                root,
+                uv_launch=(command, args),
+                wrapper_rel=_stdio_wrapper_rel(host, server_id),
+            )
+            written.append(str(wrapper.relative_to(root)))
     return written
+
+
+def regenerate_cursor_nlt_wrappers(project_root: Path) -> list[str]:
+    """Rewrite NLT stdio wrappers (Cursor + Claude) for *project_root*.
+
+    Kept name for call-site compatibility; delegates to
+    :func:`regenerate_nlt_stdio_wrappers` (TAP-5155).
+    """
+    return regenerate_nlt_stdio_wrappers(project_root)
 
 
 def _resolve_wrapper_launch(
@@ -564,8 +618,9 @@ def _apply_cursor_launch_wrapper(
     *,
     uv_launch: tuple[str, list[str]] | None = None,
     server_id: str = "tapps-mcp",
+    host: str = "cursor",
 ) -> None:
-    """Point Cursor MCP entry at the env-sourcing wrapper script."""
+    """Point a stdio MCP entry at the env-sourcing wrapper script (Cursor/Claude)."""
     if server_id.startswith("nlt-"):
         command, args = _build_nlt_launch(server_id, uv_launch, project_root=project_root)
     else:
@@ -573,7 +628,7 @@ def _apply_cursor_launch_wrapper(
     wrapper = _write_cursor_mcp_wrapper(
         project_root,
         uv_launch=(command, args),
-        wrapper_rel=_cursor_wrapper_rel(server_id),
+        wrapper_rel=_stdio_wrapper_rel(host, server_id),
     )
     entry["command"] = str(wrapper)
     entry["args"] = []
@@ -1570,24 +1625,26 @@ def _generate_config(
             )
         else:
             click.echo("  tapps-mcp entry would be added/updated. Run without --dry-run to apply.")
-        if host == "cursor":
+        if host in _STDIO_WRAPPER_HOSTS:
             if use_nlt_plugin:
                 from tapps_mcp.distribution.nlt_mcp_config import NLT_SERVER_ORDER
 
                 if transport == "http":
-                    click.echo("  Would write streamableHttp URLs (no stdio wrappers).")
+                    click.echo("  Would write HTTP fleet URLs (no stdio wrappers).")
                 else:
                     for sid in NLT_SERVER_ORDER:
                         click.echo(
-                            f"  Would write Cursor wrapper: {project_root / _cursor_wrapper_rel(sid)}"
+                            f"  Would write {host} wrapper: "
+                            f"{project_root / _stdio_wrapper_rel(host, sid)}"
                         )
             else:
                 click.echo(
-                    f"  Would write Cursor wrapper: {project_root / _CURSOR_MCP_WRAPPER_REL}"
+                    f"  Would write {host} wrapper: "
+                    f"{project_root / _stdio_wrapper_rel(host)}"
                 )
         return True
 
-    if host == "cursor" and transport != "http":
+    if host in _STDIO_WRAPPER_HOSTS and transport != "http":
         servers_block = merged.get(servers_key, {})
         if isinstance(servers_block, dict):
             if use_nlt_plugin:
@@ -1601,6 +1658,7 @@ def _generate_config(
                             project_root,
                             uv_launch=uv_launch,
                             server_id=sid,
+                            host=host,
                         )
             else:
                 tapps_entry = servers_block.get("tapps-mcp")
@@ -1609,6 +1667,7 @@ def _generate_config(
                         tapps_entry,
                         project_root,
                         uv_launch=uv_launch,
+                        host=host,
                     )
 
     config_path.parent.mkdir(parents=True, exist_ok=True)

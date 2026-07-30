@@ -23,7 +23,13 @@ $HOME/code/NLTlabsPE,\
 $HOME/NewCompanyIdeas
 ```
 
-`NewCompanyIdeas` is **not** under `~/code` — always pass explicit `--roots` (or `TAPPS_FLEET_ROOTS`) when upgrading it.
+`NewCompanyIdeas` is **not** under `~/code` — always pass explicit `--roots` (or `TAPPS_FLEET_ROOTS`) when upgrading it. For the HTTP fleet, list it in `~/.tapps-mcp/fleet.env` as:
+
+```bash
+TAPPS_FLEET_EXTRA_ROOTS=$HOME/NewCompanyIdeas
+```
+
+Absolute `X-Tapps-Project-Root` headers already identify any repo; `TAPPS_FLEET_EXTRA_ROOTS` documents extras for audit/scan (TAP-5159).
 
 ---
 
@@ -98,9 +104,10 @@ Two install stories coexist; pick by **whether the machine has the tapps-mcp che
 | Host | MCP launch | Picks up blue/green flips? |
 |------|------------|---------------------------|
 | **Cursor** (any repo) | `.cursor/bin/nlt-*-serve.sh` — probes `~/.tapps-mcp/current/bin/<tool>`, falls back to `~/.local/bin` ([ADR-0023](../adr/0023-immutable-mcp-cli-releases-no-inplace-uv-reinstall.md)) | **Yes** — on MCP reload |
-| **Claude Code** (any repo) | `.mcp.json` → `~/.local/bin/tapps-mcp` **directly** (no `current` probe) | **No** — the `~/.local` global must itself be at the target version; reinstall it (dev: `-e` from checkout; remote: tagged) and reload |
+| **Claude Code** (stdio) | `.claude/bin/nlt-*-serve.sh` — same `current` probe as Cursor (TAP-5155) | **Yes** — on MCP reload after `init`/`upgrade` regenerates wrappers |
+| **Claude Code / Cursor** (HTTP) | `streamableHttp` / `http` URLs → shared fleet on 8760–8765 | **Yes** — fleet restart after `deploy-local` |
 
-> **Claude Code gap:** because `.mcp.json` launches the raw `~/.local/bin` shim, a `deploy-local` flip alone never reaches Claude Code — only Cursor wrappers probe `current`. To upgrade Claude Code you must bring the `~/.local` global to the target version (the drift guard enforces this) and reload. Tracked for a generator fix so Claude `.mcp.json` also probes `current`.
+> **Resolved (TAP-5155):** Claude Code stdio configs now use `.claude/bin/nlt-*-serve.sh` wrappers with the same `~/.tapps-mcp/current` probe as Cursor. Re-run `tapps-mcp init --host claude-code --force` (or fleet upgrade) once to regenerate; HTTP transport was already shared-fleet and unchanged.
 
 `tapps-mcp doctor` warns when globals were installed from a local path (`Global CLI install source`) — expected on the dev-monorepo machine. The default deployment is `full` (all six servers, [ADR-0018](../adr/0018-deploy-all-six-nlt-mcp-servers-by-default.md)); opt down with `tapps-mcp mcp-bundle set developer` (build + memory + linear-issues) for token-tight sessions. Doctor reports **eager (Claude)** vs **listed (Cursor)** on the NLT row.
 

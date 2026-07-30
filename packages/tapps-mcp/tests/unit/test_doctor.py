@@ -360,18 +360,47 @@ class TestHttpFleetLiveness:
         assert "not listening" in result.message
         assert "tapps-mcp fleet start" in result.detail
 
-    def test_fleet_up_passes(self, tmp_path):
+    def test_fleet_up_passes(self, tmp_path, monkeypatch):
         import socket
 
         listener = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         listener.bind(("127.0.0.1", 0))
         listener.listen(1)
         port = listener.getsockname()[1]
+        monkeypatch.setattr(
+            "tapps_mcp.distribution.fleet_smoke.probe_fleet_mcp_initialize",
+            lambda server_id, **kwargs: {"ok": True, "server_id": server_id},
+        )
         try:
             _write_cursor_config(tmp_path, {"nlt-build": _http_entry(port)})
             result = check_http_fleet_liveness(tmp_path)
             assert result.ok is True
             assert "reachable" in result.message
+            assert "initialize" in result.message
+        finally:
+            listener.close()
+
+    def test_fleet_tcp_up_initialize_down_fails(self, tmp_path, monkeypatch):
+        import socket
+
+        listener = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        listener.bind(("127.0.0.1", 0))
+        listener.listen(1)
+        port = listener.getsockname()[1]
+        monkeypatch.setattr(
+            "tapps_mcp.distribution.fleet_smoke.probe_fleet_mcp_initialize",
+            lambda server_id, **kwargs: {
+                "ok": False,
+                "server_id": server_id,
+                "error": "initialize timeout",
+            },
+        )
+        try:
+            _write_cursor_config(tmp_path, {"nlt-build": _http_entry(port)})
+            result = check_http_fleet_liveness(tmp_path)
+            assert result.ok is False
+            assert "initialize failed" in result.message
+            assert "fleet restart" in (result.detail or "")
         finally:
             listener.close()
 

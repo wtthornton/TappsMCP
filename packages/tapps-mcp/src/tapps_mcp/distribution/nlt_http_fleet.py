@@ -18,6 +18,7 @@ McpTransport = Literal["stdio", "http"]
 
 DEFAULT_FLEET_HOST: Final[str] = "127.0.0.1"
 DEFAULT_FLEET_CODE_ROOT_ENV: Final[str] = "TAPPS_FLEET_CODE_ROOT"
+DEFAULT_FLEET_EXTRA_ROOTS_ENV: Final[str] = "TAPPS_FLEET_EXTRA_ROOTS"
 DEFAULT_FLEET_HOST_ENV: Final[str] = "TAPPS_FLEET_HOST"
 
 # Fixed localhost ports — one per NLT profile (Epic 109 order).
@@ -70,6 +71,41 @@ def resolve_fleet_code_root() -> Path:
     if raw:
         return Path(raw).expanduser().resolve()
     return default_fleet_code_root()
+
+
+def resolve_fleet_extra_roots() -> list[Path]:
+    """Return additional consumer roots outside ``TAPPS_FLEET_CODE_ROOT`` (TAP-5159).
+
+    Comma-separated absolute/``~`` paths in ``TAPPS_FLEET_EXTRA_ROOTS`` (fleet.env).
+    HTTP identity still uses absolute ``X-Tapps-Project-Root``; this list is for
+    operator scan/audit and documentation of repos like ``~/NewCompanyIdeas``.
+    """
+    raw = os.environ.get(DEFAULT_FLEET_EXTRA_ROOTS_ENV, "").strip()
+    if not raw:
+        return []
+    roots: list[Path] = []
+    seen: set[Path] = set()
+    for part in raw.split(","):
+        token = part.strip()
+        if not token:
+            continue
+        path = Path(token).expanduser().resolve()
+        if path in seen:
+            continue
+        seen.add(path)
+        roots.append(path)
+    return roots
+
+
+def resolve_fleet_consumer_roots() -> list[Path]:
+    """Code root plus any ``TAPPS_FLEET_EXTRA_ROOTS`` (deduped, code root first)."""
+    roots = [resolve_fleet_code_root()]
+    seen = {roots[0]}
+    for extra in resolve_fleet_extra_roots():
+        if extra not in seen:
+            seen.add(extra)
+            roots.append(extra)
+    return roots
 
 
 def build_http_fleet_url(server_id: str, *, fleet_host: str | None = None) -> str:
@@ -177,11 +213,17 @@ def fleet_server_launch_specs() -> list[tuple[str, str, list[str], int]]:
 def sample_fleet_env_content() -> str:
     """Default ``~/.tapps-mcp/fleet.env`` contents."""
     root = default_fleet_code_root()
+    ideas = Path.home() / "NewCompanyIdeas"
     lines = [
         "# TappsMCP shared HTTP fleet (ADR-0024)",
         "# Source operator secrets separately: ~/.tapps-operator.env",
         f"{DEFAULT_FLEET_CODE_ROOT_ENV}={root}",
         f"{DEFAULT_FLEET_HOST_ENV}={DEFAULT_FLEET_HOST}",
+        "",
+        "# Repos outside TAPPS_FLEET_CODE_ROOT (comma-separated). Absolute",
+        "# X-Tapps-Project-Root headers still work for any path; list extras here",
+        "# so fleet audit/scan know about them (TAP-5159).",
+        f"# {DEFAULT_FLEET_EXTRA_ROOTS_ENV}={ideas}",
         "",
         "# Fleet processes inherit brain/context7 from ~/.tapps-operator.env",
         "# Per-project identity is sent by Cursor via X-Tapps-Project-Root header.",
