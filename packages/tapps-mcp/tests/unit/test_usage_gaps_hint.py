@@ -459,3 +459,56 @@ class TestFormatSessionStartGapHint:
         hint = format_session_start_gap_hint(tmp_path)
         assert hint is not None
         assert "validation" in hint.lower() or "checklist" in hint.lower()
+
+
+class TestGraphDegradedIgnored:
+    """TAP-5270: usage_gaps surfaces ignored degraded graph-tool results."""
+
+    def test_flags_latest_degraded_call_graph(self, tmp_path: Path) -> None:
+        metrics = tmp_path / ".tapps-mcp" / "metrics"
+        metrics.mkdir(parents=True)
+        rows = [
+            {
+                "tool_name": "tapps_call_graph",
+                "status": "success",
+                "degraded": True,
+                "started_at": "2026-07-30T10:00:00",
+            },
+            {
+                "tool_name": "tapps_score_file",
+                "status": "success",
+                "degraded": False,
+                "started_at": "2026-07-30T10:01:00",
+            },
+        ]
+        (metrics / "tool_calls_2026-07-30.jsonl").write_text(
+            "\n".join(json.dumps(r) for r in rows) + "\n",
+            encoding="utf-8",
+        )
+        report = compute_gaps(tmp_path, called_tools={"tapps_session_start", "tapps_call_graph"})
+        assert "graph_degraded_ignored" in report["gaps"]
+        assert any("degraded=true" in r for r in report["recommendations"])
+
+    def test_no_flag_when_latest_graph_call_clean(self, tmp_path: Path) -> None:
+        metrics = tmp_path / ".tapps-mcp" / "metrics"
+        metrics.mkdir(parents=True)
+        rows = [
+            {
+                "tool_name": "tapps_call_graph",
+                "status": "success",
+                "degraded": True,
+                "started_at": "2026-07-30T09:00:00",
+            },
+            {
+                "tool_name": "tapps_call_graph",
+                "status": "success",
+                "degraded": False,
+                "started_at": "2026-07-30T10:00:00",
+            },
+        ]
+        (metrics / "tool_calls_2026-07-30.jsonl").write_text(
+            "\n".join(json.dumps(r) for r in rows) + "\n",
+            encoding="utf-8",
+        )
+        report = compute_gaps(tmp_path, called_tools={"tapps_session_start", "tapps_call_graph"})
+        assert "graph_degraded_ignored" not in report["gaps"]

@@ -2208,27 +2208,30 @@ class TestHttpStoreProperty:
 
 class TestHttpClose:
     def test_close_releases_client_no_running_loop(self) -> None:
-        """close() clears _http_client when no event loop is running (TAP-1744)."""
+        """close() clears _http_client when no event loop is running (TAP-1744/5277)."""
+        from tapps_core.brain_bridge import HttpBrainBridge
+
         bridge = _make_http_bridge()
         mock_client = AsyncMock()
         bridge._http_client = mock_client
 
-        # Simulate: no running loop → asyncio.run() path
+        # Simulate: no running loop → fresh-loop aclose path (TAP-5277)
         with (
             patch("asyncio.get_running_loop", side_effect=RuntimeError("no loop")),
-            patch("asyncio.run") as mock_run,
+            patch.object(HttpBrainBridge, "_aclose_on_fresh_loop") as mock_fresh,
         ):
             bridge.close()
 
         assert bridge._http_client is None
-        mock_run.assert_called_once()
+        mock_fresh.assert_called_once_with(mock_client)
 
     def test_close_with_running_loop_schedules_task(self) -> None:
-        """close() uses create_task when a loop is already running (TAP-1744)."""
+        """close() uses create_task when a live loop is running (TAP-1744)."""
         bridge = _make_http_bridge()
         mock_client = AsyncMock()
         bridge._http_client = mock_client
         mock_loop = MagicMock()
+        mock_loop.is_closed.return_value = False
 
         with patch("asyncio.get_running_loop", return_value=mock_loop):
             bridge.close()
@@ -2237,18 +2240,40 @@ class TestHttpClose:
         mock_loop.create_task.assert_called_once()
 
     def test_close_handles_aclose_failure(self) -> None:
-        """close() logs a warning when asyncio.run(aclose()) raises (TAP-1744)."""
+        """close() logs a warning when aclose on a fresh loop raises (TAP-1744)."""
         bridge = _make_http_bridge()
         bridge._http_client = AsyncMock()
 
         with (
             patch("asyncio.get_running_loop", side_effect=RuntimeError("no loop")),
-            patch("asyncio.run", side_effect=RuntimeError("aclose failed")),
+            patch("asyncio.new_event_loop") as mock_new,
         ):
+            loop = MagicMock()
+            loop.run_until_complete.side_effect = RuntimeError("aclose failed")
+            mock_new.return_value = loop
             bridge.close()  # must not propagate the exception
 
         assert bridge._http_client is None
 
+    def test_close_on_closed_running_loop_uses_fresh_loop(self) -> None:
+        """TAP-5277: closed running loop must not create_task (Event loop is closed)."""
+        from tapps_core.brain_bridge import HttpBrainBridge
+
+        bridge = _make_http_bridge()
+        mock_client = AsyncMock()
+        bridge._http_client = mock_client
+        closed_loop = MagicMock()
+        closed_loop.is_closed.return_value = True
+
+        with (
+            patch("asyncio.get_running_loop", return_value=closed_loop),
+            patch.object(HttpBrainBridge, "_aclose_on_fresh_loop") as mock_fresh,
+        ):
+            bridge.close()
+
+        assert bridge._http_client is None
+        closed_loop.create_task.assert_not_called()
+        mock_fresh.assert_called_once_with(mock_client)
     def test_close_clears_session_id(self) -> None:
         """close() always clears session_id regardless of client state (TAP-1744)."""
         bridge = _make_http_bridge()

@@ -49,6 +49,7 @@ from tapps_mcp.tools.validate_changed_collection import (
     _discover_changed_files,
     _partition_by_cache,
     _write_validate_ok_marker,
+    count_tracked_scorable_files,
 )
 from tapps_mcp.tools.validate_changed_orchestrator import (
     _VALIDATE_CONCURRENCY,
@@ -96,12 +97,51 @@ if TYPE_CHECKING:
 # Kept module-level so STORY-101.6 (perf budget regression test) can tune it.
 _AUTO_DETECT_BUDGET_S: float = 30.0
 
+# TAP-5271 — warm explicit-path budget (milliseconds). Cold start (first
+# ensure_session_initialized / checker warm) is documented separately and is
+# excluded from this warm-path target.
+VALIDATE_CHANGED_WARM_BUDGET_MS: int = 15_000
+
+
+def _missing_file_paths_guard(
+    *,
+    settings: Any,
+    host: Any,
+) -> dict[str, Any] | None:
+    """Warn or error when file_paths is omitted in a large repo (TAP-5271).
+
+    Returns an error response dict when mode is ``error``, else ``None`` after
+    optionally recording a warning payload the caller should attach.
+    """
+    vc = settings.validate_changed
+    mode = str(getattr(vc, "missing_file_paths_mode", "warn") or "off")
+    if mode == "off":
+        return None
+    threshold = int(getattr(vc, "require_explicit_paths_above", 50) or 0)
+    tracked = count_tracked_scorable_files(settings.project_root)
+    if threshold > 0 and tracked < threshold:
+        return None
+    message = (
+        f"file_paths was omitted in a large repo ({tracked}+ scorable files; "
+        f"threshold={threshold or 'always'}). Pass explicit "
+        "file_paths='a.py,b.py' — auto-detect via git diff is the #1 cause of "
+        "slow validate_changed (p95) and QUALITY_GATE_SKIP."
+    )
+    if mode == "error":
+        return host.error_response(
+            "tapps_validate_changed",
+            "missing_file_paths",
+            message,
+        )
+    # warn mode: signal via sentinel dict the caller merges into response later
+    return {"_missing_file_paths_warning": message, "_tracked_scorable": tracked}
 
 # Re-export for test patchability via ``server_pipeline_tools.X``.
 # Symbols imported above are kept reachable here so that
 # ``from tapps_mcp.tools.validate_changed import X`` keeps working for
 # back-compat consumers.
 __all__ = [
+    "VALIDATE_CHANGED_WARM_BUDGET_MS",
     "_AUTO_DETECT_BUDGET_S",
     "_PROGRESS_HEARTBEAT_INTERVAL",
     "_SEVERITY_RANK",
@@ -549,7 +589,7 @@ async def tapps_validate_changed(
     include_security: bool = True,
     quick: bool = True,
     security_depth: str = "basic",
-    include_impact: bool = True,
+    include_impact: bool = False,
     correlation_id: str = "",
     judges: list[dict[str, Any]] | None = None,
     project_root: str = "",
@@ -596,7 +636,8 @@ async def tapps_validate_changed(
             real security signal.
         include_impact: Run blast-radius impact analysis on each file
             (direct + transitive dependents, test coverage). Default
-            ``True``. Disable for hot-loop iteration.
+            ``False`` for hot-path latency (TAP-5271); pass ``True`` when
+            you need affected_tests / diff_impact enrichment.
         correlation_id: Caller-provided ID echoed in the response for
             log correlation. Empty (default) omits the field.
         judges: Optional list of post-gate judges. Each dict has
@@ -634,6 +675,15 @@ async def tapps_validate_changed(
     if cross_repo:
         settings = settings.model_copy(update={"project_root": root_result.root})
 
+    missing_paths_warning: str | None = None
+    if not file_paths.strip():
+        guard = _missing_file_paths_guard(settings=settings, host=_host)
+        if guard is not None and "_missing_file_paths_warning" not in guard:
+            _record_call("tapps_validate_changed", success=False)
+            return guard
+        if guard is not None:
+            missing_paths_warning = str(guard["_missing_file_paths_warning"])
+
     paths = _host._discover_changed_files(
         file_paths,
         base_ref,
@@ -647,7 +697,7 @@ async def tapps_validate_changed(
         effective_judges = [*preset_judges, *(judges or [])]
 
     if not paths:
-        return await _handle_no_changed_files(
+        resp = await _handle_no_changed_files(
             start,
             settings,
             _record_execution,
@@ -658,6 +708,14 @@ async def tapps_validate_changed(
             judges=effective_judges,
             project_root_override=cross_repo,
         )
+        data = resp.get("data")
+        if isinstance(data, dict) and missing_paths_warning:
+            warnings = data.get("warnings")
+            if not isinstance(warnings, list):
+                warnings = []
+                data["warnings"] = warnings
+            warnings.append(missing_paths_warning)
+        return resp
 
     bc = _prepare_batch_context(
         file_paths=file_paths,
@@ -677,6 +735,36 @@ async def tapps_validate_changed(
     task_results, timeout_info = await _run_with_progress(bc)
     outcome = await _finalize_outcome(bc, task_results, timeout_info)
     resp = await _assemble_response(bc, outcome)
+
+    data = resp.get("data")
+    if isinstance(data, dict):
+        data["timing_profile"] = {
+            "warm_budget_ms": VALIDATE_CHANGED_WARM_BUDGET_MS,
+            "auto_detect": not bool(file_paths.strip()),
+            "include_impact": include_impact,
+            "quick": quick,
+            "note": (
+                "Warm budget applies after session/checkers are already initialized. "
+                "Cold start (first ensure_session_initialized / checker warm) is "
+                "excluded and can dominate first-call latency."
+            ),
+        }
+        if missing_paths_warning:
+            warnings = data.get("warnings")
+            if not isinstance(warnings, list):
+                warnings = []
+                data["warnings"] = warnings
+            warnings.append(missing_paths_warning)
+            steps = data.get("next_steps")
+            if not isinstance(steps, list):
+                steps = []
+                data["next_steps"] = steps
+            steps.insert(
+                0,
+                "WARNING: Pass explicit file_paths= to tapps_validate_changed — "
+                "auto-detect in large repos inflates p95 and correlates with "
+                "QUALITY_GATE_SKIP.",
+            )
 
     try:
         from tapps_mcp.pipeline.report_studio.installer import check_report_studio

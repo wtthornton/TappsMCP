@@ -547,7 +547,11 @@ async def tapps_call_graph(
         degraded=bool(result.get("degraded")),
     )
     resp = success_response("tapps_call_graph", elapsed_ms, result)
-    return _with_nudges("tapps_call_graph", resp)
+    return _with_nudges(
+        "tapps_call_graph",
+        resp,
+        {"degraded": bool(result.get("degraded"))},
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -621,7 +625,11 @@ async def tapps_diff_impact(
         degraded=bool(data.get("degraded")),
     )
     resp = success_response("tapps_diff_impact", elapsed_ms, data)
-    return _with_nudges("tapps_diff_impact", resp)
+    return _with_nudges(
+        "tapps_diff_impact",
+        resp,
+        {"degraded": bool(data.get("degraded"))},
+    )
 
 
 # ---------------------------------------------------------------------------

@@ -45,6 +45,35 @@ def _gaps_for_symbol(index: CallGraphIndex, qualified: str) -> list[dict[str, An
     ]
 
 
+def _gap_reason_counts(gaps: list[dict[str, Any]]) -> dict[str, int]:
+    counts: dict[str, int] = {}
+    for gap in gaps:
+        reason = str(gap.get("reason") or "unknown")
+        counts[reason] = counts.get(reason, 0) + 1
+    return counts
+
+
+def _completeness_payload(
+    *,
+    reason: str | None,
+    gaps: list[dict[str, Any]] | None = None,
+) -> dict[str, Any]:
+    """Agent-visible completeness when call_graph is degraded (TAP-5268).
+
+    ``authoritative=False`` means agents must not treat callers/callees as a
+    full blast-radius answer. ``gap_reasons`` aggregates taxonomy counts.
+    """
+    gap_list = gaps or []
+    complete = reason is None and not gap_list
+    return {
+        "complete": complete,
+        "authoritative": complete,
+        "reason": reason,
+        "gap_count": len(gap_list),
+        "gap_reasons": _gap_reason_counts(gap_list),
+    }
+
+
 def _called_name(expr: str) -> str:
     """Final called identifier of a call expression (``a.b.foo`` -> ``foo``)."""
     head = expr.split("(", maxsplit=1)[0].strip()
@@ -207,6 +236,7 @@ def query_call_graph(
             "chain": [],
             "resolution_gaps": [],
             "truncated": False,
+            "completeness": _completeness_payload(reason="symbol_not_found"),
         }
 
     gaps = _gaps_for_symbol(index, qualified)
@@ -234,6 +264,7 @@ def query_call_graph(
         )
         truncated = truncated or t3
 
+    completeness_reason = "outbound_resolution_gaps" if degraded else None
     result: dict[str, Any] = {
         "symbol": symbol,
         "qualified_name": qualified,
@@ -245,6 +276,7 @@ def query_call_graph(
         "resolution_gaps": gaps,
         "truncated": truncated,
         "token_budget": token_budget,
+        "completeness": _completeness_payload(reason=completeness_reason, gaps=gaps),
     }
     # Inbound completeness only matters when the query asks who calls the symbol.
     if mode in {"callers", "chain", "all"}:

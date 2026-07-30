@@ -210,6 +210,27 @@ def _session_start_lookup_ratio(metrics: list[ToolCallMetric]) -> float | None:
     return round(lookups / session_starts, 4)
 
 
+def _count_jsonl_rows(path: Path) -> int:
+    if not path.is_file():
+        return 0
+    try:
+        return sum(1 for line in path.read_text(encoding="utf-8").splitlines() if line.strip())
+    except OSError:
+        return 0
+
+
+def _gate_telemetry(project_root: Path) -> dict[str, int]:
+    """Per-project completion-gate + cache-gate JSONL counts (TAP-5275)."""
+    tapps = project_root / ".tapps-mcp"
+    return {
+        "completion_gate_violations": _count_jsonl_rows(
+            tapps / ".completion-gate-violations.jsonl"
+        ),
+        "cache_gate_violations": _count_jsonl_rows(tapps / ".cache-gate-violations.jsonl"),
+        "loop_metrics_rows": _count_jsonl_rows(tapps / "loop-metrics.jsonl"),
+    }
+
+
 def audit_project_root(
     project_root: Path,
     *,
@@ -239,6 +260,7 @@ def audit_project_root(
     if handoff_path.is_file():
         handoff_mtime = datetime.fromtimestamp(handoff_path.stat().st_mtime, tz=UTC).isoformat()
 
+    gates = _gate_telemetry(root)
     return {
         "project_root": str(root),
         "bootstrapped": True,
@@ -253,6 +275,7 @@ def audit_project_root(
             "session_start_lookup_ratio": _session_start_lookup_ratio(metrics),
         },
         "pipeline": _pipeline_compliance(root, window_days=window_days),
+        "gates": gates,
         "handoff": {
             "path": str(_HANDOFF_PATH),
             "exists": handoff_path.is_file(),
@@ -284,12 +307,24 @@ def run_fleet_audit(
     ]
 
     totals = sum(p["metrics"]["total_calls"] for p in projects)
+    gate_rollup = {
+        "completion_gate_violations": sum(
+            int((p.get("gates") or {}).get("completion_gate_violations", 0)) for p in projects
+        ),
+        "cache_gate_violations": sum(
+            int((p.get("gates") or {}).get("cache_gate_violations", 0)) for p in projects
+        ),
+        "loop_metrics_rows": sum(
+            int((p.get("gates") or {}).get("loop_metrics_rows", 0)) for p in projects
+        ),
+    }
     return {
         "period": period,
         "since": since.isoformat(),
         "generated_at": datetime.now(tz=UTC).isoformat(),
         "project_count": len(projects),
         "total_tool_calls": totals,
+        "gate_rollup": gate_rollup,
         "fleet_top_tools": _aggregate_fleet_top_tools(projects),
         "fleet_skills": _aggregate_fleet_skills(projects),
         "projects": projects,

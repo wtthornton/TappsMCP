@@ -25,6 +25,62 @@ _logger = structlog.get_logger(__name__)
 # "run validate" reminder.
 _VALIDATE_OK_MARKER = ".tapps-mcp/sessions/last_validate_ok"
 
+# Scorable suffixes used for large-repo file_paths guard (TAP-5271).
+_SCORABLE_SUFFIXES = (
+    ".py",
+    ".pyi",
+    ".ts",
+    ".tsx",
+    ".js",
+    ".jsx",
+    ".mjs",
+    ".cjs",
+    ".go",
+    ".rs",
+)
+
+
+def count_tracked_scorable_files(project_root: Path, *, cap: int = 500) -> int:
+    """Count tracked scorable files under *project_root* (best-effort, capped).
+
+    Uses ``git ls-files`` when available; falls back to a shallow ``rglob`` of
+    scorable suffixes. Stops counting at *cap* so the large-repo check stays
+    cheap (TAP-5271).
+    """
+    import subprocess
+
+    try:
+        proc = subprocess.run(
+            ["git", "-C", str(project_root), "ls-files"],
+            capture_output=True,
+            text=True,
+            timeout=5,
+            check=False,
+        )
+    except (OSError, subprocess.TimeoutExpired):
+        proc = None
+    count = 0
+    if proc is not None and proc.returncode == 0:
+        for line in proc.stdout.splitlines():
+            lower = line.lower()
+            if lower.endswith(_SCORABLE_SUFFIXES):
+                count += 1
+                if count >= cap:
+                    return count
+        return count
+    try:
+        for path in project_root.rglob("*"):
+            if not path.is_file():
+                continue
+            name = path.name.lower()
+            if any(name.endswith(sfx) for sfx in _SCORABLE_SUFFIXES):
+                count += 1
+                if count >= cap:
+                    return count
+    except OSError:
+        return count
+    return count
+
 
 def _write_validate_ok_marker(project_root: Path) -> None:
     """Write markers so hooks can detect that validation was run.

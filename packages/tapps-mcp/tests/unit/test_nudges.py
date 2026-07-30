@@ -270,6 +270,19 @@ class TestComputeNextSteps:
         assert any("stale" in s.lower() for s in steps)
         assert any("automatically" in s.lower() for s in steps)
 
+    def test_call_graph_degraded_warns_not_authoritative(self) -> None:
+        """TAP-5268/5270: degraded graph results get a hard next_steps warning."""
+        steps = compute_next_steps("tapps_call_graph", {"degraded": True})
+        assert steps
+        assert any("degraded" in s.lower() for s in steps)
+        assert any("authoritative" in s.lower() for s in steps)
+
+    def test_diff_impact_degraded_warns_not_authoritative(self) -> None:
+        steps = compute_next_steps("tapps_diff_impact", {"degraded": True})
+        assert steps
+        assert any("degraded" in s.lower() for s in steps)
+        assert any("authoritative" in s.lower() or "complete" in s.lower() for s in steps)
+
     # Note: tapps_consult_expert and tapps_research were removed in EPIC-94.
     # Tests for those nudge rules have been removed.
 

@@ -3256,13 +3256,35 @@ class HttpBrainBridge(BrainBridge):
                 # Schedule aclose as a fire-and-forget task; the coroutine will
                 # execute on the next event-loop iteration.
                 loop = asyncio.get_running_loop()
-                loop.create_task(client.aclose())  # noqa: RUF006 — intentional fire-and-forget on shutdown
+                if loop.is_closed():
+                    # TAP-5277: Cursor MCP reload closes the loop before atexit
+                    # teardown — scheduling on a closed loop spam-logs
+                    # "Event loop is closed". Close on a fresh loop instead.
+                    self._aclose_on_fresh_loop(client)
+                else:
+                    loop.create_task(client.aclose())  # noqa: RUF006 — intentional fire-and-forget on shutdown
             except RuntimeError:
-                # No running loop — close synchronously.
-                try:
-                    asyncio.run(client.aclose())
-                except Exception as exc:
-                    logger.warning("brain_bridge.http_client_close_failed", error=str(exc))
+                # No running loop — close synchronously on a fresh loop.
+                self._aclose_on_fresh_loop(client)
+
+    @staticmethod
+    def _aclose_on_fresh_loop(client: object) -> None:
+        """Close *client* without touching a closed/stale event loop (TAP-5277)."""
+        aclose = getattr(client, "aclose", None)
+        if aclose is None:
+            return
+        loop = asyncio.new_event_loop()
+        try:
+            loop.run_until_complete(aclose())
+        except Exception as exc:
+            # Swallow closed-loop noise; real close failures still warn.
+            msg = str(exc).lower()
+            if "event loop is closed" in msg or "loop is closed" in msg:
+                logger.debug("brain_bridge.http_client_close_skipped_closed_loop", error=str(exc))
+            else:
+                logger.warning("brain_bridge.http_client_close_failed", error=str(exc))
+        finally:
+            loop.close()
 
 
 # -----------------------------------------------------------------------------

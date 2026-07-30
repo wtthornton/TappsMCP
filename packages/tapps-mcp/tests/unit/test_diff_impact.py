@@ -1,11 +1,18 @@
-"""Tests for diff impact ranking (TAP-4054)."""
+"""Tests for diff impact ranking (TAP-4054 / TAP-5269)."""
 
 from __future__ import annotations
 
 from pathlib import Path
 
+from tapps_mcp.project.call_graph_types import (
+    CallEdge,
+    CallGraphIndex,
+    ParseFailure,
+    ResolutionGap,
+)
 from tapps_mcp.project.diff_impact import (
     BLAST_RADIUS_GAP_RATE_THRESHOLD,
+    _diff_impact_gap_health,
     analyze_diff_impact,
     build_blast_radius_caveat,
     build_diff_impact_enrichment,
@@ -97,6 +104,104 @@ def compute():
         assert hints[0]["direct_callers"] >= 5
         assert hints[0]["suggested_doc_paths"]
 
+    def test_external_gaps_do_not_degrade(self, tmp_path: Path) -> None:
+        """Expected external/dynamic gaps must not flip degraded (TAP-5269)."""
+        _write(
+            tmp_path,
+            "app/core.py",
+            """
+def compute(obj):
+    return getattr(obj, "value", 42)
+""",
+        )
+        _write(
+            tmp_path,
+            "tests/test_core.py",
+            """
+from app.core import compute
+
+def test_compute():
+    assert compute(type("O", (), {"value": 1})()) == 1
+""",
+        )
+        result = analyze_diff_impact([tmp_path / "app/core.py"], tmp_path)
+        taxonomy = result["gap_taxonomy"]
+        assert isinstance(taxonomy, dict)
+        assert taxonomy["external_gaps"] >= 1
+        assert result["degraded"] is False
+        completeness = result["completeness"]
+        assert isinstance(completeness, dict)
+        assert completeness["complete"] is True
+        assert completeness["reason"] is None
+        assert "note" not in result
+
+
+class TestDiffImpactGapHealth:
+    """Unit tests for degraded taxonomy (TAP-5269)."""
+
+    def test_external_only_gaps_are_not_degraded(self) -> None:
+        index = CallGraphIndex(
+            edges=[
+                CallEdge("a.f", "a.g", "g()", 1, True),
+                CallEdge("a.g", "a.h", "h()", 2, True),
+            ],
+            resolution_gaps=[
+                ResolutionGap("a.f", "getattr", 3, "dynamic_dispatch"),
+                ResolutionGap("a.g", "print", 4, "dynamic_dispatch"),
+            ],
+        )
+        health = _diff_impact_gap_health(index)
+        assert health["degraded"] is False
+        taxonomy = health["gap_taxonomy"]
+        assert isinstance(taxonomy, dict)
+        assert taxonomy["external_gaps"] == 2
+        assert taxonomy["in_repo_gaps"] == 0
+        completeness = health["completeness"]
+        assert isinstance(completeness, dict)
+        assert completeness["complete"] is True
+        assert completeness["reason"] is None
+
+    def test_high_in_repo_gap_rate_degrades(self) -> None:
+        # 1 edge, 1 in-repo gap → rate 1.0 >= 0.10
+        index = CallGraphIndex(
+            edges=[CallEdge("pkg.a", "pkg.b", "b()", 1, True)],
+            resolution_gaps=[
+                ResolutionGap("pkg.a", "missing_local", 2, "unresolved_static_call"),
+            ],
+        )
+        health = _diff_impact_gap_health(index)
+        assert health["degraded"] is True
+        completeness = health["completeness"]
+        assert isinstance(completeness, dict)
+        assert completeness["reason"] == "high_in_repo_gap_rate"
+        assert completeness["complete"] is False
+
+    def test_parse_failures_degrade_even_at_low_gap(self) -> None:
+        index = CallGraphIndex(
+            edges=[CallEdge("a.f", "a.g", "g()", 1, True)],
+            parse_failures=[ParseFailure("a.py", 1, "syntax_error")],
+        )
+        health = _diff_impact_gap_health(index)
+        assert health["degraded"] is True
+        completeness = health["completeness"]
+        assert isinstance(completeness, dict)
+        assert completeness["reason"] == "parse_failures"
+
+    def test_in_repo_gaps_under_threshold_not_degraded(self) -> None:
+        # 20 edges, 1 in-repo gap → rate 0.05 < 0.10
+        edges = [CallEdge(f"a.f{i}", f"a.g{i}", "g()", i, True) for i in range(20)]
+        index = CallGraphIndex(
+            edges=edges,
+            resolution_gaps=[
+                ResolutionGap("a.f0", "missing_local", 1, "unresolved_static_call"),
+            ],
+        )
+        health = _diff_impact_gap_health(index)
+        assert health["degraded"] is False
+        completeness = health["completeness"]
+        assert isinstance(completeness, dict)
+        assert completeness["in_repo_gap_rate"] < BLAST_RADIUS_GAP_RATE_THRESHOLD
+
 
 class TestDiffImpactEnrichment:
     """Per-changed-symbol callers + affected tests for the review path (TAP-4526)."""
@@ -162,6 +267,25 @@ def compute():
         assert result["cache_status"] == "missing"
         assert result["symbols"] == {}
         assert result["note"]
+
+    def test_enrichment_external_gaps_not_degraded(self, tmp_path: Path) -> None:
+        """Ready cache with only expected external gaps stays non-degraded."""
+        _write(
+            tmp_path,
+            "app/core.py",
+            """
+def compute(obj):
+    return getattr(obj, "value", 0)
+""",
+        )
+        changed = tmp_path / "app/core.py"
+        analyze_diff_impact([changed], tmp_path)
+        result = build_diff_impact_enrichment([changed], tmp_path)
+        taxonomy = result.get("gap_taxonomy")
+        assert isinstance(taxonomy, dict)
+        assert taxonomy["external_gaps"] >= 1
+        assert result["degraded"] is False
+        assert "note" not in result
 
 
 class TestBlastRadiusCaveat:

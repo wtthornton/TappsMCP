@@ -960,6 +960,15 @@ async def tapps_quick_check(
 
                 hit_data = dict(cached)
                 hit_data["cache_hit"] = True
+                hit_data["timing_profile"] = {
+                    "warm_budget_ms": QUICK_CHECK_BUDGET_MS,
+                    "cache_hit": True,
+                    "elapsed_ms": elapsed_ms,
+                    "note": (
+                        "Cache-hit path; cold-start ensure_session_initialized is "
+                        "still billed in elapsed_ms on first process call."
+                    ),
+                }
                 cached_structured = hit_data.pop("__structured_content__", None)
                 resp = success_response("tapps_quick_check", elapsed_ms, hit_data)
                 if cached_structured is not None:
@@ -1082,6 +1091,19 @@ async def tapps_quick_check(
         data,
         degraded=not sec_result.bandit_available,
     )
+    # TAP-5272: document warm vs cold latency profile (cold = first
+    # ensure_session_initialized / checker warm; excluded from warm budget).
+    if isinstance(resp.get("data"), dict):
+        resp["data"]["timing_profile"] = {
+            "warm_budget_ms": QUICK_CHECK_BUDGET_MS,
+            "cache_hit": False,
+            "elapsed_ms": elapsed_ms,
+            "note": (
+                "Warm budget applies after session/checkers are initialized. "
+                "Cold-start first call (ensure_session_initialized + checker "
+                "subprocess warm) is excluded and can dominate p95."
+            ),
+        }
 
     quick_categories = data.get("quick_categories", {})
     _attach_quick_check_structured_output(
