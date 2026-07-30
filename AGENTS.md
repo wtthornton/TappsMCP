@@ -1,4 +1,4 @@
-<!-- tapps-agents-version: 3.12.54 -->
+<!-- tapps-agents-version: 3.12.55 -->
 # TappsMCP - instructions for AI assistants
 
 When the **TappsMCP** MCP server is configured, you have access to tools for **code quality, doc lookup, and domain expert advice**. Use them to avoid hallucinated APIs, missed quality steps, and inconsistent output.
@@ -336,17 +336,17 @@ The bare `mcp__tapps-mcp` entry is needed as a reliable fallback - the wildcard 
 
 ---
 
-<!-- BEGIN: karpathy-guidelines c9a44ae (MIT, forrestchang/andrej-karpathy-skills) -->
+<!-- BEGIN: karpathy-guidelines 2c60614 (MIT, forrestchang/andrej-karpathy-skills) -->
 <!--
   Vendored from https://github.com/forrestchang/andrej-karpathy-skills
-  Pinned commit: c9a44ae835fa2f5765a697216692705761a53f40 (2026-04-15)
+  Pinned commit: 2c606141936f1eeef17fa3043a72095b4765b9c2 (2026-04-20)
   License: MIT (c) forrestchang
   Do not edit by hand — update KARPATHY_GUIDELINES_SOURCE_SHA in prompt_loader.py
   and re-run the vendor script, then bump tapps-mcp version.
 -->
 ## Karpathy Behavioral Guidelines
 
-> Source: https://github.com/forrestchang/andrej-karpathy-skills @ c9a44ae835fa2f5765a697216692705761a53f40 (MIT)
+> Source: https://github.com/forrestchang/andrej-karpathy-skills @ 2c606141936f1eeef17fa3043a72095b4765b9c2 (MIT)
 > Derived from [Andrej Karpathy's observations](https://x.com/karpathy/status/2015883857489522876) on LLM coding pitfalls.
 
 Behavioral guidelines to reduce common LLM coding mistakes. Merge with project-specific instructions as needed.

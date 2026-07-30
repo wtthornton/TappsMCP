@@ -1139,9 +1139,11 @@ class TappsMCPSettings(BaseSettings):
         default=True,
         description=(
             "When False, tapps_upgrade does not install the Karpathy guidelines "
-            "block into AGENTS.md or CLAUDE.md. If the block is already present, "
-            "it is still refreshed idempotently — opting out does not silently "
-            "strip user content."
+            "block into AGENTS.md or CLAUDE.md, and does not install "
+            ".cursor/rules/karpathy-guidelines.mdc. If the AGENTS/CLAUDE block "
+            "is already present, it is still refreshed idempotently — opting "
+            "out does not silently strip user content. Use upgrade --force "
+            "with include_karpathy_guidelines=false to remove the Cursor rule."
         ),
     )
     force_python_quality_rule: bool = Field(

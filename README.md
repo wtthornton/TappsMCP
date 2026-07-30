@@ -500,7 +500,7 @@ The MCP tool exposes a richer parameter surface than the CLI (which auto-fills s
 | `warm_expert_rag_from_tech_stack` | bool | `false` | Pre-build expert RAG indices for relevant domains. |
 | `install_missing_checkers` | bool | `false` | Auto-install missing ruff/mypy/bandit/radon. |
 | `scaffold_experts` | bool | `false` | Generate business expert scaffolding. |
-| `include_karpathy` | bool | `true` | Append the vendored [Karpathy behavioral guidelines](https://github.com/forrestchang/andrej-karpathy-skills) (MIT) to AGENTS.md and CLAUDE.md between idempotent BEGIN/END markers — content outside the markers is preserved. Both files are append/update only, never replaced. Set to `false` to opt out. `tapps_upgrade` refreshes the block when the vendored SHA changes; `tapps_doctor` reports `ok`/`stale`/`missing` per file. |
+| `include_karpathy` | bool | `true` | Append the vendored [Karpathy behavioral guidelines](https://github.com/forrestchang/andrej-karpathy-skills) (MIT) to the preferred home (`AGENTS.md` if present, else `CLAUDE.md`) between idempotent BEGIN/END markers — content outside the markers is preserved. When `.cursor/rules/` exists, also installs `.cursor/rules/karpathy-guidelines.mdc` (`alwaysApply`). Set to `false` to opt out. `tapps_upgrade` refreshes when the vendored SHA changes; `tapps_doctor` reports `ok`/`stale`/`missing`. |
 | `output_mode` | str | `"auto"` | `"auto"` (write or return), `"content_return"` (always return file content), `"direct_write"` (always write). |
 
 **Settings notes:**

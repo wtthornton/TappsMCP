@@ -6,6 +6,10 @@ and `tapps_upgrade` refreshes in place. Both operations key off two HTML
 comment markers so we can rewrite between them without touching anything
 outside — and so `tapps_doctor` can report whether the block is present
 and pinned to the current source SHA.
+
+When ``.cursor/rules/`` exists, the same content is also installed as
+``.cursor/rules/karpathy-guidelines.mdc`` (upstream Cursor packaging from
+``forrestchang/andrej-karpathy-skills``).
 """
 
 from __future__ import annotations
@@ -14,9 +18,11 @@ import re
 from typing import TYPE_CHECKING, Literal
 
 from tapps_mcp.prompts.prompt_loader import (
+    KARPATHY_CURSOR_RULE_REL,
     KARPATHY_GUIDELINES_MARKER_BEGIN,
     KARPATHY_GUIDELINES_MARKER_END,
     KARPATHY_GUIDELINES_SOURCE_SHA,
+    load_karpathy_cursor_rule,
     load_karpathy_guidelines,
 )
 
@@ -25,9 +31,18 @@ if TYPE_CHECKING:
 
 
 Action = Literal["added", "refreshed", "unchanged", "skipped_file_missing"]
-DoctorState = Literal["ok", "stale", "missing", "file_absent"]
+CursorAction = Literal[
+    "added",
+    "refreshed",
+    "unchanged",
+    "skipped_no_cursor",
+    "removed",
+    "skipped_file_missing",
+]
+DoctorState = Literal["ok", "stale", "missing", "file_absent", "skipped_no_cursor"]
 
 _SHA_RE = re.compile(r"<!--\s*BEGIN:\s*karpathy-guidelines\s+([0-9a-f]{7,40})\b")
+_CURSOR_SHA_RE = re.compile(r"<!--\s*karpathy-guidelines-sha:\s*([0-9a-f]{7,40})\s*-->")
 
 
 def _find_block_span(content: str) -> tuple[int, int] | None:
@@ -171,14 +186,109 @@ def check(path: Path) -> dict[str, str | None]:
     }
 
 
+def cursor_rule_path(project_root: Path) -> Path:
+    """Return the absolute path of the Cursor Karpathy rule."""
+    return project_root / KARPATHY_CURSOR_RULE_REL
+
+
+def _cursor_rules_dir_present(project_root: Path) -> bool:
+    return (project_root / ".cursor" / "rules").is_dir()
+
+
+def install_or_refresh_cursor_rule(
+    project_root: Path,
+    *,
+    dry_run: bool = False,
+) -> CursorAction:
+    """Install or refresh ``.cursor/rules/karpathy-guidelines.mdc``.
+
+    Skips when ``.cursor/rules/`` is absent (does not create a Cursor tree
+    solely for Karpathy). Creates the rule file when the rules dir exists.
+    """
+    if not _cursor_rules_dir_present(project_root):
+        return "skipped_no_cursor"
+
+    target = cursor_rule_path(project_root)
+    new_content = load_karpathy_cursor_rule()
+    if target.is_file():
+        existing = target.read_text(encoding="utf-8")
+        if existing == new_content:
+            return "unchanged"
+        action: CursorAction = "refreshed"
+    else:
+        action = "added"
+
+    if not dry_run:
+        target.write_text(new_content, encoding="utf-8")
+    return action
+
+
+def remove_cursor_rule(project_root: Path, *, dry_run: bool = False) -> CursorAction:
+    """Remove the Cursor Karpathy rule if present."""
+    target = cursor_rule_path(project_root)
+    if not target.is_file():
+        return "skipped_file_missing"
+    if not dry_run:
+        target.unlink()
+    return "removed"
+
+
+def check_cursor_rule(project_root: Path) -> dict[str, str | None]:
+    """Doctor-style report for the Cursor Karpathy ``.mdc`` rule."""
+    expected = KARPATHY_GUIDELINES_SOURCE_SHA
+    if not _cursor_rules_dir_present(project_root):
+        return {
+            "state": "skipped_no_cursor",
+            "current_sha": None,
+            "expected_sha": expected,
+            "hint": "No .cursor/rules/ directory — Cursor rule not applicable.",
+        }
+
+    target = cursor_rule_path(project_root)
+    if not target.is_file():
+        return {
+            "state": "missing",
+            "current_sha": None,
+            "expected_sha": expected,
+            "hint": (
+                f"{KARPATHY_CURSOR_RULE_REL} not found — run tapps_upgrade to install it."
+            ),
+        }
+
+    content = target.read_text(encoding="utf-8")
+    match = _CURSOR_SHA_RE.search(content)
+    current = match.group(1) if match else None
+    if current and expected.startswith(current):
+        return {
+            "state": "ok",
+            "current_sha": current,
+            "expected_sha": expected,
+            "hint": "Cursor Karpathy rule is up to date.",
+        }
+    return {
+        "state": "stale",
+        "current_sha": current,
+        "expected_sha": expected,
+        "hint": (
+            "Cursor Karpathy rule is pinned to an older SHA — run tapps_upgrade to refresh."
+        ),
+    }
+
+
 __all__ = [
+    "KARPATHY_CURSOR_RULE_REL",
     "KARPATHY_GUIDELINES_MARKER_BEGIN",
     "KARPATHY_GUIDELINES_MARKER_END",
     "KARPATHY_GUIDELINES_SOURCE_SHA",
     "Action",
+    "CursorAction",
     "DoctorState",
     "check",
+    "check_cursor_rule",
+    "cursor_rule_path",
     "has_block",
     "install_or_refresh",
+    "install_or_refresh_cursor_rule",
     "remove_block",
+    "remove_cursor_rule",
 ]

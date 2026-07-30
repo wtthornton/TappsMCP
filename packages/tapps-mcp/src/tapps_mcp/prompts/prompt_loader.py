@@ -10,6 +10,7 @@ This module adds MCP-specific template loading (agents, platform rules).
 from __future__ import annotations
 
 import importlib.resources
+import re
 import sys
 from pathlib import Path
 
@@ -23,13 +24,14 @@ from tapps_core.prompts.prompt_loader import load_stage_prompt as load_stage_pro
 
 _PACKAGE = "tapps_mcp.prompts"
 
-KARPATHY_GUIDELINES_SOURCE_SHA = "c9a44ae835fa2f5765a697216692705761a53f40"
+KARPATHY_GUIDELINES_SOURCE_SHA = "2c606141936f1eeef17fa3043a72095b4765b9c2"
 """Pinned commit SHA for the vendored Karpathy guidelines.
 
 Update together with ``karpathy_guidelines.md`` when re-vendoring from
 https://github.com/forrestchang/andrej-karpathy-skills — `tapps_doctor`
 compares this constant against the SHA recorded in the consuming project's
-AGENTS.md marker to decide whether the block is stale.
+AGENTS.md marker and ``.cursor/rules/karpathy-guidelines.mdc`` to decide
+whether the install is stale.
 """
 
 KARPATHY_GUIDELINES_MARKER_BEGIN = (
@@ -37,6 +39,18 @@ KARPATHY_GUIDELINES_MARKER_BEGIN = (
     "(MIT, forrestchang/andrej-karpathy-skills) -->"
 )
 KARPATHY_GUIDELINES_MARKER_END = "<!-- END: karpathy-guidelines -->"
+
+KARPATHY_CURSOR_RULE_REL = ".cursor/rules/karpathy-guidelines.mdc"
+"""Relative path for the Cursor alwaysApply rule (upstream Cursor packaging)."""
+
+_KARPATHY_HTML_COMMENT_RE = re.compile(r"^<!--.*?-->\n*", re.DOTALL)
+
+_CURSOR_RULE_FRONTMATTER = """\
+---
+description: Behavioral guidelines to reduce common LLM coding mistakes. Use when writing, reviewing, or refactoring code to avoid overcomplication, make surgical changes, surface assumptions, and define verifiable success criteria.
+alwaysApply: true
+---
+"""
 
 
 def _read_resource(filename: str) -> str:
@@ -91,6 +105,43 @@ def load_karpathy_guidelines() -> str:
     """
     body = _read_resource("karpathy_guidelines.md")
     return f"{KARPATHY_GUIDELINES_MARKER_BEGIN}\n{body.rstrip()}\n{KARPATHY_GUIDELINES_MARKER_END}"
+
+
+def _karpathy_guidelines_body_for_cursor() -> str:
+    """Strip AGENTS.md wrapper lines and promote ``###`` headings to ``##``.
+
+    Matches the upstream ``.cursor/rules/karpathy-guidelines.mdc`` body shape
+    (title + principles) while keeping a single vendored source file.
+    """
+    raw = _KARPATHY_HTML_COMMENT_RE.sub("", _read_resource("karpathy_guidelines.md"), count=1)
+    lines: list[str] = []
+    for line in raw.splitlines():
+        if line.startswith("## Karpathy"):
+            continue
+        if line.startswith("> Source:") or line.startswith("> Derived from"):
+            continue
+        if not lines and not line.strip():
+            continue
+        if line.startswith("### "):
+            line = "## " + line[4:]
+        lines.append(line)
+    return "\n".join(lines).strip() + "\n"
+
+
+def load_karpathy_cursor_rule() -> str:
+    """Render the Cursor ``alwaysApply`` rule from the vendored guidelines.
+
+    Includes a ``karpathy-guidelines-sha`` HTML comment so doctor/upgrade can
+    detect staleness the same way as the AGENTS.md block markers.
+    """
+    sha = KARPATHY_GUIDELINES_SOURCE_SHA
+    body = _karpathy_guidelines_body_for_cursor()
+    return (
+        f"{_CURSOR_RULE_FRONTMATTER}\n"
+        f"<!-- karpathy-guidelines-sha: {sha} -->\n\n"
+        f"# Karpathy behavioral guidelines\n\n"
+        f"{body}"
+    )
 
 
 def load_platform_rules(platform: str, engagement_level: str = "medium") -> str:

@@ -318,40 +318,44 @@ class TestKarpathyOptOut:
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         _python_project(tmp_path)
+        (tmp_path / "AGENTS.md").write_text("# AGENTS\nHand-tuned content.\n", encoding="utf-8")
         (tmp_path / "CLAUDE.md").write_text("# CLAUDE\nHand-tuned content.\n", encoding="utf-8")
         monkeypatch.setenv("TAPPS_MCP_INCLUDE_KARPATHY_GUIDELINES", "false")
         result = upgrade_pipeline(tmp_path, platform="claude")
         kg = result["components"]["karpathy_guidelines"]
         assert kg["opted_out"] is True
-        assert kg["files"]["CLAUDE.md"] == "skipped (opt-out)"
-        # Verify the block was not added
-        content = (tmp_path / "CLAUDE.md").read_text(encoding="utf-8")
-        assert "BEGIN: karpathy-guidelines" not in content
+        assert kg["primary"] == "AGENTS.md"
+        assert kg["files"]["AGENTS.md"] == "skipped (opt-out)"
+        assert kg["files"]["CLAUDE.md"] == "skipped (single-home)"
+        # Verify the block was not added to either home
+        for name in ("AGENTS.md", "CLAUDE.md"):
+            content = (tmp_path / name).read_text(encoding="utf-8")
+            assert "BEGIN: karpathy-guidelines" not in content
 
     def test_opt_out_still_refreshes_existing_block(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         _python_project(tmp_path)
-        # Install the block first without opt-out
+        # Keep CLAUDE.md as the sole preferred home so AGENTS merge cannot
+        # rewrite the file before the Karpathy refresh step.
         from tapps_mcp.pipeline import karpathy_block
         from tapps_mcp.prompts.prompt_loader import load_karpathy_guidelines
 
         claude_md = tmp_path / "CLAUDE.md"
         seed = load_karpathy_guidelines()
-        # Emulate a stale-SHA existing install by using a fake marker
         claude_md.write_text(
             "# CLAUDE\nUser.\n\n<!-- BEGIN: karpathy-guidelines deadbee -->\nstale\n"
             "<!-- END: karpathy-guidelines -->\n",
             encoding="utf-8",
         )
-        # Sanity: block is present
         assert karpathy_block._find_block_span(claude_md.read_text(encoding="utf-8")) is not None
 
-        # Now opt out and run upgrade — the block must still refresh to current SHA
         monkeypatch.setenv("TAPPS_MCP_INCLUDE_KARPATHY_GUIDELINES", "false")
+        monkeypatch.setenv("TAPPS_MCP_UPGRADE_CREATE_AGENTS_MD", "false")
         result = upgrade_pipeline(tmp_path, platform="claude")
         kg = result["components"]["karpathy_guidelines"]
         assert kg["opted_out"] is True
+        assert kg["primary"] == "CLAUDE.md"
         assert kg["files"]["CLAUDE.md"] in ("refreshed", "unchanged")
         assert seed.splitlines()[0] in claude_md.read_text(encoding="utf-8")
 
@@ -359,12 +363,12 @@ class TestKarpathyOptOut:
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         _python_project(tmp_path)
-        (tmp_path / "CLAUDE.md").write_text("# CLAUDE\n", encoding="utf-8")
+        (tmp_path / "AGENTS.md").write_text("# AGENTS\n", encoding="utf-8")
         monkeypatch.setenv("TAPPS_MCP_UPGRADE_SKIP_FILES", '["karpathy"]')
         result = upgrade_pipeline(tmp_path, platform="claude")
         kg = result["components"]["karpathy_guidelines"]
         assert kg["opted_out"] is True
-        assert kg["files"]["CLAUDE.md"] == "skipped (opt-out)"
+        assert kg["files"]["AGENTS.md"] == "skipped (opt-out)"
 
 
 # ---------------------------------------------------------------------------

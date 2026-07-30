@@ -48,6 +48,19 @@ def test_load_karpathy_guidelines_preserves_attribution() -> None:
     assert KARPATHY_GUIDELINES_SOURCE_SHA in block
 
 
+def test_load_karpathy_cursor_rule_has_frontmatter_and_sha() -> None:
+    from tapps_mcp.prompts.prompt_loader import load_karpathy_cursor_rule
+
+    rule = load_karpathy_cursor_rule()
+    assert rule.startswith("---\n")
+    assert "alwaysApply: true" in rule
+    assert f"karpathy-guidelines-sha: {KARPATHY_GUIDELINES_SOURCE_SHA}" in rule
+    assert "# Karpathy behavioral guidelines" in rule
+    assert "## 1. Think Before Coding" in rule
+    assert "### 1." not in rule
+    assert "> Source:" not in rule
+
+
 # ---------------------------------------------------------------------------
 # install_or_refresh
 # ---------------------------------------------------------------------------
@@ -246,6 +259,7 @@ def test_init_installs_block_into_new_agents_md(tmp_path: Path) -> None:
     assert kp["files"]["AGENTS.md"] in {"added", "unchanged"}
     # No CLAUDE.md was created (platform=""), so it should be skipped
     assert kp["files"]["CLAUDE.md"] == "skipped_file_missing"
+    assert kp["cursor_rule"] == "skipped_no_cursor"
 
 
 @pytest.mark.slow
@@ -274,14 +288,17 @@ def test_init_installs_block_into_both_files_when_claude_md_present(tmp_path: Pa
 
     claude = (tmp_path / "CLAUDE.md").read_text(encoding="utf-8")
     assert "user-owned preamble that must survive." in claude  # user content preserved
-    assert KARPATHY_GUIDELINES_MARKER_BEGIN in claude
+    # ADR-0031 single-home: AGENTS.md preferred; CLAUDE.md is not newly dual-written
+    assert KARPATHY_GUIDELINES_MARKER_BEGIN not in claude
 
     agents = (tmp_path / "AGENTS.md").read_text(encoding="utf-8")
     assert KARPATHY_GUIDELINES_MARKER_BEGIN in agents
 
     kp = result["karpathy_guidelines"]
     assert kp["files"]["AGENTS.md"] in {"added", "unchanged"}
-    assert kp["files"]["CLAUDE.md"] == "added"
+    assert kp["files"]["CLAUDE.md"] == "skipped (single-home)"
+    assert kp["primary"] == "AGENTS.md"
+    assert kp["cursor_rule"] == "skipped_no_cursor"
 
 
 @pytest.mark.slow
@@ -424,3 +441,81 @@ def test_doctor_check_fails_when_preferred_home_missing_block(
     assert not result.ok
     assert "preferred home: AGENTS.md" in result.message
     assert "tapps_upgrade" in result.detail
+
+
+# ---------------------------------------------------------------------------
+# Cursor .mdc rule
+# ---------------------------------------------------------------------------
+
+
+def test_cursor_rule_skipped_without_cursor_dir(tmp_path: Path) -> None:
+    action = karpathy_block.install_or_refresh_cursor_rule(tmp_path)
+    assert action == "skipped_no_cursor"
+    assert not karpathy_block.cursor_rule_path(tmp_path).exists()
+
+
+def test_cursor_rule_install_refresh_and_doctor(tmp_path: Path) -> None:
+    rules = tmp_path / ".cursor" / "rules"
+    rules.mkdir(parents=True)
+    (tmp_path / "AGENTS.md").write_text("# AGENTS\n", encoding="utf-8")
+    karpathy_block.install_or_refresh(tmp_path / "AGENTS.md")
+
+    first = karpathy_block.install_or_refresh_cursor_rule(tmp_path)
+    assert first == "added"
+    target = karpathy_block.cursor_rule_path(tmp_path)
+    assert target.is_file()
+    assert "alwaysApply: true" in target.read_text(encoding="utf-8")
+
+    second = karpathy_block.install_or_refresh_cursor_rule(tmp_path)
+    assert second == "unchanged"
+
+    report = karpathy_block.check_cursor_rule(tmp_path)
+    assert report["state"] == "ok"
+    assert report["current_sha"] == KARPATHY_GUIDELINES_SOURCE_SHA
+
+    doctor = check_karpathy_guidelines(tmp_path)
+    assert doctor.ok
+    assert "Cursor rule ok" in doctor.message
+
+
+def test_cursor_rule_stale_fails_doctor_when_rules_dir_present(tmp_path: Path) -> None:
+    rules = tmp_path / ".cursor" / "rules"
+    rules.mkdir(parents=True)
+    (tmp_path / "AGENTS.md").write_text("# AGENTS\n", encoding="utf-8")
+    karpathy_block.install_or_refresh(tmp_path / "AGENTS.md")
+    karpathy_block.cursor_rule_path(tmp_path).write_text(
+        "---\nalwaysApply: true\n---\n\n"
+        "<!-- karpathy-guidelines-sha: deadbeef -->\n\n# stale\n",
+        encoding="utf-8",
+    )
+
+    result = check_karpathy_guidelines(tmp_path)
+    assert not result.ok
+    assert "Cursor rule stale" in result.message
+
+
+def test_upgrade_installs_cursor_rule_when_rules_dir_exists(tmp_path: Path) -> None:
+    from tapps_mcp.pipeline.upgrade import _refresh_karpathy_blocks
+
+    (tmp_path / "AGENTS.md").write_text("# AGENTS\n", encoding="utf-8")
+    (tmp_path / ".cursor" / "rules").mkdir(parents=True)
+
+    result = _refresh_karpathy_blocks(tmp_path, dry_run=False)
+    assert result["files"]["AGENTS.md"] == "added"
+    assert result["cursor_rule"] == "added"
+    assert karpathy_block.cursor_rule_path(tmp_path).is_file()
+
+
+def test_upgrade_force_opt_out_removes_cursor_rule(tmp_path: Path) -> None:
+    from tapps_mcp.pipeline.upgrade import _refresh_karpathy_blocks
+
+    (tmp_path / "AGENTS.md").write_text("# AGENTS\n", encoding="utf-8")
+    (tmp_path / ".cursor" / "rules").mkdir(parents=True)
+    karpathy_block.install_or_refresh(tmp_path / "AGENTS.md")
+    karpathy_block.install_or_refresh_cursor_rule(tmp_path)
+
+    result = _refresh_karpathy_blocks(
+        tmp_path, dry_run=False, include_karpathy=False, force=True
+    )
+    assert result["cursor_rule"] == "removed"
+    assert not karpathy_block.cursor_rule_path(tmp_path).exists()

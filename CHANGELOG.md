@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [3.12.55] - 2026-07-30
+
+### Fixed
+
+- **Karpathy Cursor rule wiring** — complete the Cursor
+  `.cursor/rules/karpathy-guidelines.mdc` install/check path that doctor
+  already called in 3.12.54 (`check_cursor_rule`). Without this, doctor
+  crashed with `AttributeError` after deploy.
+
 ## [3.12.54] - 2026-07-30
 
 ### Fixed
@@ -22,6 +31,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     quick_check / validate_changed; import-aware `test_coverage` fallback.
   - Session start: `user_invocable_only` on handoff slash skill; upgrade
     reports `alwaysApply` demotions explicitly.
+
+### Known issue
+
+- Doctor Karpathy check required `karpathy_block.check_cursor_rule`, which
+  landed incomplete in this cut — fixed in **3.12.55**. Prefer upgrading
+  straight to 3.12.55.
 
 ## [3.12.53] - 2026-07-30
 
