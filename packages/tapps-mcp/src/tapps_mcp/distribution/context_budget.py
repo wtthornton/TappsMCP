@@ -152,9 +152,31 @@ def check_always_apply_rules_weight(root: Path) -> CheckResult:
     return CheckResult("alwaysApply rules weight", True, summary)
 
 
+def _skill_tier(root: Path) -> str:
+    """Return ``skill_tier`` from ``.tapps-mcp.yaml`` (default ``full``)."""
+    import yaml
+
+    config_path = root / ".tapps-mcp.yaml"
+    if not config_path.exists():
+        return "full"
+    try:
+        with config_path.open(encoding="utf-8") as fh:
+            cfg: dict[str, object] = yaml.safe_load(fh) or {}
+        raw = cfg.get("skill_tier", "full")
+        if isinstance(raw, str) and raw.strip().lower() in {"core", "full"}:
+            return raw.strip().lower()
+    except Exception:
+        return "full"
+    return "full"
+
+
 def check_skill_inventory_budget(root: Path) -> CheckResult:
     """WARN on skill count, orphan dirs, and oversized SKILL.md without companions."""
     from tapps_mcp.distribution.doctor import CheckResult, _tapps_skill_bases
+    from tapps_mcp.pipeline.platform_docs_automation import (
+        CLAUDE_DOCS_SKILLS,
+        CURSOR_DOCS_SKILLS,
+    )
     from tapps_mcp.pipeline.platform_skills import (
         CLAUDE_SKILLS,
         CURSOR_SKILLS,
@@ -165,9 +187,17 @@ def check_skill_inventory_budget(root: Path) -> CheckResult:
     budget = read_context_budget(root)
     count_max = budget["skill_count_max"]
     body_max = budget["skill_body_max_lines"]
-    registry = set(CLAUDE_SKILLS) | set(CURSOR_SKILLS) | set(DEPRECATED_TAPPS_SKILLS)
+    tier = _skill_tier(root)
+    registry = (
+        set(CLAUDE_SKILLS)
+        | set(CURSOR_SKILLS)
+        | set(DEPRECATED_TAPPS_SKILLS)
+        | set(CLAUDE_DOCS_SKILLS)
+        | set(CURSOR_DOCS_SKILLS)
+    )
 
     warns: list[str] = []
+    notes: list[str] = []
     host_summaries: list[str] = []
     for host_label, base in _tapps_skill_bases(root):
         if not base.is_dir():
@@ -184,7 +214,12 @@ def check_skill_inventory_budget(root: Path) -> CheckResult:
         if orphans:
             preview = ", ".join(orphans[:8])
             more = f" (+{len(orphans) - 8} more)" if len(orphans) > 8 else ""
-            warns.append(f"{host_label} orphan skills: {preview}{more}")
+            orphan_msg = f"{host_label} orphan skills: {preview}{more}"
+            # Under skill_tier: full, non-registry skills are expected extras.
+            if tier == "core":
+                warns.append(orphan_msg)
+            else:
+                notes.append(orphan_msg)
 
         oversized: list[str] = []
         for skill_dir in skill_dirs:
@@ -213,7 +248,12 @@ def check_skill_inventory_budget(root: Path) -> CheckResult:
             "No deployed skills directories — skipping inventory budget",
         )
 
-    summary = f"hosts: {', '.join(host_summaries)}; ceilings count={count_max} lines={body_max}"
+    summary = (
+        f"hosts: {', '.join(host_summaries)}; ceilings count={count_max} "
+        f"lines={body_max}; skill_tier={tier}"
+    )
+    if notes:
+        summary = f"{summary}; {'; '.join(notes)}"
     if warns:
         return CheckResult(
             "Skill inventory budget",

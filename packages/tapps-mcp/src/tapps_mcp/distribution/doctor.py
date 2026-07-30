@@ -2361,13 +2361,14 @@ def check_agents_md(project_root: Path) -> CheckResult:
 
 
 def check_karpathy_guidelines(project_root: Path) -> CheckResult:
-    """Check the Karpathy guidelines block across AGENTS.md and CLAUDE.md.
+    """Check the Karpathy guidelines block (ADR-0031 single-home).
 
-    - Passes when every file that exists carries the block pinned to the
-      vendored SHA.
-    - Passes (informational) when neither file exists.
-    - Fails when any existing file is missing the block or is pinned to a
-      stale SHA.
+    Preferred home is ``AGENTS.md`` when present, otherwise ``CLAUDE.md``.
+    The secondary file may omit the block (upgrade ``--force`` strips dual
+    installs). Dual presence is reported by ``check_karpathy_dual_install``.
+
+    - Passes when the preferred home has the block pinned to the vendored SHA.
+    - Fails when neither file exists, or the preferred home is missing/stale.
     """
     from tapps_mcp.pipeline import karpathy_block
 
@@ -2386,35 +2387,35 @@ def check_karpathy_guidelines(project_root: Path) -> CheckResult:
             "Run: tapps_init",
         )
 
-    stale: list[str] = []
-    missing: list[str] = []
-    ok: list[str] = []
-    for rel, rep in existing.items():
-        state = rep["state"]
-        if state == "ok":
-            ok.append(rel)
-        elif state == "missing":
-            missing.append(rel)
-        elif state == "stale":
-            current = rep["current_sha"] or "unknown"
-            stale.append(f"{rel}@{current}")
+    preferred = "AGENTS.md" if "AGENTS.md" in existing else "CLAUDE.md"
+    pref = existing[preferred]
+    pref_state = pref["state"]
 
-    if not missing and not stale:
+    if pref_state == "ok":
+        homes = [preferred]
+        secondary = "CLAUDE.md" if preferred == "AGENTS.md" else "AGENTS.md"
+        if secondary in existing and existing[secondary]["state"] == "ok":
+            homes.append(secondary)
         return CheckResult(
             "Karpathy guidelines",
             True,
-            f"Karpathy guidelines block present in {', '.join(ok)}; pinned to {expected_short}",
+            f"Karpathy guidelines block present in {', '.join(homes)}; "
+            f"pinned to {expected_short} (preferred home: {preferred})",
         )
 
-    parts: list[str] = []
-    if missing:
-        parts.append(f"missing in: {', '.join(missing)}")
-    if stale:
-        parts.append(f"stale ({', '.join(stale)}; expected {expected_short})")
+    if pref_state == "missing":
+        return CheckResult(
+            "Karpathy guidelines",
+            False,
+            f"missing in preferred home: {preferred}",
+            "Run: tapps_upgrade (or tapps_init with include_karpathy=True)",
+        )
+
+    current = pref["current_sha"] or "unknown"
     return CheckResult(
         "Karpathy guidelines",
         False,
-        "; ".join(parts),
+        f"stale ({preferred}@{current}; expected {expected_short})",
         "Run: tapps_upgrade (or tapps_init with include_karpathy=True)",
     )
 
