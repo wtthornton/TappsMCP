@@ -60,9 +60,22 @@ def validate_mcp_config(file_path: str, content: str) -> ConfigValidationResult:
         )
 
     # --- Detect format ---
-    # Standard: {"mcpServers": {"name": {...}}}
-    # Flat:     {"name": {...}}
-    servers: Any = data.get("mcpServers", data)
+    # Standard:  {"mcpServers": {"name": {...}}}
+    # VS Code:   {"servers": {"name": {...}}}
+    # Flat:      {"name": {...}}
+    # Prefer explicit keys over the whole document so a VS Code `servers`
+    # key is not treated as a server named "servers" (TAP-5359).
+    mcp_servers = data.get("mcpServers")
+    vscode_servers = data.get("servers")
+    if isinstance(mcp_servers, dict):
+        servers: Any = mcp_servers
+        format_kind = "mcpServers"
+    elif isinstance(vscode_servers, dict):
+        servers = vscode_servers
+        format_kind = "servers"
+    else:
+        servers = data
+        format_kind = "flat"
 
     if not isinstance(servers, dict):
         findings.append(
@@ -80,7 +93,7 @@ def validate_mcp_config(file_path: str, content: str) -> ConfigValidationResult:
             suggestions=suggestions,
         )
 
-    if "mcpServers" not in data:
+    if format_kind == "flat":
         suggestions.append(
             "Consider wrapping server entries under 'mcpServers' key for standard MCP format."
         )

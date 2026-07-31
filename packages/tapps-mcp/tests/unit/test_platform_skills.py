@@ -379,6 +379,13 @@ class TestLinearReadSkill:
         # Confirm the collapse-to-one-call replacement is shown.
         assert 'snapshot_get(team=<team>, project=<project>, state="open")' in content
 
+    def test_skill_omits_open_alias_on_plugin_list_issues(self) -> None:
+        """TAP-5356: skill must not teach passing state=open to Linear plugin."""
+        content = CLAUDE_SKILLS["linear-read"]
+        assert "OMIT state" in content or "omit state" in content.lower()
+        assert 'fetch once with state="open"' not in content
+        assert 'Passing `state="open"`' in content or "never pass them to the plugin" in content
+
     def test_skill_documents_unfiltered_scroll_antipattern(self) -> None:
         content = CLAUDE_SKILLS["linear-read"]
         assert "unfiltered scroll" in content.lower()

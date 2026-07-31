@@ -81,7 +81,33 @@ class TestHandoffSchemaParse:
         doc = parse_handoff_markdown(_MISSING_P0)
         result = lint_handoff(doc, now=datetime(2026, 6, 11, tzinfo=UTC))
         assert not result.ok
-        assert any("Next (P0)" in err for err in result.errors)
+        assert any("Next" in err for err in result.errors)
+
+    def test_parse_next_heading_with_suffix(self) -> None:
+        """TAP-5362: suffixed Next headings still populate next_p0."""
+        text = _VALID_HANDOFF.replace(
+            "## Next (P0)\n- Continue Wave 2 handoff hardening\n",
+            "## Next (P0 -> Production)\n- Ship the release cut\n",
+        )
+        doc = parse_handoff_markdown(text)
+        assert doc.next_p0 == ["Ship the release cut"]
+        result = lint_handoff(doc, now=datetime(2026, 6, 11, tzinfo=UTC))
+        assert result.ok
+
+    def test_lint_quotes_unrecognized_next_like_header(self) -> None:
+        """TAP-5362: near-miss headers are quoted when next_p0 is empty."""
+        text = (
+            "# Session handoff\n"
+            "**Updated:** 2026-06-11T12:00:00Z\n\n"
+            "## Open\n"
+            "- Finish doctor linter\n\n"
+            "## Upcoming (P0)\n"
+            "- do the thing\n"
+        )
+        doc = parse_handoff_markdown(text)
+        result = lint_handoff(doc, now=datetime(2026, 6, 11, tzinfo=UTC))
+        assert not result.ok
+        assert any("unrecognized" in err and "Upcoming (P0)" in err for err in result.errors)
 
     def test_lint_warns_met_with_open(self) -> None:
         text = _MISSING_P0.replace("## Next (P0)\n- none\n", "## Next (P0)\n- do the thing\n")

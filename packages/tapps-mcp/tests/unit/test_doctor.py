@@ -325,8 +325,39 @@ class TestHostConfigChecks:
         result = check_vscode_config(tmp_path)
         assert result.ok is True
 
-    def test_vscode_config_missing(self, tmp_path):
-        result = check_vscode_config(tmp_path)
+    def test_vscode_config_missing_warns_when_vscode_undetected(self, tmp_path):
+        """TAP-5360: missing file is warn when VS Code host is not detected."""
+        result = check_vscode_config(tmp_path, vscode_detected=False)
+        assert result.ok is False
+        assert result.severity == "warn"
+        assert "WARN:" in result.message
+
+    def test_vscode_config_missing_warns_when_other_host_configured(self, tmp_path):
+        """TAP-5360: Cursor-only consumers must not get an unclearable fail."""
+        cursor_dir = tmp_path / ".cursor"
+        cursor_dir.mkdir()
+        (cursor_dir / "mcp.json").write_text(
+            json.dumps({"mcpServers": {"tapps-mcp": {"command": "tapps-mcp"}}}),
+            encoding="utf-8",
+        )
+        result = check_vscode_config(tmp_path, vscode_detected=True)
+        assert result.severity == "warn"
+        assert result.ok is False
+
+    def test_vscode_config_missing_fails_when_vscode_sole_host(self, tmp_path):
+        """TAP-5360: fail when VS Code is installed and no other host is wired."""
+        result = check_vscode_config(tmp_path, vscode_detected=True)
+        assert result.severity == "fail"
+        assert result.ok is False
+        assert "init --host vscode" in result.detail
+
+    def test_vscode_config_invalid_still_fails(self, tmp_path):
+        """Existing broken VS Code config remains a hard fail."""
+        vscode_dir = tmp_path / ".vscode"
+        vscode_dir.mkdir()
+        (vscode_dir / "mcp.json").write_text('{"servers": {}}', encoding="utf-8")
+        result = check_vscode_config(tmp_path, vscode_detected=False)
+        assert result.severity == "fail"
         assert result.ok is False
 
 

@@ -393,12 +393,54 @@ def check_cursor_config(project_root: Path) -> CheckResult:
     )
 
 
-def check_vscode_config(project_root: Path) -> CheckResult:
-    """Check ``.vscode/mcp.json`` for tapps-mcp entry."""
-    return check_json_config(
-        project_root / ".vscode" / "mcp.json",
-        "servers",
-        "VS Code",
+def _other_mcp_host_configured(project_root: Path) -> bool:
+    """Return True when the project already wires Cursor or Claude Code MCP."""
+    return (project_root / ".cursor" / "mcp.json").is_file() or (
+        project_root / ".mcp.json"
+    ).is_file()
+
+
+def check_vscode_config(
+    project_root: Path,
+    *,
+    vscode_detected: bool | None = None,
+) -> CheckResult:
+    """Check ``.vscode/mcp.json`` for tapps-mcp entry.
+
+    TAP-5360: a missing file is ``warn`` (not ``fail``) when VS Code is not an
+    active platform for this consumer — either the IDE is not installed, or the
+    project already configures Cursor/Claude without a VS Code MCP file. That
+    avoids an unclearable hard fail (``tapps_upgrade`` never generates
+    ``.vscode/mcp.json``). Invalid existing files still fail. When VS Code is
+    installed and no other host is configured, missing remains ``fail`` with a
+    remediation pointing at ``tapps-mcp init --host vscode``.
+    """
+    config_path = project_root / ".vscode" / "mcp.json"
+    if config_path.exists():
+        return check_json_config(config_path, "servers", "VS Code")
+
+    if vscode_detected is None:
+        from tapps_mcp.distribution.setup_generator import _detect_hosts
+
+        vscode_detected = "vscode" in _detect_hosts()
+
+    # Hard-fail only when VS Code looks like the intended sole host — then
+    # ``tapps-mcp init --host vscode`` clears the finding.
+    if vscode_detected and not _other_mcp_host_configured(project_root):
+        return CheckResult(
+            "VS Code config",
+            False,
+            f"Not found: {config_path}",
+            "VS Code is installed but .vscode/mcp.json is missing. "
+            "Run: tapps-mcp init --host vscode",
+        )
+    return CheckResult(
+        "VS Code config",
+        False,
+        f"WARN: Not found: {config_path} (VS Code MCP not required for this project)",
+        "Optional when the project uses Cursor or Claude Code only. "
+        "To configure VS Code: tapps-mcp init --host vscode",
+        severity="warn",
     )
 
 

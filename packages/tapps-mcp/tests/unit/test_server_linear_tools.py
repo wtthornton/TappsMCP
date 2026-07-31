@@ -239,6 +239,45 @@ async def test_get_miss_returns_hint(mock_load_settings: Any) -> None:
 
 
 @pytest.mark.asyncio
+async def test_get_miss_open_alias_omits_state_in_hint(mock_load_settings: Any) -> None:
+    """TAP-5356: open/closed miss hints must not tell agents to pass the alias to Linear."""
+    result = await tapps_linear_snapshot_get(team="T", project="P", state="open")
+    assert result["success"] is True
+    assert result["data"]["cached"] is False
+    hint = result["data"]["hint"]
+    assert "cache bucket" in hint
+    assert "omit state" in hint.lower()
+    assert "same team/project/state filters" not in hint
+
+
+@pytest.mark.asyncio
+async def test_list_issues_gate_warns_on_open_alias(
+    tmp_path: Path, mock_load_settings: Any
+) -> None:
+    """TAP-5356: gate pass for state=open warns not to pass the alias to Linear."""
+    import time
+
+    from tapps_mcp.server_linear_tools import (
+        _resolve_cache_key,
+        tapps_linear_list_issues,
+    )
+
+    key = _resolve_cache_key("T", "P", "open", "", 50)
+    sentinel_dir = tmp_path / ".tapps-mcp"
+    sentinel_dir.mkdir(parents=True, exist_ok=True)
+    (sentinel_dir / f".linear-snapshot-sentinel-{key}").write_text(
+        str(time.time()), encoding="utf-8"
+    )
+    result = await tapps_linear_list_issues(team="T", project="P", state="open")
+    assert result["success"] is True
+    assert result["data"]["ok"] is True
+    assert "alias_warning" in result["data"]
+    assert "omit state" in result["data"]["message"].lower()
+    steps = result.get("next_steps") or result["data"].get("next_steps") or []
+    assert any("omit state" in step.lower() for step in steps)
+
+
+@pytest.mark.asyncio
 async def test_get_hit_returns_stored_issues(
     tmp_path: Path, mock_load_settings: Any
 ) -> None:

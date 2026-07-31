@@ -86,6 +86,66 @@ _FETCH_HINT = (
     "tapps_linear_snapshot_put(issues_json=...) to populate the cache."
 )
 
+# Cache-bucket aliases Linear's plugin does not understand (TAP-5356).
+_CACHE_BUCKET_ALIASES: frozenset[str] = frozenset({"open", "closed"})
+
+
+def _fetch_hint_for_state(state: str | None) -> str:
+    """Return a miss hint that does not tell agents to pass bucket aliases to Linear."""
+    state_lc = (state or "").strip().lower()
+    if state_lc in _CACHE_BUCKET_ALIASES:
+        return (
+            f'Cache miss. "{state_lc}" is a tapps-mcp cache bucket, not a Linear state. '
+            "Call mcp__plugin_linear_linear__list_issues with team/project only "
+            "(omit state), includeArchived=false; filter issues in memory by "
+            f'statusType; then tapps_linear_snapshot_put(..., state="{state_lc}", '
+            "issues_json=...) to populate the cache."
+        )
+    return _FETCH_HINT
+
+
+def _is_cache_bucket_alias(state: str | None) -> bool:
+    return (state or "").strip().lower() in _CACHE_BUCKET_ALIASES
+
+
+def _list_issues_pass_payload(state: str) -> tuple[dict[str, Any], list[str]]:
+    """Build gate-pass data + next_steps for ``tapps_linear_list_issues`` (TAP-5356)."""
+    if _is_cache_bucket_alias(state):
+        alias = (state or "").strip().lower()
+        data: dict[str, Any] = {
+            "ok": True,
+            "message": (
+                f'Gate passed — "{alias}" is a tapps-mcp cache bucket, not a '
+                "Linear state. Call mcp__plugin_linear_linear__list_issues "
+                "with team/project only (omit state), includeArchived=false; "
+                "filter in memory; then tapps_linear_snapshot_put with the "
+                f'same state="{alias}".'
+            ),
+            "alias_warning": (
+                f'"{alias}" is a cache bucket alias — do not pass it as '
+                "state to the Linear plugin list_issues call."
+            ),
+        }
+        steps = [
+            "Call mcp__plugin_linear_linear__list_issues(team, project, "
+            "includeArchived=false) — omit state.",
+            f'Then call tapps_linear_snapshot_put(..., state="{alias}") to cache.',
+        ]
+        return data, steps
+    data = {
+        "ok": True,
+        "message": (
+            "Gate passed — call mcp__plugin_linear_linear__list_issues "
+            "with the same team, project, state, label, and limit params."
+        ),
+    }
+    steps = [
+        "Call mcp__plugin_linear_linear__list_issues(team, project, state, ...) now.",
+        "Then call tapps_linear_snapshot_put to cache the result.",
+    ]
+    return data, steps
+
+
 # Fields returned in compact projection — covers triage/backlog reads without
 # pulling in description, comments, attachments, history, or audit fields.
 # Include status/statusType so agents following AGENTS.md field names work;
@@ -459,7 +519,7 @@ async def tapps_linear_snapshot_get(
                 "team": team,
                 "project": project,
                 "state": state or None,
-                "hint": _FETCH_HINT,
+                "hint": _fetch_hint_for_state(state),
             },
         )
 
@@ -855,20 +915,12 @@ async def tapps_linear_list_issues(
             ],
         )
 
+    data, steps = _list_issues_pass_payload(state)
     return success_response(
         "tapps_linear_list_issues",
         elapsed_ms,
-        {
-            "ok": True,
-            "message": (
-                "Gate passed — call mcp__plugin_linear_linear__list_issues "
-                "with the same team, project, state, label, and limit params."
-            ),
-        },
-        next_steps=[
-            "Call mcp__plugin_linear_linear__list_issues(team, project, state, ...) now.",
-            "Then call tapps_linear_snapshot_put to cache the result.",
-        ],
+        data,
+        next_steps=steps,
     )
 
 

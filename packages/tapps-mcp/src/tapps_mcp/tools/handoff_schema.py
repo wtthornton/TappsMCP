@@ -53,12 +53,18 @@ def _normalize_header(name: str) -> str:
 
 
 def _section_key(header: str) -> str | None:
+    """Map a ``##`` heading to a handoff section key.
+
+    TAP-5362: any heading that begins with ``next`` (after normalize) maps to
+    ``next_p0``, so suffixes like ``Next (P0 -> Production)`` are recognized.
+    """
     norm = _normalize_header(header)
     if norm == "done":
         return "done"
     if norm == "open":
         return "open"
-    if norm in {"next (p0)", "next", "p0"}:
+    # Bare "p0" kept for legacy templates; "next…" covers Next / Next (P0) / suffixes.
+    if norm == "p0" or norm.startswith("next"):
         return "next_p0"
     if norm == "blockers":
         return "blockers"
@@ -67,6 +73,19 @@ def _section_key(header: str) -> str | None:
     if norm in {"success criterion", "success criteria"}:
         return "success_criterion"
     return None
+
+
+def _near_miss_next_headers(text: str) -> list[str]:
+    """Return ``##`` headers that look like Next but did not map to ``next_p0``."""
+    misses: list[str] = []
+    for match in _SECTION_RE.finditer(text):
+        header = match.group(1).strip()
+        norm = _normalize_header(header)
+        if _section_key(header) is not None:
+            continue
+        if "next" in norm or "p0" in norm:
+            misses.append(header)
+    return misses
 
 
 def _is_real_bullet(line: str) -> bool:
@@ -171,9 +190,20 @@ def lint_handoff(
     clock = now or datetime.now(tz=UTC)
 
     if doc.open_items and not doc.next_p0:
-        result.errors.append(
-            "Open items exist but Next (P0) is missing — continue-session cannot pick up work"
-        )
+        near_misses = _near_miss_next_headers(doc.raw_text)
+        if near_misses:
+            quoted = ", ".join(repr(h) for h in near_misses)
+            result.errors.append(
+                "Open items exist but Next section is unrecognized "
+                f"(saw {quoted}) — use a heading that begins with Next"
+            )
+        else:
+            # Covers both absent Next headers and Next present with only
+            # placeholder bullets (none/n/a) filtered out by the parser.
+            result.errors.append(
+                "Open items exist but Next (P0) is missing — "
+                "continue-session cannot pick up work"
+            )
 
     if doc.updated is None:
         result.warnings.append(

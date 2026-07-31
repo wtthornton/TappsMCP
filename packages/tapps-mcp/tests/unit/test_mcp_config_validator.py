@@ -115,6 +115,35 @@ class TestValidateMcpConfig:
         assert result.valid is True
         assert any("mcpServers" in s for s in result.suggestions)
 
+    def test_mcp_config_vscode_servers_key(self) -> None:
+        """TAP-5359: VS Code `servers` key is accepted without rewrap suggestion."""
+        config = {
+            "servers": {
+                "nlt-build": {
+                    "command": "nlt-build-serve",
+                    "args": [],
+                }
+            }
+        }
+        result = validate_mcp_config(".vscode/mcp.json", json.dumps(config))
+        assert result.valid is True
+        assert not any(f.severity == "critical" for f in result.findings)
+        assert not any("mcpServers" in s for s in result.suggestions)
+        assert not any("Server 'servers'" in f.message for f in result.findings)
+
+    def test_mcp_config_vscode_malformed_server_still_reported(self) -> None:
+        """TAP-5359: genuine missing command still fails under `servers` key."""
+        config = {
+            "servers": {
+                "broken": {
+                    "args": ["--port", "8080"],
+                }
+            }
+        }
+        result = validate_mcp_config(".vscode/mcp.json", json.dumps(config))
+        assert result.valid is False
+        assert any("missing 'command'" in f.message for f in result.findings)
+
     def test_mcp_config_server_not_object(self) -> None:
         """Server entry that is not an object gives a warning."""
         config = {
