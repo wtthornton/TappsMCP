@@ -2432,11 +2432,16 @@ def check_karpathy_guidelines(project_root: Path) -> CheckResult:
     The secondary file may omit the block (upgrade ``--force`` strips dual
     installs). Dual presence is reported by ``check_karpathy_dual_install``.
 
+    TAP-5361: every home that contains a block is reported with its pinned
+    SHA. A stale secondary copy warns (does not pass) so a current preferred
+    home cannot hide conflicting guidance loaded into the same session.
+
     When ``.cursor/rules/`` exists, also requires
     ``karpathy-guidelines.mdc`` pinned to the vendored SHA.
 
-    - Passes when the preferred home has the block pinned to the vendored SHA
-      (and the Cursor rule is ok / not applicable).
+    - Passes when the preferred home is current, no secondary is stale, and
+      the Cursor rule is ok / not applicable.
+    - Warns when the preferred home is current but a secondary home is stale.
     - Fails when neither file exists, or the preferred home is missing/stale,
       or the Cursor rule is missing/stale while ``.cursor/rules/`` exists.
     """
@@ -2461,38 +2466,23 @@ def check_karpathy_guidelines(project_root: Path) -> CheckResult:
     pref = existing[preferred]
     pref_state = pref["state"]
 
+    # Report SHA for every home that actually contains a block (ok or stale).
+    home_sha_parts: list[str] = []
+    stale_secondaries: list[str] = []
+    for rel in ("AGENTS.md", "CLAUDE.md"):
+        report = existing.get(rel)
+        if report is None or report["state"] not in ("ok", "stale"):
+            continue
+        sha = report["current_sha"] or "unknown"
+        short = sha[:7] if sha != "unknown" else sha
+        part = f"{rel}@{short}"
+        home_sha_parts.append(part)
+        if rel != preferred and report["state"] == "stale":
+            stale_secondaries.append(part)
+    homes_summary = ", ".join(home_sha_parts) if home_sha_parts else preferred
+
     cursor = karpathy_block.check_cursor_rule(project_root)
     cursor_state = cursor["state"]
-
-    if pref_state == "ok":
-        homes = [preferred]
-        secondary = "CLAUDE.md" if preferred == "AGENTS.md" else "AGENTS.md"
-        if secondary in existing and existing[secondary]["state"] == "ok":
-            homes.append(secondary)
-        msg = (
-            f"Karpathy guidelines block present in {', '.join(homes)}; "
-            f"pinned to {expected_short} (preferred home: {preferred})"
-        )
-        if cursor_state == "ok":
-            msg += f"; Cursor rule ok ({karpathy_block.KARPATHY_CURSOR_RULE_REL})"
-        elif cursor_state == "skipped_no_cursor":
-            pass
-        elif cursor_state == "missing":
-            return CheckResult(
-                "Karpathy guidelines",
-                False,
-                f"{msg}; Cursor rule missing",
-                "Run: tapps_upgrade (or tapps_init with include_karpathy=True)",
-            )
-        else:
-            current = cursor["current_sha"] or "unknown"
-            return CheckResult(
-                "Karpathy guidelines",
-                False,
-                f"{msg}; Cursor rule stale (@{current}; expected {expected_short})",
-                "Run: tapps_upgrade (or tapps_init with include_karpathy=True)",
-            )
-        return CheckResult("Karpathy guidelines", True, msg)
 
     if pref_state == "missing":
         return CheckResult(
@@ -2502,13 +2492,51 @@ def check_karpathy_guidelines(project_root: Path) -> CheckResult:
             "Run: tapps_upgrade (or tapps_init with include_karpathy=True)",
         )
 
-    current = pref["current_sha"] or "unknown"
-    return CheckResult(
-        "Karpathy guidelines",
-        False,
-        f"stale ({preferred}@{current}; expected {expected_short})",
-        "Run: tapps_upgrade (or tapps_init with include_karpathy=True)",
+    if pref_state == "stale":
+        current = pref["current_sha"] or "unknown"
+        return CheckResult(
+            "Karpathy guidelines",
+            False,
+            f"stale ({preferred}@{current}; expected {expected_short}"
+            f"; homes: {homes_summary})",
+            "Run: tapps_upgrade (or tapps_init with include_karpathy=True)",
+        )
+
+    # preferred is ok
+    msg = (
+        f"Karpathy guidelines homes: {homes_summary}; "
+        f"expected {expected_short} (preferred home: {preferred})"
     )
+    if cursor_state == "ok":
+        msg += f"; Cursor rule ok ({karpathy_block.KARPATHY_CURSOR_RULE_REL})"
+    elif cursor_state == "skipped_no_cursor":
+        pass
+    elif cursor_state == "missing":
+        return CheckResult(
+            "Karpathy guidelines",
+            False,
+            f"{msg}; Cursor rule missing",
+            "Run: tapps_upgrade (or tapps_init with include_karpathy=True)",
+        )
+    elif cursor_state != "ok":
+        current = cursor["current_sha"] or "unknown"
+        return CheckResult(
+            "Karpathy guidelines",
+            False,
+            f"{msg}; Cursor rule stale (@{current}; expected {expected_short})",
+            "Run: tapps_upgrade (or tapps_init with include_karpathy=True)",
+        )
+
+    if stale_secondaries:
+        return CheckResult(
+            "Karpathy guidelines",
+            False,
+            f"WARN: {msg}; stale secondary: {', '.join(stale_secondaries)}",
+            "Run: tapps-mcp upgrade --force to strip the secondary copy "
+            "(non-force upgrade refreshes the preferred home but retains dual-home).",
+            severity="warn",
+        )
+    return CheckResult("Karpathy guidelines", True, msg)
 
 
 def check_tapps_mcp_yaml(project_root: Path) -> CheckResult:

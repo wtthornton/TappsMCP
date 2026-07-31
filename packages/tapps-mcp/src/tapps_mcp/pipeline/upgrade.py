@@ -517,9 +517,6 @@ def _refresh_karpathy_blocks(
     primary = _karpathy_primary_home(project_root)
 
     per_file: dict[str, str] = {}
-    dual_homes: list[str] = [
-        name for name in ("AGENTS.md", "CLAUDE.md") if karpathy_block.has_block(project_root / name)
-    ]
 
     for rel in ("AGENTS.md", "CLAUDE.md"):
         target = project_root / rel
@@ -568,14 +565,28 @@ def _refresh_karpathy_blocks(
         log.exception("karpathy_cursor_rule_failed")
         cursor_rule = f"error: {exc}"
 
-    return {
+    # TAP-5361: report on-disk homes *after* install/strip, not the pre-pass
+    # snapshot (installing into an empty preferred home used to yield
+    # dual_homes=[] while files.* still said WARN dual-home).
+    on_disk_homes = [
+        name for name in ("AGENTS.md", "CLAUDE.md") if karpathy_block.has_block(project_root / name)
+    ]
+    dual_homes = on_disk_homes if len(on_disk_homes) >= 2 else []
+    retained_dual = any(str(v).startswith("WARN dual-home") for v in per_file.values())
+    payload: dict[str, Any] = {
         "source_sha": karpathy_block.KARPATHY_GUIDELINES_SOURCE_SHA,
         "files": per_file,
         "cursor_rule": cursor_rule,
         "opted_out": opted_out,
         "primary": primary,
-        "dual_homes": dual_homes if len(dual_homes) >= 2 else [],
+        "dual_homes": dual_homes,
     }
+    if retained_dual:
+        payload["dual_home_note"] = (
+            "Secondary Karpathy copy retained on disk; "
+            "non-force upgrade will not strip it — pass --force to remove."
+        )
+    return payload
 
 
 def _mcp_json_has_unresolved_workspacefolder(project_root: Path, host: str) -> bool:

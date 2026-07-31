@@ -348,11 +348,17 @@ def test_upgrade_refreshes_primary_and_strips_secondary_with_force(
     warn = _refresh_karpathy_blocks(tmp_path, dry_run=False, force=False)
     assert warn["files"]["AGENTS.md"] == "refreshed"
     assert "WARN dual-home" in warn["files"]["CLAUDE.md"]
+    # TAP-5361: dual_homes reflects on-disk state after non-force retain.
+    assert warn["dual_homes"] == ["AGENTS.md", "CLAUDE.md"]
+    assert "dual_home_note" in warn
+    assert "--force" in warn["dual_home_note"]
 
     result = _refresh_karpathy_blocks(tmp_path, dry_run=False, force=True)
     assert result["source_sha"] == KARPATHY_GUIDELINES_SOURCE_SHA
     assert result["files"]["AGENTS.md"] == "unchanged"
     assert result["files"]["CLAUDE.md"].startswith("removed (dual-home)")
+    assert result["dual_homes"] == []
+    assert "dual_home_note" not in result
 
     agents = (tmp_path / "AGENTS.md").read_text(encoding="utf-8")
     assert "deadbee" not in agents
@@ -368,6 +374,29 @@ def test_upgrade_skips_missing_files(tmp_path: Path) -> None:
     result = _refresh_karpathy_blocks(tmp_path, dry_run=False)
     assert result["files"]["AGENTS.md"] == "skipped_file_missing"
     assert result["files"]["CLAUDE.md"] == "skipped_file_missing"
+
+
+def test_upgrade_dual_homes_reflects_disk_after_installing_primary(
+    tmp_path: Path,
+) -> None:
+    """TAP-5361: installing preferred home must not report dual_homes=[]."""
+    from tapps_mcp.pipeline.upgrade import _refresh_karpathy_blocks
+
+    stale = (
+        "<!-- BEGIN: karpathy-guidelines deadbee "
+        "(MIT, forrestchang/andrej-karpathy-skills) -->\n"
+        "stale\n"
+        "<!-- END: karpathy-guidelines -->\n"
+    )
+    # Preferred AGENTS.md exists without a block; secondary CLAUDE.md is stale.
+    (tmp_path / "AGENTS.md").write_text("# AGENTS\n", encoding="utf-8")
+    (tmp_path / "CLAUDE.md").write_text(f"# CLAUDE\n\n{stale}", encoding="utf-8")
+
+    result = _refresh_karpathy_blocks(tmp_path, dry_run=False, force=False)
+    assert result["files"]["AGENTS.md"] == "added"
+    assert "WARN dual-home" in result["files"]["CLAUDE.md"]
+    assert result["dual_homes"] == ["AGENTS.md", "CLAUDE.md"]
+    assert "will not strip" in result["dual_home_note"]
 
 
 # ---------------------------------------------------------------------------
@@ -390,8 +419,9 @@ def test_doctor_check_passes_when_both_files_have_block(tmp_path: Path) -> None:
 
     result = check_karpathy_guidelines(tmp_path)
     assert result.ok
-    assert "AGENTS.md" in result.message
-    assert "CLAUDE.md" in result.message
+    assert "AGENTS.md@" in result.message
+    assert "CLAUDE.md@" in result.message
+    assert KARPATHY_GUIDELINES_SOURCE_SHA[:7] in result.message
 
 
 def test_doctor_check_passes_single_home_when_claude_omits_block(
@@ -405,14 +435,15 @@ def test_doctor_check_passes_single_home_when_claude_omits_block(
 
     result = check_karpathy_guidelines(tmp_path)
     assert result.ok
-    assert "AGENTS.md" in result.message
+    assert "AGENTS.md@" in result.message
     assert "preferred home: AGENTS.md" in result.message
+    assert "CLAUDE.md@" not in result.message
 
 
-def test_doctor_check_ignores_stale_secondary_when_preferred_ok(
+def test_doctor_check_warns_on_stale_secondary_when_preferred_ok(
     tmp_path: Path,
 ) -> None:
-    """Stale secondary copy is dual-install noise; preferred home gates pass."""
+    """TAP-5361: stale secondary must not hide behind a preferred-home pass."""
     agents = tmp_path / "AGENTS.md"
     agents.write_text("# AGENTS\n", encoding="utf-8")
     karpathy_block.install_or_refresh(agents)
@@ -425,8 +456,12 @@ def test_doctor_check_ignores_stale_secondary_when_preferred_ok(
     )
 
     result = check_karpathy_guidelines(tmp_path)
-    assert result.ok
-    assert "AGENTS.md" in result.message
+    assert not result.ok
+    assert result.severity == "warn"
+    assert "AGENTS.md@" in result.message
+    assert "CLAUDE.md@deadbee" in result.message
+    assert "stale secondary" in result.message
+    assert "upgrade --force" in result.detail
 
 
 def test_doctor_check_fails_when_preferred_home_missing_block(
