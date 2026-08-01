@@ -192,7 +192,7 @@ All file I/O through `security/path_validator.py` (sandboxed to `TAPPS_MCP_PROJE
 
 ## Expert system (deprecated — EPIC-94)
 
-The RAG-based expert consultation system was removed in EPIC-94. `tapps_consult_expert` and `tapps_research` are registered as deprecation stubs returning structured `TOOL_DEPRECATED` errors with migration guidance. The `experts/` module in tapps-core retains only the tech-stack-to-domain mapping (`rag_warming.py`) used by session start for domain hints. Knowledge files remain in the repository for reference but are no longer queried at runtime.
+The RAG-based expert consultation system was removed in EPIC-94 (`tapps_consult_expert` is gone). `tapps_research` was restored in TAP-5365 as the ADR-0030 unified research front door (docs → `lookup_docs`; open-ended/latest → brain `web_research`; URL → `research_fetch`). The `experts/` module in tapps-core retains only the tech-stack-to-domain mapping (`rag_warming.py`) used by session start for domain hints. Knowledge files remain in the repository for reference but are no longer queried at runtime.
 
 ## Memory subsystem
 

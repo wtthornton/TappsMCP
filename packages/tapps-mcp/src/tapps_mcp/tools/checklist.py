@@ -105,6 +105,10 @@ TOOL_REASONS: dict[str, str] = {
         "Call before declaring work complete to ensure the file passes the quality preset."
     ),
     "tapps_lookup_docs": "Look up library docs before using an API to avoid hallucinated usage.",
+    "tapps_research": (
+        "Unified research front door (ADR-0030): library/API → lookup_docs; "
+        "open-ended/latest → brain web_research; URL scrape → research_fetch."
+    ),
     "tapps_validate_config": (
         "Validate Dockerfile, docker-compose, YAML manifests (config_type=yaml_manifest), "
         "or other infra config against best practices."
@@ -402,6 +406,8 @@ TASK_TYPE_REASONS: dict[str, str] = {
 _TOOL_EQUIVALENTS: dict[str, frozenset[str]] = {
     "tapps_quick_check": frozenset({"tapps_score_file", "tapps_quality_gate"}),
     "tapps_validate_changed": frozenset({"tapps_score_file", "tapps_quality_gate"}),
+    # Docs-routed research satisfies the lookup_docs obligation (ADR-0030).
+    "tapps_research": frozenset({"tapps_lookup_docs"}),
 }
 
 _engagement_maps_cache: dict[str, dict[str, dict[str, list[str]]]] | None = None

@@ -751,6 +751,26 @@ class BrainBridge:
         """In-process bridge does not host doc RAG — use HTTP transport."""
         raise BrainBridgeUnavailable("docs_warm requires HTTP brain bridge")
 
+    async def web_research(
+        self,
+        query: str,
+        *,
+        source: str = "auto",
+        freshness: str = "volatile",
+        max_results: int = 5,
+    ) -> dict[str, Any]:
+        """In-process bridge does not host web research — use HTTP transport."""
+        raise BrainBridgeUnavailable("web_research requires HTTP brain bridge")
+
+    async def research_fetch(
+        self,
+        url: str,
+        *,
+        freshness: str = "evergreen",
+    ) -> dict[str, Any]:
+        """In-process bridge does not host research fetch — use HTTP transport."""
+        raise BrainBridgeUnavailable("research_fetch requires HTTP brain bridge")
+
     async def hive_search(
         self,
         query: str,
@@ -1983,6 +2003,39 @@ class HttpBrainBridge(BrainBridge):
         """Batch-warm library docs via brain ``docs_warm`` (ADR-0014)."""
         result = await self._http_mcp_call("docs_warm", {"libraries": libraries})
         return result if isinstance(result, dict) else {"warmed": result}
+
+    async def web_research(
+        self,
+        query: str,
+        *,
+        source: str = "auto",
+        freshness: str = "volatile",
+        max_results: int = 5,
+    ) -> dict[str, Any]:
+        """Run brain ``web_research`` (ADR-0030 / TAP-5364 contract)."""
+        result = await self._http_mcp_call(
+            "web_research",
+            {
+                "query": query,
+                "source": source,
+                "freshness": freshness,
+                "max_results": max_results,
+            },
+        )
+        return result if isinstance(result, dict) else {"content": str(result)}
+
+    async def research_fetch(
+        self,
+        url: str,
+        *,
+        freshness: str = "evergreen",
+    ) -> dict[str, Any]:
+        """Run brain ``research_fetch`` (ADR-0030 / TAP-5364 contract)."""
+        result = await self._http_mcp_call(
+            "research_fetch",
+            {"url": url, "freshness": freshness},
+        )
+        return result if isinstance(result, dict) else {"content": str(result)}
 
     # -------------------------------------------------------------------------
     # Knowledge graph (TAP-1630)

@@ -113,6 +113,7 @@ NLT_BUNDLE_CHOICES: Final[tuple[str, ...]] = (
 
 # Eager / total tool counts per spec (Epic 109.5 / ADR-0016 doctor thresholds).
 NLT_SERVER_EAGER_COUNTS: Final[dict[str, int]] = {
+    # tapps_research is deferred (TAP-5365); eager catalog stays at 9
     "nlt-build": 9,
     # session_start (eager bootstrap) + tapps_memory; remaining deferred
     "nlt-memory": 2,
@@ -128,13 +129,13 @@ NLT_SERVER_EAGER_COUNTS: Final[dict[str, int]] = {
 
 # Listed tools/list counts (Cursor catalogs all of these; eager is Claude Tool Search).
 NLT_SERVER_TOTAL_COUNTS: Final[dict[str, int]] = {
-    "nlt-build": 19,
+    "nlt-build": 20,  # +tapps_research (TAP-5365)
     "nlt-memory": 5,  # includes bootstrap tapps_session_start
     "nlt-setup": 8,  # includes bootstrap tapps_session_start
     "nlt-linear-issues": 15,
     "nlt-project-docs": 29,
     "nlt-release-ship": 6,
-    "nlt-code-quality": 19,
+    "nlt-code-quality": 20,
     "nlt-platform-admin": 8,
 }
 
@@ -158,6 +159,7 @@ NLT_TOOL_SERVER: Final[dict[str, str]] = {
     "tapps_quality_gate": "nlt-build",
     "tapps_checklist": "nlt-build",
     "tapps_lookup_docs": "nlt-build",
+    "tapps_research": "nlt-build",
     "tapps_score_file": "nlt-build",
     "tapps_security_scan": "nlt-build",
     "tapps_impact_analysis": "nlt-build",

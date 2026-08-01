@@ -16,7 +16,7 @@ from tapps_mcp.distribution.nlt_mcp_config import (
 
 class TestNltServerTotalCounts:
     def test_build_memory_setup_include_session_start(self) -> None:
-        assert NLT_SERVER_TOTAL_COUNTS["nlt-build"] == 19
+        assert NLT_SERVER_TOTAL_COUNTS["nlt-build"] == 20
         assert NLT_SERVER_TOTAL_COUNTS["nlt-memory"] == 5
         assert NLT_SERVER_TOTAL_COUNTS["nlt-setup"] == 8
 

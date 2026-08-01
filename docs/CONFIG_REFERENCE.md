@@ -91,12 +91,12 @@ Role-scoped presets (selected via `TAPPS_MCP_TOOL_PRESET=<name>` env var, Epic 7
 
 | Preset | Members | Use case |
 |---|---|---|
-| `TOOL_PRESET_CORE` | `tapps_session_start`, `tapps_quick_check`, `tapps_validate_changed`, `tapps_quality_gate`, `tapps_checklist`, `tapps_lookup_docs`, `tapps_security_scan`, `tapps_pipeline` | Minimal coding loop |
+| `TOOL_PRESET_CORE` | `tapps_session_start`, `tapps_quick_check`, `tapps_validate_changed`, `tapps_quality_gate`, `tapps_checklist`, `tapps_lookup_docs`, `tapps_research`, `tapps_security_scan`, `tapps_pipeline` | Minimal coding loop |
 | `TOOL_PRESET_PIPELINE` | `TOOL_PRESET_CORE` + `tapps_score_file`, `tapps_memory`, `tapps_impact_analysis`, `tapps_validate_config` | Standard quality pipeline |
 | `TOOL_PRESET_REVIEWER` | `tapps_session_start`, `tapps_quick_check`, `tapps_validate_changed`, `tapps_quality_gate`, `tapps_checklist`, `tapps_security_scan`, `tapps_score_file`, `tapps_dead_code`, `tapps_dependency_scan` | Code review agent |
 | `TOOL_PRESET_PLANNER` | `tapps_session_start`, `tapps_checklist`, `tapps_validate_changed`, `tapps_quality_gate`, `tapps_score_file`, `tapps_memory` | Planning / architecture agent |
-| `TOOL_PRESET_FRONTEND` | `tapps_session_start`, `tapps_quick_check`, `tapps_score_file`, `tapps_lookup_docs`, `tapps_quality_gate` | Frontend-focused agent |
-| `TOOL_PRESET_DEVELOPER` | `tapps_session_start`, `tapps_quick_check`, `tapps_validate_changed`, `tapps_quality_gate`, `tapps_checklist`, `tapps_score_file`, `tapps_security_scan`, `tapps_lookup_docs`, `tapps_memory`, `tapps_impact_analysis` | General developer agent |
+| `TOOL_PRESET_FRONTEND` | `tapps_session_start`, `tapps_quick_check`, `tapps_score_file`, `tapps_lookup_docs`, `tapps_research`, `tapps_quality_gate` | Frontend-focused agent |
+| `TOOL_PRESET_DEVELOPER` | `tapps_session_start`, `tapps_quick_check`, `tapps_validate_changed`, `tapps_quality_gate`, `tapps_checklist`, `tapps_score_file`, `tapps_security_scan`, `tapps_lookup_docs`, `tapps_research`, `tapps_impact_analysis` | General developer agent |
 
 DocsMCP role presets (42 tools total in full catalog; 7 eager via `defer_loading` on full `docsmcp serve`):
 

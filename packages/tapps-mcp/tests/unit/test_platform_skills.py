@@ -88,7 +88,7 @@ class TestClaudeArgumentHint:
     @pytest.mark.parametrize(
         ("skill_name", "expected_hint"),
         [
-            ("tapps-research", "[library] [topic]"),
+            ("tapps-research", "[library|query] [topic]"),
             ("tapps-memory", "[save|search|get] [key]"),
             ("tapps-security", "[file-path]"),
         ],
