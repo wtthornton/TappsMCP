@@ -1,11 +1,13 @@
-"""Tests for restored tapps_research router (TAP-5365 / ADR-0030)."""
+"""Tests for tapps_research router + freshness recall (TAP-5365 / TAP-5366)."""
 
 from __future__ import annotations
 
+from datetime import UTC, datetime, timedelta
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
+from tapps_core.config.settings import MemorySettings
 from tapps_mcp.tools.research import (
     bridge_degraded_response,
     classify_research_route,
@@ -13,6 +15,13 @@ from tapps_mcp.tools.research import (
     telemetry_source_for_docs,
     telemetry_source_for_web,
     wrap_brain_research_payload,
+)
+from tapps_mcp.tools.research_memory import (
+    build_answer_memory_value,
+    is_answer_fresh,
+    parse_answer_memory_value,
+    recall_research_answer,
+    research_answer_memory_key,
 )
 
 
@@ -56,6 +65,8 @@ class TestTelemetryAndWrap:
         assert telemetry_source_for_web({"cache_hit": True}) == "cache-hit"
         assert telemetry_source_for_web({"source": "api"}) == "web"
         assert telemetry_source_for_web({"source": "stale_fallback"}) == "web"
+        assert telemetry_source_for_web({"memory_hit": True}) == "memory-hit"
+        assert telemetry_source_for_web({"source": "memory-hit"}) == "memory-hit"
 
     def test_wrap_success(self) -> None:
         payload = {
@@ -89,6 +100,102 @@ class TestTelemetryAndWrap:
         assert out["degraded"] is True
         assert out["retryable"] is True
         assert out["data"]["error"] == "brain_bridge_call_failed"
+
+
+class TestAnswerFreshnessHelpers:
+    def test_memory_key_stable(self) -> None:
+        a = research_answer_memory_key(route="web", query="Latest MCP Changes")
+        b = research_answer_memory_key(route="web", query="latest mcp changes")
+        assert a == b
+        assert a.startswith("research-answer:web:")
+
+    def test_is_answer_fresh_volatile_and_evergreen(self) -> None:
+        now = datetime(2026, 8, 1, 12, 0, tzinfo=UTC)
+        fresh_vol = now - timedelta(hours=2)
+        stale_vol = now - timedelta(hours=25)
+        fresh_ever = now - timedelta(days=10)
+        stale_ever = now - timedelta(days=31)
+        assert is_answer_fresh(
+            freshness="volatile", saved_at=fresh_vol, now=now, volatile_ttl_hours=24
+        )
+        assert not is_answer_fresh(
+            freshness="volatile", saved_at=stale_vol, now=now, volatile_ttl_hours=24
+        )
+        assert is_answer_fresh(
+            freshness="evergreen", saved_at=fresh_ever, now=now, evergreen_ttl_days=30
+        )
+        assert not is_answer_fresh(
+            freshness="evergreen", saved_at=stale_ever, now=now, evergreen_ttl_days=30
+        )
+
+    def test_build_and_parse_roundtrip(self) -> None:
+        payload = {
+            "success": True,
+            "provider": "tavily",
+            "results": [{"title": "t", "url": "https://example.com"}],
+        }
+        saved_at = datetime(2026, 8, 1, 10, 0, tzinfo=UTC)
+        value = build_answer_memory_value(
+            payload,
+            freshness="evergreen",
+            route="web",
+            query="latest mcp",
+            saved_at=saved_at,
+        )
+        parsed = parse_answer_memory_value(value)
+        assert parsed is not None
+        assert parsed["freshness"] == "evergreen"
+        assert parsed["answer"]["provider"] == "tavily"
+        assert parsed["saved_at"].startswith("2026-08-01T10:00:00")
+
+    @pytest.mark.asyncio
+    async def test_recall_skips_stale_volatile(self) -> None:
+        now = datetime(2026, 8, 1, 12, 0, tzinfo=UTC)
+        value = build_answer_memory_value(
+            {"success": True, "provider": "tavily", "results": []},
+            freshness="volatile",
+            route="web",
+            query="latest news",
+            saved_at=now - timedelta(hours=48),
+        )
+        bridge = MagicMock()
+        bridge.get = AsyncMock(return_value={"key": "k", "value": value, "tags": ["research-answer"]})
+        hit = await recall_research_answer(
+            bridge,
+            route="web",
+            query="latest news",
+            freshness="volatile",
+            volatile_ttl_hours=24,
+            now=now,
+        )
+        assert hit is None
+
+    @pytest.mark.asyncio
+    async def test_recall_returns_fresh_evergreen(self) -> None:
+        now = datetime(2026, 8, 1, 12, 0, tzinfo=UTC)
+        value = build_answer_memory_value(
+            {"success": True, "provider": "tavily", "answer": "stable fact"},
+            freshness="evergreen",
+            route="web",
+            query="what is mcp",
+            saved_at=now - timedelta(days=3),
+        )
+        key = research_answer_memory_key(route="web", query="what is mcp")
+        bridge = MagicMock()
+        bridge.get = AsyncMock(
+            return_value={"key": key, "value": value, "tags": ["research-answer"]}
+        )
+        hit = await recall_research_answer(
+            bridge,
+            route="web",
+            query="what is mcp",
+            freshness="evergreen",
+            evergreen_ttl_days=30,
+            now=now,
+        )
+        assert hit is not None
+        assert hit["data"]["source"] == "memory-hit"
+        assert hit["data"]["answer"] == "stable fact"
 
 
 class TestErrorResponseExtra:
@@ -147,6 +254,8 @@ class TestTappsResearchHandler:
         from tapps_mcp.server import tapps_research
 
         bridge = MagicMock()
+        bridge.get = AsyncMock(return_value=None)
+        bridge.save = AsyncMock(return_value={"success": True})
         bridge.web_research = AsyncMock(
             return_value={
                 "success": True,
@@ -156,9 +265,13 @@ class TestTappsResearchHandler:
                 "results": [],
             }
         )
+        memory = MemorySettings(enabled=True, auto_save_quality=True)
+        settings = MagicMock()
+        settings.memory = memory
 
         with (
             patch("tapps_mcp.server._get_brain_bridge", return_value=bridge),
+            patch("tapps_mcp.server.load_settings", return_value=settings),
             patch("tapps_mcp.server._record_call"),
             patch("tapps_mcp.server._record_execution"),
             patch("tapps_mcp.server._with_nudges", side_effect=lambda _t, r: r),
@@ -168,16 +281,22 @@ class TestTappsResearchHandler:
         assert result["success"] is True
         assert result["data"]["route"] == "web"
         bridge.web_research.assert_awaited_once()
+        bridge.save.assert_awaited_once()
 
     async def test_brain_down_degrades(self) -> None:
         from tapps_core.brain_bridge import BrainBridgeUnavailable
         from tapps_mcp.server import tapps_research
 
         bridge = MagicMock()
+        bridge.get = AsyncMock(return_value=None)
         bridge.web_research = AsyncMock(side_effect=BrainBridgeUnavailable("circuit open"))
+        memory = MemorySettings(enabled=True, auto_save_quality=True)
+        settings = MagicMock()
+        settings.memory = memory
 
         with (
             patch("tapps_mcp.server._get_brain_bridge", return_value=bridge),
+            patch("tapps_mcp.server.load_settings", return_value=settings),
             patch("tapps_mcp.server._record_call"),
             patch("tapps_mcp.server._record_execution"),
             patch("tapps_mcp.server._with_nudges", side_effect=lambda _t, r: r),
@@ -208,6 +327,8 @@ class TestTappsResearchHandler:
         from tapps_mcp.server import tapps_research
 
         bridge = MagicMock()
+        bridge.get = AsyncMock(return_value=None)
+        bridge.save = AsyncMock(return_value={"success": True})
         bridge.research_fetch = AsyncMock(
             return_value={
                 "success": True,
@@ -217,9 +338,18 @@ class TestTappsResearchHandler:
                 "results": [{"url": "https://example.com", "content": "x"}],
             }
         )
+        memory = MemorySettings(
+            enabled=True,
+            auto_save_quality=True,
+            research_volatile_ttl_hours=24,
+            research_evergreen_ttl_days=30,
+        )
+        settings = MagicMock()
+        settings.memory = memory
 
         with (
             patch("tapps_mcp.server._get_brain_bridge", return_value=bridge),
+            patch("tapps_mcp.server.load_settings", return_value=settings),
             patch("tapps_mcp.server._record_call"),
             patch("tapps_mcp.server._record_execution"),
             patch("tapps_mcp.server._with_nudges", side_effect=lambda _t, r: r),
@@ -234,6 +364,131 @@ class TestTappsResearchHandler:
         assert result["data"]["route"] == "fetch"
         assert result["data"]["source"] == "cache-hit"
         bridge.research_fetch.assert_awaited_once()
+        bridge.save.assert_awaited_once()
+
+    async def test_evergreen_memory_hit_skips_web_research(self) -> None:
+        from tapps_mcp.server import tapps_research
+
+        bridge = MagicMock()
+        bridge.web_research = AsyncMock()
+        bridge.save = AsyncMock()
+        memory = MemorySettings(enabled=True, auto_save_quality=True)
+        settings = MagicMock()
+        settings.memory = memory
+        memory_hit = {
+            "tool": "tapps_research",
+            "success": True,
+            "elapsed_ms": 0,
+            "data": {
+                "route": "web",
+                "source": "memory-hit",
+                "memory_hit": True,
+                "freshness": "evergreen",
+                "answer": "from memory",
+            },
+        }
+
+        with (
+            patch("tapps_mcp.server._get_brain_bridge", return_value=bridge),
+            patch("tapps_mcp.server.load_settings", return_value=settings),
+            patch(
+                "tapps_mcp.tools.research_memory.maybe_recall_research_answer",
+                new_callable=AsyncMock,
+                return_value=memory_hit,
+            ),
+            patch("tapps_mcp.server._record_call"),
+            patch("tapps_mcp.server._record_execution"),
+            patch("tapps_mcp.server._with_nudges", side_effect=lambda _t, r: r),
+        ):
+            result = await tapps_research(
+                query="what is the model context protocol",
+                route="web",
+                freshness="evergreen",
+            )
+
+        assert result["success"] is True
+        assert result["data"]["source"] == "memory-hit"
+        assert result["data"]["answer"] == "from memory"
+        bridge.web_research.assert_not_awaited()
+        bridge.save.assert_not_awaited()
+
+    async def test_stale_volatile_misses_then_saves(self) -> None:
+        from tapps_mcp.server import tapps_research
+
+        bridge = MagicMock()
+        bridge.web_research = AsyncMock(
+            return_value={
+                "success": True,
+                "cache_hit": False,
+                "source": "api",
+                "provider": "tavily",
+                "results": [{"title": "new"}],
+            }
+        )
+        bridge.save = AsyncMock(return_value={"success": True})
+        memory = MemorySettings(
+            enabled=True,
+            auto_save_quality=True,
+            research_volatile_ttl_hours=24,
+        )
+        settings = MagicMock()
+        settings.memory = memory
+
+        with (
+            patch("tapps_mcp.server._get_brain_bridge", return_value=bridge),
+            patch("tapps_mcp.server.load_settings", return_value=settings),
+            patch(
+                "tapps_mcp.tools.research_memory.maybe_recall_research_answer",
+                new_callable=AsyncMock,
+                return_value=None,
+            ) as recall_mock,
+            patch("tapps_mcp.server._record_call"),
+            patch("tapps_mcp.server._record_execution"),
+            patch("tapps_mcp.server._with_nudges", side_effect=lambda _t, r: r),
+        ):
+            result = await tapps_research(
+                query="latest mcp changes",
+                route="web",
+                freshness="volatile",
+            )
+
+        assert result["success"] is True
+        assert result["data"]["source"] == "web"
+        assert result["data"]["freshness"] == "volatile"
+        recall_mock.assert_awaited_once()
+        assert recall_mock.await_args.kwargs["freshness"] == "volatile"
+        bridge.web_research.assert_awaited_once()
+        bridge.save.assert_awaited_once()
+        save_kwargs = bridge.save.await_args.kwargs
+        assert save_kwargs["tier"] == "pattern"
+        assert "freshness:volatile" in save_kwargs["tags"]
+
+    async def test_auto_save_quality_false_skips_recall_and_save(self) -> None:
+        from tapps_mcp.server import tapps_research
+
+        bridge = MagicMock()
+        bridge.get = AsyncMock()
+        bridge.save = AsyncMock()
+        bridge.web_research = AsyncMock(
+            return_value={"success": True, "source": "api", "results": []}
+        )
+        memory = MemorySettings(enabled=True, auto_save_quality=False)
+        settings = MagicMock()
+        settings.memory = memory
+
+        with (
+            patch("tapps_mcp.server._get_brain_bridge", return_value=bridge),
+            patch("tapps_mcp.server.load_settings", return_value=settings),
+            patch("tapps_mcp.server._record_call"),
+            patch("tapps_mcp.server._record_execution"),
+            patch("tapps_mcp.server._with_nudges", side_effect=lambda _t, r: r),
+        ):
+            result = await tapps_research(query="latest news", route="web")
+
+        assert result["success"] is True
+        bridge.get.assert_not_awaited()
+        bridge.save.assert_not_awaited()
+        bridge.web_research.assert_awaited_once()
 
 
 @pytest.mark.asyncio

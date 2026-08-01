@@ -256,7 +256,9 @@ memory:
   gc_auto_threshold: 0.8
   inject_into_experts: true
   # Pipeline integrations (defaults on in shipped default.yaml; set false to disable)
-  auto_save_quality: true
+  auto_save_quality: true              # M4.1 + TAP-5366 research answer recall/save
+  research_volatile_ttl_hours: 24      # skip stale volatile research answers
+  research_evergreen_ttl_days: 30      # evergreen research memory-hit window
   track_recurring_quick_check: true
   recurring_quick_check_threshold: 3
   enrich_impact_analysis: true

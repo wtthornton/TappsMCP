@@ -41,6 +41,9 @@ memory:
   inject_into_experts: true
   # M4 pipeline memory integrations — on by default for POC
   auto_save_quality: true
+  # TAP-5366 / ADR-0030 answer-level research recall TTLs
+  research_volatile_ttl_hours: 24
+  research_evergreen_ttl_days: 30
   track_recurring_quick_check: true
   recurring_quick_check_threshold: 3
   enrich_impact_analysis: true
