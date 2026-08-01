@@ -1,4 +1,4 @@
-"""Tests for tapps_research router + freshness recall (TAP-5365 / TAP-5366)."""
+"""Tests for tapps_research router, freshness, and telemetry matrix (TAP-5365–5367)."""
 
 from __future__ import annotations
 
@@ -93,6 +93,22 @@ class TestTelemetryAndWrap:
         assert out["success"] is False
         assert out["degraded"] is True
         assert out["retryable"] is True
+
+    def test_wrap_ssrf_blocked_not_retryable(self) -> None:
+        payload = {
+            "success": False,
+            "error": "ssrf_blocked",
+            "detail": "blocked host 127.0.0.1",
+            "degraded": True,
+            "retryable": False,
+            "url": "http://127.0.0.1:8080/admin",
+        }
+        out = wrap_brain_research_payload(payload, route="fetch", elapsed_ms=4)
+        assert out["success"] is False
+        assert out["degraded"] is True
+        assert out["retryable"] is False
+        assert out["data"]["error"] == "ssrf_blocked"
+        assert out["data"]["source"] == "web"
 
     def test_bridge_degraded_shape(self) -> None:
         out = bridge_degraded_response(route="web", detail="circuit open", elapsed_ms=5)
@@ -250,6 +266,39 @@ class TestTappsResearchHandler:
         assert result["data"]["source"] == "cache-hit"
         engine.lookup.assert_awaited_once()
 
+    async def test_docs_route_cache_miss_source_docs(self) -> None:
+        from tapps_core.knowledge.models import LookupResult
+        from tapps_mcp.server import tapps_research
+
+        lookup = LookupResult(
+            library="pydantic",
+            topic="validators",
+            success=True,
+            content="fresh docs",
+            source="context7",
+            cache_hit=False,
+            response_time_ms=12.0,
+        )
+        engine = MagicMock()
+        engine.lookup = AsyncMock(return_value=lookup)
+
+        with (
+            patch("tapps_mcp.server_helpers._get_lookup_engine", return_value=engine),
+            patch("tapps_mcp.server._record_call"),
+            patch("tapps_mcp.server._record_execution"),
+            patch("tapps_mcp.server._with_nudges", side_effect=lambda _t, r: r),
+            patch("tapps_mcp.server._maybe_record_lookup_telemetry"),
+        ):
+            result = await tapps_research(
+                query="pydantic validators",
+                library="pydantic",
+                topic="validators",
+            )
+
+        assert result["success"] is True
+        assert result["data"]["route"] == "docs"
+        assert result["data"]["source"] == "docs"
+
     async def test_web_route_calls_bridge(self) -> None:
         from tapps_mcp.server import tapps_research
 
@@ -280,8 +329,125 @@ class TestTappsResearchHandler:
 
         assert result["success"] is True
         assert result["data"]["route"] == "web"
+        assert result["data"]["source"] == "web"
         bridge.web_research.assert_awaited_once()
         bridge.save.assert_awaited_once()
+
+    async def test_web_route_cache_hit_source(self) -> None:
+        from tapps_mcp.server import tapps_research
+
+        bridge = MagicMock()
+        bridge.get = AsyncMock(return_value=None)
+        bridge.save = AsyncMock(return_value={"success": True})
+        bridge.web_research = AsyncMock(
+            return_value={
+                "success": True,
+                "cache_hit": True,
+                "source": "cache",
+                "provider": "tavily",
+                "results": [{"title": "cached"}],
+            }
+        )
+        memory = MemorySettings(enabled=True, auto_save_quality=True)
+        settings = MagicMock()
+        settings.memory = memory
+
+        with (
+            patch("tapps_mcp.server._get_brain_bridge", return_value=bridge),
+            patch("tapps_mcp.server.load_settings", return_value=settings),
+            patch("tapps_mcp.server._record_call"),
+            patch("tapps_mcp.server._record_execution"),
+            patch("tapps_mcp.server._with_nudges", side_effect=lambda _t, r: r),
+        ):
+            result = await tapps_research(query="latest changes in MCP protocol")
+
+        assert result["success"] is True
+        assert result["data"]["route"] == "web"
+        assert result["data"]["source"] == "cache-hit"
+
+    async def test_fetch_ssrf_blocked_does_not_save(self) -> None:
+        from tapps_mcp.server import tapps_research
+
+        bridge = MagicMock()
+        bridge.get = AsyncMock(return_value=None)
+        bridge.save = AsyncMock(return_value={"success": True})
+        bridge.research_fetch = AsyncMock(
+            return_value={
+                "success": False,
+                "error": "ssrf_blocked",
+                "detail": "blocked host 127.0.0.1",
+                "degraded": True,
+                "retryable": False,
+                "freshness_tier": "evergreen",
+                "url": "http://127.0.0.1:8080/admin",
+            }
+        )
+        memory = MemorySettings(enabled=True, auto_save_quality=True)
+        settings = MagicMock()
+        settings.memory = memory
+        record_exec = MagicMock()
+
+        with (
+            patch("tapps_mcp.server._get_brain_bridge", return_value=bridge),
+            patch("tapps_mcp.server.load_settings", return_value=settings),
+            patch("tapps_mcp.server._record_call"),
+            patch("tapps_mcp.server._record_execution", record_exec),
+            patch("tapps_mcp.server._with_nudges", side_effect=lambda _t, r: r),
+        ):
+            result = await tapps_research(
+                query="",
+                url="http://127.0.0.1:8080/admin",
+                freshness="evergreen",
+            )
+
+        assert result["success"] is False
+        assert result["degraded"] is True
+        assert result["retryable"] is False
+        assert result["data"]["error"] == "ssrf_blocked"
+        assert result["data"]["source"] == "web"
+        bridge.research_fetch.assert_awaited_once()
+        bridge.save.assert_not_awaited()
+        record_exec.assert_called_once()
+        assert record_exec.call_args.kwargs["status"] == "failed"
+        assert record_exec.call_args.kwargs["error_code"] == "ssrf_blocked"
+
+    async def test_fetch_rag_safety_blocked_does_not_save(self) -> None:
+        from tapps_mcp.server import tapps_research
+
+        bridge = MagicMock()
+        bridge.get = AsyncMock(return_value=None)
+        bridge.save = AsyncMock(return_value={"success": True})
+        bridge.research_fetch = AsyncMock(
+            return_value={
+                "success": False,
+                "error": "rag_safety_blocked",
+                "detail": "content failed safety filter",
+                "degraded": True,
+                "retryable": False,
+                "url": "https://example.com/unsafe",
+            }
+        )
+        memory = MemorySettings(enabled=True, auto_save_quality=True)
+        settings = MagicMock()
+        settings.memory = memory
+
+        with (
+            patch("tapps_mcp.server._get_brain_bridge", return_value=bridge),
+            patch("tapps_mcp.server.load_settings", return_value=settings),
+            patch("tapps_mcp.server._record_call"),
+            patch("tapps_mcp.server._record_execution"),
+            patch("tapps_mcp.server._with_nudges", side_effect=lambda _t, r: r),
+        ):
+            result = await tapps_research(
+                query="",
+                url="https://example.com/unsafe",
+                freshness="evergreen",
+            )
+
+        assert result["success"] is False
+        assert result["retryable"] is False
+        assert result["data"]["error"] == "rag_safety_blocked"
+        bridge.save.assert_not_awaited()
 
     async def test_brain_down_degrades(self) -> None:
         from tapps_core.brain_bridge import BrainBridgeUnavailable
