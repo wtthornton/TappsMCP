@@ -30,7 +30,10 @@ The `tapps-research` skill can only call `lookup_docs`, so web research is uncac
 3. **Credentials stay brain-side.** tapps-mcp holds no Exa / Firecrawl / Tavily API keys.
 4. **`tapps_lookup_docs` stays doc-only.** No web search through Context7 or the docs cache.
 5. **Safety:** RAG safety + SSRF / `url_guard` apply on the brain web path before cache write-through.
-6. **Telemetry:** research calls record `source=docs|web|cache-hit|memory-hit` (same spirit as lookup telemetry).
+   tapps-mcp propagates brain `ssrf_blocked` / `rag_safety_blocked` (non-retryable,
+   no pattern-tier save) and does not duplicate `url_guard` locally (TAP-5367).
+6. **Telemetry:** research responses set `data.source=docs|web|cache-hit|memory-hit`;
+   failed brain calls record `error_code` via execution metrics (TAP-5367).
 
 ## Consequences
 
