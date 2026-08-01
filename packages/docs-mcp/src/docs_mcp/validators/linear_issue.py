@@ -16,6 +16,7 @@ from pydantic import BaseModel
 
 from docs_mcp.linters.linear_issue import (
     RULE_ACCEPTANCE_EMPTY,
+    RULE_ACCEPTANCE_PROSE,
     RULE_MISSING_ACCEPTANCE,
     RULE_MISSING_FILE_ANCHOR,
     RULE_TITLE_TOO_LONG,
@@ -31,6 +32,9 @@ _MISSING_PHRASING: dict[str, str] = {
     RULE_MISSING_FILE_ANCHOR: "a file anchor (e.g., `path/to/file.py:LINE-RANGE`)",
     RULE_MISSING_ACCEPTANCE: "a `## Acceptance` section",
     RULE_ACCEPTANCE_EMPTY: "at least one `- [ ]` checkbox under `## Acceptance`",
+    RULE_ACCEPTANCE_PROSE: (
+        "only `- [ ]` checkbox lines under `## Acceptance` (no bare prose)"
+    ),
     RULE_TITLE_TOO_LONG: "a non-empty title (pattern: `file.py: symptom`)",
 }
 

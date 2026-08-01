@@ -1095,3 +1095,123 @@ class TestAgentAudienceViaMCPHandler:
         content = (root / result["data"]["written_to"]).read_text(encoding="utf-8")
         assert "## What" in content
         assert "## Acceptance" in content
+
+
+# ---------------------------------------------------------------------------
+# TAP-5357: criteria list parsing + What-section description fidelity
+# ---------------------------------------------------------------------------
+
+
+class TestTap5357CriteriaAndWhat:
+    """Comma-safe AC splitting, multi-line checkboxes, full description in What."""
+
+    def test_split_criteria_keeps_commas_in_one_item(self) -> None:
+        from docs_mcp.server_gen_tools import _split_criteria_list
+
+        criterion = (
+            "A written decision records where credential refresh belongs: "
+            "AgentForge runtime, consumer repo, or explicitly out of scope "
+            "with a stated reason"
+        )
+        assert _split_criteria_list(criterion) == [criterion]
+
+    def test_split_criteria_splits_newlines_not_commas(self) -> None:
+        from docs_mcp.server_gen_tools import _split_criteria_list
+
+        raw = (
+            "either X, Y, or Z is documented\n"
+            "- [ ] second criterion with, commas\n"
+            "* [ ] third criterion"
+        )
+        assert _split_criteria_list(raw) == [
+            "either X, Y, or Z is documented",
+            "second criterion with, commas",
+            "third criterion",
+        ]
+
+    async def test_generate_story_comma_criterion_one_checkbox(
+        self,
+        tmp_path: Path,
+    ) -> None:
+        from docs_mcp.server_gen_tools import docs_generate_story
+
+        root = tmp_path / "proj"
+        root.mkdir()
+        criterion = (
+            "A written decision records where credential refresh belongs: "
+            "AgentForge runtime, consumer repo, or explicitly out of scope "
+            "with a stated reason"
+        )
+        with patch(
+            "docs_mcp.server_gen_tools._get_settings",
+            return_value=_make_settings(root),
+        ):
+            result = await docs_generate_story(
+                title="auth.py: decide OAuth refresh ownership",
+                files="auth.py:10-20",
+                acceptance_criteria=criterion,
+                description=(
+                    "Research and discussion spike. Map consumer vs AgentForge "
+                    "ownership. Record the decision in an ADR."
+                ),
+                project_root=str(root),
+                write_to_disk=True,
+            )
+        assert result["success"] is True
+        content = (root / result["data"]["written_to"]).read_text(encoding="utf-8")
+        checkbox_lines = [
+            line for line in content.splitlines() if line.startswith("- [ ] ")
+        ]
+        assert len(checkbox_lines) == 1
+        assert criterion in checkbox_lines[0]
+        assert "- [ ] consumer repo" not in content
+
+    async def test_generate_story_multiline_each_checkbox(
+        self,
+        tmp_path: Path,
+    ) -> None:
+        from docs_mcp.server_gen_tools import docs_generate_story
+
+        root = tmp_path / "proj"
+        root.mkdir()
+        criteria = "first criterion\nsecond criterion\nthird criterion"
+        with patch(
+            "docs_mcp.server_gen_tools._get_settings",
+            return_value=_make_settings(root),
+        ):
+            result = await docs_generate_story(
+                title="foo.py: multiline acceptance",
+                files="foo.py:1-5",
+                acceptance_criteria=criteria,
+                project_root=str(root),
+                write_to_disk=True,
+            )
+        assert result["success"] is True
+        content = (root / result["data"]["written_to"]).read_text(encoding="utf-8")
+        checkbox_lines = [
+            line for line in content.splitlines() if line.startswith("- [ ] ")
+        ]
+        assert checkbox_lines == [
+            "- [ ] first criterion",
+            "- [ ] second criterion",
+            "- [ ] third criterion",
+        ]
+
+    def test_agent_what_keeps_multi_sentence_description(self) -> None:
+        gen = StoryGenerator()
+        config = StoryConfig(
+            title="foo.py: research spike",
+            description=(
+                "Research and discussion spike. Map ownership boundaries. "
+                "Write down the decision."
+            ),
+            files=["foo.py:1"],
+            acceptance_criteria=["done"],
+        )
+        content = gen.generate(config)
+        what_idx = content.index("## What")
+        where_idx = content.index("## Where")
+        what_block = content[what_idx:where_idx]
+        assert "Research and discussion spike." in what_block
+        assert "Map ownership boundaries." in what_block
+        assert "Write down the decision." in what_block

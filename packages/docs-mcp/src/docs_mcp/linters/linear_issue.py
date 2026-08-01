@@ -22,6 +22,7 @@ RULE_TITLE_TOO_LONG = "title-too-long"
 RULE_MISSING_FILE_ANCHOR = "missing-file-anchor"
 RULE_MISSING_ACCEPTANCE = "missing-acceptance"
 RULE_ACCEPTANCE_EMPTY = "acceptance-empty"
+RULE_ACCEPTANCE_PROSE = "acceptance-prose"
 RULE_CODE_BLOCK_NO_ANCHOR = "code-block-no-anchor"
 RULE_MISSING_ESTIMATE = "missing-estimate"
 RULE_MISSING_PRIORITY = "missing-priority"
@@ -283,6 +284,35 @@ def _check_acceptance(ctx: _Context) -> None:
             location=_locate(ctx.description, heading_match.start()),
             fix_hint="Add verifiable checkbox items (e.g., `- [ ] pytest test_X passes`).",
         )
+        return
+
+    # Flag non-checkbox prose under Acceptance (TAP-5357). A single `- [ ]`
+    # plus orphaned lines used to score agent_ready because emptiness only
+    # checked for ≥1 checkbox. Skip HTML comment markers (epic SmartMerge
+    # fences like ``<!-- docsmcp:end:acceptance-criteria -->``).
+    checkbox_line_re = re.compile(r"^\s*-\s*\[[ xX]\]\s+\S")
+    for line in block.splitlines():
+        stripped = line.strip()
+        if not stripped:
+            continue
+        if checkbox_line_re.match(stripped):
+            continue
+        if stripped.startswith("<!--") and stripped.endswith("-->"):
+            continue
+        ctx.add(
+            rule=RULE_ACCEPTANCE_PROSE,
+            severity=SEVERITY_HIGH,
+            message=(
+                "`## Acceptance` contains non-checkbox prose — every criterion "
+                "must be its own `- [ ]` line."
+            ),
+            location=_locate(ctx.description, heading_match.start()),
+            fix_hint=(
+                "Convert each Acceptance line to `- [ ] …` (one criterion per "
+                "checkbox; do not leave bare prose under the heading)."
+            ),
+        )
+        break
 
 
 def _check_code_block_anchors(ctx: _Context) -> None:

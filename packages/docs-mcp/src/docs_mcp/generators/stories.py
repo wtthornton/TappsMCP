@@ -404,10 +404,9 @@ class StoryGenerator:
         if config.role.strip() and config.want.strip():
             return f"As a {config.role.strip()}, {config.want.strip()}."
         if config.description.strip():
-            first = config.description.split(". ")[0].strip()
-            if not first.endswith("."):
-                first += "."
-            return first
+            # Keep the full description — first-sentence truncation dropped
+            # multi-sentence context that agents need (TAP-5357).
+            return config.description.strip()
         return config.title
 
     def _render_agent_where(self, config: StoryConfig) -> list[str]:

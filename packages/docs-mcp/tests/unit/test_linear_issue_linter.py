@@ -6,6 +6,7 @@ import pytest
 
 from docs_mcp.linters.linear_issue import (
     RULE_ACCEPTANCE_EMPTY,
+    RULE_ACCEPTANCE_PROSE,
     RULE_AUTOLINK_MANGLED,
     RULE_CODE_BLOCK_NO_ANCHOR,
     RULE_MISSING_ACCEPTANCE,
@@ -328,6 +329,27 @@ class TestAcceptance:
         rules = [f.rule for f in result.findings]
         assert RULE_MISSING_ACCEPTANCE not in rules
         assert RULE_ACCEPTANCE_EMPTY not in rules
+
+    def test_acceptance_prose_lines_flagged_high(self) -> None:
+        """TAP-5357: one checkbox plus bare prose must not pass as agent-ready."""
+        result = lint_issue(
+            title="foo.py: x",
+            description=(
+                "## What\nd\n"
+                "## Where\n`foo.py:1`\n"
+                "## Acceptance\n"
+                "- [ ] first real criterion\n"
+                "orphaned prose that should have been a checkbox\n"
+                "another orphaned line\n"
+            ),
+            priority=3,
+            estimate=1.0,
+        )
+        rules = [f.rule for f in result.findings]
+        assert RULE_ACCEPTANCE_PROSE in rules
+        assert result.agent_ready is False
+        high = [f for f in result.findings if f.rule == RULE_ACCEPTANCE_PROSE]
+        assert high[0].severity == SEVERITY_HIGH
 
 
 # ---------------------------------------------------------------------------

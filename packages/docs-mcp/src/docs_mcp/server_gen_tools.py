@@ -111,6 +111,31 @@ def _split_csv(value: str) -> list[str]:
     return [_strip_wire_tags(item.strip()) for item in value.split(",") if item.strip()]
 
 
+# Leading checkbox / bullet markers agents paste when supplying criteria.
+_CRITERIA_PREFIX_RE = re.compile(
+    r"^\s*(?:[-*+]|\d+\.)\s*(?:\[[ xX]\]\s*)?",
+)
+
+
+def _split_criteria_list(value: str) -> list[str]:
+    """Split acceptance criteria on newlines — never on commas (TAP-5357).
+
+    Commas are ordinary English inside a criterion (e.g. ``either X, Y, or Z``).
+    Multi-criterion inputs must be newline-separated. Optional leading
+    ``- [ ]`` / bullet prefixes are stripped so pasted checkbox lists round-trip.
+    """
+    if not value:
+        return []
+    cleaned = _strip_wire_tags(value)
+    raw_items = re.split(r"[\r\n]+", cleaned) if re.search(r"[\r\n]", cleaned) else [cleaned]
+    items: list[str] = []
+    for item in raw_items:
+        text = _CRITERIA_PREFIX_RE.sub("", item).strip()
+        if text:
+            items.append(text)
+    return items
+
+
 async def docs_generate_changelog(
     format: str = "keep-a-changelog",
     include_unreleased: bool = True,
@@ -1391,7 +1416,9 @@ async def docs_generate_epic(
         estimated_loe: Level of effort estimate (e.g. "~2-3 weeks (1 developer)").
         dependencies: Comma-separated list of dependencies (e.g. "Epic 0, Epic 4").
         blocks: Comma-separated list of epics this blocks.
-        acceptance_criteria: Comma-separated list of acceptance criteria.
+        acceptance_criteria: Newline-separated acceptance criteria (TAP-5357).
+            Commas inside a criterion are preserved; do not use commas as
+            delimiters. Optional leading ``- [ ]`` markers are stripped.
         stories: JSON array of story objects with keys: title, points, description,
             tasks, ac_count.
             Example: [{"title": "Data Models", "points": 3}]
@@ -1452,7 +1479,7 @@ async def docs_generate_epic(
     # Parse comma-separated lists
     dep_list = _split_csv(dependencies)
     blocks_list = _split_csv(blocks)
-    ac_list = _split_csv(acceptance_criteria)
+    ac_list = _split_criteria_list(acceptance_criteria)
     notes_list = _split_csv(technical_notes)
     risks_list = _split_csv(risks)
     ng_list = _split_csv(non_goals)
@@ -1627,7 +1654,9 @@ async def docs_generate_story(
         size: T-shirt size - "S", "M", "L", or "XL".
         tasks: JSON array of task objects with keys: description, file_path.
             Example: [{"description": "Create model", "file_path": "src/models.py"}]
-        acceptance_criteria: Comma-separated list of acceptance criteria.
+        acceptance_criteria: Newline-separated acceptance criteria (TAP-5357).
+            Commas inside a criterion are preserved; do not use commas as
+            delimiters. Optional leading ``- [ ]`` markers are stripped.
         test_cases: Comma-separated list of test cases (comprehensive style only).
         dependencies: Comma-separated list of dependencies.
         files: Comma-separated list of affected file paths.
@@ -1671,8 +1700,8 @@ async def docs_generate_story(
 
     from docs_mcp.generators.stories import StoryConfig, StoryGenerator, StoryTask
 
-    # Parse comma-separated lists
-    ac_list = _split_csv(acceptance_criteria)
+    # Parse list params — AC is newline-split (TAP-5357); others stay CSV.
+    ac_list = _split_criteria_list(acceptance_criteria)
     tc_list = _split_csv(test_cases)
     dep_list = _split_csv(dependencies)
     file_list = _split_csv(files)

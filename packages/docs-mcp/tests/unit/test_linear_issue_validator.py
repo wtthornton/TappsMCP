@@ -62,6 +62,24 @@ class TestMissingAcceptance:
         )
         assert any(i.severity == "error" and i.rule == "missing-acceptance" for i in report.issues)
 
+    def test_acceptance_prose_blocks_agent_ready(self) -> None:
+        """TAP-5357: non-checkbox Acceptance prose is a pre-create blocker."""
+        report = validate_issue(
+            title="foo.py: x",
+            description=(
+                "## What\nd\n"
+                "## Where\n`foo.py:1`\n"
+                "## Acceptance\n"
+                "- [ ] one checkbox\n"
+                "bare prose line\n"
+            ),
+            priority=3,
+            estimate=1.0,
+        )
+        assert report.agent_ready is False
+        assert any(i.rule == "acceptance-prose" for i in report.issues)
+        assert any("checkbox" in m for m in report.missing)
+
 
 class TestMissingFileAnchor:
     def test_missing_anchor_blocks_agent_ready(self) -> None:
