@@ -32,7 +32,7 @@ Seven rules every agent in this project should follow.
 | **tapps_usage** | When you want to see what you missed this session - per-session `gaps` + concrete `recommendations`. Inlined as `usage_gaps` on every `tapps_checklist` response. |
 | **tapps_quality_gate** | Before declaring work complete - ensures file passes preset |
 
-**For full tool reference** (43 tools with per-tool guidance), invoke the **tapps-tool-reference** skill when the user asks "what tools does TappsMCP have?", "when do I use tapps_score_file?", etc.
+**For full tool reference** (44 tools with per-tool guidance), invoke the **tapps-tool-reference** skill when the user asks "what tools does TappsMCP have?", "when do I use tapps_score_file?", etc.
 
 ---
 
@@ -77,6 +77,7 @@ See [ADR-0017](docs/adr/0017-function-level-call-graph-python-first.md).
 |------|----------------|
 | **tapps_score_file** | When editing/reviewing a code file. Use `quick=True` during edit loops. |
 | **tapps_lookup_docs** | **Before writing code** that uses an external library - prevents hallucinated APIs |
+| **tapps_research** | Unified research front door (ADR-0030): docs → lookup_docs; open-ended/latest → brain web_research; URL → research_fetch |
 | **tapps_security_scan** | Security-sensitive changes or before security review |
 | **tapps_impact_analysis** | Before modifying a file's public API (module-level importers). Pass `symbol` + `granularity="symbol"` or `"both"` for function-level blast radius; `tapps_call_graph` for caller/callee chains. |
 | **tapps_call_graph** | Before refactoring a function — deterministic callers, callees, token-budgeted chains (Epic 114 / ADR-0017). |
@@ -154,14 +155,10 @@ You can also invoke the `tapps-review-fixer` agent directly on individual files 
 
 Provide **purpose_and_intent** for epics and stories so the required Purpose & Intent section is populated.
 
-## Deprecated tools
+## Deprecated / removed tools
 
-The following tools were removed in EPIC-94 and now return structured `TOOL_DEPRECATED` errors:
-
-- **tapps_consult_expert** — The RAG-based expert system has been removed. Use `tapps_lookup_docs` for library documentation.
-- **tapps_research** — Combined expert + docs lookup has been removed. Use `tapps_lookup_docs` for library documentation.
-
-Both stubs return `alternatives` metadata pointing to `tapps_lookup_docs` and AgentForge.
+- **tapps_consult_expert** — Removed in EPIC-94 (RAG expert system). Use `tapps_lookup_docs` for library documentation; domain workflows use `tapps_domain_playbook` (ADR-0025).
+- **tapps_research** — Restored in TAP-5365 as the ADR-0030 unified research front door (docs → `lookup_docs`; open-ended/latest → brain `web_research`; URL → `research_fetch`). Not a deprecation stub.
 
 ---
 
@@ -256,7 +253,7 @@ For direct stdio connections you can expose only a subset of tools to keep the a
 - **disabled_tools** (deny list): tools to exclude from the full set. Applied when `enabled_tools` is not set. Env: `TAPPS_MCP_DISABLED_TOOLS`.
 - **tool_preset**: `full` (all tools), `core` (7 Tier-1 tools), `pipeline` (Tier 1 + Tier 2), or role presets: `reviewer`, `planner`, `frontend`, `developer` (Epic 79.5). NLT profiles: `nlt-build`, `nlt-memory`, `nlt-setup` (legacy: `nlt-code-quality`, `nlt-platform-admin`). Env: `TAPPS_MCP_TOOL_PRESET=nlt-build`.
 
-Empty or missing = all 43 tools (default, backward compatible). Invalid tool names in `enabled_tools` are ignored and logged. Recommended subsets by task/role and Docker tool filtering: see [docs/architecture/tool-budget.md](docs/architecture/tool-budget.md).
+Empty or missing = all 44 tools (default, backward compatible). Invalid tool names in `enabled_tools` are ignored and logged. Recommended subsets by task/role and Docker tool filtering: see [docs/architecture/tool-budget.md](docs/architecture/tool-budget.md).
 
 ---
 ## tapps_session_start vs tapps_init

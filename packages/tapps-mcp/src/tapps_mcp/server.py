@@ -216,6 +216,7 @@ ALL_TOOL_NAMES: frozenset[str] = frozenset(
         "tapps_security_scan",
         "tapps_quality_gate",
         "tapps_lookup_docs",
+        "tapps_research",
         "tapps_validate_config",
         "tapps_validate_changed",
         "tapps_quick_check",
@@ -269,6 +270,7 @@ TOOL_PRESET_CORE: frozenset[str] = frozenset(
         "tapps_quality_gate",
         "tapps_checklist",
         "tapps_lookup_docs",
+        "tapps_research",
         "tapps_security_scan",
         "tapps_pipeline",
     }
@@ -312,6 +314,7 @@ TOOL_PRESET_FRONTEND: frozenset[str] = frozenset(
         "tapps_quick_check",
         "tapps_score_file",
         "tapps_lookup_docs",
+        "tapps_research",
         "tapps_quality_gate",
     }
 )
@@ -325,6 +328,7 @@ TOOL_PRESET_DEVELOPER: frozenset[str] = frozenset(
         "tapps_score_file",
         "tapps_security_scan",
         "tapps_lookup_docs",
+        "tapps_research",
         "tapps_impact_analysis",
     }
 )
@@ -341,6 +345,7 @@ TAPPS_TOOL_PRESET_QUALITY: frozenset[str] = frozenset(
         "tapps_validate_changed",
         "tapps_security_scan",
         "tapps_lookup_docs",
+        "tapps_research",
         "tapps_dead_code",
         "tapps_impact_analysis",
         "tapps_validate_config",
@@ -381,6 +386,7 @@ TOOL_PROFILE_NLT_BUILD: frozenset[str] = frozenset(
         "tapps_quality_gate",
         "tapps_checklist",
         "tapps_lookup_docs",
+        "tapps_research",
         "tapps_score_file",
         "tapps_security_scan",
         "tapps_impact_analysis",
@@ -1188,6 +1194,236 @@ async def tapps_lookup_docs(
     return _with_nudges("tapps_lookup_docs", response)
 
 
+async def tapps_research(
+    query: str,
+    library: str = "",
+    topic: str = "overview",
+    mode: str = "code",
+    url: str = "",
+    source: str = "auto",
+    freshness: str = "volatile",
+    max_results: int = 5,
+    route: str = "auto",
+) -> dict[str, Any]:
+    """Unified research front door (ADR-0030 / TAP-5365).
+
+    Routes library/API documentation questions to ``lookup_docs`` and
+    open-ended / latest / URL questions to tapps-brain ``web_research`` or
+    ``research_fetch`` via BrainBridge. Provider credentials stay brain-side;
+    brain-down returns a structured degraded error (never silent empty success).
+
+    Args:
+        query: Free-text research question (required for web; also used for
+            auto-routing heuristics).
+        library: When set (or ``route="docs"``), forces the docs path.
+        topic: Docs subtopic when routing to ``lookup_docs``.
+        mode: ``"code"`` or ``"info"`` for the docs path.
+        url: When set (or ``route="fetch"``), scrapes a single URL via brain
+            ``research_fetch``.
+        source: Brain provider hint: ``auto`` | ``exa`` | ``tavily`` | ``firecrawl``.
+        freshness: ``volatile`` (default for search) or ``evergreen``.
+        max_results: 1-20 results for ``web_research``.
+        route: ``auto`` | ``docs`` | ``web`` | ``fetch``.
+    """
+    start = time.perf_counter_ns()
+    _record_call("tapps_research")
+
+    from tapps_mcp.tools.research import (
+        VALID_FRESHNESS,
+        VALID_ROUTES,
+        VALID_SOURCES,
+        bridge_degraded_response,
+        classify_research_route,
+        looks_like_url,
+        telemetry_source_for_docs,
+        wrap_brain_research_payload,
+    )
+
+    query_clean = _sanitize_lookup_param(query, max_len=500)
+    library_clean = _sanitize_lookup_param(library)
+    topic_clean = _sanitize_lookup_param(topic) or "overview"
+    url_clean = _sanitize_lookup_param(url, max_len=2000)
+    route_clean = (route or "auto").strip().lower() or "auto"
+    source_clean = (source or "auto").strip().lower() or "auto"
+    freshness_clean = (freshness or "volatile").strip().lower() or "volatile"
+
+    if route_clean not in VALID_ROUTES:
+        return error_response(
+            "tapps_research",
+            "invalid_args",
+            f"Invalid route '{route}'. Must be one of: {', '.join(sorted(VALID_ROUTES))}",
+        )
+    if source_clean not in VALID_SOURCES:
+        return error_response(
+            "tapps_research",
+            "invalid_args",
+            f"Invalid source '{source}'. Must be one of: {', '.join(sorted(VALID_SOURCES))}",
+        )
+    if freshness_clean not in VALID_FRESHNESS:
+        return error_response(
+            "tapps_research",
+            "invalid_args",
+            f"Invalid freshness '{freshness}'. Must be one of: "
+            f"{', '.join(sorted(VALID_FRESHNESS))}",
+        )
+    if not isinstance(max_results, int) or max_results < 1 or max_results > 20:
+        return error_response(
+            "tapps_research",
+            "invalid_args",
+            "max_results must be an integer between 1 and 20.",
+        )
+
+    chosen = classify_research_route(
+        query_clean,
+        library=library_clean,
+        url=url_clean,
+        route=route_clean,
+    )
+
+    if chosen == "docs":
+        if not library_clean:
+            return error_response(
+                "tapps_research",
+                "missing_params",
+                "Docs route requires library= (or pass route='web' for open-ended research).",
+            )
+        if mode not in _VALID_LOOKUP_MODES:
+            return error_response(
+                "tapps_research",
+                "invalid_mode",
+                f"Invalid mode '{mode}'. Must be one of: {', '.join(sorted(_VALID_LOOKUP_MODES))}",
+            )
+        from tapps_mcp.server_helpers import _get_lookup_engine
+
+        engine = _get_lookup_engine()
+        try:
+            result = await engine.lookup(library_clean, topic_clean, mode=mode)
+        except Exception:
+            logger.warning(
+                "research_docs_lookup_error",
+                library=library_clean,
+                topic=topic_clean,
+                exc_info=True,
+            )
+            return error_response(
+                "tapps_research",
+                "lookup_failed",
+                f"Documentation lookup failed for '{library_clean}' / '{topic_clean}'.",
+            )
+        elapsed_ms = (time.perf_counter_ns() - start) // 1_000_000
+        data = _build_lookup_data(result)
+        data["route"] = "docs"
+        data["source"] = telemetry_source_for_docs(cache_hit=bool(result.cache_hit))
+        data["query"] = query_clean
+        response = success_response("tapps_research", elapsed_ms, data)
+        response["success"] = result.success
+        err_code = _lookup_error_code(result.error)
+        if result.error:
+            response["error"] = {"code": err_code, "message": result.error}
+        if result.warning:
+            response["warning"] = result.warning
+        _record_execution(
+            "tapps_research",
+            start,
+            status="success" if result.success else "failed",
+            error_code=err_code,
+        )
+        _maybe_record_lookup_telemetry(result, library=library_clean, topic=topic_clean)
+        return _with_nudges("tapps_research", response)
+
+    # Web / fetch paths require HTTP BrainBridge (credentials stay brain-side).
+    fetch_url = url_clean if chosen == "fetch" else ""
+    if chosen == "fetch" and not fetch_url:
+        if looks_like_url(query_clean):
+            fetch_url = query_clean
+        else:
+            return error_response(
+                "tapps_research",
+                "missing_params",
+                "Fetch route requires url= (absolute http(s) URL).",
+            )
+    if chosen == "web" and not query_clean:
+        return error_response(
+            "tapps_research",
+            "missing_params",
+            "Web route requires a non-empty query.",
+        )
+
+    from tapps_core.brain_bridge import (
+        BrainBridgeUnavailable,
+        BrainMcpError,
+        ToolNotInProfileError,
+    )
+
+    bridge = _get_brain_bridge()
+    if bridge is None:
+        elapsed_ms = (time.perf_counter_ns() - start) // 1_000_000
+        resp = bridge_degraded_response(
+            route=chosen,
+            detail="BrainBridge is not configured (set memory.brain_http_url).",
+            reason="brain_bridge_unconfigured",
+            elapsed_ms=elapsed_ms,
+        )
+        _record_execution("tapps_research", start, status="failed", error_code=resp["data"]["error"])
+        return _with_nudges("tapps_research", resp)
+
+    try:
+        if chosen == "fetch":
+            # Brain contract default for research_fetch is evergreen. When the
+            # URL was auto-detected from query and freshness was left at the
+            # tool default (volatile), prefer evergreen.
+            if route_clean == "auto" and not url_clean and freshness == "volatile":
+                fetch_freshness = "evergreen"
+            else:
+                fetch_freshness = freshness_clean
+            brain_payload = await bridge.research_fetch(fetch_url, freshness=fetch_freshness)
+        else:
+            brain_payload = await bridge.web_research(
+                query_clean,
+                source=source_clean,
+                freshness=freshness_clean,
+                max_results=max_results,
+            )
+    except (BrainBridgeUnavailable, ToolNotInProfileError, BrainMcpError) as exc:
+        elapsed_ms = (time.perf_counter_ns() - start) // 1_000_000
+        reason = "brain_tool_unavailable" if isinstance(exc, ToolNotInProfileError) else "brain_bridge_call_failed"
+        resp = bridge_degraded_response(
+            route=chosen,
+            detail=str(exc) or type(exc).__name__,
+            reason=reason,
+            elapsed_ms=elapsed_ms,
+        )
+        _record_execution("tapps_research", start, status="failed", error_code=reason)
+        return _with_nudges("tapps_research", resp)
+    except Exception as exc:
+        logger.warning("research_brain_call_error", route=chosen, exc_info=True)
+        elapsed_ms = (time.perf_counter_ns() - start) // 1_000_000
+        resp = bridge_degraded_response(
+            route=chosen,
+            detail=str(exc) or type(exc).__name__,
+            elapsed_ms=elapsed_ms,
+        )
+        _record_execution(
+            "tapps_research",
+            start,
+            status="failed",
+            error_code="brain_bridge_call_failed",
+        )
+        return _with_nudges("tapps_research", resp)
+
+    elapsed_ms = (time.perf_counter_ns() - start) // 1_000_000
+    if not isinstance(brain_payload, dict):
+        brain_payload = {"success": False, "error": "invalid_response", "detail": str(brain_payload)}
+    response = wrap_brain_research_payload(brain_payload, route=chosen, elapsed_ms=elapsed_ms)
+    _record_execution(
+        "tapps_research",
+        start,
+        status="success" if response.get("success") else "failed",
+        error_code=None if response.get("success") else str(brain_payload.get("error") or "research_failed"),
+    )
+    return _with_nudges("tapps_research", response)
+
+
 # ---------------------------------------------------------------------------
 # tapps_validate_config helpers
 # ---------------------------------------------------------------------------
@@ -1775,6 +2011,14 @@ def _register_core_tools(mcp_instance: FastMCP, allowed_tools: frozenset[str]) -
         )
     if "tapps_lookup_docs" in allowed_tools:
         register_tool(mcp_instance, tapps_lookup_docs, annotations=_ANNOTATIONS_READ_ONLY_OPEN)
+    if "tapps_research" in allowed_tools:
+        # Deferred: keeps eager catalog ≤10 (TAP-1986); lookup_docs stays eager.
+        register_tool(
+            mcp_instance,
+            tapps_research,
+            annotations=_ANNOTATIONS_READ_ONLY_OPEN,
+            meta=_META_DEFERRED,
+        )
     if "tapps_validate_config" in allowed_tools:
         register_tool(
             mcp_instance,

@@ -435,7 +435,7 @@ def mcp_bundle_set(bundle: str, project_root: Path, dry_run: bool) -> None:
     default=None,
     help=(
         "Tool profile preset (Epic 109 / ADR-0016). Overrides --mode when set. "
-        "Use nlt-build for daily coding (~16 tools, 9 eager)."
+        "Use nlt-build for daily coding (~20 tools, 9 eager)."
     ),
 )
 def serve(

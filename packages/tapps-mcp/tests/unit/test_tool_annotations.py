@@ -78,8 +78,9 @@ EXPECTED_ANNOTATIONS: dict[str, ToolAnnotations] = {
     "tapps_pipeline": _READ_ONLY,
     "tapps_decompose": _READ_ONLY,
     "tapps_linear_snapshot_get": _READ_ONLY,
-    # Read-only, open-world (2 tools)
+    # Read-only, open-world (3 tools)
     "tapps_lookup_docs": _READ_ONLY_OPEN,
+    "tapps_research": _READ_ONLY_OPEN,
     "tapps_dependency_scan": _READ_ONLY_OPEN,
     # Side-effect, idempotent (7 tools)
     "tapps_session_start": _SIDE_EFFECT_IDEMPOTENT,
@@ -168,13 +169,14 @@ class TestAnnotationCategories:
             for name, tool in tools.items()
             if tool.annotations and tool.annotations.readOnlyHint
         ]
-        # 18 closed-world + 2 open-world + 1 linear-snapshot-get + 1 release-update
+        # 18 closed-world + 3 open-world + 1 linear-snapshot-get + 1 release-update
         # + 1 tapps_linear_count (TAP-1847) + 1 tapps_audit_campaign (TAP-2036)
         # + 1 tapps_usage (v3.11.0) + 1 tapps_linear_list_issues (TAP-2010)
         # + 1 tapps_finding_to_story (TAP-2717) + 1 tapps_memory (TAP-3895)
-        # + 2 Epic 114 read-only tools + 1 tapps_domain_playbook (ADR-0025) = 31
-        assert len(read_only) == 31, (
-            f"Expected 31 read-only tools, got {len(read_only)}"
+        # + 2 Epic 114 read-only tools + 1 tapps_domain_playbook (ADR-0025)
+        # + 1 tapps_research (TAP-5365) = 32
+        assert len(read_only) == 32, (
+            f"Expected 32 read-only tools, got {len(read_only)}"
         )
 
     def test_side_effect_count(self) -> None:
@@ -199,9 +201,9 @@ class TestAnnotationCategories:
             for name, tool in tools.items()
             if tool.annotations and tool.annotations.openWorldHint
         ]
-        assert len(open_world) == 2, (
-            f"Expected 2 open-world tools, got {len(open_world)}"
-        )  # TAP-483: -2
+        assert len(open_world) == 3, (
+            f"Expected 3 open-world tools, got {len(open_world)}"
+        )  # +tapps_research (TAP-5365)
 
     def test_idempotent_count(self) -> None:
         tools = mcp._tool_manager._tools
@@ -215,7 +217,8 @@ class TestAnnotationCategories:
         # + 1 tapps_usage (v3.11.0) + 1 tapps_linear_list_issues (TAP-2010)
         # + 1 tapps_finding_to_story (TAP-2717)
         # + 1 tapps_audit_close_coverage (TAP-2798) + 1 tapps_handoff_save (TAP-3792)
-        # + 1 tapps_memory (TAP-3895) + 2 Epic 114 tools + 1 tapps_domain_playbook = 38
+        # + 1 tapps_memory (TAP-3895) + 2 Epic 114 tools + 1 tapps_domain_playbook
+        # + 0 for tapps_research (openWorld, idempotentHint=False) = 38
         assert len(idempotent) == 38, (
             f"Expected 38 idempotent tools, got {len(idempotent)}: {sorted(idempotent)}"
         )

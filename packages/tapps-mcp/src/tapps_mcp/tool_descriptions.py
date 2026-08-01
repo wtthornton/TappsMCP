@@ -34,6 +34,10 @@ TOOL_DESCRIPTIONS: dict[str, str] = {
     "tapps_lookup_docs": (
         "Fetch library documentation and examples via Context7 or local llms.txt cache."
     ),
+    "tapps_research": (
+        "Unified research front door: library/API docs via lookup_docs; "
+        "open-ended/latest/URL via brain web_research or research_fetch (ADR-0030)."
+    ),
     "tapps_validate_config": (
         "Validate Dockerfile, docker-compose, GitHub Actions, and other infra config files."
     ),

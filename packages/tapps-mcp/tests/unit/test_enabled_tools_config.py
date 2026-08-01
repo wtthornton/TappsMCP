@@ -50,7 +50,7 @@ class TestResolveAllowedTools:
         settings.tool_preset = "core"
         allowed = _resolve_allowed_tools(settings)
         assert allowed == TOOL_PRESET_CORE
-        assert len(allowed) == 8
+        assert len(allowed) == 9  # +tapps_research (TAP-5365)
 
     def test_preset_pipeline(self) -> None:
         from tapps_mcp.server import TOOL_PRESET_PIPELINE, _resolve_allowed_tools
@@ -61,8 +61,8 @@ class TestResolveAllowedTools:
         settings.tool_preset = "pipeline"
         allowed = _resolve_allowed_tools(settings)
         assert allowed == TOOL_PRESET_PIPELINE
-        # TAP-1994: tapps_memory removed from catalog; was 12, now 11
-        assert len(allowed) == 11
+        # TAP-1994: tapps_memory removed; TAP-5365: +tapps_research → 12
+        assert len(allowed) == 12
 
     def test_preset_full(self) -> None:
         from tapps_mcp.server import ALL_TOOL_NAMES, _resolve_allowed_tools
@@ -106,7 +106,7 @@ class TestResolveAllowedTools:
         settings.tool_preset = "frontend"
         allowed = _resolve_allowed_tools(settings)
         assert allowed == TOOL_PRESET_FRONTEND
-        assert len(allowed) == 5
+        assert len(allowed) == 6  # +tapps_research (TAP-5365)
 
     def test_preset_developer(self) -> None:
         from tapps_mcp.server import TOOL_PRESET_DEVELOPER, _resolve_allowed_tools
@@ -117,8 +117,8 @@ class TestResolveAllowedTools:
         settings.tool_preset = "developer"
         allowed = _resolve_allowed_tools(settings)
         assert allowed == TOOL_PRESET_DEVELOPER
-        # TAP-1994: tapps_memory removed from catalog; was 10, now 9
-        assert len(allowed) == 9
+        # TAP-1994: tapps_memory removed; TAP-5365: +tapps_research → 10
+        assert len(allowed) == 10
 
     def test_enabled_tools_invalid_names_ignored(self) -> None:
         from tapps_mcp.server import _resolve_allowed_tools
@@ -151,9 +151,10 @@ class TestResolveAllowedTools:
         settings.tool_preset = "nlt-build"
         allowed = _resolve_allowed_tools(settings)
         assert allowed == TOOL_PROFILE_NLT_BUILD
-        assert len(allowed) == 19
+        assert len(allowed) == 20  # +tapps_research (TAP-5365)
         assert "tapps_domain_playbook" in allowed
         assert "tapps_dependency_scan" in allowed
+        assert "tapps_research" in allowed
 
     def test_preset_nlt_memory(self) -> None:
         from tapps_mcp.server import TOOL_PROFILE_NLT_MEMORY, _resolve_allowed_tools
@@ -269,6 +270,7 @@ class TestToolPresetConstants:
             "tapps_quality_gate",
             "tapps_checklist",
             "tapps_lookup_docs",
+            "tapps_research",
             "tapps_security_scan",
             "tapps_pipeline",
         }
@@ -284,8 +286,8 @@ class TestToolPresetConstants:
             "tapps_validate_config",
         }
         assert tier2 <= TOOL_PRESET_PIPELINE
-        # TAP-1994: tapps_memory removed from catalog; was 12, now 11
-        assert len(TOOL_PRESET_PIPELINE) == 11
+        # TAP-1994: tapps_memory removed; TAP-5365: +tapps_research → 12
+        assert len(TOOL_PRESET_PIPELINE) == 12
 
     def test_all_tool_names_count(self) -> None:
         from tapps_mcp.server import ALL_TOOL_NAMES
@@ -297,4 +299,6 @@ class TestToolPresetConstants:
         # + 1 tapps_linear_list_issues (TAP-2010) + 1 tapps_finding_to_story (TAP-2717)
         # + 1 tapps_audit_close_coverage (TAP-2798) + 1 tapps_handoff_save (TAP-3792)
         # + 2 Epic 114 tools (tapps_call_graph, tapps_diff_impact) = 42.
-        assert len(ALL_TOOL_NAMES) == 43
+        # + 1 tapps_domain_playbook = 43.
+        # + 1 tapps_research (TAP-5365 / ADR-0030) = 44.
+        assert len(ALL_TOOL_NAMES) == 44

@@ -593,9 +593,9 @@ Quick index:
 | **tapps_quality_gate** | Pass/fail a file against a quality preset (standard/strict/framework). |
 | **tapps_validate_changed** | Score + gate + security scan all changed files (auto-detects via git diff). |
 | **tapps_lookup_docs** | Fetch current documentation for a library (Context7 when key set, LlmsTxt fallback; cache). |
+| **tapps_research** | Unified research front door (ADR-0030): routes docs to `lookup_docs` and open-ended/latest/URL queries to brain `web_research` / `research_fetch`. |
 | **tapps_validate_config** | Validate Dockerfile, docker-compose, or infra configs. |
-| **tapps_consult_expert** | **Deprecated (EPIC-94)** — returns structured deprecation error with alternatives. |
-| **tapps_research** | **Deprecated (EPIC-94)** — returns structured deprecation error with alternatives. |
+| **tapps_consult_expert** | **Removed (EPIC-94)** — RAG expert system deleted; use `tapps_lookup_docs` / `tapps_domain_playbook`. |
 | **tapps_checklist** | See which tools this session invoked and what is still missing. |
 | **tapps_session_notes** | Save and retrieve key decisions and constraints across the session. Promotable to shared memory. |
 | **tapps_memory** | **Removed in v3.12.0** — use `uv run tapps-mcp memory` CLI or enable **`nlt-memory`**. Full action list: [MEMORY_REFERENCE.md](docs/MEMORY_REFERENCE.md). |
@@ -689,19 +689,19 @@ Quick index:
 
 ---
 
-### tapps_consult_expert (deprecated)
+### tapps_consult_expert (removed)
 
-**Status:** Deprecated since EPIC-94. Returns a structured `TOOL_DEPRECATED` error with `alternatives` pointing to `tapps_lookup_docs` (for documentation) and AgentForge (for expert consultation).
+**Status:** Removed in EPIC-94. The RAG-based expert system is gone.
 
-**Migration:** Use `tapps_lookup_docs` for library documentation lookup. The RAG-based expert system has been removed.
+**Migration:** Use `tapps_lookup_docs` for library docs and `tapps_domain_playbook` for domain checklists (ADR-0025).
 
 ---
 
-### tapps_research (deprecated)
+### tapps_research
 
-**Status:** Deprecated since EPIC-94. Returns a structured `TOOL_DEPRECATED` error with `alternatives` pointing to `tapps_lookup_docs` and AgentForge.
+**What it does:** Unified research entry point (ADR-0030 / TAP-5365). Routes library/API questions to the existing `lookup_docs` path and open-ended / “latest” / URL questions to tapps-brain `web_research` or `research_fetch` via BrainBridge. Provider credentials (Exa / Tavily / Firecrawl) stay brain-side. Brain-down returns `success=false`, `degraded=true`, `retryable=true` — never a silent empty success.
 
-**Migration:** Use `tapps_lookup_docs` for library documentation lookup.
+**Why use it:** One front door for docs and web research so skills stop inventing parallel uncached paths. Prefer `tapps_lookup_docs` when you already know the library name; use `tapps_research` for mixed or open-ended questions.
 
 ---
 

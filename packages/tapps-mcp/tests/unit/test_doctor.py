@@ -2796,7 +2796,7 @@ class TestCheckNltPartialEnablement:
         result = check_nlt_partial_enablement(tmp_path)
         assert result.ok is True
         assert "combined eager=18" in result.message
-        assert "nlt-build: 9 eager / 19 listed" in result.message
+        assert "nlt-build: 9 eager / 20 listed" in result.message
         assert "nlt-memory: 2 eager / 5 listed" in result.message
         assert "nlt-linear-issues: 7 eager / 15 listed" in result.message
         assert "combined listed=39" in result.message

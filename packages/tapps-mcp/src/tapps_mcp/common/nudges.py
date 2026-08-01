@@ -163,6 +163,15 @@ _TOOL_NUDGES: dict[str, list[NudgeRule]] = {
             _IMPACT_LOW,
         ),
     ],
+    "tapps_research": [
+        (
+            lambda called, _ctx: (
+                "tapps_score_file" not in called and "tapps_quick_check" not in called
+            ),
+            "NEXT: Write your code, then call tapps_score_file() or tapps_quick_check().",
+            _IMPACT_LOW,
+        ),
+    ],
     "tapps_impact_analysis": [
         (
             lambda called, ctx: (

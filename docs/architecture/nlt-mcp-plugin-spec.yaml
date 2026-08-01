@@ -180,6 +180,7 @@ servers:
         - tapps_security_scan
         - tapps_impact_analysis
       deferred:
+        - tapps_research
         - tapps_usage
         - tapps_validate_config
         - tapps_dead_code
