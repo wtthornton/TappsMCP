@@ -27,6 +27,7 @@ from tapps_mcp.pipeline.agent_contract import (
     CHECKLIST_SKIPPED_REC,
     SESSION_START_CHECKLIST_GAP_HINT,
     STOP_GAP_FOLLOWUP_DEFAULT,
+    lookup_docs_underused_recommendation,
     lookup_gap_recommendation,
 )
 from tapps_mcp.tools.loop_metrics import (
@@ -246,13 +247,102 @@ def _lookup_gap_libraries(project_root: Path, edited_paths: list[str]) -> list[s
     try:
         cache_dir, _ = resolve_kb_cache_dir(project_root)
         cache = KBCache(cache_dir)
-        return find_uncached_libraries(sorted(external), cache)
+        uncached = find_uncached_libraries(sorted(external), cache)
     except Exception:
-        return sorted(external)
+        uncached = sorted(external)
+
+    # Recent lookup events also satisfy coverage (any topic / CLI / MCP) — TAP-5419.
+    if uncached:
+        try:
+            from tapps_mcp.tools.lookup_telemetry import lookup_recorded_libraries
+
+            recorded = lookup_recorded_libraries(project_root)
+            if recorded:
+                uncached = [lib for lib in uncached if lib.lower() not in recorded]
+        except Exception:
+            pass
+    return uncached
 
 
 def _lookup_gap_recommendation(libraries: list[str], *, generic: bool) -> str:
     return lookup_gap_recommendation(libraries, generic=generic)
+
+
+def _count_py_edit_lookup_loops(rows: list[dict[str, Any]]) -> tuple[int, int]:
+    """Return ``(loops_without_lookup, loops_with_lookup)`` for recent Python edits."""
+    without = 0
+    with_lookup = 0
+    for row in rows[-10:]:
+        if not isinstance(row, dict):
+            continue
+        edited = [
+            p
+            for p in row.get("files_edited", [])
+            if isinstance(p, str) and p.endswith((".py", ".pyi"))
+        ]
+        if not edited:
+            continue
+        if row.get("lookup_docs_called") is False:
+            without += 1
+        elif row.get("lookup_docs_called") is True:
+            with_lookup += 1
+    return without, with_lookup
+
+
+def _lookup_underused_kind(
+    *,
+    used_lookup: bool,
+    loops_with_lookup: int,
+) -> str:
+    if used_lookup:
+        return "still-uncached"
+    if loops_with_lookup >= 1:
+        return "historical-miss"
+    return "session-never"
+
+
+def _append_lookup_docs_underused(
+    gaps: list[str],
+    recs: list[str],
+    *,
+    uncached_libs: list[str],
+    used_lookup: bool,
+    rows: list[dict[str, Any]],
+    recent_edit_loops: int,
+    lookup_ratio: float | None,
+) -> None:
+    """Append ``lookup_docs_underused`` when ratio or sticky historical miss applies."""
+    if not uncached_libs or "lookup_docs_underused" in gaps:
+        return
+
+    # Ratio path: only evaluate the ratio; sticky is a separate call with None.
+    if lookup_ratio is not None:
+        if lookup_ratio < 0.2:
+            gaps.append("lookup_docs_underused")
+            recs.append(
+                lookup_docs_underused_recommendation(
+                    uncached_libs,
+                    kind=_lookup_underused_kind(
+                        used_lookup=used_lookup, loops_with_lookup=0
+                    ),
+                    loops_without_lookup=recent_edit_loops,
+                )
+            )
+        return
+
+    without, with_lookup = _count_py_edit_lookup_loops(rows)
+    if without < 1:
+        return
+    gaps.append("lookup_docs_underused")
+    recs.append(
+        lookup_docs_underused_recommendation(
+            uncached_libs,
+            kind=_lookup_underused_kind(
+                used_lookup=used_lookup, loops_with_lookup=with_lookup
+            ),
+            loops_without_lookup=without,
+        )
+    )
 
 
 def compute_gaps(
@@ -316,6 +406,8 @@ def compute_gaps(
         gaps.append("checklist_skipped")
         recs.append(CHECKLIST_SKIPPED_REC)
 
+    used_lookup = _LOOKUP_TOOL in called or _telemetry_used_lookup(rows, project_root)
+
     recent_edit_loops = int(recent_edits.get("loops", 0))
     if recent_edit_loops >= 3:
         skip_rate = float(recent_edits.get("gate_skip_rate", 0.0))
@@ -327,41 +419,26 @@ def compute_gaps(
                 f"({recent_edit_loops} loops, last {rolling_window_days}d). "
                 "Consider raising engagement to high so tapps-task-completed.sh blocks instead of warns."
             )
-        lookup_ratio = float(recent_edits.get("lookup_docs_to_edit_ratio", 0.0))
-        if lookup_ratio < 0.2 and uncached_libs_in_edits:
-            gaps.append("lookup_docs_underused")
-            recs.append(
-                "tapps_lookup_docs was rarely called before edits. Use it for "
-                "any external library API to avoid hallucinated calls."
-            )
+        _append_lookup_docs_underused(
+            gaps,
+            recs,
+            uncached_libs=uncached_libs_in_edits,
+            used_lookup=used_lookup,
+            rows=rows,
+            recent_edit_loops=recent_edit_loops,
+            lookup_ratio=float(recent_edits.get("lookup_docs_to_edit_ratio", 0.0)),
+        )
 
-    # TAP-5273: strengthen — Python edit loops with lookup_docs_called=false and
-    # uncached external libs should flag even with <3 loops / ratio still quiet.
-    # Workspace-only / cached-lib edits stay suppressed (existing tests).
-    if "lookup_docs_underused" not in gaps and uncached_libs_in_edits:
-        py_edit_loops_without_lookup = 0
-        for row in rows[-10:]:
-            if not isinstance(row, dict):
-                continue
-            edited = [
-                p
-                for p in row.get("files_edited", [])
-                if isinstance(p, str) and p.endswith((".py", ".pyi"))
-            ]
-            if not edited:
-                continue
-            if row.get("lookup_docs_called") is False:
-                py_edit_loops_without_lookup += 1
-        if py_edit_loops_without_lookup >= 1:
-            gaps.append("lookup_docs_underused")
-            libs = ", ".join(uncached_libs_in_edits[:5])
-            recs.append(
-                f"{py_edit_loops_without_lookup} recent Python edit loop(s) never "
-                f"called tapps_lookup_docs for external libs ({libs}). Call "
-                "tapps_lookup_docs before using those APIs."
-            )
-
-    used_lookup = _LOOKUP_TOOL in called or _telemetry_used_lookup(rows, project_root)
+    # TAP-5273 / TAP-5422: sticky historical miss when ratio path stayed quiet.
+    _append_lookup_docs_underused(
+        gaps,
+        recs,
+        uncached_libs=uncached_libs_in_edits,
+        used_lookup=used_lookup,
+        rows=rows,
+        recent_edit_loops=recent_edit_loops,
+        lookup_ratio=None,
+    )
     libraries_without_lookup: list[str] = []
     if not used_lookup and has_recent_edits:
         libraries_without_lookup = uncached_libs_in_edits

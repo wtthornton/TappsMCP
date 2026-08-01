@@ -262,6 +262,8 @@ The scan path runs for **every project**. The trailing reminder to stderr now fi
 
 The `tapps_usage` tool ([packages/tapps-mcp/src/tapps_mcp/tools/usage.py](../packages/tapps-mcp/src/tapps_mcp/tools/usage.py)) reads the violations log alongside `loop-metrics.jsonl` and the in-process `CallTracker` to produce a per-session gap report, surfaced both standalone and inline as `usage_gaps` on every `tapps_checklist` response.
 
+Doc-related gaps (`lookup_docs_underused`, `library_uses_without_lookup_docs`) are **cache-coverage checks** (any topic under `.tapps-mcp-cache/<library>/`, or a recent lookup event — [ADR-0032](adr/0032-usage-gap-cache-coverage-local-modules.md)), not purely call-count checks. Resolvable sibling/script modules are excluded from external imports; overview is not required to clear coverage.
+
 ## Doctor diagnostics
 
 The `tapps_doctor` tool/CLI command runs configuration and connectivity checks:

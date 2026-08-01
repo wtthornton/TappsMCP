@@ -98,6 +98,31 @@ class TestExtractExternalImports:
         result = extract_external_imports(f, tmp_path)
         assert result.count("fastapi") == 1
 
+    def test_excludes_sibling_script_modules_without_init(self, tmp_path: Path) -> None:
+        """TAP-5420: kit/script siblings are local, not Context7 externals."""
+        kit = tmp_path / "kits" / "agentforge"
+        kit.mkdir(parents=True)
+        (kit / "af_eval_cli.py").write_text("CLI = True\n", encoding="utf-8")
+        runner = kit / "af_eval_runner.py"
+        runner.write_text(
+            "import af_eval_cli\nimport pydantic\nfrom af_eval_cli import CLI\n",
+            encoding="utf-8",
+        )
+        result = extract_external_imports(runner, tmp_path)
+        assert "af_eval_cli" not in result
+        assert "pydantic" in result
+
+    def test_relative_imports_stay_excluded(self, tmp_path: Path) -> None:
+        pkg = tmp_path / "src" / "mypkg"
+        pkg.mkdir(parents=True)
+        (pkg / "__init__.py").write_text("", encoding="utf-8")
+        (pkg / "helper.py").write_text("X = 1\n", encoding="utf-8")
+        mod = pkg / "service.py"
+        mod.write_text("from .helper import X\nimport httpx\n", encoding="utf-8")
+        result = extract_external_imports(mod, tmp_path)
+        assert "helper" not in result
+        assert "httpx" in result
+
 
 class TestFindUncachedLibraries:
     """Tests for find_uncached_libraries."""
@@ -137,6 +162,18 @@ class TestFindUncachedLibraries:
         cache.put(CacheEntry(library="fastapi", topic="overview", content="# FastAPI"))
 
         assert find_uncached_libraries(["httpx"], cache) == ["httpx"]
+
+    def test_any_topic_counts_as_cached_coverage(self, tmp_path: Path) -> None:
+        """TAP-5421: non-overview topics satisfy is_library_cached / find_uncached."""
+        cache = KBCache(cache_dir=tmp_path / "cache")
+        cache.put(CacheEntry(library="pydantic", topic="basemodel", content="# BaseModel"))
+        cache.put(CacheEntry(library="httpx", topic="client", content="# Client"))
+
+        assert is_library_cached("pydantic", cache) is True
+        assert is_library_cached("httpx", cache) is True
+        assert find_uncached_libraries(["pydantic", "httpx", "fastapi"], cache) == ["fastapi"]
+        assert cache.has("pydantic", "overview") is False
+        assert cache.has_any_topic("pydantic") is True
 
 
 class TestDetectProjectPackage:

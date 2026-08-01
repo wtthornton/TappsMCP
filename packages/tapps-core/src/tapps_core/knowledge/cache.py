@@ -201,6 +201,18 @@ class KBCache:
             self._content_path(library, topic).exists() and self._meta_path(library, topic).exists()
         )
 
+    def has_any_topic(self, library: str) -> bool:
+        """True when any topic is cached for *library* (coverage check; TAP-5421).
+
+        Unlike :meth:`has`, this does not default to ``topic="overview"``. A
+        prior ``tapps_lookup_docs`` for ``basemodel`` / ``client`` counts as
+        warmed coverage even when overview was never fetched.
+        """
+        lib_dir = self.cache_dir / _safe_name(library)
+        if not lib_dir.is_dir():
+            return False
+        return any(lib_dir.glob("*.meta.json"))
+
     def is_stale(self, library: str, topic: str = "overview") -> bool:
         """Check whether a cache entry is stale (past TTL)."""
         meta_path = self._meta_path(library, topic)

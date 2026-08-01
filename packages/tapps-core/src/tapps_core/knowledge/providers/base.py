@@ -44,3 +44,4 @@ class ProviderResult:
     from_cache: bool = False
     error: str | None = None
     success: bool = False
+    library_id: str | None = None

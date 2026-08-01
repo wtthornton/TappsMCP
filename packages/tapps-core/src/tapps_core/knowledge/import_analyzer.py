@@ -78,6 +78,9 @@ def extract_external_imports(
     Filters out:
     - stdlib modules (via ``sys.stdlib_module_names``)
     - local project imports (detected via src/ layout)
+    - uv workspace member packages
+    - resolvable same-dir / project-local sibling modules (TAP-5420)
+    - relative imports (``from .x import y``)
     - private modules (starting with ``_``)
     - common test/tool packages
 
@@ -103,22 +106,54 @@ def extract_external_imports(
 
     project_package = _detect_project_package(project_root)
     workspace_packages = _detect_workspace_packages(project_root)
+    return [
+        mod
+        for mod in sorted(top_modules)
+        if _is_external_import(mod, file_path, project_root, project_package, workspace_packages)
+    ]
 
-    external: list[str] = []
-    for mod in sorted(top_modules):
-        if mod in _STDLIB_MODULES:
-            continue
-        if mod in _SKIP_MODULES:
-            continue
-        if project_package and mod == project_package:
-            continue
-        if mod in workspace_packages:
-            continue
-        if mod.startswith("_"):
-            continue
-        external.append(mod)
 
-    return external
+def _is_external_import(
+    mod: str,
+    file_path: Path,
+    project_root: Path,
+    project_package: str | None,
+    workspace_packages: frozenset[str],
+) -> bool:
+    """True when *mod* should be treated as an external library for docs gaps."""
+    if mod in _STDLIB_MODULES or mod in _SKIP_MODULES or mod.startswith("_"):
+        return False
+    if project_package and mod == project_package:
+        return False
+    if mod in workspace_packages:
+        return False
+    return not _is_resolvable_local_module(mod, file_path, project_root)
+
+
+def _local_module_path_exists(base: Path, mod: str) -> bool:
+    """True when *mod* is a ``.py`` / ``.pyi`` file or package under *base*."""
+    if (base / f"{mod}.py").is_file() or (base / f"{mod}.pyi").is_file():
+        return True
+    pkg = base / mod
+    return pkg.is_dir() and (
+        (pkg / "__init__.py").is_file() or (pkg / "__init__.pyi").is_file()
+    )
+
+
+def _is_resolvable_local_module(mod: str, file_path: Path, project_root: Path) -> bool:
+    """Return True when *mod* resolves beside the file or under project root.
+
+    Covers kit/script layouts without ``__init__.py`` (e.g. ``af_eval_runner.py``
+    importing sibling ``af_eval_cli.py``) so usage gaps do not nag Context7 for
+    in-repo ground truth (TAP-5420).
+    """
+    if not mod or mod.startswith("."):
+        return False
+    try:
+        bases = (file_path.resolve().parent, project_root.resolve())
+    except OSError:
+        return False
+    return any(_local_module_path_exists(base, mod) for base in dict.fromkeys(bases))
 
 
 def _cache_key_candidates(import_name: str) -> list[str]:
@@ -143,6 +178,18 @@ def _cache_key_candidates(import_name: str) -> list[str]:
     return unique
 
 
+def _cache_has_coverage(cache: KBCache, library: str) -> bool:
+    """Coverage probe: any cached topic counts (TAP-5421), not overview-only.
+
+    Uses the class attribute so MagicMock test doubles that only stub
+    ``has()`` keep working (instance getattr would auto-create a truthy mock).
+    """
+    has_any = getattr(type(cache), "has_any_topic", None)
+    if callable(has_any):
+        return bool(cache.has_any_topic(library))
+    return bool(cache.has(library))
+
+
 def is_library_cached(
     import_name: str,
     cache: KBCache,
@@ -153,9 +200,12 @@ def is_library_cached(
 
     Checks direct keys, import→PyPI aliases, ``resolve_alias``, then fuzzy
     match against libraries already present in the cache directory.
+
+    Coverage is any-topic: a cached ``basemodel`` / ``client`` entry satisfies
+    the check even when ``overview`` was never warmed (TAP-5421).
     """
     for candidate in _cache_key_candidates(import_name):
-        if cache.has(candidate):
+        if _cache_has_coverage(cache, candidate):
             return True
 
     libs = known_libs
@@ -176,7 +226,7 @@ def is_library_cached(
     )
     if not matches:
         return False
-    return cache.has(matches[0].library)
+    return _cache_has_coverage(cache, matches[0].library)
 
 
 def find_uncached_libraries(

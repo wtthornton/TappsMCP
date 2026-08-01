@@ -35,6 +35,18 @@ class LookupResult(BaseModel):
     library: str | None = Field(default=None, description="Resolved library name.")
     topic: str | None = Field(default=None, description="Resolved topic.")
     context7_id: str | None = Field(default=None, description="Context7 library ID.")
+    matched_library_id: str | None = Field(
+        default=None,
+        description="Provider library id actually resolved (e.g. Context7 /org/name).",
+    )
+    resolution_confidence: str | None = Field(
+        default=None,
+        description="high | medium | low — how well the match fits the request (TAP-5423).",
+    )
+    likely_local_module: bool = Field(
+        default=False,
+        description="True when the request looks local and the provider match diverges.",
+    )
     error: str | None = Field(default=None, description="Error message if failed.")
     response_time_ms: float = Field(default=0.0, description="Lookup latency.")
     cache_hit: bool = Field(default=False, description="Whether result came from cache.")

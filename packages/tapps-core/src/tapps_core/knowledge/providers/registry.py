@@ -100,6 +100,7 @@ class ProviderRegistry:
                     latency_ms=round(elapsed, 1),
                     token_estimate=len(content) // 4,
                     success=True,
+                    library_id=library_id,
                 )
             except Exception as exc:
                 elapsed = (time.monotonic() - start) * 1000

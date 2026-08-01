@@ -174,3 +174,11 @@ class TestKBCacheTopics:
         cache.remove("fastapi", "overview")
         assert not cache.has("fastapi", "overview")
         assert cache.has("fastapi", "routing")
+
+    def test_has_any_topic_true_without_overview(self, tmp_path):
+        """TAP-5421: coverage helper sees non-overview topics."""
+        cache = KBCache(cache_dir=tmp_path / "cache")
+        cache.put(CacheEntry(library="pydantic", topic="basemodel", content="# BaseModel"))
+        assert cache.has("pydantic", "overview") is False
+        assert cache.has_any_topic("pydantic") is True
+        assert cache.has_any_topic("missing") is False

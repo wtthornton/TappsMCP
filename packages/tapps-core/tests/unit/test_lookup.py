@@ -9,7 +9,11 @@ import pytest
 
 from tapps_core.knowledge.cache import KBCache
 from tapps_core.knowledge.circuit_breaker import CircuitBreaker, CircuitBreakerConfig
-from tapps_core.knowledge.lookup import LookupEngine, _is_toc_only
+from tapps_core.knowledge.lookup import (
+    LookupEngine,
+    _is_toc_only,
+    assess_resolution_confidence,
+)
 from tapps_core.knowledge.models import CacheEntry, LibraryMatch
 
 
@@ -583,3 +587,55 @@ class TestLookupDocsViaBrain:
         cache.put.assert_not_called()
         assert result.success is True
         assert result.content == "# docs"
+
+
+class TestResolutionConfidenceTap5423:
+    """TAP-5423: structured signal when Context7 match diverges from request."""
+
+    def test_assess_divergent_basename_likely_local(self) -> None:
+        confidence, likely_local = assess_resolution_confidence(
+            "af_eval_cli", "/dbt-labs/dbt-af"
+        )
+        assert confidence == "low"
+        assert likely_local is True
+
+    def test_assess_matching_basename_high(self) -> None:
+        confidence, likely_local = assess_resolution_confidence(
+            "fastapi", "/tiangolo/fastapi"
+        )
+        assert confidence == "high"
+        assert likely_local is False
+
+    @pytest.mark.asyncio
+    async def test_divergent_resolve_skips_cache_warm(self, tmp_path) -> None:
+        from pydantic import SecretStr
+
+        from tapps_core.knowledge.providers.base import DocumentationProvider
+        from tapps_core.knowledge.providers.registry import ProviderRegistry
+
+        class DivergentProvider(DocumentationProvider):
+            def name(self) -> str:
+                return "context7"
+
+            def is_available(self) -> bool:
+                return True
+
+            async def resolve(self, library: str) -> str | None:
+                return "/dbt-labs/dbt-af"
+
+            async def fetch(self, library_id: str, topic: str = "overview") -> str | None:
+                return "# Wrong package docs for dbt-af"
+
+        cache = KBCache(cache_dir=tmp_path / "cache")
+        registry = ProviderRegistry()
+        registry.register(DivergentProvider())
+        engine = LookupEngine(cache, api_key=SecretStr("test-key"), registry=registry)
+        result = await engine.lookup("af_eval_cli")
+        await engine.close()
+
+        assert result.success is True
+        assert result.likely_local_module is True
+        assert result.resolution_confidence == "low"
+        assert result.matched_library_id == "/dbt-labs/dbt-af"
+        assert cache.has_any_topic("af_eval_cli") is False
+        assert "likely a local" in (result.warning or "").lower()

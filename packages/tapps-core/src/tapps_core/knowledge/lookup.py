@@ -18,6 +18,7 @@ import asyncio
 import contextlib
 import re
 import time
+from difflib import SequenceMatcher
 from typing import TYPE_CHECKING
 
 import structlog
@@ -55,6 +56,50 @@ _TOC_LINK_RATIO_THRESHOLD = 0.5
 _LINK_RE = re.compile(r"\[.*?\]\(.*?\)|https?://\S+")
 # Pattern matching markdown headings
 _HEADING_RE = re.compile(r"^#{1,6}\s+")
+
+_HIGH_RESOLUTION_SCORE = 0.7
+_MEDIUM_RESOLUTION_SCORE = 0.45
+
+
+def _normalize_library_token(name: str) -> str:
+    """Normalize library / Context7 basename for divergence checks."""
+    return (
+        name.strip()
+        .lower()
+        .replace("-", "_")
+        .replace(".", "_")
+        .replace(" ", "_")
+        .strip("_")
+    )
+
+
+def assess_resolution_confidence(
+    requested: str,
+    matched_library_id: str | None,
+) -> tuple[str, bool]:
+    """Score how well a provider match fits the requested library name (TAP-5423).
+
+    Returns ``(resolution_confidence, likely_local_module)``. Strong basename
+    divergence (e.g. ``af_eval_cli`` → ``/dbt-labs/dbt-af``) is low confidence
+    and marked likely-local so callers skip trustworthy cache warm.
+    """
+    if not matched_library_id:
+        return "medium", False
+
+    basename = matched_library_id.rstrip("/").split("/")[-1]
+    req = _normalize_library_token(requested)
+    base = _normalize_library_token(basename)
+    if not req or not base:
+        return "medium", False
+    if req == base or req in base or base in req:
+        return "high", False
+
+    score = SequenceMatcher(None, req, base).ratio()
+    if score >= _HIGH_RESOLUTION_SCORE:
+        return "high", False
+    if score >= _MEDIUM_RESOLUTION_SCORE:
+        return "medium", False
+    return "low", True
 
 
 def _is_toc_only(content: str) -> bool:
@@ -210,7 +255,9 @@ class LookupEngine:
             return custom_result
 
         # 3. API resolve + fetch — try provider chain first, then legacy Context7
-        content, provider_source = await self._fetch_from_providers(lib_clean, topic, mode, start)
+        content, provider_source, matched_id = await self._fetch_from_providers(
+            lib_clean, topic, mode, start
+        )
         if isinstance(content, LookupResult):
             # Provider step returned an error result (circuit breaker / API error)
             return content
@@ -224,9 +271,15 @@ class LookupEngine:
             return safety_result
         safe_content, toc_warning = safety_result
 
-        # 5. Store in cache and return
-        return self._cache_and_return(
-            lib_clean, topic, safe_content, provider_source, toc_warning, start
+        # 5. Store in cache and return (skip warm for low-confidence local-looking hits)
+        return self._finalize_provider_result(
+            lib_clean,
+            topic,
+            safe_content,
+            provider_source,
+            toc_warning,
+            start,
+            matched_id=matched_id,
         )
 
     def _check_exact_cache(
@@ -304,14 +357,16 @@ class LookupEngine:
         topic: str,
         mode: str,
         start: float,
-    ) -> tuple[str | LookupResult | None, str | None]:
+    ) -> tuple[str | LookupResult | None, str | None, str | None]:
         """Fetch content via the provider chain then legacy Context7.
 
-        Returns ``(content, provider_source)`` on success, or a ``LookupResult``
-        error packed in the first element when a circuit-breaker / API error occurs.
+        Returns ``(content, provider_source, matched_library_id)`` on success, or a
+        ``LookupResult`` error packed in the first element when a circuit-breaker /
+        API error occurs.
         """
         content: str | None = None
         provider_source: str | None = None
+        matched_id: str | None = None
 
         # 3a. Multi-provider chain (Context7 + llms.txt fallback)
         healthy = self._registry.healthy_providers()
@@ -320,17 +375,18 @@ class LookupEngine:
             if result.success and result.content:
                 content = result.content
                 provider_source = result.provider_name or "provider"
+                matched_id = result.library_id
 
         # 3b. Legacy Context7 path (when no provider succeeded and API key set)
         if content is None and self._api_key is not None:
             legacy_result = await self._fetch_legacy_context7(lib_clean, topic, mode, start)
             if isinstance(legacy_result, LookupResult):
-                return legacy_result, None
+                return legacy_result, None, None
             if legacy_result is not None:
-                content = legacy_result
+                content, matched_id = legacy_result
                 provider_source = "context7"
 
-        return content, provider_source
+        return content, provider_source, matched_id
 
     async def _fetch_legacy_context7(
         self,
@@ -338,14 +394,14 @@ class LookupEngine:
         topic: str,
         mode: str,
         start: float,
-    ) -> str | LookupResult | None:
+    ) -> tuple[str, str | None] | LookupResult | None:
         """Call the legacy Context7 circuit breaker and handle its errors.
 
-        Returns the raw content string on success, a ``LookupResult`` on a
+        Returns ``(content, matched_library_id)`` on success, a ``LookupResult`` on a
         recoverable error (circuit open or API error), or ``None`` if not fetched.
         """
         try:
-            result: str | LookupResult | None = await self._breaker.call(
+            result = await self._breaker.call(
                 self._resolve_and_fetch,
                 lib_clean,
                 topic,
@@ -450,6 +506,38 @@ class LookupEngine:
 
         return safe_content, toc_warning
 
+    def _finalize_provider_result(
+        self,
+        lib_clean: str,
+        topic: str,
+        safe_content: str,
+        provider_source: str | None,
+        toc_warning: str | None,
+        start: float,
+        *,
+        matched_id: str | None,
+    ) -> LookupResult:
+        """Attach resolution confidence and cache (or skip warm for likely-local)."""
+        confidence, likely_local = assess_resolution_confidence(lib_clean, matched_id)
+        warning = toc_warning
+        if likely_local and confidence == "low":
+            local_warn = (
+                f"Resolved '{lib_clean}' to '{matched_id}' with low confidence; "
+                "treat as likely a local/sibling module, not authoritative external docs."
+            )
+            warning = f"{warning} {local_warn}" if warning else local_warn
+        return self._cache_and_return(
+            lib_clean,
+            topic,
+            safe_content,
+            provider_source,
+            warning,
+            start,
+            matched_library_id=matched_id,
+            resolution_confidence=confidence,
+            likely_local_module=likely_local,
+        )
+
     def _cache_and_return(
         self,
         lib_clean: str,
@@ -458,11 +546,18 @@ class LookupEngine:
         provider_source: str | None,
         toc_warning: str | None,
         start: float,
+        *,
+        matched_library_id: str | None = None,
+        resolution_confidence: str | None = None,
+        likely_local_module: bool = False,
     ) -> LookupResult:
         """Store content in cache and build the final success result."""
         from tapps_core.knowledge.brain_docs import docs_via_brain_enabled
 
-        if not (self._settings and docs_via_brain_enabled(self._settings)):
+        # Low-confidence local-looking hits must not warm coverage under the
+        # requested name (wrong Context7 match would clear usage gaps falsely).
+        trust_for_cache = not (likely_local_module and resolution_confidence == "low")
+        if trust_for_cache and not (self._settings and docs_via_brain_enabled(self._settings)):
             self._cache.put(
                 CacheEntry(
                     library=lib_clean,
@@ -470,6 +565,7 @@ class LookupEngine:
                     content=safe_content,
                     token_count=len(safe_content) // 4,  # rough estimate
                     provider_source=provider_source,
+                    context7_id=matched_library_id,
                 )
             )
         elapsed = (time.monotonic() - start) * 1000
@@ -479,6 +575,10 @@ class LookupEngine:
             source=provider_source or "api",
             library=lib_clean,
             topic=topic,
+            context7_id=matched_library_id,
+            matched_library_id=matched_library_id,
+            resolution_confidence=resolution_confidence,
+            likely_local_module=likely_local_module,
             response_time_ms=round(elapsed, 1),
             cache_hit=False,
             warning=toc_warning,
@@ -659,8 +759,11 @@ class LookupEngine:
         library: str,
         topic: str,
         mode: str,
-    ) -> str | None:
-        """Resolve library name via API and fetch documentation."""
+    ) -> tuple[str, str | None] | None:
+        """Resolve library name via API and fetch documentation.
+
+        Returns ``(content, matched_library_id)`` or ``None``.
+        """
         # Resolve
         matches = await self._client.resolve_library(library)
         if not matches:
@@ -674,7 +777,9 @@ class LookupEngine:
             topic=topic,
             mode=mode,
         )
-        return content or None
+        if not content:
+            return None
+        return content, best_match.id
 
     def _schedule_background_refresh(
         self,
@@ -688,8 +793,18 @@ class LookupEngine:
 
         async def _refresh() -> None:
             try:
-                content = await self._resolve_and_fetch(library, topic, mode)
-                if content:
+                resolved = await self._resolve_and_fetch(library, topic, mode)
+                if resolved:
+                    content, matched_id = resolved
+                    confidence, likely_local = assess_resolution_confidence(library, matched_id)
+                    if likely_local and confidence == "low":
+                        logger.info(
+                            "background_refresh_skipped_low_confidence",
+                            library=library,
+                            topic=topic,
+                            matched_library_id=matched_id,
+                        )
+                        return
                     safety = check_content_safety(content)
                     if safety.safe:
                         safe_content = safety.sanitised_content or content
@@ -699,6 +814,7 @@ class LookupEngine:
                                 topic=topic,
                                 content=safe_content,
                                 token_count=len(safe_content) // 4,
+                                context7_id=matched_id,
                             )
                         )
                         logger.info(

@@ -254,6 +254,34 @@ def lookup_gap_recommendation(libraries: list[str], *, generic: bool) -> str:
     return ""
 
 
+def lookup_docs_underused_recommendation(
+    libraries: list[str],
+    *,
+    kind: str,
+    loops_without_lookup: int = 0,
+) -> str:
+    """Copy for ``lookup_docs_underused`` — session-never / historical-miss / still-uncached."""
+    libs = ", ".join(libraries[:5]) if libraries else "external libraries"
+    if kind == "still-uncached":
+        return (
+            f"tapps_lookup_docs ran this session but these imports still lack cached docs "
+            f"({libs}). Call tapps_lookup_docs for each remaining library "
+            "(any topic counts for coverage — overview is not required)."
+        )
+    if kind == "historical-miss":
+        return (
+            f"{loops_without_lookup} earlier Python edit loop(s) skipped tapps_lookup_docs "
+            f"while imports were uncached ({libs}). Retrospectively look them up now "
+            f"({LOOKUP_GAP_RETRO_NOTE}); any topic or CLI lookup-docs clears coverage."
+        )
+    # session-never
+    return (
+        f"No tapps_lookup_docs in this session; {loops_without_lookup or 1} recent Python "
+        f"edit loop(s) referenced uncached external libs ({libs}). Call "
+        "tapps_lookup_docs before using those APIs."
+    )
+
+
 def finish_task_doc_gaps_step(*, claude_nlt_prefix: bool) -> str:
     """Step 3 block for tapps-finish-task (Cursor vs Claude tool names)."""
     if claude_nlt_prefix:
@@ -325,6 +353,7 @@ __all__ = [
     "VALIDATION_QUICK_VS_BATCH",
     "finish_task_checklist_and_doc_gaps",
     "finish_task_doc_gaps_step",
+    "lookup_docs_underused_recommendation",
     "lookup_gap_recommendation",
     "render_agents_template",
     "tapps_mcp_tool_count",

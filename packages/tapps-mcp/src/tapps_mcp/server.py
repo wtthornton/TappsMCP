@@ -1052,6 +1052,12 @@ def _build_lookup_data(result: LookupResult) -> dict[str, Any]:
         data["token_estimate"] = len(result.content) // 4
     if result.context7_id is not None:
         data["context7_id"] = result.context7_id
+    if result.matched_library_id is not None:
+        data["matched_library_id"] = result.matched_library_id
+    if result.resolution_confidence is not None:
+        data["resolution_confidence"] = result.resolution_confidence
+    if result.likely_local_module:
+        data["likely_local_module"] = True
     if result.fuzzy_score is not None:
         data["fuzzy_score"] = result.fuzzy_score
     # Issue #79: surface a hint when Context7 is not configured and we're
@@ -1067,6 +1073,30 @@ def _build_lookup_data(result: LookupResult) -> dict[str, Any]:
             "(currently using LlmsTxt fallback)."
         )
     return data
+
+
+def _maybe_record_lookup_telemetry(
+    result: LookupResult, *, library: str, topic: str
+) -> None:
+    """Record coverage telemetry for trustworthy lookups only (TAP-5423)."""
+    if not result.success:
+        return
+    if result.likely_local_module and result.resolution_confidence == "low":
+        return
+    try:
+        from tapps_core.config.settings import load_settings
+        from tapps_mcp.tools.lookup_telemetry import record_lookup_event
+
+        settings = load_settings()
+        record_lookup_event(
+            settings.project_root,
+            library=library,
+            topic=topic,
+            source="mcp",
+            resolved_library=result.library if result.library != library else None,
+        )
+    except Exception:
+        logger.debug("lookup_telemetry_record_failed", exc_info=True)
 
 
 async def tapps_lookup_docs(
@@ -1153,21 +1183,7 @@ async def tapps_lookup_docs(
         error_code=err_code,
     )
 
-    if result.success:
-        try:
-            from tapps_core.config.settings import load_settings
-            from tapps_mcp.tools.lookup_telemetry import record_lookup_event
-
-            settings = load_settings()
-            record_lookup_event(
-                settings.project_root,
-                library=library,
-                topic=topic,
-                source="mcp",
-                resolved_library=result.library if result.library != library else None,
-            )
-        except Exception:
-            logger.debug("lookup_telemetry_record_failed", exc_info=True)
+    _maybe_record_lookup_telemetry(result, library=library, topic=topic)
 
     return _with_nudges("tapps_lookup_docs", response)
 

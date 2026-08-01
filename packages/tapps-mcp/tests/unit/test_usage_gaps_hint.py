@@ -82,6 +82,144 @@ class TestLookupDocsUnderused:
             called_tools={"tapps_session_start", "tapps_validate_changed", "tapps_checklist"},
         )
         assert "lookup_docs_underused" in report["gaps"]
+        assert any("No tapps_lookup_docs in this session" in r for r in report["recommendations"])
+
+    def test_mixed_historical_false_later_true_clears_when_cached(
+        self, tmp_path: Path
+    ) -> None:
+        """TAP-5422: later lookups + any-topic warm clear sticky underused gap."""
+        src_dir = tmp_path / "src"
+        src_dir.mkdir()
+        mod = src_dir / "api.py"
+        mod.write_text("import fastapi\n", encoding="utf-8")
+        cache_dir = tmp_path / ".tapps-mcp-cache" / "fastapi"
+        cache_dir.mkdir(parents=True)
+        (cache_dir / "routing.md").write_text("# FastAPI routing\n", encoding="utf-8")
+        (cache_dir / "routing.meta.json").write_text(
+            json.dumps({"library": "fastapi", "topic": "routing", "cached_at": int(time.time())}),
+            encoding="utf-8",
+        )
+        metrics_dir = tmp_path / ".tapps-mcp"
+        metrics_dir.mkdir(parents=True)
+        rel = str(mod.relative_to(tmp_path))
+        now = int(time.time())
+        rows = [
+            {
+                "ts": now - 2,
+                "files_edited": [rel],
+                "gate_skipped_files": [],
+                "lookup_docs_called": False,
+                "checklist_called": True,
+                "tools_used": ["tapps_validate_changed", "tapps_checklist"],
+            },
+            {
+                "ts": now - 1,
+                "files_edited": [rel],
+                "gate_skipped_files": [],
+                "lookup_docs_called": True,
+                "checklist_called": True,
+                "tools_used": [
+                    "tapps_lookup_docs",
+                    "tapps_validate_changed",
+                    "tapps_checklist",
+                ],
+            },
+        ]
+        (metrics_dir / "loop-metrics.jsonl").write_text(
+            "\n".join(json.dumps(r) for r in rows) + "\n",
+            encoding="utf-8",
+        )
+        report = compute_gaps(
+            tmp_path,
+            called_tools={
+                "tapps_session_start",
+                "tapps_lookup_docs",
+                "tapps_validate_changed",
+                "tapps_checklist",
+            },
+        )
+        assert "lookup_docs_underused" not in report["gaps"]
+
+    def test_used_lookup_still_uncached_does_not_claim_never_called(
+        self, tmp_path: Path
+    ) -> None:
+        """TAP-5422: when used_lookup is true, copy is still-uncached not never-called."""
+        src_dir = tmp_path / "src"
+        src_dir.mkdir()
+        mod = src_dir / "api.py"
+        mod.write_text("import fastapi\nimport httpx\n", encoding="utf-8")
+        metrics_dir = tmp_path / ".tapps-mcp"
+        metrics_dir.mkdir(parents=True)
+        rel = str(mod.relative_to(tmp_path))
+        now = int(time.time())
+        rows = [
+            {
+                "ts": now - 1,
+                "files_edited": [rel],
+                "gate_skipped_files": [],
+                "lookup_docs_called": False,
+                "checklist_called": True,
+                "tools_used": ["tapps_validate_changed"],
+            },
+            {
+                "ts": now,
+                "files_edited": [rel],
+                "gate_skipped_files": [],
+                "lookup_docs_called": True,
+                "checklist_called": True,
+                "tools_used": ["tapps_lookup_docs", "tapps_validate_changed"],
+            },
+        ]
+        (metrics_dir / "loop-metrics.jsonl").write_text(
+            "\n".join(json.dumps(r) for r in rows) + "\n",
+            encoding="utf-8",
+        )
+        report = compute_gaps(
+            tmp_path,
+            called_tools={
+                "tapps_session_start",
+                "tapps_lookup_docs",
+                "tapps_validate_changed",
+                "tapps_checklist",
+            },
+        )
+        assert "lookup_docs_underused" in report["gaps"]
+        joined = " ".join(report["recommendations"])
+        assert "never" not in joined.lower()
+        assert "still lack cached docs" in joined
+
+    def test_sibling_scripts_not_listed_in_libraries_without_lookup(
+        self, tmp_path: Path
+    ) -> None:
+        """TAP-5420: kit siblings must not appear in usage gap library lists."""
+        kit = tmp_path / "kits" / "agentforge"
+        kit.mkdir(parents=True)
+        (kit / "af_eval_cli.py").write_text("CLI = True\n", encoding="utf-8")
+        runner = kit / "af_eval_runner.py"
+        runner.write_text("import af_eval_cli\nimport os\n", encoding="utf-8")
+        metrics_dir = tmp_path / ".tapps-mcp"
+        metrics_dir.mkdir(parents=True)
+        rel = str(runner.relative_to(tmp_path))
+        (metrics_dir / "loop-metrics.jsonl").write_text(
+            json.dumps(
+                {
+                    "ts": int(time.time()),
+                    "files_edited": [rel],
+                    "gate_skipped_files": [],
+                    "lookup_docs_called": False,
+                    "checklist_called": True,
+                    "tools_used": ["tapps_validate_changed", "tapps_checklist"],
+                }
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+        report = compute_gaps(
+            tmp_path,
+            called_tools={"tapps_session_start", "tapps_validate_changed", "tapps_checklist"},
+        )
+        assert "af_eval_cli" not in report.get("libraries_without_lookup", [])
+        assert "lookup_docs_underused" not in report["gaps"]
 
 
 class TestLibraryUsesWithoutLookupDocs:
