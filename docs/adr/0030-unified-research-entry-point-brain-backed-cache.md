@@ -23,6 +23,10 @@ The `tapps-research` skill can only call `lookup_docs`, so web research is uncac
 2. **tapps-brain owns both cache layers** for external web data:
    - raw-result cache (normalized query + source)
    - answer-level (pattern-tier) recall with freshness tiers (volatile vs evergreen)
+   - tapps-mcp wires answer recall/save via BrainBridge memory (`get`/`save`,
+     gated by `memory.auto_save_quality`) with TTLs
+     `research_volatile_ttl_hours` / `research_evergreen_ttl_days` (TAP-5366);
+     telemetry uses `source=memory-hit` on fresh hits and skips stale volatile answers
 3. **Credentials stay brain-side.** tapps-mcp holds no Exa / Firecrawl / Tavily API keys.
 4. **`tapps_lookup_docs` stays doc-only.** No web search through Context7 or the docs cache.
 5. **Safety:** RAG safety + SSRF / `url_guard` apply on the brain web path before cache write-through.

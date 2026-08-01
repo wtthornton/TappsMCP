@@ -39,6 +39,8 @@ memory:
   injection_max_tokens: 2000  # Epic 65.16: cap injected memory context (~4 chars/token)
   inject_into_experts: true
   auto_save_quality: true
+  research_volatile_ttl_hours: 24
+  research_evergreen_ttl_days: 30
   track_recurring_quick_check: true
   recurring_quick_check_threshold: 3
   enrich_impact_analysis: true

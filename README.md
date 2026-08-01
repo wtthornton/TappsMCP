@@ -863,6 +863,8 @@ memory:
   max_memories: 1500
   inject_into_experts: true
   auto_save_quality: true              # Expert / research → pattern-tier memory
+  research_volatile_ttl_hours: 24      # TAP-5366 volatile research answer TTL
+  research_evergreen_ttl_days: 30      # TAP-5366 evergreen research answer TTL
   track_recurring_quick_check: true    # Repeated gate failures → procedural memory
   recurring_quick_check_threshold: 3
   enrich_impact_analysis: true         # tapps_impact_analysis memory_context

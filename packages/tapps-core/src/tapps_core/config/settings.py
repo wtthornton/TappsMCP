@@ -466,6 +466,24 @@ class MemorySettings(BaseSettings):
             "Default true for POC; set false to disable."
         ),
     )
+    research_volatile_ttl_hours: int = Field(
+        default=24,
+        ge=1,
+        le=168,
+        description=(
+            "TTL for volatile tapps_research answer-level (pattern-tier) memories "
+            "(TAP-5366 / ADR-0030). Stale volatile answers are skipped on recall."
+        ),
+    )
+    research_evergreen_ttl_days: int = Field(
+        default=30,
+        ge=1,
+        le=365,
+        description=(
+            "TTL for evergreen tapps_research answer-level (pattern-tier) memories "
+            "(TAP-5366 / ADR-0030). Fresh evergreen answers return source=memory-hit."
+        ),
+    )
     track_recurring_quick_check: bool = Field(
         default=True,
         description=(

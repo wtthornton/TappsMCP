@@ -1238,6 +1238,10 @@ async def tapps_research(
         telemetry_source_for_docs,
         wrap_brain_research_payload,
     )
+    from tapps_mcp.tools.research_memory import (
+        maybe_recall_research_answer,
+        maybe_save_research_answer,
+    )
 
     query_clean = _sanitize_lookup_param(query, max_len=500)
     library_clean = _sanitize_lookup_param(library)
@@ -1367,26 +1371,50 @@ async def tapps_research(
         _record_execution("tapps_research", start, status="failed", error_code=resp["data"]["error"])
         return _with_nudges("tapps_research", resp)
 
+    # Fetch freshness: brain contract default for research_fetch is evergreen.
+    # When the URL was auto-detected from query and freshness was left at the
+    # tool default (volatile), prefer evergreen.
+    if chosen == "fetch" and route_clean == "auto" and not url_clean and freshness == "volatile":
+        effective_freshness = "evergreen"
+    else:
+        effective_freshness = freshness_clean
+
+    memory_cfg = load_settings().memory
+    recalled = await maybe_recall_research_answer(
+        bridge,
+        route=chosen,
+        query=query_clean,
+        url=fetch_url,
+        freshness=effective_freshness,
+        memory_enabled=memory_cfg.enabled,
+        auto_save_quality=memory_cfg.auto_save_quality,
+        volatile_ttl_hours=memory_cfg.research_volatile_ttl_hours,
+        evergreen_ttl_days=memory_cfg.research_evergreen_ttl_days,
+        elapsed_ms=(time.perf_counter_ns() - start) // 1_000_000,
+    )
+    if recalled is not None:
+        _record_execution("tapps_research", start, status="success", error_code=None)
+        return _with_nudges("tapps_research", recalled)
+
     try:
         if chosen == "fetch":
-            # Brain contract default for research_fetch is evergreen. When the
-            # URL was auto-detected from query and freshness was left at the
-            # tool default (volatile), prefer evergreen.
-            if route_clean == "auto" and not url_clean and freshness == "volatile":
-                fetch_freshness = "evergreen"
-            else:
-                fetch_freshness = freshness_clean
-            brain_payload = await bridge.research_fetch(fetch_url, freshness=fetch_freshness)
+            brain_payload = await bridge.research_fetch(
+                fetch_url, freshness=effective_freshness
+            )
         else:
             brain_payload = await bridge.web_research(
                 query_clean,
                 source=source_clean,
-                freshness=freshness_clean,
+                freshness=effective_freshness,
                 max_results=max_results,
             )
     except (BrainBridgeUnavailable, ToolNotInProfileError, BrainMcpError) as exc:
         elapsed_ms = (time.perf_counter_ns() - start) // 1_000_000
-        reason = "brain_tool_unavailable" if isinstance(exc, ToolNotInProfileError) else "brain_bridge_call_failed"
+        reason = (
+            "brain_tool_unavailable"
+            if isinstance(exc, ToolNotInProfileError)
+            else "brain_bridge_call_failed"
+        )
         resp = bridge_degraded_response(
             route=chosen,
             detail=str(exc) or type(exc).__name__,
@@ -1413,13 +1441,34 @@ async def tapps_research(
 
     elapsed_ms = (time.perf_counter_ns() - start) // 1_000_000
     if not isinstance(brain_payload, dict):
-        brain_payload = {"success": False, "error": "invalid_response", "detail": str(brain_payload)}
+        brain_payload = {
+            "success": False,
+            "error": "invalid_response",
+            "detail": str(brain_payload),
+        }
     response = wrap_brain_research_payload(brain_payload, route=chosen, elapsed_ms=elapsed_ms)
+    data = response.get("data") if isinstance(response.get("data"), dict) else None
+    if response.get("success"):
+        await maybe_save_research_answer(
+            bridge,
+            brain_payload,
+            route=chosen,
+            query=query_clean,
+            url=fetch_url,
+            freshness=effective_freshness,
+            memory_enabled=memory_cfg.enabled,
+            auto_save_quality=memory_cfg.auto_save_quality,
+            response_data=data,
+        )
     _record_execution(
         "tapps_research",
         start,
         status="success" if response.get("success") else "failed",
-        error_code=None if response.get("success") else str(brain_payload.get("error") or "research_failed"),
+        error_code=(
+            None
+            if response.get("success")
+            else str(brain_payload.get("error") or "research_failed")
+        ),
     )
     return _with_nudges("tapps_research", response)
 

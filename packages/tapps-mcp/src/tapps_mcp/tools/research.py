@@ -3,6 +3,8 @@
 Routes library/API questions to ``lookup_docs`` and open-ended / latest /
 URL questions to brain ``web_research`` / ``research_fetch`` via BrainBridge.
 Credentials stay brain-side; brain-down never returns silent empty success.
+
+Answer-level freshness recall lives in ``research_memory`` (TAP-5366).
 """
 
 from __future__ import annotations
@@ -12,6 +14,7 @@ from typing import Any, Literal
 from urllib.parse import urlparse
 
 ResearchRoute = Literal["docs", "web", "fetch"]
+ResearchFreshness = Literal["volatile", "evergreen"]
 
 VALID_ROUTES: frozenset[str] = frozenset({"auto", "docs", "web", "fetch"})
 VALID_FRESHNESS: frozenset[str] = frozenset({"volatile", "evergreen"})
@@ -74,11 +77,15 @@ def telemetry_source_for_docs(*, cache_hit: bool) -> str:
 
 def telemetry_source_for_web(payload: dict[str, Any]) -> str:
     """Map brain web/fetch payload to ADR-0030 ``source`` telemetry."""
+    if payload.get("memory_hit") is True or payload.get("source") == "memory-hit":
+        return "memory-hit"
     if payload.get("cache_hit") is True:
         return "cache-hit"
     source = str(payload.get("source") or "").lower()
     if source in {"cache", "cache-hit"}:
         return "cache-hit"
+    if source == "memory-hit":
+        return "memory-hit"
     if source == "stale_fallback":
         return "web"
     return "web"
