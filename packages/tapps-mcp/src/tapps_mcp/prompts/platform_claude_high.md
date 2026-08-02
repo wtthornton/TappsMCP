@@ -66,7 +66,7 @@ This validates against security and operational best practices.
 
 ## Memory System
 
-`tapps_memory` is a **single MCP tool** on the `nlt-memory` server that dispatches on an `action=` argument. The server lists **5 tools**; `tapps_memory` is one of them and accepts **44 actions** (see AGENTS.md / docs/MEMORY_REFERENCE.md): CRUD, search, intelligence, consolidation, import/export, federation (6), maintenance (validate, maintain), security (safety_check, verify_integrity), profiles (3), health, Hive/Agent Teams (hive_status, hive_search, hive_propagate, agent_register), knowledge graph (related, relations, neighbors, explain_connection), batch ops (recall_many, reinforce_many), feedback (rate), and native session memory (index_session, search_sessions, session_end).
+`tapps_memory` is **one tool** on `nlt-memory` (which lists 5 tools) taking an `action=` arg — **44 actions**, not 44 tools (see AGENTS.md / docs/MEMORY_REFERENCE.md): CRUD, search, intelligence, consolidation, import/export, federation (6), maintenance (validate, maintain), security (safety_check, verify_integrity), profiles (3), health, Hive/Agent Teams (hive_status, hive_search, hive_propagate, agent_register), knowledge graph (related, relations, neighbors, explain_connection), batch ops (recall_many, reinforce_many), feedback (rate), and native session memory (index_session, search_sessions, session_end).
 
 **Tiers:** architectural (180d), pattern (60d), procedural (30d), context (14d). **Scopes:** project, branch, session. Max 1500 entries. (Federation publishing has its own propagation tier — see federation actions, not a `scope=` value.)
 

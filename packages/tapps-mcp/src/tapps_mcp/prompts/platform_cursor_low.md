@@ -58,7 +58,7 @@ Consider calling `tapps_validate_config(file_path)` when changing Dockerfile, do
 
 ## Memory System
 
-`tapps_memory` is a **single MCP tool** dispatching on an `action=` argument — **44 actions** (save, search, federation, profiles, Hive, knowledge graph, batch ops, feedback, native session memory, etc.). It exists only when the `nlt-memory` server is enabled (that server lists 5 tools; the 44 are `action=` values on `tapps_memory`). Otherwise use the `uv run tapps-mcp memory` CLI. Tiers: architectural/pattern/procedural/context. Scopes: project/branch/session. Max 1500 entries. At low engagement, still call `search` at session start and `save` before end; automatic hooks may be off depending on `.tapps-mcp.yaml`.
+`tapps_memory` is **one tool** with an `action=` arg — **44 actions** (save, search, federation, profiles, Hive, knowledge graph, batch ops, feedback, session memory, etc.). Not 44 tools: `nlt-memory` lists 5. Missing it? Use the `tapps-mcp memory` CLI. Tiers: architectural/pattern/procedural/context. Scopes: project/branch/session. Max 1500 entries. At low engagement, still call `search` at session start and `save` before end; automatic hooks may be off depending on `.tapps-mcp.yaml`.
 
 **Cross-session handoff:** `/tapps-handoff-session` + `/tapps-continue-session`, or `tapps-mcp memory save/get`.
 

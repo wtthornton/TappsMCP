@@ -37,9 +37,14 @@ def inject_memories(
 
     settings = load_settings()
     rr = settings.memory.reranker
+    # tapps-brain 3.28.0 removed `InjectionConfig.reranker_top_k`. Rerank depth
+    # is now the retrieval limit itself — `inject_memories` passes
+    # `_MAX_INJECT_HIGH` / `_MAX_INJECT_MEDIUM` (chosen by engagement level) as
+    # `retriever.search(limit=...)`, and the reranker returns that many. There
+    # is no separate knob to thread, so `memory.reranker.top_k` no longer
+    # affects injection; see its field description in tapps_core settings.
     config = InjectionConfig(
         reranker_enabled=rr.enabled,
-        reranker_top_k=rr.top_k,
         injection_max_tokens=settings.memory.injection_max_tokens,
     )
     return _brain_inject_memories(

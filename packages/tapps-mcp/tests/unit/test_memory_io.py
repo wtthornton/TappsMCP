@@ -48,6 +48,12 @@ def _make_store(entries: list[MemoryEntry] | None = None) -> MagicMock:
 
     # get() returns None by default (no existing key)
     store.get.return_value = None
+    # tapps-brain 3.28.0 added a `_ensure_entry_cached` fast path that
+    # import/save prefer over `get()`. A bare MagicMock auto-creates it and
+    # returns a truthy mock, which reads as "key already exists" and silently
+    # turns every import into a skip. Mirror `get()` so the double stays
+    # faithful to the real store.
+    store._ensure_entry_cached.return_value = None
     store.count.return_value = len(entries)
     return store
 
@@ -160,8 +166,12 @@ class TestImport:
         input_file.write_text(json.dumps(payload))
 
         store = _make_store()
-        # Simulate existing key
-        store.get.return_value = _make_entry("existing-key", "old value")
+        # Simulate existing key on both lookup paths: the import code prefers
+        # the `_ensure_entry_cached` fast path (tapps-brain 3.28.0+) and falls
+        # back to `get()` on stores that lack it.
+        existing = _make_entry("existing-key", "old value")
+        store.get.return_value = existing
+        store._ensure_entry_cached.return_value = existing
         validator = _make_validator(tmp_path)
 
         result = import_memories(store, input_file, validator, overwrite=False)

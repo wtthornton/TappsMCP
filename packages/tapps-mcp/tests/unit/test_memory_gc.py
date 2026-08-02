@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import json
 from datetime import UTC, datetime, timedelta
 
 import pytest
@@ -98,31 +97,14 @@ class TestIdentifyCandidates:
         assert len(candidates) == 0
 
 
-class TestAppendToArchive:
-    def test_writes_jsonl(self, tmp_path: pytest.TempPathFactory) -> None:
-        """Archived entries are written to a JSONL file."""
-        archive_path = tmp_path / "archive.jsonl"  # type: ignore[operator]
-        entry = _make_entry(key="archived-key")
-
-        MemoryGarbageCollector.append_to_archive([entry], archive_path)  # type: ignore[arg-type]
-
-        text = archive_path.read_text(encoding="utf-8")  # type: ignore[union-attr]
-        lines = [line for line in text.strip().splitlines() if line.strip()]
-        assert len(lines) == 1
-        data = json.loads(lines[0])
-        assert data["key"] == "archived-key"
-        assert "archived_at" in data
-
-    def test_appends_multiple(self, tmp_path: pytest.TempPathFactory) -> None:
-        """Multiple entries append to the same file."""
-        archive_path = tmp_path / "archive.jsonl"  # type: ignore[operator]
-        entries = [_make_entry(key=f"key-{i}") for i in range(3)]
-
-        MemoryGarbageCollector.append_to_archive(entries, archive_path)  # type: ignore[arg-type]
-
-        text = archive_path.read_text(encoding="utf-8")  # type: ignore[union-attr]
-        lines = [line for line in text.strip().splitlines() if line.strip()]
-        assert len(lines) == 3
+# TAP-5404: `TestAppendToArchive` removed. tapps-brain 3.28.0 deleted
+# `MemoryGarbageCollector.append_to_archive` along with file-based JSONL
+# archiving — archiving now happens in `PostgresPrivateBackend.archive_entry`
+# and `archived_at` is a column rather than part of the payload. The only
+# module-level survivor is `archive_entries_jsonl_utf8_bytes`, a dry-run byte
+# estimator with a different contract. The old tests asserted a JSONL file
+# with an in-payload `archived_at`, which no longer exists anywhere; no
+# tapps-mcp production code ever called the removed API.
 
 
 class TestGCResult:

@@ -2,9 +2,13 @@
 members = ["packages/*"]
 
 [tool.uv.sources]
-# tapps-brain 3.24.0 (brain_query_events + docs_lookup). ADR-0015: pin at d893fc1
-# (TAP-3865/3866 docs_lookup + import-dir). Switch to tag = "v3.24.0" when released.
-tapps-brain = { git = "https://github.com/wtthornton/tapps-brain.git", rev = "d893fc1cbf0df77112c29fdd321e690068c0985f" }
+# tapps-brain v3.28.0 — first tagged release we can pin to, closing the
+# "switch to a tag when released" TODO that ADR-0013/0015 carried (v3.24.0 was
+# never tagged upstream, which is why this was a bare rev). Tag pin is the form
+# ADR-0011 prescribes; uv.lock still records the resolved SHA.
+# Note: the live brain service runs 3.28.1, an untagged master build. The
+# version floor stays 3.24.0 (ADR-0013) — nothing here requires a 3.28 API.
+tapps-brain = { git = "https://github.com/wtthornton/tapps-brain.git", tag = "v3.28.0" }
 
 [tool.uv]
 dev-dependencies = [

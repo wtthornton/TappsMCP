@@ -322,7 +322,13 @@ class MemoryRerankerSettings(BaseModel):
         default=10,
         ge=1,
         le=50,
-        description="Number of results to return after reranking (1-50). Default: 10.",
+        description=(
+            "Number of results to return after reranking (1-50). Default: 10. "
+            "NO LONGER HONORED for memory injection as of tapps-brain 3.28.0, "
+            "which removed InjectionConfig.reranker_top_k: rerank depth is now "
+            "the retrieval limit itself, set by engagement level. Retained so "
+            "existing .tapps-mcp.yaml files keep validating."
+        ),
     )
     api_key: str | None = Field(
         default=None,

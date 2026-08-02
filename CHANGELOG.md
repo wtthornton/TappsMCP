@@ -7,6 +7,48 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [3.12.57] - 2026-08-02
+
+### Changed
+
+- **tapps-brain source pin: `rev = d893fc1c` → `tag = "v3.28.0"`.** Closes the
+  "switch to a tag when released" TODO that ADR-0013/0015 carried — `v3.24.0`
+  was never tagged upstream, which is why the pin was a bare commit. `v3.28.0`
+  is published and durable, so the tag form ADR-0011 prescribes now applies.
+  The **version floor stays 3.24.0** (ADR-0013 unchanged): nothing here
+  requires a 3.28 API, so consumers on 3.24–3.27 are unaffected.
+  Note the live brain service runs **3.28.1**, an untagged master build; the
+  pin tracks the newest tag, not that build.
+
+### Fixed
+
+Moving the library 3.24.0 → 3.28.0 surfaced four real incompatibilities
+(48 memory tests passed on 3.24.0, 22 failed on 3.28.0):
+
+- **`InjectionConfig.reranker_top_k` removed upstream.** `memory/injection.py`
+  still passed it, raising `TypeError` on every `inject_memories` call. Rerank
+  depth is now the retrieval limit itself (`_MAX_INJECT_HIGH` /
+  `_MAX_INJECT_MEDIUM`, chosen by engagement level), so there is no separate
+  knob to thread. `memory.reranker.top_k` consequently no longer affects
+  injection — the field is retained so existing `.tapps-mcp.yaml` files keep
+  validating, and its description now says plainly that it is not honored
+  rather than letting a configured value be silently dropped.
+- **Test doubles lied about the store interface.** tapps-brain 3.28.0 added a
+  `_ensure_entry_cached` fast path that import/save prefer over `get()`. A bare
+  `MagicMock` auto-creates it and returns a truthy mock, so every import read as
+  "key already exists" and degraded to a skip (`imported_count: 0`). The store
+  doubles in `test_memory_io.py` and `test_memory_integration.py` now mirror
+  `get()` on both lookup paths.
+- **`MemoryGarbageCollector.append_to_archive` removed upstream.** File-based
+  JSONL archiving moved into `PostgresPrivateBackend.archive_entry`, and
+  `archived_at` became a column rather than payload. The two tests asserting the
+  old file format were removed — the behavior no longer exists anywhere and no
+  tapps-mcp production code ever called it.
+- **Platform-rules context budget.** The 3.12.56 memory-docs rewording pushed
+  the shipped rules over their caps (Claude 1484/1400, Cursor 1881/1800). The
+  caps are deliberate — these rules load into every agent's context — so the
+  wording was compressed to fit rather than the caps raised (now 1399 and 1796).
+
 ## [3.12.56] - 2026-08-02
 
 ### Fixed

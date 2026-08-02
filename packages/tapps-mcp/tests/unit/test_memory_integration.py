@@ -65,6 +65,11 @@ def _make_mock_store(entries: list[MemoryEntry] | None = None) -> MagicMock:
 
     entry_map = {e.key: e for e in entries}
     store.get.side_effect = lambda k, **kw: entry_map.get(k)
+    # tapps-brain 3.28.0 added a `_ensure_entry_cached` fast path that the
+    # import/save code prefers over `get()`. A bare MagicMock auto-creates it
+    # and returns a truthy mock, so every entry looks like it already exists
+    # and imports silently degrade to skips. Mirror `get()`'s behaviour.
+    store._ensure_entry_cached.side_effect = lambda k, **kw: entry_map.get(k)
 
     # v2.0.4: MemoryRetriever validates scoring weights from store.profile
     store.profile = None
