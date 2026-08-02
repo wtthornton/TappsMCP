@@ -103,10 +103,11 @@ async def test_cached_files_do_not_count_against_budget(tmp_path: Path) -> None:
 
     # Pre-populate cache for every file.
     for p in files:
-        sha = _chc.content_hash(p)
+        # TAP-5401: the cache key is content + resolved path + preset, not
+        # content alone. "standard" is tapps_validate_changed's default preset.
         _chc.set(
             _chc.KIND_QUICK_CHECK,
-            sha,
+            _chc.result_key(p, preset="standard"),
             {
                 "file_path": str(p),
                 "overall_score": 95.0,

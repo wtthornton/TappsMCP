@@ -49,8 +49,15 @@ async def _run_security_scan(
     is_python: bool,
     do_security_full: bool,
     quick: bool,
+    quick_sec: Any = None,
 ) -> dict[str, Any]:
-    """Run bandit + secret scan for Python files; no-op for other languages."""
+    """Run bandit + secret scan for Python files; no-op for other languages.
+
+    ``quick_sec`` is the :class:`SecurityScanResult` already produced by
+    ``score_and_scan_quick`` in quick mode. Reusing it keeps the reported
+    security verdict identical to ``tapps_quick_check``'s (TAP-5402) and
+    avoids scanning the same file twice.
+    """
     if do_security_full and is_python:
         from tapps_mcp.security.secret_scanner import SecretScanner
 
@@ -64,10 +71,14 @@ async def _run_security_scan(
             "security_passed": (bandit_crit_high + secret_result.high_severity) == 0,
             "security_issues": bandit_count + secret_count,
         }
+    if is_python and quick and quick_sec is not None:
+        return {
+            "security_passed": quick_sec.passed,
+            "security_issues": quick_sec.total_issues,
+        }
     if is_python and quick:
-        # Quick mode skips the dedicated secret scan, but score.security_issues
-        # may still hold bandit/heuristic findings from scoring — surface them
-        # instead of always claiming security_passed=True.
+        # No precomputed scan (e.g. a test stub) — fall back to whatever the
+        # scorer attached rather than claiming security_passed=True outright.
         issues = getattr(score, "security_issues", None) or []
         crit_high = sum(1 for i in issues if getattr(i, "severity", "") in ("critical", "high"))
         return {
@@ -114,14 +125,32 @@ async def _validate_single_file(
 
             file_result["language"] = scorer.language
 
+            quick_sec = None
             async with heavy_cpu():
                 if quick:
-                    score = await asyncio.to_thread(scorer.score_file_quick, path)
+                    # TAP-5402: share tapps_quick_check's scoring path exactly.
+                    # This used to call the bare `score_file_quick`, which
+                    # scores only `linting` and publishes it on the 0-100
+                    # scale — so `evaluate_gate` silently skipped every
+                    # category-minimum check (they no-op on a missing
+                    # category) and the gate reduced to `lint*10 >= 70`. The
+                    # documented pre-completion gate therefore PASSED files
+                    # that quick_check FAILED on the very same bytes.
+                    from tapps_core.config.settings import load_settings
+                    from tapps_mcp.server_scoring_tools import score_and_scan_quick
+
+                    score, quick_sec = await score_and_scan_quick(path, scorer, load_settings())
                 else:
                     score = await scorer.score_file(path)
             file_result["overall_score"] = round(score.overall_score, 2)
             file_result["mode"] = "quick" if quick else "full"
             file_result["categories_scored"] = list(score.categories.keys())
+            # TAP-5402: a ruff timeout/crash yields an empty issue list and a
+            # perfect lint score. Surfacing `degraded` keeps a tool outage
+            # from reading as a clean pass.
+            if score.degraded:
+                file_result["degraded"] = True
+                file_result["missing_tools"] = list(score.missing_tools)
 
             gate = evaluate_gate(score, preset=preset)
             file_result["gate_passed"] = gate.passed
@@ -138,7 +167,7 @@ async def _validate_single_file(
             attach_improvement_hints(file_result, score)
 
             sec = await _run_security_scan(
-                path, score, scorer.language == "python", do_security_full, quick
+                path, score, scorer.language == "python", do_security_full, quick, quick_sec
             )
             file_result.update(sec)
             finalize_file_diagnostics(file_result)

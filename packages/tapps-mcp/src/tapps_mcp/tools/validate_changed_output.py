@@ -251,6 +251,11 @@ def _build_file_entry(
         "security_passed": security_issues == 0,
         "issue_count": issue_count,
     }
+    # TAP-5402: a checker outage (ruff/radon/bandit unavailable or timed out)
+    # otherwise reads as a clean pass in the headline list.
+    if r.get("degraded"):
+        entry["degraded"] = True
+        entry["missing_tools"] = r.get("missing_tools", [])
 
     row_parts = [
         f"{status:<5}",

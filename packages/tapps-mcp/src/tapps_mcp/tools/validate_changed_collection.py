@@ -144,20 +144,24 @@ def _discover_changed_files(
     return paths
 
 
-def _cache_hit_as_file_result(path: Path) -> dict[str, Any] | None:
-    """Return a validate_changed-shaped file_result from content-hash cache.
+def _cache_hit_as_file_result(path: Path, preset: str = "standard") -> dict[str, Any] | None:
+    """Return a validate_changed-shaped file_result from the content cache.
 
     STORY-101.3 — reuses the ``KIND_QUICK_CHECK`` entry populated by
     :func:`tapps_quick_check` so identical-content re-validations don't
     consume the auto-detect wall-clock budget.
+
+    ``preset`` must match the batch's gate preset: the cache key includes it
+    (see :func:`content_hash_cache.result_key`), so a ``standard`` entry can
+    never satisfy a ``strict`` run.
     """
     from tapps_mcp.tools import content_hash_cache as _chc
 
     try:
-        sha = _chc.content_hash(path)
+        key = _chc.result_key(path, preset=preset)
     except (OSError, FileNotFoundError):
         return None
-    cached = _chc.get(_chc.KIND_QUICK_CHECK, sha)
+    cached = _chc.get(_chc.KIND_QUICK_CHECK, key)
     if cached is None:
         return None
     return {
@@ -167,17 +171,23 @@ def _cache_hit_as_file_result(path: Path) -> dict[str, Any] | None:
         "security_passed": cached.get("security_passed", False),
         "security_issues": cached.get("security_issue_count", 0),
         "cache_hit": True,
+        # Entries come from quick_check, which always scores the full
+        # category set — label them so a quick-mode batch does not report
+        # a 7-category score as if it were the 1-category lint score.
+        "mode": "full",
+        "categories_scored": cached.get("categories_scored", []),
     }
 
 
 def _partition_by_cache(
     paths: list[Path],
+    preset: str = "standard",
 ) -> tuple[list[dict[str, Any]], list[Path]]:
     """Split ``paths`` into (cached_results, uncached_paths)."""
     cached_results: list[dict[str, Any]] = []
     uncached_paths: list[Path] = []
     for p in paths:
-        hit = _cache_hit_as_file_result(p)
+        hit = _cache_hit_as_file_result(p, preset)
         if hit is not None:
             cached_results.append(hit)
         else:

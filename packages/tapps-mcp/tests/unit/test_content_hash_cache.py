@@ -80,17 +80,56 @@ def test_clear_resets_stats_and_entries() -> None:
     assert cache.stats() == {"hits": 0, "misses": 0, "sets": 0, "evictions": 0}
 
 
-def test_cache_key_is_content_not_path(tmp_path: Path) -> None:
-    """Same bytes, different filenames → cache hit."""
+def test_content_hash_ignores_path(tmp_path: Path) -> None:
+    """The raw content hash is path-insensitive — it hashes bytes only."""
     a = tmp_path / "a.py"
     b = tmp_path / "b.py"
     a.write_text("same\n")
     b.write_text("same\n")
-    ha = cache.content_hash(a)
-    hb = cache.content_hash(b)
-    assert ha == hb
-    cache.set(cache.KIND_SCORE, ha, {"score": 90})
-    assert cache.get(cache.KIND_SCORE, hb) == {"score": 90}
+    assert cache.content_hash(a) == cache.content_hash(b)
+
+
+def test_result_key_separates_identical_content_at_different_paths(tmp_path: Path) -> None:
+    """TAP-5401 regression: byte-identical files must NOT share a cache entry.
+
+    ``devex``, ``structure`` and ``test_coverage`` are pure functions of
+    directory context, so the same bytes legitimately score differently at
+    different depths. A content-only key served the first file's score — and
+    its ``file_path`` — for the second.
+    """
+    shallow = tmp_path / "mod.py"
+    deep_dir = tmp_path / "domains" / "billing" / "service" / "src"
+    deep_dir.mkdir(parents=True)
+    deep = deep_dir / "mod.py"
+    shallow.write_text("x = 1\n")
+    deep.write_text("x = 1\n")
+
+    assert cache.content_hash(shallow) == cache.content_hash(deep)
+
+    k_shallow = cache.result_key(shallow, preset="standard")
+    k_deep = cache.result_key(deep, preset="standard")
+    assert k_shallow != k_deep
+
+    cache.set(cache.KIND_QUICK_CHECK, k_shallow, {"overall_score": 82.97, "devex": 10})
+    assert cache.get(cache.KIND_QUICK_CHECK, k_deep) is None
+
+
+def test_result_key_separates_presets(tmp_path: Path) -> None:
+    """A `standard` verdict must not be served to a `strict` call."""
+    f = tmp_path / "m.py"
+    f.write_text("x = 1\n")
+    assert cache.result_key(f, preset="standard") != cache.result_key(f, preset="strict")
+
+
+def test_result_key_stable_for_same_file_and_preset(tmp_path: Path) -> None:
+    """Unchanged file + same preset still hits — the cache must remain useful."""
+    f = tmp_path / "m.py"
+    f.write_text("x = 1\n")
+    key = cache.result_key(f, preset="standard")
+    cache.set(cache.KIND_QUICK_CHECK, key, {"overall_score": 91.0})
+    assert cache.get(cache.KIND_QUICK_CHECK, cache.result_key(f, preset="standard")) == {
+        "overall_score": 91.0
+    }
 
 
 def test_cache_hit_key_used_by_quick_check_wiring(tmp_path: Path) -> None:
@@ -103,6 +142,6 @@ def test_cache_hit_key_used_by_quick_check_wiring(tmp_path: Path) -> None:
     assert cache.KIND_QUICK_CHECK == "quick_check"
     f = tmp_path / "m.py"
     f.write_text("x = 1\n")
-    h = cache.content_hash(f)
+    h = cache.result_key(f, preset="standard")
     cache.set(cache.KIND_QUICK_CHECK, h, {"score": 90})
     assert cache.get(cache.KIND_QUICK_CHECK, h) == {"score": 90}

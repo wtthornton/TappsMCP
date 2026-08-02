@@ -178,7 +178,12 @@ async def docs_lint_linear_issue(
     priority_val: int | None = priority if priority >= 0 else None
     estimate_val: float | None = estimate if estimate >= 0 else None
 
-    result = lint_issue(
+    # Offloaded: `description` is an unbounded caller-supplied string and the
+    # linter is pure sync CPU. Running it inline blocked the event loop for the
+    # whole call, so a long payload could stall the stdio transport past the
+    # host's tolerance and surface as `-32000 Connection closed`.
+    result = await asyncio.to_thread(
+        lint_issue,
         title=title,
         description=description,
         labels=labels_list,
@@ -283,7 +288,10 @@ async def docs_validate_linear_issue(
     priority_val: int | None = priority if priority >= 0 else None
     estimate_val: float | None = estimate if estimate >= 0 else None
 
-    report = validate_issue(
+    # Offloaded for the same reason as docs_lint_linear_issue: unbounded
+    # caller-supplied `description`, pure sync CPU underneath.
+    report = await asyncio.to_thread(
+        validate_issue,
         title=title,
         description=description,
         labels=labels_list,

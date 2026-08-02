@@ -26,6 +26,14 @@ def _make_mock_score(
     return score
 
 
+def _make_mock_sec(passed: bool = True, total_issues: int = 0) -> MagicMock:
+    """Build a mock SecurityScanResult as returned by score_and_scan_quick."""
+    sec = MagicMock()
+    sec.passed = passed
+    sec.total_issues = total_issues
+    return sec
+
+
 def _make_mock_gate(passed: bool = True) -> MagicMock:
     """Build a mock GateResult."""
     gate = MagicMock()
@@ -1277,12 +1285,15 @@ class TestValidateSingleFile:
 
         scorer_mock = MagicMock()
         scorer_mock.language = "python"
-        scorer_mock.score_file_quick = MagicMock(return_value=mock_score)
 
         with (
             patch(
                 "tapps_mcp.server_helpers._get_scorer_for_file",
                 return_value=scorer_mock,
+            ),
+            patch(
+                "tapps_mcp.server_scoring_tools.score_and_scan_quick",
+                new=AsyncMock(return_value=(mock_score, _make_mock_sec())),
             ),
             patch("tapps_mcp.gates.evaluator.evaluate_gate", return_value=mock_gate),
         ):
@@ -1340,11 +1351,16 @@ class TestValidateSingleFile:
 
         scorer_mock = MagicMock()
         scorer_mock.language = "python"
-        scorer_mock.score_file_quick = MagicMock(side_effect=RuntimeError("boom"))
 
-        with patch(
-            "tapps_mcp.server_helpers._get_scorer_for_file",
-            return_value=scorer_mock,
+        with (
+            patch(
+                "tapps_mcp.server_helpers._get_scorer_for_file",
+                return_value=scorer_mock,
+            ),
+            patch(
+                "tapps_mcp.server_scoring_tools.score_and_scan_quick",
+                new=AsyncMock(side_effect=RuntimeError("boom")),
+            ),
         ):
             result = await _validate_single_file(
                 f,
@@ -1369,12 +1385,15 @@ class TestValidateSingleFile:
 
         scorer_mock = MagicMock()
         scorer_mock.language = "python"
-        scorer_mock.score_file_quick = MagicMock(return_value=mock_score)
 
         with (
             patch(
                 "tapps_mcp.server_helpers._get_scorer_for_file",
                 return_value=scorer_mock,
+            ),
+            patch(
+                "tapps_mcp.server_scoring_tools.score_and_scan_quick",
+                new=AsyncMock(return_value=(mock_score, _make_mock_sec())),
             ),
             patch("tapps_mcp.gates.evaluator.evaluate_gate", return_value=mock_gate),
         ):
@@ -1944,9 +1963,9 @@ class TestBuildSearchFirst:
         from tapps_mcp.server_pipeline_tools import _build_search_first
 
         (tmp_path / "pyproject.toml").write_text(
-            '[project]\n'
-            'dependencies = []\n'
-            '[project.optional-dependencies]\n'
+            "[project]\n"
+            "dependencies = []\n"
+            "[project.optional-dependencies]\n"
             'reports = ["reportlab>=4", "pypdf>=4"]\n'
         )
         result = _build_search_first(tmp_path)

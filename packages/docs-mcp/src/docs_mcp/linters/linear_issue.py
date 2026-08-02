@@ -8,7 +8,9 @@ MCP tool wrapper lives in ``server_linear_tools.py``.
 from __future__ import annotations
 
 import re
+from bisect import bisect_left
 from dataclasses import dataclass, field
+from functools import lru_cache
 from typing import Any
 
 SEVERITY_HIGH = "high"
@@ -413,7 +415,20 @@ def _estimate_tokens(ctx: _Context) -> dict[str, int]:
     }
 
 
+@lru_cache(maxsize=4)
+def _newline_offsets(text: str) -> tuple[int, ...]:
+    """Offsets of every ``\\n`` in *text*, for O(log n) offset→line lookup.
+
+    Cached because every finding in one lint pass resolves against the same
+    description. Without it, ``_locate`` was O(offset) per call and the whole
+    linter O(chars x findings) — a long, finding-dense description could block
+    the event loop long enough for the MCP host to tear down the stdio
+    transport mid-call (``-32000 Connection closed``).
+    """
+    return tuple(m.start() for m in re.finditer("\n", text))
+
+
 def _locate(text: str, char_offset: int) -> str:
     """Convert a char offset into a ``description:Lnn`` location string."""
-    line = text.count("\n", 0, char_offset) + 1
+    line = bisect_left(_newline_offsets(text), char_offset) + 1
     return f"description:L{line}"

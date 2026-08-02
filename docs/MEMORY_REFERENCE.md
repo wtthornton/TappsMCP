@@ -1,6 +1,6 @@
 # TappsMCP Memory Reference
 
-Complete reference for TappsMCP **shared brain memory** — **44 actions** when accessed via CLI or the `nlt-memory` MCP facade (TAP-3895).
+Complete reference for TappsMCP **shared brain memory** — **44 actions** when accessed via the `uv run tapps-mcp memory` CLI or the `nlt-memory` MCP facade (TAP-3895). The 44 are `action=` values on the single `tapps_memory` tool, not 44 separate MCP tools: the `nlt-memory` server lists **5 tools** in `tools/list` (`tapps_memory`, `tapps_session_start`, `tapps_session_notes`, `tapps_session_end`, `tapps_handoff_save`).
 
 ## How to access memory (CLI vs MCP)
 

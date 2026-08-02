@@ -482,7 +482,12 @@ _ERROR_METADATA: dict[str, dict[str, Any]] = {
     "path_denied": {
         "category": "user_input",
         "retryable": False,
-        "remediation": "Pass an absolute path inside the project root.",
+        "remediation": (
+            "Pass an absolute path inside the project root. To score a file "
+            "outside it (e.g. a pristine copy in a scratch directory), pass "
+            "project_root=<that directory> instead of copying the file into "
+            "the repo."
+        ),
     },
     "file_error": {
         "category": "user_input",

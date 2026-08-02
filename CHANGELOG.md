@@ -7,6 +7,52 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [3.12.56] - 2026-08-02
+
+### Fixed
+
+- **`tapps_quick_check` cache served the wrong file's score** — the result
+  cache was keyed on file content alone, but `devex`, `structure`, and
+  `test_coverage` are pure functions of *directory context* (proximity to
+  `AGENTS.md`, the nearest project root, sibling test files) and never read
+  the bytes. Byte-identical files at different depths therefore shared one
+  entry, and the second call came back `cache_hit: true` carrying the first
+  file's `overall_score`, `gate_passed`, and `file_path`. This silently
+  corrupted the "score a pristine copy and compare" workflow. Keys now
+  include the resolved path and the gate preset (`content_hash_cache.result_key`).
+- **`tapps_validate_changed` quick mode disagreed with `tapps_quick_check`** —
+  quick mode called the bare `score_file_quick`, which scores only `linting`
+  and publishes it on the 0-100 scale. Every category-minimum check in
+  `evaluate_gate` no-ops on a missing category, so the gate collapsed to
+  `lint*10 >= 70` and the documented pre-completion gate returned
+  `gate_passed: true` for files `tapps_quick_check` failed (observed:
+  85/pass vs 66.52/fail on one unmodified file). Both tools now run the same
+  `score_and_scan_quick` path. A checker outage (ruff/radon/bandit missing or
+  timed out) also no longer reads as a clean pass — `degraded` and
+  `missing_tools` are surfaced per file.
+- **`path_denied` blocked baseline scoring outside the repo** —
+  `tapps_quick_check`, `tapps_score_file`, and `tapps_quality_gate` were the
+  only tools without a `project_root` override, so scoring a pristine copy in
+  a scratch directory was impossible and forced the file-copy workaround that
+  triggered the cache defect above. All three now accept `project_root`, and
+  quick_check batch mode returns `error_code: path_denied` instead of a bare
+  string.
+- **Event-loop stalls on large Linear payloads** — `docs_lint_linear_issue`
+  and `docs_validate_linear_issue` ran their pure-CPU linter inline on the
+  async handler with an unbounded caller-supplied `description`, and
+  `_locate` was O(offset) per finding (O(chars x findings) overall). A long,
+  finding-dense payload could block the loop long enough for the host to tear
+  down the stdio transport (`-32000 Connection closed`). The linter is now
+  offloaded to a thread and offset->line lookup is O(log n).
+
+### Changed
+
+- **Memory docs no longer read as "44 tools"** — platform rules, `CLAUDE.md`,
+  and `docs/MEMORY_REFERENCE.md` now state that `tapps_memory` is a *single*
+  MCP tool dispatching on `action=`, exposed only when the `nlt-memory`
+  server is enabled (that server lists 5 tools). The 44 are `action=` values,
+  not separate tools.
+
 ## [3.12.55] - 2026-07-30
 
 ### Fixed

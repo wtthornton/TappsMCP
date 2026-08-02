@@ -7,10 +7,24 @@ quick_check → validate_changed → checklist), we can return the previous
 result directly.
 
 Design:
-- Keys are ``(kind, sha256(file_bytes))`` tuples. The file path is *not*
-  part of the key: renaming or copying a file should still hit the cache.
+- Keys are ``(kind, entry_key)`` tuples, where ``entry_key`` is built by
+  :func:`result_key` from the file bytes **plus every other input the cached
+  result depends on** — the resolved path and the gate preset.
 - Values are opaque ``dict[str, Any]`` (the tool's response or a sub-slice
   of it — the caller decides what to store).
+
+The path is part of the key (TAP-5401). An earlier revision keyed on content
+alone, on the theory that "renaming or copying a file should still hit the
+cache". That is wrong for the scoring pipeline: three of the seven score
+categories — ``devex``, ``structure``, and ``test_coverage`` — are pure
+functions of *directory context* (proximity to ``AGENTS.md``, the nearest
+project root, sibling test files) and do not read the file's bytes at all.
+Byte-identical files at different depths legitimately score differently, so a
+content-only key served the first location's ``overall_score``,
+``gate_passed``, and ``file_path`` to the second — silently corrupting the
+"score a pristine copy and compare against the working copy" workflow. The
+preset is in the key for the same reason: a ``standard`` verdict is not a
+``strict`` verdict.
 - Bounded by ``_MAX_ENTRIES`` to prevent unbounded memory growth in
   long-lived servers; eviction is LRU (least-recently-used).
 - Optional TTL so stale entries from a previous day's session can be
@@ -62,6 +76,17 @@ def content_hash(path: Path) -> str:
         for chunk in iter(lambda: fh.read(65536), b""):
             h.update(chunk)
     return h.hexdigest()
+
+
+def result_key(path: Path, *, preset: str) -> str:
+    """Cache key for a per-file tool result.
+
+    Combines the file's content hash with the inputs the result also depends
+    on but that the bytes do not capture: the resolved path (directory context
+    drives the ``devex`` / ``structure`` / ``test_coverage`` categories) and
+    the gate ``preset`` (drives ``gate_passed``). See the module docstring.
+    """
+    return f"{content_hash(path)}|{path.resolve()}|{preset}"
 
 
 def get(kind: str, sha: str, *, ttl: float = _DEFAULT_TTL) -> dict[str, Any] | None:

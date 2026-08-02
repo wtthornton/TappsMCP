@@ -185,11 +185,41 @@ def _attach_score_file_structured_output(
         logger.debug("structured_output_failed: tapps_score_file", exc_info=True)
 
 
+def _resolve_scoring_path(file_path: str, project_root: str) -> Path:
+    """Validate *file_path*, honouring an optional ``project_root`` override.
+
+    TAP-5403: without the override these tools could only score files under
+    the server's own project root, so the common "copy a pristine version to
+    a scratch dir and score it as a baseline" workflow returned
+    ``path_denied``. Every analysis tool (``tapps_impact_analysis``,
+    ``tapps_diff_impact``, ``tapps_validate_changed``, …) already accepts the
+    override; the scoring tools were the outliers.
+
+    Raises ``ValueError`` / ``FileNotFoundError`` on rejection, matching
+    ``_validate_file_path``.
+    """
+    from tapps_mcp.server import _validate_file_path
+
+    if not project_root.strip():
+        return _validate_file_path(file_path)
+
+    from tapps_mcp.tools.project_paths import (
+        resolve_effective_project_root,
+        validate_read_path_under_root,
+    )
+
+    root = resolve_effective_project_root(load_settings().project_root, project_root)
+    if root.error_code is not None:
+        raise ValueError(root.error_message or "invalid project_root")
+    return validate_read_path_under_root(file_path, root.root)
+
+
 async def tapps_score_file(
     file_path: str,
     quick: bool = False,
     fix: bool = False,
     mode: str = "auto",
+    project_root: str = "",
 ) -> dict[str, Any]:
     """Returns a 7-category quality score (complexity, security,
     maintainability, test coverage, performance, structure, devex) for a
@@ -223,15 +253,22 @@ async def tapps_score_file(
             ``"direct"`` uses radon as a library and runs subprocess
             checkers in a thread pool — avoids async-subprocess
             reliability issues on Windows.
+        project_root: Optional directory to score against instead of the
+            server's project root. Use this to score a file outside the
+            repo — e.g. a pristine copy in a scratch directory for a
+            baseline comparison. Must be an existing directory containing
+            ``file_path``. Note that ``structure``, ``devex``, and
+            ``test_coverage`` are derived from directory context, so a
+            scratch copy will not score identically to the in-repo file.
     """
-    from tapps_mcp.server import _record_call, _record_execution, _validate_file_path, _with_nudges
+    from tapps_mcp.server import _record_call, _record_execution, _with_nudges
 
     start = time.perf_counter_ns()
     _record_call("tapps_score_file")
     await ensure_session_initialized()
 
     try:
-        resolved = _validate_file_path(file_path)
+        resolved = _resolve_scoring_path(file_path, project_root)
     except (ValueError, FileNotFoundError) as exc:
         _record_call("tapps_score_file", success=False)
         return error_response("tapps_score_file", "path_denied", str(exc))
@@ -376,6 +413,7 @@ async def tapps_quality_gate(
     file_path: str,
     preset: str = "",
     ctx: Context[Any, Any, Any] | None = None,
+    project_root: str = "",
 ) -> dict[str, Any]:
     """Runs full 7-category scoring on a single file and returns a binding
     pass/fail verdict against the chosen preset, with the failing
@@ -400,8 +438,14 @@ async def tapps_quality_gate(
             defaults to the project's configured preset.
         ctx: MCP context handle, injected by the host. Do not pass
             manually.
+        project_root: Optional directory to gate against instead of the
+            server's project root — e.g. a pristine copy in a scratch
+            directory. Must be an existing directory containing
+            ``file_path``. ``structure``, ``devex``, and ``test_coverage``
+            are directory-derived, so a scratch copy will not score
+            identically to the in-repo file.
     """
-    from tapps_mcp.server import _record_call, _record_execution, _validate_file_path, _with_nudges
+    from tapps_mcp.server import _record_call, _record_execution, _with_nudges
 
     start = time.perf_counter_ns()
     _record_call("tapps_quality_gate")
@@ -410,7 +454,7 @@ async def tapps_quality_gate(
     preset = await _resolve_preset(preset, ctx)
 
     try:
-        resolved = _validate_file_path(file_path)
+        resolved = _resolve_scoring_path(file_path, project_root)
     except (ValueError, FileNotFoundError) as exc:
         _record_call("tapps_quality_gate", success=False)
         return error_response("tapps_quality_gate", "path_denied", str(exc))
@@ -736,6 +780,48 @@ def _merge_bandit_into_score_result(
     return score_result
 
 
+async def score_and_scan_quick(
+    resolved: Path,
+    scorer: Any,
+    settings: Any,
+) -> tuple[ScoreResult, SecurityScanResult]:
+    """Quick-mode score + security scan, shared by quick_check and validate_changed.
+
+    TAP-5402: both tools must produce the same verdict for the same bytes at
+    the same path. They previously used different scorers —
+    ``score_file_quick_enriched`` (7 categories, bandit merged) here versus a
+    bare ``score_file_quick`` (``linting`` only) in ``validate_changed`` — so
+    ``tapps_validate_changed``, the documented pre-completion gate, could
+    return ``gate_passed=True`` for a file ``tapps_quick_check`` failed. This
+    is the single scoring path; do not reintroduce a second one.
+    """
+    from tapps_mcp.security.security_scanner import SecurityScanResult, run_security_scan
+
+    if scorer.language != "python":
+        score_result = await asyncio.to_thread(scorer.score_file_quick, resolved)
+        return score_result, SecurityScanResult(
+            passed=True,
+            bandit_issues=[],
+            secret_findings=[],
+            bandit_available=False,
+            total_issues=0,
+        )
+
+    score_result, sec_result = await asyncio.gather(
+        asyncio.to_thread(scorer.score_file_quick_enriched, resolved),
+        asyncio.to_thread(
+            run_security_scan,
+            str(resolved),
+            scan_secrets=True,
+            cwd=str(settings.project_root),
+            timeout=settings.tool_timeout,
+        ),
+    )
+    # TAP-2209: patch the heuristic security placeholder with real bandit data
+    # so the overall_score matches score_file (tapps_report) on the same formula.
+    return _merge_bandit_into_score_result(score_result, sec_result, scorer), sec_result
+
+
 # STORY-101.6: Performance budget for tapps_quick_check on a single file.
 # Cache hits must return well under this threshold. Regression tests assert
 # the cache path does not re-invoke the scorer when content is unchanged.
@@ -750,7 +836,6 @@ async def _quick_check_single(
 ) -> dict[str, Any]:
     """Run quick_check logic on a single validated file and return the result dict."""
     from tapps_mcp.gates.evaluator import evaluate_gate
-    from tapps_mcp.security.security_scanner import run_security_scan
 
     scorer = _get_scorer_for_file(resolved)
     if scorer is None:
@@ -773,35 +858,7 @@ async def _quick_check_single(
             run_ruff_fix, str(resolved), cwd=str(resolved.parent)
         )
 
-    if is_python:
-        score_coro = asyncio.to_thread(scorer.score_file_quick_enriched, resolved)
-    else:
-        score_coro = asyncio.to_thread(scorer.score_file_quick, resolved)
-
-    if is_python:
-        sec_coro = asyncio.to_thread(
-            run_security_scan,
-            str(resolved),
-            scan_secrets=True,
-            cwd=str(settings.project_root),
-            timeout=settings.tool_timeout,
-        )
-        score_result, sec_result = await asyncio.gather(score_coro, sec_coro)
-        # TAP-2209: patch the heuristic security placeholder with real bandit data
-        # so quick_check overall_score matches score_file (tapps_report) on the
-        # same formula.
-        score_result = _merge_bandit_into_score_result(score_result, sec_result, scorer)
-    else:
-        score_result = await score_coro
-        from tapps_mcp.security.security_scanner import SecurityScanResult
-
-        sec_result = SecurityScanResult(
-            passed=True,
-            bandit_issues=[],
-            secret_findings=[],
-            bandit_available=False,
-            total_issues=0,
-        )
+    score_result, sec_result = await score_and_scan_quick(resolved, scorer, settings)
 
     complexity_hint = _compute_complexity_hint(resolved) if is_python else None
     gate_result = evaluate_gate(score_result, preset=preset)
@@ -838,6 +895,7 @@ async def tapps_quick_check(
     preset: str = "standard",
     fix: bool = False,
     file_paths: str = "",
+    project_root: str = "",
 ) -> dict[str, Any]:
     """Bundles scoring + quality gate + basic security check into one fast
     call (typically < 1s) — the default per-file post-edit verifier.
@@ -867,8 +925,17 @@ async def tapps_quick_check(
             non-empty, takes precedence over ``file_path`` and the
             response is a list of per-file results. Use this for
             "I just edited 3 files, check them all" workflows.
+        project_root: Optional directory to check against instead of the
+            server's project root. Use this to score a file outside the
+            repo — e.g. a pristine copy in a scratch directory for a
+            baseline comparison — rather than working around
+            ``path_denied``. Must be an existing directory containing the
+            target paths. ``structure``, ``devex``, and ``test_coverage``
+            are derived from directory context, so a scratch copy will not
+            score identically to the in-repo file; compare category
+            breakdowns, not just ``overall_score``.
     """
-    from tapps_mcp.server import _record_call, _record_execution, _validate_file_path, _with_nudges
+    from tapps_mcp.server import _record_call, _record_execution, _with_nudges
 
     start = time.perf_counter_ns()
     _record_call("tapps_quick_check")
@@ -889,12 +956,16 @@ async def tapps_quick_check(
         async def _run_one(fp: str) -> dict[str, Any]:
             async with sem:
                 try:
-                    resolved = _validate_file_path(fp)
+                    resolved = _resolve_scoring_path(fp, project_root)
                 except (ValueError, FileNotFoundError) as exc:
                     return {
                         "file_path": fp,
                         "success": False,
                         "error": str(exc),
+                        # TAP-5403: batch mode used to emit a bare string with
+                        # no code, so callers could not tell a rejected path
+                        # from a scorer crash.
+                        "error_code": "path_denied",
                     }
                 try:
                     return await _quick_check_single(resolved, preset, fix, settings)
@@ -933,19 +1004,21 @@ async def tapps_quick_check(
 
     # --- Single-file mode (original behavior) ---
     try:
-        resolved = _validate_file_path(file_path)
+        resolved = _resolve_scoring_path(file_path, project_root)
     except (ValueError, FileNotFoundError) as exc:
         _record_call("tapps_quick_check", success=False)
         return error_response("tapps_quick_check", "path_denied", str(exc))
 
-    # STORY-101.1 — SHA-256 content-hash cache. Safe to consult for
-    # read-only runs; skipped when ``fix=True`` since fix mutates the file.
+    # STORY-101.1 — per-file result cache, keyed on content + path + preset
+    # (TAP-5401: path-dependent categories make a content-only key unsound).
+    # Safe to consult for read-only runs; skipped when ``fix=True`` since fix
+    # mutates the file.
     from tapps_mcp.tools import content_hash_cache as _chc
 
     cache_key: str | None = None
     if not fix:
         try:
-            cache_key = _chc.content_hash(resolved)
+            cache_key = _chc.result_key(resolved, preset=preset)
             cached = _chc.get(_chc.KIND_QUICK_CHECK, cache_key)
             if cached is not None:
                 # TAP-1792: keep the cache-hit shape identical to the miss path —

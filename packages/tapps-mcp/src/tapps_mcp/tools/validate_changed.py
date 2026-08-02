@@ -285,7 +285,7 @@ def _prepare_batch_context(
     capped_paths = paths[:MAX_BATCH_FILES]
     tracker = _ProgressTracker(total=len(capped_paths))
     tracker.init_sidecar(settings.project_root)
-    cached_results, uncached_paths = _partition_by_cache(capped_paths)
+    cached_results, uncached_paths = _partition_by_cache(capped_paths, preset)
     return _BatchContext(
         file_paths=file_paths,
         base_ref=base_ref,
