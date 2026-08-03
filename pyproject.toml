@@ -2,15 +2,26 @@
 members = ["packages/*"]
 
 [tool.uv.sources]
-# tapps-brain v3.28.1 — matches the version the live brain service runs (it is
-# tagged upstream now; the earlier "untagged master build" note was stale). Tag
-# pin is the form ADR-0011 prescribes; uv.lock still records the resolved SHA.
-# The runtime version floor is 3.28.0 (ADR-0033, supersedes ADR-0013): that is
-# the release adding web_research / research_fetch, which BrainBridge binds for
-# tapps_research. 3.28.1 additionally scopes idempotency keys by operation.
+# tapps-brain v3.28.1 — the newest *tagged* upstream release, which is the form
+# ADR-0011 prescribes; uv.lock still records the resolved SHA. As of 2026-08-03
+# the live dev brain on :8080 reports 3.28.2, but no v3.28.2 tag exists upstream
+# (verified via `git ls-remote --tags`), so the pin cannot follow it without
+# violating ADR-0011. This is a benign skew: the runtime floor is 3.28.0
+# (ADR-0033, supersedes ADR-0013) and the ceiling is 4.0.0, so 3.28.2 passes the
+# BrainBridge version probe. Raise the pin once 3.28.2 is tagged.
+# 3.28.0 is the release adding web_research / research_fetch, which BrainBridge
+# binds for tapps_research. 3.28.1 additionally scopes idempotency keys by
+# operation.
 tapps-brain = { git = "https://github.com/wtthornton/tapps-brain.git", tag = "v3.28.1" }
 
 [tool.uv]
+# tapps-brain depends on sentence-transformers unconditionally, which pulls torch
+# and ~4.5 GB of CUDA wheels (nvidia-*, triton) that are dead weight on a CPU host.
+# Resolve the PyTorch ecosystem against the CPU index instead. The release builds
+# pass --torch-backend=cpu explicitly (distribution/blue_green.py); this key covers
+# `uv sync` for the dev venv. The durable fix is upstream — see
+# docs/handoff/BRAIN-sentence-transformers-optional.md.
+torch-backend = "cpu"
 dev-dependencies = [
     "pytest>=9.1.0,<10",
     "pytest-asyncio>=1.4.0,<2",

@@ -34,7 +34,7 @@ def _make_release(releases: Path, name: str) -> Path:
         exe = bin_dir / tool
         exe.write_text("#!/bin/sh\necho tool, version 1.0.0\n", encoding="utf-8")
         exe.chmod(0o755)
-    manifest = {"version": name.split("-")[0], "short_sha": name.split("-", 1)[1]}
+    manifest = {"version": name.split("-", 1)[0], "short_sha": name.split("-", 1)[1]}
     (release_dir / "release.json").write_text(json.dumps(manifest), encoding="utf-8")
     return release_dir
 
@@ -48,7 +48,9 @@ class TestFlipCurrent:
         assert bg.current_release_path() == release.resolve()
         assert bg.CURRENT_LINK.is_symlink()
 
-    def test_resolve_blue_green_binary(self, bg_home: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    def test_resolve_blue_green_binary(
+        self, bg_home: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
         monkeypatch.setattr(bg, "blue_green_enabled", lambda: True)
         release = _make_release(bg_home / "releases", "3.12.35-deadbeef")
         ref = bg.ReleaseRef(version="3.12.35", short_sha="deadbeef", path=release)
@@ -57,7 +59,9 @@ class TestFlipCurrent:
         assert resolved == str((release / "bin" / "tapps-mcp").resolve())
 
     def test_resolve_blue_green_binary_disabled_by_env(
-        self, bg_home: Path, monkeypatch: pytest.MonkeyPatch,
+        self,
+        bg_home: Path,
+        monkeypatch: pytest.MonkeyPatch,
     ) -> None:
         monkeypatch.setenv("TAPPS_MCP_USE_BLUE_GREEN", "0")
         release = _make_release(bg_home / "releases", "3.12.35-deadbeef")
@@ -66,7 +70,9 @@ class TestFlipCurrent:
         assert bg.resolve_blue_green_binary("tapps-mcp") is None
 
     def test_resolve_blue_green_binary_auto_when_current_present(
-        self, bg_home: Path, monkeypatch: pytest.MonkeyPatch,
+        self,
+        bg_home: Path,
+        monkeypatch: pytest.MonkeyPatch,
     ) -> None:
         monkeypatch.delenv("TAPPS_MCP_USE_BLUE_GREEN", raising=False)
         release = _make_release(bg_home / "releases", "3.12.35-deadbeef")
@@ -114,7 +120,9 @@ class TestDeployLock:
 
 
 class TestDeployBlueGreenDryRun:
-    def test_dry_run_does_not_flip(self, bg_home: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    def test_dry_run_does_not_flip(
+        self, bg_home: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
         checkout = tmp_path / "checkout"
         (checkout / "packages" / "tapps-mcp").mkdir(parents=True)
         pyproject = checkout / "packages" / "tapps-mcp" / "pyproject.toml"
@@ -149,12 +157,39 @@ class TestBuildRelease:
         assert result["ok"] is True
 
         install_cmd = next(c for c in commands if c[:3] == ["uv", "pip", "install"])
-        specs = install_cmd[install_cmd.index("--python") + 2 :]
+        specs = [
+            arg
+            for arg in install_cmd[install_cmd.index("--python") + 2 :]
+            if not arg.startswith("-")
+        ]
         assert specs == [
             str(checkout / "packages" / "tapps-core"),
             f"{checkout / 'packages' / 'docs-mcp'}[treesitter]",
             f"{checkout / 'packages' / 'tapps-mcp'}[treesitter]",
         ]
+
+    def test_installs_cpu_torch_wheels(
+        self, bg_home: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """tapps-brain depends on sentence-transformers unconditionally, which
+        pulls torch and ~4.5 GB of CUDA wheels the release env cannot use on a
+        CPU host. The build must pin the PyTorch ecosystem to the CPU index."""
+        checkout = tmp_path / "checkout"
+        checkout.mkdir()
+        commands: list[list[str]] = []
+
+        def _fake_run(cmd: list[str], **_kwargs: object) -> object:
+            commands.append(cmd)
+            if cmd[:2] == ["uv", "venv"]:
+                (bg.RELEASES_DIR / "3.12.35-abc1234").mkdir(parents=True, exist_ok=True)
+            return type("P", (), {"returncode": 0, "stdout": "", "stderr": ""})()
+
+        monkeypatch.setattr(bg, "_run", _fake_run)
+        ref = bg.ReleaseRef("3.12.35", "abc1234", bg.RELEASES_DIR / "3.12.35-abc1234")
+        assert bg.build_release(checkout, ref)["ok"] is True
+
+        install_cmd = next(c for c in commands if c[:3] == ["uv", "pip", "install"])
+        assert "--torch-backend=cpu" in install_cmd
 
 
 class TestSmokeTestRelease:

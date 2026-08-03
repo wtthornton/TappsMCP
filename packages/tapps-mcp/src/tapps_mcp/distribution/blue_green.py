@@ -168,8 +168,14 @@ def build_release(checkout: Path, release: ReleaseRef, *, force: bool = False) -
         f"{checkout / 'packages' / 'docs-mcp'}[treesitter]",
         f"{checkout / 'packages' / 'tapps-mcp'}[treesitter]",
     ]
+    # Force the CPU torch wheels. tapps-brain depends on sentence-transformers
+    # unconditionally, which drags in torch and ~4.5 GB of CUDA wheels that no
+    # release env can use on a CPU host. --torch-backend=cpu resolves the whole
+    # PyTorch ecosystem (torch, triton, nvidia-*) against the CPU index instead.
+    # See docs/handoff/BRAIN-sentence-transformers-optional.md for the upstream
+    # fix that would remove the dependency entirely.
     proc = _run(
-        ["uv", "pip", "install", "--python", str(python), *pkg_specs],
+        ["uv", "pip", "install", "--python", str(python), "--torch-backend=cpu", *pkg_specs],
         cwd=checkout,
         timeout=900,
     )
