@@ -22,6 +22,72 @@ from tapps_mcp.pipeline.agent_contract import (
 # ADR-0024: never reap the shared HTTP fleet (`serve --transport http`).
 _FLEET_HTTP_AWK_SKIP = " && !/--transport http|--transport=http/"
 
+# ADR-0005 ownership gate: `ps -eo` is host-global, so the candidate scan sees MCP
+# servers belonging to *sibling repos* on the same machine. Killing those takes down
+# another project's live session. Resolve each candidate's cwd and only reap when the
+# process is rooted in THIS project, or when it is a true orphan (parent gone, so it
+# belongs to nobody). Candidates we cannot attribute are left alone.
+# Shared orphan test. `ppid == 1` alone is NOT sufficient: under a systemd user
+# session an orphan reparents to `systemd --user`, which is alive and has a pid far
+# from 1 — so a naive check reports "has a parent" and never reaps anything. Treat
+# adoption by a subreaper (systemd / init / launchd) as orphanhood.
+_REAP_ORPHAN_FN_BASH = """\
+    _tapps_ppid_orphaned() {
+        [ -z "$1" ] && return 0
+        [ "$1" = "1" ] && return 0
+        kill -0 "$1" 2>/dev/null || return 0
+        case "$(ps -o comm= -p "$1" 2>/dev/null | sed 's#.*/##')" in
+            systemd|init|launchd) return 0 ;;
+        esac
+        return 1
+    }
+"""
+
+_REAP_OWNERSHIP_GATE_BASH = (
+    """\
+    TAPPS_REAP_ROOT=$(cd "${TAPPS_PROJECT_ROOT:-.}" 2>/dev/null && pwd -P) || TAPPS_REAP_ROOT=""
+    _tapps_pid_cwd() {
+        if [ -r "/proc/$1/cwd" ]; then
+            readlink "/proc/$1/cwd" 2>/dev/null
+        elif command -v lsof &>/dev/null; then
+            lsof -a -p "$1" -d cwd -Fn 2>/dev/null | sed -n 's/^n//p' | head -n1
+        fi
+    }
+"""
+    + _REAP_ORPHAN_FN_BASH
+    + """\
+    _tapps_pid_reapable() {
+        _tapps_ppid=$(ps -o ppid= -p "$1" 2>/dev/null | tr -d ' ')
+        _tapps_ppid_orphaned "$_tapps_ppid" && return 0
+        [ -n "$TAPPS_REAP_ROOT" ] && [ "$(_tapps_pid_cwd "$1")" = "$TAPPS_REAP_ROOT" ]
+    }
+"""
+)
+
+# Partition candidates into ours / other projects' before signalling anything.
+_REAP_KILL_BASH = """\
+    if [ -n "$ZOMBIE_PIDS" ]; then
+        OWNED_PIDS=""
+        FOREIGN_PIDS=""
+        for _tapps_pid in $ZOMBIE_PIDS; do
+            if _tapps_pid_reapable "$_tapps_pid"; then
+                OWNED_PIDS="$OWNED_PIDS $_tapps_pid"
+            else
+                FOREIGN_PIDS="$FOREIGN_PIDS $_tapps_pid"
+            fi
+        done
+        OWNED_PIDS="${OWNED_PIDS# }"
+        FOREIGN_PIDS="${FOREIGN_PIDS# }"
+        if [ -n "$FOREIGN_PIDS" ]; then
+            echo "[TappsMCP] Leaving MCP serve PIDs owned by other projects: $FOREIGN_PIDS" >&2
+        fi
+        if [ -n "$OWNED_PIDS" ]; then
+            echo "[TappsMCP] Reaping stale MCP serve PIDs: $OWNED_PIDS" >&2
+            echo "$OWNED_PIDS" | xargs kill 2>/dev/null || true
+        fi
+    fi
+"""
+
 
 def _mcp_zombie_cleanup_bash(
     *,
@@ -34,6 +100,9 @@ def _mcp_zombie_cleanup_bash(
     * ``reap_nlt_duplicates`` — per ``nlt-*`` profile, kill older PIDs.
     * ``reap_stale_nlt_profiles`` — kill ``serve --profile nlt-*`` children older than
       ``stale_nlt_min_age_seconds``.
+
+    Every candidate passes through :data:`_REAP_OWNERSHIP_GATE_BASH` before being
+    signalled, so a reap in one repo never kills a sibling repo's live MCP server.
 
     **Cursor** uses :func:`_mcp_zombie_cleanup_cursor_bash` instead — duplicate/stale
     reaping is unsafe with multiple Cursor windows on one host.
@@ -78,8 +147,10 @@ def _mcp_zombie_cleanup_bash(
     return f"""\
 # ADR-0005: Kill stale MCP server processes to prevent zombie accumulation.
 # Also reap project-.venv launches (missing httpx/httpcore) that break nlt-memory.
+# Scoped to this project (or true orphans) — see _REAP_OWNERSHIP_GATE_BASH.
 # DO NOT REMOVE — see docs/adr/0005-mcp-server-zombie-cleanup-hook-on-session-start.md
 if command -v ps &>/dev/null && command -v awk &>/dev/null; then
+{_REAP_OWNERSHIP_GATE_BASH}\
     OLD_PIDS=$(ps -eo pid,etimes,cmd 2>/dev/null | \\
         awk '$2 > 7200 && /tapps-mcp|docsmcp|tapps-platform/ && /serve/{_FLEET_HTTP_AWK_SKIP} {{print $1}}')
     VENV_PIDS=$(ps -eo pid,cmd 2>/dev/null | \\
@@ -87,10 +158,7 @@ if command -v ps &>/dev/null && command -v awk &>/dev/null; then
     ZOMBIE_PIDS=$({{
 {merge_echo_lines}
     }} | sort -u | grep -E '^[0-9]+$' || true)
-    if [ -n "$ZOMBIE_PIDS" ]; then
-        echo "[TappsMCP] Reaping stale MCP serve PIDs: $ZOMBIE_PIDS" >&2
-        echo "$ZOMBIE_PIDS" | xargs kill 2>/dev/null || true
-    fi
+{_REAP_KILL_BASH}\
 fi
 """
 
@@ -100,19 +168,24 @@ def _mcp_zombie_cleanup_cursor_bash() -> str:
 
     With 2-5 Cursor windows x six NLT stdio servers, profile-global duplicate/stale
     reaping kills live MCP children in *other* windows. Only reap ``serve`` processes
-    whose parent PID is dead (Reload Window / crash orphans).
+    whose parent PID is dead (Reload Window / crash orphans), as determined by
+    :data:`_REAP_ORPHAN_FN_BASH`.
     """
-    return """\
+    return (
+        """\
 # ADR-0005 (Cursor multi-window): reap MCP serve processes whose parent died only.
 # DO NOT add profile-global duplicate/stale reaping here — unsafe with N Cursor windows.
 # See docs/adr/0005-mcp-server-zombie-cleanup-hook-on-session-start.md
 if command -v ps &>/dev/null; then
+"""
+        + _REAP_ORPHAN_FN_BASH
+        + """\
     ORPHAN_PIDS=$(ps -eo pid=,ppid=,cmd= 2>/dev/null | while read -r pid ppid cmd_rest; do
         if printf '%s' "$cmd_rest" | grep -qE 'serve --profile nlt-|/(tapps-mcp|docsmcp|tapps-platform)( |$).*serve'; then
             if printf '%s' "$cmd_rest" | grep -qE -- '--transport[ =]http'; then
                 continue
             fi
-            if [ "$ppid" = "1" ] || ! kill -0 "$ppid" 2>/dev/null; then
+            if _tapps_ppid_orphaned "$ppid"; then
                 echo "$pid"
             fi
         fi
@@ -123,6 +196,7 @@ if command -v ps &>/dev/null; then
     fi
 fi
 """
+    )
 
 
 def _mcp_zombie_cleanup_standalone_script(*, reap_stale_nlt_profiles: bool = True) -> str:
