@@ -382,9 +382,10 @@ class TestRunDoctorStructured:
         assert "checks" in result
         assert "pass_count" in result
         assert "fail_count" in result
+        assert "warn_count" in result
         assert "all_passed" in result
         assert isinstance(result["checks"], list)
-        assert result["pass_count"] + result["fail_count"] == len(result["checks"])
+        assert result["pass_count"] + result["fail_count"] + result["warn_count"] == len(result["checks"])
 
     def test_all_passed_is_false_with_failures(self, tmp_path: Path) -> None:
         """all_passed is False when checks fail."""

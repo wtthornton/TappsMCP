@@ -440,7 +440,9 @@ class TestGenerateConfig:
         config_path = tmp_path / ".claude.json"
         assert config_path.exists()
         data = json.loads(config_path.read_text(encoding="utf-8"))
-        assert data["mcpServers"]["tapps-mcp"]["command"] == "/bin/tapps-mcp"
+        # Claude Code uses stdio wrapper scripts (TAP-5155) to probe ~/.tapps-mcp/current
+        expected_command = str(tmp_path / "project" / ".claude/bin/tapps-mcp-serve.sh")
+        assert data["mcpServers"]["tapps-mcp"]["command"] == expected_command
 
     def test_creates_parent_directories(self, tmp_path):
         project = tmp_path / "deep" / "nested" / "project"
