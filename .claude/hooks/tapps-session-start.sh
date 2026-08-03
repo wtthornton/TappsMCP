@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # tapps-mcp-hook-version: 3.12.58
-# tapps-mcp-hook-content-sha: 50071421
+# tapps-mcp-hook-content-sha: 0fd3a837
 # TappsMCP SessionStart hook (startup/resume)
 # Directs the agent to call tapps_session_start as the first MCP action.
 # TAP-1379: Short-circuits on subsequent fires within the same Claude session
@@ -83,7 +83,7 @@ if command -v ps &>/dev/null && command -v awk &>/dev/null; then
     echo "$VENV_PIDS"
     echo "$NLT_DUP_PIDS"
     echo "$NLT_STALE_PIDS"
-    } | sort -u | grep -E '^[0-9]+$' || true)
+    } | tr ' ' '\n' | sort -u | grep -E '^[0-9]+$' || true)
     if [ -n "$ZOMBIE_PIDS" ]; then
         OWNED_PIDS=""
         FOREIGN_PIDS=""

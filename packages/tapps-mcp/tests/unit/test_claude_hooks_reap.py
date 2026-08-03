@@ -63,6 +63,15 @@ class TestReapGateContent:
         assert "/proc/$1/cwd" in content
         assert "lsof" in content
 
+    def test_multi_pid_candidate_lines_are_split_before_filtering(self) -> None:
+        """The dup awk space-joins pids per profile; ``^[0-9]+$`` rejects such a line.
+
+        Without the split, any profile with more than one duplicate was dropped
+        entirely and nothing got reaped.
+        """
+        content = CLAUDE_HOOK_SCRIPTS[_HOOK]
+        assert "tr ' ' '\\n' | sort -u | grep -E '^[0-9]+$'" in content
+
     def test_orphan_check_recognises_subreaper_adoption(self) -> None:
         """``ppid == 1`` alone is inert on systemd hosts.
 
@@ -103,6 +112,26 @@ class TestReapGateBehaviour:
             env=env,
         )
         return result.stdout.strip().splitlines()[-1]
+
+    def test_merge_keeps_both_pids_from_a_multi_pid_line(self, tmp_path) -> None:
+        """Run the real merge pipeline with a two-dup line, as the awk emits it."""
+        content = CLAUDE_HOOK_SCRIPTS[_HOOK]
+        match = re.search(
+            r"^    ZOMBIE_PIDS=\$\(\{.*?\|\| true\)$", content, re.MULTILINE | re.DOTALL
+        )
+        assert match, "merge block not found in generated sessionStart hook"
+        script = tmp_path / "merge.sh"
+        script.write_text(
+            "#!/usr/bin/env bash\n"
+            'OLD_PIDS=""\nVENV_PIDS=""\nNLT_STALE_PIDS=""\n'
+            'NLT_DUP_PIDS="111 222"\n'
+            f"{match.group(0)}\n"
+            'echo "$ZOMBIE_PIDS"\n'
+        )
+        result = subprocess.run(
+            ["bash", str(script)], capture_output=True, text=True, timeout=30, check=True
+        )
+        assert result.stdout.split() == ["111", "222"]
 
     def test_generated_hook_is_valid_bash(self, tmp_path) -> None:
         script = tmp_path / "gate.sh"

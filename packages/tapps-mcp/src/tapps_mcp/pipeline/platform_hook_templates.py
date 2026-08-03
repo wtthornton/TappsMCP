@@ -143,6 +143,10 @@ def _mcp_zombie_cleanup_bash(
         merge_parts.append('"$NLT_DUP_PIDS"')
     if reap_stale_nlt_profiles:
         merge_parts.append('"$NLT_STALE_PIDS"')
+    # The nlt-duplicate awk emits every dup for a profile space-joined on one line.
+    # The merge filters with `^[0-9]+$`, which rejects a multi-pid line outright, so
+    # the whole group was dropped whenever a profile had more than one duplicate —
+    # `tr` splits them back to one pid per line before the filter sees them.
     merge_echo_lines = "\n".join(f"    echo {part}" for part in merge_parts)
     return f"""\
 # ADR-0005: Kill stale MCP server processes to prevent zombie accumulation.
@@ -157,7 +161,7 @@ if command -v ps &>/dev/null && command -v awk &>/dev/null; then
         awk '/\\.venv\\/bin\\/(tapps-mcp|docsmcp|tapps-platform)/ && /serve/ {{print $1}}'){nlt_dup_block}{nlt_stale_block}
     ZOMBIE_PIDS=$({{
 {merge_echo_lines}
-    }} | sort -u | grep -E '^[0-9]+$' || true)
+    }} | tr ' ' '\\n' | sort -u | grep -E '^[0-9]+$' || true)
 {_REAP_KILL_BASH}\
 fi
 """
