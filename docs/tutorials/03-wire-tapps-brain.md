@@ -114,7 +114,7 @@ You've confirmed:
 
 tapps-brain is **storage behind BrainBridge**, not a separate MCP server you configure. Use `uv run tapps-mcp memory …` or enable **`nlt-memory`** for MCP-exposed recall/save/handoff; tapps-mcp routes through `BrainBridge` to tapps-brain (in-process per [ADR-0001](../adr/0001-in-process-agentbrain-via-brainbridge.md), or HTTP when `memory.brain_http_url` is set). **Do not** add a direct `tapps-brain` entry to `.mcp.json` / `.cursor/mcp.json` — `tapps_init` and `tapps_upgrade` strip stray entries (bridge-only, TAP-1888).
 
-The four pieces that have to line up: brain HTTP service running (or in-process DSN), `tapps-brain` Python package importable, auth token in the MCP subprocess env, and `.mcp.json` listing **tapps-mcp only**. Miss any one and `tapps doctor` calls it out. Running brain must be **≥ 3.24.0** ([ADR-0013](../adr/0013-pin-tapps-brain-version-floor-at-3240.md)).
+The four pieces that have to line up: brain HTTP service running (or in-process DSN), `tapps-brain` Python package importable, auth token in the MCP subprocess env, and `.mcp.json` listing **tapps-mcp only**. Miss any one and `tapps doctor` calls it out. Running brain must be **≥ 3.28.0** ([ADR-0033](../adr/0033-pin-tapps-brain-version-floor-at-3280.md)).
 
 ## Going further
 

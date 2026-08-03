@@ -2,13 +2,13 @@
 members = ["packages/*"]
 
 [tool.uv.sources]
-# tapps-brain v3.28.0 — first tagged release we can pin to, closing the
-# "switch to a tag when released" TODO that ADR-0013/0015 carried (v3.24.0 was
-# never tagged upstream, which is why this was a bare rev). Tag pin is the form
-# ADR-0011 prescribes; uv.lock still records the resolved SHA.
-# Note: the live brain service runs 3.28.1, an untagged master build. The
-# version floor stays 3.24.0 (ADR-0013) — nothing here requires a 3.28 API.
-tapps-brain = { git = "https://github.com/wtthornton/tapps-brain.git", tag = "v3.28.0" }
+# tapps-brain v3.28.1 — matches the version the live brain service runs (it is
+# tagged upstream now; the earlier "untagged master build" note was stale). Tag
+# pin is the form ADR-0011 prescribes; uv.lock still records the resolved SHA.
+# The runtime version floor is 3.28.0 (ADR-0033, supersedes ADR-0013): that is
+# the release adding web_research / research_fetch, which BrainBridge binds for
+# tapps_research. 3.28.1 additionally scopes idempotency keys by operation.
+tapps-brain = { git = "https://github.com/wtthornton/tapps-brain.git", tag = "v3.28.1" }
 
 [tool.uv]
 dev-dependencies = [

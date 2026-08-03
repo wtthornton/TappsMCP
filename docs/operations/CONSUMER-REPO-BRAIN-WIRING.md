@@ -36,7 +36,7 @@ For the ADR-0014 fleet doc-RAG cutover (~30 min maintenance window), see
    curl -fsS http://127.0.0.1:8080/healthz | jq '{ok, brain_version, db_ok}'
    ```
 
-   - `brain_version` must be **≥ 3.24.0** (floor per
+   - `brain_version` must be **≥ 3.28.0** (floor per
      [ADR-0013](../adr/0013-pin-tapps-brain-version-floor-at-3240.md),
      amended by [ADR-0015](../adr/0015-require-tapps-brain-docs-lookup-at-3240.md)
      when `docs_via_brain` is enabled,
@@ -255,7 +255,7 @@ Expect PASS on (among others):
 | `tapps-brain HTTP auth` | Bearer token + project id present; profile probe ok |
 | `tapps-brain health` | MCP `initialize` to `/mcp/` succeeds |
 | `tapps-brain capability profile` | `full` profile exposes bridge tools |
-| `tapps-brain version floor` | Running brain ≥ `3.24.0` |
+| `tapps-brain version floor` | Running brain ≥ `3.28.0` |
 
 Doctor also reads `memory.brain_http_url` from `.tapps-mcp.yaml` when
 `TAPPS_MCP_MEMORY_BRAIN_HTTP_URL` is unset in the shell, and accepts
@@ -269,7 +269,7 @@ Call `tapps_session_start()` and inspect `data.brain_bridge_health`:
 - `enabled: true`, `ok: true`
 - `dsn_reachable: true`, `native_health_ok: true`
 - `errors: []` (if `brain_auth_failed`, fix token propagation — restart MCP host)
-- `details.brain_version` ≥ `3.24.0`
+- `details.brain_version` ≥ `3.28.0`
 
 #### 3. Round-trip memory
 
@@ -303,7 +303,7 @@ add a project-specific block to `CLAUDE.md` or `.cursor/rules/`, keep it short:
 | CLI `memory save/get` 401 | Export `TAPPS_MCP_MEMORY_BRAIN_AUTH_TOKEN` in shell (not just MCP `${TAPPS_BRAIN_AUTH_TOKEN}`); `direnv reload`; see § F |
 | `brain_project_id_missing` | Set in `.tapps-mcp.yaml` or `TAPPS_MCP_MEMORY_BRAIN_PROJECT_ID` |
 | `403` / `out_of_profile` | Raise `TAPPS_BRAIN_PROFILE` to `full` (or `suggested_profile` from error) |
-| version below floor | Upgrade brain image; confirm `brain_bridge_health.details.brain_version` ≥ `3.24.0` |
+| version below floor | Upgrade brain image; confirm `brain_bridge_health.details.brain_version` ≥ `3.28.0` |
 | project not registered | Run `tapps-brain project register <slug>` on the brain container |
 | duplicate MCP servers | Remove direct `tapps-brain` block from `.mcp.json`; run `tapps_upgrade` |
 
@@ -358,7 +358,7 @@ Audit tapps-mcp brain wiring in this repo:
    when generic).
 6. Run `tapps-mcp doctor` — brain checks PASS.
 7. `tapps_session_start()` → `brain_bridge_health.ok == true`;
-   `details.brain_version` ≥ `3.24.0`.
+   `details.brain_version` ≥ `3.28.0`.
 8. `tapps_memory` save + search round-trip succeeds.
 
 Report failures with exact remediation from

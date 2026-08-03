@@ -103,8 +103,9 @@ fi
 
 # --- tapps-brain version floor check (TAP-1923) ---
 # Refuse the push if the tapps-brain floor in packages/tapps-core/pyproject.toml
-# drops below 3.18.0. This prevents silent regression of the alias-removal
-# guard documented in ADR-0010 and CLAUDE.md.
+# drops below 3.28.0 — the release that added the web_research / research_fetch
+# MCP tools BrainBridge binds for tapps_research (ADR-0033, supersedes the
+# 3.24.0 floor in ADR-0013 and the 3.18.0 alias-removal guard in ADR-0010).
 #
 # The check is intentionally lightweight: one grep + sort -V, no subprocess.
 # Override the TOML path via TAPPS_CORE_PYPROJECT (used by integration tests).
@@ -115,7 +116,7 @@ fi
 # sandbox wrapper; keep the block self-contained (no subprocess / repo-wide
 # grep) so the replay stays hermetic.
 _CORE_PYPROJECT="${TAPPS_CORE_PYPROJECT:-packages/tapps-core/pyproject.toml}"
-_REQUIRED_BRAIN_FLOOR="3.18.0"
+_REQUIRED_BRAIN_FLOOR="3.28.0"
 if [[ -f "$_CORE_PYPROJECT" ]]; then
   _BRAIN_LINE=$(grep 'tapps-brain>=' "$_CORE_PYPROJECT" 2>/dev/null | head -1)
   if [[ -n "$_BRAIN_LINE" ]]; then

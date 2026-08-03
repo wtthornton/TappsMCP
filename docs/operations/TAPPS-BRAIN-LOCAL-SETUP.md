@@ -215,6 +215,6 @@ Then restart VSCode so it inherits the updated systemd user environment.
 ### Version mismatch warning
 
 tapps-mcp pins a minimum tapps-brain version in `packages/tapps-core/pyproject.toml`
-(current floor **3.24.0** per [ADR-0013](../adr/0013-pin-tapps-brain-version-floor-at-3240.md)).
-If the version probe fails, update tapps-brain-http to `>=3.24.0,<4` and confirm
+(current floor **3.28.0** per [ADR-0033](../adr/0033-pin-tapps-brain-version-floor-at-3280.md)).
+If the version probe fails, update tapps-brain-http to `>=3.28.0,<4` and confirm
 `brain_bridge_health.details.brain_version` in `tapps_session_start()`.

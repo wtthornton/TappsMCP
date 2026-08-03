@@ -2552,13 +2552,13 @@ class TestBrainVersionFloor:
                 "skipped": False,
                 "degraded": False,
                 "version": "3.20.0",
-                "floor": "3.24.0",
+                "floor": "3.28.0",
                 "errors": ["tapps-brain version 3.20.0 does not satisfy required range"],
             },
         ):
             result = check_brain_version_floor(tmp_path)
         assert result.ok is False
-        assert "3.24.0" in (result.detail or "")
+        assert "3.28.0" in (result.detail or "")
 
     def test_passes_when_running_brain_meets_floor(self, tmp_path, monkeypatch) -> None:
         from tapps_mcp.distribution.doctor import check_brain_version_floor
@@ -2570,14 +2570,14 @@ class TestBrainVersionFloor:
                 "ok": True,
                 "skipped": False,
                 "degraded": False,
-                "version": "3.24.0",
-                "floor": "3.24.0",
+                "version": "3.28.0",
+                "floor": "3.28.0",
                 "errors": [],
             },
         ):
             result = check_brain_version_floor(tmp_path)
         assert result.ok is True
-        assert "3.24.0" in result.message
+        assert "3.28.0" in result.message
 
 
 # ---------------------------------------------------------------------------

@@ -217,14 +217,14 @@ class TestMaintenanceEndpoints:
 
     @pytest.mark.asyncio
     async def test_consolidate_dry_run_returns_shape(self, bridge: HttpBrainBridge) -> None:
-        # TAP-800: bridge returns a graceful degraded stub when the brain
-        # no longer exposes ``memory_consolidate`` (brain 3.10+). Older
-        # brains should return a real result with ``groups_found``.
+        # TAP-800: ``maintenance_consolidate`` lives in the operator profile,
+        # so a data-plane profile gets a graceful degraded stub. Operator-profile
+        # deployments should return a real result with ``groups_found``.
         result = await bridge.consolidate(dry_run=True)
         assert isinstance(result, dict)
         assert "groups_found" in result
         if result.get("degraded"):
-            assert "memory_consolidate" in result.get("reason", "")
+            assert "maintenance_consolidate" in result.get("reason", "")
 
     @pytest.mark.asyncio
     async def test_hive_status_returns_recognisable_shape(self, bridge: HttpBrainBridge) -> None:

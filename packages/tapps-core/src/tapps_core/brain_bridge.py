@@ -68,7 +68,11 @@ _WRITE_QUEUE_CAP: int = 100
 # Keep in sync with the ``tapps-brain`` pin in
 # ``packages/tapps-core/pyproject.toml``. The floor is the minimum version
 # known to ship all fields tapps-mcp consumes; the ceiling is the next major.
-_BRAIN_VERSION_FLOOR: str = "3.24.0"
+# 3.28.0 is the release that added the ``web_research`` / ``research_fetch``
+# MCP tools this bridge binds for ``tapps_research`` (ADR-0033, supersedes the
+# 3.24.0 floor in ADR-0013). Below it those calls fail at invocation time with
+# an unknown-tool error instead of being caught by the startup version probe.
+_BRAIN_VERSION_FLOOR: str = "3.28.0"
 _BRAIN_VERSION_CEILING: str = "4.0.0"
 _BRAIN_HEALTH_TIMEOUT_SECONDS: float = 5.0
 
@@ -343,6 +347,15 @@ _BRIDGE_USED_TOOLS_SNAPSHOT: frozenset[str] = frozenset(
         "tapps_brain_session_end",
         # TAP-1938: feedback flywheel — edge and memory feedback recording.
         "brain_record_feedback",
+        # TAP-5365 / ADR-0030: brain-owned web research backing tapps_research.
+        # Added in brain 3.28.0, which is why the version floor is 3.28.0
+        # (ADR-0033).
+        "web_research",
+        "research_fetch",
+        # Memory-profile introspection and switching. Both are in brain's
+        # ``full`` profile, so the least-privilege SERVER profile is unchanged.
+        "profile_info",
+        "profile_switch",
     }
 )
 
@@ -770,6 +783,18 @@ class BrainBridge:
     ) -> dict[str, Any]:
         """In-process bridge does not host research fetch — use HTTP transport."""
         raise BrainBridgeUnavailable("research_fetch requires HTTP brain bridge")
+
+    async def memory_profile_info(self) -> dict[str, Any]:
+        """Describe the active memory profile.
+
+        In-process callers read ``store.profile`` directly; only the HTTP
+        transport needs a round-trip (brain ``profile_info``, ``full`` profile).
+        """
+        raise BrainBridgeUnavailable("memory_profile_info requires HTTP brain bridge")
+
+    async def memory_profile_switch(self, name: str) -> dict[str, Any]:
+        """Switch the active memory profile (brain ``profile_switch``)."""
+        raise BrainBridgeUnavailable("memory_profile_switch requires HTTP brain bridge")
 
     async def hive_search(
         self,
@@ -1455,7 +1480,7 @@ class HttpBrainBridge(BrainBridge):
     reinforce                 memory_reinforce
     supersede                 memory_supersede
     gc                        maintenance_gc (operator profile only)
-    consolidate               memory_consolidate (removed in brain 3.10+)
+    consolidate               maintenance_consolidate (operator profile only)
     hive_search               hive_search
     hive_status               hive_status
     hive_propagate            hive_propagate
@@ -2158,6 +2183,20 @@ class HttpBrainBridge(BrainBridge):
             events = result.get("events") or result.get("results") or []
             return events if isinstance(events, list) else []
         return []
+
+    async def memory_profile_info(self) -> dict[str, Any]:
+        """Return the active memory profile, layers, and scoring config.
+
+        Brain tool ``profile_info`` (``full`` profile). Distinct from
+        :meth:`profile_get`, which reads profile-scoped learned KV data.
+        """
+        result = await self._http_mcp_call("profile_info", {})
+        return result if isinstance(result, dict) else {"ok": False}
+
+    async def memory_profile_switch(self, name: str) -> dict[str, Any]:
+        """Switch to a different built-in memory profile (brain ``profile_switch``)."""
+        result = await self._http_mcp_call("profile_switch", {"name": name})
+        return result if isinstance(result, dict) else {"ok": False}
 
     async def profile_get(self, profile: str, key: str) -> dict[str, Any]:
         """Read profile-scoped learned data (TAP-1998 / EPIC-074)."""
@@ -2864,14 +2903,15 @@ class HttpBrainBridge(BrainBridge):
         return result if isinstance(result, dict) else {"archived_count": 0}
 
     async def consolidate(self, dry_run: bool = False) -> dict[str, Any]:
-        # brain 3.10+ removed ``memory_consolidate`` entirely with no drop-in
-        # replacement. Fall through to a graceful degraded stub when the tool
-        # is missing or gated by profile (EPIC-073), so callers (hooks,
-        # background tasks) don't crash on newer brain versions or
-        # narrower-profile deployments. Older brains still work via the RPC
-        # path. Tracked in TAP-800 drift 1.
+        # brain 3.10+ removed ``memory_consolidate``; the replacement is
+        # ``maintenance_consolidate``, which lives in the *operator* profile
+        # (mcp_profiles.yaml) alongside ``maintenance_gc``. Calling it from a
+        # data-plane profile (``full``/``coder``/…) surfaces as a profile
+        # denial, so keep the degraded stub for that path — but target the
+        # tool that actually exists so operator-profile deployments really
+        # consolidate instead of always degrading. Tracked in TAP-800 drift 1.
         try:
-            result = await self._http_mcp_call("memory_consolidate", {"dry_run": dry_run})
+            result = await self._http_mcp_call("maintenance_consolidate", {"dry_run": dry_run})
         except (RuntimeError, BrainBridgeUnavailable) as exc:
             classification = _classify_mcp_error(exc)
             if classification in {"gated", "removed"}:
@@ -2879,9 +2919,9 @@ class HttpBrainBridge(BrainBridge):
                     "groups_found": 0,
                     "degraded": True,
                     "reason": (
-                        "memory_consolidate not in active brain profile"
+                        "maintenance_consolidate not in active brain profile"
                         if classification == "gated"
-                        else "memory_consolidate removed in tapps-brain 3.10+"
+                        else "maintenance_consolidate unavailable on this brain"
                     ),
                     "dry_run": dry_run,
                 }

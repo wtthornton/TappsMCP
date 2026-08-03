@@ -198,7 +198,7 @@ The RAG-based expert consultation system was removed in EPIC-94 (`tapps_consult_
 
 Backed by **tapps-brain** (Postgres in Docker) — see the [tapps-brain repo](https://github.com/wtthornton/tapps-brain) for the canonical description of storage, retrieval (BM25 + boosts), time-based confidence decay, contradiction detection, and garbage collection. Per-project entry cap is controlled by tapps-brain's `TAPPS_BRAIN_MAX_ENTRIES`. tapps-core/memory/ modules are re-export shims; `injection.py` is a bridge adapter translating TappsMCP settings into brain's config.
 
-tapps-mcp talks to tapps-brain through `BrainBridge`, which selects between **in-process** (default; see [ADR-0001](adr/0001-in-process-agentbrain-via-brainbridge.md)) and **HTTP** transports based on `memory.brain_http_url` in `.tapps-mcp.yaml`. Both transports share the same circuit-breaker / offline-queue / `BrainBridgeUnavailable` degraded-payload behavior across every `tapps_memory` action; the HTTP path additionally supports profile negotiation via `X-Brain-Profile` (TAP-1629). Runtime version check (`check_brain_version` in `brain_bridge.py`, floor constant `_BRAIN_VERSION_FLOOR`) validates installed brain meets the floor (`>=3.24.0, <4`; [ADR-0013](adr/0013-pin-tapps-brain-version-floor-at-3240.md), supersedes ADR-0010). Live state is surfaced as `data.brain_bridge_health` on every `tapps_session_start` response — see [docs/MEMORY_REFERENCE.md](MEMORY_REFERENCE.md#brain-health-diagnostics). Consumer wiring checklist: [operations/CONSUMER-REPO-BRAIN-WIRING.md](operations/CONSUMER-REPO-BRAIN-WIRING.md).
+tapps-mcp talks to tapps-brain through `BrainBridge`, which selects between **in-process** (default; see [ADR-0001](adr/0001-in-process-agentbrain-via-brainbridge.md)) and **HTTP** transports based on `memory.brain_http_url` in `.tapps-mcp.yaml`. Both transports share the same circuit-breaker / offline-queue / `BrainBridgeUnavailable` degraded-payload behavior across every `tapps_memory` action; the HTTP path additionally supports profile negotiation via `X-Brain-Profile` (TAP-1629). Runtime version check (`check_brain_version` in `brain_bridge.py`, floor constant `_BRAIN_VERSION_FLOOR`) validates installed brain meets the floor (`>=3.28.0, <4`; [ADR-0033](adr/0033-pin-tapps-brain-version-floor-at-3280.md), supersedes ADR-0013). Live state is surfaced as `data.brain_bridge_health` on every `tapps_session_start` response — see [docs/MEMORY_REFERENCE.md](MEMORY_REFERENCE.md#brain-health-diagnostics). Consumer wiring checklist: [operations/CONSUMER-REPO-BRAIN-WIRING.md](operations/CONSUMER-REPO-BRAIN-WIRING.md).
 
 Stable agent identity (UUIDv4) persisted to `.tapps-mcp/agent.id` is attached to every write for cross-session traceability.
 
@@ -213,7 +213,7 @@ Tool-call metrics default to `brain` mode when the bridge passes `health_check`
 unreachable. Each recorded call fires a best-effort `quality_metric`
 `brain_record_event` with scalar payload (score, duration, gate flags) and
 entities built via `kg_keys.entity_spec()`. Reads prefer `brain_query_events`
-when the brain bridge passes `health_check` (tapps-brain >=3.24.0).
+when the brain bridge passes `health_check` (tapps-brain >=3.28.0).
 
 | `TAPPS_METRICS_STORAGE` | Local JSONL write | Brain KG event write | Read path |
 |-------------------------|-------------------|----------------------|-----------|

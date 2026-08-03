@@ -354,9 +354,7 @@ class TestCreateBrainBridgeDispatch:
         assert isinstance(result, HttpBrainBridge)
         assert result._http_headers.get("X-Brain-Profile") == "reviewer"
 
-    def test_no_default_profile_leaves_header_absent(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_no_default_profile_leaves_header_absent(self, monkeypatch: pytest.MonkeyPatch) -> None:
         """Omitting ``default_profile`` preserves old behaviour — no header sent."""
         monkeypatch.setenv("TAPPS_MCP_MEMORY_BRAIN_HTTP_URL", "http://brain:8080")
         monkeypatch.delenv("TAPPS_BRAIN_PROFILE", raising=False)
@@ -744,9 +742,7 @@ class TestDoMcpPost:
         bridge._http_client = AsyncMock()
         bridge._http_client.post = post_mock
 
-        await bridge._do_mcp_post(
-            "memory_search", {"query": "q"}, project_id="tapps-mcp"
-        )
+        await bridge._do_mcp_post("memory_search", {"query": "q"}, project_id="tapps-mcp")
 
         headers = post_mock.call_args[1]["headers"]
         assert headers["X-Project-Id"] == "tapps-mcp"
@@ -777,9 +773,7 @@ class TestDoMcpPost:
         bridge._http_client = AsyncMock()
         bridge._http_client.post = post_mock
 
-        await bridge._do_mcp_post(
-            "memory_search", {"query": "q"}, project_id="tapps-mcp"
-        )
+        await bridge._do_mcp_post("memory_search", {"query": "q"}, project_id="tapps-mcp")
 
         payload = post_mock.call_args[1]["json"]
         assert payload["params"]["_meta"]["project_id"] == "tapps-mcp"
@@ -2274,6 +2268,7 @@ class TestHttpClose:
         assert bridge._http_client is None
         closed_loop.create_task.assert_not_called()
         mock_fresh.assert_called_once_with(mock_client)
+
     def test_close_clears_session_id(self) -> None:
         """close() always clears session_id regardless of client state (TAP-1744)."""
         bridge = _make_http_bridge()
@@ -2796,3 +2791,111 @@ class TestRecordFeedback:
         from tapps_core.brain_bridge import _BRIDGE_USED_TOOLS
 
         assert "brain_record_feedback" in _BRIDGE_USED_TOOLS
+
+
+# ---------------------------------------------------------------------------
+# Memory-profile introspection over HTTP (brain ``full`` profile)
+# ---------------------------------------------------------------------------
+
+
+class TestMemoryProfileTools:
+    @pytest.mark.asyncio
+    async def test_memory_profile_info_calls_brain_profile_info(self) -> None:
+        """``memory_profile_info`` maps to the brain ``profile_info`` tool."""
+        bridge = _make_http_bridge()
+        bridge._session_id = "__test__"
+        bridge._negotiated = True
+        bridge._http_client = AsyncMock()
+        bridge._http_client.post = _make_async_post(
+            _mcp_response({"active_profile": "repo-brain", "layers": []})
+        )
+
+        result = await bridge.memory_profile_info()
+
+        assert result["active_profile"] == "repo-brain"
+        sent = bridge._http_client.post.call_args[1]["json"]
+        assert sent["params"]["name"] == "profile_info"
+
+    @pytest.mark.asyncio
+    async def test_memory_profile_switch_passes_target_name(self) -> None:
+        """``memory_profile_switch`` forwards the target name to the brain."""
+        bridge = _make_http_bridge()
+        bridge._session_id = "__test__"
+        bridge._negotiated = True
+        bridge._http_client = AsyncMock()
+        bridge._http_client.post = _make_async_post(
+            _mcp_response({"active_profile": "coder", "changed": True})
+        )
+
+        result = await bridge.memory_profile_switch("coder")
+
+        assert result["changed"] is True
+        sent = bridge._http_client.post.call_args[1]["json"]
+        assert sent["params"]["name"] == "profile_switch"
+        assert sent["params"]["arguments"] == {"name": "coder"}
+
+    @pytest.mark.asyncio
+    async def test_non_dict_response_normalised(self) -> None:
+        bridge = _make_http_bridge()
+        bridge._session_id = "__test__"
+        bridge._negotiated = True
+        bridge._http_client = AsyncMock()
+        bridge._http_client.post = _make_async_post(_mcp_response("nope"))
+
+        assert await bridge.memory_profile_info() == {"ok": False}
+
+    def test_profile_tools_in_bridge_used_tools(self) -> None:
+        """Profile-coverage checks must see the tools the bridge actually calls."""
+        from tapps_core.brain_bridge import _BRIDGE_USED_TOOLS
+
+        assert {"profile_info", "profile_switch"} <= set(_BRIDGE_USED_TOOLS)
+
+    def test_research_tools_in_bridge_used_tools(self) -> None:
+        """TAP-5365: web research is a bound surface, not an optional extra."""
+        from tapps_core.brain_bridge import _BRIDGE_USED_TOOLS
+
+        assert {"web_research", "research_fetch"} <= set(_BRIDGE_USED_TOOLS)
+
+
+class TestConsolidateToolName:
+    @pytest.mark.asyncio
+    async def test_consolidate_targets_maintenance_consolidate(self) -> None:
+        """``memory_consolidate`` is not a tool on any brain — the real name is
+        ``maintenance_consolidate`` (operator profile).
+        """
+        bridge = _make_http_bridge()
+        bridge._session_id = "__test__"
+        bridge._negotiated = True
+        bridge._http_client = AsyncMock()
+        bridge._http_client.post = _make_async_post(_mcp_response({"groups_found": 3}))
+
+        result = await bridge.consolidate(dry_run=True)
+
+        assert result["groups_found"] == 3
+        sent = bridge._http_client.post.call_args[1]["json"]
+        assert sent["params"]["name"] == "maintenance_consolidate"
+
+    @pytest.mark.asyncio
+    async def test_consolidate_degrades_when_gated_by_profile(self) -> None:
+        """Data-plane profiles can't call the operator tool — degrade, don't raise."""
+        bridge = _make_http_bridge()
+        bridge._session_id = "__test__"
+        bridge._negotiated = True
+        bridge._http_client = AsyncMock()
+        bridge._http_client.post = _make_async_post(
+            {
+                "jsonrpc": "2.0",
+                "id": 1,
+                "error": {
+                    "code": -32602,
+                    "message": "tool not in profile",
+                    "data": {"reason": "out_of_profile", "tool": "maintenance_consolidate"},
+                },
+            }
+        )
+
+        result = await bridge.consolidate(dry_run=True)
+
+        assert result["degraded"] is True
+        assert result["groups_found"] == 0
+        assert "maintenance_consolidate" in result["reason"]

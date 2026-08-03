@@ -201,6 +201,11 @@ _HTTP_BRIDGE_FALLBACK_ACTIONS = {
     # TAP-1631: bulk save in HTTP mode routes to memory_save_many (1 round
     # trip) instead of the N-call in-process loop.
     "save_bulk",
+    # brain's ``full`` profile exposes profile_info / profile_switch; without
+    # these the actions dead-ended at requires_in_process_store in HTTP mode,
+    # which is the deployed transport for every consumer with brain_http_url.
+    "profile_info",
+    "profile_switch",
 }
 
 # TAP-3895: bounded actions when tapps_memory is registered on nlt-memory profile.
@@ -3594,6 +3599,40 @@ async def _http_handle_save_bulk(p: _Params) -> dict[str, Any]:
     return response
 
 
+async def _http_handle_profile_info(_p: _Params) -> dict[str, Any]:
+    """Read the active memory profile from brain ``profile_info``.
+
+    The sync handler walks ``store.profile``, which does not exist in HTTP
+    mode. brain exposes ``profile_info`` in the ``full`` profile, so the
+    action no longer has to refuse with ``requires_in_process_store``.
+    """
+    bridge = _require_bridge()
+    info = await bridge.memory_profile_info()
+    return {
+        "action": "profile_info",
+        **info,
+        "store_metadata": {"mode": "http_bridge"},
+    }
+
+
+async def _http_handle_profile_switch(p: _Params) -> dict[str, Any]:
+    """Switch the active memory profile via brain ``profile_switch``.
+
+    Takes the target name from ``value``, matching the in-process handler's
+    contract so callers do not need a transport-specific argument.
+    """
+    target_name = p.value.strip() if p.value else ""
+    if not target_name:
+        return {"error": "missing_value", "message": "Profile name is required (pass as value)."}
+    bridge = _require_bridge()
+    result = await bridge.memory_profile_switch(target_name)
+    return {
+        "action": "profile_switch",
+        **result,
+        "store_metadata": {"mode": "http_bridge"},
+    }
+
+
 _HTTP_BRIDGE_DISPATCH: dict[str, Any] = {
     "save": _http_handle_save,
     "get": _http_handle_get,
@@ -3603,6 +3642,10 @@ _HTTP_BRIDGE_DISPATCH: dict[str, Any] = {
     "reinforce": _http_handle_reinforce,
     # TAP-1631: single-round-trip bulk save against tapps-brain HTTP.
     "save_bulk": _http_handle_save_bulk,
+    # brain exposes profile_info / profile_switch in the ``full`` profile;
+    # both actions used to dead-end at requires_in_process_store in HTTP mode.
+    "profile_info": _http_handle_profile_info,
+    "profile_switch": _http_handle_profile_switch,
 }
 
 

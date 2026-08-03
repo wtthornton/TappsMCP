@@ -4,7 +4,9 @@ Date: 2026-06-09
 
 ## Status
 
-Accepted (supersedes the 3.18.0 floor in [ADR-0010](0010-pin-tapps-brain-version-floor-at-3180.md); workspace source pin remains rev-based until `v3.24.0` tag ships — see [ADR-0011](0011-pin-tapps-brain-by-tag.md). Amended by [ADR-0015](0015-require-tapps-brain-docs-lookup-at-3240.md) for `docs_lookup` / `docs_warm` capability when `docs_via_brain` is enabled.)
+Superseded by [ADR-0033](0033-pin-tapps-brain-version-floor-at-3280.md) (floor raised to 3.28.0 for `web_research` / `research_fetch`).
+
+Previously: Accepted (superseded the 3.18.0 floor in [ADR-0010](0010-pin-tapps-brain-version-floor-at-3180.md); workspace source pin remained rev-based until the `v3.24.0` tag shipped — see [ADR-0011](0011-pin-tapps-brain-by-tag.md). Amended by [ADR-0015](0015-require-tapps-brain-docs-lookup-at-3240.md) for `docs_lookup` / `docs_warm` capability when `docs_via_brain` is enabled.)
 
 ## Context
 
