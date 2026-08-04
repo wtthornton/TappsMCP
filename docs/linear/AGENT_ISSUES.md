@@ -45,8 +45,30 @@ TAP-### (prior work), commit <sha>
   `VAL-<AREA>-###` IDs from `/tapps-validation-contract`. Pass via
   `docs_generate_story(assertions=...)`. Not required for docs/research tickets.
 - **Bare issue refs**: `TAP-###`. Never wrap in `<issue id="UUID">…</issue>` — the UUID is pure noise.
-- **Acceptance is mandatory.** Every issue needs ≥1 verifiable checkbox. If you can't write one, keep it in **Triage** status until it can be specified.
+- **Acceptance is mandatory** for **implementable** agent stories. Every implementable
+  issue needs ≥1 verifiable checkbox. If you can't write one, keep it in **Triage**
+  until it can be specified — or file a **decision** / **map-parent** ticket instead
+  (see below). Don't invent fake Acceptance just to satisfy the validator.
 - **Estimates required** on all stories. Agents use estimate as a "fits-one-session" budget signal.
+
+## Issue kinds (TAP-5497 / TAP-5500)
+
+Three shapes share the Linear lint/validate gate (`docs_validate_linear_issue(issue_kind=...)`):
+
+| `issue_kind` | When | Required body | Skips |
+|---|---|---|---|
+| `implementable` (default) | Build work an agent can execute alone | `## Where` file anchor + `## Acceptance` checkboxes | — |
+| `decision` | Fog / preference / tradeoff that must resolve before build | `## Question` | File anchors, Acceptance |
+| `map-parent` | Wayfind map index for a multi-session destination | At least one of `## Destination`, `## Decisions so far`, `## Not yet specified`, `## Out of scope` (generator emits all four + `## Notes`) | File anchors, Acceptance |
+
+**Map-as-index:** a `map-parent` ticket is the frontier document. Child tickets are
+research / grilling / implementable stories. Linear remains the source of truth for
+status and assignee; do not invent standing human label-maintenance duties.
+
+**Generators:** `docs_generate_story(..., issue_kind="decision"|"map-parent", ...)`.
+**Planning skill:** `/tapps-wayfind` charts maps and decisions before
+`/orchestration-prompt` invents Goals. AgentForge and other consumers receive both
+skills via `tapps-mcp upgrade` only — no manual skill copy.
 
 ## Status and labels
 
