@@ -172,18 +172,26 @@ class TestManagedBlockUnit:
 
 
 class TestDoctorCheck:
+    def test_fails_full_tier_when_missing(self, tmp_path):
+        (tmp_path / ".mcp.json").write_text("{}", encoding="utf-8")
+        (tmp_path / ".tapps-mcp.yaml").write_text("skill_tier: full\n", encoding="utf-8")
+        result = check_orchestration_prompt_skill_current(tmp_path)
+        assert not result.ok
+        assert "missing" in result.message
+
+    def test_ok_core_tier_when_missing(self, tmp_path):
+        (tmp_path / ".mcp.json").write_text("{}", encoding="utf-8")
+        (tmp_path / ".tapps-mcp.yaml").write_text("skill_tier: core\n", encoding="utf-8")
+        result = check_orchestration_prompt_skill_current(tmp_path)
+        assert result.ok
+        assert "not required" in result.message
+
     def test_ok_when_fully_deployed(self, tmp_path):
         (tmp_path / ".mcp.json").write_text("{}", encoding="utf-8")
         generate_skills(tmp_path, "claude")
         result = check_orchestration_prompt_skill_current(tmp_path)
         assert result.ok
         assert "current" in result.message
-
-    def test_ok_when_not_deployed(self, tmp_path):
-        (tmp_path / ".mcp.json").write_text("{}", encoding="utf-8")
-        result = check_orchestration_prompt_skill_current(tmp_path)
-        assert result.ok
-        assert "not deployed" in result.message
 
     def test_flags_missing_companion(self, tmp_path):
         (tmp_path / ".mcp.json").write_text("{}", encoding="utf-8")
