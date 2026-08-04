@@ -25,6 +25,10 @@ from typing import Any, Literal
 from tapps_mcp.pipeline.agent_contract import (
     CALL_GRAPH_STOP_FOLLOWUP,
     CHECKLIST_SKIPPED_REC,
+    CONTRACT_ASSERTIONS_UNVERIFIED_GAP,
+    CONTRACT_ASSERTIONS_UNVERIFIED_REC,
+    CREATOR_VERIFIER_SKIPPED_GAP,
+    CREATOR_VERIFIER_SKIPPED_REC,
     SESSION_START_CHECKLIST_GAP_HINT,
     STOP_GAP_FOLLOWUP_DEFAULT,
     lookup_docs_underused_recommendation,
@@ -55,6 +59,8 @@ _PRIORITY_GAPS: tuple[str, ...] = (
     "checklist_skipped",
     "lookup_docs_underused",
     "library_uses_without_lookup_docs",
+    "contract_assertions_unverified",
+    "creator_verifier_skipped",
     "graph_degraded_ignored",
 )
 
@@ -484,6 +490,24 @@ def compute_gaps(
             "session_start in_repo_gap_rate is already high, re-querying will "
             "not clear degraded (index-level debt)."
         )
+
+    # TAP-5543 / TAP-5548: contract + creator-verifier marks (feature-style edit loops).
+    py_recent = [p for p in edited_recent if str(p).endswith((".py", ".pyi"))]
+    if py_recent:
+        from tapps_mcp.tools.contract_telemetry import mark_recorded_recently
+
+        if not mark_recorded_recently(
+            project_root, kind="contract-verified", window_days=rolling_window_days
+        ):
+            if CONTRACT_ASSERTIONS_UNVERIFIED_GAP not in gaps:
+                gaps.append(CONTRACT_ASSERTIONS_UNVERIFIED_GAP)
+                recs.append(CONTRACT_ASSERTIONS_UNVERIFIED_REC)
+        if not mark_recorded_recently(
+            project_root, kind="creator-verifier", window_days=rolling_window_days
+        ):
+            if CREATOR_VERIFIER_SKIPPED_GAP not in gaps:
+                gaps.append(CREATOR_VERIFIER_SKIPPED_GAP)
+                recs.append(CREATOR_VERIFIER_SKIPPED_REC)
 
     if not gaps:
         recs.append("No gaps detected. Pipeline coverage looks healthy.")

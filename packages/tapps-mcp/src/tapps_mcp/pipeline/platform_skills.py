@@ -26,6 +26,14 @@ from tapps_mcp.pipeline.platform_skill_orchestration import (
     ORCHESTRATION_PROMPT_CREATE_ONLY_FILES,
     ORCHESTRATION_PROMPT_SKILL_BODY,
 )
+from tapps_mcp.pipeline.platform_skill_validation_contract import (
+    VALIDATION_CONTRACT_COMPANION_FILES,
+    VALIDATION_CONTRACT_SKILL_BODY,
+)
+from tapps_mcp.pipeline.platform_skill_wayfind import (
+    WAYFIND_COMPANION_FILES,
+    WAYFIND_SKILL_BODY,
+)
 from tapps_mcp.pipeline.skill_managed_block import install_or_refresh_skill
 
 if TYPE_CHECKING:
@@ -282,8 +290,12 @@ Run a parallel review-fix-validate pipeline on changed Python files:
 4. Wait for all agents to complete and collect their results
 5. Merge any worktree changes back (review diffs before accepting)
 6. Call `mcp__nlt-build__tapps_validate_changed` with explicit `file_paths` to verify all files pass
-7. Call `mcp__nlt-build__tapps_checklist(task_type="review")` for final verification
-8. Present a summary table: file | before score | after score | gate | fixes applied
+7. **Creator ≠ verifier:** the review-fixer agents that *implemented* fixes must not be the sole
+   judges. Spawn a fresh review pass (or Bugbot / tapps-reviewer) that did not write the fixes,
+   then `uv run tapps-mcp pipeline-mark creator-verifier`.
+8. Call `mcp__nlt-build__tapps_checklist(task_type="review")` for final verification — clear
+   `creator_verifier_skipped` / `contract_assertions_unverified` if present
+9. Present a summary table: file | before score | after score | gate | fixes applied
 """,
     "tapps-refactor": """\
 ---
@@ -985,8 +997,12 @@ Run a parallel review-fix-validate pipeline on changed Python files:
 4. Wait for all agents to complete and collect their results
 5. Review and merge any changes
 6. Call `tapps_validate_changed` with explicit `file_paths` to verify all files pass
-7. Call `tapps_checklist(task_type="review")` for final verification
-8. Present a summary table: file | before score | after score | gate | fixes applied
+7. **Creator ≠ verifier:** the agents that *implemented* fixes must not be the sole judges.
+   Spawn a fresh review pass that did not write the fixes, then
+   `uv run tapps-mcp pipeline-mark creator-verifier`.
+8. Call `tapps_checklist(task_type="review")` for final verification — clear
+   `creator_verifier_skipped` / `contract_assertions_unverified` if present
+9. Present a summary table: file | before score | after score | gate | fixes applied
 """,
     "tapps-refactor": """\
 ---
@@ -1412,24 +1428,32 @@ CLAUDE_SKILLS.update(CLAUDE_DOMAIN_SKILLS)
 CURSOR_SKILLS.update(CURSOR_DOMAIN_SKILLS)
 
 # ---------------------------------------------------------------------------
-# Multi-file / smart-merge skills (orchestration-prompt platformisation)
+# Multi-file / smart-merge skills (orchestration-prompt + tapps-wayfind)
 # ---------------------------------------------------------------------------
 # The body is host-agnostic prose (no tool grants), so the same text serves the
 # Claude and Cursor hosts.
 CLAUDE_SKILLS["orchestration-prompt"] = ORCHESTRATION_PROMPT_SKILL_BODY
 CURSOR_SKILLS["orchestration-prompt"] = ORCHESTRATION_PROMPT_SKILL_BODY
+CLAUDE_SKILLS["tapps-wayfind"] = WAYFIND_SKILL_BODY
+CURSOR_SKILLS["tapps-wayfind"] = WAYFIND_SKILL_BODY
+CLAUDE_SKILLS["tapps-validation-contract"] = VALIDATION_CONTRACT_SKILL_BODY
+CURSOR_SKILLS["tapps-validation-contract"] = VALIDATION_CONTRACT_SKILL_BODY
 CLAUDE_SKILLS["continuous-learning-v2"] = CONTINUOUS_LEARNING_CLAUDE_SKILL_BODY
 CURSOR_SKILLS["continuous-learning-v2"] = CONTINUOUS_LEARNING_CURSOR_SKILL_BODY
 
 # Skills whose SKILL.md is refreshed via the managed-block smart-merge instead of
 # the all-or-nothing skip/overwrite: the platform body is replaced surgically and
 # each project's customizations (outside the markers) are preserved.
-SMART_MERGE_SKILL_NAMES: frozenset[str] = frozenset({"orchestration-prompt"})
+SMART_MERGE_SKILL_NAMES: frozenset[str] = frozenset(
+    {"orchestration-prompt", "tapps-wayfind", "tapps-validation-contract"}
+)
 
 # Companion files shipped alongside a skill's SKILL.md. Refreshed wholesale on
 # every init/upgrade — canonical platform docs, not customization points.
 SKILL_COMPANION_FILES: dict[str, dict[str, str]] = {
     "orchestration-prompt": ORCHESTRATION_PROMPT_COMPANION_FILES,
+    "tapps-wayfind": WAYFIND_COMPANION_FILES,
+    "tapps-validation-contract": VALIDATION_CONTRACT_COMPANION_FILES,
     "continuous-learning-v2": CONTINUOUS_LEARNING_COMPANION_FILES,
 }
 

@@ -55,6 +55,21 @@ class TestScaffold:
         # 4. context hygiene
         assert "context hygiene" in content
 
+    def test_body_and_template_carry_missions_contract_loop(self, tmp_path):
+        """TAP-5552 / ADR-0034: validation contract + expected-fail fix loop."""
+        generate_skills(tmp_path, "claude")
+        d = _skill_dir(tmp_path)
+        content = (d / "SKILL.md").read_text().lower()
+        tpl = (d / "assets" / "prompt-template.md").read_text().lower()
+        ref = (d / "references" / "claude-feature-map.md").read_text().lower()
+        assert "validation contract" in content
+        assert "expected-fail" in content
+        assert "creator ≠ verifier" in content or "creator != verifier" in content
+        assert "validation contract" in tpl
+        assert "expected-fail" in tpl
+        assert "structured handoff" in tpl
+        assert "missions → orchestration-prompt" in ref or "missions" in ref
+
     def test_template_has_verifier_and_tier_columns(self, tmp_path):
         generate_skills(tmp_path, "claude")
         tpl = (_skill_dir(tmp_path) / "assets" / "prompt-template.md").read_text().lower()
@@ -162,3 +177,23 @@ class TestDoctorCheck:
         result = check_orchestration_prompt_skill_current(tmp_path)
         assert not result.ok
         assert "stale" in result.message
+
+    def test_flags_stale_pre_missions_content(self, tmp_path):
+        """Deployed skill without validation-contract markers fails doctor."""
+        (tmp_path / ".mcp.json").write_text("{}", encoding="utf-8")
+        generate_skills(tmp_path, "claude")
+        tpl = _skill_dir(tmp_path) / "assets" / "prompt-template.md"
+        # Strip Missions fingerprints while keeping file present.
+        tpl.write_text("# stale template without missions markers\n", encoding="utf-8")
+        skill_md = _skill_dir(tmp_path) / "SKILL.md"
+        # Also strip from managed body so combined check fails.
+        text = skill_md.read_text()
+        skill_md.write_text(
+            text.replace("validation contract", "plan checklist").replace(
+                "Expected-fail", "Retry"
+            ).replace("expected-fail", "retry"),
+            encoding="utf-8",
+        )
+        result = check_orchestration_prompt_skill_current(tmp_path)
+        assert not result.ok
+        assert "stale content" in result.message

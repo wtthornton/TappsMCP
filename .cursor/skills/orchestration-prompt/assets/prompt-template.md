@@ -15,7 +15,18 @@ read the file first, then loop.>
 
 ## Done-when (Goal condition — ground-truth, not narration)
 <a single condition Claude's own output can demonstrate. Name the deterministic
-artifact that proves it — exit code, test-count line, diff, pasted query result.>
+artifact that proves it — exit code, test-count line, diff, pasted query result.
+For software behavior: every validation-contract ID below is verified by an
+independent verifier (paste evidence per ID).>
+
+## Validation contract (before execution — software behavior only)
+<Skip for pure research/triage/docs. Write assertions BEFORE execution sub-goals.>
+
+| ID | Behavioral assertion | Fulfilled by sub-goal | Evidence tool |
+|----|----------------------|-----------------------|---------------|
+| VAL-… | <user-visible / API / CLI outcome> | <sub-goal #> | <pytest / smoke / tapps_validate_changed / …> |
+
+Coverage rule: every ID claimed exactly once; Done-when requires all IDs green.
 
 ## Sub-goals  (sequential; each a checkpoint)
 0. **Establish preconditions (self-healing — the loop sets these up, NOT the user).** <runtime up, scorer/tool built, auth reachable, branch ready>
@@ -23,45 +34,49 @@ artifact that proves it — exit code, test-count line, diff, pasted query resul
    - **Smoke + health gate (after any deploy, before the real run):** `/health` is `ok|degraded` and one cheap end-to-end call succeeds.
    - **Harness compatibility:** <PreToolUse gates + MCP standing nudges the loop's tool calls will hit → bake unlock/refresh steps here; adopt-or-override each nudge in Guardrails>
    - proof: <preconditions verified; for live targets — image no older than latest merged commit + a 200/non-error smoke pasted>
-1. <narrow, verifiable> — proof: <ground-truth artifact>
-2. <…>
+1. **(Software behavior) Finalize validation contract** — proof: contract table above complete + coverage check pasted
+2. <narrow, verifiable execution> — fulfills: <VAL-…> — proof: <ground-truth artifact>
+3. <…>
 
 ## Plane map  (mechanism + model tier per chunk)
 | Step | Plane | Mechanism | Model tier | Notes |
 |------|-------|-----------|-----------|-------|
-| <audit/research> | coordination | Workflow / 3–5 subagents | cheap/low-effort | fan-out OK |
-| <code change> | execution | dispatch to <repo> via PR | cheap unless hard | one repo at a time |
-| <verify proof> | coordination | **verifier subagent (fresh context)** | **frontier/high-effort** | refutes the proof; re-runs the check |
+| <audit/research> | coordination | Workflow / 3–5 subagents | cheap/low-effort | fan-out OK (read-only) |
+| <code change> | execution | dispatch to <repo> via PR | cheap unless hard | **serial writes** — one repo at a time |
+| <verify proof> | coordination | **verifier subagent (fresh context)** | **frontier/high-effort** | creator ≠ verifier; refutes proof |
+| <fix after fail> | execution | fresh worker on scoped fix sub-goal | cheap unless hard | expected-fail loop; do not reopen whole feature |
 | <recurring check> | execution | Routine / `claude -p`+cron | cheap | human-gated |
 
 ## Loop
-- **State:** <read first — status, brain recall of prior attempts, Linear>
+- **State:** <read first — status, brain recall of prior attempts, Linear, last handoff>
 - **Decide:** <how to pick the next action / sub-goal>
 - **Execute:** <the action, on the committed mechanism + tier>
-- **Verify (independent):** spawn a fresh-context verifier (frontier tier) to *refute* the sub-goal's proof — re-run the deterministic check, don't trust the executor's claim. The verifier's verdict advances the loop.
-- **On fail:** diagnose (error + state + brain recall) → hypothesis → fix → retry *differently*; ≤3 distinct strategies, then escalate once, then stop with a diagnosis
-- **Record:** <save outcome + any failure-and-why to the brain>
+- **Verify (independent):** spawn a fresh-context verifier (frontier tier) to *refute* the sub-goal's proof — re-run scrutiny + behavioral checks against the validation contract; don't trust the executor's claim. The verifier's verdict advances the loop.
+- **On fail (expected-fail fix loop):** record structured handoff → scope narrow fix sub-goal → re-execute → re-verify; ≤**3** validation rounds per sub-goal (override: N=…), then escalate once, then stop with a diagnosis. Never weaken the contract to go green.
+- **Record (structured handoff):** completed · undone · commands+exit codes · issues · procedures followed? · failure-and-why → brain
 - **Context hygiene:** prune stale reads; carry a compact state summary, not raw transcripts.
 - **Repeat or stop:** loop until **Done-when** holds; caps: <N iterations> AND <token budget>
 
 ## Guardrails
 - Termination: <goal condition>; caps: <N iterations> AND <token budget>.
-- Independent verification (not self-report); ground-truth proof.
-- No fan-out of coupled coding — sequential per-repo edits.
+- Validation contract before features when changing behavior; coverage complete.
+- Independent verification (creator ≠ verifier); ground-truth proof; expected-fail fix loop with attempt cap.
+- No fan-out of coupled coding — sequential per-repo edits (serial writes, parallel reads OK).
 - Context hygiene — targeted grep over full re-Read.
 - Scope: repos in play = <list>; reads fleet-wide, writes via owner.
-- Memory: recall at start; record outcome (incl. failures) at each checkpoint.
+- Memory: recall at start; record structured handoff (incl. failures) at each checkpoint.
 - Harness compatibility: <gated tool calls → unlock/refresh steps; MCP standing nudges → adopted or overridden>.
 - Discipline: root-cause not workarounds; no green-by-suppression; right-sized; durable; match conventions; no scope creep.
 
 ## Autonomy
 - Act on every reversible, in-scope step — no "should I proceed?" checkpoints.
 - Irreversible/outward step → produce the reversible precursor (draft PR / staged diff / proposal) and continue; human reviews async.
-- Hard-stop once (batched, with a recommendation) only for: irreversible/outward with no precursor · projected next-step cost > ceiling · unsafe-to-guess ambiguity.
+- Hard-stop once (batched, with a recommendation) only for: irreversible/outward with no precursor · projected next-step cost > ceiling · unsafe-to-guess ambiguity · **validation contract itself is wrong**.
 
 ## Failure handling
 - On failed verify: diagnose (error + state + brain recall) → hypothesis → fix → retry *differently*.
 - ≤3 distinct strategies per sub-goal; then escalate once; then stop with a concise diagnosis. Never repeat the same action on the same error.
+- Expected-fail: first verify fail is normal — scoped fix sub-goal, not panic or contract rewrite.
 
 ## Context
 - Repos: <manifest — path · Linear project · brain project_id>

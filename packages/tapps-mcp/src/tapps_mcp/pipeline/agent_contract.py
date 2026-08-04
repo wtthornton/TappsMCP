@@ -100,6 +100,19 @@ LOOKUP_TIMING_RULE = (
 )
 
 LOOKUP_DOCS_UNDERUSED_GAP = "lookup_docs_underused"
+CONTRACT_ASSERTIONS_UNVERIFIED_GAP = "contract_assertions_unverified"
+CREATOR_VERIFIER_SKIPPED_GAP = "creator_verifier_skipped"
+
+CONTRACT_ASSERTIONS_UNVERIFIED_REC = (
+    "Recent Python edits lack a recorded validation-contract verify. Draft "
+    "assertions with `/tapps-validation-contract`, then after an independent "
+    "verifier confirms them run: `uv run tapps-mcp pipeline-mark contract-verified`."
+)
+CREATOR_VERIFIER_SKIPPED_REC = (
+    "Recent edits lack a recorded creator-verifier pass (fresh review context). "
+    "Run a separate reviewer/verifier, then: "
+    "`uv run tapps-mcp pipeline-mark creator-verifier`."
+)
 
 # Doctor / upgrade freshness markers for lookup-first python-quality rules.
 LOOKUP_FIRST_RULE_MARKERS = (
@@ -206,7 +219,17 @@ _FINISH_TASK_DOC_GAPS_STEP3_BODY = """\
    - Call `{lookup_tool}` for **each** listed library (retrospective MCP lookups clear telemetry gaps; cache hits are fine — ADR-0021).
    - CLI `tapps-mcp lookup-docs` also records `.lookup-docs-events.jsonl` for the next session.
    - Re-run `{checklist_tool}` until `usage_gaps.gaps` is empty **and** `complete: true`.
-   Prefer lookup **before the first edit** that uses each external library in future sessions."""
+   Prefer lookup **before the first edit** that uses each external library in future sessions.
+
+3b. **Creator-verifier (feature/review).** Before declaring done on feature or review work,
+   spawn a **fresh** verifier context (separate review agent / Bugbot / `tapps-reviewer`)
+   that did **not** implement the change. Deterministic `tapps_validate_changed` alone is
+   scrutiny — not creator-verifier. After the verifier passes:
+   `uv run tapps-mcp pipeline-mark creator-verifier`.
+   If the work changed observable behavior, also ensure a validation contract was verified:
+   `uv run tapps-mcp pipeline-mark contract-verified` (draft via `/tapps-validation-contract` if missing).
+   Re-run `{checklist_tool}` until `contract_assertions_unverified` and `creator_verifier_skipped`
+   are absent from `usage_gaps.gaps` and `complete: true`."""
 
 AGENTS_TEMPLATE_TOOL_COUNT_PLACEHOLDER = "{{TAPPS_MCP_TOOL_COUNT}}"
 AGENTS_TEMPLATE_MEMORY_SYSTEMS_PLACEHOLDER = "{{MEMORY_SYSTEMS_BULLET}}"
@@ -329,6 +352,10 @@ __all__ = [
     "DOC_GAP_TELEMETRY_NOTE",
     "FINISH_TASK_VALIDATE_CALL_GRAPH_NOTE",
     "LOOKUP_DOCS_UNDERUSED_GAP",
+    "CONTRACT_ASSERTIONS_UNVERIFIED_GAP",
+    "CONTRACT_ASSERTIONS_UNVERIFIED_REC",
+    "CREATOR_VERIFIER_SKIPPED_GAP",
+    "CREATOR_VERIFIER_SKIPPED_REC",
     "LOOKUP_FIRST_RULE_MARKERS",
     "LOOKUP_GAP_RETRO_NOTE",
     "LOOKUP_TIMING_RULE",

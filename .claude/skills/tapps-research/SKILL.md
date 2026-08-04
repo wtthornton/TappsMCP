@@ -14,7 +14,7 @@ context: fork
 model: claude-sonnet-4-6
 ---
 
-Research using TappsMCP’s unified front door (ADR-0030):
+Research using TappsMCP's unified front door (ADR-0030):
 
 1. Prefer `mcp__nlt-build__tapps_research`:
    - Library/API: pass `library=` (and optional `topic=`) or `route="docs"`

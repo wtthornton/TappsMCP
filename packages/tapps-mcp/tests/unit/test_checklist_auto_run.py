@@ -8,6 +8,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
+from tapps_mcp.server import tapps_checklist
 from tapps_mcp.tools.checklist import CallTracker, ChecklistResult
 
 # Patch target for CallTracker.evaluate — it's imported locally inside
@@ -15,12 +16,28 @@ from tapps_mcp.tools.checklist import CallTracker, ChecklistResult
 _EVALUATE_TARGET = "tapps_mcp.tools.checklist.CallTracker.evaluate"
 _VC_TARGET = "tapps_mcp.server_pipeline_tools.tapps_validate_changed"
 _SETTINGS_TARGET = "tapps_mcp.server.load_settings"
+_GAPS_TARGET = "tapps_mcp.tools.usage.compute_gaps"
 
 
 @pytest.fixture(autouse=True)
 def _reset_tracker() -> None:  # type: ignore[misc]
     """Reset CallTracker before every test."""
     CallTracker.reset()
+
+
+@pytest.fixture(autouse=True)
+def _no_contract_gaps() -> Any:  # type: ignore[misc]
+    """Keep auto_run tests hermetic vs TAP-5543/5548 hard-gate."""
+    with patch(
+        _GAPS_TARGET,
+        return_value={
+            "gaps": [],
+            "recommendations": ["No gaps detected. Pipeline coverage looks healthy."],
+            "libraries_without_lookup": [],
+            "rolling_stats": {"gate_skip_rate": 0.0, "loops": 0},
+        },
+    ):
+        yield
 
 
 def _make_result(
@@ -63,8 +80,6 @@ async def test_auto_run_false_no_extra_calls() -> None:
         patch(_EVALUATE_TARGET, return_value=result),
         patch(_VC_TARGET, new_callable=AsyncMock) as mock_vc,
     ):
-        from tapps_mcp.server import tapps_checklist
-
         resp = await tapps_checklist(task_type="feature", auto_run=False)
 
     mock_vc.assert_not_called()
@@ -97,8 +112,6 @@ async def test_auto_run_true_runs_validate_when_score_missing() -> None:
         patch(_VC_TARGET, new_callable=AsyncMock, return_value=_mock_vc_result()) as mock_vc,
         patch(_SETTINGS_TARGET, return_value=mock_settings),
     ):
-        from tapps_mcp.server import tapps_checklist
-
         resp = await tapps_checklist(task_type="feature", auto_run=True)
 
     mock_vc.assert_called_once()
@@ -117,8 +130,6 @@ async def test_auto_run_true_all_tools_called_no_action() -> None:
         patch(_EVALUATE_TARGET, return_value=result),
         patch(_VC_TARGET, new_callable=AsyncMock) as mock_vc,
     ):
-        from tapps_mcp.server import tapps_checklist
-
         resp = await tapps_checklist(task_type="feature", auto_run=True)
 
     mock_vc.assert_not_called()
@@ -145,8 +156,6 @@ async def test_auto_run_validate_failure_graceful() -> None:
         ),
         patch(_SETTINGS_TARGET, return_value=mock_settings),
     ):
-        from tapps_mcp.server import tapps_checklist
-
         resp = await tapps_checklist(task_type="feature", auto_run=True)
 
     assert resp["success"] is True
@@ -183,8 +192,6 @@ async def test_auto_run_re_evaluates_after_running() -> None:
         patch(_VC_TARGET, new_callable=AsyncMock, return_value=_mock_vc_result()),
         patch(_SETTINGS_TARGET, return_value=mock_settings),
     ):
-        from tapps_mcp.server import tapps_checklist
-
         resp = await tapps_checklist(task_type="feature", auto_run=True)
 
     data = resp.get("data", {})
