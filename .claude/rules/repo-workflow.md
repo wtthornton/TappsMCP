@@ -2,12 +2,20 @@
 
 This file is **specific to the tapps-mcp repo** and is not deployed to consumers via `tapps_upgrade`. Consuming projects have their own workflow conventions; the rules below apply only when working inside this monorepo.
 
-## Commit directly to master — no feature branches, no PRs
+## Branch per issue, merge via PR
 
-For tapps-mcp, commit code changes directly to `master`. Solo-dev workflow on a tool repo.
+Work on a branch named after the Linear issue (`tap-5607-docs-mcp-megafile-split`),
+open a PR, and merge once CI is green. The quality gate
+(`.github/workflows/tapps-quality.yml`) and the MCP guardrails
+(`.github/workflows/mcp-guardrails.yml`) run on `pull_request` — committing
+straight to `master` skips both, which is how PR #244's pre-existing gate
+failures went unnoticed for as long as they did (TAP-5607).
 
-- Run local validation (tests, quality gate) and `git commit` + `git push` to `master`.
-- Do not propose "open a PR for X" or branch-and-PR flows in plans or recommendations.
+- One branch per issue or tight issue cluster; squash-merge to `master`.
+- Do not merge a PR with a failing gate. Fix the cause — raising the threshold,
+  adding per-file ignores, or bypassing the hook are not fixes.
+- Push directly to `master` only for trivial, gate-neutral changes (a typo in
+  prose, a README link). Anything touching code goes through a PR.
 
 The pre-push test gate (`.githooks/pre-push`) runs a **smoke suite only**
 (`scripts/prepush-smoke.sh`) before any push to master — serial pytest, no
@@ -31,7 +39,7 @@ The post-merge auto-sync hook (`.githooks/post-merge`) runs `uv sync
 lockstep with the merged tree. When none of those files changed, the hook
 exits in <1s. Bypass with `TAPPS_SKIP_POSTMERGE=1` (same `.bypass-log.jsonl`).
 Same install path as the pre-push gate (`scripts/install-git-hooks.sh`).
-- Still ask before destructive ops (force-push, `reset --hard`) — "no PRs" is a workflow preference, not a green light to skip the destructive-op confirmation rule.
+- Still ask before destructive ops (force-push, `reset --hard`) — the PR flow is a workflow convention, not a green light to skip the destructive-op confirmation rule.
 - Linear writes (epics, stories, comments) are unaffected — those go through the `linear-issue` skill as usual.
 
 ## All three packages share the same version — use the unified bumper
@@ -97,4 +105,4 @@ tapps-mcp, tapps-core, docs-mcp, and any npm wrappers are **installed globally f
 
 ## How to apply
 
-Both rules describe **this repo's** release shape: a single-author, locally-installed tool. They override the generic Claude Code defaults of "branch + PR" and "publish to a package registry." If you find yourself proposing a feature branch, a PR description, or a registry upload while working in this repo, stop and re-read this file.
+These rules describe **this repo's** shape: a single-author, locally-installed tool that still gates every code change through CI. Branch-and-PR is the norm here, so the generic Claude Code default applies — but the registry default does not. If you find yourself proposing `uv publish`, `npm publish`, or a registry upload while working in this repo, stop and re-read this file. If you find yourself pushing code straight to `master` to skip a red gate, stop and fix the gate.
