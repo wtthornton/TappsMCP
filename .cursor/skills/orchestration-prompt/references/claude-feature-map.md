@@ -47,6 +47,7 @@ exactly how a modest base model reaches frontier-level reliability.
 
 ## Anti-patterns to encode against
 
+- **Inventing a Goal under fog** → refuse; `/tapps-wayfind` until the route is clear.
 - One enormous goal → sequence narrow sub-goals.
 - Unbounded loop (no cap/budget) → always set max iterations or a token budget.
 - **Self-verification only** → add an independent, adversarial verifier (creator ≠ verifier).

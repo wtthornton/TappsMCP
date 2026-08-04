@@ -1,4 +1,4 @@
-<!-- BEGIN: tapps-skill tapps-validation-contract v3.12.60 -->
+<!-- BEGIN: tapps-skill tapps-validation-contract v3.12.61 -->
 ---
 name: tapps-validation-contract
 user-invocable: true

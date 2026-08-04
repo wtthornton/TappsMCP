@@ -1,6 +1,6 @@
 llm_engagement_level: medium
 skill_tier: full
-cursor_stop_completion_gate: "warn"
+cursor_stop_completion_gate: warn
 mcp_bundle: full
 quality_preset: standard
 install_git_hooks: true
