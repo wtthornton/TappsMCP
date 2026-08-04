@@ -26,7 +26,8 @@ description: >-
   done-condition), a validation contract before execution (when changing behavior),
   a Loop (state→decide→execute→verify→fix→repeat with attempt cap), an independent
   creator-verifier pass, and the right Claude Code feature + model tier per step
-  (subagents, Workflow tool, /goal, /loop, Routines, brain memory). Use whenever
+  (subagents, Workflow tool, /goal, /loop, Routines, brain memory). Refuses foggy
+  Goals — redirects to /tapps-wayfind when decisions are still missing. Use whenever
   the user wants to orchestrate multi-step, multi-repo, autonomous, or recurring
   work — "create a prompt to…", "orchestrate…", "make a goal for…", "work the
   backlog", "loop until X" — even if they don't say "orchestrate".
@@ -57,11 +58,61 @@ frontier one on verification-friendly tasks. A good orchestration prompt makes t
 loop explicit so Claude drives itself to a *provable* finish instead of stopping at
 "good enough".
 
-Every prompt rests on six load-bearing parts. If any is missing, the loop never
-terminates, terminates without finishing, verifies only by self-report, or can't be
-cold-started by a fresh session.
+Every prompt rests on seven load-bearing parts. If any is missing, the loop never
+terminates, terminates without finishing, verifies only by self-report, invents a
+Goal while the route is still foggy, or can't be cold-started by a fresh session.
 
 ## The method
+
+### 0. Wayfind fog preflight (before inventing a Goal)
+
+**Do not invent a Goal while the route is still foggy.** Fog means open product /
+architecture / preference decisions that must be answered before a harness loop can
+honestly terminate. This skill emits execute loops for *clear* multi-step work;
+decision maps live in `/tapps-wayfind`.
+
+**Fog signals (any → refuse Goal invent):**
+
+- The objective is a loose idea or destination without a named, locked route.
+- An open Linear `wayfinder:map` (or map parent) still has open children **or**
+  non-empty **Not yet specified**.
+- The user cannot state Done-when without guessing undecided tradeoffs.
+
+**Clear signals (proceed):**
+
+- Destination + decisions-so-far already answer the path, **or** the journey fits
+  one session and no map is needed.
+- Remaining work is implementable (build / verify / fix), not "what should we do?"
+
+**On fog:** stop drafting. Tell the user to run `/tapps-wayfind chart <idea>` or
+`/tapps-wayfind work <map-id>`, and do **not** fill `assets/prompt-template.md`
+with a fake Goal. Resume here only after the map is clear (no open decide tickets;
+Not yet specified empty).
+
+**Cold-start wayfind resume:** before Sub-goal 0 / Loop State, recall prior
+wayfind decisions when present:
+
+```bash
+uv run tapps-mcp memory search --query "wayfind <map-id or destination>"
+```
+
+Prefer hits with `memory_group=wayfind` (or keys `wayfind:*`) — Linear remains SoT
+for map/ticket status; brain holds resume/rationale only. Fold named decisions into
+Context; never invent missing ones.
+
+### Decide-vs-execute chunk taxonomy
+
+| Chunk kind | Fog? | Handle with |
+|---|---|---|
+| **Decide** — preference, tradeoff, scope, "which approach?" | yes until locked | `/tapps-wayfind` (decision / research tickets) |
+| **Map / chart** — surface fog, wire blocking | yes | `/tapps-wayfind chart` |
+| **Execute** — code edit, migration, deploy, mechanical fan-out | no (route clear) | this skill → execution plane |
+| **Verify / judge** — refute proof, run checks | no | this skill → coordination + frontier verifier |
+| **Fix after expected-fail** — scoped gap repair | no | this skill → expected-fail fix loop |
+| **Research-to-decide** | yes | wayfind `research` tickets (not an orch Goal) |
+| **Research-to-execute** (facts for a clear build) | no | orch coordination plane OK |
+
+If a chunk is still **Decide**, do not map it to `/goal` or a Workflow — redirect.
 
 ### 1. Pin the Goal to a *verifiable, demonstrable* done-condition
 
@@ -107,8 +158,8 @@ whatever the implementer already built:
    verifier), not to "executor says the feature is done."
 
 Skip the contract section only for pure research/triage/docs prompts where there
-is no behavioral product surface. Never invent a Goal while the route is still
-foggy — hand off to `/tapps-wayfind` first when decisions are missing.
+is no behavioral product surface. Fog preflight (method §0) already ran — if you
+are writing a Goal, the route is clear.
 
 ### 3. Map each chunk to a plane, a mechanism, and a model tier
 
@@ -187,6 +238,9 @@ from Missions / Factory: the implementer has cost bias; a fresh context does not
 
 The point is a prompt a **brand-new session** can run with zero hand-holding.
 
+- **Wayfind resume first.** Cold-start State opens with a brain search for
+  `memory_group=wayfind` / `wayfind:*` keyed to the map or destination (method §0).
+  Prefer those hits over inventing Context; Linear is still SoT for open tickets.
 - **Self-bootstrap launch line.** `/goal "<condition>"` carries only the *condition*
   into a fresh session — not the prompt body. So every emitted prompt needs a
   top-of-file **"How to run (cold start)"** block with one paste-able line that
@@ -227,6 +281,8 @@ The point is a prompt a **brand-new session** can run with zero hand-holding.
 - **Autonomy, not checkpoints** — act on every reversible in-scope step; for an
   outward/irreversible step produce a reversible precursor (draft PR, staged diff)
   and keep going.
+- **Fog gate** — never invent a Goal while decide work remains; redirect to
+  `/tapps-wayfind` (method §0).
 - **Scope** — name the exact repos/paths; reads can be fleet-wide, writes go through
   the owning repo's channel.
 - **Budget** — every loop carries *both* an iteration cap and a token budget; set a
@@ -287,31 +343,36 @@ no silent scope creep.
 
 ## Output
 
-1. Read the workspace manifest (e.g. `fleet.md`) for the repos / Linear projects /
+1. **Fog preflight (method §0).** If foggy, refuse and point at `/tapps-wayfind` —
+   do not emit a prompt. If clear, recall `memory_group=wayfind` resume when present.
+2. Read the workspace manifest (e.g. `fleet.md`) for the repos / Linear projects /
    brain ids involved, if the project has one.
-2. Fill `assets/prompt-template.md` — keep only the sections the task needs. Always
-   keep the **"How to run (cold start)"** block, a **Sub-goal 0** for self-healing
-   preconditions, the **Verify** step wired to an independent verifier, and — when
-   changing software behavior — a **Validation contract** filled *before* execution
-   sub-goals plus an **expected-fail fix loop** with attempt cap.
-3. If any chunk is multi-stage parallel work, also write the companion
+3. Fill `assets/prompt-template.md` — keep only the sections the task needs. Always
+   keep **Prerequisites / Wayfind gate**, the **"How to run (cold start)"** block, a
+   **Sub-goal 0** for self-healing preconditions, the **Verify** step wired to an
+   independent verifier, and — when changing software behavior — a **Validation
+   contract** filled *before* execution sub-goals plus an **expected-fail fix loop**
+   with attempt cap.
+4. If any chunk is multi-stage parallel work, also write the companion
    `.claude/workflows/<slug>.js` (schema + `budget` + per-stage `model`/`effort`) and
    point Run-as at it. A single coupled item (N=1) is a `/goal` drive, not a Workflow.
-4. Save the prompt to `prompts/<short-slug>.md`.
-5. **Completeness self-check** — every chunk names a concrete mechanism *and* model
-   tier (no "may"); the loop has *both* an iteration cap and a budget; there's an
-   **independent verification** step (not self-report); any fan-out has a schema'd
-   return + per-agent contract; a memory recall+record step with **structured
-   handoff** fields on fail; an **Autonomy contract**; a **bounded diagnose-don't-
-   repeat** path; an **expected-fail fix loop** (default ≤3 validation rounds); a
-   **context-hygiene** line; and the **Engineering discipline** line. For software
-   behavior changes, confirm a **validation contract** with IDs + fulfills coverage
-   before execution sub-goals. For a live/deployed target, confirm Sub-goal 0 has
-   the deploy-freshness + smoke/health gate. Confirm **harness compatibility**: every
-   hook-gated tool call has its unlock/refresh step and every MCP standing nudge is
-   adopted-or-overridden. Run the **cold-start test**: a fresh session with nothing
-   loaded can run it. Fix anything weak before saving.
-6. Tell the user exactly how to run it — the `/goal` line, the `/loop` cadence, the
+5. Save the prompt to `prompts/<short-slug>.md`.
+6. **Completeness self-check** — fog preflight passed (or explicit redirect; no Goal
+   invent under fog); every **execute** chunk names a concrete mechanism *and* model
+   tier (no "may"); decide chunks stayed on `/tapps-wayfind`; the loop has *both* an
+   iteration cap and a budget; there's an **independent verification** step (not
+   self-report); any fan-out has a schema'd return + per-agent contract; a memory
+   recall+record step with **structured handoff** fields on fail (incl. wayfind
+   resume when `memory_group=wayfind` hits exist); an **Autonomy contract**; a
+   **bounded diagnose-don't-repeat** path; an **expected-fail fix loop** (default ≤3
+   validation rounds); a **context-hygiene** line; and the **Engineering discipline**
+   line. For software behavior changes, confirm a **validation contract** with IDs +
+   fulfills coverage before execution sub-goals. For a live/deployed target, confirm
+   Sub-goal 0 has the deploy-freshness + smoke/health gate. Confirm **harness
+   compatibility**: every hook-gated tool call has its unlock/refresh step and every
+   MCP standing nudge is adopted-or-overridden. Run the **cold-start test**: a fresh
+   session with nothing loaded can run it. Fix anything weak before saving.
+7. Tell the user exactly how to run it — the `/goal` line, the `/loop` cadence, the
    Routine schedule, or "invoke the Workflow tool `<script>`" — and from which
    session.
 
@@ -336,15 +397,24 @@ _PROMPT_TEMPLATE = r"""# <Objective title>
 > Generated by the `orchestration-prompt` skill. Keep only the sections this task
 > needs. Run from the orchestrator session unless noted.
 
+## Prerequisites / Wayfind gate
+<Fill BEFORE Objective. Refuse to invent a Goal if any fog remains.>
+
+- **Route clear?** <yes / no — open `wayfinder:map` children? Not yet specified empty?>
+- **If no:** stop — run `/tapps-wayfind chart <idea>` or `/tapps-wayfind work <map-id>`;
+  do not continue this prompt until decide tickets are closed.
+- **Wayfind resume (cold start):** `uv run tapps-mcp memory search --query "wayfind <map-id or destination>"` — prefer `memory_group=wayfind` / keys `wayfind:*`; fold named decisions into Context. Linear is SoT for status/frontier.
+- **Chunk mix:** decide chunks → wayfind; execute / verify / fix → this loop (see skill decide-vs-execute taxonomy).
+
 ## How to run (cold start — paste into a NEW session)
 <`/goal "<condition>"` alone does NOT load this file's body, so the launch line must
-read the file first, then loop.>
+read the file first, then loop. Run Prerequisites / Wayfind gate recall before Loop.>
 
-- **Goal loop (recommended):** `Read prompts/<slug>.md in full, then execute it as a goal loop — run the Loop section repeatedly until Done-when holds, printing the score line every iteration. Establish your own preconditions per Sub-goal 0; do not stop unless an Autonomy hard-stop fires.`
+- **Goal loop (recommended):** `Read prompts/<slug>.md in full, run Prerequisites / Wayfind gate (incl. wayfind resume recall), then execute it as a goal loop — run the Loop section repeatedly until Done-when holds, printing the score line every iteration. Establish your own preconditions per Sub-goal 0; do not stop unless an Autonomy hard-stop fires.`
 - **Durable / recurring:** save as a Routine (one item per run) so it survives the terminal.
 
 ## Objective
-<one sentence — the outcome, not the steps>
+<one sentence — the outcome, not the steps. Only fill if Prerequisites say route is clear.>
 
 ## Done-when (Goal condition — ground-truth, not narration)
 <a single condition Claude's own output can demonstrate. Name the deterministic
@@ -362,7 +432,7 @@ independent verifier (paste evidence per ID).>
 Coverage rule: every ID claimed exactly once; Done-when requires all IDs green.
 
 ## Sub-goals  (sequential; each a checkpoint)
-0. **Establish preconditions (self-healing — the loop sets these up, NOT the user).** <runtime up, scorer/tool built, auth reachable, branch ready>
+0. **Establish preconditions (self-healing — the loop sets these up, NOT the user).** <runtime up, scorer/tool built, auth reachable, branch ready; wayfind resume already recalled in Prerequisites>
    - **Deploy freshness (live/deployed target only):** merged ≠ live. If baked image, compare latest merged commit to build time; rebuild/redeploy (preserve overlays) if `main` is newer. Stale image = required-fail cap.
    - **Smoke + health gate (after any deploy, before the real run):** `/health` is `ok|degraded` and one cheap end-to-end call succeeds.
    - **Harness compatibility:** <PreToolUse gates + MCP standing nudges the loop's tool calls will hit → bake unlock/refresh steps here; adopt-or-override each nudge in Guardrails>
@@ -374,15 +444,15 @@ Coverage rule: every ID claimed exactly once; Done-when requires all IDs green.
 ## Plane map  (mechanism + model tier per chunk)
 | Step | Plane | Mechanism | Model tier | Notes |
 |------|-------|-----------|-----------|-------|
-| <audit/research> | coordination | Workflow / 3–5 subagents | cheap/low-effort | fan-out OK (read-only) |
+| <audit/research> | coordination | Workflow / 3–5 subagents | cheap/low-effort | fan-out OK (read-only); research-to-*decide* stays on wayfind |
 | <code change> | execution | dispatch to <repo> via PR | cheap unless hard | **serial writes** — one repo at a time |
 | <verify proof> | coordination | **verifier subagent (fresh context)** | **frontier/high-effort** | creator ≠ verifier; refutes proof |
 | <fix after fail> | execution | fresh worker on scoped fix sub-goal | cheap unless hard | expected-fail loop; do not reopen whole feature |
 | <recurring check> | execution | Routine / `claude -p`+cron | cheap | human-gated |
 
 ## Loop
-- **State:** <read first — status, brain recall of prior attempts, Linear, last handoff>
-- **Decide:** <how to pick the next action / sub-goal>
+- **State:** <read first — wayfind resume (`memory_group=wayfind`), status, brain recall of prior attempts, Linear, last handoff>
+- **Decide:** <how to pick the next *execute* action / sub-goal — never invent decide work; if fog reappears → stop and `/tapps-wayfind`>
 - **Execute:** <the action, on the committed mechanism + tier>
 - **Verify (independent):** spawn a fresh-context verifier (frontier tier) to *refute* the sub-goal's proof — re-run scrutiny + behavioral checks against the validation contract; don't trust the executor's claim. The verifier's verdict advances the loop.
 - **On fail (expected-fail fix loop):** record structured handoff → scope narrow fix sub-goal → re-execute → re-verify; ≤**3** validation rounds per sub-goal (override: N=…), then escalate once, then stop with a diagnosis. Never weaken the contract to go green.
@@ -392,19 +462,20 @@ Coverage rule: every ID claimed exactly once; Done-when requires all IDs green.
 
 ## Guardrails
 - Termination: <goal condition>; caps: <N iterations> AND <token budget>.
+- Wayfind fog gate: no Goal invent while decide tickets / Not yet specified remain.
 - Validation contract before features when changing behavior; coverage complete.
 - Independent verification (creator ≠ verifier); ground-truth proof; expected-fail fix loop with attempt cap.
 - No fan-out of coupled coding — sequential per-repo edits (serial writes, parallel reads OK).
 - Context hygiene — targeted grep over full re-Read.
 - Scope: repos in play = <list>; reads fleet-wide, writes via owner.
-- Memory: recall at start; record structured handoff (incl. failures) at each checkpoint.
+- Memory: recall wayfind resume + prior attempts at start; record structured handoff (incl. failures) at each checkpoint.
 - Harness compatibility: <gated tool calls → unlock/refresh steps; MCP standing nudges → adopted or overridden>.
 - Discipline: root-cause not workarounds; no green-by-suppression; right-sized; durable; match conventions; no scope creep.
 
 ## Autonomy
 - Act on every reversible, in-scope step — no "should I proceed?" checkpoints.
 - Irreversible/outward step → produce the reversible precursor (draft PR / staged diff / proposal) and continue; human reviews async.
-- Hard-stop once (batched, with a recommendation) only for: irreversible/outward with no precursor · projected next-step cost > ceiling · unsafe-to-guess ambiguity · **validation contract itself is wrong**.
+- Hard-stop once (batched, with a recommendation) only for: irreversible/outward with no precursor · projected next-step cost > ceiling · unsafe-to-guess ambiguity · **validation contract itself is wrong** · **fog returned (open decide work)**.
 
 ## Failure handling
 - On failed verify: diagnose (error + state + brain recall) → hypothesis → fix → retry *differently*.
@@ -413,6 +484,7 @@ Coverage rule: every ID claimed exactly once; Done-when requires all IDs green.
 
 ## Context
 - Repos: <manifest — path · Linear project · brain project_id>
+- Wayfind decisions: <named decisions from resume / map Decisions-so-far>
 - Prior learnings: <brain recall query, if any>
 
 ## Run-as
@@ -472,6 +544,7 @@ exactly how a modest base model reaches frontier-level reliability.
 
 ## Anti-patterns to encode against
 
+- **Inventing a Goal under fog** → refuse; `/tapps-wayfind` until the route is clear.
 - One enormous goal → sequence narrow sub-goals.
 - Unbounded loop (no cap/budget) → always set max iterations or a token budget.
 - **Self-verification only** → add an independent, adversarial verifier (creator ≠ verifier).
