@@ -1,4 +1,4 @@
-<!-- tapps-generated: v3.12.61 -->
+<!-- tapps-generated: v3.12.62 -->
 # Copilot Instructions
 
 This project uses **TappsMCP** (Code Quality MCP Server) for automated
