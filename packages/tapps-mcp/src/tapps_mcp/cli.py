@@ -1478,6 +1478,7 @@ def validate_changed_cmd(
     import asyncio
 
     from tapps_mcp.server_pipeline_tools import tapps_validate_changed
+    from tapps_mcp.tools.validate_changed_cli_exit import validate_changed_cli_exit_code
 
     if project_root != ".":
         os.chdir(project_root)
@@ -1494,10 +1495,14 @@ def validate_changed_cmd(
         if not result.get("success"):
             click.echo(result.get("error", "Validation failed."), err=True)
             raise SystemExit(1)
-        data = result.get("data", {})
+        raw_data = result.get("data", {})
+        data = raw_data if isinstance(raw_data, dict) else {}
         _echo_validate_changed_data(data)
-        if not data.get("all_gates_passed", False) or not data.get("judges_passed", True):
-            raise SystemExit(1)
+        code = validate_changed_cli_exit_code(
+            data, explicit_paths=bool(file_paths.strip())
+        )
+        if code != 0:
+            raise SystemExit(code)
 
     asyncio.run(_run())
 
