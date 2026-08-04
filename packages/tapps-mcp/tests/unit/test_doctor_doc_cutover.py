@@ -69,7 +69,7 @@ def test_brain_docs_tools_fails_without_http_url(tmp_path: Path, monkeypatch) ->
     os.environ["TAPPS_MCP_DOCS_VIA_BRAIN"] = "1"
     (tmp_path / ".tapps-mcp.yaml").write_text("quality_preset: standard\n")
     monkeypatch.setattr(
-        "tapps_mcp.distribution.doctor._brain_http_url_for_checks",
+        "tapps_mcp.distribution.doctor_context7._brain_http_url_for_checks",
         lambda _root: "",
     )
     try:
@@ -86,7 +86,7 @@ def test_brain_docs_tools_passes_on_probe_ok(tmp_path: Path, monkeypatch) -> Non
         "quality_preset: standard\nmemory:\n  brain_http_url: http://localhost:8080\n"
     )
     monkeypatch.setattr(
-        "tapps_mcp.distribution.doctor._run_docs_tools_probe",
+        "tapps_mcp.distribution.doctor_context7._run_docs_tools_probe",
         lambda _url, _settings: {"ok": True, "http_status": 200},
     )
     try:
