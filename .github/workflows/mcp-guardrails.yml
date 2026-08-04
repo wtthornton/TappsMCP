@@ -8,9 +8,12 @@ on:
     paths:
       - "packages/**/src/**"
       - "docs/architecture/tool-budget.md"
+      - "docs/ARCHITECTURE.md"
       - "scripts/check-tool-budget.py"
       - "packages/tapps-mcp/tests/integration/test_tool_descriptions.py"
       - ".github/workflows/mcp-guardrails.yml"
+      - "README.md"
+      - "CLAUDE.md"
   workflow_dispatch:
 
 permissions:
@@ -40,6 +43,11 @@ jobs:
           python3 scripts/check-tool-budget.py \
             --diff-range "${{ github.event.pull_request.base.sha }}..${{ github.event.pull_request.head.sha }}" \
             --commit-msg "$(git log -1 --format='%B' ${{ github.event.pull_request.head.sha }})"
+
+      # TAP-5611: the front-door tool counts drifted twice before anything
+      # enforced them (TAP-4577 was the first).
+      - name: Check documented tool counts against the registry
+        run: python3 scripts/check-tool-budget.py --check-counts
 
   tool-descriptions:
     name: MCP tool-description budget
