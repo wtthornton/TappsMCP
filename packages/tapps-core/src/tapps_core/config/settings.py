@@ -863,6 +863,38 @@ class DoctorContextBudgetSettings(BaseModel):
             "without companion files (default 120)."
         ),
     )
+    tier1_warn_bytes: int = Field(
+        default=4096,
+        ge=256,
+        description=(
+            "WARN when an AGENTS.md/CLAUDE.md 'Tier 1' section (thin-agent "
+            "always-on budget, TAP-5549) exceeds this many bytes (default 4 KiB)."
+        ),
+    )
+    tier1_fail_bytes: int = Field(
+        default=8192,
+        ge=256,
+        description=(
+            "FAIL when a 'Tier 1' section exceeds this many bytes (default 8 KiB). "
+            "Must stay >= tier1_warn_bytes."
+        ),
+    )
+    prose_duplication_warn_bytes: int = Field(
+        default=512,
+        ge=64,
+        description=(
+            "WARN when AGENTS.md and CLAUDE.md share this many bytes of duplicated "
+            "prose blocks (default 512 B). Generalizes the Karpathy dual-install check."
+        ),
+    )
+    prose_duplication_fail_bytes: int = Field(
+        default=2048,
+        ge=64,
+        description=(
+            "FAIL when duplicated prose between AGENTS.md and CLAUDE.md exceeds this "
+            "many bytes (default 2 KiB). Must stay >= prose_duplication_warn_bytes."
+        ),
+    )
 
 
 class TappsMCPSettings(BaseSettings):

@@ -142,6 +142,7 @@ def _safe_check(name: str, fn: Callable[[], CheckResult]) -> CheckResult:
 
 def _collect_checks(root: Path, *, quick: bool = False) -> list[CheckResult]:
     from tapps_mcp.distribution import context_budget as _cb
+    from tapps_mcp.distribution import context_budget_thin_agent as _cbt
 
     """Collect all diagnostic checks for the given project root.
 
@@ -168,6 +169,8 @@ def _collect_checks(root: Path, *, quick: bool = False) -> list[CheckResult]:
         ("AGENTS.md size", lambda: _cb.check_agents_md_size(root)),
         ("alwaysApply rules weight", lambda: _cb.check_always_apply_rules_weight(root)),
         ("Skill inventory budget", lambda: _cb.check_skill_inventory_budget(root)),
+        ("Tier-1 thin budget", lambda: _cbt.check_tier1_thin_budget(root)),
+        ("Prose duplication", lambda: _cbt.check_prose_duplication(root)),
         ("Karpathy dual install", lambda: _cb.check_karpathy_dual_install(root)),
         ("Call graph tools profile", lambda: check_call_graph_tools_profile(root)),
         (
