@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from tapps_mcp.distribution.context_budget import (
+from tapps_mcp.distribution.context_budget_thin_agent import (
     check_prose_duplication,
     check_tier1_thin_budget,
 )

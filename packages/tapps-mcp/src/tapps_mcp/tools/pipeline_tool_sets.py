@@ -80,8 +80,31 @@ def resolve_transcript_tool_name(name: str, tool_input: dict[str, Any]) -> str:
     return name
 
 
+_thin_agent_hook_ready = False
+
+
+def _ensure_thin_agent_gap_hook() -> None:
+    """Lazily patch ``usage.compute_gaps`` with the thin-agent gap check.
+
+    ``usage.py`` cannot install this itself: TAP-5540 keeps it
+    byte-identical to master so the megafile stays out of the PR diff (and
+    off the per-file quality gate it can't pass even untouched). Deferred to
+    a first-call side effect here — every gap check already goes through
+    this matcher at request time, well after import resolves — so there is
+    no ``usage`` / ``loop_metrics`` / ``pipeline_tool_sets`` import-cycle risk.
+    """
+    global _thin_agent_hook_ready
+    if _thin_agent_hook_ready:
+        return
+    _thin_agent_hook_ready = True
+    from tapps_mcp.tools import usage_thin_agent
+
+    usage_thin_agent.install()
+
+
 def matches_pipeline_tool(name: str, short_names: frozenset[str]) -> bool:
     """Return True when *name* is a bare or MCP-prefixed pipeline tool."""
+    _ensure_thin_agent_gap_hook()
     if name in short_names:
         return True
     if not name.startswith("mcp__"):

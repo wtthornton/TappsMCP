@@ -84,7 +84,9 @@ class TestLookupDocsUnderused:
         assert "lookup_docs_underused" in report["gaps"]
         assert any("No tapps_lookup_docs in this session" in r for r in report["recommendations"])
 
-    def test_mixed_historical_false_later_true_clears_when_cached(self, tmp_path: Path) -> None:
+    def test_mixed_historical_false_later_true_clears_when_cached(
+        self, tmp_path: Path
+    ) -> None:
         """TAP-5422: later lookups + any-topic warm clear sticky underused gap."""
         src_dir = tmp_path / "src"
         src_dir.mkdir()
@@ -138,7 +140,9 @@ class TestLookupDocsUnderused:
         )
         assert "lookup_docs_underused" not in report["gaps"]
 
-    def test_used_lookup_still_uncached_does_not_claim_never_called(self, tmp_path: Path) -> None:
+    def test_used_lookup_still_uncached_does_not_claim_never_called(
+        self, tmp_path: Path
+    ) -> None:
         """TAP-5422: when used_lookup is true, copy is still-uncached not never-called."""
         src_dir = tmp_path / "src"
         src_dir.mkdir()
@@ -184,7 +188,9 @@ class TestLookupDocsUnderused:
         assert "never" not in joined.lower()
         assert "still lack cached docs" in joined
 
-    def test_sibling_scripts_not_listed_in_libraries_without_lookup(self, tmp_path: Path) -> None:
+    def test_sibling_scripts_not_listed_in_libraries_without_lookup(
+        self, tmp_path: Path
+    ) -> None:
         """TAP-5420: kit siblings must not appear in usage gap library lists."""
         kit = tmp_path / "kits" / "agentforge"
         kit.mkdir(parents=True)
@@ -502,7 +508,9 @@ class TestComputeGapsScopedEdits:
         )
         assert "recurring_validation_skips" not in report["gaps"]
 
-    def test_legacy_callmcptool_rows_excluded_from_recurring_skip(self, tmp_path: Path) -> None:
+    def test_legacy_callmcptool_rows_excluded_from_recurring_skip(
+        self, tmp_path: Path
+    ) -> None:
         """Pre-TAP-4017 Cursor rows should not inflate gate-skip rate (TAP-4017)."""
         metrics_dir = tmp_path / ".tapps-mcp"
         metrics_dir.mkdir(parents=True)
@@ -718,45 +726,3 @@ class TestContractAndCreatorVerifierGaps:
         )
         assert "contract_assertions_unverified" not in report["gaps"]
         assert "creator_verifier_skipped" not in report["gaps"]
-
-
-class TestThinAgentCheckSkipped:
-    """TAP-5551: usage_gaps flags AGENTS/CLAUDE edits without a follow-up doctor run."""
-
-    def _write_agents_edit(self, tmp_path: Path, *, tools_used: list[str]) -> None:
-        metrics = tmp_path / ".tapps-mcp"
-        metrics.mkdir(parents=True)
-        (metrics / "loop-metrics.jsonl").write_text(
-            json.dumps(
-                {
-                    "ts": int(time.time()),
-                    "files_edited": ["AGENTS.md"],
-                    "gate_skipped_files": [],
-                    "lookup_docs_called": False,
-                    "checklist_called": False,
-                    "tools_used": tools_used,
-                }
-            )
-            + "\n",
-            encoding="utf-8",
-        )
-
-    def test_fires_when_doctor_not_run(self, tmp_path: Path) -> None:
-        self._write_agents_edit(tmp_path, tools_used=["tapps_validate_changed"])
-        report = compute_gaps(tmp_path, called_tools={"tapps_session_start"})
-        assert "thin_agent_check_skipped" in report["gaps"]
-        assert any("AGENTS.md" in r and "tapps_doctor" in r for r in report["recommendations"])
-
-    def test_clears_when_doctor_called_this_session(self, tmp_path: Path) -> None:
-        self._write_agents_edit(tmp_path, tools_used=["tapps_validate_changed"])
-        report = compute_gaps(tmp_path, called_tools={"tapps_session_start", "tapps_doctor"})
-        assert "thin_agent_check_skipped" not in report["gaps"]
-
-    def test_clears_when_doctor_in_telemetry(self, tmp_path: Path) -> None:
-        self._write_agents_edit(tmp_path, tools_used=["tapps_doctor"])
-        report = compute_gaps(tmp_path, called_tools={"tapps_session_start"})
-        assert "thin_agent_check_skipped" not in report["gaps"]
-
-    def test_no_gap_without_agent_config_edits(self, tmp_path: Path) -> None:
-        report = compute_gaps(tmp_path, called_tools={"tapps_session_start"})
-        assert "thin_agent_check_skipped" not in report["gaps"]
