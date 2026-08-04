@@ -11,7 +11,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from tapps_mcp.distribution.doctor import CheckResult
+    from tapps_mcp.distribution.doctor_result import CheckResult
 
 
 def _check_managed_skill_current(
@@ -30,7 +30,8 @@ def _check_managed_skill_current(
     means body-only fingerprints.
     """
     from tapps_mcp.distribution.context_budget import _skill_tier
-    from tapps_mcp.distribution.doctor import CheckResult, _tapps_skill_bases
+    from tapps_mcp.distribution.doctor_pipeline import _tapps_skill_bases
+    from tapps_mcp.distribution.doctor_result import CheckResult
 
     marker = f"<!-- BEGIN: tapps-skill {skill_name}"
     tier = _skill_tier(project_root)

@@ -14,7 +14,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from tapps_core.cache import collect_cache_stats
-from tapps_mcp import server_linear_tools
+from tapps_mcp import server_linear_tools, server_linear_tools_cache
 from tapps_mcp.tools import dependency_scan_cache
 from tapps_mcp.tools.dependency_scan_cache import (
     clear_dependency_cache,
@@ -53,6 +53,12 @@ class TestDependencyScanStaleness:
 
 class TestLinearSnapshotStaleness:
     def _reset(self) -> None:
+        # The mutable timestamp lives in server_linear_tools_cache (TAP-5606
+        # split); reset it there so _linear_snapshot_stats (also defined in
+        # that module) actually observes zero. server_linear_tools re-exports
+        # the name for API compatibility but resetting that copy alone would
+        # not affect the real global.
+        server_linear_tools_cache._snapshot_last_write_ts = 0.0
         server_linear_tools._snapshot_last_write_ts = 0.0
 
     def test_no_write_reports_null_age_and_staleness(self) -> None:
@@ -80,6 +86,7 @@ class TestLinearSnapshotStaleness:
 def test_staleness_fields_surface_for_at_least_two_real_caches(tmp_path: Path) -> None:
     """AC4: unified surface reports age/staleness for >=2 distinct real caches."""
     clear_dependency_cache()
+    server_linear_tools_cache._snapshot_last_write_ts = 0.0
     server_linear_tools._snapshot_last_write_ts = 0.0
 
     # Drive both real caches so each has a populated entry / recorded write.
@@ -101,4 +108,5 @@ def test_staleness_fields_surface_for_at_least_two_real_caches(tmp_path: Path) -
         assert entry["stale"] is False
 
     clear_dependency_cache()
+    server_linear_tools_cache._snapshot_last_write_ts = 0.0
     server_linear_tools._snapshot_last_write_ts = 0.0

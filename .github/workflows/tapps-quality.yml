@@ -48,7 +48,41 @@ jobs:
       - name: Run TappsMCP quality gate on changed Python files
         env:
           TAPPS_MCP_PROJECT_ROOT: ${{ github.workspace }}
-        run: uv run tapps-mcp validate-changed --quick
+          # Keep in sync with tapps_mcp.tools.batch_validator.MAX_BATCH_FILES
+          TAPPS_VALIDATE_BATCH_SIZE: "50"
+        run: |
+          set -euo pipefail
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            RANGE="${{ github.event.pull_request.base.sha }}...${{ github.sha }}"
+          else
+            DEFAULT_BRANCH="${{ github.event.repository.default_branch }}"
+            RANGE="origin/${DEFAULT_BRANCH}...HEAD"
+          fi
+          mapfile -t FILES < <(
+            git diff --name-only --diff-filter=ACMR "${RANGE}" -- \
+              '*.py' '*.pyi' \
+              | sort -u
+          )
+          if [ "${#FILES[@]}" -eq 0 ]; then
+            echo "No changed Python files to validate."
+            exit 0
+          fi
+          BATCH_SIZE="${TAPPS_VALIDATE_BATCH_SIZE}"
+          TOTAL="${#FILES[@]}"
+          BATCHES=$(( (TOTAL + BATCH_SIZE - 1) / BATCH_SIZE ))
+          echo "Validating ${TOTAL} changed Python file(s) in ${BATCHES} batch(es) of ≤${BATCH_SIZE}"
+          status=0
+          for ((i = 0; i < TOTAL; i += BATCH_SIZE)); do
+            chunk=("${FILES[@]:i:BATCH_SIZE}")
+            csv=$(IFS=,; echo "${chunk[*]}")
+            batch_num=$(( i / BATCH_SIZE + 1 ))
+            echo "::group::validate-changed batch ${batch_num}/${BATCHES} (${#chunk[@]} files)"
+            if ! uv run tapps-mcp validate-changed --quick --file-paths "${csv}"; then
+              status=1
+            fi
+            echo "::endgroup::"
+          done
+          exit "${status}"
 
   agent-contract:
     name: agent contract + skills stamp

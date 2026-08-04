@@ -243,11 +243,11 @@ class TestDoctorCrashLoopCheck:
     def test_pids_present_ports_down_flags_crash_loop(
         self, pid_dir: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        from tapps_mcp.distribution import doctor
+        from tapps_mcp.distribution import doctor, doctor_fleet
 
         (pid_dir / "nlt-build.pid").write_text("123", encoding="utf-8")
         (pid_dir / "nlt-memory.pid").write_text("124", encoding="utf-8")
-        monkeypatch.setattr(doctor, "_probe_tcp", lambda _url, **_kw: False)
+        monkeypatch.setattr(doctor_fleet, "_probe_tcp", lambda _url, **_kw: False)
 
         result = doctor.check_fleet_crash_loop()
         assert result.ok is False
@@ -257,10 +257,10 @@ class TestDoctorCrashLoopCheck:
     def test_pids_present_ports_up_passes(
         self, pid_dir: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        from tapps_mcp.distribution import doctor
+        from tapps_mcp.distribution import doctor, doctor_fleet
 
         (pid_dir / "nlt-build.pid").write_text("123", encoding="utf-8")
-        monkeypatch.setattr(doctor, "_probe_tcp", lambda _url, **_kw: True)
+        monkeypatch.setattr(doctor_fleet, "_probe_tcp", lambda _url, **_kw: True)
 
         result = doctor.check_fleet_crash_loop()
         assert result.ok is True
