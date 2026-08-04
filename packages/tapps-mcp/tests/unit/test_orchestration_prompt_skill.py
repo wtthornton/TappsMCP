@@ -70,6 +70,29 @@ class TestScaffold:
         assert "structured handoff" in tpl
         assert "missions → orchestration-prompt" in ref or "missions" in ref
 
+    def test_body_and_template_carry_wayfind_fog_gate(self, tmp_path):
+        """TAP-5495: fog preflight, decide-vs-execute taxonomy, wayfind resume."""
+        generate_skills(tmp_path, "claude")
+        d = _skill_dir(tmp_path)
+        content = (d / "SKILL.md").read_text().lower()
+        tpl = (d / "assets" / "prompt-template.md").read_text().lower()
+        ref = (d / "references" / "claude-feature-map.md").read_text().lower()
+        # method §0 fog preflight + redirect
+        assert "wayfind fog preflight" in content
+        assert "/tapps-wayfind" in content
+        assert "do not invent a goal while the route is still foggy" in content
+        # decide-vs-execute taxonomy
+        assert "decide-vs-execute chunk taxonomy" in content
+        assert "research-to-decide" in content
+        # cold-start resume
+        assert "memory_group=wayfind" in content
+        # companion Prerequisites / Wayfind gate
+        assert "prerequisites / wayfind gate" in tpl
+        assert "memory_group=wayfind" in tpl
+        assert "/tapps-wayfind" in tpl
+        # anti-pattern in feature map
+        assert "inventing a goal under fog" in ref
+
     def test_template_has_verifier_and_tier_columns(self, tmp_path):
         generate_skills(tmp_path, "claude")
         tpl = (_skill_dir(tmp_path) / "assets" / "prompt-template.md").read_text().lower()
