@@ -112,8 +112,58 @@ class TestGetBrainBridgeProfile:
         assert call_kwargs.get("default_profile") == BRAIN_PROFILE_SERVER == "full", (
             f"Expected default_profile='full', got {call_kwargs}"
         )
-        # Cleanup singleton so other tests start clean.
+        # Cleanup tenant cache so other tests start clean.
         _reset_brain_bridge_cache()
+
+    def test_get_brain_bridge_is_tenant_scoped(self, tmp_path: Path) -> None:
+        """TAP-5442: different brain_project_id yields distinct cached bridges."""
+        from tapps_mcp.server_helpers import (
+            _brain_bridges,
+            _get_brain_bridge,
+            _reset_brain_bridge_cache,
+        )
+
+        bridge_a = MagicMock(name="bridge-a")
+        bridge_b = MagicMock(name="bridge-b")
+        settings_a = MagicMock()
+        settings_a.memory.brain_http_url = "http://brain:8080"
+        settings_a.memory.brain_project_id = "repo-a"
+        settings_a.project_root = tmp_path / "a"
+        settings_b = MagicMock()
+        settings_b.memory.brain_http_url = "http://brain:8080"
+        settings_b.memory.brain_project_id = "repo-b"
+        settings_b.project_root = tmp_path / "b"
+        settings_a.project_root.mkdir()
+        settings_b.project_root.mkdir()
+
+        creates: list[Any] = []
+
+        def _create(settings: Any, **_kwargs: Any) -> Any:
+            creates.append(settings.memory.brain_project_id)
+            return bridge_a if settings.memory.brain_project_id == "repo-a" else bridge_b
+
+        _reset_brain_bridge_cache()
+        with (
+            patch("tapps_core.brain_bridge.create_brain_bridge", side_effect=_create),
+            patch(
+                "tapps_core.config.settings.load_settings",
+                side_effect=[settings_a, settings_a, settings_b, settings_b],
+            ),
+            patch("tapps_mcp.tools.hive_safety.get_elevation_store") as mock_elev,
+        ):
+            mock_elev.return_value.check_approved = MagicMock(return_value=True)
+            first = _get_brain_bridge()
+            again_a = _get_brain_bridge()
+            second = _get_brain_bridge()
+            again_b = _get_brain_bridge()
+
+        assert first is bridge_a is again_a
+        assert second is bridge_b is again_b
+        assert first is not second
+        assert creates == ["repo-a", "repo-b"]
+        assert len(_brain_bridges) == 2
+        _reset_brain_bridge_cache()
+        assert _brain_bridges == {}
 
 
 class TestChecklistStateMarker:
