@@ -10,6 +10,7 @@ Mirrors ``test_orchestration_prompt_skill`` deploy shape:
 
 from __future__ import annotations
 
+from tapps_mcp.distribution.doctor import check_wayfind_skill_current
 from tapps_mcp.pipeline.platform_skill_wayfind import (
     WAYFIND_COMPANION_FILES,
     WAYFIND_SKILL_BODY,
@@ -124,6 +125,58 @@ class TestSmartMerge:
         ref.write_text("stale\n", encoding="utf-8")
         generate_skills(tmp_path, "claude", overwrite=True)
         assert "ticket types" in ref.read_text().lower()
+
+
+class TestDoctorCheck:
+    def test_fails_full_tier_when_missing(self, tmp_path):
+        (tmp_path / ".mcp.json").write_text("{}", encoding="utf-8")
+        (tmp_path / ".tapps-mcp.yaml").write_text("skill_tier: full\n", encoding="utf-8")
+        result = check_wayfind_skill_current(tmp_path)
+        assert not result.ok
+        assert "missing" in result.message
+
+    def test_ok_core_tier_when_missing(self, tmp_path):
+        (tmp_path / ".mcp.json").write_text("{}", encoding="utf-8")
+        (tmp_path / ".tapps-mcp.yaml").write_text("skill_tier: core\n", encoding="utf-8")
+        result = check_wayfind_skill_current(tmp_path)
+        assert result.ok
+        assert "not required" in result.message
+
+    def test_ok_when_fully_deployed(self, tmp_path):
+        (tmp_path / ".mcp.json").write_text("{}", encoding="utf-8")
+        generate_skills(tmp_path, "claude")
+        result = check_wayfind_skill_current(tmp_path)
+        assert result.ok
+        assert "current" in result.message
+
+    def test_flags_missing_companion(self, tmp_path):
+        (tmp_path / ".mcp.json").write_text("{}", encoding="utf-8")
+        generate_skills(tmp_path, "claude")
+        (_skill_dir(tmp_path) / "references" / "ticket-types.md").unlink()
+        result = check_wayfind_skill_current(tmp_path)
+        assert not result.ok
+
+    def test_flags_stale_unmarked_skill(self, tmp_path):
+        (tmp_path / ".mcp.json").write_text("{}", encoding="utf-8")
+        d = _skill_dir(tmp_path)
+        d.mkdir(parents=True)
+        (d / "SKILL.md").write_text("# legacy hand-authored, no marker\n", encoding="utf-8")
+        result = check_wayfind_skill_current(tmp_path)
+        assert not result.ok
+        assert "stale" in result.message
+
+    def test_flags_stale_content(self, tmp_path):
+        (tmp_path / ".mcp.json").write_text("{}", encoding="utf-8")
+        generate_skills(tmp_path, "claude")
+        skill_md = _skill_dir(tmp_path) / "SKILL.md"
+        text = skill_md.read_text()
+        skill_md.write_text(
+            text.replace("fog", "haze").replace("orchestration-prompt", "other-skill"),
+            encoding="utf-8",
+        )
+        result = check_wayfind_skill_current(tmp_path)
+        assert not result.ok
+        assert "stale content" in result.message
 
 
 class TestManagedBlockUnit:

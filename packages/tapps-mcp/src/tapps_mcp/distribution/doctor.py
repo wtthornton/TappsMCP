@@ -17,6 +17,11 @@ import click
 import httpx
 
 from tapps_core.common.logging import get_logger
+from tapps_mcp.distribution.doctor_skills import (
+    check_orchestration_prompt_skill_current,
+    check_validation_contract_skill_current,
+    check_wayfind_skill_current,
+)
 from tapps_mcp.pipeline.platform_hook_templates import (
     SUPPORTED_CLAUDE_HOOK_KEYS,
     SUPPORTED_CURSOR_HOOK_KEYS,
@@ -1459,134 +1464,6 @@ def check_linear_issue_skill_current(project_root: Path) -> CheckResult:
     detail = "Run: tapps-mcp upgrade --force"
     message = problems[0] if len(problems) == 1 else f"Issues: {'; '.join(problems)}"
     return CheckResult("linear-issue skill", False, message, detail)
-
-
-def check_orchestration_prompt_skill_current(project_root: Path) -> CheckResult:
-    """Check the ``orchestration-prompt`` skill is deployed with its companions.
-
-    The skill is multi-file (TAP orchestration-prompt platformisation): SKILL.md
-    carries the managed-block marker (proving smart-merge is wired, not a stale
-    hand-authored copy) and ships ``assets/prompt-template.md`` +
-    ``references/claude-feature-map.md``. Only hosts that already have the skill
-    deployed are validated — the skill is opt-in per host, so absence everywhere
-    is reported as ok (nothing to check), while a *partial* deployment is flagged.
-
-    When companions exist, also require Missions-inspired markers (validation
-    contract + expected-fail fix loop) so ``tapps-mcp upgrade --force`` clears
-    stale pre-TAP-5552 copies (ADR-0034).
-    """
-    marker = "<!-- BEGIN: tapps-skill orchestration-prompt"
-    companions = ("assets/prompt-template.md", "references/claude-feature-map.md")
-    # Content fingerprints refreshed by init/upgrade with the skill body.
-    required_phrases = (
-        "validation contract",
-        "expected-fail",
-    )
-    valid_hosts: list[str] = []
-    problems: list[str] = []
-    for host_label, base in _tapps_skill_bases(project_root):
-        skill_dir = base / "orchestration-prompt"
-        skill_path = skill_dir / "SKILL.md"
-        if not skill_path.exists():
-            continue  # not deployed on this host — opt-in, not a failure
-        content = skill_path.read_text(encoding="utf-8")
-        if marker not in content:
-            problems.append(f"{host_label}/orchestration-prompt stale (no managed-block marker)")
-            continue
-        missing = [c for c in companions if not (skill_dir / c).exists()]
-        if missing:
-            problems.append(f"{host_label}/orchestration-prompt missing {', '.join(missing)}")
-            continue
-        tpl_path = skill_dir / "assets" / "prompt-template.md"
-        tpl = tpl_path.read_text(encoding="utf-8").lower()
-        body_l = content.lower()
-        combined = f"{body_l}\n{tpl}"
-        missing_phrases = [p for p in required_phrases if p not in combined]
-        if missing_phrases:
-            problems.append(
-                f"{host_label}/orchestration-prompt stale content "
-                f"(missing {', '.join(missing_phrases)}; run upgrade --force)"
-            )
-            continue
-        valid_hosts.append(host_label)
-
-    if not valid_hosts and not problems:
-        return CheckResult(
-            "orchestration-prompt skill",
-            True,
-            "orchestration-prompt skill not deployed (opt-in) — nothing to check",
-        )
-    if valid_hosts and not problems:
-        return CheckResult(
-            "orchestration-prompt skill",
-            True,
-            f"orchestration-prompt skill current on: {', '.join(valid_hosts)}",
-        )
-    detail = "Run: tapps-mcp upgrade --force"
-    message = problems[0] if len(problems) == 1 else f"Issues: {'; '.join(problems)}"
-    return CheckResult("orchestration-prompt skill", False, message, detail)
-
-
-def check_validation_contract_skill_current(project_root: Path) -> CheckResult:
-    """Check ``tapps-validation-contract`` is deployed with companions (TAP-5541).
-
-    Full ``skill_tier`` (default): skill must be present and current on every
-    host that doctor validates. Core tier: absence is ok; when present, still
-    require managed-block marker + companions + fingerprint.
-    """
-    from tapps_mcp.distribution.context_budget import _skill_tier
-
-    marker = "<!-- BEGIN: tapps-skill tapps-validation-contract"
-    companions = (
-        "assets/contract-template.md",
-        "references/assertion-schema.md",
-        "references/when-to-use.md",
-    )
-    tier = _skill_tier(project_root)
-    valid_hosts: list[str] = []
-    problems: list[str] = []
-    for host_label, base in _tapps_skill_bases(project_root):
-        skill_dir = base / "tapps-validation-contract"
-        skill_path = skill_dir / "SKILL.md"
-        if not skill_path.exists():
-            if tier == "full":
-                problems.append(f"{host_label}/tapps-validation-contract missing")
-            continue
-        content = skill_path.read_text(encoding="utf-8")
-        if marker not in content:
-            problems.append(
-                f"{host_label}/tapps-validation-contract stale (no managed-block marker)"
-            )
-            continue
-        missing = [c for c in companions if not (skill_dir / c).exists()]
-        if missing:
-            problems.append(
-                f"{host_label}/tapps-validation-contract missing {', '.join(missing)}"
-            )
-            continue
-        if "validation contract" not in content.lower():
-            problems.append(
-                f"{host_label}/tapps-validation-contract stale content "
-                "(missing validation contract; run upgrade --force)"
-            )
-            continue
-        valid_hosts.append(host_label)
-
-    if problems:
-        detail = "Run: tapps-mcp upgrade --force"
-        message = problems[0] if len(problems) == 1 else f"Issues: {'; '.join(problems)}"
-        return CheckResult("tapps-validation-contract skill", False, message, detail)
-    if valid_hosts:
-        return CheckResult(
-            "tapps-validation-contract skill",
-            True,
-            f"tapps-validation-contract skill current on: {', '.join(valid_hosts)}",
-        )
-    return CheckResult(
-        "tapps-validation-contract skill",
-        True,
-        "tapps-validation-contract skill not required (skill_tier=core)",
-    )
 
 
 def check_pretooluse_matchers(project_root: Path) -> CheckResult:
@@ -5395,6 +5272,10 @@ def _collect_checks(root: Path, *, quick: bool = False) -> list[CheckResult]:
         (
             "orchestration-prompt skill",
             lambda: check_orchestration_prompt_skill_current(root),
+        ),
+        (
+            "tapps-wayfind skill",
+            lambda: check_wayfind_skill_current(root),
         ),
         (
             "tapps-validation-contract skill",
