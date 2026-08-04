@@ -1937,13 +1937,28 @@ async def tapps_checklist(
             from tapps_mcp.tools.usage import compute_gaps
 
             usage = compute_gaps(_Path(settings.project_root).expanduser().resolve())
+            usage_gaps_list = list(usage.get("gaps", []))
             resp_data["usage_gaps"] = {
-                "gaps": usage.get("gaps", []),
+                "gaps": usage_gaps_list,
                 "recommendations": usage.get("recommendations", []),
                 "libraries_without_lookup": usage.get("libraries_without_lookup", []),
                 "rolling_gate_skip_rate": usage.get("rolling_stats", {}).get("gate_skip_rate", 0.0),
                 "rolling_loops": usage.get("rolling_stats", {}).get("loops", 0),
             }
+            # TAP-5543/5548: feature/review cannot complete with contract/verifier gaps.
+            _blocking = frozenset(
+                {"contract_assertions_unverified", "creator_verifier_skipped"}
+            )
+            if task_type in {"feature", "review"} and _blocking.intersection(usage_gaps_list):
+                resp_data["complete"] = False
+                missing = list(resp_data.get("missing_required") or [])
+                for gap in sorted(_blocking.intersection(usage_gaps_list)):
+                    if gap not in missing:
+                        missing.append(gap)
+                resp_data["missing_required"] = missing
+                # Keep result in sync for structuredContent + checklist state marker.
+                result.complete = False
+                result.missing_required = missing
         except Exception:
             logger.debug("usage_gaps_inline_failed", exc_info=True)
 

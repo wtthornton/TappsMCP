@@ -2384,6 +2384,30 @@ def memory_reseed(confirm: bool) -> None:
 # ---------------------------------------------------------------------------
 
 
+@main.command("pipeline-mark")
+@click.argument(
+    "kind",
+    type=click.Choice(["contract-verified", "creator-verifier"], case_sensitive=False),
+)
+@click.option(
+    "--project-root",
+    type=click.Path(exists=True, file_okay=False, path_type=Path),
+    default=None,
+    help="Project root (default: CWD).",
+)
+def pipeline_mark_cmd(kind: str, project_root: Path | None) -> None:
+    """Record a contract-verified or creator-verifier mark (clears usage gaps)."""
+    from tapps_mcp.tools.contract_telemetry import record_pipeline_mark
+
+    root = (project_root or Path.cwd()).expanduser().resolve()
+    normalized = kind.lower()
+    if normalized == "contract-verified":
+        record_pipeline_mark(root, kind="contract-verified", source="cli")
+    else:
+        record_pipeline_mark(root, kind="creator-verifier", source="cli")
+    click.echo(f"Recorded pipeline-mark kind={normalized} under {root / '.tapps-mcp'}")
+
+
 @main.command("lookup-docs")
 @click.option("--library", required=True, help="Library name (fuzzy-matched).")
 @click.option("--topic", default="overview", help="Topic within the library.")

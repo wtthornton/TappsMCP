@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from typing import Any
 from unittest.mock import patch
 
 import pytest
@@ -9,12 +10,28 @@ import pytest
 from tapps_mcp.tools.checklist import CallTracker, ChecklistHint, ChecklistResult
 
 _EVALUATE_TARGET = "tapps_mcp.tools.checklist.CallTracker.evaluate"
+_GAPS_TARGET = "tapps_mcp.tools.usage.compute_gaps"
 
 
 @pytest.fixture(autouse=True)
 def _reset_tracker() -> None:  # type: ignore[misc]
     """Reset CallTracker before every test."""
     CallTracker.reset()
+
+
+@pytest.fixture(autouse=True)
+def _no_contract_gaps() -> Any:  # type: ignore[misc]
+    """Keep format tests hermetic vs TAP-5543/5548 hard-gate."""
+    with patch(
+        _GAPS_TARGET,
+        return_value={
+            "gaps": [],
+            "recommendations": ["No gaps detected. Pipeline coverage looks healthy."],
+            "libraries_without_lookup": [],
+            "rolling_stats": {"gate_skip_rate": 0.0, "loops": 0},
+        },
+    ):
+        yield
 
 
 def _make_result(

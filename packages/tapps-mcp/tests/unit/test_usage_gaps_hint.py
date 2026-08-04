@@ -675,3 +675,54 @@ class TestGraphDegradedIgnored:
             mode="warn",
         )
         assert followup is None
+
+
+class TestContractAndCreatorVerifierGaps:
+    """TAP-5543 / TAP-5548: pipeline-mark clears contract + creator-verifier gaps."""
+
+    def _write_py_edit(self, tmp_path: Path) -> None:
+        src = tmp_path / "src"
+        src.mkdir()
+        mod = src / "feat.py"
+        mod.write_text("x = 1\n", encoding="utf-8")
+        metrics = tmp_path / ".tapps-mcp"
+        metrics.mkdir(parents=True)
+        (metrics / "loop-metrics.jsonl").write_text(
+            json.dumps(
+                {
+                    "ts": int(time.time()),
+                    "files_edited": [str(mod.relative_to(tmp_path))],
+                    "gate_skipped_files": [],
+                    "lookup_docs_called": True,
+                    "checklist_called": True,
+                    "tools_used": ["tapps_validate_changed", "tapps_checklist"],
+                }
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+
+    def test_fires_both_gaps_without_marks(self, tmp_path: Path) -> None:
+        self._write_py_edit(tmp_path)
+        report = compute_gaps(
+            tmp_path,
+            called_tools={"tapps_session_start", "tapps_validate_changed", "tapps_checklist"},
+        )
+        assert "contract_assertions_unverified" in report["gaps"]
+        assert "creator_verifier_skipped" in report["gaps"]
+
+    def test_clears_after_pipeline_marks(self, tmp_path: Path) -> None:
+        from tapps_mcp.tools.contract_telemetry import (
+            record_contract_verified,
+            record_creator_verifier,
+        )
+
+        self._write_py_edit(tmp_path)
+        record_contract_verified(tmp_path)
+        record_creator_verifier(tmp_path)
+        report = compute_gaps(
+            tmp_path,
+            called_tools={"tapps_session_start", "tapps_validate_changed", "tapps_checklist"},
+        )
+        assert "contract_assertions_unverified" not in report["gaps"]
+        assert "creator_verifier_skipped" not in report["gaps"]

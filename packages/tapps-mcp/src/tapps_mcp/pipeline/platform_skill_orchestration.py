@@ -23,12 +23,13 @@ user-invocable: true
 model: claude-sonnet-4-6
 description: >-
   Generate a ready-to-run orchestration PROMPT with an explicit Goal (verifiable
-  done-condition), a Loop (state→decide→execute→verify→repeat with termination),
-  an independent verification pass, and the right Claude Code feature + model tier
-  for each step (subagents, Workflow tool, /goal, /loop, Routines, brain memory).
-  Use whenever the user wants to orchestrate multi-step, multi-repo, autonomous, or
-  recurring work — "create a prompt to…", "orchestrate…", "make a goal for…",
-  "work the backlog", "loop until X" — even if they don't say "orchestrate".
+  done-condition), a validation contract before execution (when changing behavior),
+  a Loop (state→decide→execute→verify→fix→repeat with attempt cap), an independent
+  creator-verifier pass, and the right Claude Code feature + model tier per step
+  (subagents, Workflow tool, /goal, /loop, Routines, brain memory). Use whenever
+  the user wants to orchestrate multi-step, multi-repo, autonomous, or recurring
+  work — "create a prompt to…", "orchestrate…", "make a goal for…", "work the
+  backlog", "loop until X" — even if they don't say "orchestrate".
 argument-hint: "[free-form objective]"
 ---
 """
@@ -86,11 +87,28 @@ must accept a *verified-correct negative*, e.g. "a created card passing the gate
 truth)." Otherwise the loop burns its whole budget chasing a target correct behavior
 won't produce.
 
-### 2. Decompose if the goal is large
+### 2. Decompose if the goal is large — contract before features when behavior changes
 
 Break it into **sequential sub-goals, each with its own narrow verifiable
 condition**. The loop advances one sub-goal at a time; each is a checkpoint a fresh
 context can resume from.
+
+**When the objective changes software behavior** (feature, bugfix with observable
+effect, migration), insert a **validation contract** *before* any execution
+sub-goal — the Factory Missions ordering that stops post-hoc tests from ratifying
+whatever the implementer already built:
+
+1. Write a finite checklist of **behavioral assertions** with stable IDs
+   (`VAL-…`). Each assertion is testable without reading the implementation
+   (user-visible outcome, API response, CLI exit+stdout, smoke script).
+2. Map every execution sub-goal to the assertion IDs it **fulfills**. Coverage
+   must be complete: no orphan assertions, no duplicate claims.
+3. Anchor **Done-when** to contract coverage (every ID verified by an independent
+   verifier), not to "executor says the feature is done."
+
+Skip the contract section only for pure research/triage/docs prompts where there
+is no behavioral product surface. Never invent a Goal while the route is still
+foggy — hand off to `/tapps-wayfind` first when decisions are missing.
 
 ### 3. Map each chunk to a plane, a mechanism, and a model tier
 
@@ -139,18 +157,25 @@ re-reading the same files. Instruct the loop to prune stale reads, prefer a targ
 grep/snippet over a full re-Read, and carry forward a compact state summary rather
 than raw transcripts — so iteration N isn't paying for iteration 1's tokens.
 
-### 5. Add an independent verification pass (the harness's biggest lever)
+### 5. Add an independent verification pass (creator ≠ verifier)
 
 Self-verification is the weakest link: the same agent that did the work judges the
 work and rationalizes its own output. The single largest quality gain in harness
-engineering is a **separate, adversarial verifier** — this is what lets a modest
-model ship reliable results.
+engineering is a **separate, adversarial verifier** — creator-verifier separation
+from Missions / Factory: the implementer has cost bias; a fresh context does not.
 
 - Put verification on the **coordination plane** as its own step: after Execute,
   spawn a **verifier subagent** (frontier tier) with a *fresh* context, prompted to
   **refute** the sub-goal's proof — re-run the deterministic check (tests, lint,
   build, the actual query) rather than trust the executor's narration. Default to
   "not done" on any doubt.
+- Prefer **two layers** when the target is runnable: **scrutiny** (lint / types /
+  tests / `tapps_validate_changed`) and **behavioral** (smoke / scripted user flow
+  against the validation-contract assertions). Scrutiny alone is not enough when
+  the contract is behavioral.
+- The verifier **reports gaps; it does not implement fixes.** The orchestrating
+  loop scopes a narrow **fix sub-goal** for a fresh executor (see expected-fail
+  fix loop below).
 - For high-stakes or irreversible steps, use **N independent verifiers + majority**
   (perspective-diverse where the finding can fail multiple ways: correctness,
   security, does-it-reproduce), not one. In a Workflow, this is a `parallel()` of
@@ -236,6 +261,23 @@ it: max **3 distinct strategies** per sub-goal, then escalate once (more capable
 model / different approach), then **stop and surface a concise diagnosis**. Repeating
 the same action on the same error is forbidden.
 
+## Expected-fail fix loop (Missions-inspired)
+
+Independent verification **almost never passes on the first attempt** for non-trivial
+work. Treat that as the design, not a crisis:
+
+1. **Record a structured handoff** before fixing: what completed, what is undone,
+   commands run + exit codes, issues found, whether procedures were followed.
+2. **Scope a narrow fix sub-goal** targeting the verifier's actionable gaps — do not
+   reopen the whole feature or weaken the validation contract to go green.
+3. **Re-execute → re-verify** (fresh verifier context again).
+4. **Attempt cap (default 3 validation rounds per sub-goal)** — override explicitly
+   in the emitted prompt when needed. After the cap: escalate once, then stop with
+   a diagnosis. If the *contract* itself is wrong, stop and ask the human — do not
+   silently rewrite Done-when to match the broken implementation.
+
+Infinite fix spirals and "green by suppression" are forbidden.
+
 ## Engineering discipline (emit in every prompt's guardrails)
 
 Produce *solutions*, not band-aids: root-cause not workarounds; **no
@@ -249,7 +291,9 @@ no silent scope creep.
    brain ids involved, if the project has one.
 2. Fill `assets/prompt-template.md` — keep only the sections the task needs. Always
    keep the **"How to run (cold start)"** block, a **Sub-goal 0** for self-healing
-   preconditions, and the **Verify** step wired to an independent verifier.
+   preconditions, the **Verify** step wired to an independent verifier, and — when
+   changing software behavior — a **Validation contract** filled *before* execution
+   sub-goals plus an **expected-fail fix loop** with attempt cap.
 3. If any chunk is multi-stage parallel work, also write the companion
    `.claude/workflows/<slug>.js` (schema + `budget` + per-stage `model`/`effort`) and
    point Run-as at it. A single coupled item (N=1) is a `/goal` drive, not a Workflow.
@@ -257,14 +301,16 @@ no silent scope creep.
 5. **Completeness self-check** — every chunk names a concrete mechanism *and* model
    tier (no "may"); the loop has *both* an iteration cap and a budget; there's an
    **independent verification** step (not self-report); any fan-out has a schema'd
-   return + per-agent contract; a memory recall+record step; an **Autonomy
-   contract**; a **bounded diagnose-don't-repeat** path; a **context-hygiene** line;
-   and the **Engineering discipline** line. For a live/deployed target, confirm
-   Sub-goal 0 has the deploy-freshness + smoke/health gate. Confirm **harness
-   compatibility**: every hook-gated tool call has its unlock/refresh step and every
-   MCP standing nudge is adopted-or-overridden. Run the **cold-start
-   test**: a fresh session with nothing loaded can run it. Fix anything weak before
-   saving.
+   return + per-agent contract; a memory recall+record step with **structured
+   handoff** fields on fail; an **Autonomy contract**; a **bounded diagnose-don't-
+   repeat** path; an **expected-fail fix loop** (default ≤3 validation rounds); a
+   **context-hygiene** line; and the **Engineering discipline** line. For software
+   behavior changes, confirm a **validation contract** with IDs + fulfills coverage
+   before execution sub-goals. For a live/deployed target, confirm Sub-goal 0 has
+   the deploy-freshness + smoke/health gate. Confirm **harness compatibility**: every
+   hook-gated tool call has its unlock/refresh step and every MCP standing nudge is
+   adopted-or-overridden. Run the **cold-start test**: a fresh session with nothing
+   loaded can run it. Fix anything weak before saving.
 6. Tell the user exactly how to run it — the `/goal` line, the `/loop` cadence, the
    Routine schedule, or "invoke the Workflow tool `<script>`" — and from which
    session.
@@ -302,7 +348,18 @@ read the file first, then loop.>
 
 ## Done-when (Goal condition — ground-truth, not narration)
 <a single condition Claude's own output can demonstrate. Name the deterministic
-artifact that proves it — exit code, test-count line, diff, pasted query result.>
+artifact that proves it — exit code, test-count line, diff, pasted query result.
+For software behavior: every validation-contract ID below is verified by an
+independent verifier (paste evidence per ID).>
+
+## Validation contract (before execution — software behavior only)
+<Skip for pure research/triage/docs. Write assertions BEFORE execution sub-goals.>
+
+| ID | Behavioral assertion | Fulfilled by sub-goal | Evidence tool |
+|----|----------------------|-----------------------|---------------|
+| VAL-… | <user-visible / API / CLI outcome> | <sub-goal #> | <pytest / smoke / tapps_validate_changed / …> |
+
+Coverage rule: every ID claimed exactly once; Done-when requires all IDs green.
 
 ## Sub-goals  (sequential; each a checkpoint)
 0. **Establish preconditions (self-healing — the loop sets these up, NOT the user).** <runtime up, scorer/tool built, auth reachable, branch ready>
@@ -310,45 +367,49 @@ artifact that proves it — exit code, test-count line, diff, pasted query resul
    - **Smoke + health gate (after any deploy, before the real run):** `/health` is `ok|degraded` and one cheap end-to-end call succeeds.
    - **Harness compatibility:** <PreToolUse gates + MCP standing nudges the loop's tool calls will hit → bake unlock/refresh steps here; adopt-or-override each nudge in Guardrails>
    - proof: <preconditions verified; for live targets — image no older than latest merged commit + a 200/non-error smoke pasted>
-1. <narrow, verifiable> — proof: <ground-truth artifact>
-2. <…>
+1. **(Software behavior) Finalize validation contract** — proof: contract table above complete + coverage check pasted
+2. <narrow, verifiable execution> — fulfills: <VAL-…> — proof: <ground-truth artifact>
+3. <…>
 
 ## Plane map  (mechanism + model tier per chunk)
 | Step | Plane | Mechanism | Model tier | Notes |
 |------|-------|-----------|-----------|-------|
-| <audit/research> | coordination | Workflow / 3–5 subagents | cheap/low-effort | fan-out OK |
-| <code change> | execution | dispatch to <repo> via PR | cheap unless hard | one repo at a time |
-| <verify proof> | coordination | **verifier subagent (fresh context)** | **frontier/high-effort** | refutes the proof; re-runs the check |
+| <audit/research> | coordination | Workflow / 3–5 subagents | cheap/low-effort | fan-out OK (read-only) |
+| <code change> | execution | dispatch to <repo> via PR | cheap unless hard | **serial writes** — one repo at a time |
+| <verify proof> | coordination | **verifier subagent (fresh context)** | **frontier/high-effort** | creator ≠ verifier; refutes proof |
+| <fix after fail> | execution | fresh worker on scoped fix sub-goal | cheap unless hard | expected-fail loop; do not reopen whole feature |
 | <recurring check> | execution | Routine / `claude -p`+cron | cheap | human-gated |
 
 ## Loop
-- **State:** <read first — status, brain recall of prior attempts, Linear>
+- **State:** <read first — status, brain recall of prior attempts, Linear, last handoff>
 - **Decide:** <how to pick the next action / sub-goal>
 - **Execute:** <the action, on the committed mechanism + tier>
-- **Verify (independent):** spawn a fresh-context verifier (frontier tier) to *refute* the sub-goal's proof — re-run the deterministic check, don't trust the executor's claim. The verifier's verdict advances the loop.
-- **On fail:** diagnose (error + state + brain recall) → hypothesis → fix → retry *differently*; ≤3 distinct strategies, then escalate once, then stop with a diagnosis
-- **Record:** <save outcome + any failure-and-why to the brain>
+- **Verify (independent):** spawn a fresh-context verifier (frontier tier) to *refute* the sub-goal's proof — re-run scrutiny + behavioral checks against the validation contract; don't trust the executor's claim. The verifier's verdict advances the loop.
+- **On fail (expected-fail fix loop):** record structured handoff → scope narrow fix sub-goal → re-execute → re-verify; ≤**3** validation rounds per sub-goal (override: N=…), then escalate once, then stop with a diagnosis. Never weaken the contract to go green.
+- **Record (structured handoff):** completed · undone · commands+exit codes · issues · procedures followed? · failure-and-why → brain
 - **Context hygiene:** prune stale reads; carry a compact state summary, not raw transcripts.
 - **Repeat or stop:** loop until **Done-when** holds; caps: <N iterations> AND <token budget>
 
 ## Guardrails
 - Termination: <goal condition>; caps: <N iterations> AND <token budget>.
-- Independent verification (not self-report); ground-truth proof.
-- No fan-out of coupled coding — sequential per-repo edits.
+- Validation contract before features when changing behavior; coverage complete.
+- Independent verification (creator ≠ verifier); ground-truth proof; expected-fail fix loop with attempt cap.
+- No fan-out of coupled coding — sequential per-repo edits (serial writes, parallel reads OK).
 - Context hygiene — targeted grep over full re-Read.
 - Scope: repos in play = <list>; reads fleet-wide, writes via owner.
-- Memory: recall at start; record outcome (incl. failures) at each checkpoint.
+- Memory: recall at start; record structured handoff (incl. failures) at each checkpoint.
 - Harness compatibility: <gated tool calls → unlock/refresh steps; MCP standing nudges → adopted or overridden>.
 - Discipline: root-cause not workarounds; no green-by-suppression; right-sized; durable; match conventions; no scope creep.
 
 ## Autonomy
 - Act on every reversible, in-scope step — no "should I proceed?" checkpoints.
 - Irreversible/outward step → produce the reversible precursor (draft PR / staged diff / proposal) and continue; human reviews async.
-- Hard-stop once (batched, with a recommendation) only for: irreversible/outward with no precursor · projected next-step cost > ceiling · unsafe-to-guess ambiguity.
+- Hard-stop once (batched, with a recommendation) only for: irreversible/outward with no precursor · projected next-step cost > ceiling · unsafe-to-guess ambiguity · **validation contract itself is wrong**.
 
 ## Failure handling
 - On failed verify: diagnose (error + state + brain recall) → hypothesis → fix → retry *differently*.
 - ≤3 distinct strategies per sub-goal; then escalate once; then stop with a concise diagnosis. Never repeat the same action on the same error.
+- Expected-fail: first verify fail is normal — scoped fix sub-goal, not panic or contract rewrite.
 
 ## Context
 - Repos: <manifest — path · Linear project · brain project_id>
@@ -413,11 +474,32 @@ exactly how a modest base model reaches frontier-level reliability.
 
 - One enormous goal → sequence narrow sub-goals.
 - Unbounded loop (no cap/budget) → always set max iterations or a token budget.
-- **Self-verification only** → add an independent, adversarial verifier.
+- **Self-verification only** → add an independent, adversarial verifier (creator ≠ verifier).
 - Paying frontier rates for mechanical fan-out → tier the model per chunk.
-- Parallel agents on coupled code → sequential per-repo dispatch.
+- Parallel agents on coupled code → sequential per-repo dispatch (serial writes).
 - Vague done-condition → demonstrable, ground-truth-anchored condition.
 - Context rot (re-reading the same files each iteration) → prune + targeted grep.
+- **Features before a validation contract** → write behavioral assertions first when
+  changing software behavior; map sub-goals to `fulfills` IDs.
+- **Forcing attempt-1 green** → expected-fail fix loop with attempt cap; scoped fix
+  sub-goals; never weaken the contract to pass.
+- Unstructured "done" handoffs → record completed / undone / commands+exit codes / issues.
+
+## Missions → orchestration-prompt (what we steal, what we don't)
+
+Factory Missions ([architecture](https://factory.ai/news/missions-architecture)) is a
+multi-day product runtime. This skill emits **prompts**, not a Missions runner.
+Steal the control loop; skip Mission Control UI, computer-use fleets, and
+multi-day orchestrators:
+
+| Missions idea | Emit in the prompt as… |
+|---|---|
+| Validation contract before features | Validation contract table + Done-when = all IDs green |
+| Creator ≠ verifier | Fresh verifier subagent; verifier does not implement fixes |
+| Scrutiny + user-testing | Deterministic checks + behavioral smoke against assertions |
+| Serial feature execution | Serial writes / one repo at a time; parallel read-only OK |
+| Structured handoffs | Record fields: completed · undone · cmds+exits · issues |
+| Fix features after fail | Expected-fail fix loop ≤3 rounds, then escalate/stop |
 """
 
 _LEARNINGS_SEED = """\

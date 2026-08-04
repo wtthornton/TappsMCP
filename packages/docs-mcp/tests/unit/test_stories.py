@@ -12,13 +12,14 @@ from pathlib import Path
 from typing import Any
 from unittest.mock import MagicMock, patch
 
+from tests.helpers import make_settings as _make_settings
+
 from docs_mcp.generators.stories import (
     StoryConfig,
     StoryGenerator,
     StoryTask,
     markdown_relative_link,
 )
-from tests.helpers import make_settings as _make_settings
 
 
 def _make_config(**kwargs: Any) -> StoryConfig:
@@ -959,6 +960,21 @@ class TestAgentAudience:
         config = self._agent_config(so_that="")
         content = self.gen.generate(config)
         assert "## Why" not in content
+
+    def test_assertions_section_renders_ids(self) -> None:
+        """TAP-5541: optional Assertions section with stable VAL- IDs."""
+        config = self._agent_config(assertions=["VAL-AUTH-001", "VAL-API-002"])
+        content = self.gen.generate(config)
+        assert "## Assertions" in content
+        assert "`VAL-AUTH-001`" in content
+        assert "`VAL-API-002`" in content
+        # Assertions sit between Why and Acceptance.
+        assert content.index("## Assertions") < content.index("## Acceptance")
+
+    def test_assertions_omitted_when_empty(self) -> None:
+        config = self._agent_config(assertions=[])
+        content = self.gen.generate(config)
+        assert "## Assertions" not in content
 
     def test_refs_omitted_when_no_refs(self) -> None:
         config = self._agent_config(dependencies=[], description="")

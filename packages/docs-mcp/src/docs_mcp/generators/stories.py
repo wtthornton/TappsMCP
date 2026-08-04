@@ -59,6 +59,8 @@ class StoryConfig(BaseModel):
     size: str = ""  # "S", "M", "L", "XL"
     tasks: list[StoryTask] = []
     acceptance_criteria: list[str] = []
+    # TAP-5541: optional behavioral assertion IDs for agent stories.
+    assertions: list[str] = []
     test_cases: list[str] = []
     dependencies: list[str] = []
     files: list[str] = []
@@ -371,6 +373,7 @@ class StoryGenerator:
         lines.extend(self._render_agent_what(config))
         lines.extend(self._render_agent_where(config))
         lines.extend(self._render_agent_why(config))
+        lines.extend(self._render_agent_assertions(config))
         lines.extend(self._render_agent_acceptance(config))
         lines.extend(self._render_agent_refs(config))
         return lines
@@ -419,6 +422,19 @@ class StoryGenerator:
         if not config.so_that.strip():
             return []
         return ["## Why", "", config.so_that.strip(), ""]
+
+    def _render_agent_assertions(self, config: StoryConfig) -> list[str]:
+        """Optional Assertions section (TAP-5541 validation-contract IDs)."""
+        if not config.assertions:
+            return []
+        lines = ["## Assertions", ""]
+        for item in config.assertions:
+            text = item.strip()
+            if not text:
+                continue
+            lines.append(f"- `{text}`" if not text.startswith("`") else f"- {text}")
+        lines.append("")
+        return lines
 
     def _render_agent_acceptance(self, config: StoryConfig) -> list[str]:
         lines = ["## Acceptance", ""]

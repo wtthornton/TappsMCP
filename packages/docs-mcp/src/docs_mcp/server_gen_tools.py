@@ -1607,6 +1607,7 @@ async def docs_generate_story(
     size: str = "",
     tasks: str = "",
     acceptance_criteria: str = "",
+    assertions: str = "",
     test_cases: str = "",
     dependencies: str = "",
     files: str = "",
@@ -1630,7 +1631,9 @@ async def docs_generate_story(
     and passes ``docs_validate_linear_issue`` with ``agent_ready=true`` by
     construction. Required inputs: ``title`` (≤80 chars), ``files`` with at
     least one ``path/to/file.ext:LINE-RANGE`` anchor, and non-empty
-    ``acceptance_criteria``. Missing inputs produce a structured error.
+    ``acceptance_criteria``. Optional ``assertions`` (newline-separated
+    ``VAL-…`` IDs) adds a ``## Assertions`` section (TAP-5541). Missing required
+    inputs produce a structured error.
 
     Pass ``audience="human"`` for the legacy product-review shape: "As a /
     I want / So that" statement, sizing, task checklist, standard /
@@ -1657,6 +1660,8 @@ async def docs_generate_story(
         acceptance_criteria: Newline-separated acceptance criteria (TAP-5357).
             Commas inside a criterion are preserved; do not use commas as
             delimiters. Optional leading ``- [ ]`` markers are stripped.
+        assertions: Optional newline-separated validation-contract IDs
+            (``VAL-AREA-###``) for a ``## Assertions`` section (TAP-5541).
         test_cases: Comma-separated list of test cases (comprehensive style only).
         dependencies: Comma-separated list of dependencies.
         files: Comma-separated list of affected file paths.
@@ -1702,6 +1707,7 @@ async def docs_generate_story(
 
     # Parse list params — AC is newline-split (TAP-5357); others stay CSV.
     ac_list = _split_criteria_list(acceptance_criteria)
+    assertion_list = _split_criteria_list(assertions)
     tc_list = _split_csv(test_cases)
     dep_list = _split_csv(dependencies)
     file_list = _split_csv(files)
@@ -1746,6 +1752,7 @@ async def docs_generate_story(
         size=size,
         tasks=task_list,
         acceptance_criteria=ac_list,
+        assertions=assertion_list,
         test_cases=tc_list,
         dependencies=dep_list,
         files=file_list,
