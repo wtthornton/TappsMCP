@@ -71,6 +71,14 @@ See [ADR-0017](docs/adr/0017-function-level-call-graph-python-first.md).
 
 ---
 
+## Contract-first sequencing, not ontology-first (ADR-0034)
+
+Missions-style agent work sequences a **validation contract** (`/tapps-validation-contract`) before implementation — creator ≠ verifier, expected-fail loop, serial writes. Reach for that contract-first discipline before reaching for ontology / knowledge-graph expansion on a consuming project.
+
+**Non-goal:** ontology lookups (Brain KG, Neo4j-style substrates) are **not** a required pipeline stage — `tapps_checklist` never gates on one, and the `Brain KG` row above is optional cross-session recall, not a validation step. See [ADR-0034](docs/adr/0034-orchestration-prompt-missions-contract-loop.md) and the AF tickets it informs: [TAP-5526](https://linear.app/tappscodingagents/issue/TAP-5526/missions-shaped-validation-loop-for-af-orchestration), [TAP-5532](https://linear.app/tappscodingagents/issue/TAP-5532/af-thin-agents-kg-traces-and-fleet-learning-side-channel).
+
+---
+
 ## When to use each tool
 
 | Tool | When to use it |

@@ -42,6 +42,7 @@ from tapps_mcp.tools.loop_metrics import (
 )
 from tapps_mcp.tools.pipeline_tool_sets import (
     COMPREHENSION_SHORT_NAMES,
+    DOCTOR_SHORT_NAMES,
     GATE_SHORT_NAMES,
     LOOKUP_SHORT_NAMES,
     SOURCE_FILE_SUFFIXES,
@@ -54,6 +55,9 @@ _LOOKUP_TOOL = "tapps_lookup_docs"
 _IMPACT_TOOL = "tapps_impact_analysis"
 _SESSION_INIT_TOOL = "tapps_session_start"
 _GRAPH_TOOLS = frozenset({"tapps_call_graph", "tapps_diff_impact"})
+# TAP-5551: AGENTS/CLAUDE edits are the thin-agent-check trigger — this is
+# deliberately just the two always-on agent-config files, not every doc.
+_AGENT_CONFIG_BASENAMES = frozenset({"AGENTS.md", "CLAUDE.md"})
 _PRIORITY_GAPS: tuple[str, ...] = (
     "edits_without_validation",
     "checklist_skipped",
@@ -62,6 +66,7 @@ _PRIORITY_GAPS: tuple[str, ...] = (
     "contract_assertions_unverified",
     "creator_verifier_skipped",
     "graph_degraded_ignored",
+    "thin_agent_check_skipped",
 )
 
 
@@ -200,6 +205,32 @@ def _telemetry_used_lookup(rows: list[dict[str, Any]], project_root: Path | None
     return False
 
 
+def _telemetry_used_doctor(rows: list[dict[str, Any]]) -> bool:
+    for row in reversed(rows[-5:]):
+        for tool in row.get("tools_used") or []:
+            if matches_pipeline_tool(str(tool), DOCTOR_SHORT_NAMES):
+                return True
+    return False
+
+
+def _agent_config_edited_recently(rows: list[dict[str, Any]]) -> list[str]:
+    """Return AGENTS.md/CLAUDE.md basenames edited in recent loop-metrics rows.
+
+    Deliberately unscoped by :func:`is_scoped_gate_edit` — those two files
+    live at the project root and are excluded from the *source-file* gate
+    scope, but still matter for the thin-agent doctor signal (TAP-5551).
+    """
+    seen: set[str] = set()
+    for row in rows[-10:]:
+        for raw in row.get("files_edited", []):
+            if not isinstance(raw, str):
+                continue
+            basename = Path(raw).name
+            if basename in _AGENT_CONFIG_BASENAMES:
+                seen.add(basename)
+    return sorted(seen)
+
+
 def _resolve_edited_path(raw: str, project_root: Path) -> Path | None:
     """Resolve a telemetry file path to an on-disk path under *project_root*."""
     path = Path(raw)
@@ -328,9 +359,7 @@ def _append_lookup_docs_underused(
             recs.append(
                 lookup_docs_underused_recommendation(
                     uncached_libs,
-                    kind=_lookup_underused_kind(
-                        used_lookup=used_lookup, loops_with_lookup=0
-                    ),
+                    kind=_lookup_underused_kind(used_lookup=used_lookup, loops_with_lookup=0),
                     loops_without_lookup=recent_edit_loops,
                 )
             )
@@ -343,9 +372,7 @@ def _append_lookup_docs_underused(
     recs.append(
         lookup_docs_underused_recommendation(
             uncached_libs,
-            kind=_lookup_underused_kind(
-                used_lookup=used_lookup, loops_with_lookup=with_lookup
-            ),
+            kind=_lookup_underused_kind(used_lookup=used_lookup, loops_with_lookup=with_lookup),
             loops_without_lookup=without,
         )
     )
@@ -489,6 +516,19 @@ def compute_gaps(
             "gap_taxonomy. Narrowing the symbol may help for local gaps; if "
             "session_start in_repo_gap_rate is already high, re-querying will "
             "not clear degraded (index-level debt)."
+        )
+
+    # TAP-5551: AGENTS.md/CLAUDE.md edited without a follow-up tapps_doctor
+    # (thin-agent Tier-1 / prose-duplication checks, TAP-5549) run afterward.
+    agent_config_edits = _agent_config_edited_recently(rows)
+    used_doctor = "tapps_doctor" in called or _telemetry_used_doctor(rows)
+    if agent_config_edits and not used_doctor:
+        gaps.append("thin_agent_check_skipped")
+        sample = ", ".join(agent_config_edits)
+        recs.append(
+            f"{sample} changed but tapps_doctor was not run to check the thin-agent "
+            "context budget (Tier-1 size, prose duplication, ADR-0031/TAP-5549). "
+            "Call tapps_doctor() before declaring done."
         )
 
     # TAP-5543 / TAP-5548: contract + creator-verifier marks (feature-style edit loops).
