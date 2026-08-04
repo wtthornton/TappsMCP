@@ -1,4 +1,4 @@
-<!-- BEGIN: tapps-skill tapps-wayfind v3.12.63 -->
+<!-- BEGIN: tapps-skill tapps-wayfind v3.12.64 -->
 ---
 name: tapps-wayfind
 user-invocable: true
