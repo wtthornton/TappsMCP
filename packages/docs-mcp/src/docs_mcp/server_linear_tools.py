@@ -134,6 +134,7 @@ async def docs_lint_linear_issue(
     estimate: float = -1.0,
     parent_id: str = "",
     is_epic: bool = False,
+    issue_kind: str = "implementable",
 ) -> dict[str, Any]:
     """Lint one Linear issue against the TappsMCP agent-issue template.
 
@@ -170,6 +171,13 @@ async def docs_lint_linear_issue(
             for hierarchy-aware rules; currently informational.
         is_epic: When True, epic-specific rules apply (file anchor and
             estimate requirements relaxed).
+        issue_kind: One of ``"implementable"`` (default), ``"decision"``, or
+            ``"map-parent"`` (TAP-5497). ``"decision"`` skips the file-anchor
+            and ``## Acceptance`` checks and requires ``## Question``
+            instead. ``"map-parent"`` skips the same two checks and requires
+            at least one of ``## Destination`` / ``## Decisions so far`` /
+            ``## Not yet specified`` / ``## Out of scope``. Implementable
+            agent stories are unaffected.
     """
     _record_call("docs_lint_linear_issue")
     start = time.perf_counter_ns()
@@ -191,6 +199,7 @@ async def docs_lint_linear_issue(
         estimate=estimate_val,
         parent_id=parent_id,
         is_epic=is_epic,
+        issue_kind=issue_kind,
     )
 
     result_dict = result.to_dict()
@@ -241,6 +250,7 @@ async def docs_validate_linear_issue(
     parent_id: str = "",
     is_epic: bool = False,
     project_root: str = "",
+    issue_kind: str = "implementable",
 ) -> dict[str, Any]:
     """Pre-create gate for a Linear issue.
 
@@ -280,6 +290,9 @@ async def docs_validate_linear_issue(
             to the DocsMCP project root detected from settings. The gate
             sentinel is written under ``{project_root}/.tapps-mcp/`` when
             ``agent_ready=true``.
+        issue_kind: One of ``"implementable"`` (default), ``"decision"``, or
+            ``"map-parent"`` (TAP-5497). See ``docs_lint_linear_issue`` for
+            the per-kind rule differences.
     """
     _record_call("docs_validate_linear_issue")
     start = time.perf_counter_ns()
@@ -299,6 +312,7 @@ async def docs_validate_linear_issue(
         estimate=estimate_val,
         parent_id=parent_id,
         is_epic=is_epic,
+        issue_kind=issue_kind,
     )
 
     data = report.model_dump()

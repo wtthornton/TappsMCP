@@ -28,9 +28,23 @@ RULE_ACCEPTANCE_PROSE = "acceptance-prose"
 RULE_CODE_BLOCK_NO_ANCHOR = "code-block-no-anchor"
 RULE_MISSING_ESTIMATE = "missing-estimate"
 RULE_MISSING_PRIORITY = "missing-priority"
+RULE_MISSING_QUESTION = "missing-question"
+RULE_MISSING_MAP_SECTIONS = "missing-map-sections"
 
 TITLE_MAX_LEN = 80
 CHARS_PER_TOKEN = 4  # Rough approximation consistent across rule engines.
+
+# Issue kinds gate which structural rules apply (TAP-5497). ``implementable``
+# is the default and preserves the pre-existing behavior (file anchor +
+# Acceptance section required). ``decision`` and ``map-parent`` are non-code
+# issue shapes that skip those two checks in favor of their own required
+# section.
+ISSUE_KIND_IMPLEMENTABLE = "implementable"
+ISSUE_KIND_DECISION = "decision"
+ISSUE_KIND_MAP_PARENT = "map-parent"
+_VALID_ISSUE_KINDS = frozenset(
+    {ISSUE_KIND_IMPLEMENTABLE, ISSUE_KIND_DECISION, ISSUE_KIND_MAP_PARENT}
+)
 
 # Status names for the new status-based workflow. ``needs-spec`` and
 # ``agent-blocked`` were retired as labels — Triage status now expresses both
@@ -65,6 +79,16 @@ _FENCE_RE = re.compile(r"^```", re.MULTILINE)
 _BLOCKED_MARKERS_RE = re.compile(
     r"\b(?:blocked by|waiting on|waiting for|needs approval|pending decision|design call)\b",
     re.IGNORECASE,
+)
+
+# Regex: `## Question` heading — required section for issue_kind="decision".
+_QUESTION_HEADING_RE = re.compile(r"^##\s+Question\b", re.MULTILINE | re.IGNORECASE)
+
+# Regex: any one of the four map-parent section headings. issue_kind=
+# "map-parent" requires at least one of these instead of file anchor/AC.
+_MAP_SECTION_HEADING_RE = re.compile(
+    r"^##\s+(?:Destination|Decisions so far|Not yet specified|Out of scope)\b",
+    re.MULTILINE | re.IGNORECASE,
 )
 
 
@@ -125,6 +149,7 @@ class _Context:
     priority: int | None
     estimate: float | None
     parent_id: str
+    issue_kind: str = ISSUE_KIND_IMPLEMENTABLE
     findings: list[Finding] = field(default_factory=list)
     noise_bytes: int = 0
 
@@ -147,6 +172,7 @@ def lint_issue(
     parent_id: str = "",
     *,
     is_epic: bool = False,
+    issue_kind: str = ISSUE_KIND_IMPLEMENTABLE,
 ) -> LintResult:
     """Lint one Linear issue against the TappsMCP agent template.
 
@@ -161,6 +187,14 @@ def lint_issue(
         parent_id: Parent issue id (affects hierarchy suggestions elsewhere;
             accepted here for forward compat).
         is_epic: If True, epic-specific rules apply (estimate not required).
+        issue_kind: One of ``"implementable"`` (default), ``"decision"``, or
+            ``"map-parent"`` (TAP-5497). ``"implementable"`` requires the
+            file anchor + ``## Acceptance`` checks unchanged. ``"decision"``
+            skips both and instead requires a ``## Question`` section.
+            ``"map-parent"`` skips both and instead requires at least one of
+            ``## Destination`` / ``## Decisions so far`` / ``## Not yet
+            specified`` / ``## Out of scope``. Unknown values fall back to
+            ``"implementable"``.
     """
     ctx = _Context(
         title=title,
@@ -169,13 +203,19 @@ def lint_issue(
         priority=priority,
         estimate=estimate,
         parent_id=parent_id,
+        issue_kind=issue_kind if issue_kind in _VALID_ISSUE_KINDS else ISSUE_KIND_IMPLEMENTABLE,
     )
 
     _check_title(ctx)
     _check_autolink_mangle(ctx)
     _check_uuid_wrapped_refs(ctx)
-    _check_file_anchor(ctx, is_epic=is_epic)
-    _check_acceptance(ctx)
+    if ctx.issue_kind == ISSUE_KIND_DECISION:
+        _check_question(ctx)
+    elif ctx.issue_kind == ISSUE_KIND_MAP_PARENT:
+        _check_map_sections(ctx)
+    else:
+        _check_file_anchor(ctx, is_epic=is_epic)
+        _check_acceptance(ctx)
     _check_code_block_anchors(ctx)
     _check_metadata(ctx, is_epic=is_epic)
 
@@ -315,6 +355,33 @@ def _check_acceptance(ctx: _Context) -> None:
             ),
         )
         break
+
+
+def _check_question(ctx: _Context) -> None:
+    """Require a ``## Question`` section for ``issue_kind="decision"``."""
+    if not _QUESTION_HEADING_RE.search(ctx.description):
+        ctx.add(
+            rule=RULE_MISSING_QUESTION,
+            severity=SEVERITY_HIGH,
+            message="No `## Question` section found (required for decision issues).",
+            location="description",
+            fix_hint="Add `## Question` stating the specific decision that needs to be made.",
+        )
+
+
+def _check_map_sections(ctx: _Context) -> None:
+    """Require at least one map-parent section for ``issue_kind="map-parent"``."""
+    if not _MAP_SECTION_HEADING_RE.search(ctx.description):
+        ctx.add(
+            rule=RULE_MISSING_MAP_SECTIONS,
+            severity=SEVERITY_HIGH,
+            message=(
+                "No map section found — expected at least one of `## Destination`, "
+                "`## Decisions so far`, `## Not yet specified`, `## Out of scope`."
+            ),
+            location="description",
+            fix_hint="Add at least one map section heading describing the decision space.",
+        )
 
 
 def _check_code_block_anchors(ctx: _Context) -> None:
