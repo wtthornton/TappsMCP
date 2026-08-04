@@ -545,14 +545,31 @@ def _linear_routing_gate_status(matchers: list[str]) -> str:
 
 
 def _linear_cache_gate_status(project_root: Path, matchers: list[str]) -> str:
-    cache_matcher = "mcp__plugin_linear_linear__list_issues"
-    if cache_matcher not in matchers:
+    """Describe Linear cache-gate health, distinguishing blind vs quiet (TAP-5453)."""
+    from tapps_mcp.pipeline.linear_mcp_names import matcher_covers_linear_leaf
+    from tapps_mcp.server_linear_tools_cache import count_linear_snapshot_files
+
+    cache_mode = _detect_cache_gate_mode(project_root)
+    enabled = matcher_covers_linear_leaf(matchers, "list_issues") or cache_mode in (
+        "warn",
+        "block",
+    )
+    if not enabled:
         return (
             "Linear cache-first read gate: NOT enabled "
             "(set linear_enforce_cache_gate: warn|block in .tapps-mcp.yaml)"
         )
-    cache_mode = _detect_cache_gate_mode(project_root)
     viol_24h = _count_cache_gate_violations_24h(project_root)
+    if cache_mode in ("warn", "block") and viol_24h == 0:
+        if count_linear_snapshot_files(project_root) == 0:
+            return (
+                f"Linear cache-first read gate: {cache_mode} BLIND "
+                "(0 violations in last 24h, empty snapshot cache — gate appears "
+                "unmeasured). Remediation: verify PreToolUse matcher covers "
+                "Linear list_issues across host server ids "
+                "(mcp__…__list_issues; likely hook-matcher mismatch — "
+                "run tapps-mcp upgrade --force)"
+            )
     return f"Linear cache-first read gate: {cache_mode} ({viol_24h} violations in last 24h)"
 
 

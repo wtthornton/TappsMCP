@@ -26,17 +26,27 @@ def should_auto_promote_cache_gate(
     Returns ``(should_promote, telemetry)``. ``telemetry`` always carries the
     rolling stats and a ``reason`` string explaining the decision so callers
     can log the promotion (or lack thereof).
+
+    TAP-5454: refuse promotion when Linear snapshot cache / gate telemetry show
+    no positive activity — zero quality-gate skips is not evidence the cache
+    gate is measuring anything.
     """
+    from tapps_mcp.server_linear_tools_cache import linear_cache_activity
+
     stats = compute_rolling_stats(project_root)
+    activity = linear_cache_activity(project_root, window_days=_PROMOTE_WINDOW_DAYS)
+    merged = {**stats, **activity}
     if not auto_promote_enabled:
-        return False, {**stats, "reason": "auto_promote_disabled"}
+        return False, {**merged, "reason": "auto_promote_disabled"}
     if current_mode != "warn":
-        return False, {**stats, "reason": f"current_mode={current_mode}"}
+        return False, {**merged, "reason": f"current_mode={current_mode}"}
     if stats["loops"] < _PROMOTE_WINDOW_DAYS:
-        return False, {**stats, "reason": "insufficient_loops"}
+        return False, {**merged, "reason": "insufficient_loops"}
+    if not activity["has_positive_evidence"]:
+        return False, {**merged, "reason": "no_cache_activity"}
     if stats["gate_skip_rate"] >= _PROMOTE_THRESHOLD:
-        return False, {**stats, "reason": "skip_rate_above_threshold"}
-    return True, {**stats, "reason": "ready_to_promote"}
+        return False, {**merged, "reason": "skip_rate_above_threshold"}
+    return True, {**merged, "reason": "ready_to_promote"}
 
 
 def count_session_start_gate_violations(

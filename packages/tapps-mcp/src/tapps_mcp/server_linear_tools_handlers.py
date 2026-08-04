@@ -100,7 +100,7 @@ async def tapps_linear_snapshot_get(
 
     Call this FIRST for every multi-issue Linear read — "list open
     issues in TAP", "what's assigned to me", "backlog review" — never
-    call ``mcp__plugin_linear_linear__list_issues`` directly without a
+    call the Linear MCP ``list_issues`` tool (server id varies by host) directly without a
     prior snapshot_get on the same ``(team, project, state, label,
     limit)`` slice (the cache-gate hook will reject the call). For
     single-issue lookups by id, skip this and use
@@ -240,8 +240,8 @@ async def tapps_linear_snapshot_put(
     next ``tapps_linear_snapshot_get`` for the same slice returns
     ``cached=True``.
 
-    Call this IMMEDIATELY after a successful
-    ``mcp__plugin_linear_linear__list_issues`` fetch following a
+    Call this IMMEDIATELY after a successful Linear MCP ``list_issues``
+    fetch (server id varies by host) following a
     snapshot_get cache miss. The ``(team, project, state, label,
     limit)`` tuple MUST match the earlier snapshot_get call exactly —
     mismatched keys produce duplicate caches and break the cache-gate
@@ -523,7 +523,8 @@ async def tapps_linear_list_issues(
     slice) before allowing a ``list_issues`` call to proceed.
 
     When the gate passes, returns ``{ok: true}`` — the agent should then call
-    ``mcp__plugin_linear_linear__list_issues`` with the same params. When the
+    the Linear MCP ``list_issues`` tool (server id varies by host) with the
+    same params. When the
     gate fires, returns the standard ``gate_miss`` refusal envelope (see
     ``docs/architecture/gateway-envelope.md``); call
     ``tapps_linear_snapshot_get`` first to satisfy the gate.
