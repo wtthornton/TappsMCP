@@ -363,3 +363,34 @@ Audit tapps-mcp brain wiring in this repo:
 
 Report failures with exact remediation from
 [MEMORY_REFERENCE.md § brain-health-diagnostics](../MEMORY_REFERENCE.md#brain-health-diagnostics).
+
+---
+
+## Cross-tenant key recovery (TAP-5442)
+
+Shared HTTP fleet `nlt-memory` historically frozen the BrainBridge tenant to
+the first repo that initialized the process. Entries may have been written
+under the wrong `X-Project-Id`. After upgrading tapps-mcp past TAP-5442,
+locate suspect keys across tenants before declaring them lost:
+
+```bash
+# For each candidate project slug registered on the brain:
+for pid in homeiq tapps-mcp nlt-ideas-scout OTHER_SLUG; do
+  echo "=== $pid ==="
+  uv run tapps-mcp memory get --key 'THE_KEY' --project-id "$pid" || true
+  uv run tapps-mcp memory search --query 'THE_KEY' --project-id "$pid" || true
+done
+```
+
+Known keys from the TAP-5442 report (treat as search seeds, not exhaustive):
+
+- `homeiq-session-learnings-2026-08-02`
+- Plus the four keys named in the original HomeIQ / ideas-scout probe notes
+  on Linear [TAP-5442](https://linear.app/tappscodingagents/issue/TAP-5442)
+
+Restart the shared fleet after the upgrade so live servers load the
+tenant-scoped bridge cache:
+
+```bash
+tapps-mcp fleet ensure   # or systemctl --user restart tapps-mcp-fleet.service
+```

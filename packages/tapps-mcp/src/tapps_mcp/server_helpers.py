@@ -130,18 +130,33 @@ def _reset_lookup_engine_cache() -> None:
 
 
 # ---------------------------------------------------------------------------
-# BrainBridge singleton — async-safe wrapper over tapps-brain v3 AgentBrain.
+# BrainBridge cache — async-safe wrapper over tapps-brain v3 AgentBrain.
 # TAP-408: Replaces the SQLite-backed MemoryStore init with a Postgres-backed
 # BrainBridge.  _get_memory_store() is kept as a thin compat shim so that
 # existing sync callers continue to work against the same MemoryStore API.
+#
+# TAP-5442: shared HTTP fleet (ADR-0024) serves every consumer repo from one
+# nlt-memory process. Cache bridges by ``(http_url|inproc, brain_project_id)``
+# derived from the *current* ``load_settings()`` (honors ``X-Tapps-Project-Root``)
+# so tenant headers / agent id / elevation cache are never frozen to the first
+# repo that touched the process.
 # ---------------------------------------------------------------------------
 
-_brain_bridge: _BrainBridgeType | None = None
+_brain_bridges: dict[tuple[str, str], _BrainBridgeType | None] = {}
 _brain_bridge_lock = threading.Lock()
 
 
+def _brain_bridge_cache_key(settings: TappsMCPSettings) -> tuple[str, str]:
+    """Return the tenant cache key for the current settings snapshot."""
+    http_url = (
+        settings.memory.brain_http_url or os.environ.get("TAPPS_MCP_MEMORY_BRAIN_HTTP_URL", "")
+    ).strip() or "inproc"
+    project_id = (settings.memory.brain_project_id or "").strip() or "__default__"
+    return (http_url, project_id)
+
+
 def _get_brain_bridge() -> _BrainBridgeType | None:
-    """Return a lazily-initialized brain bridge singleton.
+    """Return a lazily-initialized brain bridge for the current tenant.
 
     Returns an :class:`~tapps_core.brain_bridge.HttpBrainBridge` when
     ``TAPPS_MCP_MEMORY_BRAIN_HTTP_URL`` is set, a plain
@@ -151,42 +166,55 @@ def _get_brain_bridge() -> _BrainBridgeType | None:
 
     TAP-2014: after creation, wires the hive elevation guard so that
     ``bridge.hive_propagate`` refuses entries without a valid approval.
+
+    TAP-5442: re-derives the cache key on every call from ``load_settings()``
+    so a shared fleet process serves the correct tenant per request root.
     """
-    global _brain_bridge
-    if _brain_bridge is None:
-        with _brain_bridge_lock:
-            if _brain_bridge is None:
-                from tapps_core.brain_bridge import (
-                    BRAIN_PROFILE_SERVER,
-                    create_brain_bridge,
-                )
-                from tapps_core.config.settings import load_settings
+    from tapps_core.brain_bridge import (
+        BRAIN_PROFILE_SERVER,
+        create_brain_bridge,
+    )
+    from tapps_core.config.settings import load_settings
 
-                settings = load_settings()
-                # The server singleton backs the full tapps_memory facade, which
-                # exercises the whole read+write+hive+KG+feedback surface. Use
-                # the ``full`` profile (ADR-0012) — ``coder`` gates ~18 of the
-                # bridge's tools (memory_save/get/search/list/supersede, hive_*,
-                # batch ops, …) and would fail those calls on brain v3.20.0+.
-                _brain_bridge = create_brain_bridge(settings, default_profile=BRAIN_PROFILE_SERVER)
+    settings = load_settings()
+    key = _brain_bridge_cache_key(settings)
+    cached = _brain_bridges.get(key)
+    # Fast path: key already materialized (including explicit None).
+    if key in _brain_bridges:
+        return cached
+    with _brain_bridge_lock:
+        if key in _brain_bridges:
+            return _brain_bridges[key]
+        from tapps_core.brain_bridge_fleet_rpc import apply_http_fleet_rpc_patches
+        from tapps_mcp.memory_project_id import install_memory_project_id_patch
 
-                # TAP-2014: wire elevation guard after bridge creation.
-                if _brain_bridge is not None:
-                    from tapps_mcp.tools.hive_safety import get_elevation_store
+        apply_http_fleet_rpc_patches()
+        install_memory_project_id_patch()
+        # The server cache backs the full tapps_memory facade, which
+        # exercises the whole read+write+hive+KG+feedback surface. Use
+        # the ``full`` profile (ADR-0012) — ``coder`` gates ~18 of the
+        # bridge's tools (memory_save/get/search/list/supersede, hive_*,
+        # batch ops, …) and would fail those calls on brain v3.20.0+.
+        bridge = create_brain_bridge(settings, default_profile=BRAIN_PROFILE_SERVER)
 
-                    cache_dir = settings.project_root / ".tapps-mcp-cache"
-                    store = get_elevation_store(cache_dir)
-                    _brain_bridge.elevation_guard = store.check_approved
-    return _brain_bridge
+        # TAP-2014: wire elevation guard after bridge creation.
+        if bridge is not None:
+            from tapps_mcp.tools.hive_safety import get_elevation_store
+
+            cache_dir = settings.project_root / ".tapps-mcp-cache"
+            store = get_elevation_store(cache_dir)
+            bridge.elevation_guard = store.check_approved
+        _brain_bridges[key] = bridge
+        return bridge
 
 
 def _reset_brain_bridge_cache() -> None:
-    """Reset the cached :class:`BrainBridge` singleton (for testing)."""
-    global _brain_bridge
+    """Reset all cached :class:`BrainBridge` instances (for testing)."""
     with _brain_bridge_lock:
-        if _brain_bridge is not None:
-            _brain_bridge.close()
-        _brain_bridge = None
+        for bridge in _brain_bridges.values():
+            if bridge is not None:
+                bridge.close()
+        _brain_bridges.clear()
 
 
 def _brain_http_url_configured(settings: TappsMCPSettings) -> bool:
@@ -221,13 +249,24 @@ def sync_memory_store_available(settings: TappsMCPSettings) -> bool:
 
 
 def _peek_brain_bridge() -> _BrainBridgeType | None:
-    """Return the cached :class:`BrainBridge` without forcing init (TAP-517).
+    """Return a cached :class:`BrainBridge` without forcing init (TAP-517).
 
     Used by read-only consumers like ``tapps_server_info`` that need to
     report bridge state but must not incur a Postgres connection just to
     answer a diagnostics query.
+
+    TAP-5442: looks up the current settings tenant key first; falls back to
+    any already-materialized bridge so diagnostics still work mid-flight.
     """
-    return _brain_bridge
+    from tapps_core.config.settings import load_settings
+
+    key = _brain_bridge_cache_key(load_settings())
+    if key in _brain_bridges:
+        return _brain_bridges[key]
+    for bridge in _brain_bridges.values():
+        if bridge is not None:
+            return bridge
+    return None
 
 
 def _get_memory_store() -> _MemoryStoreType | None:
