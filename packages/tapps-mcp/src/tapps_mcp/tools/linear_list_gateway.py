@@ -27,8 +27,38 @@ _SENTINEL_MAX_AGE_S: int = 300
 # Sentinel file prefix relative to project root
 _SENTINEL_PREFIX: str = ".tapps-mcp/.linear-snapshot-sentinel-"
 
+# GC window: keep slightly longer than TTL so concurrent readers still see
+# fresh sentinels; anything older is orphaned (TAP-5456).
+_SENTINEL_GC_MAX_AGE_S: int = _SENTINEL_MAX_AGE_S * 2
+
 # Open-bucket states (TAP-1374): snapshot_get(state="open") covers all of these
 _OPEN_BUCKET_STATES: frozenset[str] = frozenset({"backlog", "unstarted", "started", "triage"})
+
+
+def gc_stale_linear_sentinels(
+    project_dir: Path,
+    *,
+    max_age_s: float = _SENTINEL_GC_MAX_AGE_S,
+) -> int:
+    """Remove orphaned ``.linear-snapshot-sentinel-*`` files (TAP-5456).
+
+    Returns the number of files deleted. Safe to call on every snapshot_get —
+    only files older than *max_age_s* (default 2x sentinel TTL) are removed.
+    """
+    tapps_dir = project_dir / ".tapps-mcp"
+    if not tapps_dir.is_dir():
+        return 0
+    now = time.time()
+    removed = 0
+    for path in tapps_dir.glob(".linear-snapshot-sentinel-*"):
+        try:
+            age = now - path.stat().st_mtime
+            if age > max_age_s:
+                path.unlink(missing_ok=True)
+                removed += 1
+        except OSError:
+            continue
+    return removed
 
 
 def _sentinel_key(
@@ -146,7 +176,8 @@ def gate_miss_envelope(
         "hint": (
             "Call tapps_linear_snapshot_get(team, project, state) first. "
             "On cached=true use data.issues directly. "
-            "On cached=false, call list_issues then tapps_linear_snapshot_put. "
+            "On cached=false, call the Linear MCP `list_issues` tool "
+            "(server id varies by host) then tapps_linear_snapshot_put. "
             "The sentinel expires after 5 minutes."
         ),
         "bypass_env": "TAPPS_LINEAR_SKIP_CACHE_GATE",
@@ -167,7 +198,7 @@ def gate_linear_list(
 
     Returns:
         ``None`` when the gate passes — the caller should proceed to
-        ``mcp__plugin_linear_linear__list_issues``.
+        ``the Linear MCP list_issues tool`` (server id varies by host).
         A ``gate_miss`` refusal envelope when the gate fires.
 
     Bypass:
@@ -175,6 +206,9 @@ def gate_linear_list(
         the sentinel check.  Bypasses are logged by the bash hook; the
         server-side path just passes through.
     """
+    # TAP-5456: opportunistic GC (cheap glob); keeps sentinels from accumulating
+    # without requiring a megafile wire-up on snapshot_get.
+    gc_stale_linear_sentinels(project_dir)
     if os.environ.get("TAPPS_LINEAR_SKIP_CACHE_GATE"):
         return None
     if check_snapshot_sentinel(project_dir, team, project, state, label, limit):

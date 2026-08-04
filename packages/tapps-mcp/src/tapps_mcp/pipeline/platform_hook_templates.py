@@ -18,6 +18,11 @@ from tapps_mcp.pipeline.agent_contract import (
     SUBAGENT_START_INTRO,
     SUBAGENT_START_TOOLS_LINE,
 )
+from tapps_mcp.pipeline.linear_mcp_names import (
+    apply_linear_host_placeholders,
+    patch_linear_hook_matchers,
+    resolve_linear_script_map,
+)
 
 # ADR-0024: never reap the shared HTTP fleet (`serve --transport http`).
 _FLEET_HTTP_AWK_SKIP = " && !/--transport http|--transport=http/"
@@ -2240,7 +2245,7 @@ except Exception:
 TOOL=$(echo "$PARSED" | sed -n '1p')
 UPDATE_ONLY=$(echo "$PARSED" | sed -n '2p')
 case "$TOOL" in
-  mcp__plugin_linear_linear__save_issue|save_issue) ;;
+  __LINEAR_SAVE_ISSUE_CASE__) ;;
   *) exit 0 ;;
 esac
 # Update-only allow-list (TAP-981 FP reduction): save_issue calls that target
@@ -2296,7 +2301,7 @@ exit 2
 LINEAR_GATE_HOOKS_CONFIG: dict[str, list[dict[str, Any]]] = {
     "PreToolUse": [
         {
-            "matcher": "mcp__plugin_linear_linear__save_issue",
+            "matcher": "__LINEAR_SAVE_ISSUE_MATCHER__",
             "hooks": [
                 {
                     "type": "command",
@@ -2380,7 +2385,7 @@ try {
         if ($hasId -and -not $hasTemplate) { $updateOnly = $true }
     }
 } catch {}
-if ($tool -ne 'mcp__plugin_linear_linear__save_issue' -and $tool -ne 'save_issue') {
+if (-not (__LINEAR_SAVE_ISSUE_PS_EQ__)) {
     exit 0
 }
 # Update-only allow-list (TAP-981 FP reduction): metadata-only updates skip the sentinel.
@@ -2436,7 +2441,7 @@ exit 2
 LINEAR_GATE_HOOKS_CONFIG_PS: dict[str, list[dict[str, Any]]] = {
     "PreToolUse": [
         {
-            "matcher": "mcp__plugin_linear_linear__save_issue",
+            "matcher": "__LINEAR_SAVE_ISSUE_MATCHER__",
             "hooks": [
                 {
                     "type": "command",
@@ -2629,7 +2634,7 @@ KEY=$(echo "$PARSED" | sed -n '2p')
 CALL_TEAM=$(echo "$PARSED" | sed -n '3p')
 CALL_PROJECT=$(echo "$PARSED" | sed -n '4p')
 case "$TOOL" in
-  mcp__plugin_linear_linear__list_issues|list_issues) ;;
+  __LINEAR_LIST_ISSUES_CASE__) ;;
   *) exit 0 ;;
 esac
 if [ -z "$KEY" ]; then
@@ -2733,7 +2738,7 @@ try:
 except Exception:
     sys.exit(0)
 name = d.get('tool_name') or d.get('toolName') or ''
-if name not in ('mcp__plugin_linear_linear__list_issues', 'list_issues'):
+if name not in __LINEAR_LIST_ISSUES_NAMES_REPR__:
     sys.exit(0)
 inp = d.get('tool_input') or d.get('toolInput') or {}
 team = (inp.get('team') or '').strip()
@@ -2839,7 +2844,7 @@ exit 0
 LINEAR_CACHE_GATE_HOOKS_CONFIG: dict[str, list[dict[str, Any]]] = {
     "PreToolUse": [
         {
-            "matcher": "mcp__plugin_linear_linear__list_issues",
+            "matcher": "__LINEAR_LIST_ISSUES_MATCHER__",
             "hooks": [
                 {
                     "type": "command",
@@ -2859,7 +2864,7 @@ LINEAR_CACHE_GATE_HOOKS_CONFIG: dict[str, list[dict[str, Any]]] = {
             ],
         },
         {
-            "matcher": "mcp__plugin_linear_linear__list_issues",
+            "matcher": "__LINEAR_LIST_ISSUES_MATCHER__",
             "hooks": [
                 {
                     "type": "command",
@@ -2953,7 +2958,7 @@ try {
     if ($d.tool_name) { $tool = [string]$d.tool_name }
     elseif ($d.toolName) { $tool = [string]$d.toolName }
 } catch { exit 0 }
-if ($tool -ne 'mcp__plugin_linear_linear__list_issues' -and $tool -ne 'list_issues') {
+if (-not (__LINEAR_LIST_ISSUES_PS_EQ__)) {
     exit 0
 }
 """
@@ -2997,7 +3002,7 @@ exit 2
 LINEAR_CACHE_GATE_HOOKS_CONFIG_PS: dict[str, list[dict[str, Any]]] = {
     "PreToolUse": [
         {
-            "matcher": "mcp__plugin_linear_linear__list_issues",
+            "matcher": "__LINEAR_LIST_ISSUES_MATCHER__",
             "hooks": [
                 {
                     "type": "command",
@@ -3029,6 +3034,28 @@ LINEAR_CACHE_GATE_SCRIPTS_PS: dict[str, str] = {
     "tapps-pre-linear-list.ps1": LINEAR_CACHE_GATE_PRE_LIST_SCRIPT_PS,
     "tapps-post-linear-snapshot-get.ps1": LINEAR_CACHE_GATE_POST_SNAPSHOT_SCRIPT_PS,
 }
+
+
+# TAP-5452: bake known Linear MCP server ids into matchers + in-hook guards.
+patch_linear_hook_matchers(LINEAR_GATE_HOOKS_CONFIG)
+patch_linear_hook_matchers(LINEAR_GATE_HOOKS_CONFIG_PS)
+patch_linear_hook_matchers(LINEAR_CACHE_GATE_HOOKS_CONFIG)
+patch_linear_hook_matchers(LINEAR_CACHE_GATE_HOOKS_CONFIG_PS)
+LINEAR_GATE_PRE_SAVE_SCRIPT = apply_linear_host_placeholders(LINEAR_GATE_PRE_SAVE_SCRIPT)
+LINEAR_GATE_PRE_SAVE_SCRIPT_PS = apply_linear_host_placeholders(LINEAR_GATE_PRE_SAVE_SCRIPT_PS)
+LINEAR_CACHE_GATE_PRE_LIST_SCRIPT = apply_linear_host_placeholders(
+    LINEAR_CACHE_GATE_PRE_LIST_SCRIPT
+)
+LINEAR_CACHE_GATE_PRE_LIST_SCRIPT_PS = apply_linear_host_placeholders(
+    LINEAR_CACHE_GATE_PRE_LIST_SCRIPT_PS
+)
+LINEAR_CACHE_GATE_POST_LIST_SCRIPT = apply_linear_host_placeholders(
+    LINEAR_CACHE_GATE_POST_LIST_SCRIPT
+)
+LINEAR_GATE_SCRIPTS.update(resolve_linear_script_map(LINEAR_GATE_SCRIPTS))
+LINEAR_GATE_SCRIPTS_PS.update(resolve_linear_script_map(LINEAR_GATE_SCRIPTS_PS))
+LINEAR_CACHE_GATE_SCRIPTS.update(resolve_linear_script_map(LINEAR_CACHE_GATE_SCRIPTS))
+LINEAR_CACHE_GATE_SCRIPTS_PS.update(resolve_linear_script_map(LINEAR_CACHE_GATE_SCRIPTS_PS))
 
 
 def render_cache_gate_scripts(
