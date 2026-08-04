@@ -23,7 +23,12 @@ from pathlib import Path
 # Pattern that marks a new MCP tool registration line in a diff. Both servers
 # register through the register_tool() helper; the bare @mcp.tool() decorator
 # is still matched so a direct registration cannot slip past.
-_NEW_TOOL_RE = re.compile(r"^\+[^+].*(?:@mcp\.tool\s*\(|\bregister_tool\s*\()", re.MULTILINE)
+_NEW_TOOL_RE = re.compile(r"^\+[^+].*(?:@mcp\.tool\s*\(|\bregister_tool\s*\()")
+
+# Unified-diff file header, used to scope the scan to package source. Test
+# fixtures legitimately contain `register_tool(` strings; counting those would
+# make the lint fire on its own tests.
+_DIFF_HEADER_RE = re.compile(r"^\+\+\+ b/(.+)$")
 
 _REPO_ROOT = Path(__file__).resolve().parent.parent
 
@@ -78,6 +83,30 @@ def get_changed_files(diff_range: str) -> list[str]:
     return [line.strip() for line in result.stdout.splitlines() if line.strip()]
 
 
+def _is_package_source(path: str) -> bool:
+    """True when *path* is a package source file (not a test, not a script)."""
+    return any(path.startswith(f"{prefix}/") for prefix in map(str, _PACKAGES.values()))
+
+
+def count_added_registrations(diff_text: str) -> int:
+    """Count added tool registrations in package source within a unified diff.
+
+    Scoped by file: a `register_tool(` literal inside a test fixture or inside
+    this lint's own source is not a registration, and counting it would make
+    the check fire on the very PR that adds a test for it.
+    """
+    count = 0
+    in_source = False
+    for line in diff_text.splitlines():
+        header = _DIFF_HEADER_RE.match(line)
+        if header:
+            in_source = _is_package_source(header.group(1))
+            continue
+        if in_source and _NEW_TOOL_RE.match(line):
+            count += 1
+    return count
+
+
 def check_new_registrations(
     diff_text: str, changed_files: list[str], commit_msg: str
 ) -> tuple[bool, str]:
@@ -91,12 +120,11 @@ def check_new_registrations(
     if _BYPASS_RE.search(commit_msg) or _BYPASS_RE.search(bypass_env):
         return True, "bypass token found — skipping check"
 
-    # 2. Find new @mcp.tool( lines in the diff.
-    new_tool_lines = _NEW_TOOL_RE.findall(diff_text)
-    if not new_tool_lines:
-        return True, "no new @mcp.tool registrations found"
+    # 2. Count added registration lines in package source.
+    count = count_added_registrations(diff_text)
+    if not count:
+        return True, "no new tool registrations in package source"
 
-    count = len(new_tool_lines)
     noun = "tool" if count == 1 else "tools"
 
     # 3. Verify the budget doc was also updated.
@@ -234,7 +262,8 @@ def run_self_tests() -> None:
     print("  PASS: empty diff → ok")
 
     # Pass: new tool BUT budget doc updated
-    diff_with_tool = "+    @mcp.tool()\n+    async def my_new_tool() -> None: ...\n"
+    src_header = "+++ b/packages/tapps-mcp/src/tapps_mcp/server.py\n"
+    diff_with_tool = src_header + "+    @mcp.tool()\n+    async def my_new_tool() -> None: ...\n"
     ok, msg = check_new_registrations(
         diff_with_tool, [_BUDGET_DOC, "packages/tapps-mcp/src/server.py"], ""
     )
@@ -264,7 +293,7 @@ def run_self_tests() -> None:
     print("  FAIL: new tool, budget doc missing → correctly rejected")
 
     # Fail: two new tools, no budget doc
-    two_tools = (
+    two_tools = src_header + (
         "+    @mcp.tool()\n+    async def tool_one() -> None: ...\n"
         "+    @mcp.tool(description='...')\n+    async def tool_two() -> None: ...\n"
     )
@@ -275,9 +304,15 @@ def run_self_tests() -> None:
 
     # Fail: register_tool() is the real registration path (TAP-5611) — the
     # decorator-only pattern was blind to every tool added since TAP-1963.
-    register_diff = "+    register_tool(mcp_instance, tapps_new_thing, annotations=_ANN)\n"
-    ok, msg = check_new_registrations(register_diff, [], "")
+    register_line = "+    register_tool(mcp_instance, tapps_new_thing, annotations=_ANN)\n"
+    ok, msg = check_new_registrations(src_header + register_line, [], "")
     assert not ok, "Expected FAIL for a new register_tool() call"
     print("  FAIL: new register_tool() call, no budget doc → correctly rejected")
+
+    # Pass: the same line inside a test fixture is not a registration.
+    test_header = "+++ b/packages/tapps-mcp/tests/unit/test_tool_budget_lint.py\n"
+    ok, msg = check_new_registrations(test_header + register_line, [], "")
+    assert ok, f"Expected PASS for a register_tool string in a test, got: {msg}"
+    print("  PASS: register_tool() inside a test fixture → not counted")
 
     print("All self-tests passed.")

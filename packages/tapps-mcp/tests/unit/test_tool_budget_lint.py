@@ -38,9 +38,7 @@ class TestCountRegisteredTools:
         assert set(counts) == {"tapps-mcp", "docs-mcp"}
         assert all(value > 0 for value in counts.values())
 
-    def test_excludes_the_register_tool_definition(
-        self, lint: ModuleType, tmp_path: Path
-    ) -> None:
+    def test_excludes_the_register_tool_definition(self, lint: ModuleType, tmp_path: Path) -> None:
         pkg = tmp_path / "packages" / "tapps-mcp" / "src" / "tapps_mcp"
         pkg.mkdir(parents=True)
         (pkg / "mcp_register.py").write_text("def register_tool(mcp, fn):\n    ...\n")
@@ -107,17 +105,41 @@ class TestDocumentedCounts:
         assert ok, message
 
 
+_SRC_HEADER = "+++ b/packages/tapps-mcp/src/tapps_mcp/server.py\n"
+_TEST_HEADER = "+++ b/packages/tapps-mcp/tests/unit/test_tool_budget_lint.py\n"
+_REGISTER_LINE = "+    register_tool(mcp_instance, tapps_new_thing, annotations=_ANN)\n"
+
+
 class TestNewRegistrations:
     def test_register_tool_addition_needs_the_budget_doc(self, lint: ModuleType) -> None:
-        diff = "+    register_tool(mcp_instance, tapps_new_thing, annotations=_ANN)\n"
-        ok, message = lint.check_new_registrations(diff, ["packages/tapps-mcp/src/server.py"], "")
+        ok, message = lint.check_new_registrations(
+            _SRC_HEADER + _REGISTER_LINE, ["packages/tapps-mcp/src/server.py"], ""
+        )
         assert not ok
         assert "tool-budget.md" in message
 
     def test_budget_doc_update_satisfies_the_gate(self, lint: ModuleType) -> None:
-        diff = "+    register_tool(mcp_instance, tapps_new_thing, annotations=_ANN)\n"
-        ok, _message = lint.check_new_registrations(diff, [lint._BUDGET_DOC], "")
+        ok, _message = lint.check_new_registrations(
+            _SRC_HEADER + _REGISTER_LINE, [lint._BUDGET_DOC], ""
+        )
         assert ok
+
+    def test_registration_literal_in_a_test_file_is_not_counted(self, lint: ModuleType) -> None:
+        """A ``register_tool(`` string in a fixture is not a registration.
+
+        Counting it made the lint fail on the PR that introduced these very
+        tests — the check fired on its own test data.
+        """
+        ok, _message = lint.check_new_registrations(_TEST_HEADER + _REGISTER_LINE, [], "")
+        assert ok
+
+    def test_only_source_registrations_are_counted_in_a_mixed_diff(self, lint: ModuleType) -> None:
+        diff = _SRC_HEADER + _REGISTER_LINE + _TEST_HEADER + _REGISTER_LINE * 5
+        assert lint.count_added_registrations(diff) == 1
+
+    def test_context_lines_are_not_counted(self, lint: ModuleType) -> None:
+        diff = _SRC_HEADER + "     register_tool(mcp_instance, tapps_existing, annotations=_ANN)\n"
+        assert lint.count_added_registrations(diff) == 0
 
 
 def _fake_registry(root: Path, *, tapps: int, docs: int) -> None:
