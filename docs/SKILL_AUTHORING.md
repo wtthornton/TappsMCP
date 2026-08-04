@@ -57,19 +57,26 @@ description: >-
 **Rule.** Add `disable-model-invocation: true` to the frontmatter of
 any skill that satisfies **all three** of the following:
 
-1. The skill body is ≤ ~30 lines.
+1. The skill body is ≤ ~30 lines **or** the skill is a long, user-gated
+   planning flow that must never autoload mid-task (e.g. `/tapps-wayfind`
+   decision maps — TAP-5500).
 2. The description does **not** name a triggering keyword, context, or
-   file type that would legitimately fire during normal agentic work.
-3. The skill is a user-invoked utility (e.g. a mode switch, a gate
-   check, a pipeline runner) rather than an agent-callable specialist.
+   file type that would legitimately fire during normal agentic work
+   **or** (for long planning skills) the skill is intentionally
+   slash-invoked only.
+3. The skill is a user-invoked utility (mode switch, gate check, pipeline
+   runner) **or** a user-gated planning skill (wayfind chart/work), rather
+   than an agent-callable specialist that should autoload.
 
 **Rationale.** `disable-model-invocation: true` tells the Claude Code
 skill router to exclude the skill from autoload consideration entirely.
 Without it, short utility skills can match spurious patterns and fire
-mid-task, interrupting normal agentic flow. Skills that target specific
-contexts or file types (e.g. `tapps-research`, `tapps-review-pipeline`)
-should keep autoload enabled so they fire at the right moment; utility
-stubs should not.
+mid-task, interrupting normal agentic flow. Long planning skills that
+drive Linear map/decision ops likewise must not interrupt implementable
+work — agents invoke them explicitly when the route is foggy.
+Skills that target specific contexts or file types (e.g. `tapps-research`,
+`tapps-review-pipeline`) should keep autoload enabled so they fire at the
+right moment; utility stubs and wayfind-style planning skills should not.
 
 **Known candidates** (as of the TAP-2487 audit):
 

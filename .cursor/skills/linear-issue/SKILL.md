@@ -19,11 +19,14 @@ Work with Linear issues for AI-agent consumption. Infer intent from the user's p
 
 **Create** a new issue (default when prompt describes a change/bug):
 
-1. Call `docs_generate_story` with the user's ask. Required args: `title` (<=80 chars, pattern `file.py: symptom`), `files` (comma-separated, each with `:LINE-RANGE`), `acceptance_criteria` (newline-separated verifiable items — commas inside a criterion are preserved; do not comma-delimit).
-2. Default `audience="agent"` emits the 5-section Linear template (What/Where/Why/Acceptance/Refs) and round-trips through the validator.
-3. If the call returns `INPUT_INVALID`, refine the inputs per the error message and retry. Do NOT pass `audience="human"` unless the user asks for a product-review doc.
-4. Call the Linear plugin's write tool with `assignee="<agent-user-id-or-name>"`. Proceed without prompting the user.
-5. After the write returns, call `tapps_linear_snapshot_invalidate(team=<team>, project=<project>)` to evict stale cached snapshots for that slice.
+1. Call `docs_generate_story` with the user's ask. Required args for **implementable** stories: `title` (<=80 chars, pattern `file.py: symptom`), `files` (comma-separated, each with `:LINE-RANGE`), `acceptance_criteria` (newline-separated verifiable items — commas inside a criterion are preserved; do not comma-delimit).
+2. Default `audience="agent"` + `issue_kind="implementable"` emits the 5-section Linear template (What/Where/Why/Acceptance/Refs) and round-trips through the validator.
+3. **Decision vs implementable (TAP-5500):** when the ask is a tradeoff/preference with no file change yet, pass `issue_kind="decision"` + `question=...` (no fake Acceptance). When charting a wayfind map, pass `issue_kind="map-parent"` (+ destination/notes fields). Validate with the **same** `issue_kind`. Foggy multi-session work → invoke `/tapps-wayfind` first; do not invent Goals via orchestration-prompt while the route is foggy.
+4. If the call returns `INPUT_INVALID`, refine the inputs per the error message and retry. Do NOT pass `audience="human"` unless the user asks for a product-review doc.
+5. Call the Linear plugin's write tool with `assignee="<agent-user-id-or-name>"`. Proceed without prompting the user.
+6. After the write returns, call `tapps_linear_snapshot_invalidate(team=<team>, project=<project>)` to evict stale cached snapshots for that slice.
+
+**Automation contract:** status is the readiness signal (Backlog = agent-ready). Do not invent standing human label-maintenance duties. AgentForge and other consumers receive `tapps-wayfind` / orchestration-prompt via `tapps-mcp upgrade` only.
 
 **Lint** an existing issue (prompt like "lint TAP-686"):
 
