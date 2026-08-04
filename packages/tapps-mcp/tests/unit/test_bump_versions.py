@@ -1,15 +1,15 @@
-"""Tests for scripts/bump-versions.py — atomic release-prep gate.
+"""Tests for scripts/bump_versions.py — atomic release-prep gate.
 
 TAP-1378 / TAP-1372: every release commit must bump pyproject AND refresh
 the AGENTS.md `<!-- tapps-agents-version: X.Y.Z -->` stamp in the same
-commit. The script is the single source of truth for the bump; CI runs
+commit. The module is the single source of truth for the bump; CI runs
 `--check` on every push to prevent the drift pattern that produced
 commits 79ef6e3, 2e2f378, and 05caaaa.
 """
 
 from __future__ import annotations
 
-import importlib.util
+import importlib
 import shutil
 import sys
 from pathlib import Path
@@ -22,17 +22,18 @@ if TYPE_CHECKING:
 
 
 REPO_ROOT = Path(__file__).resolve().parents[4]
-SCRIPT_PATH = REPO_ROOT / "scripts" / "bump-versions.py"
+SCRIPTS_DIR = REPO_ROOT / "scripts"
 
 
 @pytest.fixture
 def bump_module() -> ModuleType:
-    """Import scripts/bump-versions.py as a module (filename has a hyphen)."""
-    spec = importlib.util.spec_from_file_location("bump_versions", SCRIPT_PATH)
-    assert spec is not None and spec.loader is not None
-    mod = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(mod)
-    return mod
+    """Import scripts/bump_versions.py — scripts/ is not an installed package.
+
+    Reloaded per test because `fake_repo` rebinds the module's REPO_ROOT.
+    """
+    if str(SCRIPTS_DIR) not in sys.path:
+        sys.path.insert(0, str(SCRIPTS_DIR))
+    return importlib.reload(importlib.import_module("bump_versions"))
 
 
 @pytest.fixture
