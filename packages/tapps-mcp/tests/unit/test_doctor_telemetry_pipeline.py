@@ -28,6 +28,35 @@ def test_cache_gate_promote_hint_none_when_already_block() -> None:
     assert hint is None
 
 
+def test_cache_gate_promote_hint_surfaces_no_cache_activity(tmp_path: Path) -> None:
+    """TAP-5454: refusal reason is visible, not silently skipped."""
+    import json
+    import time
+    from types import SimpleNamespace
+
+    metrics = tmp_path / ".tapps-mcp" / "loop-metrics.jsonl"
+    metrics.parent.mkdir(parents=True)
+    now = int(time.time())
+    rows = [
+        {
+            "ts": now - i * 60,
+            "mcp_calls": 1,
+            "tools_used": ["tapps_validate_changed"],
+            "files_edited": ["a.py"],
+            "gate_skipped_files": [],
+            "lookup_docs_called": True,
+        }
+        for i in range(10)
+    ]
+    metrics.write_text("\n".join(json.dumps(r) for r in rows) + "\n", encoding="utf-8")
+    settings = SimpleNamespace(linear_enforce_cache_gate_auto_promote=True)
+    snippet, hint = _cache_gate_promote_hint(tmp_path, settings, "warn", viol_24h=0)
+    assert snippet is None
+    assert hint is not None
+    assert "Auto-promote refused" in hint
+    assert "unmeasured" in hint
+
+
 def test_check_pipeline_enforce_recommendations_no_metrics(tmp_path: Path) -> None:
     result = check_pipeline_enforce_recommendations(tmp_path)
     assert result.ok is True

@@ -83,7 +83,7 @@ def _cache_gate_promote_hint(
             f"{viol_24h} Linear cache-gate misses in 24h while mode={cache_mode}",
         )
     if settings is not None and getattr(settings, "linear_enforce_cache_gate_auto_promote", False):
-        promote, _telemetry = should_auto_promote_cache_gate(
+        promote, telemetry = should_auto_promote_cache_gate(
             project_root,
             current_mode=cache_mode,
             auto_promote_enabled=True,
@@ -92,6 +92,15 @@ def _cache_gate_promote_hint(
             return (
                 "linear_enforce_cache_gate: block",
                 "TAP-1333 auto-promote criteria met (stable pipeline, low skip rate)",
+            )
+        if telemetry.get("reason") == "no_cache_activity":
+            snaps = telemetry.get("snapshot_files", 0)
+            evals = telemetry.get("gate_evaluations", 0)
+            return (
+                None,
+                "Auto-promote refused: no Linear cache activity "
+                f"(snapshots={snaps}, gate_evaluations={evals}) — "
+                "cache gate appears unmeasured; do not flip to block",
             )
     return None, None
 

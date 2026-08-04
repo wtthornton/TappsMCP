@@ -18,11 +18,20 @@ _OPEN_STATE_BUCKETS: frozenset[str] = frozenset({"backlog", "unstarted", "starte
 # State values that indicate a closed workflow (long TTL).
 _CLOSED_STATE_BUCKETS: frozenset[str] = frozenset({"completed", "canceled"})
 
-_FETCH_HINT = (
-    "Cache miss. Call mcp__plugin_linear_linear__list_issues with the same "
-    "team/project/state filters, then pass the result to "
-    "tapps_linear_snapshot_put(issues_json=...) to populate the cache."
-)
+def _list_issues_tool_phrase() -> str:
+    """Host-neutral phrasing for Linear ``list_issues`` (TAP-5455)."""
+    from tapps_mcp.pipeline.linear_mcp_names import linear_plugin_hint_phrasing
+
+    return linear_plugin_hint_phrasing("list_issues")
+
+
+def _default_fetch_hint() -> str:
+    return (
+        f"Cache miss. Call {_list_issues_tool_phrase()} with the same "
+        "team/project/state filters, then pass the result to "
+        "tapps_linear_snapshot_put(issues_json=...) to populate the cache."
+    )
+
 
 # Cache-bucket aliases Linear's plugin does not understand (TAP-5356).
 _CACHE_BUCKET_ALIASES: frozenset[str] = frozenset({"open", "closed"})
@@ -31,15 +40,16 @@ _CACHE_BUCKET_ALIASES: frozenset[str] = frozenset({"open", "closed"})
 def _fetch_hint_for_state(state: str | None) -> str:
     """Return a miss hint that does not tell agents to pass bucket aliases to Linear."""
     state_lc = (state or "").strip().lower()
+    tool = _list_issues_tool_phrase()
     if state_lc in _CACHE_BUCKET_ALIASES:
         return (
             f'Cache miss. "{state_lc}" is a tapps-mcp cache bucket, not a Linear state. '
-            "Call mcp__plugin_linear_linear__list_issues with team/project only "
+            f"Call {tool} with team/project only "
             "(omit state), includeArchived=false; filter issues in memory by "
             f'statusType; then tapps_linear_snapshot_put(..., state="{state_lc}", '
             "issues_json=...) to populate the cache."
         )
-    return _FETCH_HINT
+    return _default_fetch_hint()
 
 
 def _is_cache_bucket_alias(state: str | None) -> bool:
@@ -48,13 +58,14 @@ def _is_cache_bucket_alias(state: str | None) -> bool:
 
 def _list_issues_pass_payload(state: str) -> tuple[dict[str, Any], list[str]]:
     """Build gate-pass data + next_steps for ``tapps_linear_list_issues`` (TAP-5356)."""
+    tool = _list_issues_tool_phrase()
     if _is_cache_bucket_alias(state):
         alias = (state or "").strip().lower()
         data: dict[str, Any] = {
             "ok": True,
             "message": (
                 f'Gate passed — "{alias}" is a tapps-mcp cache bucket, not a '
-                "Linear state. Call mcp__plugin_linear_linear__list_issues "
+                f"Linear state. Call {tool} "
                 "with team/project only (omit state), includeArchived=false; "
                 "filter in memory; then tapps_linear_snapshot_put with the "
                 f'same state="{alias}".'
@@ -65,20 +76,20 @@ def _list_issues_pass_payload(state: str) -> tuple[dict[str, Any], list[str]]:
             ),
         }
         steps = [
-            "Call mcp__plugin_linear_linear__list_issues(team, project, "
-            "includeArchived=false) — omit state.",
+            f"Call {tool} with team/project "
+            "(includeArchived=false) — omit state.",
             f'Then call tapps_linear_snapshot_put(..., state="{alias}") to cache.',
         ]
         return data, steps
     data = {
         "ok": True,
         "message": (
-            "Gate passed — call mcp__plugin_linear_linear__list_issues "
+            f"Gate passed — call {tool} "
             "with the same team, project, state, label, and limit params."
         ),
     }
     steps = [
-        "Call mcp__plugin_linear_linear__list_issues(team, project, state, ...) now.",
+        f"Call {tool} with the same team/project/state filters now.",
         "Then call tapps_linear_snapshot_put to cache the result.",
     ]
     return data, steps

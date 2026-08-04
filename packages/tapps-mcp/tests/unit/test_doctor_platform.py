@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
 from tapps_mcp.distribution.doctor_platform import (
@@ -54,3 +55,65 @@ def test_check_pretooluse_matchers_missing_settings_passes(tmp_path: Path) -> No
     result = check_pretooluse_matchers(tmp_path)
     assert result.ok is True
     assert "not present" in result.message
+
+
+def _install_cache_gate_warn(tmp_path: Path, *, with_matcher: bool = True) -> None:
+    hooks = tmp_path / ".claude" / "hooks"
+    hooks.mkdir(parents=True)
+    (hooks / "tapps-pre-linear-list.sh").write_text(
+        '#!/bin/bash\nMODE="warn"\n',
+        encoding="utf-8",
+    )
+    settings = tmp_path / ".claude" / "settings.json"
+    matchers = []
+    if with_matcher:
+        matchers.append(
+            {
+                "matcher": (
+                    "mcp__plugin_linear_linear__list_issues|"
+                    "mcp__claude_ai_Linear__list_issues"
+                ),
+                "hooks": [{"type": "command", "command": "true"}],
+            }
+        )
+    settings.write_text(
+        json.dumps({"hooks": {"PreToolUse": matchers}}),
+        encoding="utf-8",
+    )
+
+
+def test_linear_cache_gate_status_blind_when_empty_cache(tmp_path: Path) -> None:
+    from tapps_mcp.distribution.doctor_platform import _linear_cache_gate_status
+
+    _install_cache_gate_warn(tmp_path)
+    status = _linear_cache_gate_status(
+        tmp_path,
+        ["mcp__plugin_linear_linear__list_issues|mcp__claude_ai_Linear__list_issues"],
+    )
+    assert "BLIND" in status
+    assert "hook-matcher mismatch" in status
+    assert "empty snapshot cache" in status
+
+
+def test_linear_cache_gate_status_quiet_when_cache_populated(tmp_path: Path) -> None:
+    from tapps_mcp.distribution.doctor_platform import _linear_cache_gate_status
+
+    _install_cache_gate_warn(tmp_path)
+    snap = tmp_path / ".tapps-mcp-cache" / "linear-snapshots"
+    snap.mkdir(parents=True)
+    (snap / "abc.json").write_text("{}", encoding="utf-8")
+    status = _linear_cache_gate_status(
+        tmp_path,
+        ["mcp__plugin_linear_linear__list_issues"],
+    )
+    assert "BLIND" not in status
+    assert "0 violations in last 24h" in status
+    assert "warn" in status
+
+
+def test_check_pretooluse_matchers_surfaces_blind_gate(tmp_path: Path) -> None:
+    _install_cache_gate_warn(tmp_path)
+    result = check_pretooluse_matchers(tmp_path)
+    assert result.ok is True
+    assert "BLIND" in result.message
+    assert "hook-matcher mismatch" in result.message

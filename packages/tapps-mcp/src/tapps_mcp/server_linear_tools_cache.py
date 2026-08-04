@@ -33,6 +33,71 @@ def _cache_dir(project_root: Path) -> Path:
     return cache_dir
 
 
+def count_linear_snapshot_files(project_root: Path) -> int:
+    """Count on-disk Linear snapshot JSON files (does not create the cache dir).
+
+    Used by doctor / auto-promote to tell a quiet gate (populated cache) from a
+    blind gate (violations=0 because nothing measures) — TAP-5453 / TAP-5454.
+    """
+    cache_dir = project_root / ".tapps-mcp-cache" / _CACHE_SUBDIR
+    if not cache_dir.is_dir():
+        return 0
+    try:
+        return sum(1 for p in cache_dir.iterdir() if p.suffix == ".json" and p.is_file())
+    except OSError:
+        return 0
+
+
+def count_cache_gate_log_entries(project_root: Path, *, window_days: int = 7) -> int:
+    """Count cache-gate violation-log rows in the trailing window (any category).
+
+    Any row means the PreToolUse gate *evaluated* a call. Zero rows with an empty
+    snapshot cache is the blind/unmeasured signal (TAP-5454).
+    """
+    from datetime import UTC, datetime, timedelta
+
+    log_path = project_root / ".tapps-mcp" / ".cache-gate-violations.jsonl"
+    if not log_path.exists():
+        return 0
+    cutoff = datetime.now(tz=UTC) - timedelta(days=window_days)
+    count = 0
+    try:
+        with log_path.open(encoding="utf-8") as fh:
+            for raw in fh:
+                line = raw.strip()
+                if not line:
+                    continue
+                try:
+                    entry = json.loads(line)
+                except json.JSONDecodeError:
+                    continue
+                ts_raw = entry.get("ts", "")
+                if not isinstance(ts_raw, str):
+                    continue
+                try:
+                    ts = datetime.fromisoformat(ts_raw)
+                except ValueError:
+                    continue
+                if ts >= cutoff:
+                    count += 1
+    except OSError:
+        return 0
+    return count
+
+
+def linear_cache_activity(
+    project_root: Path, *, window_days: int = 7
+) -> dict[str, Any]:
+    """Positive-evidence summary for Linear cache-gate health / auto-promote."""
+    snapshots = count_linear_snapshot_files(project_root)
+    evaluations = count_cache_gate_log_entries(project_root, window_days=window_days)
+    return {
+        "snapshot_files": snapshots,
+        "gate_evaluations": evaluations,
+        "has_positive_evidence": snapshots > 0 or evaluations > 0,
+    }
+
+
 # ADR-0029 / TAP-4561: unified cache-stats counters (snapshot reads/writes).
 _snapshot_stats: dict[str, int] = {"hits": 0, "misses": 0, "writes": 0}
 # TAP-4558: wall-clock timestamp of the most recent snapshot write (0 == never).

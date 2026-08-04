@@ -43,12 +43,31 @@ def test_is_cache_bucket_alias_detects_open_and_closed() -> None:
 def test_fetch_hint_for_state_warns_on_alias() -> None:
     hint = _fetch_hint_for_state("open")
     assert "cache bucket" in hint
+    assert "mcp__plugin_linear_linear__list_issues" not in hint
+    assert "server id varies by host" in hint
+
+
+def test_fetch_hint_default_is_host_neutral() -> None:
+    hint = _fetch_hint_for_state("backlog")
+    assert "list_issues" in hint
+    assert "mcp__plugin_linear_linear__list_issues" not in hint
+    assert "server id varies by host" in hint
 
 
 def test_list_issues_pass_payload_flags_alias() -> None:
     data, steps = _list_issues_pass_payload("open")
     assert "alias_warning" in data
     assert steps
+    joined = data["message"] + " ".join(steps)
+    assert "mcp__plugin_linear_linear__list_issues" not in joined
+    assert "server id varies by host" in joined
+
+
+def test_list_issues_pass_payload_concrete_state_host_neutral() -> None:
+    data, steps = _list_issues_pass_payload("backlog")
+    joined = data["message"] + " ".join(steps)
+    assert "mcp__plugin_linear_linear__list_issues" not in joined
+    assert "list_issues" in joined
 
 
 def test_extract_status_type_reads_state_dict() -> None:
