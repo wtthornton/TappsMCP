@@ -22,6 +22,9 @@ class StoryGeneratorBase:
     VALID_SIZES: ClassVar[frozenset[str]] = frozenset({"S", "M", "L", "XL", ""})
     VALID_CRITERIA_FORMATS: ClassVar[frozenset[str]] = frozenset({"checkbox", "gherkin"})
     VALID_AUDIENCES: ClassVar[frozenset[str]] = frozenset({"agent", "human"})
+    VALID_ISSUE_KINDS: ClassVar[frozenset[str]] = frozenset(
+        {"implementable", "decision", "map-parent"}
+    )
 
     _AGENT_TITLE_MAX: ClassVar[int] = 80
     _AGENT_FILE_ANCHOR_RE: ClassVar[re.Pattern[str]] = re.compile(r"[\w./\\-]+\.\w+:\d+(?:-\d+)?")

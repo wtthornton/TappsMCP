@@ -16,7 +16,6 @@ re-exported here so existing imports keep resolving.
 
 from __future__ import annotations
 
-import time
 from pathlib import Path
 from typing import Any
 
@@ -51,7 +50,6 @@ class StoryGenerator(AgentSectionsMixin, HumanSectionsMixin, EnrichmentMixin):
     Output includes ``<!-- docsmcp:start:section -->`` markers for SmartMerger
     compatibility.
     """
-
 
     @staticmethod
     def _infer_story_defaults(config: StoryConfig) -> StoryConfig:
@@ -144,9 +142,17 @@ class StoryGenerator(AgentSectionsMixin, HumanSectionsMixin, EnrichmentMixin):
                 fallback="agent",
             )
 
-        # STORY-104.1: agent audience (default) emits the 5-section Linear
-        # template and bypasses the rich product-review shape entirely.
+        # STORY-104.1 / TAP-5498: agent audience emits Linear templates.
         if audience == "agent":
+            kind = (
+                config.issue_kind
+                if config.issue_kind in self.VALID_ISSUE_KINDS
+                else "implementable"
+            )
+            if kind == "decision":
+                return "\n".join(self._render_decision_template(config))
+            if kind == "map-parent":
+                return "\n".join(self._render_map_parent_template(config))
             return "\n".join(self._render_agent_template(config))
 
         style = config.style if config.style in self.VALID_STYLES else "standard"

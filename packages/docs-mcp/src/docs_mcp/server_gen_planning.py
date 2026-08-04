@@ -299,6 +299,13 @@ async def docs_generate_story(
     write_to_disk: bool = False,
     project_root: str = "",
     audience: str = "agent",
+    issue_kind: str = "implementable",
+    question: str = "",
+    destination: str = "",
+    notes: str = "",
+    decisions_so_far: str = "",
+    not_yet_specified: str = "",
+    out_of_scope: str = "",
 ) -> dict[str, Any]:
     """Generate a User Story document with acceptance criteria and task breakdown.
 
@@ -311,6 +318,11 @@ async def docs_generate_story(
     ``acceptance_criteria``. Optional ``assertions`` (newline-separated
     ``VAL-…`` IDs) adds a ``## Assertions`` section (TAP-5541). Missing required
     inputs produce a structured error.
+
+    Pass ``issue_kind="decision"`` (TAP-5498) for a Question-only body (no
+    fake Acceptance / file anchors). Pass ``issue_kind="map-parent"`` for a
+    wayfind map (Destination / Notes / Decisions so far / Not yet specified /
+    Out of scope). Validate with ``docs_validate_linear_issue(..., issue_kind=...)``.
 
     Pass ``audience="human"`` for the legacy product-review shape: "As a /
     I want / So that" statement, sizing, task checklist, standard /
@@ -439,6 +451,13 @@ async def docs_generate_story(
         inherit_context=inherit_context,
         epic_path=epic_path,
         audience=audience,
+        issue_kind=issue_kind,
+        question=_strip_wire_tags(question),
+        destination=_strip_wire_tags(destination),
+        notes=_strip_wire_tags(notes),
+        decisions_so_far=_strip_wire_tags(decisions_so_far),
+        not_yet_specified=_strip_wire_tags(not_yet_specified),
+        out_of_scope=_strip_wire_tags(out_of_scope),
     )
 
     generator = StoryGenerator()

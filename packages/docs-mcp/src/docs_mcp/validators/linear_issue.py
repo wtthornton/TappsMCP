@@ -15,10 +15,13 @@ from __future__ import annotations
 from pydantic import BaseModel
 
 from docs_mcp.linters.linear_issue import (
+    ISSUE_KIND_IMPLEMENTABLE,
     RULE_ACCEPTANCE_EMPTY,
     RULE_ACCEPTANCE_PROSE,
     RULE_MISSING_ACCEPTANCE,
     RULE_MISSING_FILE_ANCHOR,
+    RULE_MISSING_MAP_SECTIONS,
+    RULE_MISSING_QUESTION,
     RULE_TITLE_TOO_LONG,
     SEVERITY_HIGH,
     Finding,
@@ -32,10 +35,13 @@ _MISSING_PHRASING: dict[str, str] = {
     RULE_MISSING_FILE_ANCHOR: "a file anchor (e.g., `path/to/file.py:LINE-RANGE`)",
     RULE_MISSING_ACCEPTANCE: "a `## Acceptance` section",
     RULE_ACCEPTANCE_EMPTY: "at least one `- [ ]` checkbox under `## Acceptance`",
-    RULE_ACCEPTANCE_PROSE: (
-        "only `- [ ]` checkbox lines under `## Acceptance` (no bare prose)"
-    ),
+    RULE_ACCEPTANCE_PROSE: ("only `- [ ]` checkbox lines under `## Acceptance` (no bare prose)"),
     RULE_TITLE_TOO_LONG: "a non-empty title (pattern: `file.py: symptom`)",
+    RULE_MISSING_QUESTION: "a `## Question` section",
+    RULE_MISSING_MAP_SECTIONS: (
+        "a map section (`## Destination`, `## Decisions so far`, "
+        "`## Not yet specified`, or `## Out of scope`)"
+    ),
 }
 
 
@@ -74,12 +80,18 @@ def validate_issue(
     parent_id: str = "",
     *,
     is_epic: bool = False,
+    issue_kind: str = ISSUE_KIND_IMPLEMENTABLE,
 ) -> ValidationReport:
     """Validate an issue payload as a pre-create gate.
 
     Returns ``agent_ready=True`` iff there are zero HIGH-severity findings.
     ``missing`` is the human-phrased list of what to add; ``issues`` is the
     structured per-field detail.
+
+    Args:
+        issue_kind: One of ``"implementable"`` (default), ``"decision"``, or
+            ``"map-parent"`` — see ``lint_issue`` for the per-kind rule
+            differences (TAP-5497).
     """
     lint_result = lint_issue(
         title=title,
@@ -89,6 +101,7 @@ def validate_issue(
         estimate=estimate,
         parent_id=parent_id,
         is_epic=is_epic,
+        issue_kind=issue_kind,
     )
 
     blocking: list[Finding] = [f for f in lint_result.findings if f.severity == SEVERITY_HIGH]

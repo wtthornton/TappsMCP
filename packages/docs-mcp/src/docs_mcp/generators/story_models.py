@@ -67,3 +67,16 @@ class StoryConfig(BaseModel):
     # template from docs/linear/AGENT_ISSUES.md. Pass "human" for the
     # full product-review shape.
     audience: str = "agent"  # "agent" | "human"
+    # TAP-5498: shape of the agent-audience template. "implementable" (default)
+    # is the locked 5-section template (unchanged). "decision" emits a
+    # ## Question section instead of Where/Acceptance — no file anchor or
+    # fake acceptance criteria. "map-parent" emits Destination / Notes /
+    # Decisions so far / Not yet specified / Out of scope. Only applies when
+    # audience="agent".
+    issue_kind: str = "implementable"  # "implementable" | "decision" | "map-parent"
+    question: str = ""  # Required when issue_kind="decision".
+    destination: str = ""  # map-parent
+    notes: str = ""  # map-parent
+    decisions_so_far: str = ""  # map-parent
+    not_yet_specified: str = ""  # map-parent
+    out_of_scope: str = ""  # map-parent

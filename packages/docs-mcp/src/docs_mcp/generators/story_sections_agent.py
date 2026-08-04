@@ -1,7 +1,8 @@
-"""Agent-audience story sections (the 5-section Linear template).
+"""Agent-audience story sections.
 
-Renders and validates the shape locked in ``docs/linear/AGENT_ISSUES.md``.
-Split out of ``stories.py`` under TAP-5609.
+Renders and validates the shape locked in ``docs/linear/AGENT_ISSUES.md``:
+the 5-section implementable template, plus the decision and map-parent
+bodies from TAP-5498. Split out of ``stories.py`` under TAP-5609.
 """
 
 from __future__ import annotations
@@ -15,7 +16,68 @@ logger = structlog.get_logger(__name__)
 
 
 class AgentSectionsMixin(StoryGeneratorBase):
-    """Agent-audience story sections (the 5-section Linear template)."""
+    """Agent-audience story sections (implementable, decision, map-parent)."""
+
+    def _render_decision_template(self, config: StoryConfig) -> list[str]:
+        """Render a decision ticket (TAP-5498): Question body, no fake AC."""
+        self._validate_decision_config(config)
+        question = (config.question or config.purpose_and_intent or config.description).strip()
+        lines: list[str] = [f"# {config.title}", ""]
+        lines.extend(["## Question", "", question, ""])
+        why = (config.purpose_and_intent or config.description).strip()
+        if why and why != question:
+            lines.extend(["## Why", "", why, ""])
+        lines.extend(self._render_agent_refs(config))
+        return lines
+
+    def _validate_decision_config(self, config: StoryConfig) -> None:
+        """Raise ``ValueError`` if a decision ticket lacks a title or question."""
+        errors: list[str] = []
+        if not config.title.strip():
+            errors.append("title is empty")
+        elif len(config.title) > self._AGENT_TITLE_MAX:
+            errors.append(f"title is {len(config.title)} chars (limit {self._AGENT_TITLE_MAX})")
+        question = (config.question or config.purpose_and_intent or config.description).strip()
+        if not question:
+            errors.append("question/purpose_and_intent/description must provide ## Question body")
+        if errors:
+            joined = "; ".join(errors)
+            raise ValueError(
+                "audience='agent' issue_kind='decision' requires: "
+                f"{joined}. Pass issue_kind='implementable' for the 5-section template."
+            )
+
+    def _render_map_parent_template(self, config: StoryConfig) -> list[str]:
+        """Render a wayfind map parent body (TAP-5498)."""
+        self._validate_map_parent_config(config)
+        destination = (config.destination or config.purpose_and_intent or config.want).strip()
+        lines: list[str] = [f"# {config.title}", ""]
+        lines.extend(["## Destination", "", destination, ""])
+        notes = (config.notes or config.description).strip()
+        lines.extend(["## Notes", "", notes or "_None yet._", ""])
+        lines.extend(
+            ["## Decisions so far", "", (config.decisions_so_far or "_None yet._").strip(), ""]
+        )
+        lines.extend(
+            ["## Not yet specified", "", (config.not_yet_specified or "_TBD._").strip(), ""]
+        )
+        lines.extend(["## Out of scope", "", (config.out_of_scope or "_None listed._").strip(), ""])
+        lines.extend(self._render_agent_refs(config))
+        return lines
+
+    def _validate_map_parent_config(self, config: StoryConfig) -> None:
+        """Raise ``ValueError`` if a map parent lacks a title or destination."""
+        errors: list[str] = []
+        if not config.title.strip():
+            errors.append("title is empty")
+        elif len(config.title) > self._AGENT_TITLE_MAX:
+            errors.append(f"title is {len(config.title)} chars (limit {self._AGENT_TITLE_MAX})")
+        destination = (config.destination or config.purpose_and_intent or config.want).strip()
+        if not destination:
+            errors.append("destination/purpose_and_intent/want must provide ## Destination")
+        if errors:
+            joined = "; ".join(errors)
+            raise ValueError(f"audience='agent' issue_kind='map-parent' requires: {joined}.")
 
     def _render_agent_template(self, config: StoryConfig) -> list[str]:
         """Render a 5-section Linear-issue template.
