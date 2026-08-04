@@ -14,7 +14,6 @@ from __future__ import annotations
 import ast
 import asyncio
 import math
-import re
 from collections.abc import Iterator, Sequence
 from pathlib import Path
 from typing import TYPE_CHECKING, ClassVar
@@ -22,6 +21,36 @@ from typing import TYPE_CHECKING, ClassVar
 import structlog
 
 from tapps_core.config.settings import ScoringWeights, TappsMCPSettings
+from tapps_mcp.scoring.coverage_heuristic import (
+    _TEST_DIR_NAMES as _TEST_DIR_NAMES,
+)
+from tapps_mcp.scoring.coverage_heuristic import (
+    _count_test_files as _count_test_files,
+)
+from tapps_mcp.scoring.coverage_heuristic import (
+    _find_project_root as _find_project_root,
+)
+from tapps_mcp.scoring.coverage_heuristic import (
+    _import_module_candidates as _import_module_candidates,
+)
+from tapps_mcp.scoring.coverage_heuristic import (
+    _stem_token_in_name as _stem_token_in_name,
+)
+from tapps_mcp.scoring.coverage_heuristic import (
+    _test_count_to_score as _test_count_to_score,
+)
+from tapps_mcp.scoring.coverage_heuristic import (
+    _test_roots as _test_roots,
+)
+from tapps_mcp.scoring.coverage_heuristic import (
+    _tests_import_module as _tests_import_module,
+)
+from tapps_mcp.scoring.coverage_heuristic import (
+    _text_imports_module as _text_imports_module,
+)
+from tapps_mcp.scoring.coverage_heuristic import (
+    _workspace_members as _workspace_members,
+)
 
 if TYPE_CHECKING:
     from tapps_mcp.tools.pip_audit import VulnerabilityFinding
@@ -945,129 +974,6 @@ def _walk_skip_nested_defs(node: ast.AST) -> Iterator[ast.AST]:
             continue
         yield child
         yield from _walk_skip_nested_defs(child)
-
-
-def _stem_token_in_name(name: str, stem: str) -> bool:
-    """True when *stem* appears as a full underscore-delimited token in *name*."""
-    base = name.removesuffix(".py")
-    return stem in base.split("_")
-
-
-def _count_test_files(root: Path, stem: str) -> tuple[int, int]:
-    """Count exact and fuzzy test file matches for a module stem.
-
-    Returns (exact_count, fuzzy_count).
-    """
-    test_dirs = ["tests", "test", "tests/unit", "tests/integration"]
-    exact_patterns = [f"test_{stem}.py", f"{stem}_test.py"]
-    exact_count = 0
-    fuzzy_count = 0
-    for td in test_dirs:
-        td_path = root / td
-        if not td_path.is_dir():
-            continue
-        for pat in exact_patterns:
-            if (td_path / pat).exists():
-                exact_count += 1
-        for match in td_path.glob(f"test_*{stem}*.py"):
-            if match.name not in exact_patterns and _stem_token_in_name(match.name, stem):
-                fuzzy_count += 1
-    return exact_count, fuzzy_count
-
-
-def _import_module_candidates(root: Path, file_path: Path) -> set[str]:
-    """Return import names that could refer to *file_path* from tests."""
-    stem = file_path.stem
-    candidates: set[str] = {stem}
-    try:
-        rel = file_path.resolve().relative_to(root.resolve())
-    except ValueError:
-        return candidates
-    parts = list(rel.with_suffix("").parts)
-    if parts and parts[0] in {"src", "lib"}:
-        parts = parts[1:]
-    if len(parts) >= 2 and parts[0] == parts[1]:
-        # e.g. packages/tapps_mcp/... unusual; keep as-is
-        pass
-    if parts:
-        candidates.add(".".join(parts))
-        candidates.add(parts[-1])
-    return candidates
-
-
-def _text_imports_module(text: str, module: str) -> bool:
-    """Return True when *text* contains an import of *module* (cheap regex)."""
-    # Match: import mod / import pkg.mod / from mod import X / from pkg.mod import X
-    # Also: from pkg import mod (when module is a single token)
-    escaped = re.escape(module)
-    patterns = (
-        rf"(?m)^\s*import\s+{escaped}\b",
-        rf"(?m)^\s*from\s+{escaped}\s+import\b",
-    )
-    if "." not in module:
-        patterns = (
-            *patterns,
-            rf"(?m)^\s*from\s+[\w.]+\s+import\s+\(.*?\b{escaped}\b",
-            rf"(?m)^\s*from\s+[\w.]+\s+import\s+[^\n]*\b{escaped}\b",
-        )
-    return any(re.search(pat, text) for pat in patterns)
-
-
-def _tests_import_module(root: Path, file_path: Path) -> bool:
-    """Return True when any test file imports the module under *file_path*."""
-    candidates = _import_module_candidates(root, file_path)
-    test_roots = (
-        root / "tests",
-        root / "test",
-        root / "tests" / "unit",
-        root / "tests" / "integration",
-    )
-    seen: set[Path] = set()
-    for td in test_roots:
-        if not td.is_dir():
-            continue
-        for py in td.rglob("*.py"):
-            resolved = py.resolve()
-            if resolved in seen or py.name == "__init__.py":
-                continue
-            seen.add(resolved)
-            try:
-                text = py.read_text(encoding="utf-8", errors="replace")
-            except OSError:
-                continue
-            # Fast reject before regex.
-            if not any(c in text for c in candidates):
-                continue
-            if any(_text_imports_module(text, cand) for cand in candidates):
-                return True
-    return False
-
-
-def _test_count_to_score(exact_count: int, fuzzy_count: int) -> float:
-    """Convert test file counts to a coverage heuristic score."""
-    total = exact_count + fuzzy_count
-    multi_test_threshold = 2
-    if total >= multi_test_threshold:
-        return 7.0
-    if exact_count >= 1:
-        return 5.0
-    if fuzzy_count >= 1:
-        return 3.0
-    return 0.0
-
-
-def _find_project_root(file_path: Path) -> Path | None:
-    """Walk up from *file_path* looking for project markers."""
-    current = file_path.resolve().parent
-    markers = [".git", "pyproject.toml", "setup.py", "requirements.txt", "package.json"]
-    for _ in range(10):
-        if any((current / m).exists() for m in markers):
-            return current
-        parent = current.parent
-        if parent == current:
-            break
-        current = parent
-    return None
 
 
 def _max_nesting_depth(node: ast.AST, depth: int = 0) -> int:
