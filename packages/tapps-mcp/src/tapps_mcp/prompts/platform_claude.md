@@ -64,70 +64,15 @@ Execute these stages IN ORDER for every code task:
 
 ## Consequences of Skipping
 
-| Skipped Tool | Consequence |
-|---|---|
-| `tapps_session_start` | No project context - tools give generic advice |
-| `tapps_lookup_docs` | Hallucinated APIs - code will fail at runtime |
-| `tapps_quick_check` / scoring | Quality issues shipped silently |
-| `tapps_quality_gate` | No quality bar enforced - regressions go unnoticed |
-| `tapps_security_scan` | Vulnerabilities shipped to production |
-| `tapps_checklist` | No verification that process was followed |
-| `tapps_lookup_docs` | Hallucinated APIs and uninformed domain decisions |
-| `tapps_impact_analysis` | Refactoring breaks unknown dependents |
-| `tapps_call_graph` | Function refactors break unknown callers |
-| `tapps_dead_code` | Unused code accumulates, bloating the codebase |
-| `tapps_dependency_scan` | Vulnerable dependencies shipped to production |
-| `tapps_dependency_graph` | Circular imports cause runtime crashes |
+Critical gaps: skipping `session_start` removes project context; skipping `lookup_docs` causes hallucinated APIs; skipping validation ships bugs; skipping `checklist` loses verification. No workarounds—tools are mandatory.
 
 ## Response Guidance
 
-Every tool response includes:
-- `next_steps`: Up to 3 imperative actions to take next - FOLLOW THEM
-- `pipeline_progress`: Which stages are complete and what comes next
+Every tool response includes `next_steps` — follow them. Record progress in `docs/TAPPS_HANDOFF.md`.
+For high-traffic tools, `next_steps` are templated with the active `file_path` — paste verbatim.
 
-Record progress in `docs/TAPPS_HANDOFF.md` and `docs/TAPPS_RUNLOG.md`.
-For task-specific recommended tool call order, use the `tapps_workflow` MCP prompt (e.g. `tapps_workflow(task_type="feature")`).
-For high-traffic tools (`tapps_score_file`, `tapps_quick_check`), `next_steps` are now templated with the active `file_path` — paste them verbatim instead of re-typing the call.
-
-> **Skill deprecations (v3.12.0):** `tapps-score`, `tapps-gate`, `tapps-validate`, `tapps-report` are deprecated thin wrappers. Prefer the direct MCP tool calls or `/tapps-finish-task`.
-
-## Agent Teams (Optional)
-
-If using Claude Code Agent Teams (`CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1`),
-designate one teammate as a **quality watchdog**:
-
-1. The quality watchdog runs `tapps_quick_check` on files changed by other teammates.
-2. It messages other teammates via the shared mailbox when quality issues are found.
-3. The `TaskCompleted` hook prevents any task from being marked complete until
-   `tapps_validate_changed` passes.
-4. The `TeammateIdle` hook keeps the watchdog active while quality issues remain unresolved.
-
-To enable Agent Teams hooks, re-run `tapps_init` with `agent_teams=True`.
+> **Skill deprecations (v3.12.0):** `tapps-score`, `tapps-gate`, `tapps-validate` are deprecated. Prefer direct MCP tool calls or `/tapps-finish-task`.
 
 ## CI Integration
 
-TappsMCP can run in CI without an interactive session:
-
-### Direct Python invocation (recommended for CI)
-
-```bash
-# Install TappsMCP
-pip install tapps-mcp
-
-# Validate changed files
-TAPPS_MCP_PROJECT_ROOT=/workspace \
-  tapps-mcp validate-changed --preset staging
-```
-
-### Claude Code headless mode
-
-```bash
-claude --headless \
-  --allowedTools "mcp__tapps-mcp__tapps_validate_changed" \
-  "Run tapps_validate_changed with preset=staging"
-```
-
-### VS Code / headless — enableAllProjectMcpServers
-
-In headless or non-interactive VS Code contexts, set:
-`claude.enableAllProjectMcpServers: true` in workspace settings.
+Run `tapps-mcp validate-changed --preset staging` with `TAPPS_MCP_PROJECT_ROOT=/workspace` in CI environments.

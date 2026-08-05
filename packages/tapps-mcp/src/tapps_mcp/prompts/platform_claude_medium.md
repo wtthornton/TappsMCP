@@ -61,23 +61,12 @@ You should call `tapps_validate_config(file_path)` when changing Dockerfile, doc
 
 ## Memory System
 
-`tapps_memory` is **one tool** taking `action=` — **44 actions**, not 44 tools (`nlt-memory` lists 5): save, search, consolidate, federation, profiles, hive, health, knowledge graph, batch ops, feedback, session memory. **Tiers:** architectural (180d), pattern (60d), procedural (30d), context (14d). **Scopes:** project, branch, session. Max 1500 entries. Configure `memory_hooks` in `.tapps-mcp.yaml` for auto-recall and auto-capture.
-
-**Cross-session handoff:** prefer `/tapps-handoff-session` and `/tapps-continue-session` (`.tapps-mcp/session-handoff.md`). For ad-hoc payloads use `tapps-mcp memory save/get`. Cross-agent: `hive_propagate`; cross-project: federation actions.
+Use `/tapps-handoff-session` and `/tapps-continue-session` for cross-session handoffs (stored in `.tapps-mcp/session-handoff.md`). Use `tapps-mcp memory save/get` for ad-hoc payloads.
 
 ## Quality Gate Behavior
 
-Gate failures are sorted by category weight (highest-impact first).
-A security floor of 50/100 is enforced regardless of overall score.
+Gate failures are sorted by priority. Security floor: 50/100 regardless of score.
 
 ## Upgrade & Rollback
 
-After upgrading TappsMCP, run `tapps_upgrade` to refresh generated files.
-A timestamped backup is created before overwriting. Use `tapps-mcp rollback` to restore.
-To protect a tapps-managed artifact, add its **token** to `upgrade_skip_files` in
-`.tapps-mcp.yaml` — e.g. `CLAUDE.md`, `.claude/skills`, `.claude/settings.json`,
-`.mcp.json`, `karpathy`. These are artifact tokens, **not file paths**: an
-unrecognized entry is reported as `unknown_skip_tokens` and protects nothing,
-while the upgrade proceeds anyway. Custom files the upgrade does not own
-(non-`tapps-*` skills and agents) are preserved automatically — no entry needed.
-No token exists for `.github/**`, which the upgrade always regenerates.
+Run `tapps_upgrade` after each release to refresh generated files. Use `tapps-mcp rollback` to restore. Protect custom artifacts by adding token to `upgrade_skip_files` in `.tapps-mcp.yaml` (e.g., `CLAUDE.md`, `.claude/skills`).
