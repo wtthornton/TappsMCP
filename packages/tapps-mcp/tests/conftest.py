@@ -608,6 +608,11 @@ def no_repo_wide_scans() -> Generator[None, None, None]:
     ``check_tdd_stages`` inside each test, so an unconditional patch here would
     silently hollow out the tests that exercise it for real. Apply with
     ``pytestmark = pytest.mark.usefixtures("no_repo_wide_scans")``.
+
+    ``compute_gaps`` is stubbed for the same reason: it analyses the session's
+    edit span, which builds the call-graph index over the whole repository.
+    ``test_checklist_auto_run.py`` already stubbed it locally, and that is
+    precisely why it was the one checklist file CI never failed.
     """
     tdd_stub = MagicMock()
     tdd_stub.model_dump.return_value = {"passed": True, "checks": []}
@@ -619,6 +624,15 @@ def no_repo_wide_scans() -> Generator[None, None, None]:
         patch(
             "tapps_mcp.tools.checklist._get_git_context",
             AsyncMock(return_value=None),
+        ),
+        patch(
+            "tapps_mcp.tools.usage.compute_gaps",
+            return_value={
+                "gaps": [],
+                "recommendations": [],
+                "libraries_without_lookup": [],
+                "rolling_stats": {"gate_skip_rate": 0.0, "loops": 0},
+            },
         ),
     ):
         yield
