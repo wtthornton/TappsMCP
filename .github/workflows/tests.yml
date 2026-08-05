@@ -66,4 +66,11 @@ jobs:
           # so the gate failed on tests that were never slow. Two workers keep
           # the parallelism win without starving the event loop.
           REGRESSION_WORKERS: "2"
+          # This repo's .tapps-mcp.yaml points the brain at localhost:8080.
+          # There is no brain on a CI runner, so tests that touch the bridge
+          # got ECONNREFUSED and burned the 60s timeout in retry backoff —
+          # they pass on a developer box only because a brain happens to be
+          # listening. Blank means "no HTTP brain", which is the truth here;
+          # tests that genuinely require one are marked brain_contract and skip.
+          TAPPS_MCP_MEMORY_BRAIN_HTTP_URL: ""
         run: scripts/run-regression.sh
