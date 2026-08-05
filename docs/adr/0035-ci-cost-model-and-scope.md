@@ -59,10 +59,26 @@ slow no-op) and the `security-extended` query suite rather than
 A weekly scheduled scan on the default branch supplies the Security-tab
 baseline, since PR runs only annotate the diff. All free.
 
-**3. Gate the full regression suite on every PR.** `tests.yml` invokes
-`scripts/run-regression.sh` — the same entry point developers run locally —
-rather than a second pytest invocation maintained in YAML, so CI and local
-cannot disagree about what passing means.
+**3. Do not gate the full regression suite on PRs yet.** A `tests.yml` job
+invoking `scripts/run-regression.sh` was built and run against CI four times.
+It failed every time, and never twice on the same tests — brain-bridge
+flywheel tests, then `TestTappsChecklist`, then `test_contract_finish_gate`.
+
+The names moved because the cause is one class, not one bug: a substantial
+number of unit tests perform real subprocess, network, or repository-wide I/O.
+They pass on a developer machine, where a brain answers in milliseconds and
+`time.monotonic()` reflects days of uptime. On a clean 4-core runner they hang
+and hit the 60s per-test timeout. Four causes were found and fixed —
+oversubscribed xdist workers, a test asserting staleness against a
+boot-relative clock, a full-repo AST scan on every `tapps_checklist` call, and
+a brain URL inherited from this repo's own config — and a fifth surfaced each
+time.
+
+Landing the gate red would have been worse than not landing it: a permanently
+failing check trains everyone to ignore the check. The gate is deferred until
+the I/O-in-unit-tests debt is paid, which is work of its own scale rather than
+a step within this one. What did land are the four fixes above and the
+`REGRESSION_WORKERS` cap, so the suite is closer to CI-ready than it was.
 
 **4. A gate must be order-independent to be trustworthy.** Two failures were
 not stale expectations but genuine cross-test leaks, and both were fixed at the
@@ -94,11 +110,14 @@ hook must never regress below — a policy value, not a mirror of state.
   bill.
 - Making this repository private is a deliberate, visible cost decision: the
   guard warns and names the scheduled workflows that would begin billing.
-- PR feedback is slower — the regression job adds several minutes. On a public
-  repo that costs nothing but wall-clock, which is the correct trade against
-  merging untested regressions.
-- The `slow` marker stays excluded from the PR gate, matching
-  `scripts/run-regression.sh`. Subprocess-heavy tests are not gated on PRs.
+- **The coverage gap this ADR opened with is still open.** CI continues to run
+  only `validate-changed` on touched files plus targeted modules; nothing runs
+  the full suite. That is the honest state, and it is the top follow-up.
+- The blocker is now identified and measurable rather than suspected: unit
+  tests that reach the network, spawn subprocesses, or scan the whole
+  repository. Each is individually cheap to fix; there are enough of them that
+  the sweep is its own work item. `.claude/rules/test-quality.md` already
+  forbids the pattern for new tests, so the debt is bounded.
 - Repo-wide `mypy --strict` is still not gated; `validate-changed` type-checks
   only files a PR touches. Closing that is separate work with its own error
   surface.

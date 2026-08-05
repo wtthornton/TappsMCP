@@ -6,20 +6,23 @@ This file is **specific to the tapps-mcp repo** and is not deployed to consumers
 
 Work on a branch named after the Linear issue (`tap-5607-docs-mcp-megafile-split`),
 open a PR, and merge once CI is green. The quality gate
-(`.github/workflows/tapps-quality.yml`), the full regression suite
-(`.github/workflows/tests.yml`), and the MCP guardrails
+(`.github/workflows/tapps-quality.yml`) and the MCP guardrails
 (`.github/workflows/mcp-guardrails.yml`) run on `pull_request` — committing
-straight to `master` skips them all, which is how PR #244's pre-existing gate
+straight to `master` skips both, which is how PR #244's pre-existing gate
 failures went unnoticed for as long as they did (TAP-5607).
 
-CI runs the **full** suite (`scripts/run-regression.sh`), not just the pre-push
-smoke gate. Before `tests.yml` existed, nothing in CI ran the ~10,800-test
-suite and 25 real failures accumulated on `master` unnoticed
-([ADR-0035](../../docs/adr/0035-ci-cost-model-and-scope.md)). All of this is
-free: TappsMCP is a public repo, where standard GitHub-hosted runners are
-unmetered. Do not trim workflows, schedules, or triggers to "save Actions
-minutes" — there are none to save, and `scripts/ci_cost_guard.py` fails the
-build if a workflow adopts a runner that would actually cost money.
+**CI does not run the full test suite.** It runs `validate-changed` on touched
+files plus targeted modules; `.githooks/pre-push` is a five-test smoke gate.
+Nothing runs the ~10,900-test suite, which is how 25 real failures accumulated
+on `master` unnoticed. A gating job was built and deferred — many unit tests
+perform real network, subprocess, or repo-wide I/O and fail on a clean runner
+([ADR-0035](../../docs/adr/0035-ci-cost-model-and-scope.md)). Until that lands,
+run `scripts/run-regression.sh` locally before pushing anything non-trivial.
+
+All CI here is free: TappsMCP is a public repo, where standard GitHub-hosted
+runners are unmetered. Do not trim workflows, schedules, or triggers to "save
+Actions minutes" — there are none to save, and `scripts/ci_cost_guard.py` fails
+the build if a workflow adopts a runner that would actually cost money.
 
 - One branch per issue or tight issue cluster; squash-merge to `master`.
 - Do not merge a PR with a failing gate. Fix the cause — raising the threshold,
