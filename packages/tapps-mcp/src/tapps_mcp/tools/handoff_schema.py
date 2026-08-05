@@ -88,25 +88,30 @@ def _near_miss_next_headers(text: str) -> list[str]:
     return misses
 
 
-def _is_real_bullet(line: str) -> bool:
-    stripped = line.strip().lstrip("-* ").strip()
-    if not stripped:
+# TAP-5669: marker and content are separated by one regex — a character-class
+# lstrip("-* ") ate the opening ** of bold bullets, startswith(("-","*"))
+# made numbered items invisible (blinding the P0 gate below), and a leading
+# ``**bold**`` paragraph counted as a bullet. The marker must be followed by
+# whitespace; content comes from the capture group untouched.
+_BULLET_RE = re.compile(r"^\s*(?:[-*+]|\d+[.)])\s+(\S.*)$")
+
+
+def _is_real_bullet(content: str) -> bool:
+    """Judge bullet *content* (marker already removed) — no re-stripping."""
+    if content.lower() in _IGNORE_BULLETS:
         return False
-    lowered = stripped.lower()
-    if lowered in _IGNORE_BULLETS:
+    if content.startswith("<") and content.endswith(">"):
         return False
-    if stripped.startswith("<") and stripped.endswith(">"):
-        return False
-    return not stripped.endswith("...")
+    return not content.endswith("...")
 
 
 def _extract_bullets(block: str) -> list[str]:
     items: list[str] = []
     for raw_line in block.splitlines():
-        line = raw_line.strip()
-        if not line.startswith(("-", "*")):
+        match = _BULLET_RE.match(raw_line)
+        if match is None:
             continue
-        bullet = line.lstrip("-* ").strip()
+        bullet = match.group(1).strip()
         if _is_real_bullet(bullet):
             items.append(bullet)
     return items
@@ -201,8 +206,7 @@ def lint_handoff(
             # Covers both absent Next headers and Next present with only
             # placeholder bullets (none/n/a) filtered out by the parser.
             result.errors.append(
-                "Open items exist but Next (P0) is missing — "
-                "continue-session cannot pick up work"
+                "Open items exist but Next (P0) is missing — continue-session cannot pick up work"
             )
 
     if doc.updated is None:

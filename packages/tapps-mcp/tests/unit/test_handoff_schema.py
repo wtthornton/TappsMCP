@@ -148,6 +148,119 @@ class TestHandoffSchemaParse:
         assert not any("value cap" in w for w in result.warnings)
 
 
+class TestBulletTokenizer:
+    """TAP-5669: numbered lists, bold markup, and prose paragraphs.
+
+    One character-class ``lstrip("-* ")`` produced three defects: numbered
+    items were invisible (so the P0 gate compared two empty lists and never
+    fired), bold bullets lost their opening ``**``, and bold paragraphs
+    counted as bullets.
+    """
+
+    def test_numbered_dot_items_populate_sections(self) -> None:
+        text = (
+            "# Session handoff\n"
+            "**Updated:** 2026-08-05T12:00:00Z\n\n"
+            "## Open\n1. TAP-5618 still in progress.\n2. Second open item.\n\n"
+            "## Next (P0)\n1. Split the megafiles.\n"
+        )
+        doc = parse_handoff_markdown(text)
+        assert doc.open_items == ["TAP-5618 still in progress.", "Second open item."]
+        assert doc.next_p0 == ["Split the megafiles."]
+
+    def test_numbered_paren_and_two_digit_items(self) -> None:
+        text = (
+            "# Session handoff\n"
+            "**Updated:** 2026-08-05T12:00:00Z\n\n"
+            "## Verify\n"
+            + "\n".join(f"{i}. check number {i}" for i in range(1, 11))
+            + "\n\n## Done\n1) paren marker item\n"
+        )
+        doc = parse_handoff_markdown(text)
+        assert len(doc.verify) == 10
+        assert doc.verify[9] == "check number 10"
+        assert doc.done == ["paren marker item"]
+
+    def test_bold_leading_bullet_survives_verbatim(self) -> None:
+        text = (
+            "# Session handoff\n"
+            "**Updated:** 2026-08-05T12:00:00Z\n\n"
+            "## Open\n- **TAP-5618** (In Progress) — epic.\n- *emphasis* leading item\n\n"
+            "## Next (P0)\n1. **Commit** the scaffolding refresh.\n"
+        )
+        doc = parse_handoff_markdown(text)
+        assert doc.open_items == [
+            "**TAP-5618** (In Progress) — epic.",
+            "*emphasis* leading item",
+        ]
+        assert doc.next_p0 == ["**Commit** the scaffolding refresh."]
+
+    def test_bold_paragraph_is_not_a_bullet(self) -> None:
+        text = (
+            "# Session handoff\n"
+            "**Updated:** 2026-08-05T12:00:00Z\n\n"
+            "## Done\n**v3.12.65 released** - first cut since v3.12.29.\n\nPlain prose line.\n"
+        )
+        doc = parse_handoff_markdown(text)
+        assert doc.done == []
+
+    def test_numbered_placeholders_still_filtered(self) -> None:
+        text = (
+            "# Session handoff\n"
+            "**Updated:** 2026-08-05T12:00:00Z\n\n"
+            "## Blockers\n1. none\n\n"
+            "## Done\n- ...\n2. tbd\n"
+        )
+        doc = parse_handoff_markdown(text)
+        assert doc.blockers == []
+        assert doc.done == []
+
+    def test_gate_fires_on_numbered_open_without_next(self) -> None:
+        """The silent-pass case: all-numbered handoff, Open populated, Next empty."""
+        text = (
+            "# Session handoff\n"
+            "**Updated:** 2026-08-05T12:00:00Z\n\n"
+            "## Open\n1. TAP-5618 still in progress.\n\n"
+            "## Next (P0)\n1. none\n"
+        )
+        doc = parse_handoff_markdown(text)
+        assert doc.open_items, "numbered Open items must be visible to the gate"
+        result = lint_handoff(doc, now=datetime(2026, 8, 5, tzinfo=UTC))
+        assert not result.ok
+        assert any("Next" in err for err in result.errors)
+
+    def test_gate_quiet_on_mixed_bullet_open_numbered_next(self) -> None:
+        """The false-positive case: bulleted Open plus numbered Next (P0)."""
+        text = (
+            "# Session handoff\n"
+            "**Updated:** 2026-08-05T12:00:00Z\n\n"
+            "## Open\n- TAP-5618 still in progress.\n\n"
+            "## Next (P0)\n1. Split the megafiles.\n"
+        )
+        doc = parse_handoff_markdown(text)
+        result = lint_handoff(doc, now=datetime(2026, 8, 5, tzinfo=UTC))
+        assert result.ok
+        assert doc.next_p0 == ["Split the megafiles."]
+
+    def test_plus_marker_and_indented_bullets(self) -> None:
+        text = (
+            "# Session handoff\n"
+            "**Updated:** 2026-08-05T12:00:00Z\n\n"
+            "## Verify\n+ plus marker item\n  - indented bullet\n"
+        )
+        doc = parse_handoff_markdown(text)
+        assert doc.verify == ["plus marker item", "indented bullet"]
+
+    def test_marker_without_trailing_space_is_not_a_bullet(self) -> None:
+        text = (
+            "# Session handoff\n"
+            "**Updated:** 2026-08-05T12:00:00Z\n\n"
+            "## Done\n-dash-glued word\n*star-glued word\n"
+        )
+        doc = parse_handoff_markdown(text)
+        assert doc.done == []
+
+
 class TestHandoffSchemaDoctorIntegration:
     def test_load_and_lint_missing_file(self, tmp_path: Path) -> None:
         doc, lint = load_and_lint_handoff(tmp_path)
