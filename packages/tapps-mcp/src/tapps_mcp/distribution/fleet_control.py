@@ -10,6 +10,7 @@ import time
 from pathlib import Path
 from typing import Any
 
+from tapps_mcp.distribution.fleet_ownership import find_port_owner, process_release
 from tapps_mcp.distribution.nlt_http_fleet import (
     FLEET_ENV_FILE,
     FLEET_LOG_DIR,
@@ -247,29 +248,48 @@ def start_fleet(*, force: bool = False) -> dict[str, Any]:
     }
 
 
+def _terminate(pid: int) -> None:
+    """SIGTERM, then SIGKILL if the process is still alive after ~2s."""
+    os.kill(pid, signal.SIGTERM)
+    for _ in range(20):
+        if not _pid_alive(pid):
+            break
+        time.sleep(0.1)
+    if _pid_alive(pid):
+        os.kill(pid, signal.SIGKILL)
+
+
 def stop_fleet(*, server_ids: list[str] | None = None) -> dict[str, Any]:
-    """Stop fleet processes (SIGTERM, then SIGKILL after brief wait)."""
+    """Stop fleet processes (SIGTERM, then SIGKILL after brief wait).
+
+    Also reclaims a port still held by a fleet serve the pidfiles have lost
+    track of — a survivor of an earlier release keeps its port, so the
+    replacement cannot bind and dies silently (TAP-5630).
+    """
     targets = server_ids or list(NLT_HTTP_FLEET_PORTS.keys())
     stopped: list[str] = []
     missing: list[str] = []
+    reclaimed: list[str] = []
     for server_id in targets:
         pid_file = FLEET_PID_DIR / f"{server_id}.pid"
         pid = _read_pid(server_id)
-        if pid is None or not _pid_alive(pid):
+        if pid is not None and _pid_alive(pid):
+            _terminate(pid)
+            stopped.append(server_id)
+        else:
             missing.append(server_id)
-            if pid_file.is_file():
-                pid_file.unlink(missing_ok=True)
-            continue
-        os.kill(pid, signal.SIGTERM)
-        for _ in range(20):
-            if not _pid_alive(pid):
-                break
-            time.sleep(0.1)
-        if _pid_alive(pid):
-            os.kill(pid, signal.SIGKILL)
         pid_file.unlink(missing_ok=True)
-        stopped.append(server_id)
-    return {"stopped": stopped, "missing": missing}
+
+        # The recorded pid is not authoritative: whoever still holds the port
+        # is what the next `start` has to contend with.
+        port = NLT_HTTP_FLEET_PORTS.get(server_id)
+        if port is None:
+            continue
+        owner = find_port_owner(port)
+        if owner is not None and owner != pid and _pid_alive(owner):
+            _terminate(owner)
+            reclaimed.append(server_id)
+    return {"stopped": stopped, "missing": missing, "reclaimed": reclaimed}
 
 
 _CANONICAL_UNIT = "tapps-mcp-fleet.service"
@@ -425,17 +445,27 @@ def restart_fleet_with_smoke(*, project_root: Path | None = None) -> dict[str, A
 
 
 def fleet_status() -> dict[str, Any]:
-    """Return running/reachable status for each fleet server."""
+    """Return running/reachable status for each fleet server.
+
+    ``owner_pid`` and ``release`` describe whoever actually holds the port,
+    which is not always the recorded pid. ``orphaned`` marks the case that
+    used to read as healthy: the port answers, but a process the pidfiles do
+    not know about is the one answering (TAP-5630).
+    """
     host = resolve_fleet_host()
     servers: dict[str, dict[str, Any]] = {}
     for server_id, _, _, port in fleet_server_launch_specs():
         pid = _read_pid(server_id)
         alive = pid is not None and _pid_alive(pid)
         reachable = _http_reachable(server_id, fleet_host=host)
+        owner = find_port_owner(port)
         servers[server_id] = {
             "pid": pid,
             "alive": alive,
             "reachable": reachable,
+            "owner_pid": owner,
+            "release": process_release(owner) if owner is not None else None,
+            "orphaned": reachable and owner is not None and owner != pid,
             "url": f"http://{host}:{port}/mcp",
         }
     running = sum(1 for row in servers.values() if row["alive"])
