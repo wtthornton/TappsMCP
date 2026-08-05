@@ -60,4 +60,10 @@ jobs:
       # regression suite" means CI and local cannot disagree about what passing
       # means. Slow (subprocess-heavy) tests stay excluded, matching the script.
       - name: Run regression suite
+        env:
+          # Standard runners are 4-core. `-n auto` oversubscribes them badly
+          # enough that tests taking 0.3s locally hit the 60s per-test timeout,
+          # so the gate failed on tests that were never slow. Two workers keep
+          # the parallelism win without starving the event loop.
+          REGRESSION_WORKERS: "2"
         run: scripts/run-regression.sh

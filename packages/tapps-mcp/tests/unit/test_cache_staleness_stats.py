@@ -11,6 +11,7 @@ least two distinct caches — the AC4 requirement the prior synthetic tests miss
 
 from __future__ import annotations
 
+import time
 from pathlib import Path
 
 from tapps_core.cache import collect_cache_stats
@@ -43,8 +44,13 @@ class TestDependencyScanStaleness:
 
     def test_old_entry_reports_stale(self) -> None:
         clear_dependency_cache()
-        # Plant an entry timestamped far in the past (ts=0.0 is past any TTL).
-        dependency_scan_cache._cache["/proj-old"] = ([], 0.0)
+        # Age the entry relative to the monotonic clock the cache actually
+        # reads. Planting ts=0.0 assumed a wall-clock epoch: monotonic()
+        # counts from boot, so on a freshly-booted CI runner "0.0" was less
+        # than the 300 s TTL old and the entry read as fresh. It passed on any
+        # machine with real uptime, which is why it survived to CI.
+        stale_ts = time.monotonic() - (dependency_scan_cache._CACHE_TTL + 1)
+        dependency_scan_cache._cache["/proj-old"] = ([], stale_ts)
         stats = dependency_scan_cache._dependency_scan_stats()
         assert stats["stale"] is True
         assert isinstance(stats["age_seconds"], float)
