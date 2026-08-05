@@ -252,6 +252,12 @@ async def docs_generate_epic(
         "number": number,
         "style": style,
         "story_count": len(story_list),
+        # The renderer substitutes keyword-matched placeholders whenever no
+        # stories were supplied (EpicGenerator._suggest_stories). Say so in the
+        # response: a caller whose stories failed to parse previously saw
+        # story_count=0 next to a body full of "(suggested)" stubs and no
+        # indication the two facts were related (TAP-5657).
+        "stories_suggested": not story_list,
         "auto_populated": auto_populate,
         "quick_start": quick_start,
         "timing_ms": timing_ms,

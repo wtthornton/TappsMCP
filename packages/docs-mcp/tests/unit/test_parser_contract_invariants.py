@@ -96,3 +96,44 @@ class TestCallerInputParserInvariants:
     ) -> None:
         with pytest.raises(ValueError):
             parse("[{unclosed")
+
+
+class TestSuggestedStoriesAreDeclared:
+    """A substituted body must announce itself (TAP-5657).
+
+    story_count=0 beside a body of "(suggested)" placeholders gave the caller
+    no way to connect the two. The response now says which it got.
+    """
+
+    @pytest.mark.asyncio
+    async def test_supplied_stories_are_not_marked_suggested(self, tmp_path: Any) -> None:
+        from docs_mcp.server_gen_planning import docs_generate_epic
+
+        result = await docs_generate_epic(
+            title="Real work",
+            purpose_and_intent="We are doing this so that the parser contract holds.",
+            goal="Honour caller-supplied stories.",
+            motivation="Silent substitution misleads callers.",
+            acceptance_criteria="Stories render verbatim",
+            stories='["Phase 0: ratchet", "Phase 1: root causes"]',
+            project_root=str(tmp_path),
+        )
+        data = result["data"]
+        assert data["story_count"] == 2
+        assert data["stories_suggested"] is False
+
+    @pytest.mark.asyncio
+    async def test_omitted_stories_are_marked_suggested(self, tmp_path: Any) -> None:
+        from docs_mcp.server_gen_planning import docs_generate_epic
+
+        result = await docs_generate_epic(
+            title="CI pipeline deploy work",
+            purpose_and_intent="We are doing this so that the fallback is visible.",
+            goal="Expose the suggestion fallback.",
+            motivation="Boilerplate must not masquerade as input.",
+            acceptance_criteria="Fallback is declared",
+            project_root=str(tmp_path),
+        )
+        data = result["data"]
+        assert data["story_count"] == 0
+        assert data["stories_suggested"] is True
