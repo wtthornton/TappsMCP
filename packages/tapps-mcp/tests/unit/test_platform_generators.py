@@ -175,18 +175,20 @@ class TestSubagentTemplates:
 class TestSkillTemplates:
     """Verify skill template dicts and generation."""
 
-    def test_claude_skills_count(self) -> None:
-        # 23 single-file skills (base tapps-* + continuous-learning-v2 + domain
-        # skills) + orchestration-prompt (multi-file, smart-merged). The prior
-        # literal (17) had drifted stale as skills were added over time.
-        assert len(CLAUDE_SKILLS) == 24
+    def test_claude_and_cursor_skills_have_parity(self) -> None:
+        """Both platforms ship the same skill set.
 
-    def test_cursor_skills_count(self) -> None:
-        assert len(CURSOR_SKILLS) == 24
+        This replaces a hardcoded count that went stale twice (17 → 24 → 26)
+        as skills were added. Parity plus the generation counts below are the
+        real invariants; the absolute number is not something a test can know
+        better than the registry itself.
+        """
+        assert set(CLAUDE_SKILLS) == set(CURSOR_SKILLS)
+        assert len(CLAUDE_SKILLS) == len(CURSOR_SKILLS)
 
     def test_generate_claude_skills(self, tmp_path: Path) -> None:
         result = generate_skills(tmp_path, "claude")
-        assert len(result["created"]) == 24
+        assert len(result["created"]) == len(CLAUDE_SKILLS)
         assert (tmp_path / ".claude" / "skills" / "tapps-finish-task" / "SKILL.md").exists()
 
     def test_generate_skills_high_engagement(self, tmp_path: Path) -> None:
@@ -207,7 +209,7 @@ class TestSkillTemplates:
         generate_skills(tmp_path, "claude")
         result = generate_skills(tmp_path, "claude")
         # orchestration-prompt re-generates identically → "unchanged" → skipped.
-        assert len(result["skipped"]) == 24 - len(SESSION_TRANSFER_SKILL_NAMES)
+        assert len(result["skipped"]) == len(CLAUDE_SKILLS) - len(SESSION_TRANSFER_SKILL_NAMES)
         assert set(result["updated"]) == set(SESSION_TRANSFER_SKILL_NAMES)
         assert len(result["created"]) == 0
 

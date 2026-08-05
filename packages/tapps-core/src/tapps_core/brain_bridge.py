@@ -356,6 +356,9 @@ _BRIDGE_USED_TOOLS_SNAPSHOT: frozenset[str] = frozenset(
         # ``full`` profile, so the least-privilege SERVER profile is unchanged.
         "profile_info",
         "profile_switch",
+        # Routed by the gc / contradictions / reseed / federate_* / maintain
+        # actions in server_memory_tools._ACTION_BRAIN_TOOLS.
+        "brain_status",
     }
 )
 

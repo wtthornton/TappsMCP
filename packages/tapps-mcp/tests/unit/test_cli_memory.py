@@ -1,4 +1,12 @@
-"""Tests for the `tapps-mcp memory` CLI command group (Epic 53, Story 53.1)."""
+"""Tests for the `tapps-mcp memory` CLI command group (Epic 53, Story 53.1).
+
+``--json`` assertions parse ``result.stdout``, never ``result.output``: since
+Click 8.2 the latter interleaves stderr, so any log record emitted during the
+command corrupts the parse. That surfaced as an order-dependent failure —
+a settings cache miss logged ``memory.project_id_auto_derived`` to stderr and
+broke ``json.loads``. The CLI itself is correct (JSON on stdout, logs on
+stderr), which is exactly what reading stdout asserts.
+"""
 
 from __future__ import annotations
 
@@ -104,7 +112,7 @@ class TestMemoryList:
         with patch(_BRIDGE_PATCH, return_value=bridge):
             result = runner.invoke(main, ["memory", "list", "--json"])
         assert result.exit_code == 0
-        data = json.loads(result.output)
+        data = json.loads(result.stdout)
         assert isinstance(data, list)
         assert len(data) == 1
         assert data[0]["key"] == "test-key"
@@ -137,7 +145,7 @@ class TestMemorySave:
                 main, ["memory", "save", "--key", "test-key", "--value", "test value"]
             )
         assert result.exit_code == 0
-        data = json.loads(result.output)
+        data = json.loads(result.stdout)
         assert data["key"] == "test-key"
         assert "memory_group_note" in data
         bridge.save.assert_awaited_once()
@@ -169,7 +177,7 @@ class TestMemorySave:
             tags=[],
             memory_group="insights",
         )
-        data = json.loads(result.output)
+        data = json.loads(result.stdout)
         assert "memory_group_note" not in data
 
     def test_save_with_tags(self, runner: CliRunner) -> None:
@@ -223,7 +231,7 @@ class TestMemoryGet:
         with patch(_BRIDGE_PATCH, return_value=bridge):
             result = runner.invoke(main, ["memory", "get", "--key", "test-key"])
         assert result.exit_code == 0
-        data = json.loads(result.output)
+        data = json.loads(result.stdout)
         assert data["key"] == "test-key"
         bridge.get.assert_awaited_once_with("test-key")
 
@@ -281,7 +289,7 @@ class TestMemorySearch:
         with patch("tapps_core.brain_bridge.create_brain_bridge", return_value=bridge):
             result = runner.invoke(main, ["memory", "search", "--query", "test", "--json"])
         assert result.exit_code == 0
-        data = json.loads(result.output)
+        data = json.loads(result.stdout)
         assert isinstance(data, list)
         assert data[0]["key"] == "test-key"
 

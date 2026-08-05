@@ -3799,10 +3799,25 @@ _ACTION_BRAIN_TOOLS: dict[str, tuple[str, ...]] = {
 }
 
 # Bridge API methods without a dedicated tapps_memory action key.
+# Brain tools the bridge calls directly from a BrainBridge method rather than
+# through a ``tapps_memory`` action, so walking the dispatch maps cannot find
+# them. Every entry corresponds to an ``_http_mcp_call`` site in
+# ``tapps_core.brain_bridge`` — keep them in sync or the derived set silently
+# under-reports what the bridge actually invokes.
 _BRIDGE_API_ONLY_TOOLS: frozenset[str] = frozenset(
     {
         "memory_recall",
         "brain_record_feedback",
+        # Feedback flywheel + brain-health diagnostics (BrainBridge methods).
+        "flywheel_report",
+        "flywheel_process",
+        "diagnostics_report",
+        # Memory-profile introspection and switching.
+        "profile_info",
+        "profile_switch",
+        # TAP-5365 / ADR-0030: brain-owned web research backing tapps_research.
+        "web_research",
+        "research_fetch",
     }
 )
 

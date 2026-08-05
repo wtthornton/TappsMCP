@@ -1,0 +1,63 @@
+# Full regression suite on pull requests.
+#
+# Before this workflow existed, CI ran only `validate-changed --quick` on the
+# files a PR touched, plus three targeted test modules. Nothing executed the
+# ~10,800-test suite, and `.githooks/pre-push` runs a five-test smoke gate. A
+# regression in a package a PR did not touch could therefore merge unnoticed —
+# and 25 of them had, across the brain tool snapshot, the pre-push floor, the
+# platform skill registry, the validate_changed judge path, and the PyInstaller
+# spec. This job closes that gap.
+#
+# Cost: $0 — TappsMCP is a public repository, where standard GitHub-hosted
+# runners are free and unmetered. See docs/adr/0035-ci-cost-model-and-scope.md.
+name: Tests
+
+on:
+  pull_request:
+    branches: [main, master]
+    paths:
+      - "packages/**"
+      - "scripts/**"
+      - ".githooks/**"
+      - "pyproject.toml"
+      - "uv.lock"
+      - "tapps_mcp.spec"
+      - ".github/workflows/tests.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: tests-${{ github.head_ref || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  regression:
+    name: full regression (not slow)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@v7
+        with:
+          enable-cache: true
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+
+      - name: Install workspace
+        run: uv sync --all-packages --group dev
+
+      # Deliberately the same entry point developers run locally, rather than a
+      # second pytest invocation maintained in YAML. One definition of "the
+      # regression suite" means CI and local cannot disagree about what passing
+      # means. Slow (subprocess-heavy) tests stay excluded, matching the script.
+      - name: Run regression suite
+        run: scripts/run-regression.sh

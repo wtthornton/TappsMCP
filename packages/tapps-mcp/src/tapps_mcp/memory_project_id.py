@@ -32,4 +32,25 @@ def install_memory_project_id_patch() -> None:
         return resolve_params_project_id(p)
 
     _patched.__tapps_fleet_patched__ = True  # type: ignore[attr-defined]
+    # Keep the pre-patch function reachable so the mutation is reversible.
+    # Without this the patch is a one-way global: once any code path builds a
+    # brain bridge, every later caller in the process silently gets the
+    # settings-tenant fallback. In tests that made results order-dependent —
+    # test_related_happy_path passed alone and failed after test_audit_campaign.
+    _patched.__tapps_fleet_original__ = current  # type: ignore[attr-defined]
     smt._params_project_id = _patched  # type: ignore[assignment]
+
+
+def uninstall_memory_project_id_patch() -> None:
+    """Restore the unpatched ``_params_project_id`` (idempotent).
+
+    Production never calls this — the patch is installed once per process when
+    the brain bridge is built. It exists so tests can guarantee a known state
+    instead of inheriting whatever an earlier test left behind.
+    """
+    from tapps_mcp import server_memory_tools as smt
+
+    current = smt._params_project_id
+    original = getattr(current, "__tapps_fleet_original__", None)
+    if original is not None:
+        smt._params_project_id = original  # type: ignore[assignment]

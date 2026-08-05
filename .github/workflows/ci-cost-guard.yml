@@ -1,0 +1,43 @@
+# Asserts this repo's $0 CI cost model instead of assuming it.
+#
+# TappsMCP is public, so standard GitHub-hosted runners are free and unmetered
+# — that, and nothing else, is why CI here costs nothing. The guard fails if a
+# workflow adopts a runner that is billable even on a public repo (larger
+# runners, runner groups), and warns if the repository has been made private,
+# which silently converts every job to metered minutes.
+#
+# See docs/adr/0035-ci-cost-model-and-scope.md.
+name: CI cost guard
+
+on:
+  pull_request:
+    branches: [main, master]
+    paths:
+      - ".github/workflows/**"
+      - "scripts/ci_cost_guard.py"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-cost-guard-${{ github.head_ref || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  cost-guard:
+    name: runner cost model
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Install PyYAML
+        run: python3 -m pip install --quiet pyyaml
+
+      - name: Check workflow runner costs
+        run: |
+          python3 scripts/ci_cost_guard.py \
+            --visibility "${{ github.event.repository.private && 'private' || 'public' }}"

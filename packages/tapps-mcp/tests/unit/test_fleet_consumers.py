@@ -6,6 +6,7 @@ import json
 from pathlib import Path
 
 from tapps_mcp.distribution.fleet_consumers import (
+    _package_version,
     audit_consumer,
     audit_consumers,
     discover_http_fleet_consumers,
@@ -142,8 +143,16 @@ class TestAuditRepair:
         good.mkdir()
         (good / ".tapps-mcp.yaml").write_text("mcp_transport: http\n", encoding="utf-8")
         _write_cursor_http(good)
-        (good / "AGENTS.md").write_text("<!-- tapps-agents-version: 3.12.52 -->\n", encoding="utf-8")
-        (good / "CLAUDE.md").write_text("<!-- tapps-claude-version: 3.12.52 -->\n", encoding="utf-8")
+        # Unlike the audit_consumer tests above, audit_consumers() resolves the
+        # package version itself, so the stamps must track the live version
+        # rather than a literal that goes stale on every release bump.
+        version = _package_version()
+        (good / "AGENTS.md").write_text(
+            f"<!-- tapps-agents-version: {version} -->\n", encoding="utf-8"
+        )
+        (good / "CLAUDE.md").write_text(
+            f"<!-- tapps-claude-version: {version} -->\n", encoding="utf-8"
+        )
         report = audit_consumers(scan_parent=tmp_path)
         assert report["total"] == 1
         assert report["ok"] == 1

@@ -439,6 +439,10 @@ class TestCustomSourcePriority:
         mock_result.success = True
         mock_result.content = "Provider content"
         mock_result.provider_name = "context7"
+        # Contract is `str | None` (lookup.assess_resolution_confidence, TAP-5423).
+        # Leaving it as a bare MagicMock made the resolution-confidence check
+        # raise TypeError once that path started running.
+        mock_result.library_id = "/context7/some-lib"
         engine._registry = MagicMock()
         engine._registry.healthy_providers.return_value = [MagicMock()]
         engine._registry.lookup = AsyncMock(return_value=mock_result)

@@ -7,7 +7,7 @@ correct frontmatter format differences between Claude Code and Cursor.
 from __future__ import annotations
 
 from tapps_mcp.pipeline.platform_generators import generate_skills
-from tapps_mcp.pipeline.platform_skills import DEPRECATED_TAPPS_SKILLS
+from tapps_mcp.pipeline.platform_skills import CLAUDE_SKILLS, DEPRECATED_TAPPS_SKILLS
 
 
 class TestClaudeSkills:
@@ -181,9 +181,9 @@ class TestSkipExisting:
 
     def test_result_dict_tracks_created(self, tmp_path):
         result = generate_skills(tmp_path, "claude")
-        # 23 single-file skills (base + domain) + orchestration-prompt (multi-file,
-        # smart-merged). The prior literal (16) had drifted stale as skills were added.
-        assert len(result["created"]) == 24
+        # Derived from the registry, not a literal: the hardcoded count went
+        # stale twice (16 → 24) as skills were added.
+        assert len(result["created"]) == len(CLAUDE_SKILLS)
         assert len(result["skipped"]) == 0
 
     def test_unknown_platform_returns_error(self, tmp_path):

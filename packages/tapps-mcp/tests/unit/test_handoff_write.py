@@ -136,7 +136,7 @@ class TestHandoffWriteCli:
                 input=_VALID_HANDOFF,
             )
         assert result.exit_code == 0
-        data = json.loads(result.output)
+        data = json.loads(result.stdout)
         assert data["linear_p0"] == "TAP-3790"
         assert data["brain_mirror"]["success"] is True
 

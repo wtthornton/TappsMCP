@@ -3,7 +3,8 @@
 from __future__ import annotations
 
 from pathlib import Path
-from unittest.mock import patch
+from typing import Any
+from unittest.mock import MagicMock, patch
 
 from tapps_mcp.memory.contradictions import ContradictionDetector
 from tapps_mcp.memory.models import MemoryEntry, MemoryScope, MemorySource, MemoryTier
@@ -185,6 +186,26 @@ class TestPackageManagerDrift:
         assert len(results) == 0
 
 
+def _git_stub(*, branch_exists: bool):
+    """Stub subprocess.run for the branch-existence check.
+
+    tapps-brain resolves branches with ``git show-ref --verify --quiet``, so
+    existence is signalled by the **exit code**, not by parsing ``git branch
+    --list`` output. It also runs a repo probe first. Dispatching on argv keeps
+    this stub correct regardless of probe call count or ordering.
+    """
+
+    def _run(cmd: list[str], *args: Any, **kwargs: Any) -> MagicMock:
+        result = MagicMock()
+        result.stdout = ""
+        result.stderr = ""
+        is_lookup = "show-ref" in cmd
+        result.returncode = 0 if (not is_lookup or branch_exists) else 1
+        return result
+
+    return _run
+
+
 class TestBranchExistence:
     def test_detects_deleted_branch(self, tmp_path: Path) -> None:
         """Memory scoped to a deleted branch is flagged."""
@@ -197,10 +218,7 @@ class TestBranchExistence:
         profile = _make_profile()
         detector = ContradictionDetector(tmp_path)
 
-        with patch("subprocess.run") as mock_run:
-            mock_run.return_value.returncode = 0
-            mock_run.return_value.stdout = "  main\n  develop\n"
-            mock_run.return_value.stderr = ""
+        with patch("subprocess.run", side_effect=_git_stub(branch_exists=False)):
             results = detector.detect_contradictions([entry], profile)
 
         assert len(results) == 1
@@ -217,10 +235,7 @@ class TestBranchExistence:
         profile = _make_profile()
         detector = ContradictionDetector(tmp_path)
 
-        with patch("subprocess.run") as mock_run:
-            mock_run.return_value.returncode = 0
-            mock_run.return_value.stdout = "  main\n  develop\n"
-            mock_run.return_value.stderr = ""
+        with patch("subprocess.run", side_effect=_git_stub(branch_exists=True)):
             results = detector.detect_contradictions([entry], profile)
 
         assert len(results) == 0

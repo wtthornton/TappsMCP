@@ -11,7 +11,7 @@ calls must be reset here.  When adding a new cache:
 2. Import and call it in ``_reset_caches()`` below.
 3. Verify isolation by running the new tests twice in a row.
 
-Current resets (12 total):
+Current resets (13 total):
   - settings              — ``tapps_core.config.settings._reset_settings_cache``
   - feature_flags         — ``tapps_core.config.feature_flags.feature_flags.reset``
   - scorer           — ``tapps_mcp.server_helpers._reset_scorer_cache``
@@ -24,6 +24,7 @@ Current resets (12 total):
   - background_tasks — ``tapps_mcp.server_pipeline_tools._reset_background_tasks``
   - dependency_cache — ``tapps_mcp.tools.dependency_scan_cache.clear_dependency_cache``
   - quick_check_recurring — ``tapps_mcp.quick_check_recurring._reset_recurring_quick_check_state``
+  - memory_project_id     — ``tapps_mcp.memory_project_id.uninstall_memory_project_id_patch``
 """
 
 from __future__ import annotations
@@ -443,8 +444,6 @@ def _skip_real_memory_embeddings(monkeypatch: pytest.MonkeyPatch) -> None:
     Real embedding calls flake under pytest-xdist torch/CPU contention and can
     exceed the 60s timeout when auto-consolidation chains multiple saves.
     """
-    from typing import Any
-
     from tapps_brain.store import MemoryStore
 
     def _no_embed(_self: MemoryStore, _key: str, _value: str, entry: Any) -> Any:
@@ -523,6 +522,14 @@ def _clear_test_singleton_caches() -> None:
     from tapps_mcp.project.test_linker_cache import _reset_test_edges_stats
 
     _reset_test_edges_stats()
+
+    # TAP-5442 replaces server_memory_tools._params_project_id globally the
+    # first time a brain bridge is built, and production never undoes it. Left
+    # installed, it leaks the settings-tenant fallback into every later test in
+    # the process and makes results depend on collection order.
+    from tapps_mcp.memory_project_id import uninstall_memory_project_id_patch
+
+    uninstall_memory_project_id_patch()
 
 
 @pytest.fixture(autouse=True)
