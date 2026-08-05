@@ -11,7 +11,7 @@ calls must be reset here.  When adding a new cache:
 2. Import and call it in ``_reset_caches()`` below.
 3. Verify isolation by running the new tests twice in a row.
 
-Current resets (12 total):
+Current resets (13 total):
   - settings              — ``tapps_core.config.settings._reset_settings_cache``
   - feature_flags         — ``tapps_core.config.feature_flags.feature_flags.reset``
   - scorer           — ``tapps_mcp.server_helpers._reset_scorer_cache``
@@ -24,6 +24,7 @@ Current resets (12 total):
   - background_tasks — ``tapps_mcp.server_pipeline_tools._reset_background_tasks``
   - dependency_cache — ``tapps_mcp.tools.dependency_scan_cache.clear_dependency_cache``
   - quick_check_recurring — ``tapps_mcp.quick_check_recurring._reset_recurring_quick_check_state``
+  - memory_project_id     — ``tapps_mcp.memory_project_id.uninstall_memory_project_id_patch``
 """
 
 from __future__ import annotations
@@ -32,9 +33,10 @@ import json
 import shutil
 import tempfile
 import threading
-from collections.abc import Generator, Iterator
+from collections.abc import Callable, Generator, Iterator
 from pathlib import Path
 from typing import Any
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
@@ -443,8 +445,6 @@ def _skip_real_memory_embeddings(monkeypatch: pytest.MonkeyPatch) -> None:
     Real embedding calls flake under pytest-xdist torch/CPU contention and can
     exceed the 60s timeout when auto-consolidation chains multiple saves.
     """
-    from typing import Any
-
     from tapps_brain.store import MemoryStore
 
     def _no_embed(_self: MemoryStore, _key: str, _value: str, entry: Any) -> Any:
@@ -523,6 +523,136 @@ def _clear_test_singleton_caches() -> None:
     from tapps_mcp.project.test_linker_cache import _reset_test_edges_stats
 
     _reset_test_edges_stats()
+
+    # TAP-5442 replaces server_memory_tools._params_project_id globally the
+    # first time a brain bridge is built, and production never undoes it. Left
+    # installed, it leaks the settings-tenant fallback into every later test in
+    # the process and makes results depend on collection order.
+    from tapps_mcp.memory_project_id import uninstall_memory_project_id_patch
+
+    uninstall_memory_project_id_patch()
+
+
+def _iter_failed_sub_results(
+    node: Any,
+    path: str = "data",
+    allow: tuple[str, ...] = (),
+) -> Iterator[tuple[str, dict[str, Any]]]:
+    """Yield ``(path, payload)`` for every nested dict that reports failure."""
+    if isinstance(node, dict):
+        looks_failed = bool(node.get("error")) or node.get("success") is False
+        if looks_failed and not node.get("skipped"):
+            yield path, node
+        for key, value in node.items():
+            if key in allow:
+                continue
+            yield from _iter_failed_sub_results(value, f"{path}.{key}", allow)
+    elif isinstance(node, list):
+        for index, value in enumerate(node):
+            yield from _iter_failed_sub_results(value, f"{path}[{index}]", allow)
+
+
+def assert_envelope_consistent(
+    response: dict[str, Any],
+    *,
+    allow: tuple[str, ...] = (),
+) -> None:
+    """Fail if a response claims plain success over a nested failure (TAP-5656).
+
+    A tool may legitimately continue past a best-effort dependency, but it must
+    say so — either ``success: false`` or ``degraded: true``. Reporting an
+    unqualified success while a nested sub-result carries an error is the
+    "envelope lie" that shipped two defects to a consuming project: the caller
+    reads the top level and believes work happened that never did.
+
+    ``allow`` names data keys to skip, for genuinely informational payloads
+    that embed failure-shaped records (a report *about* failures, say).
+    ``skipped`` sub-results are not failures — that flag means never attempted.
+
+    The static counterpart is ``scripts/check-response-envelope.py``; the lint
+    catches the shape at authoring time, this catches the behaviour at runtime.
+    """
+    if response.get("success") is not True or response.get("degraded") is True:
+        return
+
+    failures = list(_iter_failed_sub_results(response.get("data"), allow=allow))
+    if not failures:
+        return
+
+    rendered = "\n".join(f"  {path}: {payload!r}" for path, payload in failures)
+    tool = response.get("tool", "<unknown tool>")
+    raise AssertionError(
+        f"{tool} reported plain success while nested sub-results report failure.\n"
+        f"{rendered}\n"
+        "Pass degraded=True (or success=False) so the caller can see it."
+    )
+
+
+@pytest.fixture
+def envelope_consistent() -> Callable[..., None]:
+    """The :func:`assert_envelope_consistent` invariant, as a fixture."""
+    return assert_envelope_consistent
+
+
+@pytest.fixture
+def no_repo_wide_scans() -> Generator[None, None, None]:
+    """Keep ``tapps_checklist`` callers off the full-repo git and AST scans.
+
+    ``tapps_checklist`` runs ``check_tdd_stages`` by default, whose
+    compile-time-RED check ``ast.parse()``s every Python file under the project
+    source roots. With ``project_root`` pointing at the real repository that is
+    slow enough to blow the 60s per-test timeout on a CI runner — it failed
+    three ``TestTappsChecklist`` tests that assert nothing about TDD stages.
+
+    Opt-in rather than autouse on purpose: ``test_checklist.py`` imports
+    ``check_tdd_stages`` inside each test, so an unconditional patch here would
+    silently hollow out the tests that exercise it for real. Apply with
+    ``pytestmark = pytest.mark.usefixtures("no_repo_wide_scans")``.
+
+    Deliberately does NOT stub ``compute_gaps``: it is also repo-wide, but
+    ``test_contract_finish_gate.py`` asserts on the gaps it returns, so a
+    blanket stub here hollows those tests out rather than speeding them up.
+    """
+    tdd_stub = MagicMock()
+    tdd_stub.model_dump.return_value = {"passed": True, "checks": []}
+    with (
+        patch(
+            "tapps_mcp.tools.checklist.check_tdd_stages",
+            AsyncMock(return_value=tdd_stub),
+        ),
+        patch(
+            "tapps_mcp.tools.checklist._get_git_context",
+            AsyncMock(return_value=None),
+        ),
+    ):
+        yield
+
+
+@pytest.fixture(autouse=True)
+def _no_install_drift() -> Generator[None, None, None]:
+    """Decouple ``upgrade_pipeline`` tests from the machine's deployed CLIs.
+
+    ``check_install_drift`` compares the in-process package version against the
+    binaries under ``~/.tapps-mcp/current``, and ``upgrade_pipeline`` refuses to
+    run when they disagree. That made 77 upgrade tests fail the moment the
+    version was bumped, until the developer happened to run ``deploy-local`` —
+    machine state deciding whether the suite passes.
+
+    Drift detection is not what these tests are for, so it reports "clean" by
+    default. Tests that *do* exercise drift (``test_install_drift.py``,
+    ``test_upgrade_integration.py``) patch the same target themselves, and an
+    explicit inner patch takes precedence over this one.
+    """
+    from tapps_core.common.models import InstallDriftDiagnostic
+
+    clean = InstallDriftDiagnostic(
+        drift_detected=False,
+        entries=[],
+        local_install_warning=False,
+        remediation_hint="",
+    )
+    with patch("tapps_mcp.diagnostics.check_install_drift", return_value=clean):
+        yield
 
 
 @pytest.fixture(autouse=True)

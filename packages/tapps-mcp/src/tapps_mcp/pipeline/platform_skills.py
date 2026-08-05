@@ -1448,6 +1448,16 @@ SMART_MERGE_SKILL_NAMES: frozenset[str] = frozenset(
     {"orchestration-prompt", "tapps-wayfind", "tapps-validation-contract"}
 )
 
+# Prose/meta skills whose frontmatter carries no tool grant (`allowed-tools:` on
+# Claude, `mcp_tools:` on Cursor). Their bodies are host-agnostic guidance rather
+# than tool-invoking workflows, so the same text serves both hosts.
+#
+# Exported so the frontmatter tests read the exemption from here instead of
+# re-declaring a literal set. Two such tests each held their own copy, and
+# neither was updated when tapps-wayfind and tapps-validation-contract were
+# added — so both shipped unexempted and the suite went red.
+NO_TOOL_GRANT_SKILL_NAMES: frozenset[str] = SMART_MERGE_SKILL_NAMES | {"continuous-learning-v2"}
+
 # Companion files shipped alongside a skill's SKILL.md. Refreshed wholesale on
 # every init/upgrade — canonical platform docs, not customization points.
 SKILL_COMPANION_FILES: dict[str, dict[str, str]] = {

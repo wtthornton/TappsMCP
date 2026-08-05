@@ -6,6 +6,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 from tapps_mcp.tools.handoff_schema import (
+    _brain_max_value_length,
     lint_handoff,
     load_and_lint_handoff,
     parse_handoff_markdown,
@@ -125,6 +126,26 @@ class TestHandoffSchemaParse:
         )
         assert result.ok
         assert any("older than" in w for w in result.warnings)
+
+    def test_lint_warns_when_body_exceeds_brain_value_cap(self) -> None:
+        """Warn while the draft can still be shortened, not after the mirror fails.
+
+        The handoff template naturally produces bodies past the brain's
+        per-value cap; without this the first sign of trouble was a
+        bad_request buried in the save response's brain_mirror key.
+        """
+        cap = _brain_max_value_length()
+        padding = "\n".join(f"- filler line {i}" for i in range(cap // 8))
+        doc = parse_handoff_markdown(_VALID_HANDOFF.replace("- Shipped metrics fix", padding))
+        result = lint_handoff(doc, now=datetime(2026, 6, 11, tzinfo=UTC))
+
+        assert result.ok, "oversize body is advisory, not a blocking error"
+        assert any(str(cap) in w and "value cap" in w for w in result.warnings)
+
+    def test_lint_does_not_warn_for_normal_sized_handoff(self) -> None:
+        doc = parse_handoff_markdown(_VALID_HANDOFF)
+        result = lint_handoff(doc, now=datetime(2026, 6, 11, tzinfo=UTC))
+        assert not any("value cap" in w for w in result.warnings)
 
 
 class TestHandoffSchemaDoctorIntegration:

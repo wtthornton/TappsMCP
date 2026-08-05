@@ -211,7 +211,9 @@ class TestTappsValidateChanged:
 
         assert result["success"] is True
         assert result["data"]["files_validated"] == 0
-        assert result["data"]["all_gates_passed"] is True
+        # Nothing was gated, so the tool reports inconclusive rather than a
+        # false green (validate_changed_output._no_changed_response).
+        assert result["data"]["all_gates_passed"] is False
 
     @pytest.mark.asyncio
     @patch("tapps_mcp.server._validate_file_path")
@@ -473,7 +475,9 @@ class TestTappsValidateChanged:
 
         assert result["success"] is True
         assert result["data"]["files_validated"] == 0
-        assert result["data"]["summary"] == "No changed scorable files found."
+        assert result["data"]["summary"] == (
+            "No changed scorable files found — inconclusive, nothing was gated."
+        )
         # base_ref=HEAD with auto-detect should include a warning
         assert "warnings" in result["data"]
         assert any("base_ref=HEAD" in w for w in result["data"]["warnings"])
@@ -497,7 +501,9 @@ class TestTappsValidateChanged:
 
         assert result["success"] is True
         assert result["data"]["files_validated"] == 0
-        assert result["data"]["all_gates_passed"] is True
+        # Nothing was gated, so the tool reports inconclusive rather than a
+        # false green (validate_changed_output._no_changed_response).
+        assert result["data"]["all_gates_passed"] is False
         warnings = result["data"].get("warnings", [])
         assert len(warnings) >= 1
         assert "base_ref=HEAD" in warnings[0]
@@ -557,7 +563,9 @@ class TestTappsValidateChanged:
 
         assert result["success"] is True
         assert result["data"]["files_validated"] == 0
-        assert result["data"]["summary"] == "No changed scorable files found."
+        assert result["data"]["summary"] == (
+            "No changed scorable files found — inconclusive, nothing was gated."
+        )
         ensure_init.assert_not_called()
         mock_scorer.score_file_quick.assert_not_called()
 

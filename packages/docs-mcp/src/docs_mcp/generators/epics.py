@@ -1455,18 +1455,21 @@ class EpicGenerator:
     def parse_stories_json(stories_json: str | list[Any]) -> list[EpicStoryStub]:
         """Parse a JSON string (or pre-parsed list) into EpicStoryStub objects.
 
-        Accepts a JSON array of objects with keys: title, points, description,
-        tasks, ac_count. Also accepts an already-parsed list (from MCP clients
-        that may send typed values instead of JSON strings).
+        Accepts a JSON array whose items are either objects with the keys
+        title, points, description, tasks, ac_count, or plain strings treated
+        as titles. Also accepts an already-parsed list (from MCP clients that
+        may send typed values instead of JSON strings).
 
         Args:
-            stories_json: JSON string or pre-parsed list of story dicts.
+            stories_json: JSON string or pre-parsed list of stories.
 
         Returns:
-            List of EpicStoryStub objects.
+            List of EpicStoryStub objects, one per input item.
 
         Raises:
-            ValueError: If the JSON is malformed or not a list.
+            ValueError: If the JSON is malformed, is not a list, or contains an
+                item that is neither an object nor a non-empty title string.
+                Every item is either parsed or raises — none are dropped.
         """
         # Handle pre-parsed list (MCP clients may send typed values)
         if isinstance(stories_json, list):
@@ -1485,17 +1488,37 @@ class EpicGenerator:
             raise ValueError(msg)
 
         stories: list[EpicStoryStub] = []
-        for item in raw:
-            if isinstance(item, dict):
-                tasks_raw = item.get("tasks", [])
-                tasks = [str(t) for t in tasks_raw] if isinstance(tasks_raw, list) else []
-                stories.append(
-                    EpicStoryStub(
-                        title=str(item.get("title", "Untitled")),
-                        points=int(item.get("points") or 0),
-                        description=str(item.get("description", "")),
-                        tasks=tasks,
-                        ac_count=int(item.get("ac_count") or 0),
-                    )
+        for index, item in enumerate(raw):
+            # A bare string is the obvious way to express "just the title", and
+            # callers reach for it constantly. Silently skipping it produced an
+            # epic with story_count=0 whose ## Stories section was then filled
+            # with keyword-suggested boilerplate — a wrong document reported as
+            # a success. Accept it, and refuse anything we cannot interpret
+            # rather than dropping it.
+            if isinstance(item, str):
+                title = item.strip()
+                if not title:
+                    msg = f"Story at index {index} is an empty string"
+                    raise ValueError(msg)
+                stories.append(EpicStoryStub(title=title))
+                continue
+
+            if not isinstance(item, dict):
+                msg = (
+                    f"Story at index {index} must be an object or a title string, "
+                    f"got {type(item).__name__}"
                 )
+                raise ValueError(msg)
+
+            tasks_raw = item.get("tasks", [])
+            tasks = [str(t) for t in tasks_raw] if isinstance(tasks_raw, list) else []
+            stories.append(
+                EpicStoryStub(
+                    title=str(item.get("title", "Untitled")),
+                    points=int(item.get("points") or 0),
+                    description=str(item.get("description", "")),
+                    tasks=tasks,
+                    ac_count=int(item.get("ac_count") or 0),
+                )
+            )
         return stories

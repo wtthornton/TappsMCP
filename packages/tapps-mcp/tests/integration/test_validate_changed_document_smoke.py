@@ -53,7 +53,10 @@ class TestDocumentConsumerValidateChangedSmoke:
 
         data = result["data"]
         assert data["files_validated"] == 0
-        assert data["all_gates_passed"] is True
+        # Zero files gated stays inconclusive even when judges pass — the
+        # semantics commit 2e08467d settled on. Judges report separately via
+        # judges_passed; they do not convert an ungated run into a green one.
+        assert data["all_gates_passed"] is False
         assert data.get("judges_passed") is True
         assert any(r.get("result") == "pass" for r in data.get("judge_results", []))
 

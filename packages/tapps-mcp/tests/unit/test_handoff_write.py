@@ -136,7 +136,7 @@ class TestHandoffWriteCli:
                 input=_VALID_HANDOFF,
             )
         assert result.exit_code == 0
-        data = json.loads(result.output)
+        data = json.loads(result.stdout)
         assert data["linear_p0"] == "TAP-3790"
         assert data["brain_mirror"]["success"] is True
 
@@ -273,3 +273,121 @@ class TestResolveSessionStartIso:
         iso, source = resolve_session_start_iso("", tmp_path)
         assert iso == "2026-06-12T08:00:00+00:00"
         assert source == "persisted_file"
+
+
+class TestBrainMirrorStatusSurfacing:
+    """A failed brain mirror must not read as a completed handoff.
+
+    The tool returned top-level ``success: true`` with a clean lint while
+    ``brain_mirror`` carried ``{"error": "bad_request", "detail": "Value
+    exceeds max length (4829 > 4096)"}``. A caller that did not inspect the
+    nested key believed the handoff was retrievable next session when the
+    cross-session copy had never persisted.
+    """
+
+    @staticmethod
+    def _mock_result(tmp_path: Path, brain_mirror: dict[str, object] | None) -> MagicMock:
+        return MagicMock(
+            file_path=str(handoff_path(tmp_path)),
+            doc=parse_handoff_markdown(_VALID_HANDOFF),
+            metadata={"linear_p0": "TAP-3790"},
+            lint=MagicMock(ok=True, errors=[], warnings=[]),
+            brain_mirror=brain_mirror,
+            session_end=None,
+        )
+
+    async def _save(self, tmp_path: Path, brain_mirror: dict[str, object] | None) -> dict:
+        from tapps_mcp import server_pipeline_tools as spt
+
+        with (
+            patch("tapps_mcp.server_pipeline_tools.load_settings") as mock_settings,
+            patch(
+                "tapps_mcp.tools.handoff_write.write_handoff",
+                new_callable=AsyncMock,
+            ) as mock_write,
+            patch("tapps_mcp.server._record_call"),
+            patch("tapps_mcp.server._record_execution"),
+        ):
+            mock_settings.return_value.project_root = tmp_path
+            mock_write.return_value = self._mock_result(tmp_path, brain_mirror)
+            return await spt.tapps_handoff_save(_VALID_HANDOFF)
+
+    @pytest.mark.asyncio
+    async def test_failed_mirror_marks_response_degraded(self, tmp_path: Path) -> None:
+        result = await self._save(
+            tmp_path,
+            {
+                "error": "bad_request",
+                "detail": "Value error, Value exceeds max length (4829 > 4096)",
+                "value_length": 4829,
+                "max_value_length": 4096,
+            },
+        )
+
+        assert result["degraded"] is True
+        assert result["data"]["brain_mirror_status"] == "failed"
+        assert any("Brain mirror failed" in w for w in result["data"]["warnings"])
+        # The size mismatch is named so the caller knows how to fix it.
+        assert any("4829" in step and "4096" in step for step in result["data"]["next_steps"])
+
+    @pytest.mark.asyncio
+    async def test_successful_mirror_is_not_degraded(self, tmp_path: Path) -> None:
+        result = await self._save(tmp_path, {"key": "session-handoff", "success": True})
+
+        assert result["data"]["brain_mirror_status"] == "ok"
+        assert result.get("degraded") is not True
+        assert "warnings" not in result["data"]
+
+    @pytest.mark.asyncio
+    async def test_skipped_mirror_is_not_a_failure(self, tmp_path: Path) -> None:
+        """No configured bridge is an expected offline state, not a defect."""
+        result = await self._save(
+            tmp_path,
+            {"success": False, "skipped": True, "reason": "bridge_unavailable"},
+        )
+
+        assert result["data"]["brain_mirror_status"] == "skipped"
+        assert result.get("degraded") is not True
+
+    @pytest.mark.asyncio
+    async def test_failed_mirror_still_reports_the_intact_file(self, tmp_path: Path) -> None:
+        result = await self._save(tmp_path, {"error": "bad_request", "detail": "nope"})
+
+        assert result["data"]["file_path"] == str(handoff_path(tmp_path))
+        assert any("intact" in step for step in result["data"]["next_steps"])
+
+    @pytest.mark.asyncio
+    async def test_failed_session_end_also_degrades(self, tmp_path: Path) -> None:
+        """session_end is best-effort too and was equally invisible.
+
+        check-response-envelope.py flagged it as the second instance of the
+        same shape in this very response (TAP-5656/TAP-5660).
+        """
+        from tapps_mcp import server_pipeline_tools as spt
+
+        with (
+            patch("tapps_mcp.server_pipeline_tools.load_settings") as mock_settings,
+            patch(
+                "tapps_mcp.tools.handoff_write.write_handoff",
+                new_callable=AsyncMock,
+            ) as mock_write,
+            patch("tapps_mcp.server._record_call"),
+            patch("tapps_mcp.server._record_execution"),
+        ):
+            mock_settings.return_value.project_root = tmp_path
+            result_stub = self._mock_result(tmp_path, {"key": "session-handoff", "success": True})
+            result_stub.session_end = {"success": False, "error": "flywheel_process timed out"}
+            mock_write.return_value = result_stub
+            result = await spt.tapps_handoff_save(_VALID_HANDOFF)
+
+        assert result["degraded"] is True
+        assert result["data"]["brain_mirror_status"] == "ok"
+        assert result["data"]["session_end_status"] == "failed"
+        assert any("Session end failed" in w for w in result["data"]["warnings"])
+
+    @pytest.mark.asyncio
+    async def test_absent_session_end_is_skipped_not_failed(self, tmp_path: Path) -> None:
+        result = await self._save(tmp_path, {"key": "session-handoff", "success": True})
+
+        assert result["data"]["session_end_status"] == "skipped"
+        assert result.get("degraded") is not True

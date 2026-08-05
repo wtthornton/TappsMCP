@@ -42,6 +42,7 @@ CLAUDE.md and per-package CLAUDE.md files point at ADRs by number rather than em
 | [0032](0032-usage-gap-cache-coverage-local-modules.md) | Usage-gap doc coverage: local modules, any-topic cache, resolution confidence | Accepted |
 | [0033](0033-pin-tapps-brain-version-floor-at-3280.md) | Pin tapps-brain version floor at 3.28.0 | Accepted (supersedes [0013](0013-pin-tapps-brain-version-floor-at-3240.md)) |
 | [0034](0034-orchestration-prompt-missions-contract-loop.md) | orchestration-prompt ships Missions-inspired contract + expected-fail loops | Accepted |
+| [0035](0035-ci-cost-model-and-scope.md) | CI cost model: free by visibility, guarded by assertion | Accepted |
 
 ## Adding a new ADR
 

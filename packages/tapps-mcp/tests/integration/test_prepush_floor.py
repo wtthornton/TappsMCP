@@ -2,13 +2,20 @@
 
 Covers three scenarios from the acceptance criteria:
   1. Floor parse — the hook correctly extracts the tapps-brain floor from TOML.
-  2. Reject    — floors below 3.18.0 cause the hook to exit non-zero.
+  2. Reject    — floors below the hook's floor cause a non-zero exit.
   3. Bypass    — TAPPS_SKIP_PREPUSH=1 bypasses the floor check.
 
 The hook requires git-ref stdin and remote args to reach the floor-check
 section, so the tests use a thin wrapper script that replays only the
 brain-floor block. The wrapper is generated from the actual pre-push hook
 source to stay in sync as the hook evolves.
+
+The operational floor is **read from the hook** rather than duplicated here.
+Hardcoding it drifted three times (3.18.0 → 3.24.0 → 3.28.0) because the floor
+moves in the hook and pyproject while this file was left behind, so the suite
+asserted a floor the project had already abandoned. The only constant that
+stays pinned is the policy minimum from ADR-0033, which the hook must never
+drop below.
 """
 from __future__ import annotations
 
@@ -24,9 +31,46 @@ import pytest
 # ---------------------------------------------------------------------------
 
 _HOOK_PATH = Path(__file__).parents[4] / ".githooks" / "pre-push"
-_REQUIRED_FLOOR = "3.18.0"
 _FLOOR_SECTION_START = "# --- tapps-brain version floor check"
 _FLOOR_SECTION_END = "# --- Smoke gate ---"
+
+# The minimum the hook's floor is allowed to be, per ADR-0033 (supersedes
+# ADR-0013's 3.24.0). Raising the operational floor is fine; dropping below
+# this is the regression the gate exists to catch.
+_ADR_MINIMUM_FLOOR = "3.28.0"
+
+
+def _parse_hook_floor() -> str:
+    """Read ``_REQUIRED_BRAIN_FLOOR`` out of the pre-push hook source."""
+    hook_text = _HOOK_PATH.read_text(encoding="utf-8")
+    match = re.search(r'_REQUIRED_BRAIN_FLOOR="(\d+\.\d+\.\d+)"', hook_text)
+    if match is None:  # pragma: no cover — hook restructured
+        raise RuntimeError(
+            "_REQUIRED_BRAIN_FLOOR not found in .githooks/pre-push — "
+            "update _parse_hook_floor() in this test."
+        )
+    return match.group(1)
+
+
+_REQUIRED_FLOOR = _parse_hook_floor()
+
+
+def _as_tuple(version: str) -> tuple[int, ...]:
+    """Convert an ``X.Y.Z`` version string to a comparable int tuple."""
+    return tuple(int(part) for part in version.split("."))
+
+
+def _offset_version(version: str, *, minor: int = 0, patch: int = 0) -> str:
+    """Return ``version`` shifted by the given minor/patch deltas.
+
+    Fixtures are derived from the live floor so they keep testing "just below"
+    and "just above" no matter where the floor moves.
+    """
+    major_v, minor_v, patch_v = _as_tuple(version)
+    shifted = (major_v, minor_v + minor, patch_v + patch)
+    if any(part < 0 for part in shifted):  # pragma: no cover — floor too low
+        raise ValueError(f"Cannot offset {version} by minor={minor}, patch={patch}")
+    return "{}.{}.{}".format(*shifted)
 
 
 def _extract_floor_section(hook_text: str) -> str:
@@ -102,7 +146,7 @@ def _make_toml(tmp_path: Path, floor: str) -> Path:
 
 @pytest.mark.integration
 class TestPrepushBrainFloor:
-    """TAP-1923: pre-push gate enforces tapps-brain>={_REQUIRED_FLOOR} floor."""
+    """TAP-1923: pre-push gate enforces the tapps-brain version floor."""
 
     # -- Floor parse ---------------------------------------------------------
 
@@ -119,9 +163,7 @@ class TestPrepushBrainFloor:
         assert match is not None, "tapps-brain floor not found in tapps-core/pyproject.toml"
         actual_floor = match.group(1)
         # Compare using tuple int conversion — safe for X.Y.Z semver.
-        actual = tuple(int(x) for x in actual_floor.split("."))
-        required = tuple(int(x) for x in _REQUIRED_FLOOR.split("."))
-        assert actual >= required, (
+        assert _as_tuple(actual_floor) >= _as_tuple(_REQUIRED_FLOOR), (
             f"tapps-brain floor {actual_floor} < required {_REQUIRED_FLOOR}; "
             "bump the floor in packages/tapps-core/pyproject.toml"
         )
@@ -132,50 +174,56 @@ class TestPrepushBrainFloor:
         assert _FLOOR_SECTION_START in hook_text, (
             "Brain-floor section missing from .githooks/pre-push"
         )
-        assert _REQUIRED_FLOOR in hook_text, (
-            f"Required floor {_REQUIRED_FLOOR} not referenced in pre-push hook"
+
+    def test_hook_floor_not_below_adr_minimum(self) -> None:
+        """The hook's floor never regresses below the ADR-0033 minimum."""
+        assert _as_tuple(_REQUIRED_FLOOR) >= _as_tuple(_ADR_MINIMUM_FLOOR), (
+            f"pre-push floor {_REQUIRED_FLOOR} is below the ADR-0033 minimum "
+            f"{_ADR_MINIMUM_FLOOR}; supersede the ADR before lowering it"
         )
 
     # -- Reject (floor < minimum) -------------------------------------------
 
     def test_rejects_floor_below_minimum(self, tmp_path: Path) -> None:
-        """Hook exits 1 and prints an actionable message when floor < 3.18.0."""
-        toml = _make_toml(tmp_path, "3.17.0")
+        """Hook exits 1 with an actionable message when the floor is too low."""
+        bad_floor = _offset_version(_REQUIRED_FLOOR, minor=-1)
+        toml = _make_toml(tmp_path, bad_floor)
         result = _run_wrapper(_make_wrapper(toml))
-        assert result.returncode != 0, "Expected non-zero exit for floor 3.17.0"
-        assert "3.17.0" in result.stderr, "Error message should name the bad floor"
+        assert result.returncode != 0, f"Expected non-zero exit for floor {bad_floor}"
+        assert bad_floor in result.stderr, "Error message should name the bad floor"
         assert _REQUIRED_FLOOR in result.stderr, "Error message should name the required floor"
 
-    def test_rejects_floor_at_3_0_0(self, tmp_path: Path) -> None:
-        """Even a very old floor (3.0.0) is rejected cleanly."""
-        toml = _make_toml(tmp_path, "3.0.0")
+    def test_rejects_very_old_floor(self, tmp_path: Path) -> None:
+        """A major version below the floor is rejected cleanly."""
+        major = _as_tuple(_REQUIRED_FLOOR)[0]
+        toml = _make_toml(tmp_path, f"{major - 1}.0.0")
         result = _run_wrapper(_make_wrapper(toml))
         assert result.returncode != 0
         assert "BRAIN FLOOR REGRESSION" in result.stderr
 
-    def test_rejects_floor_one_patch_below(self, tmp_path: Path) -> None:
-        """3.17.9 — one patch below required — is still rejected."""
-        toml = _make_toml(tmp_path, "3.17.9")
+    def test_rejects_floor_just_below(self, tmp_path: Path) -> None:
+        """The highest version below the floor is still rejected."""
+        toml = _make_toml(tmp_path, _offset_version(_REQUIRED_FLOOR, minor=-1, patch=9))
         result = _run_wrapper(_make_wrapper(toml))
         assert result.returncode != 0
 
     # -- Accept (floor >= minimum) ------------------------------------------
 
     def test_accepts_exact_minimum_floor(self, tmp_path: Path) -> None:
-        """Exactly 3.18.0 passes the floor check."""
-        toml = _make_toml(tmp_path, "3.18.0")
+        """Exactly the required floor passes the floor check."""
+        toml = _make_toml(tmp_path, _REQUIRED_FLOOR)
         result = _run_wrapper(_make_wrapper(toml))
         assert result.returncode == 0, f"Unexpected failure: {result.stderr}"
 
     def test_accepts_newer_floor(self, tmp_path: Path) -> None:
-        """A newer floor (e.g. 3.20.0) passes the floor check."""
-        toml = _make_toml(tmp_path, "3.20.0")
+        """A floor two minors above the requirement passes."""
+        toml = _make_toml(tmp_path, _offset_version(_REQUIRED_FLOOR, minor=2))
         result = _run_wrapper(_make_wrapper(toml))
         assert result.returncode == 0
 
     def test_accepts_minor_bump(self, tmp_path: Path) -> None:
-        """3.19.0 (one minor above) passes the floor check."""
-        toml = _make_toml(tmp_path, "3.19.0")
+        """One minor above the requirement passes the floor check."""
+        toml = _make_toml(tmp_path, _offset_version(_REQUIRED_FLOOR, minor=1))
         result = _run_wrapper(_make_wrapper(toml))
         assert result.returncode == 0
 
@@ -183,7 +231,7 @@ class TestPrepushBrainFloor:
 
     def test_bypass_skips_floor_check(self, tmp_path: Path) -> None:
         """TAPPS_SKIP_PREPUSH=1 skips the floor check even for a low floor."""
-        toml = _make_toml(tmp_path, "3.17.0")
+        toml = _make_toml(tmp_path, _offset_version(_REQUIRED_FLOOR, minor=-1))
         # TAPPS_SKIP_PREPUSH causes the hook to exit 0 before reaching the
         # floor check, so we pass it via env rather than inline the entire
         # hook preamble.  The wrapper re-exports it into the sub-shell.

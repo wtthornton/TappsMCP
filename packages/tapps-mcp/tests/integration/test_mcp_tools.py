@@ -19,6 +19,9 @@ from tapps_mcp.server import (
 from tapps_mcp.tools.checklist import CallTracker
 from tapps_mcp.tools.parallel import ParallelResults
 
+# tapps_checklist runs a full-repo AST scan by default; not what these assert.
+pytestmark = pytest.mark.usefixtures("no_repo_wide_scans")
+
 SAMPLE_CODE = '"""Module."""\n\ndef f() -> int:\n    return 1\n'
 
 

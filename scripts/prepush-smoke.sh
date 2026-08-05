@@ -21,9 +21,16 @@ SMOKE=(
   "packages/tapps-mcp/tests/unit/test_blue_green.py::TestFlipCurrent::test_atomic_flip"
   "packages/tapps-core/tests/unit/test_settings.py::TestProjectIdRootFallback::test_derives_slug_from_project_root_name"
   "packages/docs-mcp/tests/unit/test_scan_filters.py::TestBaselineExclude::test_venv_excluded"
+  # TAP-5660: caller-input parsers must never silently shorten their output.
+  "packages/docs-mcp/tests/unit/test_parser_contract_invariants.py"
 )
 
 echo "[prepush-smoke] Running ${#SMOKE[@]} curated tests (serial, no xdist)..." >&2
 for _TEST in "${SMOKE[@]}"; do
   uv run pytest "$_TEST" -q --tb=line --timeout=60
 done
+
+# Stdlib-only and sub-second, so it runs here as well as in CI — a success
+# envelope contradicting a nested failure should never reach a push.
+echo "[prepush-smoke] Checking response-envelope consistency..." >&2
+python3 "$ROOT/scripts/check-response-envelope.py"

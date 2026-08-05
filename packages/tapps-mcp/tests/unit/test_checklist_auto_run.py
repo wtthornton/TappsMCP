@@ -18,6 +18,9 @@ _VC_TARGET = "tapps_mcp.server_pipeline_tools.tapps_validate_changed"
 _SETTINGS_TARGET = "tapps_mcp.server.load_settings"
 _GAPS_TARGET = "tapps_mcp.tools.usage.compute_gaps"
 
+# tapps_checklist runs a full-repo AST scan by default; not what these assert.
+pytestmark = pytest.mark.usefixtures("no_repo_wide_scans")
+
 
 @pytest.fixture(autouse=True)
 def _reset_tracker() -> None:  # type: ignore[misc]

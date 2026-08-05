@@ -116,9 +116,43 @@ async def mirror_handoff_to_brain(
         if hasattr(bridge, "close"):
             bridge.close()
 
-    if isinstance(result, dict):
-        return result
-    return {"key": SESSION_HANDOFF_MEMORY_KEY, "success": True}
+    payload = result if isinstance(result, dict) else {"key": SESSION_HANDOFF_MEMORY_KEY}
+    # Sizes travel with the payload so a rejection is self-explaining. The
+    # brain caps a memory value, and the handoff template routinely produces
+    # bodies past it; without these the caller sees only "bad_request".
+    payload.setdefault("value_length", len(markdown))
+    payload.setdefault("max_value_length", _brain_max_value_length())
+    payload.setdefault("success", "error" not in payload)
+    return payload
+
+
+def _brain_max_value_length() -> int:
+    """The brain's per-value character cap (best-effort)."""
+    try:
+        from tapps_brain.models import MAX_VALUE_LENGTH
+    except ImportError:  # pragma: no cover - brain always installed in practice
+        return 4096
+    return int(MAX_VALUE_LENGTH)
+
+
+def best_effort_status(payload: dict[str, Any] | None) -> str:
+    """Classify a best-effort sub-result as ``ok``, ``skipped`` or ``failed``.
+
+    ``skipped`` means the work was never attempted — typically no bridge was
+    configured, an expected offline state rather than a failure. ``failed``
+    means it was attempted and rejected, so whatever it promised does not
+    exist even though the surrounding operation completed.
+
+    Shared by the handoff's brain mirror and session-end results: both are
+    documented best-effort, both surface outages in their result dict rather
+    than raising, and both were previously embedded in a plain success
+    envelope where a caller could not see they had failed (TAP-5656).
+    """
+    if payload is None or payload.get("skipped"):
+        return "skipped"
+    if payload.get("error") or payload.get("success") is False:
+        return "failed"
+    return "ok"
 
 
 def write_handoff_file(project_root: Path, markdown: str) -> Path:
