@@ -9,6 +9,9 @@ import pytest
 
 from tapps_mcp.tools.checklist import CallTracker, ChecklistHint, ChecklistResult
 
+# tapps_checklist runs a full-repo AST scan by default; not what these assert.
+pytestmark = pytest.mark.usefixtures("no_repo_wide_scans")
+
 _EVALUATE_TARGET = "tapps_mcp.tools.checklist.CallTracker.evaluate"
 _GAPS_TARGET = "tapps_mcp.tools.usage.compute_gaps"
 

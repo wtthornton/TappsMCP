@@ -18,38 +18,14 @@ _VC_TARGET = "tapps_mcp.server_pipeline_tools.tapps_validate_changed"
 _SETTINGS_TARGET = "tapps_mcp.server.load_settings"
 _GAPS_TARGET = "tapps_mcp.tools.usage.compute_gaps"
 
+# tapps_checklist runs a full-repo AST scan by default; not what these assert.
+pytestmark = pytest.mark.usefixtures("no_repo_wide_scans")
+
 
 @pytest.fixture(autouse=True)
 def _reset_tracker() -> None:  # type: ignore[misc]
     """Reset CallTracker before every test."""
     CallTracker.reset()
-
-
-@pytest.fixture(autouse=True)
-def _no_repo_wide_scans() -> Any:  # type: ignore[misc]
-    """Keep these tests off the full-repo git and AST scans.
-
-    ``tapps_checklist`` runs ``check_tdd_stages`` by default, whose
-    compile-time-RED check ``ast.parse()``s every Python file under the
-    project source roots. With ``project_root`` pointing at the real
-    repository and pytest-xdist running several workers, each worker scanned
-    the whole tree and the tests intermittently blew the 60s timeout — a slow,
-    order-dependent failure that had nothing to do with what they assert.
-    These are unit tests for auto_run behaviour, not for TDD stage checking.
-    """
-    tdd_stub = MagicMock()
-    tdd_stub.model_dump.return_value = {"passed": True, "checks": []}
-    with (
-        patch(
-            "tapps_mcp.tools.checklist.check_tdd_stages",
-            AsyncMock(return_value=tdd_stub),
-        ),
-        patch(
-            "tapps_mcp.tools.checklist._get_git_context",
-            AsyncMock(return_value=None),
-        ),
-    ):
-        yield
 
 
 @pytest.fixture(autouse=True)

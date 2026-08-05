@@ -16,6 +16,9 @@ from tapps_mcp.tools.contract_telemetry import (
     record_creator_verifier,
 )
 
+# tapps_checklist runs a full-repo AST scan by default; not what these assert.
+pytestmark = pytest.mark.usefixtures("no_repo_wide_scans")
+
 _EVALUATE_TARGET = "tapps_mcp.tools.checklist.CallTracker.evaluate"
 _SETTINGS_TARGET = "tapps_mcp.server.load_settings"
 

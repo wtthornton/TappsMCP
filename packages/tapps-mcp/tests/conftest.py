@@ -34,9 +34,9 @@ import shutil
 import tempfile
 import threading
 from collections.abc import Callable, Generator, Iterator
-from unittest.mock import patch
 from pathlib import Path
 from typing import Any
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
@@ -592,6 +592,36 @@ def assert_envelope_consistent(
 def envelope_consistent() -> Callable[..., None]:
     """The :func:`assert_envelope_consistent` invariant, as a fixture."""
     return assert_envelope_consistent
+
+
+@pytest.fixture
+def no_repo_wide_scans() -> Generator[None, None, None]:
+    """Keep ``tapps_checklist`` callers off the full-repo git and AST scans.
+
+    ``tapps_checklist`` runs ``check_tdd_stages`` by default, whose
+    compile-time-RED check ``ast.parse()``s every Python file under the project
+    source roots. With ``project_root`` pointing at the real repository that is
+    slow enough to blow the 60s per-test timeout on a CI runner — it failed
+    three ``TestTappsChecklist`` tests that assert nothing about TDD stages.
+
+    Opt-in rather than autouse on purpose: ``test_checklist.py`` imports
+    ``check_tdd_stages`` inside each test, so an unconditional patch here would
+    silently hollow out the tests that exercise it for real. Apply with
+    ``pytestmark = pytest.mark.usefixtures("no_repo_wide_scans")``.
+    """
+    tdd_stub = MagicMock()
+    tdd_stub.model_dump.return_value = {"passed": True, "checks": []}
+    with (
+        patch(
+            "tapps_mcp.tools.checklist.check_tdd_stages",
+            AsyncMock(return_value=tdd_stub),
+        ),
+        patch(
+            "tapps_mcp.tools.checklist._get_git_context",
+            AsyncMock(return_value=None),
+        ),
+    ):
+        yield
 
 
 @pytest.fixture(autouse=True)
