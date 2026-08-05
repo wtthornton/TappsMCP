@@ -74,4 +74,10 @@ A security floor of 50/100 is enforced regardless of overall score.
 
 After upgrading TappsMCP, run `tapps_upgrade` to refresh generated files.
 A timestamped backup is created before overwriting. Use `tapps-mcp rollback` to restore.
-To protect customized files from upgrade, add them to `upgrade_skip_files` in `.tapps-mcp.yaml`.
+To protect a tapps-managed artifact, add its **token** to `upgrade_skip_files` in
+`.tapps-mcp.yaml` — e.g. `CLAUDE.md`, `.claude/skills`, `.claude/settings.json`,
+`.mcp.json`, `karpathy`. These are artifact tokens, **not file paths**: an
+unrecognized entry is reported as `unknown_skip_tokens` and protects nothing,
+while the upgrade proceeds anyway. Custom files the upgrade does not own
+(non-`tapps-*` skills and agents) are preserved automatically — no entry needed.
+No token exists for `.github/**`, which the upgrade always regenerates.
