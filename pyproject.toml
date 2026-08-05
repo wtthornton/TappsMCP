@@ -2,17 +2,35 @@
 members = ["packages/*"]
 
 [tool.uv.sources]
-# tapps-brain v3.28.1 — the newest *tagged* upstream release, which is the form
-# ADR-0011 prescribes; uv.lock still records the resolved SHA. As of 2026-08-03
-# the live dev brain on :8080 reports 3.28.2, but no v3.28.2 tag exists upstream
-# (verified via `git ls-remote --tags`), so the pin cannot follow it without
-# violating ADR-0011. This is a benign skew: the runtime floor is 3.28.0
-# (ADR-0033, supersedes ADR-0013) and the ceiling is 4.0.0, so 3.28.2 passes the
-# BrainBridge version probe. Raise the pin once 3.28.2 is tagged.
-# 3.28.0 is the release adding web_research / research_fetch, which BrainBridge
-# binds for tapps_research. 3.28.1 additionally scopes idempotency keys by
-# operation.
-tapps-brain = { git = "https://github.com/wtthornton/tapps-brain.git", tag = "v3.28.1" }
+# tapps-brain v3.29.0 — the newest *tagged* upstream release, which is the form
+# ADR-0011 prescribes; uv.lock still records the resolved SHA.
+#
+# Raised from v3.28.1 on 2026-08-05. The prior comment held the pin because no
+# v3.28.2 tag existed upstream; v3.28.3 and v3.29.0 are both tagged now, so that
+# blocker is gone.
+#
+# This pin is not cosmetic. It is the package behind the **in-process**
+# AgentBrain path (`tapps_core/brain_bridge.py`) — the fallback used when
+# `brain_http_url` is unset or the HTTP brain is unreachable. At v3.28.1 that
+# fallback predated the 3.28.3 write-loss fixes (TAP-5614/5615/5617), where a
+# save under a distinct key could be discarded while the response still read
+# `{"status": "saved"}`. The degraded path was the one carrying the bug. HTTP
+# deployments were already fine: the live brain reports 3.29.0 and clears the
+# 3.28.0 floor (ADR-0033, supersedes ADR-0013; ceiling 4.0.0).
+#
+# What each release in the jump contributes:
+#   3.28.0  web_research / research_fetch, which BrainBridge binds for
+#           tapps_research
+#   3.28.1  idempotency keys scoped by operation
+#   3.28.3  save-path dedup scoped to the incoming key (write-loss fix), plus
+#           `status: "coalesced"` and `invalidated` on the save envelope
+#   3.29.0  `supersede: "global" | "key-scoped"` per-save scope; removes the
+#           write-only Bloom filter and its `bloom_saturation` gauge
+#
+# The only removal across the range is `bloom_saturation` from `get_metrics()`,
+# `/metrics` and `/snapshot`. This repo never read it (grepped `src/` and
+# `packages/`), so nothing here depends on it.
+tapps-brain = { git = "https://github.com/wtthornton/tapps-brain.git", tag = "v3.29.0" }
 
 [tool.uv]
 # tapps-brain depends on sentence-transformers unconditionally, which pulls torch

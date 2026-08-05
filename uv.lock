@@ -2636,8 +2636,8 @@ wheels = [
 
 [[package]]
 name = "tapps-brain"
-version = "3.28.1"
-source = { git = "https://github.com/wtthornton/tapps-brain.git?tag=v3.28.1#0a8e1fdad15d5604aebf45921d83d31079829650" }
+version = "3.29.0"
+source = { git = "https://github.com/wtthornton/tapps-brain.git?tag=v3.29.0#9a30f58396bf9f9013a7f8835ed58d546a0260ef" }
 dependencies = [
     { name = "numpy" },
     { name = "opentelemetry-api" },
@@ -2684,7 +2684,7 @@ requires-dist = [
     { name = "pyyaml", specifier = ">=6.0.3,<7" },
     { name = "sentence-transformers", marker = "extra == 'vector'", specifier = ">=5.5.1,<6" },
     { name = "structlog", specifier = ">=26.1.0,<27" },
-    { name = "tapps-brain", git = "https://github.com/wtthornton/tapps-brain.git?tag=v3.28.1" },
+    { name = "tapps-brain", git = "https://github.com/wtthornton/tapps-brain.git?tag=v3.29.0" },
 ]
 provides-extras = ["vector", "reranker"]
 
