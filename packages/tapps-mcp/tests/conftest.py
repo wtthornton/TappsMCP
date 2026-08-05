@@ -33,7 +33,8 @@ import json
 import shutil
 import tempfile
 import threading
-from collections.abc import Generator, Iterator
+from collections.abc import Callable, Generator, Iterator
+from unittest.mock import patch
 from pathlib import Path
 from typing import Any
 
@@ -530,6 +531,94 @@ def _clear_test_singleton_caches() -> None:
     from tapps_mcp.memory_project_id import uninstall_memory_project_id_patch
 
     uninstall_memory_project_id_patch()
+
+
+def _iter_failed_sub_results(
+    node: Any,
+    path: str = "data",
+    allow: tuple[str, ...] = (),
+) -> Iterator[tuple[str, dict[str, Any]]]:
+    """Yield ``(path, payload)`` for every nested dict that reports failure."""
+    if isinstance(node, dict):
+        looks_failed = bool(node.get("error")) or node.get("success") is False
+        if looks_failed and not node.get("skipped"):
+            yield path, node
+        for key, value in node.items():
+            if key in allow:
+                continue
+            yield from _iter_failed_sub_results(value, f"{path}.{key}", allow)
+    elif isinstance(node, list):
+        for index, value in enumerate(node):
+            yield from _iter_failed_sub_results(value, f"{path}[{index}]", allow)
+
+
+def assert_envelope_consistent(
+    response: dict[str, Any],
+    *,
+    allow: tuple[str, ...] = (),
+) -> None:
+    """Fail if a response claims plain success over a nested failure (TAP-5656).
+
+    A tool may legitimately continue past a best-effort dependency, but it must
+    say so — either ``success: false`` or ``degraded: true``. Reporting an
+    unqualified success while a nested sub-result carries an error is the
+    "envelope lie" that shipped two defects to a consuming project: the caller
+    reads the top level and believes work happened that never did.
+
+    ``allow`` names data keys to skip, for genuinely informational payloads
+    that embed failure-shaped records (a report *about* failures, say).
+    ``skipped`` sub-results are not failures — that flag means never attempted.
+
+    The static counterpart is ``scripts/check-response-envelope.py``; the lint
+    catches the shape at authoring time, this catches the behaviour at runtime.
+    """
+    if response.get("success") is not True or response.get("degraded") is True:
+        return
+
+    failures = list(_iter_failed_sub_results(response.get("data"), allow=allow))
+    if not failures:
+        return
+
+    rendered = "\n".join(f"  {path}: {payload!r}" for path, payload in failures)
+    tool = response.get("tool", "<unknown tool>")
+    raise AssertionError(
+        f"{tool} reported plain success while nested sub-results report failure.\n"
+        f"{rendered}\n"
+        "Pass degraded=True (or success=False) so the caller can see it."
+    )
+
+
+@pytest.fixture
+def envelope_consistent() -> Callable[..., None]:
+    """The :func:`assert_envelope_consistent` invariant, as a fixture."""
+    return assert_envelope_consistent
+
+
+@pytest.fixture(autouse=True)
+def _no_install_drift() -> Generator[None, None, None]:
+    """Decouple ``upgrade_pipeline`` tests from the machine's deployed CLIs.
+
+    ``check_install_drift`` compares the in-process package version against the
+    binaries under ``~/.tapps-mcp/current``, and ``upgrade_pipeline`` refuses to
+    run when they disagree. That made 77 upgrade tests fail the moment the
+    version was bumped, until the developer happened to run ``deploy-local`` —
+    machine state deciding whether the suite passes.
+
+    Drift detection is not what these tests are for, so it reports "clean" by
+    default. Tests that *do* exercise drift (``test_install_drift.py``,
+    ``test_upgrade_integration.py``) patch the same target themselves, and an
+    explicit inner patch takes precedence over this one.
+    """
+    from tapps_core.common.models import InstallDriftDiagnostic
+
+    clean = InstallDriftDiagnostic(
+        drift_detected=False,
+        entries=[],
+        local_install_warning=False,
+        remediation_hint="",
+    )
+    with patch("tapps_mcp.diagnostics.check_install_drift", return_value=clean):
+        yield
 
 
 @pytest.fixture(autouse=True)

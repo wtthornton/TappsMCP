@@ -1742,12 +1742,25 @@ class HttpBrainBridge(BrainBridge):
             gated_used = sorted(get_bridge_used_tools() - self._exposed_tools)
             if gated_used:
                 declared = self._http_headers.get("X-Brain-Profile") or None
-                log_fn = logger.debug if declared in BRAIN_PROFILES_NARROW_OK else logger.warning
-                log_fn(
-                    "brain_bridge.profile_mismatch",
-                    declared_profile=declared,
-                    gated_used_tools=gated_used,
-                )
+                if declared in BRAIN_PROFILES_NARROW_OK:
+                    # Expected by construction — a narrow profile deliberately
+                    # exposes a subset — so this fired on 100% of sessions and
+                    # listed every gated tool. The actionable signal is
+                    # ProfileMismatchError when a gated tool is actually
+                    # invoked; the full list stays available via
+                    # profile_status() for doctor and the health action. Log a
+                    # count so the condition remains observable without noise.
+                    logger.debug(
+                        "brain_bridge.profile_mismatch",
+                        declared_profile=declared,
+                        gated_used_count=len(gated_used),
+                    )
+                else:
+                    logger.warning(
+                        "brain_bridge.profile_mismatch",
+                        declared_profile=declared,
+                        gated_used_tools=gated_used,
+                    )
 
     def profile_status(self) -> dict[str, Any]:
         """Snapshot the negotiated brain capability profile (TAP-1629).

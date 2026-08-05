@@ -7,9 +7,12 @@ auto-populate with mocked analyzers, parse_stories_json, and the
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
 from typing import Any
 from unittest.mock import MagicMock, patch
+
+import pytest
 
 from docs_mcp.generators.epics import EpicConfig, EpicGenerator, EpicStoryStub
 from tests.helpers import make_settings as _make_settings
@@ -1708,3 +1711,73 @@ class TestStripWireTagsStory:
         content = (tmp_path / written_to).read_text(encoding="utf-8")
         assert "</purpose_and_intent>" not in content
         assert "login is safer" in content
+
+
+class TestParseStoriesJson:
+    """Every item is parsed or raises — none are silently dropped.
+
+    A caller passing a JSON array of plain title strings previously got
+    ``story_count=0`` and a success response, and the empty story list then
+    triggered the keyword suggestion engine, so the epic shipped with
+    boilerplate like "Config Setup (suggested)" in place of the real titles.
+    """
+
+    def test_array_of_title_strings_is_honoured(self) -> None:
+        titles = [
+            "Phase 0: add a mypy error-count ratchet",
+            "Phase 1: fix the two systemic root causes",
+            "Phase 2: mechanical sweep of low-risk edit sites",
+        ]
+        stories = EpicGenerator.parse_stories_json(json.dumps(titles))
+        assert [s.title for s in stories] == titles
+
+    def test_array_of_objects_still_parses_all_fields(self) -> None:
+        raw = [{"title": "Ship it", "points": 3, "description": "d", "ac_count": 2}]
+        (story,) = EpicGenerator.parse_stories_json(json.dumps(raw))
+        assert (story.title, story.points, story.description, story.ac_count) == (
+            "Ship it",
+            3,
+            "d",
+            2,
+        )
+
+    def test_mixed_strings_and_objects(self) -> None:
+        stories = EpicGenerator.parse_stories_json(json.dumps(["A", {"title": "B"}]))
+        assert [s.title for s in stories] == ["A", "B"]
+
+    def test_pre_parsed_list_of_strings(self) -> None:
+        """MCP clients may hand over typed values rather than a JSON string."""
+        stories = EpicGenerator.parse_stories_json(["A", "B"])
+        assert [s.title for s in stories] == ["A", "B"]
+
+    def test_empty_string_item_raises(self) -> None:
+        with pytest.raises(ValueError, match="index 0 is an empty string"):
+            EpicGenerator.parse_stories_json(json.dumps([""]))
+
+    @pytest.mark.parametrize("item", [123, None, 4.5, True])
+    def test_uninterpretable_item_raises_rather_than_dropping(self, item: Any) -> None:
+        with pytest.raises(ValueError, match="must be an object or a title string"):
+            EpicGenerator.parse_stories_json(json.dumps([item]))
+
+    def test_blank_and_empty_inputs_return_no_stories(self) -> None:
+        assert EpicGenerator.parse_stories_json("") == []
+        assert EpicGenerator.parse_stories_json("   ") == []
+        assert EpicGenerator.parse_stories_json(json.dumps([])) == []
+
+    def test_non_list_json_raises(self) -> None:
+        with pytest.raises(ValueError, match="must be a list"):
+            EpicGenerator.parse_stories_json(json.dumps({"title": "not a list"}))
+
+    def test_malformed_json_raises(self) -> None:
+        with pytest.raises(ValueError, match="Invalid JSON for stories"):
+            EpicGenerator.parse_stories_json("Phase 0\nPhase 1")
+
+    def test_string_titles_survive_into_rendered_epic(self) -> None:
+        """The end-to-end symptom: no "(suggested)" boilerplate substitution."""
+        config = _make_config(
+            title="CI pipeline deploy work",
+            stories=EpicGenerator.parse_stories_json(json.dumps(["Real story one"])),
+        )
+        content = EpicGenerator().generate(config)
+        assert "Real story one" in content
+        assert "(suggested)" not in content

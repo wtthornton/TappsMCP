@@ -2489,6 +2489,57 @@ class TestNegotiateProfile:
         assert status["profile_mismatch"] is True
 
     @pytest.mark.asyncio
+    async def test_narrow_profile_logs_a_count_not_the_whole_tool_list(self) -> None:
+        """A narrow profile gates tools by design, so this fires every session.
+
+        Listing all ~30 gated tools on every session start is noise: the
+        actionable signal is ProfileMismatchError at invocation time, and the
+        full list stays available through profile_status() for doctor. Log a
+        count so the condition is still observable.
+        """
+        bridge = _make_http_bridge(
+            headers={"Authorization": "Bearer t", "X-Brain-Profile": "reviewer"}
+        )
+        bridge._http_client = AsyncMock()
+        bridge._http_client.post = _negotiation_post(_CODER_PROFILE_TOOLS)
+        bridge._session_id = "test-session"
+
+        with patch("tapps_core.brain_bridge.logger") as mock_logger:
+            await bridge._negotiate_profile_locked()
+
+        mock_logger.warning.assert_not_called()
+        mismatch_calls = [
+            call
+            for call in mock_logger.debug.call_args_list
+            if call.args and call.args[0] == "brain_bridge.profile_mismatch"
+        ]
+        assert len(mismatch_calls) == 1
+        kwargs = mismatch_calls[0].kwargs
+        assert kwargs["declared_profile"] == "reviewer"
+        assert kwargs["gated_used_count"] > 0
+        assert "gated_used_tools" not in kwargs
+        # No information is lost — the full list is still introspectable.
+        assert bridge.profile_status()["gated_used_tools"]
+
+    @pytest.mark.asyncio
+    async def test_unexpected_profile_still_warns_with_the_full_list(self) -> None:
+        """A non-narrow profile missing tools is a real misconfiguration."""
+        bridge = _make_http_bridge(
+            headers={"Authorization": "Bearer t", "X-Brain-Profile": "server"}
+        )
+        bridge._http_client = AsyncMock()
+        bridge._http_client.post = _negotiation_post(_CODER_PROFILE_TOOLS)
+        bridge._session_id = "test-session"
+
+        with patch("tapps_core.brain_bridge.logger") as mock_logger:
+            await bridge._negotiate_profile_locked()
+
+        mock_logger.warning.assert_called_once()
+        kwargs = mock_logger.warning.call_args.kwargs
+        assert kwargs["declared_profile"] == "server"
+        assert kwargs["gated_used_tools"]
+
+    @pytest.mark.asyncio
     async def test_tools_list_failure_leaves_short_circuit_disabled(self) -> None:
         """A flaky brain must not block legitimate calls — when tools/list
         fails the bridge falls back to the wire as authoritative.

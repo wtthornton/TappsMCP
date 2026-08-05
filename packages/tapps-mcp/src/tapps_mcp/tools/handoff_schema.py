@@ -218,7 +218,27 @@ def lint_handoff(
     if doc.open_items and _MET_CLAIM.search(success_text):
         result.warnings.append("Success criterion says MET but Open items remain")
 
+    # The handoff template naturally produces bodies past the brain's per-value
+    # cap, and the mirror then fails after the file has already been written.
+    # Warn while the draft can still be shortened rather than at save time.
+    cap = _brain_max_value_length()
+    body_length = len(doc.raw_text)
+    if body_length > cap:
+        result.warnings.append(
+            f"Handoff is {body_length} chars, over the brain value cap of {cap} — "
+            "the cross-session mirror will be rejected; shorten it before saving"
+        )
+
     return result
+
+
+def _brain_max_value_length() -> int:
+    """The brain's per-value character cap (best-effort)."""
+    try:
+        from tapps_brain.models import MAX_VALUE_LENGTH
+    except ImportError:  # pragma: no cover - brain always installed in practice
+        return 4096
+    return int(MAX_VALUE_LENGTH)
 
 
 def handoff_sections_from_doc(doc: HandoffDocument) -> dict[str, Any]:

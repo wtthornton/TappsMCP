@@ -1627,6 +1627,10 @@ async def tapps_handoff_save(
     _record_execution("tapps_handoff_save", start)
 
     from tapps_mcp.tools.handoff_schema import handoff_sections_from_doc
+    from tapps_mcp.tools.handoff_write import best_effort_status
+
+    mirror_status = best_effort_status(result.brain_mirror)
+    session_end_status = best_effort_status(result.session_end)
 
     data = {
         "file_path": result.file_path,
@@ -1639,9 +1643,48 @@ async def tapps_handoff_save(
             "warnings": result.lint.warnings,
         },
         "brain_mirror": result.brain_mirror,
+        "brain_mirror_status": mirror_status,
         "session_end": result.session_end,
+        "session_end_status": session_end_status,
     }
-    return success_response("tapps_handoff_save", elapsed_ms, data)
+
+    # Both sub-results are best-effort and both were embedded in a plain
+    # success envelope. A failed mirror means the handoff file exists but the
+    # cross-session copy does not; a failed session-end means the feedback loop
+    # never closed. Callers reading only the top level saw neither (TAP-5656).
+    failed = [
+        ("Brain mirror", result.brain_mirror or {}),
+    ] if mirror_status == "failed" else []
+    if session_end_status == "failed":
+        failed.append(("Session end", result.session_end or {}))
+
+    if not failed:
+        return success_response("tapps_handoff_save", elapsed_ms, data)
+
+    warnings: list[str] = []
+    next_steps: list[str] = []
+    for label, payload in failed:
+        detail = str(
+            payload.get("detail") or payload.get("error") or payload.get("reason") or "unknown error"
+        )
+        warnings.append(f"{label} failed ({detail})")
+        cap = payload.get("max_value_length")
+        length = payload.get("value_length")
+        if isinstance(cap, int) and isinstance(length, int) and length > cap:
+            next_steps.append(
+                f"{label}: {length} chars against a {cap}-char cap — shorten it and re-run."
+            )
+
+    warnings.append(f"The handoff file at {result.file_path} is intact.")
+    next_steps.insert(0, "; ".join(warnings))
+    data["warnings"] = warnings
+    return success_response(
+        "tapps_handoff_save",
+        elapsed_ms,
+        data,
+        degraded=True,
+        next_steps=next_steps,
+    )
 
 
 async def tapps_session_end() -> dict[str, Any]:

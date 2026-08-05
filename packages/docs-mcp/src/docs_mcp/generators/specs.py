@@ -448,17 +448,19 @@ class PRDGenerator:
     def parse_phases_json(phases_json: str) -> list[PRDPhase]:
         """Parse a JSON string into a list of PRDPhase objects.
 
-        Accepts a JSON array of objects with keys: name, description,
-        requirements.
+        Accepts a JSON array whose items are either objects with the keys
+        name, description, requirements, or plain strings treated as names.
 
         Args:
             phases_json: JSON string representing phases.
 
         Returns:
-            List of PRDPhase objects.
+            List of PRDPhase objects, one per input item.
 
         Raises:
-            ValueError: If the JSON is malformed or not a list.
+            ValueError: If the JSON is malformed, is not a list, or contains an
+                item that is neither an object nor a non-empty name string.
+                Every item is either parsed or raises — none are dropped.
         """
         if not phases_json.strip():
             return []
@@ -473,12 +475,36 @@ class PRDGenerator:
             msg = "Phases JSON must be a list of objects"
             raise ValueError(msg)
 
-        return [
-            PRDPhase(
-                name=str(item.get("name", "Unnamed")),
-                description=str(item.get("description", "")),
-                requirements=[str(r) for r in item.get("requirements", [])],
+        phases: list[PRDPhase] = []
+        for index, item in enumerate(raw):
+            # Mirrors EpicGenerator.parse_stories_json: a bare string is the
+            # obvious way to express "just the name", and the previous
+            # comprehension filtered non-dict items out silently, so an array
+            # of strings produced zero phases under a success response.
+            if isinstance(item, str):
+                name = item.strip()
+                if not name:
+                    msg = f"Phase at index {index} is an empty string"
+                    raise ValueError(msg)
+                phases.append(PRDPhase(name=name))
+                continue
+
+            if not isinstance(item, dict):
+                msg = (
+                    f"Phase at index {index} must be an object or a name string, "
+                    f"got {type(item).__name__}"
+                )
+                raise ValueError(msg)
+
+            requirements_raw = item.get("requirements", [])
+            requirements = (
+                [str(r) for r in requirements_raw] if isinstance(requirements_raw, list) else []
             )
-            for item in raw
-            if isinstance(item, dict)
-        ]
+            phases.append(
+                PRDPhase(
+                    name=str(item.get("name", "Unnamed")),
+                    description=str(item.get("description", "")),
+                    requirements=requirements,
+                )
+            )
+        return phases

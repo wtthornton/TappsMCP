@@ -1,4 +1,5 @@
-# MCP guardrails: tool-budget lint + tool-description length budget.
+# MCP guardrails: tool-budget lint, tool-description length budget, and
+# response-envelope consistency.
 # PR-only — checks already pass before merge; push re-runs were pure duplicate cost.
 name: mcp-guardrails
 
@@ -10,6 +11,7 @@ on:
       - "docs/architecture/tool-budget.md"
       - "docs/ARCHITECTURE.md"
       - "scripts/check-tool-budget.py"
+      - "scripts/check-response-envelope.py"
       - "packages/tapps-mcp/tests/integration/test_tool_descriptions.py"
       - ".github/workflows/mcp-guardrails.yml"
       - "README.md"
@@ -68,3 +70,22 @@ jobs:
 
       - name: Run tool description budget test
         run: uv run --no-sync pytest packages/tapps-mcp/tests/integration/test_tool_descriptions.py -v
+
+  # TAP-5660: two defects reached a consuming project reporting success while a
+  # nested sub-result had failed. Reviewers do not reliably notice an absent
+  # else-branch; a failing build does. No uv sync — the lint is stdlib-only and
+  # runs in seconds.
+  response-envelope:
+    name: Response envelope consistency
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Self-test check-response-envelope.py
+        run: python3 scripts/check-response-envelope.py --test
+
+      - name: Check responses for unexamined best-effort sub-results
+        run: python3 scripts/check-response-envelope.py

@@ -527,11 +527,20 @@ class TestParsePhases:
         with pytest.raises(ValueError, match="must be a list"):
             PRDGenerator.parse_phases_json('{"name": "oops"}')
 
-    def test_skips_non_dict_items(self) -> None:
-        raw = json.dumps([{"name": "Valid"}, "not-a-dict", 42])
+    def test_string_item_is_treated_as_a_name(self) -> None:
+        # Replaces test_skips_non_dict_items (TAP-5656). That test asserted the
+        # defect: a caller's item vanished and the generator reported success
+        # over a document missing a phase. Every item is now honoured or
+        # refused — the parser never returns fewer phases than it was given.
+        raw = json.dumps([{"name": "Valid"}, "Also valid"])
         phases = PRDGenerator.parse_phases_json(raw)
-        assert len(phases) == 1
-        assert phases[0].name == "Valid"
+        assert len(phases) == 2
+        assert [p.name for p in phases] == ["Valid", "Also valid"]
+
+    def test_uninterpretable_item_raises(self) -> None:
+        raw = json.dumps([{"name": "Valid"}, 42])
+        with pytest.raises(ValueError, match="must be an object or a name string"):
+            PRDGenerator.parse_phases_json(raw)
 
 
 # ---------------------------------------------------------------------------
