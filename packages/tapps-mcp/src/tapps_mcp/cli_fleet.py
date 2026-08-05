@@ -56,14 +56,22 @@ def fleet_status_cmd() -> None:
     click.echo(f"Code root: {result['code_root']}")
     click.echo(f"Env: {result['env_file']}")
     for server_id, row in result["servers"].items():
-        state = "ok" if row["reachable"] else ("pid" if row["alive"] else "down")
-        color = "green" if row["reachable"] else ("yellow" if row["alive"] else "red")
-        click.echo(
-            click.style(
-                f"  {server_id}: {state} pid={row['pid']} url={row['url']}",
-                fg=color,
-            )
-        )
+        # A reachable port is not proof the fleet's own server answered it —
+        # report the orphan case rather than calling it ok (TAP-5630).
+        if row["orphaned"]:
+            state, color = "orphan", "yellow"
+        elif row["reachable"]:
+            state, color = "ok", "green"
+        elif row["alive"]:
+            state, color = "pid", "yellow"
+        else:
+            state, color = "down", "red"
+        detail = f"  {server_id}: {state} pid={row['pid']}"
+        if row["orphaned"]:
+            detail += f" owner={row['owner_pid']}"
+        if row["release"]:
+            detail += f" release={row['release']}"
+        click.echo(click.style(f"{detail} url={row['url']}", fg=color))
 
 
 @fleet_group.command("restart")
