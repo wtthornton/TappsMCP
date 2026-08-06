@@ -110,8 +110,9 @@ TOOL_REASONS: dict[str, str] = {
         "open-ended/latest → brain web_research; URL scrape → research_fetch."
     ),
     "tapps_validate_config": (
-        "Validate Dockerfile, docker-compose, YAML manifests (config_type=yaml_manifest), "
-        "or other infra config against best practices."
+        "Validate Dockerfile, docker-compose, MCP server configs (.mcp.json), "
+        "YAML manifests (config_type=yaml_manifest), or other infra config "
+        "against best practices."
     ),
     "tapps_checklist": (
         "Call before declaring work complete to verify no required steps were skipped."

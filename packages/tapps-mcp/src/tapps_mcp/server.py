@@ -1569,23 +1569,27 @@ def _attach_config_structured_output(resp: dict[str, Any], result: Any) -> None:
 
 
 def tapps_validate_config(file_path: str, config_type: str = "auto") -> dict[str, Any]:
-    """Validates Dockerfile, docker-compose, GitHub Actions, and other
+    """Validates Dockerfile, docker-compose, MCP server configs, and other
     infra config files against a curated rule set (pinned base images,
     non-root user, no plaintext secrets, schema conformance).
 
     Call this after editing ``Dockerfile``, ``docker-compose*.yaml``,
-    ``.github/workflows/*.yaml``, or top-level ``*.json``/``*.toml``
-    config. Skip for application Python code (use ``tapps_quick_check``)
-    and for ``.tapps-mcp.yaml`` itself (use ``tapps_doctor``).
+    ``.mcp.json`` / ``.cursor/mcp.json`` / ``.vscode/mcp.json``, or a
+    Kubernetes-style manifest. Skip for application Python code (use
+    ``tapps_quick_check``) and for ``.tapps-mcp.yaml`` itself (use
+    ``tapps_doctor``).
+
+    MCP entries are checked per transport: stdio needs ``command``,
+    remote (``http`` / ``sse``) needs ``url`` and carries no ``command``.
 
     Args:
         file_path: Path to the config file inside the project root.
             Returns ``error.code=path_denied`` for paths outside the
             root or with traversal segments.
-        config_type: One of ``"dockerfile"``, ``"docker-compose"``,
-            ``"github-actions"``, ``"json"``, ``"yaml"``, ``"toml"``,
-            or ``"auto"`` (default) to detect from file name and
-            shebang. Any other value returns
+        config_type: One of ``"dockerfile"``, ``"docker_compose"``,
+            ``"mcp"``, ``"yaml_manifest"``, ``"websocket"``, ``"mqtt"``,
+            ``"influxdb"``, or ``"auto"`` (default) to detect from file
+            name and content. Any other value returns
             ``error.code=invalid_config_type``.
     """
     start = time.perf_counter_ns()

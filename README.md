@@ -683,7 +683,9 @@ Quick index:
 
 ### tapps_validate_config
 
-**What it does:** Validates a configuration or infrastructure file against best-practice rules. Supports **Dockerfile** (e.g. non-root user, pinning versions, multi-stage usage), **docker-compose** (e.g. resource limits, env handling), and code/config containing **WebSocket**, **MQTT**, or **InfluxDB** patterns. You pass a file path and optionally a **config_type**; with `auto`, the type is inferred from path and content. Returns valid/invalid, a list of findings with severity (critical, warning), and optional suggestions.
+**What it does:** Validates a configuration or infrastructure file against best-practice rules. Supports **Dockerfile** (e.g. non-root user, pinning versions, multi-stage usage), **docker-compose** (e.g. resource limits, env handling), **MCP server configs** (`.mcp.json`, `.cursor/mcp.json`, `.vscode/mcp.json`), **YAML manifests**, and code/config containing **WebSocket**, **MQTT**, or **InfluxDB** patterns. You pass a file path and optionally a **config_type**; with `auto`, the type is inferred from path and content. Returns valid/invalid, a list of findings with severity (critical, warning), and optional suggestions.
+
+MCP entries are validated **per transport** (TAP-5723): a stdio entry needs `command` (and should declare `args`), while a remote entry — `type` of `http`, `sse`, `streamable-http`, or Cursor's `streamableHttp` — needs `url` and legitimately carries no `command`. Transport is read from `type`, falling back to the presence of `url` when `type` is absent or spelled a way the validator does not recognize.
 
 **Why use it:** Misconfigured Docker or infra leads to security and reliability issues that are easy to miss. This tool gives deterministic, rule-based feedback so the AI (or human) can fix problems before merge or deploy. Use when adding or changing Dockerfiles, docker-compose files, or the supported config patterns so the result matches team and operational standards.
 

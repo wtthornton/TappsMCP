@@ -60,6 +60,59 @@ class TestNltHttpFleet:
         assert is_valid_http_fleet_mcp_entry(claude_entry) is True
         assert is_valid_http_fleet_mcp_entry({"type": "stdio", "command": "x"}) is False
 
+    def test_is_remote_mcp_entry_covers_transport_spellings(self) -> None:
+        """TAP-5723: hosts spell remote transports differently; all mean 'no command'."""
+        from tapps_mcp.distribution.nlt_http_fleet import is_remote_mcp_entry
+
+        for spelling in ("http", "sse", "streamable-http", "streamableHttp", "HTTP"):
+            assert is_remote_mcp_entry({"type": spelling, "url": "http://x/mcp"}) is True, spelling
+        assert is_remote_mcp_entry({"type": "stdio", "command": "tapps-mcp"}) is False
+        # `type` is optional; a bare `url` implies remote, a bare command stdio.
+        assert is_remote_mcp_entry({"url": "http://x/mcp"}) is True
+        assert is_remote_mcp_entry({"command": "tapps-mcp", "args": []}) is False
+        # An explicit stdio type is never overridden by shape.
+        assert is_remote_mcp_entry({"type": "stdio", "url": "http://x/mcp"}) is False
+
+    def test_describe_problem_names_the_real_defect(self, tmp_path: Path) -> None:
+        """TAP-5723: a remote entry has no `command` to be 'unexpected'."""
+        from tapps_mcp.distribution.nlt_http_fleet import describe_http_fleet_entry_problem
+
+        assert "no usable 'url'" in describe_http_fleet_entry_problem({"type": "http"})
+        assert "Streamable HTTP" in describe_http_fleet_entry_problem(
+            {"type": "sse", "url": "http://x/mcp"}
+        )
+        assert PROJECT_ROOT_HEADER in describe_http_fleet_entry_problem(
+            {"type": "http", "url": "http://x/mcp"}
+        )
+        assert "unexpanded template" in describe_http_fleet_entry_problem(
+            {
+                "type": "http",
+                "url": "http://x/mcp",
+                "headers": {PROJECT_ROOT_HEADER: "${workspaceFolder}"},
+            }
+        )
+
+    def test_doctor_does_not_blame_command_on_remote_entry(self, tmp_path: Path) -> None:
+        """TAP-5723: doctor reported "Unexpected command: ''" for every remote entry."""
+        from tapps_mcp.distribution.doctor_mcp import _validate_mcp_entry_command
+
+        valid = build_nlt_http_mcp_entry("nlt-build", project_root=tmp_path)
+        assert _validate_mcp_entry_command(valid, tmp_path / ".mcp.json") is None
+
+        headerless = {"type": "http", "url": "http://127.0.0.1:8760/mcp"}
+        error = _validate_mcp_entry_command(headerless, tmp_path / ".mcp.json")
+        assert error is not None, "a fleet entry missing its project-root header is still broken"
+        assert "Unexpected command" not in error
+        assert PROJECT_ROOT_HEADER in error
+
+    def test_stdio_entry_still_validated_by_command(self, tmp_path: Path) -> None:
+        """The transport branch must not loosen the stdio path."""
+        from tapps_mcp.distribution.doctor_mcp import _validate_mcp_entry_command
+
+        error = _validate_mcp_entry_command({"command": "not-tapps", "args": []}, tmp_path / "m")
+        assert error is not None
+        assert "Unexpected command" in error
+
     def test_resolve_transport_explicit(self) -> None:
         assert resolve_mcp_transport(None, explicit="http") == "http"
 

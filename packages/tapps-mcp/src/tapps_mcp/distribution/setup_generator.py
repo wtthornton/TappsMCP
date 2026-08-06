@@ -1730,8 +1730,7 @@ def _generate_config(
                         )
             else:
                 click.echo(
-                    f"  Would write {host} wrapper: "
-                    f"{project_root / _stdio_wrapper_rel(host)}"
+                    f"  Would write {host} wrapper: {project_root / _stdio_wrapper_rel(host)}"
                 )
         return True
 
@@ -2048,10 +2047,19 @@ def _validate_config_file(config_path: Path, servers_key: str) -> str | None:
     if not isinstance(entry, dict):
         return f"tapps-mcp / nlt-build entry not found in {config_path} under '{servers_key}'"
 
-    from tapps_mcp.distribution.nlt_http_fleet import is_valid_http_fleet_mcp_entry
+    from tapps_mcp.distribution.nlt_http_fleet import (
+        describe_http_fleet_entry_problem,
+        is_remote_mcp_entry,
+        is_valid_http_fleet_mcp_entry,
+    )
 
     if is_valid_http_fleet_mcp_entry(entry):
         return None
+
+    # A remote entry has no `command` to be "unexpected" (TAP-5723). Report
+    # what is actually wrong with it rather than blaming an absent command.
+    if is_remote_mcp_entry(entry):
+        return f"{describe_http_fleet_entry_problem(entry)} in {config_path}"
 
     command = entry.get("command", "")
     args = entry.get("args", [])
@@ -2667,9 +2675,7 @@ def _format_upgrade_result(result: dict[str, Any], *, dry_run: bool = False) -> 
             click.echo(f"  mcp_bundle: {mcp_bundle}")
         if mcp_bundle_note:
             click.echo(f"  note: {mcp_bundle_note}")
-        click.echo(
-            "  opt-down: tapps-mcp mcp-bundle set developer|minimal|… then reload MCP"
-        )
+        click.echo("  opt-down: tapps-mcp mcp-bundle set developer|minimal|… then reload MCP")
         click.echo("")
 
     # AGENTS.md

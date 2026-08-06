@@ -8,6 +8,7 @@ Consumer ``.cursor/mcp.json`` entries use ``streamableHttp`` URLs plus
 from __future__ import annotations
 
 import os
+import re
 from pathlib import Path
 from typing import Any, Final, Literal
 
@@ -192,6 +193,50 @@ def is_valid_http_fleet_mcp_entry(entry: dict[str, Any]) -> bool:
         return False
     root = headers.get(PROJECT_ROOT_HEADER)
     return isinstance(root, str) and bool(root.strip()) and "${" not in root
+
+
+def is_remote_mcp_entry(entry: dict[str, Any]) -> bool:
+    """Return True when *entry* declares a remote (non-stdio) transport.
+
+    Remote entries carry ``url``/``headers`` and legitimately have no
+    ``command``, so callers must not judge them by one (TAP-5723). Spellings
+    vary across hosts -- ``http``, ``sse``, ``streamable-http``, Cursor's
+    camel-case ``streamableHttp`` -- so match on normalized letters rather
+    than an enumerated list that breaks on the next variant. An unrecognized
+    or absent ``type`` falls back to shape: remote entries carry a ``url``.
+    """
+    normalized = re.sub(r"[^a-z]", "", str(entry.get("type", "")).lower())
+    if "http" in normalized or normalized == "sse":
+        return True
+    if normalized == "stdio":
+        return False
+    return "url" in entry
+
+
+def describe_http_fleet_entry_problem(entry: dict[str, Any]) -> str:
+    """Explain why a remote *entry* is not a usable NLT fleet HTTP block.
+
+    Only meaningful when ``is_valid_http_fleet_mcp_entry`` is False. Exists so
+    callers report the real defect instead of ``Unexpected command: ''``, which
+    is what a stdio-shaped check says about every remote entry.
+    """
+    url = entry.get("url")
+    if not isinstance(url, str) or not url.startswith("http"):
+        return "remote entry has no usable 'url'"
+    entry_type = entry.get("type")
+    if entry_type not in HTTP_FLEET_ENTRY_TYPES:
+        expected = " or ".join(repr(t) for t in sorted(HTTP_FLEET_ENTRY_TYPES))
+        return (
+            f"remote entry uses transport {entry_type!r}; the NLT fleet speaks "
+            f"Streamable HTTP ({expected})"
+        )
+    headers = entry.get("headers")
+    root = headers.get(PROJECT_ROOT_HEADER) if isinstance(headers, dict) else None
+    if not isinstance(root, str) or not root.strip():
+        return f"remote entry is missing the {PROJECT_ROOT_HEADER!r} header"
+    if "${" in root:
+        return f"{PROJECT_ROOT_HEADER!r} header is an unexpanded template: {root!r}"
+    return "remote entry is not a valid NLT fleet HTTP block"
 
 
 def fleet_server_launch_specs() -> list[tuple[str, str, list[str], int]]:
