@@ -20,7 +20,12 @@ from tapps_mcp.distribution.doctor_mcp import (
 )
 from tapps_mcp.distribution.doctor_result import CheckResult, doctor_facade_attr
 
-__all__ = ["check_brain_health", "check_brain_version_floor", "check_brain_version_delta", "_requires"]
+__all__ = [
+    "_requires",
+    "check_brain_health",
+    "check_brain_version_delta",
+    "check_brain_version_floor",
+]
 
 
 def check_brain_health(root: Path) -> CheckResult:

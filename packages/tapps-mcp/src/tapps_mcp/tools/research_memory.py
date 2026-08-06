@@ -14,7 +14,7 @@ from typing import Any
 
 import structlog
 
-from tapps_mcp.tools.research import ResearchRoute, VALID_FRESHNESS
+from tapps_mcp.tools.research import VALID_FRESHNESS, ResearchRoute
 
 logger = structlog.get_logger(__name__)
 

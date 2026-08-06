@@ -1,12 +1,23 @@
 #!/usr/bin/env bash
 # TappsMCP git pre-commit hook (TAP-979)
 # Runs `tapps-mcp validate-changed --quick` on staged Python files.
-# Bypass with TAPPS_SKIP_GATE=1 (logged to stderr).
+# Bypass with TAPPS_SKIP_GATE=1, logged to .tapps-mcp/.bypass-log.jsonl.
 
 set -e
 
+COMMIT_LOG_DIR=".tapps-mcp"
+
 if [ "${TAPPS_SKIP_GATE:-}" = "1" ]; then
-  echo "tapps-mcp pre-commit: bypassed via TAPPS_SKIP_GATE=1" >&2
+  # Log to the same ledger as the pre-push bypass. Echoing to stderr alone
+  # left commit-gate bypasses with no durable trace, so nobody could count
+  # them and `tapps doctor` under-reported bypass pressure.
+  mkdir -p "$COMMIT_LOG_DIR" 2>/dev/null || true
+  ts="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+  staged="$(git diff --cached --name-only --diff-filter=ACM | paste -sd, - || true)"
+  printf '{"ts":"%s","hook":"pre-commit","reason":"TAPPS_SKIP_GATE=1","staged":"%s"}\n' \
+    "$ts" "$staged" \
+    >> "$COMMIT_LOG_DIR/.bypass-log.jsonl" 2>/dev/null || true
+  echo "tapps-mcp pre-commit: bypassed via TAPPS_SKIP_GATE=1. Logged to $COMMIT_LOG_DIR/.bypass-log.jsonl" >&2
   exit 0
 fi
 

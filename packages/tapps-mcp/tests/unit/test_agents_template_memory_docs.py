@@ -2,9 +2,9 @@
 
 from __future__ import annotations
 
-import pytest
-
 import re
+
+import pytest
 
 from tapps_mcp.prompts.prompt_loader import load_agents_template, load_platform_rules
 from tapps_mcp.server_memory_tools import SAVE_SCOPES
@@ -126,25 +126,35 @@ class TestMemorySystemsSection:
 
     @pytest.mark.parametrize("platform", ["claude", "cursor"])
     @pytest.mark.parametrize("level", ["high", "medium", "low"])
-    def test_platform_rules_document_cross_session_handoff(
-        self, platform: str, level: str
-    ) -> None:
+    def test_platform_rules_document_cross_session_handoff(self, platform: str, level: str) -> None:
         """Each platform-rules template (CLAUDE.md / .cursorrules) must document
-        the cross-session handoff pattern. Same drift-catch as the AGENTS.md test."""
+        the cross-session handoff pattern. Same drift-catch as the AGENTS.md test.
+
+        Asserts the guidance, not a literal heading. TAP-5672's token trim
+        rephrased ``**Cross-session handoff:**`` to "... for cross-session
+        handoffs" in platform_claude_medium.md while keeping both commands, so
+        the old exact-string match failed on wording alone with the substance
+        fully intact.
+        """
         content = load_platform_rules(platform=platform, engagement_level=level)
-        assert "Cross-session handoff" in content, (
-            f"platform_{platform}_{level}.md is missing 'Cross-session handoff' "
+        handoff_lines = [
+            line for line in content.splitlines() if "cross-session handoff" in line.lower()
+        ]
+        assert handoff_lines, (
+            f"platform_{platform}_{level}.md is missing cross-session handoff "
             "guidance. See packages/tapps-mcp/src/tapps_mcp/prompts/platform_*.md."
         )
-        handoff_section = content.split("Cross-session handoff")[1].split("\n")[0]
-        assert "tapps-handoff-session" in handoff_section
-        assert "tapps-continue-session" in handoff_section
+        assert any(
+            "tapps-handoff-session" in line and "tapps-continue-session" in line
+            for line in handoff_lines
+        ), (
+            f"platform_{platform}_{level}.md mentions cross-session handoff but does "
+            "not name both /tapps-handoff-session and /tapps-continue-session."
+        )
 
     @pytest.mark.parametrize("platform", ["claude", "cursor"])
     @pytest.mark.parametrize("level", ["high", "medium", "low"])
-    def test_platform_rules_document_call_graph(
-        self, platform: str, level: str
-    ) -> None:
+    def test_platform_rules_document_call_graph(self, platform: str, level: str) -> None:
         """Platform rules must mention Epic 114 call-graph tools (ADR-0017)."""
         content = load_platform_rules(platform=platform, engagement_level=level)
         assert "tapps_call_graph" in content, (
