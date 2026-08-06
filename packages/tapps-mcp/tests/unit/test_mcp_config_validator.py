@@ -144,6 +144,145 @@ class TestValidateMcpConfig:
         assert result.valid is False
         assert any("missing 'command'" in f.message for f in result.findings)
 
+    def test_mcp_config_http_server_needs_no_command(self) -> None:
+        """Remote `http` servers carry url/headers, not command/args.
+
+        Regression: the validator used to demand `command` from every
+        server, so a working all-remote config reported one critical and
+        one warning per server. NLTWeb's six `nlt-*` servers produced 12
+        findings on a config that had always worked.
+        """
+        config = {
+            "mcpServers": {
+                "nlt-build": {
+                    "type": "http",
+                    "url": "http://localhost:8720/mcp",
+                    "headers": {"Authorization": "Bearer x"},
+                },
+                "nlt-memory": {
+                    "type": "http",
+                    "url": "http://localhost:8720/mcp",
+                    "headers": {"Authorization": "Bearer x"},
+                },
+            }
+        }
+        result = validate_mcp_config(".mcp.json", json.dumps(config))
+        assert result.valid is True
+        assert result.findings == []
+
+    def test_mcp_config_sse_server_needs_no_command(self) -> None:
+        """`sse` is a remote transport too."""
+        config = {"mcpServers": {"remote": {"type": "sse", "url": "https://example.com/sse"}}}
+        result = validate_mcp_config("mcp.json", json.dumps(config))
+        assert result.valid is True
+        assert not any(f.severity == "critical" for f in result.findings)
+
+    def test_mcp_config_http_server_missing_url_is_critical(self) -> None:
+        """A remote server without `url` is genuinely broken."""
+        config = {"mcpServers": {"remote": {"type": "http"}}}
+        result = validate_mcp_config("mcp.json", json.dumps(config))
+        assert result.valid is False
+        critical = [f for f in result.findings if f.severity == "critical"]
+        assert len(critical) == 1
+        assert "missing 'url'" in critical[0].message
+
+    @pytest.mark.parametrize(
+        "type_value",
+        ["http", "sse", "streamable-http", "streamableHttp", "streamable_http", "HTTP"],
+    )
+    def test_mcp_config_remote_transport_spellings(self, type_value: str) -> None:
+        """Hosts spell remote transports differently; all mean 'no command'.
+
+        Cursor writes `streamableHttp`, which an enumerated list of
+        lowercase names would miss.
+        """
+        config = {
+            "mcpServers": {"remote": {"type": type_value, "url": "http://127.0.0.1:8760/mcp"}}
+        }
+        result = validate_mcp_config("mcp.json", json.dumps(config))
+        assert result.valid is True, f"{type_value} should not require 'command'"
+        assert result.findings == []
+
+    @pytest.mark.parametrize("url_value", ["", "   ", None, 123])
+    def test_mcp_config_remote_blank_url_is_critical(self, url_value: object) -> None:
+        """A blank or non-string `url` is as unusable as a missing one.
+
+        A bare `"url" in config` presence check scored these clean, which is
+        the same false-negative the transport fix exists to avoid — inverted.
+        """
+        config = {"mcpServers": {"remote": {"type": "http", "url": url_value}}}
+        result = validate_mcp_config("mcp.json", json.dumps(config))
+        assert result.valid is False
+        assert any(f.severity == "critical" and "'url'" in f.message for f in result.findings)
+
+    @pytest.mark.parametrize("command_value", ["", "   ", None, 123])
+    def test_mcp_config_stdio_blank_command_is_critical(self, command_value: object) -> None:
+        """Same tightening on the stdio side; an empty `command` cannot spawn."""
+        config = {"mcpServers": {"local": {"type": "stdio", "command": command_value, "args": []}}}
+        result = validate_mcp_config("mcp.json", json.dumps(config))
+        assert result.valid is False
+        assert any(f.severity == "critical" and "'command'" in f.message for f in result.findings)
+
+    def test_mcp_config_unrecognized_transport_infers_from_url(self) -> None:
+        """An unknown `type` spelling falls back to shape, not to stdio.
+
+        Matching normalized letters still leaves `sse` an exact compare, so a
+        variant like `server-sent-events` would otherwise be demanded a
+        `command` it will never have.
+        """
+        config = {"mcpServers": {"remote": {"type": "server-sent-events", "url": "https://x/mcp"}}}
+        result = validate_mcp_config("mcp.json", json.dumps(config))
+        assert result.valid is True
+        assert not any("missing 'command'" in f.message for f in result.findings)
+
+    def test_mcp_config_explicit_stdio_with_url_still_needs_command(self) -> None:
+        """An explicit `type: stdio` is never overridden by shape inference."""
+        config = {"mcpServers": {"local": {"type": "stdio", "url": "https://x/mcp"}}}
+        result = validate_mcp_config("mcp.json", json.dumps(config))
+        assert result.valid is False
+        assert any("missing 'command'" in f.message for f in result.findings)
+
+    def test_mcp_config_transport_inferred_from_url(self) -> None:
+        """`type` is optional; presence of `url` implies a remote server."""
+        config = {"mcpServers": {"remote": {"url": "https://example.com/mcp"}}}
+        result = validate_mcp_config("mcp.json", json.dumps(config))
+        assert result.valid is True
+        assert not any("missing 'command'" in f.message for f in result.findings)
+
+    def test_mcp_config_remote_server_with_command_warns(self) -> None:
+        """`command` on a remote server is ignored at runtime; flag it."""
+        config = {
+            "mcpServers": {
+                "confused": {
+                    "type": "http",
+                    "url": "https://example.com/mcp",
+                    "command": "npx",
+                }
+            }
+        }
+        result = validate_mcp_config("mcp.json", json.dumps(config))
+        assert result.valid is True
+        assert any(
+            f.severity == "warning" and "ignored for remote transports" in f.message
+            for f in result.findings
+        )
+
+    def test_mcp_config_mixed_transports(self) -> None:
+        """A stdio server and a remote server coexist without false positives."""
+        config = {
+            "mcpServers": {
+                "agentforge": {
+                    "type": "stdio",
+                    "command": "uvx",
+                    "args": ["--from", "/path", "agentforge-mcp"],
+                },
+                "nlt-build": {"type": "http", "url": "http://localhost:8720/mcp"},
+            }
+        }
+        result = validate_mcp_config(".mcp.json", json.dumps(config))
+        assert result.valid is True
+        assert result.findings == []
+
     def test_mcp_config_server_not_object(self) -> None:
         """Server entry that is not an object gives a warning."""
         config = {
