@@ -183,6 +183,7 @@ def check_fleet_crash_loop() -> CheckResult:
 
 def _cursor_config_transport(project_root: Path) -> str | None:
     """Return ``"http"``/``"stdio"`` for the Cursor MCP config, ``None`` if absent."""
+    from tapps_mcp.distribution.nlt_http_fleet import HTTP_FLEET_ENTRY_TYPES
     from tapps_mcp.distribution.setup_generator import _load_mcp_config_json
 
     path = project_root / ".cursor" / "mcp.json"
@@ -194,8 +195,11 @@ def _cursor_config_transport(project_root: Path) -> str | None:
     servers = data.get("mcpServers", {})
     if not isinstance(servers, dict) or not servers:
         return None
+    # Claude Code and VS Code write `http` where Cursor writes `streamableHttp`
+    # (see http_entry_type_for_host); matching only the latter read an `http`
+    # config as stdio and reported a drift that was not there.
     has_http = any(
-        isinstance(entry, dict) and entry.get("type") == "streamableHttp"
+        isinstance(entry, dict) and entry.get("type") in HTTP_FLEET_ENTRY_TYPES
         for entry in servers.values()
     )
     return "http" if has_http else "stdio"

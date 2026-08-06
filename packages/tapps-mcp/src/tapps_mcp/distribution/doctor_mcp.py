@@ -35,11 +35,20 @@ def check_json_config(
 
 def _validate_mcp_entry_command(entry: dict[str, Any], config_path: Path) -> str | None:
     """Return an error message if the resolved server *entry* command is invalid."""
-    from tapps_mcp.distribution.nlt_http_fleet import is_valid_http_fleet_mcp_entry
+    from tapps_mcp.distribution.nlt_http_fleet import (
+        describe_http_fleet_entry_problem,
+        is_remote_mcp_entry,
+        is_valid_http_fleet_mcp_entry,
+    )
     from tapps_mcp.distribution.setup_generator import _is_valid_tapps_command
 
     if is_valid_http_fleet_mcp_entry(entry):
         return None
+
+    # A remote entry has no `command` to be "unexpected" (TAP-5723). Report
+    # what is actually wrong with it rather than blaming an absent command.
+    if is_remote_mcp_entry(entry):
+        return describe_http_fleet_entry_problem(entry)
 
     command = entry.get("command", "")
     args = entry.get("args", [])
