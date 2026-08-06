@@ -28,7 +28,9 @@ echo "[regression] Full non-slow suite (all packages, single invocation). Not pa
 # TAP-4575: the three packages' tests are collected in one root pytest run
 # (testpaths + --import-mode=importlib in pyproject.toml). No more per-package
 # loop — a single invocation restores cross-package xdist parallelism.
-if ! uv run pytest -m "not slow" -q --tb=line --timeout=60 "${XDIST[@]}" --maxfail=3; then
+# nice: a full-width xdist run owns every core; deprioritize it so live
+# agent/editor sessions stay responsive while the suite runs.
+if ! nice -n 10 uv run pytest -m "not slow" -q --tb=line --timeout=60 "${XDIST[@]}" --maxfail=3; then
   echo "[regression] FAILED — investigate with: uv run pytest -m 'not slow' -v" >&2
   exit 1
 fi
