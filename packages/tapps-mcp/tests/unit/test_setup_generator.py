@@ -11,6 +11,7 @@ from click.testing import CliRunner
 
 from tapps_mcp.cli import main
 from tapps_mcp.distribution.setup_generator import (
+    _build_nlt_launch,
     _build_uv_run_tapps_launch,
     _check_config,
     _collect_plaintext_secrets,
@@ -25,15 +26,14 @@ from tapps_mcp.distribution.setup_generator import (
     _load_existing_env_from_other_scope,
     _looks_like_secret_key,
     _merge_config,
+    _nlt_profile_from_serve_args,
     _parse_cursor_wrapper_launch,
     _render_cursor_mcp_wrapper_script,
-    _nlt_profile_from_serve_args,
     _should_include_docs_mcp,
     _should_use_uv_launch,
     _value_is_plaintext_secret,
-    is_tapps_mcp_package_layout,
     is_tapps_mcp_dev_monorepo,
-    _build_nlt_launch,
+    is_tapps_mcp_package_layout,
     run_init,
     run_upgrade,
 )
@@ -2105,6 +2105,34 @@ class TestPlaintextSecretDetection:
         added = ensure_tapps_runtime_gitignore(tmp_path)
         assert added == []
         assert gi.read_text(encoding="utf-8").count(".tapps-mcp/backups/") == 0
+
+    def test_ensure_tapps_runtime_gitignore_creates_file_when_absent(self, tmp_path):
+        from tapps_mcp.distribution.setup_generator import (
+            _TAPPS_RUNTIME_GITIGNORE_ENTRIES,
+            ensure_tapps_runtime_gitignore,
+        )
+
+        gi = tmp_path / ".gitignore"
+        assert not gi.exists()
+        added = ensure_tapps_runtime_gitignore(tmp_path)
+        assert added == list(_TAPPS_RUNTIME_GITIGNORE_ENTRIES)
+        text = gi.read_text(encoding="utf-8")
+        assert ".tapps-mcp/backups/" in text
+        assert ".tapps-mcp/hook-backups/" in text
+        assert ".tapps-mcp-cache/" in text
+
+    def test_ensure_tapps_runtime_gitignore_create_failure_returns_empty(
+        self, tmp_path, monkeypatch
+    ):
+        from tapps_mcp.distribution import setup_generator
+
+        def _raise(*args: object, **kwargs: object) -> None:
+            raise OSError("read-only filesystem")
+
+        monkeypatch.setattr(setup_generator.Path, "write_text", _raise)
+        added = setup_generator.ensure_tapps_runtime_gitignore(tmp_path)
+        assert added == []
+        assert not (tmp_path / ".gitignore").exists()
 
 
 # ---------------------------------------------------------------------------
