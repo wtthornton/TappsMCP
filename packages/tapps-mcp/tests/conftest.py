@@ -629,6 +629,48 @@ def no_repo_wide_scans() -> Generator[None, None, None]:
 
 
 @pytest.fixture(autouse=True)
+def _isolate_checklist_session(
+    tmp_path_factory: pytest.TempPathFactory,
+) -> Generator[None, None, None]:
+    """Point ``CallTracker`` at a per-test file instead of the real repo ledger.
+
+    ``server._record_call`` lazily calls ``CallTracker.set_persist_path`` on the
+    project's ``.tapps-mcp/sessions/checklist_calls.jsonl``, and that setter
+    *clears in-memory records and reloads from disk*. Two things followed:
+
+    - Tests that ``CallTracker.record(...)`` then call ``tapps_checklist`` had
+      their records wiped by the first ``_record_call``, so assertions read the
+      developer's real session instead. Whichever test ran first flipped
+      ``persist_configured``, which is why the failures were order-dependent
+      (``test_with_calls`` and ``test_checklist_tracks_session`` passed in a
+      full run and failed standalone).
+    - Test runs appended into that real ledger, corrupting live telemetry.
+
+    Autouse because any test touching a recorded tool inherits both problems.
+    """
+    from tapps_mcp import server as _server
+    from tapps_mcp.tools.checklist import CallTracker
+
+    prev_path = CallTracker._persist_path
+    prev_session = CallTracker._active_session_id
+    prev_configured = _server._checklist_state["persist_configured"]
+
+    session_dir = tmp_path_factory.mktemp("checklist_session")
+    CallTracker.set_persist_path(session_dir / "checklist_calls.jsonl")
+    _server._checklist_state["persist_configured"] = True
+    try:
+        yield
+    finally:
+        _server._checklist_state["persist_configured"] = prev_configured
+        if prev_path is not None:
+            CallTracker.set_persist_path(prev_path)
+        else:
+            CallTracker._persist_path = None
+            CallTracker._calls.clear()
+        CallTracker._active_session_id = prev_session
+
+
+@pytest.fixture(autouse=True)
 def _no_install_drift() -> Generator[None, None, None]:
     """Decouple ``upgrade_pipeline`` tests from the machine's deployed CLIs.
 
