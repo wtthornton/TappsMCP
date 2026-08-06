@@ -111,16 +111,15 @@ def _text_imports_module(text: str, module: str) -> bool:
     # Match: import mod / import pkg.mod / from mod import X / from pkg.mod import X
     # Also: from pkg import mod (when module is a single token)
     escaped = re.escape(module)
-    patterns = (
+    patterns = [
         rf"(?m)^\s*import\s+{escaped}\b",
         rf"(?m)^\s*from\s+{escaped}\s+import\b",
-    )
+    ]
     if "." not in module:
-        patterns = (
-            *patterns,
+        patterns.extend([
             rf"(?m)^\s*from\s+[\w.]+\s+import\s+\(.*?\b{escaped}\b",
             rf"(?m)^\s*from\s+[\w.]+\s+import\s+[^\n]*\b{escaped}\b",
-        )
+        ])
     return any(re.search(pat, text) for pat in patterns)
 
 

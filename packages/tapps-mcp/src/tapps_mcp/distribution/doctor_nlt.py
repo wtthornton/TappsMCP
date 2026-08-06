@@ -245,7 +245,7 @@ def check_call_graph_index_cache(root: Path) -> CheckResult:
     ]
     prune = prune_call_graph_cache(root, dry_run=True)
     would = prune.get("would_remove") or []
-    if would:
+    if would and isinstance(would, (list, tuple)):
         parts.append(f"GC would remove {len(would)} artifact(s) (run maintain/upgrade)")
     if summary is not None:
         parts.extend(_call_graph_cache_summary_parts(summary))
