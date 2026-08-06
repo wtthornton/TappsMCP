@@ -38,7 +38,7 @@ def install_memory_project_id_patch() -> None:
     # settings-tenant fallback. In tests that made results order-dependent —
     # test_related_happy_path passed alone and failed after test_audit_campaign.
     _patched.__tapps_fleet_original__ = current  # type: ignore[attr-defined]
-    smt._params_project_id = _patched  # type: ignore[assignment]
+    smt._params_project_id = _patched
 
 
 def uninstall_memory_project_id_patch() -> None:
@@ -53,4 +53,4 @@ def uninstall_memory_project_id_patch() -> None:
     current = smt._params_project_id
     original = getattr(current, "__tapps_fleet_original__", None)
     if original is not None:
-        smt._params_project_id = original  # type: ignore[assignment]
+        smt._params_project_id = original

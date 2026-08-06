@@ -1632,7 +1632,7 @@ async def tapps_handoff_save(
     mirror_status = best_effort_status(result.brain_mirror)
     session_end_status = best_effort_status(result.session_end)
 
-    data = {
+    data: dict[str, Any] = {
         "file_path": result.file_path,
         "linear_p0": result.doc.linear_p0,
         "metadata": result.metadata,

@@ -32,7 +32,7 @@ import contextlib
 import dataclasses
 import time
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, cast
 
 import structlog
 from mcp.server.fastmcp import Context
@@ -128,11 +128,11 @@ def _missing_file_paths_guard(
         "slow validate_changed (p95) and QUALITY_GATE_SKIP."
     )
     if mode == "error":
-        return host.error_response(
+        return cast("dict[str, Any]", host.error_response(
             "tapps_validate_changed",
             "missing_file_paths",
             message,
-        )
+        ))
     # warn mode: signal via sentinel dict the caller merges into response later
     return {"_missing_file_paths_warning": message, "_tracked_scorable": tracked}
 

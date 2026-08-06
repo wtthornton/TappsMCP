@@ -1447,7 +1447,7 @@ async def tapps_research(
             "detail": str(brain_payload),
         }
     response = wrap_brain_research_payload(brain_payload, route=chosen, elapsed_ms=elapsed_ms)
-    data = response.get("data") if isinstance(response.get("data"), dict) else None
+    research_response_data: dict[str, Any] | None = response.get("data") if isinstance(response.get("data"), dict) else None
     if response.get("success"):
         await maybe_save_research_answer(
             bridge,
@@ -1458,7 +1458,7 @@ async def tapps_research(
             freshness=effective_freshness,
             memory_enabled=memory_cfg.enabled,
             auto_save_quality=memory_cfg.auto_save_quality,
-            response_data=data,
+            response_data=research_response_data,
         )
     _record_execution(
         "tapps_research",

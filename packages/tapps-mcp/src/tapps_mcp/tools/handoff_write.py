@@ -116,7 +116,7 @@ async def mirror_handoff_to_brain(
         if hasattr(bridge, "close"):
             bridge.close()
 
-    payload = result if isinstance(result, dict) else {"key": SESSION_HANDOFF_MEMORY_KEY}
+    payload: dict[str, Any] = result if isinstance(result, dict) else {"key": SESSION_HANDOFF_MEMORY_KEY}
     # Sizes travel with the payload so a rejection is self-explaining. The
     # brain caps a memory value, and the handoff template routinely produces
     # bodies past it; without these the caller sees only "bad_request".

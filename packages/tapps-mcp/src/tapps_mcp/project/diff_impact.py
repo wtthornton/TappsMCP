@@ -274,9 +274,11 @@ def analyze_diff_impact(
     reason = (
         completeness.get("reason") if isinstance(completeness, dict) else None
     )
+    pf_raw = health.get("parse_failures", 0)
+    parse_failures = int(pf_raw) if isinstance(pf_raw, (int, str)) else 0
     note = _degraded_note_for_reason(
         str(reason) if reason else None,
-        parse_failures=int(health["parse_failures"]),
+        parse_failures=parse_failures,
         in_repo_gap_rate=float(
             completeness.get("in_repo_gap_rate", 0.0)
             if isinstance(completeness, dict)
@@ -395,9 +397,11 @@ def build_diff_impact_enrichment(
     reason = (
         completeness.get("reason") if isinstance(completeness, dict) else None
     )
-    note = _degraded_note_for_reason(
+    pf_raw = health.get("parse_failures", 0)
+    parse_failures = int(pf_raw) if isinstance(pf_raw, (int, str)) else 0
+    degraded_note = _degraded_note_for_reason(
         str(reason) if reason else None,
-        parse_failures=int(health["parse_failures"]),
+        parse_failures=parse_failures,
         in_repo_gap_rate=float(
             completeness.get("in_repo_gap_rate", 0.0)
             if isinstance(completeness, dict)
@@ -413,8 +417,8 @@ def build_diff_impact_enrichment(
         "completeness": completeness,
         "gap_taxonomy": health["gap_taxonomy"],
     }
-    if note:
-        payload["note"] = note
+    if degraded_note:
+        payload["note"] = degraded_note
     return payload
 
 

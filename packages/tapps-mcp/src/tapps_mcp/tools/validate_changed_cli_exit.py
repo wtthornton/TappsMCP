@@ -21,7 +21,8 @@ def validate_changed_cli_exit_code(
     """
     if not data.get("judges_passed", True):
         return 1
-    files_validated = int(data.get("files_validated", 0) or 0)
+    raw_count = data.get("files_validated", 0)
+    files_validated = int(raw_count) if isinstance(raw_count, (int, str)) else 0
     if files_validated == 0:
         if explicit_paths or data.get("path_hint"):
             return 1

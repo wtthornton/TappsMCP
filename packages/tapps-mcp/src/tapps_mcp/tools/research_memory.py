@@ -185,7 +185,8 @@ def wrap_memory_hit_payload(
     route = str(parsed.get("route") or "web")
     if route not in {"web", "fetch"}:
         route = "web"
-    answer = parsed.get("answer") if isinstance(parsed.get("answer"), dict) else {}
+    answer_raw = parsed.get("answer")
+    answer = answer_raw if isinstance(answer_raw, dict) else {}
     data: dict[str, Any] = {
         "route": route,
         "source": "memory-hit",
