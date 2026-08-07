@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import json
 import os
+from pathlib import Path
 
 import click
 
@@ -143,3 +145,95 @@ def quick_check_cmd(file_path: str, preset: str, project_root: str) -> None:
             raise SystemExit(1)
 
     asyncio.run(_run())
+
+
+@click.command("session-budget")
+@click.option(
+    "--transcript",
+    "--transcript-path",
+    required=True,
+    type=click.Path(exists=True, file_okay=True, dir_okay=False, path_type=str),
+    help="Path to session transcript (JSONL format).",
+)
+@click.option(
+    "--json",
+    "as_json",
+    is_flag=True,
+    help="Output as JSON (default: human-readable).",
+)
+@click.option(
+    "--threshold",
+    type=int,
+    default=110000,
+    show_default=True,
+    help="Token threshold for 'over' verdict.",
+)
+def session_budget_cmd(transcript: str, as_json: bool, threshold: int) -> None:
+    """Measure session transcript size and check if it exceeds budget threshold.
+
+    Reads a Claude Code session transcript (JSONL format) and estimates token count.
+    Returns whether the transcript exceeds the configured threshold (default 110K tokens).
+    Use this to detect when a session needs rotation to a fresh context.
+    """
+    from tapps_mcp.distribution.context_budget import _estimate_tokens
+
+    transcript_path = Path(transcript)
+    if not transcript_path.is_file():
+        raise click.ClickException(f"Transcript not found: {transcript}")
+
+    try:
+        total_bytes = 0
+        message_count = 0
+        tool_use_count = 0
+        try:
+            with transcript_path.open(encoding="utf-8", errors="replace") as fh:
+                for line in fh:
+                    if not line.strip():
+                        continue
+                    try:
+                        entry = json.loads(line)
+                    except json.JSONDecodeError:
+                        continue
+
+                    # Count bytes of this entry
+                    total_bytes += len(line.encode("utf-8"))
+                    message_count += 1
+
+                    # Count tool uses
+                    msg = entry.get("message") or {}
+                    for blk in msg.get("content") or []:
+                        if isinstance(blk, dict) and blk.get("type") == "tool_use":
+                            tool_use_count += 1
+        except OSError as exc:
+            raise click.ClickException(f"Failed to read transcript: {exc}")
+
+        estimated_tokens = _estimate_tokens(total_bytes)
+        over_budget = estimated_tokens > threshold
+
+        result = {
+            "transcript_path": str(transcript_path),
+            "total_bytes": total_bytes,
+            "estimated_tokens": estimated_tokens,
+            "threshold_tokens": threshold,
+            "over": over_budget,
+            "message_count": message_count,
+            "tool_use_count": tool_use_count,
+        }
+
+        if as_json:
+            click.echo(json.dumps(result, indent=2))
+        else:
+            status = "OVER" if over_budget else "OK"
+            click.echo(
+                f"{status}: {estimated_tokens:,} tokens (threshold: {threshold:,}) "
+                f"| messages: {message_count} | tools: {tool_use_count}"
+            )
+            if over_budget:
+                delta = estimated_tokens - threshold
+                click.echo(
+                    f"  → over by {delta:,} tokens; consider session rotation "
+                    f"(write handoff, prompt user, start fresh)"
+                )
+
+    except Exception as exc:
+        raise click.ClickException(f"Error: {exc}")
