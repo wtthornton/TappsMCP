@@ -205,7 +205,7 @@ def session_budget_cmd(transcript: str, as_json: bool, threshold: int) -> None:
                         if isinstance(blk, dict) and blk.get("type") == "tool_use":
                             tool_use_count += 1
         except OSError as exc:
-            raise click.ClickException(f"Failed to read transcript: {exc}")
+            raise click.ClickException(f"Failed to read transcript: {exc}") from exc
 
         estimated_tokens = _estimate_tokens(total_bytes)
         over_budget = estimated_tokens > threshold
@@ -235,5 +235,7 @@ def session_budget_cmd(transcript: str, as_json: bool, threshold: int) -> None:
                     f"(write handoff, prompt user, start fresh)"
                 )
 
+    except click.ClickException:
+        raise
     except Exception as exc:
-        raise click.ClickException(f"Error: {exc}")
+        raise click.ClickException(str(exc)) from exc

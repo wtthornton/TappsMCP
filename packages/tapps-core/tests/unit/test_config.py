@@ -29,9 +29,7 @@ class TestTappsMCPSettings:
         assert settings.linear_cache_ttl_open_seconds == 1800
         assert settings.linear_cache_ttl_closed_seconds == 3600
 
-    def test_linear_cache_ttl_rejects_negative(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_linear_cache_ttl_rejects_negative(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setenv("TAPPS_MCP_LINEAR_CACHE_TTL_OPEN_SECONDS", "-1")
         with pytest.raises(ValueError):
             TappsMCPSettings()
