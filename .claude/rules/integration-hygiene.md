@@ -1,5 +1,12 @@
 ---
 alwaysApply: false
+paths:
+  - .mcp.json
+  - .cursor/mcp.json
+  - .vscode/settings.json
+  - packages/*/pyproject.toml
+  - '**/*-mcp*.py'
+  - docs/operations/CONSUMER-REPO-BRAIN-WIRING.md
 ---
 # Integration Hygiene (TappsMCP)
 

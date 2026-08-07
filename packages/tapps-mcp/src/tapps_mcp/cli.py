@@ -625,10 +625,11 @@ def _register_memory_group() -> None:
 
 def _register_validation_commands() -> None:
     """Lazily register standalone validation commands."""
-    from tapps_mcp.cli_validation import quick_check_cmd, validate_changed_cmd
+    from tapps_mcp.cli_validation import quick_check_cmd, session_budget_cmd, validate_changed_cmd
 
     main.add_command(validate_changed_cmd)
     main.add_command(quick_check_cmd)
+    main.add_command(session_budget_cmd)
 
 
 def _register_benchmark_group() -> None:
