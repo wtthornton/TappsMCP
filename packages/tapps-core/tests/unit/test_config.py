@@ -26,7 +26,7 @@ class TestTappsMCPSettings:
 
     def test_linear_cache_ttl_defaults(self) -> None:
         settings = TappsMCPSettings()
-        assert settings.linear_cache_ttl_open_seconds == 300
+        assert settings.linear_cache_ttl_open_seconds == 1800
         assert settings.linear_cache_ttl_closed_seconds == 3600
 
     def test_linear_cache_ttl_rejects_negative(

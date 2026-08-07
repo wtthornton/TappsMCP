@@ -2749,8 +2749,11 @@ try:
     limit = int(inp.get('limit') or 50)
 except Exception:
     limit = 50
-if not team or not project:
-    sys.exit(0)
+# Historically this hook required BOTH team and project and exited otherwise,
+# so a team-only or project-only list_issues cached nothing — the cache stayed
+# empty while the gate logged misses. The reader's _cache_key falls back to '_'
+# for an empty segment exactly as this writer does, so every combination
+# (including neither) produces a key the reader reproduces. No guard needed.
 # TAP-4588: canonicalize the open-bucket alias and drop limit from the hash so
 # this writer's key matches server _resolve_cache_key / the reader.
 OPEN_BUCKET = ('backlog', 'unstarted', 'started', 'triage')
@@ -2796,7 +2799,27 @@ def _find_issues(o):
             if r is not None:
                 return r
     return None
-issues = _find_issues(resp) or []
+# Store the COMPACT projection, mirroring server_linear_tools_keys._compact_issue.
+# The raw plugin payload carries description/comments/attachments/history; a
+# 50-issue backlog of that shape blows past the Read tool's 25 k-token ceiling,
+# which is what forced agents into the fallback parse. Keep the fields triage
+# actually reads and synthesize statusType so compact consumers see one shape.
+COMPACT_FIELDS = (
+    'id', 'identifier', 'title', 'state', 'status', 'statusType',
+    'priority', 'estimate', 'assignee', 'parent',
+)
+def _compact(it):
+    out = {k: v for k, v in it.items() if k in COMPACT_FIELDS}
+    if 'statusType' not in out:
+        st = out.get('state')
+        if isinstance(st, dict) and st.get('type'):
+            out['statusType'] = st['type']
+        elif isinstance(out.get('status'), dict) and out['status'].get('type'):
+            out['statusType'] = out['status']['type']
+    return out
+issues = [
+    _compact(i) if isinstance(i, dict) else i for i in (_find_issues(resp) or [])
+]
 # TAP-4588 poisoning guard: list_issues(state='open') (a tapps-mcp alias, not a
 # real Linear state) returns [] — caching that empty list under the canonical
 # 'open' key would make a later get falsely report 0 issues. Skip the write
@@ -2807,8 +2830,11 @@ VALID_LINEAR_STATES = (
 state_lc = state.lower()
 if not issues and state_lc and state_lc not in VALID_LINEAR_STATES:
     sys.exit(0)
-# TTL aligned with server-side _ttl_for_state defaults (5 min open, 1 h closed).
-ttl = 3600 if state_lc in ('completed', 'canceled') else 300
+# TTL aligned with server-side _ttl_for_state defaults (30 min open, 1 h closed).
+# Keep in lockstep with Settings.linear_cache_ttl_open_seconds /
+# linear_cache_ttl_closed_seconds — a writer that expires sooner than the reader
+# expects silently reintroduces the empty-cache symptom.
+ttl = 3600 if state_lc in ('completed', 'canceled') else 1800
 now = time.time()
 out = {
     'issues': issues,

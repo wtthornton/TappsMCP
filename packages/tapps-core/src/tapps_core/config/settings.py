@@ -988,13 +988,17 @@ class TappsMCPSettings(BaseSettings):
         ),
     )
     linear_cache_ttl_open_seconds: int = Field(
-        default=300,
+        default=1800,
         ge=0,
         description=(
             "TTL for cached open/in-progress Linear issues stored via "
             "tapps_linear_snapshot_put (seconds). 0 disables caching. "
             "Linear itself is fetched by the agent via the OAuth plugin; "
-            "tapps-mcp only caches the result."
+            "tapps-mcp only caches the result. 30 min, not 5: a backlog read "
+            "repeated inside one session is the common case, and a 5-minute "
+            "window expired between the snapshot_get and the follow-up read, "
+            "so the cache never served a hit. Keep in lockstep with the TTL in "
+            "LINEAR_CACHE_GATE_POST_LIST_SCRIPT."
         ),
     )
     linear_cache_ttl_closed_seconds: int = Field(
