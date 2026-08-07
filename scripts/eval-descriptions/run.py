@@ -14,7 +14,7 @@ Two backends:
 * ``--backend=api``: Anthropic Messages API directly via the ``anthropic``
   Python SDK (lazy-imported). Spawns one tapps-mcp stdio session per run,
   lists tools, and calls ``messages.create()`` with ``tools=`` per
-  scenario. Needs ``ANTHROPIC_API_KEY``. Bills per-token (~$0.01–0.03 per
+  scenario. Needs ``ANTHROPIC_API_KEY``. Bills per-token (~$0.01-0.03 per
   scenario at Sonnet 4.6). Rate-limit-immune; this is the CI backend
   ([.github/workflows/eval-descriptions.yml](../../.github/workflows/eval-descriptions.yml)).
 
@@ -333,9 +333,9 @@ async def _run_scenarios_api(
     ``expected_tool`` values without modification.
     """
     try:
-        from anthropic import AsyncAnthropic  # noqa: PLC0415
-        from mcp import ClientSession  # noqa: PLC0415
-        from mcp.client.stdio import StdioServerParameters, stdio_client  # noqa: PLC0415
+        from anthropic import AsyncAnthropic
+        from mcp import ClientSession
+        from mcp.client.stdio import StdioServerParameters, stdio_client
     except ImportError as exc:  # pragma: no cover
         raise RuntimeError(
             "--backend=api requires the `anthropic` and `mcp` Python SDKs. "
@@ -423,7 +423,7 @@ async def _run_scenario_api(
             elapsed_ms=int((time.perf_counter() - start) * 1000),
             error=f"API call exceeded {_API_SCENARIO_TIMEOUT_SECONDS}s",
         )
-    except Exception as exc:  # noqa: BLE001 — surface any API error verbatim
+    except Exception as exc:
         return ScenarioResult(
             scenario_id=sid,
             category=category,
@@ -463,35 +463,45 @@ async def _run_scenario_api(
 
 
 _VERDICT_COLORS: dict[str, str] = {
-    "exact": "\033[32m",       # green
+    "exact": "\033[32m",  # green
     "acceptable": "\033[33m",  # yellow
-    "wrong": "\033[31m",       # red
+    "wrong": "\033[31m",  # red
     "no_tool": "\033[31m",
-    "error": "\033[35m",       # magenta
+    "error": "\033[35m",  # magenta
 }
 
 
 def _build_arg_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
-        "--output", "-o", type=Path,
+        "--output",
+        "-o",
+        type=Path,
         default=Path(tempfile.gettempdir()) / "eval-results.json",
         help="Where to write the per-scenario results JSON.",
     )
     parser.add_argument(
-        "--mcp-config", type=Path, default=None,
+        "--mcp-config",
+        type=Path,
+        default=None,
         help="Path to .mcp.json to pass via --mcp-config (default: claude CLI defaults).",
     )
     parser.add_argument(
-        "--cwd", type=Path, default=REPO_ROOT,
+        "--cwd",
+        type=Path,
+        default=REPO_ROOT,
         help="Working directory to run `claude -p` from (default: repo root).",
     )
     parser.add_argument(
-        "--only", type=str, default="",
+        "--only",
+        type=str,
+        default="",
         help="Comma-separated scenario ids to run (default: all).",
     )
     parser.add_argument(
-        "--ref-label", type=str, default="",
+        "--ref-label",
+        type=str,
+        default="",
         help="Optional label to include in results (e.g. 'HEAD', 'baseline-cc1d340').",
     )
     parser.add_argument(
@@ -506,7 +516,9 @@ def _build_arg_parser() -> argparse.ArgumentParser:
         ),
     )
     parser.add_argument(
-        "--model", type=str, default=_API_DEFAULT_MODEL,
+        "--model",
+        type=str,
+        default=_API_DEFAULT_MODEL,
         help=(
             f"Model for --backend=api (default: {_API_DEFAULT_MODEL}). "
             "Ignored for --backend=cli (uses whatever Claude CLI is configured for)."
@@ -546,7 +558,7 @@ def build_summary(
 ) -> dict[str, Any]:
     """Aggregate per-scenario verdicts into a JSON-serializable summary."""
     n = max(len(results), 1)
-    verdict_counts = {v: 0 for v in _VERDICT_NAMES}
+    verdict_counts = dict.fromkeys(_VERDICT_NAMES, 0)
     n_strict = 0
     n_lenient = 0
     for r in results:
@@ -597,8 +609,7 @@ def main() -> int:
         # The anthropic SDK reads either env var automatically; we just
         # need at least one to be present.
         has_auth = bool(
-            os.environ.get("ANTHROPIC_AUTH_TOKEN")
-            or os.environ.get("ANTHROPIC_API_KEY")
+            os.environ.get("ANTHROPIC_AUTH_TOKEN") or os.environ.get("ANTHROPIC_API_KEY")
         )
         if not has_auth:
             print(
@@ -632,7 +643,10 @@ def main() -> int:
             _print_progress(i, len(scenarios), scenario["id"], r)
 
     summary = build_summary(
-        results, ref_label=args.ref_label, cwd=args.cwd, mcp_config=args.mcp_config,
+        results,
+        ref_label=args.ref_label,
+        cwd=args.cwd,
+        mcp_config=args.mcp_config,
     )
     summary["backend"] = args.backend
     if args.backend == "api":
