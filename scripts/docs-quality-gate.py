@@ -20,9 +20,7 @@ def main() -> int:
     root = Path.cwd()
     failures: list[str] = []
 
-    completeness = CompletenessChecker().check(
-        root, exclude=ARCHIVE_GLOBS, respect_gitignore=True
-    )
+    completeness = CompletenessChecker().check(root, exclude=ARCHIVE_GLOBS, respect_gitignore=True)
     score = completeness.overall_score
     if score <= 1.0:
         score *= 100
