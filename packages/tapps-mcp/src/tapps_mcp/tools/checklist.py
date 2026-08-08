@@ -6,13 +6,16 @@ still missing for a given task type.
 
 Call records are persisted to a JSONL file so that state survives
 server restarts within the same session.
+
+The task-type tool maps, the shared models, epic markdown validation, and
+the TDD stage checks live in sibling ``checklist_*`` modules (TAP-5733) and
+are re-exported here — see the re-export block at the bottom of this file.
 """
 
 from __future__ import annotations
 
 import contextlib
 import json
-import re
 import threading
 import time
 import uuid
@@ -20,7 +23,41 @@ from pathlib import Path
 from typing import Any, ClassVar
 
 import structlog
-from pydantic import BaseModel, Field
+
+from tapps_mcp.tools.checklist_epic import (
+    CrossFileSummary,
+    EpicChecklistResult,
+    EpicFinding,
+    EpicStoryInfo,
+    EpicValidation,
+    validate_epic_markdown,
+)
+from tapps_mcp.tools.checklist_maps import (
+    _ENGAGEMENT_TOOL_MAP,
+    _TOOL_EQUIVALENTS,
+    KNOWN_TASK_TYPES,
+    TASK_TOOL_MAP,
+    TASK_TOOL_MAP_HIGH,
+    TASK_TOOL_MAP_LOW,
+    TASK_TOOL_MAP_MEDIUM,
+    TASK_TYPE_REASONS,
+    TOOL_REASONS,
+    _get_merged_engagement_maps,
+    invalidate_engagement_maps_cache,
+)
+from tapps_mcp.tools.checklist_models import (
+    ChecklistHint,
+    ChecklistResult,
+    ToolCallRecord,
+)
+from tapps_mcp.tools.checklist_tdd import (
+    TDDCheckResult,
+    TDDStageCheck,
+    _check_compile_time_red,
+    _check_coverage,
+    _check_git_commits,
+    check_tdd_stages,
+)
 
 logger = structlog.get_logger(__name__)
 
@@ -71,467 +108,6 @@ async def _get_git_context(commit_sha: str = "") -> dict[str, Any] | None:
         "head_sha_full": head_sha_full,
         "dirty": dirty,
     }
-
-
-class ToolCallRecord(BaseModel):
-    """Record of a single tool invocation."""
-
-    tool_name: str
-    timestamp: float = Field(default_factory=time.time)
-    session_id: str = Field(
-        default="",
-        description="Checklist session id (empty = recorded before session boundary).",
-    )
-    success: bool = Field(default=True, description="Whether the invocation succeeded.")
-
-
-# ---------------------------------------------------------------------------
-# Short reasons for checklist hints (so the LLM knows what to do)
-# ---------------------------------------------------------------------------
-
-TOOL_REASONS: dict[str, str] = {
-    "tapps_server_info": "Call at session start to discover server version and installed checkers.",
-    "tapps_session_start": (
-        "Call as the FIRST action in every session to discover server version, installed checkers, and project context."
-    ),
-    "tapps_session_end": (
-        "Call at session end to process session events through the brain flywheel and close the feedback loop."
-    ),
-    "tapps_score_file": (
-        "Score the file for quality; use quick=True during edits, full before done."
-    ),
-    "tapps_security_scan": "Run a dedicated security scan (bandit + secrets) on the file.",
-    "tapps_quality_gate": (
-        "Call before declaring work complete to ensure the file passes the quality preset."
-    ),
-    "tapps_lookup_docs": "Look up library docs before using an API to avoid hallucinated usage.",
-    "tapps_research": (
-        "Unified research front door (ADR-0030): library/API → lookup_docs; "
-        "open-ended/latest → brain web_research; URL scrape → research_fetch."
-    ),
-    "tapps_validate_config": (
-        "Validate Dockerfile, docker-compose, MCP server configs (.mcp.json), "
-        "YAML manifests (config_type=yaml_manifest), or other infra config "
-        "against best practices."
-    ),
-    "tapps_checklist": (
-        "Call before declaring work complete to verify no required steps were skipped."
-    ),
-    "tapps_validate_changed": (
-        "Batch-validate changed files (score + gate + optional blocking judges). "
-        "For document/PDF work use task_type=document and configure validate_changed.judges."
-    ),
-    "tapps_quick_check": (
-        "Quick score + gate + security in one call. Minimum check after editing any Python file."
-    ),
-    "tapps_dead_code": (
-        "Scan for unused functions, classes, imports, and variables. Use during refactoring."
-    ),
-    "tapps_dependency_scan": (
-        "Scan dependencies for known vulnerabilities (CVEs). Use before releases."
-    ),
-    "tapps_dependency_graph": (
-        "Analyze import graph for circular dependencies and coupling. Use before major refactoring."
-    ),
-    "tapps_set_engagement_level": (
-        "When the user requests to change enforcement intensity"
-        " (e.g. 'set tappsmcp to high' or 'make checks optional')."
-    ),
-    "tapps_decompose": (
-        "Decompose a task into ~15-minute units with model tier hints before starting work."
-    ),
-    "tapps_release_update": (
-        "Generate and validate a release update document body from CHANGELOG or git log."
-        " Call before posting a version release to Linear via the linear-release-update skill."
-    ),
-    "tapps_impact_analysis": ("Map module-level import blast radius before API or layout changes."),
-    "tapps_call_graph": ("Query function-level callers/callees before changing a specific symbol."),
-    "tapps_diff_impact": (
-        "Rank affected tests for a set of changed Python files before declaring done."
-    ),
-    "tapps_audit_close_coverage": (
-        "Close an audit finding's brain coverage after a fix lands — updates the file's"
-        " audited SHA and links the fix/finding tickets. Call after committing an audit fix."
-    ),
-}
-
-
-# ---------------------------------------------------------------------------
-# Recommended tool sets per task type (medium = default)
-# ---------------------------------------------------------------------------
-
-TASK_TOOL_MAP: dict[str, dict[str, list[str]]] = {
-    "feature": {
-        "required": ["tapps_score_file", "tapps_quality_gate"],
-        "recommended": ["tapps_security_scan"],
-        "optional": ["tapps_checklist"],
-    },
-    "bugfix": {
-        "required": ["tapps_score_file"],
-        "recommended": ["tapps_quality_gate", "tapps_security_scan"],
-        "optional": ["tapps_checklist"],
-    },
-    "refactor": {
-        "required": ["tapps_score_file", "tapps_quality_gate"],
-        "recommended": [
-            "tapps_dead_code",
-            "tapps_dependency_graph",
-            "tapps_impact_analysis",
-            "tapps_call_graph",
-            "tapps_diff_impact",
-        ],
-        "optional": ["tapps_security_scan", "tapps_checklist"],
-    },
-    "security": {
-        "required": ["tapps_security_scan", "tapps_quality_gate"],
-        "recommended": ["tapps_score_file", "tapps_dependency_scan"],
-        "optional": ["tapps_checklist"],
-    },
-    "review": {
-        "required": ["tapps_score_file", "tapps_security_scan", "tapps_quality_gate"],
-        "recommended": ["tapps_checklist", "tapps_dead_code"],
-        "optional": [
-            "tapps_dependency_scan",
-            "tapps_dependency_graph",
-            "tapps_audit_campaign",
-            "tapps_audit_close_coverage",
-        ],
-    },
-    "epic": {
-        "required": ["tapps_checklist"],
-        "recommended": ["tapps_score_file", "tapps_quality_gate"],
-        "optional": ["tapps_security_scan", "tapps_validate_changed"],
-    },
-    "release": {
-        "required": ["tapps_release_update"],
-        "recommended": ["tapps_dependency_scan"],
-        "optional": ["tapps_checklist"],
-    },
-    "document": {
-        "required": ["tapps_validate_changed"],
-        "recommended": ["tapps_validate_config", "tapps_lookup_docs", "tapps_checklist"],
-        "optional": ["tapps_impact_analysis"],
-    },
-    "documentation": {
-        "required": [],
-        "recommended": ["tapps_checklist"],
-        "optional": ["tapps_lookup_docs"],
-    },
-    "qa": {
-        "required": ["tapps_validate_changed", "tapps_security_scan", "tapps_quality_gate"],
-        "recommended": ["tapps_diff_impact", "tapps_checklist"],
-        "optional": ["tapps_score_file"],
-    },
-    "frontend": {
-        "required": ["tapps_lookup_docs", "tapps_quality_gate"],
-        "recommended": ["tapps_score_file", "tapps_validate_changed", "tapps_checklist"],
-        "optional": ["tapps_quick_check"],
-    },
-}
-
-# High engagement: more tools required (stricter)
-TASK_TOOL_MAP_HIGH: dict[str, dict[str, list[str]]] = {
-    "feature": {
-        "required": ["tapps_score_file", "tapps_quality_gate", "tapps_security_scan"],
-        "recommended": ["tapps_validate_changed", "tapps_checklist"],
-        "optional": [],
-    },
-    "bugfix": {
-        "required": ["tapps_score_file", "tapps_quality_gate"],
-        "recommended": ["tapps_security_scan", "tapps_checklist"],
-        "optional": [],
-    },
-    "refactor": {
-        "required": ["tapps_score_file", "tapps_quality_gate", "tapps_dead_code"],
-        "recommended": [
-            "tapps_dependency_graph",
-            "tapps_impact_analysis",
-            "tapps_call_graph",
-            "tapps_diff_impact",
-            "tapps_security_scan",
-            "tapps_checklist",
-        ],
-        "optional": [],
-    },
-    "security": {
-        "required": ["tapps_security_scan", "tapps_quality_gate", "tapps_score_file"],
-        "recommended": ["tapps_dependency_scan", "tapps_checklist"],
-        "optional": [],
-    },
-    "review": {
-        "required": [
-            "tapps_score_file",
-            "tapps_security_scan",
-            "tapps_quality_gate",
-            "tapps_checklist",
-        ],
-        "recommended": ["tapps_dead_code", "tapps_validate_changed"],
-        "optional": [
-            "tapps_dependency_scan",
-            "tapps_dependency_graph",
-            "tapps_audit_campaign",
-            "tapps_audit_close_coverage",
-        ],
-    },
-    "epic": {
-        "required": ["tapps_checklist", "tapps_score_file"],
-        "recommended": ["tapps_quality_gate", "tapps_validate_changed"],
-        "optional": ["tapps_security_scan"],
-    },
-    "release": {
-        "required": ["tapps_release_update", "tapps_dependency_scan"],
-        "recommended": ["tapps_checklist", "tapps_security_scan"],
-        "optional": [],
-    },
-    "document": {
-        "required": ["tapps_validate_changed", "tapps_checklist"],
-        "recommended": ["tapps_validate_config", "tapps_lookup_docs", "tapps_quality_gate"],
-        "optional": ["tapps_impact_analysis"],
-    },
-    "documentation": {
-        "required": ["tapps_checklist"],
-        "recommended": [],
-        "optional": ["tapps_lookup_docs"],
-    },
-    "qa": {
-        "required": [
-            "tapps_validate_changed",
-            "tapps_security_scan",
-            "tapps_quality_gate",
-            "tapps_checklist",
-        ],
-        "recommended": ["tapps_diff_impact", "tapps_score_file"],
-        "optional": [],
-    },
-    "frontend": {
-        "required": ["tapps_lookup_docs", "tapps_quality_gate", "tapps_validate_changed"],
-        "recommended": ["tapps_score_file", "tapps_checklist"],
-        "optional": ["tapps_quick_check"],
-    },
-}
-
-# Low engagement: fewer tools required (lighter)
-TASK_TOOL_MAP_LOW: dict[str, dict[str, list[str]]] = {
-    "feature": {
-        "required": ["tapps_quality_gate"],
-        "recommended": ["tapps_score_file", "tapps_quick_check"],
-        "optional": ["tapps_security_scan", "tapps_checklist"],
-    },
-    "bugfix": {
-        "required": [],
-        "recommended": ["tapps_score_file", "tapps_quality_gate"],
-        "optional": ["tapps_security_scan", "tapps_checklist"],
-    },
-    "refactor": {
-        "required": ["tapps_quality_gate"],
-        "recommended": ["tapps_score_file", "tapps_dead_code"],
-        "optional": ["tapps_dependency_graph", "tapps_security_scan", "tapps_checklist"],
-    },
-    "security": {
-        "required": ["tapps_security_scan", "tapps_quality_gate"],
-        "recommended": ["tapps_score_file"],
-        "optional": ["tapps_dependency_scan", "tapps_checklist"],
-    },
-    "review": {
-        "required": ["tapps_quality_gate"],
-        "recommended": ["tapps_score_file", "tapps_security_scan", "tapps_checklist"],
-        "optional": ["tapps_dead_code", "tapps_dependency_scan", "tapps_dependency_graph"],
-    },
-    "epic": {
-        "required": ["tapps_checklist"],
-        "recommended": ["tapps_score_file"],
-        "optional": ["tapps_quality_gate", "tapps_validate_changed"],
-    },
-    "release": {
-        "required": ["tapps_release_update"],
-        "recommended": ["tapps_dependency_scan"],
-        "optional": ["tapps_checklist"],
-    },
-    "document": {
-        "required": ["tapps_validate_changed"],
-        "recommended": ["tapps_validate_config", "tapps_lookup_docs"],
-        "optional": ["tapps_checklist", "tapps_impact_analysis"],
-    },
-    "documentation": {
-        "required": [],
-        "recommended": [],
-        "optional": ["tapps_checklist", "tapps_lookup_docs"],
-    },
-    "qa": {
-        "required": ["tapps_quality_gate", "tapps_security_scan"],
-        "recommended": ["tapps_validate_changed", "tapps_checklist"],
-        "optional": ["tapps_diff_impact"],
-    },
-    "frontend": {
-        "required": ["tapps_lookup_docs"],
-        "recommended": ["tapps_quality_gate", "tapps_quick_check"],
-        "optional": ["tapps_checklist"],
-    },
-}
-
-# Alias for medium (same as TASK_TOOL_MAP)
-TASK_TOOL_MAP_MEDIUM: dict[str, dict[str, list[str]]] = TASK_TOOL_MAP
-
-_ENGAGEMENT_TOOL_MAP: dict[str, dict[str, dict[str, list[str]]]] = {
-    "high": TASK_TOOL_MAP_HIGH,
-    "medium": TASK_TOOL_MAP_MEDIUM,
-    "low": TASK_TOOL_MAP_LOW,
-}
-
-KNOWN_TASK_TYPES: frozenset[str] = frozenset(TASK_TOOL_MAP.keys())
-
-TASK_TYPE_REASONS: dict[str, str] = {
-    "document": (
-        "Document/PDF/HTML output work: run validate_changed with blocking judges "
-        "(shell/pytest audit CLIs), validate_config for brand/template YAML manifests, "
-        "and rebuild shipped outputs after layout changes."
-    ),
-    "documentation": (
-        "Project documentation work: invoke /tapps-docs-bootstrap or /tapps-docs-refresh "
-        "skills (nlt-project-docs). Finish with /tapps-docs-finish-task for drift, links, "
-        "and completeness checks."
-    ),
-    "qa": (
-        "QA and test-validation work: use /tapps-domain-testing or task_type=qa; "
-        "require validate_changed, security_scan, and diff_impact when tests are in scope."
-    ),
-    "frontend": (
-        "Frontend/UX work: use /tapps-domain-frontend or /tapps-flow-frontend; "
-        "lookup_docs for UI libraries before implementation."
-    ),
-}
-
-# Primary tool -> checklist tool names satisfied by calling the primary (success only).
-# Composite tools that satisfy score + gate. Security is NOT implied: quick mode
-# and validate_changed(quick=True) often skip bandit / full security scans.
-_TOOL_EQUIVALENTS: dict[str, frozenset[str]] = {
-    "tapps_quick_check": frozenset({"tapps_score_file", "tapps_quality_gate"}),
-    "tapps_validate_changed": frozenset({"tapps_score_file", "tapps_quality_gate"}),
-    # Docs-routed research satisfies the lookup_docs obligation (ADR-0030).
-    "tapps_research": frozenset({"tapps_lookup_docs"}),
-}
-
-_engagement_maps_cache: dict[str, dict[str, dict[str, list[str]]]] | None = None
-_engagement_maps_version: str = ""
-_engagement_maps_root: str | None = None
-_engagement_maps_extras_fp: str | None = None
-
-
-def invalidate_engagement_maps_cache() -> None:
-    """Clear merged policy cache (tests / policy file edits)."""
-    global _engagement_maps_cache, _engagement_maps_version, _engagement_maps_root
-    global _engagement_maps_extras_fp
-    _engagement_maps_cache = None
-    _engagement_maps_version = ""
-    _engagement_maps_root = None
-    _engagement_maps_extras_fp = None
-
-
-def _get_merged_engagement_maps(
-    project_root: Path | None,
-) -> tuple[dict[str, dict[str, dict[str, list[str]]]], str]:
-    from tapps_mcp.tools.checklist_policy import (
-        compute_policy_version,
-        load_checklist_policy_extras,
-        merge_engagement_maps,
-    )
-
-    global _engagement_maps_cache, _engagement_maps_version, _engagement_maps_root
-    global _engagement_maps_extras_fp
-    root = (project_root or Path.cwd()).resolve()
-    extras = load_checklist_policy_extras(root)
-    fp = extras.content_fingerprint if extras else ""
-    key = str(root)
-    if (
-        _engagement_maps_cache is not None
-        and _engagement_maps_root == key
-        and _engagement_maps_extras_fp == fp
-    ):
-        return _engagement_maps_cache, _engagement_maps_version
-    merged = merge_engagement_maps(_ENGAGEMENT_TOOL_MAP, extras)
-    ver = compute_policy_version(merged, extras)
-    _engagement_maps_cache = merged
-    _engagement_maps_version = ver
-    _engagement_maps_root = key
-    _engagement_maps_extras_fp = fp
-    return merged, ver
-
-
-class ChecklistHint(BaseModel):
-    """A missing tool with a short reason for the LLM."""
-
-    tool: str = Field(description="Tool name to call.")
-    reason: str = Field(description="Why to call it / what to do next.")
-
-
-class ChecklistResult(BaseModel):
-    """Result of checklist evaluation."""
-
-    task_type: str = Field(description="The task type evaluated.")
-    resolved_policy_task_type: str = Field(
-        default="",
-        description="Task key used to load policy (may differ when falling back to review).",
-    )
-    policy_fallback: bool = Field(
-        default=False,
-        description="True when user task_type was unknown and review policy was used.",
-    )
-    checklist_policy_version: str = Field(
-        default="",
-        description="Hash of merged built-in + optional checklist-policy.yaml maps.",
-    )
-    called: list[str] = Field(
-        default_factory=list, description="Tools already called this session."
-    )
-    missing_required: list[str] = Field(
-        default_factory=list, description="Required tools not yet called."
-    )
-    missing_recommended: list[str] = Field(
-        default_factory=list, description="Recommended tools not yet called."
-    )
-    missing_optional: list[str] = Field(
-        default_factory=list, description="Optional tools not yet called."
-    )
-    missing_required_hints: list[ChecklistHint] = Field(
-        default_factory=list,
-        description="Required tools not yet called, with a short reason for each.",
-    )
-    missing_recommended_hints: list[ChecklistHint] = Field(
-        default_factory=list,
-        description="Recommended tools not yet called, with a short reason for each.",
-    )
-    missing_optional_hints: list[ChecklistHint] = Field(
-        default_factory=list,
-        description="Optional tools not yet called, with a short reason for each.",
-    )
-    required_tool_names: list[str] = Field(
-        default_factory=list, description="Required tools for this task/engagement."
-    )
-    satisfied_required_tools: list[str] = Field(
-        default_factory=list, description="Required tools satisfied (including equivalents)."
-    )
-    recommended_tool_names: list[str] = Field(
-        default_factory=list, description="Recommended tools for this task/engagement."
-    )
-    satisfied_recommended_tools: list[str] = Field(
-        default_factory=list, description="Recommended tools satisfied (including equivalents)."
-    )
-    optional_tool_names: list[str] = Field(
-        default_factory=list, description="Optional tools for this task/engagement."
-    )
-    satisfied_optional_tools: list[str] = Field(
-        default_factory=list, description="Optional tools satisfied (including equivalents)."
-    )
-    task_type_hint: str = Field(
-        default="",
-        description="When set, explains when to use this task_type (document, epic, etc.).",
-    )
-    complete: bool = Field(default=False, description="All required tools have been called.")
-    total_calls: int = Field(default=0, description="Total tool calls this session.")
-    server_unavailable_tools: list[str] = Field(
-        default_factory=list,
-        description="Required tools downgraded because their NLT server is disabled.",
-    )
 
 
 # ---------------------------------------------------------------------------
@@ -611,6 +187,68 @@ def _compute_effective_tools(base_successful: set[str]) -> set[str]:
 def _build_hints(tools: list[str]) -> list[ChecklistHint]:
     """Build hint objects for missing tools."""
     return [ChecklistHint(tool=t, reason=TOOL_REASONS.get(t, f"Call {t}.")) for t in tools]
+
+
+def _partition_by_effective(
+    names: list[str], effective: set[str]
+) -> tuple[list[str], list[str]]:
+    """Split *names* into (missing, satisfied) against the effective tool set."""
+    missing = [t for t in names if t not in effective]
+    satisfied = [t for t in names if t in effective]
+    return missing, satisfied
+
+
+def _demote_unavailable_server_tools(
+    missing_required: list[str],
+    missing_optional: list[str],
+    project_root: Path | None,
+) -> tuple[list[str], list[str], list[ChecklistHint]]:
+    """Move required tools whose NLT server is disabled into optional.
+
+    A tool the caller has no way to invoke is not a checklist failure, so it
+    is demoted rather than reported as missing. *missing_optional* is appended
+    to in place, matching the pre-split behaviour.
+
+    Returns (still_required, server_unavailable, extra_optional_hints).
+    """
+    if project_root is None:
+        return missing_required, [], []
+
+    from tapps_mcp.distribution.nlt_mcp_config import (
+        NLT_TOOL_SERVER,
+        _load_enabled_mcp_servers,
+        list_nlt_server_ids_in_config,
+        tool_unavailable_reason,
+        tools_on_enabled_nlt_servers,
+    )
+
+    available = tools_on_enabled_nlt_servers(project_root)
+    try:
+        enabled_servers = frozenset(
+            list_nlt_server_ids_in_config(_load_enabled_mcp_servers(project_root))
+        )
+    except Exception:
+        enabled_servers = frozenset({"nlt-build"})
+
+    server_unavailable: list[str] = []
+    still_required: list[str] = []
+    for tool in missing_required:
+        if tool in NLT_TOOL_SERVER and tool not in available:
+            server_unavailable.append(tool)
+            if tool not in missing_optional:
+                missing_optional.append(tool)
+        else:
+            still_required.append(tool)
+
+    hints = [
+        ChecklistHint(
+            tool=t,
+            reason=tool_unavailable_reason(t, enabled_servers)
+            or f"{t} requires another NLT server",
+        )
+        for t in server_unavailable
+    ]
+    return still_required, server_unavailable, hints
 
 
 class CallTracker:
@@ -825,55 +463,14 @@ class CallTracker:
         base_ok = _base_successful_tools(states, require_success=require_success)
         called_sorted = sorted(states.keys())
         effective = _compute_effective_tools(base_ok)
-        missing_required = [t for t in required if t not in effective]
-        missing_recommended = [t for t in recommended if t not in effective]
-        missing_optional = [t for t in optional if t not in effective]
 
-        server_unavailable: list[str] = []
-        if project_root is not None:
-            from tapps_mcp.distribution.nlt_mcp_config import (
-                NLT_TOOL_SERVER,
-                _load_enabled_mcp_servers,
-                list_nlt_server_ids_in_config,
-                tool_unavailable_reason,
-                tools_on_enabled_nlt_servers,
-            )
+        missing_required, sat_req = _partition_by_effective(required, effective)
+        missing_recommended, sat_rec = _partition_by_effective(recommended, effective)
+        missing_optional, sat_opt = _partition_by_effective(optional, effective)
 
-            available = tools_on_enabled_nlt_servers(project_root)
-            try:
-                enabled_servers = frozenset(
-                    list_nlt_server_ids_in_config(_load_enabled_mcp_servers(project_root))
-                )
-            except Exception:
-                enabled_servers = frozenset({"nlt-build"})
-
-            adjusted_required: list[str] = []
-            for tool in missing_required:
-                if tool in NLT_TOOL_SERVER and tool not in available:
-                    server_unavailable.append(tool)
-                    if tool not in missing_optional:
-                        missing_optional.append(tool)
-                else:
-                    adjusted_required.append(tool)
-            missing_required = adjusted_required
-
-            if server_unavailable:
-                extra_hints = [
-                    ChecklistHint(
-                        tool=t,
-                        reason=tool_unavailable_reason(t, enabled_servers)
-                        or f"{t} requires another NLT server",
-                    )
-                    for t in server_unavailable
-                ]
-                missing_optional_hints_extra = extra_hints
-            else:
-                missing_optional_hints_extra = []
-        else:
-            missing_optional_hints_extra = []
-        sat_req = [t for t in required if t in effective]
-        sat_rec = [t for t in recommended if t in effective]
-        sat_opt = [t for t in optional if t in effective]
+        missing_required, server_unavailable, missing_optional_hints_extra = (
+            _demote_unavailable_server_tools(missing_required, missing_optional, project_root)
+        )
 
         return ChecklistResult(
             task_type=task_type,
@@ -934,933 +531,41 @@ class CallTracker:
 
 
 # ---------------------------------------------------------------------------
-# Epic validation models
+# Re-exports (TAP-5733)
+#
+# These names lived here before the split. Tests and callers import them from
+# this module, and three of them are monkeypatched by dotted path
+# (``tools.checklist.check_tdd_stages``, ``…._get_git_context``,
+# ``….CallTracker.evaluate``), so the names must stay bound here.
 # ---------------------------------------------------------------------------
 
-# Valid point ranges per size label
-_SIZE_POINT_RANGES: dict[str, tuple[int, int]] = {
-    "S": (1, 2),
-    "M": (3, 5),
-    "L": (8, 13),
-}
-
-
-class EpicStoryInfo(BaseModel):
-    """Parsed information about a single story in an epic."""
-
-    story_id: str = Field(description="Story identifier (e.g. '1.1').")
-    title: str = Field(default="", description="Story title text.")
-    points: int | None = Field(default=None, description="Story points.")
-    size: str | None = Field(default=None, description="Size label (S/M/L).")
-    priority: str | None = Field(default=None, description="Priority (P0-P4).")
-    files: list[str] = Field(default_factory=list, description="Files listed.")
-    has_acceptance_criteria: bool = Field(default=False, description="Whether AC section exists.")
-    has_tasks: bool = Field(default=False, description="Whether Tasks section exists.")
-    linked_file: str | None = Field(
-        default=None, description="File path from a markdown link in the heading or table row."
-    )
-
-
-class EpicFinding(BaseModel):
-    """A single validation finding for an epic document."""
-
-    severity: str = Field(description="'error' or 'warning'.")
-    message: str = Field(description="Human-readable finding description.")
-    story_id: str | None = Field(default=None, description="Story ID if finding is story-specific.")
-
-
-class CrossFileSummary(BaseModel):
-    """Aggregate completeness metrics from linked story files."""
-
-    total_stories: int = Field(default=0, description="Stories with linked files.")
-    stories_with_files: int = Field(default=0, description="Stories that have linked files.")
-    files_found: int = Field(default=0, description="Linked files that exist on disk.")
-    files_missing: int = Field(default=0, description="Linked files not found.")
-    with_acceptance_criteria: int = Field(
-        default=0, description="Stories whose linked file has an AC section."
-    )
-    with_tasks: int = Field(default=0, description="Stories whose linked file has a Tasks section.")
-    with_definition_of_done: int = Field(
-        default=0, description="Stories whose linked file has a DoD section."
-    )
-    summary: str = Field(default="", description="Human-readable summary line.")
-
-
-class EpicValidation(BaseModel):
-    """Result of structural validation of an epic markdown file."""
-
-    sections_found: list[str] = Field(default_factory=list, description="Top-level sections found.")
-    stories: list[EpicStoryInfo] = Field(default_factory=list, description="Parsed stories.")
-    files_affected_entries: list[str] = Field(
-        default_factory=list,
-        description="Files listed in a files-affected table.",
-    )
-    findings: list[EpicFinding] = Field(default_factory=list, description="Validation findings.")
-    valid: bool = Field(
-        default=True,
-        description="True when no error-severity findings exist.",
-    )
-    cross_file_summary: CrossFileSummary | None = Field(
-        default=None,
-        description="Cross-file story completeness metrics (when linked files are validated).",
-    )
-
-
-class EpicChecklistResult(ChecklistResult):
-    """Extended checklist result with epic-specific validation."""
-
-    epic_validation: EpicValidation | None = Field(
-        default=None,
-        description="Epic structural validation (present when file_path provided).",
-    )
-
-
-# ---------------------------------------------------------------------------
-# Epic markdown parsing
-# ---------------------------------------------------------------------------
-
-# Regex for story headings: "### Story X.Y: Title" or "### X.Y — Title"
-_STORY_HEADING_RE = re.compile(
-    r"^###\s+(?:Story\s+)?(\d+\.\d+)\s*[:\u2014-]\s*(.*)",
-    re.MULTILINE,
-)
-
-# Linked heading: "### [X.Y](path) -- Title"
-_LINKED_HEADING_RE = re.compile(
-    r"^###\s+\[(\d+\.\d+)\]\(([^)]+)\)\s*[:\u2014-]+\s*(.*)",
-    re.MULTILINE,
-)
-
-# Table-linked story: "| ID | [Title](file.md) | ... |"
-_TABLE_STORY_RE = re.compile(
-    r"^\|\s*(\S+)\s*\|\s*\[([^\]]+)\]\(([^)]+)\)\s*\|(.*)$",
-    re.MULTILINE,
-)
-
-# Points pattern: "**Points:** N" or "Points: N"
-_POINTS_RE = re.compile(r"\*{0,2}Points:?\*{0,2}:?\s*(\d+)", re.IGNORECASE)
-
-# Size pattern: "**Size:** S" or "Size: M"
-_SIZE_RE = re.compile(r"\*{0,2}Size:?\*{0,2}:?\s*([SML])\b", re.IGNORECASE)
-
-# Priority pattern: "**Priority:** P1" or "Priority: P2"
-_PRIORITY_RE = re.compile(r"\*{0,2}Priority:?\*{0,2}:?\s*(P\d)\b", re.IGNORECASE)
-
-# Files pattern: lines starting with "- `path`" in a Files section
-_FILE_ENTRY_RE = re.compile(r"^-\s+`([^`]+)`", re.MULTILINE)
-
-# Table row for files-affected: "| `path` | ..."
-_FILES_TABLE_ROW_RE = re.compile(r"^\|\s*`([^`]+)`", re.MULTILINE)
-
-
-def _parse_table_size_priority(remaining_cols: str) -> tuple[str | None, str | None]:
-    """Extract size and priority from remaining table columns.
-
-    Args:
-        remaining_cols: The portion of the table row after the link column.
-
-    Returns:
-        Tuple of (size, priority) — each may be None.
-    """
-    cells = [c.strip() for c in remaining_cols.split("|") if c.strip()]
-    size: str | None = None
-    priority: str | None = None
-    size_re = re.compile(r"^(XS|XL|S|M|L)$", re.IGNORECASE)
-    prio_re = re.compile(r"^(P[0-4])$", re.IGNORECASE)
-    for cell in cells:
-        if not size and size_re.match(cell):
-            size = cell.upper()
-        elif not priority and prio_re.match(cell):
-            priority = cell.upper()
-    return size, priority
-
-
-def _parse_epic_markdown(
-    content: str,
-) -> tuple[
-    list[str],
-    list[EpicStoryInfo],
-    list[str],
-]:
-    """Parse an epic markdown file and extract structural information.
-
-    Returns:
-        Tuple of (section_headings, stories, files_affected_entries).
-    """
-    # Extract top-level (##) section headings
-    sections = re.findall(r"^##\s+(.+)", content, re.MULTILINE)
-    section_names = [s.strip() for s in sections]
-
-    # --- 1. Try classic story headings ---
-    story_matches = list(_STORY_HEADING_RE.finditer(content))
-    stories: list[EpicStoryInfo] = []
-
-    for i, match in enumerate(story_matches):
-        story_id = match.group(1)
-        title = match.group(2).strip()
-
-        start = match.end()
-        end = story_matches[i + 1].start() if i + 1 < len(story_matches) else len(content)
-        block = content[start:end]
-
-        points_m = _POINTS_RE.search(block)
-        size_m = _SIZE_RE.search(block)
-        priority_m = _PRIORITY_RE.search(block)
-        files = _extract_story_files(block)
-        has_ac = _has_subsection(block, "acceptance criteria")
-        has_tasks = _has_subsection(block, "tasks")
-
-        stories.append(
-            EpicStoryInfo(
-                story_id=story_id,
-                title=title,
-                points=int(points_m.group(1)) if points_m else None,
-                size=size_m.group(1).upper() if size_m else None,
-                priority=priority_m.group(1).upper() if priority_m else None,
-                files=files,
-                has_acceptance_criteria=has_ac,
-                has_tasks=has_tasks,
-            )
-        )
-
-    # --- 2. Try linked headings: ### [X.Y](path) -- Title ---
-    linked_matches = list(_LINKED_HEADING_RE.finditer(content))
-    # Avoid duplicates — only add if story_id not already captured
-    existing_ids = {s.story_id for s in stories}
-
-    for i, match in enumerate(linked_matches):
-        story_id = match.group(1)
-        if story_id in existing_ids:
-            continue
-        linked_file = match.group(2).strip()
-        title = match.group(3).strip()
-
-        start = match.end()
-        end = linked_matches[i + 1].start() if i + 1 < len(linked_matches) else len(content)
-        block = content[start:end]
-
-        points_m = _POINTS_RE.search(block)
-        size_m = _SIZE_RE.search(block)
-        priority_m = _PRIORITY_RE.search(block)
-        files = _extract_story_files(block)
-        has_ac = _has_subsection(block, "acceptance criteria")
-        has_tasks = _has_subsection(block, "tasks")
-
-        stories.append(
-            EpicStoryInfo(
-                story_id=story_id,
-                title=title,
-                linked_file=linked_file,
-                points=int(points_m.group(1)) if points_m else None,
-                size=size_m.group(1).upper() if size_m else None,
-                priority=priority_m.group(1).upper() if priority_m else None,
-                files=files,
-                has_acceptance_criteria=has_ac,
-                has_tasks=has_tasks,
-            )
-        )
-        existing_ids.add(story_id)
-
-    # --- 3. Try table-linked stories if no stories found yet ---
-    if not stories:
-        table_matches = list(_TABLE_STORY_RE.finditer(content))
-        for match in table_matches:
-            story_id = match.group(1)
-            title = match.group(2).strip()
-            linked_file = match.group(3).strip()
-            remaining = match.group(4)
-
-            size, priority = _parse_table_size_priority(remaining)
-
-            stories.append(
-                EpicStoryInfo(
-                    story_id=story_id,
-                    title=title,
-                    linked_file=linked_file,
-                    size=size,
-                    priority=priority,
-                )
-            )
-
-    # Extract files-affected table entries
-    files_affected = _extract_files_affected(content)
-
-    return section_names, stories, files_affected
-
-
-def _extract_story_files(block: str) -> list[str]:
-    """Extract file paths from a story block's Files section."""
-    # Find "**Files:**" or "#### Files" section
-    files_match = re.search(
-        r"(?:\*\*Files:?\*\*|####\s+Files)\s*\n((?:\s*-\s+`[^`]+`.*\n?)+)",
-        block,
-        re.IGNORECASE,
-    )
-    if not files_match:
-        return []
-    files_text = files_match.group(1)
-    return _FILE_ENTRY_RE.findall(files_text)
-
-
-def _has_subsection(block: str, name: str) -> bool:
-    """Check whether a block contains a sub-section with the given name."""
-    pattern = re.compile(
-        rf"(?:^####?\s+{re.escape(name)}|^\*\*{re.escape(name)}:?\*\*)",
-        re.IGNORECASE | re.MULTILINE,
-    )
-    return bool(pattern.search(block))
-
-
-def _extract_files_affected(content: str) -> list[str]:
-    """Extract file paths from a files-affected table."""
-    # Look for a "Files Affected" or "Files-Affected" section
-    section_match = re.search(
-        r"(?:^##\s+Files[- ]Affected|^\*\*Files[- ]Affected:?\*\*)",
-        content,
-        re.IGNORECASE | re.MULTILINE,
-    )
-    if not section_match:
-        return []
-    start = section_match.end()
-    # Find next section heading
-    next_section = re.search(r"^##\s+", content[start:], re.MULTILINE)
-    end = start + next_section.start() if next_section else len(content)
-    table_text = content[start:end]
-    return _FILES_TABLE_ROW_RE.findall(table_text)
-
-
-# ---------------------------------------------------------------------------
-# Epic structural validation
-# ---------------------------------------------------------------------------
-
-_REQUIRED_SECTIONS = {"Goal", "Acceptance Criteria", "Stories"}
-
-
-def _check_required_sections(
-    section_names: list[str],
-    findings: list[EpicFinding],
-) -> None:
-    """Check that required top-level sections exist."""
-    normalized = {s.lower().strip() for s in section_names}
-    findings.extend(
-        EpicFinding(
-            severity="error",
-            message=f"Missing required section: '{req}'",
-        )
-        for req in _REQUIRED_SECTIONS
-        if req.lower() not in normalized
-    )
-
-
-def _check_story_completeness(
-    stories: list[EpicStoryInfo],
-    findings: list[EpicFinding],
-) -> None:
-    """Check each story for required sub-fields."""
-    for story in stories:
-        if story.points is None:
-            findings.append(
-                EpicFinding(
-                    severity="warning",
-                    message=f"Story {story.story_id} missing Points",
-                    story_id=story.story_id,
-                )
-            )
-        if story.size is None:
-            findings.append(
-                EpicFinding(
-                    severity="warning",
-                    message=f"Story {story.story_id} missing Size",
-                    story_id=story.story_id,
-                )
-            )
-        if story.priority is None:
-            findings.append(
-                EpicFinding(
-                    severity="warning",
-                    message=f"Story {story.story_id} missing Priority",
-                    story_id=story.story_id,
-                )
-            )
-        if not story.files:
-            findings.append(
-                EpicFinding(
-                    severity="warning",
-                    message=f"Story {story.story_id} missing Files list",
-                    story_id=story.story_id,
-                )
-            )
-        if not story.has_acceptance_criteria:
-            findings.append(
-                EpicFinding(
-                    severity="error",
-                    message=f"Story {story.story_id} missing Acceptance Criteria",
-                    story_id=story.story_id,
-                )
-            )
-        if not story.has_tasks:
-            findings.append(
-                EpicFinding(
-                    severity="warning",
-                    message=f"Story {story.story_id} missing Tasks",
-                    story_id=story.story_id,
-                )
-            )
-
-
-def _check_point_size_consistency(
-    stories: list[EpicStoryInfo],
-    findings: list[EpicFinding],
-) -> None:
-    """Flag stories where points don't match the expected range for the size."""
-    for story in stories:
-        if story.points is None or story.size is None:
-            continue
-        expected = _SIZE_POINT_RANGES.get(story.size)
-        if expected is None:
-            continue
-        lo, hi = expected
-        if not (lo <= story.points <= hi):
-            findings.append(
-                EpicFinding(
-                    severity="warning",
-                    message=(
-                        f"Story {story.story_id} size {story.size} "
-                        f"expects {lo}-{hi} points but has {story.points}"
-                    ),
-                    story_id=story.story_id,
-                )
-            )
-
-
-def _check_dependency_cycles(
-    content: str,
-    findings: list[EpicFinding],
-) -> None:
-    """Check for cycles in story dependency references.
-
-    Looks for patterns like "Dependencies: Story X.Y" and builds
-    a simple DAG to detect cycles.
-    """
-    dep_re = re.compile(
-        r"(?:depends\s+on|dependencies?:?|requires)\s+(?:story\s+)?(\d+\.\d+)",
-        re.IGNORECASE,
-    )
-    # Build adjacency from story blocks
-    story_blocks = list(_STORY_HEADING_RE.finditer(content))
-    graph: dict[str, list[str]] = {}
-
-    for i, match in enumerate(story_blocks):
-        story_id = match.group(1)
-        start = match.end()
-        end = story_blocks[i + 1].start() if i + 1 < len(story_blocks) else len(content)
-        block = content[start:end]
-        deps = dep_re.findall(block)
-        if deps:
-            graph[story_id] = deps
-
-    # Simple cycle detection via DFS
-    visited: set[str] = set()
-    in_stack: set[str] = set()
-
-    def _dfs(node: str) -> bool:
-        if node in in_stack:
-            return True
-        if node in visited:
-            return False
-        visited.add(node)
-        in_stack.add(node)
-        for dep in graph.get(node, []):
-            if _dfs(dep):
-                return True
-        in_stack.discard(node)
-        return False
-
-    for node in graph:
-        if _dfs(node):
-            findings.append(
-                EpicFinding(
-                    severity="error",
-                    message=f"Dependency cycle detected involving story {node}",
-                    story_id=node,
-                )
-            )
-            break  # One cycle finding is sufficient
-
-
-def _check_files_table_coverage(
-    stories: list[EpicStoryInfo],
-    files_affected: list[str],
-    findings: list[EpicFinding],
-) -> None:
-    """Check that files in stories appear in the files-affected table."""
-    if not files_affected:
-        return  # No table present, skip check
-    table_set = set(files_affected)
-    for story in stories:
-        findings.extend(
-            EpicFinding(
-                severity="warning",
-                message=(
-                    f"Story {story.story_id} references '{f}' not found in files-affected table"
-                ),
-                story_id=story.story_id,
-            )
-            for f in story.files
-            if f not in table_set
-        )
-
-
-def _check_story_file_structure(
-    content: str,
-) -> tuple[bool, bool, bool, int | None, str | None]:
-    """Check a story file for structural sections.
-
-    Returns:
-        Tuple of (has_ac, has_tasks, has_dod, points, size).
-    """
-    ac_re = re.compile(
-        r"(?:^##?\s+Acceptance\s+Criteria|^\*\*Acceptance\s+Criteria:?\*\*)",
-        re.IGNORECASE | re.MULTILINE,
-    )
-    tasks_re = re.compile(
-        r"(?:^##?\s+Tasks?\b|^\*\*Tasks?:?\*\*)",
-        re.IGNORECASE | re.MULTILINE,
-    )
-    dod_re = re.compile(
-        r"(?:^##?\s+Definition\s+of\s+Done|^\*\*Definition\s+of\s+Done:?\*\*)",
-        re.IGNORECASE | re.MULTILINE,
-    )
-
-    has_ac = bool(ac_re.search(content))
-    has_tasks = bool(tasks_re.search(content))
-    has_dod = bool(dod_re.search(content))
-
-    pm = _POINTS_RE.search(content)
-    points = int(pm.group(1)) if pm else None
-
-    sm = _SIZE_RE.search(content)
-    size = sm.group(1).upper() if sm else None
-
-    return has_ac, has_tasks, has_dod, points, size
-
-
-def _validate_linked_stories(
-    stories: list[EpicStoryInfo],
-    findings: list[EpicFinding],
-    epic_file_path: Path,
-) -> CrossFileSummary | None:
-    """Follow linked story files and validate their structure.
-
-    Args:
-        stories: Parsed stories (may have ``linked_file`` set).
-        findings: Findings list to append to.
-        epic_file_path: Path to the epic file (links are resolved relative to its parent).
-
-    Returns:
-        A ``CrossFileSummary`` or ``None`` if no stories have linked files.
-    """
-    epic_dir = epic_file_path.parent
-    stories_with_files = [s for s in stories if s.linked_file]
-
-    if not stories_with_files:
-        return None
-
-    files_found = 0
-    files_missing = 0
-    with_ac = 0
-    with_tasks = 0
-    with_dod = 0
-    seen_paths: set[str] = set()
-
-    for story in stories_with_files:
-        linked = story.linked_file
-        if linked is None:  # pragma: no cover — filtered above
-            continue
-
-        resolved = (epic_dir / linked).resolve()
-        canonical = str(resolved)
-
-        # Guard against circular/self references
-        if canonical in seen_paths:
-            continue
-        seen_paths.add(canonical)
-        if resolved == epic_file_path.resolve():
-            continue
-
-        if not resolved.is_file():
-            files_missing += 1
-            findings.append(
-                EpicFinding(
-                    severity="warning",
-                    message=f"Story {story.story_id} linked file not found: {linked}",
-                    story_id=story.story_id,
-                )
-            )
-            continue
-
-        files_found += 1
-        try:
-            content = resolved.read_text(encoding="utf-8", errors="replace")
-        except OSError:
-            findings.append(
-                EpicFinding(
-                    severity="warning",
-                    message=f"Story {story.story_id} cannot read linked file: {linked}",
-                    story_id=story.story_id,
-                )
-            )
-            continue
-
-        has_ac, has_tasks_sec, has_dod, points, size = _check_story_file_structure(content)
-
-        # Merge with inline metadata (linked file wins if present)
-        if has_ac:
-            story.has_acceptance_criteria = True
-            with_ac += 1
-        elif not story.has_acceptance_criteria:
-            findings.append(
-                EpicFinding(
-                    severity="info",
-                    message=(f"Story {story.story_id} linked file missing Acceptance Criteria"),
-                    story_id=story.story_id,
-                )
-            )
-
-        if has_tasks_sec:
-            story.has_tasks = True
-            with_tasks += 1
-        elif not story.has_tasks:
-            findings.append(
-                EpicFinding(
-                    severity="info",
-                    message=f"Story {story.story_id} linked file missing Tasks section",
-                    story_id=story.story_id,
-                )
-            )
-
-        if has_dod:
-            with_dod += 1
-
-        if points is not None and story.points is None:
-            story.points = points
-        if size is not None and story.size is None:
-            story.size = size
-
-    total = len(stories_with_files)
-    parts = [
-        f"{total} stories",
-        f"{files_found}/{total} files found",
-        f"{with_ac}/{total} have AC",
-        f"{with_tasks}/{total} have tasks",
-    ]
-    return CrossFileSummary(
-        total_stories=total,
-        stories_with_files=total,
-        files_found=files_found,
-        files_missing=files_missing,
-        with_acceptance_criteria=with_ac,
-        with_tasks=with_tasks,
-        with_definition_of_done=with_dod,
-        summary=", ".join(parts),
-    )
-
-
-def validate_epic_markdown(
-    content: str,
-    *,
-    epic_file_path: Path | None = None,
-    validate_linked_stories: bool = True,
-) -> EpicValidation:
-    """Validate an epic markdown document for structural completeness.
-
-    Args:
-        content: The epic markdown content.
-        epic_file_path: Path to the epic file on disk.  Required for
-            cross-file story validation (resolving linked story files).
-        validate_linked_stories: When True and ``epic_file_path`` is given,
-            follow linked story files and validate their structure.
-
-    Returns an ``EpicValidation`` with all findings.
-    """
-    section_names, stories, files_affected = _parse_epic_markdown(content)
-    findings: list[EpicFinding] = []
-
-    _check_required_sections(section_names, findings)
-
-    cross_file_summary: CrossFileSummary | None = None
-
-    if not stories:
-        findings.append(
-            EpicFinding(
-                severity="error",
-                message=(
-                    "No stories found (expected '### Story X.Y:', "
-                    "'### [X.Y](path) --', or table-linked rows)"
-                ),
-            )
-        )
-    else:
-        _check_story_completeness(stories, findings)
-        _check_point_size_consistency(stories, findings)
-        _check_files_table_coverage(stories, files_affected, findings)
-
-        # Cross-file story validation
-        if validate_linked_stories and epic_file_path is not None:
-            cross_file_summary = _validate_linked_stories(
-                stories,
-                findings,
-                epic_file_path,
-            )
-
-    _check_dependency_cycles(content, findings)
-
-    has_errors = any(f.severity == "error" for f in findings)
-
-    return EpicValidation(
-        sections_found=section_names,
-        stories=stories,
-        files_affected_entries=files_affected,
-        findings=findings,
-        valid=not has_errors,
-        cross_file_summary=cross_file_summary,
-    )
-
-
-# ---------------------------------------------------------------------------
-# TDD stage validation (TAP-476)
-# ---------------------------------------------------------------------------
-
-_TDD_RED_PREFIXES = ("test:", "tests:")
-_TDD_GREEN_PREFIXES = ("fix:", "feat:")
-_TDD_REFACTOR_PREFIXES = ("refactor:", "chore:")
-_COVERAGE_MIN = 80.0
-
-
-class TDDStageCheck(BaseModel):
-    """Result of a single TDD stage check."""
-
-    stage: str = Field(description="TDD stage name: red | green | refactor | coverage")
-    result: str = Field(description="passed | failed | skipped")
-    message: str = Field(default="", description="Human-readable explanation.")
-
-
-class TDDCheckResult(BaseModel):
-    """Aggregate result of TDD stage validation."""
-
-    checks: list[TDDStageCheck] = Field(default_factory=list)
-    passed: bool = Field(description="True only when all non-skipped checks pass.")
-    summary: str = Field(default="", description="One-line summary.")
-
-
-_COMPILE_SKIP_DIRS = frozenset(
-    {
-        ".venv",
-        "__pycache__",
-        ".git",
-        "node_modules",
-        ".tox",
-        "site-packages",
-        "dist",
-        "build",
-        ".mypy_cache",
-        ".ruff_cache",
-        "vendor",
-        ".eggs",
-        ".pytest_cache",
-    }
-)
-
-
-def _compile_scan_roots(repo_root: Path) -> list[Path]:
-    """Prefer project source trees over a full-repo rglob."""
-    roots: list[Path] = []
-    src = repo_root / "src"
-    if src.is_dir():
-        roots.append(src)
-    packages = repo_root / "packages"
-    if packages.is_dir():
-        for pkg in packages.iterdir():
-            pkg_src = pkg / "src"
-            if pkg_src.is_dir():
-                roots.append(pkg_src)
-    return roots or [repo_root]
-
-
-def _check_compile_time_red(repo_root: Path) -> TDDStageCheck:
-    """Validate that RED state is runtime RED (test failure) not compile-time RED.
-
-    Compile-time RED means a syntax/import error that prevents even running
-    pytest — that is invalid TDD RED state.  We check whether any Python file
-    under project source roots is unparseable (skipping venv/vendor caches).
-    """
-    import ast
-
-    broken: list[str] = []
-    for scan_root in _compile_scan_roots(repo_root):
-        for py_file in scan_root.rglob("*.py"):
-            if any(part in _COMPILE_SKIP_DIRS for part in py_file.parts):
-                continue
-            try:
-                ast.parse(py_file.read_text(encoding="utf-8", errors="replace"))
-            except SyntaxError:
-                try:
-                    broken.append(str(py_file.relative_to(repo_root)))
-                except ValueError:
-                    broken.append(py_file.name)
-            if len(broken) >= 3:
-                break
-        if len(broken) >= 3:
-            break
-
-    if broken:
-        return TDDStageCheck(
-            stage="red_state",
-            result="failed",
-            message=(
-                f"Compile-time RED detected — syntax errors in: {', '.join(broken)}. "
-                "Fix syntax before committing RED checkpoint."
-            ),
-        )
-    return TDDStageCheck(
-        stage="red_state",
-        result="passed",
-        message="No compile-time errors found; RED state is valid runtime RED.",
-    )
-
-
-async def _check_git_commits(
-    red_prefixes: tuple[str, ...],
-    green_prefixes: tuple[str, ...],
-    refactor_prefixes: tuple[str, ...],
-) -> list[TDDStageCheck]:
-    """Scan recent git log for RED/GREEN/REFACTOR checkpoint commits."""
-    from tapps_mcp.tools.subprocess_runner import run_command_async
-
-    try:
-        result = await run_command_async(["git", "log", "--oneline", "-30"], timeout=5)
-        if result.returncode != 0:
-            return [
-                TDDStageCheck(stage="red", result="skipped", message="git log unavailable."),
-                TDDStageCheck(stage="green", result="skipped", message="git log unavailable."),
-                TDDStageCheck(stage="refactor", result="skipped", message="git log unavailable."),
-            ]
-        log_lines = [ln.strip() for ln in result.stdout.splitlines() if ln.strip()]
-    except Exception:
-        return [
-            TDDStageCheck(stage="red", result="skipped", message="git not available."),
-            TDDStageCheck(stage="green", result="skipped", message="git not available."),
-            TDDStageCheck(stage="refactor", result="skipped", message="git not available."),
-        ]
-
-    def _has_prefix(lines: list[str], prefixes: tuple[str, ...]) -> bool:
-        return any(
-            # git log --oneline format: "<sha> <message>"
-            " ".join(ln.split()[1:]).lower().startswith(pfx)
-            for ln in lines
-            for pfx in prefixes
-        )
-
-    red_ok = _has_prefix(log_lines, red_prefixes)
-    green_ok = _has_prefix(log_lines, green_prefixes)
-    refactor_ok = _has_prefix(log_lines, refactor_prefixes)
-
-    return [
-        TDDStageCheck(
-            stage="red",
-            result="passed" if red_ok else "failed",
-            message=(
-                "RED checkpoint commit found (test: prefix)."
-                if red_ok
-                else "No RED checkpoint commit found. Expected a commit starting with 'test:'."
-            ),
-        ),
-        TDDStageCheck(
-            stage="green",
-            result="passed" if green_ok else "failed",
-            message=(
-                "GREEN checkpoint commit found (fix:/feat: prefix)."
-                if green_ok
-                else "No GREEN checkpoint found. Expected a commit starting with 'fix:' or 'feat:'."
-            ),
-        ),
-        TDDStageCheck(
-            stage="refactor",
-            result="passed" if refactor_ok else "skipped",
-            message=(
-                "REFACTOR checkpoint commit found."
-                if refactor_ok
-                else "No REFACTOR checkpoint found (optional — skipped)."
-            ),
-        ),
-    ]
-
-
-def _check_coverage(repo_root: Path) -> TDDStageCheck:
-    """Check coverage threshold from .coverage or coverage.xml."""
-    from defusedxml.ElementTree import parse as parse_xml
-
-    # Try coverage.xml first (generated by pytest-cov --cov-report=xml)
-    xml_path = repo_root / "coverage.xml"
-    if xml_path.exists():
-        try:
-            tree = parse_xml(xml_path)
-            root_el = tree.getroot()
-            line_rate = float(root_el.attrib.get("line-rate", "0"))
-            pct = round(line_rate * 100, 1)
-            passed = pct >= _COVERAGE_MIN
-            return TDDStageCheck(
-                stage="coverage",
-                result="passed" if passed else "failed",
-                message=(
-                    f"Coverage {pct}% {'meets' if passed else 'below'} "
-                    f"{_COVERAGE_MIN}% threshold (from coverage.xml)."
-                ),
-            )
-        except Exception:
-            logger.debug("coverage_xml_parse_failed", path=str(xml_path), exc_info=True)
-
-    # Try .coverage binary presence as a weak signal
-    dot_coverage = repo_root / ".coverage"
-    if dot_coverage.exists():
-        return TDDStageCheck(
-            stage="coverage",
-            result="skipped",
-            message=".coverage file exists but cannot be parsed without coverage.py CLI. "
-            "Run `coverage report` to verify >= 80%.",
-        )
-
-    return TDDStageCheck(
-        stage="coverage",
-        result="skipped",
-        message="No coverage.xml or .coverage found. "
-        "Run pytest with --cov --cov-report=xml to generate coverage data.",
-    )
-
-
-async def check_tdd_stages(repo_root: Path | None = None) -> TDDCheckResult:
-    """Run all TDD stage checks and return an aggregate result.
-
-    Args:
-        repo_root: Root of the repository. Defaults to cwd.
-    """
-    root = repo_root or Path.cwd()
-
-    compile_check = _check_compile_time_red(root)
-    git_checks = await _check_git_commits(
-        _TDD_RED_PREFIXES, _TDD_GREEN_PREFIXES, _TDD_REFACTOR_PREFIXES
-    )
-    coverage_check = _check_coverage(root)
-
-    all_checks = [compile_check, *git_checks, coverage_check]
-
-    failed = [c for c in all_checks if c.result == "failed"]
-    passed_all = len(failed) == 0
-
-    summary = (
-        "All TDD stage checks passed."
-        if passed_all
-        else f"{len(failed)} TDD stage check(s) failed: {', '.join(c.stage for c in failed)}."
-    )
-
-    return TDDCheckResult(checks=all_checks, passed=passed_all, summary=summary)
+__all__ = [
+    "KNOWN_TASK_TYPES",
+    "TASK_TOOL_MAP",
+    "TASK_TOOL_MAP_HIGH",
+    "TASK_TOOL_MAP_LOW",
+    "TASK_TOOL_MAP_MEDIUM",
+    "TASK_TYPE_REASONS",
+    "TOOL_REASONS",
+    "_ENGAGEMENT_TOOL_MAP",
+    "_TOOL_EQUIVALENTS",
+    "CallTracker",
+    "ChecklistHint",
+    "ChecklistResult",
+    "CrossFileSummary",
+    "EpicChecklistResult",
+    "EpicFinding",
+    "EpicStoryInfo",
+    "EpicValidation",
+    "TDDCheckResult",
+    "TDDStageCheck",
+    "ToolCallRecord",
+    "_check_compile_time_red",
+    "_check_coverage",
+    "_check_git_commits",
+    "_get_git_context",
+    "_get_merged_engagement_maps",
+    "check_tdd_stages",
+    "invalidate_engagement_maps_cache",
+    "validate_epic_markdown",
+]
