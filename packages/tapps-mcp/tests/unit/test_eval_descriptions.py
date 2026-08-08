@@ -9,6 +9,7 @@ not unit tests, because it requires OAuth + the live MCP catalog.
 from __future__ import annotations
 
 import importlib.util
+import json
 import subprocess
 import sys
 from pathlib import Path
@@ -252,6 +253,100 @@ class TestSafeRefLabel:
 
     def test_branch_with_slash(self, compare_mod) -> None:
         assert compare_mod.safe_ref_label("feature/foo") == "feature-foo"
+
+
+class TestCopyMcpConfig:
+    """`copy_mcp_config` re-points the main .mcp.json at an eval worktree so
+    MCP servers spawn against that ref's source, not the main checkout."""
+
+    @staticmethod
+    def _write_config(repo_root: Path, servers: dict) -> None:
+        (repo_root / ".mcp.json").write_text(
+            json.dumps({"mcpServers": servers}), encoding="utf-8"
+        )
+
+    def test_inserts_directory_flag_after_uv_run(
+        self, compare_mod, tmp_path, monkeypatch
+    ) -> None:
+        repo_root, worktree = tmp_path / "repo", tmp_path / "wt"
+        repo_root.mkdir()
+        worktree.mkdir()
+        self._write_config(
+            repo_root, {"nlt-build": {"command": "uv", "args": ["run", "tapps-mcp", "serve"]}}
+        )
+        monkeypatch.setattr(compare_mod, "REPO_ROOT", repo_root)
+
+        out = json.loads(compare_mod.copy_mcp_config(worktree).read_text(encoding="utf-8"))
+        assert out["mcpServers"]["nlt-build"]["args"] == [
+            "run", "--directory", str(worktree), "tapps-mcp", "serve",
+        ]
+
+    def test_repoints_project_root_env_vars(
+        self, compare_mod, tmp_path, monkeypatch
+    ) -> None:
+        repo_root, worktree = tmp_path / "repo", tmp_path / "wt"
+        repo_root.mkdir()
+        worktree.mkdir()
+        self._write_config(repo_root, {
+            "nlt-build": {
+                "command": "uv",
+                "args": ["run", "tapps-mcp"],
+                "env": {
+                    "TAPPS_MCP_PROJECT_ROOT": "/old",
+                    "DOCS_MCP_PROJECT_ROOT": "/old",
+                    "UNRELATED": "keep-me",
+                },
+            },
+        })
+        monkeypatch.setattr(compare_mod, "REPO_ROOT", repo_root)
+
+        env = json.loads(
+            compare_mod.copy_mcp_config(worktree).read_text(encoding="utf-8")
+        )["mcpServers"]["nlt-build"]["env"]
+        assert env["TAPPS_MCP_PROJECT_ROOT"] == str(worktree)
+        assert env["DOCS_MCP_PROJECT_ROOT"] == str(worktree)
+        assert env["UNRELATED"] == "keep-me"
+
+    def test_leaves_non_uv_entries_untouched(
+        self, compare_mod, tmp_path, monkeypatch
+    ) -> None:
+        repo_root, worktree = tmp_path / "repo", tmp_path / "wt"
+        repo_root.mkdir()
+        worktree.mkdir()
+        original = {"command": "npx", "args": ["run", "some-server"]}
+        self._write_config(repo_root, {"other": dict(original)})
+        monkeypatch.setattr(compare_mod, "REPO_ROOT", repo_root)
+
+        out = json.loads(compare_mod.copy_mcp_config(worktree).read_text(encoding="utf-8"))
+        assert out["mcpServers"]["other"] == original
+
+    def test_tolerates_off_contract_entry_shapes(
+        self, compare_mod, tmp_path, monkeypatch
+    ) -> None:
+        # A malformed .mcp.json must not crash the eval before it starts.
+        repo_root, worktree = tmp_path / "repo", tmp_path / "wt"
+        repo_root.mkdir()
+        worktree.mkdir()
+        self._write_config(repo_root, {
+            "a_string": "not-a-dict",
+            "args_not_a_list": {"command": "uv", "args": "run"},
+            "env_not_a_dict": {"command": "uv", "args": ["run"], "env": "nope"},
+        })
+        monkeypatch.setattr(compare_mod, "REPO_ROOT", repo_root)
+
+        out = json.loads(compare_mod.copy_mcp_config(worktree).read_text(encoding="utf-8"))
+        assert out["mcpServers"]["a_string"] == "not-a-dict"
+        assert out["mcpServers"]["args_not_a_list"]["args"] == "run"
+        assert out["mcpServers"]["env_not_a_dict"]["env"] == "nope"
+
+    def test_missing_config_raises(self, compare_mod, tmp_path, monkeypatch) -> None:
+        repo_root, worktree = tmp_path / "repo", tmp_path / "wt"
+        repo_root.mkdir()
+        worktree.mkdir()
+        monkeypatch.setattr(compare_mod, "REPO_ROOT", repo_root)
+
+        with pytest.raises(FileNotFoundError, match="tapps_init"):
+            compare_mod.copy_mcp_config(worktree)
 
 
 class TestDiffResults:

@@ -30,9 +30,13 @@ import sys
 import tempfile
 from datetime import date
 from pathlib import Path
+from typing import Any
 
 REPO_ROOT = Path(__file__).resolve().parent.parent.parent
 RUN_SCRIPT = Path(__file__).resolve().parent / "run.py"
+
+#: Verdicts that count as a pass under lenient scoring. Mirrors run.py.
+_LENIENT_PASS: frozenset[str] = frozenset(("exact", "acceptable"))
 
 
 def safe_ref_label(ref: str) -> str:
@@ -91,6 +95,30 @@ def sync_uv_in_worktree(worktree: Path) -> None:
     )
 
 
+def _retarget_uv_args(args: list[str], worktree: Path) -> list[str]:
+    """Insert ``--directory <worktree>`` after ``run`` so uv uses the worktree env."""
+    directory_flag = ("--directory", str(worktree))
+    new_args: list[str] = []
+    for a in args:
+        new_args.append(a)
+        if a == "run":
+            new_args.extend(directory_flag)
+    return new_args
+
+
+def _retarget_server_entry(entry: dict[str, Any], worktree: Path) -> None:
+    """Point one .mcp.json server entry at `worktree` instead of the main checkout."""
+    args = entry.get("args")
+    if isinstance(args, list) and entry.get("command") == "uv":
+        entry["args"] = _retarget_uv_args(args, worktree)
+    env = entry.get("env")
+    if isinstance(env, dict):
+        target = str(worktree)
+        for key in ("TAPPS_MCP_PROJECT_ROOT", "DOCS_MCP_PROJECT_ROOT"):
+            if key in env:
+                env[key] = target
+
+
 def copy_mcp_config(worktree: Path) -> Path:
     """Copy the main .mcp.json (gitignored) into the worktree so the eval
     agent has a tool catalog. We rewrite TAPPS_MCP_PROJECT_ROOT to point at
@@ -100,27 +128,12 @@ def copy_mcp_config(worktree: Path) -> Path:
         raise FileNotFoundError(
             f"{src} not found. Run `tapps_init` or copy from another checkout."
         )
-    raw = src.read_text(encoding="utf-8")
-    data = json.loads(raw)
+    data = json.loads(src.read_text(encoding="utf-8"))
     # Re-target every server entry's command/args to the worktree's uv run
     # so MCP servers spawn against the worktree's source tree, not the main one.
     for entry in (data.get("mcpServers") or {}).values():
         if isinstance(entry, dict):
-            args = entry.get("args")
-            if isinstance(args, list) and entry.get("command") == "uv":
-                # Insert `--directory <worktree>` after `run` so uv runs the
-                # worktree's environment.
-                new_args: list[str] = []
-                for a in args:
-                    new_args.append(a)
-                    if a == "run":
-                        new_args.extend(["--directory", str(worktree)])
-                entry["args"] = new_args
-            env = entry.get("env")
-            if isinstance(env, dict) and "TAPPS_MCP_PROJECT_ROOT" in env:
-                env["TAPPS_MCP_PROJECT_ROOT"] = str(worktree)
-            if isinstance(env, dict) and "DOCS_MCP_PROJECT_ROOT" in env:
-                env["DOCS_MCP_PROJECT_ROOT"] = str(worktree)
+            _retarget_server_entry(entry, worktree)
     out = worktree / ".mcp.json"
     out.write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8")
     return out
@@ -155,7 +168,54 @@ def run_eval(
     return json.loads(output_json.read_text(encoding="utf-8"))
 
 
-def diff_results(baseline: dict, head: dict) -> dict:
+def _verdict_pair(sid: str, b: dict[str, Any], h: dict[str, Any]) -> dict[str, Any]:
+    """Shared row shape for a regression or an improvement entry."""
+    return {
+        "scenario_id": sid,
+        "baseline_verdict": b["verdict"],
+        "baseline_tool": b["actual_tool"],
+        "head_verdict": h["verdict"],
+        "head_tool": h["actual_tool"],
+        "expected": h["expected_tool"],
+    }
+
+
+def _partition_scenarios(
+    by_id_base: dict[str, Any], by_id_head: dict[str, Any], all_ids: set[str]
+) -> dict[str, list[Any]]:
+    """Bucket every scenario present in both refs by how its verdict moved."""
+    lenient = _LENIENT_PASS
+    regressions: list[dict[str, Any]] = []
+    improvements: list[dict[str, Any]] = []
+    stable_correct: list[str] = []
+    stable_wrong: list[str] = []
+
+    for sid in sorted(all_ids):
+        b = by_id_base.get(sid)
+        h = by_id_head.get(sid)
+        if b is None or h is None:
+            continue
+        b_pass = b["verdict"] in lenient
+        h_pass = h["verdict"] in lenient
+        if b_pass and not h_pass:
+            regressions.append(_verdict_pair(sid, b, h))
+        elif h_pass and not b_pass:
+            improvements.append(_verdict_pair(sid, b, h))
+        elif b_pass:
+            # Neither mismatch branch fired, so h_pass == b_pass: both passed.
+            stable_correct.append(sid)
+        else:
+            stable_wrong.append(sid)
+
+    return {
+        "regressions": regressions,
+        "improvements": improvements,
+        "stable_correct": stable_correct,
+        "stable_wrong": stable_wrong,
+    }
+
+
+def diff_results(baseline: dict[str, Any], head: dict[str, Any]) -> dict[str, Any]:
     """Per-scenario verdict diff. Returns:
         {
           regressions: [scenario_id, baseline_verdict, head_verdict],
@@ -170,42 +230,6 @@ def diff_results(baseline: dict, head: dict) -> dict:
     by_id_head = {r["scenario_id"]: r for r in head["results"]}
     all_ids = set(by_id_base) | set(by_id_head)
 
-    regressions: list[dict] = []
-    improvements: list[dict] = []
-    stable_correct: list[str] = []
-    stable_wrong: list[str] = []
-
-    PASS = {"exact", "acceptable"}
-    for sid in sorted(all_ids):
-        b = by_id_base.get(sid)
-        h = by_id_head.get(sid)
-        if b is None or h is None:
-            continue
-        b_pass = b["verdict"] in PASS
-        h_pass = h["verdict"] in PASS
-        if b_pass and not h_pass:
-            regressions.append({
-                "scenario_id": sid,
-                "baseline_verdict": b["verdict"],
-                "baseline_tool": b["actual_tool"],
-                "head_verdict": h["verdict"],
-                "head_tool": h["actual_tool"],
-                "expected": h["expected_tool"],
-            })
-        elif h_pass and not b_pass:
-            improvements.append({
-                "scenario_id": sid,
-                "baseline_verdict": b["verdict"],
-                "baseline_tool": b["actual_tool"],
-                "head_verdict": h["verdict"],
-                "head_tool": h["actual_tool"],
-                "expected": h["expected_tool"],
-            })
-        elif b_pass and h_pass:
-            stable_correct.append(sid)
-        else:
-            stable_wrong.append(sid)
-
     return {
         "baseline_label": baseline.get("ref_label", "baseline"),
         "head_label": head.get("ref_label", "head"),
@@ -215,10 +239,7 @@ def diff_results(baseline: dict, head: dict) -> dict:
         "head_lenient": head["accuracy_lenient"],
         "accuracy_delta_strict": head["accuracy_strict"] - baseline["accuracy_strict"],
         "accuracy_delta_lenient": head["accuracy_lenient"] - baseline["accuracy_lenient"],
-        "regressions": regressions,
-        "improvements": improvements,
-        "stable_correct": stable_correct,
-        "stable_wrong": stable_wrong,
+        **_partition_scenarios(by_id_base, by_id_head, all_ids),
         "total_scenarios": len(all_ids),
     }
 
