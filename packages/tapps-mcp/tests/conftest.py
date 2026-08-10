@@ -30,6 +30,7 @@ Current resets (13 total):
 from __future__ import annotations
 
 import json
+import re
 import shutil
 import tempfile
 import threading
@@ -54,6 +55,59 @@ import pytest
 # The registry is cleared between tests by the autouse fixture below.
 
 _inmemory_backend_registry: dict[str, InMemoryPrivateBackend] = {}
+
+_AUDIT_ROW_KEYS = ("action", "key", "timestamp", "event_type")
+_WORD_RE = re.compile(r"[a-z0-9]+")
+
+
+def _search_tokens(text: str) -> set[str]:
+    """Lowercase word tokens, approximating plainto_tsquery's tokenizer."""
+    return set(_WORD_RE.findall(text.lower()))
+
+
+def _entry_matches(entry: Any, q_words: set[str]) -> bool:
+    """True when *entry*'s value or key shares a token with *q_words*."""
+    return bool(
+        q_words & _search_tokens(entry.value)
+        or q_words & _search_tokens(entry.key.replace("-", " "))
+    )
+
+
+def _filter_by_created_at(entries: list[Any], *, since: str | None, until: str | None) -> list[Any]:
+    """Restrict *entries* to the inclusive ``created_at`` window."""
+    if since is not None:
+        entries = [e for e in entries if getattr(e, "created_at", "") >= since]
+    if until is not None:
+        entries = [e for e in entries if getattr(e, "created_at", "") <= until]
+    return entries
+
+
+def _audit_row(rec: dict[str, Any]) -> dict[str, Any]:
+    """Normalise a raw audit record into the query_audit result shape."""
+    return {
+        "timestamp": str(rec.get("timestamp", "")),
+        "event_type": str(rec.get("event_type") or rec.get("action", "")),
+        "key": str(rec.get("key", "")),
+        "details": {k: v for k, v in rec.items() if k not in _AUDIT_ROW_KEYS},
+    }
+
+
+def _audit_row_matches(
+    row: dict[str, Any],
+    *,
+    key: str | None,
+    event_type: str | None,
+    since: str | None,
+    until: str | None,
+) -> bool:
+    """True when *row* satisfies every supplied query_audit filter."""
+    if key is not None and row["key"] != key:
+        return False
+    if event_type is not None and row["event_type"] != event_type:
+        return False
+    if since is not None and row["timestamp"] < since:
+        return False
+    return not (until is not None and row["timestamp"] > until)
 
 
 class InMemoryPrivateBackend:
@@ -108,29 +162,12 @@ class InMemoryPrivateBackend:
 
     def search(self, query: str, **kwargs: Any) -> list[Any]:
         """Word-level FTS approximation matching plainto_tsquery token behaviour."""
-        import re
-
-        def _tokens(text: str) -> set[str]:
-            return set(re.findall(r"[a-z0-9]+", text.lower()))
-
-        since: str | None = kwargs.get("since")
-        until: str | None = kwargs.get("until")
-
         if not query.strip():
             return []
-        q_words = _tokens(query)
+        q_words = _search_tokens(query)
         with self._lock:
-            results = [
-                e
-                for e in self._entries.values()
-                if q_words & _tokens(e.value) or q_words & _tokens(e.key.replace("-", " "))
-            ]
-
-        if since is not None:
-            results = [e for e in results if getattr(e, "created_at", "") >= since]
-        if until is not None:
-            results = [e for e in results if getattr(e, "created_at", "") <= until]
-        return results
+            results = [e for e in self._entries.values() if _entry_matches(e, q_words)]
+        return _filter_by_created_at(results, since=kwargs.get("since"), until=kwargs.get("until"))
 
     def list_relations(self) -> list[dict[str, Any]]:
         with self._lock:
@@ -229,6 +266,24 @@ class InMemoryPrivateBackend:
         with self._lock:
             return self._gc_archive_bytes
 
+    def _read_audit_records(self) -> list[dict[str, Any]]:
+        """Parse the audit log into records, skipping blank and malformed lines."""
+        try:
+            lines = self._audit_path.read_text(encoding="utf-8").splitlines()
+        except OSError:
+            return []
+
+        records: list[dict[str, Any]] = []
+        for line in lines:
+            stripped = line.strip()
+            if not stripped:
+                continue
+            try:
+                records.append(json.loads(stripped))
+            except json.JSONDecodeError:
+                continue
+        return records
+
     def query_audit(
         self,
         *,
@@ -239,44 +294,15 @@ class InMemoryPrivateBackend:
         limit: int = 100,
     ) -> list[dict[str, Any]]:
         results: list[dict[str, Any]] = []
-        try:
-            lines = self._audit_path.read_text(encoding="utf-8").splitlines()
-        except OSError:
-            return []
-
-        for line in lines:
-            line = line.strip()
-            if not line:
+        for rec in self._read_audit_records():
+            row = _audit_row(rec)
+            if not _audit_row_matches(
+                row, key=key, event_type=event_type, since=since, until=until
+            ):
                 continue
-            try:
-                rec: dict[str, Any] = json.loads(line)
-            except json.JSONDecodeError:
-                continue
-
-            ev_type = str(rec.get("event_type") or rec.get("action", ""))
-            rec_key = str(rec.get("key", ""))
-            ts = str(rec.get("timestamp", ""))
-            details = {
-                k: v
-                for k, v in rec.items()
-                if k not in ("action", "key", "timestamp", "event_type")
-            }
-
-            if key is not None and rec_key != key:
-                continue
-            if event_type is not None and ev_type != event_type:
-                continue
-            if since is not None and ts < since:
-                continue
-            if until is not None and ts > until:
-                continue
-
-            results.append(
-                {"timestamp": ts, "event_type": ev_type, "key": rec_key, "details": details}
-            )
+            results.append(row)
             if len(results) >= limit:
                 break
-
         return results
 
     def flywheel_meta_set(self, key: str, value: str) -> None:
@@ -430,11 +456,11 @@ def _inject_in_memory_private_backend(monkeypatch: pytest.MonkeyPatch) -> Iterat
 
     monkeypatch.setattr(_store_mod.MemoryStore, "__init__", _patched_init)
     yield
+    # close() is already total: rmtree(ignore_errors=True) cannot raise and the
+    # None guard makes a second call a no-op, so the try/except that used to
+    # wrap this only hid real teardown breakage (bandit B110).
     for _backend in list(_inmemory_backend_registry.values()):
-        try:
-            _backend.close()
-        except Exception:
-            pass
+        _backend.close()
     _inmemory_backend_registry.clear()
 
 
