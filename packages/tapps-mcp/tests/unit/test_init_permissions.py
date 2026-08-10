@@ -3,6 +3,9 @@
 Verifies that generate_permission_settings and _bootstrap_claude_settings
 correctly generate, merge, and deduplicate permission rules in
 .claude/settings.json, including engagement-level-based extras.
+
+Imports deliberately go through ``tapps_mcp.pipeline.init`` rather than
+``init_permissions``: that keeps the TAP-5733 facade re-export under test.
 """
 
 from __future__ import annotations
