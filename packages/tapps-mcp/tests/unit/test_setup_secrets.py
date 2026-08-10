@@ -214,6 +214,33 @@ class TestPlaintextSecretDetection:
         assert added == []
         assert gi.read_text(encoding="utf-8").count(".tapps-mcp/backups/") == 0
 
+    def test_ensure_tapps_runtime_gitignore_creates_file_when_absent(self, tmp_path):
+        from tapps_mcp.distribution.setup_secrets import (
+            _TAPPS_RUNTIME_GITIGNORE_ENTRIES,
+            ensure_tapps_runtime_gitignore,
+        )
+
+        gi = tmp_path / ".gitignore"
+        assert not gi.exists()
+        added = ensure_tapps_runtime_gitignore(tmp_path)
+        assert added == list(_TAPPS_RUNTIME_GITIGNORE_ENTRIES)
+        text = gi.read_text(encoding="utf-8")
+        assert ".tapps-mcp/backups/" in text
+        assert ".tapps-mcp/hook-backups/" in text
+        assert ".tapps-mcp-cache/" in text
+
+    def test_ensure_tapps_runtime_gitignore_create_failure_returns_empty(
+        self, tmp_path, monkeypatch
+    ):
+        from tapps_mcp.distribution import setup_secrets
+
+        def _raise(*args: object, **kwargs: object) -> None:
+            raise OSError("read-only filesystem")
+
+        monkeypatch.setattr(setup_secrets.Path, "write_text", _raise)
+        assert setup_secrets.ensure_tapps_runtime_gitignore(tmp_path) == []
+        assert not (tmp_path / ".gitignore").exists()
+
 
 # ---------------------------------------------------------------------------
 # Issue #77: uv context detection
