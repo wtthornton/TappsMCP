@@ -15,7 +15,10 @@ from tapps_mcp.tools.checklist import CallTracker, ChecklistResult
 # tapps_checklist from tapps_mcp.tools.checklist, so we patch at source.
 _EVALUATE_TARGET = "tapps_mcp.tools.checklist.CallTracker.evaluate"
 _VC_TARGET = "tapps_mcp.server_pipeline_tools.tapps_validate_changed"
-_SETTINGS_TARGET = "tapps_mcp.server.load_settings"
+# tapps_checklist lives in server_checklist_tools (TAP-5733 split) and binds
+# load_settings into that module's namespace; server.py only re-exports the
+# tool, so patching tapps_mcp.server.load_settings would be a no-op here.
+_SETTINGS_TARGET = "tapps_mcp.server_checklist_tools.load_settings"
 _GAPS_TARGET = "tapps_mcp.tools.usage.compute_gaps"
 
 # tapps_checklist runs a full-repo AST scan by default; not what these assert.

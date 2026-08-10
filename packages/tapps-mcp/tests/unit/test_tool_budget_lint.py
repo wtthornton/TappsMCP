@@ -106,8 +106,10 @@ class TestDocumentedCounts:
 
 
 _SRC_HEADER = "+++ b/packages/tapps-mcp/src/tapps_mcp/server.py\n"
+_MOVED_HEADER = "+++ b/packages/tapps-mcp/src/tapps_mcp/server_system_tools.py\n"
 _TEST_HEADER = "+++ b/packages/tapps-mcp/tests/unit/test_tool_budget_lint.py\n"
 _REGISTER_LINE = "+    register_tool(mcp_instance, tapps_new_thing, annotations=_ANN)\n"
+_REMOVE_LINE = "-    register_tool(mcp_instance, tapps_new_thing, annotations=_ANN)\n"
 
 
 class TestNewRegistrations:
@@ -140,6 +142,53 @@ class TestNewRegistrations:
     def test_context_lines_are_not_counted(self, lint: ModuleType) -> None:
         diff = _SRC_HEADER + "     register_tool(mcp_instance, tapps_existing, annotations=_ANN)\n"
         assert lint.count_added_registrations(diff) == 0
+
+
+class TestMovedRegistrations:
+    """TAP-5733: a module split moves registrations; that is not a new tool.
+
+    The lint counted only added ``register_tool(`` lines, so every one of the
+    epic's module splits reported N brand-new tools and failed CI on a diff
+    whose registered tool set was byte-identical.
+    """
+
+    def test_removed_registration_is_counted(self, lint: ModuleType) -> None:
+        assert lint.count_removed_registrations(_SRC_HEADER + _REMOVE_LINE) == 1
+
+    def test_removed_context_line_is_not_counted(self, lint: ModuleType) -> None:
+        diff = _SRC_HEADER + "     register_tool(mcp_instance, tapps_existing, annotations=_ANN)\n"
+        assert lint.count_removed_registrations(diff) == 0
+
+    def test_diff_header_is_not_counted_as_a_removal(self, lint: ModuleType) -> None:
+        """``--- a/...`` must not match the removal pattern."""
+        diff = "--- a/packages/tapps-mcp/src/tapps_mcp/server.py\n" + _SRC_HEADER
+        assert lint.count_removed_registrations(diff) == 0
+
+    def test_pure_move_nets_zero(self, lint: ModuleType) -> None:
+        diff = _SRC_HEADER + _REMOVE_LINE + _MOVED_HEADER + _REGISTER_LINE
+        assert lint.count_net_new_registrations(diff) == 0
+
+    def test_pure_move_passes_the_gate(self, lint: ModuleType) -> None:
+        diff = _SRC_HEADER + _REMOVE_LINE + _MOVED_HEADER + _REGISTER_LINE
+        ok, _message = lint.check_new_registrations(diff, [], "")
+        assert ok
+
+    def test_move_plus_genuine_addition_still_fails(self, lint: ModuleType) -> None:
+        """Netting must not let a real new tool ride along with a refactor."""
+        diff = _SRC_HEADER + _REMOVE_LINE + _MOVED_HEADER + _REGISTER_LINE * 2
+        assert lint.count_net_new_registrations(diff) == 1
+        ok, message = lint.check_new_registrations(diff, [], "")
+        assert not ok
+        assert "1 new" in message
+
+    def test_net_is_floored_at_zero(self, lint: ModuleType) -> None:
+        """Deleting more tools than are added is not a negative count."""
+        diff = _SRC_HEADER + _REMOVE_LINE * 3
+        assert lint.count_net_new_registrations(diff) == 0
+
+    def test_pure_deletion_passes_the_gate(self, lint: ModuleType) -> None:
+        ok, _message = lint.check_new_registrations(_SRC_HEADER + _REMOVE_LINE * 3, [], "")
+        assert ok
 
 
 def _fake_registry(root: Path, *, tapps: int, docs: int) -> None:

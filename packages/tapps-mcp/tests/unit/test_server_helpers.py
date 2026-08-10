@@ -22,6 +22,16 @@ class TestErrorResponse:
         result = error_response("tapps_test", "err", "msg")
         assert "degraded" not in result
 
+    def test_extra_merged_into_error(self) -> None:
+        result = error_response(
+            "test_tool",
+            "TEST_CODE",
+            "test message",
+            extra={"hint": "try X", "severity": "low"},
+        )
+        assert result["error"]["code"] == "TEST_CODE"
+        assert result["error"]["hint"] == "try X"
+
 
 class TestSuccessResponse:
     def test_basic_success(self) -> None:
@@ -78,9 +88,9 @@ class TestGetBrainBridgeProfile:
         """``_get_brain_bridge()`` must call ``create_brain_bridge`` with
         ``default_profile=BRAIN_PROFILE_SERVER`` (``full``)."""
         from tapps_core.brain_bridge import (
+            _BRIDGE_USED_TOOLS,
             BRAIN_PROFILE_SERVER,
             BRAIN_PROFILES_DEFERRED_OK,
-            _BRIDGE_USED_TOOLS,
         )
         from tapps_mcp.server_helpers import _get_brain_bridge, _reset_brain_bridge_cache
 
@@ -99,9 +109,7 @@ class TestGetBrainBridgeProfile:
             patch(
                 "tapps_core.brain_bridge.create_brain_bridge", return_value=mock_bridge
             ) as mock_create,
-            patch(
-                "tapps_core.config.settings.load_settings", return_value=mock_settings
-            ),
+            patch("tapps_core.config.settings.load_settings", return_value=mock_settings),
         ):
             _reset_brain_bridge_cache()
             bridge = _get_brain_bridge()

@@ -25,6 +25,11 @@ from pathlib import Path
 # is still matched so a direct registration cannot slip past.
 _NEW_TOOL_RE = re.compile(r"^\+[^+].*(?:@mcp\.tool\s*\(|\bregister_tool\s*\()")
 
+# Same shape on the removal side. Registrations that move between modules
+# during a refactor appear as both an add and a delete; counting only the adds
+# reported every module split as N brand-new tools (TAP-5733).
+_REMOVED_TOOL_RE = re.compile(r"^-[^-].*(?:@mcp\.tool\s*\(|\bregister_tool\s*\()")
+
 # Unified-diff file header, used to scope the scan to package source. Test
 # fixtures legitimately contain `register_tool(` strings; counting those would
 # make the lint fire on its own tests.
@@ -88,8 +93,8 @@ def _is_package_source(path: str) -> bool:
     return any(path.startswith(f"{prefix}/") for prefix in map(str, _PACKAGES.values()))
 
 
-def count_added_registrations(diff_text: str) -> int:
-    """Count added tool registrations in package source within a unified diff.
+def _count_registrations(diff_text: str, pattern: re.Pattern[str]) -> int:
+    """Count package-source lines in *diff_text* matching *pattern*.
 
     Scoped by file: a `register_tool(` literal inside a test fixture or inside
     this lint's own source is not a registration, and counting it would make
@@ -102,9 +107,31 @@ def count_added_registrations(diff_text: str) -> int:
         if header:
             in_source = _is_package_source(header.group(1))
             continue
-        if in_source and _NEW_TOOL_RE.match(line):
+        if in_source and pattern.match(line):
             count += 1
     return count
+
+
+def count_added_registrations(diff_text: str) -> int:
+    """Count added tool registrations in package source within a unified diff."""
+    return _count_registrations(diff_text, _NEW_TOOL_RE)
+
+
+def count_removed_registrations(diff_text: str) -> int:
+    """Count removed tool registrations in package source within a unified diff."""
+    return _count_registrations(diff_text, _REMOVED_TOOL_RE)
+
+
+def count_net_new_registrations(diff_text: str) -> int:
+    """Registrations added minus registrations removed, floored at zero.
+
+    A tool moved between modules is deleted from one file and added to another,
+    so the raw added-count alone reports every module split as N brand-new
+    tools. Netting the two makes a pure move a no-op while still catching a
+    genuine addition (TAP-5733).
+    """
+    net = count_added_registrations(diff_text) - count_removed_registrations(diff_text)
+    return max(net, 0)
 
 
 def check_new_registrations(
@@ -120,10 +147,11 @@ def check_new_registrations(
     if _BYPASS_RE.search(commit_msg) or _BYPASS_RE.search(bypass_env):
         return True, "bypass token found — skipping check"
 
-    # 2. Count added registration lines in package source.
-    count = count_added_registrations(diff_text)
+    # 2. Count net-new registration lines in package source. Moves between
+    #    modules cancel out; only a genuine addition survives.
+    count = count_net_new_registrations(diff_text)
     if not count:
-        return True, "no new tool registrations in package source"
+        return True, "no net-new tool registrations in package source"
 
     noun = "tool" if count == 1 else "tools"
 
@@ -284,6 +312,19 @@ def run_self_tests() -> None:
     assert ok, f"Expected PASS with bypass env var, got: {msg}"
     print("  PASS: bypass env var → ok")
 
+    # Pass: tool moved between modules — deleted from one file, added to
+    # another. Net zero, so a module split must not read as a new tool.
+    moved_header = "+++ b/packages/tapps-mcp/src/tapps_mcp/server_system_tools.py\n"
+    moved = (
+        src_header
+        + "-    register_tool(mcp_instance, tapps_moved, annotations=_ANN)\n"
+        + moved_header
+        + "+    register_tool(mcp_instance, tapps_moved, annotations=_ANN)\n"
+    )
+    ok, msg = check_new_registrations(moved, ["packages/tapps-mcp/src/tapps_mcp/server.py"], "")
+    assert ok, f"Expected PASS for a moved registration, got: {msg}"
+    print("  PASS: registration moved between modules → ok")
+
     # --- FAIL fixtures ---
 
     # Fail: new tool, budget doc NOT updated, no bypass
@@ -314,5 +355,19 @@ def run_self_tests() -> None:
     ok, msg = check_new_registrations(test_header + register_line, [], "")
     assert ok, f"Expected PASS for a register_tool string in a test, got: {msg}"
     print("  PASS: register_tool() inside a test fixture → not counted")
+
+    # Fail: a genuine addition alongside a move still nets one new tool, so
+    # netting must not become a way to smuggle a tool in behind a refactor.
+    move_plus_add = (
+        src_header
+        + "-    register_tool(mcp_instance, tapps_moved, annotations=_ANN)\n"
+        + moved_header
+        + "+    register_tool(mcp_instance, tapps_moved, annotations=_ANN)\n"
+        + "+    register_tool(mcp_instance, tapps_brand_new, annotations=_ANN)\n"
+    )
+    ok, msg = check_new_registrations(move_plus_add, [], "")
+    assert not ok, "Expected FAIL when a move is paired with a real addition"
+    assert "1 new" in msg, f"Expected '1 new' in message, got: {msg}"
+    print("  FAIL: move + one genuine addition → correctly rejected")
 
     print("All self-tests passed.")
