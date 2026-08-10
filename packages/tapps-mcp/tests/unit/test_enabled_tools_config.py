@@ -245,16 +245,88 @@ class TestConditionalRegistration:
         names = sorted(mcp._tool_manager._tools.keys())
         assert names == ["tapps_session_start", "tapps_validate_changed"]
 
-    def test_core_tools_register_subset(self) -> None:
+    def test_system_register_subset(self) -> None:
         from mcp.server.fastmcp import FastMCP
 
-        from tapps_mcp.server import _register_core_tools
+        from tapps_mcp import server_system_tools
 
         mcp = FastMCP("test")
-        allowed = frozenset({"tapps_server_info", "tapps_checklist"})
-        _register_core_tools(mcp, allowed)
+        allowed = frozenset({"tapps_server_info"})
+        server_system_tools.register(mcp, allowed)
         names = sorted(mcp._tool_manager._tools.keys())
-        assert names == ["tapps_checklist", "tapps_server_info"]
+        assert names == ["tapps_server_info"]
+
+    def test_checklist_register_subset(self) -> None:
+        from mcp.server.fastmcp import FastMCP
+
+        from tapps_mcp import server_checklist_tools
+
+        mcp = FastMCP("test")
+        allowed = frozenset({"tapps_checklist"})
+        server_checklist_tools.register(mcp, allowed)
+        names = sorted(mcp._tool_manager._tools.keys())
+        assert names == ["tapps_checklist"]
+
+    def test_lookup_register_subset(self) -> None:
+        from mcp.server.fastmcp import FastMCP
+
+        from tapps_mcp import server_lookup_tools
+
+        mcp = FastMCP("test")
+        server_lookup_tools.register(mcp, frozenset({"tapps_lookup_docs"}))
+        assert list(mcp._tool_manager._tools.keys()) == ["tapps_lookup_docs"]
+
+        excluded = FastMCP("test")
+        server_lookup_tools.register(excluded, frozenset({"tapps_research"}))
+        assert list(excluded._tool_manager._tools.keys()) == []
+
+    def test_research_register_subset(self) -> None:
+        from mcp.server.fastmcp import FastMCP
+
+        from tapps_mcp import server_research_tools
+
+        mcp = FastMCP("test")
+        server_research_tools.register(mcp, frozenset({"tapps_research"}))
+        assert list(mcp._tool_manager._tools.keys()) == ["tapps_research"]
+
+        excluded = FastMCP("test")
+        server_research_tools.register(excluded, frozenset({"tapps_lookup_docs"}))
+        assert list(excluded._tool_manager._tools.keys()) == []
+
+    def test_former_core_tools_all_still_registered(self) -> None:
+        """TAP-5733 split: the six ex-``_register_core_tools`` names survive.
+
+        ``_register_core_tools`` was decomposed across three modules; this guards
+        against a tool silently going missing from every register() path.
+        """
+        from mcp.server.fastmcp import FastMCP
+
+        from tapps_mcp import (
+            server_checklist_tools,
+            server_lookup_tools,
+            server_research_tools,
+            server_system_tools,
+        )
+
+        former_core = frozenset(
+            {
+                "tapps_server_info",
+                "tapps_security_scan",
+                "tapps_lookup_docs",
+                "tapps_research",
+                "tapps_validate_config",
+                "tapps_checklist",
+            }
+        )
+        mcp = FastMCP("test")
+        for module in (
+            server_system_tools,
+            server_lookup_tools,
+            server_research_tools,
+            server_checklist_tools,
+        ):
+            module.register(mcp, former_core)
+        assert sorted(mcp._tool_manager._tools.keys()) == sorted(former_core)
 
 
 class TestToolPresetConstants:

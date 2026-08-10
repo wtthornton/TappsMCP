@@ -20,7 +20,9 @@ from tapps_mcp.tools.contract_telemetry import (
 pytestmark = pytest.mark.usefixtures("no_repo_wide_scans")
 
 _EVALUATE_TARGET = "tapps_mcp.tools.checklist.CallTracker.evaluate"
-_SETTINGS_TARGET = "tapps_mcp.server.load_settings"
+# tapps_checklist lives in server_checklist_tools (TAP-5733 split); server.py only
+# re-exports it, so the patch must target the namespace that resolves the call.
+_SETTINGS_TARGET = "tapps_mcp.server_checklist_tools.load_settings"
 
 
 @pytest.fixture(autouse=True)
