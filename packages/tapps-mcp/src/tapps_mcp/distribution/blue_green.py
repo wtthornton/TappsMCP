@@ -311,7 +311,11 @@ def _deploy_under_lock(
             report["ok"] = False
             return report
 
-    from tapps_mcp.distribution.fleet_control import fleet_any_running, restart_fleet_with_smoke
+    from tapps_mcp.distribution.fleet_control import (
+        fleet_any_running,
+        reap_superseded_fleet,
+        restart_fleet_with_smoke,
+    )
 
     if fleet_any_running():
         fleet_smoke = restart_fleet_with_smoke(project_root=checkout)
@@ -319,6 +323,15 @@ def _deploy_under_lock(
         if not fleet_smoke.get("ok"):
             report["ok"] = False
             return report
+
+    # Servers stranded on the release we just superseded hold memory and brain
+    # connections for nothing, and would keep a GC'd release dir alive. Runs
+    # after the restart so the pidfiles already name the new live set, and
+    # before GC so nothing is executing out of a directory about to be deleted.
+    try:
+        report["superseded_reap"] = reap_superseded_fleet()
+    except Exception as exc:  # never fail a good deploy on cleanup
+        report["superseded_reap"] = {"ok": False, "error": str(exc)}
 
     report["gc"] = gc_releases(keep=keep_releases, protect=release.path)
     report["ok"] = True

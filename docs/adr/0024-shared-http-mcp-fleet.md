@@ -41,6 +41,13 @@ Consumer projects opt in with `mcp_transport: http` in `.tapps-mcp.yaml` or `tap
 
 `tapps-mcp fleet install-systemd` is the **single source of truth** for all three units; do not hand-author the watchdog. `tapps-mcp doctor` flags the crash-loop signature (PID files recorded but ports not listening) distinctly from "never started".
 
+**Identification constraint (load-bearing, pairs with [ADR-0005](0005-mcp-server-zombie-cleanup-hook-on-session-start.md)):** because `fleet start` spawns the servers with `start_new_session=True` under a parent that then exits, every fleet server is **permanently `ppid=1`**. To any parent-based reaper it is indistinguishable from an abandoned orphan, *by design and forever*. ADR-0005's cleanup therefore identifies the fleet by **transport**, not by parentage: `_FLEET_HTTP_AWK_SKIP` in `pipeline/platform_hook_templates.py` excludes `--transport http` from the stale/duplicate/old sweeps, and the Cursor orphan-reaper skips the same marker. Those regexes are the only thing standing between the reaper and a live fleet — treat them as load-bearing, not incidental.
+
+Two consequences follow, both confirmed empirically on 2026-08-10:
+
+- **Never relax the transport exclusion to clean up strays.** A superseded-release server must be identified by *release plus absence from the pidfiles* (`fleet_ownership.find_superseded_fleet_pids`), never by parentage or age. Loosening the transport filter reinstates precisely the reaping this ADR exists to prevent.
+- **`--transport http` in the command line is the fleet's identity.** A `serve --profile nlt-*` process **without** that marker is a per-session stdio server owned by ADR-0005, even when it runs out of a release directory and even when it is one release behind (stdio wrappers exec `~/.tapps-mcp/current/...`, which resolves at spawn time). Six such processes were twice misread as leaked fleet servers; killing them would have terminated a live session's MCP.
+
 ## Consequences
 
 ### Positive

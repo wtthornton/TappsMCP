@@ -259,6 +259,46 @@ def _terminate(pid: int) -> None:
         os.kill(pid, signal.SIGKILL)
 
 
+def reap_superseded_fleet(*, dry_run: bool = False) -> dict[str, Any]:
+    """Terminate fleet servers stranded on a release that is no longer current.
+
+    The ADR-0005 session-start reaper deliberately excludes the HTTP fleet
+    (ADR-0024), and correctly so — fleet children are permanently ppid=1 and
+    would otherwise be reaped as orphans on every session start. The gap that
+    leaves is that nothing then cleans up servers from a *superseded* release,
+    which linger holding memory and brain connections after a deploy.
+
+    This closes it with the narrow, release-aware predicate documented on
+    :func:`find_superseded_fleet_pids` — never by loosening the transport
+    filter, which would reinstate exactly what ADR-0024 prevents.
+    """
+    from tapps_mcp.distribution.blue_green import current_release_path
+    from tapps_mcp.distribution.fleet_ownership import find_superseded_fleet_pids
+
+    current = current_release_path()
+    current_release = current.name if current is not None else None
+    pids = find_superseded_fleet_pids(current_release, pid_dir=FLEET_PID_DIR)
+
+    result: dict[str, Any] = {
+        "current_release": current_release,
+        "superseded_pids": pids,
+        "reaped": [],
+        "errors": [],
+        "dry_run": dry_run,
+    }
+    if dry_run:
+        return result
+
+    for pid in pids:
+        try:
+            _terminate(pid)
+        except OSError as exc:
+            result["errors"].append(f"{pid}: {exc}")
+            continue
+        result["reaped"].append(pid)
+    return result
+
+
 def stop_fleet(*, server_ids: list[str] | None = None) -> dict[str, Any]:
     """Stop fleet processes (SIGTERM, then SIGKILL after brief wait).
 
