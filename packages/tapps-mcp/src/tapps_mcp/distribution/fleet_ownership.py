@@ -48,6 +48,61 @@ def _serves_port(cmdline: str, port: int) -> bool:
     return f"--port {port}" in cmdline or f"--port={port}" in cmdline
 
 
+def _pidfile_claimed_pids(pid_dir: Path) -> set[int]:
+    """Pids the fleet pidfiles currently claim as the live set."""
+    claimed: set[int] = set()
+    if not pid_dir.is_dir():
+        return claimed
+    for pidfile in pid_dir.glob("*.pid"):
+        try:
+            claimed.add(int(pidfile.read_text(encoding="utf-8").strip()))
+        except (OSError, ValueError):
+            continue
+    return claimed
+
+
+def find_superseded_fleet_pids(
+    current_release: str | None,
+    *,
+    pid_dir: Path,
+    proc_root: Path = _PROC,
+) -> list[int]:
+    """Fleet HTTP servers stranded on a release that is no longer ``current``.
+
+    ADR-0024 forbids reaping the shared HTTP fleet by transport alone, because
+    the servers are spawned ``start_new_session=True`` under a ``Type=oneshot``
+    parent that exits — they are permanently ppid=1 and would look like orphans
+    to any parent-based reaper. This is the narrower question that *is* safe to
+    act on: which fleet processes belong to a superseded release **and** are not
+    claimed by any pidfile.
+
+    Both conditions are required. Release alone would kill a server mid-deploy
+    that still owns its port; pidfile-absence alone would kill a healthy server
+    whose bookkeeping was lost. Requiring both leaves exactly the strays.
+
+    Returns an empty list when *current_release* is unknown — never guess and
+    kill on incomplete information.
+    """
+    if not current_release or not proc_root.is_dir():
+        return []
+    claimed = _pidfile_claimed_pids(pid_dir)
+    stranded: list[int] = []
+    for entry in proc_root.iterdir():
+        if not entry.name.isdigit():
+            continue
+        pid = int(entry.name)
+        if pid in claimed:
+            continue
+        cmdline = read_process_cmdline(pid, proc_root=proc_root)
+        if not is_fleet_http_serve_command(cmdline):
+            continue
+        match = _RELEASE_RE.search(cmdline)
+        if match is None or match.group(1) == current_release:
+            continue
+        stranded.append(pid)
+    return sorted(stranded)
+
+
 def find_port_owner(port: int, *, proc_root: Path = _PROC) -> int | None:
     """Return the pid of the fleet serve process bound to *port*.
 

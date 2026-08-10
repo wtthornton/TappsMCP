@@ -9,6 +9,8 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
+import os
+import signal
 import subprocess  # nosec B404
 
 import structlog
@@ -19,6 +21,40 @@ logger = structlog.get_logger(__name__)
 
 DEFAULT_TIMEOUT: int = 60
 MAX_OUTPUT_BYTES: int = 8 * 1024 * 1024  # 8 MiB per stream
+# Grace for a killed process tree to close its pipes so ``communicate()`` can
+# return. Bounded so a wedged descendant cannot re-hang the timeout path.
+_POST_KILL_GRACE_SECONDS: float = 5.0
+
+
+def _new_process_group_kwargs() -> dict[str, object]:
+    """Spawn the child in its own process group so the tree can be killed.
+
+    Without this only the direct child is signalled on timeout, and any
+    grandchildren keep the inherited stdout/stderr write-ends open.
+    """
+    if os.name == "posix":
+        return {"start_new_session": True}
+    return {}
+
+
+def _kill_process_tree(proc: asyncio.subprocess.Process) -> None:
+    """SIGKILL the child *and its descendants*, best effort.
+
+    ``proc.kill()`` alone signals one pid. A tool that shells out — pip-audit
+    invoking pip's resolver, say — leaves those grandchildren running and
+    holding the pipes, which is what turns a 30s timeout into an unbounded
+    hang (see :func:`run_command_async`).
+    """
+    if proc.returncode is not None:
+        return
+    if os.name == "posix":
+        try:
+            os.killpg(os.getpgid(proc.pid), signal.SIGKILL)
+            return
+        except (ProcessLookupError, PermissionError, OSError):
+            logger.debug("killpg_failed_falling_back", pid=proc.pid, exc_info=True)
+    with contextlib.suppress(ProcessLookupError, OSError):
+        proc.kill()
 
 
 def run_command(
@@ -118,19 +154,30 @@ async def run_command_async(
     logger.debug("run_command_async", cmd=cmd, cwd=cwd, timeout=timeout)
 
     proc: asyncio.subprocess.Process | None = None
+    comm_task: asyncio.Task[tuple[bytes, bytes]] | None = None
     try:
         proc = await asyncio.create_subprocess_exec(
             *cmd,
             cwd=cwd,
+            # Without an stdin pipe the child inherits ours and `stdin_data` is
+            # silently discarded — the parameter never worked in this path.
+            stdin=asyncio.subprocess.PIPE if stdin_data is not None else None,
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
             env=env,
+            **_new_process_group_kwargs(),  # type: ignore[arg-type]
         )
         stdin_bytes: bytes | None = stdin_data.encode() if stdin_data else None
-        stdout_bytes, stderr_bytes = await asyncio.wait_for(
-            proc.communicate(input=stdin_bytes),
-            timeout=timeout,
-        )
+        # Deliberately not asyncio.wait_for: on timeout it cancels communicate()
+        # and then *awaits* that cancellation, which never completes while a
+        # surviving grandchild holds the pipes — a 30s timeout became a 44-minute
+        # hang that way (pip-audit under `validate-changed --full`). asyncio.wait
+        # does not cancel, so the kill happens first and we stay in control.
+        comm_task = asyncio.ensure_future(proc.communicate(input=stdin_bytes))
+        done, _pending = await asyncio.wait({comm_task}, timeout=timeout)
+        if comm_task not in done:
+            raise TimeoutError
+        stdout_bytes, stderr_bytes = comm_task.result()
         stdout_raw = stdout_bytes.decode("utf-8", errors="replace").strip() if stdout_bytes else ""
         stderr_raw = stderr_bytes.decode("utf-8", errors="replace").strip() if stderr_bytes else ""
         truncated = False
@@ -151,9 +198,16 @@ async def run_command_async(
         )
     except TimeoutError:
         logger.warning("command_timeout_async", cmd=cmd, timeout=timeout)
-        with contextlib.suppress(Exception):
-            if proc is not None:
-                proc.kill()
+        if proc is not None:
+            _kill_process_tree(proc)
+        if comm_task is not None:
+            # Let communicate() drain now that the tree is dead, but never wait
+            # on it unbounded — that is the hang this path exists to prevent.
+            with contextlib.suppress(Exception):
+                await asyncio.wait({comm_task}, timeout=_POST_KILL_GRACE_SECONDS)
+            comm_task.cancel()
+            with contextlib.suppress(Exception):
+                await asyncio.wait({comm_task}, timeout=_POST_KILL_GRACE_SECONDS)
         return CommandResult(
             returncode=-1,
             stdout="",

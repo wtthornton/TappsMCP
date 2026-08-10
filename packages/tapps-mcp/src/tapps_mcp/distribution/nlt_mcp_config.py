@@ -218,19 +218,18 @@ def match_bundle_for_servers(servers: dict[str, Any]) -> NltBundle | None:
 
 
 def persist_mcp_bundle_yaml(project_root: Path, bundle: NltBundle) -> None:
-    """Write ``mcp_bundle`` into ``.tapps-mcp.yaml`` (create or update)."""
-    import yaml
+    """Write ``mcp_bundle`` into ``.tapps-mcp.yaml`` (create or update).
+
+    Edits only that key's block. A load/dump round-trip here used to delete
+    every comment in the consumer's config — the notes recording *why* a
+    setting is set, which is the part nobody can reconstruct afterwards.
+    """
+    from tapps_mcp.common.yaml_edit import update_yaml_preserving_comments
 
     config_path = project_root / ".tapps-mcp.yaml"
-    data: dict[str, Any] = {}
-    if config_path.exists():
-        raw = config_path.read_text(encoding="utf-8-sig")
-        loaded = yaml.safe_load(raw) if raw.strip() else {}
-        if isinstance(loaded, dict):
-            data = loaded
-    data["mcp_bundle"] = bundle
+    raw = config_path.read_text(encoding="utf-8-sig") if config_path.exists() else ""
     config_path.write_text(
-        yaml.dump(data, default_flow_style=False, sort_keys=False),
+        update_yaml_preserving_comments(raw, {"mcp_bundle": bundle}),
         encoding="utf-8",
     )
 

@@ -69,6 +69,7 @@ a = Analysis(
         "tapps_mcp.common.developer_workflow",
         "tapps_mcp.common.pipeline_models",
         "tapps_mcp.common.utils",
+        "tapps_mcp.common.yaml_edit",
         "tapps_mcp.config",
         "tapps_mcp.config.settings",
         "tapps_mcp.security",
