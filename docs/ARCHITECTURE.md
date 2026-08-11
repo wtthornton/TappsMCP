@@ -76,8 +76,10 @@ Prior to ADR-0016, tapps-mcp registered `tapps-quality` and `tapps-admin` aliase
 ```
 src/tapps_mcp/
 ├── __init__.py, cli.py, diagnostics.py, server.py, server_helpers.py, py.typed
-├── server_scoring_tools.py, server_pipeline_tools.py, server_metrics_tools.py
-├── server_memory_tools.py, server_analysis_tools.py, server_resources.py
+├── server_*.py  Tool handlers grouped by domain, registered on the facade
+│               in server.py: scoring, pipeline, metrics, memory, analysis,
+│               lookup, research, system, checklist, release, resources, and
+│               linear (linear_tools + _cache/_handlers/_keys)
 ├── common/     constants.py, developer_workflow.py, elicitation.py,
 │               exceptions.py, logging.py, models.py, nudges.py,
 │               output_schemas.py, pipeline_models.py, utils.py
@@ -89,11 +91,16 @@ src/tapps_mcp/
 │               language_detector.py, dead_code.py, dependency_security.py,
 │               suggestions.py
 ├── gates/      models.py, evaluator.py
-├── tools/      subprocess_utils.py, subprocess_runner.py, tool_detection.py,
-│               ruff.py, ruff_direct.py, mypy.py, bandit.py,
-│               radon.py, radon_direct.py, parallel.py, checklist.py,
-│               batch_validator.py, vulture.py, pip_audit.py,
-│               dependency_scan_cache.py
+├── tools/      Checker adapters: ruff(_direct).py, mypy.py, bandit.py,
+│               radon(_direct).py, vulture.py, perflint.py, semgrep.py,
+│               pip_audit.py, tool_detection.py, subprocess_utils.py,
+│               subprocess_runner.py, parallel.py
+│               checklist*.py — checklist.py facade + _maps/_models/_policy/
+│                 _epic/_tdd siblings (TAP-5733 split)
+│               validate_changed*.py — facade + _collection/_orchestrator/
+│                 _output/_diagnostics/_cli_exit siblings
+│               loop_metrics*.py, audit_*.py, handoff_*.py, session_*.py,
+│               fleet_*.py, usage*.py, research*.py and other tool helpers
 ├── knowledge/  models.py, cache.py, fuzzy_matcher.py, context7_client.py,
 │               rag_safety.py, lookup.py, circuit_breaker.py,
 │               library_detector.py, warming.py, import_analyzer.py,
@@ -131,15 +138,28 @@ src/tapps_mcp/
 │               impact_analyzer.py, report.py, import_graph.py,
 │               cycle_detector.py, coupling_metrics.py,
 │               vulnerability_impact.py
-├── pipeline/   models.py, init.py, upgrade.py, handoff.py, agents_md.py,
-│               platform_generators.py, platform_hooks.py,
-│               platform_hook_templates.py, platform_rules.py,
-│               platform_skills.py, platform_subagents.py,
-│               platform_bundles.py,
-│               github_templates.py, github_ci.py, github_copilot.py,
-│               github_governance.py
-├── distribution/ setup_generator.py, doctor.py, exe_manager.py,
-│               plugin_builder.py, rollback.py
+├── pipeline/   models.py, upgrade.py, handoff.py, agents_md.py, claude_md.py,
+│               version_stamps.py, karpathy_block.py, git_hooks.py,
+│               ci_install.py, document_judges.py, agent_contract.py
+│               init*.py — init.py facade + init_state/_platform/
+│                 _verification/_permissions/_config_yaml/_claude_md/
+│                 _tech_stack/_github siblings (TAP-5733 split). init.py
+│                 re-exports the moved names; see its __all__ for the
+│                 backward-compatible surface
+│               platform_*.py — generators, hooks, hook_templates, rules,
+│                 skills, subagents, bundles, docs_automation, domain_skills,
+│                 and the platform_skill_* templates
+│               github_*.py — templates, ci, copilot, governance
+├── distribution/ exe_manager.py, plugin_builder.py, rollback.py,
+│               mcp_bundle_cli.py, mcp_zombie_reap.py, context_budget*.py
+│               setup_*.py — setup_generator.py facade + config_gen/config_io/
+│                 entries/wrappers/secrets/docs/launch/guidance/upgrade_cli
+│                 siblings (TAP-5733 split)
+│               doctor_*.py — doctor.py facade + ~19 per-check siblings
+│                 (brain_http, context7, fleet, hooks, install, mcp, memory,
+│                 nlt, pipeline, platform, skills, telemetry, ...)
+│               blue_green*.py, fleet_*.py, nlt_*.py — local release deploy
+│                 and the nlt-* server fleet
 ├── benchmark/  models.py, config.py, dataset.py, evaluator.py,
 │               analyzer.py, reporter.py, cli_commands.py, ...
 ├── platform/   __init__.py, cli.py, combined_server.py
