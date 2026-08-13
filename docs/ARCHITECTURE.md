@@ -98,7 +98,7 @@ src/tapps_mcp/
 │               checklist*.py — checklist.py facade + _maps/_models/_policy/
 │                 _epic/_tdd siblings (TAP-5733 split)
 │               validate_changed*.py — facade + _collection/_orchestrator/
-│                 _output/_diagnostics/_cli_exit siblings
+│                 _output/_response/_diagnostics/_cli_exit siblings
 │               loop_metrics*.py, audit_*.py, handoff_*.py, session_*.py,
 │               fleet_*.py, usage*.py, research*.py and other tool helpers
 ├── knowledge/  models.py, cache.py, fuzzy_matcher.py, context7_client.py,
