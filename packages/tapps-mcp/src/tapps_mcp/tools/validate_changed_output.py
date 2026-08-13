@@ -471,15 +471,25 @@ def _build_judge_summary_rows(judge_results: list[dict[str, Any]]) -> list[str]:
     return rows
 
 
+def _judge_result_counts(judge_results: list[dict[str, Any]]) -> tuple[int, int, int]:
+    """Return ``(passed, blocking_failed, skipped)`` over judge results."""
+    passed = failed = skipped = 0
+    for result in judge_results:
+        verdict = result.get("result")
+        if verdict == "pass":
+            passed += 1
+        elif verdict in {"fail", "error"} and result.get("blocking"):
+            failed += 1
+        elif verdict == "skipped":
+            skipped += 1
+    return passed, failed, skipped
+
+
 def _append_judge_summary(summary: str, judge_results: list[dict[str, Any]]) -> str:
     """Append judge pass/fail counts to the human-readable summary."""
     if not judge_results:
         return summary
-    passed = sum(1 for r in judge_results if r.get("result") == "pass")
-    failed = sum(
-        1 for r in judge_results if r.get("result") in {"fail", "error"} and r.get("blocking")
-    )
-    skipped = sum(1 for r in judge_results if r.get("result") == "skipped")
+    passed, failed, skipped = _judge_result_counts(judge_results)
     suffix = f" | judges: {passed} passed"
     if failed:
         suffix += f", {failed} blocking failed"
@@ -542,28 +552,9 @@ async def _run_judges(
         }
 
 
-def _append_timeout_hint(
-    resp: dict[str, Any],
-    files_remaining: list[Path],
-) -> None:
-    """Inject an auto-detect-budget hint into the response's next_steps."""
-    from tapps_mcp import server_pipeline_tools as _host
-
-    data = resp.get("data", {})
-    sample = ",".join(str(p) for p in files_remaining[:10])
-    hint = (
-        f"Auto-detect exceeded {_host._AUTO_DETECT_BUDGET_S:.0f}s budget with "
-        f"{len(files_remaining)} files unvalidated. Finish with explicit "
-        f'paths: tapps_validate_changed(file_paths="{sample}")'
-    )
-    existing = list(data.get("next_steps") or [])
-    data["next_steps"] = [hint, *existing][:5]
-
-
 __all__ = [
     "_SEVERITY_RANK",
     "_append_judge_summary",
-    "_append_timeout_hint",
     "_build_file_entry",
     "_build_judge_summary_rows",
     "_build_per_file_results",

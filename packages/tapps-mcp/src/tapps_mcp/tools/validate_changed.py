@@ -65,7 +65,6 @@ from tapps_mcp.tools.validate_changed_orchestrator import (
 )
 from tapps_mcp.tools.validate_changed_output import (
     _SEVERITY_RANK,
-    _append_timeout_hint,
     _build_per_file_results,
     _build_response_data,
     _build_structured_validation_output,
@@ -79,6 +78,14 @@ from tapps_mcp.tools.validate_changed_output import (
     attach_affected_tests,
     attach_blast_radius_caveat,
     attach_diff_impact,
+)
+from tapps_mcp.tools.validate_changed_response import (
+    append_timeout_hint,
+    attach_missing_paths_warning,
+    attach_optional_payload,
+    attach_report_studio_hint,
+    attach_timing_profile,
+    batch_budget_s,
 )
 from tapps_mcp.tools.validation_progress import (
     _PROGRESS_HEARTBEAT_INTERVAL,
@@ -128,13 +135,17 @@ def _missing_file_paths_guard(
         "slow validate_changed (p95) and QUALITY_GATE_SKIP."
     )
     if mode == "error":
-        return cast("dict[str, Any]", host.error_response(
-            "tapps_validate_changed",
-            "missing_file_paths",
-            message,
-        ))
+        return cast(
+            "dict[str, Any]",
+            host.error_response(
+                "tapps_validate_changed",
+                "missing_file_paths",
+                message,
+            ),
+        )
     # warn mode: signal via sentinel dict the caller merges into response later
     return {"_missing_file_paths_warning": message, "_tracked_scorable": tracked}
+
 
 # Re-export for test patchability via ``server_pipeline_tools.X``.
 # Symbols imported above are kept reachable here so that
@@ -150,7 +161,6 @@ __all__ = [
     "_VALIDATION_PROGRESS_FILE",
     "_ProgressTracker",
     "_TimedOutInfo",
-    "_append_timeout_hint",
     "_build_per_file_results",
     "_build_response_data",
     "_build_structured_validation_output",
@@ -413,43 +423,6 @@ async def _finalize_outcome(
     )
 
 
-def _attach_optional_payload(
-    resp_data: dict[str, Any],
-    *,
-    paths: list[Path],
-    settings: Any,
-    correlation_id: str,
-    timeout_info: _TimedOutInfo,
-) -> None:
-    """Append correlation id, insight recall, and timeout summary to data."""
-    # EPIC-102: auto-recall of relevant insights (opt-in)
-    if settings.memory.recall_on_validate:
-        from tapps_mcp.tools.insight_recall import recall_insights_for_validate
-
-        resp_data.update(recall_insights_for_validate(paths, settings.project_root))
-    if correlation_id.strip():
-        resp_data["correlation_id"] = correlation_id.strip()
-    if timeout_info.timed_out:
-        from tapps_mcp import server_pipeline_tools as _host
-
-        resp_data["timed_out"] = True
-        resp_data["files_remaining"] = len(timeout_info.files_remaining)
-        resp_data["files_remaining_paths"] = [str(p) for p in timeout_info.files_remaining]
-        resp_data["auto_detect_budget_s"] = _host._AUTO_DETECT_BUDGET_S
-
-    from tapps_mcp.tools.validate_changed_diagnostics import (
-        build_multi_file_memory_hint,
-        count_src_paths,
-    )
-
-    src_count = count_src_paths(paths)
-    memory_hint = build_multi_file_memory_hint(src_count)
-    if memory_hint:
-        resp_data["multi_file_src_count"] = src_count
-        existing = list(resp_data.get("next_steps") or [])
-        resp_data["next_steps"] = [memory_hint, *existing][:5]
-
-
 async def _assemble_response(
     bc: _BatchContext,
     outcome: _BatchOutcome,
@@ -477,12 +450,13 @@ async def _assemble_response(
     if bc.capped:
         resp_data["capped"] = True
         resp_data["files_not_validated"] = bc.extra_count
-    _attach_optional_payload(
+    attach_optional_payload(
         resp_data,
         paths=bc.paths,
         settings=bc.settings,
         correlation_id=bc.correlation_id,
         timeout_info=outcome.timeout_info,
+        auto_detect=bc.auto_detect,
     )
     overall_passed = outcome.all_passed
     if bc.judges:
@@ -513,7 +487,12 @@ async def _assemble_response(
         },
     )
     if outcome.timeout_info.timed_out:
-        _append_timeout_hint(resp, outcome.timeout_info.files_remaining)
+        append_timeout_hint(
+            resp,
+            outcome.timeout_info.files_remaining,
+            budget_s=batch_budget_s(bc.auto_detect),
+            auto_detect=bc.auto_detect,
+        )
     return resp
 
 
@@ -738,50 +717,21 @@ async def tapps_validate_changed(
 
     data = resp.get("data")
     if isinstance(data, dict):
-        data["timing_profile"] = {
-            "warm_budget_ms": VALIDATE_CHANGED_WARM_BUDGET_MS,
-            "auto_detect": not bool(file_paths.strip()),
-            "include_impact": include_impact,
-            "quick": quick,
-            "note": (
-                "Warm budget applies after session/checkers are already initialized. "
-                "Cold start (first ensure_session_initialized / checker warm) is "
-                "excluded and can dominate first-call latency."
-            ),
-        }
+        attach_timing_profile(
+            data,
+            warm_budget_ms=VALIDATE_CHANGED_WARM_BUDGET_MS,
+            auto_detect=bc.auto_detect,
+            include_impact=include_impact,
+            quick=quick,
+        )
         if missing_paths_warning:
-            warnings = data.get("warnings")
-            if not isinstance(warnings, list):
-                warnings = []
-                data["warnings"] = warnings
-            warnings.append(missing_paths_warning)
-            steps = data.get("next_steps")
-            if not isinstance(steps, list):
-                steps = []
-                data["next_steps"] = steps
-            steps.insert(
-                0,
-                "WARNING: Pass explicit file_paths= to tapps_validate_changed — "
-                "auto-detect in large repos inflates p95 and correlates with "
-                "QUALITY_GATE_SKIP.",
-            )
+            attach_missing_paths_warning(data, missing_paths_warning)
 
-    try:
-        from tapps_mcp.pipeline.report_studio.installer import check_report_studio
-
-        rs = check_report_studio(settings.project_root)
-        if rs.get("installed") and not effective_judges:
-            data = resp.get("data", {})
-            hint = (
-                "Report-studio detected: add validate_changed.judges in .tapps-mcp.yaml "
-                "or pass judges=[{type: pytest, target: tests/, description: PDF audit}] "
-                "to gate PDF quality after rebuild."
-            )
-            steps = list(data.get("next_steps") or [])
-            data["next_steps"] = [hint, *steps][:5]
-            data["report_studio"] = rs
-    except Exception:
-        _logger.debug("report_studio_hint_failed", exc_info=True)
+    attach_report_studio_hint(
+        resp,
+        settings.project_root,
+        has_judges=bool(effective_judges),
+    )
 
     elapsed_ms = (time.perf_counter_ns() - bc.start) // 1_000_000
     _fire_validate_events(bc.paths, outcome, elapsed_ms)

@@ -6,7 +6,8 @@ stays thin. This module owns:
 * Running the scorer + gate + security scan against a single file under
   a concurrency semaphore.
 * Reporting progress (initial notification + heartbeat task).
-* Honouring the auto-detect wall-clock budget when running the batch.
+* Honouring the wall-clock budget when running the batch (tight for
+  auto-detect, a much larger wedge-breaking ceiling for explicit paths).
 * Background dependency-cache warming.
 """
 
@@ -41,6 +42,13 @@ _logger = structlog.get_logger(__name__)
 # Kept at 2 so shared HTTP fleet (nlt-build) cannot spawn a GIL stampede that
 # starves Cursor initialize/tools/list — see tools.event_loop_guard.
 _VALIDATE_CONCURRENCY = 2
+
+# TAP-5965 — wall-clock ceiling for explicit-file_paths runs. Deliberately far
+# above any healthy batch (full mode on a large explicit set is minutes, not
+# tens of minutes): this is a wedge breaker, not a latency budget. Without it
+# the explicit path gathered its tasks unbounded, so a single stuck file hung
+# the MCP caller forever instead of returning a verdict.
+_EXPLICIT_PATHS_BUDGET_S: float = 600.0
 
 
 async def _run_security_scan(
@@ -288,10 +296,16 @@ async def _run_tasks_with_budget(
     start: int,
     auto_detect: bool,
 ) -> tuple[list[dict[str, Any]], _TimedOutInfo]:
-    """Run validation tasks, honouring the auto-detect wall-clock budget.
+    """Run validation tasks under a wall-clock budget.
 
-    Looks up ``_AUTO_DETECT_BUDGET_S`` on ``server_pipeline_tools`` at
-    call time so tests patching the module-level constant are honoured.
+    Auto-detect runs use the tight ``_AUTO_DETECT_BUDGET_S`` cap. Explicit
+    ``file_paths`` runs get the far larger ``_EXPLICIT_PATHS_BUDGET_S``
+    ceiling (TAP-5965) — long full-mode batches are legitimate, but an
+    unbounded ``gather`` turned any wedged file into an indefinite hang for
+    the MCP caller.
+
+    ``_AUTO_DETECT_BUDGET_S`` is looked up on ``server_pipeline_tools`` at call
+    time so tests patching it on the host module are honoured.
     """
     from tapps_mcp import server_pipeline_tools as _host
 
@@ -299,11 +313,8 @@ async def _run_tasks_with_budget(
     if not tasks:
         return [], info
 
-    if auto_detect:
-        return await _run_tasks_with_timeout(tasks, uncached_paths, start, info, _host)
-
-    raw = list(await asyncio.gather(*tasks, return_exceptions=True))
-    return _collect_results(raw, uncached_paths), info
+    budget_s = _host._AUTO_DETECT_BUDGET_S if auto_detect else _EXPLICIT_PATHS_BUDGET_S
+    return await _run_tasks_with_timeout(tasks, uncached_paths, start, info, budget_s)
 
 
 async def _run_tasks_with_timeout(
@@ -311,11 +322,11 @@ async def _run_tasks_with_timeout(
     uncached_paths: list[Path],
     start: int,
     info: _TimedOutInfo,
-    host: Any,
+    budget_s: float,
 ) -> tuple[list[dict[str, Any]], _TimedOutInfo]:
-    """Wait on tasks with the auto-detect wall-clock budget applied."""
+    """Wait on tasks until ``budget_s`` wall-clock seconds have elapsed."""
     elapsed_s = (time.perf_counter_ns() - start) / 1e9
-    remaining_budget = max(0.0, host._AUTO_DETECT_BUDGET_S - elapsed_s)
+    remaining_budget = max(0.0, budget_s - elapsed_s)
     done, pending = await asyncio.wait(tasks, timeout=remaining_budget)
     raw_results: list[dict[str, Any] | BaseException] = []
     completed_paths: list[Path] = []
@@ -337,6 +348,7 @@ async def _run_tasks_with_timeout(
 
 
 __all__ = [
+    "_EXPLICIT_PATHS_BUDGET_S",
     "_VALIDATE_CONCURRENCY",
     "_TimedOutInfo",
     "_emit_file_info",
