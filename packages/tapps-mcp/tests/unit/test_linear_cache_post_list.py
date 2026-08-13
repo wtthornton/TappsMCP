@@ -211,6 +211,134 @@ class TestPostListAutoPopulate:
         assert TappsMCPSettings().linear_cache_ttl_open_seconds == 1800
 
 
+@pytest.mark.skipif(sys.platform == "win32", reason="bash-only behavioral tests")
+class TestPostListEmptyCachePoisoning:
+    """TAP-5901: the hook must never write a falsely-empty issue list.
+
+    A miss costs one API call; a poisoned hit makes the agent report "no open
+    issues" for a project with 160 of them, and every downstream decision built
+    on that read is wrong.
+    """
+
+    def _setup(self, tmp_path: Path) -> Path:
+        generate_claude_hooks(tmp_path, force_windows=False, linear_enforce_cache_gate="warn")
+        return tmp_path / ".claude" / "hooks"
+
+    def _run(self, script: Path, stdin: str, *, cwd: Path) -> int:
+        proc = subprocess.run(
+            ["/usr/bin/env", "bash", str(script)],
+            input=stdin,
+            capture_output=True,
+            text=True,
+            env={**os.environ, "CLAUDE_PROJECT_DIR": str(cwd)},
+            cwd=str(cwd),
+            timeout=10,
+        )
+        return proc.returncode
+
+    @staticmethod
+    def _cache_files(tmp_path: Path) -> list[Path]:
+        return list((tmp_path / ".tapps-mcp-cache" / "linear-snapshots").glob("*.json"))
+
+    def test_content_array_envelope_yields_the_real_issue_list(self, tmp_path: Path) -> None:
+        """The MCP content-array envelope hides issues inside a JSON string.
+
+        Live repro (2026-08-13, nlt-orchestrator): a 160-issue response cached
+        as ``{"issues": []}`` because ``_find_issues`` walked dicts and lists
+        but never parsed the nested ``text`` payload.
+        """
+        hooks = self._setup(tmp_path)
+        inner = json.dumps(
+            {"issues": [{"id": f"TAP-{n}", "title": f"issue {n}"} for n in range(160)]}
+        )
+        payload = {
+            "tool_name": "mcp__plugin_linear_linear__list_issues",
+            "tool_input": {
+                "team": "TappsCodingAgents",
+                "project": "Web-Store-DNA",
+                "includeArchived": False,
+                "limit": 250,
+                "fields": ["id", "title", "status", "statusType"],
+            },
+            "tool_response": {"content": [{"type": "text", "text": inner}]},
+        }
+        assert (
+            self._run(hooks / "tapps-post-linear-list.sh", json.dumps(payload), cwd=tmp_path) == 0
+        )
+
+        files = self._cache_files(tmp_path)
+        assert len(files) == 1
+        entry = json.loads(files[0].read_text(encoding="utf-8"))
+        assert len(entry["issues"]) == 160
+        assert entry["issues"][0]["id"] == "TAP-0"
+
+    def test_empty_result_with_state_omitted_writes_nothing(self, tmp_path: Path) -> None:
+        """The ``linear-read`` skill omits ``state``; that must not poison ``open``."""
+        hooks = self._setup(tmp_path)
+        payload = {
+            "tool_name": "mcp__plugin_linear_linear__list_issues",
+            "tool_input": {"team": "TappsCodingAgents", "project": "Web-Store-DNA"},
+            "tool_response": {"issues": []},
+        }
+        assert (
+            self._run(hooks / "tapps-post-linear-list.sh", json.dumps(payload), cwd=tmp_path) == 0
+        )
+        assert self._cache_files(tmp_path) == []
+
+    def test_empty_result_with_real_state_writes_nothing(self, tmp_path: Path) -> None:
+        """A valid state does not license an empty write either."""
+        hooks = self._setup(tmp_path)
+        payload = {
+            "tool_name": "mcp__plugin_linear_linear__list_issues",
+            "tool_input": {"team": "TAP", "project": "P", "state": "completed"},
+            "tool_response": {"issues": []},
+        }
+        assert (
+            self._run(hooks / "tapps-post-linear-list.sh", json.dumps(payload), cwd=tmp_path) == 0
+        )
+        assert self._cache_files(tmp_path) == []
+
+    def test_unparseable_response_writes_nothing(self, tmp_path: Path) -> None:
+        """An envelope the parser cannot read must fail open, not cache zero."""
+        hooks = self._setup(tmp_path)
+        payload = {
+            "tool_name": "mcp__plugin_linear_linear__list_issues",
+            "tool_input": {"team": "TAP", "project": "P"},
+            "tool_response": {"content": [{"type": "text", "text": "not json at all"}]},
+        }
+        assert (
+            self._run(hooks / "tapps-post-linear-list.sh", json.dumps(payload), cwd=tmp_path) == 0
+        )
+        assert self._cache_files(tmp_path) == []
+
+    def test_content_array_envelope_with_no_issues_writes_nothing(self, tmp_path: Path) -> None:
+        """A genuinely empty content-array response also fails open."""
+        hooks = self._setup(tmp_path)
+        payload = {
+            "tool_name": "mcp__plugin_linear_linear__list_issues",
+            "tool_input": {"team": "TAP", "project": "P"},
+            "tool_response": {"content": [{"type": "text", "text": json.dumps({"issues": []})}]},
+        }
+        assert (
+            self._run(hooks / "tapps-post-linear-list.sh", json.dumps(payload), cwd=tmp_path) == 0
+        )
+        assert self._cache_files(tmp_path) == []
+
+    def test_top_level_json_string_response_still_parses(self, tmp_path: Path) -> None:
+        """The pre-existing whole-response-is-a-string path must keep working."""
+        hooks = self._setup(tmp_path)
+        payload = {
+            "tool_name": "mcp__plugin_linear_linear__list_issues",
+            "tool_input": {"team": "TAP", "project": "P", "state": "started"},
+            "tool_response": json.dumps({"issues": [{"id": "TAP-9", "title": "x"}]}),
+        }
+        assert (
+            self._run(hooks / "tapps-post-linear-list.sh", json.dumps(payload), cwd=tmp_path) == 0
+        )
+        entry = json.loads(self._cache_files(tmp_path)[0].read_text(encoding="utf-8"))
+        assert [i["id"] for i in entry["issues"]] == ["TAP-9"]
+
+
 class TestPostListHookRegistration:
     """The auto-populate hook must be wired into both the scripts map and
     the PostToolUse matcher list.

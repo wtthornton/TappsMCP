@@ -2780,7 +2780,22 @@ if isinstance(resp, str):
         resp = json.loads(resp)
     except Exception:
         resp = {}
+def _as_json(s):
+    # TAP-5901: MCP hosts deliver the payload as
+    # {'content': [{'type': 'text', 'text': '{\"issues\": [...]}'}]} — the issue
+    # list lives inside a nested JSON *string*. Walking dicts and lists alone
+    # returns nothing there, and the empty result used to be cached.
+    t = s.strip()
+    if not t or t[0] not in '[{':
+        return None
+    try:
+        return json.loads(t)
+    except Exception:
+        return None
 def _find_issues(o):
+    if isinstance(o, str):
+        parsed = _as_json(o)
+        return None if parsed is None else _find_issues(parsed)
     if isinstance(o, list):
         if o and isinstance(o[0], dict) and any(
             k in o[0] for k in ('identifier', 'id', 'title')
@@ -2820,15 +2835,15 @@ def _compact(it):
 issues = [
     _compact(i) if isinstance(i, dict) else i for i in (_find_issues(resp) or [])
 ]
-# TAP-4588 poisoning guard: list_issues(state='open') (a tapps-mcp alias, not a
-# real Linear state) returns [] — caching that empty list under the canonical
-# 'open' key would make a later get falsely report 0 issues. Skip the write
-# when the raw request state was an alias/invalid AND the result is empty.
-VALID_LINEAR_STATES = (
-    'backlog', 'unstarted', 'started', 'triage', 'completed', 'canceled'
-)
+# Poisoning guard: never write an empty issue list. TAP-4588 only skipped the
+# write when the raw request state was an alias/invalid, which required a
+# truthy state — but the linear-read skill tells agents to OMIT state and
+# filter in memory, so state was '' and an unparseable response cached zero
+# issues under the canonical 'open' key for 30 minutes (TAP-5901). A miss costs
+# one API call; a poisoned hit makes the agent report an empty backlog. Fail
+# open: no write, and the next read repopulates.
 state_lc = state.lower()
-if not issues and state_lc and state_lc not in VALID_LINEAR_STATES:
+if not issues:
     sys.exit(0)
 # TTL aligned with server-side _ttl_for_state defaults (30 min open, 1 h closed).
 # Keep in lockstep with Settings.linear_cache_ttl_open_seconds /
