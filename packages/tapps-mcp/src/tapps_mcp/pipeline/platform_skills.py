@@ -34,7 +34,10 @@ from tapps_mcp.pipeline.platform_skill_wayfind import (
     WAYFIND_COMPANION_FILES,
     WAYFIND_SKILL_BODY,
 )
-from tapps_mcp.pipeline.skill_managed_block import install_or_refresh_skill
+from tapps_mcp.pipeline.skill_managed_block import (
+    install_or_refresh_skill,
+    prepend_below_frontmatter,
+)
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -1559,7 +1562,7 @@ def generate_skills(
                 updated.append(skill_name)
             continue
 
-        full_content = engagement_note + content
+        full_content = prepend_below_frontmatter(content, engagement_note)
         if target.exists():
             refresh = overwrite or skill_name in SESSION_TRANSFER_SKILL_NAMES
             if refresh:
