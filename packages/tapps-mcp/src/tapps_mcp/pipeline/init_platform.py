@@ -114,6 +114,7 @@ def _append_skill_file_ops(cfg: BootstrapConfig, state: _BootstrapState) -> None
         return
 
     from tapps_mcp.pipeline.platform_skills import CLAUDE_SKILLS, CURSOR_SKILLS
+    from tapps_mcp.pipeline.skill_managed_block import prepend_below_frontmatter
 
     if cfg.platform == "claude":
         templates = CLAUDE_SKILLS
@@ -131,7 +132,7 @@ def _append_skill_file_ops(cfg: BootstrapConfig, state: _BootstrapState) -> None
         state.file_ops.append(
             FileOperation(
                 path=rel_path,
-                content=note + content,
+                content=prepend_below_frontmatter(content, note),
                 mode="create",
                 description=f"TappsMCP skill template: {skill_name}",
                 priority=3,
