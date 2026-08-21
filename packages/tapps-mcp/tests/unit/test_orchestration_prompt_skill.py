@@ -105,10 +105,43 @@ class TestScaffold:
         content = (d / "SKILL.md").read_text().lower()
         # method §6: the emitted prompt must survive the project's own hooks
         # (PreToolUse gates) and MCP standing nudges — adopt or override each.
-        assert "harness-compatibility sweep" in content
+        # The rule stays in SKILL.md; the sweep checklist lives in the companion.
+        assert "harness preflight" in content
         assert "adopt or override" in content or "adopted or overridden" in content
+        ref = (d / "references" / "cold-start-and-verify.md").read_text().lower()
+        assert "harness-compatibility sweep" in ref
         tpl = (d / "assets" / "prompt-template.md").read_text().lower()
         assert "harness compatibility" in tpl
+
+    def test_capability_preflight_is_carried(self, tmp_path):
+        """A granted tool that silently refuses is the AgentForge cornhole failure:
+        the loop degrades into a confident wrong answer that reads as success."""
+        generate_skills(tmp_path, "claude")
+        d = _skill_dir(tmp_path)
+        content = (d / "SKILL.md").read_text().lower()
+        assert "preflight the mechanism before you commit" in content
+        ref = (d / "references" / "cold-start-and-verify.md").read_text().lower()
+        assert "a grant is not a capability" in ref
+
+    def test_feature_map_mirrors_all_eight_loops_anti_patterns(self, tmp_path):
+        """TAP-5759: the canonical loops.md smell-list ships with the skill."""
+        generate_skills(tmp_path, "claude")
+        ref = (
+            (_skill_dir(tmp_path) / "references" / "claude-feature-map.md")
+            .read_text()
+            .lower()
+        )
+        for canonical in (
+            "vacuous verify",
+            "prose judge",
+            "gate outside the harness",
+            "self-declared convergence",
+            "goal-less workflow",
+            "unreachable bar",
+            "fan-out on ambiguity",
+            "critic grades the tool, not the artifact",
+        ):
+            assert canonical in ref, f"missing loops.md anti-pattern: {canonical}"
 
     def test_cursor_host_also_gets_skill(self, tmp_path):
         generate_skills(tmp_path, "cursor")

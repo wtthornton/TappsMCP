@@ -22,15 +22,12 @@ name: orchestration-prompt
 user-invocable: true
 model: claude-sonnet-4-6
 description: >-
-  Generate a ready-to-run orchestration PROMPT with an explicit Goal (verifiable
-  done-condition), a validation contract before execution (when changing behavior),
-  a Loop (state→decide→execute→verify→fix→repeat with attempt cap), an independent
-  creator-verifier pass, and the right Claude Code feature + model tier per step
-  (subagents, Workflow tool, /goal, /loop, Routines, brain memory). Refuses foggy
-  Goals — redirects to /tapps-wayfind when decisions are still missing. Use whenever
-  the user wants to orchestrate multi-step, multi-repo, autonomous, or recurring
-  work — "create a prompt to…", "orchestrate…", "make a goal for…", "work the
-  backlog", "loop until X" — even if they don't say "orchestrate".
+  Generate a ready-to-run orchestration PROMPT: a verifiable Goal, a bounded loop,
+  and an independent creator-verifier pass. Refuses foggy Goals — redirects to
+  /tapps-wayfind. Use whenever the user wants to orchestrate multi-step, multi-repo,
+  autonomous, or recurring work — "create a prompt to…", "orchestrate…", "make a
+  goal for…", "work the backlog", "loop until X" — even if they don't say
+  "orchestrate".
 argument-hint: "[free-form objective]"
 ---
 """
@@ -46,97 +43,59 @@ You produce **prompts, not actions**. The output is a self-contained orchestrati
 prompt (a markdown file under `prompts/`) that the user — or a Routine, or a `/goal`
 run — executes later. You write the *loop*; you do not run it.
 
-## Why this exists (the 2026 shift)
+## Why this exists
 
-Work moved from *prompt engineering* to **loop / harness engineering**: an agent is
-an LLM wrapped in a loop with tools, and the leverage is in the loop's shape — its
-goal, its termination, its verification, and which capability + model tier handles
-each step — not in clever phrasing. Empirically the *harness* (planning →
-delegation → **independent verification** → context management), not the model,
-does most of the work: a well-shaped loop lets a cheaper or open model match a
-frontier one on verification-friendly tasks. A good orchestration prompt makes the
-loop explicit so Claude drives itself to a *provable* finish instead of stopping at
-"good enough".
-
-Every prompt rests on seven load-bearing parts. If any is missing, the loop never
-terminates, terminates without finishing, verifies only by self-report, invents a
-Goal while the route is still foggy, or can't be cold-started by a fresh session.
+The leverage is in the loop's shape — goal, termination, verification, model tier
+per step — not in phrasing. A well-shaped harness lets a cheaper model match a
+frontier one on verification-friendly work. Every prompt rests on seven load-bearing
+parts; miss one and the loop never terminates, terminates without finishing, trusts
+self-report, invents a Goal under fog, or can't be cold-started.
 
 ## The method
 
 ### 0. Wayfind fog preflight (before inventing a Goal)
 
-**Do not invent a Goal while the route is still foggy.** Fog means open product /
-architecture / preference decisions that must be answered before a harness loop can
-honestly terminate. This skill emits execute loops for *clear* multi-step work;
-decision maps live in `/tapps-wayfind`.
+**Do not invent a Goal while the route is still foggy.** This skill emits execute
+loops for *clear* work; decision maps belong to `/tapps-wayfind`.
 
-**Fog signals (any → refuse Goal invent):**
+**Foggy (refuse):** a destination with no locked route; an open `wayfinder:map` with
+open children or non-empty **Not yet specified**; the user cannot state Done-when
+without guessing an undecided tradeoff.
+**Clear (proceed):** remaining work is implementable (build / verify / fix), not
+"what should we do?"
 
-- The objective is a loose idea or destination without a named, locked route.
-- An open Linear `wayfinder:map` (or map parent) still has open children **or**
-  non-empty **Not yet specified**.
-- The user cannot state Done-when without guessing undecided tradeoffs.
+**On fog:** stop drafting, point at `/tapps-wayfind chart <idea>` or
+`/tapps-wayfind work <map-id>`, and do not fill the template with a fake Goal.
 
-**Clear signals (proceed):**
-
-- Destination + decisions-so-far already answer the path, **or** the journey fits
-  one session and no map is needed.
-- Remaining work is implementable (build / verify / fix), not "what should we do?"
-
-**On fog:** stop drafting. Tell the user to run `/tapps-wayfind chart <idea>` or
-`/tapps-wayfind work <map-id>`, and do **not** fill `assets/prompt-template.md`
-with a fake Goal. Resume here only after the map is clear (no open decide tickets;
-Not yet specified empty).
-
-**Cold-start wayfind resume:** before Sub-goal 0 / Loop State, recall prior
-wayfind decisions when present:
-
-```bash
-uv run tapps-mcp memory search --query "wayfind <map-id or destination>"
-```
-
-Prefer hits with `memory_group=wayfind` (or keys `wayfind:*`) — Linear remains SoT
-for map/ticket status; brain holds resume/rationale only. Fold named decisions into
-Context; never invent missing ones.
+**Resume:** when a map exists, open Context with
+`uv run tapps-mcp memory search --query "wayfind <map-id>"` and prefer
+`memory_group=wayfind` hits. Linear stays SoT for ticket status; fold named
+decisions into Context, never invent missing ones.
 
 ### Decide-vs-execute chunk taxonomy
 
-| Chunk kind | Fog? | Handle with |
-|---|---|---|
-| **Decide** — preference, tradeoff, scope, "which approach?" | yes until locked | `/tapps-wayfind` (decision / research tickets) |
-| **Map / chart** — surface fog, wire blocking | yes | `/tapps-wayfind chart` |
-| **Execute** — code edit, migration, deploy, mechanical fan-out | no (route clear) | this skill → execution plane |
-| **Verify / judge** — refute proof, run checks | no | this skill → coordination + frontier verifier |
-| **Fix after expected-fail** — scoped gap repair | no | this skill → expected-fail fix loop |
-| **Research-to-decide** | yes | wayfind `research` tickets (not an orch Goal) |
-| **Research-to-execute** (facts for a clear build) | no | orch coordination plane OK |
-
-If a chunk is still **Decide**, do not map it to `/goal` or a Workflow — redirect.
+**Decide / map / research-to-decide** chunks are fog — they belong on
+`/tapps-wayfind`, never on a `/goal` or a Workflow. **Execute / verify / fix /
+research-to-execute** chunks are this skill's. Full table:
+`references/claude-feature-map.md`.
 
 ### 1. Pin the Goal to a *verifiable, demonstrable* done-condition
 
-A `/goal` run checks completion by sending the condition + conversation to a fast
-model after each turn. **That evaluator does not run commands or read files** — it
-judges only what Claude *surfaced in its output*. So the condition must be
-demonstrable, and it must be anchored to **ground truth, not narration**: name the
-deterministic artifact that proves it (an exit code, a test-count line, a diff, a
-query result the loop pasted), so a confident-but-wrong model can't score itself
+A `/goal` evaluator judges only what Claude *surfaced in its output* — it does not
+run commands or read files. So anchor the condition to **ground truth, not
+narration**: name the deterministic artifact that proves it (exit code, test-count
+line, diff, pasted query result), so a confident-but-wrong model cannot score itself
 green by asserting success.
 
 - Good: "All five repos paste a `pytest` summary line showing 0 failures."
 - Good: "Zero open P1 issues — paste the final query result."
 - Weak: "The code is better" / "tests pass" (nothing in the transcript proves it).
 
-**Then pressure-test for *reachability*, not just verifiability.** A condition can be
-demonstrable yet impossible to satisfy without the system misbehaving. Distinguish
-**validate** goals ("prove X works" — a correct *negative* IS success) from
-**optimize** goals ("drive the metric to 100"). For a validation goal the Done-when
-must accept a *verified-correct negative*, e.g. "a created card passing the gate
-**OR** a verified zero-result run where every stage is green and the empty result is
-*because* the gate correctly held all inputs (≥1 hold validated against ground
-truth)." Otherwise the loop burns its whole budget chasing a target correct behavior
-won't produce.
+**Then pressure-test *reachability*.** A condition can be demonstrable yet
+unsatisfiable without the system misbehaving. Separate **validate** goals ("prove X
+works" — a correct *negative* IS success) from **optimize** goals ("drive the metric
+to 100"). A validation Done-when must accept a verified-correct negative, or the loop
+burns its budget chasing a result correct behavior will never produce.
 
 ### 2. Decompose if the goal is large — contract before features when behavior changes
 
@@ -174,18 +133,14 @@ frontier-model rates for mechanical work. Two planes (full catalog in
   per-repo PR, **Routines** / `claude -p`+cron for recurring runs. Never fan
   parallel agents across coupled code — the documented worst fit.
 
-Give every chunk a **model tier**, not just a mechanism — this is how you get
-"frontier results from a cheaper model": run the harness cheap, spend the strong
-model only where judgement is load-bearing.
+Give every chunk a **model tier**, not just a mechanism — run the harness cheap,
+spend the strong model only where judgement is load-bearing (independent verify is
+always frontier tier). Selector table: `references/claude-feature-map.md`.
 
-| The chunk is… | Mechanism | Model tier |
-|---|---|---|
-| "Look across all repos and tell me X" | Workflow / 3–5 subagents | cheap/low-effort (mechanical fan-out) |
-| Mechanical edit, rename, codemod | per-repo dispatch | cheap/low-effort |
-| Hard reasoning, design, ambiguous fix | `/goal` drive | frontier/high-effort |
-| **Independent verify / judge (step 5)** | verifier subagent | **frontier/high-effort** |
-| "Re-check Z every N minutes" | `/loop` → Routine | cheap |
-| "Remember/recall across sessions" | brain (`tapps_memory`) | n/a |
+**Preflight the mechanism before you commit a chunk to it.** A mechanism that is
+listed is not a mechanism that works: a granted tool with no targets, a degraded
+index, an unreachable MCP server all fail *silently* and the loop degrades into a
+confident wrong answer. Sub-goal 0 must prove each one executes once for real.
 
 **Commit to the mechanism — don't hedge.** "You *may* dispatch subagents" forces the
 runner to re-decide and usually defaults to the weakest option. Name exactly one
@@ -210,29 +165,20 @@ than raw transcripts — so iteration N isn't paying for iteration 1's tokens.
 
 ### 5. Add an independent verification pass (creator ≠ verifier)
 
-Self-verification is the weakest link: the same agent that did the work judges the
-work and rationalizes its own output. The single largest quality gain in harness
-engineering is a **separate, adversarial verifier** — creator-verifier separation
-from Missions / Factory: the implementer has cost bias; a fresh context does not.
+Self-verification is the weakest link — the implementer has cost bias, a fresh
+context does not. A separate adversarial verifier is the single largest quality gain.
 
-- Put verification on the **coordination plane** as its own step: after Execute,
-  spawn a **verifier subagent** (frontier tier) with a *fresh* context, prompted to
-  **refute** the sub-goal's proof — re-run the deterministic check (tests, lint,
-  build, the actual query) rather than trust the executor's narration. Default to
-  "not done" on any doubt.
-- Prefer **two layers** when the target is runnable: **scrutiny** (lint / types /
-  tests / `tapps_validate_changed`) and **behavioral** (smoke / scripted user flow
-  against the validation-contract assertions). Scrutiny alone is not enough when
-  the contract is behavioral.
-- The verifier **reports gaps; it does not implement fixes.** The orchestrating
-  loop scopes a narrow **fix sub-goal** for a fresh executor (see expected-fail
-  fix loop below).
-- For high-stakes or irreversible steps, use **N independent verifiers + majority**
-  (perspective-diverse where the finding can fail multiple ways: correctness,
-  security, does-it-reproduce), not one. In a Workflow, this is a `parallel()` of
-  verify agents keyed off each finding.
-- The verifier's verdict — not the executor's claim — is what advances the loop or
-  triggers the diagnose branch.
+- After Execute, spawn a **verifier subagent** (frontier tier, *fresh* context)
+  prompted to **refute** the proof: re-run the deterministic check rather than trust
+  the executor's narration. Default to "not done" on any doubt.
+- The verifier **grades the artifact, not the run.** "Node completed" / "tool
+  returned" is not evidence; re-run the deterministic check and read the output.
+- The verifier **reports gaps; it does not implement fixes** — the loop scopes a
+  narrow fix sub-goal for a fresh executor.
+- The verifier's verdict — not the executor's claim — advances the loop.
+
+Two-layer verification, N-verifier majority, and perspective-diverse lenses:
+`references/cold-start-and-verify.md`.
 
 ### 6. Make it cold-start runnable (the drop-in test)
 
@@ -248,22 +194,11 @@ The point is a prompt a **brand-new session** can run with zero hand-holding.
 - **Self-healing preconditions.** Anything the loop needs (a runtime up, a
   scorer/tool built, a branch, auth reachable) is a **Sub-goal 0** the loop
   *establishes itself* — never a "set this up first" note the user must action.
-- **Harness-compatibility sweep.** The runner session carries the *project's own*
-  harness: PreToolUse/PostToolUse hooks that gate tool calls (issue-tracker write
-  sentinels, prod guards) and MCP-server standing instructions that nudge per-edit
-  behavior (quality checks after every file edit, doc lookups). Enumerate the gates
-  and nudges the loop's tool calls will actually hit; bake each required
-  unlock/refresh step into Sub-goal 0 or the relevant loop step, and in Guardrails
-  explicitly **adopt or override** each standing nudge (e.g. "quality pipeline runs
-  at the epic gate, not per edit — this overrides the per-edit nudge"). A prompt
-  that fights its own project's hooks burns its budget on diagnose loops.
-- **Deploy-freshness + smoke/health gate** (any prompt that runs against a live or
-  deployed target, not source): in Sub-goal 0, self-healing — (1) **merged ≠ live**:
-  if the target is a baked image, compare latest merged commit to the build time and
-  rebuild/redeploy (preserving overlays) if `main` is newer; make "ran against a
-  stale image" a required-fail cap. (2) **smoke before spend**: after any
-  rebuild/deploy and before the real run, hit `/health` and one cheap end-to-end
-  call to prove runtime + auth + transport.
+- **Capability + harness preflight.** Sub-goal 0 proves the loop can actually do
+  its job before it spends: every granted tool executes once for real, every
+  hook-gated call has its unlock step, every MCP standing nudge is explicitly
+  adopted or overridden, and a live target passes deploy-freshness + `/health`.
+  Checklists: `references/cold-start-and-verify.md`.
 
 ## Guardrails every emitted prompt must carry
 
@@ -357,21 +292,9 @@ no silent scope creep.
    `.claude/workflows/<slug>.js` (schema + `budget` + per-stage `model`/`effort`) and
    point Run-as at it. A single coupled item (N=1) is a `/goal` drive, not a Workflow.
 5. Save the prompt to `prompts/<short-slug>.md`.
-6. **Completeness self-check** — fog preflight passed (or explicit redirect; no Goal
-   invent under fog); every **execute** chunk names a concrete mechanism *and* model
-   tier (no "may"); decide chunks stayed on `/tapps-wayfind`; the loop has *both* an
-   iteration cap and a budget; there's an **independent verification** step (not
-   self-report); any fan-out has a schema'd return + per-agent contract; a memory
-   recall+record step with **structured handoff** fields on fail (incl. wayfind
-   resume when `memory_group=wayfind` hits exist); an **Autonomy contract**; a
-   **bounded diagnose-don't-repeat** path; an **expected-fail fix loop** (default ≤3
-   validation rounds); a **context-hygiene** line; and the **Engineering discipline**
-   line. For software behavior changes, confirm a **validation contract** with IDs +
-   fulfills coverage before execution sub-goals. For a live/deployed target, confirm
-   Sub-goal 0 has the deploy-freshness + smoke/health gate. Confirm **harness
-   compatibility**: every hook-gated tool call has its unlock/refresh step and every
-   MCP standing nudge is adopted-or-overridden. Run the **cold-start test**: a fresh
-   session with nothing loaded can run it. Fix anything weak before saving.
+6. **Completeness self-check** — walk the **Guardrails** list above and confirm the
+   emitted prompt satisfies every line; then run the **cold-start test** (a fresh
+   session with nothing loaded can run it). Fix anything weak before saving.
 7. Tell the user exactly how to run it — the `/goal` line, the `/loop` cadence, the
    Routine schedule, or "invoke the Workflow tool `<script>`" — and from which
    session.
@@ -510,6 +433,20 @@ load-bearing (hard reasoning, and the independent verify/judge step).
 - **Execution plane** (writing code): sequential, one repo at a time. Coupled coding
   is the worst fit for fan-out (tight dependencies, shared context, error cascade).
 
+## Decide-vs-execute chunk taxonomy
+
+Fog chunks belong on `/tapps-wayfind`; clear chunks belong to orchestration-prompt.
+
+| Chunk kind | Fog? | Handle with |
+|---|---|---|
+| **Decide** — preference, tradeoff, scope, "which approach?" | yes until locked | `/tapps-wayfind` (decision / research tickets) |
+| **Map / chart** — surface fog, wire blocking | yes | `/tapps-wayfind chart` |
+| **Research-to-decide** | yes | wayfind `research` tickets (not an orch Goal) |
+| **Execute** — code edit, migration, deploy, mechanical fan-out | no (route clear) | execution plane |
+| **Verify / judge** — refute proof, run checks | no | coordination plane + frontier verifier |
+| **Fix after expected-fail** — scoped gap repair | no | expected-fail fix loop |
+| **Research-to-execute** (facts for a clear build) | no | coordination plane OK |
+
 ## Mechanism catalog
 
 | Mechanism | What it is | Best for | Watch out |
@@ -547,10 +484,33 @@ exactly how a modest base model reaches frontier-level reliability.
 - **Inventing a Goal under fog** → refuse; `/tapps-wayfind` until the route is clear.
 - One enormous goal → sequence narrow sub-goals.
 - Unbounded loop (no cap/budget) → always set max iterations or a token budget.
-- **Self-verification only** → add an independent, adversarial verifier (creator ≠ verifier).
+- **Self-verification only** (loops.md #4 *self-declared convergence*) → an
+  independent, adversarial verifier owns the stop field; the creator never does.
+- **Vacuous verify** (loops.md #1) → a presence-style predicate ("output non-empty",
+  "node completed", "tool returned") reads as "output correct" while the thing it
+  guards is inert. An uncheckable criterion is itself a FAIL.
+- **Prose judge** (loops.md #2) → a judge with no result schema answers in prose, the
+  stop field never resolves, and the loop runs to max iterations every time. Declare
+  a schema on every member a convergence or goal expression reads.
+- **Gate outside the harness** (loops.md #3) → a policy/human gate that lives only in
+  a wrapper script is bypassed by anyone invoking the loop directly. Put the gate in
+  the spec, where it travels with the run.
+- **Unreachable bar** (loops.md #6) → a bar no correct run can meet ("utterly
+  perfect") plus a human-only brake converts every unattended run into
+  max-iterations × worst-case spend. Pair reachable wording with a cap and a budget.
+- **Fan-out on ambiguity** (loops.md #7) → decomposing hardest when the goal is
+  vaguest multiplies the ambiguity. Foggy goals collapse to one agent; open questions
+  lead with research, not execution.
+- **Critic grades the tool, not the artifact** (loops.md #8) → the judge scores
+  intermediate tool output or the builder's summary instead of the shipped artifact,
+  so the loop optimizes the wrong surface. Judges receive artifacts, never narration.
+- **Inert capability** → a granted tool that silently refuses (no targets, missing
+  key, unreachable server) degrades the agent into a confident wrong answer that
+  reads as success. Prove each tool executes once in Sub-goal 0.
 - Paying frontier rates for mechanical fan-out → tier the model per chunk.
 - Parallel agents on coupled code → sequential per-repo dispatch (serial writes).
-- Vague done-condition → demonstrable, ground-truth-anchored condition.
+- Vague / absent done-condition (loops.md #5 *goal-less workflow*) → "every step
+  completed" is not success; demand a demonstrable, ground-truth-anchored condition.
 - Context rot (re-reading the same files each iteration) → prune + targeted grep.
 - **Features before a validation contract** → write behavioral assertions first when
   changing software behavior; map sub-goals to `fulfills` IDs.
@@ -575,6 +535,80 @@ multi-day orchestrators:
 | Fix features after fail | Expected-fail fix loop ≤3 rounds, then escalate/stop |
 """
 
+_COLD_START_AND_VERIFY = r"""# Cold-start preflight & verification depth
+
+Consult while *filling* the prompt template — not while deciding the shape of the
+loop. `SKILL.md` carries the rules; this file carries the checklists.
+
+## Sub-goal 0 preflight — prove the loop can work before it spends
+
+Everything here is **self-healing**: the loop establishes it, never a "set this up
+first" note the user must action.
+
+### 1. Capability preflight (every prompt)
+
+A mechanism that is *listed* is not a mechanism that *works*. Each of these fails
+silently and leaves the agent producing a confident, degraded answer:
+
+- A tool granted with no targets/allowlist — the call is refused, the agent falls
+  back to weaker evidence and mentions it once in passing.
+- A degraded index or cache — partial results returned as if complete.
+- An unreachable MCP server or expired auth — the tool simply never fires.
+
+**Rule:** for every tool the loop depends on, Sub-goal 0 executes it once for real
+against a known-good input and asserts the result. A grant is not a capability.
+Make "ran with a refused tool" a required-fail cap, not a warning.
+
+### 2. Harness-compatibility sweep
+
+The runner session carries the *project's own* harness: PreToolUse/PostToolUse hooks
+that gate tool calls (issue-tracker write sentinels, prod guards) and MCP standing
+instructions that nudge per-edit behavior (quality checks after every file edit, doc
+lookups). Enumerate the gates and nudges the loop's calls will actually hit; bake
+each unlock/refresh step into Sub-goal 0 or the relevant loop step; and in Guardrails
+explicitly **adopt or override** each standing nudge (e.g. "quality pipeline runs at
+the epic gate, not per edit — this overrides the per-edit nudge"). A prompt that
+fights its own project's hooks burns its budget on diagnose loops.
+
+### 3. Deploy-freshness + smoke/health (live or deployed targets only)
+
+1. **Merged is not live.** If the target is a baked image, compare the latest merged
+   commit to the build time and rebuild/redeploy (preserving overlays) when the
+   default branch is newer. Make "ran against a stale image" a required-fail cap.
+2. **Smoke before spend.** After any rebuild/deploy and before the real run, hit
+   `/health` plus one cheap end-to-end call to prove runtime + auth + transport.
+
+### 4. Wayfind resume
+
+Cold-start State opens with a brain search for `memory_group=wayfind` / `wayfind:*`
+keyed to the map or destination. Prefer those hits over inventing Context; the issue
+tracker remains source of truth for open tickets.
+
+## Verification depth
+
+Scale the verifier to the stakes. All layers keep creator ≠ verifier.
+
+| Stakes | Verification |
+|---|---|
+| Routine, reversible | One fresh-context verifier prompted to refute |
+| Behavioral change | Two layers: **scrutiny** + **behavioral** (below) |
+| High-stakes / irreversible | N independent verifiers, majority rules |
+
+- **Scrutiny layer** — lint, types, tests, `tapps_validate_changed`. Necessary,
+  never sufficient when the contract is behavioral.
+- **Behavioral layer** — smoke or a scripted user flow exercised against the
+  validation-contract assertion IDs. This is the layer that catches "the tests pass
+  and the feature still does not work".
+- **N verifiers** — prefer *perspective-diverse* lenses over N identical refuters
+  when a finding can fail in more than one way (correctness, security,
+  does-it-reproduce). In a Workflow this is a `parallel()` of verify agents keyed off
+  each finding; kill the finding when a majority refute.
+
+**Grade the artifact, never the run.** "Node completed", "agent returned", "no
+exception raised" are not evidence. The verifier re-runs the deterministic check and
+reads the shipped output. Default to "not done" on any doubt.
+"""
+
 _LEARNINGS_SEED = """\
 # orchestration-prompt learnings (project-scoped)
 
@@ -590,6 +624,7 @@ overwritten on upgrade — it's yours.
 ORCHESTRATION_PROMPT_COMPANION_FILES: dict[str, str] = {
     "assets/prompt-template.md": _PROMPT_TEMPLATE,
     "references/claude-feature-map.md": _FEATURE_MAP,
+    "references/cold-start-and-verify.md": _COLD_START_AND_VERIFY,
 }
 
 # Files created once and NEVER overwritten (project-owned).
