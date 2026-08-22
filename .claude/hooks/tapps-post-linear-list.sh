@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# tapps-mcp-hook-version: 3.12.71
+# tapps-mcp-hook-version: 3.12.73
 # tapps-mcp-hook-content-sha: 9021157b
 # TappsMCP PostToolUse hook — Linear list_issues auto-populate (TAP-1412)
 # After a successful mcp__plugin_linear_linear__list_issues call, write the
