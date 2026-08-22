@@ -170,8 +170,43 @@ def _skill_tier(root: Path) -> str:
     return "full"
 
 
+def _preview(names: list[str], limit: int) -> str:
+    """Render at most ``limit`` names plus a "+N more" tail."""
+    more = f" (+{len(names) - limit} more)" if len(names) > limit else ""
+    return f"{', '.join(names[:limit])}{more}"
+
+
+def _oversized_skill_bodies(
+    skill_dirs: list[Path],
+    registry: set[str],
+    deprecated: frozenset[str] | set[str],
+    with_companions: set[str],
+    body_max: int,
+) -> list[str]:
+    """Registered skills whose SKILL.md body exceeds ``body_max`` lines.
+
+    Companion files are the *remedy* for an oversized body, not an exemption from
+    measuring it — a skill can ship companions and still inline everything. So
+    every registered skill is measured; carrying companions only annotates the
+    finding (the content already has somewhere to move to).
+    """
+    oversized: list[str] = []
+    for skill_dir in skill_dirs:
+        if skill_dir.name not in registry or skill_dir.name in deprecated:
+            continue
+        try:
+            body = skill_dir.joinpath("SKILL.md").read_text(encoding="utf-8")
+        except OSError:
+            continue
+        lines = body.count("\n") + 1
+        if lines > body_max:
+            suffix = "; has companions" if skill_dir.name in with_companions else ""
+            oversized.append(f"{skill_dir.name}({lines}{suffix})")
+    return oversized
+
+
 def check_skill_inventory_budget(root: Path) -> CheckResult:
-    """WARN on skill count, orphan dirs, and oversized SKILL.md without companions."""
+    """WARN on skill count, external skill dirs, and oversized SKILL.md bodies."""
     from tapps_mcp.distribution.doctor import CheckResult, _tapps_skill_bases
     from tapps_mcp.pipeline.platform_docs_automation import (
         CLAUDE_DOCS_SKILLS,
@@ -210,32 +245,18 @@ def check_skill_inventory_budget(root: Path) -> CheckResult:
         if count > count_max:
             warns.append(f"{host_label} has {count} skills (ceiling={count_max})")
 
-        orphans = [d.name for d in skill_dirs if d.name not in registry]
-        if orphans:
-            preview = ", ".join(orphans[:8])
-            more = f" (+{len(orphans) - 8} more)" if len(orphans) > 8 else ""
-            # Third-party / AgentForge / user skills are expected extras — never
-            # labeled "orphans" (that implies tapps should remove them).
-            notes.append(f"{host_label} external skills: {preview}{more}")
+        # Third-party / AgentForge / user skills are expected extras — never
+        # labeled "orphans" (that implies tapps should remove them).
+        external = [d.name for d in skill_dirs if d.name not in registry]
+        if external:
+            notes.append(f"{host_label} external skills: {_preview(external, 8)}")
 
-        oversized: list[str] = []
-        for skill_dir in skill_dirs:
-            if skill_dir.name not in registry or skill_dir.name in DEPRECATED_TAPPS_SKILLS:
-                continue
-            if skill_dir.name in SKILL_COMPANION_FILES:
-                continue
-            try:
-                lines = skill_dir.joinpath("SKILL.md").read_text(encoding="utf-8").count("\n") + 1
-            except OSError:
-                continue
-            if lines > body_max:
-                oversized.append(f"{skill_dir.name}({lines})")
+        oversized = _oversized_skill_bodies(
+            skill_dirs, registry, DEPRECATED_TAPPS_SKILLS, set(SKILL_COMPANION_FILES), body_max
+        )
         if oversized:
-            preview = ", ".join(oversized[:6])
-            more = f" (+{len(oversized) - 6} more)" if len(oversized) > 6 else ""
             warns.append(
-                f"{host_label} SKILL.md over {body_max} lines without companions: "
-                f"{preview}{more}"
+                f"{host_label} SKILL.md over {body_max} lines: {_preview(oversized, 6)}"
             )
 
     if not host_summaries:
@@ -256,7 +277,8 @@ def check_skill_inventory_budget(root: Path) -> CheckResult:
             "Skill inventory budget",
             False,
             f"WARN: {'; '.join(warns)}. {summary}",
-            "Split long skills into companions, raise doctor_context_budget.skill_count_max "
+            "Move reference content out of SKILL.md into companions, raise "
+            "doctor_context_budget.skill_count_max "
             "/ skill_body_max_lines in .tapps-mcp.yaml, or keep skill_tier: full for "
             "AgentForge and other third-party skills (unknown skills are never deleted).",
         )
