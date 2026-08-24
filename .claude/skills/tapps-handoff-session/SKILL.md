@@ -17,6 +17,10 @@ End the session with a durable handoff the next chat can load via `/tapps-contin
 0. **Session bootstrap (if needed).** If `tapps_session_start()` was not called this session, call it now (cached is fine) so flywheel scope and checker context are correct. Skip when already called.
 
 1. **Draft handoff (5-10 bullets).** From this session's work, write:
+   **Checkpoint trigger:** when the user says "checkpoint", "context full", or an
+   orchestration prompt prints a `CHECKPOINT` block — include the **Cumulative**
+   section above (not optional). Cross-ref: orchestration-prompt method §7.
+
    - **Done** — what shipped or was verified
    - **Open** — in-progress or untested
    - **Next (P0)** — one concrete next action (plain prose)
@@ -53,6 +57,13 @@ End the session with a durable handoff the next chat can load via `/tapps-contin
 
 ## Success criterion
 - ...
+
+## Cumulative (loop checkpoints — required for shift boundaries)
+- Sub-goal: <k> · VAL IDs: <…>
+- Attempt: <a> of <cap> (cumulative across shifts)
+- Budget spent: <spent>/<ceiling>
+- Refuted strategies: <bullets>
+- Resume line: <exact cold-start launch line from prompt>
 ```
 
 2. **Persist (one atomic call when MCP is available).** Do **not** write the file separately before MCP — `tapps_handoff_save` writes `.tapps-mcp/session-handoff.md`, lints, mirrors to brain, and can close the session lifecycle.

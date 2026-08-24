@@ -16,6 +16,7 @@ Start work in a fresh context window by assembling structured state — not a us
 1. **Session bootstrap.**
    - **Preferred:** Call `mcp__nlt-build__tapps_session_start()`. If `data.compaction_rehydration` is present, summarize it in one sentence.
    - **CLI fallback** (MCP unavailable): Run `uv run tapps-mcp doctor --quick` and read `.tapps-mcp.yaml` for project context (quality preset, brain URL, engagement). Proceed without blocking.
+- **Usage gaps:** `usage_gaps.recurring_validation_skips` is 7-day rolling fleet telemetry — not proof this call failed. Still run validate + checklist at epic boundaries in execution repos.
 
 2. **Load handoff (priority order).**
    - Read `.tapps-mcp/session-handoff.md` if it exists — primary source.
@@ -31,8 +32,12 @@ Start work in a fresh context window by assembling structured state — not a us
 4. **Emit continue block (~15 lines max).** Present:
    - **P0** — next action + Linear link if available (note if promoted from Open)
    - **Done / Open / Blockers** — compressed from handoff
+   - **Cumulative** (when present) — sub-goal, attempt vs cap, budget spent, refuted strategies, resume line
    - **Verify first** — commands from handoff
    - **Success criterion**
+   - **Host reset** — Claude Code: operator may `/clear` then continue; Cursor: **new chat** then re-invoke this skill
    - **Stale warning** if handoff **Updated** is >7 days old or missing
 
-5. **Proceed on P0.** Ask only if P0 is ambiguous; otherwise start using normal TAPPS workflow (`tapps_quick_check` after Python edits). Do **not** ask the user to re-paste prior context when handoff files exist.
+5. **Re-verify live state** when **Cumulative** is present — handoff is a pointer, not proof (orchestration §7 / cold-start companion).
+
+6. **Proceed on P0.** Ask only if P0 is ambiguous; otherwise start using normal TAPPS workflow (`tapps_quick_check` after Python edits). Do **not** ask the user to re-paste prior context when handoff files exist.

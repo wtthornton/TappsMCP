@@ -87,9 +87,22 @@ def check_orchestration_prompt_skill_current(project_root: Path) -> CheckResult:
         project_root,
         skill_name="orchestration-prompt",
         check_name="orchestration-prompt skill",
-        companions=("assets/prompt-template.md", "references/claude-feature-map.md"),
-        required_phrases=("validation contract", "expected-fail"),
-        phrase_sources=("assets/prompt-template.md",),
+        companions=(
+            "assets/prompt-template.md",
+            "references/claude-feature-map.md",
+            "references/cold-start-and-verify.md",
+            "references/host-feature-map.md",
+        ),
+        required_phrases=(
+            "validation contract",
+            "expected-fail",
+            "shift boundary",
+            "host-feature-map",
+        ),
+        phrase_sources=(
+            "assets/prompt-template.md",
+            "references/host-feature-map.md",
+        ),
     )
 
 

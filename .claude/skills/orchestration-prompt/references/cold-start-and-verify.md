@@ -8,6 +8,16 @@ loop. `SKILL.md` carries the rules; this file carries the checklists.
 Everything here is **self-healing**: the loop establishes it, never a "set this up
 first" note the user must action.
 
+### 0. TAPPS session bootstrap (every loop)
+
+Before any other TAPPS MCP tool in a fresh session (including after
+`/tapps-continue-session`, which calls this internally): run `tapps_session_start()`.
+Skipping it leaves the checker matrix and project context stale — a required-fail
+cap when the loop depends on quality gates or `usage_gaps` telemetry.
+`usage_gaps.recurring_validation_skips` is **7-day rolling fleet telemetry**, not
+proof the current call failed; still run `tapps_validate_changed` + `tapps_checklist`
+at epic boundaries in execution repos with full `nlt-build`.
+
 ### 1. Capability preflight (every prompt)
 
 A mechanism that is *listed* is not a mechanism that *works*. Each of these fails

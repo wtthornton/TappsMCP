@@ -11,7 +11,7 @@ description: >-
   "orchestrate".
 argument-hint: "[free-form objective]"
 ---
-<!-- BEGIN: tapps-skill orchestration-prompt v3.12.73 -->
+<!-- BEGIN: tapps-skill orchestration-prompt v3.12.74 -->
 # orchestration-prompt
 
 You produce **prompts, not actions**. The output is a self-contained orchestration
@@ -133,7 +133,7 @@ frontier-model rates for mechanical work. Two planes (full catalog in
 
 Give every chunk a **model tier**, not just a mechanism — run the harness cheap,
 spend the strong model only where judgement is load-bearing (independent verify is
-always frontier tier). Selector table: `references/claude-feature-map.md`.
+always frontier tier). Selector table: `references/claude-feature-map.md`. For host-specific Run-as, checkpoint lanes, and MCP scope, read `references/host-feature-map.md`.
 
 **Preflight the mechanism before you commit a chunk to it.** A mechanism that is
 listed is not a mechanism that works: a granted tool with no targets, a degraded
@@ -228,7 +228,7 @@ The point is a prompt a **brand-new session** can run with zero hand-holding.
   baked path, a stale layer cache, or a container still on the previous image id).
   Verify by identity — running image id vs the one just built, or a sentinel string
   from the new source found inside the running artifact — never by the build's exit
-  code. Checklists: `references/cold-start-and-verify.md`.
+  code. Checklists: `references/cold-start-and-verify.md` (incl. `tapps_session_start()` as first MCP call).
 
 ### 7. Checkpoint the context window (handoff → clear → continue)
 
@@ -356,22 +356,23 @@ no silent scope creep.
 
 1. **Fog preflight (method §0).** If foggy, refuse and point at `/tapps-wayfind` —
    do not emit a prompt. If clear, recall `memory_group=wayfind` resume when present.
-2. Read the workspace manifest (e.g. `fleet.md`) for the repos / Linear projects /
+2. Read `references/host-feature-map.md` when the runner host is Cursor or when Run-as / checkpoint lanes differ by host.
+3. Read the workspace manifest (e.g. `fleet.md`) for the repos / Linear projects /
    brain ids involved, if the project has one.
-3. Fill `assets/prompt-template.md` — keep only the sections the task needs. Always
+4. Fill `assets/prompt-template.md` — keep only the sections the task needs. Always
    keep **Prerequisites / Wayfind gate**, the **"How to run (cold start)"** block, a
    **Sub-goal 0** for self-healing preconditions, the **Verify** step wired to an
    independent verifier, and — when changing software behavior — a **Validation
    contract** filled *before* execution sub-goals plus an **expected-fail fix loop**
    with attempt cap.
-4. If any chunk is multi-stage parallel work, also write the companion
+5. If any chunk is multi-stage parallel work, also write the companion
    `.claude/workflows/<slug>.js` (schema + `budget` + per-stage `model`/`effort`) and
    point Run-as at it. A single coupled item (N=1) is a `/goal` drive, not a Workflow.
-5. Save the prompt to `prompts/<short-slug>.md`.
-6. **Completeness self-check** — walk the **Guardrails** list above and confirm the
+6. Save the prompt to `prompts/<short-slug>.md`.
+7. **Completeness self-check** — walk the **Guardrails** list above and confirm the
    emitted prompt satisfies every line; then run the **cold-start test** (a fresh
    session with nothing loaded can run it). Fix anything weak before saving.
-7. Tell the user exactly how to run it — the `/goal` line, the `/loop` cadence, the
+8. Tell the user exactly how to run it — the `/goal` line, the `/loop` cadence, the
    Routine schedule, or "invoke the Workflow tool `<script>`" — and from which
    session.
 

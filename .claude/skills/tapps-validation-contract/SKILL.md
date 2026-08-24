@@ -10,7 +10,7 @@ description: >-
   needs a contract; or when the user invokes /tapps-validation-contract.
 argument-hint: "[draft | claim <VAL-id> | mark-verified]"
 ---
-<!-- BEGIN: tapps-skill tapps-validation-contract v3.12.73 -->
+<!-- BEGIN: tapps-skill tapps-validation-contract v3.12.74 -->
 # tapps-validation-contract
 
 You produce a **validation contract** — a finite checklist of testable behavioral
