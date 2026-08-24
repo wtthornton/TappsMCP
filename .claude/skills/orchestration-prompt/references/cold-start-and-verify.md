@@ -70,3 +70,34 @@ Scale the verifier to the stakes. All layers keep creator ≠ verifier.
 **Grade the artifact, never the run.** "Node completed", "agent returned", "no
 exception raised" are not evidence. The verifier re-runs the deterministic check and
 reads the shipped output. Default to "not done" on any doubt.
+
+## Shift-boundary checkpoints (method §7)
+
+A checkpoint discards the transcript — and the transcript is where the loop's own
+guardrails were tracked. Clear without carrying them and the guardrails **silently stop
+binding**: the attempt cap resets to zero, the budget resets to zero, and the fresh
+session retries the strategy that just failed.
+
+A checkpoint handoff must carry, on top of the stock Done/Open/Next/Verify fields:
+
+- **Current sub-goal** + the validation-contract IDs it must turn green.
+- **Attempt count vs cap** — *cumulative across shifts*, e.g. `round 2 of 3`.
+- **Budget spent** — cumulative, so the ceiling still means something.
+- **Strategies already tried and refuted, and why** — this is what preserves
+  diagnose-don't-repeat across the boundary. Without it, clearing *causes* the
+  repetition the failure-handling rule exists to forbid.
+- **The exact resume line** (the cold-start launch line from §6).
+
+**The handoff is a pointer, not a proof.** State recorded before the boundary describes
+the world as it was. On resume, re-verify live state before acting — a PR that was
+"open, merge pending" at checkpoint can be merged an hour later, flipping the correct
+branch base. Treat every handoff claim as a hypothesis with a cheap test; the
+independent verifier (§5) still runs, and a checkpoint never substitutes for it.
+
+**Declared-checkpoint block** (interactive lane — print verbatim, then stop):
+
+```
+CHECKPOINT <n> — sub-goal <k> complete. Handoff written.
+Cumulative: round <a> of <cap> · budget <spent>/<ceiling>.
+Next: /clear   then   /tapps-continue-session
+```
