@@ -55,6 +55,7 @@ Coverage rule: every ID claimed exactly once; Done-when requires all IDs green.
 
 ## Sub-goals  (sequential; each a checkpoint)
 0. **Establish preconditions (self-healing — the loop sets these up, NOT the user).** <runtime up, scorer/tool built, auth reachable, branch ready; wayfind resume already recalled in Prerequisites>
+   - **TAPPS session bootstrap:** `tapps_session_start()` as the first MCP call (or `/tapps-continue-session` on resume).
    - **Deploy freshness (live/deployed target only):** merged ≠ live. If baked image, compare latest merged commit to build time; rebuild/redeploy (preserve overlays) if `main` is newer. Stale image = required-fail cap.
    - **Smoke + health gate (after any deploy, before the real run):** `/health` is `ok|degraded` and one cheap end-to-end call succeeds.
    - **Harness compatibility:** <PreToolUse gates + MCP standing nudges the loop's tool calls will hit → bake unlock/refresh steps here; adopt-or-override each nudge in Guardrails>

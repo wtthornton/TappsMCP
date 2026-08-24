@@ -1,20 +1,6 @@
-"""Platform ``orchestration-prompt`` skill — body + companion files.
-
-Shipped as a multi-file skill (SKILL.md smart-merged via
-``skill_managed_block``; companion reference/template refreshed wholesale;
-``learnings.md`` created-once and never overwritten). Kept in its own module so
-``platform_skills.py`` stays navigable.
-
-The body is the *generic platform core* of loop/harness engineering. Consumer
-specifics (fleet manifest path, observed-failure examples, run-as lines) live in
-each project's preserved region below the managed block — never here.
-"""
+"""Platform ``orchestration-prompt`` skill — body + companion files."""
 
 from __future__ import annotations
-
-# ---------------------------------------------------------------------------
-# SKILL.md body (managed block — smart-merged on upgrade)
-# ---------------------------------------------------------------------------
 
 ORCHESTRATION_PROMPT_SKILL_FRONTMATTER = """\
 ---
@@ -31,9 +17,6 @@ description: >-
 argument-hint: "[free-form objective]"
 ---
 """
-
-# NOTE: the body below is deliberately host-agnostic prose (no tool grants), so
-# the same text serves both the Claude and Cursor skill hosts.
 ORCHESTRATION_PROMPT_SKILL_BODY = (
     ORCHESTRATION_PROMPT_SKILL_FRONTMATTER
     + r"""
@@ -47,7 +30,7 @@ run — executes later. You write the *loop*; you do not run it.
 
 The leverage is in the loop's shape — goal, termination, verification, model tier
 per step — not in phrasing. A well-shaped harness lets a cheaper model match a
-frontier one on verification-friendly work. Every prompt rests on seven load-bearing
+frontier one on verification-friendly work. Every prompt rests on nine load-bearing
 parts; miss one and the loop never terminates, terminates without finishing, trusts
 self-report, invents a Goal under fog, or can't be cold-started.
 
@@ -79,6 +62,21 @@ decisions into Context, never invent missing ones.
 research-to-execute** chunks are this skill's. Full table:
 `references/claude-feature-map.md`.
 
+### 0b. Harvest the user's standing constraints *before* shaping the goal
+
+A constraint that lives only in conversation history **dies with the session**. The
+runner is a fresh context: it knows nothing the prompt does not carry. Enumerate every
+standing instruction the user has given — "don't touch production", "read-only for
+now", "never force-push", "ask before spending" — and encode each in **two** places:
+**Guardrails** states the rule; an **Autonomy hard-stop** enforces it at the moment of
+action, so a loop optimizing for a green score cannot satisfy the goal by breaking it.
+
+The failure this prevents is severe: a loop whose Done-when requires "system
+configured" will configure the *live* system to score itself done. **Split such
+goals** — "built and tested against fixtures" is automatable; "applied to production"
+is a hard-stop needing authorization. If you cannot restate a constraint as a
+condition checkable *at the moment of action*, it is not yet encoded.
+
 ### 1. Pin the Goal to a *verifiable, demonstrable* done-condition
 
 A `/goal` evaluator judges only what Claude *surfaced in its output* — it does not
@@ -96,6 +94,14 @@ unsatisfiable without the system misbehaving. Separate **validate** goals ("prov
 works" — a correct *negative* IS success) from **optimize** goals ("drive the metric
 to 100"). A validation Done-when must accept a verified-correct negative, or the loop
 burns its budget chasing a result correct behavior will never produce.
+
+**Require at least one clause where a *count must not shrink*.** Every "failures = 0"
+condition is satisfiable by destruction: delete the tests, close the issues unfixed,
+weaken the assertion. Discipline forbids green-by-suppression in prose, but the
+Done-when never *proves* it did not happen — so pair every must-reach-zero clause with
+a must-not-shrink one: "0 failing **and** ≥ N tests collected"; "36/36 green, where 36
+is the enumerated total"; "every story Done **or** Cancelled *with a reason*". If a run
+could satisfy the condition by removing the thing being measured, it is not finished.
 
 ### 2. Decompose if the goal is large — contract before features when behavior changes
 
@@ -135,12 +141,32 @@ frontier-model rates for mechanical work. Two planes (full catalog in
 
 Give every chunk a **model tier**, not just a mechanism — run the harness cheap,
 spend the strong model only where judgement is load-bearing (independent verify is
-always frontier tier). Selector table: `references/claude-feature-map.md`.
+always frontier tier). Selector table: `references/claude-feature-map.md`. For host-specific Run-as, checkpoint lanes, and MCP scope, read `references/host-feature-map.md`.
 
 **Preflight the mechanism before you commit a chunk to it.** A mechanism that is
 listed is not a mechanism that works: a granted tool with no targets, a degraded
 index, an unreachable MCP server all fail *silently* and the loop degrades into a
 confident wrong answer. Sub-goal 0 must prove each one executes once for real.
+
+**Emit literal dispatch parameters, not adjectives.** "cheap tier" is not
+dispatchable. Every subagent in an emitted prompt names `agentType` + `model` (+
+`effort` where it runs in a Workflow): `Agent(subagent_type: "Explore", model:
+"haiku", prompt: "<narrow question + return schema>")`. Three constraints that change
+the design, not just the wording — full tables in `references/claude-feature-map.md`:
+
+1. **`effort` is Workflow-only.** The Agent tool accepts `model` but **not** `effort`;
+   an Agent subagent inherits the session's. If a step's effort is load-bearing —
+   verification especially — put it in a Workflow and set `opts.effort`. Writing "use
+   high effort" in an Agent prompt does nothing.
+2. **`agentType` is a permission boundary.** `general-purpose` holds Edit/Write even
+   when the prompt says read-only; `Explore` cannot write at all. Pick `Explore` for
+   read-only work so the tool boundary enforces it, and check `git status` after any
+   `general-purpose` fan-out.
+3. **Tier by question shape, not output size.** A cheap model is reliable on closed,
+   evidence-checkable questions and unreliable on open-ended judgement that gates an
+   action. Narrow the question until cheap is safe, or pay frontier. **Never let a
+   cheap model's verdict gate an irreversible step**; re-derive load-bearing
+   conclusions from the evidence it returned.
 
 **Commit to the mechanism — don't hedge.** "You *may* dispatch subagents" forces the
 runner to re-decide and usually defaults to the weakest option. Name exactly one
@@ -171,6 +197,12 @@ context does not. A separate adversarial verifier is the single largest quality 
 - After Execute, spawn a **verifier subagent** (frontier tier, *fresh* context)
   prompted to **refute** the proof: re-run the deterministic check rather than trust
   the executor's narration. Default to "not done" on any doubt.
+- **Hand the verifier the *proof command*, not the claim.** A fresh context cannot
+  see the executor's work, so a narrative ("the endpoint now returns 200") invites it
+  to reason about plausibility instead of running anything — self-verification in
+  disguise. Give it the exact command, the expected artifact, file:line anchors, and
+  environment quirks (non-default ports, which interpreter, auth source). Its report
+  must quote the output it actually observed.
 - The verifier **grades the artifact, not the run.** "Node completed" / "tool
   returned" is not evidence; re-run the deterministic check and read the output.
 - The verifier **reports gaps; it does not implement fixes** — the loop scopes a
@@ -197,15 +229,62 @@ The point is a prompt a **brand-new session** can run with zero hand-holding.
 - **Capability + harness preflight.** Sub-goal 0 proves the loop can actually do
   its job before it spends: every granted tool executes once for real, every
   hook-gated call has its unlock step, every MCP standing nudge is explicitly
-  adopted or overridden, and a live target passes deploy-freshness + `/health`.
-  Checklists: `references/cold-start-and-verify.md`.
+  adopted or overridden, and a live target passes artifact-identity + `/health`.
+  **Artifact identity is two distinct failures, both required-fail caps:** *stale*
+  (merged ≠ live — rebuild if `main` is newer than the build) and *divergent* (built ≠
+  loaded — a compose service with `build:` and no `image:`, a bind mount shadowing the
+  baked path, a stale layer cache, or a container still on the previous image id).
+  Verify by identity — running image id vs the one just built, or a sentinel string
+  from the new source found inside the running artifact — never by the build's exit
+  code. Checklists: `references/cold-start-and-verify.md` (incl. `tapps_session_start()` as first MCP call).
+
+### 7. Checkpoint the context window (handoff → clear → continue)
+
+Context hygiene (§4) slows the rot; it does not reset it. A loop that finishes inside
+**one** context window still pays iteration 1's tokens on iteration N, and past ~600k
+tokens it gets disproportionately fragile to `529 Overloaded` kills. The fix is a
+**shift boundary** — persist state, drop the transcript, rehydrate from the state: a
+fresh worker on a new shift, not a longer one ("one-task-one-session").
+
+**The loop cannot clear itself.** `/clear` is a built-in CLI command, not a skill or a
+tool — no agent can invoke one. Never emit a prompt telling the loop to "run `/clear`";
+it silently no-ops and the context keeps growing. Commit to a real lane: **delegated**
+(subagent / Workflow — the noisy work never enters the orchestrator's context),
+**process boundary** (`claude -p` / Routine, one iteration per process — a real clear,
+unattended), or **declared checkpoint** (the prompt prints a CHECKPOINT block; the
+operator types `/clear`).
+
+Write the checkpoint with `/tapps-handoff-session`, resume with
+`/tapps-continue-session`. Trigger at each sub-goal boundary or ~50% context, whichever
+first.
+
+**Clearing resets the loop's own guardrails unless the handoff carries them** — attempt
+cap, budget, and refuted strategies live in the transcript you just dropped, so a loop
+that checkpoints three times has, in effect, no cap. Carry-forward contract and the
+re-verify-on-resume rule: `references/cold-start-and-verify.md`.
 
 ## Guardrails every emitted prompt must carry
 
 - **Verifiable termination** — the Goal condition *and* a hard cap (max iterations
   or a token budget) so a stuck loop stops instead of burning quota.
 - **Independent verification** — the sub-goal's proof is confirmed by a verifier that
-  did not produce the work (method §5), against ground truth.
+  did not produce the work (method §5), handed the *proof command* rather than the
+  claim, against ground truth.
+- **Standing user constraints** — every one restated as a Guardrail *and* an Autonomy
+  hard-stop (method §0b); no Done-when clause is satisfiable by violating one.
+- **No green-by-deletion** — at least one Done-when clause is a count that must not
+  shrink, so the goal cannot be met by removing what is measured (method §1).
+- **Every subagent dispatch names `agentType` + `model`** (and `effort` when it runs
+  in a Workflow) — never "spawn an agent to…". Read-only work uses `Explore` so the
+  tool boundary, not the prose, enforces it. No cheap-model verdict gates an
+  irreversible step; load-bearing answers are re-derived from returned evidence.
+- **Research grant** — every emitted prompt states that the loop has web access,
+  `tapps_research` and `tapps_lookup_docs` (Context7-backed, local-cache-first, so
+  effectively free to repeat), and **names the specific lookups required before the
+  first line of code touching an external API**. A loop that writes against a
+  versioned external surface from recalled syntax will hallucinate a schema that lints
+  clean and fails at runtime. Research-to-*execute* is in scope; research-to-*decide*
+  still goes to `/tapps-wayfind`.
 - **Caps must not fire on *correct* behavior** — for every required-fail cap, ask "is
   there a legitimate correct run where this still fires?" Separate *broken* from
   *correct-empty* (the gate rightly held everything) or a correct negative scores red.
@@ -213,6 +292,11 @@ The point is a prompt a **brand-new session** can run with zero hand-holding.
   errors; keep code edits sequential, per repo.
 - **Context hygiene** — prune stale reads each iteration; targeted grep over full
   re-Read (method §4).
+- **Shift boundaries** — a long loop checkpoints instead of growing: `/tapps-handoff-session`
+  at each sub-goal boundary or ~50% context, then a real clear (subagent / new process /
+  operator `/clear`) and `/tapps-continue-session` to rehydrate (method §7). The handoff
+  carries **cumulative** attempt-count, budget-spent, and refuted strategies, or the
+  clear silently resets the caps and the loop repeats what already failed.
 - **Autonomy, not checkpoints** — act on every reversible in-scope step; for an
   outward/irreversible step produce a reversible precursor (draft PR, staged diff)
   and keep going.
@@ -238,7 +322,7 @@ continue; the human reviews async. A draft PR is not a stop.
 Hard-stop and ask **once** (batched, with a recommendation) only when: the step is
 irreversible/outward with no reversible precursor (merge to main, force-push, delete
 un-recreatable data, external message, cross-project write); **or** the projected
-cost of the next step exceeds the configured ceiling (default ≈ $20; honor any higher
+cost of the next step exceeds the configured ceiling (default ≈ USD 20; honor any higher
 pre-authorization); **or** a genuinely ambiguous decision where a wrong guess is
 expensive and unrecoverable. Enforce the cost gate mechanically via the Workflow
 `budget` so the run aborts itself instead of asking.
@@ -280,22 +364,23 @@ no silent scope creep.
 
 1. **Fog preflight (method §0).** If foggy, refuse and point at `/tapps-wayfind` —
    do not emit a prompt. If clear, recall `memory_group=wayfind` resume when present.
-2. Read the workspace manifest (e.g. `fleet.md`) for the repos / Linear projects /
+2. Read `references/host-feature-map.md` when the runner host is Cursor or when Run-as / checkpoint lanes differ by host.
+3. Read the workspace manifest (e.g. `fleet.md`) for the repos / Linear projects /
    brain ids involved, if the project has one.
-3. Fill `assets/prompt-template.md` — keep only the sections the task needs. Always
+4. Fill `assets/prompt-template.md` — keep only the sections the task needs. Always
    keep **Prerequisites / Wayfind gate**, the **"How to run (cold start)"** block, a
    **Sub-goal 0** for self-healing preconditions, the **Verify** step wired to an
    independent verifier, and — when changing software behavior — a **Validation
    contract** filled *before* execution sub-goals plus an **expected-fail fix loop**
    with attempt cap.
-4. If any chunk is multi-stage parallel work, also write the companion
+5. If any chunk is multi-stage parallel work, also write the companion
    `.claude/workflows/<slug>.js` (schema + `budget` + per-stage `model`/`effort`) and
    point Run-as at it. A single coupled item (N=1) is a `/goal` drive, not a Workflow.
-5. Save the prompt to `prompts/<short-slug>.md`.
-6. **Completeness self-check** — walk the **Guardrails** list above and confirm the
+6. Save the prompt to `prompts/<short-slug>.md`.
+7. **Completeness self-check** — walk the **Guardrails** list above and confirm the
    emitted prompt satisfies every line; then run the **cold-start test** (a fresh
    session with nothing loaded can run it). Fix anything weak before saving.
-7. Tell the user exactly how to run it — the `/goal` line, the `/loop` cadence, the
+8. Tell the user exactly how to run it — the `/goal` line, the `/loop` cadence, the
    Routine schedule, or "invoke the Workflow tool `<script>`" — and from which
    session.
 
@@ -311,14 +396,16 @@ when it shows measured lift against the evals — don't hand-tune blind.
 """
 )
 
-# ---------------------------------------------------------------------------
-# Companion files (refreshed wholesale on upgrade — canonical platform docs)
-# ---------------------------------------------------------------------------
-
 _PROMPT_TEMPLATE = r"""# <Objective title>
 
 > Generated by the `orchestration-prompt` skill. Keep only the sections this task
 > needs. Run from the orchestrator session unless noted.
+>
+> **Structurally required — do not drop or reshape these:** `## How to run (cold start)`,
+> `## Done-when`, `## Loop`, `## Guardrails`, `## Autonomy`, plus `## Standing constraints`
+> whenever the user has given any. Keep bullets as bullets under every `##` heading —
+> tooling that parses these files (and the sibling handoff linter) reads bullet lists, and
+> silently rejects prose where it expects `- `.
 
 ## Prerequisites / Wayfind gate
 <Fill BEFORE Objective. Refuse to invent a Goal if any fog remains.>
@@ -335,6 +422,14 @@ read the file first, then loop. Run Prerequisites / Wayfind gate recall before L
 
 - **Goal loop (recommended):** `Read prompts/<slug>.md in full, run Prerequisites / Wayfind gate (incl. wayfind resume recall), then execute it as a goal loop — run the Loop section repeatedly until Done-when holds, printing the score line every iteration. Establish your own preconditions per Sub-goal 0; do not stop unless an Autonomy hard-stop fires.`
 - **Durable / recurring:** save as a Routine (one item per run) so it survives the terminal.
+- **Resuming mid-run (after a checkpoint):** `/tapps-continue-session` first, then the Goal-loop line above — the handoff supplies current sub-goal, cumulative caps, and refuted strategies. Re-verify live state before acting on any handoff claim.
+
+## Standing constraints  (REQUIRED when the user has given any — they die with the session otherwise)
+<Every persistent instruction the user has stated: "read-only for now", "don't touch
+prod", "never force-push". Each must ALSO appear as an Autonomy hard-stop below —
+Guardrails state the rule, the hard-stop enforces it at the moment of action.
+If a Done-when clause could be satisfied by violating one of these, split the goal:
+"built and tested against fixtures" is automatable; "applied to production" is gated.>
 
 ## Objective
 <one sentence — the outcome, not the steps. Only fill if Prerequisites say route is clear.>
@@ -343,7 +438,9 @@ read the file first, then loop. Run Prerequisites / Wayfind gate recall before L
 <a single condition Claude's own output can demonstrate. Name the deterministic
 artifact that proves it — exit code, test-count line, diff, pasted query result.
 For software behavior: every validation-contract ID below is verified by an
-independent verifier (paste evidence per ID).>
+independent verifier (paste evidence per ID).
+MUST include one clause where a count must NOT shrink (">= N tests collected",
+"36/36 of an enumerated total") — otherwise the goal is satisfiable by deletion.>
 
 ## Validation contract (before execution — software behavior only)
 <Skip for pure research/triage/docs. Write assertions BEFORE execution sub-goals.>
@@ -356,6 +453,7 @@ Coverage rule: every ID claimed exactly once; Done-when requires all IDs green.
 
 ## Sub-goals  (sequential; each a checkpoint)
 0. **Establish preconditions (self-healing — the loop sets these up, NOT the user).** <runtime up, scorer/tool built, auth reachable, branch ready; wayfind resume already recalled in Prerequisites>
+   - **TAPPS session bootstrap:** `tapps_session_start()` as the first MCP call (or `/tapps-continue-session` on resume).
    - **Deploy freshness (live/deployed target only):** merged ≠ live. If baked image, compare latest merged commit to build time; rebuild/redeploy (preserve overlays) if `main` is newer. Stale image = required-fail cap.
    - **Smoke + health gate (after any deploy, before the real run):** `/health` is `ok|degraded` and one cheap end-to-end call succeeds.
    - **Harness compatibility:** <PreToolUse gates + MCP standing nudges the loop's tool calls will hit → bake unlock/refresh steps here; adopt-or-override each nudge in Guardrails>
@@ -364,32 +462,69 @@ Coverage rule: every ID claimed exactly once; Done-when requires all IDs green.
 2. <narrow, verifiable execution> — fulfills: <VAL-…> — proof: <ground-truth artifact>
 3. <…>
 
-## Plane map  (mechanism + model tier per chunk)
-| Step | Plane | Mechanism | Model tier | Notes |
-|------|-------|-----------|-----------|-------|
-| <audit/research> | coordination | Workflow / 3–5 subagents | cheap/low-effort | fan-out OK (read-only); research-to-*decide* stays on wayfind |
-| <code change> | execution | dispatch to <repo> via PR | cheap unless hard | **serial writes** — one repo at a time |
-| <verify proof> | coordination | **verifier subagent (fresh context)** | **frontier/high-effort** | creator ≠ verifier; refutes proof |
-| <fix after fail> | execution | fresh worker on scoped fix sub-goal | cheap unless hard | expected-fail loop; do not reopen whole feature |
-| <recurring check> | execution | Routine / `claude -p`+cron | cheap | human-gated |
+## Plane map  (mechanism + literal dispatch parameters per chunk)
+<`effort` applies only inside a Workflow — the Agent tool has no effort parameter and
+inherits the session's. If a step's effort is load-bearing, run it in a Workflow.>
+
+| Step | Plane | Mechanism | agentType | model | effort | Notes |
+|------|-------|-----------|-----------|-------|--------|-------|
+| <audit/research> | coordination | Workflow / 3–5 subagents | `Explore` | `haiku` | `low` | read-only enforced by agent type, not prose; research-to-*decide* stays on wayfind |
+| <multi-file synthesis> | coordination | subagent | `Explore` | `sonnet` | `medium` | judgement about what matters |
+| <code change> | execution | dispatch to <repo> via PR | `general-purpose` | `sonnet` | `low` | **serial writes** — one repo at a time |
+| <hard/ambiguous fix> | execution | `/goal` drive | `general-purpose` | `opus` | `high` | load-bearing judgement |
+| <verify proof> | coordination | **verifier subagent (fresh context)** | `general-purpose` | **`opus`** | **`high`–`xhigh`** | creator ≠ verifier; refutes proof; a weak verifier defeats the pattern |
+| <fix after fail> | execution | fresh worker on scoped fix sub-goal | `general-purpose` | `sonnet` | `low` | expected-fail loop; do not reopen whole feature |
+| <recurring check> | execution | Routine / `claude -p`+cron | `Explore` | `haiku` | `low` | human-gated |
+
+Cheap-model rule: `haiku` answers closed, evidence-checkable questions. It does not
+render verdicts that gate irreversible steps — narrow the question or pay for `opus`.
 
 ## Loop
 - **State:** <read first — wayfind resume (`memory_group=wayfind`), status, brain recall of prior attempts, Linear, last handoff>
 - **Decide:** <how to pick the next *execute* action / sub-goal — never invent decide work; if fog reappears → stop and `/tapps-wayfind`>
 - **Execute:** <the action, on the committed mechanism + tier>
-- **Verify (independent):** spawn a fresh-context verifier (frontier tier) to *refute* the sub-goal's proof — re-run scrutiny + behavioral checks against the validation contract; don't trust the executor's claim. The verifier's verdict advances the loop.
+- **Verify (independent):** spawn a fresh-context verifier (frontier tier) to *refute* the sub-goal's proof — re-run scrutiny + behavioral checks against the validation contract. Hand it the **exact proof command, expected artifact, file:line anchors, and environment quirks** (non-default ports, which interpreter, auth source) — never the executor's narrative, or it will reason about plausibility instead of running anything. Its report must quote the output it observed. The verifier's verdict advances the loop.
 - **On fail (expected-fail fix loop):** record structured handoff → scope narrow fix sub-goal → re-execute → re-verify; ≤**3** validation rounds per sub-goal (override: N=…), then escalate once, then stop with a diagnosis. Never weaken the contract to go green.
 - **Record (structured handoff):** completed · undone · commands+exit codes · issues · procedures followed? · failure-and-why → brain
 - **Context hygiene:** prune stale reads; carry a compact state summary, not raw transcripts.
-- **Repeat or stop:** loop until **Done-when** holds; caps: <N iterations> AND <token budget>
+- **Print every iteration:** `SCORE: <metric>/<total> · <metric2> · sub-goal <k>/<n> · iteration <i>/<cap>` — a long autonomous loop with no per-iteration signal is unmonitorable, and the trend is what tells a watching human whether to intervene.
+- **Checkpoint (shift boundary):** at each sub-goal boundary or ~50% context — whichever first — run `/tapps-handoff-session`, then clear for real and resume via `/tapps-continue-session`. See Checkpoint protocol below. Never instruct yourself to run `/clear` — an agent cannot invoke a built-in CLI command.
+- **Repeat or stop:** loop until **Done-when** holds; caps: <N iterations> AND <token budget> — **both cumulative across shifts**, read from the handoff, never reset by a checkpoint
+
+## Checkpoint protocol (context shift boundary)
+<Keep for any loop expected to exceed one context window. Delete for short one-shot prompts.>
+
+- **Lane:** <delegated (subagents/Workflow) · process boundary (`claude -p` / Routine, one iteration per process) · declared checkpoint (operator types `/clear`)>
+- **Trigger:** sub-goal boundary, or ~50% context / before a fan-out wave — whichever first.
+- **Write:** `/tapps-handoff-session` → `.tapps-mcp/session-handoff.md` (lints + mirrors to brain in one call).
+- **Resume:** `/tapps-continue-session` → rehydrates ~15 lines, not a transcript.
+- **Carry-forward (must survive the clear, or the guardrails stop binding):**
+  - Current sub-goal + the VAL IDs it must turn green
+  - Attempt count vs cap — **cumulative**, e.g. `round 2 of 3`
+  - Budget spent — **cumulative**
+  - Strategies already tried and refuted, and why (preserves diagnose-don't-repeat)
+  - The exact resume line from "How to run (cold start)"
+- **On resume, re-verify before acting:** the handoff is a pointer, not a proof. Re-check live state (`git rev-parse --short HEAD`, PR state, `git merge-base --is-ancestor HEAD origin/master`, <target-specific>) — a claim true at checkpoint can be false an hour later. The independent verifier still runs; a checkpoint never replaces it.
+
+**Declared-checkpoint block** (interactive lane — print verbatim, then stop):
+```
+CHECKPOINT <n> — sub-goal <k> complete. Handoff written.
+Cumulative: round <a> of <cap> · budget <spent>/<ceiling>.
+Next: /clear   then   /tapps-continue-session
+```
 
 ## Guardrails
 - Termination: <goal condition>; caps: <N iterations> AND <token budget>.
 - Wayfind fog gate: no Goal invent while decide tickets / Not yet specified remain.
 - Validation contract before features when changing behavior; coverage complete.
-- Independent verification (creator ≠ verifier); ground-truth proof; expected-fail fix loop with attempt cap.
+- Independent verification (creator ≠ verifier); ground-truth proof; verifier gets the proof command, not the claim; expected-fail fix loop with attempt cap.
+- Standing constraints: <each one from the section above — and each also an Autonomy hard-stop>.
+- No green-by-deletion: <the Done-when clause whose count must not shrink>.
+- Every subagent dispatch names `agentType` + `model` (+ `effort` in a Workflow); read-only steps use `Explore`; no cheap-model verdict gates an irreversible step.
+- Research grant: the loop has web + `tapps_research` + `tapps_lookup_docs` (cache-first, free to repeat). Never write against an external/versioned API from memory — required lookups: <list>.
 - No fan-out of coupled coding — sequential per-repo edits (serial writes, parallel reads OK).
 - Context hygiene — targeted grep over full re-Read.
+- Shift boundaries — checkpoint via handoff → clear → continue; caps are cumulative across shifts, never reset by a clear.
 - Scope: repos in play = <list>; reads fleet-wide, writes via owner.
 - Memory: recall wayfind resume + prior attempts at start; record structured handoff (incl. failures) at each checkpoint.
 - Harness compatibility: <gated tool calls → unlock/refresh steps; MCP standing nudges → adopted or overridden>.
@@ -398,7 +533,7 @@ Coverage rule: every ID claimed exactly once; Done-when requires all IDs green.
 ## Autonomy
 - Act on every reversible, in-scope step — no "should I proceed?" checkpoints.
 - Irreversible/outward step → produce the reversible precursor (draft PR / staged diff / proposal) and continue; human reviews async.
-- Hard-stop once (batched, with a recommendation) only for: irreversible/outward with no precursor · projected next-step cost > ceiling · unsafe-to-guess ambiguity · **validation contract itself is wrong** · **fog returned (open decide work)**.
+- Hard-stop once (batched, with a recommendation) only for: <each standing constraint that guards a write> · irreversible/outward with no precursor · projected next-step cost > ceiling · unsafe-to-guess ambiguity · **validation contract itself is wrong** · **fog returned (open decide work)**.
 
 ## Failure handling
 - On failed verify: diagnose (error + state + brain recall) → hypothesis → fix → retry *differently*.
@@ -409,6 +544,15 @@ Coverage rule: every ID claimed exactly once; Done-when requires all IDs green.
 - Repos: <manifest — path · Linear project · brain project_id>
 - Wayfind decisions: <named decisions from resume / map Decisions-so-far>
 - Prior learnings: <brain recall query, if any>
+
+## Unverified assumptions  (optional — include whenever research fed this prompt)
+<Claims the prompt relies on that were NOT confirmed against ground truth: a
+source-read inference rather than an observed runtime behavior, a doc that
+contradicts the code, a source that was unreachable during research. Without this
+section the runner treats every stated fact as equally solid and builds on sand.
+Name the cheap check that would settle each one, and require it before the fact is
+depended upon.>
+- <claim> — basis: <how it was derived> — confirm by: <the cheap check>
 
 ## Run-as
 <exact invocation, e.g.:>
@@ -459,15 +603,63 @@ Fog chunks belong on `/tapps-wayfind`; clear chunks belong to orchestration-prom
 | **Subagents** | Focused workers in isolated context, report back | 3–5 parallel research/review/**verify** tasks | Don't fan out coupled coding; declare minimal tools |
 | **Verifier subagent** | A fresh-context agent prompted to *refute* a claim, re-running the check | Confirming a sub-goal's proof independently of the executor | The whole point is a *different* context — don't reuse the executor |
 | **brain / `tapps_memory`** | Shared episodic+semantic memory (per-repo `project_id`) | Recall prior attempts; avoid rediscovery | Cross-project recall needs an explicit `project_id` |
+| **Issue-tracker write** (Linear/Jira/GitHub) | Creating or updating backlog items from inside the loop | Backlog-driven loops that file, close, or re-scope work as implementation reveals reality | Often **hook-gated** (e.g. a validation sentinel with a short TTL, plus a cache-first read gate). Route through the owning skill, never the raw API — and re-satisfy the gate if the loop has outlived the sentinel |
+| **AgentForge agent / workflow** | Durable, versioned, published cognition running on the AF platform — survives the session, is Git-authored and independently invocable | Domain reasoning a project needs repeatedly: authoring, judging, analysis. **Where a project's agents should live**, rather than as LLM calls inside its own services | AF cannot see your repo or network — collect source locally and pass it as a declared workflow input. Side effects stay in the consumer |
+| **AgentForge `expert-*` agents** | Pre-published platform experts (architecture, testing, security, performance, database, api-design, observability, …) | A second opinion during planning or review, at no authoring cost | They return analysis, not actions. Record where you *rejected* the advice and why |
+| **`/tapps-handoff-session`** | Writes `.tapps-mcp/session-handoff.md`, lints, mirrors to brain, closes the session lifecycle — one call | Closing a shift: the checkpoint a cleared session resumes from | Must carry *cumulative* attempt-count + budget + refuted strategies, else the clear resets the loop's caps |
+| **`/tapps-continue-session`** | Rehydrates a fresh session from the handoff (~15 lines) + `tapps_session_start` | Opening a shift; cold-starting a loop mid-run | Handoff is a pointer, not a proof — re-verify live state before acting on it |
+| **`/clear`** | Built-in CLI command that drops the transcript | Operator-driven shift boundary in an attended run | **No agent can invoke it.** A prompt that tells the loop to run `/clear` silently no-ops — use a subagent, a new process, or an operator checkpoint |
 
-## Model-tier selector
+## Model-tier selector — concrete parameters, not adjectives
 
-| The chunk is… | Tier |
-|---|---|
-| Mechanical fan-out, read/summarize, codemod, rename | cheap / low-effort |
-| Hard reasoning, ambiguous fix, architecture, design | frontier / high-effort |
-| **Independent verify / judge** | **frontier / high-effort** (a weak verifier defeats the pattern) |
-| Recurring poll, status check | cheap |
+"cheap tier" is not a dispatchable instruction. Emit the literal parameter values.
+
+**Where each parameter is accepted (check before writing a dispatch line):**
+
+| Caller | `agentType` | `model` | `effort` |
+|---|---|---|---|
+| **Agent tool** | `subagent_type:` | `model:` — `haiku` \| `sonnet` \| `opus` \| `fable` | **not accepted** — inherits the session's effort |
+| **Workflow `agent()`** | `opts.agentType` | `opts.model` | `opts.effort` — `low` \| `medium` \| `high` \| `xhigh` \| `max` |
+
+Consequence worth designing around: **if per-step effort matters, the chunk belongs in
+a Workflow**, because the Agent tool cannot set it. Reaching for the Agent tool and
+writing "use high effort" in the prose does nothing.
+
+| The chunk is… | agentType | model | effort | Why |
+|---|---|---|---|---|
+| Poll a status, fetch a file, run a fixed command | `Explore` | `haiku` | `low` | Deterministic; no judgement |
+| Mechanical fan-out, read/summarize, inventory | `Explore` | `haiku` | `low` | Read-only by construction |
+| Codemod / rename / mechanical edit | `general-purpose` | `sonnet` | `low` | Needs write tools; low judgement |
+| Multi-file research needing synthesis | `Explore` | `sonnet` | `medium` | Judgement in what matters, not what exists |
+| Hard reasoning, ambiguous fix, architecture | `general-purpose` | `opus` | `high` | Load-bearing judgement |
+| **Independent verify / judge** | `general-purpose` | `opus` | `high`–`xhigh` | A weak verifier defeats the whole pattern |
+| Adversarial refute on an irreversible step | `general-purpose` | `opus` | `xhigh`–`max` | Cost of a wrong pass is unrecoverable |
+
+## What a cheap model may decide (measured, not assumed)
+
+Model tier must track **the shape of the question**, not the size of the output.
+
+- **Safe on `haiku`:** closed questions with a mechanical answer — "does step X report
+  success?", "which files match?", "is this value present?". A wrong answer is visible
+  immediately because the evidence is right there.
+- **Not safe on `haiku`:** open-ended judgement that *gates* an action — "is CI OK?",
+  "is this change safe to merge?", "did anything regress?". Observed failure mode: a
+  cheap verifier returned "NO NEW FAILURES FROM THIS PR" while a check on the exact
+  changed path was failing *because of that PR*, having skipped the log-fetch step it
+  was told to run. It reasoned backwards from the desired conclusion.
+
+**Rule:** narrow the question until a cheap model can answer it from evidence, or pay
+for a strong one. Never let a cheap model render a verdict that gates an irreversible
+step. If a cheap agent's answer *is* load-bearing, the orchestrator re-derives the
+conclusion from the evidence the agent returned, rather than accepting its verdict.
+
+## Agent type is a permission boundary, not a label
+
+`general-purpose` carries Edit/Write **even when the prompt says "read-only"** — a
+research agent once silently modified a source file during a prompt-writing turn.
+`Explore` has no write tools at all. For genuinely read-only work, pick `Explore` and
+let the tool boundary enforce it; prose does not. After any fan-out that used
+`general-purpose`, check `git status` before trusting the tree.
 
 Running the harness cheap and spending the strong model only on reasoning + verify is
 exactly how a modest base model reaches frontier-level reliability.
@@ -486,6 +678,15 @@ exactly how a modest base model reaches frontier-level reliability.
 - Unbounded loop (no cap/budget) → always set max iterations or a token budget.
 - **Self-verification only** (loops.md #4 *self-declared convergence*) → an
   independent, adversarial verifier owns the stop field; the creator never does.
+- **Verifier handed the claim instead of the proof command** → it reasons about
+  plausibility and never runs anything; self-verification in disguise.
+- **Done-when satisfiable by deletion** ("0 failures" with no floor on the count) →
+  pair every must-reach-zero clause with a must-not-shrink one.
+- **A user constraint left in chat history** → the fresh runner never sees it and will
+  violate it to score green; restate it as a Guardrail *and* a hard-stop.
+- **Trusting the build's exit code as proof the runtime changed** → verify artifact
+  *identity* (running image id vs the one just built, or a sentinel from the new source
+  found inside the running artifact).
 - **Vacuous verify** (loops.md #1) → a presence-style predicate ("output non-empty",
   "node completed", "tool returned") reads as "output correct" while the thing it
   guards is inert. An uncheckable criterion is itself a FAIL.
@@ -512,6 +713,11 @@ exactly how a modest base model reaches frontier-level reliability.
 - Vague / absent done-condition (loops.md #5 *goal-less workflow*) → "every step
   completed" is not success; demand a demonstrable, ground-truth-anchored condition.
 - Context rot (re-reading the same files each iteration) → prune + targeted grep.
+- **Growing one context to the finish** → checkpoint at shift boundaries: handoff →
+  real clear → continue.
+- **Telling the loop to run `/clear`** → it cannot; pick a real clear mechanism.
+- **Clearing without carrying cumulative caps** → attempt cap and budget reset each
+  shift, so a capped loop becomes unbounded and re-tries refuted strategies.
 - **Features before a validation contract** → write behavioral assertions first when
   changing software behavior; map sub-goals to `fulfills` IDs.
 - **Forcing attempt-1 green** → expected-fail fix loop with attempt cap; scoped fix
@@ -544,6 +750,16 @@ loop. `SKILL.md` carries the rules; this file carries the checklists.
 
 Everything here is **self-healing**: the loop establishes it, never a "set this up
 first" note the user must action.
+
+### 0. TAPPS session bootstrap (every loop)
+
+Before any other TAPPS MCP tool in a fresh session (including after
+`/tapps-continue-session`, which calls this internally): run `tapps_session_start()`.
+Skipping it leaves the checker matrix and project context stale — a required-fail
+cap when the loop depends on quality gates or `usage_gaps` telemetry.
+`usage_gaps.recurring_validation_skips` is **7-day rolling fleet telemetry**, not
+proof the current call failed; still run `tapps_validate_changed` + `tapps_checklist`
+at epic boundaries in execution repos with full `nlt-build`.
 
 ### 1. Capability preflight (every prompt)
 
@@ -607,6 +823,65 @@ Scale the verifier to the stakes. All layers keep creator ≠ verifier.
 **Grade the artifact, never the run.** "Node completed", "agent returned", "no
 exception raised" are not evidence. The verifier re-runs the deterministic check and
 reads the shipped output. Default to "not done" on any doubt.
+
+## Shift-boundary checkpoints (method §7)
+
+A checkpoint discards the transcript — and the transcript is where the loop's own
+guardrails were tracked. Clear without carrying them and the guardrails **silently stop
+binding**: the attempt cap resets to zero, the budget resets to zero, and the fresh
+session retries the strategy that just failed.
+
+A checkpoint handoff must carry, on top of the stock Done/Open/Next/Verify fields:
+
+- **Current sub-goal** + the validation-contract IDs it must turn green.
+- **Attempt count vs cap** — *cumulative across shifts*, e.g. `round 2 of 3`.
+- **Budget spent** — cumulative, so the ceiling still means something.
+- **Strategies already tried and refuted, and why** — this is what preserves
+  diagnose-don't-repeat across the boundary. Without it, clearing *causes* the
+  repetition the failure-handling rule exists to forbid.
+- **The exact resume line** (the cold-start launch line from §6).
+
+**The handoff is a pointer, not a proof.** State recorded before the boundary describes
+the world as it was. On resume, re-verify live state before acting — a PR that was
+"open, merge pending" at checkpoint can be merged an hour later, flipping the correct
+branch base. Treat every handoff claim as a hypothesis with a cheap test; the
+independent verifier (§5) still runs, and a checkpoint never substitutes for it.
+
+**Declared-checkpoint block** (interactive lane — print verbatim, then stop):
+
+```
+CHECKPOINT <n> — sub-goal <k> complete. Handoff written.
+Cumulative: round <a> of <cap> · budget <spent>/<ceiling>.
+Next: /clear   then   /tapps-continue-session
+```
+"""
+
+_HOST_FEATURE_MAP = r"""# Host feature map — Claude Code vs Cursor
+
+Read when emitting **Run-as**, checkpoint lanes, or plane-map mechanism choices.
+Default host = runner session: `.cursor/` present → Cursor; `.claude/` → Claude
+Code; an explicit user flag overrides.
+
+| Concern | Claude Code | Cursor |
+|---|---|---|
+| Goal loop | `/goal "<condition>"` (evaluates surfaced output only) | Explicit loop in prompt + paste ground-truth each iteration; optional `claude -p` for unattended |
+| Fan-out verify | Workflow `parallel()` / subagents | `Task` tool (`explore`, `generalPurpose`, `shell`); Multitask Mode when parallel |
+| Context reset | `/clear` (operator) · subagent · `claude -p` process boundary | **New chat** + `/tapps-continue-session` (no `/clear` API) |
+| Recurring | Routine / `claude -p`+cron | Shell cron + `claude -p`; document in emitted prompt Run-as |
+| MCP budget | Full six-server bundle common | ~40-tool cap — prefer `developer` bundle; orchestrator often memory-only |
+| Plan vs execute | N/A | Plan Mode for fog; Agent Mode for execute (link to `/tapps-wayfind` for decide work) |
+| TAPPS quality gate | Full `nlt-build` in execution repos | Orchestrator Cursor: often `nlt-memory` only — use `fleet-dispatch` for validate in owning repo |
+| Session bootstrap | `tapps_session_start()` first MCP call every session | Same — required-fail if skipped when checkers are stale |
+
+## Checkpoint resume by host
+
+| Host | After `/tapps-handoff-session` |
+|---|---|
+| Claude Code | Operator runs `/clear`, then `/tapps-continue-session` |
+| Cursor | **New chat** (Composer reset), then `/tapps-continue-session` |
+
+Cross-ref: shift-boundary carry-forward in `references/cold-start-and-verify.md`;
+cumulative handoff fields in `/tapps-handoff-session` and `/tapps-continue-session`.
 """
 
 _LEARNINGS_SEED = """\
@@ -619,15 +894,13 @@ overwritten on upgrade — it's yours.
 <!-- Example: -->
 <!-- - Validation goals need a verified-correct-negative Done-when, or the loop chases an unreachable target. (2026-06-18) -->
 """
-
-# Companion files refreshed on every upgrade (canonical platform docs).
 ORCHESTRATION_PROMPT_COMPANION_FILES: dict[str, str] = {
     "assets/prompt-template.md": _PROMPT_TEMPLATE,
     "references/claude-feature-map.md": _FEATURE_MAP,
     "references/cold-start-and-verify.md": _COLD_START_AND_VERIFY,
+    "references/host-feature-map.md": _HOST_FEATURE_MAP,
 }
 
-# Files created once and NEVER overwritten (project-owned).
 ORCHESTRATION_PROMPT_CREATE_ONLY_FILES: dict[str, str] = {
     "learnings.md": _LEARNINGS_SEED,
 }

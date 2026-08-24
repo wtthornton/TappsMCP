@@ -20,33 +20,22 @@ Use `tapps_lookup_docs(library, topic)` for test framework APIs and best practic
 - Reset module-level caches in autouse fixtures (see conftest.py)
 - Tests that depend on environment variables must use explicit fixtures
 
-## Negative paths are not optional (TAP-5656)
+## Negative paths are not optional
 
 **Every mock of a fallible dependency needs a failing counterpart.** A success-only
 mock does not test integration — it tests that your happy path compiles.
 
-Two defects reached a consuming project because this was skipped. Every handoff
-test hardcoded `brain_mirror={"success": True}`, so no test in the suite ever
-exercised a failed mirror, and the tool shipped reporting `success=true` over a
-mirror that never persisted. The gate never asked the question, so it could
-never fail.
-
 When you write a test that mocks something which can fail, add:
 
-- **The failure case.** Dependency returns an error, raises, or times out.
+- **The failure case.** The dependency returns an error, raises, or times out.
 - **An assertion on what the caller reports.** Not just "it didn't crash" — assert
   the response marks itself `degraded`, or errors. A tool that swallows a
-  dependency failure and reports plain success is the bug.
+  dependency failure and still reports plain success is the bug.
 
-When a function accepts caller-supplied structured input (a JSON array, a
-config dict), add the **off-contract shape**: strings where objects were
-expected, nulls, mixed arrays. The invariant is that every item is honoured or
-the call raises — never silently shorter. See
-`packages/docs-mcp/tests/unit/test_parser_contract_invariants.py`.
-
-Static counterpart: `scripts/check-response-envelope.py` fails CI when a
-response embeds a best-effort sub-result nothing branched on. The lint catches
-the shape; only a test catches the behaviour. Write both.
+When a function accepts caller-supplied structured input (a JSON array, a config
+dict), add the **off-contract shape**: strings where objects were expected, nulls,
+mixed arrays. The invariant is that every item is honoured or the call raises —
+never silently shorter.
 
 ## Coverage
 

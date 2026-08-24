@@ -96,7 +96,8 @@ class TestScaffold:
     def test_template_has_verifier_and_tier_columns(self, tmp_path):
         generate_skills(tmp_path, "claude")
         tpl = (_skill_dir(tmp_path) / "assets" / "prompt-template.md").read_text().lower()
-        assert "model tier" in tpl
+        assert "agenttype" in tpl
+        assert "model" in tpl
         assert "verifier subagent" in tpl
 
     def test_body_and_template_carry_harness_compatibility(self, tmp_path):
@@ -142,6 +143,22 @@ class TestScaffold:
             "critic grades the tool, not the artifact",
         ):
             assert canonical in ref, f"missing loops.md anti-pattern: {canonical}"
+
+
+    def test_body_carries_shift_boundaries_and_host_map(self, tmp_path):
+        """v3.12.74: §7 shift boundaries + host-feature-map companion."""
+        generate_skills(tmp_path, "claude")
+        d = _skill_dir(tmp_path)
+        content = (d / "SKILL.md").read_text().lower()
+        assert "checkpoint the context window" in content or "shift boundary" in content
+        assert "handoff-session" in content
+        host = d / "references" / "host-feature-map.md"
+        assert host.exists()
+        assert "claude code" in host.read_text().lower()
+        assert "cursor" in host.read_text().lower()
+        cold = (d / "references" / "cold-start-and-verify.md").read_text().lower()
+        assert "shift-boundary checkpoints" in cold
+        assert "tapps session bootstrap" in cold
 
     def test_cursor_host_also_gets_skill(self, tmp_path):
         generate_skills(tmp_path, "cursor")

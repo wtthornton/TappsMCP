@@ -73,6 +73,13 @@ _HANDOFF_MARKDOWN_SHAPE = """\
 
 ## Success criterion
 - ...
+
+## Cumulative (loop checkpoints — required for shift boundaries)
+- Sub-goal: <k> · VAL IDs: <…>
+- Attempt: <a> of <cap> (cumulative across shifts)
+- Budget spent: <spent>/<ceiling>
+- Refuted strategies: <bullets>
+- Resume line: <exact cold-start launch line from prompt>
 ```"""
 
 _HANDOFF_P0_GATE = """\
@@ -121,11 +128,15 @@ _CONTINUE_EMIT_AND_PROCEED = """\
 4. **Emit continue block (~15 lines max).** Present:
    - **P0** — next action + Linear link if available (note if promoted from Open)
    - **Done / Open / Blockers** — compressed from handoff
+   - **Cumulative** (when present) — sub-goal, attempt vs cap, budget spent, refuted strategies, resume line
    - **Verify first** — commands from handoff
    - **Success criterion**
+   - **Host reset** — Claude Code: operator may `/clear` then continue; Cursor: **new chat** then re-invoke this skill
    - **Stale warning** if handoff **Updated** is >7 days old or missing
 
-5. **Proceed on P0.** Ask only if P0 is ambiguous; otherwise start using normal TAPPS workflow (`tapps_quick_check` after Python edits). Do **not** ask the user to re-paste prior context when handoff files exist."""
+5. **Re-verify live state** when **Cumulative** is present — handoff is a pointer, not proof (orchestration §7 / cold-start companion).
+
+6. **Proceed on P0.** Ask only if P0 is ambiguous; otherwise start using normal TAPPS workflow (`tapps_quick_check` after Python edits). Do **not** ask the user to re-paste prior context when handoff files exist."""
 
 # Skills removed in v3.12.0 (TAP-3930) — wrapper skills with no orchestration value.
 DEPRECATED_TAPPS_SKILLS: frozenset[str] = frozenset(
@@ -214,6 +225,10 @@ End the session with a durable handoff the next chat can load via `/tapps-contin
     + """
 
 1. **Draft handoff (5-10 bullets).** From this session's work, write:
+   **Checkpoint trigger:** when the user says "checkpoint", "context full", or an
+   orchestration prompt prints a `CHECKPOINT` block — include the **Cumulative**
+   section above (not optional). Cross-ref: orchestration-prompt method §7.
+
    - **Done** — what shipped or was verified
    - **Open** — in-progress or untested
    - **Next (P0)** — one concrete next action (plain prose)
@@ -255,6 +270,7 @@ Start work in a fresh context window by assembling structured state — not a us
 1. **Session bootstrap.**
    - **Preferred:** Call `mcp__nlt-build__tapps_session_start()`. If `data.compaction_rehydration` is present, summarize it in one sentence.
    - **CLI fallback** (MCP unavailable): Run `uv run tapps-mcp doctor --quick` and read `.tapps-mcp.yaml` for project context (quality preset, brain URL, engagement). Proceed without blocking.
+- **Usage gaps:** `usage_gaps.recurring_validation_skips` is 7-day rolling fleet telemetry — not proof this call failed. Still run validate + checklist at epic boundaries in execution repos.
 
 """
     + _CONTINUE_LOAD_AND_CONTEXT
@@ -930,7 +946,9 @@ End the session with a durable handoff the next chat loads via `tapps-continue-s
     + _HANDOFF_PRE_GATE
     + """
 
-1. **Draft handoff (5-10 bullets):** Done, Open, Next (P0), Blockers (`- none` when clear), optional Changed files, Verify, Success criterion.
+1. **Draft handoff (5-10 bullets):** Done, Open, Next (P0), Blockers (`- none` when clear), optional Changed files, Verify, Success criterion.**Checkpoint trigger:** when the user says "checkpoint", "context full", or an
+   orchestration prompt prints a `CHECKPOINT` block — include the **Cumulative**
+   section above (not optional). Cross-ref: orchestration-prompt method §7.
 
 """
     + _HANDOFF_P0_GATE
@@ -964,6 +982,7 @@ Start work in a fresh context by assembling structured state.
 1. **Session bootstrap.**
    - **Preferred:** Call `tapps_session_start()`. Note `compaction_rehydration` if present.
    - **CLI fallback** (MCP unavailable): Run `uv run tapps-mcp doctor --quick` and read `.tapps-mcp.yaml` for project context. Proceed without blocking.
+- **Usage gaps:** `usage_gaps.recurring_validation_skips` is 7-day rolling fleet telemetry — not proof this call failed. Still run validate + checklist at epic boundaries in execution repos.
 
 """
     + _CONTINUE_LOAD_AND_CONTEXT

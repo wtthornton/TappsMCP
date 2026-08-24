@@ -11,7 +11,7 @@ description: >-
   "orchestrate".
 argument-hint: "[free-form objective]"
 ---
-<!-- BEGIN: tapps-skill orchestration-prompt v3.12.73 -->
+<!-- BEGIN: tapps-skill orchestration-prompt v3.12.74 -->
 # orchestration-prompt
 
 You produce **prompts, not actions**. The output is a self-contained orchestration
@@ -22,7 +22,7 @@ run — executes later. You write the *loop*; you do not run it.
 
 The leverage is in the loop's shape — goal, termination, verification, model tier
 per step — not in phrasing. A well-shaped harness lets a cheaper model match a
-frontier one on verification-friendly work. Every prompt rests on seven load-bearing
+frontier one on verification-friendly work. Every prompt rests on nine load-bearing
 parts; miss one and the loop never terminates, terminates without finishing, trusts
 self-report, invents a Goal under fog, or can't be cold-started.
 
@@ -54,6 +54,21 @@ decisions into Context, never invent missing ones.
 research-to-execute** chunks are this skill's. Full table:
 `references/claude-feature-map.md`.
 
+### 0b. Harvest the user's standing constraints *before* shaping the goal
+
+A constraint that lives only in conversation history **dies with the session**. The
+runner is a fresh context: it knows nothing the prompt does not carry. Enumerate every
+standing instruction the user has given — "don't touch production", "read-only for
+now", "never force-push", "ask before spending" — and encode each in **two** places:
+**Guardrails** states the rule; an **Autonomy hard-stop** enforces it at the moment of
+action, so a loop optimizing for a green score cannot satisfy the goal by breaking it.
+
+The failure this prevents is severe: a loop whose Done-when requires "system
+configured" will configure the *live* system to score itself done. **Split such
+goals** — "built and tested against fixtures" is automatable; "applied to production"
+is a hard-stop needing authorization. If you cannot restate a constraint as a
+condition checkable *at the moment of action*, it is not yet encoded.
+
 ### 1. Pin the Goal to a *verifiable, demonstrable* done-condition
 
 A `/goal` evaluator judges only what Claude *surfaced in its output* — it does not
@@ -71,6 +86,14 @@ unsatisfiable without the system misbehaving. Separate **validate** goals ("prov
 works" — a correct *negative* IS success) from **optimize** goals ("drive the metric
 to 100"). A validation Done-when must accept a verified-correct negative, or the loop
 burns its budget chasing a result correct behavior will never produce.
+
+**Require at least one clause where a *count must not shrink*.** Every "failures = 0"
+condition is satisfiable by destruction: delete the tests, close the issues unfixed,
+weaken the assertion. Discipline forbids green-by-suppression in prose, but the
+Done-when never *proves* it did not happen — so pair every must-reach-zero clause with
+a must-not-shrink one: "0 failing **and** ≥ N tests collected"; "36/36 green, where 36
+is the enumerated total"; "every story Done **or** Cancelled *with a reason*". If a run
+could satisfy the condition by removing the thing being measured, it is not finished.
 
 ### 2. Decompose if the goal is large — contract before features when behavior changes
 
@@ -110,12 +133,32 @@ frontier-model rates for mechanical work. Two planes (full catalog in
 
 Give every chunk a **model tier**, not just a mechanism — run the harness cheap,
 spend the strong model only where judgement is load-bearing (independent verify is
-always frontier tier). Selector table: `references/claude-feature-map.md`.
+always frontier tier). Selector table: `references/claude-feature-map.md`. For host-specific Run-as, checkpoint lanes, and MCP scope, read `references/host-feature-map.md`.
 
 **Preflight the mechanism before you commit a chunk to it.** A mechanism that is
 listed is not a mechanism that works: a granted tool with no targets, a degraded
 index, an unreachable MCP server all fail *silently* and the loop degrades into a
 confident wrong answer. Sub-goal 0 must prove each one executes once for real.
+
+**Emit literal dispatch parameters, not adjectives.** "cheap tier" is not
+dispatchable. Every subagent in an emitted prompt names `agentType` + `model` (+
+`effort` where it runs in a Workflow): `Agent(subagent_type: "Explore", model:
+"haiku", prompt: "<narrow question + return schema>")`. Three constraints that change
+the design, not just the wording — full tables in `references/claude-feature-map.md`:
+
+1. **`effort` is Workflow-only.** The Agent tool accepts `model` but **not** `effort`;
+   an Agent subagent inherits the session's. If a step's effort is load-bearing —
+   verification especially — put it in a Workflow and set `opts.effort`. Writing "use
+   high effort" in an Agent prompt does nothing.
+2. **`agentType` is a permission boundary.** `general-purpose` holds Edit/Write even
+   when the prompt says read-only; `Explore` cannot write at all. Pick `Explore` for
+   read-only work so the tool boundary enforces it, and check `git status` after any
+   `general-purpose` fan-out.
+3. **Tier by question shape, not output size.** A cheap model is reliable on closed,
+   evidence-checkable questions and unreliable on open-ended judgement that gates an
+   action. Narrow the question until cheap is safe, or pay frontier. **Never let a
+   cheap model's verdict gate an irreversible step**; re-derive load-bearing
+   conclusions from the evidence it returned.
 
 **Commit to the mechanism — don't hedge.** "You *may* dispatch subagents" forces the
 runner to re-decide and usually defaults to the weakest option. Name exactly one
@@ -146,6 +189,12 @@ context does not. A separate adversarial verifier is the single largest quality 
 - After Execute, spawn a **verifier subagent** (frontier tier, *fresh* context)
   prompted to **refute** the proof: re-run the deterministic check rather than trust
   the executor's narration. Default to "not done" on any doubt.
+- **Hand the verifier the *proof command*, not the claim.** A fresh context cannot
+  see the executor's work, so a narrative ("the endpoint now returns 200") invites it
+  to reason about plausibility instead of running anything — self-verification in
+  disguise. Give it the exact command, the expected artifact, file:line anchors, and
+  environment quirks (non-default ports, which interpreter, auth source). Its report
+  must quote the output it actually observed.
 - The verifier **grades the artifact, not the run.** "Node completed" / "tool
   returned" is not evidence; re-run the deterministic check and read the output.
 - The verifier **reports gaps; it does not implement fixes** — the loop scopes a
@@ -172,15 +221,62 @@ The point is a prompt a **brand-new session** can run with zero hand-holding.
 - **Capability + harness preflight.** Sub-goal 0 proves the loop can actually do
   its job before it spends: every granted tool executes once for real, every
   hook-gated call has its unlock step, every MCP standing nudge is explicitly
-  adopted or overridden, and a live target passes deploy-freshness + `/health`.
-  Checklists: `references/cold-start-and-verify.md`.
+  adopted or overridden, and a live target passes artifact-identity + `/health`.
+  **Artifact identity is two distinct failures, both required-fail caps:** *stale*
+  (merged ≠ live — rebuild if `main` is newer than the build) and *divergent* (built ≠
+  loaded — a compose service with `build:` and no `image:`, a bind mount shadowing the
+  baked path, a stale layer cache, or a container still on the previous image id).
+  Verify by identity — running image id vs the one just built, or a sentinel string
+  from the new source found inside the running artifact — never by the build's exit
+  code. Checklists: `references/cold-start-and-verify.md` (incl. `tapps_session_start()` as first MCP call).
+
+### 7. Checkpoint the context window (handoff → clear → continue)
+
+Context hygiene (§4) slows the rot; it does not reset it. A loop that finishes inside
+**one** context window still pays iteration 1's tokens on iteration N, and past ~600k
+tokens it gets disproportionately fragile to `529 Overloaded` kills. The fix is a
+**shift boundary** — persist state, drop the transcript, rehydrate from the state: a
+fresh worker on a new shift, not a longer one ("one-task-one-session").
+
+**The loop cannot clear itself.** `/clear` is a built-in CLI command, not a skill or a
+tool — no agent can invoke one. Never emit a prompt telling the loop to "run `/clear`";
+it silently no-ops and the context keeps growing. Commit to a real lane: **delegated**
+(subagent / Workflow — the noisy work never enters the orchestrator's context),
+**process boundary** (`claude -p` / Routine, one iteration per process — a real clear,
+unattended), or **declared checkpoint** (the prompt prints a CHECKPOINT block; the
+operator types `/clear`).
+
+Write the checkpoint with `/tapps-handoff-session`, resume with
+`/tapps-continue-session`. Trigger at each sub-goal boundary or ~50% context, whichever
+first.
+
+**Clearing resets the loop's own guardrails unless the handoff carries them** — attempt
+cap, budget, and refuted strategies live in the transcript you just dropped, so a loop
+that checkpoints three times has, in effect, no cap. Carry-forward contract and the
+re-verify-on-resume rule: `references/cold-start-and-verify.md`.
 
 ## Guardrails every emitted prompt must carry
 
 - **Verifiable termination** — the Goal condition *and* a hard cap (max iterations
   or a token budget) so a stuck loop stops instead of burning quota.
 - **Independent verification** — the sub-goal's proof is confirmed by a verifier that
-  did not produce the work (method §5), against ground truth.
+  did not produce the work (method §5), handed the *proof command* rather than the
+  claim, against ground truth.
+- **Standing user constraints** — every one restated as a Guardrail *and* an Autonomy
+  hard-stop (method §0b); no Done-when clause is satisfiable by violating one.
+- **No green-by-deletion** — at least one Done-when clause is a count that must not
+  shrink, so the goal cannot be met by removing what is measured (method §1).
+- **Every subagent dispatch names `agentType` + `model`** (and `effort` when it runs
+  in a Workflow) — never "spawn an agent to…". Read-only work uses `Explore` so the
+  tool boundary, not the prose, enforces it. No cheap-model verdict gates an
+  irreversible step; load-bearing answers are re-derived from returned evidence.
+- **Research grant** — every emitted prompt states that the loop has web access,
+  `tapps_research` and `tapps_lookup_docs` (Context7-backed, local-cache-first, so
+  effectively free to repeat), and **names the specific lookups required before the
+  first line of code touching an external API**. A loop that writes against a
+  versioned external surface from recalled syntax will hallucinate a schema that lints
+  clean and fails at runtime. Research-to-*execute* is in scope; research-to-*decide*
+  still goes to `/tapps-wayfind`.
 - **Caps must not fire on *correct* behavior** — for every required-fail cap, ask "is
   there a legitimate correct run where this still fires?" Separate *broken* from
   *correct-empty* (the gate rightly held everything) or a correct negative scores red.
@@ -188,6 +284,11 @@ The point is a prompt a **brand-new session** can run with zero hand-holding.
   errors; keep code edits sequential, per repo.
 - **Context hygiene** — prune stale reads each iteration; targeted grep over full
   re-Read (method §4).
+- **Shift boundaries** — a long loop checkpoints instead of growing: `/tapps-handoff-session`
+  at each sub-goal boundary or ~50% context, then a real clear (subagent / new process /
+  operator `/clear`) and `/tapps-continue-session` to rehydrate (method §7). The handoff
+  carries **cumulative** attempt-count, budget-spent, and refuted strategies, or the
+  clear silently resets the caps and the loop repeats what already failed.
 - **Autonomy, not checkpoints** — act on every reversible in-scope step; for an
   outward/irreversible step produce a reversible precursor (draft PR, staged diff)
   and keep going.
@@ -213,7 +314,7 @@ continue; the human reviews async. A draft PR is not a stop.
 Hard-stop and ask **once** (batched, with a recommendation) only when: the step is
 irreversible/outward with no reversible precursor (merge to main, force-push, delete
 un-recreatable data, external message, cross-project write); **or** the projected
-cost of the next step exceeds the configured ceiling (default ≈ $20; honor any higher
+cost of the next step exceeds the configured ceiling (default ≈ USD 20; honor any higher
 pre-authorization); **or** a genuinely ambiguous decision where a wrong guess is
 expensive and unrecoverable. Enforce the cost gate mechanically via the Workflow
 `budget` so the run aborts itself instead of asking.
@@ -255,22 +356,23 @@ no silent scope creep.
 
 1. **Fog preflight (method §0).** If foggy, refuse and point at `/tapps-wayfind` —
    do not emit a prompt. If clear, recall `memory_group=wayfind` resume when present.
-2. Read the workspace manifest (e.g. `fleet.md`) for the repos / Linear projects /
+2. Read `references/host-feature-map.md` when the runner host is Cursor or when Run-as / checkpoint lanes differ by host.
+3. Read the workspace manifest (e.g. `fleet.md`) for the repos / Linear projects /
    brain ids involved, if the project has one.
-3. Fill `assets/prompt-template.md` — keep only the sections the task needs. Always
+4. Fill `assets/prompt-template.md` — keep only the sections the task needs. Always
    keep **Prerequisites / Wayfind gate**, the **"How to run (cold start)"** block, a
    **Sub-goal 0** for self-healing preconditions, the **Verify** step wired to an
    independent verifier, and — when changing software behavior — a **Validation
    contract** filled *before* execution sub-goals plus an **expected-fail fix loop**
    with attempt cap.
-4. If any chunk is multi-stage parallel work, also write the companion
+5. If any chunk is multi-stage parallel work, also write the companion
    `.claude/workflows/<slug>.js` (schema + `budget` + per-stage `model`/`effort`) and
    point Run-as at it. A single coupled item (N=1) is a `/goal` drive, not a Workflow.
-5. Save the prompt to `prompts/<short-slug>.md`.
-6. **Completeness self-check** — walk the **Guardrails** list above and confirm the
+6. Save the prompt to `prompts/<short-slug>.md`.
+7. **Completeness self-check** — walk the **Guardrails** list above and confirm the
    emitted prompt satisfies every line; then run the **cold-start test** (a fresh
    session with nothing loaded can run it). Fix anything weak before saving.
-7. Tell the user exactly how to run it — the `/goal` line, the `/loop` cadence, the
+8. Tell the user exactly how to run it — the `/goal` line, the `/loop` cadence, the
    Routine schedule, or "invoke the Workflow tool `<script>`" — and from which
    session.
 
