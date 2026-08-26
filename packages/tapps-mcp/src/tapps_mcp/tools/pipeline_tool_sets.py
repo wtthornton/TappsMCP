@@ -13,6 +13,13 @@ from typing import Any, Final
 from tapps_mcp.distribution.nlt_mcp_config import LEGACY_NLT_SERVER_IDS, NLT_SERVER_ORDER
 
 _CALLMCPTOOL_NAME = "CallMcpTool"
+_CALLDYNAMICTOOL_NAME = "CallDynamicTool"
+# Cursor wraps MCP calls as either envelope depending on transport path (TAP-6569).
+# Both carry the inner tool name under toolName/tool_name; only the identifier
+# field differs (server vs. namespace), handled in resolve_wrapped_tool_name.
+TRANSCRIPT_WRAPPER_TOOL_NAMES: Final[frozenset[str]] = frozenset(
+    {_CALLMCPTOOL_NAME, _CALLDYNAMICTOOL_NAME}
+)
 
 GATE_SHORT_NAMES: Final[frozenset[str]] = frozenset(
     {"tapps_quick_check", "tapps_validate_changed", "tapps_quality_gate"}
@@ -52,8 +59,8 @@ MCP_SERVER_PREFIXES: Final[frozenset[str]] = frozenset(
 )
 
 
-def resolve_callmcptool_tool_name(tool_input: dict[str, Any]) -> str | None:
-    """Return ``toolName`` from a Cursor ``CallMcpTool`` envelope when present."""
+def resolve_wrapped_tool_name(tool_input: dict[str, Any]) -> str | None:
+    """Return ``toolName`` from a Cursor ``CallMcpTool``/``CallDynamicTool`` envelope."""
     for key in ("toolName", "tool_name"):
         raw = tool_input.get(key)
         if isinstance(raw, str) and raw.strip():
@@ -72,9 +79,9 @@ def is_tapps_mcp_server(server: str) -> bool:
 
 
 def resolve_transcript_tool_name(name: str, tool_input: dict[str, Any]) -> str:
-    """Map Cursor ``CallMcpTool`` to the inner ``tapps_*`` tool name when present."""
-    if name == _CALLMCPTOOL_NAME:
-        inner = resolve_callmcptool_tool_name(tool_input)
+    """Map Cursor wrapper envelopes to the inner ``tapps_*`` tool name when present."""
+    if name in TRANSCRIPT_WRAPPER_TOOL_NAMES:
+        inner = resolve_wrapped_tool_name(tool_input)
         if inner:
             return inner
     return name
@@ -137,11 +144,12 @@ __all__ = [
     "LOOKUP_SHORT_NAMES",
     "MCP_SERVER_PREFIXES",
     "SOURCE_FILE_SUFFIXES",
+    "TRANSCRIPT_WRAPPER_TOOL_NAMES",
     "is_checklist_tool",
     "is_gate_tool",
     "is_lookup_tool",
     "is_tapps_mcp_server",
     "matches_pipeline_tool",
-    "resolve_callmcptool_tool_name",
     "resolve_transcript_tool_name",
+    "resolve_wrapped_tool_name",
 ]
