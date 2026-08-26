@@ -36,11 +36,14 @@ from tapps_mcp.server_linear_tools_cache import (
 from tapps_mcp.server_linear_tools_keys import (
     _CLOSED_STATE_BUCKETS,
     _OPEN_STATE_BUCKETS,
+    _PROJECTION_COMPACT,
+    _PROJECTION_NONE,
     _compact_issue,
     _extract_status_type,
     _fetch_hint_for_state,
     _list_issues_pass_payload,
     _resolve_cache_key,
+    _stored_projection,
     _ttl_for_state,
 )
 
@@ -121,17 +124,25 @@ async def tapps_linear_snapshot_get(
             history. A 50-issue backlog in compact mode serialises to
             under 48 kB — well within the 25 k-token Read cap that
             subagents face. ``"full"`` (default) returns the stored
-            issue dicts unchanged.
+            issue dicts unchanged — but is only *reported* as ``"full"``
+            when the stored rows carry fields beyond the compact set
+            (TAP-6581); over compact-or-poorer rows the response says
+            ``"compact"``.
 
     Returns:
         Envelope with:
           - ``data.cached``: ``True`` on hit, ``False`` on miss/expired.
           - ``data.issues``: stored list (only on hit; projected if
             ``projection="compact"``).
-          - ``data.projection``: the projection mode applied.
+          - ``data.projection``: the projection the served rows actually
+            satisfy — never richer than what is stored.
+          - ``data.requested_projection`` / ``data.projection_downgraded``:
+            what the caller asked for and whether it was honoured.
           - ``data.cache_key``: cache-file stem.
           - ``data.cached_at`` / ``data.expires_at`` / ``data.age_seconds``
-            on hit; ``data.hint`` on miss.
+            on hit; ``data.hint`` + ``data.miss_reason``
+            (``not_cached`` | ``empty_auto_populated`` | ``degraded_rows``
+            | ``limit_subset``) on miss.
     """
     _record_call("tapps_linear_snapshot_get")
     start_ns = time.perf_counter_ns()
@@ -161,16 +172,32 @@ async def tapps_linear_snapshot_get(
     # reject an auto-populated empty payload as a false empty hit: it most
     # likely came from list_issues(state="<alias/invalid>") returning [].
     served_from_superset = False
+    miss_reason = "not_cached"
+    stored_projection = _PROJECTION_NONE
     if cached is not None:
         stored_limit_raw = cached.get("limit")
         auto_populated = bool(cached.get("auto_populated"))
         issue_list: list[dict[str, Any]] = cached.get("issues", []) or []
+        stored_projection = _stored_projection(issue_list)
 
         if auto_populated and not issue_list:
             # Poisoning guard: an empty auto-populated payload is not a
             # confident hit — undo the hit bookkeeping and fall through to MISS.
             _snapshot_stats["hits"] -= 1
             _snapshot_stats["misses"] += 1
+            miss_reason = "empty_auto_populated"
+            cached = None
+        elif issue_list and stored_projection == _PROJECTION_NONE:
+            # TAP-6581 contents-level poisoning guard: the rows are below the
+            # compact floor (an id-only payload from list_issues(fields=["id"])
+            # is the live case). They cannot satisfy ANY projection, so there is
+            # no honest label to serve them under — MISS instead of handing the
+            # caller rows tagged with a projection they do not have. Guarded on
+            # a non-empty list so a deliberate ``put([])`` — a genuinely empty
+            # slice, with no row to mislabel — stays the hit it has always been.
+            _snapshot_stats["hits"] -= 1
+            _snapshot_stats["misses"] += 1
+            miss_reason = "degraded_rows"
             cached = None
         elif stored_limit_raw is not None:
             try:
@@ -181,6 +208,7 @@ async def tapps_linear_snapshot_get(
                 # Smaller stored slice cannot satisfy a larger request.
                 _snapshot_stats["hits"] -= 1
                 _snapshot_stats["misses"] += 1
+                miss_reason = "limit_subset"
                 cached = None
             elif stored_limit > limit:
                 served_from_superset = True
@@ -197,6 +225,7 @@ async def tapps_linear_snapshot_get(
                 "team": team,
                 "project": project,
                 "state": state or None,
+                "miss_reason": miss_reason,
                 "hint": _fetch_hint_for_state(state),
             },
         )
@@ -209,13 +238,24 @@ async def tapps_linear_snapshot_get(
         issues = issues[:limit]
     if projection == "compact":
         issues = [_compact_issue(i) for i in issues]
+    # TAP-6581: report the projection the stored rows actually SATISFY, not the
+    # one the caller asked for. A "full" request over rows that carry nothing
+    # beyond _COMPACT_FIELDS is served — and labelled — as compact; the caller
+    # sees requested_projection/projection_downgraded rather than a silent lie.
+    served_projection = (
+        _PROJECTION_COMPACT
+        if projection == "compact" or stored_projection == _PROJECTION_COMPACT
+        else projection
+    )
     return success_response(
         "tapps_linear_snapshot_get",
         elapsed_ms,
         {
             "cached": True,
             "issues": issues,
-            "projection": projection,
+            "projection": served_projection,
+            "requested_projection": projection,
+            "projection_downgraded": served_projection != projection,
             "cache_key": key,
             "cached_at": cached_at,
             "expires_at": cached.get("expires_at"),
