@@ -26,18 +26,14 @@ class TestClaudeSkills:
 
     def test_finish_task_has_allowed_tools(self, tmp_path):
         generate_skills(tmp_path, "claude")
-        content = (
-            tmp_path / ".claude" / "skills" / "tapps-finish-task" / "SKILL.md"
-        ).read_text()
+        content = (tmp_path / ".claude" / "skills" / "tapps-finish-task" / "SKILL.md").read_text()
         assert "allowed-tools:" in content
         assert "mcp__nlt-build__tapps_validate_changed" in content
         assert "mcp__nlt-build__tapps_checklist" in content
 
     def test_finish_task_has_name(self, tmp_path):
         generate_skills(tmp_path, "claude")
-        content = (
-            tmp_path / ".claude" / "skills" / "tapps-finish-task" / "SKILL.md"
-        ).read_text()
+        content = (tmp_path / ".claude" / "skills" / "tapps-finish-task" / "SKILL.md").read_text()
         assert "name: tapps-finish-task" in content
 
     def test_all_skills_have_frontmatter(self, tmp_path):
@@ -105,18 +101,14 @@ class TestCursorSkills:
 
     def test_finish_task_has_mcp_tools_list(self, tmp_path):
         generate_skills(tmp_path, "cursor")
-        content = (
-            tmp_path / ".cursor" / "skills" / "tapps-finish-task" / "SKILL.md"
-        ).read_text()
+        content = (tmp_path / ".cursor" / "skills" / "tapps-finish-task" / "SKILL.md").read_text()
         assert "mcp_tools:" in content
         assert "  - tapps_validate_changed" in content
         assert "  - tapps_checklist" in content
 
     def test_cursor_body_uses_short_tool_names(self, tmp_path):
         generate_skills(tmp_path, "cursor")
-        content = (
-            tmp_path / ".cursor" / "skills" / "tapps-finish-task" / "SKILL.md"
-        ).read_text()
+        content = (tmp_path / ".cursor" / "skills" / "tapps-finish-task" / "SKILL.md").read_text()
         assert "tapps_validate_changed" in content
         assert "mcp__tapps-mcp__" not in content
 
@@ -160,6 +152,7 @@ class TestSkipExisting:
 
     def test_refreshes_session_transfer_skills_without_overwrite(self, tmp_path):
         from tapps_mcp.pipeline.platform_skills import CLAUDE_SKILLS, SESSION_TRANSFER_SKILL_NAMES
+        from tapps_mcp.pipeline.skill_asset_policy import policy_header
 
         for skill_name in SESSION_TRANSFER_SKILL_NAMES:
             skill_dir = tmp_path / ".claude" / "skills" / skill_name
@@ -171,7 +164,12 @@ class TestSkipExisting:
         for skill_name in SESSION_TRANSFER_SKILL_NAMES:
             assert skill_name in result["updated"]
             content = (tmp_path / ".claude" / "skills" / skill_name / "SKILL.md").read_text()
-            assert content == CLAUDE_SKILLS[skill_name]
+            # TAP-6497: the body is the template plus a one-line in-file
+            # statement of the upgrade policy that governs the file.
+            assert policy_header("overwrite") in content
+            assert (
+                content.replace(f"{policy_header('overwrite')}\n", "") == CLAUDE_SKILLS[skill_name]
+            )
         assert "tapps-finish-task" in result["created"]
 
     def test_creates_directories(self, tmp_path):

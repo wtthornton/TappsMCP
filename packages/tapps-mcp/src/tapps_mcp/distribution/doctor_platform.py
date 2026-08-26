@@ -638,3 +638,35 @@ def check_pretooluse_matchers(project_root: Path) -> CheckResult:
         True,
         f"wired: {', '.join(matchers)}. {linear_status}. {cache_status}. {session_status}",
     )
+
+
+def check_upgrade_skip_tokens(project_root: Path) -> CheckResult:
+    """Report ``upgrade_skip_files`` entries outside the fixed vocabulary (TAP-6499).
+
+    An unrecognized entry protects nothing — upgrade rewrites the artifact the
+    operator believed was pinned. The failure is silent by construction, so
+    doctor is the only place a project learns about it before the overwrite.
+    """
+    from tapps_mcp.pipeline.upgrade_skip_tokens import (
+        describe_unknown_skip_tokens,
+        unknown_skip_tokens,
+    )
+
+    configured = _upgrade_skip_tokens(project_root)
+    if not configured:
+        return CheckResult("upgrade_skip_files", True, "no skip tokens configured")
+
+    unknown = unknown_skip_tokens(configured)
+    if not unknown:
+        return CheckResult(
+            "upgrade_skip_files",
+            True,
+            f"all {len(configured)} token(s) recognized: {', '.join(sorted(configured))}",
+        )
+    return CheckResult(
+        "upgrade_skip_files",
+        False,
+        f"{len(unknown)} entry/entries protect nothing: {', '.join(unknown)}",
+        " ".join(describe_unknown_skip_tokens(unknown)),
+        severity="fail",
+    )

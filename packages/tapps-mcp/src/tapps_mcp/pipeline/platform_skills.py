@@ -34,6 +34,10 @@ from tapps_mcp.pipeline.platform_skill_wayfind import (
     WAYFIND_COMPANION_FILES,
     WAYFIND_SKILL_BODY,
 )
+from tapps_mcp.pipeline.skill_asset_policy import (
+    policy_header,
+    write_companions,
+)
 from tapps_mcp.pipeline.skill_managed_block import (
     install_or_refresh_skill,
     prepend_below_frontmatter,
@@ -1480,8 +1484,8 @@ SMART_MERGE_SKILL_NAMES: frozenset[str] = frozenset(
 # added — so both shipped unexempted and the suite went red.
 NO_TOOL_GRANT_SKILL_NAMES: frozenset[str] = SMART_MERGE_SKILL_NAMES | {"continuous-learning-v2"}
 
-# Companion files shipped alongside a skill's SKILL.md. Refreshed wholesale on
-# every init/upgrade — canonical platform docs, not customization points.
+# Companion files shipped alongside a skill's SKILL.md. Their upgrade policy —
+# and every other scaffolded file's — is defined in ``skill_asset_policy``.
 SKILL_COMPANION_FILES: dict[str, dict[str, str]] = {
     "orchestration-prompt": ORCHESTRATION_PROMPT_COMPANION_FILES,
     "tapps-wayfind": WAYFIND_COMPANION_FILES,
@@ -1495,22 +1499,26 @@ SKILL_CREATE_ONLY_FILES: dict[str, dict[str, str]] = {
 }
 
 
-def _write_skill_companions(skill_dir: Path, skill_name: str) -> None:
-    """Write a skill's companion files: canonical docs (refresh) + seed-once state.
+def _write_skill_companions(
+    skill_dir: Path,
+    skill_name: str,
+    asset_actions: dict[str, dict[str, str]],
+    overwrite_warnings: list[str],
+) -> None:
+    """Write *skill_name*'s companions and fold the outcome into the accumulators.
 
-    Canonical companion files (templates, references) are rewritten every call so
-    upgrades deliver doc fixes. Create-only files (``learnings.md``) are written
-    solely when absent so project-owned content is never clobbered.
+    The policy logic lives in :mod:`tapps_mcp.pipeline.skill_asset_policy`; this
+    resolves the registries, hands them over, and records what happened so
+    ``generate_skills`` reports it in one place.
     """
-    for rel_path, content in SKILL_COMPANION_FILES.get(skill_name, {}).items():
-        target = skill_dir / rel_path
-        target.parent.mkdir(parents=True, exist_ok=True)
-        target.write_text(content, encoding="utf-8")
-    for rel_path, content in SKILL_CREATE_ONLY_FILES.get(skill_name, {}).items():
-        target = skill_dir / rel_path
-        if not target.exists():
-            target.parent.mkdir(parents=True, exist_ok=True)
-            target.write_text(content, encoding="utf-8")
+    result = write_companions(
+        skill_dir,
+        skill_name,
+        SKILL_COMPANION_FILES.get(skill_name, {}),
+        SKILL_CREATE_ONLY_FILES.get(skill_name, {}),
+    )
+    asset_actions[skill_name] = result["assets"]
+    overwrite_warnings.extend(result["overwrite_warnings"])
 
 
 def generate_skills(
@@ -1534,8 +1542,10 @@ def generate_skills(
     When *skill_tier* is ``"core"``, only :data:`CORE_SKILL_NAMES` are written;
     other registry skills are listed under ``skipped_tier``.
 
-    Returns a summary dict with ``created``, ``updated``, ``skipped``,
-    and ``skipped_tier`` lists.
+    Returns a summary dict with ``created``, ``updated``, ``skipped``, and
+    ``skipped_tier`` lists, plus ``assets`` (per-skill companion actions) and
+    ``asset_overwrite_warnings`` (customized companions upgrade will replace
+    wholesale because their format carries no marker — TAP-6497).
     """
     if platform == "claude":
         skills_base = project_root / ".claude" / "skills"
@@ -1562,6 +1572,8 @@ def generate_skills(
     updated: list[str] = []
     skipped: list[str] = []
     skipped_tier: list[str] = []
+    asset_actions: dict[str, dict[str, str]] = {}
+    overwrite_warnings: list[str] = []
     for skill_name, content in templates.items():
         if tier == "core" and skill_name not in CORE_SKILL_NAMES:
             skipped_tier.append(skill_name)
@@ -1571,8 +1583,13 @@ def generate_skills(
         target = skill_dir / "SKILL.md"
 
         if skill_name in SMART_MERGE_SKILL_NAMES:
-            action = install_or_refresh_skill(target, content, skill_name)
-            _write_skill_companions(skill_dir, skill_name)
+            # The policy header goes below the frontmatter and therefore inside
+            # the managed block: platform-owned text, refreshed with the body.
+            managed_body = prepend_below_frontmatter(
+                content, f"{policy_header('managed_block')}\n\n"
+            )
+            action = install_or_refresh_skill(target, managed_body, skill_name)
+            _write_skill_companions(skill_dir, skill_name, asset_actions, overwrite_warnings)
             if action == "created":
                 created.append(skill_name)
             elif action == "unchanged":
@@ -1581,7 +1598,12 @@ def generate_skills(
                 updated.append(skill_name)
             continue
 
-        full_content = prepend_below_frontmatter(content, engagement_note)
+        # TAP-6497: upgrade calls this with overwrite=True, so a non-smart-merge
+        # SKILL.md is replaced wholesale — say so in the file rather than letting
+        # the next customizer find out by losing work.
+        full_content = prepend_below_frontmatter(
+            content, f"{policy_header('overwrite')}\n\n{engagement_note}"
+        )
         if target.exists():
             refresh = overwrite or skill_name in SESSION_TRANSFER_SKILL_NAMES
             if refresh:
@@ -1593,10 +1615,9 @@ def generate_skills(
             target.write_text(full_content, encoding="utf-8")
             created.append(skill_name)
 
-        # Always refresh registered companions (canonical docs); create-only
-        # files inside _write_skill_companions are never clobbered.
+        # Refresh registered companions under their declared policy.
         if skill_name in SKILL_COMPANION_FILES or skill_name in SKILL_CREATE_ONLY_FILES:
-            _write_skill_companions(skill_dir, skill_name)
+            _write_skill_companions(skill_dir, skill_name, asset_actions, overwrite_warnings)
 
     return {
         "created": created,
@@ -1604,6 +1625,8 @@ def generate_skills(
         "skipped": skipped,
         "skipped_tier": skipped_tier,
         "skill_tier": tier,
+        "assets": asset_actions,
+        "asset_overwrite_warnings": overwrite_warnings,
     }
 
 

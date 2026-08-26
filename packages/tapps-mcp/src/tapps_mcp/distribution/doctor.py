@@ -192,6 +192,7 @@ from tapps_mcp.distribution.doctor_platform import (
     check_retired_hooks,
     check_security_rule,
     check_test_quality_rule,
+    check_upgrade_skip_tokens,
 )
 from tapps_mcp.distribution.doctor_result import CheckResult
 from tapps_mcp.distribution.doctor_runner import (
@@ -206,6 +207,7 @@ from tapps_mcp.distribution.doctor_runner import (
 )
 from tapps_mcp.distribution.doctor_skills import (
     check_orchestration_prompt_skill_current,
+    check_skill_asset_drift,
     check_validation_contract_skill_current,
     check_wayfind_skill_current,
 )
@@ -296,11 +298,13 @@ __all__ = [
     "check_session_handoff_schema",
     "check_session_handoff_skills",
     "check_session_sentinel",
+    "check_skill_asset_drift",
     "check_stale_exe_backups",
     "check_tapps_brain",
     "check_tapps_mcp_yaml",
     "check_tapps_memory_skill",
     "check_test_quality_rule",
+    "check_upgrade_skip_tokens",
     "check_uv_path_mismatch",
     "check_validation_contract_skill_current",
     "check_vscode_config",
