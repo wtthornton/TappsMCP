@@ -81,7 +81,7 @@ Scale the verifier to the stakes. All layers keep creator ≠ verifier.
 exception raised" are not evidence. The verifier re-runs the deterministic check and
 reads the shipped output. Default to "not done" on any doubt.
 
-## Shift-boundary checkpoints (method §7)
+## Shift-boundary checkpoints — the context-recycle cycle (method §7)
 
 A checkpoint discards the transcript — and the transcript is where the loop's own
 guardrails were tracked. Clear without carrying them and the guardrails **silently stop
@@ -103,6 +103,23 @@ the world as it was. On resume, re-verify live state before acting — a PR that
 "open, merge pending" at checkpoint can be merged an hour later, flipping the correct
 branch base. Treat every handoff claim as a hypothesis with a cheap test; the
 independent verifier (§5) still runs, and a checkpoint never substitutes for it.
+
+**The re-verify gate (mandatory, both sides of the boundary).** Run it before clearing
+*and* on resume — clearing destroys the only context that could contradict the file:
+
+| Check | Command | Failure it catches |
+|---|---|---|
+| Commit drift | `git log -1 --format=%h` vs the handoff **Git:** sha; then `git log --oneline <handoff-sha>..HEAD` | The file predates real work — every **Open** item is unverified until re-probed |
+| Tracker state | `get_issue(<P0>)`, `gh pr view <N> --json state,mergedAt` | A merged PR offered as "needs review"; a P0 already Done or Canceled. Done is a claim in both directions — report it, never conclude from it alone |
+| Metrics | Re-read from the newest artifact (test run, score report, coverage file) | A quoted count inherited from prose that the last commit already changed |
+
+On any mismatch, **correct the handoff before clearing**. A known-wrong handoff inherited
+by a fresh context is worse than no handoff: it reads as evidence.
+
+**One runner per handoff file.** Two loops writing `.tapps-mcp/session-handoff.md`
+overwrite each other with no error — the second save wipes the first run's state and the
+first run rehydrates the other's. Check for a concurrent lane before chaining `claude -p`
+invocations; give overlapping runs separate handoff paths.
 
 **Declared-checkpoint block** (interactive lane — print verbatim, then stop):
 
