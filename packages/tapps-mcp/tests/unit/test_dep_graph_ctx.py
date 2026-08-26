@@ -6,6 +6,8 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
+pytestmark = pytest.mark.usefixtures("envelope_guard")
+
 
 class TestDepGraphCtx:
     """Verify ctx.info phase notifications in tapps_dependency_graph."""

@@ -15,6 +15,8 @@ from tapps_mcp.tools.validate_changed import (
 )
 from tapps_mcp.tools.validate_changed_collection import count_tracked_scorable_files
 
+pytestmark = pytest.mark.usefixtures("envelope_guard")
+
 
 class TestWarmBudgetConstant:
     def test_warm_budget_is_15s(self) -> None:

@@ -15,6 +15,8 @@ import pytest
 
 from tapps_core.config.settings import load_settings
 
+pytestmark = pytest.mark.usefixtures("envelope_guard")
+
 
 @pytest.mark.asyncio
 async def test_collect_session_hive_status_bridge_not_configured(

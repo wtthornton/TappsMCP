@@ -24,6 +24,8 @@ from tapps_mcp.tools.hive_safety import (
     reset_elevation_store,
 )
 
+pytestmark = pytest.mark.usefixtures("envelope_guard")
+
 
 # ---------------------------------------------------------------------------
 # Fixtures

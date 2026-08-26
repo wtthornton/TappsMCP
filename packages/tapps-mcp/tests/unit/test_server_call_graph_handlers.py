@@ -9,6 +9,8 @@ import pytest
 
 from tapps_mcp.project.call_graph import build_call_graph_index
 
+pytestmark = pytest.mark.usefixtures("envelope_guard")
+
 
 def _write_pkg(root: Path, rel: str, source: str) -> Path:
     path = root / rel

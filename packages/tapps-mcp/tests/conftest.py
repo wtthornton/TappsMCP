@@ -29,6 +29,7 @@ Current resets (13 total):
 
 from __future__ import annotations
 
+import contextlib
 import json
 import re
 import shutil
@@ -592,7 +593,13 @@ def _iter_failed_sub_results(
 ) -> Iterator[tuple[str, dict[str, Any]]]:
     """Yield ``(path, payload)`` for every nested dict that reports failure."""
     if isinstance(node, dict):
-        looks_failed = bool(node.get("error")) or node.get("success") is False
+        # A key named in ``allow`` is not read as a failure signal on this node,
+        # and is not descended into — one meaning of "skip this key", applied at
+        # both ends. Without the first half a payload whose failure marker sits
+        # at the root of ``data`` is unreachable by ``allow`` (TAP-5659).
+        looks_failed = ("error" not in allow and bool(node.get("error"))) or (
+            "success" not in allow and node.get("success") is False
+        )
         if looks_failed and not node.get("skipped"):
             yield path, node
         for key, value in node.items():
@@ -618,7 +625,10 @@ def assert_envelope_consistent(
     reads the top level and believes work happened that never did.
 
     ``allow`` names data keys to skip, for genuinely informational payloads
-    that embed failure-shaped records (a report *about* failures, say).
+    that embed failure-shaped records (a report *about* failures, say). A named
+    key is skipped both as a subtree to walk and as a failure signal on the node
+    that carries it, so ``allow=("error",)`` also covers a marker sitting at the
+    root of ``data`` where there is no parent key to name.
     ``skipped`` sub-results are not failures — that flag means never attempted.
 
     The static counterpart is ``scripts/check-response-envelope.py``; the lint
@@ -644,6 +654,73 @@ def assert_envelope_consistent(
 def envelope_consistent() -> Callable[..., None]:
     """The :func:`assert_envelope_consistent` invariant, as a fixture."""
     return assert_envelope_consistent
+
+
+@pytest.fixture
+def envelope_guard(request: pytest.FixtureRequest) -> Generator[None, None, None]:
+    """Assert the envelope invariant on every response a test actually builds.
+
+    The chokepoint is ``success_response`` — every tool envelope in this package
+    is constructed there. The fixture records each envelope as it is built and
+    checks it at teardown, *not* at construction: handlers routinely mutate the
+    returned dict afterwards (setting ``degraded``, merging sub-results), and the
+    recorded reference is that same dict, so teardown sees the final shape the
+    caller would receive.
+
+    Most tool modules bind the helper with ``from tapps_mcp.server_helpers import
+    success_response``, which copies the reference into their own namespace at
+    import time — patching ``server_helpers`` alone would miss every one of them.
+    So the binding sites are discovered from ``sys.modules`` rather than listed:
+    a hand-maintained list silently goes stale and the guard degrades to a no-op.
+    Modules imported lazily *after* the patch is installed re-bind the spy, so
+    they are covered too.
+
+    Opt a suite in with ``pytestmark = pytest.mark.usefixtures("envelope_guard")``
+    rather than making it autouse: it only means anything for tests that drive a
+    real tool handler, and a blanket patch would fire inside the tests that
+    exercise ``success_response`` itself.
+
+    A suite whose tool legitimately returns failure-shaped records inside a
+    success payload names those keys with ``@pytest.mark.envelope_allow(...)``;
+    every use carries a justification comment at the mark.
+    """
+    import sys
+
+    from tapps_mcp import server_helpers
+
+    allow: tuple[str, ...] = ()
+    for mark in request.node.iter_markers("envelope_allow"):
+        allow += tuple(mark.args)
+
+    built: list[dict[str, Any]] = []
+    original = server_helpers.success_response
+
+    def _spy(*args: Any, **kwargs: Any) -> dict[str, Any]:
+        response = original(*args, **kwargs)
+        built.append(response)
+        return response
+
+    targets = [
+        module
+        for name, module in list(sys.modules.items())
+        if name.startswith(("tapps_mcp", "tapps_core", "docs_mcp"))
+        and getattr(module, "success_response", None) is original
+    ]
+
+    with contextlib.ExitStack() as stack:
+        for module in targets:
+            stack.enter_context(patch.object(module, "success_response", _spy))
+        yield
+
+    # A module imported lazily *during* the test bound the spy itself, so the
+    # ExitStack knows nothing about it. Left alone it would keep appending to
+    # this fixture's dead list for the rest of the session.
+    for module in list(sys.modules.values()):
+        if getattr(module, "success_response", None) is _spy:
+            module.success_response = original
+
+    for response in built:
+        assert_envelope_consistent(response, allow=allow)
 
 
 @pytest.fixture

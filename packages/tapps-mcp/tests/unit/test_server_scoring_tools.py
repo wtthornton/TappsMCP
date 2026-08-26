@@ -25,6 +25,8 @@ from tapps_mcp.server_scoring_tools import (
     tapps_score_file,
 )
 
+pytestmark = pytest.mark.usefixtures("envelope_guard")
+
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------

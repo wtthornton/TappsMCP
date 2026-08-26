@@ -98,6 +98,85 @@ class TestEnvelopeInvariantItself:
             envelope_consistent(response)
         envelope_consistent(response, allow=("violation_log",))
 
+    def test_allow_covers_a_marker_at_the_root_of_data(self, envelope_consistent) -> None:
+        """No parent key names it, so ``allow`` must reach the signal itself.
+
+        ``tapps_dependency_scan`` puts ``error`` directly on ``data`` — a suite
+        deferring that known inconsistency has nothing else to name (TAP-5659).
+        """
+        response = {"tool": "demo", "success": True, "data": {"error": "pip-audit missing"}}
+        with pytest.raises(AssertionError):
+            envelope_consistent(response)
+        envelope_consistent(response, allow=("error",))
+
+    def test_allow_covers_a_nested_success_false(self, envelope_consistent) -> None:
+        response = {"tool": "demo", "success": True, "data": {"sub": {"success": False}}}
+        envelope_consistent(response, allow=("success",))
+
+
+@pytest.mark.usefixtures("envelope_guard")
+class TestEnvelopeGuardFixture:
+    """The sweep's chokepoint: every envelope a test builds gets checked.
+
+    Without these, ``envelope_guard`` could silently degrade to a no-op — it
+    discovers its patch targets from ``sys.modules`` at runtime, so a refactor
+    that moves ``success_response`` would leave the whole sweep green and blind.
+    """
+
+    def test_guard_patches_the_modules_that_bind_the_helper(self) -> None:
+        """Most tool modules ``from ... import success_response`` at import time."""
+        from tapps_mcp import server_analysis_tools, server_helpers, server_scoring_tools
+
+        original = getattr(server_helpers.success_response, "__wrapped_original__", None)
+        assert original is None  # the spy is a plain closure, not a functools wrapper
+        assert server_helpers.success_response is server_scoring_tools.success_response
+        assert server_helpers.success_response is server_analysis_tools.success_response
+        assert server_helpers.success_response.__name__ == "_spy"
+
+    def test_guard_records_envelopes_built_during_the_test(self) -> None:
+        from tapps_mcp import server_helpers
+
+        response = server_helpers.success_response("demo", 1, {"count": 1})
+        assert response["success"] is True
+
+
+class TestEnvelopeGuardTeardown:
+    """The guard must fail the test when a real envelope lies, and clean up after."""
+
+    def test_guard_raises_at_teardown_on_a_lying_envelope(self) -> None:
+        """Driven through the fixture generator directly — the failure is a
+        teardown error, which a test cannot observe from inside its own body."""
+        import sys
+
+        # ``pythonpath = packages/docs-mcp`` owns the top-level ``tests`` package,
+        # so ``from tests.conftest import ...`` resolves to the wrong conftest.
+        # Importlib import mode registers this package's under its own key.
+        conftest = next(
+            module
+            for name, module in sys.modules.items()
+            if name.endswith("conftest") and hasattr(module, "envelope_guard")
+        )
+        envelope_guard = conftest.envelope_guard
+
+        request = MagicMock()
+        request.node.iter_markers.return_value = []
+        guard = envelope_guard.__wrapped__(request)
+        next(guard)
+        try:
+            from tapps_mcp import server_helpers
+
+            server_helpers.success_response("demo", 1, {"sub": {"error": "boom"}})
+        finally:
+            with pytest.raises(AssertionError, match="plain success while nested"):
+                next(guard, None)
+
+    def test_bindings_are_restored_after_the_guard_exits(self) -> None:
+        """A leaked spy would keep appending to a dead fixture's list all session."""
+        from tapps_mcp import server_helpers, server_scoring_tools
+
+        assert server_helpers.success_response.__name__ == "success_response"
+        assert server_scoring_tools.success_response is server_helpers.success_response
+
 
 class TestHandoffSaveEnvelope:
     """The response the defect was reported against, both ways round."""

@@ -10,6 +10,8 @@ import pytest
 
 from tapps_mcp.tools.checklist import CallTracker
 
+pytestmark = pytest.mark.usefixtures("envelope_guard")
+
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------

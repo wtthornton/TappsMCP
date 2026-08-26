@@ -15,6 +15,8 @@ from tapps_mcp.server_lookup_tools import (
     tapps_lookup_docs,
 )
 
+pytestmark = pytest.mark.usefixtures("envelope_guard")
+
 
 def _lookup_result(**overrides: object) -> SimpleNamespace:
     """Build a LookupResult-shaped stub with sane defaults."""

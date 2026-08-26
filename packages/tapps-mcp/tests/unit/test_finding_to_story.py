@@ -27,6 +27,8 @@ from tapps_mcp.tools.finding_to_story import (
     finding_to_story,
 )
 
+pytestmark = pytest.mark.usefixtures("envelope_guard")
+
 # ---------------------------------------------------------------------------
 # _normalise_file_anchor
 # ---------------------------------------------------------------------------

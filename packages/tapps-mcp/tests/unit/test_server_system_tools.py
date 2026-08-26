@@ -16,6 +16,8 @@ from tapps_mcp.server_system_tools import (
     tapps_server_info,
 )
 
+pytestmark = pytest.mark.usefixtures("envelope_guard")
+
 
 def _finding(severity: str = "warning") -> SimpleNamespace:
     return SimpleNamespace(

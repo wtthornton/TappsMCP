@@ -26,6 +26,8 @@ from tapps_mcp.tools.audit_manifest import (
     write_coverage,
 )
 
+pytestmark = pytest.mark.usefixtures("envelope_guard")
+
 
 class FakeBridge:
     """In-memory stand-in for BrainBridge used in tests."""
