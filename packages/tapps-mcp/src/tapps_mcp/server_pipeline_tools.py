@@ -1636,7 +1636,7 @@ async def tapps_handoff_save(
             "tapps_handoff_save",
             "handoff_lint_warnings",
             "Handoff has advisory lint warnings",
-            extra={"warnings": result.lint.warnings},
+            extra={"warnings": result.lint.warnings, "file_path": result.file_path},
         )
         resp["elapsed_ms"] = elapsed_ms
         return resp

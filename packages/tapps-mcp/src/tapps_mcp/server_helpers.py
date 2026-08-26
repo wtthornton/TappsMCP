@@ -568,6 +568,25 @@ _ERROR_METADATA: dict[str, dict[str, Any]] = {
         "retryable": True,
         "remediation": "Re-run with a smaller scope (explicit file_paths or fewer files).",
     },
+    # Both handoff refusals are decided from the submitted markdown alone, so
+    # the default "retry the call" is wrong twice over: an unchanged body fails
+    # identically, and the caller is told to wait instead of to edit.
+    "handoff_lint_failed": {
+        "category": "user_input",
+        "retryable": False,
+        "remediation": (
+            "Fix the handoff markdown the errors name, then re-save. The same "
+            "body fails identically on retry."
+        ),
+    },
+    "handoff_lint_warnings": {
+        "category": "user_input",
+        "retryable": False,
+        "remediation": (
+            "Address the warnings, or pass allow_lint_warnings=true to persist "
+            "anyway. Retrying unchanged returns this same response."
+        ),
+    },
 }
 
 _DEFAULT_ERROR_METADATA: dict[str, Any] = {

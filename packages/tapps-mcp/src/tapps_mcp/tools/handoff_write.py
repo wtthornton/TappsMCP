@@ -14,8 +14,10 @@ from tapps_mcp.tools.handoff_schema import (
     SESSION_HANDOFF_MEMORY_KEY,
     HandoffDocument,
     HandoffLintResult,
+    empty_parse_error,
     handoff_path,
     handoff_sections_from_doc,
+    handoff_size_report,
     lint_handoff,
     parse_handoff_markdown,
 )
@@ -89,6 +91,22 @@ async def mirror_handoff_to_brain(
     bridge: Any | None = None,
 ) -> dict[str, Any]:
     """Mirror full handoff markdown to brain under ``session-handoff`` key."""
+    # The cap is a known constant, so an over-cap body is decidable here rather
+    # than something to learn from a bad_request after the round-trip. Deciding
+    # it up front means the caller always gets the size, the cap and the section
+    # to shorten — including when the bridge is unreachable and would have
+    # queued the doomed value instead of rejecting it (TAP-6444).
+    size = handoff_size_report(markdown)
+    if size.over:
+        return {
+            "success": False,
+            "error": "value_over_cap",
+            "detail": size.message(),
+            "value_length": size.length,
+            "max_value_length": size.cap,
+            "largest_section": size.largest_section,
+        }
+
     if bridge is None:
         from tapps_core.brain_bridge import BRAIN_PROFILE_SERVER, create_brain_bridge
         from tapps_core.config.settings import load_settings
@@ -121,18 +139,9 @@ async def mirror_handoff_to_brain(
     # brain caps a memory value, and the handoff template routinely produces
     # bodies past it; without these the caller sees only "bad_request".
     payload.setdefault("value_length", len(markdown))
-    payload.setdefault("max_value_length", _brain_max_value_length())
+    payload.setdefault("max_value_length", size.cap)
     payload.setdefault("success", "error" not in payload)
     return payload
-
-
-def _brain_max_value_length() -> int:
-    """The brain's per-value character cap (best-effort)."""
-    try:
-        from tapps_brain.models import MAX_VALUE_LENGTH
-    except ImportError:  # pragma: no cover - brain always installed in practice
-        return 4096
-    return int(MAX_VALUE_LENGTH)
 
 
 def best_effort_status(payload: dict[str, Any] | None) -> str:
@@ -175,6 +184,11 @@ async def write_handoff(
     """Write handoff file, optionally mirror to brain and close session lifecycle."""
     doc = parse_handoff_markdown(markdown)
     lint = lint_handoff(doc)
+    # A zero-section parse is refused whatever ``fail_on_lint_errors`` says:
+    # there is nothing to persist, and writing it would replace the previous
+    # handoff with a file continue-session reads back as empty (TAP-6493).
+    if empty_parse_error(doc) is not None:
+        raise HandoffWriteError(lint.errors, lint.warnings)
     if fail_on_lint_errors and not lint.ok:
         raise HandoffWriteError(lint.errors, lint.warnings)
 

@@ -16,6 +16,32 @@ _SECTION_RE = re.compile(r"^##\s+(.+)$", re.MULTILINE)
 _PLACEHOLDER_UPDATED = frozenset({"<iso-8601 utc from date -u>", "t00:00:00z"})
 _IGNORE_BULLETS = frozenset({"none", "n/a", "...", "—", "-", "tbd"})
 
+# The headings the parser understands, in template order. Quoted back at the
+# author when nothing parsed, so a miss names the target set and not just the
+# failure (TAP-6493).
+RECOGNIZED_SECTION_HEADINGS: tuple[str, ...] = (
+    "Done",
+    "Open",
+    "Next (P0)",
+    "Blockers",
+    "Changed files",
+    "Verify",
+    "Success criterion",
+    "Cumulative",
+)
+
+# ``HandoffDocument`` attributes that hold parsed bullets, template order.
+_SECTION_FIELDS: tuple[str, ...] = (
+    "done",
+    "open_items",
+    "next_p0",
+    "blockers",
+    "changed_files",
+    "verify",
+    "success_criterion",
+    "cumulative",
+)
+
 
 @dataclass
 class HandoffDocument:
@@ -29,6 +55,11 @@ class HandoffDocument:
     blockers: list[str] = field(default_factory=list)
     verify: list[str] = field(default_factory=list)
     success_criterion: list[str] = field(default_factory=list)
+    changed_files: list[str] = field(default_factory=list)
+    cumulative: list[str] = field(default_factory=list)
+    recognized_headings: list[str] = field(default_factory=list)
+    unrecognized_headings: list[str] = field(default_factory=list)
+    section_lengths: dict[str, int] = field(default_factory=dict)
     raw_text: str = ""
 
 
@@ -72,6 +103,12 @@ def _section_key(header: str) -> str | None:
         return "verify"
     if norm in {"success criterion", "success criteria"}:
         return "success_criterion"
+    # Both carry a parenthetical suffix in the shipped template, so match on
+    # the prefix rather than the whole heading.
+    if norm.startswith("changed files"):
+        return "changed_files"
+    if norm.startswith("cumulative"):
+        return "cumulative"
     return None
 
 
@@ -156,9 +193,17 @@ def parse_handoff_markdown(text: str) -> HandoffDocument:
     # split returns [preamble, h1, body1, h2, body2, ...]
     idx = 1
     while idx + 1 < len(sections):
-        header = sections[idx]
+        header = sections[idx].strip()
         body = sections[idx + 1]
         key = _section_key(header)
+        # Every block is measured, recognized or not: an unrecognized heading
+        # still consumes the brain value budget, so the over-cap message has
+        # to be able to point at it (TAP-6444).
+        doc.section_lengths[header] = doc.section_lengths.get(header, 0) + len(body)
+        if key is None:
+            doc.unrecognized_headings.append(header)
+        else:
+            doc.recognized_headings.append(header)
         if key == "done":
             doc.done = _extract_bullets(body)
         elif key == "open":
@@ -171,8 +216,49 @@ def parse_handoff_markdown(text: str) -> HandoffDocument:
             doc.verify = _extract_bullets(body)
         elif key == "success_criterion":
             doc.success_criterion = _extract_bullets(body)
+        elif key == "changed_files":
+            doc.changed_files = _extract_bullets(body)
+        elif key == "cumulative":
+            doc.cumulative = _extract_bullets(body)
         idx += 2
     return doc
+
+
+def populated_sections(doc: HandoffDocument) -> list[str]:
+    """Section field names that parsed to at least one real bullet."""
+    return [name for name in _SECTION_FIELDS if getattr(doc, name)]
+
+
+def empty_parse_error(doc: HandoffDocument) -> str | None:
+    """Describe a handoff that parsed to zero populated sections (TAP-6493).
+
+    An unrecognized heading drops its bullets silently, so a handoff written
+    against the wrong template parses to nothing, satisfies every other lint
+    rule vacuously, and is written and mirrored as if it held work. The three
+    causes need three different fixes, so they get three different messages:
+    headings the parser did not recognize, recognized headings holding only
+    placeholders, and no ``##`` headings at all.
+    """
+    if populated_sections(doc):
+        return None
+    expected = ", ".join(RECOGNIZED_SECTION_HEADINGS)
+    if doc.unrecognized_headings:
+        quoted = ", ".join(repr(header) for header in doc.unrecognized_headings)
+        return (
+            f"Handoff parsed to zero populated sections — unrecognized headings {quoted} "
+            f"were dropped; expected one of: {expected}"
+        )
+    if doc.recognized_headings:
+        quoted = ", ".join(repr(header) for header in doc.recognized_headings)
+        return (
+            f"Handoff parsed to zero populated sections — headings {quoted} are recognized "
+            "but hold no content (only placeholders such as 'none', 'tbd' or '...'); "
+            "fill at least one section"
+        )
+    return (
+        "Handoff parsed to zero populated sections — no '## ' headings found; "
+        f"expected one of: {expected}"
+    )
 
 
 # A success criterion that CLAIMS achievement ("MET", "criterion is met.")
@@ -193,6 +279,13 @@ def lint_handoff(
     """Validate handoff schema; errors fail doctor, warnings are advisory."""
     result = HandoffLintResult()
     clock = now or datetime.now(tz=UTC)
+
+    # First rule, because every rule below it is vacuously satisfied by an
+    # all-empty parse: 'Open items exist but Next is missing' cannot fire when
+    # Open itself parsed to nothing (TAP-6493).
+    empty = empty_parse_error(doc)
+    if empty is not None:
+        result.errors.append(empty)
 
     if doc.open_items and not doc.next_p0:
         near_misses = _near_miss_next_headers(doc.raw_text)
@@ -225,13 +318,9 @@ def lint_handoff(
     # The handoff template naturally produces bodies past the brain's per-value
     # cap, and the mirror then fails after the file has already been written.
     # Warn while the draft can still be shortened rather than at save time.
-    cap = _brain_max_value_length()
-    body_length = len(doc.raw_text)
-    if body_length > cap:
-        result.warnings.append(
-            f"Handoff is {body_length} chars, over the brain value cap of {cap} — "
-            "the cross-session mirror will be rejected; shorten it before saving"
-        )
+    size = handoff_size_report(doc.raw_text, doc=doc)
+    if size.over:
+        result.warnings.append(size.message())
 
     return result
 
@@ -243,6 +332,59 @@ def _brain_max_value_length() -> int:
     except ImportError:  # pragma: no cover - brain always installed in practice
         return 4096
     return int(MAX_VALUE_LENGTH)
+
+
+@dataclass(frozen=True)
+class HandoffSizeReport:
+    """How a handoff body measures against the brain's per-value cap."""
+
+    length: int
+    cap: int
+    section_lengths: dict[str, int]
+
+    @property
+    def over(self) -> bool:
+        return self.length > self.cap
+
+    @property
+    def over_by(self) -> int:
+        return max(0, self.length - self.cap)
+
+    @property
+    def largest_section(self) -> tuple[str, int] | None:
+        """The heading with the most body characters, or ``None`` if unsectioned."""
+        if not self.section_lengths:
+            return None
+        return max(self.section_lengths.items(), key=lambda item: item[1])
+
+    def message(self) -> str:
+        """One line naming the actual size, the cap, and what to shorten."""
+        largest = self.largest_section
+        target = (
+            f"shorten '## {largest[0]}' ({largest[1]} chars, the largest section)"
+            if largest is not None
+            else "shorten the body"
+        )
+        return (
+            f"Handoff is {self.length} chars, {self.over_by} over the brain value cap "
+            f"of {self.cap} — the cross-session mirror is rejected until it fits; "
+            f"{target}."
+        )
+
+
+def handoff_size_report(
+    markdown: str,
+    *,
+    doc: HandoffDocument | None = None,
+    cap: int | None = None,
+) -> HandoffSizeReport:
+    """Measure a handoff body against the brain value cap, section by section."""
+    parsed = doc if doc is not None else parse_handoff_markdown(markdown)
+    return HandoffSizeReport(
+        length=len(markdown),
+        cap=_brain_max_value_length() if cap is None else cap,
+        section_lengths=dict(parsed.section_lengths),
+    )
 
 
 def handoff_sections_from_doc(doc: HandoffDocument) -> dict[str, Any]:
@@ -259,6 +401,8 @@ def handoff_sections_from_doc(doc: HandoffDocument) -> dict[str, Any]:
         "blockers": doc.blockers,
         "verify": doc.verify,
         "success_criterion": doc.success_criterion,
+        "changed_files": doc.changed_files,
+        "cumulative": doc.cumulative,
     }
 
 
@@ -273,12 +417,17 @@ def load_and_lint_handoff(project_root: Path) -> tuple[HandoffDocument | None, H
 
 
 __all__ = [
+    "RECOGNIZED_SECTION_HEADINGS",
     "SESSION_HANDOFF_MEMORY_KEY",
     "HandoffDocument",
     "HandoffLintResult",
+    "HandoffSizeReport",
+    "empty_parse_error",
     "handoff_path",
     "handoff_sections_from_doc",
+    "handoff_size_report",
     "lint_handoff",
     "load_and_lint_handoff",
     "parse_handoff_markdown",
+    "populated_sections",
 ]
