@@ -7,6 +7,434 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [3.12.74] - 2026-08-24
+
+### Added
+
+- **Shift-boundary checkpoint protocol for orchestration loops.** A new method
+  section 7 in the `orchestration-prompt` skill lets a long-running loop reset
+  its context instead of growing unbounded: `/tapps-handoff-session` at a
+  shift boundary, a real clear, then `/tapps-continue-session` to rehydrate
+  from a short handoff rather than replaying a full transcript. Past roughly
+  600k tokens a single-context loop becomes disproportionately fragile to
+  `529 Overloaded` kills. Because `/clear` is a CLI command, not a skill or
+  tool the loop can invoke on itself, the protocol names the three mechanisms
+  that actually clear (delegated subagent/Workflow, a process boundary via
+  `claude -p` or a Routine, or an operator checkpoint) and forbids emitting a
+  self-clear instruction. The handoff must carry attempt-count, budget, and
+  refuted strategies forward cumulatively, or a fresh session after a clear
+  re-tries the strategy the prior session just ruled out.
+- **Host-feature-map and fleet-sync promoted into the platform skill.** The
+  Cursor/Claude companion capability map and the cumulative handoff
+  checkpoints are now part of the shipped `orchestration-prompt` skill, with
+  a sync script so the generated tree stays the source of truth instead of
+  drifting from hand-edits.
+
+### Fixed
+
+- **A literal `$20` in a skill body was being arg-interpolated at load**,
+  silently replacing the autonomy cost ceiling with a fragment of whatever
+  argument string the skill was invoked with. Found by invoking the skill
+  with arguments rather than just reading it.
+
+## [3.12.73] - 2026-08-21
+
+### Fixed
+
+- **Generated `SKILL.md` files with prepended text lost their frontmatter
+  entirely.** Claude Code only parses skill frontmatter when the opening
+  `---` is the very first byte of the file. Two generators —
+  `platform_skills.generate_skills` (prepending an engagement note) and
+  `skill_managed_block.wrap_with_markers` (prepending the `BEGIN: tapps-skill`
+  marker) — wrote content above the `---`, which silently voided `name`,
+  `description`, `allowed-tools`, `model`, and `disable-model-invocation` for
+  every skill they touched. A skill whose description never loads never
+  auto-triggers, so roughly half of each consumer's skill library was inert
+  while looking correct in review — visible only as the banner/engagement
+  text showing up where the description belongs in Claude Code's own skill
+  listing. Both generators now insert their prose below the closing `---`
+  instead. Measured blast radius across this workspace: 93 `SKILL.md` files
+  across 8 repos. A file written by the old code self-heals on its next
+  refresh.
+
+### Changed
+
+- **`orchestration-prompt` slimmed from 21,341 B / 365 lines to 16,241 B /
+  287 lines** (TAP-5759) — it had grown to 3.1x the next-largest skill and
+  ships to 33 repos, so every byte is paid at session start everywhere.
+  Reference content moved into existing companion files
+  (`references/claude-feature-map.md`, a new
+  `references/cold-start-and-verify.md`) rather than being cut; the skill's
+  frontmatter description also shrank 849 → 555 B.
+- **The skill's anti-pattern list now mirrors all 8 canonical `loops.md`
+  smells** (was missing 5: vacuous verify, prose judge, gate outside the
+  harness, fan-out on ambiguity, critic-grades-the-tool), plus a new
+  capability-preflight guardrail — "a mechanism that is listed is not a
+  mechanism that works" — after a live orchestrated run granted a researcher
+  agent `WebSearch`/`WebFetch` with no `tool_targets`, so every `WebFetch`
+  call was refused and the run still reported success.
+- `check_skill_inventory_budget` no longer exempts skills that have companion
+  files from size measurement — `orchestration-prompt` was the first entry in
+  that exemption table, so the worst-offending skill was the one never
+  actually measured.
+
+## [3.12.72] - 2026-08-13
+
+### Fixed
+
+- **`tapps_validate_changed` could deadlock permanently between two
+  concurrent calls** (TAP-5965) — the process-wide `heavy_cpu()` semaphore
+  (limit 2) was not re-entrant, and `CodeScorer.score_file` acquired a second
+  slot while `_validate_single_file` still held the first, so both callers'
+  outer waiters ended up needing an inner slot only the other could release.
+  The semaphore is now re-entrant per asyncio task, and explicit
+  `file_paths` runs get a 600s wedge-breaking ceiling that returns
+  `code="validate_changed_timeout"` instead of hanging forever.
+- **The Linear cache-gate auto-populate hook could cache an empty issue
+  list for 30 minutes** (TAP-5901) — `_find_issues` couldn't parse the MCP
+  content-array envelope when the issues were JSON-encoded as a *string*
+  inside `content[0].text`, and separately the anti-poisoning guard only
+  fired when `state` was non-empty, which the `linear-read` skill's own
+  "omit state, filter in memory" convention bypassed. A 160-issue backlog
+  in one live case cached as `{"issues": []}`. The hook now parses nested
+  JSON strings and refuses to write an empty list under any state.
+- **`.tapps-mcp.yaml` writes destroyed every comment in a consumer's
+  config.** `persist_mcp_bundle_yaml` (and three more writers found in
+  `pipeline/init.py`) did load → mutate → `yaml.dump`, which drops comments
+  wholesale — including notes explaining *why* a non-default setting exists.
+  The `mcp-bundle set` path now rewrites only the target key's block via
+  `common/yaml_edit.py`, preserving comments, key order, and formatting.
+- **`ensure_tapps_runtime_gitignore` did nothing for a consumer with no
+  `.gitignore` at all** (TAP-5678), leaving `.tapps-mcp/backups/` committable
+  — a real occurrence swept 391 upgrade-backup files into one commit. The
+  helper now creates `.gitignore` with the full runtime entry list when
+  none exists.
+- **`run_command_async` could hang past its own timeout** — `proc.kill()`
+  only signals the direct child, so a subprocess's own children kept the
+  inherited stdout/stderr pipes open, and `asyncio.wait_for` cancels
+  `communicate()` and then awaits that cancellation, which can't finish
+  while the pipes are held. This was observed as `validate-changed --full`
+  sitting 44+ minutes on `pip-audit` with a 30s timeout configured and no
+  `command_timeout_async` ever logged. Commands now spawn into their own
+  process group and are killed via `killpg` before the drain is awaited.
+  `stdin_data` is also now actually wired to the subprocess (it was
+  previously silently discarded).
+- Fleet deploys now sweep servers stranded on a superseded release (marked
+  by the `--transport http` flag plus absence from the pidfiles, never by
+  parentage — fleet children are permanently `ppid=1` by design and would
+  otherwise look identical to a live per-session stdio server).
+- `docs/ARCHITECTURE.md`'s module map is corrected after the megafile
+  splits below made it badly stale (16 of 42 `pipeline/` modules, 5 of 44
+  `distribution/`, 15 of 70 `tools/` were listed).
+
+### Changed
+
+- `server.py`, `distribution/setup_generator.py`, `tools/checklist.py`, and
+  `pipeline/init.py` — all previously below the quality gate's
+  maintainability threshold and effectively unmodifiable without a gate
+  bypass — are split into focused sibling modules (TAP-5733) with unchanged
+  public import surfaces. This is what unblocked the yaml-comment fix above,
+  which had originally been reverted from an earlier PR because `init.py`
+  could not be committed.
+
+## [3.12.71] - 2026-08-07
+
+### Added
+
+- **`session-budget` CLI** for context-rotation detection: measures a
+  transcript's token count against a threshold (default 110K, against the
+  120K auto-compact window) and reports `{over: bool}`, so a hook or agent
+  can decide to checkpoint before an auto-compact forcibly truncates context.
+- `measure_context_floor.py` — a ground-truth script for measuring the
+  token cost of the always-loaded platform surface (settings, rules,
+  memory, skill descriptions), used to validate the token-budget trims in
+  this and the following release.
+
+### Fixed
+
+- **The Linear snapshot cache was provably dead** (VAL-9/VAL-10): 0 entries
+  on disk against 128 logged cache-gate misses and 0 hits. Three
+  independent causes: the auto-populate hook skipped writing whenever
+  `team` or `project` was empty even though the reader's key derivation
+  already handled that case symmetrically; the hook stored the full raw
+  Linear payload (description, comments, history) rather than the compact
+  projection, so a 50-issue backlog blew past the Read tool's ~25k-token
+  ceiling; and the open-bucket TTL was 300s on both sides, which routinely
+  expired between a `snapshot_get` and the agent's follow-up read within the
+  same session. Fixed all three; TTL raised to 1800s.
+- Corrected exception chaining and a "Error: Error: ..." double-wrapped
+  message in the new `session-budget` CLI's failure paths.
+
+### Changed
+
+- **`.claude/rules/linear-standards.md` condensed from 9,866 B to 1,780 B**
+  (-82%), with enforcement/technical detail relocated to a references file
+  that loads only on demand — part of a progressive-disclosure pass applied
+  to always-loaded rules (net -7,919 B, -51%, on this release's rule set).
+  `integration-hygiene.md` gained a `paths:` glob so it scopes to
+  MCP/integration files instead of loading unconditionally.
+
+## 3.12.70
+
+Skipped — never released. The version bumper advanced 3.12.69 straight to
+3.12.71; no commit ever set `packages/tapps-mcp/pyproject.toml` to `3.12.70`.
+
+## [3.12.69] - 2026-08-06
+
+### Fixed
+
+- **`tapps_validate_config` (and doctor/upgrade) treated every remote MCP
+  server entry as broken** (TAP-5723) — the validator required `command`/
+  `args` from every entry regardless of transport, so a project using
+  `http`/`sse`/`streamableHttp` remote servers (which correctly carry no
+  `command`) scored a permanently failing config; one consumer's three
+  config files reported 12 findings each on configs that had always worked.
+  Validation now branches on transport, matching transport spellings on
+  normalized letters so Cursor's camelCase `streamableHttp` is recognized.
+  Two real holes were closed in the same pass: a blank/non-string `url` on
+  a remote entry and an empty `command` on a stdio entry now both correctly
+  fail, where they previously passed silently. `doctor` and the upgrade path
+  had the identical stdio assumption baked into a separate fleet-only
+  predicate and are fixed the same way.
+- Resolved all 16 outstanding `mypy --strict` errors across 11 files via
+  structural fixes — type annotations, narrowing, `isinstance` checks,
+  tuple→list refactors — no `# type: ignore` (TAP-5671).
+
+## [3.12.68] - 2026-08-06
+
+### Fixed
+
+- **The Claude platform rules exceeded their 1400-token budget** (Claude
+  1510, cap 1400) after the previous release's memory-docs rewording —
+  condensed the Memory System, Quality Gate Behavior, and Upgrade/Rollback
+  sections to ~1257 tokens without dropping any blocking requirement or
+  pipeline stage (TAP-5672).
+- **Session-handoff bullet parsing silently ignored numbered and bold list
+  items**, which meant the P0 open-item gate compared two empty lists and
+  never fired on handoffs that used those formats (TAP-5669). The bullet
+  tokenizer also stripped the opening `**` off bold bullets and miscounted
+  plain bold paragraphs as bullets. Replaced with a single regex requiring
+  a real marker (`-`/`*`/`+` or `N.`/`N)`) with trailing whitespace; content
+  comes from a capture group untouched. This is a strict-rollout fix by
+  design: handoffs with real open items and no P0 next-step now correctly
+  fail doctor where they previously passed silently.
+
+## [3.12.67] - 2026-08-05
+
+### Fixed
+
+- **The generated CodeQL workflow template disagreed with this repo's own
+  CodeQL config**, and because the template is regenerated on every
+  `tapps_upgrade`, the next upgrade in a consumer repo would have silently
+  reverted 3.12.66's CodeQL changes. Template now emits `build-mode: none`
+  (Python is interpreted; autobuild was a slow no-op) and
+  `security-extended` (not `security-and-quality`, whose quality half
+  duplicates ruff/pylint/mypy). The weekly cron scan is deliberately *not*
+  added to the template — it's free here because this repo is public, but
+  the same schedule would bill metered minutes in a private consumer repo.
+- Unstaled the CodeQL action pins the template writes (`actions/checkout`
+  v4→v7, `github/codeql-action` v3→v4) — the old pins were actively
+  downgrading consumer repos already on newer versions every time they ran
+  `tapps_upgrade`.
+- Corrected `upgrade_skip_files` documentation, which described it as
+  taking file paths; it actually takes per-artifact tokens, and a path-shaped
+  entry silently matches nothing (`unknown_skip_tokens`) while looking like
+  it's protecting the file.
+
+## [3.12.66] - 2026-08-05
+
+### Fixed
+
+- **`docs_generate_epic` silently discarded stories passed as an array of
+  title strings** (TAP-5657) — its parser only accepted dict items, so a
+  caller passing five real phase titles got `story_count: 0` back under a
+  success envelope, and the empty-story path then substituted generic
+  keyword-suggested boilerplate the caller had no way to notice. Strings
+  are now accepted as titles; anything genuinely uninterpretable raises
+  instead of silently degrading, and the response now reports
+  `stories_suggested` whenever placeholders were substituted.
+- **`tapps_handoff_save` reported success while its cross-session brain
+  mirror silently failed** (TAP-5658) when the handoff body exceeded the
+  brain's 4096-byte cap — the failure was nested three levels deep in the
+  response and never surfaced at the top level. Failed sub-results now set
+  `degraded: true` and name the size overrun.
+- Added `check-response-envelope.py`, an AST lint (wired into CI) that
+  fails when a response embeds a failing best-effort sub-result under a
+  top-level success envelope — closing the class of defect the two fixes
+  above both were, rather than just the two instances (TAP-5656/5660).
+- **Fleet `status`/`restart` reported a stale server as healthy** (TAP-5630)
+  — after a `deploy-local` flip, one of six fleet servers failed to rebind
+  its port (already held by the old release) and died, leaving its pidfile
+  behind. `fleet status` read reachability alone as "ok" and reported the
+  old release's PID as running; `fleet restart` reported a clean smoke test
+  against the same wrong process and never reclaimed the port. A new
+  `fleet_ownership` module now resolves which process actually holds a
+  port via `/proc` and reports `orphaned` plus the real release directory.
+- **Top-level source files always scored 0 for test coverage in a uv
+  workspace** (TAP-5619) — the coverage heuristic looked for `tests/` only
+  at the repo root, but in this workspace tests live inside the packages.
+  Test-root discovery now also checks each uv workspace member's test
+  directories (member globs read from the root `pyproject.toml`).
+- CI's full ~10,900-test suite now actually runs on every PR (previously
+  only `validate-changed` on touched files ran; the full suite was
+  untested for months, during which 25 real failures accumulated
+  unnoticed) — see ADR-0035. CodeQL scanning, disabled with zero runs for
+  30 days, is restored on `codeql-action@v4`.
+
+### Changed
+
+- **Raised the `tapps-brain` pin from `v3.28.1` to `v3.29.0`.** The
+  in-process fallback path (used when `brain_http_url` is unset or
+  unreachable) was two releases behind the fixes for a write-loss bug
+  where a save under a distinct key could be silently discarded while the
+  response still read `{"status": "saved"}` (TAP-5614/5615/5617); HTTP
+  deployments were already unaffected since the live service tracks
+  master. No code in this repo referenced the one field removed in the
+  bump (`bloom_saturation`).
+
+## [3.12.65] - 2026-08-04
+
+### Added
+
+- **`decision` and `map-parent` Linear issue kinds** (TAP-5497/5498) — the
+  story generator now emits Question-only bodies for decision records and
+  wayfind-map bodies for map-parent issues, and both round-trip
+  `agent_ready` through the lint/validate tools.
+- **`tapps_doctor` fails full-tier consumers on missing or stale `wayfind`
+  or `orchestration-prompt` skills** instead of silently treating their
+  absence as opt-in (TAP-5496); core tier still skips the check.
+- Thin-agent context-budget doctor checks: an oversized "Tier 1" markdown
+  section and duplicated prose between `AGENTS.md`/`CLAUDE.md` now warn or
+  fail, opt-in via `doctor_context_budget` in `.tapps-mcp.yaml`. `tapps_usage`
+  surfaces a `thin_agent_check_skipped` gap when those files are edited
+  without a follow-up `tapps_doctor` call (TAP-5549/5550/5551).
+
+### Fixed
+
+- **The front-door tool-count docs disagreed with the registry and with
+  each other** (TAP-5611, second occurrence after TAP-4577) — README said
+  85, CLAUDE.md said 43, ARCHITECTURE.md's diagram said 42/42; the real
+  count is 44 tapps-mcp + 42 docs-mcp = 86. A new `check-tool-budget.py
+  --check-counts` lint now fails CI on any future disagreement, wired to
+  fire on README/CLAUDE.md/ARCHITECTURE.md edits.
+- **`repo-workflow.md` told agents to commit straight to `master` and never
+  open a PR** (TAP-5612), but the quality gate and MCP guardrails only run
+  on `pull_request` — an agent following the rule as written skips the gate
+  that let PR #244's failures go unnoticed. Rule now describes
+  branch-per-issue with PR merge.
+- **Brain bridges were shared across tenants on the shared HTTP fleet**
+  (TAP-5442) — `BrainBridge` is now cached by tenant, closing a data-leak
+  risk on multi-project fleet deployments.
+- **The Linear cache-gate could report a clean bill of health with an empty
+  cache** — zero recorded violations looked identical to "the cache was
+  never populated." The gate now reports `BLIND` when violations are zero
+  but the snapshot cache is empty (TAP-5453), refuses to auto-promote
+  enforcement without positive cache evidence (TAP-5454), and stops
+  hardcoding a single Linear MCP tool name so hosts registering under a
+  different tool name (e.g. `claude_ai_Linear` instead of
+  `plugin_linear_linear`) still trigger the cache and write gates
+  (TAP-5451/5455).
+- CI's `validate-changed` step hit its 50-file cap and silently skipped the
+  remainder of large diffs; changed files are now chunked into ≤50-path
+  batches so the whole diff is gated (TAP-5606).
+
+## [3.12.64] - 2026-08-04
+
+No user-visible change — internal refactor only: `cli.py` was split into
+focused sibling modules (`cli_fleet.py`, `cli_memory.py`, `cli_deploy.py`,
+etc.) purely so it clears the internal quality gate; the CLI's commands and
+behavior are unchanged.
+
+## [3.12.63] - 2026-08-04
+
+### Fixed
+
+- **`validate-changed` CLI exited non-zero on stamp/docs/version-bump PRs
+  that touch no gate-relevant files** — an empty gate (`files_validated: 0`)
+  set `all_gates_passed: false`, and CI treated that as a hard failure. The
+  MCP tool keeps its "inconclusive" semantics; the CLI now soft-passes only
+  when auto-detect finds nothing to gate (an explicit path that misses, or
+  a judge failure, still fails).
+
+## [3.12.62] - 2026-08-04
+
+### Added
+
+- `tapps_doctor` gains required-on-full checks for `wayfind` and
+  `orchestration-prompt` skill freshness (TAP-5496), extracted into a
+  dedicated `doctor_skills` module.
+
+## [3.12.61] - 2026-08-03
+
+### Added
+
+- **Orchestration-prompt wayfind fog gate** (TAP-5495) — the skill now
+  refuses to invent a Goal when the route to it is still foggy, documents a
+  decide-vs-execute chunk taxonomy, and supports a cold-start
+  `memory_group=wayfind` resume-pack recall.
+- **Validation-contract and creator-verifier finish gate** (TAP-5538,
+  ADR-0034) — new `validation-contract` and `wayfind` skills, pipeline-mark
+  telemetry, hard gates in `tapps_checklist` for feature/review task types,
+  and an expected-fail loop for orchestration runs, enforcing
+  contract-first assertions and adversarial (rather than self-reported)
+  verification.
+
+## [3.12.60] - 2026-08-03
+
+### Changed
+
+- **Release venv builds now resolve PyTorch against the CPU wheel index**
+  (`--torch-backend=cpu`) instead of pulling the full CUDA/`triton` stack —
+  `tapps-brain`'s unconditional `sentence-transformers` dependency was
+  dragging roughly 4.5 GB of unreachable GPU wheels into every release on
+  hosts with no NVIDIA GPU.
+- Dropped the `.cursor/bin` wrapper scripts for the ADR-0016 legacy server
+  IDs (`nlt-code-quality`, `nlt-platform-admin`) — no MCP config in any repo
+  references them, and the generator only ever emits `NLT_SERVER_ORDER`
+  entries.
+
+## [3.12.59] - 2026-08-03
+
+### Changed
+
+- **`tapps-brain` version floor raised from 3.24.0 to 3.28.0** (ADR-0033,
+  supersedes ADR-0013) — `BrainBridge` binds `web_research`/`research_fetch`
+  (TAP-5365, ADR-0030), which only exist starting in brain 3.28.0. The
+  floor previously still accepted 3.24.0, so `tapps_research` failed at
+  call time with an unknown-tool error on an older brain instead of being
+  caught by the session-start version probe.
+
+### Fixed
+
+- **`consolidate()` called a brain tool that exists on no version** —
+  `memory_consolidate` was removed in brain 3.10; the call always degraded.
+  Now targets the real replacement, `maintenance_consolidate`.
+- **`profile_info`/`profile_switch` were dead in HTTP mode** — both actions
+  only had in-process handlers, so any consumer with `brain_http_url` set
+  (the deployed transport) got `requires_in_process_store` for every call.
+  Added HTTP-mode bridge methods for both.
+- **The ADR-0005 MCP-reap ownership filter dropped every duplicate-PID line
+  once a profile had more than one duplicate** — the candidate filter
+  required an entire line to be digits, but the upstream `awk` emits
+  multiple duplicate PIDs space-joined on one line, so any profile with
+  more than one duplicate was rejected outright and reaped nothing.
+
+## [3.12.58] - 2026-08-02
+
+### Fixed
+
+- **The Claude Code session-start MCP reap could kill a sibling repo's live
+  servers.** It scanned `ps -eo` host-globally and signalled every match; on
+  a machine with multiple repos checked out, starting a session in one repo
+  SIGTERMed another repo's running MCP servers. Candidates now pass an
+  ownership gate first — reap only processes rooted in the current project
+  (`cwd == project root`) or true orphans; anything attributable to another
+  project is logged and left alone.
+- **Orphan detection was inert on systemd hosts** — it tested `ppid == 1`,
+  but an orphaned process reparents to a live `systemd --user` whose PID is
+  nowhere near 1, so the branch never fired and the reap collected nothing.
+  Adoption by any subreaper (systemd/init/launchd) now counts as orphanhood.
+
 ## [3.12.57] - 2026-08-02
 
 ### Changed
