@@ -6,6 +6,8 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
+pytestmark = pytest.mark.usefixtures("envelope_guard")
+
 
 class TestInitCtxInfo:
     """Verify ctx.info notifications during tapps_init."""

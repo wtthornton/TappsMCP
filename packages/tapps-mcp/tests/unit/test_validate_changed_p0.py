@@ -10,6 +10,8 @@ import pytest
 from tapps_mcp.project.models import FileImpact, ImpactReport
 from tapps_mcp.scoring.models import ScoreResult
 
+pytestmark = pytest.mark.usefixtures("envelope_guard")
+
 
 def _mock_score() -> ScoreResult:
     return ScoreResult(
@@ -382,6 +384,14 @@ class TestValidateChangedP0:
         assert result["success"] is True
         assert "impact_summary" not in result["data"]
 
+    # TODO(TAP-5656): a per-file impact analysis that errors leaves
+    # data.impact_summary.per_file[].error set while the envelope stays plainly
+    # successful. Recorded by the TAP-5659 sweep; the tool fix is out of that lane.
+    # TODO(TAP-5656): sixth live inconsistency — data.affected_tests = {"error": ...}
+    # from _compute_affected_tests, emitted via tools/validate_changed_output.py under
+    # the same plain-success envelope. Discovered by the independent verifier in an
+    # isolation run (2026-08-26); tool fix is out of this lane.
+    @pytest.mark.envelope_allow("per_file", "affected_tests")
     @pytest.mark.asyncio
     async def test_impact_failure_graceful(self, tmp_path: Path) -> None:
         """When analyze_impact raises, the response should still succeed with error info."""

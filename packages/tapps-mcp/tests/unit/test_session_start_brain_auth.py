@@ -23,6 +23,8 @@ import pytest
 
 from tapps_mcp.server_pipeline_tools import _detect_brain_auth_failure
 
+pytestmark = pytest.mark.usefixtures("envelope_guard")
+
 
 @pytest.fixture(autouse=True)
 def _clear_brain_auth_env(monkeypatch: pytest.MonkeyPatch) -> None:

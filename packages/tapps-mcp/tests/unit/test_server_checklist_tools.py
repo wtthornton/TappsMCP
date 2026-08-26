@@ -24,7 +24,7 @@ from tapps_mcp.server_checklist_tools import (
     _optional_otel_trace_hint,
 )
 
-pytestmark = pytest.mark.usefixtures("no_repo_wide_scans")
+pytestmark = [pytest.mark.usefixtures("no_repo_wide_scans"), pytest.mark.usefixtures("envelope_guard")]
 
 
 def _checklist_result(**overrides: Any) -> SimpleNamespace:

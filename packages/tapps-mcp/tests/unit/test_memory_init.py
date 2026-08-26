@@ -19,6 +19,8 @@ import pytest
 
 from tapps_mcp.server_memory_tools import _classify_store_init_error, tapps_memory
 
+pytestmark = pytest.mark.usefixtures("envelope_guard")
+
 
 async def _noop_init() -> None:
     """Async no-op replacement for ensure_session_initialized."""

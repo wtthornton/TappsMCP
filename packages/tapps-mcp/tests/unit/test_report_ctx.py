@@ -6,6 +6,8 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
+pytestmark = pytest.mark.usefixtures("envelope_guard")
+
 
 class TestReportCtxInfo:
     """Verify ctx.info notifications in tapps_report."""

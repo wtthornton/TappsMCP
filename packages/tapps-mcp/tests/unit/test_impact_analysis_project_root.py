@@ -9,6 +9,8 @@ import pytest
 
 from tapps_mcp.server_analysis_tools import tapps_impact_analysis
 
+pytestmark = pytest.mark.usefixtures("envelope_guard")
+
 
 def _make_impact_report(changed_file: str = "mod.py") -> object:
     """Create a minimal ImpactReport-like object for testing."""

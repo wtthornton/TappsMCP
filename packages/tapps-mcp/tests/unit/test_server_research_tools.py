@@ -12,6 +12,8 @@ import pytest
 
 from tapps_mcp.server_research_tools import register, tapps_research
 
+pytestmark = pytest.mark.usefixtures("envelope_guard")
+
 
 class TestArgumentValidation:
     @pytest.mark.asyncio

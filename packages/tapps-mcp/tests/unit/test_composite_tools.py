@@ -18,6 +18,8 @@ from tapps_mcp.common.models import (
 )
 from tapps_mcp.tools.checklist import CallTracker
 
+pytestmark = pytest.mark.usefixtures("envelope_guard")
+
 
 @pytest.fixture(autouse=True)
 def _reset_tracker() -> None:  # type: ignore[misc]
@@ -1305,6 +1307,10 @@ class TestTappsQuickCheckBatch:
         assert result["success"] is False
         assert result["error"]["code"] == "invalid_input"
 
+    # TODO(TAP-5656): batch quick_check reports plain success while
+    # data.results[] carries a per-file path_denied failure. Recorded as a live
+    # envelope inconsistency by the TAP-5659 sweep; the fix belongs to the tool.
+    @pytest.mark.envelope_allow("results")
     @pytest.mark.asyncio
     @patch("tapps_mcp.server._validate_file_path")
     @patch("tapps_mcp.server_scoring_tools.load_settings")

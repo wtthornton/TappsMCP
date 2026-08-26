@@ -17,6 +17,8 @@ from tapps_mcp.tools.handoff_write import (
     write_handoff,
 )
 
+pytestmark = pytest.mark.usefixtures("envelope_guard")
+
 _VALID_HANDOFF = """\
 # Session handoff
 **Updated:** 2026-06-12T12:00:00Z

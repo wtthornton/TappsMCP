@@ -12,6 +12,8 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
+pytestmark = pytest.mark.usefixtures("envelope_guard")
+
 
 class TestRunSessionEnd:
     """TAP-3174: shared run_session_end helper for MCP tool and CLI."""

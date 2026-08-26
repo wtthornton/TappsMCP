@@ -19,6 +19,8 @@ import pytest
 from tapps_mcp.server_pipeline_tools import tapps_validate_changed
 from tapps_mcp.tools import content_hash_cache as _chc
 
+pytestmark = pytest.mark.usefixtures("envelope_guard")
+
 
 def _make_files(tmp_path: Path, n: int) -> list[Path]:
     paths: list[Path] = []

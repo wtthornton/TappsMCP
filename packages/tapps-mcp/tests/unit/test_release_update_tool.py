@@ -13,6 +13,8 @@ from tapps_mcp.tools.release_update import (
     source_git_log,
 )
 
+pytestmark = pytest.mark.usefixtures("envelope_guard")
+
 # ---------------------------------------------------------------------------
 # _parse_changelog_bullets
 # ---------------------------------------------------------------------------

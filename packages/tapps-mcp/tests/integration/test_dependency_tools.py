@@ -15,6 +15,8 @@ from tapps_mcp.tools.dependency_scan_cache import (
 )
 from tapps_mcp.tools.pip_audit import DependencyAuditResult, VulnerabilityFinding
 
+pytestmark = pytest.mark.usefixtures("envelope_guard")
+
 
 def _sample_audit_result(
     *,
@@ -99,6 +101,11 @@ class TestDependencyScanTool:
         assert len(cached) == 1
         assert cached[0].package == "requests"
 
+    # TODO(TAP-5656): tapps_dependency_scan sets data["error"] when pip-audit is
+    # missing but still returns a plain success envelope
+    # (server_analysis_tools.py:1230-1232). Recorded as a live envelope
+    # inconsistency by the TAP-5659 sweep; the tool fix belongs to the owning issue.
+    @pytest.mark.envelope_allow("error")
     @pytest.mark.asyncio
     async def test_error_does_not_populate_cache(self):
         """Scan with error does not populate cache."""

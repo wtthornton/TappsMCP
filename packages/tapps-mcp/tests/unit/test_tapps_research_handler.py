@@ -14,6 +14,8 @@ import pytest
 
 from tapps_core.config.settings import MemorySettings
 
+pytestmark = pytest.mark.usefixtures("envelope_guard")
+
 
 @pytest.mark.asyncio
 class TestTappsResearchHandler:

@@ -33,6 +33,8 @@ from tapps_mcp.server_linear_tools import (
     tapps_linear_snapshot_put,
 )
 
+pytestmark = pytest.mark.usefixtures("envelope_guard")
+
 
 @pytest.fixture
 def fake_settings(tmp_path: Path) -> Any:
