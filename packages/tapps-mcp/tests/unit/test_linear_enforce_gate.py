@@ -470,26 +470,45 @@ class TestGateScriptPerf:
     The acceptance criterion is a single-call <100ms budget. We measure several
     runs and assert the median is well under budget so a single GC pause or
     cold subprocess doesn't flake the test.
+
+    TAP-5841: the budget is spent on the script's **CPU** time, not its wall
+    clock. Wall clock here measures how loaded the box is: under a 20-worker
+    xdist run the identical subprocess ranged over 117-476ms while a bare
+    ``exit 0`` baseline ranged over 4-35ms, so no fixed wall-clock number and no
+    subtracted baseline can separate the script's cost from the scheduler's.
+    That is why the budget had already drifted from the stated 100ms acceptance
+    criterion to 300ms and still failed on seed 424242. Child CPU time from
+    ``getrusage(RUSAGE_CHILDREN)`` is what a regression in the script actually
+    moves -- being descheduled costs wall time, not CPU time -- so the real
+    100ms criterion can stand and the test stops depending on what else the
+    suite is running.
     """
 
-    PERF_BUDGET_MS = 300
+    PERF_BUDGET_MS = 100
     PERF_RUNS = 5
 
     def _setup(self, tmp_path: Path) -> Path:
         generate_claude_hooks(tmp_path, force_windows=False, linear_enforce_gate=True)
         return tmp_path / ".claude" / "hooks"
 
-    def _measure_ms(
+    def _measure_cpu_ms(
         self,
         script: Path,
         stdin: str,
         env: dict[str, str],
         cwd: Path,
     ) -> int:
-        import time as _time
+        """Return the CPU milliseconds the script's process tree consumed.
+
+        ``RUSAGE_CHILDREN`` accumulates only children this process has waited
+        for, and ``subprocess.run`` waits, so the delta is exactly this script's
+        tree. Each xdist worker is its own process, so workers cannot pollute
+        each other's accounting.
+        """
+        import resource
 
         full_env = {**os.environ, **env}
-        t0 = _time.perf_counter_ns()
+        before = resource.getrusage(resource.RUSAGE_CHILDREN)
         proc = subprocess.run(
             ["/usr/bin/env", "bash", str(script)],
             input=stdin,
@@ -499,21 +518,32 @@ class TestGateScriptPerf:
             cwd=str(cwd),
             timeout=10,
         )
-        elapsed_ms = (_time.perf_counter_ns() - t0) // 1_000_000
+        after = resource.getrusage(resource.RUSAGE_CHILDREN)
         # Sanity-check the script actually executed end-to-end.
         assert proc.returncode in (0, 2), f"unexpected rc {proc.returncode}"
-        return elapsed_ms
+        cpu_s = (after.ru_utime - before.ru_utime) + (after.ru_stime - before.ru_stime)
+        return round(cpu_s * 1000)
+
+    def _median_cpu_ms(
+        self,
+        script: Path,
+        stdin: str,
+        env: dict[str, str],
+        cwd: Path,
+    ) -> tuple[int, list[int]]:
+        """Return ``(median CPU ms, all runs)`` over :attr:`PERF_RUNS` runs."""
+        runs = sorted(self._measure_cpu_ms(script, stdin, env, cwd) for _ in range(self.PERF_RUNS))
+        return runs[len(runs) // 2], runs
 
     def test_pre_save_block_path_under_100ms(self, tmp_path: Path) -> None:
         hooks = self._setup(tmp_path)
         script = hooks / "tapps-pre-linear-write.sh"
         stdin = json.dumps({"tool_name": "mcp__plugin_linear_linear__save_issue"})
         env = {"CLAUDE_PROJECT_DIR": str(tmp_path)}
-        runs = [self._measure_ms(script, stdin, env, tmp_path) for _ in range(self.PERF_RUNS)]
-        runs.sort()
-        median = runs[len(runs) // 2]
+        median, runs = self._median_cpu_ms(script, stdin, env, tmp_path)
         assert median < self.PERF_BUDGET_MS, (
-            f"pre-save block path median={median}ms exceeds {self.PERF_BUDGET_MS}ms budget; runs={runs}"
+            f"pre-save block path burns {median}ms CPU, over the "
+            f"{self.PERF_BUDGET_MS}ms budget; runs={runs}"
         )
 
     def test_pre_save_allow_path_under_100ms(self, tmp_path: Path) -> None:
@@ -525,11 +555,10 @@ class TestGateScriptPerf:
         script = hooks / "tapps-pre-linear-write.sh"
         stdin = json.dumps({"tool_name": "mcp__plugin_linear_linear__save_issue"})
         env = {"CLAUDE_PROJECT_DIR": str(tmp_path)}
-        runs = [self._measure_ms(script, stdin, env, tmp_path) for _ in range(self.PERF_RUNS)]
-        runs.sort()
-        median = runs[len(runs) // 2]
+        median, runs = self._median_cpu_ms(script, stdin, env, tmp_path)
         assert median < self.PERF_BUDGET_MS, (
-            f"pre-save allow path median={median}ms exceeds {self.PERF_BUDGET_MS}ms budget; runs={runs}"
+            f"pre-save allow path burns {median}ms CPU, over the "
+            f"{self.PERF_BUDGET_MS}ms budget; runs={runs}"
         )
 
 

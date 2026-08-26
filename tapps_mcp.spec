@@ -127,6 +127,7 @@ a = Analysis(
         "tapps_mcp.tools.validate_changed_collection",
         "tapps_mcp.tools.validate_changed_orchestrator",
         "tapps_mcp.tools.validate_changed_output",
+        "tapps_mcp.tools.validate_changed_response",
         "tapps_mcp.tools.validate_changed_diagnostics",
         "tapps_mcp.tools.validation_progress",
         "tapps_mcp.tools.session_start_helpers",

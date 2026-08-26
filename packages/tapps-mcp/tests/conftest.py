@@ -370,7 +370,10 @@ def _tolerate_brain_auth_failure_in_tests(
 
 
 @pytest.fixture(autouse=True)
-def _inject_test_brain_bridge(monkeypatch: pytest.MonkeyPatch) -> Iterator[None]:
+def _inject_test_brain_bridge(
+    request: pytest.FixtureRequest,
+    monkeypatch: pytest.MonkeyPatch,
+) -> Iterator[None]:
     """Patch ``_get_brain_bridge`` to wrap whatever store ``_get_memory_store`` returns.
 
     Production code requires ``TAPPS_BRAIN_DATABASE_URL`` for the bridge.  Unit
@@ -411,9 +414,23 @@ def _inject_test_brain_bridge(monkeypatch: pytest.MonkeyPatch) -> Iterator[None]
             return None
         return _make_test_bridge(store)
 
-    # Only patch the alias used by the handler module, not the canonical name
-    # in server_helpers. Patching both creates the recursion described above.
     monkeypatch.setattr("tapps_mcp.server_memory_tools._get_brain_bridge", _bridge_from_store)
+    # TAP-5841: the canonical accessor must be patched too. Unpatched, it calls
+    # the real ``load_settings()`` -- which reads this repo's own
+    # ``.tapps-mcp.yaml`` and its ``brain_http_url: http://localhost:8080`` --
+    # and hands back a live ``HttpBrainBridge`` no matter what settings the test
+    # mocked. ``tapps_session_start`` reaches it through
+    # ``session_start_helpers``, so every session-start unit test opened real
+    # sockets to whatever tapps-brain the developer happened to be running. With
+    # 20 xdist workers on one brain those round trips stall past pytest-timeout's
+    # 60s and die blocked in ``selectors.py``, which is the order-dependent hang
+    # TAP-5841 describes. ``_resolve_store`` already short-circuits to ``None``
+    # when ``_get_memory_store`` is unpatched, so wiring the canonical name to
+    # the same factory cannot re-enter the recursion described above.
+    # Tests marked ``real_brain_bridge`` are *about* this accessor and mock the
+    # wire themselves, so they keep the production function.
+    if request.node.get_closest_marker("real_brain_bridge") is None:
+        monkeypatch.setattr("tapps_mcp.server_helpers._get_brain_bridge", _bridge_from_store)
     yield
 
 
@@ -525,8 +542,10 @@ def _clear_test_singleton_caches() -> None:
         _reset_background_tasks,
         _reset_session_gc_flag,
         _reset_session_start_cache,
+        _reset_state_lock,
     )
     from tapps_mcp.tools.dependency_scan_cache import clear_dependency_cache
+    from tapps_mcp.tools.event_loop_guard import reset_heavy_cpu_semaphore_for_tests
     from tapps_mcp.tools.tool_detection import _reset_tools_cache
 
     _reset_scorer_cache()
@@ -539,6 +558,13 @@ def _clear_test_singleton_caches() -> None:
     _reset_session_gc_flag()
     _reset_session_start_cache()
     _reset_background_tasks()
+    # TAP-5841: both of these are process-wide asyncio primitives that outlive
+    # the per-test event loop. Left alone, one loop teardown while a slot or the
+    # lock is held poisons every later test in the process — the serial suite
+    # then dies in ``EpollSelector.select(timeout=-1)`` on whichever test the
+    # shuffle put next, which is the order-dependent hang.
+    _reset_state_lock()
+    reset_heavy_cpu_semaphore_for_tests()
     clear_dependency_cache()
     _reset_recurring_quick_check_state()
 

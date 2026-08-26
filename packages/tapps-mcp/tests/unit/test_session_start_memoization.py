@@ -30,17 +30,27 @@ from tapps_mcp.tools.checklist import CallTracker
 
 @pytest.fixture(autouse=True)
 def _clean_cache() -> None:
-    from tapps_mcp.tools.session_start_core import SENTINEL_FILENAME
-
     _reset_session_start_cache()
     CallTracker.reset()
-    # TAP-1928: also clear the file-based sentinel so that in-memory memoization
-    # tests see a clean slate.  The sentinel is written by the full bootstrap, so
-    # a prior test run (or the live MCP session) may have left it on disk.
-    Path(".tapps-mcp").joinpath(SENTINEL_FILENAME).unlink(missing_ok=True)
 
 
+@pytest.mark.usefixtures("no_session_sentinel")
 class TestSessionStartMemoization:
+    """TAP-5841: these call the real ``tapps_session_start()``, so they resolve
+    the real project root and the sentinel at
+    ``<repo>/.tapps-mcp/.tapps-session-id`` -- one file shared by all 20 xdist
+    workers *and* by whatever live MCP session the developer is running. A full
+    bootstrap anywhere writes it, and the next call here then takes the
+    sentinel-suppressed path and reports ``cached`` on what should be a first
+    call, so the result depended on collection order rather than on the
+    memoization under test. Deleting the repo's real sentinel per test (the
+    previous workaround) reached outside the test sandbox and still raced the
+    other workers. ``no_session_sentinel`` removes the dependency instead: reads
+    return ``None``, so only the in-memory cache decides ``cached``. The
+    file-sentinel layer itself is covered by ``TestReadWriteSessionSentinel``
+    and ``TestSessionStartSentinelIntegration``, which work in ``tmp_path``.
+    """
+
     @pytest.mark.asyncio
     async def test_second_call_returns_cached(self) -> None:
         from tapps_mcp.server_pipeline_tools import tapps_session_start
@@ -85,9 +95,7 @@ class TestSessionStartMemoization:
         assert quick2["data"].get("cached") is True
 
     @pytest.mark.asyncio
-    async def test_different_project_roots_cache_independently(
-        self, tmp_path: Path
-    ) -> None:
+    async def test_different_project_roots_cache_independently(self, tmp_path: Path) -> None:
         """ADR-0024 fleet: Marketing must not steal LabsPE's session_start cache."""
         from tapps_core.http.request_context import (
             reset_request_project_root,
@@ -148,16 +156,12 @@ class TestSessionStartMemoization:
             _reset_session_start_cache,
             tapps_session_start,
         )
-        from tapps_mcp.tools.session_start_core import SENTINEL_FILENAME
 
         await tapps_session_start()
         cached = await tapps_session_start()
         assert cached["data"].get("cached") is True
 
         _reset_session_start_cache()
-        # TAP-1928: also clear the file sentinel — resetting the in-memory cache
-        # alone would still hit the on-disk sentinel written by the first call.
-        Path(".tapps-mcp").joinpath(SENTINEL_FILENAME).unlink(missing_ok=True)
         fresh = await tapps_session_start()
         assert fresh["data"].get("cached") is not True
 
@@ -178,9 +182,7 @@ class TestSessionStartHookSentinel:
         assert "REQUIRED: Call tapps_session_start()" in script
         assert "usage-gaps-hint" in script
 
-    def test_hook_emits_prompt_on_first_fire_and_silences_on_resume(
-        self, tmp_path: object
-    ) -> None:
+    def test_hook_emits_prompt_on_first_fire_and_silences_on_resume(self, tmp_path: object) -> None:
         """End-to-end: run the deployed hook script with a fake session_id."""
         import os
         import shutil

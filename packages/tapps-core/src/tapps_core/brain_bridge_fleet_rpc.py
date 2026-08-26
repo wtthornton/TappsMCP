@@ -18,9 +18,25 @@ logger = structlog.get_logger(__name__)
 
 _PATCHED = False
 
+# Stamped on the wrappers so a second application can recognise its own work.
+_PATCH_MARKER = "_tapps_fleet_rpc_wrapper"
+
 
 def apply_http_fleet_rpc_patches() -> None:
-    """Monkeypatch :class:`HttpBrainBridge` once per process (idempotent)."""
+    """Monkeypatch :class:`HttpBrainBridge` once per process (idempotent).
+
+    Idempotence is load-bearing, not tidiness. ``_do_mcp_post_fleet`` takes a
+    non-reentrant per-bridge :class:`asyncio.Lock`; wrap the method twice and
+    the outer wrapper holds that lock while the inner one waits for the same
+    one, so the first post deadlocks permanently -- the event loop goes idle in
+    ``EpollSelector.select(timeout=-1)`` and pytest-timeout kills whatever test
+    happened to make that call (TAP-5841).
+
+    The ``_PATCHED`` flag alone does not guarantee that: it is a module global,
+    and anything that resets it -- a test forcing re-application, a reload --
+    re-enters the wrapping. So check the class attribute itself and refuse to
+    wrap a function this module already wrapped, whatever the flag says.
+    """
     global _PATCHED
     if _PATCHED:
         return
@@ -28,6 +44,11 @@ def apply_http_fleet_rpc_patches() -> None:
 
     original_do_mcp_post = HttpBrainBridge._do_mcp_post
     original_health = HttpBrainBridge.health
+    if getattr(original_do_mcp_post, _PATCH_MARKER, False) or getattr(
+        original_health, _PATCH_MARKER, False
+    ):
+        _PATCHED = True
+        return
 
     async def _do_mcp_post_fleet(
         self: Any,
@@ -82,6 +103,8 @@ def apply_http_fleet_rpc_patches() -> None:
                 base["tier_distribution"] = tier_dist
         return base
 
+    setattr(_do_mcp_post_fleet, _PATCH_MARKER, True)
+    setattr(_health_fleet, _PATCH_MARKER, True)
     HttpBrainBridge._do_mcp_post = _do_mcp_post_fleet  # type: ignore[method-assign]
     HttpBrainBridge.health = _health_fleet  # type: ignore[method-assign]
     _PATCHED = True
