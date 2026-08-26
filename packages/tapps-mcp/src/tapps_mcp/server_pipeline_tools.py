@@ -286,6 +286,24 @@ _session_state = _SessionFlags()
 _state_lock = asyncio.Lock()
 
 
+def _reset_state_lock() -> None:
+    """Rebind ``_state_lock`` to a fresh lock (for testing).
+
+    ``asyncio.Lock`` binds its waiters to whichever event loop first awaits it.
+    Production runs one loop for the process lifetime, so a module-level lock is
+    correct there; pytest-asyncio gives every test its own loop. If a test's
+    loop is torn down while a task holds the lock -- a cancelled background
+    task, a timed-out coroutine -- the lock stays held and its waiters belong to
+    a loop that will never run again. Every later ``async with _state_lock``
+    then blocks on a future nothing can resolve: the process sits in
+    ``EpollSelector.select(timeout=-1)`` until pytest-timeout kills it, and
+    whichever test drew that slot in the shuffle is the one that appears to
+    hang (TAP-5841). Same reasoning as :func:`_reset_background_tasks`.
+    """
+    global _state_lock
+    _state_lock = asyncio.Lock()
+
+
 def _reset_session_gc_flag() -> None:
     """Reset the auto-GC flag (for testing)."""
     _session_state.gc_done = False

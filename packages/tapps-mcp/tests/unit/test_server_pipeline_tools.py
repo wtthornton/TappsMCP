@@ -172,6 +172,7 @@ class TestTappsSessionStart:
         assert data["session_capture"] == "background"
 
     @pytest.mark.asyncio
+    @pytest.mark.real_brain_bridge
     async def test_memory_status_enabled_in_http_mode(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
@@ -236,6 +237,7 @@ class TestTappsSessionStart:
         assert data["memory_status"]["mode"] == "http"
 
     @pytest.mark.asyncio
+    @pytest.mark.real_brain_bridge
     async def test_brain_bridge_health_enabled_in_http_mode(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
@@ -281,6 +283,7 @@ class TestTappsSessionStart:
         assert data["brain_bridge_health"]["enabled"] is True
 
     @pytest.mark.asyncio
+    @pytest.mark.real_brain_bridge
     async def test_brain_bridge_health_details_carry_suggested_profile(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:

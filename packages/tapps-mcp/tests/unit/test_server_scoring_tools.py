@@ -831,10 +831,16 @@ class TestFireQualityGateEvents:
         ):
             _fire_quality_gate_events("/project/src/foo.py", _make_gate_failures())
 
-        # create_task is called (fire-and-forget), but the coroutine exits
-        # silently because the bridge is None.
-        assert len(captured) == 1
-        await captured[0]  # must not raise
+            # create_task is called (fire-and-forget), but the coroutine exits
+            # silently because the bridge is None. Await inside the patch
+            # context: ``_emit`` resolves ``_get_brain_bridge`` when it runs, so
+            # awaiting after the ``with`` block exits ran it against the real
+            # accessor and made this "bridge is unavailable" test open a live
+            # brain connection (TAP-5841). Its two siblings in
+            # ``test_security_scan_emit`` and ``test_validate_changed_event_emit``
+            # already await in the right place.
+            assert len(captured) == 1
+            await captured[0]  # must not raise
 
     def test_silent_when_empty_failures(self) -> None:
         """No exception and no task when failure list is empty."""

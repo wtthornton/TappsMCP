@@ -23,6 +23,7 @@ Exercises three wire shapes against the ``agent_brain`` profile:
 
 from __future__ import annotations
 
+import contextlib
 import os
 from typing import Any
 
@@ -470,6 +471,31 @@ async def test_save_many_collapses_50_entries_into_one_wire_round_trip(
         for i in range(N)
     ]
 
+    # TAP-5841: an absolute wall-clock bound on a live external service
+    # measures how loaded the box is, not how fast the brain is — this same
+    # call runs in ~1s solo and took 11.44s with 20 xdist workers sharing one
+    # brain, so the old ``elapsed < 10.0`` failed on machine contention alone.
+    # Time a serial reference in the same run instead: both halves absorb
+    # identical contention, so the ratio still catches a brain that regressed
+    # while the noise divides out.
+    serial_ref_count = 5
+    ref_entries = [
+        {"key": f"tap1631-serial-{run_id}-{i}", "value": f"serial value {i}", "tier": "context"}
+        for i in range(serial_ref_count)
+    ]
+    ref_bridge = _build_bridge(brain_url, auth_token, project_id, "full")
+    try:
+        await ref_bridge._http_mcp_call("brain_status", {})
+        ref_start = time.perf_counter()
+        for entry in ref_entries:
+            await ref_bridge.save(entry["key"], entry["value"], tier=entry["tier"])
+        serial_per_entry = (time.perf_counter() - ref_start) / serial_ref_count
+        for entry in ref_entries:
+            with contextlib.suppress(Exception):
+                await ref_bridge.delete(entry["key"])
+    finally:
+        ref_bridge.close()
+
     batch_bridge = _build_bridge(brain_url, auth_token, project_id, "full")
     initial_post_calls = 0
     try:
@@ -512,9 +538,18 @@ async def test_save_many_collapses_50_entries_into_one_wire_round_trip(
         f"save_many issued {post_calls} HTTP POST(s) for {N} entries — "
         "the batched-call architecture requires exactly one round trip."
     )
-    # Bound the wall-clock so a brain regression that goes substantially
-    # backwards still fails the test even though we don't hit 5x today.
-    assert elapsed < 10.0, f"save_many took {elapsed:.2f}s for {N} entries"
+    # Bound the cost against the same-run serial reference so a brain
+    # regression that goes substantially backwards still fails the test even
+    # though we don't hit 5x today. Batching is only ~1.1x faster per entry on
+    # this brain (it loops server-side), so allow generous headroom — the
+    # signal we want is "one batched round trip is not multiples worse than
+    # doing them one at a time", not a tuned constant.
+    serial_budget = serial_per_entry * N * 1.5
+    assert elapsed < serial_budget, (
+        f"save_many took {elapsed:.2f}s for {N} entries, over the "
+        f"{serial_budget:.2f}s budget derived from {serial_per_entry:.3f}s "
+        f"per serial save measured in the same run"
+    )
 
 
 # ---------------------------------------------------------------------------

@@ -6,6 +6,8 @@ from pathlib import Path
 from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
 
+import pytest
+
 from tapps_mcp.server_helpers import error_response, serialize_issues, success_response
 
 
@@ -77,6 +79,7 @@ class TestSerializeIssues:
         assert len(result) == 5
 
 
+@pytest.mark.real_brain_bridge
 class TestGetBrainBridgeProfile:
     """ADR-0012: the server bridge backs the full tapps_memory facade, so it
     must declare the ``full`` profile — ``coder`` gates ~18 of the bridge's
