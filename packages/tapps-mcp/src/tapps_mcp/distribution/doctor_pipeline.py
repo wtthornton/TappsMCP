@@ -405,11 +405,15 @@ def check_session_handoff_schema(project_root: Path) -> CheckResult:
             rel = str(path.relative_to(project_root.resolve()))
         except ValueError:
             pass
+        # Non-blocking, but not a pass: an over-cap body means the cross-session
+        # mirror is being rejected, and grading that "pass with a warning string"
+        # is how it stayed invisible (TAP-6444, ADR-0031 warn semantics).
         return CheckResult(
             "session handoff schema",
-            True,
+            False,
             f"Handoff present with warnings: {'; '.join(lint.warnings)}",
             rel,
+            severity="warn",
         )
 
     return CheckResult(

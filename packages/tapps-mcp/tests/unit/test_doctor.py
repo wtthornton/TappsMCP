@@ -1984,17 +1984,62 @@ class TestCheckSessionHandoffSchema:
         assert "p0" in result.message.lower()
 
     def test_valid_handoff_passes(self, tmp_path):
+        from datetime import UTC, datetime
+
+        from tapps_mcp.distribution.doctor import check_session_handoff_schema
+
+        # Minted now: a fixed literal ages into the staleness warning, which
+        # since TAP-6444 grades warn rather than pass.
+        stamp = datetime.now(tz=UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
+        path = tmp_path / ".tapps-mcp" / "session-handoff.md"
+        path.parent.mkdir(parents=True)
+        path.write_text(
+            f"# Session handoff\n**Updated:** {stamp}\n\n"
+            "## Open\n- none\n\n## Next (P0)\n- ship wave 2\n",
+            encoding="utf-8",
+        )
+        result = check_session_handoff_schema(tmp_path)
+        assert result.ok is True
+        assert result.severity == "pass"
+
+    def test_over_cap_handoff_reports_warn_not_pass(self, tmp_path):
+        """TAP-6444: a rejected mirror is not a passing handoff.
+
+        Doctor graded an over-cap body ``pass`` with the overage buried in the
+        message string, so the one signal that the cross-session copy never
+        landed read as green in the tally.
+        """
+        from tapps_mcp.distribution.doctor import check_session_handoff_schema
+        from tapps_mcp.tools.handoff_schema import _brain_max_value_length
+
+        padding = "\n".join(f"- filler {i}" for i in range(_brain_max_value_length() // 8))
+        path = tmp_path / ".tapps-mcp" / "session-handoff.md"
+        path.parent.mkdir(parents=True)
+        path.write_text(
+            "# Session handoff\n**Updated:** 2026-06-11T12:00:00Z\n\n"
+            f"## Done\n{padding}\n\n## Open\n- none\n\n## Next (P0)\n- ship wave 2\n",
+            encoding="utf-8",
+        )
+        result = check_session_handoff_schema(tmp_path)
+        assert result.severity == "warn"
+        assert result.ok is False
+        assert "value cap" in result.message
+        assert "## Done" in result.message
+
+    def test_unparseable_handoff_fails(self, tmp_path):
+        """TAP-6493: headings the parser drops make the document worthless."""
         from tapps_mcp.distribution.doctor import check_session_handoff_schema
 
         path = tmp_path / ".tapps-mcp" / "session-handoff.md"
         path.parent.mkdir(parents=True)
         path.write_text(
             "# Session handoff\n**Updated:** 2026-06-11T12:00:00Z\n\n"
-            "## Open\n- none\n\n## Next (P0)\n- ship wave 2\n",
+            "## Completed\n- shipped it\n\n## Todo\n- finish it\n",
             encoding="utf-8",
         )
         result = check_session_handoff_schema(tmp_path)
-        assert result.ok is True
+        assert result.severity == "fail"
+        assert "zero populated sections" in result.message
 
 
 class TestCheckCacheGateBlockHint:
