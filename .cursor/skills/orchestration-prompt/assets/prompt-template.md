@@ -74,6 +74,13 @@ N. **Lessons learned (REQUIRED — always the last sub-goal, never dropped when 
    `orchestration-prompt/learnings.md`. — proof: the appended bullets pasted, or one
    line saying nothing transferable came up and why.
 
+**Context boundary between sub-goals** (recycle unless noted): `/tapps-handoff-session`
+→ **re-verify the handoff** (see Loop → Recycle) → `/clear` → `/tapps-continue-session`.
+Autonomous runs take it as a **process** boundary — one `claude -p` per sub-goal — since
+`/clear` is a built-in CLI command the loop cannot invoke itself. Skip the boundary
+inside a tightly-coupled sub-goal or when the remaining work is smaller than the cycle's
+overhead; say which sub-goals skip it and why. One runner per handoff file.
+
 ## Plane map  (mechanism + literal dispatch parameters per chunk)
 <`effort` applies only inside a Workflow — the Agent tool has no effort parameter and
 inherits the session's. If a step's effort is load-bearing, run it in a Workflow.>
@@ -100,7 +107,7 @@ render verdicts that gate irreversible steps — narrow the question or pay for 
 - **Record (structured handoff):** completed · undone · commands+exit codes · issues · procedures followed? · failure-and-why → brain
 - **Context hygiene:** prune stale reads; carry a compact state summary, not raw transcripts.
 - **Print every iteration:** `SCORE: <metric>/<total> · <metric2> · sub-goal <k>/<n> · iteration <i>/<cap>` — a long autonomous loop with no per-iteration signal is unmonitorable, and the trend is what tells a watching human whether to intervene.
-- **Checkpoint (shift boundary):** at each sub-goal boundary or ~50% context — whichever first — run `/tapps-handoff-session`, then clear for real and resume via `/tapps-continue-session`. See Checkpoint protocol below. Never instruct yourself to run `/clear` — an agent cannot invoke a built-in CLI command.
+- **Recycle (context boundary — at each sub-goal boundary or ~50% context, whichever first):** `/tapps-handoff-session` → **re-verify** → clear for real (autonomous: the next `claude -p`; attended: operator `/clear`; Cursor: new chat) → `/tapps-continue-session`. Never instruct yourself to run `/clear` — an agent cannot invoke a built-in CLI command. **The re-verify gate is mandatory:** clearing destroys the context that would catch a stale handoff, so before clearing check the handoff `Git:` sha against `git log -1` (`git log --oneline <sha>..HEAD` names what landed), re-read every named PR/issue state from the tracker, and re-read every quoted metric from its newest artifact. On mismatch, fix the handoff *before* clearing and treat every **Open** item as unverified until re-probed. Skip the boundary only inside a tightly-coupled sub-goal or when the remaining work is smaller than the cycle's overhead — say which and why. One runner per handoff file: two loops sharing it overwrite each other silently. See Checkpoint protocol below.
 - **Repeat or stop:** loop until **Done-when** holds; caps: <N iterations> AND <token budget> — **both cumulative across shifts**, read from the handoff, never reset by a checkpoint
 
 ## Checkpoint protocol (context shift boundary)
@@ -136,7 +143,7 @@ Next: /clear   then   /tapps-continue-session
 - Research grant: the loop has web + `tapps_research` + `tapps_lookup_docs` (cache-first, free to repeat). Never write against an external/versioned API from memory — required lookups: <list>.
 - No fan-out of coupled coding — sequential per-repo edits (serial writes, parallel reads OK).
 - Context hygiene — targeted grep over full re-Read.
-- Shift boundaries — checkpoint via handoff → clear → continue; caps are cumulative across shifts, never reset by a clear.
+- Context lifecycle — recycle at each sub-goal boundary: handoff → **re-verify** → clear → continue; never clear on an unverified handoff; one runner per handoff file; caps are cumulative across shifts, never reset by a clear; boundaries skipped only where the prompt says so and why.
 - Scope: repos in play = <list>; reads fleet-wide, writes via owner.
 - Memory: recall wayfind resume + prior attempts at start; record structured handoff (incl. failures) at each checkpoint.
 - Lessons learned: the final sub-goal runs the "Lessons learned" pass and appends to `learnings.md`. It is REQUIRED and is the one sub-goal that survives any trim — a run that fixes the problem and teaches the harness nothing has paid full price for half the value. Mine what the verifier refuted first.
@@ -211,4 +218,5 @@ ones overtaken by a fixed tool or a changed codebase.
 - **Cold-start loop (recommended):** the paste line from "How to run" above. **or**
 - `/goal <condition>` — only if this file is already in context. **or**
 - invoke the Workflow tool with `.claude/workflows/<script>.js` (fan-out only). **or**
-- Routine: schedule `<cadence>` with this prompt, push=draft-PR.
+- Routine: schedule `<cadence>` with this prompt, push=draft-PR. **or**
+- **Chained (autonomous, context-recycling):** one `claude -p` per sub-goal, each run starting from `.tapps-mcp/session-handoff.md` and ending by rewriting it. The process boundary is the clear, so per-turn context cost stays flat and every sub-goal gets a fresh executor. Re-verify the handoff at the start of each run; one runner at a time — check for a concurrent lane before starting.

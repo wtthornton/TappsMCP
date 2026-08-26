@@ -238,29 +238,82 @@ The point is a prompt a **brand-new session** can run with zero hand-holding.
   from the new source found inside the running artifact — never by the build's exit
   code. Checklists: `references/cold-start-and-verify.md` (incl. `tapps_session_start()` as first MCP call).
 
-### 7. Checkpoint the context window (handoff → clear → continue)
+### 7. Context lifecycle — recycle at every sub-goal boundary (handoff → re-verify → clear → continue)
 
-Context hygiene (§4) slows the rot; it does not reset it. A loop that finishes inside
-**one** context window still pays iteration 1's tokens on iteration N, and past ~600k
-tokens it gets disproportionately fragile to `529 Overloaded` kills. The fix is a
-**shift boundary** — persist state, drop the transcript, rehydrate from the state: a
+Context hygiene (§4) slows the rot; it does not reset it. A long run loses to its own
+context twice. **Cost:** every turn re-pays for the whole transcript, so iteration 40 on
+a 200k context costs a multiple of the same work done at 30k, and past ~600k tokens the
+run gets disproportionately fragile to `529 Overloaded` kills. **Quality:** a context
+thick with superseded reads degrades the judgement making the next decision. The fix is
+a **shift boundary** — persist state, drop the transcript, rehydrate from the state: a
 fresh worker on a new shift, not a longer one ("one-task-one-session").
 
-**The loop cannot clear itself.** `/clear` is a built-in CLI command, not a skill or a
-tool — no agent can invoke one. Never emit a prompt telling the loop to "run `/clear`";
-it silently no-ops and the context keeps growing. Commit to a real lane: **delegated**
-(subagent / Workflow — the noisy work never enters the orchestrator's context),
-**process boundary** (`claude -p` / Routine, one iteration per process — a real clear,
-unattended), or **declared checkpoint** (the prompt prints a CHECKPOINT block; the
-operator types `/clear`).
+**The boundary already exists in this method; the loop is simply never told to take it.**
+§2 makes each sub-goal "a checkpoint a fresh context can resume from" and §6 requires the
+prompt be cold-start runnable — together those mean a sub-goal boundary *is* a valid
+context boundary. So every emitted prompt makes it explicit, as a first-class loop step:
 
-Write the checkpoint with `/tapps-handoff-session`, resume with
-`/tapps-continue-session`. Trigger at each sub-goal boundary or ~50% context, whichever
-first.
+1. `/tapps-handoff-session` — persist Done / Open / Next(P0) / Verify / cumulative caps.
+2. **Re-verify the handoff before trusting it** — the mandatory gate below.
+3. `/clear` — or the process boundary; see the run-shape table.
+4. `/tapps-continue-session` — rehydrate from the handoff, not from a paste.
+
+**This is a quality gain, not only a cost cut.** §5 wants the verifier to hold a *fresh*
+context; a recycled context is exactly that, for free, at the boundary where the next
+executor starts. And the cycle continuously exercises the cold-start property §6 only
+asserts: if the handoff cannot restart the loop you learn it at sub-goal 1, while the
+context is still alive to diagnose with — not at session death when it is gone.
+
+**Mechanics: `/clear` is a built-in CLI command the model cannot invoke.** It is not a
+skill and not a tool, so an autonomous loop cannot clear itself. Never emit a prompt
+telling the loop to "run `/clear`" — it silently no-ops and the context keeps growing.
+Name the realization per run shape instead:
+
+| Run shape | What plays the role of `/clear` |
+|---|---|
+| **Attended operator** | The prompt prints a CHECKPOINT block and stops; the operator runs `/clear` then `/tapps-continue-session` (Cursor: **new chat**, no `/clear` API) |
+| **Autonomous** | **One `claude -p` invocation per sub-goal** — the process boundary *is* the clear, and the handoff file is the only channel between runs |
+| **Workflow / subagents** | Each agent already starts fresh; delegate the noisy work so it never enters the orchestrator's context, and let the handoff carry what a return schema does not |
+
+The autonomous shape is the load-bearing one: it turns a monolithic run into a chain of
+short, independently cheap invocations, and it is already this skill's execution-plane
+tool (Routines / `claude -p` + cron).
+
+**The trap: a handoff is a claim about the past.** Recycling destroys the context that
+would have caught a wrong claim, so an unverified handoff converts a cost win into a
+correctness loss — measured: a handoff under three hours old offered a PR as "open,
+needs review" that had merged 43 minutes after the file was written, and listed two
+already-fixed config drifts as live; three false items in a four-item **Open** section.
+An age warning would never have fired. So the boundary carries a **mandatory re-verify
+gate**, not just a save:
+
+- **Handoff `Git:` sha vs `git log -1`** — differing means the file predates real work;
+  `git log --oneline <handoff-sha>..HEAD` names what landed.
+- **Every named PR / issue state re-read from the tracker** (`gh pr view`, `get_issue`),
+  never from the file. A Done status is a claim in both directions — report it, never
+  conclude from it alone.
+- **Every metric re-read from its newest artifact** (test count, score, coverage), never
+  inherited from prose.
+- **On mismatch: correct the handoff *before* clearing**, and treat every **Open** item
+  as unverified until re-probed.
+
+`/tapps-continue-session` runs this gate on the resume side; the prompt still states it
+so the boundary is enforced even when the resume happens in another host.
+
+**One runner per handoff file.** Two loops sharing `.tapps-mcp/session-handoff.md`
+silently overwrite each other — the second save wipes the first run's Open items and the
+first run then rehydrates the *other* run's state, with no error anywhere. Before
+chaining `claude -p` invocations, check for a concurrent lane; if two runs must overlap,
+give each its own handoff path.
+
+**When *not* to recycle.** The cycle costs a save plus a rehydrate and loses everything
+nobody wrote down. Skip it inside one tightly-coupled sub-goal, when the remaining work
+is smaller than the cycle's overhead, or when live state resists compression into ten
+bullets — and say *which*, rather than silently dropping the boundary.
 
 **Clearing resets the loop's own guardrails unless the handoff carries them** — attempt
 cap, budget, and refuted strategies live in the transcript you just dropped, so a loop
-that checkpoints three times has, in effect, no cap. Carry-forward contract and the
+that recycles three times has, in effect, no cap. Carry-forward contract and the
 re-verify-on-resume rule: `references/cold-start-and-verify.md`.
 
 ## Guardrails every emitted prompt must carry
@@ -299,11 +352,15 @@ re-verify-on-resume rule: `references/cold-start-and-verify.md`.
   errors; keep code edits sequential, per repo.
 - **Context hygiene** — prune stale reads each iteration; targeted grep over full
   re-Read (method §4).
-- **Shift boundaries** — a long loop checkpoints instead of growing: `/tapps-handoff-session`
-  at each sub-goal boundary or ~50% context, then a real clear (subagent / new process /
-  operator `/clear`) and `/tapps-continue-session` to rehydrate (method §7). The handoff
-  carries **cumulative** attempt-count, budget-spent, and refuted strategies, or the
-  clear silently resets the caps and the loop repeats what already failed.
+- **Context lifecycle** — a long loop recycles instead of growing: at each sub-goal
+  boundary (or ~50% context, whichever first) `/tapps-handoff-session` → **re-verify** →
+  a real clear (subagent / next `claude -p` / operator `/clear`) → `/tapps-continue-session`
+  (method §7). Never clear on an unverified handoff — check sha vs `git log -1`, re-read
+  named PR/issue state from the tracker, re-read metrics from their newest artifact. One
+  runner per handoff file. The handoff carries **cumulative** attempt-count,
+  budget-spent, and refuted strategies, or the clear silently resets the caps and the
+  loop repeats what already failed. Name the sub-goals where the boundary is skipped and
+  why.
 - **Autonomy, not checkpoints** — act on every reversible in-scope step; for an
   outward/irreversible step produce a reversible precursor (draft PR, staged diff)
   and keep going.
@@ -388,6 +445,13 @@ no silent scope creep.
 7. **Completeness self-check** — walk the **Guardrails** list above and confirm the
    emitted prompt satisfies every line; then run the **cold-start test** (a fresh
    session with nothing loaded can run it). Fix anything weak before saving.
+   **Context lifecycle is checked explicitly**, because nothing else catches its
+   absence: confirm the prompt names a context boundary per sub-goal (or says which
+   sub-goals skip it and why), that the boundary carries the re-verify gate, and that
+   the autonomous run shape is named as one `claude -p` per sub-goal rather than a
+   `/clear` the loop cannot invoke. A template supplies the boundary by default, so a
+   prompt that quietly drops it looks finished — this is the one guardrail whose failure
+   mode is silence.
 8. Tell the user exactly how to run it — the `/goal` line, the `/loop` cadence, the
    Routine schedule, or "invoke the Workflow tool `<script>`" — and from which
    session.
@@ -512,6 +576,13 @@ N. **Lessons learned (REQUIRED — always the last sub-goal, never dropped when 
    `orchestration-prompt/learnings.md`. — proof: the appended bullets pasted, or one
    line saying nothing transferable came up and why.
 
+**Context boundary between sub-goals** (recycle unless noted): `/tapps-handoff-session`
+→ **re-verify the handoff** (see Loop → Recycle) → `/clear` → `/tapps-continue-session`.
+Autonomous runs take it as a **process** boundary — one `claude -p` per sub-goal — since
+`/clear` is a built-in CLI command the loop cannot invoke itself. Skip the boundary
+inside a tightly-coupled sub-goal or when the remaining work is smaller than the cycle's
+overhead; say which sub-goals skip it and why. One runner per handoff file.
+
 ## Plane map  (mechanism + literal dispatch parameters per chunk)
 <`effort` applies only inside a Workflow — the Agent tool has no effort parameter and
 inherits the session's. If a step's effort is load-bearing, run it in a Workflow.>
@@ -538,7 +609,7 @@ render verdicts that gate irreversible steps — narrow the question or pay for 
 - **Record (structured handoff):** completed · undone · commands+exit codes · issues · procedures followed? · failure-and-why → brain
 - **Context hygiene:** prune stale reads; carry a compact state summary, not raw transcripts.
 - **Print every iteration:** `SCORE: <metric>/<total> · <metric2> · sub-goal <k>/<n> · iteration <i>/<cap>` — a long autonomous loop with no per-iteration signal is unmonitorable, and the trend is what tells a watching human whether to intervene.
-- **Checkpoint (shift boundary):** at each sub-goal boundary or ~50% context — whichever first — run `/tapps-handoff-session`, then clear for real and resume via `/tapps-continue-session`. See Checkpoint protocol below. Never instruct yourself to run `/clear` — an agent cannot invoke a built-in CLI command.
+- **Recycle (context boundary — at each sub-goal boundary or ~50% context, whichever first):** `/tapps-handoff-session` → **re-verify** → clear for real (autonomous: the next `claude -p`; attended: operator `/clear`; Cursor: new chat) → `/tapps-continue-session`. Never instruct yourself to run `/clear` — an agent cannot invoke a built-in CLI command. **The re-verify gate is mandatory:** clearing destroys the context that would catch a stale handoff, so before clearing check the handoff `Git:` sha against `git log -1` (`git log --oneline <sha>..HEAD` names what landed), re-read every named PR/issue state from the tracker, and re-read every quoted metric from its newest artifact. On mismatch, fix the handoff *before* clearing and treat every **Open** item as unverified until re-probed. Skip the boundary only inside a tightly-coupled sub-goal or when the remaining work is smaller than the cycle's overhead — say which and why. One runner per handoff file: two loops sharing it overwrite each other silently. See Checkpoint protocol below.
 - **Repeat or stop:** loop until **Done-when** holds; caps: <N iterations> AND <token budget> — **both cumulative across shifts**, read from the handoff, never reset by a checkpoint
 
 ## Checkpoint protocol (context shift boundary)
@@ -574,7 +645,7 @@ Next: /clear   then   /tapps-continue-session
 - Research grant: the loop has web + `tapps_research` + `tapps_lookup_docs` (cache-first, free to repeat). Never write against an external/versioned API from memory — required lookups: <list>.
 - No fan-out of coupled coding — sequential per-repo edits (serial writes, parallel reads OK).
 - Context hygiene — targeted grep over full re-Read.
-- Shift boundaries — checkpoint via handoff → clear → continue; caps are cumulative across shifts, never reset by a clear.
+- Context lifecycle — recycle at each sub-goal boundary: handoff → **re-verify** → clear → continue; never clear on an unverified handoff; one runner per handoff file; caps are cumulative across shifts, never reset by a clear; boundaries skipped only where the prompt says so and why.
 - Scope: repos in play = <list>; reads fleet-wide, writes via owner.
 - Memory: recall wayfind resume + prior attempts at start; record structured handoff (incl. failures) at each checkpoint.
 - Lessons learned: the final sub-goal runs the "Lessons learned" pass and appends to `learnings.md`. It is REQUIRED and is the one sub-goal that survives any trim — a run that fixes the problem and teaches the harness nothing has paid full price for half the value. Mine what the verifier refuted first.
@@ -649,7 +720,8 @@ ones overtaken by a fixed tool or a changed codebase.
 - **Cold-start loop (recommended):** the paste line from "How to run" above. **or**
 - `/goal <condition>` — only if this file is already in context. **or**
 - invoke the Workflow tool with `.claude/workflows/<script>.js` (fan-out only). **or**
-- Routine: schedule `<cadence>` with this prompt, push=draft-PR.
+- Routine: schedule `<cadence>` with this prompt, push=draft-PR. **or**
+- **Chained (autonomous, context-recycling):** one `claude -p` per sub-goal, each run starting from `.tapps-mcp/session-handoff.md` and ending by rewriting it. The process boundary is the clear, so per-turn context cost stays flat and every sub-goal gets a fresh executor. Re-verify the handoff at the start of each run; one runner at a time — check for a concurrent lane before starting.
 """
 
 _FEATURE_MAP = r"""# Claude feature map — intent → mechanism → model tier
@@ -914,7 +986,7 @@ Scale the verifier to the stakes. All layers keep creator ≠ verifier.
 exception raised" are not evidence. The verifier re-runs the deterministic check and
 reads the shipped output. Default to "not done" on any doubt.
 
-## Shift-boundary checkpoints (method §7)
+## Shift-boundary checkpoints — the context-recycle cycle (method §7)
 
 A checkpoint discards the transcript — and the transcript is where the loop's own
 guardrails were tracked. Clear without carrying them and the guardrails **silently stop
@@ -936,6 +1008,23 @@ the world as it was. On resume, re-verify live state before acting — a PR that
 "open, merge pending" at checkpoint can be merged an hour later, flipping the correct
 branch base. Treat every handoff claim as a hypothesis with a cheap test; the
 independent verifier (§5) still runs, and a checkpoint never substitutes for it.
+
+**The re-verify gate (mandatory, both sides of the boundary).** Run it before clearing
+*and* on resume — clearing destroys the only context that could contradict the file:
+
+| Check | Command | Failure it catches |
+|---|---|---|
+| Commit drift | `git log -1 --format=%h` vs the handoff **Git:** sha; then `git log --oneline <handoff-sha>..HEAD` | The file predates real work — every **Open** item is unverified until re-probed |
+| Tracker state | `get_issue(<P0>)`, `gh pr view <N> --json state,mergedAt` | A merged PR offered as "needs review"; a P0 already Done or Canceled. Done is a claim in both directions — report it, never conclude from it alone |
+| Metrics | Re-read from the newest artifact (test run, score report, coverage file) | A quoted count inherited from prose that the last commit already changed |
+
+On any mismatch, **correct the handoff before clearing**. A known-wrong handoff inherited
+by a fresh context is worse than no handoff: it reads as evidence.
+
+**One runner per handoff file.** Two loops writing `.tapps-mcp/session-handoff.md`
+overwrite each other with no error — the second save wipes the first run's state and the
+first run rehydrates the other's. Check for a concurrent lane before chaining `claude -p`
+invocations; give overlapping runs separate handoff paths.
 
 **Declared-checkpoint block** (interactive lane — print verbatim, then stop):
 
