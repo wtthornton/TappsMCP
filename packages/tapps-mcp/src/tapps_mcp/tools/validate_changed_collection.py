@@ -19,6 +19,8 @@ from typing import Any
 
 import structlog
 
+from tapps_mcp.security.verdict import read_security_verdict
+
 _logger = structlog.get_logger(__name__)
 
 # Marker file for stop hook: if present and recent, hook skips
@@ -168,7 +170,9 @@ def _cache_hit_as_file_result(path: Path, preset: str = "standard") -> dict[str,
         "file_path": str(path),
         "overall_score": cached.get("overall_score", 0.0),
         "gate_passed": cached.get("gate_passed", False),
-        "security_passed": cached.get("security_passed", False),
+        # TAP-6387: replayed quick_check payload — read the recorded verdict,
+        # never re-derive one from the issue count below it.
+        "security_passed": read_security_verdict(cached),
         "security_issues": cached.get("security_issue_count", 0),
         "cache_hit": True,
         # Entries come from quick_check, which always scores the full

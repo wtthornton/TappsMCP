@@ -7,6 +7,7 @@ from pydantic import BaseModel, Field
 
 from tapps_core.common.models import SecurityIssue
 from tapps_core.security.secret_scanner import SecretFinding, SecretScanner
+from tapps_mcp.security.verdict import security_verdict
 from tapps_mcp.tools.bandit import run_bandit_check
 
 logger = structlog.get_logger(__name__)
@@ -128,9 +129,10 @@ def run_security_scan(
         high_count=high,
         medium_count=medium,
         low_count=low,
+        # TAP-6387: one definition of the verdict, shared with validate_changed.
         # TAP-1794: a read error on the secret scanner must fail the gate,
         # not silently leave passed=True.
-        passed=(critical + high) == 0 and secret_error is None,
+        passed=security_verdict(blocking_findings=critical + high, scan_error=secret_error),
         bandit_available=bandit_available,
         secret_scan_error=secret_error,
     )
