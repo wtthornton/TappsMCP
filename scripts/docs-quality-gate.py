@@ -4,7 +4,13 @@
 from __future__ import annotations
 
 import sys
+from datetime import date
 from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+
+from gen_sprint_board import MAX_STAMP_AGE_DAYS, stamp_age_days
+from gen_sprint_board import OUTPUT_PATH as SPRINT_BOARD_PATH
 
 from docs_mcp.validators.completeness import CompletenessChecker
 from docs_mcp.validators.cross_ref import CrossRefValidator
@@ -51,6 +57,15 @@ def main() -> int:
         failures.append(f"cross_ref score {cross.score:.0f} < {MIN_CROSS_REF_SCORE}")
     if cross.broken_count > 0:
         failures.append(f"{cross.broken_count} broken cross-references")
+
+    if SPRINT_BOARD_PATH.exists():
+        age_days = stamp_age_days(SPRINT_BOARD_PATH.read_text(encoding="utf-8"), date.today())
+        print(f"sprint_board_age: {age_days}d (max {MAX_STAMP_AGE_DAYS}d)")
+        if age_days > MAX_STAMP_AGE_DAYS:
+            failures.append(
+                f"docs/SPRINT_BOARD.md stamp is {age_days}d old (> {MAX_STAMP_AGE_DAYS}d) — "
+                "regenerate with `python3 scripts/gen-sprint-board.py`"
+            )
 
     if failures:
         print("docs-quality-gate: FAIL")
