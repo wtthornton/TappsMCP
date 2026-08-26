@@ -105,8 +105,15 @@ def _echo_platform_section(platform: dict[str, Any]) -> None:
 
 
 def _echo_upgrade_summary(result: dict[str, Any], *, dry_run: bool) -> None:
-    """Close out with the overall verdict and any collected errors."""
+    """Close out with the overall verdict, any warnings, and collected errors."""
     click.echo("")
+    # TAP-6499: warnings used to be computed and dropped. Render them above the
+    # verdict so an inert ``upgrade_skip_files`` entry, or an asset about to be
+    # overwritten, is impossible to miss in either dry-run or real output.
+    for warning in result.get("warnings", []):
+        click.echo(click.style(f"  WARNING: {warning}", fg="yellow"))
+    if result.get("warnings"):
+        click.echo("")
     errors: list[str] = result.get("errors", [])
     if dry_run:
         click.echo(

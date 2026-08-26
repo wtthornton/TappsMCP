@@ -134,3 +134,69 @@ def check_validation_contract_skill_current(project_root: Path) -> CheckResult:
         ),
         required_phrases=("validation contract",),
     )
+
+
+def check_skill_asset_drift(project_root: Path) -> CheckResult:
+    """Flag SKILL.md-customization-vs-asset drift in scaffolded skills (TAP-6497).
+
+    The dangerous shape: a project customized a skill's ``SKILL.md`` outside its
+    managed block — so the operator has learned that customizations survive —
+    while the skill's companion assets predate the asset-marker rollout and
+    still have no preserved region. The next upgrade honors one expectation and
+    silently discards the other. Running ``tapps-mcp upgrade`` migrates the
+    assets, preserving whatever is in them today.
+    """
+    from tapps_mcp.distribution.doctor_pipeline import _tapps_skill_bases
+    from tapps_mcp.distribution.doctor_result import CheckResult
+    from tapps_mcp.pipeline.platform_skills import (
+        SKILL_COMPANION_FILES,
+        SMART_MERGE_SKILL_NAMES,
+    )
+    from tapps_mcp.pipeline.skill_asset_policy import (
+        ASSET_MARKER_BEGIN_PREFIX,
+        is_delimitable,
+    )
+    from tapps_mcp.pipeline.skill_managed_block import MARKER_BEGIN_PREFIX, MARKER_END
+
+    drifted: list[str] = []
+    checked = 0
+    for host_label, base in _tapps_skill_bases(project_root):
+        for skill_name in sorted(SMART_MERGE_SKILL_NAMES):
+            skill_dir = base / skill_name
+            skill_path = skill_dir / "SKILL.md"
+            if not skill_path.exists():
+                continue
+            checked += 1
+            body = skill_path.read_text(encoding="utf-8")
+            begin = body.find(MARKER_BEGIN_PREFIX)
+            end = body.find(MARKER_END, begin) if begin != -1 else -1
+            if end == -1:
+                continue  # no managed block yet — the freshness check owns this
+            outside = body[end + len(MARKER_END) :]
+            if not outside.strip():
+                continue  # SKILL.md is uncustomized; assets carry no expectation
+            unmarked = [
+                rel
+                for rel in sorted(SKILL_COMPANION_FILES.get(skill_name, {}))
+                if is_delimitable(rel)
+                and (skill_dir / rel).exists()
+                and ASSET_MARKER_BEGIN_PREFIX not in (skill_dir / rel).read_text(encoding="utf-8")
+            ]
+            drifted.extend(f"{host_label}/{skill_name}/{rel}" for rel in unmarked)
+
+    if drifted:
+        return CheckResult(
+            "Skill asset drift",
+            False,
+            f"customized SKILL.md but {len(drifted)} asset(s) have no preserved "
+            f"region: {', '.join(drifted)}",
+            "These assets are overwritten wholesale today. Run: tapps-mcp upgrade",
+            severity="warn",
+        )
+    if not checked:
+        return CheckResult("Skill asset drift", True, "no managed skills installed")
+    return CheckResult(
+        "Skill asset drift",
+        True,
+        f"{checked} managed skill(s): SKILL.md and assets share one upgrade policy",
+    )

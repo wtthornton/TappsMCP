@@ -108,10 +108,12 @@ from tapps_mcp.distribution.doctor_platform import (
     check_retired_hooks,
     check_security_rule,
     check_test_quality_rule,
+    check_upgrade_skip_tokens,
 )
 from tapps_mcp.distribution.doctor_result import CheckResult, doctor_facade_attr
 from tapps_mcp.distribution.doctor_skills import (
     check_orchestration_prompt_skill_current,
+    check_skill_asset_drift,
     check_validation_contract_skill_current,
     check_wayfind_skill_current,
 )
@@ -190,6 +192,7 @@ def _collect_checks(root: Path, *, quick: bool = False) -> list[CheckResult]:
         ("Linear standards rule", lambda: check_linear_standards_rule(root)),
         ("Retired hooks", lambda: check_retired_hooks(root)),
         ("Autonomy rule", lambda: check_autonomy_rule(root)),
+        ("upgrade_skip_files", lambda: check_upgrade_skip_tokens(root)),
         ("Security rule", lambda: check_security_rule(root)),
         ("Test quality rule", lambda: check_test_quality_rule(root)),
         ("Config files rule", lambda: check_config_files_rule(root)),
@@ -206,6 +209,7 @@ def _collect_checks(root: Path, *, quick: bool = False) -> list[CheckResult]:
             "tapps-validation-contract skill",
             lambda: check_validation_contract_skill_current(root),
         ),
+        ("Skill asset drift", lambda: check_skill_asset_drift(root)),
         ("finish-task skill", lambda: check_finish_task_skill(root)),
         ("Deprecated wrapper skills", lambda: check_deprecated_wrapper_skills(root)),
         ("tapps-memory skill", lambda: check_tapps_memory_skill(root)),

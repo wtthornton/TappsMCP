@@ -84,35 +84,21 @@ from tapps_core.common.file_operations import (
     detect_write_mode,
 )
 from tapps_core.common.logging import get_logger
+from tapps_mcp.pipeline.upgrade_skip_tokens import (
+    ALL_SKIP_TOKENS,
+    SKIP_TOKENS,
+    describe_unknown_skip_tokens,
+    unknown_skip_tokens,
+)
 
 log = get_logger(__name__)
 
 
-# Per-artifact skip tokens. Kept as a mapping so we can add short aliases later
-# without changing call sites.
-_SKIP_TOKENS: dict[str, frozenset[str]] = {
-    "agents_md": frozenset({"AGENTS.md"}),
-    "claude_md": frozenset({"CLAUDE.md"}),
-    "tech_stack_md": frozenset({"TECH_STACK.md"}),
-    "claude_settings": frozenset({".claude/settings.json"}),
-    "claude_hooks": frozenset({".claude/hooks"}),
-    "claude_agents": frozenset({".claude/agents"}),
-    "claude_skills": frozenset({".claude/skills"}),
-    "python_quality_rule": frozenset({".claude/rules/python-quality.md"}),
-    "agent_scope_rule": frozenset({".claude/rules/agent-scope.md"}),
-    "autonomy_rule": frozenset({".claude/rules/autonomy.md"}),
-    "linear_standards_rule": frozenset({".claude/rules/linear-standards.md"}),
-    "integration_hygiene_rule": frozenset({".claude/rules/integration-hygiene.md"}),
-    "pipeline_rule": frozenset({".claude/rules/tapps-pipeline.md"}),
-    # TAP-978: scoped quality rules with same skip-token pattern.
-    "security_rule": frozenset({".claude/rules/security.md"}),
-    "test_quality_rule": frozenset({".claude/rules/test-quality.md"}),
-    "config_files_rule": frozenset({".claude/rules/config-files.md"}),
-    "mcp_config": frozenset({".mcp.json"}),
-    "karpathy": frozenset({"karpathy"}),
-}
-
-_ALL_SKIP_TOKENS: frozenset[str] = frozenset().union(*_SKIP_TOKENS.values())
+# The skip-token vocabulary lives in a leaf module so ``tapps doctor`` can
+# validate a project's ``upgrade_skip_files`` without importing this one
+# (TAP-6499). Re-exported under the historical private names.
+_SKIP_TOKENS = SKIP_TOKENS
+_ALL_SKIP_TOKENS = ALL_SKIP_TOKENS
 
 _AGENTS_MD_OPT_OUT_SENTINEL = "<!-- tapps:agents-md-disabled -->"
 
@@ -296,6 +282,42 @@ def _migrate_retired_hooks(project_root: Path) -> dict[str, Any]:
                 pass
 
     return summary
+
+
+def _record_unknown_skip_tokens(result: dict[str, Any], skip_files: set[str]) -> None:
+    """Warn loudly about ``upgrade_skip_files`` entries that protect nothing.
+
+    TAP-6499: these used to land in the result dict and be rendered nowhere, so
+    a consumer who wrote file paths instead of tokens watched two upgrades
+    overwrite a customized skill in silence.
+    """
+    unknown = unknown_skip_tokens(skip_files)
+    if not unknown:
+        return
+    explanations = describe_unknown_skip_tokens(unknown)
+    result["unknown_skip_tokens"] = unknown
+    result["unknown_skip_token_warnings"] = explanations
+    result.setdefault("warnings", []).extend(explanations)
+    log.warning(
+        "upgrade.unknown_skip_tokens",
+        unknown=unknown,
+        detail="; ".join(explanations),
+    )
+
+
+def _lift_asset_overwrite_warnings(
+    result: dict[str, Any], platform_results: list[dict[str, Any]]
+) -> None:
+    """Surface per-host "about to overwrite a customized asset" lines at top level.
+
+    TAP-6497: a scaffolded asset whose format cannot carry a managed-block
+    marker is replaced wholesale. Lifting the report here puts it next to the
+    skip-token warnings in CLI output instead of burying it per host.
+    """
+    for host_result in platform_results:
+        skills = host_result.get("components", {}).get("skills")
+        if isinstance(skills, dict) and skills.get("asset_overwrite_warnings"):
+            result.setdefault("warnings", []).extend(skills["asset_overwrite_warnings"])
 
 
 def _skipped(artifact: str, skip: set[str]) -> bool:
@@ -695,9 +717,7 @@ def _upgrade_mcp_config(
     needs_nlt_migration = needs_legacy_nlt_migration(servers_dict)
     # None = preserve custom on-disk set (do not sync / re-expand to full).
     sync_bundle = mcp_bundle is not None
-    normalized_bundle = (
-        normalize_mcp_bundle(mcp_bundle) if sync_bundle else DEFAULT_NLT_BUNDLE
-    )
+    normalized_bundle = normalize_mcp_bundle(mcp_bundle) if sync_bundle else DEFAULT_NLT_BUNDLE
     bundle_mismatch = (
         sync_bundle
         and already_opted_in
@@ -706,9 +726,7 @@ def _upgrade_mcp_config(
     # When preserving a custom set, only regenerate when on-disk matches a
     # named bundle (heal/migrate); never silently expand custom → full.
     on_disk_bundle = match_bundle_for_servers(servers_dict)
-    generate_bundle = (
-        normalized_bundle if sync_bundle else (on_disk_bundle or DEFAULT_NLT_BUNDLE)
-    )
+    generate_bundle = normalized_bundle if sync_bundle else (on_disk_bundle or DEFAULT_NLT_BUNDLE)
     if needs_heal and already_opted_in:
         if not sync_bundle and on_disk_bundle is None:
             result["components"]["mcp_config"] = (
@@ -755,8 +773,7 @@ def _upgrade_mcp_config(
             )
     elif not sync_bundle and already_opted_in:
         result["components"]["mcp_config"] = (
-            "ok (custom nlt-* set preserved; "
-            "run: tapps-mcp mcp-bundle set <bundle> to sync)"
+            "ok (custom nlt-* set preserved; run: tapps-mcp mcp-bundle set <bundle> to sync)"
         )
     elif bundle_mismatch and already_opted_in:
         if dry_run:
@@ -1549,9 +1566,7 @@ def _upgrade_cursor_live(
     )
     from tapps_mcp.pipeline.platform_skills import prune_skills_for_tier
 
-    skills_result = generate_skills(
-        project_root, "cursor", overwrite=True, skill_tier=skill_tier
-    )
+    skills_result = generate_skills(project_root, "cursor", overwrite=True, skill_tier=skill_tier)
     prune_result = prune_skills_for_tier(
         project_root, "cursor", skill_tier=skill_tier, dry_run=False
     )
@@ -2348,9 +2363,7 @@ def upgrade_pipeline(
     skip_files: set[str] = set(settings.upgrade_skip_files)
     if skip_files:
         result["skipped_files"] = sorted(skip_files)
-        unknown = sorted(skip_files - _ALL_SKIP_TOKENS)
-        if unknown:
-            result["unknown_skip_tokens"] = unknown
+        _record_unknown_skip_tokens(result, skip_files)
 
     stamp_results = _bump_skipped_version_stamps(project_root, skip_files, dry_run=dry_run)
     if stamp_results:
@@ -2457,6 +2470,8 @@ def upgrade_pipeline(
             )
 
     result["components"]["platforms"] = platform_results
+
+    _lift_asset_overwrite_warnings(result, platform_results)
 
     # Karpathy guidelines block — refresh in AGENTS.md and CLAUDE.md after
     # per-host upgrades have potentially created/updated CLAUDE.md. Opt-out
