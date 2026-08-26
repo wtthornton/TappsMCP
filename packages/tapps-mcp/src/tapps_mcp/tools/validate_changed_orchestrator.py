@@ -23,6 +23,7 @@ from typing import TYPE_CHECKING, Any
 import structlog
 from mcp.server.fastmcp import Context
 
+from tapps_mcp.security.verdict import count_blocking, security_verdict
 from tapps_mcp.server_helpers import emit_ctx_info
 from tapps_mcp.tools.validate_changed_collection import _collect_results
 from tapps_mcp.tools.validation_progress import (
@@ -65,19 +66,27 @@ async def _run_security_scan(
     ``score_and_scan_quick`` in quick mode. Reusing it keeps the reported
     security verdict identical to ``tapps_quick_check``'s (TAP-5402) and
     avoids scanning the same file twice.
+
+    TAP-6387: every branch derives ``security_passed`` from
+    :func:`security_verdict` — the same definition backing
+    ``SecurityScanResult.passed`` — so this tool cannot answer the question
+    differently from ``tapps_quick_check``. The full-scan branch previously
+    hand-counted ``bandit_crit_high + secret_result.high_severity``, which
+    silently dropped the TAP-1794 secret-scan read error and reported an
+    unreadable file as clean.
     """
     if do_security_full and is_python:
         from tapps_mcp.security.secret_scanner import SecretScanner
 
         secret_result = SecretScanner().scan_file(str(path))
-        bandit_count = len(score.security_issues)
-        secret_count = secret_result.total_findings
-        bandit_crit_high = sum(
-            1 for i in score.security_issues if i.severity in ("critical", "high")
-        )
         return {
-            "security_passed": (bandit_crit_high + secret_result.high_severity) == 0,
-            "security_issues": bandit_count + secret_count,
+            "security_passed": security_verdict(
+                blocking_findings=(
+                    count_blocking(score.security_issues) + secret_result.high_severity
+                ),
+                scan_error=secret_result.error,
+            ),
+            "security_issues": len(score.security_issues) + secret_result.total_findings,
         }
     if is_python and quick and quick_sec is not None:
         return {
@@ -88,9 +97,8 @@ async def _run_security_scan(
         # No precomputed scan (e.g. a test stub) — fall back to whatever the
         # scorer attached rather than claiming security_passed=True outright.
         issues = getattr(score, "security_issues", None) or []
-        crit_high = sum(1 for i in issues if getattr(i, "severity", "") in ("critical", "high"))
         return {
-            "security_passed": crit_high == 0,
+            "security_passed": security_verdict(blocking_findings=count_blocking(issues)),
             "security_issues": len(issues),
             "security_scan_skipped": True,
         }

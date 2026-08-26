@@ -110,6 +110,9 @@ class TestValidateChangedP0:
         mock_secret_result = MagicMock()
         mock_secret_result.total_findings = 0
         mock_secret_result.high_severity = 0
+        # Real SecretScanResult.error defaults to None; leaving it a MagicMock
+        # would read as a TAP-1794 scan failure once the verdict honours it.
+        mock_secret_result.error = None
 
         with (
             patch("tapps_mcp.server_pipeline_tools.load_settings") as mock_settings,

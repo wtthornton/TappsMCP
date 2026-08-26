@@ -15,6 +15,7 @@ from typing import TYPE_CHECKING, Any
 
 import structlog
 
+from tapps_mcp.security.verdict import read_security_verdict
 from tapps_mcp.server_helpers import success_response
 
 if TYPE_CHECKING:
@@ -199,7 +200,7 @@ def _build_structured_validation_output(
                 file_path=r.get("file_path", ""),
                 score=r.get("overall_score", 0.0),
                 gate_passed=r.get("gate_passed", False),
-                security_passed=r.get("security_passed", False),
+                security_passed=read_security_verdict(r),
                 mode=str(r.get("mode") or "quick"),
             )
             for r in results
@@ -239,7 +240,12 @@ def _build_file_entry(
     lint_issues = r.get("lint_issues") or []
 
     status = "PASS" if gate_passed and not errors else "FAIL"
-    security_status = "fail" if security_issues > 0 else "pass"
+    # TAP-6387: read the verdict the scan already produced. Deriving it from
+    # ``security_issues > 0`` made this block contradict ``results[]`` and
+    # ``structuredContent`` in the same response whenever a file's findings
+    # were all below critical/high.
+    security_passed = read_security_verdict(r)
+    security_status = "pass" if security_passed else "fail"
     issue_count = len(errors) + security_issues + len(lint_issues)
 
     entry: dict[str, Any] = {
@@ -248,7 +254,7 @@ def _build_file_entry(
         "status": status,
         "score": round(float(score if score is not None else 0.0), 1),
         "gate_passed": gate_passed,
-        "security_passed": security_issues == 0,
+        "security_passed": security_passed,
         "issue_count": issue_count,
     }
     # TAP-5402: a checker outage (ruff/radon/bandit unavailable or timed out)
