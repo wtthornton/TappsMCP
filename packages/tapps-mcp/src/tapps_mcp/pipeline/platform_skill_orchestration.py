@@ -288,6 +288,13 @@ re-verify-on-resume rule: `references/cold-start-and-verify.md`.
 - **Caps must not fire on *correct* behavior** — for every required-fail cap, ask "is
   there a legitimate correct run where this still fires?" Separate *broken* from
   *correct-empty* (the gate rightly held everything) or a correct negative scores red.
+- **Terminal lessons-learned pass** — every emitted prompt ends with a REQUIRED final
+  sub-goal that mines the run and appends to `learnings.md`, plus a Done-when clause
+  gating on it. Without a clause in Done-when it is advisory, and an autonomous loop
+  drops advisory work the moment the real goal goes green — which is exactly when the
+  lessons are freshest. It is the one sub-goal that survives trimming. Point it at what
+  an independent verifier *refuted* first: that is the run's densest source of
+  transferable lesson, because each item is something the loop believed and got wrong.
 - **No fan-out of coupled coding** — parallel agents editing related code cascade
   errors; keep code edits sequential, per repo.
 - **Context hygiene** — prune stale reads each iteration; targeted grep over full
@@ -370,9 +377,10 @@ no silent scope creep.
 4. Fill `assets/prompt-template.md` — keep only the sections the task needs. Always
    keep **Prerequisites / Wayfind gate**, the **"How to run (cold start)"** block, a
    **Sub-goal 0** for self-healing preconditions, the **Verify** step wired to an
-   independent verifier, and — when changing software behavior — a **Validation
-   contract** filled *before* execution sub-goals plus an **expected-fail fix loop**
-   with attempt cap.
+   independent verifier, the **Lessons learned** section with its REQUIRED final
+   sub-goal *and* its Done-when clause, and — when changing software behavior — a
+   **Validation contract** filled *before* execution sub-goals plus an
+   **expected-fail fix loop** with attempt cap.
 5. If any chunk is multi-stage parallel work, also write the companion
    `.claude/workflows/<slug>.js` (schema + `budget` + per-stage `model`/`effort`) and
    point Run-as at it. A single coupled item (N=1) is a `/goal` drive, not a Workflow.
@@ -386,13 +394,45 @@ no silent scope creep.
 
 ## Learn as you go (measured evolution)
 
-Before drafting, read `learnings.md` (project-scoped) and fold in relevant lessons.
-When a generation teaches a better pattern — or the user edits your output before
-running it — append a one-line lesson. Keep lessons **project-scoped**; never bleed
-them across repos. Treat this as a *measured* loop, not a scratchpad: the harness
-improves by observing its own runs. When a golden set (`evals/evals.json`) and a
-gated improvement loop (`SELF_IMPROVEMENT.md`) exist, promote a template change only
-when it shows measured lift against the evals — don't hand-tune blind.
+`learnings.md` (project-scoped) is written on **two** occasions. Both are required —
+the second is the one that gets forgotten, and it is the richer of the two.
+
+**1. At generation time (you, writing the prompt).** Read `learnings.md` before
+drafting and fold in relevant lessons. When a generation teaches a better pattern — or
+the user edits your output before running it — append a one-line lesson.
+
+**2. At the end of every RUN of an emitted prompt.** The prompt itself must carry the
+terminal lessons-learned sub-goal and the Done-when clause that gates on it (see
+Guardrails and `assets/prompt-template.md`). Generation-time lessons capture what you
+learned *planning*; run-time lessons capture what the work actually cost — and those
+are the ones a fresh session cannot rediscover. If a run finished without them, the
+harness paid for the mistake and kept none of the value.
+
+Keep lessons **project-scoped**; never bleed them across repos.
+
+**What a lesson must be.** Transferable to a *different* task, concrete enough to
+falsify later, and where possible carrying the cheap command that detects the trap.
+Mine what an independent verifier **refuted** before anything else — a refuted claim
+is by construction something the loop believed and got wrong, which is the densest
+lesson available. Then what cost the most retries, then any premise that turned out
+false, then evidence that did not prove what it appeared to.
+
+**What a lesson is not.** A narration of the run (that is the handoff). A one-off
+project fact — a ticket id, a port, a service quirk — which belongs in brain or a
+project memory file. A near-duplicate of an existing bullet: read the file first and
+*sharpen the existing line* instead. And never filler — **zero lessons is a legitimate
+outcome**, stated in one line. A manufactured lesson corrupts this file the same way
+an invented error corrupts a correction.
+
+**Keep it readable.** This file is read in full before every generation, so every
+stale bullet taxes every future run. Past roughly 120 bullets or 40 KB, merge
+overlapping lines and delete ones overtaken by a fixed tool or a changed codebase.
+Pruning is part of the loop, not cleanup deferred forever.
+
+Treat this as a *measured* loop, not a scratchpad: the harness improves by observing
+its own runs. When a golden set (`evals/evals.json`) and a gated improvement loop
+(`SELF_IMPROVEMENT.md`) exist, promote a template change only when it shows measured
+lift against the evals — don't hand-tune blind.
 """
 )
 
@@ -442,6 +482,12 @@ independent verifier (paste evidence per ID).
 MUST include one clause where a count must NOT shrink (">= N tests collected",
 "36/36 of an enumerated total") — otherwise the goal is satisfiable by deletion.>
 
+**REQUIRED final clause (never delete this one):** the lessons-learned pass has run
+and the project's `orchestration-prompt/learnings.md` carries this run's transferable
+lessons, or the run states in one line that it produced none and why. Paste the
+appended bullets. A run that solved the problem and taught the harness nothing is only
+half done.
+
 ## Validation contract (before execution — software behavior only)
 <Skip for pure research/triage/docs. Write assertions BEFORE execution sub-goals.>
 
@@ -461,6 +507,10 @@ Coverage rule: every ID claimed exactly once; Done-when requires all IDs green.
 1. **(Software behavior) Finalize validation contract** — proof: contract table above complete + coverage check pasted
 2. <narrow, verifiable execution> — fulfills: <VAL-…> — proof: <ground-truth artifact>
 3. <…>
+N. **Lessons learned (REQUIRED — always the last sub-goal, never dropped when trimming).**
+   Run the pass in "Lessons learned" below and append to the project's
+   `orchestration-prompt/learnings.md`. — proof: the appended bullets pasted, or one
+   line saying nothing transferable came up and why.
 
 ## Plane map  (mechanism + literal dispatch parameters per chunk)
 <`effort` applies only inside a Workflow — the Agent tool has no effort parameter and
@@ -527,6 +577,7 @@ Next: /clear   then   /tapps-continue-session
 - Shift boundaries — checkpoint via handoff → clear → continue; caps are cumulative across shifts, never reset by a clear.
 - Scope: repos in play = <list>; reads fleet-wide, writes via owner.
 - Memory: recall wayfind resume + prior attempts at start; record structured handoff (incl. failures) at each checkpoint.
+- Lessons learned: the final sub-goal runs the "Lessons learned" pass and appends to `learnings.md`. It is REQUIRED and is the one sub-goal that survives any trim — a run that fixes the problem and teaches the harness nothing has paid full price for half the value. Mine what the verifier refuted first.
 - Harness compatibility: <gated tool calls → unlock/refresh steps; MCP standing nudges → adopted or overridden>.
 - Discipline: root-cause not workarounds; no green-by-suppression; right-sized; durable; match conventions; no scope creep.
 
@@ -553,6 +604,45 @@ section the runner treats every stated fact as equally solid and builds on sand.
 Name the cheap check that would settle each one, and require it before the fact is
 depended upon.>
 - <claim> — basis: <how it was derived> — confirm by: <the cheap check>
+
+## Lessons learned  (REQUIRED — runs once, at the end, before Run-as is reported done)
+
+Append to the project's `orchestration-prompt/learnings.md` (project-scoped; never
+bleed lessons across repos). This is the harness improving from its own runs —
+skipping it is how the same trap gets paid for twice.
+
+**Mine these four sources, in order. Do not summarize the run.**
+
+1. **What an independent verifier refuted** — the highest-value source by far. Anything
+   a verifier caught is, by construction, something you believed and got wrong.
+2. **What cost the most wall-clock or the most retries** — the wrong diagnosis, the
+   silent tool failure, the poll that looked like a different problem.
+3. **A premise that turned out false** — especially one this prompt itself asserted, or
+   one that pre-specified the shape of an answer the evidence would not fit.
+4. **Evidence that turned out not to prove what it seemed to** — a green check that did
+   not discriminate, a count that was satisfiable another way.
+
+**Each bullet must earn its line.** Bar:
+
+- **Transferable** — it would change behavior on a *different* task.
+- **Concrete and falsifiable** — name the real artifact, number, or error string.
+- **Actionable** — name the cheap command that detects the trap next time.
+- **Dated** — trailing `(YYYY-MM-DD)`, matching the file's house style.
+
+**Do NOT write:** a narration of the run (that is the handoff's job) · a one-off
+project fact such as a ticket id, port, or service quirk (those go to brain or a
+project memory file) · a near-duplicate — read the file first and *sharpen the
+existing bullet* instead · filler. **Zero lessons is a legitimate outcome** — say so
+in one line. Manufacturing a lesson corrupts the file exactly the way over-confessing
+an error corrupts a correction.
+
+**Route each finding to the right home:** how to orchestrate/verify/diagnose better →
+`learnings.md` · this run's state, commands, failures → brain, via the Record step ·
+a durable fact about this repo or setup → a project memory file.
+
+**Keep the file readable.** It is read in full before every generation. Past ~120
+bullets or ~40 KB, spend part of this pass merging overlapping bullets and deleting
+ones overtaken by a fixed tool or a changed codebase.
 
 ## Run-as
 <exact invocation, e.g.:>
