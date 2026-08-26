@@ -145,6 +145,36 @@ class TestCursorStopCompletionGate:
         assert "BLOCKED" in followup
         assert "checklist_skipped" in followup or "validation" in followup.lower()
 
+    def test_calldynamictool_session_start_no_false_followup(self, tmp_path: Path) -> None:
+        """TAP-6569: CallDynamicTool session_start must not emit a false gap followup."""
+        transcript = tmp_path / "t.jsonl"
+        transcript.write_text(
+            json.dumps(
+                {
+                    "message": {
+                        "content": [
+                            {
+                                "type": "tool_use",
+                                "name": "CallDynamicTool",
+                                "input": {
+                                    "namespace": "project-0-tapps-mcp-nlt-build",
+                                    "toolName": "tapps_session_start",
+                                    "arguments": {},
+                                },
+                            }
+                        ]
+                    }
+                }
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+        result = record_loop_metrics_from_hook_payload(
+            {"workspace_roots": [str(tmp_path)], "transcript_path": str(transcript)}
+        )
+        assert "session_start_skipped" not in result["usage_gaps"]
+        assert result["followup_message"] is None
+
     def test_record_payload_returns_usage_gaps(self, tmp_path: Path) -> None:
         transcript = tmp_path / "t.jsonl"
         transcript.write_text(

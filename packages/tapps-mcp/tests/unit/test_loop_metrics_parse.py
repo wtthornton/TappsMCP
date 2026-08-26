@@ -38,3 +38,47 @@ def test_parse_transcript_counts_edit_and_gate(tmp_path: Path) -> None:
     assert str(target) in row["files_edited"]
     assert row["gate_skipped_files"] == []
     assert row["mcp_calls"] >= 1
+
+
+def test_calldynamictool_unwraps_session_start(tmp_path: Path) -> None:
+    """TAP-6569: CallDynamicTool (namespace+toolName) must unwrap like CallMcpTool."""
+    transcript = tmp_path / "t.jsonl"
+    _write_transcript(
+        transcript,
+        [
+            {
+                "name": "CallDynamicTool",
+                "input": {
+                    "namespace": "project-0-tapps-mcp-nlt-build",
+                    "toolName": "tapps_session_start",
+                    "arguments": {},
+                },
+            },
+        ],
+    )
+    row = parse_transcript_loop_metrics(transcript, project_root=tmp_path)
+    assert "tapps_session_start" in row["tools_used"]
+    assert "CallDynamicTool" not in row["tools_used"]
+    assert row["mcp_calls"] == 1
+
+
+def test_callmcptool_regression_still_unwraps(tmp_path: Path) -> None:
+    """Regression guard: CallMcpTool (server+toolName) unwrap must keep working."""
+    transcript = tmp_path / "t.jsonl"
+    _write_transcript(
+        transcript,
+        [
+            {
+                "name": "CallMcpTool",
+                "input": {
+                    "server": "project-0-tapps-mcp-nlt-build",
+                    "toolName": "tapps_session_start",
+                    "arguments": {},
+                },
+            },
+        ],
+    )
+    row = parse_transcript_loop_metrics(transcript, project_root=tmp_path)
+    assert "tapps_session_start" in row["tools_used"]
+    assert "CallMcpTool" not in row["tools_used"]
+    assert row["mcp_calls"] == 1

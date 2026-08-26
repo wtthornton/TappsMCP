@@ -14,6 +14,7 @@ from tapps_mcp.tools.loop_metrics_scope import (
 from tapps_mcp.tools.pipeline_tool_sets import (
     EDIT_TOOL_NAMES,
     SOURCE_FILE_SUFFIXES,
+    TRANSCRIPT_WRAPPER_TOOL_NAMES,
     is_checklist_tool,
     is_gate_tool,
     is_lookup_tool,
@@ -69,10 +70,10 @@ def _iter_transcript_tool_blocks(transcript_path: Path) -> list[tuple[str, dict[
 def _mcp_call_from_tool_use(name: str, tool_input: dict[str, Any], resolved_name: str) -> bool:
     if name.startswith("mcp__"):
         return True
-    if name != "CallMcpTool":
+    if name not in TRANSCRIPT_WRAPPER_TOOL_NAMES:
         return False
-    server = str(tool_input.get("server") or "")
-    return is_tapps_mcp_server(server) or resolved_name.startswith("tapps_")
+    identifier = str(tool_input.get("server") or tool_input.get("namespace") or "")
+    return is_tapps_mcp_server(identifier) or resolved_name.startswith("tapps_")
 
 
 def _edit_path_from_tool_use(
