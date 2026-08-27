@@ -3724,6 +3724,32 @@ def _create_http_bridge(
 _shutdown_hooks_registered: bool = False
 
 
+_PROCESS_START_MONOTONIC: float = time.monotonic()
+
+# Written to fd 2 the instant a fatal signal is caught, before any unwinding.
+# Grep key for the fleet logs and for ``journalctl --user -g``.
+SIGNAL_EXIT_LOG_PREFIX = "tapps.signal_exit"
+
+
+def format_signal_exit_line(signum: int, *, now_monotonic: float | None = None) -> str:
+    """Render the one-line death record the SIGTERM handler writes.
+
+    Split out of the handler so it is unit-testable — the handler body itself
+    is the one place a normal test cannot drive.
+    """
+    try:
+        name = signal.Signals(signum).name
+    except ValueError:
+        name = "UNKNOWN"
+    monotonic = time.monotonic() if now_monotonic is None else now_monotonic
+    uptime = max(0.0, monotonic - _PROCESS_START_MONOTONIC)
+    return (
+        f"{SIGNAL_EXIT_LOG_PREFIX} signal={name} signum={signum} "
+        f"pid={os.getpid()} ppid={os.getppid()} exit_status=0 "
+        f"uptime_s={uptime:.1f}\n"
+    )
+
+
 def _register_shutdown_hooks(bridge: BrainBridge) -> None:
     """Wire atexit + SIGTERM drain hooks for *bridge* (TAP-517).
 
@@ -3739,7 +3765,20 @@ def _register_shutdown_hooks(bridge: BrainBridge) -> None:
 
     atexit.register(bridge.close)
 
-    def _sigterm_drain_exit(_signum: int, _frame: Any) -> None:
+    def _sigterm_drain_exit(signum: int, _frame: Any) -> None:
+        # TAP-6053: this handler used to be a bare ``sys.exit(0)``. That made
+        # every signalled death indistinguishable from a clean one — exit
+        # status 0, no record that a signal arrived at all, and (because the
+        # SystemExit unwinds from wherever the loop happened to be) only an
+        # incidental ``SystemExit: 0`` traceback out of ``selectors.poll``.
+        # Both 2026-08-13 fleet deaths left exactly that and nothing else.
+        # Write the cause to fd 2 *before* unwinding. ``os.write`` on an
+        # already-open descriptor is safe from a handler; structlog's lock is
+        # not — taking it here can deadlock against an interrupted emit.
+        try:
+            os.write(2, format_signal_exit_line(signum).encode("utf-8", "replace"))
+        except (OSError, ValueError):
+            pass
         sys.exit(0)
 
     try:
