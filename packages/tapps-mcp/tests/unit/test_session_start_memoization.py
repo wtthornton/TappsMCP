@@ -80,7 +80,7 @@ class TestSessionStartMemoization:
     async def test_quick_and_full_cached_independently(self) -> None:
         from tapps_mcp.server_pipeline_tools import tapps_session_start
 
-        full = await tapps_session_start()
+        full = await tapps_session_start(quick=False)
         quick = await tapps_session_start(quick=True)
 
         # Each is the first call for its (session_id, quick, root) key, so neither
@@ -89,7 +89,7 @@ class TestSessionStartMemoization:
         assert quick["data"].get("cached") is not True
 
         # Repeat calls hit their respective cache slots.
-        full2 = await tapps_session_start()
+        full2 = await tapps_session_start(quick=False)
         quick2 = await tapps_session_start(quick=True)
         assert full2["data"].get("cached") is True
         assert quick2["data"].get("cached") is True
@@ -345,7 +345,7 @@ class TestSessionStartSentinelIntegration:
             "tapps_mcp.server_pipeline_tools.load_settings",
             return_value=_FakeSettings(),
         ):
-            resp = await tapps_session_start()
+            resp = await tapps_session_start(quick=False)
 
         assert resp["success"] is True
         assert resp["data"]["cached"] is True
@@ -363,7 +363,7 @@ class TestSessionStartSentinelIntegration:
         CallTracker.reset()
 
         # With force=True the sentinel must be ignored — full bootstrap runs.
-        resp = await tapps_session_start(force=True)
+        resp = await tapps_session_start(quick=False, force=True)
         assert resp["success"] is True
         assert resp["data"].get("sentinel_age_s") is None  # sentinel path not taken
 
@@ -388,6 +388,6 @@ class TestSessionStartSentinelIntegration:
             # so we just verify the sentinel-cached path was NOT taken.
             # The response will either succeed or fail depending on the environment;
             # what matters is that sentinel_age_s is absent.
-            resp = await tapps_session_start()
+            resp = await tapps_session_start(quick=False)
 
         assert resp["data"].get("sentinel_age_s") is None

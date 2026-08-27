@@ -93,9 +93,11 @@ that catch issues your training data cannot: stale APIs, real CVEs, current \
 project standards, and per-file quality scores against the configured gate.
 
 Call these first, even when you think you know the answer:
-- tapps_session_start at session start -- bootstraps project context, brain \
-auth, and the checker environment. Skipping it leaves later tools running \
-in degraded mode with generic verdicts.
+- tapps_session_start at session start -- bootstraps project context and \
+the checker environment. Skipping it leaves later tools running in degraded \
+mode with generic verdicts. It returns the compact bootstrap payload by \
+default; pass quick=False (or call tapps_doctor) when you actually need \
+brain health, memory status, and install-drift diagnostics.
 - tapps_lookup_docs before using any external library API (React, Next.js, \
 FastAPI, Django, httpx, pydantic, structlog, click, pytest, anything) -- \
 returns current Context7 docs so you do not hallucinate signatures.

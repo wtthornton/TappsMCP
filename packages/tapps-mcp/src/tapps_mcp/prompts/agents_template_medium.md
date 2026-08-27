@@ -24,7 +24,7 @@ Seven rules every agent in this project should follow.
 
 | Tool | When to use |
 |------|--------------|
-| **tapps_session_start** | **FIRST call in every session** - server info only |
+| **tapps_session_start** | **FIRST call in every session** - server info only; pass `quick=False` for full diagnostics |
 | **tapps_quick_check** | **After editing any Python file** - quick score + gate + security |
 | **tapps_validate_changed** | **Before declaring multi-file work complete** - score + gate on changed files. **Always pass explicit `file_paths`** (comma-separated). Default is quick mode; only use `quick=false` as a last resort. |
 | **tapps_checklist** | **Before declaring work complete** - reports missing required steps. Response includes an inline `usage_gaps` payload (same data as `tapps_usage`) - read it before declaring done. |
@@ -45,7 +45,7 @@ Seven rules every agent in this project should follow.
 | **Side effects** | None (read-only) | Writes files, warms caches |
 | **Typical flow** | Call at session start, then work | Call once to bootstrap, or `dry_run: true` to preview |
 
-**Session start** -> `tapps_session_start`. Use this as the first call in every session. Returns server info and project context.
+**Session start** -> `tapps_session_start`. Use this as the first call in every session. Returns server info and project context — the compact payload by default; pass `quick=False` for full diagnostics.
 
 **Pipeline/bootstrap** -> `tapps_init`. Use when you need to set up TappsMCP in a project (AGENTS.md, TECH_STACK.md, platform rules) or upgrade existing files.
 

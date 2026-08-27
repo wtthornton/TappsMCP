@@ -269,7 +269,7 @@ class TestSessionStartEnrichedMemory:
                 return_value=None,
             ),
         ):
-            result = await tapps_session_start(force=True)
+            result = await tapps_session_start(quick=False, force=True)
 
         data = result["data"]
         mem = data["memory_status"]
@@ -346,7 +346,7 @@ class TestSessionStartEnrichedMemory:
                 return_value=None,
             ),
         ):
-            result = await tapps_session_start(force=True)
+            result = await tapps_session_start(quick=False, force=True)
 
         mem = result["data"]["memory_status"]
         assert mem["enabled"] is True

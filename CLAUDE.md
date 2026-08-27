@@ -1,4 +1,4 @@
-<!-- tapps-claude-version: 3.12.75 -->
+<!-- tapps-claude-version: 3.12.76 -->
 # CLAUDE.md
 
 This file provides guidance to Claude Code when working with code in this repository.
@@ -117,7 +117,7 @@ uv run tapps-mcp benchmark tools report|rank|calibrate
 - **Deterministic tools only** -- no LLM calls in the tool chain; same input → same output. Missing external checkers fall back to AST analysis and mark results `degraded: true`. See [ADR-0004](docs/adr/0004-deterministic-tools-only-contract.md).
 - **Architectural decisions** live in [docs/adr/](docs/adr/) — see the [index](docs/adr/README.md). When changing a load-bearing decision, supersede the ADR; do not edit history.
 
-<!-- BEGIN: tapps-obligations v3.12.74 -->
+<!-- BEGIN: tapps-obligations v3.12.76 -->
 # TAPPS Quality Pipeline
 
 This project uses the TAPPS MCP server for code quality enforcement.
@@ -144,6 +144,8 @@ You should follow these steps to avoid broken, insecure, or hallucinated code.
 
 You should call `tapps_session_start()` as the first action in every session.
 This returns server info (version, checkers, config) and project context.
+The default payload is compact; pass `quick=False` (or call `tapps_doctor`)
+when you need brain health, memory status, and install-drift diagnostics.
 
 ### Before Using Any Library API
 

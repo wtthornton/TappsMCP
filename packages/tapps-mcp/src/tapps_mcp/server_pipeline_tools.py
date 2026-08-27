@@ -585,31 +585,29 @@ def _prepend_next_step(resp: dict[str, Any], step: str) -> None:
 
 async def tapps_session_start(
     project_root: str = "",
-    quick: bool = False,
+    quick: bool = True,
     force: bool = False,
 ) -> TappsSessionStartResponse:
-    """Bootstraps project context: server info, installed checkers, brain
-    auth, memory status, cache health, install-drift, and pipeline
-    progress for the current task.
+    """Bootstraps project context: server info, installed checkers, cache
+    health, and the checklist session id for the current task.
 
     Call this as the first MCP tool in every session — agent reasoning,
     library lookups, and quality gates run in degraded mode until this
-    completes. The full payload caches per server process (TAP-1379), so
+    completes. The response caches per server process (TAP-1379), so
     repeat calls return instantly with ``cached: true`` and do not churn
-    the checklist session id. Use ``force=True`` only when project
-    state changed under the running server (config edit, brain restart,
-    checker install).
+    the checklist session id.
 
     Args:
         project_root: Reserved override (stdio / remote hosts). On the
             shared HTTP fleet, prefer ``X-Tapps-Project-Root``; that header
             scopes the memoization cache and ``load_settings()`` root.
-        quick: Return a minimal payload from cached checker versions
-            without subprocess probes, diagnostics, or memory GC.
-            Target latency < 1s. Use for fast liveness probes; the full
-            response is still needed at least once per session.
+        quick: Default ``True`` (TAP-6434) — the compact bootstrap payload,
+            from cached checker versions, without subprocess probes or
+            diagnostics. Pass ``quick=False`` for the full diagnostic
+            payload (brain health, memory status, install drift, call
+            graph, usage gaps); ``tapps_doctor`` covers the same ground.
         force: Bypass the per-process memoization cache and re-run the
-            full bootstrap. Default ``False``. Use after restarting the
+            bootstrap. Default ``False``. Use after restarting the
             brain, editing ``.tapps-mcp.yaml``, or installing a new
             checker — otherwise the cached response is what you want.
     """
@@ -872,6 +870,12 @@ async def _session_start_quick(
 
     Loads tool versions from disk cache (no subprocess calls). Skips
     diagnostics, memory GC, and contradiction checks.
+
+    TAP-6434 made this the default payload, so it also takes the two
+    lifecycle side effects nothing else performs (see ``session_start_core``).
+    It deliberately does NOT write the TAP-1928 sentinel: that file means "a
+    full bootstrap ran recently", so writing it here would short-circuit a
+    later ``quick=False`` call into a near-empty cached response.
     """
     from tapps_mcp import __version__
     from tapps_mcp.server import _bootstrap_cache_dir, _cache_info_dict
@@ -917,10 +921,13 @@ async def _session_start_quick(
         "checklist_session_id": checklist_sid_q,
         "hive_status": hive_status,
         "recommended_next": (
-            "Quick session started (diagnostics skipped). "
-            "Call tapps_session_start() without quick=True for full diagnostics."
+            "Session started. Next: tapps_lookup_docs before using a library API, "
+            "tapps_quick_check after each Python edit, tapps_validate_changed + "
+            "tapps_checklist before declaring done. Run tapps_doctor() for diagnostics."
         ),
     }
+
+    await _ssc.attach_compaction_rehydration(Path(settings.project_root), data)
 
     # TAP-1414: Surface ruff/mypy missing on Python projects as a loud warning.
     degraded_checkers, degraded_warning = _ssc.compute_python_degraded_checkers(
@@ -947,6 +954,7 @@ async def _session_start_quick(
     )
     # TAP-975: refresh sidecar in quick path too.
     write_session_start_marker(settings.project_root)
+    _session_state.session_start_iso = _ssc.record_session_start_iso(Path(settings.project_root))
 
     resp = with_nudges("tapps_session_start", resp, {})
     if degraded_warning:

@@ -118,7 +118,7 @@ class TestTappsSessionStart:
     async def test_includes_memory_status(self) -> None:
         from tapps_mcp.server_pipeline_tools import tapps_session_start
 
-        result = await tapps_session_start()
+        result = await tapps_session_start(quick=False)
         data = result["data"]
         assert "memory_status" in data
         assert "enabled" in data["memory_status"]
@@ -147,7 +147,7 @@ class TestTappsSessionStart:
         """Full session start includes per-phase timings dict (Epic 68.2)."""
         from tapps_mcp.server_pipeline_tools import tapps_session_start
 
-        result = await tapps_session_start()
+        result = await tapps_session_start(quick=False)
         data = result["data"]
         assert "timings" in data
         timings = data["timings"]
@@ -166,7 +166,7 @@ class TestTappsSessionStart:
         """Full session start marks maintenance ops as background (Epic 68.2)."""
         from tapps_mcp.server_pipeline_tools import tapps_session_start
 
-        result = await tapps_session_start()
+        result = await tapps_session_start(quick=False)
         data = result["data"]
         assert data["memory_gc"] == "background"
         assert data["memory_consolidation"] == "background"
@@ -229,7 +229,7 @@ class TestTappsSessionStart:
                 return_value=_ok_auth_probe,
             ),
         ):
-            result = await tapps_session_start(force=True)
+            result = await tapps_session_start(quick=False, force=True)
 
         _reset_brain_bridge_cache()  # clean up singleton after test
 
@@ -277,7 +277,7 @@ class TestTappsSessionStart:
             ),
             patch("httpx.get", return_value=mock_health_response),
         ):
-            result = await tapps_session_start(force=True)
+            result = await tapps_session_start(quick=False, force=True)
 
         _reset_brain_bridge_cache()
 
@@ -343,7 +343,7 @@ class TestTappsSessionStart:
                 return_value=gated_probe,
             ),
         ):
-            result = await tapps_session_start(force=True)
+            result = await tapps_session_start(quick=False, force=True)
 
         _reset_brain_bridge_cache()
 
@@ -1691,7 +1691,7 @@ class TestMaybeAutoGC:
                 return_value=mock_store,
             ),
         ):
-            result = await tapps_session_start(force=True)
+            result = await tapps_session_start(quick=False, force=True)
 
         data = result["data"]
         # GC, consolidation, doc validation, and session capture are now
@@ -1729,7 +1729,7 @@ class TestSessionStartProjectRoot:
                 return_value=mock_settings,
             ),
         ):
-            result = await tapps_session_start(force=True)
+            result = await tapps_session_start(quick=False, force=True)
 
         data = result["data"]
         assert "project_root" in data
