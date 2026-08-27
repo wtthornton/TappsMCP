@@ -18,6 +18,7 @@ from tapps_mcp.project.call_graph_fingerprint import (
     compute_per_file_fingerprints,
     fingerprint_settings,
 )
+from tapps_mcp.project.call_graph_gap_classify import reclassify_external_attr_gaps
 from tapps_mcp.project.call_graph_resolve_ts import resolve_ts_cross_file
 from tapps_mcp.project.call_graph_routes import (
     extract_fastapi_routes,
@@ -250,6 +251,13 @@ def _finalize_index(
                 else:
                     kept.append(edge)
             edges = kept
+
+    # TAP-6439: index-wide gap-cause post-pass. Runs after the TS post-pass so
+    # it sees every symbol and every gap (including demoted phantom edges), and
+    # before the sort so the persisted order is unchanged. Pure and derived from
+    # ``symbols`` alone, so an incremental update recomputes the same labels a
+    # full rebuild would (byte-equivalence, ADR-0004 / AC2).
+    gaps = reclassify_external_attr_gaps(gaps, (s.qualified_name for s in symbols))
 
     symbols.sort(key=lambda s: (s.qualified_name, s.file_path, s.line))
     edges.sort(key=lambda e: (e.caller, e.line, e.callee_expr))

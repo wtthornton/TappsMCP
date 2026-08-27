@@ -8,6 +8,53 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from tapps_mcp.project.call_graph_analyze import FileIndex
 
+# TAP-6439. Marker for a local whose type is written down in the source as a
+# builtin display (``lines = []``, ``bindings = {}``, ``seen = set()``). Calls on
+# such a receiver are ``list.append`` / ``dict.get`` / ``set.add`` — never an
+# in-repo edge, even when the repo happens to define a method of that name. The
+# marker is not a dotted path, so ``resolve_attribute`` can never turn it into a
+# callee; it exists only to let the analyzer record an accurate gap cause.
+BUILTIN_RECEIVER = "!builtin"
+
+_BUILTIN_DISPLAY_CONSTRUCTORS = frozenset(
+    {"list", "dict", "set", "tuple", "str", "bytes", "frozenset"}
+)
+
+
+def _is_builtin_display(value: ast.expr) -> bool:
+    """True when *value*'s type is literally written in the source.
+
+    Only forms whose runtime type is unambiguous from the syntax alone: display
+    literals, comprehensions, f-strings, and no-argument builtin container
+    constructors. Deliberately excludes anything requiring inference (a call
+    returning a list, an annotation, a subscript) — the point is a proof, not a
+    guess.
+    """
+    if isinstance(value, ast.List | ast.Dict | ast.Set | ast.Tuple | ast.JoinedStr):
+        return True
+    if isinstance(value, ast.ListComp | ast.DictComp | ast.SetComp):
+        return True
+    if isinstance(value, ast.Constant):
+        return isinstance(value.value, str | bytes)
+    return (
+        isinstance(value, ast.Call)
+        and isinstance(value.func, ast.Name)
+        and value.func.id in _BUILTIN_DISPLAY_CONSTRUCTORS
+    )
+
+
+def _is_builtin_annotation(ann: ast.expr | None) -> bool:
+    """True when an annotation names a builtin container/str type.
+
+    ``x: dict[str, str]``, ``x: list[int]``, ``x: str``. Only consulted after
+    ``_annotation_target`` has failed to find a local class or imported name, so
+    an in-repo class can never be shadowed by this check. The subscript is
+    stripped because only the head decides the runtime type.
+    """
+    if isinstance(ann, ast.Subscript):
+        ann = ann.value
+    return isinstance(ann, ast.Name) and ann.id in _BUILTIN_DISPLAY_CONSTRUCTORS
+
 
 def qualify(
     idx: FileIndex,
@@ -112,13 +159,17 @@ def local_bindings(
             annotated = _annotation_target(idx, child.annotation)
             if annotated:
                 bindings[child.target.id] = annotated
+            elif _is_builtin_annotation(child.annotation):
+                bindings[child.target.id] = BUILTIN_RECEIVER
             continue
         if not isinstance(child, ast.Assign):
             continue
         for target in child.targets:
             if not isinstance(target, ast.Name):
                 continue
-            if isinstance(child.value, ast.Name):
+            if _is_builtin_display(child.value):
+                bindings[target.id] = BUILTIN_RECEIVER
+            elif isinstance(child.value, ast.Name):
                 bindings[target.id] = bindings.get(child.value.id, child.value.id)
             elif isinstance(child.value, ast.Call) and isinstance(child.value.func, ast.Name):
                 resolved = resolve_name(idx, child.value.func.id, class_stack, bindings)
@@ -134,6 +185,8 @@ def resolve_name(
     bindings: dict[str, str],
 ) -> str | None:
     bound = bindings.get(name)
+    if bound == BUILTIN_RECEIVER:
+        return None
     if bound and bound != name and "." in bound:
         return bound
     if name in idx.functions:
@@ -167,6 +220,8 @@ def resolve_attribute(
         if base in idx.imports:
             return f"{idx.imports[base]}.{attr}"
         bound = bindings.get(base)
+        if bound == BUILTIN_RECEIVER:
+            return None
         if bound and "." in bound:
             return f"{bound}.{attr}"
         return None
@@ -185,3 +240,23 @@ def method_map(idx: FileIndex, class_stack: list[str]) -> dict[str, str]:
         for sym in idx.symbols
         if sym.kind == "method" and sym.qualified_name.startswith(f"{prefix}.")
     }
+
+
+def is_external_receiver(node: ast.Attribute, bindings: dict[str, str]) -> bool:
+    """True when *node*'s receiver is provably a builtin, so the call leaves the repo.
+
+    Two proofs, both syntactic (TAP-6439):
+
+    * a literal receiver — ``"\\n".join(...)``, ``{"a", "b"}.issubset(...)``,
+      ``f"{x}".strip()``;
+    * a local bound to a builtin display earlier in the same function —
+      ``lines = []`` then ``lines.append(...)``.
+
+    Without this the gap is recorded as ``unresolved_static_call`` and counted
+    as in-repo debt whenever the repo happens to define a method of the same
+    name (``get``, ``add``, ``append``, ``search``), which is most of them.
+    """
+    receiver = node.value
+    if _is_builtin_display(receiver):
+        return True
+    return isinstance(receiver, ast.Name) and bindings.get(receiver.id) == BUILTIN_RECEIVER

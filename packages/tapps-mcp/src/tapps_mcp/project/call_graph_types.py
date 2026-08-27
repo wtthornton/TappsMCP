@@ -27,7 +27,13 @@ CALL_GRAPH_CACHE_REL = ".tapps-mcp/call-graph-index.json"
 # vendored under e.g. ``projects/``) and consumer-configured
 # ``graph_exclude_patterns`` are now excluded from the walk. Cached v7 indexes
 # may contain foreign-repo symbols/edges, so bump to force a rebuild.
-INDEX_VERSION = 8
+# v9 (TAP-6439): gap-cause accuracy — an unresolved ``recv.attr()`` is labelled
+# ``external_attr_call`` when its called name is defined nowhere in the repo, or
+# when its receiver is provably a builtin, so stdlib/builtin/third-party
+# receivers stop counting as in-repo resolution debt (measured on this repo:
+# in-repo gap rate 0.471 -> 0.144). Persisted gap *reasons* differ, and builtin
+# receivers no longer emit phantom callees, so bump to invalidate v8.
+INDEX_VERSION = 9
 SymbolKind = Literal["function", "method"]
 
 # Stable taxonomy for resolution gaps (TAP-4092).
@@ -35,6 +41,10 @@ SymbolKind = Literal["function", "method"]
 # (default exports, untyped receivers, re-exports, tsconfig path aliases).
 ResolutionGapReason = Literal[
     "unresolved_static_call",
+    # TAP-6439: attribute call with no in-repo definition of the called name —
+    # provably not an in-repo edge (stdlib/builtin/third-party receiver, or a
+    # callable resolved at runtime). Excluded from ``in_repo_gap_rate``.
+    "external_attr_call",
     "dynamic_dispatch",
     "callback_opaque",
     "import_unresolved",
