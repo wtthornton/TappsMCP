@@ -1,4 +1,10 @@
-"""Platform ``orchestration-prompt`` skill — body + companion files."""
+"""Platform ``orchestration-prompt`` skill — body + companion files.
+
+TAP-6602 / TAP-6603 lift two guardrails ("artifact identity, not just validity" and
+"execution-path proof before this change takes effect") from an nlt-orchestrator
+project customization into this generic template, adapted to project-agnostic
+phrasing.
+"""
 
 from __future__ import annotations
 
@@ -416,6 +422,21 @@ re-verify-on-resume rule: `references/cold-start-and-verify.md`.
   hard-stop (method §0b); no Done-when clause is satisfiable by violating one.
 - **No green-by-deletion** — at least one Done-when clause is a count that must not
   shrink, so the goal cannot be met by removing what is measured (method §1).
+- **Artifact identity, not just validity** — gates check form only (schema, exit code,
+  geometry, provenance, signature) and will happily pass an artifact that is the wrong
+  *thing* entirely. Every emitted prompt whose loop produces something a human or
+  customer will look at needs one delegated step — named `agentType` + `model=opus`
+  and tiered as open judgement rather than a closed check — that opens the artifact
+  and answers *is this the thing that was asked for*, in words. Drop this guardrail
+  only when the loop produces no artifact a human or customer will look at.
+- **Execution-path proof before "this change takes effect"** — name the file, the
+  checkout it resolves from, and the revision the consumer loads, then prove it with a
+  marker check against that exact file — never a merge SHA or a branch name alone.
+  Merging to a default branch is not the same as the consumer seeing it: a consumer
+  can load a stale checkout, or one on a different branch, that never sees the merge.
+  Forbid delegates from locating the tool by filesystem search — pin the path and
+  hard-stop on mismatch. Drop this guardrail only when the change's producer and
+  consumer are the same checkout.
 - **Driver discipline — the orchestrator dispatches, it does not execute** (this is
   the Orchestrator-discipline guardrail; the emitted prompt carries it as the single
   required `## Driver discipline` section). The top session decides what to dispatch,
@@ -554,7 +575,10 @@ no silent scope creep.
    independent verifier, the **Lessons learned** section with its REQUIRED final
    sub-goal *and* its Done-when clause, and — when changing software behavior — a
    **Validation contract** filled *before* execution sub-goals plus an
-   **expected-fail fix loop** with attempt cap.
+   **expected-fail fix loop** with attempt cap. Drop the template's
+   **artifact-identity** Guardrails bullet only when the loop produces no artifact a
+   human or customer will look at; drop the **execution-path proof** Guardrails
+   bullet only when the change's producer and consumer are the same checkout.
 5. If any chunk is multi-stage parallel work, also write the companion
    `.claude/workflows/<slug>.js` (schema + `budget` + per-stage `model`/`effort`) and
    point Run-as at it. A single coupled item (N=1) is a `/goal` drive, not a Workflow.
@@ -863,6 +887,8 @@ Next: /clear   then   /tapps-continue-session
 - Independent verification (creator ≠ verifier); ground-truth proof; verifier gets the proof command, not the claim; expected-fail fix loop with attempt cap.
 - Standing constraints: <each one from the section above — and each also an Autonomy hard-stop>.
 - No green-by-deletion: <the Done-when clause whose count must not shrink>.
+- **Artifact identity, not just validity** — gates check form only (schema, exit code, geometry, provenance, signature); when the loop produces something a human or customer will look at (<name the artifacts>), a delegated step opens it and answers *is this the thing that was asked for*, in words — `agentType` + `model=opus`, tiered as open judgement, not a closed check.
+- **Execution-path proof before "this change takes effect"** — name the file, the checkout it resolves from, and the revision the consumer loads (<name file / checkout / revision>), then prove it with a marker check against that exact file, never a merge SHA or branch name alone; merging to a default branch is not the consumer seeing it. Forbid locating the tool by filesystem search — pin the path and hard-stop on mismatch.
 - **Driver discipline:** the top session decides · dispatches · adjudicates · performs writes delegates cannot · checkpoints. It edits no files, runs no builds, runs no probes, tails no logs, reads no sibling source, gathers no per-iteration state. Every Plane-map row whose Owner is not `driver` is delegated. Driver context ceiling <~250k>; checkpoint at ~50% regardless of sub-goal boundary; `orch-spend` under 15%.
 - **Every dispatch carries a return schema** alongside `agentType` + `model` — a schema-less dispatch returns prose the driver must re-read, spending the tokens the delegation saved.
 - **Tier by question shape, not importance** — closed/evidence-checkable → cheap even at high stakes; open judgement gating an irreversible step → frontier even when small.
