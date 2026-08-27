@@ -28,6 +28,7 @@ from tapps_mcp.server_helpers import error_response, success_response
 
 if TYPE_CHECKING:
     from collections.abc import Callable
+    from pathlib import Path
 
     from mcp.server.fastmcp import FastMCP
 
@@ -246,11 +247,11 @@ async def _run_auto_run(
     return eval_checklist(), auto_run_results
 
 
-async def _gather_git_context(commit_sha: str) -> dict[str, Any] | None:
+async def _gather_git_context(commit_sha: str, project_root: Path) -> dict[str, Any] | None:
     try:
         from tapps_mcp.tools.checklist import _get_git_context
 
-        return await _get_git_context(commit_sha=commit_sha)
+        return await _get_git_context(commit_sha=commit_sha, project_root=project_root)
     except Exception:
         return None
 
@@ -505,7 +506,7 @@ async def tapps_checklist(
         trace_hint = _optional_otel_trace_hint()
         session_id = CallTracker.get_active_checklist_session_id()
 
-        git_context = await _gather_git_context(commit_sha)
+        git_context = await _gather_git_context(commit_sha, settings.project_root)
         tdd_results = await _gather_tdd_results(tdd, settings)
 
         resp_data = _format_checklist_response(

@@ -96,3 +96,70 @@ class TestValidateFilePathHostMapping:
         # Path outside project_root should still fail even with host mapping
         with pytest.raises(PathValidationError):
             _validate_file_path(str(outside / "file.py"))
+
+
+class TestValidateFilePathHostRootIsAncestor:
+    """TAP-6494 (VAL-14): host_project_root as a shared multi-repo ancestor
+    of project_root, not a 1:1 alias of it — the real layout on a machine
+    where many checkouts live under one parent directory."""
+
+    @patch("tapps_mcp.server.load_settings")
+    def test_absolute_in_root_path_resolves_regardless_of_ancestor_host_root(
+        self, mock_load_settings, tmp_path
+    ):
+        parent = tmp_path
+        project_root = parent / "tapps-mcp-clone"
+        project_root.mkdir()
+        (project_root / "foo.py").write_text("x = 1\n")
+
+        mock_load_settings.return_value = TappsMCPSettings(
+            project_root=project_root,
+            host_project_root=str(parent),
+        )
+
+        result = _validate_file_path(str(project_root / "foo.py"))
+        assert result == (project_root / "foo.py").resolve()
+
+    @patch("tapps_mcp.server.load_settings")
+    def test_sibling_repo_under_shared_ancestor_refused_as_outside_not_not_found(
+        self, mock_load_settings, tmp_path
+    ):
+        parent = tmp_path
+        project_root = parent / "tapps-mcp-clone"
+        project_root.mkdir()
+        sibling = parent / "HomeIQ"
+        sibling.mkdir()
+        target = sibling / "config.yaml"
+        target.write_text("x: 1\n")
+
+        mock_load_settings.return_value = TappsMCPSettings(
+            project_root=project_root,
+            host_project_root=str(parent),
+        )
+
+        with pytest.raises(PathValidationError) as exc_info:
+            _validate_file_path(str(target))
+
+        # Must be the honest "outside project root" refusal quoting the
+        # caller's own path, never a FileNotFoundError over a guessed one.
+        assert "outside project root" in str(exc_info.value)
+        assert str(target) in str(exc_info.value)
+
+    @patch("tapps_mcp.server.load_settings")
+    def test_relative_suffix_under_ancestor_maps_into_project_root(
+        self, mock_load_settings, tmp_path
+    ):
+        parent = tmp_path
+        project_root = parent / "tapps-mcp-clone"
+        (project_root / "src").mkdir(parents=True)
+        (project_root / "src" / "main.py").write_text("x = 1\n")
+
+        mock_load_settings.return_value = TappsMCPSettings(
+            project_root=project_root,
+            host_project_root=str(parent),
+        )
+
+        # A host-side path naming this same project (parent/tapps-mcp-clone/...)
+        # still maps correctly even though host_project_root is the ancestor.
+        result = _validate_file_path(str(project_root / "src" / "main.py"))
+        assert result == (project_root / "src" / "main.py").resolve()

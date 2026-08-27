@@ -400,7 +400,19 @@ def tapps_validate_config(file_path: str, config_type: str = "auto") -> dict[str
     try:
         resolved = _validate_file_path(file_path)
     except (ValueError, FileNotFoundError) as exc:
-        return error_response("tapps_validate_config", "path_denied", str(exc))
+        return error_response(
+            "tapps_validate_config",
+            "path_denied",
+            str(exc),
+            extra={
+                "remediation": (
+                    "Pass an absolute or project-relative path inside the "
+                    "project root. tapps_validate_config has no project_root "
+                    "override — copy the config into the repo to validate it "
+                    "against a different root."
+                )
+            },
+        )
 
     explicit_type = _resolve_config_type(config_type)
     if isinstance(explicit_type, dict):
