@@ -33,6 +33,37 @@ PACKAGES: list[tuple[str, str | None]] = [
 # tapps-mcp's pyproject is the source of truth for the AGENTS.md / CLAUDE.md stamps.
 TAPPS_MCP_PYPROJECT = "packages/tapps-mcp/pyproject.toml"
 
+# TAP-5876: internal-package dependency specs that must stay exact-pinned
+# (`"<dep>==<version>"`) to the unified workspace version. `[tool.uv.sources]
+# workspace = true` is a uv-only override — plain pip resolves these lines
+# straight from public PyPI, where a same-named unrelated project can exist
+# ("docs-mcp" already does). An exact pin can only ever match this
+# workspace's own version, so a public-package mismatch makes pip fail
+# loudly instead of silently substituting. Each entry is
+# ``(pyproject_rel, dependency_name)``.
+INTERNAL_PINS: tuple[tuple[str, str], ...] = (
+    ("packages/tapps-mcp/pyproject.toml", "tapps-core"),
+    ("packages/tapps-mcp/pyproject.toml", "docs-mcp"),
+    ("packages/docs-mcp/pyproject.toml", "tapps-core"),
+)
+
+_PIN_RE_CACHE: dict[str, re.Pattern[str]] = {}
+
+
+def _internal_pin_regex(dep_name: str) -> re.Pattern[str]:
+    """Return (and cache) a regex matching ``"<dep_name>==X.Y.Z"``."""
+    if dep_name not in _PIN_RE_CACHE:
+        _PIN_RE_CACHE[dep_name] = re.compile(rf'"{re.escape(dep_name)}==([\d.]+)"')
+    return _PIN_RE_CACHE[dep_name]
+
+
+def read_internal_pin(path: Path, dep_name: str) -> str | None:
+    """Return the exact-pinned version for *dep_name* in *path*, or None if absent."""
+    if not path.exists():
+        return None
+    match = _internal_pin_regex(dep_name).search(path.read_text(encoding="utf-8"))
+    return match.group(1) if match else None
+
 # Files containing a TappsMCP version stamp that must match tapps-mcp pyproject.
 # Each entry is ``(relative_path, stamp_key)`` where stamp_key is the HTML
 # comment marker name (without surrounding ``<!-- ... -->``).
@@ -78,15 +109,6 @@ def read_pyproject_version(path: Path) -> str:
     if not match:
         raise ValueError(f"No version found in {path}")
     return match.group(1)
-
-
-def update_pyproject_version(path: Path, old_version: str, new_version: str) -> str:
-    """Update version in pyproject.toml. Returns updated content."""
-    content = path.read_text(encoding="utf-8")
-    updated = content.replace(f'version = "{old_version}"', f'version = "{new_version}"', 1)
-    if updated == content:
-        raise ValueError(f"Failed to replace version in {path}")
-    return updated
 
 
 def read_npm_version(path: Path) -> str:
@@ -198,6 +220,25 @@ def collect_drift(target_version: str) -> list[str]:
                         f"{npm_rel}: {npm_ver} != tapps-mcp {target_version} (run --sync)"
                     )
 
+    # TAP-5876: internal-package pins must exact-match the unified version —
+    # a stale pin either breaks `uv sync` (pin behind the workspace member's
+    # actual version) or, worse, silently re-widens the window in which a
+    # plain `pip install` could land on a same-named public PyPI package.
+    for pin_rel, dep_name in INTERNAL_PINS:
+        path = REPO_ROOT / pin_rel
+        if not path.exists():
+            continue
+        pin_ver = read_internal_pin(path, dep_name)
+        if pin_ver is None:
+            findings.append(
+                f'{pin_rel}: no "{dep_name}==..." exact pin found '
+                f"(TAP-5876 dependency-confusion guard missing)"
+            )
+        elif pin_ver != target_version:
+            findings.append(
+                f"{pin_rel}: {dep_name} pin {pin_ver} != tapps-mcp {target_version} (run --sync)"
+            )
+
     templates = all_template_hook_names()
     actual = actual_hook_manifest()
     phantom = sorted(actual - templates)
@@ -262,12 +303,36 @@ def collect_bump_changes(part: str | None) -> list[tuple[Path, str, str, str]]:
             continue
 
         old_ver = read_pyproject_version(pyproject_path)
+        content = pyproject_path.read_text(encoding="utf-8")
+        file_changed = False
         if old_ver != target_version:
-            content = update_pyproject_version(pyproject_path, old_ver, target_version)
-            changes.append((pyproject_path, old_ver, target_version, content))
+            updated = content.replace(f'version = "{old_ver}"', f'version = "{target_version}"', 1)
+            if updated == content:
+                raise ValueError(f"Failed to replace version in {pyproject_path}")
+            content = updated
+            file_changed = True
             print(f"  {pyproject_rel}: {old_ver} -> {target_version}")
         else:
             print(f"  {pyproject_rel}: {old_ver} (already at target)")
+
+        # TAP-5876: keep internal-package exact pins in lockstep with the
+        # unified version in the same file write — a separate write to this
+        # path would clobber whichever change ran last.
+        for pin_rel, dep_name in INTERNAL_PINS:
+            if pin_rel != pyproject_rel:
+                continue
+            pin_regex = _internal_pin_regex(dep_name)
+            pin_match = pin_regex.search(content)
+            if not pin_match:
+                raise ValueError(f'No "{dep_name}==..." pin found in {pyproject_path}')
+            old_pin = pin_match.group(1)
+            if old_pin != target_version:
+                content = pin_regex.sub(f'"{dep_name}=={target_version}"', content, count=1)
+                file_changed = True
+                print(f"  {pyproject_rel}: {dep_name} pin {old_pin} -> {target_version}")
+
+        if file_changed:
+            changes.append((pyproject_path, old_ver, target_version, content))
 
         if pyproject_rel == TAPPS_MCP_PYPROJECT:
             new_tapps_mcp_version = target_version

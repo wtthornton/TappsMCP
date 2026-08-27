@@ -45,9 +45,17 @@ def fake_repo(tmp_path: Path, bump_module: ModuleType) -> Path:
     (tmp_path / "npm").mkdir()
     (tmp_path / "npm-docs-mcp").mkdir()
 
+    # TAP-5876: tapps-mcp and docs-mcp exact-pin their internal workspace
+    # deps (dependency-confusion guard) — the fixture mirrors that shape so
+    # the pin-rewrite/drift-check paths run under test like the real repo.
+    dep_lines = {
+        "tapps-core": "",
+        "tapps-mcp": 'dependencies = [\n    "tapps-core==1.0.0",\n    "docs-mcp==1.0.0",\n]\n',
+        "docs-mcp": 'dependencies = [\n    "tapps-core==1.0.0",\n]\n',
+    }
     for sub in ("tapps-core", "tapps-mcp", "docs-mcp"):
         (tmp_path / "packages" / sub / "pyproject.toml").write_text(
-            f'[project]\nname = "{sub}"\nversion = "1.0.0"\n', encoding="utf-8"
+            f'[project]\nname = "{sub}"\nversion = "1.0.0"\n{dep_lines[sub]}', encoding="utf-8"
         )
     (tmp_path / "npm" / "package.json").write_text('{"version": "1.0.0"}\n', encoding="utf-8")
     (tmp_path / "npm-docs-mcp" / "package.json").write_text(
@@ -197,7 +205,9 @@ class TestUnifiedVersioning:
         # Mimic the real-world drift that motivated this change: tapps-mcp
         # ahead, the other two languishing on an older release.
         (fake_repo / "packages/tapps-mcp/pyproject.toml").write_text(
-            '[project]\nname = "tapps-mcp"\nversion = "1.0.5"\n', encoding="utf-8"
+            '[project]\nname = "tapps-mcp"\nversion = "1.0.5"\n'
+            'dependencies = [\n    "tapps-core==1.0.0",\n    "docs-mcp==1.0.0",\n]\n',
+            encoding="utf-8",
         )
         (fake_repo / "AGENTS.md").write_text(
             "<!-- tapps-agents-version: 1.0.5 -->\n", encoding="utf-8"
@@ -222,6 +232,25 @@ class TestUnifiedVersioning:
         assert (
             bump_module.read_npm_version(fake_repo / "npm-docs-mcp/package.json") == "1.0.6"
         )
+        # TAP-5876: internal-package exact pins converge on the same target too.
+        assert (
+            bump_module.read_internal_pin(
+                fake_repo / "packages/tapps-mcp/pyproject.toml", "tapps-core"
+            )
+            == "1.0.6"
+        )
+        assert (
+            bump_module.read_internal_pin(
+                fake_repo / "packages/tapps-mcp/pyproject.toml", "docs-mcp"
+            )
+            == "1.0.6"
+        )
+        assert (
+            bump_module.read_internal_pin(
+                fake_repo / "packages/docs-mcp/pyproject.toml", "tapps-core"
+            )
+            == "1.0.6"
+        )
         assert (
             bump_module.read_stamp(fake_repo / "AGENTS.md", "tapps-agents-version") == "1.0.6"
         )
@@ -239,7 +268,9 @@ class TestUnifiedVersioning:
         Used as a one-time fix after drift; should NOT advance the version.
         """
         (fake_repo / "packages/tapps-mcp/pyproject.toml").write_text(
-            '[project]\nname = "tapps-mcp"\nversion = "1.0.9"\n', encoding="utf-8"
+            '[project]\nname = "tapps-mcp"\nversion = "1.0.9"\n'
+            'dependencies = [\n    "tapps-core==1.0.0",\n    "docs-mcp==1.0.0",\n]\n',
+            encoding="utf-8",
         )
         (fake_repo / "AGENTS.md").write_text(
             "<!-- tapps-agents-version: 1.0.9 -->\n", encoding="utf-8"
@@ -256,13 +287,22 @@ class TestUnifiedVersioning:
             "packages/docs-mcp/pyproject.toml",
         ):
             assert bump_module.read_pyproject_version(fake_repo / rel) == "1.0.9"
+        # TAP-5876: --sync also realigns the internal pins, not just versions.
+        assert (
+            bump_module.read_internal_pin(
+                fake_repo / "packages/tapps-mcp/pyproject.toml", "tapps-core"
+            )
+            == "1.0.9"
+        )
 
     def test_check_flags_drift_between_packages(
         self, fake_repo: Path, bump_module, capsys
     ) -> None:
         """`--check` must catch a tapps-mcp / tapps-core mismatch."""
         (fake_repo / "packages/tapps-mcp/pyproject.toml").write_text(
-            '[project]\nname = "tapps-mcp"\nversion = "1.0.5"\n', encoding="utf-8"
+            '[project]\nname = "tapps-mcp"\nversion = "1.0.5"\n'
+            'dependencies = [\n    "tapps-core==1.0.5",\n    "docs-mcp==1.0.5",\n]\n',
+            encoding="utf-8"
         )
         (fake_repo / "AGENTS.md").write_text(
             "<!-- tapps-agents-version: 1.0.5 -->\n", encoding="utf-8"
@@ -273,3 +313,64 @@ class TestUnifiedVersioning:
         assert "packages/tapps-core/pyproject.toml" in out
         assert "1.0.0" in out and "tapps-mcp 1.0.5" in out
         assert "run --sync" in out
+
+
+class TestInternalPins:
+    """TAP-5876: tapps-core/docs-mcp must stay exact-pinned, not `>=`.
+
+    `[tool.uv.sources] workspace = true` is a uv-only override; plain pip
+    resolves the `dependencies` line from public PyPI. An exact pin can
+    only ever match this workspace's own version, so bump_versions.py must
+    keep it in lockstep on every bump/sync and `--check` must catch drift.
+    """
+
+    def test_read_internal_pin_extracts_version(self, fake_repo: Path, bump_module) -> None:
+        assert (
+            bump_module.read_internal_pin(
+                fake_repo / "packages/tapps-mcp/pyproject.toml", "tapps-core"
+            )
+            == "1.0.0"
+        )
+        assert (
+            bump_module.read_internal_pin(
+                fake_repo / "packages/tapps-mcp/pyproject.toml", "docs-mcp"
+            )
+            == "1.0.0"
+        )
+
+    def test_read_internal_pin_none_when_absent(self, fake_repo: Path, bump_module) -> None:
+        assert (
+            bump_module.read_internal_pin(
+                fake_repo / "packages/tapps-core/pyproject.toml", "tapps-brain"
+            )
+            is None
+        )
+
+    def test_check_flags_stale_pin(self, fake_repo: Path, bump_module, capsys) -> None:
+        # Version bumps but the internal pin is left behind — the exact
+        # drift class this guard exists to catch.
+        pyproject = fake_repo / "packages/tapps-mcp/pyproject.toml"
+        pyproject.write_text(
+            pyproject.read_text().replace('version = "1.0.0"', 'version = "1.0.1"'),
+            encoding="utf-8",
+        )
+        (fake_repo / "AGENTS.md").write_text(
+            "<!-- tapps-agents-version: 1.0.1 -->\n", encoding="utf-8"
+        )
+        (fake_repo / "CLAUDE.md").write_text(
+            "<!-- tapps-claude-version: 1.0.1 -->\n", encoding="utf-8"
+        )
+        rc = bump_module.run_check()
+        assert rc == 1
+        out = capsys.readouterr().out
+        assert "tapps-core pin 1.0.0 != tapps-mcp 1.0.1" in out
+        assert "docs-mcp pin 1.0.0 != tapps-mcp 1.0.1" in out
+
+    def test_check_flags_missing_pin(self, fake_repo: Path, bump_module, capsys) -> None:
+        (fake_repo / "packages/docs-mcp/pyproject.toml").write_text(
+            '[project]\nname = "docs-mcp"\nversion = "1.0.0"\n', encoding="utf-8"
+        )
+        rc = bump_module.run_check()
+        assert rc == 1
+        out = capsys.readouterr().out
+        assert "dependency-confusion guard missing" in out
