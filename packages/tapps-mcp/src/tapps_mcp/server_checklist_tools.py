@@ -25,6 +25,7 @@ from mcp.types import ToolAnnotations
 from tapps_core.config.settings import load_settings
 from tapps_mcp.mcp_register import register_tool
 from tapps_mcp.server_helpers import error_response, success_response
+from tapps_mcp.tools.nothing_to_gate import attach_nothing_to_gate
 
 if TYPE_CHECKING:
     from collections.abc import Callable
@@ -123,6 +124,7 @@ def _checklist_json_format(
         "next_steps": next_steps,
         "full": result.model_dump(),
     }
+    attach_nothing_to_gate(data, result)
     if auto_run_results:
         data["auto_run_results"] = auto_run_results
     return data
@@ -150,7 +152,6 @@ def _checklist_compact_format(
     if result.missing_recommended:
         missing_names = ", ".join(result.missing_recommended)
         parts.append(f"{len(result.missing_recommended)} recommended missing ({missing_names})")
-
     summary = f"Checklist {result.task_type}: {', '.join(parts)}"
 
     next_steps: list[str] = [h.reason for h in result.missing_required_hints]
@@ -169,6 +170,7 @@ def _checklist_compact_format(
         "next_steps": next_steps,
         "full": result.model_dump(),
     }
+    attach_nothing_to_gate(data, result)
     if auto_run_results:
         data["auto_run_results"] = auto_run_results
     return data

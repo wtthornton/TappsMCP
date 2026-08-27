@@ -352,9 +352,11 @@ async def _handle_no_changed_files(
     correlation_id: str = "",
     judges: list[dict[str, Any]] | None = None,
     project_root_override: bool = False,
+    file_paths: str = "",
 ) -> dict[str, Any]:
     """Return early response when no changed scorable files are found."""
     from tapps_mcp import server_pipeline_tools as _host
+    from tapps_mcp.tools import nothing_to_gate as _ntg
 
     elapsed_ms = (time.perf_counter_ns() - start) // 1_000_000
 
@@ -381,6 +383,11 @@ async def _handle_no_changed_files(
         "results": [],
         "summary": "No changed scorable files found — inconclusive, nothing was gated.",
     }
+
+    # TAP-6606: the verdict "there was nothing to gate" used to stop here.
+    # attach_verdict both returns and persists it so tapps_checklist and the
+    # stop hook can tell it apart from "no validation was run".
+    _ntg.attach_verdict(resp_data, settings.project_root, file_paths=file_paths, base_ref=base_ref)
 
     summary = resp_data["summary"]
     if judges:

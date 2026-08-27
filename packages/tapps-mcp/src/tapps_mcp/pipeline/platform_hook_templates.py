@@ -2851,7 +2851,29 @@ PROJECT_DIR="${CLAUDE_PROJECT_DIR:-.}"
 MARKER="$PROJECT_DIR/.tapps-mcp/.validation-marker"
 PROGRESS="$PROJECT_DIR/.tapps-mcp/.validation-progress.json"
 if command -v git >/dev/null 2>&1 && git -C "$PROJECT_DIR" rev-parse --git-dir >/dev/null 2>&1 && ! { git -C "$PROJECT_DIR" diff --name-only HEAD; git -C "$PROJECT_DIR" diff --name-only --cached; git -C "$PROJECT_DIR" ls-files --others --exclude-standard; for r in main master origin/main origin/master; do git -C "$PROJECT_DIR" diff --name-only "$r...HEAD"; done; } 2>/dev/null | grep -qE '\\.(py|pyi|ts|tsx|js|jsx|mjs|cjs|go|rs)$'; then
-  echo "OK: no scorable changed files — nothing to validate." >&2
+  # TAP-6606: no scorable file changed, so this turn cannot block. Prefer the
+  # verdict tapps_validate_changed recorded over our own git guess — "nothing
+  # needed validating" must read differently from the "No quality validation
+  # was run" block below. Wording only: when scorable files DO exist this
+  # branch is unreachable, so a stale sidecar can never weaken the gate.
+  NTG_FILE="$PROJECT_DIR/.tapps-mcp/.nothing-to-gate.json"
+  NTG_MSG=""
+  if [ -f "$NTG_FILE" ] && [ -n "$PYBIN" ]; then
+    NTG_MSG=$("$PYBIN" - "$NTG_FILE" <<'NTGEOF' 2>/dev/null
+import json, sys, time
+try:
+    d = json.load(open(sys.argv[1]))
+    if 0 <= time.time() - float(d.get('ts', 0)) <= 3600:
+        print('OK: nothing needed validating — tapps_validate_changed recorded %s scorable '
+              'file(s) among %s changed file(s).'
+              % (d.get('scorable_changed', 0), d.get('changed_files', 0)))
+except Exception:
+    pass
+NTGEOF
+)
+  fi
+  [ -n "$NTG_MSG" ] || NTG_MSG="OK: no scorable changed files — nothing to validate."
+  echo "$NTG_MSG" >&2
   exit 0
 fi
 if [ -f "$MARKER" ]; then
@@ -3005,7 +3027,24 @@ function Test-TappsNoScorableChanges {
     }
     return -not ($changed | Where-Object { $_ -match $pattern })
 }
-if (Test-TappsNoScorableChanges) { Write-Output "OK: no scorable changed files — nothing to validate."; exit 0 }
+if (Test-TappsNoScorableChanges) {
+    # TAP-6606: prefer the recorded verdict over our own git guess, so "nothing
+    # needed validating" reads differently from the "No quality validation was
+    # run" block below. Wording only — unreachable when scorable files changed.
+    $ntgMsg = "OK: no scorable changed files — nothing to validate."
+    $ntgFile = "$projDir/.tapps-mcp/.nothing-to-gate.json"
+    if (Test-Path $ntgFile) {
+        try {
+            $ntg = Get-Content $ntgFile -Raw | ConvertFrom-Json
+            $age = [DateTimeOffset]::UtcNow.ToUnixTimeSeconds() - [double]$ntg.ts
+            if ($age -ge 0 -and $age -le 3600) {
+                $ntgMsg = "OK: nothing needed validating — tapps_validate_changed recorded $($ntg.scorable_changed) scorable file(s) among $($ntg.changed_files) changed file(s)."
+            }
+        } catch {}
+    }
+    Write-Output $ntgMsg
+    exit 0
+}
 if (Test-Path $marker) {
     if (Test-Path $progress) {
         try {

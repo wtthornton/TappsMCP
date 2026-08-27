@@ -109,6 +109,7 @@ a = Analysis(
         "tapps_mcp.tools.radon",
         "tapps_mcp.tools.radon_direct",
         "tapps_mcp.tools.parallel",
+        "tapps_mcp.tools.nothing_to_gate",
         "tapps_mcp.tools.checklist",
         "tapps_mcp.tools.checklist_epic",
         "tapps_mcp.tools.checklist_maps",
