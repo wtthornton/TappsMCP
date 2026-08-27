@@ -47,7 +47,8 @@ This is the only reason the incident is diagnosable at all.
 
 ## 3. The decisive lines
 
-All six logs, immediately before both restart markers, end with the *same* frame:
+Four of the six logs — `nlt-build`, `nlt-linear-issues`, `nlt-memory`, `nlt-setup` —
+end the session immediately before both restart markers with the *same* frame:
 
 ```
   File ".../asyncio/base_events.py", line 2012, in _run_once
@@ -67,8 +68,31 @@ asyncio.exceptions.CancelledError
 (`nlt-build.log:381293-381311` and `:381586-381604` — the last such frame before each
 restart marker; uvicorn dumps one copy per in-flight ASGI request, so the frame also
 appears at `:381220`, `:381439`, `:381513`. The identical frame appears in
-`nlt-memory.log`, `nlt-setup.log`, `nlt-project-docs.log`, `nlt-release-ship.log`, and
-`nlt-linear-issues.log` at both events.)
+`nlt-memory.log`, `nlt-setup.log`, and `nlt-linear-issues.log` at both events.)
+
+**`nlt-project-docs.log` and `nlt-release-ship.log` carry no such frame** in the
+session before either marker. Their residue instead is uvicorn's own
+graceful-shutdown sequence:
+
+```
+INFO:     Shutting down
+INFO:     Waiting for connections to close. (CTRL+C to force quit)
+ERROR:    ASGI callable returned without completing response.
+INFO:     Waiting for application shutdown.
+StreamableHTTP session manager shutting down
+INFO:     Application shutdown complete.
+INFO:     Finished server process [<pid>]
+```
+
+(`nlt-project-docs.log:63010-63023` before event 1, `:63086-63092` before event 2;
+`nlt-release-ship.log:59212-59225` before event 1, `:59289-59295` before event 2. No
+`_sigterm_drain_exit` frame appears anywhere in either process's session preceding
+either marker — verified over the full span back to each process's own prior restart,
+`nlt-project-docs.log:61149-63025` / `:63025-63094` and
+`nlt-release-ship.log:57350-59227` / `:59227-59297`.) uvicorn installs its own exit
+handler on `HANDLED_SIGNALS = (SIGINT, SIGTERM)` (`uvicorn/server.py:36-39`) and
+produces byte-identical output for either signal, so for these two processes the
+signal is bounded to "SIGINT or SIGTERM," not established as SIGTERM.
 
 Last normal activity before event 1: `nlt-build.log:380652`, `17:16:49Z` = 10:16:49 PDT,
 followed by ordinary `200 OK` `/mcp` traffic. No error, no warning, no shutdown line.
@@ -100,9 +124,26 @@ changed here.
 
 ### 4.2 What killed them — bounded, not identified
 
-**Mechanism: SIGTERM delivered to all six processes.** This is established, not
-inferred: the `_sigterm_drain_exit` frame is only reachable from
-`signal.signal(signal.SIGTERM, …)`.
+**Mechanism: an external signal to all six processes, same second — SIGTERM
+established for four of them.** For `nlt-build`, `nlt-linear-issues`, `nlt-memory`, and
+`nlt-setup`, SIGTERM is established, not inferred: the `_sigterm_drain_exit` frame is
+only reachable from `signal.signal(signal.SIGTERM, …)`. For `nlt-project-docs` and
+`nlt-release-ship`, the residue is uvicorn's own shutdown path, which uvicorn installs
+identically for SIGINT and SIGTERM (`HANDLED_SIGNALS = (SIGINT, SIGTERM)`,
+`uvicorn/server.py:36-39`) — for those two the verdict is bounded to **an external
+signal in `{SIGINT, SIGTERM}`**, not established as SIGTERM specifically.
+
+Hypothesis for the 4/2 split, not confirmed from these logs (labeled as such — the
+evidence to confirm it does not survive): `_register_shutdown_hooks` installs the
+draining SIGTERM handler lazily, the first time some tool call in that process
+triggers `get_bridge()` (`brain_bridge.py:3720`, `:3753-3791`; the lazy import sites are
+`server_helpers.py` in both packages and `server_val_tools.py` in docs-mcp) — it is not
+installed at process startup, and whichever handler is registered when the signal
+arrives is the one that runs. It is consistent with the code that if the
+`nlt-project-docs` and `nlt-release-ship` processes' sessions before both 08-13 events
+never happened to call a brain-touching tool, uvicorn's own handler would still have
+been in place. Whether that is what actually happened in those two sessions cannot be
+confirmed — no tool-call trace survives from the incident window.
 
 **Sender: unrecoverable.** A Python signal handler receives no sender pid, the handler
 recorded nothing, and the journals that would have carried the `systemctl`/session
@@ -117,7 +158,8 @@ What the evidence *does* exclude:
 - **Not a resource/exit-code failure in the server itself.** Exit status was 0 by
   construction.
 
-The residual class is **an external SIGTERM to the process group or session** — e.g. a
+The residual class is **an external signal to the process group or session** —
+SIGTERM for four processes, SIGINT-or-SIGTERM bounded for the other two — e.g. a
 `tapps-mcp fleet stop`, a `systemctl --user restart tapps-mcp-fleet.service`, a
 `pkill`-style sweep, or a session-scope teardown. The near-simultaneity of all six
 (single second) is consistent with a group-wide delivery rather than six independent
