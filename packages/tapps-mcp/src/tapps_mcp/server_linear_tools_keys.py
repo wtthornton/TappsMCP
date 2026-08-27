@@ -18,6 +18,7 @@ _OPEN_STATE_BUCKETS: frozenset[str] = frozenset({"backlog", "unstarted", "starte
 # State values that indicate a closed workflow (long TTL).
 _CLOSED_STATE_BUCKETS: frozenset[str] = frozenset({"completed", "canceled"})
 
+
 def _list_issues_tool_phrase() -> str:
     """Host-neutral phrasing for Linear ``list_issues`` (TAP-5455)."""
     from tapps_mcp.pipeline.linear_mcp_names import linear_plugin_hint_phrasing
@@ -76,8 +77,7 @@ def _list_issues_pass_payload(state: str) -> tuple[dict[str, Any], list[str]]:
             ),
         }
         steps = [
-            f"Call {tool} with team/project "
-            "(includeArchived=false) — omit state.",
+            f"Call {tool} with team/project (includeArchived=false) — omit state.",
             f'Then call tapps_linear_snapshot_put(..., state="{alias}") to cache.',
         ]
         return data, steps
@@ -113,6 +113,50 @@ _COMPACT_FIELDS: frozenset[str] = frozenset(
         "parent",
     }
 )
+
+
+# TAP-6581: ``_COMPACT_FIELDS`` is the CEILING of the compact projection (what a
+# compact row may contain); these two are the FLOOR (what it must contain to be
+# a usable issue row). A row with neither ``identifier`` nor ``id`` is not
+# addressable; a row without ``title`` is not readable. A cache auto-populated
+# from ``list_issues(fields=["id"])`` stores rows that satisfy neither, and
+# serving those as a hit is what made snapshot_get claim a projection it did
+# not have.
+_COMPACT_IDENTITY_FIELDS: frozenset[str] = frozenset({"identifier", "id"})
+_COMPACT_REQUIRED_FIELDS: frozenset[str] = frozenset({"title"})
+
+# Projection a stored payload can honestly be served as.
+_PROJECTION_NONE = "none"
+_PROJECTION_COMPACT = "compact"
+_PROJECTION_FULL = "full"
+
+
+def _row_satisfies_compact(issue: Any) -> bool:
+    """Return True if *issue* carries the compact floor (identity + title)."""
+    if not isinstance(issue, dict):
+        return False
+    keys = set(issue)
+    return bool(keys & _COMPACT_IDENTITY_FIELDS) and keys >= _COMPACT_REQUIRED_FIELDS
+
+
+def _stored_projection(issues: list[Any]) -> str:
+    """Return the richest projection *issues* actually satisfies.
+
+    ``"full"`` only when every row carries at least one field OUTSIDE
+    ``_COMPACT_FIELDS`` — that is the sole observable evidence the payload was
+    never pruned. Rows made only of compact fields are indistinguishable from a
+    compact projection, so ``"full"`` is a claim the data cannot support and
+    ``"compact"`` is returned instead. ``"none"`` when any row falls below the
+    compact floor: such a payload cannot serve either projection and must MISS
+    rather than be handed back with a projection label it does not satisfy.
+    """
+    if not issues:
+        return _PROJECTION_NONE
+    if not all(_row_satisfies_compact(i) for i in issues):
+        return _PROJECTION_NONE
+    if all(set(i) - _COMPACT_FIELDS for i in issues):
+        return _PROJECTION_FULL
+    return _PROJECTION_COMPACT
 
 
 def _compact_issue(issue: dict[str, Any]) -> dict[str, Any]:

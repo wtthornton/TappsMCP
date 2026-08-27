@@ -469,7 +469,7 @@ async def test_invalidate_then_get_returns_miss(
     await tapps_linear_snapshot_put(
         team="T",
         project="P",
-        issues_json=json.dumps([{"id": "x"}]),
+        issues_json=json.dumps([{"id": "x", "title": "some work"}]),
         state="backlog",
     )
     hit = await tapps_linear_snapshot_get(team="T", project="P", state="backlog")
@@ -675,7 +675,7 @@ async def test_get_smaller_limit_hits_larger_cached_superset(
     tmp_path: Path, mock_load_settings: Any
 ) -> None:
     """get(limit=50) HITS a cached limit=150 snapshot, truncated."""
-    issues = [{"id": f"LIN-{i}"} for i in range(150)]
+    issues = [{"id": f"LIN-{i}", "title": f"issue {i}"} for i in range(150)]
     put = await tapps_linear_snapshot_put(
         team="T", project="P", issues_json=json.dumps(issues), state="open", limit=150
     )
@@ -695,7 +695,7 @@ async def test_get_larger_limit_misses_smaller_cached(
     tmp_path: Path, mock_load_settings: Any
 ) -> None:
     """get(limit=150) MISSES a cached limit=50 snapshot (can't serve larger)."""
-    issues = [{"id": f"LIN-{i}"} for i in range(50)]
+    issues = [{"id": f"LIN-{i}", "title": f"issue {i}"} for i in range(50)]
     await tapps_linear_snapshot_put(
         team="T", project="P", issues_json=json.dumps(issues), state="open", limit=50
     )
@@ -711,7 +711,7 @@ async def test_get_exact_limit_hits_not_flagged_superset(
     tmp_path: Path, mock_load_settings: Any
 ) -> None:
     """Equal stored/requested limit hits without the superset flag."""
-    issues = [{"id": f"LIN-{i}"} for i in range(50)]
+    issues = [{"id": f"LIN-{i}", "title": f"issue {i}"} for i in range(50)]
     await tapps_linear_snapshot_put(
         team="T", project="P", issues_json=json.dumps(issues), state="open", limit=50
     )

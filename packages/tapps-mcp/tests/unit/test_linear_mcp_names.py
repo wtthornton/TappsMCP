@@ -14,6 +14,7 @@ from tapps_mcp.pipeline.linear_mcp_names import (
     linear_plugin_tool_names,
     matcher_covers_linear_leaf,
     patch_linear_hook_matchers,
+    resolve_linear_host_placeholders,
 )
 
 
@@ -29,7 +30,7 @@ class TestLinearPluginToolNames:
         assert "mcp__plugin_linear_linear__list_issues" in m
         assert "mcp__claude_ai_Linear__list_issues" in m
         assert "|" in m
-        assert LINEAR_LIST_ISSUES_MATCHER == m
+        assert m == LINEAR_LIST_ISSUES_MATCHER
 
     def test_save_issue_matcher_distinct(self) -> None:
         assert "save_issue" in LINEAR_SAVE_ISSUE_MATCHER
@@ -56,9 +57,7 @@ class TestIsLinearPluginTool:
 
 class TestMatcherCovers:
     def test_exact_legacy(self) -> None:
-        assert matcher_covers_linear_leaf(
-            ["mcp__plugin_linear_linear__list_issues"], "list_issues"
-        )
+        assert matcher_covers_linear_leaf(["mcp__plugin_linear_linear__list_issues"], "list_issues")
 
     def test_pipe_matcher(self) -> None:
         assert matcher_covers_linear_leaf([LINEAR_LIST_ISSUES_MATCHER], "list_issues")
@@ -94,3 +93,24 @@ class TestPatchLinearHookMatchers:
         assert "mcp__plugin_linear_linear__list_issues" in matchers
         assert "mcp__claude_ai_Linear__list_issues" in matchers
         assert all("|" not in str(m) for m in matchers)
+
+
+class TestListIssuesNamesRepr:
+    """TAP-6581: the emitted set literal must be byte-stable across processes.
+
+    ``repr(set(...))`` orders by hash, and PYTHONHASHSEED randomizes that per
+    process — so the generated hook body and its ``hook-content-sha`` differed
+    between two runs of the same generator, making "the deployed hook matches
+    the generator" impossible to assert.
+    """
+
+    def test_names_repr_is_sorted_and_stable(self) -> None:
+        out = resolve_linear_host_placeholders("X = __LINEAR_LIST_ISSUES_NAMES_REPR__")
+        names = [n.strip().strip("'") for n in out.split("{", 1)[1].rstrip("}").split(", ")]
+        assert names == sorted(names)
+        assert "mcp__plugin_linear_linear__list_issues" in names
+        assert out == resolve_linear_host_placeholders("X = __LINEAR_LIST_ISSUES_NAMES_REPR__")
+
+    def test_names_repr_is_a_valid_set_literal(self) -> None:
+        rendered = resolve_linear_host_placeholders("__LINEAR_LIST_ISSUES_NAMES_REPR__")
+        assert eval(rendered) == set(linear_plugin_tool_names("list_issues"))  # noqa: S307

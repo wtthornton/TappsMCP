@@ -90,6 +90,18 @@ LINEAR_LIST_ISSUES_NAMES: Final[tuple[str, ...]] = linear_plugin_tool_names(_LIS
 LINEAR_SAVE_ISSUE_NAMES: Final[tuple[str, ...]] = linear_plugin_tool_names(_SAVE_ISSUE)
 
 
+def _sorted_set_literal(names: tuple[str, ...]) -> str:
+    """Render *names* as a set literal in a stable order.
+
+    ``repr(set(...))`` orders by hash, which PYTHONHASHSEED randomizes per
+    process — so the generated hook body, and therefore its
+    ``tapps-mcp-hook-content-sha``, differed between two runs of the same
+    generator. That made "deployed copy matches the generator" unverifiable and
+    caused spurious hook rewrites on upgrade (TAP-6581).
+    """
+    return "{" + ", ".join(repr(n) for n in sorted(names)) + "}"
+
+
 def resolve_linear_host_placeholders(text: str) -> str:
     """Substitute TAP-5452 Linear host-id placeholders (matcher + in-hook guards)."""
     return (
@@ -101,7 +113,7 @@ def resolve_linear_host_placeholders(text: str) -> str:
         .replace("__LINEAR_LIST_ISSUES_PS_EQ__", powershell_eq_chain("list_issues"))
         .replace(
             "__LINEAR_LIST_ISSUES_NAMES_REPR__",
-            repr(set(LINEAR_LIST_ISSUES_NAMES)),
+            _sorted_set_literal(LINEAR_LIST_ISSUES_NAMES),
         )
     )
 
