@@ -24,8 +24,18 @@ classifiers = [
     "Typing :: Typed",
 ]
 dependencies = [
-    "tapps-core>=1.0.0",
-    "docs-mcp>=0.1.0",
+    # TAP-5876: exact-pinned, NOT >=. tapps-core/docs-mcp are uv workspace
+    # members (see [tool.uv.sources] below) — that override is uv-only, so
+    # plain pip resolves this line straight from public PyPI. "docs-mcp"
+    # already collides with an unrelated PyPI project (github.com/herring101);
+    # a loose `>=` range would let pip silently install it instead of this
+    # workspace's package. An exact pin can only ever match this workspace's
+    # current version, so a mismatched public release makes pip fail loudly
+    # naming the requirement instead of substituting silently.
+    # scripts/bump_versions.py rewrites and CI-gates (`--check`) this pin on
+    # every version bump so it can't drift back open.
+    "tapps-core==3.12.76",
+    "docs-mcp==3.12.76",
     "mcp[cli]>=1.27.2,<2",
     "pydantic>=2.13.4,<3",
     "pydantic-settings>=2.14.1,<3",

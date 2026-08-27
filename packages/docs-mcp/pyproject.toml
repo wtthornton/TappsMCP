@@ -25,7 +25,14 @@ classifiers = [
     "Typing :: Typed",
 ]
 dependencies = [
-    "tapps-core>=1.0.0",
+    # TAP-5876: exact-pinned, NOT >=. tapps-core is a uv workspace member
+    # (see [tool.uv.sources] below) — that override is uv-only, so plain pip
+    # resolves this line from public PyPI, where an unrelated same-named
+    # package could appear. An exact pin only ever matches this workspace's
+    # current version, so a mismatch makes pip fail loudly naming the
+    # requirement instead of silently substituting. scripts/bump_versions.py
+    # rewrites and CI-gates (`--check`) this pin on every version bump.
+    "tapps-core==3.12.76",
     "mcp[cli]>=1.27.2,<2",
     "click>=8.4.1,<9",
     "jinja2>=3.1.6,<4",

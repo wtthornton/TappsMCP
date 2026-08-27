@@ -1376,8 +1376,14 @@ MIT - see [LICENSE](LICENSE).
 <!-- docsmcp:start:installation -->
 ## Installation
 
+TappsMCP is never published to PyPI (ADR-0003) — `uv sync` is the only supported
+install command. A bare `pip install tapps-mcp`/`docs-mcp` would resolve against
+unrelated public PyPI packages of those names rather than this workspace
+(TAP-5876); the workspace pyprojects exact-pin those internal deps so a plain
+`pip install` fails loudly instead of silently substituting.
+
 ```bash
-uv sync  # or: pip install tapps-mcp
+uv sync
 ```
 <!-- docsmcp:end:installation -->
 
