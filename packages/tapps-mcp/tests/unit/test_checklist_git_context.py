@@ -1,12 +1,38 @@
-"""Tests for checklist git context (Story 75.5)."""
+"""Tests for checklist git context (Story 75.5, TAP-6388)."""
 
 from __future__ import annotations
 
+import subprocess
+from pathlib import Path
 from unittest.mock import AsyncMock, patch
 
 import pytest
 
+from tapps_mcp.server_checklist_tools import _gather_git_context
 from tapps_mcp.tools.checklist import _get_git_context
+
+
+def _run_git(args: list[str], cwd: Path) -> str:
+    result = subprocess.run(
+        ["git", *args],
+        cwd=str(cwd),
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+    return result.stdout.strip()
+
+
+def _init_temp_repo(repo_dir: Path, branch: str) -> str:
+    """Create a hermetic temp git repo on a distinct branch; return its HEAD SHA."""
+    repo_dir.mkdir(parents=True, exist_ok=True)
+    _run_git(["init", "-q", "-b", branch], repo_dir)
+    _run_git(["config", "user.email", "test@example.com"], repo_dir)
+    _run_git(["config", "user.name", "Test"], repo_dir)
+    (repo_dir / "marker.txt").write_text("tap-6388\n")
+    _run_git(["add", "marker.txt"], repo_dir)
+    _run_git(["commit", "-q", "-m", "tap-6388 regression commit"], repo_dir)
+    return _run_git(["rev-parse", "HEAD"], repo_dir)
 
 
 class TestGetGitContext:
@@ -127,3 +153,46 @@ class TestGetGitContext:
             ctx = await _get_git_context(commit_sha="   ")
             assert ctx is not None
             assert ctx["head_sha"] == "abcd1234"
+
+
+class TestGatherGitContextProjectRootThreading:
+    """TAP-6388 (VAL-15): git_context must reflect *project_root*, never the
+    server process's own cwd. Regression test uses a real hermetic temp git
+    repo — never the live tapps-mcp checkout's state."""
+
+    @pytest.mark.asyncio
+    async def test_reports_target_project_branch_and_sha_not_process_cwd(
+        self, tmp_path: Path
+    ) -> None:
+        target_repo = tmp_path / "target-project"
+        branch_name = "tap-6388-regression-branch"
+        target_sha = _init_temp_repo(target_repo, branch_name)
+
+        live_repo_root = Path(
+            _run_git(["rev-parse", "--show-toplevel"], Path(__file__).parent)
+        )
+        live_branch = _run_git(["rev-parse", "--abbrev-ref", "HEAD"], live_repo_root)
+        live_sha = _run_git(["rev-parse", "HEAD"], live_repo_root)
+
+        ctx = await _gather_git_context(commit_sha="", project_root=target_repo)
+
+        assert ctx is not None
+        assert ctx["branch"] == branch_name
+        assert ctx["head_sha_full"] == target_sha
+        assert ctx["dirty"] is False
+
+        # Negative control: must NOT be the live repo's own state, proving
+        # the server process's actual cwd was not what got reported.
+        assert ctx["branch"] != live_branch
+        assert ctx["head_sha_full"] != live_sha
+
+    @pytest.mark.asyncio
+    async def test_not_a_git_repo_returns_none_not_silent_fallback(
+        self, tmp_path: Path
+    ) -> None:
+        non_repo_dir = tmp_path / "not-a-repo"
+        non_repo_dir.mkdir()
+
+        ctx = await _gather_git_context(commit_sha="", project_root=non_repo_dir)
+
+        assert ctx is None

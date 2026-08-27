@@ -180,23 +180,48 @@ def _normalize_path_for_mapping(path: str) -> str:
 
 
 def _validate_file_path(file_path: str) -> Path:
-    """Validate *file_path* against the project root boundary."""
+    """Validate *file_path* against the project root boundary.
+
+    TAP-6494: a path already expressed in ``project_root``'s own coordinate
+    space always resolves as-is, whatever ``host_project_root`` says — host
+    mapping is a fallback for paths that don't already resolve, never an
+    override for ones that do. When ``host_project_root`` is a strict
+    ancestor of ``project_root`` (a shared multi-repo workspace root, e.g.
+    ``/home/user/code`` holding many checkouts) rather than a 1:1 alias of
+    it (the Docker/Cursor host<->container case the field was designed
+    for), a host path under a *different* checkout is a genuine sibling —
+    it must be refused as outside the root, never guessed into this one.
+    """
     from tapps_core.security.path_validator import PathValidator
 
     settings = load_settings()
     validator = PathValidator(settings.project_root)
     path_str = file_path.strip()
+    input_norm = _normalize_path_for_mapping(path_str)
+    project_root_norm = _normalize_path_for_mapping(str(settings.project_root))
+
+    already_in_root = input_norm == project_root_norm or input_norm.startswith(
+        project_root_norm + "/"
+    )
+    if already_in_root:
+        return validator.validate_read_path(input_norm)
 
     if settings.host_project_root:
         host_norm = _normalize_path_for_mapping(settings.host_project_root)
-        input_norm = _normalize_path_for_mapping(path_str)
-        if host_norm and (
-            input_norm == host_norm
-            or input_norm.startswith(host_norm + "/")
-            or (input_norm + "/").startswith(host_norm + "/")
-        ):
+        if host_norm and (input_norm == host_norm or input_norm.startswith(host_norm + "/")):
             suffix = input_norm[len(host_norm) :].lstrip("/")
-            path_str = suffix or "."
+            if project_root_norm.startswith(host_norm + "/"):
+                project_rel = project_root_norm[len(host_norm) :].lstrip("/")
+                if suffix == project_rel:
+                    return validator.validate_read_path(".")
+                prefix = project_rel + "/"
+                if suffix.startswith(prefix):
+                    return validator.validate_read_path(suffix[len(prefix) :])
+                # Sibling under the shared ancestor, not this project — fall
+                # through so the caller's own path produces an honest
+                # "outside project root" refusal instead of a guessed one.
+            else:
+                return validator.validate_read_path(suffix or ".")
 
     return validator.validate_read_path(path_str)
 

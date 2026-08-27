@@ -62,17 +62,24 @@ from tapps_mcp.tools.checklist_tdd import (
 logger = structlog.get_logger(__name__)
 
 
-async def _get_git_context(commit_sha: str = "") -> dict[str, Any] | None:
+async def _get_git_context(
+    commit_sha: str = "", project_root: Path | None = None
+) -> dict[str, Any] | None:
     """Retrieve current git context (branch, HEAD SHA, dirty status).
 
     Returns None if git is unavailable or not in a git repo.
     If *commit_sha* is provided, it overrides the auto-detected HEAD SHA.
+    TAP-6388: *project_root* pins ``cwd`` for every git command so the
+    context reflects the TARGET project, not the server process's own cwd.
     """
     from tapps_mcp.tools.subprocess_runner import run_command_async
+
+    cwd = str(project_root) if project_root is not None else None
 
     try:
         branch_result = await run_command_async(
             ["git", "rev-parse", "--abbrev-ref", "HEAD"],
+            cwd=cwd,
             timeout=5,
         )
         if branch_result.returncode != 0:
@@ -81,14 +88,17 @@ async def _get_git_context(commit_sha: str = "") -> dict[str, Any] | None:
 
         sha_short_result = await run_command_async(
             ["git", "rev-parse", "--short", "HEAD"],
+            cwd=cwd,
             timeout=5,
         )
         sha_full_result = await run_command_async(
             ["git", "rev-parse", "HEAD"],
+            cwd=cwd,
             timeout=5,
         )
         dirty_result = await run_command_async(
             ["git", "status", "--porcelain"],
+            cwd=cwd,
             timeout=5,
         )
 
