@@ -148,15 +148,19 @@ def rewrite_stamp(path: Path, stamp_key: str, new_version: str) -> tuple[str | N
 
 
 def all_template_hook_names() -> set[str]:
-    """Return every hook script name registered in the templates module.
+    """Return every hook script name registered across the hook-template modules.
 
     Parses the source rather than importing — keeps this script standalone
-    so the CI gate runs without `uv sync`.
+    so the CI gate runs without `uv sync`. Globs `platform_hook_templates*.py`
+    so a future split into another sibling module (TAP-6598) doesn't silently
+    drop hook names from the scan.
     """
-    src = (
-        REPO_ROOT / "packages/tapps-mcp/src/tapps_mcp/pipeline/platform_hook_templates.py"
-    ).read_text(encoding="utf-8")
-    return set(re.findall(r'^    "(tapps-[a-z-]+\.sh)"\s*:', src, flags=re.MULTILINE))
+    templates_dir = REPO_ROOT / "packages/tapps-mcp/src/tapps_mcp/pipeline"
+    names: set[str] = set()
+    for path in sorted(templates_dir.glob("platform_hook_templates*.py")):
+        src = path.read_text(encoding="utf-8")
+        names |= set(re.findall(r'^    "(tapps-[a-z-]+\.sh)"\s*:', src, flags=re.MULTILINE))
+    return names
 
 
 def actual_hook_manifest() -> set[str]:
