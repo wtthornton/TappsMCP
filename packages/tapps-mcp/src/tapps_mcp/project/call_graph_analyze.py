@@ -8,6 +8,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 from tapps_mcp.project.call_graph_resolve import (
+    is_external_receiver,
     local_bindings,
     qualify,
     resolve_attribute,
@@ -214,7 +215,11 @@ def _record_call(
         callee = resolve_name(idx, call_node.func.id, class_stack, bindings)
     elif isinstance(call_node.func, ast.Attribute):
         callee = resolve_attribute(idx, call_node.func, class_stack, bindings)
-        if callee is None and call_node.func.attr in {"apply", "map", "filter", "reduce"}:
+        if callee is None and is_external_receiver(call_node.func, bindings):
+            # Builtin receiver (TAP-6439) — `list.append`, `dict.get`, `str.join`.
+            # Recorded before the HOF check: a builtin `.map` is still external.
+            reason = "external_attr_call"
+        elif callee is None and call_node.func.attr in {"apply", "map", "filter", "reduce"}:
             reason = "framework_hof"
     else:
         callee = None

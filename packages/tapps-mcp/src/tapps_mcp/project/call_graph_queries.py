@@ -7,8 +7,13 @@ from collections import deque
 from dataclasses import asdict
 from typing import Any, Literal
 
+from tapps_mcp.project.call_graph_gap_classify import (
+    called_name,
+    degrades_answer,
+    is_external_gap,
+)
 from tapps_mcp.project.call_graph_routes import handlers_for_path, routes_for_handler
-from tapps_mcp.project.call_graph_types import CallGraphIndex
+from tapps_mcp.project.call_graph_types import CallGraphIndex, ResolutionGap
 
 DEFAULT_TOKEN_BUDGET = 4000
 _CHARS_PER_TOKEN = 4
@@ -37,9 +42,9 @@ def _edge_payload(edge: Any) -> dict[str, Any]:
     return asdict(edge)
 
 
-def _gaps_for_symbol(index: CallGraphIndex, qualified: str) -> list[dict[str, Any]]:
+def _gaps_for_symbol(index: CallGraphIndex, qualified: str) -> list[ResolutionGap]:
     return [
-        asdict(gap)
+        gap
         for gap in index.resolution_gaps
         if gap.caller == qualified or gap.caller.startswith(f"{qualified}.")
     ]
@@ -57,13 +62,19 @@ def _completeness_payload(
     *,
     reason: str | None,
     gaps: list[dict[str, Any]] | None = None,
+    external: list[dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
     """Agent-visible completeness when call_graph is degraded (TAP-5268).
 
     ``authoritative=False`` means agents must not treat callers/callees as a
-    full blast-radius answer. ``gap_reasons`` aggregates taxonomy counts.
+    full blast-radius answer. ``gaps`` are the call sites that may hide an
+    in-repo edge (see ``degrades_answer``) and alone decide completeness;
+    ``external`` are the call sites proven to leave the graph (stdlib, builtins,
+    third-party receivers) and are reported so a degraded — or a clean — answer
+    explains itself rather than just asserting a flag (TAP-6439).
     """
     gap_list = gaps or []
+    external_list = external or []
     complete = reason is None and not gap_list
     return {
         "complete": complete,
@@ -71,13 +82,9 @@ def _completeness_payload(
         "reason": reason,
         "gap_count": len(gap_list),
         "gap_reasons": _gap_reason_counts(gap_list),
+        "external_gap_count": len(external_list),
+        "external_gap_reasons": _gap_reason_counts(external_list),
     }
-
-
-def _called_name(expr: str) -> str:
-    """Final called identifier of a call expression (``a.b.foo`` -> ``foo``)."""
-    head = expr.split("(", maxsplit=1)[0].strip()
-    return head.rsplit(".", maxsplit=1)[-1] if head else ""
 
 
 def _caller_completeness(
@@ -97,15 +104,13 @@ def _caller_completeness(
     ``complete=False`` tells the caller the resolved ``callers`` list may be
     missing edges, distinct from ``degraded`` (which is outbound-only).
     """
-    from tapps_mcp.project.call_graph_gap_classify import is_external_gap
-
     short = qualified.rsplit(".", maxsplit=1)[-1]
     resolved_callers = len(index.callers_of(qualified))
     candidates: list[dict[str, Any]] = []
     for gap in index.resolution_gaps:
         if gap.caller == qualified:
             continue  # outbound self-gap, not an inbound caller
-        if _called_name(gap.expr) != short:
+        if called_name(gap.expr) != short:
             continue
         if is_external_gap(gap):
             continue
@@ -239,8 +244,18 @@ def query_call_graph(
             "completeness": _completeness_payload(reason="symbol_not_found"),
         }
 
-    gaps = _gaps_for_symbol(index, qualified)
-    degraded = bool(gaps)
+    # TAP-6439: only gaps that could hide an in-repo edge degrade the answer.
+    # Counting every gap made ``degraded`` true for any function that calls
+    # ``len()`` or ``lines.append()`` — i.e. almost all of them (89% of live
+    # calls), which trains agents to ignore the flag entirely.
+    degrading: list[dict[str, Any]] = []
+    external_gaps: list[dict[str, Any]] = []
+    all_gaps: list[dict[str, Any]] = []
+    for gap in _gaps_for_symbol(index, qualified):
+        payload = asdict(gap)
+        all_gaps.append(payload)
+        (degrading if degrades_answer(gap) else external_gaps).append(payload)
+    degraded = bool(degrading)
     truncated = False
     callers: list[dict[str, Any]] = []
     callees: list[dict[str, Any]] = []
@@ -273,10 +288,12 @@ def query_call_graph(
         "callers": callers,
         "callees": callees,
         "chain": chain,
-        "resolution_gaps": gaps,
+        "resolution_gaps": all_gaps,
         "truncated": truncated,
         "token_budget": token_budget,
-        "completeness": _completeness_payload(reason=completeness_reason, gaps=gaps),
+        "completeness": _completeness_payload(
+            reason=completeness_reason, gaps=degrading, external=external_gaps
+        ),
     }
     # Inbound completeness only matters when the query asks who calls the symbol.
     if mode in {"callers", "chain", "all"}:
