@@ -69,15 +69,17 @@ def fake_repo(tmp_path: Path, bump_module: ModuleType) -> Path:
         "<!-- tapps-claude-version: 1.0.0 -->\n# Claude\n", encoding="utf-8"
     )
     # Copy the real templates + upgrade.py so manifest checks against the
-    # real registry (smaller surface than mocking).
-    src = (
-        REPO_ROOT
-        / "packages/tapps-mcp/src/tapps_mcp/pipeline/platform_hook_templates.py"
-    )
-    shutil.copy(
-        src,
-        tmp_path / "packages/tapps-mcp/src/tapps_mcp/pipeline/platform_hook_templates.py",
-    )
+    # real registry (smaller surface than mocking). Glob mirrors the
+    # production checker (scripts/bump_versions.py::all_template_hook_names)
+    # so a future module split doesn't starve the fixture again (TAP-6598).
+    for src in sorted(
+        (REPO_ROOT / "packages/tapps-mcp/src/tapps_mcp/pipeline").glob(
+            "platform_hook_templates*.py"
+        )
+    ):
+        shutil.copy(
+            src, tmp_path / "packages/tapps-mcp/src/tapps_mcp/pipeline" / src.name
+        )
     upgrade = REPO_ROOT / "packages/tapps-mcp/src/tapps_mcp/pipeline/upgrade.py"
     shutil.copy(
         upgrade,

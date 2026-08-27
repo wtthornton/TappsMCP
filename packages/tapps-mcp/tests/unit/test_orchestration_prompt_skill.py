@@ -12,6 +12,7 @@ from __future__ import annotations
 
 from tapps_mcp.distribution.doctor import check_orchestration_prompt_skill_current
 from tapps_mcp.pipeline.platform_skills import generate_skills
+from tapps_mcp.pipeline.skill_asset_policy import policy_header
 from tapps_mcp.pipeline.skill_managed_block import (
     MARKER_BEGIN_PREFIX,
     MARKER_END,
@@ -41,6 +42,18 @@ class TestScaffold:
         assert f"{MARKER_BEGIN_PREFIX} {SKILL} v" in content
         assert MARKER_END in content
         assert "name: orchestration-prompt" in content
+
+    def test_managed_block_warns_directly_after_begin(self, tmp_path):
+        """TAP-6598: an editor working inside the block sees why it's lost."""
+        generate_skills(tmp_path, "claude")
+        content = (_skill_dir(tmp_path) / "SKILL.md").read_text()
+        begin_idx = content.index(f"{MARKER_BEGIN_PREFIX} {SKILL} v")
+        end_idx = content.index(MARKER_END)
+        warning = policy_header("managed_block")
+        warning_idx = content.index(warning)
+        assert begin_idx < warning_idx < end_idx
+        begin_line_end = content.index("\n", begin_idx) + 1
+        assert content[begin_line_end:].startswith(warning)
 
     def test_body_carries_the_four_enhancements(self, tmp_path):
         generate_skills(tmp_path, "claude")

@@ -20,6 +20,7 @@ import re
 from typing import TYPE_CHECKING, Literal
 
 from tapps_mcp import __version__
+from tapps_mcp.pipeline.skill_asset_policy import policy_header
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -94,10 +95,17 @@ def wrap_with_markers(body: str, skill_name: str, *, version: str = __version__)
     The markers wrap only the prose below the frontmatter. Wrapping the whole
     body — frontmatter included — pushed the opening ``---`` off line 1 and made
     every generated skill unparseable.
+
+    TAP-6598: the managed-block policy note (:func:`policy_header`) is emitted
+    as the first line inside the block, directly after BEGIN. It is baked in
+    here rather than left to each caller so every skill routed through this
+    function warns that edits inside the block are lost on the next
+    ``tapps_upgrade`` — there is no call site that can forget it.
     """
     frontmatter, rest = split_frontmatter(body)
     inner = rest.strip("\n")
-    block = f"{MARKER_BEGIN_PREFIX} {skill_name} v{version} -->\n{inner}\n{MARKER_END}"
+    header = policy_header("managed_block")
+    block = f"{MARKER_BEGIN_PREFIX} {skill_name} v{version} -->\n{header}\n\n{inner}\n{MARKER_END}"
     return f"{frontmatter}{block}"
 
 

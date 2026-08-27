@@ -1603,12 +1603,9 @@ def generate_skills(
         target = skill_dir / "SKILL.md"
 
         if skill_name in SMART_MERGE_SKILL_NAMES:
-            # The policy header goes below the frontmatter and therefore inside
-            # the managed block: platform-owned text, refreshed with the body.
-            managed_body = prepend_below_frontmatter(
-                content, f"{policy_header('managed_block')}\n\n"
-            )
-            action = install_or_refresh_skill(target, managed_body, skill_name)
+            # wrap_with_markers (TAP-6598) emits the managed-block policy
+            # header itself, directly after BEGIN — no prepend needed here.
+            action = install_or_refresh_skill(target, content, skill_name)
             _write_skill_companions(skill_dir, skill_name, asset_actions, overwrite_warnings)
             if action == "created":
                 created.append(skill_name)
