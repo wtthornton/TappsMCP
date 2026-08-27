@@ -12,6 +12,7 @@ from typing import Any
 
 import structlog
 
+from tapps_core.cache.atomic import AtomicJsonCache
 from tapps_core.common.models import InstalledTool
 from tapps_mcp.tools.subprocess_runner import run_command, run_command_async
 
@@ -155,7 +156,7 @@ def _write_disk_cache(tools: list[InstalledTool]) -> None:
             "tools": [t.model_dump() for t in tools],
         }
         cache_path.parent.mkdir(parents=True, exist_ok=True)
-        cache_path.write_text(json.dumps(data, indent=2), encoding="utf-8")
+        AtomicJsonCache.write_json(cache_path, data, indent=2)
         _logger.debug("disk_cache_written", path=str(cache_path))
     except Exception:
         _logger.debug("disk_cache_write_failed", exc_info=True)
@@ -204,6 +205,12 @@ def _read_disk_cache() -> list[InstalledTool] | None:
 
         tools = [InstalledTool(**t) for t in data["tools"]]
         _logger.debug("disk_cache_hit", tool_count=len(tools))
+    except json.JSONDecodeError:
+        # TAP-6081: the file is present but does not parse — that is torn or
+        # truncated state, not an ordinary miss. Surface it once at WARNING so
+        # corruption stops being silent; the caller still rebuilds from probes.
+        _logger.warning("disk_cache_corrupt", path=str(cache_path), exc_info=True)
+        return None
     except Exception:
         _logger.debug("disk_cache_read_failed", exc_info=True)
         return None

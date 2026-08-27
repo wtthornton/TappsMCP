@@ -15,6 +15,7 @@ from typing import Any
 
 import structlog
 
+from tapps_core.cache.atomic import AtomicJsonCache
 from tapps_core.common.utils import utc_now
 
 logger = structlog.get_logger(__name__)
@@ -166,7 +167,7 @@ class RAGMetricsTracker:
     def _save(self, records: list[RAGQueryMetric]) -> None:
         data = [r.to_dict() for r in records]
         try:
-            self._file.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
+            AtomicJsonCache.write_text(self._file, json.dumps(data, ensure_ascii=False, indent=2))
         except OSError:
             logger.warning("rag_metrics_write_failed", exc_info=True)
 
