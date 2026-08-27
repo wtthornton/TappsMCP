@@ -1511,7 +1511,7 @@ if ($py) {{
     if ($parsed.Count -ge 4) {{ $skillGuard = [string]$parsed[3] }}
 }}
 if ($skillGuard -eq '1') {{
-    [Console]::Error.WriteLine("{MANAGED_SKILL_BLOCK_EDIT_WARNING_BASH.replace("$FILE", "$file")}")
+    [Console]::Error.WriteLine("{MANAGED_SKILL_BLOCK_EDIT_WARNING_BASH.replace("$FILE", "${file}")}")
 }}
 switch -Regex ($file) {{
     '\\.(py|pyi|ts|tsx|js|jsx|go|rs)$' {{

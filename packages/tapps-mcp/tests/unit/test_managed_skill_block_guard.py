@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -87,6 +88,76 @@ class TestSharedParserSyntax:
             },
         )
         assert lines[1] == "bar"
+
+
+class TestPowerShellRenderSyntax:
+    """TAP-6598 round 2: PowerShell parse-time interpolation regression guard.
+
+    ``$var:`` inside a double-quoted PowerShell string is parsed as a
+    scope/drive-qualified variable reference. When the name before the colon
+    is empty (e.g. ``"$file: ..."`` after Python-side interpolation),
+    PowerShell raises a *parse* error and the ENTIRE script fails to load —
+    not just that line. ``$env:`` is the only legitimate drive-qualifier
+    used in these templates (``$env:TEMP``, ``$env:CLAUDE_PROJECT_DIR``).
+
+    ``bash -n`` / ``test_hook_script_syntax.py`` cannot catch this — it only
+    covers the ``.sh`` outputs. This is the PowerShell analogue of
+    ``TestSharedParserSyntax.test_parser_compiles`` above.
+    """
+
+    _INTERPOLATION_PATTERN = re.compile(r'"\$([A-Za-z_][A-Za-z0-9_]*):')
+    _VALID_DRIVE_QUALIFIERS = {"env"}
+
+    def _all_rendered_ps1_scripts(self) -> dict[str, str]:
+        from tapps_mcp.pipeline import platform_hook_templates as templates
+
+        scripts: dict[str, str] = {}
+        for dict_name in (
+            "CLAUDE_HOOK_SCRIPTS_PS",
+            "CURSOR_HOOK_SCRIPTS_PS",
+            "LINEAR_GATE_SCRIPTS_PS",
+            "LINEAR_CACHE_GATE_SCRIPTS_PS",
+            "SESSION_START_GATE_SCRIPTS_PS",
+            "CLAUDE_REACTIVE_HOOK_SCRIPTS_PS",
+            "CLAUDE_HOOK_SCRIPTS_BLOCKING_PS",
+        ):
+            scripts.update(getattr(templates, dict_name))
+        return scripts
+
+    def test_no_empty_name_variable_interpolation(self) -> None:
+        offenders: list[str] = []
+        for script_name, src in self._all_rendered_ps1_scripts().items():
+            for match in self._INTERPOLATION_PATTERN.finditer(src):
+                if match.group(1) in self._VALID_DRIVE_QUALIFIERS:
+                    continue
+                line_no = src.count("\n", 0, match.start()) + 1
+                offenders.append(f"{script_name}:{line_no}: {match.group(0)}")
+        assert not offenders, (
+            "PowerShell parse-time bug: '\"$var:' is parsed as a "
+            "scope/drive-qualified variable reference; PowerShell rejects it "
+            "at parse time when the name is not a known drive. Use "
+            "'\"${var}:' instead. Offenders: " + ", ".join(offenders)
+        )
+
+    @pytest.mark.skipif(shutil.which("pwsh") is None, reason="pwsh not installed")
+    def test_after_edit_ps1_parses_under_pwsh(self, tmp_path: Path) -> None:
+        from tapps_mcp.pipeline.platform_hook_templates import CURSOR_HOOK_SCRIPTS_PS
+
+        target = tmp_path / "tapps-after-edit.ps1"
+        target.write_text(CURSOR_HOOK_SCRIPTS_PS["tapps-after-edit.ps1"], encoding="utf-8")
+        wrapper = tmp_path / "parse_only.ps1"
+        wrapper.write_text(
+            "param($Path)\n"
+            "[ScriptBlock]::Create((Get-Content -Raw -LiteralPath $Path)) | Out-Null\n",
+            encoding="utf-8",
+        )
+        proc = subprocess.run(
+            ["pwsh", "-NoProfile", "-File", str(wrapper), "-Path", str(target)],
+            capture_output=True,
+            text=True,
+            timeout=15,
+        )
+        assert proc.returncode == 0, proc.stderr
 
 
 class TestManagedSkillBlockGuard:
@@ -161,7 +232,9 @@ class TestManagedSkillBlockGuard:
 class TestPostEditHookEmitsWarning:
     """End-to-end: the shipped hook script itself warns on stderr."""
 
-    def _run_hook(self, tmp_path: Path, script: str, hook_input: dict) -> subprocess.CompletedProcess:
+    def _run_hook(
+        self, tmp_path: Path, script: str, hook_input: dict
+    ) -> subprocess.CompletedProcess:
         rendered = tmp_path / "post-edit.sh"
         rendered.write_text(script, encoding="utf-8")
         env = dict(os.environ, TAPPS_MCP_PROJECT_ROOT=str(tmp_path))
