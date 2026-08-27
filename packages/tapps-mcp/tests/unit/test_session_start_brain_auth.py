@@ -297,7 +297,7 @@ class TestSessionStartIntegration:
         ):
             from tapps_mcp.server_pipeline_tools import tapps_session_start
 
-            result = await tapps_session_start()
+            result = await tapps_session_start(quick=False)
 
         assert result["success"] is False
         assert result["error"]["code"] == "brain_auth_failed"

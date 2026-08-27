@@ -79,6 +79,40 @@ def write_session_sentinel(project_root: Path) -> None:
         _logger.debug("session_sentinel_write_failed", exc_info=True)
 
 
+async def attach_compaction_rehydration(project_root: Path, data: dict[str, Any]) -> None:
+    """Consume the PreCompact marker into ``data['compaction_rehydration']``.
+
+    TAP-6434: the compact payload is the default, and /tapps-continue-session
+    reads this block from a no-argument call. Marker-gated, so the common case
+    costs one stat. Failures are swallowed — a brain outage must not block
+    session start.
+    """
+    from tapps_mcp.tools.session_start_helpers import _check_compaction_rehydration
+
+    try:
+        rehydration = await _check_compaction_rehydration(project_root)
+    except Exception:
+        _logger.debug("compaction_rehydration_quick_failed", exc_info=True)
+        return
+    if rehydration is not None:
+        data["compaction_rehydration"] = rehydration
+
+
+def record_session_start_iso(project_root: Path) -> str:
+    """Persist and return this session's start time (TAP-2005 / TAP-6434).
+
+    ``tapps_session_end`` scopes ``flywheel_process(since=...)`` with it, so the
+    default path has to write it even though it skips the full diagnostics.
+    """
+    from datetime import UTC, datetime
+
+    from tapps_mcp.tools.session_end_helpers import persist_session_start_iso
+
+    iso = datetime.now(UTC).isoformat()
+    persist_session_start_iso(project_root, iso)
+    return iso
+
+
 def _is_python_project(project_root: Path) -> bool:
     """Return True if the project root looks like a Python project."""
     if (project_root / "pyproject.toml").exists():

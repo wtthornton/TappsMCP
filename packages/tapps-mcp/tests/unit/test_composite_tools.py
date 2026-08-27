@@ -158,9 +158,6 @@ class TestTappsSessionStart:
         data = result["data"]
         assert "server" in data
         assert "configuration" in data
-        assert "pipeline" in data
-        assert "quick_start" in data
-        assert "critical_rules" in data
 
     @pytest.mark.asyncio
     async def test_records_session_start_call(self) -> None:

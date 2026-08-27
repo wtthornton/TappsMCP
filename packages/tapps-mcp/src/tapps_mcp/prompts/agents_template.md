@@ -35,7 +35,7 @@ You only see these tools when the host has started the TappsMCP server and attac
 
 | Tool | When to use it |
 |------|----------------|
-| **tapps_session_start** | **FIRST call in every session** - returns server info (version, checkers, configuration) and project context. |
+| **tapps_session_start** | **FIRST call in every session** - returns server info (version, checkers, configuration) and project context. Returns the compact bootstrap payload by default; pass `quick=False` (or call `tapps_doctor`) for full diagnostics. |
 | **tapps_server_info** | Lightweight discovery: version, tools, checkers. Prefer **tapps_session_start** as FIRST call (adds memory status, auto-GC, session capture). Use tapps_server_info only when you need discovery without session init. |
 | **tapps_score_file** | When **editing or reviewing** a Python file. Use `quick=True` during edit-lint-fix loops; use full (default) **before declaring work complete**. |
 | **tapps_quick_check** | **After editing any Python file** - quick score + gate + basic security in one fast call. |
@@ -74,7 +74,7 @@ You only see these tools when the host has started the TappsMCP server and attac
 | **Side effects** | None (read-only) | Writes files, warms caches |
 | **Typical flow** | Call at session start, then work | Call once to bootstrap, or `dry_run: true` to preview |
 
-**Session start** -> `tapps_session_start`. Use this as the first call in every session. Returns server info and project context.
+**Session start** -> `tapps_session_start`. Use this as the first call in every session. Returns server info and project context — the compact payload by default; pass `quick=False` for full diagnostics.
 
 **Pipeline/bootstrap** -> `tapps_init`. Use when you need to set up TappsMCP in a project (AGENTS.md, TECH_STACK.md, platform rules) or upgrade existing files.
 
@@ -92,7 +92,7 @@ Use this when writing project-specific tool priority docs or integrating TappsMC
 
 | Contract | Detail |
 |----------|--------|
-| **tapps_session_start** | Returns server info (version, checkers, config) and project context. |
+| **tapps_session_start** | Returns server info (version, checkers, config) and project context. Returns the compact bootstrap payload by default; pass `quick=False` (or call `tapps_doctor`) for full diagnostics. |
 | **tapps_validate_changed** | Default `quick=true`: runs **score + quality gate** on each changed file; **security scan is not run**. To include security: pass `quick=false` or `security_depth='full'`. |
 | **tapps_quick_check** | Single tool; **no `quick` parameter**. Always runs quick score + gate + basic security in one call. For per-file "quick" scoring with a `quick` flag, use **tapps_score_file(file_path, quick=True)** instead. |
 | **tapps_lookup_docs** | Primary tool for both library documentation and domain-specific guidance. Returns structured docs for libraries and supports topic queries for patterns, best practices, and design guidance. |
@@ -189,7 +189,7 @@ Use `uv run tapps-mcp memory` for architecture decisions and quality patterns.
 
 **Cross-session handoff:** for tokens/IDs/payloads, prefer `/tapps-handoff-session` at chat end and `/tapps-continue-session` at chat start — they read/write `.tapps-mcp/session-handoff.md` (canonical) with an optional brain mirror (`tapps-mcp memory save --key session-handoff`). For ad-hoc key/value payloads, use `tapps-mcp memory save/get` or brain recall directly. Cross-agent: `hive_propagate`; cross-project: federation actions.
 
-**Brain health (`brain_bridge_health`):** every `tapps_session_start` response carries a `data.brain_bridge_health` block — `enabled`, `ok`, `dsn_reachable`, `pool_config_valid`, `native_health_ok`, `errors`, `warnings`, plus `details` (mode, `http_url`, `brain_version`, `brain_status`). `tapps doctor` runs the same probe. See [docs/MEMORY_REFERENCE.md](docs/MEMORY_REFERENCE.md#brain-health-diagnostics) for troubleshooting `brain_auth_failed`, `BrainBridgeUnavailable`, and version-floor mismatches.
+**Brain health (`brain_bridge_health`):** a `tapps_session_start(quick=False)` response carries a `data.brain_bridge_health` block (the compact default payload omits it) — `enabled`, `ok`, `dsn_reachable`, `pool_config_valid`, `native_health_ok`, `errors`, `warnings`, plus `details` (mode, `http_url`, `brain_version`, `brain_status`). `tapps doctor` runs the same probe. See [docs/MEMORY_REFERENCE.md](docs/MEMORY_REFERENCE.md#brain-health-diagnostics) for troubleshooting `brain_auth_failed`, `BrainBridgeUnavailable`, and version-floor mismatches.
 
 ---
 
