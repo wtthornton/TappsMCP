@@ -86,7 +86,13 @@ class TestEnsureFleetRunning:
     def test_healthy_is_noop(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setattr(fleet_control, "_port_listening", _listening(set()))
         result = fleet_control.ensure_fleet_running()
-        assert result == {"action": "none", "healthy": True, "unhealthy": []}
+        assert result == {
+            "action": "none",
+            "healthy": True,
+            "unhealthy": [],
+            "reasons": {},
+            "source": "watchdog",
+        }
 
     def test_mcp_starved_but_tcp_up_defers_then_restarts(
         self, monkeypatch: pytest.MonkeyPatch
@@ -110,6 +116,7 @@ class TestEnsureFleetRunning:
         first = fleet_control.ensure_fleet_running()
         assert first["action"] == "defer"
         assert first["unhealthy"] == ["nlt-build"]
+        assert first["reasons"] == {"nlt-build": "initialize_timeout"}
 
         class _Proc:
             returncode = 0
@@ -149,7 +156,13 @@ class TestEnsureFleetRunning:
         monkeypatch.setattr(fleet_control, "start_fleet", _no_restart)
 
         result = fleet_control.ensure_fleet_running()
-        assert result == {"action": "none", "healthy": True, "unhealthy": []}
+        assert result == {
+            "action": "none",
+            "healthy": True,
+            "unhealthy": [],
+            "reasons": {},
+            "source": "watchdog",
+        }
 
     def test_first_strike_defers_without_restart(self, monkeypatch: pytest.MonkeyPatch) -> None:
         # A server down on a single poll (no prior strike) must defer, not
@@ -165,6 +178,7 @@ class TestEnsureFleetRunning:
         result = fleet_control.ensure_fleet_running()
         assert result["action"] == "defer"
         assert result["unhealthy"] == ["nlt-project-docs"]
+        assert result["reasons"] == {"nlt-project-docs": "tcp_down"}
         # The suspect set is persisted for the next poll's confirmation.
         assert fleet_control._read_prev_unhealthy() == {"nlt-project-docs"}
 

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import signal
 import subprocess
 import time
@@ -32,23 +33,110 @@ _OPERATOR_ENV = Path.home() / ".tapps-operator.env"
 # every port at once, which must not trigger a fleet-wide restart).
 FLEET_WATCH_STATE_FILE = FLEET_PID_DIR.parent / ".watch-unhealthy.json"
 
+# TAP-6053: an out-of-band ``tapps-mcp fleet ensure`` used to write the *same*
+# debounce file the systemd poll reads. A manual run that happened to find the
+# fleet reachable cleared the pending set, so the next automated poll restarted
+# its two-strike count from zero — a human (or a script) polling between timer
+# ticks could starve confirmation indefinitely and the fleet would stay down.
+# Each caller now debounces in its own namespace: the timer owns
+# ``.watch-unhealthy.json``, every other invocation gets
+# ``.watch-unhealthy-<source>.json``. Namespacing rather than merging is the
+# structural fix — a manual run cannot reach the automated state at all, so no
+# interleaving of manual and automated runs can perturb it.
+WATCH_SOURCE_WATCHDOG = "watchdog"
+WATCH_SOURCE_MANUAL = "manual"
 
-def _read_prev_unhealthy() -> set[str]:
+# Why a server was judged unhealthy, so the watchdog's journal line carries a
+# diagnosis and not just a list of names (TAP-6053 acceptance 2).
+UNHEALTHY_TCP_DOWN = "tcp_down"
+UNHEALTHY_INITIALIZE_TIMEOUT = "initialize_timeout"
+
+# Bounds on the log tail captured as death evidence at detection time.
+_LOG_TAIL_BYTES = 8192
+_LOG_TAIL_LINES = 5
+_LOG_TAIL_LINE_CHARS = 300
+
+
+def _watch_state_file(source: str = WATCH_SOURCE_WATCHDOG) -> Path:
+    """Debounce state path for *source* (the watchdog keeps the bare name)."""
+    base = FLEET_WATCH_STATE_FILE
+    if source == WATCH_SOURCE_WATCHDOG:
+        return base
+    slug = re.sub(r"[^a-z0-9]+", "-", source.lower()).strip("-") or "other"
+    return base.with_name(f"{base.stem}-{slug}{base.suffix}")
+
+
+def _read_watch_state(source: str = WATCH_SOURCE_WATCHDOG) -> dict[str, dict[str, Any]]:
+    """Per-server debounce records from the previous run of *source*.
+
+    Also accepts the pre-TAP-6053 bare-list format so a pending set written by
+    an older build still confirms on the next poll instead of being dropped.
+    """
     try:
-        data = json.loads(FLEET_WATCH_STATE_FILE.read_text(encoding="utf-8"))
+        data = json.loads(_watch_state_file(source).read_text(encoding="utf-8"))
     except (OSError, ValueError):
-        return set()
+        return {}
     if isinstance(data, list):
-        return {str(item) for item in data}
-    return set()
+        return {str(item): {"first_seen": 0.0, "polls": 1, "reason": "unknown"} for item in data}
+    if not isinstance(data, dict):
+        return {}
+    return {str(k): v for k, v in data.items() if isinstance(v, dict)}
 
 
-def _write_prev_unhealthy(unhealthy: set[str]) -> None:
+def _write_watch_state(
+    state: dict[str, dict[str, Any]], source: str = WATCH_SOURCE_WATCHDOG
+) -> None:
+    path = _watch_state_file(source)
     try:
-        FLEET_WATCH_STATE_FILE.parent.mkdir(parents=True, exist_ok=True)
-        FLEET_WATCH_STATE_FILE.write_text(json.dumps(sorted(unhealthy)), encoding="utf-8")
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(json.dumps(state, sort_keys=True), encoding="utf-8")
     except OSError:
         pass
+
+
+def _read_prev_unhealthy(source: str = WATCH_SOURCE_WATCHDOG) -> set[str]:
+    """Server ids that were unhealthy on the previous run of *source*."""
+    return set(_read_watch_state(source))
+
+
+def _write_prev_unhealthy(unhealthy: set[str], source: str = WATCH_SOURCE_WATCHDOG) -> None:
+    """Seed the debounce state with *unhealthy* as a fresh first strike."""
+    now = time.time()
+    _write_watch_state(
+        {sid: {"first_seen": now, "polls": 1, "reason": "unknown"} for sid in sorted(unhealthy)},
+        source,
+    )
+
+
+def _death_evidence(server_id: str) -> dict[str, Any]:
+    """Best-effort cause capture for a server the watchdog just judged dead.
+
+    TAP-6053: both 2026-08-13 fleet deaths surfaced no cause, because the
+    servers exit 0 on SIGTERM and nothing ever reads their append-only log.
+    Pull the recorded pid, whether it is still alive, and the tail of that log
+    so the detection itself carries evidence into the journal.
+    """
+    pid = _read_pid(server_id)
+    log_path = FLEET_LOG_DIR / f"{server_id}.log"
+    try:
+        with log_path.open("rb") as handle:
+            handle.seek(0, os.SEEK_END)
+            handle.seek(max(0, handle.tell() - _LOG_TAIL_BYTES))
+            chunk = handle.read().decode("utf-8", "replace")
+    except OSError:
+        chunk = ""
+    tail: list[str] = []
+    for line in reversed(chunk.splitlines()):
+        stripped = line.strip()
+        if stripped:
+            tail.append(stripped[:_LOG_TAIL_LINE_CHARS])
+        if len(tail) >= _LOG_TAIL_LINES:
+            break
+    return {
+        "pid": pid,
+        "pid_alive": bool(pid is not None and _pid_alive(pid)),
+        "log_tail": list(reversed(tail)),
+    }
 
 
 def ensure_fleet_env_file() -> Path:
@@ -177,19 +265,26 @@ def _mcp_persistently_unresponsive(
     return True
 
 
-def _collect_unhealthy_servers(host: str) -> set[str]:
-    """TCP-down servers plus TCP-up servers whose ``/mcp`` handshake is hung."""
-    down = {
-        server_id
+def _collect_unhealthy_servers(host: str) -> dict[str, str]:
+    """Map each unhealthy server id to *why* it was judged unhealthy.
+
+    ``tcp_down`` means the port never answered across every re-probe;
+    ``initialize_timeout`` means TCP is listening but the ``/mcp`` handshake
+    never completes (a starved event loop — Cursor's "Loading tools"). Keeping
+    the two apart is what lets the watchdog log a diagnosis rather than a bare
+    list of names (TAP-6053).
+    """
+    reasons: dict[str, str] = {
+        server_id: UNHEALTHY_TCP_DOWN
         for server_id, port in NLT_HTTP_FLEET_PORTS.items()
         if _port_persistently_down(host, port)
     }
     for server_id in NLT_HTTP_FLEET_PORTS:
-        if server_id in down:
+        if server_id in reasons:
             continue
         if _mcp_persistently_unresponsive(server_id, host):
-            down.add(server_id)
-    return down
+            reasons[server_id] = UNHEALTHY_INITIALIZE_TIMEOUT
+    return reasons
 
 
 def start_fleet(*, force: bool = False) -> dict[str, Any]:
@@ -389,7 +484,7 @@ def _systemd_unit_available(unit: str) -> bool:
     return proc.returncode == 0
 
 
-def ensure_fleet_running() -> dict[str, Any]:
+def ensure_fleet_running(*, source: str = WATCH_SOURCE_WATCHDOG) -> dict[str, Any]:
     """Restart the fleet only when it is not fully reachable (watchdog entry).
 
     Designed to be the ``ExecStart`` of a ``Type=oneshot`` watchdog unit. It must
@@ -400,30 +495,67 @@ def ensure_fleet_running() -> dict[str, Any]:
     cgroup; only outside systemd do we fall back to a direct start.
 
     Unhealthy means TCP not listening **or** TCP up but ``/mcp`` ``initialize``
-    fails persistently (event-loop starvation — Cursor "Loading tools").
+    fails persistently (event-loop starvation — Cursor "Loading tools"). The
+    reason per server is carried through to the caller so the journal line is a
+    diagnosis (TAP-6053).
+
+    *source* selects the debounce namespace. The systemd timer passes
+    ``watchdog``; anything a human runs must pass something else so it cannot
+    reset or short-circuit the automated confirmation.
     """
     host = resolve_fleet_host()
-    down_now = _collect_unhealthy_servers(host)
+    reasons_now = _collect_unhealthy_servers(host)
+    down_now = set(reasons_now)
 
     if not down_now:
-        _write_prev_unhealthy(set())
-        return {"action": "none", "healthy": True, "unhealthy": []}
+        _write_watch_state({}, source)
+        return {
+            "action": "none",
+            "healthy": True,
+            "unhealthy": [],
+            "reasons": {},
+            "source": source,
+        }
 
-    # Debounce: only act on servers that were ALSO down on the previous poll.
-    # A single bad poll (transient host overload) records the suspect set but
-    # defers the restart, so the fleet is not torn down for every CPU blip.
-    prev_down = _read_prev_unhealthy()
-    _write_prev_unhealthy(down_now)
-    confirmed = sorted(down_now & prev_down)
+    # Debounce: only act on servers that were ALSO down on the previous poll of
+    # THIS source. A single bad poll (transient host overload) records the
+    # suspect set but defers the restart, so the fleet is not torn down for
+    # every CPU blip. ``first_seen`` survives across strikes so the confirmed
+    # payload can report how long the server has been down.
+    prev = _read_watch_state(source)
+    now = time.time()
+    _write_watch_state(
+        {
+            server_id: {
+                "first_seen": float(prev.get(server_id, {}).get("first_seen") or now),
+                "polls": int(prev.get(server_id, {}).get("polls") or 0) + 1,
+                "reason": reason,
+            }
+            for server_id, reason in reasons_now.items()
+        },
+        source,
+    )
+    confirmed = sorted(down_now & set(prev))
     if not confirmed:
         return {
             "action": "defer",
             "healthy": False,
             "unhealthy": sorted(down_now),
             "deferred": sorted(down_now),
+            "reasons": {sid: reasons_now[sid] for sid in sorted(down_now)},
+            "source": source,
         }
 
     unhealthy = confirmed
+    detail: dict[str, Any] = {
+        "reasons": {sid: reasons_now[sid] for sid in unhealthy},
+        "down_for_s": {
+            sid: round(now - float(prev.get(sid, {}).get("first_seen") or now), 1)
+            for sid in unhealthy
+        },
+        "evidence": {sid: _death_evidence(sid) for sid in unhealthy},
+        "source": source,
+    }
 
     if _systemd_unit_available(_CANONICAL_UNIT):
         try:
@@ -436,10 +568,15 @@ def ensure_fleet_running() -> dict[str, Any]:
         except (OSError, subprocess.SubprocessError):
             proc = None
         if proc is not None and proc.returncode == 0:
-            return {"action": "systemd_restart", "healthy": False, "unhealthy": unhealthy}
+            return {
+                "action": "systemd_restart",
+                "healthy": False,
+                "unhealthy": unhealthy,
+                **detail,
+            }
 
     start_fleet(force=True)
-    return {"action": "direct_start", "healthy": False, "unhealthy": unhealthy}
+    return {"action": "direct_start", "healthy": False, "unhealthy": unhealthy, **detail}
 
 
 def fleet_any_running() -> bool:
@@ -577,7 +714,9 @@ def install_systemd_user_unit() -> list[Path]:
                 "Type=oneshot",
                 # No RemainAfterExit by design: `fleet ensure` does not spawn the
                 # servers into this unit's cgroup, so oneshot teardown is safe.
-                f"ExecStart={tapps_bin} fleet ensure",
+                # --source watchdog keeps the timer's debounce state in its own
+                # namespace, out of reach of any manual `fleet ensure`.
+                f"ExecStart={tapps_bin} fleet ensure --source watchdog",
                 "Environment=PYTHONUNBUFFERED=1",
                 "",
             ]

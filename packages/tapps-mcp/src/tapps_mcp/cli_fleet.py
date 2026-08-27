@@ -167,33 +167,65 @@ def fleet_smoke_cmd(project_root: str) -> None:
     click.echo(click.style(f"All {result['total']} fleet servers passed MCP smoke.", fg="green"))
 
 
+def _format_unhealthy(result: dict[str, Any]) -> str:
+    """Render ``server (reason, down 42s)`` so the journal line diagnoses."""
+    reasons: dict[str, str] = result.get("reasons") or {}
+    down_for: dict[str, float] = result.get("down_for_s") or {}
+    server_ids: list[str] = result["unhealthy"]
+    parts: list[str] = []
+    for server_id in server_ids:
+        detail = reasons.get(server_id, "unknown")
+        seconds = down_for.get(server_id)
+        if seconds is not None:
+            detail = f"{detail}, down {seconds}s"
+        parts.append(f"{server_id} ({detail})")
+    return ", ".join(parts)
+
+
 @fleet_group.command("ensure")
-def fleet_ensure() -> None:
+@click.option(
+    "--source",
+    default="manual",
+    show_default=True,
+    help=(
+        "Debounce namespace for this run. The systemd timer passes 'watchdog'; "
+        "leave the default for hand-run invocations so they cannot reset the "
+        "automated confirmation (TAP-6053)."
+    ),
+)
+def fleet_ensure(source: str) -> None:
     """Restart the fleet only when it is not fully reachable (watchdog entry)."""
     from tapps_mcp.distribution.fleet_control import ensure_fleet_running
 
-    result = ensure_fleet_running()
+    result = ensure_fleet_running(source=source)
     if result["action"] == "none":
         click.echo(click.style("Fleet healthy: all servers reachable", fg="green"))
         return
-    unhealthy = ", ".join(result["unhealthy"])
+    unhealthy = _format_unhealthy(result)
     if result["action"] == "defer":
         # First strike: a single bad poll defers a restart so transient host
         # overload does not sever every client's session (debounce).
         click.echo(
             click.style(
-                f"Fleet degraded ({unhealthy}); deferring restart pending "
-                "confirmation on the next poll",
+                f"Fleet degraded [{source}] ({unhealthy}); deferring restart "
+                "pending confirmation on the next poll",
                 fg="yellow",
             )
         )
         return
     click.echo(
         click.style(
-            f"Fleet unhealthy ({unhealthy}); recovered via {result['action']}",
+            f"Fleet unhealthy [{source}] ({unhealthy}); recovered via {result['action']}",
             fg="yellow",
         )
     )
+    evidence_by_server: dict[str, dict[str, Any]] = result.get("evidence") or {}
+    for server_id, evidence in evidence_by_server.items():
+        # Death evidence at detection time: the append-only server log is the
+        # only place a signalled exit leaves a trace (TAP-6053).
+        click.echo(f"  {server_id}: pid={evidence['pid']} pid_alive={evidence['pid_alive']}")
+        for line in evidence["log_tail"]:
+            click.echo(f"    | {line}")
 
 
 @fleet_group.command("install-systemd")
