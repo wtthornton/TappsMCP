@@ -53,6 +53,7 @@ class TestBuildPerFileResults:
                 "gate_passed": True,
                 "score": 8.5,
                 "security_issues": 0,
+                "security_passed": True,
                 "errors": [],
             },
         ]
@@ -71,6 +72,7 @@ class TestBuildPerFileResults:
                 "gate_passed": True,
                 "score": 7.0,
                 "security_issues": 2,
+                "security_passed": False,
                 "errors": [],
             },
         ]
