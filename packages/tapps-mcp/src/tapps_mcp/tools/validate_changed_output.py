@@ -371,10 +371,11 @@ async def _handle_no_changed_files(
         # TAP-5734: additive signal distinguishing "nothing was gated" from a
         # genuine gate failure. all_gates_passed stays False (fail-closed —
         # see validate_changed_cli_exit.py); callers that only branch on
-        # all_gates_passed see unchanged behaviour. Consumers that need to
-        # tell "nothing to check" apart from "checked and failed" (e.g. the
-        # tapps-task-completed / tapps-stop hooks, TAP-6068) read this field
-        # instead of parsing the summary string.
+        # all_gates_passed see unchanged behaviour. The tapps-task-completed /
+        # tapps-stop hooks (TAP-6068) do NOT read this field — they decide
+        # honest no-op vs. block via their own git-diff guard. This field is
+        # for programmatic MCP callers that need to tell "nothing to check"
+        # apart from "checked and failed" without parsing the summary string.
         "inconclusive": True,
         "total_security_issues": 0,
         "results": [],
@@ -390,14 +391,6 @@ async def _handle_no_changed_files(
             base_ref=base_ref,
         )
         summary = apply_judge_payload(resp_data, judge_payload, summary=summary)
-
-    # A zero-file gate is not a failure the session needs to fix — write the
-    # same ok-marker a passing batch would, so Stop/TaskCompleted hooks don't
-    # block a session that genuinely touched no scorable files (TAP-6068).
-    # Skipped when a configured judge actually failed — that IS a real
-    # failure, judges_passed defaults True when none were configured.
-    if resp_data.get("judges_passed", True):
-        _host._write_validate_ok_marker(settings.project_root)
 
     warnings = _no_changed_warnings(explicit_paths, base_ref)
     if explicit_paths:
