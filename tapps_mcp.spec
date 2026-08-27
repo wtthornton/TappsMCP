@@ -292,6 +292,8 @@ a = Analysis(
         "tapps_mcp.pipeline.platform_rules",
         "tapps_mcp.pipeline.platform_bundles",
         "tapps_mcp.pipeline.platform_hook_templates",
+        "tapps_mcp.pipeline.platform_hook_templates_linear_gate",
+        "tapps_mcp.pipeline.hook_edit_parse_py",
         "tapps_mcp.pipeline.platform_skills",
         "tapps_mcp.pipeline.platform_subagents",
         "tapps_mcp.pipeline.platform_docs_automation",
