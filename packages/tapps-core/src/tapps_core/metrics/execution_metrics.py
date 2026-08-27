@@ -42,6 +42,7 @@ class ToolCallMetric:
     error_code: str | None = None
     degraded: bool = False
     session_id: str = ""
+    action: str | None = None
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
@@ -121,6 +122,7 @@ class ToolCallMetricsCollector:
         error_code: str | None = None,
         degraded: bool = False,
         session_id: str = "",
+        action: str | None = None,
     ) -> ToolCallMetric:
         """Convenience method to build and record a metric."""
         duration_ms = (completed_at - started_at).total_seconds() * 1000.0
@@ -137,6 +139,7 @@ class ToolCallMetricsCollector:
             error_code=error_code,
             degraded=degraded,
             session_id=session_id,
+            action=action,
         )
         self.record_call(metric)
         return metric

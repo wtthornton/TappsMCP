@@ -775,16 +775,37 @@ async def tapps_memory(
     _record_call("tapps_memory")
 
     t0 = time.perf_counter()
+    start_ns = time.perf_counter_ns()
+
+    def _finish(resp: dict[str, Any]) -> dict[str, Any]:
+        """Record execution metrics for *resp* and return it unchanged.
+
+        Every return path in this handler funnels through here so
+        ``tool_calls_*.jsonl`` gets one row per invocation, success or
+        failure, carrying the sub-``action`` (VAL-13).
+        """
+        success = bool(resp.get("success"))
+        error_code = None if success else (resp.get("error") or {}).get("code")
+        _record_execution(
+            "tapps_memory",
+            start_ns,
+            status="success" if success else "failed",
+            action=action,
+            error_code=error_code,
+        )
+        return resp
 
     if action not in _VALID_ACTIONS:
         # TAP-1801: failure must override the eager success=True _record_call
         # above; otherwise the checklist counts an error-only invocation as a
         # satisfied tapps_memory slot.
         _record_call("tapps_memory", success=False)
-        return error_response(
-            "tapps_memory",
-            "invalid_action",
-            f"Invalid action '{action}'. Must be one of: {', '.join(sorted(_VALID_ACTIONS))}",
+        return _finish(
+            error_response(
+                "tapps_memory",
+                "invalid_action",
+                f"Invalid action '{action}'. Must be one of: {', '.join(sorted(_VALID_ACTIONS))}",
+            )
         )
 
     # TAP-1992: best-effort deprecation telemetry — fire-and-forget KG event so
@@ -812,28 +833,32 @@ async def tapps_memory(
         if _MCP_MEMORY_MODE == "slim" and action in NLT_MEMORY_SLIM_ACTIONS:
             pass  # fall through to dispatch below
         elif _MCP_MEMORY_MODE == "slim":
-            return error_response(
-                "tapps_memory",
-                "action_not_on_nlt_memory",
-                (
-                    f"Action '{action}' is not on the nlt-memory slim profile. "
-                    f"Allowed: {', '.join(sorted(NLT_MEMORY_SLIM_ACTIONS))}"
-                ),
+            return _finish(
+                error_response(
+                    "tapps_memory",
+                    "action_not_on_nlt_memory",
+                    (
+                        f"Action '{action}' is not on the nlt-memory slim profile. "
+                        f"Allowed: {', '.join(sorted(NLT_MEMORY_SLIM_ACTIONS))}"
+                    ),
+                )
             )
         else:
             brain_tool = _REFUSED_BRAIN_TOOL.get(action, "mcp__tapps-brain__brain_recall")
-            return success_response(
-                "tapps_memory",
-                0,
-                {
-                    "refused": True,
-                    "use": brain_tool,
-                    "action": action,
-                    "hint": (
-                        f"tapps_memory(action='{action}') has been retired. "
-                        f"Call {brain_tool} directly instead."
-                    ),
-                },
+            return _finish(
+                success_response(
+                    "tapps_memory",
+                    0,
+                    {
+                        "refused": True,
+                        "use": brain_tool,
+                        "action": action,
+                        "hint": (
+                            f"tapps_memory(action='{action}') has been retired. "
+                            f"Call {brain_tool} directly instead."
+                        ),
+                    },
+                )
             )
 
     try:
@@ -842,14 +867,16 @@ async def tapps_memory(
         sub_code = _classify_store_init_error(exc)
         # TAP-1801: same — record store-init failure as success=False.
         _record_call("tapps_memory", success=False)
-        return error_response(
-            "tapps_memory",
-            "store_init_failed",
-            f"Failed to initialize memory store: {exc}",
-            extra={
-                "sub_code": sub_code,
-                "exception_type": type(exc).__name__,
-            },
+        return _finish(
+            error_response(
+                "tapps_memory",
+                "store_init_failed",
+                f"Failed to initialize memory store: {exc}",
+                extra={
+                    "sub_code": sub_code,
+                    "exception_type": type(exc).__name__,
+                },
+            )
         )
 
     tag_list = [t.strip() for t in tags.split(",") if t.strip()] if tags else []
@@ -907,7 +934,7 @@ async def tapps_memory(
             if store is None and action not in _ASYNC_HTTP_OK_ACTIONS:
                 # TAP-1801: error path — flip the success counter.
                 _record_call("tapps_memory", success=False)
-                return _requires_in_process_store_response(action)
+                return _finish(_requires_in_process_store_response(action))
             result_data = await _ASYNC_DISPATCH[action](store, params)
         elif store is None and action in _HTTP_BRIDGE_FALLBACK_ACTIONS:
             # TAP-1421: HTTP-bridge mode — route core CRUD through BrainBridge
@@ -917,11 +944,11 @@ async def tapps_memory(
             classified = _classify_http_bridge_result(action, result_data)
             if classified is not None:
                 _record_call("tapps_memory", success=False)
-                return classified
+                return _finish(classified)
         else:
             if store is None:
                 _record_call("tapps_memory", success=False)
-                return _requires_in_process_store_response(action)
+                return _finish(_requires_in_process_store_response(action))
             result_data = _DISPATCH[action](store, params)
             # TAP-1632: close the flywheel loop on sync search paths too —
             # the in-process handler can't await, so the auto-emit runs in
@@ -941,10 +968,12 @@ async def tapps_memory(
     except Exception as exc:
         # TAP-1801: dispatch crash is a failed invocation, not a success.
         _record_call("tapps_memory", success=False)
-        return error_response(
-            "tapps_memory",
-            "action_failed",
-            f"Memory {action} failed: {exc}",
+        return _finish(
+            error_response(
+                "tapps_memory",
+                "action_failed",
+                f"Memory {action} failed: {exc}",
+            )
         )
 
     elapsed = int((time.perf_counter() - t0) * 1000)
@@ -952,7 +981,7 @@ async def tapps_memory(
         result_data = enrich_memory_get_action_result(params.key, result_data)
     elif action == "save" and isinstance(result_data, dict):
         result_data = enrich_memory_save_action_result(result_data)
-    return success_response("tapps_memory", elapsed, result_data)
+    return _finish(success_response("tapps_memory", elapsed, result_data))
 
 
 # ---------------------------------------------------------------------------
@@ -4041,6 +4070,20 @@ def _record_call(tool_name: str, *, success: bool = True) -> None:
     from tapps_mcp.server import _record_call as _rc
 
     _rc(tool_name, success=success)
+
+
+def _record_execution(
+    tool_name: str,
+    start_ns: int,
+    *,
+    status: str = "success",
+    action: str | None = None,
+    error_code: str | None = None,
+) -> None:
+    """Delegate to server._record_execution for MetricsHub persistence."""
+    from tapps_mcp.server import _record_execution as _re
+
+    _re(tool_name, start_ns, status=status, action=action, error_code=error_code)
 
 
 # ---------------------------------------------------------------------------

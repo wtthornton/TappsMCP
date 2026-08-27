@@ -637,8 +637,14 @@ def _record_execution(
     score: float | None = None,
     error_code: str | None = None,
     degraded: bool = False,
+    action: str | None = None,
 ) -> None:
-    """Record tool execution metrics to the MetricsHub."""
+    """Record tool execution metrics to the MetricsHub.
+
+    ``action`` carries the sub-action for umbrella tools (e.g.
+    ``tapps_memory(action="save")``) so per-action counts are recoverable
+    from ``tool_calls_*.jsonl`` without a second tool-name namespace.
+    """
     from datetime import UTC, datetime, timedelta
 
     elapsed_ms = (time.perf_counter_ns() - start_ns) / 1_000_000
@@ -657,6 +663,7 @@ def _record_execution(
         error_code=error_code,
         degraded=degraded,
         session_id=hub.session_id,
+        action=action,
     )
 
 
