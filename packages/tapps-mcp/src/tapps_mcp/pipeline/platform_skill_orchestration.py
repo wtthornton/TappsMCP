@@ -139,9 +139,30 @@ frontier-model rates for mechanical work. Two planes (full catalog in
   per-repo PR, **Routines** / `claude -p`+cron for recurring runs. Never fan
   parallel agents across coupled code — the documented worst fit.
 
+**Disjoint file lists are not evidence of independence.** Two chunks can touch no file
+in common and still be coupled, because one of them *computes* a set the other
+*consumes*: the env-var names carrying required-interpolation markers in a compose file
+that a CI placeholder env file has to mirror exactly, an enum a fixture enumerates, a
+migration list a seed script replays, an exported-symbol set a barrel file re-exports.
+Related code is the *obvious* coupling. Derived shared state is the one that ships,
+because it **fails silently** — each half stays internally consistent, both verifiers go
+green against their own half, and the mismatch only surfaces where the two artifacts
+meet: a different machine, a later run, the CI runner rather than the laptop.
+
+**The test to apply before pairing two chunks in a wave: what set does each one read
+that the other writes?** Enumerate the derived sets in play — env-var names, marker
+lists, generated fixtures, schema columns, exported symbols, lockfile entries, migration
+ids — and for each one name its producer chunk and its consumer chunk. Any
+producer/consumer pair spanning two chunks forces an order: the producer lands first,
+the consumer re-derives afterwards. If you cannot name the derived sets, you have not
+shown independence — you have only shown non-overlap. Carry the answer into the emitted
+prompt as the Parallelization plan's `order-forced-by` field, so a later reader can audit
+the claim instead of re-deriving it.
+
 Give every chunk a **model tier**, not just a mechanism — run the harness cheap,
 spend the strong model only where judgement is load-bearing (independent verify is
-always frontier tier). Selector table: `references/claude-feature-map.md`. For host-specific Run-as, checkpoint lanes, and MCP scope, read `references/host-feature-map.md`.
+tiered by **proof shape** — see the table in method §5 — never uniformly maximal).
+Selector table: `references/claude-feature-map.md`. For host-specific Run-as, checkpoint lanes, and MCP scope, read `references/host-feature-map.md`.
 
 **Preflight the mechanism before you commit a chunk to it.** A mechanism that is
 listed is not a mechanism that works: a granted tool with no targets, a degraded
@@ -221,9 +242,10 @@ than raw transcripts — so iteration N isn't paying for iteration 1's tokens.
 Self-verification is the weakest link — the implementer has cost bias, a fresh
 context does not. A separate adversarial verifier is the single largest quality gain.
 
-- After Execute, spawn a **verifier subagent** (frontier tier, *fresh* context)
-  prompted to **refute** the proof: re-run the deterministic check rather than trust
-  the executor's narration. Default to "not done" on any doubt.
+- After Execute, spawn a **verifier subagent** (*fresh* context; tier it by the
+  proof-shape table below, not at a uniform maximum) prompted to **refute** the proof:
+  re-run the deterministic check rather than trust the executor's narration. Default to
+  "not done" on any doubt.
 - **Hand the verifier the *proof command*, not the claim.** A fresh context cannot
   see the executor's work, so a narrative ("the endpoint now returns 200") invites it
   to reason about plausibility instead of running anything — self-verification in
@@ -235,6 +257,43 @@ context does not. A separate adversarial verifier is the single largest quality 
 - The verifier **reports gaps; it does not implement fixes** — the loop scopes a
   narrow fix sub-goal for a fresh executor.
 - The verifier's verdict — not the executor's claim — advances the loop.
+
+**Tier the verifier by the shape of its proof.** "Verification matters, so
+verification is frontier" is the expensive misreading. Eight verifiers all set to `opus`
+spends frontier tokens re-reasoning about proofs an exit code had already settled, and
+at the same time buries the two checks that genuinely needed judgement inside one
+undifferentiated bill — so neither gets the effort it warranted. Read the proof first,
+then pick the row:
+
+| Proof shape | What the verifier actually does | model | effort |
+|-------------|---------------------------------|-------|--------|
+| **Deterministic** — exit code, `grep -c`, test-count line, file present | re-runs one command and reads its output; there is nothing to judge | `haiku` | `low` |
+| **Comparative** — two outputs differ, a count did not shrink, a diff is confined to N files | re-runs both sides and compares; still closed, but it must compare the right two things | `sonnet` | `medium` |
+| **Semantic** — "the section says what it claims", "the fix addresses the root cause", "the wording no longer instructs X" | reads artifacts and renders a judgement no command can settle | `opus` | `high` or `xhigh` |
+| **Gates an irreversible step** — merge, deploy, delete, publish, tracker write | any shape, but a wrong PASS is unrecoverable | `opus` | `high`+ |
+
+**Consequence overrides shape.** A deterministic proof whose verdict gates a deploy is
+an `opus` row. Shape decides the tier only while the step is reversible.
+
+**Verdict schemas carry evidence, not conclusions.** Every verifier's return schema
+requires two fields beyond the verdict itself:
+
+- **`observed_output`** — the literal text the verifier saw: the command's stdout, the
+  pasted lines, the count. **An empty `observed_output` is a FAIL**, whatever the verdict
+  field says — it means the verifier reasoned about plausibility instead of running
+  anything, which is the exact failure an independent pass exists to eliminate.
+- **`green_by_suppression`** (boolean) — true when the proof was satisfied by removing
+  what it measures: the test was deleted, the assertion weakened, the file the grep
+  counted is gone, the check skipped. A proof can be honestly green *and* be
+  suppression; the verifier flags it, and the orchestrator treats a flagged proof as a
+  fail.
+
+**For cheap-tier verdicts the orchestrator reads `observed_output` and never the
+conclusion sentence.** A `haiku` verifier's prose is the least reliable thing it returns
+and its transcription of the command output is the most reliable; adjudicate on the
+evidence field and treat the conclusion as commentary. That is precisely what makes a
+cheap tier safe on a deterministic proof — the driver is not trusting the model's
+judgement, only its copying.
 
 Two-layer verification, N-verifier majority, and perspective-diverse lenses:
 `references/cold-start-and-verify.md`.
@@ -349,7 +408,10 @@ re-verify-on-resume rule: `references/cold-start-and-verify.md`.
   or a token budget) so a stuck loop stops instead of burning quota.
 - **Independent verification** — the sub-goal's proof is confirmed by a verifier that
   did not produce the work (method §5), handed the *proof command* rather than the
-  claim, against ground truth.
+  claim, against ground truth. Its tier follows the **proof-shape table** (method §5)
+  rather than a uniform frontier default, and its verdict schema carries
+  `observed_output` (empty = FAIL) and `green_by_suppression`; cheap-tier verdicts are
+  adjudicated on `observed_output`, never on the conclusion sentence.
 - **Standing user constraints** — every one restated as a Guardrail *and* an Autonomy
   hard-stop (method §0b); no Done-when clause is satisfiable by violating one.
 - **No green-by-deletion** — at least one Done-when clause is a count that must not
@@ -396,6 +458,12 @@ re-verify-on-resume rule: `references/cold-start-and-verify.md`.
   transferable lesson, because each item is something the loop believed and got wrong.
 - **No fan-out of coupled coding** — parallel agents editing related code cascade
   errors; keep code edits sequential, per repo.
+- **Parallel where independent, serial where coupled** — lanes that share no derived
+  state fan out and dispatch to the background at iteration 1; the moment one lane reads
+  a set another lane writes, they serialise and the emitted prompt names that set in the
+  Parallelization plan's `order-forced-by` field. Disjoint file lists are not evidence of
+  independence (method §3) — the coupling that fails silently is the one where each half
+  is internally consistent.
 - **Context hygiene** — prune stale reads each iteration; targeted grep over full
   re-Read (method §4).
 - **Context lifecycle** — a long loop recycles instead of growing: at each sub-goal
@@ -480,7 +548,8 @@ no silent scope creep.
 4. Fill `assets/prompt-template.md` — keep only the sections the task needs. Always
    keep **Prerequisites / Wayfind gate**, the **"How to run (cold start)"** block,
    **`## Driver discipline`** with its Owner-column Plane map and
-   **`### Parallel wave schedule`**, a
+   **`### Parallel wave schedule`**, the **`## Parallelization plan`** that says which
+   lanes are serial and why, a
    **Sub-goal 0** for self-healing preconditions, the **Verify** step wired to an
    independent verifier, the **Lessons learned** section with its REQUIRED final
    sub-goal *and* its Done-when clause, and — when changing software behavior — a
@@ -692,8 +761,10 @@ human-supervised work). If `driver` appears on a body of work, the prompt is wro
 | <multi-file synthesis> | delegate | coordination | subagent | `Explore` | `sonnet` | `medium` | judgement about what matters |
 | <code change> | delegate | execution | dispatch to <repo> via PR | `general-purpose` | `sonnet` | `low` | **serial writes** — one repo at a time |
 | <hard/ambiguous fix> | delegate | execution | `/goal` drive | `general-purpose` | `opus` | `high` | load-bearing judgement |
-| <verify — open judgement> | delegate | coordination | **verifier subagent (fresh context)** | `general-purpose` | **`opus`** | **`high`–`xhigh`** | creator ≠ verifier; refutes proof; a weak verifier defeats the pattern |
-| <verify — closed check> | delegate | coordination | verifier subagent (fresh context) | `general-purpose` | `sonnet` | `medium` | a line count / diff / exit code is closed — frontier here is waste, not rigour |
+| <verify — deterministic proof> | delegate | coordination | verifier subagent (fresh context) | `general-purpose` | `haiku` | `low` | deterministic shape: exit code / `grep -c` / test-count line — it re-runs one command and transcribes; read its `observed_output`, never its conclusion |
+| <verify — closed check> | delegate | coordination | verifier subagent (fresh context) | `general-purpose` | `sonnet` | `medium` | comparative shape: two outputs differ, a count did not shrink, a diff confined to N files — closed, but it must compare the right two things |
+| <verify — open judgement> | delegate | coordination | **verifier subagent (fresh context)** | `general-purpose` | **`opus`** | **`high`–`xhigh`** | semantic shape: creator ≠ verifier; refutes proof; a weak verifier defeats the pattern |
+| <verify — gates an irreversible step> | delegate | coordination | verifier subagent (fresh context) | `general-purpose` | **`opus`** | **`high`+** | consequence overrides shape: merge / deploy / delete / publish — a wrong PASS is unrecoverable, so tier by consequence even when the proof is a one-line exit code |
 | <fix after fail> | delegate | execution | fresh worker on scoped fix sub-goal | `general-purpose` | `sonnet` | `low` | expected-fail loop; do not reopen whole feature |
 | <recurring check> | delegate | execution | Routine / `claude -p`+cron | `Explore` | `haiku` | `low` | human-gated |
 | <human-supervised lane> | **operator** | execution | human session in <repo> | — | operator's | — | never dispatched; say why the repo cannot take a headless lane |
@@ -705,6 +776,14 @@ human-supervised work). If `driver` appears on a body of work, the prompt is wro
 Cheap-model rule: `haiku` answers closed, evidence-checkable questions. It does not
 render verdicts that gate irreversible steps — narrow the question or pay for `opus`.
 Tier by **question shape, not importance**: a high-stakes line count is still a line count.
+
+**Verifier tiering follows the proof shape** — deterministic → `haiku`/`low`,
+comparative → `sonnet`/`medium`, semantic → `opus`/`high`+, and anything gating an
+irreversible step → `opus` whatever its shape. Every verifier's return schema carries
+**`observed_output`** (the literal text it saw — **empty is a FAIL**, it means the
+verifier reasoned instead of running) and **`green_by_suppression`** (true when the proof
+went green by deleting what it measures). For cheap-tier verdicts the driver adjudicates
+on `observed_output` and never on the conclusion sentence.
 
 ### Parallel wave schedule
 <Group independent chunks into waves and dispatch each wave in full before polling any of it.
@@ -720,11 +799,34 @@ WAVE 2  (after <the blocking merge/deploy>)
   <lane> -> <repo> (<model>)
 ```
 
+## Parallelization plan  (why each lane is parallel or serial — the wave schedule is the *what*, this is the *why*)
+<Disjoint file lists are NOT evidence of independence. Two lanes are coupled whenever one
+computes a set the other consumes — env-var names carrying required-interpolation markers,
+a generated fixture, an enum, a lockfile, a migration list, an exported-symbol set. That
+coupling fails *silently*: each half stays internally consistent, both verifiers go green
+against their own half, and the mismatch only surfaces where the two artifacts meet — the
+CI runner rather than the laptop. Before pairing two lanes in a wave, answer one question
+for each of them: **what set does it read that the other writes?**>
+
+- **Lanes:** <lane id → the sub-goals it owns → repo / working tree → `agentType` + `model`>
+- **order-forced-by:** <one line per forced edge, naming the shared derived state and its
+  producer → consumer direction — e.g. "compose env-var marker set: lane B deletes a var,
+  so lane A's placeholder env file must mirror the new set → B lands first, then A
+  re-derives". `none` is a valid answer only after the derived sets were enumerated and
+  none crossed a lane boundary; "the file lists are disjoint" is not an answer.>
+- **Never fan out:** <lanes that stay serial even though their file lists look disjoint —
+  coupled code edits inside one repo · two write-lanes sharing a working tree · a verifier
+  sharing a repo with a live write-lane · every producer/consumer pair named above.>
+- **Dispatch independent lanes to the background at iteration 1** — a lane with no inbound
+  `order-forced-by` edge starts immediately, in the background, instead of queueing behind
+  unrelated work. Queueing an independent lane costs wall-clock and buys no safety; poll it
+  with a delegated log-tailer (see the Plane map), never by blocking the driver on it.
+
 ## Loop
 - **State:** <read first — wayfind resume (`memory_group=wayfind`), status, brain recall of prior attempts, Linear, last handoff>
 - **Decide:** <how to pick the next *execute* action / sub-goal — never invent decide work; if fog reappears → stop and `/tapps-wayfind`>
 - **Execute:** <the action, on the committed mechanism + tier>
-- **Verify (independent):** spawn a fresh-context verifier (frontier tier) to *refute* the sub-goal's proof — re-run scrutiny + behavioral checks against the validation contract. Hand it the **exact proof command, expected artifact, file:line anchors, and environment quirks** (non-default ports, which interpreter, auth source) — never the executor's narrative, or it will reason about plausibility instead of running anything. Its report must quote the output it observed. The verifier's verdict advances the loop.
+- **Verify (independent):** spawn a fresh-context verifier — **tiered by proof shape**, not uniformly frontier (deterministic → `haiku`/`low` · comparative → `sonnet`/`medium` · semantic → `opus`/`high`+ · anything gating an irreversible step → `opus` whatever its shape) — to *refute* the sub-goal's proof — re-run scrutiny + behavioral checks against the validation contract. Hand it the **exact proof command, expected artifact, file:line anchors, and environment quirks** (non-default ports, which interpreter, auth source) — never the executor's narrative, or it will reason about plausibility instead of running anything. Its return schema requires `observed_output` (the literal text it saw — **an empty value is a FAIL**, it means the verifier reasoned instead of running) and `green_by_suppression` (true when the proof went green by deleting what it measures; a flagged proof is a fail). For cheap-tier verdicts read `observed_output`, never the conclusion sentence. The verifier's verdict advances the loop.
 - **On fail (expected-fail fix loop):** record structured handoff → scope narrow fix sub-goal → re-execute → re-verify; ≤**3** validation rounds per sub-goal (override: N=…), then escalate once, then stop with a diagnosis. Never weaken the contract to go green.
 - **Record (structured handoff):** completed · undone · commands+exit codes · issues · procedures followed? · failure-and-why → brain
 - **Context hygiene:** prune stale reads; carry a compact state summary, not raw transcripts.
@@ -768,6 +870,8 @@ Next: /clear   then   /tapps-continue-session
 - Every subagent dispatch names `agentType` + `model` (+ `effort` in a Workflow); read-only steps use `Explore`; no cheap-model verdict gates an irreversible step.
 - Research grant: the loop has web + `tapps_research` + `tapps_lookup_docs` (cache-first, free to repeat). Never write against an external/versioned API from memory — required lookups: <list>.
 - No fan-out of coupled coding — sequential per-repo edits (serial writes, parallel reads OK).
+- **Parallel where independent, serial where coupled** — lanes sharing no derived state fan out and dispatch to the background at iteration 1; a lane that reads a set another lane writes is serialised, and that set is named in the Parallelization plan's `order-forced-by`. Disjoint file lists are not evidence of independence.
+- **Verifier tier follows the proof shape** — deterministic → `haiku`/`low`, comparative → `sonnet`/`medium`, semantic → `opus`/`high`+, irreversible-gating → `opus` regardless of shape. Every verdict schema carries `observed_output` (empty = FAIL) and `green_by_suppression`; cheap-tier verdicts are read on `observed_output`, never the conclusion.
 - Context hygiene — targeted grep over full re-Read.
 - Context lifecycle — recycle at each sub-goal boundary: handoff → **re-verify** → clear → continue; never clear on an unverified handoff; one runner per handoff file; caps are cumulative across shifts, never reset by a clear; boundaries skipped only where the prompt says so and why.
 - Scope: repos in play = <list>; reads fleet-wide, writes via owner.
