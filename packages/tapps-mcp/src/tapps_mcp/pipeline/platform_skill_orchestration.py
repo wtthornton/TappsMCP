@@ -168,6 +168,33 @@ the design, not just the wording — full tables in `references/claude-feature-m
    cheap model's verdict gate an irreversible step**; re-derive load-bearing
    conclusions from the evidence it returned.
 
+**The top session dispatches, reads verdicts, and checkpoints — it does not do the work.**
+The plane split says *where* a chunk runs; it never says the orchestrator itself is off the
+hook, so prompts routinely assign half their sub-goals to `inline` and the one context that
+cannot be reset spends frontier-tier tokens editing files and reading logs. State the
+constraint on the top session directly: it decides what to dispatch, dispatches with literal
+`agentType` + `model`, adjudicates verifier verdicts, makes the single gated or plugin-only
+call a delegate structurally cannot reach, and checkpoints. It does **not** edit files, run
+builds or migrations, run the test suite, trawl logs, or read large files into its own
+context. Each of those is a dispatch.
+
+**Give the orchestrator a measured budget, not an intention.** Target **under 15%** of the
+run's total tokens for the top session, and require the emitted prompt's SCORE line to carry
+an `orch-spend <n>%` field so the share is visible every iteration rather than discovered at
+the end. An unmeasured share is one nobody notices growing.
+
+**Two mechanical detectors — run them on the Plane map you just wrote, before you save:**
+
+1. **Every `—` in the `agentType` column is orchestrator work.** A row with no agentType is a
+   row nobody was dispatched for, so the top session does it. Five such rows is the whole
+   budget (decide · dispatch · adjudicate · gated write · checkpoint); a sixth means a body of
+   work leaked inline.
+2. **An all-`—` `effort` column means effort control was surrendered** — `effort` is
+   Workflow-only and an Agent subagent inherits the session's, so a prompt with no Workflow
+   has no effort knob at all. That is a legitimate state; the prompt must *say* so. Silence
+   reads as an omission, and the fix is to move the effort-load-bearing step into a Workflow,
+   never to write "use high effort" into an Agent prompt.
+
 **Commit to the mechanism — don't hedge.** "You *may* dispatch subagents" forces the
 runner to re-decide and usually defaults to the weakest option. Name exactly one
 mechanism + tier per chunk. For **multi-stage parallel work** (N items × ≥2 steps)
@@ -327,6 +354,25 @@ re-verify-on-resume rule: `references/cold-start-and-verify.md`.
   hard-stop (method §0b); no Done-when clause is satisfiable by violating one.
 - **No green-by-deletion** — at least one Done-when clause is a count that must not
   shrink, so the goal cannot be met by removing what is measured (method §1).
+- **Driver discipline — the orchestrator dispatches, it does not execute** (this is
+  the Orchestrator-discipline guardrail; the emitted prompt carries it as the single
+  required `## Driver discipline` section). The top session decides what to dispatch,
+  dispatches, adjudicates verdicts, makes the gated or plugin-only calls a delegate
+  cannot reach, and checkpoints. It edits no files, runs no builds, runs no probes,
+  tails no logs, and gathers no per-iteration state. Every Plane-map row whose Owner is
+  not `driver` is delegated, `orch-spend` stays under 15%, and the two detectors
+  (method §3) have been run against the map.
+- **Every dispatch carries a return schema** alongside `agentType` + `model` — a
+  schema-less dispatch comes back as prose the driver must re-read, spending exactly
+  the tokens the delegation was meant to save.
+- **Tier by question shape, not importance** — closed and evidence-checkable (line
+  counts, string presence, exit codes) goes cheap *even at high stakes*; open judgement
+  gating an irreversible step goes frontier *even when it looks small*. Defaulting
+  everything to frontier is the expensive failure this rule exists to stop.
+- **Dispatch each wave in full before polling it** — independent chunks grouped into a
+  `### Parallel wave schedule`, with the constraint that actually binds stated (usually
+  one working tree per repo). Serialising independent lanes buys no safety and costs
+  wall-clock.
 - **Every subagent dispatch names `agentType` + `model`** (and `effort` when it runs
   in a Workflow) — never "spawn an agent to…". Read-only work uses `Explore` so the
   tool boundary, not the prose, enforces it. No cheap-model verdict gates an
@@ -432,7 +478,9 @@ no silent scope creep.
 3. Read the workspace manifest (e.g. `fleet.md`) for the repos / Linear projects /
    brain ids involved, if the project has one.
 4. Fill `assets/prompt-template.md` — keep only the sections the task needs. Always
-   keep **Prerequisites / Wayfind gate**, the **"How to run (cold start)"** block, a
+   keep **Prerequisites / Wayfind gate**, the **"How to run (cold start)"** block,
+   **`## Driver discipline`** with its Owner-column Plane map and
+   **`### Parallel wave schedule`**, a
    **Sub-goal 0** for self-healing preconditions, the **Verify** step wired to an
    independent verifier, the **Lessons learned** section with its REQUIRED final
    sub-goal *and* its Done-when clause, and — when changing software behavior — a
@@ -506,10 +554,54 @@ _PROMPT_TEMPLATE = r"""# <Objective title>
 > needs. Run from the orchestrator session unless noted.
 >
 > **Structurally required — do not drop or reshape these:** `## How to run (cold start)`,
-> `## Done-when`, `## Loop`, `## Guardrails`, `## Autonomy`, plus `## Standing constraints`
-> whenever the user has given any. Keep bullets as bullets under every `##` heading —
+> `## Driver discipline`, `## Done-when`, `## Loop`, `## Guardrails`, `## Autonomy`, plus
+> `## Standing constraints` whenever the user has given any. Keep bullets as bullets under every `##` heading —
 > tooling that parses these files (and the sibling handoff linter) reads bullet lists, and
 > silently rejects prose where it expects `- `.
+
+## Driver discipline — dispatch, don't execute  (REQUIRED — the top session orchestrates, it does not work)
+<The single largest source of wasted spend in an emitted prompt is a top session that does
+the work itself: running probes, tailing logs, grepping siblings, re-reading state each
+iteration — all at the runner's frontier tier, in the one context that cannot be reset
+without losing the thread. Fill the five jobs and the ceiling; the Plane map's Owner column
+then enforces it row by row.>
+
+- **The driver does exactly five things:** decide what to dispatch next · dispatch (with
+  explicit `agentType` + `model`) · adjudicate verifier verdicts · perform writes the
+  delegates structurally cannot (hook-gated calls, plugin-only APIs unreachable inside
+  `claude -p`) · checkpoint.
+- **Everything else is delegated.** No probes, no log tails, no sibling source reads, no
+  symbol greps, no per-iteration state gathering in the top session. Dispatch it, take the
+  conclusion; the raw output never enters the driver's context.
+- **The driver MAY:** decide the next dispatch · dispatch with literal `agentType` + `model`
+  + a return schema · adjudicate a verifier's verdict · make a single gated or plugin-only
+  call a delegate structurally cannot reach · write the checkpoint handoff · print the SCORE
+  line.
+- **The driver MUST NOT:** edit files · run builds, migrations, or docker commands · run the
+  test suite or a quality gate · trawl or tail logs · read a large file into its own context
+  · grep a sibling repo for a symbol · re-gather loop state by hand each iteration. Every one
+  of those is a dispatch.
+- **Every dispatch names four things:** `agentType`, `model`, a narrow question, and a
+  **return schema**. A schema-less dispatch returns prose the driver must re-read — which
+  spends exactly the tokens the delegation was meant to save.
+- **Driver context ceiling:** <~250k tokens> — checkpoint at ~50% regardless of sub-goal
+  boundary. Pasting a log or a file body into the driver's own context is the tell that a
+  delegation was missed.
+- **Orchestrator token share: under 15%** of the run's total. Report it every iteration as
+  `orch-spend <n>%` in the SCORE line — an unmeasured share is one nobody notices growing.
+- **Two mechanical detectors — run them on this prompt's own Plane map before shipping it:**
+  1. **Every `—` in the `agentType` column is orchestrator work.** A row with no agentType is
+     a row nobody was dispatched for, so the driver does it. Five such rows is the budget
+     (the five jobs); a sixth means a body of work leaked into the top session.
+  2. **An all-`—` `effort` column means effort control was surrendered**, because `effort` is
+     Workflow-only and an Agent subagent inherits the session's. That is a legitimate state —
+     say so explicitly. Silence reads as an omission, and the fix is to move the
+     effort-load-bearing step into a Workflow, never to ask for effort in prose.
+- **Tier by question shape, not importance.** Closed + evidence-checkable (line counts,
+  string presence, exit codes, "did these two outputs differ") → `haiku`/`sonnet` *even when
+  the stakes are high*. Open judgement gating an irreversible step → `opus` *even when it
+  looks small*. Defaulting everything to frontier is the expensive failure this rule prevents.
+- **Dispatch the whole wave before polling any of it** — see the Parallel wave schedule.
 
 ## Prerequisites / Wayfind gate
 <Fill BEFORE Objective. Refuse to invent a Goal if any fog remains.>
@@ -587,18 +679,46 @@ overhead; say which sub-goals skip it and why. One runner per handoff file.
 <`effort` applies only inside a Workflow — the Agent tool has no effort parameter and
 inherits the session's. If a step's effort is load-bearing, run it in a Workflow.>
 
-| Step | Plane | Mechanism | agentType | model | effort | Notes |
-|------|-------|-----------|-----------|-------|--------|-------|
-| <audit/research> | coordination | Workflow / 3–5 subagents | `Explore` | `haiku` | `low` | read-only enforced by agent type, not prose; research-to-*decide* stays on wayfind |
-| <multi-file synthesis> | coordination | subagent | `Explore` | `sonnet` | `medium` | judgement about what matters |
-| <code change> | execution | dispatch to <repo> via PR | `general-purpose` | `sonnet` | `low` | **serial writes** — one repo at a time |
-| <hard/ambiguous fix> | execution | `/goal` drive | `general-purpose` | `opus` | `high` | load-bearing judgement |
-| <verify proof> | coordination | **verifier subagent (fresh context)** | `general-purpose` | **`opus`** | **`high`–`xhigh`** | creator ≠ verifier; refutes proof; a weak verifier defeats the pattern |
-| <fix after fail> | execution | fresh worker on scoped fix sub-goal | `general-purpose` | `sonnet` | `low` | expected-fail loop; do not reopen whole feature |
-| <recurring check> | execution | Routine / `claude -p`+cron | `Explore` | `haiku` | `low` | human-gated |
+**Owner** is the load-bearing column — it is what makes Driver discipline auditable per row.
+`driver` belongs only on the five jobs; every other row is `delegate` (or `operator` for
+human-supervised work). If `driver` appears on a body of work, the prompt is wrong.
+
+| Step | Owner | Plane | Mechanism | agentType | model | effort | Notes |
+|------|-------|-------|-----------|-----------|-------|--------|-------|
+| <preflight probes> | delegate | coordination | subagent, one call, schema'd | `Explore` | `haiku` | `low` | closed questions; raw output never reaches the driver |
+| <per-iteration state gather> | delegate | coordination | subagent, one call, schema'd | `Explore` | `haiku` | `low` | git + tracker + PR state → one struct; flat cost per iteration instead of monotonic growth |
+| <lane log tail / progress poll> | delegate | coordination | subagent | `Explore` | `haiku` | `low` | logs run to thousands of lines; poll on a cadence matched to the work |
+| <audit/research> | delegate | coordination | Workflow / 3–5 subagents | `Explore` | `haiku` | `low` | read-only enforced by agent type, not prose; research-to-*decide* stays on wayfind |
+| <multi-file synthesis> | delegate | coordination | subagent | `Explore` | `sonnet` | `medium` | judgement about what matters |
+| <code change> | delegate | execution | dispatch to <repo> via PR | `general-purpose` | `sonnet` | `low` | **serial writes** — one repo at a time |
+| <hard/ambiguous fix> | delegate | execution | `/goal` drive | `general-purpose` | `opus` | `high` | load-bearing judgement |
+| <verify — open judgement> | delegate | coordination | **verifier subagent (fresh context)** | `general-purpose` | **`opus`** | **`high`–`xhigh`** | creator ≠ verifier; refutes proof; a weak verifier defeats the pattern |
+| <verify — closed check> | delegate | coordination | verifier subagent (fresh context) | `general-purpose` | `sonnet` | `medium` | a line count / diff / exit code is closed — frontier here is waste, not rigour |
+| <fix after fail> | delegate | execution | fresh worker on scoped fix sub-goal | `general-purpose` | `sonnet` | `low` | expected-fail loop; do not reopen whole feature |
+| <recurring check> | delegate | execution | Routine / `claude -p`+cron | `Explore` | `haiku` | `low` | human-gated |
+| <human-supervised lane> | **operator** | execution | human session in <repo> | — | operator's | — | never dispatched; say why the repo cannot take a headless lane |
+| <adjudicate verdicts> | **driver** | coordination | inline | — | runner | — | accept / reject / scope a fix |
+| <gated or plugin-only write> | **driver** | coordination | skill/tool call | — | runner | — | e.g. a hook-gated tracker write a headless lane cannot reach |
+| <decide next dispatch> | **driver** | coordination | inline | — | runner | — | the orchestration itself |
+| <checkpoint> | **driver** | coordination | `/tapps-handoff-session` | — | runner | — | shift boundary |
 
 Cheap-model rule: `haiku` answers closed, evidence-checkable questions. It does not
 render verdicts that gate irreversible steps — narrow the question or pay for `opus`.
+Tier by **question shape, not importance**: a high-stakes line count is still a line count.
+
+### Parallel wave schedule
+<Group independent chunks into waves and dispatch each wave in full before polling any of it.
+Serialising independent lanes buys no safety and costs wall-clock. State the constraint that
+actually binds — usually one working tree per repo: two write-lanes never share a repo, and a
+verifier never shares a repo with a live lane. Cross-repo overlap is the real parallelism.>
+
+```
+WAVE 1  (dispatch all, then poll via delegated log-tailers)
+  <lane> -> <repo> (<model>)   — <why it is independent>
+  <lane> -> <repo> (<model>)
+WAVE 2  (after <the blocking merge/deploy>)
+  <lane> -> <repo> (<model>)
+```
 
 ## Loop
 - **State:** <read first — wayfind resume (`memory_group=wayfind`), status, brain recall of prior attempts, Linear, last handoff>
@@ -608,7 +728,7 @@ render verdicts that gate irreversible steps — narrow the question or pay for 
 - **On fail (expected-fail fix loop):** record structured handoff → scope narrow fix sub-goal → re-execute → re-verify; ≤**3** validation rounds per sub-goal (override: N=…), then escalate once, then stop with a diagnosis. Never weaken the contract to go green.
 - **Record (structured handoff):** completed · undone · commands+exit codes · issues · procedures followed? · failure-and-why → brain
 - **Context hygiene:** prune stale reads; carry a compact state summary, not raw transcripts.
-- **Print every iteration:** `SCORE: <metric>/<total> · <metric2> · sub-goal <k>/<n> · iteration <i>/<cap>` — a long autonomous loop with no per-iteration signal is unmonitorable, and the trend is what tells a watching human whether to intervene.
+- **Print every iteration:** `SCORE: <metric>/<total> · <metric2> · orch-spend <n>% · sub-goal <k>/<n> · iteration <i>/<cap>` — `orch-spend` is the driver's own share of run tokens, target under 15%; a long autonomous loop with no per-iteration signal is unmonitorable, and the trend is what tells a watching human whether to intervene.
 - **Recycle (context boundary — at each sub-goal boundary or ~50% context, whichever first):** `/tapps-handoff-session` → **re-verify** → clear for real (autonomous: the next `claude -p`; attended: operator `/clear`; Cursor: new chat) → `/tapps-continue-session`. Never instruct yourself to run `/clear` — an agent cannot invoke a built-in CLI command. **The re-verify gate is mandatory:** clearing destroys the context that would catch a stale handoff, so before clearing check the handoff `Git:` sha against `git log -1` (`git log --oneline <sha>..HEAD` names what landed), re-read every named PR/issue state from the tracker, and re-read every quoted metric from its newest artifact. On mismatch, fix the handoff *before* clearing and treat every **Open** item as unverified until re-probed. Skip the boundary only inside a tightly-coupled sub-goal or when the remaining work is smaller than the cycle's overhead — say which and why. One runner per handoff file: two loops sharing it overwrite each other silently. See Checkpoint protocol below.
 - **Repeat or stop:** loop until **Done-when** holds; caps: <N iterations> AND <token budget> — **both cumulative across shifts**, read from the handoff, never reset by a checkpoint
 
@@ -641,6 +761,10 @@ Next: /clear   then   /tapps-continue-session
 - Independent verification (creator ≠ verifier); ground-truth proof; verifier gets the proof command, not the claim; expected-fail fix loop with attempt cap.
 - Standing constraints: <each one from the section above — and each also an Autonomy hard-stop>.
 - No green-by-deletion: <the Done-when clause whose count must not shrink>.
+- **Driver discipline:** the top session decides · dispatches · adjudicates · performs writes delegates cannot · checkpoints. It edits no files, runs no builds, runs no probes, tails no logs, reads no sibling source, gathers no per-iteration state. Every Plane-map row whose Owner is not `driver` is delegated. Driver context ceiling <~250k>; checkpoint at ~50% regardless of sub-goal boundary; `orch-spend` under 15%.
+- **Every dispatch carries a return schema** alongside `agentType` + `model` — a schema-less dispatch returns prose the driver must re-read, spending the tokens the delegation saved.
+- **Tier by question shape, not importance** — closed/evidence-checkable → cheap even at high stakes; open judgement gating an irreversible step → frontier even when small.
+- **Dispatch each wave in full before polling it** — independent lanes serialised cost wall-clock for no safety.
 - Every subagent dispatch names `agentType` + `model` (+ `effort` in a Workflow); read-only steps use `Explore`; no cheap-model verdict gates an irreversible step.
 - Research grant: the loop has web + `tapps_research` + `tapps_lookup_docs` (cache-first, free to repeat). Never write against an external/versioned API from memory — required lookups: <list>.
 - No fan-out of coupled coding — sequential per-repo edits (serial writes, parallel reads OK).
