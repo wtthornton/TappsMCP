@@ -2,6 +2,24 @@
 
 > A deep-dive technical reference for the `tapps_memory` subsystem - the persistent,
 > cross-session knowledge store that gives TappsMCP a "brain."
+>
+> **v3 (current):** The deployed runtime is a Dockerized **PostgreSQL** `tapps-brain` service,
+> reached over HTTP or in-process through `BrainBridge` (see [ADR-0001](../docs/adr/0001-in-process-agentbrain-via-brainbridge.md))
+> and exposed to agents as the `tapps_memory` tool (44 actions). `packages/tapps-core/src/tapps_core/memory/`
+> — the module tree this document describes throughout — was removed in TAP-1995; persistence,
+> retrieval, decay, consolidation, contradiction detection, GC, and federation now live in the
+> [tapps-brain repo](https://github.com/wtthornton/tapps-brain), whose own decision record is
+> ADR-007 (Postgres-only, 2026-04-11). For current API surface and config, see
+> [docs/MEMORY_REFERENCE.md](../docs/MEMORY_REFERENCE.md) and
+> [docs/ARCHITECTURE.md](../docs/ARCHITECTURE.md).
+>
+> **Sections below describe the pre-migration (v2) design** — SQLite/WAL/FTS5 storage, the
+> `tapps_core/memory/` module layout, in-process `MemoryStore`/`MemoryRetriever` classes, and
+> file/line counts that no longer exist. The algorithms and design patterns they document
+> (BM25 + decay + consolidation scoring, deterministic no-LLM merging, scope resolution, etc.)
+> are conceptually still representative of what tapps-brain does today, but every concrete
+> file path, class name, table name, and action count below is v2 context only — do not treat
+> it as a map of the current codebase.
 
 ---
 
