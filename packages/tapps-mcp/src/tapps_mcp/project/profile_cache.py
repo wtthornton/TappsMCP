@@ -12,6 +12,8 @@ from typing import Any
 
 import structlog
 
+from tapps_core.cache.atomic import AtomicJsonCache
+
 logger = structlog.get_logger(__name__)
 
 PROFILE_CACHE_REL = ".tapps-mcp/profile-cache.json"
@@ -79,6 +81,6 @@ def save_cached_profile_summary(
     try:
         path.parent.mkdir(parents=True, exist_ok=True)
         payload = {"fingerprint": fingerprint, "profile": profile_data}
-        path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
+        AtomicJsonCache.write_json(path, payload, indent=2)
     except OSError as exc:
         logger.warning("profile_cache_write_failed", path=str(path), error=str(exc))

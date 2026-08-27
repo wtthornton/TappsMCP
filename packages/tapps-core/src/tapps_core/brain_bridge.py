@@ -43,6 +43,7 @@ import httpx
 import structlog
 from packaging.version import InvalidVersion, Version
 
+from tapps_core.cache.atomic import AtomicJsonCache
 from tapps_core.knowledge.kg_keys import entity_spec, entity_uuid
 
 if TYPE_CHECKING:
@@ -129,9 +130,12 @@ def _write_tools_warm_cache(cache_path: Path, tools: frozenset[str]) -> None:
     try:
         cache_path.parent.mkdir(parents=True, exist_ok=True)
         payload = {"tools": [{"name": n} for n in sorted(tools)]}
-        cache_path.write_text(json.dumps(payload), encoding="utf-8")
+        AtomicJsonCache.write_json(cache_path, payload, indent=None)
     except Exception:
-        pass
+        # TAP-6081: still best-effort (a warm cache miss is harmless), but the
+        # failure is no longer swallowed silently — a permanently unwritable
+        # cache dir used to look identical to a healthy one.
+        logger.warning("tools_warm_cache_write_failed", path=str(cache_path), exc_info=True)
 
 
 # --- MCP streamable-HTTP transport ------------------------------------------
