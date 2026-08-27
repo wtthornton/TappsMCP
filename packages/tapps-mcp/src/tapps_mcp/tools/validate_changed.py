@@ -694,6 +694,7 @@ async def tapps_validate_changed(
             correlation_id=correlation_id,
             judges=effective_judges,
             project_root_override=cross_repo,
+            file_paths=file_paths,
         )
         data = resp.get("data")
         if isinstance(data, dict) and missing_paths_warning:

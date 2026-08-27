@@ -95,6 +95,13 @@ def _write_validate_ok_marker(project_root: Path) -> None:
     - ``_VALIDATE_OK_MARKER`` (legacy, for Cursor stop hook)
     - ``.tapps-mcp/.validation-marker`` (for Claude Code blocking hooks)
     """
+    # TAP-6606: a real batch just ran, so any recorded "nothing to gate"
+    # verdict is now false. Drop it here rather than letting it age out —
+    # a stale verdict must never outlive the session that earned it.
+    from tapps_mcp.tools.nothing_to_gate import clear as _clear_nothing_to_gate
+
+    _clear_nothing_to_gate(project_root)
+
     ts = str(time.time())
     with contextlib.suppress(OSError):
         marker = project_root / _VALIDATE_OK_MARKER

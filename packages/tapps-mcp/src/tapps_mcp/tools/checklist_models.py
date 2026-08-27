@@ -99,3 +99,25 @@ class ChecklistResult(BaseModel):
         default_factory=list,
         description="Required tools downgraded because their NLT server is disabled.",
     )
+    nothing_to_gate: bool = Field(
+        default=False,
+        description=(
+            "TAP-6606: tapps_validate_changed recorded that this session's changeset "
+            "holds no scorable file, and a fresh git census still agrees. File-scoped "
+            "required tools have no target and are reported as not_applicable_tools."
+        ),
+    )
+    nothing_to_gate_reason: str = Field(
+        default="",
+        description=(
+            "Honest terminal reason when nothing_to_gate is set. Distinct from the "
+            "'no validation was run' state, which never sets this field."
+        ),
+    )
+    not_applicable_tools: list[str] = Field(
+        default_factory=list,
+        description=(
+            "Required tools that need a scorable file the session never touched. "
+            "Not missing and not optional — inapplicable."
+        ),
+    )

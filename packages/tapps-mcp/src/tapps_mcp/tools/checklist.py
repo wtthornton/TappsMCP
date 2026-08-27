@@ -199,9 +199,7 @@ def _build_hints(tools: list[str]) -> list[ChecklistHint]:
     return [ChecklistHint(tool=t, reason=TOOL_REASONS.get(t, f"Call {t}.")) for t in tools]
 
 
-def _partition_by_effective(
-    names: list[str], effective: set[str]
-) -> tuple[list[str], list[str]]:
+def _partition_by_effective(names: list[str], effective: set[str]) -> tuple[list[str], list[str]]:
     """Split *names* into (missing, satisfied) against the effective tool set."""
     missing = [t for t in names if t not in effective]
     satisfied = [t for t in names if t in effective]
@@ -259,6 +257,34 @@ def _demote_unavailable_server_tools(
         for t in server_unavailable
     ]
     return still_required, server_unavailable, hints
+
+
+def _apply_nothing_to_gate(
+    missing_required: list[str],
+    project_root: Path | None,
+) -> tuple[list[str], list[str], str]:
+    """Demote file-scoped required tools when there is nothing to gate.
+
+    TAP-6606. ``tapps_validate_changed`` already decided this session had no
+    scorable surface; :func:`nothing_to_gate.resolve` re-verifies that against
+    git before we act on it, so a stale marker cannot make a session with real
+    code changes complete.
+
+    Only tools that *need a file path* are demoted — ``tapps_session_start``,
+    ``tapps_checklist``, ``tapps_release_update`` and friends stay required.
+    Returns (still_required, not_applicable, reason).
+    """
+    from tapps_mcp.tools.nothing_to_gate import partition_file_scoped, resolve
+
+    if not missing_required:
+        return missing_required, [], ""
+    verdict = resolve(project_root)
+    if verdict is None:
+        return missing_required, [], ""
+    still_required, not_applicable = partition_file_scoped(missing_required)
+    if not not_applicable:
+        return missing_required, [], ""
+    return still_required, not_applicable, verdict.reason
 
 
 class CallTracker:
@@ -481,6 +507,9 @@ class CallTracker:
         missing_required, server_unavailable, missing_optional_hints_extra = (
             _demote_unavailable_server_tools(missing_required, missing_optional, project_root)
         )
+        missing_required, not_applicable, ntg_reason = _apply_nothing_to_gate(
+            missing_required, project_root
+        )
 
         return ChecklistResult(
             task_type=task_type,
@@ -496,6 +525,9 @@ class CallTracker:
             missing_recommended_hints=_build_hints(missing_recommended),
             missing_optional_hints=_build_hints(missing_optional) + missing_optional_hints_extra,
             server_unavailable_tools=server_unavailable,
+            nothing_to_gate=bool(not_applicable),
+            nothing_to_gate_reason=ntg_reason,
+            not_applicable_tools=not_applicable,
             required_tool_names=list(required),
             satisfied_required_tools=sat_req,
             recommended_tool_names=list(recommended),
