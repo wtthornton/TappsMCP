@@ -27,7 +27,7 @@ import time
 from collections.abc import Callable
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, cast
+from typing import TYPE_CHECKING, Any, Literal, cast
 
 import structlog
 from mcp.server.fastmcp import Context
@@ -1244,7 +1244,7 @@ async def tapps_upgrade(
 # ---------------------------------------------------------------------------
 
 
-def tapps_set_engagement_level(level: str) -> dict[str, Any]:
+def tapps_set_engagement_level(level: Literal["high", "medium", "low"]) -> dict[str, Any]:
     """Persists the project's LLM engagement level to ``.tapps-mcp.yaml``,
     which controls how aggressively tapps-mcp enforces the quality pipeline.
 
@@ -1273,6 +1273,8 @@ def tapps_set_engagement_level(level: str) -> dict[str, Any]:
 
     valid = ("high", "medium", "low")
     if level not in valid:
+        # Runtime guard kept as defence in depth: a non-MCP caller (CLI,
+        # direct import) bypasses the schema-level enum entirely.
         _record_execution(
             "tapps_set_engagement_level",
             start,

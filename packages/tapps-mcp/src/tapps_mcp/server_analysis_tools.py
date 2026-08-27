@@ -133,6 +133,7 @@ def _record_execution(
     score: float | None = None,
     error_code: str | None = None,
     degraded: bool = False,
+    action: str | None = None,
 ) -> None:
     """Delegate to server._record_execution."""
     from tapps_mcp.server import _record_execution as _re
@@ -146,6 +147,7 @@ def _record_execution(
         score=score,
         error_code=error_code,
         degraded=degraded,
+        action=action,
     )
 
 
@@ -258,6 +260,10 @@ async def tapps_session_notes(action: str, key: str = "", value: str = "") -> di
 
     if action == "save":
         if not key or not value:
+            _record_execution(
+                "tapps_session_notes", start, status="failed", error_code="missing_params",
+                action=action,
+            )
             return error_response(
                 "tapps_session_notes",
                 "missing_params",
@@ -267,6 +273,10 @@ async def tapps_session_notes(action: str, key: str = "", value: str = "") -> di
         data = {"action": "save", "note": note.model_dump()}
     elif action == "get":
         if not key:
+            _record_execution(
+                "tapps_session_notes", start, status="failed", error_code="missing_params",
+                action=action,
+            )
             return error_response("tapps_session_notes", "missing_params", "get requires key")
         found = store.get(key)
         data = {
@@ -280,12 +290,24 @@ async def tapps_session_notes(action: str, key: str = "", value: str = "") -> di
         data = {"action": "clear", "cleared_count": store.clear(key or None)}
     elif action == "promote":
         if not key:
+            _record_execution(
+                "tapps_session_notes", start, status="failed", error_code="missing_params",
+                action=action,
+            )
             return error_response("tapps_session_notes", "missing_params", "promote requires key")
         found = store.get(key)
         if found is None:
+            _record_execution(
+                "tapps_session_notes", start, status="failed", error_code="not_found",
+                action=action,
+            )
             return error_response("tapps_session_notes", "not_found", f"Note '{key}' not found")
         data = await _promote_note_to_memory(found, value or "context")
     else:
+        _record_execution(
+            "tapps_session_notes", start, status="failed", error_code="invalid_action",
+            action=action,
+        )
         return error_response(
             "tapps_session_notes",
             "invalid_action",
@@ -293,7 +315,7 @@ async def tapps_session_notes(action: str, key: str = "", value: str = "") -> di
         )
 
     elapsed_ms = (time.perf_counter_ns() - start) // 1_000_000
-    _record_execution("tapps_session_notes", start)
+    _record_execution("tapps_session_notes", start, action=action)
     data.update(store.metadata())
     data["migration_hint"] = "Use tapps_memory for persistent cross-session storage."
     resp = success_response("tapps_session_notes", elapsed_ms, data)

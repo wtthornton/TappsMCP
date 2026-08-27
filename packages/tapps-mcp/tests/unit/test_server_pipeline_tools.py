@@ -479,6 +479,17 @@ class TestTappsSetEngagementLevel:
         # Invalid returns error, so check valid case via mock
         assert result["success"] is False
 
+    def test_exported_schema_carries_level_enum(self) -> None:
+        """VAL-12: the generated MCP tool schema must enumerate valid levels,
+        not just accept a bare string, or models keep guessing synonyms."""
+        from mcp.server.fastmcp.tools.base import Tool
+
+        from tapps_mcp.server_pipeline_tools import tapps_set_engagement_level
+
+        tool = Tool.from_function(tapps_set_engagement_level)
+        level_schema = tool.parameters["properties"]["level"]
+        assert level_schema.get("enum") == ["high", "medium", "low"]
+
 
 # ---------------------------------------------------------------------------
 # tapps_upgrade
