@@ -118,3 +118,6 @@ jobs:
 
       - name: AGENTS.md version stamp
         run: uv run tapps-mcp check-agents-md-stamp --project-root .
+
+      - name: Version pins in sync (bump-versions --check)
+        run: python3 scripts/bump-versions.py --check

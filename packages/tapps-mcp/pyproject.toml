@@ -32,8 +32,9 @@ dependencies = [
     # workspace's package. An exact pin can only ever match this workspace's
     # current version, so a mismatched public release makes pip fail loudly
     # naming the requirement instead of substituting silently.
-    # scripts/bump_versions.py rewrites and CI-gates (`--check`) this pin on
-    # every version bump so it can't drift back open.
+    # scripts/bump-versions.py rewrites this pin on every version bump; both
+    # .githooks/pre-push and the tapps-quality.yml "agent-contract" CI job
+    # run `--check` so it can't drift back open.
     "tapps-core==3.12.76",
     "docs-mcp==3.12.76",
     "mcp[cli]>=1.27.2,<2",

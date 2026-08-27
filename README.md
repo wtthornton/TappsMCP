@@ -509,7 +509,7 @@ The MCP tool exposes a richer parameter surface than the CLI (which auto-fills s
 
 ### `tapps-mcp upgrade`
 
-After upgrading TappsMCP (`pip install -U tapps-mcp`), refresh generated files:
+After upgrading TappsMCP (`uv sync` from the checkout), refresh generated files:
 
 ```bash
 tapps-mcp upgrade                           # auto-detect host, update all files
@@ -753,7 +753,7 @@ MCP entries are validated **per transport** (TAP-5723): a stdio entry needs `com
 
 **What it does:** Validates and refreshes TappsMCP-generated files in a project after upgrading the server. Detects the platform (Claude Code, Cursor, or both) from existing config files and upgrades AGENTS.md (via smart-merge), platform rules, the four `tapps-*` subagents, the `tapps-*` + `linear-issue` skills, `tapps-*` hook scripts, and `settings.json` permissions. The upgrade preserves files outside that managed set — consumer-authored agents, skills, hooks, and custom command paths in `.mcp.json`. It merges `settings.json` hook entries by matcher. Accepts optional `platform`, `force`, and `dry_run` parameters.
 
-**Why use it:** After upgrading TappsMCP (`pip install -U tapps-mcp`), generated files may be outdated — missing new tools, stale hook scripts, or old AGENTS.md sections. Call `tapps_upgrade(dry_run=true)` to preview what would change, then `tapps_upgrade()` to apply updates. The upgrade creates a timestamped backup before overwriting (stored in `.tapps-mcp/backups/`). This is the MCP-tool equivalent of the `tapps-mcp upgrade` CLI command, usable from within an AI session without dropping to a terminal.
+**Why use it:** After upgrading TappsMCP (`uv sync` from the checkout), generated files may be outdated — missing new tools, stale hook scripts, or old AGENTS.md sections. Call `tapps_upgrade(dry_run=true)` to preview what would change, then `tapps_upgrade()` to apply updates. The upgrade creates a timestamped backup before overwriting (stored in `.tapps-mcp/backups/`). This is the MCP-tool equivalent of the `tapps-mcp upgrade` CLI command, usable from within an AI session without dropping to a terminal.
 
 **Dry-run response shape:** Returns per-component dicts under `components.platforms[].components.{agents,skills,hooks}` with `action`, `managed_files` / `managed_skills` (tapps-* files the upgrade would write), and `preserved_files` / `preserved_skills` (consumer-custom files that stay untouched). A top-level `dry_run_summary` provides a `verdict` (`"safe-to-run"` or `"review-recommended"`), aggregate counts, `preserved_files` across all hosts, and `review_recommended_for` listing components that merge into user-editable files (`CLAUDE.md`, `settings.json`). Agents can branch on the verdict without parsing per-component details.
 
@@ -1037,7 +1037,7 @@ When you upgrade TappsMCP, generated files (AGENTS.md, hooks, rules, skills) may
 ### Quick upgrade (recommended)
 
 ```bash
-pip install -U tapps-mcp                    # 1. Upgrade the package
+uv sync                                     # 1. Reinstall from the local checkout
 tapps-mcp upgrade --dry-run                 # 2. Preview what would change
 tapps-mcp upgrade                           # 3. Apply updates
 ```

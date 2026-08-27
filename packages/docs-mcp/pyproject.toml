@@ -30,8 +30,10 @@ dependencies = [
     # resolves this line from public PyPI, where an unrelated same-named
     # package could appear. An exact pin only ever matches this workspace's
     # current version, so a mismatch makes pip fail loudly naming the
-    # requirement instead of silently substituting. scripts/bump_versions.py
-    # rewrites and CI-gates (`--check`) this pin on every version bump.
+    # requirement instead of silently substituting. scripts/bump-versions.py
+    # rewrites this pin on every version bump; both .githooks/pre-push and
+    # the tapps-quality.yml "agent-contract" CI job run `--check` so it
+    # can't drift back open.
     "tapps-core==3.12.76",
     "mcp[cli]>=1.27.2,<2",
     "click>=8.4.1,<9",
