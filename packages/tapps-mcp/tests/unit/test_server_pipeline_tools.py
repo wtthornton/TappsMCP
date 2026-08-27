@@ -1109,8 +1109,13 @@ class TestTappsValidateChanged:
         assert result["data"]["impact_summary"]["max_severity"] == "low"
 
     @pytest.mark.asyncio
-    async def test_no_files_does_not_write_marker(self, tmp_path: Path) -> None:
-        """Zero files gated is inconclusive — never write the validate-ok marker."""
+    async def test_no_files_writes_marker_as_inconclusive(self, tmp_path: Path) -> None:
+        """TAP-6068: zero files gated is inconclusive, not a failure — the
+        ok-marker IS written so Stop/TaskCompleted hooks see an honest clean
+        session instead of blocking it. ``all_gates_passed`` stays False
+        (TAP-5734 fail-closed); ``inconclusive: True`` is the distinguishing
+        signal.
+        """
         from tapps_mcp.server_pipeline_tools import tapps_validate_changed
 
         with (
@@ -1122,9 +1127,11 @@ class TestTappsValidateChanged:
             patch("tapps_mcp.server_pipeline_tools._write_validate_ok_marker") as mock_marker,
         ):
             ms.return_value = _make_mock_settings(tmp_path)
-            await tapps_validate_changed()
+            result = await tapps_validate_changed()
 
-        mock_marker.assert_not_called()
+        assert result["data"]["all_gates_passed"] is False
+        assert result["data"]["inconclusive"] is True
+        mock_marker.assert_called_once_with(tmp_path)
 
     @pytest.mark.asyncio
     async def test_multiple_files(self, tmp_path: Path) -> None:
