@@ -110,10 +110,13 @@ class TestHandleNoChangedFilesWithJudges:
         mock_marker.assert_not_called()
 
     @pytest.mark.asyncio
-    async def test_does_not_write_marker_when_no_files_even_if_judges_pass(
-        self, tmp_path: Path
-    ) -> None:
-        """Zero files gated is inconclusive — never write the validate-ok marker."""
+    async def test_writes_marker_when_no_files_and_judges_pass(self, tmp_path: Path) -> None:
+        """TAP-6068: zero files gated + no configured-judge failure is an
+        honest clean session — the ok-marker IS written so Stop/TaskCompleted
+        hooks don't block it. all_gates_passed stays False (TAP-5734
+        fail-closed); ``inconclusive: True`` is how callers tell this apart
+        from a genuine gate failure.
+        """
         judges = [{"type": "exists", "target": "x"}]
         with (
             patch(
@@ -136,7 +139,8 @@ class TestHandleNoChangedFilesWithJudges:
             )
 
         assert resp["data"]["all_gates_passed"] is False
-        mock_marker.assert_not_called()
+        assert resp["data"]["inconclusive"] is True
+        mock_marker.assert_called_once_with(tmp_path)
 
 
 class TestRunJudgesExceptionPayload:

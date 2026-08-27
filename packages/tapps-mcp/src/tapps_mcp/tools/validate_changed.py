@@ -50,6 +50,7 @@ from tapps_mcp.tools.validate_changed_collection import (
     _partition_by_cache,
     _write_validate_ok_marker,
     count_tracked_scorable_files,
+    maybe_write_debt_ok_marker,
 )
 from tapps_mcp.tools.validate_changed_orchestrator import (
     _VALIDATE_CONCURRENCY,
@@ -183,6 +184,7 @@ __all__ = [
     "_validate_single_file",
     "_warm_dependency_cache",
     "_write_validate_ok_marker",
+    "maybe_write_debt_ok_marker",
     "tapps_validate_changed",
 ]
 
@@ -409,8 +411,14 @@ async def _finalize_outcome(
     if not all_passed:
         _record_call("tapps_validate_changed", success=False)
     _record_execution("tapps_validate_changed", bc.start, gate_passed=all_passed)
-    if all_passed:
-        _host._write_validate_ok_marker(bc.settings.project_root)
+
+    await maybe_write_debt_ok_marker(
+        _host._write_validate_ok_marker,
+        incomplete=incomplete,
+        all_passed=all_passed,
+        results=results,
+        project_root=bc.settings.project_root,
+    )
     return _BatchOutcome(
         results=results,
         all_passed=all_passed,

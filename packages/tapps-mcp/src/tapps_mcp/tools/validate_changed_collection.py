@@ -12,12 +12,16 @@ focused on the MCP tool handler. This module is responsible for:
 
 from __future__ import annotations
 
+import asyncio
 import contextlib
 import time
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import structlog
+
+if TYPE_CHECKING:
+    from collections.abc import Callable
 
 from tapps_mcp.security.verdict import read_security_verdict
 
@@ -213,11 +217,116 @@ def _collect_results(
     return results
 
 
+# TAP-6068: refs tried (in order) when checking whether a failing file's
+# content already existed on trunk before this session touched anything.
+# Mirrors the branch-range fallback in batch_validator.detect_changed_scorable_files.
+_ZERO_DELTA_TRUNK_REFS = ("main", "master", "origin/main", "origin/master")
+_ZERO_DELTA_GIT_TIMEOUT = 5
+
+
+def _git_show_text(project_root: Path, ref: str, relpath: str) -> str | None:
+    """Return *relpath*'s content at *ref*, or ``None`` if unresolvable."""
+    from tapps_mcp.tools.subprocess_runner import run_command
+
+    result = run_command(
+        ["git", "show", f"{ref}:{relpath}"],
+        cwd=str(project_root),
+        timeout=_ZERO_DELTA_GIT_TIMEOUT,
+    )
+    if result.returncode != 0:
+        return None
+    return result.stdout
+
+
+def _is_zero_delta_against_trunk(project_root: Path, file_path: str) -> bool:
+    """True when *file_path*'s current content matches its content on trunk.
+
+    Distinguishes pre-existing debt (a sub-70 file the session never
+    touched) from a fresh regression the gate should genuinely block on.
+    Fail-closed: a brand-new file, an unresolved trunk ref, or a read error
+    all resolve to ``False`` — a genuine regression can never hide behind
+    this check.
+    """
+    try:
+        rel = Path(file_path).resolve().relative_to(project_root.resolve())
+    except (OSError, ValueError):
+        return False
+    try:
+        current = (project_root / rel).read_text(encoding="utf-8", errors="replace")
+    except OSError:
+        return False
+    posix_rel = rel.as_posix()
+    for ref in _ZERO_DELTA_TRUNK_REFS:
+        trunk_content = _git_show_text(project_root, ref, posix_rel)
+        if trunk_content is not None:
+            return trunk_content == current
+    return False
+
+
+def _annotate_zero_delta_failures(
+    results: list[dict[str, Any]],
+    project_root: Path,
+) -> bool:
+    """Tag each failing result with ``zero_delta``; report if ALL of them are.
+
+    Mutates *results* in place, adding ``zero_delta: True`` to any failing
+    entry whose content is unchanged from trunk. Returns ``True`` only when
+    there is at least one failure and every failure is zero-delta —
+    pre-existing debt this session did not introduce, distinguishable from a
+    fresh regression (TAP-6068 acceptance item 3).
+    """
+    saw_failure = False
+    saw_new_failure = False
+    for r in results:
+        if r.get("gate_passed"):
+            continue
+        saw_failure = True
+        file_path = r.get("file_path")
+        zero_delta = (
+            _is_zero_delta_against_trunk(project_root, file_path)
+            if isinstance(file_path, str)
+            else False
+        )
+        r["zero_delta"] = zero_delta
+        if not zero_delta:
+            saw_new_failure = True
+    return saw_failure and not saw_new_failure
+
+
+async def maybe_write_debt_ok_marker(
+    write_marker: Callable[[Path], None],
+    *,
+    incomplete: bool,
+    all_passed: bool,
+    results: list[dict[str, Any]],
+    project_root: Path,
+) -> bool:
+    """Write the ok-marker on a pass or a debt-only failure; report which.
+
+    Returns ``only_pre_existing_debt_failed`` — ``True`` when the batch
+    failed solely on pre-existing debt (TAP-6068). *write_marker* is passed
+    in (rather than imported) so callers keep writing through their own
+    test-patchable indirection.
+    """
+    if all_passed:
+        write_marker(project_root)
+        return False
+    if incomplete or not results:
+        return False
+    only_debt = await asyncio.to_thread(_annotate_zero_delta_failures, results, project_root)
+    if only_debt:
+        write_marker(project_root)
+    return only_debt
+
+
 __all__ = [
     "_VALIDATE_OK_MARKER",
+    "_annotate_zero_delta_failures",
     "_cache_hit_as_file_result",
     "_collect_results",
     "_discover_changed_files",
+    "_is_zero_delta_against_trunk",
     "_partition_by_cache",
     "_write_validate_ok_marker",
+    "maybe_write_debt_ok_marker",
 ]

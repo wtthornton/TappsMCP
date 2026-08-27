@@ -262,6 +262,10 @@ def _build_file_entry(
     if r.get("degraded"):
         entry["degraded"] = True
         entry["missing_tools"] = r.get("missing_tools", [])
+    # TAP-6068: surfaced only on failing entries — mirrors the `degraded`
+    # additive-field convention above.
+    if not gate_passed and r.get("zero_delta"):
+        entry["zero_delta"] = True
 
     row_parts = [
         f"{status:<5}",
@@ -364,6 +368,14 @@ async def _handle_no_changed_files(
     resp_data: dict[str, Any] = {
         "files_validated": 0,
         "all_gates_passed": False,
+        # TAP-5734: additive signal distinguishing "nothing was gated" from a
+        # genuine gate failure. all_gates_passed stays False (fail-closed —
+        # see validate_changed_cli_exit.py); callers that only branch on
+        # all_gates_passed see unchanged behaviour. Consumers that need to
+        # tell "nothing to check" apart from "checked and failed" (e.g. the
+        # tapps-task-completed / tapps-stop hooks, TAP-6068) read this field
+        # instead of parsing the summary string.
+        "inconclusive": True,
         "total_security_issues": 0,
         "results": [],
         "summary": "No changed scorable files found — inconclusive, nothing was gated.",
@@ -378,6 +390,14 @@ async def _handle_no_changed_files(
             base_ref=base_ref,
         )
         summary = apply_judge_payload(resp_data, judge_payload, summary=summary)
+
+    # A zero-file gate is not a failure the session needs to fix — write the
+    # same ok-marker a passing batch would, so Stop/TaskCompleted hooks don't
+    # block a session that genuinely touched no scorable files (TAP-6068).
+    # Skipped when a configured judge actually failed — that IS a real
+    # failure, judges_passed defaults True when none were configured.
+    if resp_data.get("judges_passed", True):
+        _host._write_validate_ok_marker(settings.project_root)
 
     warnings = _no_changed_warnings(explicit_paths, base_ref)
     if explicit_paths:
@@ -419,6 +439,18 @@ async def _handle_no_changed_files(
     return with_nudges("tapps_validate_changed", resp)
 
 
+def _only_pre_existing_debt_failed(results: list[dict[str, Any]]) -> bool:
+    """True when every failing result is pre-existing debt (TAP-6068).
+
+    Reads the ``zero_delta`` flags ``_annotate_zero_delta_failures`` already
+    attached to failing entries — distinguishes "this session broke
+    something" from "this session inherited debt it never touched" without
+    re-deriving the comparison against trunk.
+    """
+    failing = [r for r in results if not r.get("gate_passed")]
+    return bool(failing) and all(r.get("zero_delta") for r in failing)
+
+
 def _build_response_data(
     results: list[dict[str, Any]],
     all_passed: bool,
@@ -437,6 +469,7 @@ def _build_response_data(
         "summary_rows": summary_rows,
         "results": results,
         "summary": summary,
+        "only_pre_existing_debt_failed": _only_pre_existing_debt_failed(results),
     }
     if impact_data is not None:
         resp_data["impact_summary"] = impact_data

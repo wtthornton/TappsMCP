@@ -3688,13 +3688,17 @@ CLAUDE_HOOK_SCRIPTS_BLOCKING: dict[str, str] = {
     "tapps-task-completed.sh": """\
 #!/usr/bin/env bash
 # TappsMCP TaskCompleted hook (HIGH engagement - BLOCKING)
-# Blocks task completion if validation has not been run.
+# Blocks task completion if validation has not been run (TAP-6068: skips honest no-scorable-change no-ops).
 # Reads sidecar for richer context in systemMessage.
 INPUT=$(cat)
 PROJECT_DIR="${CLAUDE_PROJECT_DIR:-.}"
 MARKER="$PROJECT_DIR/.tapps-mcp/.validation-marker"
 PROGRESS="$PROJECT_DIR/.tapps-mcp/.validation-progress.json"
 PYBIN=$(command -v python3 2>/dev/null || command -v python 2>/dev/null)
+if command -v git >/dev/null 2>&1 && git -C "$PROJECT_DIR" rev-parse --git-dir >/dev/null 2>&1 && ! { git -C "$PROJECT_DIR" diff --name-only HEAD; git -C "$PROJECT_DIR" diff --name-only --cached; git -C "$PROJECT_DIR" ls-files --others --exclude-standard; for r in main master origin/main origin/master; do git -C "$PROJECT_DIR" diff --name-only "$r...HEAD"; done; } 2>/dev/null | grep -qE '\\.(py|pyi|ts|tsx|js|jsx|mjs|cjs|go|rs)$'; then
+  echo "OK: no scorable changed files — nothing to validate." >&2
+  exit 0
+fi
 if [ -f "$MARKER" ]; then
   AGE=$("$PYBIN" -c "
 import time
@@ -3751,7 +3755,7 @@ exit 2
     "tapps-stop.sh": """\
 #!/usr/bin/env bash
 # TappsMCP Stop hook (HIGH engagement - BLOCKING on first invocation)
-# Blocks if no quality validation was run this session.
+# Blocks if no quality validation was run this session (TAP-6068: skips honest no-scorable-change no-ops).
 # Reads sidecar for richer context when validation was run.
 # IMPORTANT: Must check stop_hook_active to prevent infinite loops.
 INPUT=$(cat)
@@ -3764,6 +3768,10 @@ fi
 PROJECT_DIR="${CLAUDE_PROJECT_DIR:-.}"
 MARKER="$PROJECT_DIR/.tapps-mcp/.validation-marker"
 PROGRESS="$PROJECT_DIR/.tapps-mcp/.validation-progress.json"
+if command -v git >/dev/null 2>&1 && git -C "$PROJECT_DIR" rev-parse --git-dir >/dev/null 2>&1 && ! { git -C "$PROJECT_DIR" diff --name-only HEAD; git -C "$PROJECT_DIR" diff --name-only --cached; git -C "$PROJECT_DIR" ls-files --others --exclude-standard; for r in main master origin/main origin/master; do git -C "$PROJECT_DIR" diff --name-only "$r...HEAD"; done; } 2>/dev/null | grep -qE '\\.(py|pyi|ts|tsx|js|jsx|mjs|cjs|go|rs)$'; then
+  echo "OK: no scorable changed files — nothing to validate." >&2
+  exit 0
+fi
 if [ -f "$MARKER" ]; then
   # Emit sidecar summary if available
   if [ -f "$PROGRESS" ]; then
@@ -3807,13 +3815,28 @@ exit 2
 CLAUDE_HOOK_SCRIPTS_BLOCKING_PS: dict[str, str] = {
     "tapps-task-completed.ps1": """\
 # TappsMCP TaskCompleted hook (HIGH engagement - BLOCKING)
-# Blocks task completion if validation has not been run.
+# Blocks task completion if validation has not been run (TAP-6068: skips honest no-scorable-change no-ops).
 # Reads sidecar for richer context in systemMessage.
 $null = $input | Out-Null
 $projDir = $env:CLAUDE_PROJECT_DIR
 if (-not $projDir) { $projDir = "." }
 $marker = "$projDir/.tapps-mcp/.validation-marker"
 $progress = "$projDir/.tapps-mcp/.validation-progress.json"
+function Test-TappsNoScorableChanges {
+    if (-not (Get-Command git -ErrorAction SilentlyContinue)) { return $false }
+    git -C $projDir rev-parse --git-dir *> $null
+    if ($LASTEXITCODE -ne 0) { return $false }
+    $pattern = '\\.(py|pyi|ts|tsx|js|jsx|mjs|cjs|go|rs)$'
+    $changed = @()
+    $changed += git -C $projDir diff --name-only HEAD 2>$null
+    $changed += git -C $projDir diff --name-only --cached 2>$null
+    $changed += git -C $projDir ls-files --others --exclude-standard 2>$null
+    foreach ($ref in @("main", "master", "origin/main", "origin/master")) {
+        $changed += git -C $projDir diff --name-only "$ref...HEAD" 2>$null
+    }
+    return -not ($changed | Where-Object { $_ -match $pattern })
+}
+if (Test-TappsNoScorableChanges) { Write-Output "OK: no scorable changed files — nothing to validate."; exit 0 }
 if (Test-Path $marker) {
     $content = Get-Content $marker -Raw
     try {
@@ -3869,7 +3892,7 @@ exit 2
 """,
     "tapps-stop.ps1": """\
 # TappsMCP Stop hook (HIGH engagement - BLOCKING on first invocation)
-# Blocks if no quality validation was run this session.
+# Blocks if no quality validation was run this session (TAP-6068: skips honest no-scorable-change no-ops).
 # Reads sidecar for richer context when validation was run.
 # IMPORTANT: Must check stop_hook_active to prevent infinite loops.
 $rawInput = @($input) -join "`n"
@@ -3886,6 +3909,21 @@ $projDir = $env:CLAUDE_PROJECT_DIR
 if (-not $projDir) { $projDir = "." }
 $marker = "$projDir/.tapps-mcp/.validation-marker"
 $progress = "$projDir/.tapps-mcp/.validation-progress.json"
+function Test-TappsNoScorableChanges {
+    if (-not (Get-Command git -ErrorAction SilentlyContinue)) { return $false }
+    git -C $projDir rev-parse --git-dir *> $null
+    if ($LASTEXITCODE -ne 0) { return $false }
+    $pattern = '\\.(py|pyi|ts|tsx|js|jsx|mjs|cjs|go|rs)$'
+    $changed = @()
+    $changed += git -C $projDir diff --name-only HEAD 2>$null
+    $changed += git -C $projDir diff --name-only --cached 2>$null
+    $changed += git -C $projDir ls-files --others --exclude-standard 2>$null
+    foreach ($ref in @("main", "master", "origin/main", "origin/master")) {
+        $changed += git -C $projDir diff --name-only "$ref...HEAD" 2>$null
+    }
+    return -not ($changed | Where-Object { $_ -match $pattern })
+}
+if (Test-TappsNoScorableChanges) { Write-Output "OK: no scorable changed files — nothing to validate."; exit 0 }
 if (Test-Path $marker) {
     if (Test-Path $progress) {
         try {
