@@ -73,6 +73,13 @@ POST_EDIT_IMPORT_LOOKUP_BASH = (
 )
 POST_EDIT_QUICK_CHECK_BASH = "Edited: $FILE — run tapps_quick_check after this edit."
 
+# TAP-6598: fires when an edit lands inside a managed skill's BEGIN/END block.
+MANAGED_SKILL_BLOCK_EDIT_WARNING_BASH = (
+    "$FILE: this edit landed inside the BEGIN/END managed block — "
+    "tapps_upgrade regenerates that region and the edit will be lost. Move "
+    "project-specific content below the END marker instead."
+)
+
 # Stop / TaskCompleted reminders (warn-only telemetry; not hard blocks unless opt-in gates)
 STOP_FINISH_REMINDER = (
     "Reminder: run /tapps-finish-task (or tapps_validate_changed + tapps_checklist "

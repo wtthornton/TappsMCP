@@ -10,6 +10,7 @@ import shlex
 from typing import Any
 
 from tapps_mcp.pipeline.agent_contract import (
+    MANAGED_SKILL_BLOCK_EDIT_WARNING_BASH,
     POST_EDIT_IMPORT_LOOKUP_BASH,
     POST_EDIT_PUBLIC_API_CALL_GRAPH_BASH,
     POST_EDIT_PUBLIC_API_DRIFT_BASH,
@@ -18,6 +19,7 @@ from tapps_mcp.pipeline.agent_contract import (
     SUBAGENT_START_INTRO,
     SUBAGENT_START_TOOLS_LINE,
 )
+from tapps_mcp.pipeline.hook_edit_parse_py import _CURSOR_AFTER_EDIT_IMPORT_PARSE_PY
 from tapps_mcp.pipeline.linear_mcp_names import (
     apply_linear_host_placeholders,
     patch_linear_hook_matchers,
@@ -218,63 +220,6 @@ exit 0
 """
 
 
-# Shared Python for after-edit import + public API detection (TAP-1330 / doc drift nudge).
-_CURSOR_AFTER_EDIT_IMPORT_PARSE_PY = """\
-import os, json, re
-from pathlib import Path
-
-try:
-    d = json.loads(os.environ.get("TAPPS_HOOK_INPUT", "{}"))
-    ti = d.get("tool_input") or d.get("toolInput") or {}
-    f = (
-        d.get("file")
-        or d.get("file_path")
-        or ti.get("file_path")
-        or ti.get("path")
-        or ""
-    )
-    content = ti.get("content") or ti.get("new_string") or ""
-    if not content and f:
-        candidate = Path(f)
-        if not candidate.is_file():
-            for root in (
-                os.environ.get("TAPPS_MCP_PROJECT_ROOT"),
-                os.environ.get("TAPPS_PROJECT_ROOT"),
-                os.environ.get("CURSOR_PROJECT_DIR"),
-                os.getcwd(),
-            ):
-                if not root:
-                    continue
-                alt = Path(root) / f
-                if alt.is_file():
-                    candidate = alt
-                    break
-        if candidate.is_file():
-            content = candidate.read_text(encoding="utf-8", errors="replace")
-    print(f)
-    libs: set[str] = set()
-    if f.endswith((".py", ".pyi")):
-        for m in re.finditer(
-            r"^\\s*(?:from|import)\\s+([A-Za-z_][A-Za-z0-9_]*)", content, re.M
-        ):
-            libs.add(m.group(1))
-    elif f.endswith((".ts", ".tsx", ".js", ".jsx", ".mjs", ".cjs")):
-        js_import = r"^\\s*import[^'\"]*['\"]([^'\"./][^'\"]*)['\"]"
-        for m in re.finditer(js_import, content, re.M):
-            libs.add(m.group(1).split("/")[0])
-    print(",".join(sorted(libs)))
-    api = "0"
-    if f.endswith((".py", ".pyi")):
-        if re.search(r"^\\s*(?:async\\s+)?def\\s+\\w+|^\\s*class\\s+\\w+", content, re.M):
-            api = "1"
-    print(api)
-except Exception:
-    print("")
-    print("")
-    print("")
-"""
-
-
 # ---------------------------------------------------------------------------
 # Claude Code hook script templates (Story 12.5)
 # ---------------------------------------------------------------------------
@@ -376,6 +321,11 @@ PYEOF
 FILE=$(echo "$PARSED" | sed -n '1p')
 LIBS=$(echo "$PARSED" | sed -n '2p')
 API=$(echo "$PARSED" | sed -n '3p')
+SKILL_GUARD=$(echo "$PARSED" | sed -n '4p')
+if [ "$SKILL_GUARD" = "1" ]; then
+"""
+        + f'  echo "{MANAGED_SKILL_BLOCK_EDIT_WARNING_BASH}" >&2\n'
+        + """fi
 case "$FILE" in
   *.py|*.pyi|*.ts|*.tsx|*.js|*.jsx|*.go|*.rs)
 """
@@ -1549,6 +1499,7 @@ if (-not $py) {{ $py = Get-Command python -ErrorAction SilentlyContinue }}
 $file = "unknown"
 $libs = ""
 $api = ""
+$skillGuard = ""
 if ($py) {{
     $parseScript = @'
 {_CURSOR_AFTER_EDIT_IMPORT_PARSE_PY}\
@@ -1557,6 +1508,10 @@ if ($py) {{
     if ($parsed.Count -ge 1) {{ $file = [string]$parsed[0] }}
     if ($parsed.Count -ge 2) {{ $libs = [string]$parsed[1] }}
     if ($parsed.Count -ge 3) {{ $api = [string]$parsed[2] }}
+    if ($parsed.Count -ge 4) {{ $skillGuard = [string]$parsed[3] }}
+}}
+if ($skillGuard -eq '1') {{
+    [Console]::Error.WriteLine("{MANAGED_SKILL_BLOCK_EDIT_WARNING_BASH.replace("$FILE", "$file")}")
 }}
 switch -Regex ($file) {{
     '\\.(py|pyi|ts|tsx|js|jsx|go|rs)$' {{
@@ -1633,6 +1588,11 @@ PYEOF
 FILE=$(echo "$PARSED" | sed -n '1p')
 LIBS=$(echo "$PARSED" | sed -n '2p')
 API=$(echo "$PARSED" | sed -n '3p')
+SKILL_GUARD=$(echo "$PARSED" | sed -n '4p')
+if [ "$SKILL_GUARD" = "1" ]; then
+"""
+        + f'  echo "{MANAGED_SKILL_BLOCK_EDIT_WARNING_BASH}" >&2\n'
+        + """fi
 case "$FILE" in
   *.py|*.pyi|*.ts|*.tsx|*.js|*.jsx|*.go|*.rs)
 """

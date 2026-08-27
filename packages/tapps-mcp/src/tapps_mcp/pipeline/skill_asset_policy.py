@@ -58,10 +58,10 @@ ASSET_PROJECT_REGION_HEADING = (
 #: governs it is readable without consulting this module.
 POLICY_NOTES: dict[Policy, str] = {
     "managed_block": (
-        "upgrade-policy: managed-block. tapps_upgrade replaces only the text "
-        "between the BEGIN/END markers below. Anything you write outside them "
-        "is yours and survives every upgrade — no upgrade_skip_files entry "
-        "needed."
+        "upgrade-policy: managed-block. Edits made inside this BEGIN/END block "
+        "are regenerated and lost on the next tapps_upgrade — put "
+        "project-specific customizations below the END marker instead, where "
+        "they survive every upgrade untouched."
     ),
     "create_only": (
         "upgrade-policy: create-only. tapps_upgrade wrote this file once and "
