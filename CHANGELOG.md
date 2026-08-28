@@ -7,6 +7,314 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [3.12.77] - 2026-08-28
+
+This release reconciles a changelog gap: 3.12.75 and 3.12.76 were bumped in
+prior PRs without their own entries. Their shipped work is documented below
+under its own version headings rather than folded silently into 3.12.77.
+
+### Changed
+
+- **`tapps_checklist`'s `auto_run` parameter now defaults to `True`, not
+  `False`** (TAP-6586) — this is a behaviour change for every existing
+  caller. The completion gate had logged 185+ `CHECKLIST_MISSING` violations
+  in warn mode since 2026-05-27 because passing `auto_run=True` was itself an
+  optional step a caller could skip; making it the default removes that
+  skip. A bare `tapps_checklist(task_type=...)` call now runs the missing
+  validation itself instead of only reporting `missing_required`. One
+  existing test had to pass `auto_run=False` explicitly to keep its original
+  behaviour. Session-scoped call tracking also closed two ledger leaks where
+  a prior or unrelated session's tool calls falsely satisfied the current
+  session's checklist, and zero-file validation runs no longer credit
+  required tools — `complete` can now correctly resolve to `False` where it
+  previously passed vacuously.
+- **The warn-mode completion-gate Stop hook now fires on `.mjs`/`.cjs` edits
+  it previously ignored** (TAP-6586) — its "did this session touch code?"
+  check used a hand-written extension tuple that had drifted from the
+  scorer and never included `.mjs`/`.cjs`, while the blocking hook variant
+  already covered both. A session editing only JS/module files never
+  tripped the warn-mode gate at all. The template now derives the extension
+  list from `scorable_extensions()` so the two hook variants can't drift
+  again. **Violation counts recorded by this hook may rise after upgrading**
+  — that is the gate becoming honest about work it was silently missing, not
+  a regression. TAP-6586 stays open, not fixed: the mechanism changes landed
+  and were exercised against a synthetic transcript, but the issue's
+  acceptance criteria require a week of real behavioural measurement before
+  it closes. The PowerShell warn-mode Stop hook still has no completion gate
+  at all (no `pwsh` available to build or test one here) — reported, not
+  silently left as parity with the bash/Python variants.
+
+### Added
+
+- **`tapps_checklist`/`tapps_validate_changed` gain a first-class "nothing to
+  gate" terminal state** (TAP-6606) — a session whose changed files are all
+  non-scorable (markdown, prompts, docs) previously couldn't reach a
+  complete checklist without invoking a required tool against a file it
+  never touched. A new `nothing_to_gate` module resolves this state from
+  both a freshly recorded marker *and* an independently re-derived
+  zero-scorable-files git census, so a stale marker alone can never soften
+  the gate. New response fields: `nothing_to_gate`, `nothing_to_gate_reason`,
+  `changed_files_seen`, `non_scorable_changed`, `not_applicable_tools`.
+  Stop-hook messaging now distinguishes "OK: nothing needed validating"
+  (exit 0) from "BLOCKED: No quality validation was run" (exit 2). This
+  supersedes an earlier attempt in this same window to mark zero-file runs
+  `inconclusive` (TAP-6068): an independent verifier found that approach
+  still minted a validation marker for zero actual validation, so the
+  marker mint was reverted before this version shipped in favor of the
+  re-derived-census approach above.
+- **A required "Driver discipline" section in emitted orchestration
+  prompts** (TAP-6594, TAP-6595) — merges two overlapping tickets describing
+  the same failure mode (the top-level session doing the work instead of
+  dispatching it) into one `## Driver discipline — dispatch, don't execute`
+  section in the orchestration-prompt skill generator, with MAY/MUST NOT
+  bullet lists, an under-15% orchestrator token-share target, an `Owner`
+  column (driver/delegate/operator) in the plane map, and a `### Parallel
+  wave schedule` block.
+- **Verifiers in emitted orchestration prompts are now tiered by proof
+  shape, and parallelization plans must show real independence** (TAP-6596,
+  TAP-6597) — replaces "verifier is always frontier tier" with a four-row
+  table (deterministic → cheap/low tier, comparative → mid tier, semantic
+  and irreversible-gating → opus regardless) after observing verifiers
+  re-checking things an exit code had already settled. Disjoint file lists
+  are no longer accepted as evidence that two parallel lanes are
+  independent; a new `## Parallelization plan` section requires each lane
+  to name what it reads that another lane writes, after a real incident
+  where two file-disjoint sub-goals silently broke each other through
+  shared derived state.
+- **Artifact-identity and execution-path guardrails in emitted orchestration
+  prompts** (TAP-6602, TAP-6603), lifted from a proven external
+  customization. A gate that only checks form — schema, exit code,
+  geometry, signature — will pass a wrong-but-valid artifact, so a
+  delegated step must now open the artifact and judge whether it is the
+  thing that was actually asked for. Separately, merging to a default
+  branch is not the same as a consumer seeing the change, so prompts must
+  now name the exact file/checkout/revision the consumer loads and prove it
+  with a marker check.
+- **A warning surfaces when an edit lands inside a managed skill block**
+  (TAP-6598) — all three smart-merge skills now emit a warning line after
+  the managed-block `BEGIN` marker, and a new PostToolUse hook warns on
+  stderr (advisory only) when an edit falls inside a managed `SKILL.md`'s
+  `BEGIN`/`END` span. This also fixed a pre-existing quote-escaping bug in
+  the shared hook parser's `js_import` regex that had caused a
+  `SyntaxError` on every platform — the post-edit hook had never actually
+  run successfully until this fix.
+
+### Fixed
+
+- **`tapps_set_engagement_level`'s `level` parameter now carries an enum in
+  the exported MCP schema** (TAP-6438) — it was a bare string, and 39.8% of
+  829 calls over 30 days failed with `invalid_level` as models guessed
+  synonyms; the schema itself now constrains the value. `tapps_memory` and
+  `tapps_session_notes` were also recording call metrics but never
+  execution metrics, leaving zero rows across 125,201 metric records
+  (TAP-6441); both now record via a shared `_finish()` helper.
+- **Path validation and `tapps_checklist`'s git context are now honest about
+  the target repo** (TAP-6494, TAP-6388) — `_validate_file_path`
+  misclassified paths when `host_project_root` was a strict ancestor of the
+  target (a shared multi-repo workspace) rather than a 1:1 alias, producing
+  misleading "not found" errors instead of an honest "outside project root"
+  refusal. Separately, `tapps_checklist`'s git subprocess calls didn't pass
+  `cwd`, so `git_context` reported the *server process's* branch/SHA
+  instead of the target project's.
+- **`tapps_call_graph`'s `degraded` flag and gap-rate metrics are now
+  accurate** (TAP-6439) — the classifier couldn't recognize instance-method
+  receivers (`lines.append`, `path.read_text`) as external calls, only
+  module-qualified ones, so ordinary calls were miscounted as unresolved
+  in-repo debt, and `degraded` flipped `true` for essentially any function
+  calling `len()`. Measured on a fixed probe set: `in_repo_gap_rate` dropped
+  0.471 → 0.144 and the degraded rate dropped 100% → 52%. `INDEX_VERSION`
+  bumped 8 → 9, invalidating old caches.
+- **Fleet servers dying from an external signal now log the cause instead of
+  exiting silently** (TAP-6053) — two whole-fleet deaths on 2026-08-13 left
+  no trace because SIGTERM was handled with a bare `sys.exit(0)`. Per-server
+  unhealthy reasons now distinguish `tcp_down` from `initialize_timeout`,
+  and a manual `fleet ensure` no longer resets the automated watchdog's
+  two-strike counter. The original external SIGTERM sender remains
+  unidentified — the journal logs that would show it were already rotated
+  away, and that is reported as unrecoverable evidence rather than guessed
+  at.
+- **Six shared-state writers now write atomically, and first-run agent-ID
+  minting no longer races** (TAP-6081, TAP-5893) — writers routed through
+  tempfile-plus-`os.replace` instead of a bare `write_text`; first-run
+  agent-ID creation now uses `O_CREAT|O_EXCL`, with losers re-reading the
+  winner's value instead of racing to write their own.
+- **Internal workspace dependencies are now exact-pinned** (TAP-5876) —
+  `tapps-mcp` and `docs-mcp` declared loose `>=` ranges for each other and
+  for `tapps-core`; because `[tool.uv.sources] workspace=true` is a uv-only
+  mechanism, a plain `pip install` resolved those ranges against public
+  PyPI instead of the workspace packages, and `docs-mcp` collides with an
+  unrelated existing PyPI package of the same name. A non-uv install now
+  fails loudly instead of silently installing the wrong package; the
+  README states `uv sync` as the only supported install path.
+- **PyInstaller builds were silently dropping two new hook modules**
+  (TAP-6598) — the managed-skill-block split introduced
+  `platform_hook_templates_linear_gate.py` and `hook_edit_parse_py.py`
+  without adding either to `tapps_mcp.spec`'s hiddenimports, so a built
+  binary would drop them at runtime with no error. No CI job runs
+  `test_pyinstaller_spec.py`, which is how the original split passed all
+  CI checks while leaving this gap on master.
+
+### Documentation
+
+- **The brain-architecture deep-dive story is flagged as pre-migration
+  context** (TAP-6677) — `stories/tapps-memory-brain-architecture.md`
+  described the in-process SQLite/WAL/FTS5 memory model that TAP-1995
+  removed; rather than a partial rewrite that would leave the doc
+  internally inconsistent, it now carries a banner pointing readers at
+  `docs/MEMORY_REFERENCE.md` and `docs/ARCHITECTURE.md` for the current
+  `BrainBridge`/Postgres model.
+
+### Internal
+
+- Trimmed `platform_cursor_medium.md` back under its 1800-token CI budget
+  after a session-start note pushed it to 1833 tokens, and conformed two
+  `test_per_file_results.py` fixtures to the security-verdict contract
+  shipped in 3.12.76 (they omitted `security_passed`, which that contract
+  correctly fail-closes on).
+
+### Known issues
+
+- **Cross-process tool credit can drop calls made by a sibling `nlt-*` MCP
+  server** (TAP-6738) — closing the session-scoping leak in TAP-6586 above
+  also removed the empty `session_id` fallback that cross-process tool
+  credit depended on, so tool calls recorded by a sibling `nlt-*` MCP
+  server can be silently dropped from the current checklist. The trigger is
+  a sibling process binding its persist path while no active-session marker
+  exists yet — a fresh clone, a first-ever run, or a cleared
+  `.tapps-mcp/sessions/` directory. A brand-new consumer project installing
+  this release lands in that window by definition. `server.py` binds the
+  persist path once per process and reads the marker only at that moment,
+  never re-reading it, which is why the condition is sticky for that
+  process's entire lifetime.
+- **The failure direction is safe**: it only over-reports missing
+  validation and never produces a false green — a checklist may say work is
+  unvalidated when it was actually validated, but never the reverse. The
+  practical effect to expect is an under-credited checklist and, because
+  `auto_run` now defaults to `True` (see `### Changed` above), an
+  automatically triggered unscoped `tapps_validate_changed` that can be
+  slow.
+- See **TAP-6738** for the fix.
+
+## [3.12.76] - 2026-08-28
+
+### Changed
+
+- **`tapps_session_start()` now defaults to the compact payload** (TAP-6434)
+  — it previously defaulted to `quick=False`, returning the full diagnostic
+  payload (12,303 bytes) on every routine bootstrap and duplicating what
+  `tapps_doctor` already provides; measured at roughly 10.1M unwanted input
+  tokens per month across the fleet. The default now returns the compact
+  payload (`quick=True`, ~3,202 bytes), verified byte-identical to the old
+  default aside from volatile fields like `elapsed_ms`. `recommended_next`
+  no longer nudges a re-run without `quick`; callers that need the full
+  diagnostic payload now pass `quick=False` explicitly.
+
+### Added
+
+- **`/tapps-continue-session` now verifies a handoff against ground truth
+  before trusting it, and context recycling is a mandatory loop step**
+  (TAP-6498, TAP-6496) — the skill previously trusted a stale handoff file
+  outright. A new required step checks commit drift, P0 issue status, and
+  named PR merge state against reality before anything is emitted,
+  correcting the handoff file on mismatch and surfacing a "Drift" line with
+  verified/corrected/unverified tags. The orchestration-prompt template now
+  also treats context recycling (handoff → re-verify → clear → continue) as
+  a first-class, mandatory step, since clearing destroys the only context
+  that could contradict a stale handoff.
+
+### Fixed
+
+- **Cursor's `CallDynamicTool` envelope is now recognized by loop-metrics
+  parsing** (TAP-6569) — `parse_transcript_loop_metrics` only unwrapped the
+  `CallMcpTool` envelope shape; tool calls transported as `CallDynamicTool`
+  (namespace + tool name) were invisible, so `tapps_session_start` calls
+  made through that envelope were never recorded and the Cursor Stop hook
+  falsely reported `session_start_skipped` every turn. A shared
+  `resolve_wrapped_tool_name` helper now handles both shapes; `CallMcpTool`
+  behaviour is unchanged.
+- **`tapps_validate_changed` now reports one consistent security verdict per
+  file, not three disagreeing ones** (TAP-6387) — a file with only
+  low-severity findings that clear the security floor could render
+  `security=fail` in `summary_rows` while `security_passed=true` elsewhere
+  in the same response. A new `security/verdict.py` module centralizes the
+  definition so every producer and consumer converges on one answer; a file
+  the secret scanner couldn't read now correctly fails rather than
+  reporting clean.
+- **The handoff writer no longer reports success on a save the brain
+  silently rejects** (TAP-6444, TAP-6493) — a handoff over the brain's
+  4096-character value cap previously reported success while being
+  rejected or queued; it is now refused upfront with the actual size, the
+  overage, and which section to shorten, and lint failures are marked
+  `retryable: false` instead of asking callers to retry the same oversized
+  body. Separately, unrecognized markdown headings caused the parser to
+  silently drop all content, producing an empty handoff that passed lint
+  vacuously and overwrote a real one with nothing; a zero-populated-section
+  parse is now a hard lint error naming the expected headings.
+- **`tapps_linear_snapshot_get` now reports the projection its cached rows
+  actually satisfy, not the one the caller requested** (TAP-6581) — a cache
+  auto-populated from a narrow `list_issues(fields=["id"])` call could be
+  served as `projection: "full"` for its entire 30-minute TTL, reproduced
+  live on 3.12.74. Reads now downgrade `full` → `compact` when the cached
+  rows don't support it, with new `miss_reason` values (`not_cached`,
+  `empty_auto_populated`, `degraded_rows`, `limit_subset`); the write-side
+  hook refuses to write degraded rows and logs refusals instead of exiting
+  silently.
+
+### Internal
+
+- Swept the envelope-invariant teardown check (shipped in 3.12.66) across
+  35 test suites covering 379 envelopes in 304 tests. Found five live
+  envelope inconsistencies (plain success wrapping error data in
+  `tapps_quick_check`, `tapps_validate_changed`, `tapps_report` twice, and
+  `tapps_dependency_scan`); these are recorded via
+  `@pytest.mark.envelope_allow(...)` with TODOs and deliberately left
+  unfixed here for follow-up work (TAP-5659, TAP-5656).
+
+## [3.12.75] - 2026-08-28
+
+### Added
+
+- **Orchestration prompts now require a terminal lessons-learned pass**
+  (TAP-6578) — `learnings.md` was previously only updated at generation
+  time, never when an emitted prompt finished *running*, the richer lesson
+  source. A live run reached its goal with eight transferable lessons that
+  would never have been captured. The orchestration-prompt template now has
+  a mandatory (not advisory) four-point lessons-learned pass across
+  Done-when, Sub-goals, Guardrails, and the Output step, with verifier
+  refutations ranked as the primary source, a quality bar per bullet, and a
+  pruning duty around 120 bullets / 40KB. Zero lessons is an explicit valid
+  outcome.
+- **`docs/SPRINT_BOARD.md` is now generated from Linear and freshness-gated
+  in CI** — the hand-maintained board had drifted badly (it claimed 2 open
+  issues while Linear actually had 43). A new generator renders the board
+  grouped by priority with epics nesting their children, and a `--check`
+  mode wired into `scripts/docs-quality-gate.py` fails the build if the
+  board's stamp is more than 30 days old. `CHANGELOG.md` was also backfilled
+  for versions 3.12.58–3.12.74 from git history, noting that 3.12.70 was
+  never released.
+
+### Fixed
+
+- **Six defects found via seed-pinned bisect of regression-suite order
+  dependence** (TAP-5841) — a missing PyInstaller hiddenimport, a
+  wall-clock-based flaky assert converted to a count-based one, a
+  repo-wide session-start sentinel made per-worker, an unpatched brain
+  bridge in tests that made live HTTP calls, a leaked process-wide
+  lock/semaphore, and the root cause of a 60-second socket hang:
+  `apply_http_fleet_rpc_patches()` double-wrapped `_do_mcp_post` and
+  deadlocked on a non-reentrant lock. The patch is now idempotent.
+- **Two coupled upgrade-safety gaps closed** (TAP-6497, TAP-6499) —
+  `upgrade_skip_files` entries that weren't valid tokens (for example, a
+  full file path instead of a filename) were silently accepted and did
+  nothing, which let a consumer's bogus entries allow two upgrades to
+  silently overwrite a customized skill; this now warns by name in the log,
+  the CLI, and `tapps doctor`, with a specific remediation message.
+  Separately, scaffolded skill assets (`prompt-template.md`,
+  `references/*.md`) had no managed-block markers, so customizations were
+  wholesale overwritten on upgrade; every generated file now carries a
+  managed-block marker and upgrade-policy header, and non-delimitable
+  overwrites are reported as warnings instead of silently applied.
+
 ## [3.12.74] - 2026-08-24
 
 ### Added
