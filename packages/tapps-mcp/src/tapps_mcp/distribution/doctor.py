@@ -216,6 +216,7 @@ from tapps_mcp.distribution.doctor_telemetry import (
 )
 from tapps_mcp.distribution.doctor_telemetry import (
     check_cache_gate_block_hint,
+    check_completion_gate_violations,
     check_continuous_learning_v2_skill,
     check_cursor_loop_metrics_telemetry,
     check_cursor_stop_completion_gate,
@@ -251,6 +252,7 @@ __all__ = [
     "check_claude_md",
     "check_claude_md_stamp",
     "check_claude_settings",
+    "check_completion_gate_violations",
     "check_config_files_rule",
     "check_consumer_context7_env",
     "check_context7_live",

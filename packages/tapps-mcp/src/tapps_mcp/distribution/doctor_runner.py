@@ -120,6 +120,7 @@ from tapps_mcp.distribution.doctor_skills import (
 from tapps_mcp.distribution.doctor_telemetry import (
     _read_engagement_level,
     check_cache_gate_block_hint,
+    check_completion_gate_violations,
     check_continuous_learning_v2_skill,
     check_cursor_loop_metrics_telemetry,
     check_cursor_stop_completion_gate,
@@ -229,6 +230,10 @@ def _collect_checks(root: Path, *, quick: bool = False) -> list[CheckResult]:
         (
             "Cursor stop completion gate",
             lambda: check_cursor_stop_completion_gate(root),
+        ),
+        (
+            "Completion gate violations",
+            lambda: check_completion_gate_violations(root),
         ),
         (
             "continuous-learning-v2 skill",

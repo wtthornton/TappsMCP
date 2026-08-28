@@ -210,43 +210,90 @@ def _optional_otel_trace_hint() -> dict[str, str] | None:
 # ===== tapps_checklist step helpers =====
 
 
+def _revoke_uncredited_autorun(result: ChecklistResult, candidates: set[str]) -> list[str]:
+    """Un-satisfy the tools an evidence-free auto-run would otherwise pay for.
+
+    ``tapps_validate_changed`` records its own call whether or not it found a
+    file to gate, and ``tapps_score_file`` / ``tapps_quality_gate`` ride along as
+    equivalents. When the run validated 0 files that credit is a bookkeeping
+    artifact — nothing was checked — so the checklist must not read as complete
+    off it (TAP-6586).
+
+    Tools TAP-6606 already moved into ``not_applicable_tools`` are left alone:
+    there, 0 files is the honest terminal answer rather than a gap.
+    """
+    from tapps_mcp.tools.checklist import _build_hints
+
+    not_applicable = set(result.not_applicable_tools or [])
+    revoked = sorted(t for t in candidates if t not in not_applicable)
+    if not revoked:
+        return []
+    missing = list(result.missing_required)
+    missing.extend(t for t in revoked if t not in missing)
+    result.missing_required = missing
+    result.missing_required_hints = _build_hints(missing)
+    revoked_set = set(revoked)
+    result.satisfied_required_tools = [
+        t for t in result.satisfied_required_tools if t not in revoked_set
+    ]
+    result.complete = False
+    return revoked
+
+
 async def _run_auto_run(
     auto_run: bool,
     result: ChecklistResult,
     eval_checklist: Callable[[], ChecklistResult],
     settings: Any,
 ) -> tuple[ChecklistResult, dict[str, Any]]:
-    """Auto-run missing validation tools and re-evaluate (no-op unless requested)."""
+    """Run the missing validation here and re-evaluate.
+
+    On by default (TAP-6586). A remediation the agent has to remember to switch
+    on is the same skippable step the completion gate has been recording as a
+    miss; running it from the checklist deletes the step instead of reminding
+    about it.
+    """
     auto_run_results: dict[str, Any] = {}
     if not (auto_run and result.missing_required):
         return result, auto_run_results
 
     needs_validate = set(result.missing_required) & _AUTO_RUNNABLE_TOOLS
+    files_validated = 0
     if needs_validate:
         try:
             from tapps_mcp.server_pipeline_tools import tapps_validate_changed
 
             vc_result = await tapps_validate_changed(preset=settings.quality_preset)
             vc_data = vc_result.get("data", {})
+            files_validated = int(vc_data.get("files_validated", 0) or 0)
             auto_run_results["validate_changed"] = {
                 "success": vc_result.get("success", False),
-                "files_validated": vc_data.get("files_validated", 0),
+                "files_validated": files_validated,
                 "all_gates_passed": vc_data.get("all_gates_passed", False),
             }
             # Epic 66.2: Add validation_note when 0 files validated
-            if vc_data.get("files_validated", 0) == 0:
+            if files_validated == 0:
                 auto_run_results["validate_changed"]["validation_note"] = (
                     "Validation ran but 0 files validated. "
                     "Consider tapps_quick_check on changed files."
                 )
         except Exception as exc:
+            # A run that threw produced no evidence either — same zero-file path.
+            files_validated = 0
             auto_run_results["validate_changed"] = {
                 "success": False,
                 "error": str(exc),
             }
 
     # Re-evaluate after auto-running
-    return eval_checklist(), auto_run_results
+    result = eval_checklist()
+    if needs_validate and files_validated == 0:
+        revoked = _revoke_uncredited_autorun(result, needs_validate)
+        if revoked:
+            entry = auto_run_results.setdefault("validate_changed", {})
+            entry["credited"] = False
+            entry["uncredited_tools"] = revoked
+    return result, auto_run_results
 
 
 async def _gather_git_context(commit_sha: str, project_root: Path) -> dict[str, Any] | None:
@@ -409,7 +456,7 @@ def _checklist_fallback_response(task_type: str, start: int) -> dict[str, Any]:
 
 async def tapps_checklist(
     task_type: str = "review",
-    auto_run: bool = False,
+    auto_run: bool = True,
     output_format: str = "markdown",
     commit_sha: str = "",
     epic_file_path: str = "",
@@ -422,11 +469,11 @@ async def tapps_checklist(
 
     Call this as the very last step before declaring work complete —
     after ``tapps_validate_changed`` has passed but before announcing
-    the task done. Pass ``auto_run=True`` to have the checklist call
-    any missing required tools itself and re-evaluate, instead of
-    failing and asking you to backfill. For epic-level validation
-    against a markdown epic file, set ``task_type='epic'`` and pass
-    ``epic_file_path``.
+    the task done. By default the checklist runs any missing required
+    validation itself and re-evaluates, so you do not have to backfill
+    by hand; an auto-run that validates 0 files credits nothing. For
+    epic-level validation against a markdown epic file, set
+    ``task_type='epic'`` and pass ``epic_file_path``.
 
     Args:
         task_type: One of ``"feature"``, ``"bugfix"``, ``"refactor"``,
@@ -435,10 +482,13 @@ async def tapps_checklist(
             ``security`` requires a security scan, ``document`` requires
             ``validate_changed`` with judges for PDF/HTML output work,
             ``epic`` requires the markdown structural check.
-        auto_run: When ``True``, the checklist runs any missing required
-            tools itself (``tapps_validate_changed``, etc.) and
-            re-evaluates rather than returning a fail. Default ``False``
-            so the agent sees the gap before it gets papered over.
+        auto_run: When ``True`` (default, TAP-6586), the checklist runs
+            any missing required tools itself
+            (``tapps_validate_changed``, etc.) and re-evaluates rather
+            than returning a fail the caller has to remember to fix. The
+            gap is not papered over: a run that validates 0 files leaves
+            those tools missing and the checklist incomplete. Pass
+            ``False`` to see the raw pre-remediation verdict.
         output_format: ``"markdown"`` (default, full table for human
             review), ``"json"`` (machine-readable counts and per-tool
             status), or ``"compact"`` (one or two lines suitable for

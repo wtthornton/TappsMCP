@@ -216,9 +216,15 @@ class TestMCPChecklistTool:
 
     @pytest.mark.asyncio
     async def test_checklist_different_task_types(self):
-        """Different task types have different requirements."""
-        feature_result = await tapps_checklist("feature")
-        security_result = await tapps_checklist("security")
+        """Different task types have different requirements.
+
+        ``auto_run=False`` because this asserts on the required-tools *matrix*,
+        not on remediation: since TAP-6586 the default path runs the missing
+        validation itself, which would credit the very tools being asserted as
+        missing here.
+        """
+        feature_result = await tapps_checklist("feature", auto_run=False)
+        security_result = await tapps_checklist("security", auto_run=False)
 
         feat_req = feature_result["data"]["missing_required"]
         sec_req = security_result["data"]["missing_required"]
