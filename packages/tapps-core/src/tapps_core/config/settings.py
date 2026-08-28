@@ -252,6 +252,22 @@ class MemoryAutoCaptureSettings(BaseModel):
         le=10,
         description="Maximum facts to extract per session (1-10). Default: 5.",
     )
+    transcript_turns: int = Field(
+        default=40,
+        ge=1,
+        le=200,
+        description=(
+            "Max user/assistant turns read from transcript_path when the Stop hook "
+            "payload has no inline transcript/context/messages. Default: 40."
+        ),
+    )
+    transcript_max_bytes: int = Field(
+        default=32 * 1024,
+        ge=1024,
+        description=(
+            "Byte cap on text read from transcript_path (most recent turns first). Default: 32 KiB."
+        ),
+    )
 
 
 class MemoryHooksSettings(BaseModel):
