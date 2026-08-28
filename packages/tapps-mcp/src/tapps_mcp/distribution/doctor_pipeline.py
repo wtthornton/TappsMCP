@@ -16,6 +16,9 @@ from pathlib import Path
 
 from tapps_mcp.distribution.doctor_result import CheckResult
 
+#: Violation log the Stop hook appends to in warn mode (TAP-6586).
+COMPLETION_GATE_VIOLATIONS_LOG = ".completion-gate-violations.jsonl"
+
 
 def _detect_cache_gate_mode(project_root: Path) -> str:
     """Read the baked MODE from the installed pre-list hook script (TAP-1224).
@@ -37,6 +40,67 @@ def _detect_cache_gate_mode(project_root: Path) -> str:
     if 'MODE="warn"' in head:
         return "warn"
     return "off"
+
+
+def _detect_completion_gate_mode(project_root: Path) -> str:
+    """Read the completion-gate mode baked into the installed stop hook (TAP-6586).
+
+    Sibling of :func:`_detect_cache_gate_mode`. The stop hook has no ``MODE=``
+    line to read — the two variants differ in what they do — so the mode is
+    inferred from the behaviour that is actually deployed: the blocking hook
+    exits 2 on missing validation, the warn hook only appends to the violation
+    log. Returns "off" when neither marker is present.
+    """
+    script = project_root / ".claude" / "hooks" / "tapps-stop.sh"
+    if not script.exists():
+        return "off"
+    try:
+        body = script.read_text(encoding="utf-8")
+    except OSError:
+        return "off"
+    if "BLOCKED:" in body:
+        return "block"
+    if COMPLETION_GATE_VIOLATIONS_LOG in body:
+        return "warn"
+    return "off"
+
+
+def _count_completion_gate_violations_24h(project_root: Path) -> int:
+    """Count completion-gate violations from the last 24 h (TAP-6586).
+
+    Sibling of :func:`_count_cache_gate_violations_24h`. Reads
+    ``.tapps-mcp/.completion-gate-violations.jsonl`` and counts entries whose
+    ``ts`` is within 24 hours of now. The stop hook writes ``ts`` as an integer
+    Unix epoch (the cache-gate hook writes an ISO string), so this parses
+    epochs; unparseable lines are skipped. Returns 0 when the log is missing —
+    a doctor-time signal, not a gate, so failures degrade silently.
+    """
+    log_path = project_root / ".tapps-mcp" / COMPLETION_GATE_VIOLATIONS_LOG
+    if not log_path.exists():
+        return 0
+    cutoff = (datetime.now(UTC) - timedelta(hours=24)).timestamp()
+    count = 0
+    try:
+        with log_path.open(encoding="utf-8") as f:
+            for line in f:
+                stripped = line.strip()
+                if not stripped:
+                    continue
+                try:
+                    entry = json.loads(stripped)
+                except json.JSONDecodeError:
+                    continue
+                if not isinstance(entry, dict):
+                    continue
+                try:
+                    ts = float(entry["ts"])
+                except (KeyError, TypeError, ValueError):
+                    continue
+                if ts >= cutoff:
+                    count += 1
+    except OSError:
+        return count
+    return count
 
 
 def _detect_session_start_gate_mode(project_root: Path) -> str:

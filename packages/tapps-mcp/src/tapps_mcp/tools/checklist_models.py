@@ -19,7 +19,10 @@ class ToolCallRecord(BaseModel):
     timestamp: float = Field(default_factory=time.time)
     session_id: str = Field(
         default="",
-        description="Checklist session id (empty = recorded before session boundary).",
+        description=(
+            "Owning checklist session or pre-session window id. Empty means the "
+            "record predates TAP-6586 and belongs to no session."
+        ),
     )
     success: bool = Field(default=True, description="Whether the invocation succeeded.")
 

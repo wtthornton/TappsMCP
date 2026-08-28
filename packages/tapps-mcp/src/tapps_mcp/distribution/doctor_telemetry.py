@@ -14,7 +14,9 @@ from typing import Any
 
 from tapps_mcp.distribution.doctor_pipeline import (
     _count_cache_gate_violations_24h,
+    _count_completion_gate_violations_24h,
     _detect_cache_gate_mode,
+    _detect_completion_gate_mode,
     _memory_skill_content_ok,
     _tapps_skill_bases,
 )
@@ -240,6 +242,37 @@ def check_cursor_stop_completion_gate(project_root: Path) -> CheckResult:
         True,
         message,
         detail,
+    )
+
+
+def check_completion_gate_violations(project_root: Path) -> CheckResult:
+    """Report the completion-gate 24 h violation count (TAP-6586).
+
+    Sibling of :func:`check_cache_gate_block_hint`: the completion gate runs the
+    same warn-mode telemetry and, until this check existed, nobody read it — the
+    log passed 185 entries unnoticed. Reports the count; the remediation is the
+    checklist auto-running its own missing validation, not promoting the gate.
+    """
+    from tapps_core.config.settings import load_settings
+
+    resolved_mode: str
+    try:
+        settings = load_settings(project_root=project_root)
+        resolved_mode = settings.cursor_stop_completion_gate_resolved()
+    except Exception:
+        resolved_mode = _detect_completion_gate_mode(project_root)
+
+    viol_24h = _count_completion_gate_violations_24h(project_root)
+    message = f"mode={resolved_mode}, {viol_24h} completion-gate violations in 24h"
+    if viol_24h == 0:
+        return CheckResult("Completion gate violations", True, message)
+    return CheckResult(
+        "Completion gate violations",
+        True,
+        message,
+        "Sessions ended with edited code and no checklist. Finish with "
+        "/tapps-finish-task (or tapps_checklist, which now runs the missing "
+        "validation itself) so the gate has real evidence to read.",
     )
 
 

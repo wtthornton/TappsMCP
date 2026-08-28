@@ -287,6 +287,24 @@ exit 0
 # Claude Code hook script templates (Story 12.5)
 # ---------------------------------------------------------------------------
 
+
+def scorable_extensions() -> tuple[str, ...]:
+    """Extensions the quality pipeline can actually score, from the scorer itself.
+
+    The completion gate decides "did this session touch code?" from this list.
+    Restating it by hand is how the warn-mode stop hook silently lost ``.mjs``
+    and ``.cjs`` while the blocking variant kept them: a session that edited
+    only those files never tripped the gate at all (TAP-6586).
+    """
+    from tapps_mcp.scoring.language_detector import get_supported_extensions
+
+    return tuple(sorted(get_supported_extensions()))
+
+
+#: ``('.cjs', '.go', …)`` — literal for embedding in generated Python snippets.
+SCORABLE_EXT_PY_TUPLE: str = repr(scorable_extensions())
+
+
 CLAUDE_HOOK_SCRIPTS: dict[str, str] = {
     "tapps-session-start.sh": """\
 #!/usr/bin/env bash
@@ -475,8 +493,9 @@ except Exception:
     pass
 seen=set()
 edits=[p for p in edited_from_transcript if not (p in seen or seen.add(p))]
-needs_gate=any(p.endswith(('.py','.pyi','.ts','.tsx','.js','.jsx','.go','.rs')) for p in edits)
-miss=[]
+"""
+        + f"needs_gate=any(p.endswith({SCORABLE_EXT_PY_TUPLE}) for p in edits)\n"
+        + """miss=[]
 gate_skipped=[]
 if needs_gate and not gate_called:
     miss.append('QUALITY_GATE_SKIP:'+','.join(edits[:8]))
