@@ -413,16 +413,7 @@ def __getattr__(name: str) -> frozenset[str]:
 #   OPERATOR→ "operator":   CLI maintenance (gc / consolidate / config / export).
 #   READONLY→ "reviewer":   read-only recall/search (e.g. CLI auto-recall,
 #                           which calls only ``memory_search``).
-#   HOOKS   → "coder":      auto-recall/reinforce + KG reads only — NOT
-#                           ``memory_save`` (TAP-6733: ADR-0012's own table
-#                           lists ``memory_save`` as excluded from "coder";
-#                           the auto-capture hook writes via ``bridge.save()``,
-#                           which calls ``memory_save`` directly, so it needs
-#                           ``BRAIN_PROFILE_WRITE_HOOK`` instead, not "coder".
-#   WRITE_HOOK → "seeder":  write-only hook paths that call ``bridge.save()``
-#                           (``memory/auto_capture``). ``seeder`` is the
-#                           least-privilege profile that exposes
-#                           ``memory_save``/``memory_supersede``.
+#   HOOKS   → "coder":      auto-recall/capture/reinforce + KG reads only.
 #   FACADE  → "agent_brain": ``brain_*`` facade only (docs-mcp KG queries).
 #
 # A consumer overrides any of these via ``memory.brain_profile`` in
@@ -433,7 +424,6 @@ BRAIN_PROFILE_SERVER: str = "full"
 BRAIN_PROFILE_OPERATOR: str = "operator"
 BRAIN_PROFILE_READONLY: str = "reviewer"
 BRAIN_PROFILE_HOOKS: str = "coder"
-BRAIN_PROFILE_WRITE_HOOK: str = "seeder"
 BRAIN_PROFILE_FACADE: str = "agent_brain"
 
 # Roles whose profile is broad enough that a ``_BRIDGE_USED_TOOLS`` member
@@ -449,7 +439,7 @@ BRAIN_PROFILES_NARROW_OK: frozenset[str] = frozenset(
     {
         BRAIN_PROFILE_READONLY,
         BRAIN_PROFILE_HOOKS,
-        BRAIN_PROFILE_WRITE_HOOK,
+        "seeder",
         BRAIN_PROFILE_FACADE,
     }
 )

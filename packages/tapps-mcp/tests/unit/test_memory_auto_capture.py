@@ -202,16 +202,14 @@ class TestAutoCaptureRunner:
         so every save was silently refused (TAP-6733). Regression guard:
         fails loudly if a future edit reintroduces a profile that doesn't
         expose memory_save."""
-        from tapps_core.brain_bridge import BRAIN_PROFILE_HOOKS, BRAIN_PROFILE_WRITE_HOOK
-
         ctx = "We decided to use PostgreSQL for the database."
         stdin = json.dumps({"transcript": ctx})
         ctx_mgr, _bridge = self._patch_bridge()
         with ctx_mgr as mock_create:
             await run_auto_capture(stdin, tmp_path, min_context_length=10)
         used_profile = mock_create.call_args.kwargs["default_profile"]
-        assert used_profile == BRAIN_PROFILE_WRITE_HOOK
-        assert used_profile != BRAIN_PROFILE_HOOKS
+        assert used_profile == "seeder"
+        assert used_profile != "coder"
 
     @pytest.mark.asyncio
     async def test_transcript_path_used_when_no_inline_context(self, tmp_path: Path) -> None:

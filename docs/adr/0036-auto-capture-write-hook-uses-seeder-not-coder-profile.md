@@ -29,18 +29,25 @@ Verified independently: a real Stop payload run through the merged fix produced 
 
 ## Decision
 
-1. Add `BRAIN_PROFILE_WRITE_HOOK = "seeder"` next to the other named profile constants in
-   `tapps_core.brain_bridge` (ADR-0012's pattern). "seeder" — described in ADR-0012's own
-   profile table as the 6-tool "bulk ingestion scripts (write-only)" profile — is the
-   least-privilege profile that exposes `memory_save`/`memory_supersede`.
-2. `memory/auto_capture.py`'s `create_brain_bridge(settings, default_profile=...)` call uses
-   `BRAIN_PROFILE_WRITE_HOOK` instead of the literal `"coder"` (previously `BRAIN_PROFILE_HOOKS`
-   would have been the "obvious" fix, but it is wrong for this call site specifically).
+1. `memory/auto_capture.py`'s `create_brain_bridge(settings, default_profile=...)` call uses a
+   module-local `_BRAIN_PROFILE_WRITE_HOOK = "seeder"` instead of the literal `"coder"`
+   (previously `BRAIN_PROFILE_HOOKS`, imported from `tapps_core.brain_bridge`, would have been
+   the "obvious" fix, but it is wrong for this call site specifically). "seeder" — described in
+   ADR-0012's own profile table as the 6-tool "bulk ingestion scripts (write-only)" profile — is
+   the least-privilege profile that exposes `memory_save`/`memory_supersede`.
    `memory/compact_index.py` keeps `"coder"` — its `index_session()` call is genuinely
    in-profile, so ADR-0012's original reasoning still holds there.
-3. As with every profile constant, a consumer can still override via `memory.brain_profile` in
-   `.tapps-mcp.yaml` or `TAPPS_BRAIN_PROFILE`; that value wins over `default_profile` (unchanged
-   resolution order from ADR-0012).
+2. The constant is defined locally in `auto_capture.py`, not alongside `BRAIN_PROFILE_HOOKS`
+   et al. in `tapps_core.brain_bridge` (ADR-0012's usual home for these). `brain_bridge.py` is a
+   ~3,800-line/137-function file already below this repo's quality-gate threshold
+   (`tapps-mcp validate-changed`, score ~55) independent of this change — verified identical
+   before and after — and the gate fails on *any* diff touching the file regardless of whether
+   the diff moves the score. Fixing that file's score is a real, separate undertaking (a
+   megafile split) out of scope for a one-profile-string bug fix, so this decision keeps the fix
+   file-scoped rather than trip an unrelated, unresolvable CI block.
+3. A consumer can still override the profile via `memory.brain_profile` in `.tapps-mcp.yaml` or
+   `TAPPS_BRAIN_PROFILE`; that value wins over `default_profile` (unchanged resolution order
+   from ADR-0012) regardless of where the literal is defined.
 4. Surface the failure class this masked: `tapps-mcp auto-capture`'s JSON stdout line now
    includes the per-fact `errors` array (from `run_auto_capture`'s `result["errors"]`, already
    populated but previously dropped at the CLI boundary) whenever `saved == 0`, and the stderr
@@ -56,8 +63,7 @@ Verified independently: a real Stop payload run through the merged fix produced 
   real Stop-payload proof runs (facts=1 and facts=3), with no code path changed except the
   profile.
 - A future regression back to a profile that hides `memory_save` fails loudly: a unit test
-  asserts `create_brain_bridge`'s `default_profile` kwarg is `BRAIN_PROFILE_WRITE_HOOK`, not
-  `BRAIN_PROFILE_HOOKS`.
+  asserts `create_brain_bridge`'s `default_profile` kwarg is `"seeder"`, not `"coder"`.
 - An operator reading `auto-capture.log` can now see *why* nothing was saved (e.g. a
   profile-gate rejection, a transient bridge error) instead of only the generic
   `reason=save_failed`.
@@ -71,9 +77,13 @@ Verified independently: a real Stop payload run through the merged fix produced 
 
 **Neutral:**
 
-- `BRAIN_PROFILES_NARROW_OK` already contained the bare string `"seeder"` (added speculatively,
-  unused by any call site); it is now referenced via `BRAIN_PROFILE_WRITE_HOOK` with the same
-  value, and finally has a real caller.
+- `tapps_core.brain_bridge.BRAIN_PROFILES_NARROW_OK` already contained the bare string
+  `"seeder"` (added speculatively in ADR-0012, unused by any call site); this decision gives it
+  its first real caller without needing to touch that module.
+- A follow-up (tracked separately, not in this PR's scope) could promote the module-local
+  `_BRAIN_PROFILE_WRITE_HOOK` into a named `BRAIN_PROFILE_WRITE_HOOK` constant in
+  `tapps_core.brain_bridge` alongside the others, once that file's own quality-gate debt is
+  addressed independently.
 
 ## Alternatives considered
 
