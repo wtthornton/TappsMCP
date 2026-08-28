@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+from unittest.mock import AsyncMock, patch
 
 from tapps_mcp.pipeline.platform_hook_templates import (
     MEMORY_AUTO_RECALL_HOOKS_CONFIG,
@@ -16,7 +17,10 @@ from tapps_mcp.pipeline.platform_hook_templates import (
     _memory_auto_recall_script_cursor,
     _memory_auto_recall_script_ps,
 )
-from tapps_mcp.pipeline.platform_hooks import generate_memory_auto_recall_hook
+from tapps_mcp.pipeline.platform_hooks import (
+    generate_memory_auto_recall_hook,
+    wire_memory_hooks,
+)
 
 # ---------------------------------------------------------------------------
 # Hook template content tests
@@ -168,9 +172,7 @@ class TestGenerateMemoryAutoRecallHook:
         assert result["hooks_action"] in ("created", "skipped")
 
     def test_creates_cursor_script_on_unix(self, tmp_path: Path) -> None:
-        result = generate_memory_auto_recall_hook(
-            tmp_path, force_windows=False, platform="cursor"
-        )
+        result = generate_memory_auto_recall_hook(tmp_path, force_windows=False, platform="cursor")
         assert result["platform"] == "cursor"
         script_path = tmp_path / ".cursor" / "hooks" / "tapps-memory-auto-recall.sh"
         zombie_path = tmp_path / ".cursor" / "hooks" / "tapps-mcp-zombie-cleanup.sh"
@@ -229,6 +231,36 @@ class TestGenerateMemoryAutoRecallHook:
         assert "3" in content or "--max-results 3" in content
         assert "0.5" in content or "--min-score 0.5" in content
         assert "100" in content
+
+
+class TestWireMemoryHooksMinScoreThreading:
+    """``.tapps-mcp.yaml``'s ``memory_hooks.auto_recall.min_score`` must reach the
+    generated hook script's ``--min-score`` arg via ``wire_memory_hooks`` →
+    ``generate_memory_auto_recall_hook`` — this is already wired (TAP-6701 anchor
+    recon); this test only proves it, it does not re-plumb it.
+    """
+
+    def test_custom_min_score_in_tapps_mcp_yaml_reaches_generated_script(
+        self, tmp_path: Path
+    ) -> None:
+        (tmp_path / ".tapps-mcp.yaml").write_text(
+            "memory_hooks:\n  auto_recall:\n    enabled: true\n    min_score: 0.73\n",
+            encoding="utf-8",
+        )
+        result = wire_memory_hooks(tmp_path, platform="claude")
+        assert "memory_auto_recall" in result
+        script_path = tmp_path / ".claude" / "hooks" / "tapps-memory-auto-recall.sh"
+        content = script_path.read_text()
+        assert "--min-score 0.73" in content
+
+    def test_default_min_score_in_generated_script_when_unconfigured(self, tmp_path: Path) -> None:
+        (tmp_path / ".tapps-mcp.yaml").write_text(
+            "memory_hooks:\n  auto_recall:\n    enabled: true\n", encoding="utf-8"
+        )
+        wire_memory_hooks(tmp_path, platform="claude")
+        script_path = tmp_path / ".claude" / "hooks" / "tapps-memory-auto-recall.sh"
+        content = script_path.read_text()
+        assert "--min-score 0.3" in content
 
 
 # ---------------------------------------------------------------------------
@@ -295,3 +327,98 @@ class TestMemoryRecallCLI:
         if "<memory_context>" in (result.output or ""):
             assert "test-key" in (result.output or "")
             assert "test value" in (result.output or "")
+
+    @staticmethod
+    def _recall_fixture_hits() -> list[dict[str, object]]:
+        """A recorded ``/v1/recall``-shaped response: 3 hits, mixed wire ``score``."""
+        return [
+            {"key": "low-score", "tier": "pattern", "value": "low value", "score": 0.2},
+            {"key": "mid-score", "tier": "pattern", "value": "mid value", "score": 0.5},
+            {"key": "high-score", "tier": "pattern", "value": "high value", "score": 0.8},
+        ]
+
+    def test_recall_min_score_0_3_vs_0_9_filter_differently(self, tmp_path: Path) -> None:
+        """VAL-21: filtering on wire ``score`` — 0.3 keeps mid/high, 0.9 keeps none."""
+        from click.testing import CliRunner
+
+        from tapps_mcp.cli import main
+
+        bridge = AsyncMock()
+        bridge.search = AsyncMock(return_value=self._recall_fixture_hits())
+        bridge.get = AsyncMock(return_value=None)
+        bridge.close = lambda: None
+        runner = CliRunner()
+
+        with patch("tapps_core.brain_bridge.create_brain_bridge", return_value=bridge):
+            low_threshold = runner.invoke(
+                main,
+                [
+                    "memory",
+                    "recall",
+                    "--query",
+                    "x",
+                    "--project-root",
+                    str(tmp_path),
+                    "--min-score",
+                    "0.3",
+                ],
+            )
+            high_threshold = runner.invoke(
+                main,
+                [
+                    "memory",
+                    "recall",
+                    "--query",
+                    "x",
+                    "--project-root",
+                    str(tmp_path),
+                    "--min-score",
+                    "0.9",
+                ],
+            )
+
+        assert low_threshold.exit_code == 0
+        assert high_threshold.exit_code == 0
+        assert "mid-score" in low_threshold.output
+        assert "high-score" in low_threshold.output
+        assert "low-score" not in low_threshold.output
+        assert "<memory_context>" not in high_threshold.output
+        assert low_threshold.output != high_threshold.output
+
+    def test_recall_score_absent_hit_passed_through_unfiltered(self, tmp_path: Path) -> None:
+        """A hit with no wire ``score`` key (older-brain response) is never dropped,
+        and never falls back to reading ``confidence`` (the deleted TAP-6701 path)."""
+        from click.testing import CliRunner
+
+        from tapps_mcp.cli import main
+
+        hits: list[dict[str, object]] = [
+            {"key": "no-score", "tier": "pattern", "value": "unscored value"},
+            {"key": "high-conf-no-score", "tier": "pattern", "value": "x", "confidence": 0.99},
+        ]
+        bridge = AsyncMock()
+        bridge.search = AsyncMock(return_value=hits)
+        bridge.get = AsyncMock(return_value=None)
+        bridge.close = lambda: None
+        runner = CliRunner()
+
+        with patch("tapps_core.brain_bridge.create_brain_bridge", return_value=bridge):
+            result = runner.invoke(
+                main,
+                [
+                    "memory",
+                    "recall",
+                    "--query",
+                    "x",
+                    "--project-root",
+                    str(tmp_path),
+                    "--min-score",
+                    "0.99",
+                ],
+            )
+
+        assert result.exit_code == 0
+        # Absent-score hits pass through regardless of --min-score, and are not
+        # filtered by any fallback read of "confidence".
+        assert "no-score" in result.output
+        assert "high-conf-no-score" in result.output
