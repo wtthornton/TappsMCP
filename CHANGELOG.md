@@ -7,6 +7,49 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [3.12.78] - 2026-08-28
+
+### Fixed
+
+- **The memory auto-capture Stop hook reads `transcript_path` and has never
+  actually saved a row until now** (TAP-6733, #311) — Claude Code's real
+  Stop hook payload is `{"session_id","transcript_path","cwd",
+  "hook_event_name":"Stop","stop_hook_active"}`, but
+  `_extract_context_from_payload` in `auto_capture.py` only ever read inline
+  `transcript`/`context`/`messages` keys. When none matched, it fell back to
+  dumping the raw payload JSON as "context" — long enough to pass
+  `min_context_length` but yielding zero usable facts, so the hook silently
+  saved nothing in any project since it shipped. It now reads the
+  `transcript_path` JSONL directly (the last N user/assistant `text` blocks,
+  bounded by turns and bytes via the newly-wired
+  `memory_hooks.auto_capture.transcript_turns`/`transcript_max_bytes`
+  settings; `tool_use`/`tool_result` blocks are skipped), and unusable
+  context now returns `""` rather than a payload dump so the length gate
+  fails honestly instead of passing on noise. `run_auto_capture` reports a
+  `reason` (`disabled`, `stop_hook_active`, `no_context`, `no_facts`,
+  `bridge_unavailable`, `save_failed`) plus `facts`/`session_id`; the CLI
+  echoes one JSON summary line to stdout and a stderr `WARNING` when
+  `saved==0`. The generated Stop hook script no longer discards stderr
+  (`2>/dev/null || true`) on the auto-capture invocation — failures now
+  append to `.tapps-mcp/auto-capture.log` instead of vanishing. Verified
+  end-to-end against a real transcript from a sibling project
+  (`nlt-orchestrator`): `transcript_path` was read correctly and a fact was
+  extracted and saved. A separate, pre-existing, out-of-scope gap surfaced
+  during that proof — the default hooks/`coder` brain profile currently has
+  `memory_save` hidden server-side on the deployed brain (3.32.2), so under
+  the *default* configuration no row persists yet even though extraction now
+  works correctly — and is flagged for follow-up rather than addressed here.
+
+### Held back
+
+- **PR #309 (TAP-6701 — CLI score filter, promote-instincts, logical agent
+  identity) is excluded from this release** because its `validate-changed
+  (quick)` CI job fails the quality gate: `brain_bridge.py` scores 55.1,
+  `test_brain_bridge.py` 66.8, and `test_brain_bridge_http.py` 61.5, all
+  below `gate_threshold`. This is a held change, not a defect report — it is
+  not this release's job to diagnose the score, only to record that it did
+  not ship in 3.12.78.
+
 ## [3.12.77] - 2026-08-28
 
 This release reconciles a changelog gap: 3.12.75 and 3.12.76 were bumped in
