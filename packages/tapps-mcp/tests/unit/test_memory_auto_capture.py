@@ -67,6 +67,35 @@ class TestAutoCaptureRunner:
         assert bridge.save.await_args.kwargs["scope"] == "session"
 
     @pytest.mark.asyncio
+    async def test_save_carries_agent_provenance_and_session_id(self, tmp_path: Path) -> None:
+        """VAL-22: rows must land with source='agent' and the Stop payload's
+        session_id threaded into source_session_id, not source='system' with
+        an empty source_session_id (TAP-6733)."""
+        ctx = "We decided to use PostgreSQL for the database."
+        stdin = json.dumps({"transcript": ctx, "session_id": "sess-abc123"})
+        ctx_mgr, bridge = self._patch_bridge()
+        with ctx_mgr:
+            result = await run_auto_capture(stdin, tmp_path, min_context_length=10)
+        assert result["saved"] >= 1
+        assert bridge.save.await_args.kwargs["source"] == "agent"
+        assert bridge.save.await_args.kwargs["source_agent"] == "auto-capture"
+        assert bridge.save.await_args.kwargs["source_session_id"] == "sess-abc123"
+
+    @pytest.mark.asyncio
+    async def test_save_session_id_empty_string_when_payload_omits_it(
+        self, tmp_path: Path
+    ) -> None:
+        """No session_id in the Stop payload -> source_session_id='' (store default),
+        never None (the store's default type is str)."""
+        ctx = "We decided to use PostgreSQL for the database."
+        stdin = json.dumps({"transcript": ctx})
+        ctx_mgr, bridge = self._patch_bridge()
+        with ctx_mgr:
+            result = await run_auto_capture(stdin, tmp_path, min_context_length=10)
+        assert result["saved"] >= 1
+        assert bridge.save.await_args.kwargs["source_session_id"] == ""
+
+    @pytest.mark.asyncio
     async def test_transcript_field_used(self, tmp_path: Path) -> None:
         """Transcript field is extracted from payload."""
         ctx = "A key decision was to use Redis for caching."
@@ -194,6 +223,24 @@ class TestAutoCaptureRunner:
         assert spy.call_args.kwargs["transcript_turns"] == 2
 
     @pytest.mark.asyncio
+    async def test_bridge_created_with_profile_exposing_memory_save(
+        self, tmp_path: Path
+    ) -> None:
+        """run_auto_capture writes via bridge.save() (memory_save). The "coder"
+        profile hides memory_save (ADR-0012's own tool table excludes it),
+        so every save was silently refused (TAP-6733). Regression guard:
+        fails loudly if a future edit reintroduces a profile that doesn't
+        expose memory_save."""
+        ctx = "We decided to use PostgreSQL for the database."
+        stdin = json.dumps({"transcript": ctx})
+        ctx_mgr, _bridge = self._patch_bridge()
+        with ctx_mgr as mock_create:
+            await run_auto_capture(stdin, tmp_path, min_context_length=10)
+        used_profile = mock_create.call_args.kwargs["default_profile"]
+        assert used_profile == "seeder"
+        assert used_profile != "coder"
+
+    @pytest.mark.asyncio
     async def test_transcript_path_used_when_no_inline_context(self, tmp_path: Path) -> None:
         """Real Stop payload shape: transcript_path is read and saved via bridge."""
         transcript = _write_transcript(
@@ -262,6 +309,14 @@ class TestAutoCaptureHookTemplate:
     def test_ps_script_has_stop_hook_active_guard(self) -> None:
         script = CLAUDE_HOOK_SCRIPTS_PS["tapps-memory-auto-capture.ps1"]
         assert "stop_hook_active" in script
+
+    def test_ps_script_logs_instead_of_silently_discarding(self) -> None:
+        """Windows twin of test_bash_script_logs_instead_of_silently_discarding --
+        the PowerShell hook must leave the same on-disk trace as bash, not
+        `2>$null` the output into the void (TAP-6733)."""
+        script = CLAUDE_HOOK_SCRIPTS_PS["tapps-memory-auto-capture.ps1"]
+        assert "auto-capture.log" in script
+        assert "2>$null" not in script
 
 
 class TestAutoCaptureHookConfig:

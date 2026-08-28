@@ -242,8 +242,10 @@ def auto_capture(
     Read JSON from stdin (Claude Code Stop event), extract decision-like facts,
     and save to project memory. Invoked by memory_auto_capture Stop hook.
 
-    Echoes one JSON line to stdout with the result summary; writes a WARNING
-    to stderr naming the reason when nothing was saved.
+    Echoes one JSON line to stdout with the result summary (including
+    per-fact ``errors`` when present); writes a WARNING to stderr naming the
+    reason and those errors when nothing was saved (TAP-6733: a bare
+    "save_failed" hid the real per-fact rejection reason).
     """
     import asyncio
     import json
@@ -267,19 +269,20 @@ def auto_capture(
             transcript_max_bytes=transcript_max_bytes,
         )
     )
-    click.echo(
-        json.dumps(
-            {
-                "saved": result.get("saved", 0),
-                "facts": result.get("facts", 0),
-                "reason": result.get("reason"),
-                "session_id": result.get("session_id"),
-            }
-        )
-    )
+    errors = result.get("errors") or []
+    payload: dict[str, object] = {
+        "saved": result.get("saved", 0),
+        "facts": result.get("facts", 0),
+        "reason": result.get("reason"),
+        "session_id": result.get("session_id"),
+    }
+    if errors:
+        payload["errors"] = errors
+    click.echo(json.dumps(payload))
     if result.get("saved", 0) == 0:
+        detail = f" errors={errors}" if errors else ""
         click.echo(
-            f"WARNING: auto-capture saved 0 facts (reason={result.get('reason')})",
+            f"WARNING: auto-capture saved 0 facts (reason={result.get('reason')}){detail}",
             err=True,
         )
 
