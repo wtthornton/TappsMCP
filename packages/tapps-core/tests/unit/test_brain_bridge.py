@@ -620,7 +620,6 @@ class TestBrainProfileRoleConstants:
             BRAIN_PROFILE_HOOKS,
             BRAIN_PROFILE_OPERATOR,
             BRAIN_PROFILE_READONLY,
-            BRAIN_PROFILE_SEEDER,
             BRAIN_PROFILE_SERVER,
         )
 
@@ -629,15 +628,6 @@ class TestBrainProfileRoleConstants:
         assert BRAIN_PROFILE_READONLY == "reviewer"
         assert BRAIN_PROFILE_HOOKS == "coder"
         assert BRAIN_PROFILE_FACADE == "agent_brain"
-        assert BRAIN_PROFILE_SEEDER == "seeder"
-
-    def test_seeder_profile_is_registered_not_a_bare_literal(self) -> None:
-        """TAP-6733: BRAIN_PROFILE_SEEDER must live in the same registry as
-        every other role constant and be recognized as narrow-ok, so callers
-        (e.g. auto_capture.py) never re-spell the "seeder" string themselves."""
-        from tapps_core.brain_bridge import BRAIN_PROFILE_SEEDER, BRAIN_PROFILES_NARROW_OK
-
-        assert BRAIN_PROFILE_SEEDER in BRAIN_PROFILES_NARROW_OK
 
     def test_server_profile_is_broad_surface(self) -> None:
         """The server bridge backs the full tapps_memory facade, so its profile

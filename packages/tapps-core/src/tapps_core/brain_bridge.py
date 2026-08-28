@@ -425,7 +425,6 @@ BRAIN_PROFILE_OPERATOR: str = "operator"
 BRAIN_PROFILE_READONLY: str = "reviewer"
 BRAIN_PROFILE_HOOKS: str = "coder"
 BRAIN_PROFILE_FACADE: str = "agent_brain"
-BRAIN_PROFILE_SEEDER: str = "seeder"
 
 # Roles whose profile is broad enough that a ``_BRIDGE_USED_TOOLS`` member
 # missing from the eager ``tools/list`` is benign deferred-loading (TAP-1985,
@@ -440,7 +439,7 @@ BRAIN_PROFILES_NARROW_OK: frozenset[str] = frozenset(
     {
         BRAIN_PROFILE_READONLY,
         BRAIN_PROFILE_HOOKS,
-        BRAIN_PROFILE_SEEDER,
+        "seeder",
         BRAIN_PROFILE_FACADE,
     }
 )
