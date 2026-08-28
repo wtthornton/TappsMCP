@@ -703,6 +703,26 @@ class BrainBridge:
 
         return await self._call(_fn)
 
+    async def recall(
+        self,
+        query: str,
+        max_results: int = 10,
+    ) -> list[dict[str, Any]]:
+        """Relevance-ranked recall for auto-recall injection (TAP-6701).
+
+        Distinct from :meth:`search`: this is the ranked-recall surface, not
+        the structured filter search. The in-process :class:`tapps_brain.AgentBrain`
+        (``agent_brain.py::recall``) has no composite-score computation — it
+        returns ``confidence`` only, never ``score``. Callers must treat a
+        missing ``score`` key on this path as legitimate (see
+        :class:`HttpBrainBridge.recall` for the scored HTTP counterpart).
+        """
+
+        def _fn() -> list[dict[str, Any]]:
+            return self._brain.recall(query, max_results=max_results)
+
+        return await self._call(_fn)
+
     async def get(self, key: str) -> dict[str, Any] | None:
         """Fetch a single entry by key."""
 
@@ -2006,6 +2026,36 @@ class HttpBrainBridge(BrainBridge):
         if tier is not None:
             args["tier"] = tier
         result = await self._http_mcp_call("memory_search", args, project_id=project_id)
+        if isinstance(result, list):
+            return result
+        if isinstance(result, dict):
+            return result.get("results") or result.get("entries") or []
+        return []
+
+    async def recall(
+        self,
+        query: str,
+        max_results: int = 10,
+        *,
+        project_id: str | None = None,
+    ) -> list[dict[str, Any]]:
+        """Relevance-ranked recall carrying a wire ``score`` per hit (TAP-6701).
+
+        Calls the ``brain_recall`` MCP tool rather than ``memory_search``.
+        ``brain_recall`` (tapps-brain ``mcp_server/tools_brain.py::brain_recall``)
+        and the REST ``POST /v1/recall`` (``http_adapter.py:1961``) are both thin
+        transports over the same ``services.memory_service.brain_recall``
+        (``memory_service.py:220``), which since TAP-6696 serializes a composite
+        ``score`` per result, sorted desc, before truncating to ``max_results``.
+        ``memory_search`` (``memory_service.py:1180``) is a distinct, unranked
+        structured-filter search that never computes a score — that is why
+        :meth:`search` cannot be reused for this. ``brain_recall`` is present in
+        the ``reviewer`` profile (``mcp_profiles.yaml:277``), the same
+        least-privilege profile ``memory_search`` uses, so no profile widening
+        is required to call it from read-only auto-recall.
+        """
+        args: dict[str, Any] = {"query": query, "max_results": max_results}
+        result = await self._http_mcp_call("brain_recall", args, project_id=project_id)
         if isinstance(result, list):
             return result
         if isinstance(result, dict):

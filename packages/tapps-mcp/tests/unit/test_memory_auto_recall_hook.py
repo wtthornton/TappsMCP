@@ -330,7 +330,16 @@ class TestMemoryRecallCLI:
 
     @staticmethod
     def _recall_fixture_hits() -> list[dict[str, object]]:
-        """A recorded ``/v1/recall``-shaped response: 3 hits, mixed wire ``score``."""
+        """A recorded ``brain_recall`` wire response (TAP-6701): 3 hits, mixed
+        wire ``score`` — this is the exact wire shape ``BrainBridge.recall``
+        returns from the ``brain_recall`` MCP tool / ``POST /v1/recall``
+        (both transports over ``services.memory_service.brain_recall``,
+        which serializes ``score`` since TAP-6696). ``memory_search`` — the
+        tool the CLI called before this fix — never carries a ``score`` key;
+        a fixture shaped like *that* wire response cannot discriminate
+        between a working and a broken filter, which is what made the
+        pre-TAP-6701-round-3 version of this test vacuous.
+        """
         return [
             {"key": "low-score", "tier": "pattern", "value": "low value", "score": 0.2},
             {"key": "mid-score", "tier": "pattern", "value": "mid value", "score": 0.5},
@@ -338,13 +347,18 @@ class TestMemoryRecallCLI:
         ]
 
     def test_recall_min_score_0_3_vs_0_9_filter_differently(self, tmp_path: Path) -> None:
-        """VAL-21: filtering on wire ``score`` — 0.3 keeps mid/high, 0.9 keeps none."""
+        """VAL-21: filtering on wire ``score`` — 0.3 keeps mid/high, 0.9 keeps none.
+
+        Mocks ``bridge.recall`` — the method ``memory_recall`` actually calls
+        (TAP-6701 round 3) — not ``bridge.search``, which the CLI no longer
+        calls for its primary hits.
+        """
         from click.testing import CliRunner
 
         from tapps_mcp.cli import main
 
         bridge = AsyncMock()
-        bridge.search = AsyncMock(return_value=self._recall_fixture_hits())
+        bridge.recall = AsyncMock(return_value=self._recall_fixture_hits())
         bridge.get = AsyncMock(return_value=None)
         bridge.close = lambda: None
         runner = CliRunner()
@@ -386,8 +400,9 @@ class TestMemoryRecallCLI:
         assert low_threshold.output != high_threshold.output
 
     def test_recall_score_absent_hit_passed_through_unfiltered(self, tmp_path: Path) -> None:
-        """A hit with no wire ``score`` key (older-brain response) is never dropped,
-        and never falls back to reading ``confidence`` (the deleted TAP-6701 path)."""
+        """A hit with no wire ``score`` key (in-process ``BrainBridge.recall`` path,
+        which has no composite-score computation) is never dropped, and never
+        falls back to reading ``confidence`` (the deleted TAP-6701 path)."""
         from click.testing import CliRunner
 
         from tapps_mcp.cli import main
@@ -397,7 +412,7 @@ class TestMemoryRecallCLI:
             {"key": "high-conf-no-score", "tier": "pattern", "value": "x", "confidence": 0.99},
         ]
         bridge = AsyncMock()
-        bridge.search = AsyncMock(return_value=hits)
+        bridge.recall = AsyncMock(return_value=hits)
         bridge.get = AsyncMock(return_value=None)
         bridge.close = lambda: None
         runner = CliRunner()

@@ -216,9 +216,14 @@ def memory_recall(
 
     async def _recall() -> tuple[list[dict[str, object]], list[dict[str, Any]]]:
         settings = load_settings(project_root=root)
-        # Read-only auto-recall calls only ``memory_search``; ``reviewer`` is
-        # the least-privilege profile that exposes it (ADR-0012). ``coder``
-        # hides ``memory_search`` and silently returned no hits on v3.20.0+.
+        # Read-only auto-recall calls ``brain_recall`` (VAL-21 / TAP-6701),
+        # the relevance-ranked recall that carries a wire ``score`` per hit
+        # (BrainBridge.recall) rather than ``memory_search``'s unranked,
+        # score-less structured filter. ``brain_recall`` sits in the same
+        # least-privilege ``reviewer`` profile ``memory_search`` used
+        # (ADR-0012; mcp_profiles.yaml:277), so no profile widening is
+        # needed. ``coder`` hides both and silently returned no hits on
+        # v3.20.0+.
         bridge = create_brain_bridge(settings, default_profile=BRAIN_PROFILE_READONLY)
         if bridge is None:
             return [], []
@@ -228,7 +233,7 @@ def memory_recall(
                 entry = await bridge.get(key)
                 if entry is not None:
                     pinned.append(entry)
-            hits = await bridge.search(query, limit=max_results)
+            hits = await bridge.recall(query, max_results=max_results)
             return pinned, hits
         finally:
             bridge.close()
