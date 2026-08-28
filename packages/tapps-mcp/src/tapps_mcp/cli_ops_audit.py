@@ -213,13 +213,40 @@ def check_agents_md_stamp(project_root: str) -> None:
     type=int,
     help="Maximum facts to extract (default: 5).",
 )
-def auto_capture(project_root: str, max_facts: int) -> None:
+@click.option(
+    "--transcript-turns",
+    default=None,
+    type=int,
+    help=(
+        "Max transcript turns read when payload has no inline context "
+        "(default: memory_hooks.auto_capture.transcript_turns, 40)."
+    ),
+)
+@click.option(
+    "--transcript-max-bytes",
+    default=None,
+    type=int,
+    help=(
+        "Byte cap on transcript text read "
+        "(default: memory_hooks.auto_capture.transcript_max_bytes, 32768)."
+    ),
+)
+def auto_capture(
+    project_root: str,
+    max_facts: int,
+    transcript_turns: int | None,
+    transcript_max_bytes: int | None,
+) -> None:
     """Extract durable facts from stdin (Stop hook JSON) and save to memory (Epic 65.5).
 
     Read JSON from stdin (Claude Code Stop event), extract decision-like facts,
     and save to project memory. Invoked by memory_auto_capture Stop hook.
+
+    Echoes one JSON line to stdout with the result summary; writes a WARNING
+    to stderr naming the reason when nothing was saved.
     """
     import asyncio
+    import json
     import sys
     from pathlib import Path
 
@@ -231,7 +258,30 @@ def auto_capture(project_root: str, max_facts: int) -> None:
     raw = sys.stdin.read()
     from tapps_mcp.memory.auto_capture import run_auto_capture
 
-    asyncio.run(run_auto_capture(raw, project_root_path, max_facts=max_facts))
+    result = asyncio.run(
+        run_auto_capture(
+            raw,
+            project_root_path,
+            max_facts=max_facts,
+            transcript_turns=transcript_turns,
+            transcript_max_bytes=transcript_max_bytes,
+        )
+    )
+    click.echo(
+        json.dumps(
+            {
+                "saved": result.get("saved", 0),
+                "facts": result.get("facts", 0),
+                "reason": result.get("reason"),
+                "session_id": result.get("session_id"),
+            }
+        )
+    )
+    if result.get("saved", 0) == 0:
+        click.echo(
+            f"WARNING: auto-capture saved 0 facts (reason={result.get('reason')})",
+            err=True,
+        )
 
 
 @click.command("compact-index")
@@ -340,5 +390,3 @@ def lookup_docs_cmd(library: str, topic: str, mode: str, raw: bool) -> None:
         )
 
     asyncio.run(_run())
-
-
