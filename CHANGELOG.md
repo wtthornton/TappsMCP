@@ -172,6 +172,29 @@ under its own version headings rather than folded silently into 3.12.77.
   shipped in 3.12.76 (they omitted `security_passed`, which that contract
   correctly fail-closes on).
 
+### Known issues
+
+- **Cross-process tool credit can drop calls made by a sibling `nlt-*` MCP
+  server** (TAP-6738) — closing the session-scoping leak in TAP-6586 above
+  also removed the empty `session_id` fallback that cross-process tool
+  credit depended on, so tool calls recorded by a sibling `nlt-*` MCP
+  server can be silently dropped from the current checklist. The trigger is
+  a sibling process binding its persist path while no active-session marker
+  exists yet — a fresh clone, a first-ever run, or a cleared
+  `.tapps-mcp/sessions/` directory. A brand-new consumer project installing
+  this release lands in that window by definition. `server.py` binds the
+  persist path once per process and reads the marker only at that moment,
+  never re-reading it, which is why the condition is sticky for that
+  process's entire lifetime.
+- **The failure direction is safe**: it only over-reports missing
+  validation and never produces a false green — a checklist may say work is
+  unvalidated when it was actually validated, but never the reverse. The
+  practical effect to expect is an under-credited checklist and, because
+  `auto_run` now defaults to `True` (see `### Changed` above), an
+  automatically triggered unscoped `tapps_validate_changed` that can be
+  slow.
+- See **TAP-6738** for the fix.
+
 ## [3.12.76] - 2026-08-28
 
 ### Changed
