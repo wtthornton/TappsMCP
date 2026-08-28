@@ -159,7 +159,7 @@ async def run_auto_capture(
     """
     from tapps_brain.extraction import extract_durable_facts
 
-    from tapps_core.brain_bridge import create_brain_bridge
+    from tapps_core.brain_bridge import BRAIN_PROFILE_WRITE_HOOK, create_brain_bridge
     from tapps_core.config.settings import load_settings
 
     try:
@@ -216,7 +216,11 @@ async def run_auto_capture(
         result["reason"] = "no_facts"
         return result
 
-    bridge = create_brain_bridge(settings, default_profile="coder")
+    # TAP-6733: this path writes via bridge.save() (memory_save), which the
+    # "coder" profile hides (ADR-0012's own tool table excludes memory_save
+    # from "coder"). "seeder" is the least-privilege profile that exposes it.
+    # settings.memory.brain_profile / TAPPS_BRAIN_PROFILE still override this.
+    bridge = create_brain_bridge(settings, default_profile=BRAIN_PROFILE_WRITE_HOOK)
     if bridge is None:
         result["degraded"] = True
         result["reason"] = "bridge_unavailable"

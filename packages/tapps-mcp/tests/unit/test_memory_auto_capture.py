@@ -194,6 +194,26 @@ class TestAutoCaptureRunner:
         assert spy.call_args.kwargs["transcript_turns"] == 2
 
     @pytest.mark.asyncio
+    async def test_bridge_created_with_profile_exposing_memory_save(
+        self, tmp_path: Path
+    ) -> None:
+        """run_auto_capture writes via bridge.save() (memory_save). The "coder"
+        profile hides memory_save (ADR-0012's own tool table excludes it),
+        so every save was silently refused (TAP-6733). Regression guard:
+        fails loudly if a future edit reintroduces a profile that doesn't
+        expose memory_save."""
+        from tapps_core.brain_bridge import BRAIN_PROFILE_HOOKS, BRAIN_PROFILE_WRITE_HOOK
+
+        ctx = "We decided to use PostgreSQL for the database."
+        stdin = json.dumps({"transcript": ctx})
+        ctx_mgr, _bridge = self._patch_bridge()
+        with ctx_mgr as mock_create:
+            await run_auto_capture(stdin, tmp_path, min_context_length=10)
+        used_profile = mock_create.call_args.kwargs["default_profile"]
+        assert used_profile == BRAIN_PROFILE_WRITE_HOOK
+        assert used_profile != BRAIN_PROFILE_HOOKS
+
+    @pytest.mark.asyncio
     async def test_transcript_path_used_when_no_inline_context(self, tmp_path: Path) -> None:
         """Real Stop payload shape: transcript_path is read and saved via bridge."""
         transcript = _write_transcript(

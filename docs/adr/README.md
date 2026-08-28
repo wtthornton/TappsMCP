@@ -19,7 +19,7 @@ CLAUDE.md and per-package CLAUDE.md files point at ADRs by number rather than em
 | [0009](0009-pin-tapps-brain-version-floor-at-3170.md) | Pin tapps-brain version floor at 3.17.0 | Superseded by [0010](0010-pin-tapps-brain-version-floor-at-3180.md) |
 | [0010](0010-pin-tapps-brain-version-floor-at-3180.md) | Pin tapps-brain version floor at 3.18.0 | Superseded by [0011](0011-pin-tapps-brain-by-tag.md) |
 | [0011](0011-pin-tapps-brain-by-tag.md) | Pin tapps-brain by release tag instead of commit SHA | Accepted |
-| [0012](0012-brain-capability-profile-per-consumer-role.md) | Select the tapps-brain capability profile per consumer role | Accepted |
+| [0012](0012-brain-capability-profile-per-consumer-role.md) | Select the tapps-brain capability profile per consumer role | Accepted (one call site corrected by [0036](0036-auto-capture-write-hook-uses-seeder-not-coder-profile.md)) |
 | [0013](0013-pin-tapps-brain-version-floor-at-3240.md) | Pin tapps-brain version floor at 3.24.0 | Superseded by [0033](0033-pin-tapps-brain-version-floor-at-3280.md) |
 | [0014](0014-brain-central-doc-rag-big-bang.md) | Brain-central doc RAG (big-bang cutover) | Accepted |
 | [0015](0015-require-tapps-brain-docs-lookup-at-3240.md) | Require tapps-brain docs_lookup at 3.24.0+ | Accepted |
@@ -43,6 +43,7 @@ CLAUDE.md and per-package CLAUDE.md files point at ADRs by number rather than em
 | [0033](0033-pin-tapps-brain-version-floor-at-3280.md) | Pin tapps-brain version floor at 3.28.0 | Accepted (supersedes [0013](0013-pin-tapps-brain-version-floor-at-3240.md)) |
 | [0034](0034-orchestration-prompt-missions-contract-loop.md) | orchestration-prompt ships Missions-inspired contract + expected-fail loops | Accepted |
 | [0035](0035-ci-cost-model-and-scope.md) | CI cost model: free by visibility, guarded by assertion | Accepted |
+| [0036](0036-auto-capture-write-hook-uses-seeder-not-coder-profile.md) | Auto-capture write hook uses "seeder", not "coder", profile | Accepted (corrects one call site in [0012](0012-brain-capability-profile-per-consumer-role.md)) |
 
 ## Adding a new ADR
 

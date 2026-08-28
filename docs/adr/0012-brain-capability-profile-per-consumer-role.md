@@ -4,7 +4,9 @@ Date: 2026-06-03
 
 ## Status
 
-accepted
+accepted (the `memory/auto_capture` → "coder" call-site assignment below was corrected to
+"seeder" by [ADR-0036](0036-auto-capture-write-hook-uses-seeder-not-coder-profile.md); every
+other role assignment here is unchanged)
 
 ## Context
 
