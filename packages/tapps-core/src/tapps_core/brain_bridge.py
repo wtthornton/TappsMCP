@@ -703,6 +703,26 @@ class BrainBridge:
 
         return await self._call(_fn)
 
+    async def recall(
+        self,
+        query: str,
+        max_results: int = 10,
+    ) -> list[dict[str, Any]]:
+        """Relevance-ranked recall for auto-recall injection (TAP-6701).
+
+        Distinct from :meth:`search`: this is the ranked-recall surface, not
+        the structured filter search. The in-process :class:`tapps_brain.AgentBrain`
+        (``agent_brain.py::recall``) has no composite-score computation — it
+        returns ``confidence`` only, never ``score``. Callers must treat a
+        missing ``score`` key on this path as legitimate (see
+        :class:`HttpBrainBridge.recall` for the scored HTTP counterpart).
+        """
+
+        def _fn() -> list[dict[str, Any]]:
+            return self._brain.recall(query, max_results=max_results)
+
+        return await self._call(_fn)
+
     async def get(self, key: str) -> dict[str, Any] | None:
         """Fetch a single entry by key."""
 
@@ -1122,6 +1142,30 @@ class BrainBridge:
             return self._to_dict(entry)
 
         return await self._call(_fn)
+
+    async def promote_instinct(
+        self,
+        *,
+        key: str,
+        value: str,
+        tier: str,
+        scope: str,
+        signal: str,
+        actor: str,
+        evidence: str,
+    ) -> dict[str, Any]:
+        """Promote a staged instinct to a served brain memory entry (KB-3.8, Ruling 8).
+
+        Not yet supported over the in-process :class:`AgentBrain`/
+        :class:`~tapps_brain.store.MemoryStore` path — ``learning_promote`` is
+        a staged capability (TAP-6701 M1 ships the client call; a later wave
+        ships the brain-side handler and the live ``--apply``).
+        :class:`HttpBrainBridge` overrides this once that lands.
+        """
+        raise NotImplementedError(
+            "promote_instinct requires the HTTP brain path (brain_http_url) — "
+            "the in-process AgentBrain has no learning-promote capability yet"
+        )
 
     # -------------------------------------------------------------------------
     # Maintenance
@@ -1982,6 +2026,36 @@ class HttpBrainBridge(BrainBridge):
         if tier is not None:
             args["tier"] = tier
         result = await self._http_mcp_call("memory_search", args, project_id=project_id)
+        if isinstance(result, list):
+            return result
+        if isinstance(result, dict):
+            return result.get("results") or result.get("entries") or []
+        return []
+
+    async def recall(
+        self,
+        query: str,
+        max_results: int = 10,
+        *,
+        project_id: str | None = None,
+    ) -> list[dict[str, Any]]:
+        """Relevance-ranked recall carrying a wire ``score`` per hit (TAP-6701).
+
+        Calls the ``brain_recall`` MCP tool rather than ``memory_search``.
+        ``brain_recall`` (tapps-brain ``mcp_server/tools_brain.py::brain_recall``)
+        and the REST ``POST /v1/recall`` (``http_adapter.py:1961``) are both thin
+        transports over the same ``services.memory_service.brain_recall``
+        (``memory_service.py:220``), which since TAP-6696 serializes a composite
+        ``score`` per result, sorted desc, before truncating to ``max_results``.
+        ``memory_search`` (``memory_service.py:1180``) is a distinct, unranked
+        structured-filter search that never computes a score — that is why
+        :meth:`search` cannot be reused for this. ``brain_recall`` is present in
+        the ``reviewer`` profile (``mcp_profiles.yaml:277``), the same
+        least-privilege profile ``memory_search`` uses, so no profile widening
+        is required to call it from read-only auto-recall.
+        """
+        args: dict[str, Any] = {"query": query, "max_results": max_results}
+        result = await self._http_mcp_call("brain_recall", args, project_id=project_id)
         if isinstance(result, list):
             return result
         if isinstance(result, dict):
@@ -2893,6 +2967,41 @@ class HttpBrainBridge(BrainBridge):
         result = await self._http_mcp_call("memory_supersede", args)
         return result if isinstance(result, dict) else {"key": key}
 
+    async def promote_instinct(
+        self,
+        *,
+        key: str,
+        value: str,
+        tier: str,
+        scope: str,
+        signal: str,
+        actor: str,
+        evidence: str,
+    ) -> dict[str, Any]:
+        """Promote a staged instinct to a served brain memory entry (KB-3.8, Ruling 8).
+
+        Calls the brain's ``learning_promote`` tool — not present in the
+        tapps-brain>=3.28.0,<4 floor pinned by ADR-0033 as of TAP-6701 (no
+        ``learning_promote`` registration found in ``tools_memory.py`` /
+        ``tools_maintenance.py`` of the installed 3.29.0 package, and
+        ``MemoryEntry`` has no ``promotion_signal``/``promoted_by``/``evidence``
+        fields yet). This is the client-side half of a staged rollout: the
+        call will fail against today's brain until a later wave ships the
+        handler and schema; this lane never invokes it for real (SC-6) —
+        only against a mocked bridge in tests.
+        """
+        args: dict[str, Any] = {
+            "key": key,
+            "value": value,
+            "tier": tier,
+            "scope": scope,
+            "signal": signal,
+            "actor": actor,
+            "evidence": evidence,
+        }
+        result = await self._http_mcp_call("learning_promote", args)
+        return result if isinstance(result, dict) else {"key": key, "success": bool(result)}
+
     # -------------------------------------------------------------------------
     # Maintenance (HTTP overrides)
     # -------------------------------------------------------------------------
@@ -3572,6 +3681,8 @@ def create_brain_bridge(settings: Any = None, *, default_profile: str = "") -> B
     # --- In-process path -----------------------------------------------------
     from tapps_brain import AgentBrain
 
+    from tapps_core.agent_identity import get_stable_agent_id
+
     dsn = ""
     if settings is not None:
         memory = getattr(settings, "memory", None)
@@ -3616,7 +3727,10 @@ def create_brain_bridge(settings: Any = None, *, default_profile: str = "") -> B
 
     try:
         brain = AgentBrain(
-            agent_id="tapps-mcp",
+            # Ruling 9 (TAP-6701): logical agent id (brain_project_id / project_id
+            # / dir name), matching the HTTP path's X-Agent-Id resolver — not a
+            # hardcoded literal, so both bridge paths agree.
+            agent_id=get_stable_agent_id(settings),
             project_dir=project_root or None,
             profile=profile,
             hive_dsn=hive_dsn,

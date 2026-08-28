@@ -809,6 +809,53 @@ class TestHttpReadOps:
         assert result == [{"key": "k1", "value": "v1"}]
 
     @pytest.mark.asyncio
+    async def test_recall_calls_brain_recall_tool_not_memory_search(self) -> None:
+        """TAP-6701 (VAL-21, round 3): ``recall`` must call the ``brain_recall``
+        MCP tool — the score-bearing transport over ``services.memory_service
+        .brain_recall`` (memory_service.py:220), same function ``POST
+        /v1/recall`` calls (http_adapter.py:1961) — not ``memory_search``,
+        which never computes a score (memory_service.py:1180).
+        """
+        bridge = _make_http_bridge()
+        bridge._session_id = "__test__"
+        bridge._negotiated = True
+        post_mock = _make_async_post(_mcp_response([]))
+        bridge._http_client = AsyncMock()
+        bridge._http_client.post = post_mock
+
+        await bridge.recall("query", max_results=7)
+
+        payload = post_mock.call_args[1]["json"]
+        assert payload["params"]["name"] == "brain_recall"
+        assert payload["params"]["arguments"] == {"query": "query", "max_results": 7}
+
+    @pytest.mark.asyncio
+    async def test_recall_returns_hits_with_score(self) -> None:
+        bridge = _make_http_bridge()
+        hits = [
+            {"key": "k1", "value": "v1", "score": 0.9},
+            {"key": "k2", "value": "v2", "score": 0.2},
+        ]
+        bridge._http_client = AsyncMock()
+        bridge._http_client.post = _make_async_post(_mcp_response(hits))
+
+        result = await bridge.recall("query", max_results=5)
+
+        assert result == hits
+
+    @pytest.mark.asyncio
+    async def test_recall_unwraps_results_dict(self) -> None:
+        bridge = _make_http_bridge()
+        bridge._http_client = AsyncMock()
+        bridge._http_client.post = _make_async_post(
+            _mcp_response({"results": [{"key": "k1", "value": "v1", "score": 0.5}]})
+        )
+
+        result = await bridge.recall("query")
+
+        assert result == [{"key": "k1", "value": "v1", "score": 0.5}]
+
+    @pytest.mark.asyncio
     async def test_get_returns_entry(self) -> None:
         bridge = _make_http_bridge()
         entry = {"key": "k1", "value": "v1", "tier": "pattern"}

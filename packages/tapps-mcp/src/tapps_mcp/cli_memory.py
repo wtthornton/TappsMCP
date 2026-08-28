@@ -216,9 +216,14 @@ def memory_recall(
 
     async def _recall() -> tuple[list[dict[str, object]], list[dict[str, Any]]]:
         settings = load_settings(project_root=root)
-        # Read-only auto-recall calls only ``memory_search``; ``reviewer`` is
-        # the least-privilege profile that exposes it (ADR-0012). ``coder``
-        # hides ``memory_search`` and silently returned no hits on v3.20.0+.
+        # Read-only auto-recall calls ``brain_recall`` (VAL-21 / TAP-6701),
+        # the relevance-ranked recall that carries a wire ``score`` per hit
+        # (BrainBridge.recall) rather than ``memory_search``'s unranked,
+        # score-less structured filter. ``brain_recall`` sits in the same
+        # least-privilege ``reviewer`` profile ``memory_search`` used
+        # (ADR-0012; mcp_profiles.yaml:277), so no profile widening is
+        # needed. ``coder`` hides both and silently returned no hits on
+        # v3.20.0+.
         bridge = create_brain_bridge(settings, default_profile=BRAIN_PROFILE_READONLY)
         if bridge is None:
             return [], []
@@ -228,7 +233,7 @@ def memory_recall(
                 entry = await bridge.get(key)
                 if entry is not None:
                     pinned.append(entry)
-            hits = await bridge.search(query, limit=max_results)
+            hits = await bridge.recall(query, max_results=max_results)
             return pinned, hits
         finally:
             bridge.close()
@@ -242,7 +247,26 @@ def memory_recall(
         sys.exit(0)
 
     # Filter search hits by min_score — pinned keys are always included.
-    filtered = [h for h in hits if float(h.get("confidence", h.get("score", 1.0))) >= min_score]
+    # Wire "score" (KB-3.1 composite retrieval score) is the only filter key;
+    # a hit missing it (older-brain response) is passed through unfiltered
+    # rather than defaulting to a fabricated confidence value.
+    filtered = []
+    score_absent = False
+    for hit in hits:
+        score = hit.get("score")
+        if score is None:
+            score_absent = True
+            filtered.append(hit)
+            continue
+        if float(score) >= min_score:
+            filtered.append(hit)
+    if score_absent:
+        import structlog
+
+        structlog.get_logger(__name__).debug(
+            "memory_recall_score_absent",
+            hint="hit missing wire 'score' key; passed through unfiltered",
+        )
     seen_keys: set[str] = set()
     merged: list[dict[str, object]] = []
     for hit in pinned + filtered:
@@ -354,6 +378,101 @@ def memory_search(query: str, limit: int, as_json: bool) -> None:
             click.echo(f"{e.key:<30} {e.tier:<15} {e.confidence:<12.2f} {value_preview}")
     finally:
         store.close()
+
+
+@memory_group.command("promote-instincts")
+@click.option(
+    "--project",
+    default=None,
+    help="Homunculus project name to scan (default: this checkout's project root).",
+)
+@click.option(
+    "--dry-run/--apply",
+    "dry_run",
+    default=True,
+    help="Preview candidates (default) or write promotions after operator ACCEPT.",
+)
+@click.option(
+    "--report",
+    "report_path",
+    default=None,
+    type=click.Path(path_type=str),
+    help="Path for the dry-run diff report (default: reports/promote-instincts.md).",
+)
+@click.option(
+    "--operator",
+    default=None,
+    help="Operator name for promoted_by=operator:<name> (required with --apply).",
+)
+def memory_promote_instincts(
+    project: str | None,
+    dry_run: bool,
+    report_path: str | None,
+    operator: str | None,
+) -> None:
+    """Preview or apply staged-instinct -> brain-memory promotions (KB-3.8, Ruling 8).
+
+    ``--dry-run`` (default) only reads ``~/.claude/homunculus/`` and writes a
+    diff report; it never touches the brain. ``--apply`` requires
+    ``--operator`` and calls ``BrainBridge.promote_instinct`` for each
+    candidate lacking ``promoted_key:`` (idempotent — a second run makes 0
+    additional promote calls), then appends ``promoted_key:`` to the
+    instinct's frontmatter.
+    """
+    from pathlib import Path
+
+    from tapps_mcp.cli import _get_project_root
+    from tapps_mcp.tools.instinct_promotion import select_instinct_candidates, write_dry_run_report
+
+    homunculus_root = Path.home() / ".claude" / "homunculus"
+    candidates = select_instinct_candidates(
+        homunculus_root, _get_project_root(), project_name=project
+    )
+    out_path = write_dry_run_report(candidates, Path(report_path) if report_path else None)
+    click.echo(out_path.read_text(encoding="utf-8"))
+    click.echo(f"Report written to {out_path}")
+
+    if dry_run:
+        return
+    if not operator:
+        click.echo("Error: --operator is required with --apply.", err=True)
+        raise SystemExit(2)
+    if not candidates:
+        click.echo("No candidates to apply.")
+        return
+    _run_promote_apply(candidates, operator)
+
+
+def _run_promote_apply(candidates: list[dict[str, object]], operator: str) -> None:
+    """Apply promotions via a fresh BrainBridge (SC-6: never invoked from this lane's tests
+    against a real brain — only reachable through ``--apply``, which callers must mock)."""
+    import asyncio
+
+    from tapps_mcp.cli import _brain_bridge_unavailable_message, _create_cli_brain_bridge
+    from tapps_mcp.tools.instinct_promotion import apply_promotions
+
+    async def _apply() -> list[dict[str, object]]:
+        bridge = _create_cli_brain_bridge()
+        if bridge is None:
+            raise RuntimeError("bridge_unavailable")
+        try:
+            return await apply_promotions(candidates, bridge, operator=operator)
+        finally:
+            bridge.close()
+
+    try:
+        results = asyncio.run(_apply())
+    except NotImplementedError as exc:
+        # In-process BrainBridge (no brain_http_url configured) has no
+        # learning_promote capability yet — see BrainBridge.promote_instinct.
+        click.echo(f"Error: {exc}", err=True)
+        raise SystemExit(2) from None
+    except RuntimeError as exc:
+        if str(exc) == "bridge_unavailable":
+            click.echo(_brain_bridge_unavailable_message(), err=True)
+            raise SystemExit(2) from None
+        raise
+    click.echo(f"Promoted {len(results)} instinct(s).")
 
 
 @memory_group.command("delete")
