@@ -14,16 +14,6 @@ import sys
 from pathlib import Path
 from typing import Any
 
-# TAP-6733: this module writes via bridge.save() (memory_save). The "coder"
-# profile tapps_core.brain_bridge.BRAIN_PROFILE_HOOKS names for hook consumers
-# excludes memory_save (ADR-0012's own tool table lists it as one of the
-# tools "coder" hides), so every save was silently rejected with
-# ToolNotInProfileError. "seeder" -- ADR-0012's 6-tool "bulk ingestion
-# scripts (write-only)" profile -- is the least-privilege profile that
-# exposes memory_save/memory_supersede. settings.memory.brain_profile /
-# TAPPS_BRAIN_PROFILE still override this (see ADR-0036).
-_BRAIN_PROFILE_WRITE_HOOK = "seeder"
-
 
 def _text_from_message_content(content: Any) -> str:
     """Extract plain text from a transcript row's ``message.content``.
@@ -169,7 +159,15 @@ async def run_auto_capture(
     """
     from tapps_brain.extraction import extract_durable_facts
 
-    from tapps_core.brain_bridge import create_brain_bridge
+    # TAP-6733: this module writes via bridge.save() (memory_save). The
+    # "coder" profile (BRAIN_PROFILE_HOOKS) excludes memory_save (ADR-0012's
+    # own tool table lists it as one of the tools "coder" hides), so every
+    # save was silently rejected with ToolNotInProfileError. BRAIN_PROFILE_SEEDER
+    # -- ADR-0012's 6-tool "bulk ingestion scripts (write-only)" profile -- is
+    # the least-privilege profile that exposes memory_save/memory_supersede.
+    # settings.memory.brain_profile / TAPPS_BRAIN_PROFILE still override this
+    # (see ADR-0036).
+    from tapps_core.brain_bridge import BRAIN_PROFILE_SEEDER, create_brain_bridge
     from tapps_core.config.settings import load_settings
 
     try:
@@ -226,12 +224,14 @@ async def run_auto_capture(
         result["reason"] = "no_facts"
         return result
 
-    bridge = create_brain_bridge(settings, default_profile=_BRAIN_PROFILE_WRITE_HOOK)
+    bridge = create_brain_bridge(settings, default_profile=BRAIN_PROFILE_SEEDER)
     if bridge is None:
         result["degraded"] = True
         result["reason"] = "bridge_unavailable"
         result["errors"].append("TAPPS_BRAIN_DATABASE_URL not configured; skipping auto-capture.")
         return result
+
+    session_id = result["session_id"] or ""
 
     try:
         for entry in facts:
@@ -247,8 +247,9 @@ async def run_auto_capture(
                     value=value,
                     tier=tier,
                     scope="session",
-                    source="system",
+                    source="agent",
                     source_agent="auto-capture",
+                    source_session_id=session_id,
                 )
                 if isinstance(out, dict) and out.get("degraded"):
                     result["errors"].append(

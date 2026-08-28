@@ -1269,11 +1269,14 @@ if ($active -eq $true -or $active -eq "true" -or $active -eq "True") {
 }
 $projDir = $env:CLAUDE_PROJECT_DIR
 if (-not $projDir) { $projDir = "." }
+$logDir = Join-Path $projDir ".tapps-mcp"
+New-Item -ItemType Directory -Force -Path $logDir -ErrorAction SilentlyContinue | Out-Null
+$log = Join-Path $logDir "auto-capture.log"
 try {
     if (Get-Command tapps-mcp -ErrorAction SilentlyContinue) {
-        $rawInput | tapps-mcp auto-capture --project-root $projDir 2>$null
+        $rawInput | tapps-mcp auto-capture --project-root $projDir *>> $log
     } else {
-        $rawInput | python -m tapps_mcp.cli auto-capture --project-root $projDir 2>$null
+        $rawInput | python -m tapps_mcp.cli auto-capture --project-root $projDir *>> $log
     }
 } catch {}
 exit 0
