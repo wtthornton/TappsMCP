@@ -172,13 +172,18 @@ def build_nlt_http_mcp_entry(
     host: str = "cursor",
 ) -> dict[str, Any]:
     """Build one HTTP fleet MCP config entry for *server_id* on *host*."""
-    return {
+    entry: dict[str, Any] = {
         "type": http_entry_type_for_host(host),
         "url": build_http_fleet_url(server_id, fleet_host=fleet_host),
         "headers": {
             PROJECT_ROOT_HEADER: resolve_http_project_root_header(project_root),
         },
     }
+    if host == "claude-code":
+        spec = NLT_SERVER_SPECS.get(server_id)
+        if spec is not None:
+            entry["instructions"] = spec["tagline"]
+    return entry
 
 
 def is_valid_http_fleet_mcp_entry(entry: dict[str, Any]) -> bool:

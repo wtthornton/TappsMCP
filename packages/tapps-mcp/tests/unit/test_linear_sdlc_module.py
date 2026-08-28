@@ -26,7 +26,7 @@ class TestLinearSDLCConfig:
         cfg = LinearSDLCConfig()
         assert cfg.issue_prefix == "TAP"
         assert cfg.prefix_lower == "tap"
-        assert cfg.agent_name == "claude-sonnet-4-6"
+        assert cfg.agent_name == "claude-sonnet-5"
         assert cfg.skill_path == "~/.claude/skills/linear"
 
     def test_empty_prefix_rejected(self) -> None:
@@ -81,7 +81,7 @@ class TestRenderAll:
         templates = rendered["docs/linear-sdlc/guides/ISSUE_TEMPLATES.md"]
         assert "TAP-XXX" in templates
         assert "tap-XXX-short-title" in templates  # branch placeholder
-        assert "claude-sonnet-4-6" in templates
+        assert "claude-sonnet-5" in templates
         assert "{{" not in templates
 
     def test_agent_guidance_substitutes_prefix(self) -> None:

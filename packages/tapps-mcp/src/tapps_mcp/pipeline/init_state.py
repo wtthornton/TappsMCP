@@ -47,7 +47,7 @@ class BootstrapConfig:
     memory_auto_recall: bool = False
     memory_auto_capture: bool = False
     overwrite_tech_stack_md: bool = False
-    destructive_guard: bool = False
+    destructive_guard: bool = True
     linear_enforce_gate: bool = False
     linear_enforce_cache_gate: str = "off"
     session_start_gate: str = "off"

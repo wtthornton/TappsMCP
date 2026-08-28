@@ -1058,7 +1058,7 @@ async def tapps_init(
     settings = load_settings()
     dg = destructive_guard
     if dg is None:
-        dg = getattr(settings, "destructive_guard", False)
+        dg = getattr(settings, "destructive_guard", True)
     leg = linear_enforce_gate
     if leg is None:
         # TAP-981: engagement-aware default — true at high/medium, false at low.

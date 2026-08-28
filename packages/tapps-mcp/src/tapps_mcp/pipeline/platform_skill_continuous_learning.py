@@ -77,7 +77,7 @@ description: >-
   managing project vs global instinct scope.
 origin: ECC
 version: 2.1.0
-model: claude-sonnet-4-6
+model: claude-sonnet-5
 ---
 """ + _BODY
 

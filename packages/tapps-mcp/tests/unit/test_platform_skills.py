@@ -168,15 +168,15 @@ class TestClaudeModel:
 
     def test_research_has_model_sonnet(self) -> None:
         fm = _get_frontmatter(CLAUDE_SKILLS["tapps-research"])
-        assert "model: claude-sonnet-4-6" in fm
+        assert "model: claude-sonnet-5" in fm
 
     @pytest.mark.parametrize(
         "skill_name,expected_model",
         [
             ("tapps-finish-task", "claude-haiku-4-5-20251001"),
-            ("tapps-review-pipeline", "claude-sonnet-4-6"),
-            ("tapps-security", "claude-sonnet-4-6"),
-            ("tapps-memory", "claude-sonnet-4-6"),
+            ("tapps-review-pipeline", "claude-sonnet-5"),
+            ("tapps-security", "claude-sonnet-5"),
+            ("tapps-memory", "claude-sonnet-5"),
         ],
     )
     def test_model_present(self, skill_name: str, expected_model: str) -> None:
@@ -314,7 +314,7 @@ class TestGenerateSkills:
             encoding="utf-8"
         )
         assert "context: fork" in content
-        assert "model: claude-sonnet-4-6" in content
+        assert "model: claude-sonnet-5" in content
 
 
 # ---------------------------------------------------------------------------

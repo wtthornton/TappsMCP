@@ -308,7 +308,7 @@ Start work in a fresh context window by assembling structured state — not a us
 ---
 name: tapps-review-pipeline
 user-invocable: true
-model: claude-sonnet-4-6
+model: claude-sonnet-5
 description: >-
   Orchestrate a parallel review-fix-validate pipeline across multiple changed files.
   Spawns tapps-review-fixer agents in worktrees for parallel processing. Use when
@@ -340,7 +340,7 @@ Run a parallel review-fix-validate pipeline on changed Python files:
 ---
 name: tapps-refactor
 user-invocable: true
-model: claude-sonnet-4-6
+model: claude-sonnet-5
 description: >-
   Function-level refactor workflow using call graph tools (Epic 114).
   Use before changing a symbol's signature, deleting a function, or
@@ -386,7 +386,7 @@ allowed-tools: >-
   mcp__nlt-build__tapps_lookup_docs
 argument-hint: "[library|query] [topic]"
 context: fork
-model: claude-sonnet-4-6
+model: claude-sonnet-5
 ---
 
 Research using TappsMCP's unified front door (ADR-0030):
@@ -404,7 +404,7 @@ Research using TappsMCP's unified front door (ADR-0030):
 ---
 name: tapps-security
 user-invocable: true
-model: claude-sonnet-4-6
+model: claude-sonnet-5
 description: >-
   Run a comprehensive security audit including vulnerability scanning
   and dependency CVE checks. Use when reviewing security-sensitive changes,
@@ -426,7 +426,7 @@ Run a comprehensive security audit using TappsMCP:
 ---
 name: tapps-memory
 user-invocable: true
-model: claude-sonnet-4-6
+model: claude-sonnet-5
 description: >-
   Manage shared project memory via tapps-mcp CLI and session notes.
   Use when saving cross-session decisions, searching prior patterns, or
@@ -584,7 +584,7 @@ For function-level refactors use `/tapps-refactor`. Call `tapps_server_info` for
 ---
 name: tapps-init
 user-invocable: true
-model: claude-sonnet-4-6
+model: claude-sonnet-5
 description: >-
   Bootstrap TappsMCP in a project. Creates AGENTS.md, TECH_STACK.md,
   platform rules, hooks, agents, skills, and MCP config. Use when setting
@@ -616,7 +616,7 @@ Bootstrap TappsMCP in a new or existing project:
 ---
 name: tapps-upgrade
 user-invocable: true
-model: claude-sonnet-4-6
+model: claude-sonnet-5
 description: >-
   Upgrade tapps-mcp / docs-mcp in this project to the latest version.
   Reinstalls global CLIs, restarts the MCP servers, refreshes scaffolding

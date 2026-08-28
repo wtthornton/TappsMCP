@@ -330,10 +330,12 @@ def _repair_mcp_json(
 
     changed = False
     for server_id in enabled:
+        # Regenerate `instructions` from the current NLT_SERVER_SPECS tagline
+        # rather than preserving whatever is on disk — a stale/wrong string
+        # (e.g. copied from another server) would otherwise survive every
+        # repair indefinitely. This field is scaffold-owned, not user prose.
         want = build_nlt_http_mcp_entry(server_id, project_root=project_root, host=host)
         cur = servers.get(server_id)
-        if isinstance(cur, dict) and "instructions" in cur:
-            want = {**want, "instructions": cur["instructions"]}
         if cur != want:
             servers[server_id] = want
             changed = True
@@ -347,8 +349,6 @@ def _repair_mcp_json(
             continue  # already rewritten above
         # Fix root/url/type on leftover nlt entries outside the active bundle.
         want = build_nlt_http_mcp_entry(server_id, project_root=project_root, host=host)
-        if isinstance(entry.get("instructions"), str):
-            want = {**want, "instructions": entry["instructions"]}
         if entry != want:
             servers[server_id] = want
             changed = True
