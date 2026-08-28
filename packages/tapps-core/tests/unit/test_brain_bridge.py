@@ -336,6 +336,18 @@ class TestReadOperations:
         bridge._brain.store.search.assert_called_once_with("test query", tier=None)
 
     @pytest.mark.asyncio()
+    async def test_recall_delegates_to_brain(self, bridge: Any) -> None:
+        """TAP-6701: ``recall`` is distinct from ``search`` — it must delegate to
+        ``AgentBrain.recall``, the ranked-recall surface that returns a wire
+        ``score`` per hit, not to ``store.search`` (unscored raw hits). A
+        regression back to ``store.search`` here would silently break the
+        CLI's ``--min-score`` filter, which reads ``score`` from this call.
+        """
+        results = await bridge.recall("test query", max_results=5)
+        assert results == [{"key": "k1", "value": "recalled", "score": 0.8}]
+        bridge._brain.recall.assert_called_once_with("test query", max_results=5)
+
+    @pytest.mark.asyncio()
     async def test_get_returns_dict(self, bridge: Any) -> None:
         result = await bridge.get("my-key")
         assert isinstance(result, dict)

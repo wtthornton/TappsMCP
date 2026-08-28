@@ -62,7 +62,9 @@ def test_headers_include_bearer_and_project_and_agent_id(tmp_path: Path) -> None
 
     assert headers["Authorization"] == f"Bearer {_TOKEN_VALUE}"
     assert headers["X-Project-Id"] == _PROJECT_ID
-    assert headers["X-Agent-Id"].startswith(f"{_PROJECT_ID}-")
+    # Ruling 9 (TAP-6701): logical agent id, no per-checkout uuid suffix —
+    # X-Agent-Id equals the project slug exactly when brain_project_id is set.
+    assert headers["X-Agent-Id"] == _PROJECT_ID
 
 
 def test_secret_str_not_leaked_in_repr(tmp_path: Path) -> None:
@@ -112,7 +114,8 @@ def test_non_strict_warn_and_proceed(tmp_path: Path, monkeypatch: pytest.MonkeyP
 
     assert "Authorization" not in headers
     assert headers["X-Project-Id"] == _PROJECT_ID
-    assert headers["X-Agent-Id"].startswith(f"{_PROJECT_ID}-")
+    # Ruling 9 (TAP-6701): logical agent id, no per-checkout uuid suffix.
+    assert headers["X-Agent-Id"] == _PROJECT_ID
     assert warnings, "expected a warning when required config is missing"
     event, payload = warnings[0]
     assert event == "brain_auth.incomplete_config"

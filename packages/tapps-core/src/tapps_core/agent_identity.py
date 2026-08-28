@@ -1,46 +1,44 @@
-"""Stable agent identity persisted to ``.tapps-mcp/agent.id``.
+"""Stable, logical agent identity (Ruling 9, TAP-6701).
 
-Replaces the PID-based fallback (``f"agent-{os.getpid()}"``) that changed on
-every MCP server restart, causing Hive memory attribution drift and duplicate
-agent registrations.
+Replaces both the PID-based fallback (``f"agent-{os.getpid()}"``, which
+changed on every MCP server restart) and the later per-checkout
+``f"{project_slug}-{uuid_hex_8}"`` shape (TAP-518/TAP-5893), which minted a
+distinct id — persisted to ``{project_root}/.tapps-mcp/agent.id`` — for every
+git worktree of the same project. Ruling 9 requires a *logical* name: two
+worktrees of the same project must resolve to the same ``X-Agent-Id`` so
+tapps-brain attributes their writes to one tenant instead of fragmenting
+memory across per-checkout hashes.
 
-Final agent_id shape::
+Final agent_id resolution, no filesystem I/O:
 
-    f"{project_slug}-{uuid_hex_8}"
+1. ``CLAUDE_AGENT_ID`` environment variable override.
+2. ``settings.memory.brain_project_id`` (the registered tapps-brain slug,
+   also sent as ``X-Project-Id`` — see :mod:`tapps_core.brain_auth`).
+3. ``settings.memory.project_id`` (auto-derived from ``brain_project_id``
+   when either is set; kept as a fallback for the disagreement case).
+4. The project root directory name, as a last resort when neither is
+   configured — best-effort only; distinct worktree directory names still
+   diverge here, which is why (2)/(3) are the ones a multi-worktree project
+   should configure in ``.tapps-mcp.yaml``.
 
-where ``project_slug`` is ``settings.memory.project_id`` when set, else the
-project root directory name; and ``uuid_hex_8`` is the first 8 hex chars of a
-UUID4 persisted to ``{project_root}/.tapps-mcp/agent.id`` on first call.
-
-See TAP-518.
+``.tapps-mcp/agent.id`` is no longer read, written, or consulted by this
+resolution. ``_write_uuid`` stays in this module — it is a generic atomic
+create-if-absent primitive independently exercised by
+``test_shared_state_atomic_writers.py`` (TAP-6081) and its own race test
+below — but nothing in this module calls it anymore.
 """
 
 from __future__ import annotations
 
 import os
 import re
-import time
-import uuid
 from pathlib import Path
 from typing import TYPE_CHECKING
-
-import structlog
 
 if TYPE_CHECKING:
     from tapps_core.config.settings import TappsMCPSettings
 
-logger = structlog.get_logger(__name__)
-
-_AGENT_ID_RELATIVE_PATH = Path(".tapps-mcp") / "agent.id"
-_UUID_SHORT_LEN = 8
 _SLUG_INVALID_RE = re.compile(r"[^a-zA-Z0-9_-]+")
-
-# TAP-5893: a racing first-caller can observe the winner's ``agent.id`` in the
-# microsecond window between ``O_CREAT | O_EXCL`` creating it and the winner
-# writing its bytes. Re-read on a short bounded backoff rather than minting a
-# divergent id.
-_CREATE_RACE_ATTEMPTS = 5
-_CREATE_RACE_BACKOFF_SECONDS = 0.01
 
 
 def is_real_writable_root(project_root: object) -> bool:
@@ -69,26 +67,23 @@ def _slugify(value: str) -> str:
 
 
 def _project_slug(settings: TappsMCPSettings) -> str:
-    """Derive the project-name prefix for the agent id.
+    """Derive the logical project slug the agent id is built from (Ruling 9).
 
-    Prefers ``settings.memory.project_id`` (the registered tapps-brain slug);
-    falls back to the project root directory name.
+    Prefers ``settings.memory.brain_project_id`` — the field actually sent as
+    the ``X-Project-Id`` header (``brain_auth.build_brain_headers``) — over
+    ``settings.memory.project_id`` so the two agree with what the brain
+    already associates the write with. Falls back to the project root
+    directory name only when neither is configured.
     """
     memory = getattr(settings, "memory", None)
+    brain_project_id = str(getattr(memory, "brain_project_id", "") or "").strip()
+    if brain_project_id:
+        return _slugify(brain_project_id)
     project_id = str(getattr(memory, "project_id", "") or "").strip()
     if project_id:
         return _slugify(project_id)
     root = Path(getattr(settings, "project_root", Path.cwd()))
     return _slugify(root.name)
-
-
-def _read_uuid(path: Path) -> str | None:
-    """Return the persisted UUID hex (stripped), or None if unreadable/empty."""
-    try:
-        raw = path.read_text(encoding="utf-8").strip()
-    except OSError:
-        return None
-    return raw or None
 
 
 def _write_uuid(path: Path, value: str) -> bool:
@@ -125,86 +120,24 @@ def _write_uuid(path: Path, value: str) -> bool:
     return True
 
 
-def _await_persisted_uuid(path: Path) -> str | None:
-    """Re-read *path* on a short backoff, for the caller that lost the race.
-
-    Returns the winner's UUID, or ``None`` if it never became readable within
-    :data:`_CREATE_RACE_ATTEMPTS` tries (the file exists but stayed empty or
-    unreadable).
-    """
-    for attempt in range(_CREATE_RACE_ATTEMPTS):
-        existing = _read_uuid(path)
-        if existing is not None:
-            return existing
-        time.sleep(_CREATE_RACE_BACKOFF_SECONDS * (attempt + 1))
-    return None
-
-
 def get_stable_agent_id(settings: TappsMCPSettings) -> str:
-    """Return the stable agent id, honouring ``CLAUDE_AGENT_ID`` overrides.
+    """Return the stable, logical agent id (Ruling 9), honouring ``CLAUDE_AGENT_ID``.
 
     Precedence:
 
-    1. ``CLAUDE_AGENT_ID`` environment variable (unchanged from prior behaviour).
-    2. ``f"{project_slug}-{uuid8}"`` with UUID persisted to
-       ``{project_root}/.tapps-mcp/agent.id``.
+    1. ``CLAUDE_AGENT_ID`` environment variable.
+    2. :func:`_project_slug` — ``brain_project_id``, then ``project_id``,
+       then the project root directory name.
 
-    The file is created on first call. Subsequent calls read the same UUID so
-    the agent id survives MCP server restarts.
+    Pure and deterministic: no filesystem I/O, no persisted per-checkout
+    state. Two worktrees of the same project sharing the same
+    ``brain_project_id``/``project_id`` resolve to the *same* id — the
+    cross-checkout invariant TAP-518's old uuid8-suffix design violated.
     """
     override = os.environ.get("CLAUDE_AGENT_ID", "").strip()
     if override:
         return override
-
-    raw_root = getattr(settings, "project_root", Path.cwd())
-
-    # TAP-4573: never mkdir/write under a non-real (mock- or relative-coerced)
-    # project_root. A bare MagicMock() coerces to a relative "MagicMock/..."
-    # path, so writing it would create a real tree in the pytest CWD. Skip the
-    # persistence attempt but still return a valid in-memory agent id.
-    if not is_real_writable_root(raw_root):
-        return f"{_project_slug(settings)}-{uuid.uuid4().hex[:_UUID_SHORT_LEN]}"
-
-    project_root = Path(raw_root)
-    id_path = project_root / _AGENT_ID_RELATIVE_PATH
-
-    uuid_hex = _read_uuid(id_path)
-    if uuid_hex is None:
-        minted = uuid.uuid4().hex
-        try:
-            created = _write_uuid(id_path, minted)
-        except OSError as exc:
-            # Read-only FS or permission denied — fall back to an in-memory
-            # UUID so the caller still gets a non-PID identifier for this
-            # process. It won't persist, but it won't collide with other
-            # concurrent sessions either.
-            logger.warning(
-                "agent_identity.persist_failed",
-                path=str(id_path),
-                error=str(exc),
-            )
-            uuid_hex = minted
-        else:
-            if created:
-                uuid_hex = minted
-                logger.info(
-                    "agent_identity.created",
-                    path=str(id_path),
-                )
-            else:
-                # TAP-5893: another first-caller created the file between our
-                # read and our create. Converge on its id instead of persisting
-                # a second one.
-                uuid_hex = _await_persisted_uuid(id_path)
-                if uuid_hex is None:
-                    logger.warning(
-                        "agent_identity.race_read_failed",
-                        path=str(id_path),
-                    )
-                    uuid_hex = minted
-
-    short = uuid_hex[:_UUID_SHORT_LEN]
-    return f"{_project_slug(settings)}-{short}"
+    return _project_slug(settings)
 
 
 __all__ = ["get_stable_agent_id", "is_real_writable_root"]

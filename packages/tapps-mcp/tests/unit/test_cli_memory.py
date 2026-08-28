@@ -16,8 +16,8 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from click.testing import CliRunner
-
 from tapps_brain.models import MemoryEntry, MemoryScope, MemorySource, MemoryTier
+
 from tapps_mcp.cli import main
 
 
@@ -316,6 +316,191 @@ class TestMemoryDelete:
             result = runner.invoke(main, ["memory", "delete", "--key", "missing"])
         assert result.exit_code == 1
         assert "not found" in result.output
+
+
+class TestMemoryPromoteInstincts:
+    """CLI-level tests for `tapps-mcp memory promote-instincts` (TAP-6701, VAL-23).
+
+    Selector/dry-run/apply logic itself is covered in test_instinct_promotion.py;
+    these tests only exercise the click wiring (report path, --operator gate,
+    bridge plumbing). ``Path.home()`` is monkeypatched so this never touches the
+    real ``~/.claude/homunculus/`` tree.
+    """
+
+    def _seed_homunculus(self, home: Path, repo_root: Path, *, instinct_id: str = "seed") -> None:
+        homunculus = home / ".claude" / "homunculus"
+        homunculus.mkdir(parents=True)
+        (homunculus / "projects.json").write_text(
+            json.dumps({"p1": {"id": "p1", "name": "tapps-mcp", "root": str(repo_root)}}),
+            encoding="utf-8",
+        )
+        instincts_dir = homunculus / "projects" / "p1" / "instincts" / "personal"
+        instincts_dir.mkdir(parents=True)
+        (instincts_dir / f"{instinct_id}.md").write_text(
+            "---\n"
+            f"id: {instinct_id}\n"
+            "trigger: when doing the thing\n"
+            "confidence: 0.9\n"
+            "domain: workflow\n"
+            "source: session-observation\n"
+            "scope: project\n"
+            "project_id: p1\n"
+            "project_name: tapps-mcp\n"
+            "---\n"
+            "\n## Action\nDo the thing.\n\n"
+            "## Evidence\n- Observed 5 times in session x\n- Last observed: 2026-08-20\n",
+            encoding="utf-8",
+        )
+
+    def test_dry_run_writes_report(self, runner: CliRunner, tmp_path: Path) -> None:
+        home = tmp_path / "home"
+        repo_root = tmp_path / "repo"
+        repo_root.mkdir()
+        self._seed_homunculus(home, repo_root)
+        report_path = tmp_path / "out.md"
+
+        with (
+            patch(_ROOT_PATCH, return_value=repo_root),
+            patch("pathlib.Path.home", return_value=home),
+        ):
+            result = runner.invoke(
+                main,
+                ["memory", "promote-instincts", "--report", str(report_path)],
+            )
+        assert result.exit_code == 0
+        assert "1 instinct promotion candidate" in result.output
+        assert report_path.exists()
+        assert "key: seed" in report_path.read_text(encoding="utf-8")
+
+    def test_apply_requires_operator(self, runner: CliRunner, tmp_path: Path) -> None:
+        home = tmp_path / "home"
+        repo_root = tmp_path / "repo"
+        repo_root.mkdir()
+        report_path = tmp_path / "out.md"
+        with (
+            patch(_ROOT_PATCH, return_value=repo_root),
+            patch("pathlib.Path.home", return_value=home),
+        ):
+            result = runner.invoke(
+                main,
+                ["memory", "promote-instincts", "--apply", "--report", str(report_path)],
+            )
+        assert result.exit_code == 2
+        assert "--operator is required" in result.output
+
+    def test_apply_calls_bridge_promote_instinct(self, runner: CliRunner, tmp_path: Path) -> None:
+        home = tmp_path / "home"
+        repo_root = tmp_path / "repo"
+        repo_root.mkdir()
+        self._seed_homunculus(home, repo_root)
+        report_path = tmp_path / "out.md"
+
+        bridge = MagicMock()
+        bridge.promote_instinct = AsyncMock(return_value={"key": "seed", "success": True})
+        bridge.close = MagicMock()
+
+        with (
+            patch(_ROOT_PATCH, return_value=repo_root),
+            patch("pathlib.Path.home", return_value=home),
+            patch(_BRIDGE_PATCH, return_value=bridge),
+        ):
+            result = runner.invoke(
+                main,
+                [
+                    "memory",
+                    "promote-instincts",
+                    "--apply",
+                    "--operator",
+                    "bill",
+                    "--report",
+                    str(report_path),
+                ],
+            )
+        assert result.exit_code == 0
+        assert "Promoted 1 instinct(s)" in result.output
+        bridge.promote_instinct.assert_awaited_once()
+        _, kwargs = bridge.promote_instinct.call_args
+        assert kwargs["actor"] == "operator:bill"
+        assert kwargs["evidence"] == "instinct:seed"
+        assert kwargs["signal"] == "human"
+        instinct_file = (
+            home
+            / ".claude"
+            / "homunculus"
+            / "projects"
+            / "p1"
+            / "instincts"
+            / "personal"
+            / "seed.md"
+        )
+        assert "promoted_key: seed" in instinct_file.read_text(encoding="utf-8")
+
+    def test_apply_bridge_unavailable(self, runner: CliRunner, tmp_path: Path) -> None:
+        home = tmp_path / "home"
+        repo_root = tmp_path / "repo"
+        repo_root.mkdir()
+        self._seed_homunculus(home, repo_root)
+        report_path = tmp_path / "out.md"
+
+        with (
+            patch(_ROOT_PATCH, return_value=repo_root),
+            patch("pathlib.Path.home", return_value=home),
+            patch(_BRIDGE_PATCH, return_value=None),
+        ):
+            result = runner.invoke(
+                main,
+                [
+                    "memory",
+                    "promote-instincts",
+                    "--apply",
+                    "--operator",
+                    "bill",
+                    "--report",
+                    str(report_path),
+                ],
+            )
+        assert result.exit_code == 2
+        assert "BrainBridge unavailable" in result.output
+
+    def test_apply_not_implemented_bridge_exits_cleanly(
+        self, runner: CliRunner, tmp_path: Path
+    ) -> None:
+        """The in-process BrainBridge's ``promote_instinct`` raises
+        ``NotImplementedError`` until the brain ships the capability — this must
+        surface as a clean CLI error, not an uncaught traceback. Regression for
+        the fact that ``NotImplementedError`` subclasses ``RuntimeError``, so a
+        bare ``except RuntimeError`` would swallow-and-reraise it unhelpfully."""
+        home = tmp_path / "home"
+        repo_root = tmp_path / "repo"
+        repo_root.mkdir()
+        self._seed_homunculus(home, repo_root)
+        report_path = tmp_path / "out.md"
+
+        bridge = MagicMock()
+        bridge.promote_instinct = AsyncMock(
+            side_effect=NotImplementedError("promote_instinct requires the HTTP brain path")
+        )
+        bridge.close = MagicMock()
+
+        with (
+            patch(_ROOT_PATCH, return_value=repo_root),
+            patch("pathlib.Path.home", return_value=home),
+            patch(_BRIDGE_PATCH, return_value=bridge),
+        ):
+            result = runner.invoke(
+                main,
+                [
+                    "memory",
+                    "promote-instincts",
+                    "--apply",
+                    "--operator",
+                    "bill",
+                    "--report",
+                    str(report_path),
+                ],
+            )
+        assert result.exit_code == 2
+        assert "requires the HTTP brain path" in result.output
 
 
 class TestMemoryImportExport:
