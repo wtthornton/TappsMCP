@@ -12,7 +12,7 @@ ORCHESTRATION_PROMPT_SKILL_FRONTMATTER = """\
 ---
 name: orchestration-prompt
 user-invocable: true
-model: claude-sonnet-4-6
+model: claude-sonnet-5
 description: >-
   Generate a ready-to-run orchestration PROMPT: a verifiable Goal, a bounded loop,
   and an independent creator-verifier pass. Refuses foggy Goals — redirects to

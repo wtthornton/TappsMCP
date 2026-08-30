@@ -1251,12 +1251,15 @@ class TappsMCPSettings(BaseSettings):
         ),
     )
 
-    # Destructive command guard (opt-in PreToolUse hook)
+    # Destructive command guard (on by default; set False to opt out)
     destructive_guard: bool = Field(
-        default=False,
+        default=True,
         description=(
             "When True, generate a PreToolUse hook that blocks Bash commands "
-            "containing destructive patterns (rm -rf, format c:, etc.). Opt-in only."
+            "containing destructive patterns (rm -rf, format c:, etc.). "
+            "Defaults on since the script is always written to "
+            ".claude/hooks/tapps-pre-bash.sh regardless; leaving it unwired "
+            "by default made every project ship a dead-looking safety file."
         ),
     )
 

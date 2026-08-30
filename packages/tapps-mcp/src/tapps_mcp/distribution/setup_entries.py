@@ -340,6 +340,13 @@ def _build_nlt_server_entry(
             project_root=project_root,
         )
 
+    if "instructions" in entry:
+        # _build_server_entry/_build_docsmcp_server_entry stamp a generic,
+        # shared instructions string; override with this server's own
+        # tagline so nlt-memory/nlt-setup/nlt-linear-issues/nlt-release-ship
+        # don't all inherit nlt-build's "code quality scoring" description.
+        entry["instructions"] = spec["tagline"]
+
     if isinstance(old_entry, dict):
         binary_name = str(spec["serve_command"])
         if _preserve_launch_on_upgrade(

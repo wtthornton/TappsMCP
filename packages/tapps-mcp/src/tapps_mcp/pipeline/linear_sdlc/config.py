@@ -14,7 +14,7 @@ class LinearSDLCConfig:
             (``tap-123-...``), grep patterns in hooks, and example text in
             workflow docs.
         agent_name: Canonical agent identifier shown in issue-comment
-            templates, e.g. ``"claude-sonnet-4-6"``.
+            templates, e.g. ``"claude-sonnet-5"``.
         skill_path: Filesystem path (as rendered text) where the Linear
             Claude skill is installed. Used by hook command lines.
         team_id: Optional Linear team identifier (e.g. ``"TAP"``). Reserved
@@ -24,7 +24,7 @@ class LinearSDLCConfig:
     """
 
     issue_prefix: str = "TAP"
-    agent_name: str = "claude-sonnet-4-6"
+    agent_name: str = "claude-sonnet-5"
     skill_path: str = "~/.claude/skills/linear"
     team_id: str = ""
     project_id: str = ""

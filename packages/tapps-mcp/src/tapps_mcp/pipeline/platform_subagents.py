@@ -49,7 +49,7 @@ description: >-
   Use proactively to review code quality, run security scans, and enforce
   quality gates after editing Python files.
 tools: Read, Glob, Grep, Write, Edit
-model: claude-sonnet-4-6
+model: claude-sonnet-5
 maxTurns: 20
 permissionMode: acceptEdits
 memory: project
@@ -76,7 +76,7 @@ description: >-
   Look up documentation, consult domain experts, and research best practices
   for the technologies used in this project.
 tools: Read, Glob, Grep
-model: claude-sonnet-4-6
+model: claude-sonnet-5
 maxTurns: 15
 permissionMode: plan
 memory: project
@@ -127,7 +127,7 @@ description: >-
   and validates the result passes the quality gate. Use in worktrees for
   parallel multi-file review pipelines.
 tools: Read, Glob, Grep, Write, Edit, Bash
-model: claude-sonnet-4-6
+model: claude-sonnet-5
 maxTurns: 25
 permissionMode: acceptEdits
 memory: project
@@ -159,7 +159,7 @@ description: >-
   Review UI/UX and frontend changes using domain playbooks and TAPPS quality
   gates. Use for React, CSS, accessibility, or layout work.
 tools: Read, Glob, Grep, Write, Edit
-model: claude-sonnet-4-6
+model: claude-sonnet-5
 maxTurns: 20
 permissionMode: acceptEdits
 memory: project

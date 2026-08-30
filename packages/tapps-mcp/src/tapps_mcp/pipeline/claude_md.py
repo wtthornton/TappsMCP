@@ -192,12 +192,28 @@ def merge_claude_md(
     return body, changes
 
 
+_FRESH_PROJECT_PLACEHOLDER = """
+## About This Project
+
+_Replace this section with what this project actually is: what it does, the
+stack, and where to look (README, docs/). Everything outside the
+`tapps-obligations` block above is yours — `tapps_upgrade` never touches it._
+"""
+
+
 def render_fresh_claude_md(obligations_content: str) -> str:
-    """Return the content for a fresh CLAUDE.md (no existing file)."""
+    """Return the content for a fresh CLAUDE.md (no existing file).
+
+    Seeds a placeholder section outside the marker block so a brand-new
+    CLAUDE.md isn't 100% generic tooling boilerplate with no prompt to add
+    project-specific orientation content (TAP-6011).
+    """
     from tapps_mcp.pipeline.tapps_obligations_block import wrap_with_markers
 
     return (
-        f"<!-- tapps-claude-version: {__version__} -->\n{wrap_with_markers(obligations_content)}\n"
+        f"<!-- tapps-claude-version: {__version__} -->\n"
+        f"{wrap_with_markers(obligations_content)}\n"
+        f"{_FRESH_PROJECT_PLACEHOLDER}"
     )
 
 

@@ -51,7 +51,7 @@ def _claude_domain_skill(
 ---
 name: {name}
 user-invocable: true
-model: claude-sonnet-4-6
+model: claude-sonnet-5
 description: >-
   {description}
 allowed-tools: {tools}
@@ -147,7 +147,7 @@ argument-hint: "[task_type: feature|bugfix]"
 ---
 name: tapps-flow-review
 user-invocable: true
-model: claude-sonnet-4-6
+model: claude-sonnet-5
 description: >-
   QA/review flow: parallel review pipeline or single-file review ending in checklist.
   Use when reviewing PRs, audit findings, or validating another agent's changes.
@@ -164,7 +164,7 @@ Prefer `/tapps-review-pipeline` for multiple Python files. Otherwise:
 ---
 name: tapps-flow-frontend
 user-invocable: true
-model: claude-sonnet-4-6
+model: claude-sonnet-5
 description: >-
   Frontend work flow combining UX playbook and standard finish pipeline.
   Use when the task is primarily UI/UX implementation or accessibility.

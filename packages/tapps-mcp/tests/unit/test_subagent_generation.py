@@ -30,7 +30,7 @@ class TestClaudeAgents:
     def test_reviewer_has_model_sonnet(self, tmp_path):
         generate_subagent_definitions(tmp_path, "claude")
         content = (tmp_path / ".claude" / "agents" / "tapps-reviewer.md").read_text()
-        assert "model: claude-sonnet-4-6" in content
+        assert "model: claude-sonnet-5" in content
 
     def test_reviewer_has_permission_mode_accept_edits(self, tmp_path):
         generate_subagent_definitions(tmp_path, "claude")
@@ -62,7 +62,7 @@ class TestClaudeAgents:
     def test_researcher_has_model_sonnet(self, tmp_path):
         generate_subagent_definitions(tmp_path, "claude")
         content = (tmp_path / ".claude" / "agents" / "tapps-researcher.md").read_text()
-        assert "model: claude-sonnet-4-6" in content
+        assert "model: claude-sonnet-5" in content
 
     def test_researcher_has_memory_project(self, tmp_path):
         generate_subagent_definitions(tmp_path, "claude")
@@ -145,7 +145,7 @@ class TestClaudeAgents:
     def test_review_fixer_has_model_sonnet(self, tmp_path):
         generate_subagent_definitions(tmp_path, "claude")
         content = (tmp_path / ".claude" / "agents" / "tapps-review-fixer.md").read_text()
-        assert "model: claude-sonnet-4-6" in content
+        assert "model: claude-sonnet-5" in content
 
     def test_review_fixer_has_max_turns_25(self, tmp_path):
         generate_subagent_definitions(tmp_path, "claude")
