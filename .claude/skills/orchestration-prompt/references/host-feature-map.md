@@ -1,3 +1,5 @@
+<!-- upgrade-policy: managed-block. Edits made inside this BEGIN/END block are regenerated and lost on the next tapps_upgrade — put project-specific customizations below the END marker instead, where they survive every upgrade untouched. -->
+<!-- BEGIN: tapps-skill-asset orchestration-prompt/references/host-feature-map.md v3.12.78 -->
 # Host feature map — Claude Code vs Cursor
 
 Read when emitting **Run-as**, checkpoint lanes, or plane-map mechanism choices.
@@ -24,3 +26,4 @@ Code; an explicit user flag overrides.
 
 Cross-ref: shift-boundary carry-forward in `references/cold-start-and-verify.md`;
 cumulative handoff fields in `/tapps-handoff-session` and `/tapps-continue-session`.
+<!-- END: tapps-skill-asset -->

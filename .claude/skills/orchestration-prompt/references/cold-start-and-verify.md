@@ -1,3 +1,5 @@
+<!-- upgrade-policy: managed-block. Edits made inside this BEGIN/END block are regenerated and lost on the next tapps_upgrade — put project-specific customizations below the END marker instead, where they survive every upgrade untouched. -->
+<!-- BEGIN: tapps-skill-asset orchestration-prompt/references/cold-start-and-verify.md v3.12.78 -->
 # Cold-start preflight & verification depth
 
 Consult while *filling* the prompt template — not while deciding the shape of the
@@ -128,3 +130,4 @@ CHECKPOINT <n> — sub-goal <k> complete. Handoff written.
 Cumulative: round <a> of <cap> · budget <spent>/<ceiling>.
 Next: /clear   then   /tapps-continue-session
 ```
+<!-- END: tapps-skill-asset -->

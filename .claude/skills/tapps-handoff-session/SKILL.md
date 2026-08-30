@@ -11,6 +11,7 @@ allowed-tools: mcp__nlt-memory__tapps_handoff_save mcp__nlt-build__tapps_session
 argument-hint: "[optional Linear issue id e.g. TAP-1234]"
 disable-model-invocation: true
 ---
+<!-- upgrade-policy: overwrite. tapps_upgrade replaces this file wholesale on every run and local edits are lost (tapps_init leaves an existing copy alone; upgrade does not). Fold the change upstream into the platform template, or pin the whole directory with an upgrade_skip_files token. -->
 
 End the session with a durable handoff the next chat can load via `/tapps-continue-session`.
 
