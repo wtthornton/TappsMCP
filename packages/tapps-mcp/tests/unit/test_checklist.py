@@ -2,6 +2,11 @@
 
 from __future__ import annotations
 
+import json
+import time
+from collections.abc import Iterator
+from pathlib import Path
+
 import pytest
 
 from tapps_mcp.tools.checklist import (
@@ -249,6 +254,157 @@ class TestCallTracker:
         assert set(TASK_TOOL_MAP_LOW.keys()) == set(TASK_TOOL_MAP.keys())
         assert "tapps_security_scan" in TASK_TOOL_MAP_HIGH["feature"]["required"]
         assert "tapps_security_scan" not in TASK_TOOL_MAP_LOW["feature"]["required"]
+
+
+class TestCrossProcessChecklistCredit:
+    """TAP-6738: a sibling MCP process (nlt-release-ship, nlt-linear-issues,
+    ...) that binds the shared ledger before any session marker exists must
+    not be stranded forever once a session starts elsewhere.
+
+    ``CallTracker`` is a process-wide singleton (all state lives on the
+    class), so two real bindings sharing one ledger file are simulated the
+    same way the TAP-6586 regression suite does it: clear the class state
+    and re-``set_persist_path`` onto the same on-disk ledger, standing in for
+    a fresh OS process picking up where the files left off.
+    """
+
+    @pytest.fixture(autouse=True)
+    def _ledger(self, tmp_path: Path) -> Iterator[Path]:
+        CallTracker.reset()
+        path = tmp_path / "state" / "checklist_calls.jsonl"
+        CallTracker.set_persist_path(path)
+        yield path
+        CallTracker.reset()
+        CallTracker._persist_path = None
+        CallTracker._calls.clear()
+
+    @staticmethod
+    def _rebind(path: Path) -> None:
+        """Simulate a fresh process binding the same project ledger."""
+        CallTracker._calls.clear()
+        CallTracker._window_id = None
+        CallTracker._active_session_id = None
+        CallTracker._adopted_window_ids = frozenset()
+        CallTracker.set_persist_path(path)
+
+    def test_sibling_process_window_is_adopted_once_a_session_starts(
+        self, _ledger: Path
+    ) -> None:
+        """Second binding records under no marker; first binding's later
+        begin_session must retroactively adopt that orphan window so its
+        row is credited.
+        """
+        self._rebind(_ledger)
+        CallTracker.record("tapps_lookup_docs")
+        sibling_window = CallTracker._window_id
+        assert sibling_window is not None
+
+        self._rebind(_ledger)
+        CallTracker.begin_session("sess-a")
+
+        assert sibling_window in CallTracker._adopted_window_ids
+        result = CallTracker.evaluate("feature", engagement_level="medium")
+        assert "tapps_lookup_docs" in result.called
+
+    def test_prior_unrelated_session_still_does_not_leak(self, _ledger: Path) -> None:
+        """A genuinely different, already-claimed session must not be picked
+        up by the orphan scan (TAP-6586 stays fixed).
+        """
+        self._rebind(_ledger)
+        CallTracker.begin_session("sess-old")
+        CallTracker.record("tapps_score_file")
+
+        self._rebind(_ledger)
+        CallTracker.begin_session("sess-new")
+
+        result = CallTracker.evaluate("feature", engagement_level="medium")
+        assert result.total_calls == 0
+        assert "tapps_score_file" not in result.called
+
+    def test_migration_ledger_with_no_registry_adopts_nothing(self, _ledger: Path) -> None:
+        """TAP-6738 round 2 (verifier refutation): the claimed-ids registry is
+        introduced BY this feature, so it is absent on every existing install.
+        A ledger already holding rows from many old, real session ids (written
+        by a version of the server that predates the registry) must not have
+        every one of those ids look "unclaimed" and get swept in wholesale by
+        the very first ``begin_session`` after upgrading — that is the exact
+        TAP-6586 false-green class, reopened via a migration path the
+        existing sibling-window tests never exercise (they always begin a
+        session under the new code first, which populates the registry).
+        """
+        old_timestamp = time.time() - (2 * CallTracker._ORPHAN_ADOPTION_WINDOW_SECONDS)
+        _ledger.parent.mkdir(parents=True, exist_ok=True)
+        with _ledger.open("w", encoding="utf-8") as fh:
+            for sid in ("hist-a", "hist-b", "hist-c"):
+                record = ToolCallRecord(
+                    tool_name="tapps_score_file", timestamp=old_timestamp, session_id=sid
+                )
+                fh.write(
+                    json.dumps(
+                        {
+                            "tool_name": record.tool_name,
+                            "timestamp": record.timestamp,
+                            "session_id": record.session_id,
+                            "success": record.success,
+                        }
+                    )
+                    + "\n"
+                )
+
+        assert not (_ledger.parent / "checklist_claimed_ids").exists()
+
+        self._rebind(_ledger)
+        CallTracker.begin_session("new-after-upgrade")
+
+        assert CallTracker._adopted_window_ids == frozenset()
+        result = CallTracker.evaluate("feature", engagement_level="medium")
+        assert result.total_calls == 0
+        assert result.called == []
+        assert result.missing_required != []
+
+    def test_marker_named_prior_session_is_not_adopted_as_orphan(self, _ledger: Path) -> None:
+        """TAP-6738 round 3 (verifier refutation): on an upgrade boundary the
+        PRIOR session's rows are typically minutes old, well inside
+        ``_ORPHAN_ADOPTION_WINDOW_SECONDS`` -- the round-2 recency bound alone
+        does not exclude them. The marker's line-1 id is always a real prior
+        session, never a sibling window id, so it must never be swept up by
+        the orphan scan even though it is absent from the (not-yet-existing)
+        claimed-ids registry.
+        """
+        recent_timestamp = time.time() - 60.0
+        _ledger.parent.mkdir(parents=True, exist_ok=True)
+        with _ledger.open("w", encoding="utf-8") as fh:
+            for _ in range(3):
+                record = ToolCallRecord(
+                    tool_name="tapps_score_file",
+                    timestamp=recent_timestamp,
+                    session_id="prior-sess",
+                )
+                fh.write(
+                    json.dumps(
+                        {
+                            "tool_name": record.tool_name,
+                            "timestamp": record.timestamp,
+                            "session_id": record.session_id,
+                            "success": record.success,
+                        }
+                    )
+                    + "\n"
+                )
+        (_ledger.parent / "checklist_active_session").write_text(
+            "prior-sess\n", encoding="utf-8"
+        )
+
+        assert not (_ledger.parent / "checklist_claimed_ids").exists()
+
+        self._rebind(_ledger)
+        assert CallTracker._active_session_id == "prior-sess"
+        CallTracker.begin_session("new-after-prior")
+
+        assert "prior-sess" not in CallTracker._adopted_window_ids
+        result = CallTracker.evaluate("feature", engagement_level="medium")
+        assert result.total_calls == 0
+        assert result.complete is False
 
 
 class TestChecklistResult:

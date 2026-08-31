@@ -321,6 +321,54 @@ class CallTracker:
         return cls._persist_path.parent / "checklist_active_session"
 
     @classmethod
+    def _claimed_ids_path(cls) -> Path | None:
+        """Append-only, project-level registry of every id that has ever been
+        an active session id or an adopted window (TAP-6738).
+
+        Distinct from the marker (which only holds the *current* session's
+        adoption): once an id lands here it is never eligible for orphan
+        adoption again, which is what keeps a genuinely unrelated prior
+        session's rows from leaking into a later one (TAP-6586).
+        """
+        if cls._persist_path is None:
+            return None
+        return cls._persist_path.parent / "checklist_claimed_ids"
+
+    @classmethod
+    def _load_claimed_ids(cls) -> frozenset[str]:
+        path = cls._claimed_ids_path()
+        if path is None or not path.is_file():
+            return frozenset()
+        try:
+            text = path.read_text(encoding="utf-8")
+        except OSError:
+            return frozenset()
+        return frozenset(ln.strip() for ln in text.splitlines() if ln.strip())
+
+    @classmethod
+    def _append_claimed_ids(cls, ids: frozenset[str]) -> None:
+        path = cls._claimed_ids_path()
+        if path is None or not ids:
+            return
+        try:
+            path.parent.mkdir(parents=True, exist_ok=True)
+            with path.open("a", encoding="utf-8") as fh:
+                for claimed_id in sorted(ids):
+                    fh.write(claimed_id + "\n")
+        except OSError:
+            logger.debug("checklist_claimed_ids_write_failed", exc_info=True)
+
+    #: Upper bound on how old an unclaimed session id's *newest* row may be for
+    #: that id to still be adopted as a cross-process orphan (TAP-6738/TAP-6586
+    #: round 2). A genuine sibling process binds and records within the same
+    #: work session, i.e. within minutes; an hour comfortably covers that while
+    #: excluding a migration ledger's pre-existing history, which is what the
+    #: id being *absent from the claimed-ids registry* alone cannot distinguish
+    #: the first time the registry file is created (it starts empty on every
+    #: existing install, so every historical id would otherwise look orphaned).
+    _ORPHAN_ADOPTION_WINDOW_SECONDS: ClassVar[float] = 3600.0
+
+    @classmethod
     def _current_window_id(cls) -> str:
         """Owner id for records made outside any session (called under lock)."""
         if cls._window_id is None:
@@ -378,20 +426,60 @@ class CallTracker:
         """Start a new checklist session boundary (call from tapps_session_start).
 
         Records made in this process before the *first* boundary are adopted, so
-        early tool calls are not dropped. A later boundary adopts nothing: by
-        then every earlier record already names the session that was active when
-        it was made, and re-adopting would hand session B session A's evidence
-        (TAP-6586).
+        early tool calls are not dropped. A later boundary adopts nothing new of
+        its *own* process's window: by then every earlier record already names
+        the session that was active when it was made, and re-adopting would hand
+        session B session A's evidence (TAP-6586).
+
+        Also adopts any *cross-process* orphan window: a sibling MCP process
+        (nlt-release-ship, nlt-linear-issues, ...) that bound this same ledger
+        before any marker existed stamps its rows with its own process-local
+        window id and can never itself learn that a session later started
+        (TAP-6738). Those rows are picked up here by scanning the freshly
+        reloaded ledger for ids that were never claimed — i.e. never an active
+        session id and never previously adopted — AND whose newest row is
+        recent (within :data:`_ORPHAN_ADOPTION_WINDOW_SECONDS`). The recency
+        bound is what keeps a migration ledger safe: the claimed-ids registry
+        file is introduced by this same change, so it is absent on every
+        existing install and every id already in the ledger would otherwise
+        look identically "unclaimed" as a genuine sibling's window, silently
+        crediting a brand-new session with a whole project's history (TAP-6586
+        round 2). Once adopted, an id is recorded in the claimed-ids registry
+        and can never be adopted again, so a genuinely unrelated prior
+        session's rows still cannot leak.
         """
         sid = session_id or uuid.uuid4().hex[:16]
         with cls._lock:
             window = cls._window_id
+            adopted: set[str] = set()
             if cls._active_session_id is None and window is not None:
-                cls._adopted_window_ids = frozenset({window})
-            else:
-                cls._adopted_window_ids = frozenset()
+                adopted.add(window)
+            if cls._persist_path is not None:
+                cls._calls.clear()
+                cls._load_persisted()
+                claimed = cls._load_claimed_ids() | {sid}
+                if cls._active_session_id is not None:
+                    # The marker's line-1 id is always a real prior session,
+                    # never a sibling window id -- positive evidence it must
+                    # not be re-adopted as an orphan (TAP-6738 round 3).
+                    claimed = claimed | {cls._active_session_id}
+                now = time.time()
+                newest_by_id: dict[str, float] = {}
+                for c in cls._calls:
+                    if c.session_id and c.session_id not in claimed:
+                        newest_by_id[c.session_id] = max(
+                            newest_by_id.get(c.session_id, c.timestamp), c.timestamp
+                        )
+                orphans = {
+                    oid
+                    for oid, newest in newest_by_id.items()
+                    if now - newest <= cls._ORPHAN_ADOPTION_WINDOW_SECONDS
+                }
+                adopted |= orphans
+            cls._adopted_window_ids = frozenset(adopted)
             cls._active_session_id = sid
             cls._persist_active_session()
+            cls._append_claimed_ids(frozenset({sid}) | cls._adopted_window_ids)
         return sid
 
     @classmethod
@@ -518,6 +606,10 @@ class CallTracker:
                 if marker is not None and marker.exists():
                     with contextlib.suppress(OSError):
                         marker.unlink()
+                claimed = cls._claimed_ids_path()
+                if claimed is not None and claimed.exists():
+                    with contextlib.suppress(OSError):
+                        claimed.unlink()
 
     @classmethod
     def evaluate(

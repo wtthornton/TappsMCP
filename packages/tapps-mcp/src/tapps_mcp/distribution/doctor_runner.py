@@ -288,7 +288,9 @@ def _collect_checks(root: Path, *, quick: bool = False) -> list[CheckResult]:
     return checks
 
 
-def run_doctor_structured(*, project_root: str = ".", quick: bool = False) -> dict[str, Any]:
+def run_doctor_structured(
+    *, project_root: str = ".", quick: bool = False, include_passing: bool = True
+) -> dict[str, Any]:
     """Run all diagnostic checks and return structured results.
 
     Returns a dict with ``checks``, ``pass_count``, ``fail_count``,
@@ -297,6 +299,10 @@ def run_doctor_structured(*, project_root: str = ".", quick: bool = False) -> di
     Args:
         project_root: Project root path.
         quick: When True, skip quality tool version checks.
+        include_passing: When False, ``checks`` omits ``severity == "pass"``
+            rows — only warn/fail rows are returned (TAP-6433). Aggregate
+            counts (``pass_count``, ``all_passed``, ...) always reflect the
+            full check set regardless of this flag.
     """
     root = Path(project_root).resolve()
     log.info("doctor_structured", project_root=str(root))
@@ -308,6 +314,14 @@ def run_doctor_structured(*, project_root: str = ".", quick: bool = False) -> di
     fail_count = 0
     warn_count = 0
     for check in checks:
+        if check.severity == "pass":
+            pass_count += 1
+        elif check.severity == "warn":
+            warn_count += 1
+        else:
+            fail_count += 1
+        if check.severity == "pass" and not include_passing:
+            continue
         entry: dict[str, str | bool] = {
             "name": check.name,
             "ok": check.ok,
@@ -317,12 +331,6 @@ def run_doctor_structured(*, project_root: str = ".", quick: bool = False) -> di
         if check.detail:
             entry["detail"] = check.detail
         results.append(entry)
-        if check.severity == "pass":
-            pass_count += 1
-        elif check.severity == "warn":
-            warn_count += 1
-        else:
-            fail_count += 1
 
     out: dict[str, Any] = {
         "checks": results,

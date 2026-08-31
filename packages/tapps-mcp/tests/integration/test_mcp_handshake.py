@@ -13,7 +13,17 @@ from tapps_mcp.server import mcp, tapps_server_info
 class TestMCPHandshake:
     @pytest.mark.asyncio
     async def test_server_info_tool_returns_valid_response(self):
-        """Call tapps_server_info and verify the response structure."""
+        """Call tapps_server_info and verify the response structure.
+
+        TAP-6433: configuration, installed_checkers, checker_environment*,
+        docs_provider, and cache are no longer part of this tool's response
+        — they duplicate tapps_session_start(quick=True) byte-for-byte.
+        ``server`` (name/version/protocol_version) is kept as the one named
+        exception: the tool's own "verify a remote deployment is reachable"
+        use case needs it without session_start having run first. Checker
+        detection is covered by test_server_info_reports_diagnostics below
+        (``diagnostics`` is unique to this tool, unlike ``installed_checkers``).
+        """
         result = await tapps_server_info()
 
         assert isinstance(result, dict)
@@ -32,39 +42,28 @@ class TestMCPHandshake:
         assert "available_tools" in data
         assert "tapps_server_info" in data["available_tools"]
 
-        assert "installed_checkers" in data
-        assert isinstance(data["installed_checkers"], list)
-
-        assert data["checker_environment"] == "mcp_server"
-        assert "MCP server" in data["checker_environment_note"]
-
-        assert "configuration" in data
-        assert "project_root" in data["configuration"]
-        assert "quality_preset" in data["configuration"]
+        for duplicated_field in (
+            "installed_checkers",
+            "checker_environment",
+            "checker_environment_note",
+            "configuration",
+            "docs_provider",
+            "cache",
+        ):
+            assert duplicated_field not in data, duplicated_field
 
         assert "recommended_workflow" in data
         assert isinstance(data["recommended_workflow"], str)
         assert "tapps_quality_gate" in data["recommended_workflow"]
 
     @pytest.mark.asyncio
-    async def test_server_info_reports_installed_checkers(self):
-        """Verify the installed_checkers field has expected tool entries."""
+    async def test_server_info_reports_diagnostics(self):
+        """Verify the diagnostics field (unique to this tool) is populated."""
         result = await tapps_server_info()
-        checkers = result["data"]["installed_checkers"]
+        diagnostics = result["data"]["diagnostics"]
 
-        tool_names = {c["name"] for c in checkers}
-        assert "ruff" in tool_names
-        assert "mypy" in tool_names
-        assert "bandit" in tool_names
-        assert "radon" in tool_names
-
-        for checker in checkers:
-            assert "name" in checker
-            assert "available" in checker
-            assert isinstance(checker["available"], bool)
-            # If unavailable, should have install_hint
-            if not checker["available"]:
-                assert checker.get("install_hint") is not None
+        assert isinstance(diagnostics, dict)
+        assert "cache" in diagnostics
 
     def test_mcp_instance_has_tools_registered(self):
         """Verify the FastMCP instance has tools registered."""

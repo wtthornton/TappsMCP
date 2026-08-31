@@ -461,16 +461,37 @@ class TestWithNudges:
         assert "next_steps" in result["data"]
         assert isinstance(result["data"]["next_steps"], list)
 
-    def test_injects_pipeline_progress(self) -> None:
+    def test_injects_pipeline_progress_for_checklist_and_session_start(self) -> None:
+        """TAP-6433: pipeline_progress is scoped to the two tools that read
+        it (checklist, session_start), not attached to every successful
+        response as it was before.
+        """
         from tapps_mcp.server import _with_nudges
 
         CallTracker.record("tapps_score_file")
-        response: dict[str, Any] = {
-            "success": True,
-            "data": {"file_path": "test.py"},
-        }
-        result = _with_nudges("tapps_score_file", response)
-        assert "pipeline_progress" in result["data"]
+        for tool_name in ("tapps_checklist", "tapps_session_start"):
+            response: dict[str, Any] = {
+                "success": True,
+                "data": {},
+            }
+            result = _with_nudges(tool_name, response)
+            assert "pipeline_progress" in result["data"], tool_name
+
+    def test_pipeline_progress_absent_for_other_tools(self) -> None:
+        """TAP-6433: tools outside the checklist/session_start pair no
+        longer carry pipeline_progress — it was dead weight on ~25+ other
+        tool responses that never read it.
+        """
+        from tapps_mcp.server import _with_nudges
+
+        CallTracker.record("tapps_score_file")
+        for tool_name in ("tapps_score_file", "tapps_server_info", "tapps_doctor"):
+            response: dict[str, Any] = {
+                "success": True,
+                "data": {"file_path": "test.py"},
+            }
+            result = _with_nudges(tool_name, response)
+            assert "pipeline_progress" not in result["data"], tool_name
 
     def test_skips_error_responses(self) -> None:
         from tapps_mcp.server import _with_nudges

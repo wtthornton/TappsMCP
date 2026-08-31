@@ -1,14 +1,24 @@
 """TAP-1616: live contract test for BrainBridge's profile wire integration.
 
-Runs against a real ``tapps-brain-http`` server (3.17.0+) reachable on
-``TAPPS_MCP_MEMORY_BRAIN_HTTP_URL`` (or ``http://127.0.0.1:8080`` by default).
-Skipped when the server is unreachable or the bearer token is unset, so the
-unit-test runs in CI without a brain stay green.
+Runs writes (``memory_save``, ``memory_save_many``) against a real
+``tapps-brain-http`` server (3.17.0+). Requires ``TAPPS_BRAIN_CONTRACT_TEST_URL``
+to name a **disposable** brain instance explicitly — see the TAP-6803 note
+below. Skipped (loudly) when that env var is unset, so a default ``pytest``
+run never touches a live brain.
 
-Run explicitly:
+TAP-6803: this file used to default onto ``TAPPS_MCP_MEMORY_BRAIN_HTTP_URL``
+/ ``http://127.0.0.1:8080`` — the project's *ambient* brain config — and a
+plain ``uv run pytest`` in a dev environment with a reachable brain and an
+auth token in the environment silently wrote 55 real entries (``memory_save``
++ ``memory_save_many``, best-effort cleanup only) into the live
+``tapps-mcp`` project. ``TAPPS_BRAIN_CONTRACT_TEST_URL`` is a distinct env
+var precisely so that having ``TAPPS_MCP_MEMORY_BRAIN_HTTP_URL`` set for
+normal MCP operation can never accidentally satisfy this gate.
+
+Run explicitly, pointed at a disposable brain instance:
 
     TAPPS_BRAIN_AUTH_TOKEN=... \\
-    TAPPS_MCP_MEMORY_BRAIN_HTTP_URL=http://127.0.0.1:8080 \\
+    TAPPS_BRAIN_CONTRACT_TEST_URL=http://127.0.0.1:8080 \\
     pytest packages/tapps-core/tests/contract -m brain_contract -v
 
 Exercises three wire shapes against the ``agent_brain`` profile:
@@ -39,8 +49,12 @@ from tapps_core.brain_bridge import (
 pytestmark = pytest.mark.brain_contract
 
 
-_DEFAULT_URL = "http://127.0.0.1:8080"
 _REQUIRED_BRAIN_VERSION = (3, 28, 0)
+#: TAP-6803: the ONLY env var that can point this suite at a brain to write
+#: into. Deliberately distinct from TAPPS_MCP_MEMORY_BRAIN_HTTP_URL (normal
+#: MCP operation config) so the latter being set can never accidentally
+#: satisfy this gate and re-enable writes against the shared/production brain.
+_CONTRACT_TEST_URL_ENV = "TAPPS_BRAIN_CONTRACT_TEST_URL"
 
 
 def _parse_version(value: str) -> tuple[int, ...]:
@@ -53,8 +67,23 @@ def _parse_version(value: str) -> tuple[int, ...]:
     return tuple(parts)
 
 
-def _resolve_brain_url() -> str:
-    return os.environ.get("TAPPS_MCP_MEMORY_BRAIN_HTTP_URL", _DEFAULT_URL).rstrip("/")
+def _resolve_or_skip_brain_url() -> str:
+    """Resolve the disposable contract-test brain URL, or skip loudly.
+
+    TAP-6803: never reads TAPPS_MCP_MEMORY_BRAIN_HTTP_URL or any
+    ``.tapps-mcp.yaml`` config as a fallback — those name the project's
+    ambient/production brain. Only ``TAPPS_BRAIN_CONTRACT_TEST_URL``, set
+    explicitly by the operator to a disposable instance, can unlock writes.
+    """
+    url = os.environ.get(_CONTRACT_TEST_URL_ENV, "").strip()
+    if not url:
+        pytest.skip(
+            f"{_CONTRACT_TEST_URL_ENV} not set — this suite performs real "
+            "writes (memory_save, memory_save_many) and refuses to default "
+            "onto the ambient/project brain config (TAP-6803). Set it to a "
+            "disposable tapps-brain instance to run this contract suite."
+        )
+    return url.rstrip("/")
 
 
 def _resolve_token() -> str:
@@ -131,11 +160,37 @@ def _check_profile_loaded(url: str, token: str, project_id: str, profile: str) -
 
 @pytest.fixture(scope="module")
 def brain_url() -> str:
-    url = _resolve_brain_url()
+    url = _resolve_or_skip_brain_url()
     skip_reason = _check_brain_reachable(url)
     if skip_reason:
         pytest.skip(skip_reason)
     return url
+
+
+def test_default_run_makes_zero_brain_calls_without_the_disposable_url_opt_in(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """TAP-6803 guard: a default run (TAPPS_BRAIN_CONTRACT_TEST_URL unset)
+    must refuse before any network call — even when the project's ambient
+    TAPPS_MCP_MEMORY_BRAIN_HTTP_URL is set and points at a reachable brain,
+    which is exactly the environment that caused the original data-loss
+    incident (55 real entries written under project id ``tapps-mcp``).
+    """
+    monkeypatch.delenv(_CONTRACT_TEST_URL_ENV, raising=False)
+    # The ambient config that USED to be silently read as a fallback before
+    # this gate existed — confirm it is now inert for this file.
+    monkeypatch.setenv("TAPPS_MCP_MEMORY_BRAIN_HTTP_URL", "http://127.0.0.1:8080")
+
+    def _fail_if_called(*_args: object, **_kwargs: object) -> None:
+        raise AssertionError(
+            f"brain_contract suite made a network call without the {_CONTRACT_TEST_URL_ENV} opt-in"
+        )
+
+    monkeypatch.setattr(httpx, "get", _fail_if_called)
+    monkeypatch.setattr(httpx, "post", _fail_if_called)
+
+    with pytest.raises(pytest.skip.Exception):
+        _resolve_or_skip_brain_url()
 
 
 @pytest.fixture(scope="module")

@@ -212,7 +212,6 @@ _PREVIEW_FILES_BY_HOST: dict[str, tuple[str, ...]] = {
         ".claude/hooks/ (tapps-session-start, tapps-stop, ...)",
         ".claude/agents/ (tapps-reviewer, tapps-validator, ...)",
         ".claude/skills/ (tapps-score, tapps-validate, ...)",
-        ".github/workflows/tapps-quality.yml",
         ".github/copilot-instructions.md",
     ),
     "cursor": (
@@ -222,11 +221,9 @@ _PREVIEW_FILES_BY_HOST: dict[str, tuple[str, ...]] = {
         ".cursor/skills/ (tapps-score, tapps-validate, ...)",
         ".cursor/rules/ (tapps-quality, ...)",
         ".cursor/BUGBOT.md",
-        ".github/workflows/tapps-quality.yml",
         ".github/copilot-instructions.md",
     ),
     "vscode": (
-        ".github/workflows/tapps-quality.yml",
         ".github/copilot-instructions.md",
     ),
 }

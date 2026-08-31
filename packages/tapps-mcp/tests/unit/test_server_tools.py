@@ -17,7 +17,10 @@ from tapps_mcp.server import (
 from tapps_mcp.tools.checklist import CallTracker
 
 # tapps_checklist runs a full-repo AST scan by default; not what these assert.
-pytestmark = [pytest.mark.usefixtures("no_repo_wide_scans"), pytest.mark.usefixtures("envelope_guard")]
+pytestmark = [
+    pytest.mark.usefixtures("no_repo_wide_scans"),
+    pytest.mark.usefixtures("envelope_guard"),
+]
 
 
 class TestTappsServerInfo:
@@ -39,10 +42,12 @@ class TestTappsServerInfo:
         assert "version" in result["data"]["server"]
 
     @pytest.mark.asyncio
-    async def test_includes_configuration(self):
+    async def test_configuration_dropped_as_duplicate_of_quick_session_start(self):
+        """TAP-6433: configuration duplicates tapps_session_start(quick=True)'s
+        payload byte-for-byte, so the standalone tool response drops it.
+        """
         result = await tapps_server_info()
-        assert "configuration" in result["data"]
-        assert "project_root" in result["data"]["configuration"]
+        assert "configuration" not in result["data"]
 
     @pytest.mark.asyncio
     async def test_records_call(self):
