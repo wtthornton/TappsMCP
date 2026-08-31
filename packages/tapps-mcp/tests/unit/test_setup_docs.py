@@ -77,3 +77,35 @@ class TestGenerateRules:
 # ---------------------------------------------------------------------------
 # Multi-host configuration tests
 # ---------------------------------------------------------------------------
+
+
+class TestPreviewFilesMatchGenerators:
+    """VAL-08: every concrete path in _PREVIEW_FILES_BY_HOST must actually be
+    written by _generate_rules for that host (TAP-6802). Directory-glob
+    entries such as ".claude/hooks/ (tapps-session-start, ...)" describe a
+    directory of examples rather than one file and are out of scope — they
+    are identified by the " (" example-list marker and skipped.
+    """
+
+    @staticmethod
+    def _concrete_paths(entries: tuple[str, ...]) -> list[str]:
+        return [entry for entry in entries if " (" not in entry]
+
+    @pytest.mark.parametrize("host", ["claude-code", "cursor", "vscode"])
+    def test_every_previewed_file_is_actually_generated(self, tmp_path: Path, host: str) -> None:
+        from tapps_mcp.distribution.setup_docs import (
+            _PREVIEW_COMMON_FILES,
+            _PREVIEW_FILES_BY_HOST,
+        )
+
+        _generate_rules(host, tmp_path)
+
+        previewed = (
+            self._concrete_paths(_PREVIEW_FILES_BY_HOST.get(host, ()))
+            + self._concrete_paths(_PREVIEW_COMMON_FILES)
+        )
+        missing = [path for path in previewed if not (tmp_path / path).exists()]
+        assert not missing, (
+            f"Preview advertises files for host={host!r} that no generator "
+            f"in the _generate_rules path creates: {missing}"
+        )
