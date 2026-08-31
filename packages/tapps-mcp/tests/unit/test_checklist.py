@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+from collections.abc import Iterator
+from pathlib import Path
+
 import pytest
 
 from tapps_mcp.tools.checklist import (
@@ -249,6 +252,72 @@ class TestCallTracker:
         assert set(TASK_TOOL_MAP_LOW.keys()) == set(TASK_TOOL_MAP.keys())
         assert "tapps_security_scan" in TASK_TOOL_MAP_HIGH["feature"]["required"]
         assert "tapps_security_scan" not in TASK_TOOL_MAP_LOW["feature"]["required"]
+
+
+class TestCrossProcessChecklistCredit:
+    """TAP-6738: a sibling MCP process (nlt-release-ship, nlt-linear-issues,
+    ...) that binds the shared ledger before any session marker exists must
+    not be stranded forever once a session starts elsewhere.
+
+    ``CallTracker`` is a process-wide singleton (all state lives on the
+    class), so two real bindings sharing one ledger file are simulated the
+    same way the TAP-6586 regression suite does it: clear the class state
+    and re-``set_persist_path`` onto the same on-disk ledger, standing in for
+    a fresh OS process picking up where the files left off.
+    """
+
+    @pytest.fixture(autouse=True)
+    def _ledger(self, tmp_path: Path) -> Iterator[Path]:
+        CallTracker.reset()
+        path = tmp_path / "state" / "checklist_calls.jsonl"
+        CallTracker.set_persist_path(path)
+        yield path
+        CallTracker.reset()
+        CallTracker._persist_path = None
+        CallTracker._calls.clear()
+
+    @staticmethod
+    def _rebind(path: Path) -> None:
+        """Simulate a fresh process binding the same project ledger."""
+        CallTracker._calls.clear()
+        CallTracker._window_id = None
+        CallTracker._active_session_id = None
+        CallTracker._adopted_window_ids = frozenset()
+        CallTracker.set_persist_path(path)
+
+    def test_sibling_process_window_is_adopted_once_a_session_starts(
+        self, _ledger: Path
+    ) -> None:
+        """Second binding records under no marker; first binding's later
+        begin_session must retroactively adopt that orphan window so its
+        row is credited.
+        """
+        self._rebind(_ledger)
+        CallTracker.record("tapps_lookup_docs")
+        sibling_window = CallTracker._window_id
+        assert sibling_window is not None
+
+        self._rebind(_ledger)
+        CallTracker.begin_session("sess-a")
+
+        assert sibling_window in CallTracker._adopted_window_ids
+        result = CallTracker.evaluate("feature", engagement_level="medium")
+        assert "tapps_lookup_docs" in result.called
+
+    def test_prior_unrelated_session_still_does_not_leak(self, _ledger: Path) -> None:
+        """A genuinely different, already-claimed session must not be picked
+        up by the orphan scan (TAP-6586 stays fixed).
+        """
+        self._rebind(_ledger)
+        CallTracker.begin_session("sess-old")
+        CallTracker.record("tapps_score_file")
+
+        self._rebind(_ledger)
+        CallTracker.begin_session("sess-new")
+
+        result = CallTracker.evaluate("feature", engagement_level="medium")
+        assert result.total_calls == 0
+        assert "tapps_score_file" not in result.called
 
 
 class TestChecklistResult:

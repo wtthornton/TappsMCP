@@ -1581,7 +1581,7 @@ async def tapps_pipeline(
     if not vc_passed:
         pipeline_passed = False
 
-    cl_stage, cl_passed = await _po.pipeline_checklist_stage(task_type)
+    cl_stage, cl_passed = await _po.pipeline_checklist_stage(task_type, file_paths)
     stages.append(cl_stage)
     if not cl_passed:
         pipeline_passed = False

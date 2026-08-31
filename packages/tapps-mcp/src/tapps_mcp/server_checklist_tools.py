@@ -245,6 +245,7 @@ async def _run_auto_run(
     result: ChecklistResult,
     eval_checklist: Callable[[], ChecklistResult],
     settings: Any,
+    file_paths: str = "",
 ) -> tuple[ChecklistResult, dict[str, Any]]:
     """Run the missing validation here and re-evaluate.
 
@@ -252,6 +253,11 @@ async def _run_auto_run(
     on is the same skippable step the completion gate has been recording as a
     miss; running it from the checklist deletes the step instead of reminding
     about it.
+
+    ``file_paths`` scopes the auto-run ``tapps_validate_changed`` call to the
+    caller's known changed files (e.g. ``tapps_pipeline``, which already has
+    them). Empty (default) falls back to the unscoped git-wide auto-detect —
+    the same behavior direct ``tapps_checklist`` callers had before TAP-6738.
     """
     auto_run_results: dict[str, Any] = {}
     if not (auto_run and result.missing_required):
@@ -263,7 +269,9 @@ async def _run_auto_run(
         try:
             from tapps_mcp.server_pipeline_tools import tapps_validate_changed
 
-            vc_result = await tapps_validate_changed(preset=settings.quality_preset)
+            vc_result = await tapps_validate_changed(
+                file_paths=file_paths, preset=settings.quality_preset
+            )
             vc_data = vc_result.get("data", {})
             files_validated = int(vc_data.get("files_validated", 0) or 0)
             auto_run_results["validate_changed"] = {
@@ -462,6 +470,7 @@ async def tapps_checklist(
     epic_file_path: str = "",
     reset_checklist_session: bool = False,
     tdd: bool = False,
+    file_paths: str = "",
 ) -> dict[str, Any]:
     """Verifies the per-task TAPPS pipeline ran end-to-end and returns a
     markdown/JSON/compact report of which required tools fired vs were
@@ -505,6 +514,12 @@ async def tapps_checklist(
         tdd: Add TDD stage checks (RED/GREEN/REFACTOR commit pattern +
             coverage delta). Default ``False``; enable when the task
             is supposed to follow strict TDD.
+        file_paths: Comma-separated paths to scope the auto-run
+            ``tapps_validate_changed`` call to (TAP-6738), when
+            ``auto_run`` triggers it. Empty (default) auto-detects via
+            ``git diff`` — the slower, unscoped path. Callers that
+            already know their changed files (``tapps_pipeline``)
+            should always pass this.
     """
     from tapps_mcp.server import (
         _record_call,
@@ -551,7 +566,9 @@ async def tapps_checklist(
                 str(exc),
             )
 
-        result, auto_run_results = await _run_auto_run(auto_run, result, _eval_checklist, settings)
+        result, auto_run_results = await _run_auto_run(
+            auto_run, result, _eval_checklist, settings, file_paths
+        )
 
         elapsed_ms = (time.perf_counter_ns() - start) // 1_000_000
         _record_execution("tapps_checklist", start)

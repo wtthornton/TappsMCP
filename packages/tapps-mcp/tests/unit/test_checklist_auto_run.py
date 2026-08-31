@@ -173,6 +173,54 @@ async def test_auto_run_validate_failure_graceful() -> None:
 
 
 @pytest.mark.asyncio
+async def test_auto_run_scopes_validate_to_explicit_file_paths() -> None:
+    """TAP-6738: a caller-supplied file_paths threads into the auto-run
+    tapps_validate_changed call instead of falling back to the unscoped,
+    git-wide auto-detect (the slow path pipeline_checklist_stage used to
+    hit unconditionally).
+    """
+    result = _make_result(missing_required=["tapps_score_file"])
+
+    mock_settings = MagicMock()
+    mock_settings.quality_preset = "standard"
+    mock_settings.project_root = Path.cwd()
+    mock_settings.checklist_require_success = False
+    mock_settings.checklist_strict_unknown_task_types = False
+
+    with (
+        patch(_EVALUATE_TARGET, return_value=result),
+        patch(_VC_TARGET, new_callable=AsyncMock, return_value=_mock_vc_result()) as mock_vc,
+        patch(_SETTINGS_TARGET, return_value=mock_settings),
+    ):
+        await tapps_checklist(task_type="feature", auto_run=True, file_paths="a.py,b.py")
+
+    mock_vc.assert_called_once_with(file_paths="a.py,b.py", preset="standard")
+
+
+@pytest.mark.asyncio
+async def test_auto_run_defaults_to_unscoped_auto_detect() -> None:
+    """Direct tapps_checklist callers that don't pass file_paths keep the
+    pre-TAP-6738 unscoped auto-detect behavior.
+    """
+    result = _make_result(missing_required=["tapps_score_file"])
+
+    mock_settings = MagicMock()
+    mock_settings.quality_preset = "standard"
+    mock_settings.project_root = Path.cwd()
+    mock_settings.checklist_require_success = False
+    mock_settings.checklist_strict_unknown_task_types = False
+
+    with (
+        patch(_EVALUATE_TARGET, return_value=result),
+        patch(_VC_TARGET, new_callable=AsyncMock, return_value=_mock_vc_result()) as mock_vc,
+        patch(_SETTINGS_TARGET, return_value=mock_settings),
+    ):
+        await tapps_checklist(task_type="feature", auto_run=True)
+
+    mock_vc.assert_called_once_with(file_paths="", preset="standard")
+
+
+@pytest.mark.asyncio
 async def test_auto_run_re_evaluates_after_running() -> None:
     """auto_run=True should re-evaluate checklist after running validations."""
     first_result = _make_result(missing_required=["tapps_score_file"], complete=False)

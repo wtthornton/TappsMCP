@@ -103,13 +103,21 @@ async def pipeline_validate_stage(
 
 async def pipeline_checklist_stage(
     task_type: str,
+    file_paths: str,
 ) -> tuple[dict[str, Any], bool]:
-    """Run the checklist stage; always runs even on failure."""
+    """Run the checklist stage; always runs even on failure.
+
+    Passes ``file_paths`` through so an auto-run ``tapps_validate_changed``
+    (TAP-6586) scopes to the pipeline's already-known changed files instead
+    of falling back to the unscoped git-wide auto-detect (TAP-6738).
+    """
     stage_start = time.perf_counter_ns()
     try:
         from tapps_mcp.server import tapps_checklist
 
-        cl_resp = await tapps_checklist(task_type=task_type, output_format="compact")
+        cl_resp = await tapps_checklist(
+            task_type=task_type, output_format="compact", file_paths=file_paths
+        )
         cl_data = cl_resp.get("data", {}) if isinstance(cl_resp, dict) else {}
         cl_passed = bool(cl_resp.get("success")) and not cl_data.get("missing")
         stage = {
