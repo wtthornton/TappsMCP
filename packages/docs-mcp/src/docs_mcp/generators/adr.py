@@ -7,6 +7,7 @@ from datetime import UTC, datetime
 from typing import TYPE_CHECKING, ClassVar
 
 import structlog
+import yaml
 from pydantic import BaseModel
 
 if TYPE_CHECKING:
@@ -45,6 +46,21 @@ class ADRGenerator:
     )
 
     _NUMBER_PATTERN: ClassVar[re.Pattern[str]] = re.compile(r"^(\d+)-.*\.md$")
+
+    # Shape A: YAML frontmatter block delimited by "---" lines.
+    _FRONTMATTER_PATTERN: ClassVar[re.Pattern[str]] = re.compile(
+        r"^---\s*\n(.*?\n)---\s*\n", re.DOTALL
+    )
+
+    # Shape B: a "Status:"/"Date:" label line, optionally wrapped in bold
+    # markers ("**Status:** Accepted"), bare ("Status: Accepted"), or as a
+    # markdown list item ("- **Status:** Accepted"). The optional-bold match
+    # also covers the bare variant used by this repo's own ADR-0008, which
+    # has neither a YAML block nor a "## Status" heading; the optional list
+    # marker covers AgentForge ADRs that render the same field as a bullet.
+    _BOLD_FIELD_PATTERN: ClassVar[re.Pattern[str]] = re.compile(
+        r"^(?:[-*]\s+)?\*{0,2}(status|date)\s*:\*{0,2}\s*(.+?)\*{0,2}\s*$", re.IGNORECASE
+    )
 
     def generate(
         self,
@@ -319,28 +335,114 @@ class ADRGenerator:
             return "", "", ""
 
         title = ""
-        status = ""
-        adr_date = ""
-
         for line in content.splitlines():
             stripped = line.strip()
-
             # Parse title from H1: "# N. Title"
             if not title and stripped.startswith("# "):
-                # Remove "# N. " prefix
                 h1_match = re.match(r"^#\s+\d+\.\s+(.+)$", stripped)
                 if h1_match:
                     title = h1_match.group(1).strip()
+                    break
 
-            # Parse date from "Date: YYYY-MM-DD"
-            if not adr_date and stripped.startswith("Date:"):
-                adr_date = stripped[len("Date:") :].strip()
-
-            # Parse status: first non-empty line after "## Status"
-            if stripped == "## Status":
-                status = self._read_next_content_line(content, line)
+        status, adr_date = self._parse_status_and_date(content)
 
         return title, status, adr_date
+
+    def _parse_status_and_date(self, content: str) -> tuple[str, str]:
+        """Extract (status, date) from whichever ADR shape the file uses.
+
+        Three shapes exist across the fleet, tried in this precedence order:
+
+        1. **YAML frontmatter** (``status:`` / ``last_reviewed:`` keys) --
+           structured, machine-authored metadata. Wins outright when present,
+           even over a bold prose line in the same file (8+ AgentForge ADRs
+           carry both): the frontmatter is the canonical field, while a bold
+           line is a human-facing restatement that may add detail or drift
+           out of sync with it.
+        2. **Bold markdown line** (``**Status:**`` / ``**Date:**``, or the
+           bare ``Status:`` / ``Date:`` variant with no bold markers -- this
+           repo's own ADR-0008 uses the bare form with no "## Status"
+           heading at all).
+        3. **Nygard heading** (``## Status`` followed by the next non-empty
+           line) -- the loosest convention, so it is the fallback.
+
+        Fields are taken from a single shape, not mixed across shapes, so a
+        file's status and date always come from the same source of truth.
+        Status values are lowercased on read (not rewritten on disk) so
+        ``Accepted`` and ``accepted`` parse to the same value.
+        """
+        frontmatter = self._parse_frontmatter(content)
+        if frontmatter is not None:
+            fm_status = str(frontmatter.get("status") or "")
+            if fm_status:
+                fm_date = str(frontmatter.get("last_reviewed") or frontmatter.get("date") or "")
+                return self._normalize_status(fm_status), fm_date
+
+        bold_status, bold_date = self._parse_bold_fields(content)
+        if bold_status:
+            return self._normalize_status(bold_status), bold_date
+
+        nygard_status, nygard_date = self._parse_nygard_fields(content)
+        return self._normalize_status(nygard_status), nygard_date
+
+    @classmethod
+    def _parse_frontmatter(cls, content: str) -> dict[str, object] | None:
+        """Parse a leading YAML frontmatter block, if present.
+
+        Returns None when the file has no frontmatter block or the block
+        fails to parse as a YAML mapping.
+        """
+        match = cls._FRONTMATTER_PATTERN.match(content)
+        if not match:
+            return None
+        try:
+            parsed = yaml.safe_load(match.group(1))
+        except yaml.YAMLError as exc:
+            logger.debug("adr_frontmatter_parse_failed", reason=str(exc))
+            return None
+        return parsed if isinstance(parsed, dict) else None
+
+    @classmethod
+    def _parse_bold_fields(cls, content: str) -> tuple[str, str]:
+        """Parse "Status:"/"Date:" label lines, bold or bare."""
+        status = ""
+        adr_date = ""
+        for line in content.splitlines():
+            match = cls._BOLD_FIELD_PATTERN.match(line.strip())
+            if not match:
+                continue
+            label = match.group(1).lower()
+            value = match.group(2).strip()
+            if label == "status" and not status:
+                status = value
+            elif label == "date" and not adr_date:
+                adr_date = value
+            if status and adr_date:
+                break
+        return status, adr_date
+
+    @staticmethod
+    def _parse_nygard_fields(content: str) -> tuple[str, str]:
+        """Parse the classic Nygard shape: "Date:" line + "## Status" heading."""
+        status = ""
+        adr_date = ""
+        for line in content.splitlines():
+            stripped = line.strip()
+            if not adr_date and stripped.startswith("Date:"):
+                adr_date = stripped[len("Date:") :].strip()
+            if stripped == "## Status":
+                status = ADRGenerator._read_next_content_line(content, line)
+        return status, adr_date
+
+    @staticmethod
+    def _normalize_status(status: str) -> str:
+        """Lowercase a parsed status value for read-side normalization.
+
+        This never rewrites ADR file content on disk -- it only normalizes
+        the in-memory value returned to callers (e.g. the index table) so
+        ``Accepted`` and ``accepted`` compare equal.
+        """
+        return status.lower() if status else status
 
     @staticmethod
     def _read_next_content_line(content: str, after_line: str) -> str:
