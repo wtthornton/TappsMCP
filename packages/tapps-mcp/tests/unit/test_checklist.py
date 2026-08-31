@@ -362,6 +362,50 @@ class TestCrossProcessChecklistCredit:
         assert result.called == []
         assert result.missing_required != []
 
+    def test_marker_named_prior_session_is_not_adopted_as_orphan(self, _ledger: Path) -> None:
+        """TAP-6738 round 3 (verifier refutation): on an upgrade boundary the
+        PRIOR session's rows are typically minutes old, well inside
+        ``_ORPHAN_ADOPTION_WINDOW_SECONDS`` -- the round-2 recency bound alone
+        does not exclude them. The marker's line-1 id is always a real prior
+        session, never a sibling window id, so it must never be swept up by
+        the orphan scan even though it is absent from the (not-yet-existing)
+        claimed-ids registry.
+        """
+        recent_timestamp = time.time() - 60.0
+        _ledger.parent.mkdir(parents=True, exist_ok=True)
+        with _ledger.open("w", encoding="utf-8") as fh:
+            for _ in range(3):
+                record = ToolCallRecord(
+                    tool_name="tapps_score_file",
+                    timestamp=recent_timestamp,
+                    session_id="prior-sess",
+                )
+                fh.write(
+                    json.dumps(
+                        {
+                            "tool_name": record.tool_name,
+                            "timestamp": record.timestamp,
+                            "session_id": record.session_id,
+                            "success": record.success,
+                        }
+                    )
+                    + "\n"
+                )
+        (_ledger.parent / "checklist_active_session").write_text(
+            "prior-sess\n", encoding="utf-8"
+        )
+
+        assert not (_ledger.parent / "checklist_claimed_ids").exists()
+
+        self._rebind(_ledger)
+        assert CallTracker._active_session_id == "prior-sess"
+        CallTracker.begin_session("new-after-prior")
+
+        assert "prior-sess" not in CallTracker._adopted_window_ids
+        result = CallTracker.evaluate("feature", engagement_level="medium")
+        assert result.total_calls == 0
+        assert result.complete is False
+
 
 class TestChecklistResult:
     def test_creation(self):

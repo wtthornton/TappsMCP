@@ -458,6 +458,11 @@ class CallTracker:
                 cls._calls.clear()
                 cls._load_persisted()
                 claimed = cls._load_claimed_ids() | {sid}
+                if cls._active_session_id is not None:
+                    # The marker's line-1 id is always a real prior session,
+                    # never a sibling window id -- positive evidence it must
+                    # not be re-adopted as an orphan (TAP-6738 round 3).
+                    claimed = claimed | {cls._active_session_id}
                 now = time.time()
                 newest_by_id: dict[str, float] = {}
                 for c in cls._calls:
