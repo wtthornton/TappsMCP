@@ -351,6 +351,157 @@ class TestADRGeneratorIndex:
 
 
 # ---------------------------------------------------------------------------
+# _parse_adr_file: all three fleet shapes (TAP-6769)
+# ---------------------------------------------------------------------------
+
+
+class TestADRGeneratorParseFormats:
+    """``_parse_adr_file`` must read all three ADR status/date shapes seen
+    across the fleet: YAML frontmatter, bold markdown lines, and the
+    classic Nygard heading -- plus a plain (non-bold, non-heading)
+    "Status:"/"Date:" line variant found in this repo's own ADR-0008.
+    """
+
+    def test_shape_a_yaml_frontmatter(self, tmp_path: Path) -> None:
+        """Shape A: YAML frontmatter with status/last_reviewed keys."""
+        path = tmp_path / "0001-yaml.md"
+        path.write_text(
+            "---\n"
+            "status: Accepted\n"
+            "last_reviewed: 2026-07-02\n"
+            "---\n\n"
+            "# 1. YAML Frontmatter Decision\n\n"
+            "## Context\n\nSome context.\n",
+            encoding="utf-8",
+        )
+        gen = ADRGenerator()
+        title, status, date = gen._parse_adr_file(path)
+        assert title == "YAML Frontmatter Decision"
+        assert status == "accepted"
+        assert date == "2026-07-02"
+
+    def test_shape_b_bold_markdown_line(self, tmp_path: Path) -> None:
+        """Shape B: bold "**Status:**" / "**Date:**" prose lines."""
+        path = tmp_path / "0002-bold.md"
+        path.write_text(
+            "# 2. Bold Markdown Decision\n\n"
+            "**Status:** Accepted\n"
+            "**Date:** 2026-05-22\n\n"
+            "## Context\n\nSome context.\n",
+            encoding="utf-8",
+        )
+        gen = ADRGenerator()
+        title, status, date = gen._parse_adr_file(path)
+        assert title == "Bold Markdown Decision"
+        assert status == "accepted"
+        assert date == "2026-05-22"
+
+    def test_shape_b_plain_label_line_no_bold(self, tmp_path: Path) -> None:
+        """Shape B tolerates a plain (unbolded) "Status:"/"Date:" line with
+        no "## Status" heading -- the variant this repo's own ADR-0008 uses.
+        """
+        path = tmp_path / "0008-plain.md"
+        path.write_text(
+            "# 8. Plain Label Decision\n\n"
+            "Status: Accepted\n"
+            "Date: 2026-05-04\n"
+            "Linear: TAP-1375\n\n"
+            "## Context\n\nSome context.\n",
+            encoding="utf-8",
+        )
+        gen = ADRGenerator()
+        title, status, date = gen._parse_adr_file(path)
+        assert title == "Plain Label Decision"
+        assert status == "accepted"
+        assert date == "2026-05-04"
+
+    def test_shape_b_list_item_bold_line(self, tmp_path: Path) -> None:
+        """Shape B also covers a bold field rendered as a markdown list item
+        ("- **Status:** Accepted"), the form several AgentForge ADRs use.
+        """
+        path = tmp_path / "0009-list-item.md"
+        path.write_text(
+            "# 9. List Item Decision\n\n"
+            "- **Status:** Accepted\n"
+            "- **Date:** 2026-06-26\n"
+            "- **Deciders:** Platform team\n\n"
+            "## Context\n\nSome context.\n",
+            encoding="utf-8",
+        )
+        gen = ADRGenerator()
+        title, status, date = gen._parse_adr_file(path)
+        assert title == "List Item Decision"
+        assert status == "accepted"
+        assert date == "2026-06-26"
+
+    def test_shape_c_nygard_heading(self, tmp_path: Path) -> None:
+        """Shape C: classic Nygard "## Status" heading + value on the next
+        non-empty line (the pre-existing, only-supported shape).
+        """
+        path = tmp_path / "0003-nygard.md"
+        path.write_text(
+            "# 3. Nygard Decision\n\nDate: 2026-03-01\n\n## Status\n\naccepted\n",
+            encoding="utf-8",
+        )
+        gen = ADRGenerator()
+        title, status, date = gen._parse_adr_file(path)
+        assert title == "Nygard Decision"
+        assert status == "accepted"
+        assert date == "2026-03-01"
+
+    def test_both_yaml_and_bold_yaml_takes_precedence(self, tmp_path: Path) -> None:
+        """When a file has both YAML frontmatter and a bold prose line (8+
+        AgentForge ADRs do), the YAML frontmatter value wins -- it is
+        structured, machine-authored metadata, while the bold line is a
+        human-facing prose restatement that may drift or add detail. This
+        precedence is deliberate, not incidental: it is documented on
+        ``_parse_status_and_date`` and enforced by this test.
+        """
+        path = tmp_path / "0004-both.md"
+        path.write_text(
+            "---\n"
+            "status: Superseded\n"
+            "last_reviewed: 2026-07-02\n"
+            "---\n\n"
+            "# 4. Both Shapes Decision\n\n"
+            "**Status:** Accepted (2026-05-01, later superseded per frontmatter)\n"
+            "**Date:** 2026-05-01\n\n"
+            "## Context\n\nSome context.\n",
+            encoding="utf-8",
+        )
+        gen = ADRGenerator()
+        _title, status, date = gen._parse_adr_file(path)
+        assert status == "superseded"
+        assert date == "2026-07-02"
+
+    def test_status_case_normalized_on_read(self, tmp_path: Path) -> None:
+        """"Accepted" and "accepted" parse to the same normalized value."""
+        upper = tmp_path / "0005-upper.md"
+        upper.write_text(
+            "# 5. Upper Case Status\n\n**Status:** Accepted\n**Date:** 2026-01-01\n",
+            encoding="utf-8",
+        )
+        lower = tmp_path / "0006-lower.md"
+        lower.write_text(
+            "# 6. Lower Case Status\n\n**Status:** accepted\n**Date:** 2026-01-01\n",
+            encoding="utf-8",
+        )
+        gen = ADRGenerator()
+        _, upper_status, _ = gen._parse_adr_file(upper)
+        _, lower_status, _ = gen._parse_adr_file(lower)
+        assert upper_status == lower_status == "accepted"
+
+    def test_original_content_never_rewritten(self, tmp_path: Path) -> None:
+        """Parsing is read-only: the source file bytes are untouched."""
+        path = tmp_path / "0007-untouched.md"
+        original = "# 7. Untouched\n\n**Status:** Accepted\n**Date:** 2026-01-01\n"
+        path.write_text(original, encoding="utf-8")
+        gen = ADRGenerator()
+        gen._parse_adr_file(path)
+        assert path.read_text(encoding="utf-8") == original
+
+
+# ---------------------------------------------------------------------------
 # Validation fallbacks
 # ---------------------------------------------------------------------------
 
