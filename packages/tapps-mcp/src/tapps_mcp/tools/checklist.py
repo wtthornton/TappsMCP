@@ -358,6 +358,16 @@ class CallTracker:
         except OSError:
             logger.debug("checklist_claimed_ids_write_failed", exc_info=True)
 
+    #: Upper bound on how old an unclaimed session id's *newest* row may be for
+    #: that id to still be adopted as a cross-process orphan (TAP-6738/TAP-6586
+    #: round 2). A genuine sibling process binds and records within the same
+    #: work session, i.e. within minutes; an hour comfortably covers that while
+    #: excluding a migration ledger's pre-existing history, which is what the
+    #: id being *absent from the claimed-ids registry* alone cannot distinguish
+    #: the first time the registry file is created (it starts empty on every
+    #: existing install, so every historical id would otherwise look orphaned).
+    _ORPHAN_ADOPTION_WINDOW_SECONDS: ClassVar[float] = 3600.0
+
     @classmethod
     def _current_window_id(cls) -> str:
         """Owner id for records made outside any session (called under lock)."""
@@ -427,9 +437,16 @@ class CallTracker:
         window id and can never itself learn that a session later started
         (TAP-6738). Those rows are picked up here by scanning the freshly
         reloaded ledger for ids that were never claimed — i.e. never an active
-        session id and never previously adopted. Once adopted, an id is
-        recorded in the claimed-ids registry and can never be adopted again,
-        so a genuinely unrelated prior session's rows still cannot leak.
+        session id and never previously adopted — AND whose newest row is
+        recent (within :data:`_ORPHAN_ADOPTION_WINDOW_SECONDS`). The recency
+        bound is what keeps a migration ledger safe: the claimed-ids registry
+        file is introduced by this same change, so it is absent on every
+        existing install and every id already in the ledger would otherwise
+        look identically "unclaimed" as a genuine sibling's window, silently
+        crediting a brand-new session with a whole project's history (TAP-6586
+        round 2). Once adopted, an id is recorded in the claimed-ids registry
+        and can never be adopted again, so a genuinely unrelated prior
+        session's rows still cannot leak.
         """
         sid = session_id or uuid.uuid4().hex[:16]
         with cls._lock:
@@ -441,7 +458,18 @@ class CallTracker:
                 cls._calls.clear()
                 cls._load_persisted()
                 claimed = cls._load_claimed_ids() | {sid}
-                orphans = {c.session_id for c in cls._calls if c.session_id and c.session_id not in claimed}
+                now = time.time()
+                newest_by_id: dict[str, float] = {}
+                for c in cls._calls:
+                    if c.session_id and c.session_id not in claimed:
+                        newest_by_id[c.session_id] = max(
+                            newest_by_id.get(c.session_id, c.timestamp), c.timestamp
+                        )
+                orphans = {
+                    oid
+                    for oid, newest in newest_by_id.items()
+                    if now - newest <= cls._ORPHAN_ADOPTION_WINDOW_SECONDS
+                }
                 adopted |= orphans
             cls._adopted_window_ids = frozenset(adopted)
             cls._active_session_id = sid

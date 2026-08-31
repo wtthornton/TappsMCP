@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import json
+import time
 from collections.abc import Iterator
 from pathlib import Path
 
@@ -318,6 +320,47 @@ class TestCrossProcessChecklistCredit:
         result = CallTracker.evaluate("feature", engagement_level="medium")
         assert result.total_calls == 0
         assert "tapps_score_file" not in result.called
+
+    def test_migration_ledger_with_no_registry_adopts_nothing(self, _ledger: Path) -> None:
+        """TAP-6738 round 2 (verifier refutation): the claimed-ids registry is
+        introduced BY this feature, so it is absent on every existing install.
+        A ledger already holding rows from many old, real session ids (written
+        by a version of the server that predates the registry) must not have
+        every one of those ids look "unclaimed" and get swept in wholesale by
+        the very first ``begin_session`` after upgrading — that is the exact
+        TAP-6586 false-green class, reopened via a migration path the
+        existing sibling-window tests never exercise (they always begin a
+        session under the new code first, which populates the registry).
+        """
+        old_timestamp = time.time() - (2 * CallTracker._ORPHAN_ADOPTION_WINDOW_SECONDS)
+        _ledger.parent.mkdir(parents=True, exist_ok=True)
+        with _ledger.open("w", encoding="utf-8") as fh:
+            for sid in ("hist-a", "hist-b", "hist-c"):
+                record = ToolCallRecord(
+                    tool_name="tapps_score_file", timestamp=old_timestamp, session_id=sid
+                )
+                fh.write(
+                    json.dumps(
+                        {
+                            "tool_name": record.tool_name,
+                            "timestamp": record.timestamp,
+                            "session_id": record.session_id,
+                            "success": record.success,
+                        }
+                    )
+                    + "\n"
+                )
+
+        assert not (_ledger.parent / "checklist_claimed_ids").exists()
+
+        self._rebind(_ledger)
+        CallTracker.begin_session("new-after-upgrade")
+
+        assert CallTracker._adopted_window_ids == frozenset()
+        result = CallTracker.evaluate("feature", engagement_level="medium")
+        assert result.total_calls == 0
+        assert result.called == []
+        assert result.missing_required != []
 
 
 class TestChecklistResult:
