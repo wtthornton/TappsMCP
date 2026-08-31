@@ -886,7 +886,9 @@ class TestTappsQuickCheck:
 
         result = await tapps_quick_check(str(f))
         assert "next_steps" in result["data"]
-        assert "pipeline_progress" in result["data"]
+        # TAP-6433: pipeline_progress is scoped to tapps_checklist and
+        # tapps_session_start responses only.
+        assert "pipeline_progress" not in result["data"]
 
     @pytest.mark.asyncio
     @patch("tapps_mcp.server._validate_file_path")

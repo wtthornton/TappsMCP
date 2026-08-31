@@ -369,9 +369,7 @@ class TestHostConfigChecks:
 def _write_cursor_config(root: Path, servers: dict) -> None:
     cursor_dir = root / ".cursor"
     cursor_dir.mkdir(parents=True, exist_ok=True)
-    (cursor_dir / "mcp.json").write_text(
-        json.dumps({"mcpServers": servers}), encoding="utf-8"
-    )
+    (cursor_dir / "mcp.json").write_text(json.dumps({"mcpServers": servers}), encoding="utf-8")
 
 
 def _http_entry(port: int) -> dict:
@@ -1337,6 +1335,39 @@ class TestDoctorQuickMode:
             result = run_doctor_structured(project_root=str(tmp_path))
         assert result["quick_mode"] is False
 
+    def test_run_doctor_structured_default_include_passing_true(self, tmp_path: Path) -> None:
+        """run_doctor_structured itself still defaults to the full row list —
+        only the tapps_doctor MCP tool opts into omitting passing rows
+        (TAP-6433), so other callers of this lower-level function are
+        unaffected.
+        """
+        with patch("tapps_mcp.distribution.doctor._collect_checks") as mock_collect:
+            mock_collect.return_value = [
+                CheckResult("ok-check", True, "fine"),
+                CheckResult("bad-check", False, "broken"),
+            ]
+            result = run_doctor_structured(project_root=str(tmp_path))
+        names = {c["name"] for c in result["checks"]}
+        assert names == {"ok-check", "bad-check"}
+
+    def test_run_doctor_structured_include_passing_false_omits_pass_rows(
+        self, tmp_path: Path
+    ) -> None:
+        """include_passing=False drops severity=='pass' rows from ``checks``
+        but leaves the aggregate counts covering every check (TAP-6433).
+        """
+        with patch("tapps_mcp.distribution.doctor._collect_checks") as mock_collect:
+            mock_collect.return_value = [
+                CheckResult("ok-check", True, "fine"),
+                CheckResult("bad-check", False, "broken"),
+            ]
+            result = run_doctor_structured(project_root=str(tmp_path), include_passing=False)
+        names = {c["name"] for c in result["checks"]}
+        assert names == {"bad-check"}
+        assert result["pass_count"] == 1
+        assert result["fail_count"] == 1
+        assert result["all_passed"] is False
+
     def test_cli_doctor_quick_flag(self):
         """CLI doctor --quick flag works."""
         runner = CliRunner()
@@ -1537,9 +1568,7 @@ class TestCheckAgentsMdStampMatchesPackage:
         from tapps_mcp import __version__
         from tapps_mcp.distribution.doctor import check_agents_md_stamp_matches_package
 
-        (tmp_path / "AGENTS.md").write_text(
-            "<!-- tapps-agents-version: 0.0.1 -->\n# AGENTS\n"
-        )
+        (tmp_path / "AGENTS.md").write_text("<!-- tapps-agents-version: 0.0.1 -->\n# AGENTS\n")
         result = check_agents_md_stamp_matches_package(tmp_path)
         assert result.ok is False
         assert "0.0.1" in result.message
@@ -1552,9 +1581,7 @@ class TestCheckAgentsMdStampMatchesPackage:
         (tmp_path / ".tapps-mcp.yaml").write_text(
             "upgrade_skip_files:\n  - AGENTS.md\n", encoding="utf-8"
         )
-        (tmp_path / "AGENTS.md").write_text(
-            "<!-- tapps-agents-version: 0.0.1 -->\n# AGENTS\n"
-        )
+        (tmp_path / "AGENTS.md").write_text("<!-- tapps-agents-version: 0.0.1 -->\n# AGENTS\n")
         result = check_agents_md_stamp_matches_package(tmp_path)
         assert result.ok is False
         assert "upgrade_skip_files" in result.message
@@ -1576,9 +1603,7 @@ class TestCheckLinearStandardsRule:
         from tapps_mcp.distribution.doctor import check_linear_standards_rule
 
         (tmp_path / ".claude" / "rules").mkdir(parents=True)
-        (tmp_path / ".claude" / "rules" / "linear-standards.md").write_text(
-            "# Linear Standards\n"
-        )
+        (tmp_path / ".claude" / "rules" / "linear-standards.md").write_text("# Linear Standards\n")
         result = check_linear_standards_rule(tmp_path)
         assert result.ok is True
         assert "linear-standards.md" in result.message
@@ -1710,8 +1735,7 @@ class TestCheckLinearIssueSkillCurrent:
         skill_dir.mkdir(parents=True)
         # Old version without save_issue in allowed-tools
         (skill_dir / "SKILL.md").write_text(
-            "---\nname: linear-issue\nallowed-tools: "
-            "mcp__docs-mcp__docs_generate_story\n---\n"
+            "---\nname: linear-issue\nallowed-tools: mcp__docs-mcp__docs_generate_story\n---\n"
         )
         result = check_linear_issue_skill_current(tmp_path)
         assert result.ok is False
@@ -1846,8 +1870,7 @@ class TestCheckTappsMemorySkill:
         skill_dir = tmp_path / ".cursor" / "skills" / "tapps-memory"
         skill_dir.mkdir(parents=True)
         (skill_dir / "SKILL.md").write_text(
-            "---\nname: tapps-memory\n---\n"
-            "mcp__tapps-mcp__tapps_memory(action=save)\n" * 5,
+            "---\nname: tapps-memory\n---\nmcp__tapps-mcp__tapps_memory(action=save)\n" * 5,
             encoding="utf-8",
         )
         result = check_tapps_memory_skill(tmp_path)
@@ -2066,7 +2089,12 @@ class TestCheckCacheGateBlockHint:
         log.parent.mkdir(parents=True)
         now = time.time()
         lines = [
-            json.dumps({"ts": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(now)), "category": "gate_miss"})
+            json.dumps(
+                {
+                    "ts": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(now)),
+                    "category": "gate_miss",
+                }
+            )
             for _ in range(25)
         ]
         log.write_text("\n".join(lines) + "\n", encoding="utf-8")
@@ -2179,9 +2207,7 @@ class TestCheckPipelineEnforceRecommendations:
                     {
                         "ts": now - offset * 100,
                         "mcp_calls": 1,
-                        "tools_used": (
-                            ["tapps_validate_changed"] if compliant else ["Edit"]
-                        ),
+                        "tools_used": (["tapps_validate_changed"] if compliant else ["Edit"]),
                         "files_edited": ["packages/tapps-mcp/src/tapps_mcp/foo.py"],
                         "checklist_called": compliant,
                         "gate_skipped_files": [],
@@ -2207,7 +2233,12 @@ class TestCheckPipelineEnforceRecommendations:
         log.parent.mkdir(parents=True)
         now = time.time()
         lines = [
-            json.dumps({"ts": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(now)), "category": "gate_miss"})
+            json.dumps(
+                {
+                    "ts": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(now)),
+                    "category": "gate_miss",
+                }
+            )
             for _ in range(22)
         ]
         log.write_text("\n".join(lines) + "\n", encoding="utf-8")
@@ -2515,9 +2546,7 @@ class TestStripBrainMcpEntries:
 class TestBrainAuthTokenForDoctor:
     """Doctor accepts TAPPS_BRAIN_AUTH_TOKEN for CLI direnv workflows."""
 
-    def test_http_auth_passes_with_tapps_brain_auth_token_env(
-        self, tmp_path, monkeypatch
-    ) -> None:
+    def test_http_auth_passes_with_tapps_brain_auth_token_env(self, tmp_path, monkeypatch) -> None:
         from tapps_mcp.distribution.doctor import check_brain_http_auth
 
         monkeypatch.setenv("TAPPS_MCP_MEMORY_BRAIN_HTTP_URL", "http://brain:8080")
@@ -2749,6 +2778,7 @@ class TestCheckMcpToolBudget:
 
     def _mcp_json(self, tmp_path, servers: dict) -> None:
         import json as _json
+
         (tmp_path / ".mcp.json").write_text(_json.dumps({"mcpServers": servers}))
 
     def test_skips_when_no_mcp_json(self, tmp_path) -> None:  # type: ignore[no-untyped-def]
@@ -2759,18 +2789,30 @@ class TestCheckMcpToolBudget:
 
     def test_ok_within_default_budget(self, tmp_path) -> None:  # type: ignore[no-untyped-def]
         """tapps-quality (9 eager tools: 8 from TAP-1986 + tapps_usage added in v3.11.0) is within default budget of 20."""
-        self._mcp_json(tmp_path, {"tapps-quality": {
-            "command": "uv", "args": ["run", "tapps-mcp", "serve", "--mode", "quality"],
-        }})
+        self._mcp_json(
+            tmp_path,
+            {
+                "tapps-quality": {
+                    "command": "uv",
+                    "args": ["run", "tapps-mcp", "serve", "--mode", "quality"],
+                }
+            },
+        )
         result = check_mcp_tool_budget(tmp_path)
         assert result.ok is True
         assert "9" in result.message
 
     def test_warn_15_tools_at_budget_9(self, tmp_path) -> None:  # type: ignore[no-untyped-def]
         """quality preset has 9 eager tools; budget=9 is exactly at limit (OK), budget=8 would WARN."""
-        self._mcp_json(tmp_path, {"tapps-quality": {
-            "command": "uv", "args": ["run", "tapps-mcp", "serve", "--mode", "quality"],
-        }})
+        self._mcp_json(
+            tmp_path,
+            {
+                "tapps-quality": {
+                    "command": "uv",
+                    "args": ["run", "tapps-mcp", "serve", "--mode", "quality"],
+                }
+            },
+        )
         (tmp_path / ".tapps-mcp.yaml").write_text("doctor_tool_budget_limit: 9\n")
         result = check_mcp_tool_budget(tmp_path)
         # 9 eager tools <= budget 9 → OK (no WARN)
@@ -2779,9 +2821,15 @@ class TestCheckMcpToolBudget:
 
     def test_full_mode_warns_over_default_budget(self, tmp_path) -> None:  # type: ignore[no-untyped-def]
         """tapps-mcp full has 10 eager tools, which is within default budget of 20."""
-        self._mcp_json(tmp_path, {"tapps-mcp": {
-            "command": "uv", "args": ["run", "tapps-mcp", "serve"],
-        }})
+        self._mcp_json(
+            tmp_path,
+            {
+                "tapps-mcp": {
+                    "command": "uv",
+                    "args": ["run", "tapps-mcp", "serve"],
+                }
+            },
+        )
         result = check_mcp_tool_budget(tmp_path)
         # 10 eager tools ≤ 20 → OK (no WARN)
         assert result.ok is True
@@ -2789,18 +2837,30 @@ class TestCheckMcpToolBudget:
 
     def test_admin_mode_within_default_budget(self, tmp_path) -> None:  # type: ignore[no-untyped-def]
         """tapps-admin has 1 eager tool (tapps_usage), well within budget."""
-        self._mcp_json(tmp_path, {"tapps-admin": {
-            "command": "uv", "args": ["run", "tapps-mcp", "serve", "--mode", "admin"],
-        }})
+        self._mcp_json(
+            tmp_path,
+            {
+                "tapps-admin": {
+                    "command": "uv",
+                    "args": ["run", "tapps-mcp", "serve", "--mode", "admin"],
+                }
+            },
+        )
         result = check_mcp_tool_budget(tmp_path)
         assert result.ok is True
         assert "1" in result.message
 
     def test_unknown_server_skipped(self, tmp_path) -> None:  # type: ignore[no-untyped-def]
         """Unknown servers (e.g. plain HTTP) are silently skipped."""
-        self._mcp_json(tmp_path, {"my-custom-mcp": {
-            "command": "node", "args": ["server.js"],
-        }})
+        self._mcp_json(
+            tmp_path,
+            {
+                "my-custom-mcp": {
+                    "command": "node",
+                    "args": ["server.js"],
+                }
+            },
+        )
         result = check_mcp_tool_budget(tmp_path)
         assert result.ok is True
         assert "No recognized" in result.message
@@ -2998,10 +3058,7 @@ class TestParseHistogramQuantiles:
         assert q[0.99] == pytest.approx(0.475)
 
     def test_missing_metric_returns_none(self) -> None:
-        assert (
-            _parse_histogram_quantiles("# nothing here\n", "absent_metric", (0.5,))
-            is None
-        )
+        assert _parse_histogram_quantiles("# nothing here\n", "absent_metric", (0.5,)) is None
 
     def test_zero_total_returns_none(self) -> None:
         body = (
@@ -3010,9 +3067,7 @@ class TestParseHistogramQuantiles:
             'tapps_brain_mcp_probe_duration_seconds_bucket{le="+Inf"} 0\n'
         )
         assert (
-            _parse_histogram_quantiles(
-                body, "tapps_brain_mcp_probe_duration_seconds", (0.5,)
-            )
+            _parse_histogram_quantiles(body, "tapps_brain_mcp_probe_duration_seconds", (0.5,))
             is None
         )
 
@@ -3105,9 +3160,7 @@ class TestCheckBrainProfileGateVsDeferral:
         from tapps_mcp.distribution.doctor import check_brain_profile
 
         with (
-            patch.dict(
-                "os.environ", {"TAPPS_MCP_MEMORY_BRAIN_HTTP_URL": "http://brain:8080"}
-            ),
+            patch.dict("os.environ", {"TAPPS_MCP_MEMORY_BRAIN_HTTP_URL": "http://brain:8080"}),
             patch("tapps_core.config.settings.load_settings", return_value=MagicMock()),
             patch("tapps_core.brain_auth.build_brain_headers", return_value=dict(headers)),
             patch(
@@ -3152,9 +3205,7 @@ class TestCheckCallGraph:
 
     def _nlt_mcp_json(self, tmp_path: Path) -> None:
         (tmp_path / ".mcp.json").write_text(
-            json.dumps(
-                {"mcpServers": {"nlt-build": {"command": "nlt-build-serve.sh", "args": []}}}
-            )
+            json.dumps({"mcpServers": {"nlt-build": {"command": "nlt-build-serve.sh", "args": []}}})
         )
 
     def test_tools_skipped_without_nlt_build(self, tmp_path: Path) -> None:
@@ -3226,9 +3277,7 @@ class TestCheckCallGraph:
         from tapps_mcp.project.call_graph import build_call_graph_index
 
         # print() -> external (builtin); missing() -> in-repo unresolved.
-        (tmp_path / "mod.py").write_text(
-            "def f():\n    print('x')\n    missing()\n"
-        )
+        (tmp_path / "mod.py").write_text("def f():\n    print('x')\n    missing()\n")
         build_call_graph_index(tmp_path, force_rebuild=True)
         result = check_call_graph_index_cache(tmp_path)
         assert result.ok is True
@@ -3374,9 +3423,7 @@ class TestContextBudgetChecks:
         assert "orphan" not in result.message.lower()
         assert "skill_tier: core" not in result.detail
 
-    def test_skill_inventory_full_tier_notes_external_without_fail(
-        self, tmp_path: Path
-    ) -> None:
+    def test_skill_inventory_full_tier_notes_external_without_fail(self, tmp_path: Path) -> None:
         from tapps_mcp.distribution.context_budget import check_skill_inventory_budget
 
         skills = tmp_path / ".claude" / "skills"
@@ -3435,4 +3482,3 @@ class TestContextBudgetChecks:
         result = check_karpathy_dual_install(tmp_path)
         assert result.ok is True
         assert "AGENTS.md" in result.message
-

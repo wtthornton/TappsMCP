@@ -699,6 +699,13 @@ def _get_metrics_hub() -> MetricsHub:
     return get_metrics_hub()
 
 
+#: Tools whose response carries pipeline_progress (TAP-6433). Every other
+#: successful response still gets next_steps/suggested_workflow — only the
+#: progress-map payload (checked at every one of 25+ call sites for no
+#: reason but checklist/session_start ever reading it) is scoped down.
+_PIPELINE_PROGRESS_TOOLS = frozenset({"tapps_checklist", "tapps_session_start"})
+
+
 def _with_nudges(
     tool_name: str,
     response: dict[str, Any],
@@ -714,7 +721,7 @@ def _with_nudges(
     )
 
     steps = compute_next_steps(tool_name, context)
-    progress = compute_pipeline_progress()
+    progress = compute_pipeline_progress() if tool_name in _PIPELINE_PROGRESS_TOOLS else None
     workflow = compute_suggested_workflow(tool_name, context)
     data = response.get("data", {})
     if steps:
@@ -740,11 +747,36 @@ def _with_nudges(
 # ---------------------------------------------------------------------------
 
 
-async def _server_info_async() -> dict[str, Any]:
+#: Fields tapps_session_start(quick=True) already returns byte-for-byte
+#: (see _session_start_quick's data dict). Trimmed from the standalone
+#: tapps_server_info tool response (TAP-6433) since that duplication was
+#: pure payload cost at the tool's ~2,300-calls/30d volume. "server" (name/
+#: version/protocol_version) stays as a named, intentional exception: it is
+#: the minimal identity tapps_server_info's own "verify a remote deployment
+#: is reachable" use case needs *without* session_start having run first.
+_SERVER_INFO_FIELDS_DUPLICATED_BY_QUICK_SESSION_START = frozenset(
+    {
+        "configuration",
+        "installed_checkers",
+        "checker_environment",
+        "checker_environment_note",
+        "docs_provider",
+        "cache",
+    }
+)
+
+
+async def _server_info_async(*, trim_duplicated_fields: bool = False) -> dict[str, Any]:
     """Async variant of ``tapps_server_info`` for use by ``tapps_session_start``.
 
     Runs tool detection in parallel (via ``detect_installed_tools_async``)
     and diagnostics in a thread pool to avoid blocking the event loop.
+
+    ``trim_duplicated_fields`` (TAP-6433): drop the fields
+    ``tapps_session_start(quick=True)`` already returns. Only the standalone
+    ``tapps_server_info`` tool sets this — ``tapps_session_start(quick=False)``
+    calls this function internally via ``session_start_core`` and needs the
+    full field set to assemble its own payload.
     """
     start = time.perf_counter_ns()
     _record_call("tapps_server_info")
@@ -771,6 +803,9 @@ async def _server_info_async() -> dict[str, Any]:
 
     data = _build_server_info_data(settings, installed, diagnostics, available_tools)
     data["cache"] = _cache_info_dict(cache_dir, cache_fallback)
+    if trim_duplicated_fields:
+        for key in _SERVER_INFO_FIELDS_DUPLICATED_BY_QUICK_SESSION_START:
+            data.pop(key, None)
     resp = success_response("tapps_server_info", elapsed_ms, data)
     return _with_nudges("tapps_server_info", resp)
 

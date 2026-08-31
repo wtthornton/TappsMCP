@@ -1362,6 +1362,7 @@ def tapps_set_engagement_level(level: Literal["high", "medium", "low"]) -> dict[
 def tapps_doctor(
     project_root: str = "",
     quick: bool = False,
+    include_passing: bool = False,
 ) -> dict[str, Any]:
     """Diagnoses TappsMCP configuration, checker installation, brain
     connectivity, cache health, install-drift, and Linear-write
@@ -1381,6 +1382,10 @@ def tapps_doctor(
             ``pip-audit --version``, etc.) and return cached versions.
             Default ``False``; the full diagnostic is what you usually
             want for triage.
+        include_passing: Include ``severity == "pass"`` rows in ``checks``.
+            Default ``False`` (TAP-6433) — triage only needs the warn/fail
+            rows; ``pass_count``/``all_passed`` still reflect every check
+            regardless. Pass ``True`` to see the full row-by-row report.
     """
     from tapps_mcp.distribution.doctor import run_doctor_structured
     from tapps_mcp.server import _record_call, _record_execution, _with_nudges
@@ -1391,7 +1396,7 @@ def tapps_doctor(
     settings = load_settings()
     root = project_root or str(settings.project_root)
 
-    result = run_doctor_structured(project_root=root, quick=quick)
+    result = run_doctor_structured(project_root=root, quick=quick, include_passing=include_passing)
 
     # TAP-1333: surface 7-day MCP-call ratio + gate-skip rate.
     try:
@@ -1680,9 +1685,13 @@ async def tapps_handoff_save(
     # success envelope. A failed mirror means the handoff file exists but the
     # cross-session copy does not; a failed session-end means the feedback loop
     # never closed. Callers reading only the top level saw neither (TAP-5656).
-    failed = [
-        ("Brain mirror", result.brain_mirror or {}),
-    ] if mirror_status == "failed" else []
+    failed = (
+        [
+            ("Brain mirror", result.brain_mirror or {}),
+        ]
+        if mirror_status == "failed"
+        else []
+    )
     if session_end_status == "failed":
         failed.append(("Session end", result.session_end or {}))
 
@@ -1693,7 +1702,10 @@ async def tapps_handoff_save(
     next_steps: list[str] = []
     for label, payload in failed:
         detail = str(
-            payload.get("detail") or payload.get("error") or payload.get("reason") or "unknown error"
+            payload.get("detail")
+            or payload.get("error")
+            or payload.get("reason")
+            or "unknown error"
         )
         warnings.append(f"{label} failed ({detail})")
         cap = payload.get("max_value_length")

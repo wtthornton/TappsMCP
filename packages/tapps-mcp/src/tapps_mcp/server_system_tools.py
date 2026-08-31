@@ -153,19 +153,22 @@ def _attach_config_structured_output(resp: dict[str, Any], result: Any) -> None:
 
 
 async def tapps_server_info() -> dict[str, Any]:
-    """Returns server version, available tools, installed checkers, and config.
+    """Returns server version, available tools, and diagnostics.
 
-    Use this for a lightweight discovery probe — e.g., when verifying a remote
-    deployment is reachable, or when a session is already initialized and you
-    just want the toolset/checker matrix. For project bootstrap call
-    ``tapps_session_start`` instead; it returns this payload plus brain auth,
-    cache health, memory status, and pipeline progress.
+    Use this for a lightweight discovery probe — e.g., when verifying a
+    remote deployment is reachable, or when you need the checker-detection
+    diagnostics / brain-bridge snapshot without a full bootstrap. If
+    ``tapps_session_start`` has already run this session, its
+    ``quick=True`` payload already covers config, installed checkers, and
+    docs provider (TAP-6433) — call ``tapps_session_start`` instead for
+    project bootstrap; it returns those plus brain auth, cache health,
+    memory status, and pipeline progress.
     """
     # Resolved through ``tapps_mcp.server`` at call time so tests that patch
     # ``tapps_mcp.server._server_info_async`` still intercept this tool.
     from tapps_mcp.server import _server_info_async
 
-    return await _server_info_async()
+    return await _server_info_async(trim_duplicated_fields=True)
 
 
 def tapps_security_scan(
