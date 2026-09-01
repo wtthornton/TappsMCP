@@ -1106,6 +1106,16 @@ def _upgrade_claude_code_dry_run(
             "bytes_freed": prune_preview.get("bytes_freed", 0),
         }
 
+    if _skipped("claude_workflows", skip):
+        result["components"]["workflows"] = "skipped (upgrade_skip_files)"
+    else:
+        from tapps_mcp.pipeline.platform_workflow_scripts import WORKFLOW_SCRIPTS
+
+        result["components"]["workflows"] = {
+            "action": "would-write-managed-files",
+            "managed_files": sorted(WORKFLOW_SCRIPTS.keys()),
+        }
+
     if _skipped("docs_automation", skip):
         result["components"]["docs_automation"] = "skipped (upgrade_skip_files)"
     else:
@@ -1328,6 +1338,13 @@ def _upgrade_claude_code_live(
         skills_result["pruned"] = prune_result.get("pruned", [])
         skills_result["bytes_freed"] = prune_result.get("bytes_freed", 0)
         result["components"]["skills"] = skills_result
+
+    if _skipped("claude_workflows", skip):
+        result["components"]["workflows"] = "skipped (upgrade_skip_files)"
+    else:
+        from tapps_mcp.pipeline.platform_workflow_scripts import generate_workflow_scripts
+
+        result["components"]["workflows"] = generate_workflow_scripts(project_root, dry_run=False)
 
     if _skipped("docs_automation", skip):
         result["components"]["docs_automation"] = "skipped (upgrade_skip_files)"

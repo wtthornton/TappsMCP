@@ -39,6 +39,8 @@ SKIP_TOKENS: dict[str, frozenset[str]] = {
     "config_files_rule": frozenset({".claude/rules/config-files.md"}),
     "mcp_config": frozenset({".mcp.json"}),
     "karpathy": frozenset({"karpathy"}),
+    # TAP-6890: scaffolded Workflow scripts (val-verify.js, linear-disposition-verify.js).
+    "claude_workflows": frozenset({".claude/workflows"}),
 }
 
 ALL_SKIP_TOKENS: frozenset[str] = frozenset().union(*SKIP_TOKENS.values())
@@ -46,7 +48,12 @@ ALL_SKIP_TOKENS: frozenset[str] = frozenset().union(*SKIP_TOKENS.values())
 # Tokens that cover a whole directory. A configured entry pointing *inside* one
 # of these is the common mistake: the operator wanted per-file granularity,
 # which the vocabulary does not offer.
-_DIRECTORY_TOKENS: tuple[str, ...] = (".claude/hooks", ".claude/agents", ".claude/skills")
+_DIRECTORY_TOKENS: tuple[str, ...] = (
+    ".claude/hooks",
+    ".claude/agents",
+    ".claude/skills",
+    ".claude/workflows",
+)
 
 
 def unknown_skip_tokens(configured: object) -> list[str]:
