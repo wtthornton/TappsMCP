@@ -537,3 +537,64 @@ class TestGcProtectsPreviousRelease:
         # keep semantics unchanged for filler: kept by index, not by name.
         assert filler.name in gc["kept"]
         assert filler.name not in gc["protected"]
+
+    def test_previous_release_survives_mtime_reorder(
+        self, bg_home: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """previous_release is captured from current_release_path() before
+        the flip (blue_green.py `_deploy_under_lock`) -- not inferred from
+        _release_dirs()[1], which sorts by st_mtime and can disagree with
+        deploy order. Touch an older, unrelated release so it jumps to the
+        front of the mtime sort, then prove the release protected as
+        "previous" is still the one `current` pointed at pre-flip, not
+        whatever now sits at index 1.
+        """
+        releases_dir = bg_home / "releases"
+        now = time.time()
+        older_unrelated = _make_release(releases_dir, "3.12.20-0000000")
+        os.utime(older_unrelated, (now - 500, now - 500))
+        outgoing = _make_release(releases_dir, "3.12.34-1111111")
+        os.utime(outgoing, (now - 300, now - 300))
+        filler = _make_release(releases_dir, "3.12.35-2222222")
+        os.utime(filler, (now - 100, now - 100))
+        bg.flip_current(bg.ReleaseRef("3.12.34", "1111111", outgoing))
+
+        # Reorder: touch the unrelated OLDEST release so it now sorts
+        # newest by mtime -- deploy order (older_unrelated < outgoing <
+        # filler) and mtime order now disagree.
+        os.utime(older_unrelated, (now + 1000, now + 1000))
+        # Sanity check on the setup itself: mtime order (older_unrelated,
+        # filler, outgoing) now disagrees with deploy order (older_unrelated,
+        # outgoing, filler) -- `outgoing`, the actual previous release, is
+        # NOT at mtime-sorted index 1. Any "previous" inferred from position
+        # rather than from the pre-flip `current` symlink would misidentify
+        # it here.
+        pre_deploy_order = [d.name for d in bg._release_dirs()]
+        assert pre_deploy_order[0] == older_unrelated.name
+        assert pre_deploy_order[1] != outgoing.name
+
+        result = _run_deploy(
+            bg_home,
+            tmp_path,
+            monkeypatch,
+            keep_releases=1,
+            reap_fn=lambda: {"superseded_pids": [], "reaped": [], "errors": []},
+        )
+
+        assert result["ok"] is True
+        gc = result["gc"]
+        # Known-positive: `outgoing` -- what `current` resolved to before
+        # the flip -- is protected as "previous" despite the reorder.
+        assert gc["protected"].get(outgoing.name) == "previous"
+        assert outgoing.name in gc["kept"]
+        assert outgoing.exists()
+        # Known-negative: `filler`, which is not the pre-flip previous
+        # release, is NOT protected and is evicted -- proves the fix names
+        # the right release, not a release that happens to still survive
+        # for some other reason.
+        assert filler.name not in gc["protected"]
+        assert filler.name in gc["deleted"]
+        assert not filler.exists()
+        # `older_unrelated` is kept by index (idx=0 < keep=1), unrelated to
+        # the previous-release protection being tested here.
+        assert older_unrelated.name in gc["kept"]
