@@ -39,6 +39,8 @@ SKIP_TOKENS: dict[str, frozenset[str]] = {
     "config_files_rule": frozenset({".claude/rules/config-files.md"}),
     "mcp_config": frozenset({".mcp.json"}),
     "karpathy": frozenset({"karpathy"}),
+    # TAP-6890: scaffolded Workflow scripts (val-verify.js, linear-disposition-verify.js).
+    "claude_workflows": frozenset({".claude/workflows"}),
     # TAP-6884: project-root scaffolded scripts, not under .claude/.
     "measure_script": frozenset({"scripts/measure.py"}),
     "gitfacts_script": frozenset({"scripts/gitfacts.sh"}),
@@ -49,7 +51,12 @@ ALL_SKIP_TOKENS: frozenset[str] = frozenset().union(*SKIP_TOKENS.values())
 # Tokens that cover a whole directory. A configured entry pointing *inside* one
 # of these is the common mistake: the operator wanted per-file granularity,
 # which the vocabulary does not offer.
-_DIRECTORY_TOKENS: tuple[str, ...] = (".claude/hooks", ".claude/agents", ".claude/skills")
+_DIRECTORY_TOKENS: tuple[str, ...] = (
+    ".claude/hooks",
+    ".claude/agents",
+    ".claude/skills",
+    ".claude/workflows",
+)
 
 
 def unknown_skip_tokens(configured: object) -> list[str]:
@@ -57,6 +64,18 @@ def unknown_skip_tokens(configured: object) -> list[str]:
     if not isinstance(configured, (list, tuple, set, frozenset)):
         return []
     return sorted({str(entry) for entry in configured} - ALL_SKIP_TOKENS)
+
+
+def applied_skip_tokens(configured: object) -> list[str]:
+    """Return the sorted ``upgrade_skip_files`` entries that matched the vocabulary.
+
+    Companion to :func:`unknown_skip_tokens` (TAP-6891): without this, a
+    working entry and an unconfigured project produce identical (silent)
+    output — "applied" and "not configured" were indistinguishable.
+    """
+    if not isinstance(configured, (list, tuple, set, frozenset)):
+        return []
+    return sorted({str(entry) for entry in configured} & ALL_SKIP_TOKENS)
 
 
 def nearest_token(entry: str) -> str | None:
@@ -101,6 +120,7 @@ def describe_unknown_skip_tokens(unknown: list[str]) -> list[str]:
 __all__ = [
     "ALL_SKIP_TOKENS",
     "SKIP_TOKENS",
+    "applied_skip_tokens",
     "describe_unknown_skip_token",
     "describe_unknown_skip_tokens",
     "nearest_token",

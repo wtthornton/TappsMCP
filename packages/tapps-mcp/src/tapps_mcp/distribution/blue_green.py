@@ -13,7 +13,7 @@ import shutil
 import subprocess
 import sys
 import time
-from collections.abc import Iterator
+from collections.abc import Iterator, Mapping
 from contextlib import contextmanager
 from dataclasses import dataclass
 from datetime import UTC, datetime
@@ -269,6 +269,93 @@ def _smoke_required_binaries(release: ReleaseRef) -> dict[str, Any]:
     return {"ok": True, "versions": versions}
 
 
+def _previous_protect_extra(
+    previous_release: Path | None, incoming_path: Path
+) -> dict[Path, str] | None:
+    """Build the ``protect_extra`` map for the outgoing (pre-flip) release.
+
+    Shared by the real post-flip GC call (:func:`_reap_superseded_then_gc`)
+    and the ``--dry-run`` preview (:func:`deploy_blue_green`) so the two
+    never compute "previous" by two different rules (TAP-6895 / TAP-6896).
+
+    Scope: protection is one deploy deep. R0 is protected as "previous"
+    during the deploy that supersedes it with R1. At the *next* deploy
+    (R1 -> R2), "previous" becomes R1 and R0 falls back to index-only
+    (``--keep-releases``) protection -- it is not permanently pinned. A
+    later reader should not take "the rollback target is protected" as an
+    unconditional guarantee spanning more than one deploy.
+    """
+    if previous_release is not None and previous_release.resolve() != incoming_path.resolve():
+        return {previous_release: "previous"}
+    return None
+
+
+def _reap_superseded_then_gc(
+    release: ReleaseRef, previous_release: Path | None, keep_releases: int
+) -> dict[str, Any]:
+    """Reap fleet servers stranded on the superseded release, then GC.
+
+    Servers stranded on the release we just superseded hold memory and brain
+    connections for nothing, and would keep a GC'd release dir alive. Must
+    run before GC so nothing is executing out of a directory about to be
+    deleted.
+
+    The reap touches pidfiles, /proc, and signal delivery -- any of which
+    can fail in ways this call site cannot enumerate in advance (a pidfile
+    written by a different tapps-mcp version, a race on process exit, a
+    permissions quirk). Broad ``except Exception`` is kept deliberately: the
+    point of this comment is that narrowing it to "the exceptions we
+    thought of" would silently let an unanticipated one fall through and
+    reach gc_releases anyway, which is precisely the defect being fixed
+    (TAP-6894). What changed is that failure now *gates* GC instead of being
+    swallowed and ignored.
+
+    ``reap_superseded_fleet`` can also fail *without* raising: it catches
+    ``OSError`` per pid, records it in ``errors``, and continues -- so a pid
+    that could not be terminated still comes back as a normal return value.
+    ``ok`` is therefore computed here, not trusted from the reap result: a
+    reap "fails" when it recorded any error, or when any pid it targeted is
+    missing from ``reaped``. Both cases mean a stranded server may still be
+    executing out of the release GC is about to delete, so GC is gated on
+    this computed ``ok`` exactly like the raise path above. The dict this
+    function returns as ``superseded_reap`` always carries ``ok`` -- on the
+    raise path (synthesized above) and here -- so no caller ever reads a key
+    that only exists on one branch.
+    """
+    from tapps_mcp.distribution.fleet_control import reap_superseded_fleet
+
+    try:
+        superseded_reap = reap_superseded_fleet()
+    except Exception as exc:  # gate GC below instead of narrowing, see docstring above
+        return {
+            "superseded_reap": {"ok": False, "error": str(exc)},
+            "gc": {
+                "ok": False,
+                "skipped": True,
+                "reason": "superseded_reap raised; GC blocked until reap succeeds",
+            },
+        }
+
+    stranded = set(superseded_reap.get("superseded_pids", [])) - set(
+        superseded_reap.get("reaped", [])
+    )
+    reap_ok = not superseded_reap.get("errors") and not stranded
+    superseded_reap = {**superseded_reap, "ok": reap_ok}
+    if not reap_ok:
+        return {
+            "superseded_reap": superseded_reap,
+            "gc": {
+                "ok": False,
+                "skipped": True,
+                "reason": "superseded_reap reported failure; GC blocked until reap succeeds",
+            },
+        }
+
+    protect_extra = _previous_protect_extra(previous_release, release.path)
+    gc = gc_releases(keep=keep_releases, protect=release.path, protect_extra=protect_extra)
+    return {"superseded_reap": superseded_reap, "gc": gc}
+
+
 def _deploy_under_lock(
     checkout: Path,
     release: ReleaseRef,
@@ -298,6 +385,12 @@ def _deploy_under_lock(
         report["ok"] = False
         return report
 
+    # Captured before the flip: this is the rollback target an operator would
+    # reach for. Once flip_current runs, current_release_path() resolves to
+    # the *new* release, so this is the only chance to know what "outgoing"
+    # means (TAP-6895).
+    previous_release = current_release_path()
+
     flip = flip_current(release)
     report["flip"] = flip
     if not flip.get("ok"):
@@ -311,11 +404,7 @@ def _deploy_under_lock(
             report["ok"] = False
             return report
 
-    from tapps_mcp.distribution.fleet_control import (
-        fleet_any_running,
-        reap_superseded_fleet,
-        restart_fleet_with_smoke,
-    )
+    from tapps_mcp.distribution.fleet_control import fleet_any_running, restart_fleet_with_smoke
 
     if fleet_any_running():
         fleet_smoke = restart_fleet_with_smoke(project_root=checkout)
@@ -324,16 +413,7 @@ def _deploy_under_lock(
             report["ok"] = False
             return report
 
-    # Servers stranded on the release we just superseded hold memory and brain
-    # connections for nothing, and would keep a GC'd release dir alive. Runs
-    # after the restart so the pidfiles already name the new live set, and
-    # before GC so nothing is executing out of a directory about to be deleted.
-    try:
-        report["superseded_reap"] = reap_superseded_fleet()
-    except Exception as exc:  # never fail a good deploy on cleanup
-        report["superseded_reap"] = {"ok": False, "error": str(exc)}
-
-    report["gc"] = gc_releases(keep=keep_releases, protect=release.path)
+    report.update(_reap_superseded_then_gc(release, previous_release, keep_releases))
     report["ok"] = True
     report["current"] = str(CURRENT_LINK)
     try:
@@ -353,32 +433,100 @@ def _deploy_under_lock(
     return report
 
 
-def gc_releases(
-    *, keep: int = DEFAULT_KEEP_RELEASES, protect: Path | None = None
-) -> dict[str, Any]:
-    """Delete old release dirs not referenced by live processes."""
-    current = current_release_path()
-    protected = {current.resolve()} if current is not None else set()
-    if protect is not None:
-        protected.add(protect.resolve())
+def _resolve_protected_reasons(
+    *,
+    current: Path | None,
+    protect: Path | None,
+    protect_extra: Mapping[Path, str] | None,
+) -> dict[Path, str]:
+    """Build the {resolved_path: reason} map GC (real or previewed) protects.
 
-    dirs = _release_dirs()
+    ``current`` is passed explicitly rather than read live via
+    :func:`current_release_path` here, so a caller modeling post-flip state
+    (the ``--dry-run`` preview, TAP-6896) can pass the *incoming* release --
+    what ``current`` will resolve to once the real flip runs -- instead of
+    the pre-flip value that is still on disk at preview time.
+    """
+    protected_reasons: dict[Path, str] = {}
+    if current is not None:
+        protected_reasons[current.resolve()] = "current"
+    if protect is not None:
+        protected_reasons.setdefault(protect.resolve(), "incoming")
+    if protect_extra:
+        for path, extra_reason in protect_extra.items():
+            protected_reasons.setdefault(path.resolve(), extra_reason)
+    return protected_reasons
+
+
+def _plan_gc(
+    dirs: list[Path],
+    *,
+    keep: int,
+    protected_reasons: Mapping[Path, str],
+) -> dict[str, Any]:
+    """Decide what GC would keep/delete/skip. Takes no filesystem action.
+
+    Pure decision logic shared by :func:`gc_releases` (which acts on
+    ``to_delete``) and the ``--dry-run`` preview in :func:`deploy_blue_green`
+    (which does not) -- a second, separately maintained copy of this
+    keep/protect/skip logic in the CLI preview is exactly the kind of drift
+    TAP-6896 exists to prevent.
+    """
     kept: list[str] = []
-    deleted: list[str] = []
+    to_delete: list[str] = []
     skipped: list[str] = []
+    protected_report: dict[str, str] = {}
 
     for idx, release_dir in enumerate(dirs):
         resolved = release_dir.resolve()
-        if resolved in protected or idx < keep:
+        reason = protected_reasons.get(resolved)
+        if reason is not None:
+            kept.append(release_dir.name)
+            protected_report[release_dir.name] = reason
+            continue
+        if idx < keep:
             kept.append(release_dir.name)
             continue
         if pids_referencing(resolved):
             skipped.append(release_dir.name)
             continue
-        shutil.rmtree(release_dir, ignore_errors=True)
-        deleted.append(release_dir.name)
+        to_delete.append(release_dir.name)
 
-    return {"ok": True, "kept": kept, "deleted": deleted, "skipped_in_use": skipped}
+    return {
+        "kept": kept,
+        "to_delete": to_delete,
+        "skipped_in_use": skipped,
+        "protected": protected_report,
+    }
+
+
+def gc_releases(
+    *,
+    keep: int = DEFAULT_KEEP_RELEASES,
+    protect: Path | None = None,
+    protect_extra: Mapping[Path, str] | None = None,
+) -> dict[str, Any]:
+    """Delete old release dirs not referenced by live processes.
+
+    ``protect`` names the incoming release (kept for call-site compatibility);
+    ``protect_extra`` names additional paths with a reason each -- used to
+    protect the pre-flip rollback target alongside the incoming release
+    (TAP-6895), so it survives index-based eviction the way ``current`` does.
+    """
+    protected_reasons = _resolve_protected_reasons(
+        current=current_release_path(), protect=protect, protect_extra=protect_extra
+    )
+    plan = _plan_gc(_release_dirs(), keep=keep, protected_reasons=protected_reasons)
+    for name in plan["to_delete"]:
+        shutil.rmtree(RELEASES_DIR / name, ignore_errors=True)
+
+    return {
+        "ok": True,
+        "kept": plan["kept"],
+        "deleted": plan["to_delete"],
+        "skipped_in_use": plan["skipped_in_use"],
+        "protected": plan["protected"],
+    }
 
 
 @contextmanager
@@ -436,12 +584,36 @@ def deploy_blue_green(
             return report
 
     if dry_run:
+        # The incoming release directory does not exist yet (build hasn't
+        # run) and `current` still resolves to the pre-flip release on disk.
+        # The real GC runs post-flip: the incoming release has been built
+        # (present, newest by mtime) and `current` resolves to it. Modeling
+        # pre-flip state here previews a different, smaller GC than the one
+        # that actually runs (TAP-6896) -- every existing release would sit
+        # one index lower in the preview than it does at real GC time.
+        #
+        # So build the same inputs the post-flip real GC call would see:
+        # the incoming release prepended at the newest position, `current`
+        # modeled as resolving to it, and the outgoing (pre-flip current)
+        # release protected exactly like TAP-6895 protects it for real.
+        # Still the identical `_plan_gc` helper the real GC uses -- not a
+        # second copy of the rules, only different (correct) inputs.
+        previous_release = current_release_path()
+        protect_extra = _previous_protect_extra(previous_release, release.path)
+        protected_reasons = _resolve_protected_reasons(
+            current=release.path, protect=release.path, protect_extra=protect_extra
+        )
+        existing_dirs = [d for d in _release_dirs() if d.resolve() != release.path.resolve()]
+        gc_preview = _plan_gc(
+            [release.path, *existing_dirs], keep=keep_releases, protected_reasons=protected_reasons
+        )
         report["ok"] = True
         report["planned"] = {
             "build": str(release.path),
             "flip": str(CURRENT_LINK),
             "keep_releases": keep_releases,
         }
+        report["gc_preview"] = gc_preview
         return report
 
     with deploy_lock():

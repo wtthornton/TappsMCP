@@ -251,6 +251,7 @@ class _BatchContext:
     start: int
     settings: Any
     paths: list[Path]
+    baseline_ref: str
     capped: bool
     extra_count: int
     tracker: _ProgressTracker
@@ -288,6 +289,7 @@ def _prepare_batch_context(
     start: int,
     settings: Any,
     paths: list[Path],
+    baseline_ref: str = "",
 ) -> _BatchContext:
     """Cap paths, init the progress tracker, partition by content cache."""
     from tapps_mcp.tools.batch_validator import MAX_BATCH_FILES
@@ -312,6 +314,7 @@ def _prepare_batch_context(
         start=start,
         settings=settings,
         paths=capped_paths,
+        baseline_ref=baseline_ref,
         capped=capped,
         extra_count=extra_count,
         tracker=tracker,
@@ -342,7 +345,15 @@ async def _execute_validation_batch(
     tasks = [
         asyncio.create_task(
             _host._validate_single_file(
-                p, bc.preset, bc.quick, do_security_full, sem, bc.tracker, bc.ctx
+                p,
+                bc.preset,
+                bc.quick,
+                do_security_full,
+                sem,
+                bc.tracker,
+                bc.ctx,
+                baseline_ref=bc.baseline_ref,
+                project_root=bc.settings.project_root,
             )
         )
         for p in bc.uncached_paths
@@ -580,6 +591,7 @@ async def tapps_validate_changed(
     correlation_id: str = "",
     judges: list[dict[str, Any]] | None = None,
     project_root: str = "",
+    baseline_ref: str = "",
     ctx: Context[Any, Any, Any] | None = None,
 ) -> dict[str, Any]:
     """Runs the per-file quality gate across multiple changed files in one
@@ -637,6 +649,17 @@ async def tapps_validate_changed(
             the server-configured root. Set when validating files in a
             sibling repo from a long-lived MCP host; ``file_paths`` must
             then be relative to this root.
+        baseline_ref: Git ref to ratchet against (TAP-6904). Empty
+            (default) disables the ratchet entirely -- behaviour is then
+            identical to before this parameter existed. When set, a file
+            already below the overall-score threshold at this ref may pass
+            by holding or improving instead of failing outright; a file
+            that regresses, or is new at this ref, still fails. Never
+            relaxes a category minimum or the security floor. Pass the
+            PR's base SHA/branch (e.g. the merge target) -- never a
+            feature branch, or the ratchet compares against your own
+            in-flight work instead of the merge target. See
+            ``tapps_mcp.gates.ratchet`` for the three rules.
         ctx: MCP context handle, injected by the host for progress
             notifications during long-running batch validation. Do
             not pass manually.
@@ -719,6 +742,7 @@ async def tapps_validate_changed(
         start=start,
         settings=settings,
         paths=paths,
+        baseline_ref=baseline_ref,
     )
     task_results, timeout_info = await _run_with_progress(bc)
     outcome = await _finalize_outcome(bc, task_results, timeout_info)
