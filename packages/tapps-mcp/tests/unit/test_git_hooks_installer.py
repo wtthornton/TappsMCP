@@ -92,3 +92,40 @@ class TestPreCommitScriptContract:
     def test_uses_diff_filter_for_added_modified_files(self) -> None:
         assert "--cached" in GIT_PRE_COMMIT_SCRIPT
         assert "--diff-filter=ACM" in GIT_PRE_COMMIT_SCRIPT
+
+
+class TestPreCommitRatchet:
+    """TAP-6904: the hook must ratchet, and both copies must keep it.
+
+    CI passes ``--baseline-ref`` (the PR base) but the hook did not, so a
+    commit that *improved* an already-below-threshold file was rejected
+    locally and accepted by CI. That gap is a standing incentive to reach for
+    TAPPS_SKIP_GATE=1 on exactly the changes the ratchet exists to reward.
+    """
+
+    def test_template_passes_baseline_ref(self):
+        assert "--baseline-ref HEAD" in GIT_PRE_COMMIT_SCRIPT
+
+    def test_template_guards_the_initial_commit(self):
+        """No HEAD to compare against on the first commit, so no ratchet."""
+        assert "git rev-parse --verify --quiet HEAD" in GIT_PRE_COMMIT_SCRIPT
+
+    def test_template_expansion_is_safe_when_empty(self):
+        """``${A+"${A[@]}"}`` so an empty array does not break under set -u."""
+        assert '${BASELINE_ARGS+"${BASELINE_ARGS[@]}"}' in GIT_PRE_COMMIT_SCRIPT
+
+    def test_this_repo_hook_has_not_drifted_from_the_template(self):
+        """The repo's own hook is a hand-maintained copy of the template.
+
+        They differ deliberately (this one logs bypasses to a jsonl ledger),
+        so byte equality is wrong — but a behavioural flag present in one and
+        missing from the other is exactly the drift that caused TAP-6904's
+        gap. Assert the ratchet specifically, in both.
+        """
+        repo_root = Path(__file__).resolve().parents[4]
+        hook = repo_root / ".githooks" / "pre-commit"
+        if not hook.exists():  # pragma: no cover - source checkouts only
+            pytest.skip(f"no .githooks/pre-commit at {hook}")
+        text = hook.read_text(encoding="utf-8")
+        assert "--baseline-ref HEAD" in text
+        assert "git rev-parse --verify --quiet HEAD" in text
