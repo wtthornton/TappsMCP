@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "tapps-mcp"
-version = "3.12.79"
+version = "3.12.80"
 description = "MCP server providing deterministic code quality tools for AI coding assistants"
 readme = "README.md"
 license = "MIT"
@@ -35,8 +35,8 @@ dependencies = [
     # scripts/bump-versions.py rewrites this pin on every version bump; both
     # .githooks/pre-push and the tapps-quality.yml "agent-contract" CI job
     # run `--check` so it can't drift back open.
-    "tapps-core==3.12.79",
-    "docs-mcp==3.12.79",
+    "tapps-core==3.12.80",
+    "docs-mcp==3.12.80",
     "mcp[cli]>=1.27.2,<2",
     "pydantic>=2.13.4,<3",
     "pydantic-settings>=2.14.1,<3",

@@ -855,6 +855,9 @@ exit 0
 #!/usr/bin/env bash
 # TappsMCP PreToolUse hook (Bash) - destructive command guard (opt-in)
 # Blocks commands containing rm -rf, format c:, etc. Exit 2 = block, 0 = allow.
+# TAP-6889: also blocks backgrounding, leaving the project dir, and a few
+# suppression markers, but only when ORCHESTRATOR_GOAL_DISPATCH=1 (dispatched
+# lanes) so interactive sessions are never affected.
 INPUT=$(cat)
 PYBIN=$(command -v python3 2>/dev/null || command -v python 2>/dev/null)
 if [ -z "$PYBIN" ]; then
@@ -892,6 +895,75 @@ esac
 if [ "$BLOCK" = 1 ]; then
   echo "TappsMCP: Blocked potentially destructive command." >&2
   exit 2
+fi
+# TAP-6889: lane guard, gated on ORCHESTRATOR_GOAL_DISPATCH=1 so it only
+# fires for dispatched lanes, never interactive sessions. Re-parses $INPUT
+# independently of the $CMD extraction above (rather than sharing it) since
+# a command can contain literal newlines and splitting combined stdout by
+# line would corrupt it.
+if [ "$ORCHESTRATOR_GOAL_DISPATCH" = "1" ]; then
+  LANE_CHECK=$(echo "$INPUT" | "$PYBIN" -c "
+import json, os, shlex, sys
+try:
+    d = json.load(sys.stdin)
+except Exception:
+    print('ALLOW')
+    sys.exit(0)
+ti = d.get('tool_input', {}) or {}
+cmd = ti.get('command', '') or ti.get('cmd', '')
+if not cmd and isinstance(ti.get('args'), list):
+    cmd = ' '.join(str(a) for a in ti['args'])
+if not isinstance(cmd, str):
+    cmd = ''
+if ti.get('run_in_background') is True:
+    print('BLOCK:run_in_background tool_input flag')
+    sys.exit(0)
+s = cmd.rstrip()
+if s.endswith(';'):
+    s = s[:-1].rstrip()
+if s.endswith('&') and not s.endswith('&&'):
+    prev = s[-2] if len(s) >= 2 else ''
+    if prev not in ('>', '&'):
+        print('BLOCK:trailing background operator')
+        sys.exit(0)
+try:
+    tokens = shlex.split(cmd)
+except ValueError:
+    tokens = []
+for word in ('nohup', 'disown', 'setsid'):
+    if word in tokens:
+        print('BLOCK:' + word + ' command word')
+        sys.exit(0)
+project_dir = os.environ.get('CLAUDE_PROJECT_DIR') or os.getcwd()
+project_real = os.path.realpath(project_dir)
+for idx, tok in enumerate(tokens):
+    if tok != 'cd':
+        continue
+    if idx + 1 >= len(tokens):
+        continue
+    target = tokens[idx + 1]
+    if target in ('-', '~'):
+        continue
+    if target.startswith('~/'):
+        target = os.path.expanduser('~') + target[1:]
+    if not os.path.isabs(target):
+        target = os.path.join(project_dir, target)
+    target_real = os.path.realpath(target)
+    if target_real != project_real and not target_real.startswith(project_real + os.sep):
+        print('BLOCK:cd outside project directory')
+        sys.exit(0)
+for marker in ('# noqa', '# type: ignore', '@pytest.mark.skip', 'xfail'):
+    if marker in cmd:
+        print('BLOCK:suppression marker')
+        sys.exit(0)
+print('ALLOW')
+" 2>/dev/null)
+  case "$LANE_CHECK" in
+    BLOCK:*)
+      echo "TappsMCP: Blocked by lane guard - ${LANE_CHECK#BLOCK:} (ORCHESTRATOR_GOAL_DISPATCH=1)." >&2
+      exit 2
+      ;;
+  esac
 fi
 exit 0
 """,
