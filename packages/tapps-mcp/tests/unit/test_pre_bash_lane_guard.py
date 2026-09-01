@@ -192,6 +192,133 @@ def test_suppression_marker_allowed_without_dispatch(tmp_path: Path) -> None:
 
 
 # ---------------------------------------------------------------------------
+# Tokenizer bypass regression (TAP-6889 round 2): squishing a guarded word
+# against the previous command with no space defeated shlex.split, which
+# does not split a word off a bare ";" the way a real shell does. Both prior
+# verifications (this file's first version, and an independent 18-case
+# harness) held the separator fixed at "; " and varied only the command, so
+# neither could see the bug. This section makes the separator an explicit
+# axis, crossed against every guarded shape.
+# ---------------------------------------------------------------------------
+
+_SEPARATORS = {
+    "none": "",  # the shape stands alone -- the historical positive control
+    "semicolon": ";",
+    "semicolon_space": "; ",
+    "double_amp": "&&",
+    "double_pipe": "||",
+    "newline": "\n",
+    "tab": "\t",
+}
+
+
+def _prefixed(sep: str, body: str) -> str:
+    # Gluing "hi" directly onto the next word with zero characters between
+    # is not a shell separator at all -- it is one word, and must stay
+    # allowed. "none" therefore uses the shape as the whole command instead
+    # of prefixing it, matching the pre-existing positive-control shape.
+    if sep == "":
+        return body
+    return f"echo hi{sep}{body}"
+
+
+_GUARDED_SHAPES = {
+    "nohup": "nohup pytest -v",
+    "disown": "disown",
+    "setsid": "setsid pytest -v",
+    "cd_escape": "cd /tmp/some-sibling-checkout",
+    "noqa": "echo '# noqa' >> x.py",
+    "type_ignore": "echo '# type: ignore' >> x.py",
+    "pytest_skip": "echo '@pytest.mark.skip' >> x.py",
+    "xfail": "echo 'xfail' >> x.py",
+}
+
+
+@pytest.mark.parametrize("sep_name", sorted(_SEPARATORS))
+@pytest.mark.parametrize("shape_name", sorted(_GUARDED_SHAPES))
+def test_guarded_shapes_blocked_across_every_separator(
+    tmp_path: Path, shape_name: str, sep_name: str
+) -> None:
+    command = _prefixed(_SEPARATORS[sep_name], _GUARDED_SHAPES[shape_name])
+    result = _run(tmp_path, command, dispatch=True)
+    assert result.returncode == 2, (
+        f"expected block for shape={shape_name} sep={sep_name} command={command!r}: {result.stderr}"
+    )
+
+
+@pytest.mark.parametrize(
+    "command",
+    [
+        "   nohup pytest -v",
+        "\tdisown",
+        "  setsid pytest -v",
+        "   cd /tmp/some-sibling-checkout",
+    ],
+)
+def test_guarded_shapes_blocked_with_leading_whitespace(tmp_path: Path, command: str) -> None:
+    result = _run(tmp_path, command, dispatch=True)
+    assert result.returncode == 2, f"expected block for {command!r}: {result.stderr}"
+
+
+@pytest.mark.parametrize(
+    "command",
+    [
+        "echo hi;nohup pytest -v",
+        "echo hi;setsid pytest -v",
+        "echo hi;disown",
+        "echo hi;cd /tmp/some-sibling-checkout",
+        "nohup pytest -v",
+        "sleep 5 &",
+        "echo hi;echo '# noqa' >> x.py",
+    ],
+)
+def test_guarded_shapes_allowed_without_dispatch(tmp_path: Path, command: str) -> None:
+    """Lane-scoping control: with the gate env var unset, every squished
+    bypass shape (and the plain positive controls) still exits 0."""
+    result = _run(tmp_path, command, dispatch=False)
+    assert result.returncode == 0, f"expected allow for {command!r}: {result.stderr}"
+
+
+@pytest.mark.parametrize(
+    "command",
+    [
+        "a && b",
+        "cmd 2>&1",
+        "cmd &> log",
+        'echo "x & y"',
+        "cd packages/tapps-mcp",
+        "cd -",
+        "cd ~",
+        "cd",
+        "make lint && make test",
+        "echo done && echo more",
+        "pytest packages/tapps-mcp/tests -v",
+        "cd packages/tapps-mcp && pytest tests -v",
+        "cd ./packages && ls",
+        "git commit -m 'fix: a;b'",
+        "find . -name '*.py'",
+    ],
+)
+def test_must_allow_set_survives_stricter_tokenizer(tmp_path: Path, command: str) -> None:
+    """The punctuation-aware tokenizer must not start blocking ordinary
+    shell idioms that merely contain an operator character."""
+    result = _run(tmp_path, command, dispatch=True)
+    assert result.returncode == 0, f"expected allow for {command!r}: {result.stderr}"
+
+
+def test_grep_for_xfail_is_a_known_false_positive_ceiling(tmp_path: Path) -> None:
+    """The suppression-marker check is a plain substring match on command
+    text, so it cannot distinguish a write from a read: ``grep -rn xfail``
+    blocks even though it never writes a suppression marker anywhere. This
+    is the documented, accepted ceiling of the check (see the PR's Known
+    limitations) -- pinned here so a later change to the marker check
+    cannot silently flip it one way or the other without a test noticing.
+    """
+    result = _run(tmp_path, "grep -rn xfail packages/tapps-mcp/tests", dispatch=True)
+    assert result.returncode == 2
+
+
+# ---------------------------------------------------------------------------
 # Existing destructive-command blocks and fail-closed path (must be unchanged)
 # ---------------------------------------------------------------------------
 

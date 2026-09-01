@@ -926,8 +926,14 @@ if s.endswith('&') and not s.endswith('&&'):
     if prev not in ('>', '&'):
         print('BLOCK:trailing background operator')
         sys.exit(0)
+SHELL_OPERATOR_CHARS = '();<>|&'
+def _is_operator_token(tok):
+    return bool(tok) and all(c in SHELL_OPERATOR_CHARS for c in tok)
 try:
-    tokens = shlex.split(cmd)
+    lex = shlex.shlex(cmd, posix=True, punctuation_chars=True)
+    lex.whitespace_split = True
+    lex.commenters = ''
+    tokens = list(lex)
 except ValueError:
     tokens = []
 for word in ('nohup', 'disown', 'setsid'):
@@ -939,7 +945,7 @@ project_real = os.path.realpath(project_dir)
 for idx, tok in enumerate(tokens):
     if tok != 'cd':
         continue
-    if idx + 1 >= len(tokens):
+    if idx + 1 >= len(tokens) or _is_operator_token(tokens[idx + 1]):
         continue
     target = tokens[idx + 1]
     if target in ('-', '~'):
