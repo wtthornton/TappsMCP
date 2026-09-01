@@ -229,7 +229,7 @@ For moving work between fresh chats (not just compaction recovery):
 A concurrent program passes `slot=` to `tapps_handoff_save` (or CLI `--slot`) to get its own brain row instead of overwriting the shared `session-handoff` key: `handoff_memory_key(slot)` returns `session-handoff.<slot>` — **a dot, not a colon**. This is not a style choice: the brain validates every `MemoryEntry.key` against a slug pattern that excludes `:`, so a colon-separated key is rejected server-side on every real `save`, not merely awkward. Verified live against the pinned dependency (`tapps-brain>=3.28.0,<4`; workspace source pinned to tag `v3.29.0`, `pyproject.toml:33`):
 
 ```
-_KEY_SLUG_PATTERN = re.compile(r"^[a-z0-9][a-z0-9._-]{0,127}$")   # tapps_brain/models.py:42
+_KEY_SLUG_PATTERN = re.compile(r"^[a-z0-9][a-z0-9._-]{0,127}$")   # tapps_brain/models.py:43
 ```
 
 `session-handoff:ceg-hub` — **rejected**, `:` is outside the pattern; a `save` with this key returns `brain_validation_failed` ("Key must be a lowercase slug (letters, digits, dots, hyphens, underscores)").

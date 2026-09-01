@@ -138,11 +138,15 @@ class TestOwnershipGuard:
         real_replace = os.replace
         calls: list[tuple[str, str]] = []
 
-        def flaky_replace(src, dst, **kwargs):  # type: ignore[no-untyped-def]
+        def flaky_replace(
+            src: str | bytes | os.PathLike[str] | os.PathLike[bytes],
+            dst: str | bytes | os.PathLike[str] | os.PathLike[bytes],
+            **kwargs: int | None,
+        ) -> None:
             calls.append((str(src), str(dst)))
             if len(calls) == 2:
                 raise OSError("simulated promote failure")
-            return real_replace(src, dst, **kwargs)
+            real_replace(src, dst, **kwargs)
 
         with patch("os.replace", side_effect=flaky_replace):
             with pytest.raises(OSError, match="simulated promote failure"):
