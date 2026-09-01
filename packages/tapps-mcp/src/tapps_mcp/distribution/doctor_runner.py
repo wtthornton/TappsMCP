@@ -96,6 +96,7 @@ from tapps_mcp.distribution.doctor_pipeline import (
     check_tapps_memory_skill,
 )
 from tapps_mcp.distribution.doctor_platform import (
+    check_agent_to_agent_rule,
     check_autonomy_rule,
     check_claude_hook_scripts,
     check_claude_md,
@@ -193,6 +194,7 @@ def _collect_checks(root: Path, *, quick: bool = False) -> list[CheckResult]:
         ("Linear standards rule", lambda: check_linear_standards_rule(root)),
         ("Retired hooks", lambda: check_retired_hooks(root)),
         ("Autonomy rule", lambda: check_autonomy_rule(root)),
+        ("Agent-to-agent rule", lambda: check_agent_to_agent_rule(root)),
         ("upgrade_skip_files", lambda: check_upgrade_skip_tokens(root)),
         ("Security rule", lambda: check_security_rule(root)),
         ("Test quality rule", lambda: check_test_quality_rule(root)),

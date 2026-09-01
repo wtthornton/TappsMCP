@@ -179,6 +179,7 @@ from tapps_mcp.distribution.doctor_pipeline import (
     check_tapps_memory_skill,
 )
 from tapps_mcp.distribution.doctor_platform import (
+    check_agent_to_agent_rule,
     check_agents_md_stamp_matches_package,
     check_autonomy_rule,
     check_claude_hook_scripts,
@@ -229,6 +230,7 @@ from tapps_mcp.distribution.doctor_telemetry_pipeline import (
 
 __all__ = [
     "CheckResult",
+    "check_agent_to_agent_rule",
     "check_agents_md",
     "check_agents_md_stamp_matches_package",
     "check_autonomy_rule",

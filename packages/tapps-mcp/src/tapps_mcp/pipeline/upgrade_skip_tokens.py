@@ -28,6 +28,7 @@ SKIP_TOKENS: dict[str, frozenset[str]] = {
     "claude_skills": frozenset({".claude/skills"}),
     "python_quality_rule": frozenset({".claude/rules/python-quality.md"}),
     "agent_scope_rule": frozenset({".claude/rules/agent-scope.md"}),
+    "agent_to_agent_rule": frozenset({".claude/rules/agent-to-agent.md"}),
     "autonomy_rule": frozenset({".claude/rules/autonomy.md"}),
     "linear_standards_rule": frozenset({".claude/rules/linear-standards.md"}),
     "integration_hygiene_rule": frozenset({".claude/rules/integration-hygiene.md"}),
