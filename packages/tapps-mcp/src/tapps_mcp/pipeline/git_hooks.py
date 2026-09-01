@@ -21,7 +21,7 @@ GIT_PRE_COMMIT_SCRIPT: str = """\
 #!/usr/bin/env bash
 # TappsMCP git pre-commit hook (TAP-979)
 # Runs `tapps-mcp validate-changed --quick` on staged Python files,
-# ratcheted against HEAD (TAP-6904).
+# ratcheted against the branch's merge target (TAP-6911).
 # Bypass with TAPPS_SKIP_GATE=1 (logged to stderr).
 
 set -e
@@ -51,15 +51,47 @@ echo "tapps-mcp pre-commit: validating $(echo \"$STAGED_PY\" | wc -l | tr -d ' '
 # Validate exactly the staged files -- without --file-paths the CLI
 # auto-detects all branch-changed files and can trip the validation cap.
 STAGED_CSV=$(echo "$STAGED_PY" | paste -sd, -)
-# TAP-6904: ratchet against HEAD so a commit that holds or improves a file
-# already below the threshold passes, instead of deadlocking on a bar no
-# honest commit could clear. CI ratchets against the PR base; HEAD is the
-# hook's equivalent and asks the question a hook should: does THIS commit
-# make the file worse? Absent on the very first commit, where nothing to
-# compare against means the ratchet stays off.
+# TAP-6911: derive a local stand-in for CI's PR-base ratchet baseline.
+# CI ratchets against the PR base SHA; a local commit has no PR, so the
+# honest equivalent is the merge target this branch will land on -- the
+# commit where it diverged from upstream. gates/ratchet.py's own
+# "Monotonicity" contract depends on baseline_ref being that stable merge
+# target: a prior attempt (TAP-6904) passed `--baseline-ref HEAD`, which
+# ratchets each commit against its own immediate predecessor and can
+# reject a multi-commit branch CI would accept. Resolve the target via the
+# branch's upstream, else the remote's default branch, else common
+# default-branch names; then the merge-base of HEAD against it. When none
+# of that resolves (detached HEAD with no default branch, no origin
+# remote, unrelated history, no commits yet), BASELINE_REF stays empty and
+# the gate runs exactly as it does today -- an undeterminable baseline
+# refuses, it never skips.
+resolve_baseline_ref() {
+  local target=""
+
+  target="$(git rev-parse --abbrev-ref --symbolic-full-name '@{upstream}' 2>/dev/null || true)"
+
+  if [ -z "$target" ]; then
+    target="$(git symbolic-ref --quiet --short refs/remotes/origin/HEAD 2>/dev/null || true)"
+  fi
+
+  if [ -z "$target" ]; then
+    for candidate in origin/master origin/main; do
+      if git rev-parse --verify --quiet "$candidate" >/dev/null 2>&1; then
+        target="$candidate"
+        break
+      fi
+    done
+  fi
+
+  [ -z "$target" ] && return 0
+
+  git merge-base HEAD "$target" 2>/dev/null || true
+}
+
+BASELINE_REF="$(resolve_baseline_ref)"
 BASELINE_ARGS=()
-if git rev-parse --verify --quiet HEAD >/dev/null 2>&1; then
-  BASELINE_ARGS=(--baseline-ref HEAD)
+if [ -n "$BASELINE_REF" ]; then
+  BASELINE_ARGS=(--baseline-ref "$BASELINE_REF")
 fi
 if ! "${RUNNER[@]}" validate-changed --quick --file-paths "$STAGED_CSV" ${BASELINE_ARGS+"${BASELINE_ARGS[@]}"}; then
   echo "" >&2

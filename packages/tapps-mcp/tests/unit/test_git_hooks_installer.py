@@ -95,20 +95,38 @@ class TestPreCommitScriptContract:
 
 
 class TestPreCommitRatchet:
-    """TAP-6904: the hook must ratchet, and both copies must keep it.
+    """TAP-6904/TAP-6911: the hook must ratchet, and both copies must keep it.
 
     CI passes ``--baseline-ref`` (the PR base) but the hook did not, so a
     commit that *improved* an already-below-threshold file was rejected
     locally and accepted by CI. That gap is a standing incentive to reach for
     TAPPS_SKIP_GATE=1 on exactly the changes the ratchet exists to reward.
+
+    TAP-6904's first fix passed ``--baseline-ref HEAD``, but
+    ``gates/ratchet.py``'s own "Monotonicity" contract requires
+    ``baseline_ref`` to be a stable merge target, not the immediately
+    preceding local commit -- ``HEAD`` moves with every commit, so a
+    multi-commit branch could still deadlock on an intermediate commit CI
+    would accept. TAP-6911 derives the actual merge target instead: the
+    branch's upstream, else the remote's default branch, else a common
+    default-branch name, then the merge-base of ``HEAD`` against it.
     """
 
-    def test_template_passes_baseline_ref(self):
-        assert "--baseline-ref HEAD" in GIT_PRE_COMMIT_SCRIPT
+    def test_template_derives_a_merge_target_baseline(self):
+        assert "resolve_baseline_ref" in GIT_PRE_COMMIT_SCRIPT
+        assert "git merge-base HEAD" in GIT_PRE_COMMIT_SCRIPT
+        assert '--baseline-ref "$BASELINE_REF"' in GIT_PRE_COMMIT_SCRIPT
 
-    def test_template_guards_the_initial_commit(self):
-        """No HEAD to compare against on the first commit, so no ratchet."""
-        assert "git rev-parse --verify --quiet HEAD" in GIT_PRE_COMMIT_SCRIPT
+    def test_template_resolution_order_has_all_three_fallbacks(self):
+        """Upstream, then origin/HEAD, then common default-branch names."""
+        assert "@{upstream}" in GIT_PRE_COMMIT_SCRIPT
+        assert "refs/remotes/origin/HEAD" in GIT_PRE_COMMIT_SCRIPT
+        assert "origin/master" in GIT_PRE_COMMIT_SCRIPT
+        assert "origin/main" in GIT_PRE_COMMIT_SCRIPT
+
+    def test_template_guards_the_undeterminable_case(self):
+        """No target resolves (or no merge-base exists) -> stay off, don't skip."""
+        assert '[ -z "$target" ] && return 0' in GIT_PRE_COMMIT_SCRIPT
 
     def test_template_expansion_is_safe_when_empty(self):
         """``${A+"${A[@]}"}`` so an empty array does not break under set -u."""
@@ -127,5 +145,11 @@ class TestPreCommitRatchet:
         if not hook.exists():  # pragma: no cover - source checkouts only
             pytest.skip(f"no .githooks/pre-commit at {hook}")
         text = hook.read_text(encoding="utf-8")
-        assert "--baseline-ref HEAD" in text
-        assert "git rev-parse --verify --quiet HEAD" in text
+        assert "resolve_baseline_ref" in text
+        assert "git merge-base HEAD" in text
+        assert '--baseline-ref "$BASELINE_REF"' in text
+        assert "@{upstream}" in text
+        assert "refs/remotes/origin/HEAD" in text
+        assert "origin/master" in text
+        assert "origin/main" in text
+        assert '[ -z "$target" ] && return 0' in text
