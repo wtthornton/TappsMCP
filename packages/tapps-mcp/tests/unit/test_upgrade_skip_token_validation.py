@@ -24,6 +24,7 @@ from tapps_mcp.pipeline import upgrade as upgrade_mod
 from tapps_mcp.pipeline.upgrade import upgrade_pipeline
 from tapps_mcp.pipeline.upgrade_skip_tokens import (
     ALL_SKIP_TOKENS,
+    applied_skip_tokens,
     describe_unknown_skip_token,
     nearest_token,
     unknown_skip_tokens,
@@ -70,6 +71,15 @@ class TestVocabulary:
         assert "not_a_real_token" in message
         assert "karpathy" in message
 
+    def test_applied_skip_tokens_returns_the_matched_entries(self) -> None:
+        assert applied_skip_tokens([".claude/skills", "CLAUDE.md"]) == [
+            ".claude/skills",
+            "CLAUDE.md",
+        ]
+
+    def test_applied_skip_tokens_excludes_unknown_entries(self) -> None:
+        assert applied_skip_tokens([BAD_ENTRY, "not_a_real_token"]) == []
+
 
 class TestUpgradeSignal:
     def test_single_file_path_entry_warns_loudly(
@@ -113,6 +123,77 @@ class TestUpgradeSignal:
         )
         out = click.unstyle(capsys.readouterr().out)
         assert f"WARNING: {BAD_ENTRY} is not a skip token" in out
+
+
+class TestAppliedSkipTokens:
+    """TAP-6891: a working entry must be confirmable, not just inferred.
+
+    ``_record_unknown_skip_tokens`` already makes a no-op entry loud. Before
+    this change, a *working* entry produced identical (silent) output to an
+    unconfigured project — "applied" and "not configured" were
+    indistinguishable in the run output.
+    """
+
+    def test_valid_entries_are_recorded_as_applied(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Positive control: a config of only-valid entries reports them as applied."""
+        _python_project(tmp_path)
+        monkeypatch.setenv(
+            "TAPPS_MCP_UPGRADE_SKIP_FILES", json.dumps([".claude/skills", "CLAUDE.md"])
+        )
+        result = upgrade_pipeline(tmp_path, platform="claude", dry_run=True)
+
+        assert result["applied_skip_tokens"] == [".claude/skills", "CLAUDE.md"]
+        assert "unknown_skip_tokens" not in result
+
+    def test_unknown_only_config_reports_none_applied(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Negative control: an unknown-only config applies nothing."""
+        _python_project(tmp_path)
+        monkeypatch.setenv("TAPPS_MCP_UPGRADE_SKIP_FILES", json.dumps([BAD_ENTRY]))
+        result = upgrade_pipeline(tmp_path, platform="claude", dry_run=True)
+
+        assert "applied_skip_tokens" not in result
+
+    def test_unknown_entry_warning_path_fires_unchanged(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """The existing unknown-entry warning must be byte-unchanged by this change."""
+        _python_project(tmp_path)
+        monkeypatch.setenv("TAPPS_MCP_UPGRADE_SKIP_FILES", json.dumps([BAD_ENTRY]))
+
+        logged: list[tuple[str, dict[str, Any]]] = []
+        monkeypatch.setattr(
+            upgrade_mod.log,
+            "warning",
+            lambda event, **kw: logged.append((event, kw)),
+        )
+
+        result = upgrade_pipeline(tmp_path, platform="claude", dry_run=True)
+
+        assert result["unknown_skip_tokens"] == [BAD_ENTRY]
+        assert result["warnings"] == [describe_unknown_skip_token(BAD_ENTRY)]
+        assert logged == [
+            (
+                "upgrade.unknown_skip_tokens",
+                {"unknown": [BAD_ENTRY], "detail": describe_unknown_skip_token(BAD_ENTRY)},
+            )
+        ]
+
+    def test_cli_renders_the_applied_tokens(self, capsys: pytest.CaptureFixture[str]) -> None:
+        """An applied entry that never reaches stdout is indistinguishable from unset."""
+        from tapps_mcp.distribution.setup_upgrade_cli import _format_upgrade_result
+
+        _format_upgrade_result(
+            {"version": "0.0.0", "applied_skip_tokens": [".claude/skills", "CLAUDE.md"]},
+            dry_run=True,
+        )
+        out = click.unstyle(capsys.readouterr().out)
+        assert ".claude/skills" in out
+        assert "CLAUDE.md" in out
+        assert "applied" in out.lower()
 
 
 class TestDoctorFinding:

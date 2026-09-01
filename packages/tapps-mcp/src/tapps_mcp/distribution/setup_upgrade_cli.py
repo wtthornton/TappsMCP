@@ -107,6 +107,16 @@ def _echo_platform_section(platform: dict[str, Any]) -> None:
 def _echo_upgrade_summary(result: dict[str, Any], *, dry_run: bool) -> None:
     """Close out with the overall verdict, any warnings, and collected errors."""
     click.echo("")
+    # TAP-6891: a working upgrade_skip_files entry used to be indistinguishable
+    # from an unconfigured one — this confirms it was actually applied.
+    applied = result.get("applied_skip_tokens", [])
+    if applied:
+        click.echo(
+            click.style(
+                f"  upgrade_skip_files: {len(applied)} token(s) applied: {', '.join(applied)}",
+                fg="green",
+            )
+        )
     # TAP-6499: warnings used to be computed and dropped. Render them above the
     # verdict so an inert ``upgrade_skip_files`` entry, or an asset about to be
     # overwritten, is impossible to miss in either dry-run or real output.
