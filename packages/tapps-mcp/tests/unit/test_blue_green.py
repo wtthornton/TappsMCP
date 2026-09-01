@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import json
+import os
+import time
 from pathlib import Path
 from typing import Any
 from unittest.mock import MagicMock, patch
@@ -300,3 +302,45 @@ class TestSupersededReapGatesGC:
         # Known-positive: a succeeding reap still reaches GC, unchanged.
         gc_spy.assert_called_once()
         assert result["gc"]["ok"] is True
+
+
+class TestGcProtectsPreviousRelease:
+    """TAP-6895: gc_releases must protect the outgoing (pre-flip) release too."""
+
+    def test_outgoing_release_survives_index_eviction(
+        self, bg_home: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        releases_dir = bg_home / "releases"
+        now = time.time()
+        delete_target = _make_release(releases_dir, "3.12.30-0000001")
+        os.utime(delete_target, (now - 400, now - 400))
+        outgoing = _make_release(releases_dir, "3.12.34-1111111")
+        os.utime(outgoing, (now - 300, now - 300))
+        filler = _make_release(releases_dir, "3.12.35-2222222")
+        os.utime(filler, (now - 200, now - 200))
+        bg.flip_current(bg.ReleaseRef("3.12.34", "1111111", outgoing))
+
+        result = _run_deploy(
+            bg_home,
+            tmp_path,
+            monkeypatch,
+            keep_releases=2,
+            reap_fn=lambda: {"ok": True, "reaped": [], "errors": []},
+        )
+
+        assert result["ok"] is True
+        gc = result["gc"]
+        # Known-positive: outgoing (what `current` resolved to pre-flip)
+        # survives even though keep=2 fills both index-kept slots with the
+        # new incoming release and filler, which would otherwise evict it.
+        assert outgoing.name in gc["kept"]
+        assert gc["protected"][outgoing.name] == "previous"
+        assert outgoing.exists()
+        # Known-negative: an unprotected, un-kept, unreferenced release is
+        # still deleted -- proves the fix protects specific paths, not
+        # everything.
+        assert delete_target.name in gc["deleted"]
+        assert not delete_target.exists()
+        # keep semantics unchanged for filler: kept by index, not by name.
+        assert filler.name in gc["kept"]
+        assert filler.name not in gc["protected"]
