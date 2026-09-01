@@ -352,6 +352,7 @@ def _generate_claude_scoped_rules(cfg: BootstrapConfig, state: _BootstrapState) 
     """
     from tapps_mcp.pipeline.platform_generators import (
         generate_claude_agent_scope_rule,
+        generate_claude_agent_to_agent_rule,
         generate_claude_autonomy_rule,
         generate_claude_config_files_rule,
         generate_claude_integration_hygiene_rule,
@@ -366,6 +367,7 @@ def _generate_claude_scoped_rules(cfg: BootstrapConfig, state: _BootstrapState) 
         root, engagement_level=cfg.llm_engagement_level
     )
     state.result["agent_scope_rule"] = generate_claude_agent_scope_rule(root)
+    state.result["agent_to_agent_rule"] = generate_claude_agent_to_agent_rule(root)
     state.result["autonomy_rule"] = generate_claude_autonomy_rule(root)
     state.result["linear_standards_rule"] = generate_claude_linear_standards_rule(root)
     state.result["integration_hygiene_rule"] = generate_claude_integration_hygiene_rule(root)

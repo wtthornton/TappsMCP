@@ -34,7 +34,8 @@ are named, documented here, and stamped into each generated file:
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any, Literal
+import stat
+from typing import TYPE_CHECKING, Any, Literal, NamedTuple
 
 from tapps_mcp import __version__
 
@@ -44,8 +45,41 @@ if TYPE_CHECKING:
 Policy = Literal["managed_block", "create_only", "overwrite"]
 AssetAction = Literal["created", "refreshed", "migrated", "unchanged"]
 
-ASSET_MARKER_BEGIN_PREFIX = "<!-- BEGIN: tapps-skill-asset"
-ASSET_MARKER_END = "<!-- END: tapps-skill-asset -->"
+
+class _Syntax(NamedTuple):
+    """A comment style: the token that opens a line/block, and the one that closes it.
+
+    ``close`` is ``""`` for a line-comment style (``#``, ``//``) — the marker is
+    a single line with no closing token, ending at the newline instead.
+    """
+
+    open: str
+    close: str
+
+
+def _marker_begin_prefix(syntax: _Syntax) -> str:
+    return f"{syntax.open} BEGIN: tapps-skill-asset"
+
+
+def _marker_end(syntax: _Syntax) -> str:
+    if syntax.close:
+        return f"{syntax.open} END: tapps-skill-asset {syntax.close}"
+    return f"{syntax.open} END: tapps-skill-asset"
+
+
+# The three comment styles a scaffolded asset can carry. Every delimitable
+# suffix maps to exactly one of these; adding a suffix means picking one of
+# these (or defining a new one), never inventing an ad hoc marker shape.
+_HTML_SYNTAX = _Syntax("<!--", "-->")
+_HASH_SYNTAX = _Syntax("#", "")
+_SLASH_SYNTAX = _Syntax("//", "")
+_ALL_SYNTAXES: tuple[_Syntax, ...] = (_HTML_SYNTAX, _HASH_SYNTAX, _SLASH_SYNTAX)
+
+# Derived from _HTML_SYNTAX rather than duplicated as literals, so the
+# pre-TAP-6884 html marker shape can never drift from what wrap_asset/
+# asset_block actually emit for a .md/.markdown/.html asset.
+ASSET_MARKER_BEGIN_PREFIX = _marker_begin_prefix(_HTML_SYNTAX)
+ASSET_MARKER_END = _marker_end(_HTML_SYNTAX)
 
 # Heading introducing the preserved region when a pre-marker asset is migrated.
 ASSET_PROJECT_REGION_HEADING = (
@@ -76,9 +110,24 @@ POLICY_NOTES: dict[Policy, str] = {
     ),
 }
 
-# Suffixes whose format can carry an HTML comment marker. Anything else falls
-# back to ``OVERWRITE`` plus the about-to-overwrite report.
-_DELIMITABLE_SUFFIXES: frozenset[str] = frozenset({".md", ".markdown", ".html"})
+# Suffixes whose format can carry a comment marker, and which comment style
+# each one uses. Anything else falls back to ``OVERWRITE`` plus the
+# about-to-overwrite report. ``.sh``/``.py`` share the hash style; ``.js``
+# gets slash; the original three share the html style unchanged.
+_COMMENT_SYNTAX: dict[str, _Syntax] = {
+    ".md": _HTML_SYNTAX,
+    ".markdown": _HTML_SYNTAX,
+    ".html": _HTML_SYNTAX,
+    ".sh": _HASH_SYNTAX,
+    ".py": _HASH_SYNTAX,
+    ".js": _SLASH_SYNTAX,
+}
+_DELIMITABLE_SUFFIXES: frozenset[str] = frozenset(_COMMENT_SYNTAX)
+
+
+def _syntax_for(rel_path: str) -> _Syntax:
+    suffix = rel_path[rel_path.rfind(".") :].lower() if "." in rel_path else ""
+    return _COMMENT_SYNTAX.get(suffix, _HTML_SYNTAX)
 
 
 def is_delimitable(rel_path: str) -> bool:
@@ -94,13 +143,27 @@ def policy_for(rel_path: str, *, create_only: bool = False) -> Policy:
     return "managed_block" if is_delimitable(rel_path) else "overwrite"
 
 
-def policy_header(policy: Policy) -> str:
-    """Return the in-file HTML-comment header stating *policy*."""
-    return f"<!-- {POLICY_NOTES[policy]} -->"
+def _header_text(policy: Policy, syntax: _Syntax) -> str:
+    note = POLICY_NOTES[policy]
+    if syntax.close:
+        return f"{syntax.open} {note} {syntax.close}"
+    return f"{syntax.open} {note}"
+
+
+def policy_header(policy: Policy, rel_path: str = "") -> str:
+    """Return the in-file comment header stating *policy*, in *rel_path*'s syntax.
+
+    *rel_path* defaults to ``""``, which resolves to the original html-comment
+    style — every existing caller that omits it keeps today's output exactly.
+    """
+    return _header_text(policy, _syntax_for(rel_path))
 
 
 def _asset_marker_begin(skill_name: str, rel_path: str, version: str) -> str:
-    return f"{ASSET_MARKER_BEGIN_PREFIX} {skill_name}/{rel_path} v{version} -->"
+    syntax = _syntax_for(rel_path)
+    prefix = _marker_begin_prefix(syntax)
+    close = f" {syntax.close}" if syntax.close else ""
+    return f"{prefix} {skill_name}/{rel_path} v{version}{close}"
 
 
 def asset_block(
@@ -112,7 +175,8 @@ def asset_block(
 ) -> str:
     """Return *body* delimited by the asset BEGIN/END markers, header excluded."""
     begin = _asset_marker_begin(skill_name, rel_path, version)
-    return f"{begin}\n{body.strip('\n')}\n{ASSET_MARKER_END}"
+    end = _marker_end(_syntax_for(rel_path))
+    return f"{begin}\n{body.strip('\n')}\n{end}"
 
 
 def wrap_asset(
@@ -124,17 +188,39 @@ def wrap_asset(
 ) -> str:
     """Return the full scaffolded file: policy header + managed block."""
     block = asset_block(body, skill_name, rel_path, version=version)
-    return f"{policy_header('managed_block')}\n{block}\n"
+    return f"{policy_header('managed_block', rel_path)}\n{block}\n"
 
 
-def _find_asset_block(content: str) -> tuple[int, int] | None:
-    begin = content.find(ASSET_MARKER_BEGIN_PREFIX)
-    if begin == -1:
-        return None
-    end_idx = content.find(ASSET_MARKER_END, begin)
-    if end_idx == -1:
-        return None
-    return begin, end_idx + len(ASSET_MARKER_END)
+class _AssetSpan(NamedTuple):
+    begin: int
+    end: int
+    inner_start: int
+    syntax: _Syntax
+
+
+def _find_asset_block(content: str) -> _AssetSpan | None:
+    """Locate the marker span in *content*, detecting its comment syntax.
+
+    The syntax is read off the content itself (already-scaffolded text is
+    self-describing) rather than passed in, so this and its callers stay
+    usable from just a file's text. Stops hardcoding ``-->``: the inner-body
+    start is computed from whichever syntax's begin marker actually matched.
+    """
+    for syntax in _ALL_SYNTAXES:
+        prefix = _marker_begin_prefix(syntax)
+        begin = content.find(prefix)
+        if begin == -1:
+            continue
+        end_marker = _marker_end(syntax)
+        end_idx = content.find(end_marker, begin)
+        if end_idx == -1:
+            continue
+        if syntax.close:
+            inner_start = content.find(syntax.close, begin) + len(syntax.close)
+        else:
+            inner_start = content.find("\n", begin) + 1
+        return _AssetSpan(begin, end_idx + len(end_marker), inner_start, syntax)
+    return None
 
 
 def strip_asset_scaffolding(content: str) -> str:
@@ -146,9 +232,7 @@ def strip_asset_scaffolding(content: str) -> str:
     span = _find_asset_block(content)
     if span is None:
         return content
-    begin, end = span
-    inner_start = content.find("-->", begin) + len("-->")
-    inner = content[inner_start : end - len(ASSET_MARKER_END)]
+    inner = content[span.inner_start : span.end - len(_marker_end(span.syntax))]
     return inner.strip("\n")
 
 
@@ -162,8 +246,8 @@ def has_asset_customization(content: str) -> bool:
     span = _find_asset_block(content)
     if span is None:
         return False
-    begin, end = span
-    outside = (content[:begin] + content[end:]).replace(policy_header("managed_block"), "")
+    header = _header_text("managed_block", span.syntax)
+    outside = (content[: span.begin] + content[span.end :]).replace(header, "")
     return bool(outside.strip())
 
 
@@ -187,7 +271,7 @@ def install_or_refresh_asset(
       duplicate. An unmodified pre-marker copy is *not* preserved — it is
       byte-identical to canonical and would only add noise.
     """
-    header = policy_header("managed_block")
+    header = policy_header("managed_block", rel_path)
     block = asset_block(body, skill_name, rel_path, version=version)
     fresh = f"{header}\n{block}\n"
 
@@ -201,7 +285,7 @@ def install_or_refresh_asset(
     span = _find_asset_block(original)
 
     if span is not None:
-        begin, end = span
+        begin, end = span.begin, span.end
         # Project content above the block, minus the header the platform owns.
         head = original[:begin].replace(header, "").lstrip("\n")
         updated = f"{header}\n{head}{block}{original[end:]}"
@@ -219,6 +303,35 @@ def install_or_refresh_asset(
 
     if not dry_run:
         path.write_text(updated, encoding="utf-8")
+    return action
+
+
+def write_project_script(
+    project_root: Path,
+    rel_path: str,
+    body: str,
+    skill_name: str,
+    *,
+    dry_run: bool = False,
+    version: str = __version__,
+) -> AssetAction:
+    """Install or refresh an executable script at a project-root-relative path.
+
+    Unlike :func:`write_companions` (skill-dir scoped, under
+    ``.claude/skills/<name>/``), this targets a different destination —
+    typically ``scripts/<name>`` at the project root — for the executable
+    asset class (TAP-6884). Same managed-block refresh semantics as any other
+    delimitable asset via :func:`install_or_refresh_asset`; the only addition
+    is setting the executable bit, following the chmod idiom already used at
+    ``github_governance.generate_ruleset_scripts`` and
+    ``platform_bundles.generate_agent_teams_hooks``.
+    """
+    target = project_root / rel_path
+    action = install_or_refresh_asset(
+        target, body, skill_name, rel_path, dry_run=dry_run, version=version
+    )
+    if not dry_run:
+        target.chmod(target.stat().st_mode | stat.S_IXUSR | stat.S_IXGRP)
     return action
 
 
@@ -311,4 +424,5 @@ __all__ = [
     "strip_asset_scaffolding",
     "wrap_asset",
     "write_companions",
+    "write_project_script",
 ]

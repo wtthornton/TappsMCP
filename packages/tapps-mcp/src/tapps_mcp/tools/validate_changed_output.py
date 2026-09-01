@@ -277,6 +277,18 @@ def _build_file_entry(
     if issue_count > 0:
         row_parts.append(f"issues={issue_count}")
 
+    # TAP-6904: a gate that passed only because a below-threshold file held
+    # or improved against its baseline must never read identically to a
+    # clean absolute pass -- surface the rule and both scores so a reader
+    # can tell the two apart at a glance, on both the pass and fail side.
+    ratchet = r.get("ratchet")
+    if ratchet:
+        entry["ratchet"] = ratchet
+        row_parts.append(
+            f"ratchet={ratchet.get('rule')} "
+            f"base={ratchet.get('base_score')} current={ratchet.get('current_score')}"
+        )
+
     from tapps_mcp.tools.validate_changed_diagnostics import enrich_file_entry
 
     remaining = enrich_file_entry(

@@ -346,6 +346,42 @@ def check_linear_standards_rule(project_root: Path) -> CheckResult:
     )
 
 
+def check_agent_to_agent_rule(project_root: Path) -> CheckResult:
+    """Check ``.claude/rules/agent-to-agent.md`` is present and current.
+
+    Shipped by ``generate_claude_agent_to_agent_rule`` (TAP-6886). The rule
+    documents the multi-session transport/identity/authority/coordination/
+    epistemic protocol. Stale copies missing the identity-and-authority
+    passage (§2) or the two-failure-classes table (§5) silently drop the
+    load-bearing content the source explicitly forbids compressing.
+    """
+    rule_path = project_root / ".claude" / "rules" / "agent-to-agent.md"
+    if not rule_path.exists():
+        return CheckResult(
+            "Agent-to-agent rule",
+            False,
+            ".claude/rules/agent-to-agent.md not found",
+            "Run: tapps-mcp upgrade",
+        )
+    content = rule_path.read_text(encoding="utf-8")
+    if (
+        "very likely the same human as you" not in content
+        or "Failure class | What catches it" not in content
+    ):
+        return CheckResult(
+            "Agent-to-agent rule",
+            False,
+            "agent-to-agent.md missing identity/authority (§2) or "
+            "failure-classes table (§5) — stale",
+            "Run: tapps-mcp upgrade --force",
+        )
+    return CheckResult(
+        "Agent-to-agent rule",
+        True,
+        f"Present: {rule_path}",
+    )
+
+
 def check_autonomy_rule(project_root: Path) -> CheckResult:
     """Check ``.claude/rules/autonomy.md`` is present and current.
 

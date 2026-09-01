@@ -57,6 +57,7 @@ def _add_version_marker(content: str) -> str:
 from tapps_mcp.pipeline.platform_bundles import (
     generate_agent_teams_hooks,
     generate_claude_agent_scope_rule,
+    generate_claude_agent_to_agent_rule,
     generate_claude_autonomy_rule,
     generate_claude_config_files_rule,
     generate_claude_integration_hygiene_rule,
@@ -153,6 +154,7 @@ __all__ = [
     "generate_agent_teams_hooks",
     "generate_bugbot_rules",
     "generate_claude_agent_scope_rule",
+    "generate_claude_agent_to_agent_rule",
     "generate_claude_autonomy_rule",
     "generate_claude_config_files_rule",
     "generate_claude_hooks",
