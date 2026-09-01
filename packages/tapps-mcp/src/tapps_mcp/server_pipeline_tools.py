@@ -1389,6 +1389,7 @@ def tapps_doctor(
     """
     from tapps_mcp.distribution.doctor import run_doctor_structured
     from tapps_mcp.server import _record_call, _record_execution, _with_nudges
+    from tapps_mcp.tools import session_health as _sh
 
     start = time.perf_counter_ns()
     _record_call("tapps_doctor")
@@ -1489,6 +1490,13 @@ def tapps_doctor(
     except Exception:
         pass
 
+    # TAP-6900 / TAP-6901: was this session bootstrapped for real, and is this
+    # the build that is installed on disk? A memoized session_start answers
+    # success without running, and __version__ is frozen at process import.
+    # Both probes live in tools.session_health so this module stays flat: it is
+    # ratcheted at its current score, and added complexity here fails CI.
+    _sh.attach_session_health(result, root, _SESSION_START_CACHE)
+
     # Usage gap summary (per-session). Surfaces edits-without-validation,
     # lookup-docs-underused, etc. from tapps_usage tool data sources.
     try:
@@ -1514,6 +1522,7 @@ def tapps_doctor(
         _prepend_next_step(resp, result["degraded_checkers_warning"])
     if result.get("completion_gate_hook", {}).get("warning"):
         _prepend_next_step(resp, result["completion_gate_hook"]["warning"])
+    _sh.prepend_session_health_warnings(resp, result, _prepend_next_step)
     return resp
 
 
