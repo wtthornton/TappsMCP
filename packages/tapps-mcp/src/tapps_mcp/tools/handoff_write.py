@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import json
 from dataclasses import dataclass, field
 from datetime import UTC
 from pathlib import Path
@@ -16,10 +15,10 @@ from tapps_mcp.tools.handoff_guard import (
     guarded_write,
 )
 from tapps_mcp.tools.handoff_schema import (
-    SESSION_HANDOFF_MEMORY_KEY,
     HandoffDocument,
     HandoffLintResult,
     empty_parse_error,
+    handoff_memory_key,
     handoff_sections_from_doc,
     handoff_size_report,
     lint_handoff,
@@ -91,11 +90,28 @@ def build_handoff_metadata(doc: HandoffDocument, git_ctx: dict[str, str]) -> dic
 
 async def mirror_handoff_to_brain(
     markdown: str,
-    metadata: dict[str, str],
     *,
+    slot: str | None = None,
     bridge: Any | None = None,
 ) -> dict[str, Any]:
-    """Mirror full handoff markdown to brain under ``session-handoff`` key."""
+    """Mirror full handoff markdown to the brain row this handoff owns.
+
+    The key comes from :func:`handoff_memory_key`, so a slotted handoff reaches
+    the brain under ``session-handoff.<slot>`` instead of overwriting the shared
+    default row. Before TAP-6874 this passed the bare constant and the slotted
+    key was unreachable from any caller (TAP-6873 shipped the naming function
+    with no write-path caller).
+
+    Handoff metadata is deliberately **not** a parameter here. This used to
+    take one and forward it as ``details_json=``, which the pinned brain
+    (``>=3.28.0,<4``) has nowhere to put: ``MemoryEntry`` declares no such
+    field, and neither ``MemoryStore.save`` nor the brain's ``memory_save``
+    tool accepts the keyword — it belongs to ``brain_record_feedback``. On the
+    in-process bridge that raised ``TypeError`` before the save was attempted,
+    so the mirror failed outright. The metadata still reaches the caller, via
+    ``HandoffWriteResult.metadata`` and the tool response; it is only the brain
+    row that cannot carry it.
+    """
     # The cap is a known constant, so an over-cap body is decidable here rather
     # than something to learn from a bad_request after the round-trip. Deciding
     # it up front means the caller always gets the size, the cap and the section
@@ -122,26 +138,19 @@ async def mirror_handoff_to_brain(
     if bridge is None:
         return {"success": False, "skipped": True, "reason": "bridge_unavailable"}
 
-    details_json = json.dumps(metadata) if metadata else ""
-    kwargs: dict[str, Any] = {}
-    if details_json:
-        kwargs["details_json"] = details_json
-
+    key = handoff_memory_key(slot)
     try:
         result = await bridge.save(
-            SESSION_HANDOFF_MEMORY_KEY,
+            key,
             markdown,
             tier="context",
             tags=_HANDOFF_TAGS,
-            **kwargs,
         )
     finally:
         if hasattr(bridge, "close"):
             bridge.close()
 
-    payload: dict[str, Any] = (
-        result if isinstance(result, dict) else {"key": SESSION_HANDOFF_MEMORY_KEY}
-    )
+    payload: dict[str, Any] = result if isinstance(result, dict) else {"key": key}
     # Sizes travel with the payload so a rejection is self-explaining. The
     # brain caps a memory value, and the handoff template routinely produces
     # bodies past it; without these the caller sees only "bad_request".
@@ -176,6 +185,7 @@ def write_handoff_file(
     markdown: str,
     *,
     slot: str | None = None,
+    owner: str | None = None,
     conflict_mode: ConflictMode | None = None,
     conflict_window_hours: int | None = None,
     force: bool = False,
@@ -192,6 +202,7 @@ def write_handoff_file(
         project_root,
         markdown,
         slot=slot,
+        owner=owner,
         mode=conflict_mode,
         window_hours=conflict_window_hours,
         force=force,
@@ -202,6 +213,8 @@ async def write_handoff(
     project_root: Path,
     markdown: str,
     *,
+    slot: str | None = None,
+    owner: str | None = None,
     mirror_brain: bool = True,
     run_session_end: bool = False,
     session_start_iso: str = "",
@@ -210,7 +223,14 @@ async def write_handoff(
     conflict_window_hours: int | None = None,
     force: bool = False,
 ) -> HandoffWriteResult:
-    """Write handoff file, optionally mirror to brain and close session lifecycle."""
+    """Write handoff file, optionally mirror to brain and close session lifecycle.
+
+    ``slot`` selects both the file *and* the brain row: it reaches
+    :func:`~tapps_mcp.tools.handoff_schema.handoff_path` through
+    :func:`write_handoff_file` and :func:`~tapps_mcp.tools.handoff_schema.handoff_memory_key`
+    through :func:`mirror_handoff_to_brain`, so the two halves of a handoff can
+    never end up in different namespaces.
+    """
     doc = parse_handoff_markdown(markdown)
     lint = lint_handoff(doc)
     # A zero-section parse is refused whatever ``fail_on_lint_errors`` says:
@@ -224,6 +244,8 @@ async def write_handoff(
     written = write_handoff_file(
         project_root,
         markdown,
+        slot=slot,
+        owner=owner,
         conflict_mode=conflict_mode,
         conflict_window_hours=conflict_window_hours,
         force=force,
@@ -233,7 +255,7 @@ async def write_handoff(
 
     brain_result: dict[str, Any] | None = None
     if mirror_brain:
-        brain_result = await mirror_handoff_to_brain(markdown, metadata)
+        brain_result = await mirror_handoff_to_brain(markdown, slot=slot)
 
     session_end_result: dict[str, Any] | None = None
     if run_session_end:

@@ -27,7 +27,7 @@ from __future__ import annotations
 import os
 import re
 import tempfile
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any, Literal
@@ -323,11 +323,17 @@ def guarded_write(
     markdown: str,
     *,
     slot: str | None = None,
+    owner: str | None = None,
     mode: ConflictMode | None = None,
     window_hours: int | None = None,
     force: bool = False,
 ) -> HandoffGuardResult:
     """Read the incumbent, archive it, then promote *markdown* atomically.
+
+    ``owner`` states the incoming program when the body's ``**Program:**``
+    header does not, or overrides it when it does (spec §2.2). It substitutes
+    for one field of the incoming fingerprint and nothing else: the comparison
+    in :func:`classify_foreign`, the archive, and the promote are unchanged.
 
     Raises:
         HandoffOwnerConflictError: under ``block`` when the incumbent is a
@@ -340,9 +346,12 @@ def guarded_write(
     path.parent.mkdir(parents=True, exist_ok=True)
 
     previous = read_handoff_identity(path)
+    incoming = identity_from_markdown(markdown)
+    if owner is not None:
+        incoming = replace(incoming, program=owner)
     foreign = classify_foreign(
         previous,
-        identity_from_markdown(markdown),
+        incoming,
         window_hours=resolved_window,
     )
 

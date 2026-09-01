@@ -1888,10 +1888,13 @@ class TestCheckSessionHandoffSkills:
         if name == "tapps-handoff-session":
             body += (
                 "\nsession-handoff.md\ntapps_handoff_save\nsession_end=true\n"
-                "tapps_session_start\np0 gate\n" * 5
+                "tapps_session_start\np0 gate\n# Session handoff\n**Program:**\n" * 5
             )
         elif name == "tapps-continue-session":
-            body += "\nsession-handoff.md\ntapps_session_start\nmemory search\np0 fallback\n" * 5
+            body += (
+                "\nsession-handoff.md\ntapps_session_start\nmemory search\np0 fallback\n"
+                "never silently pick\n" * 5
+            )
         (skill_dir / "SKILL.md").write_text(body, encoding="utf-8")
 
     def test_both_skills_on_claude_passes(self, tmp_path):

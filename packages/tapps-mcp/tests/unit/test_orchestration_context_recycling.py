@@ -56,11 +56,19 @@ class TestContextRecycling:
         assert "smaller than the cycle's overhead" in content
 
     def test_body_warns_about_two_runners_on_one_handoff(self, tmp_path):
-        """Acceptance 7 — concurrent runners silently overwrite each other."""
+        """Acceptance 7 — concurrent runners overwrite each other.
+
+        No longer *silently*: the ownership guard archives the incumbent and
+        reports ``conflict.foreign`` (TAP-6871/6874). The body says so, and
+        names the fix — a slot each — rather than leaving the reader to invent
+        "separate handoff paths".
+        """
         generate_skills(tmp_path, "claude")
         content = (_skill_dir(tmp_path) / "SKILL.md").read_text()
         assert "One runner per handoff file" in content
-        assert "silently overwrite each other" in content
+        assert "overwrite each other" in content
+        assert "conflict.foreign" in content
+        assert "give each its own slot" in content
 
     def test_body_guardrail_restates_context_lifecycle(self, tmp_path):
         generate_skills(tmp_path, "claude")
@@ -115,7 +123,7 @@ class TestContextRecycling:
         run_as = tpl.split("## Run-as", 1)[1]
         assert "Chained (autonomous, context-recycling)" in run_as
         assert "one `claude -p` per sub-goal" in run_as
-        assert "one runner at a time" in run_as.lower()
+        assert "one runner per handoff" in run_as.lower()
 
     def test_companion_carries_the_reverify_gate_table(self, tmp_path):
         generate_skills(tmp_path, "claude")

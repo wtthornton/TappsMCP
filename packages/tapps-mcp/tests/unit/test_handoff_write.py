@@ -95,15 +95,22 @@ class TestHandoffWriteCore:
 
     @pytest.mark.asyncio
     async def test_mirror_uses_full_markdown(self, tmp_path: Path) -> None:
+        """The mirror gets the whole body, and the metadata reaches the caller.
+
+        The metadata used to be a second argument to the mirror, forwarded as
+        ``details_json=``; no brain at the pinned floor has a field for it, so
+        the mirror no longer takes it (TAP-6874). It is still built and still
+        returned — asserted here on the result, which is where it now lands.
+        """
         mock_mirror = AsyncMock(return_value={"success": True})
         with patch("tapps_mcp.tools.handoff_write.mirror_handoff_to_brain", mock_mirror):
-            await write_handoff(tmp_path, _VALID_HANDOFF, mirror_brain=True)
+            result = await write_handoff(tmp_path, _VALID_HANDOFF, mirror_brain=True)
 
         mock_mirror.assert_awaited_once()
         assert mock_mirror.await_args.args[0] == _VALID_HANDOFF
-        metadata = mock_mirror.await_args.args[1]
-        assert metadata["linear_p0"] == "TAP-3790"
-        assert "updated_at" in metadata
+        assert mock_mirror.await_args.kwargs["slot"] is None
+        assert result.metadata["linear_p0"] == "TAP-3790"
+        assert "updated_at" in result.metadata
 
     def test_build_handoff_metadata_includes_git(self, tmp_path: Path) -> None:
         from tapps_mcp.tools.handoff_schema import parse_handoff_markdown
@@ -132,6 +139,9 @@ class TestHandoffWriteCli:
                     lint=MagicMock(ok=True, errors=[], warnings=[]),
                     brain_mirror={"success": True},
                     session_end=None,
+                    # The guard's conflict report is part of the CLI payload
+                    # (TAP-6874); left as a MagicMock it is not serializable.
+                    conflict=None,
                 ),
             ),
             patch("tapps_mcp.cli._get_project_root", return_value=tmp_path),
@@ -493,7 +503,7 @@ class TestOverCapMirrorIsRefusedUpFront:
 
         bridge = MagicMock()
         bridge.save = AsyncMock(return_value={"success": True})
-        payload = await mirror_handoff_to_brain(_over_cap_handoff(), {}, bridge=bridge)
+        payload = await mirror_handoff_to_brain(_over_cap_handoff(), bridge=bridge)
 
         bridge.save.assert_not_awaited()
         assert payload["success"] is False
@@ -505,7 +515,7 @@ class TestOverCapMirrorIsRefusedUpFront:
 
         bridge = MagicMock()
         bridge.save = AsyncMock()
-        payload = await mirror_handoff_to_brain(_over_cap_handoff(), {}, bridge=bridge)
+        payload = await mirror_handoff_to_brain(_over_cap_handoff(), bridge=bridge)
 
         detail = payload["detail"]
         assert str(payload["value_length"]) in detail
@@ -519,7 +529,7 @@ class TestOverCapMirrorIsRefusedUpFront:
 
         bridge = MagicMock()
         bridge.save = AsyncMock(return_value={"success": True, "key": handoff_memory_key()})
-        payload = await mirror_handoff_to_brain(_VALID_HANDOFF, {}, bridge=bridge)
+        payload = await mirror_handoff_to_brain(_VALID_HANDOFF, bridge=bridge)
 
         bridge.save.assert_awaited_once()
         assert payload["success"] is True

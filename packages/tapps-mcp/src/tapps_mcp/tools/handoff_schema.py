@@ -541,14 +541,77 @@ def handoff_sections_from_doc(doc: HandoffDocument) -> dict[str, Any]:
     }
 
 
-def load_and_lint_handoff(project_root: Path) -> tuple[HandoffDocument | None, HandoffLintResult]:
-    """Load handoff file if present and lint it."""
-    path = handoff_path(project_root)
+def load_and_lint_handoff(
+    project_root: Path,
+    slot: str | None = None,
+) -> tuple[HandoffDocument | None, HandoffLintResult]:
+    """Load handoff file if present and lint it.
+
+    The path comes from :func:`handoff_path`, never from a literal composed
+    here — the read side and the write side must agree on what a slot names.
+    """
+    path = handoff_path(project_root, slot)
     if not path.is_file():
         return None, HandoffLintResult()
     text = path.read_text(encoding="utf-8")
     doc = parse_handoff_markdown(text)
     return doc, lint_handoff(doc)
+
+
+def _handoff_row(path: Path, slot: str | None, now: datetime) -> dict[str, Any]:
+    """One enumerated handoff, described from the document itself."""
+    doc = parse_handoff_markdown(path.read_text(encoding="utf-8"))
+    updated: str | None = None
+    age_hours: float | None = None
+    if doc.updated is not None:
+        updated = doc.updated.astimezone(UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
+        age_hours = (now - doc.updated).total_seconds() / 3600.0
+    return {
+        "slot": slot,
+        "path": str(path),
+        "program": doc.program,
+        "updated": updated,
+        "linear_p0": doc.linear_p0,
+        "age_hours": age_hours,
+    }
+
+
+def list_handoffs(project_root: Path, *, now: datetime | None = None) -> list[dict[str, Any]]:
+    """Every live handoff in *project_root*, newest first.
+
+    The **single enumeration site**: the continue-session skill, the
+    ``handoff list`` CLI and ``fleet_audit`` all read this rather than each
+    globbing ``handoffs/`` for itself. A second glob is the restatement
+    :func:`handoff_path` exists to prevent, one directory up.
+
+    Covers the default file plus one row per ``handoffs/<slot>.md``. The
+    archive is excluded structurally, not by a name filter: it lives at
+    ``handoffs/archive/`` and the glob below is non-recursive, so a superseded
+    handoff can never be offered as a live one.
+
+    Rows carry ``{slot, path, program, updated, linear_p0, age_hours}``. There
+    is deliberately no ``git_sha``: the only source for it is the ``**Git:**``
+    header, whose parsing spec §6 places out of scope for this program, and a
+    key that is permanently ``None`` reads as data while carrying none.
+    """
+    clock = now if now is not None else datetime.now(tz=UTC)
+    rows: list[dict[str, Any]] = []
+
+    default = handoff_path(project_root)
+    if default.is_file():
+        rows.append(_handoff_row(default, None, clock))
+
+    slot_dir = project_root / _HANDOFF_SLOT_DIR
+    if slot_dir.is_dir():
+        for path in sorted(slot_dir.glob("*.md")):
+            if path.is_file():
+                rows.append(_handoff_row(path, path.stem, clock))
+
+    # ``updated`` is optional, so it cannot be the sort key on its own. A
+    # handoff that never stated one sorts last rather than crashing the sort or
+    # jumping the queue on a falsy comparison.
+    rows.sort(key=lambda row: (row["updated"] is not None, row["updated"] or ""), reverse=True)
+    return rows
 
 
 __all__ = [
@@ -566,6 +629,7 @@ __all__ = [
     "handoff_size_report",
     "is_session_handoff_key",
     "lint_handoff",
+    "list_handoffs",
     "load_and_lint_handoff",
     "parse_handoff_markdown",
     "populated_sections",

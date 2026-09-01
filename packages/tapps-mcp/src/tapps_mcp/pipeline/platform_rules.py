@@ -38,7 +38,9 @@ This project uses the TAPPS MCP server for code quality enforcement.
 
 Call `tapps_session_start()` as the FIRST action in every session.
 {MEMORY_RECALL_SESSION_START}
-Read `.tapps-mcp/session-handoff.md` when continuing work.
+Read `.tapps-mcp/session-handoff.md` when continuing work. When several programs share this
+repo, `uv run tapps-mcp handoff list` names every handoff (default plus each `.tapps-mcp/handoffs/<slot>.md`)
+so you resume yours rather than whichever was written last.
 
 """
     + CURSOR_PIPELINE_BEFORE_EDIT_LOOKUP
@@ -216,7 +218,7 @@ following tools to maintain code quality throughout development.
 
 1. Start a session: call `tapps_session_start`
 2. Recall context: `uv run tapps-mcp memory search --query "..."` or read
-   `.tapps-mcp/session-handoff.md`
+   `.tapps-mcp/session-handoff.md` (`uv run tapps-mcp handoff list` when the repo holds slots)
 3. After editing Python files: call `tapps_quick_check` on changed files
 4. Before creating a PR or declaring work complete: invoke `/tapps-finish-task`
    or call `tapps_validate_changed` then `tapps_checklist`

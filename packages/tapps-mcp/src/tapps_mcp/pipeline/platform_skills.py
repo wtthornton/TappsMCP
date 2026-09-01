@@ -107,9 +107,13 @@ _HANDOFF_PERSIST = """\
    | Priority | When | How |
    |----------|------|-----|
    | 1 (MCP) | `nlt-memory` available | `tapps_handoff_save(markdown=..., session_end=true)` — single call; do **not** also call `tapps_session_end` |
-   | 2 (CLI atomic) | Shell auth; no MCP write | `uv run tapps-mcp handoff write --file .tapps-mcp/session-handoff.md --session-end` after writing the file locally |
+   | 2 (CLI atomic) | Shell auth; no MCP write | `uv run tapps-mcp handoff write --file <draft.md> [--slot <your-program>] --session-end` — `--file` is the **input** to read, `--slot` picks the **destination** |
    | 3 (manual) | Brain HTTP only | `uv run tapps-mcp memory save --key session-handoff --tier context --tags handoff,cross-session --value "$(cat .tapps-mcp/session-handoff.md)"` — full markdown body |
    | 4 (skip) | Brain offline | File-only via Bash heredoc: `mkdir -p .tapps-mcp && cat > .tapps-mcp/session-handoff.md <<'EOF'` … `EOF` |
+
+   **Slots — when another program shares this repo.** `slot="<your-program>"` writes `.tapps-mcp/handoffs/<slot>.md` and brain key `session-handoff.<slot>` instead of the shared default, so concurrent programs stop overwriting each other. Lowercase letters, digits and dashes, at most 48 characters. Omit it and you write the shared file, which is correct for a repo running one program at a time.
+
+   **When the response carries `conflict`.** Print it. `foreign: true` means you replaced another program's handoff — name the program from `conflict.previous` and the recovery path from `conflict.archived_to`; the right fix is almost always to re-save under your own `slot=`. `foreign: "unknown"` means nobody could tell (no **Program:** header on one side) — say so rather than reporting a clean write. Under `handoff_conflict_mode: block` the save is **refused** with `handoff_owner_conflict`: retry with `slot=`, or pass `force=true` only when you genuinely mean to take over the shared file (the incumbent is archived first either way).
 
    Handoff **Updated** older than 7 days: pass `allow_lint_warnings=true` on `tapps_handoff_save` if lint warns on age."""
 
@@ -123,9 +127,12 @@ SESSION_TRANSFER_SKILL_NAMES: tuple[str, ...] = (
 _HANDOFF_BRAIN_MIRROR = _HANDOFF_PERSIST
 
 _CONTINUE_LOAD_AND_CONTEXT = """\
-2. **Load handoff (priority order).**
-   - Read `.tapps-mcp/session-handoff.md` if it exists — primary source.
-   - Else best-effort CLI (no `tapps_memory` MCP — removed v3.12.0): `uv run tapps-mcp memory get --key session-handoff` (brain offline or auth missing → skip).
+2. **Choose the handoff, then load it.** A repo can hold several: the shared `.tapps-mcp/session-handoff.md` plus one per slot under `.tapps-mcp/handoffs/`. Enumerate before reading — `uv run tapps-mcp handoff list` prints every one, newest first, with its slot, program, **Updated** and age.
+   - **A slot argument was given** (`/tapps-continue-session <slot>`) → load that one: `.tapps-mcp/handoffs/<slot>.md`. Say so if it does not exist; do not silently fall back to the shared file.
+   - **Exactly one fresh handoff** → load it and continue.
+   - **More than one** → **list the slots and ask which to resume — never silently pick one.** Print slot, program, **Updated** and age for each, then stop and wait. Picking for the user is how one program resumes another program's state without either noticing. Recency is not consent: the newest handoff is frequently the *other* program's.
+   - Then read the chosen file — primary source.
+   - Else best-effort CLI (no `tapps_memory` MCP — removed v3.12.0): `uv run tapps-mcp memory get --key session-handoff` (slotted: `--key session-handoff.<slot>`; brain offline or auth missing → skip).
    - Optional supplements (only if present): `docs/NEXT_SESSION_PROMPT.md`, `docs/TAPPS_HANDOFF.md` (**Next:** section).
    - **P0 fallback:** If **Next (P0)** is empty but **Open** has bullets, promote the first Open item as provisional P0 and flag it in the continue block.
    - **Memory context (optional):** `uv run tapps-mcp memory recall --recall-key session-handoff --query "<P0 text or Linear id>"` pins the handoff mirror then adds semantic hits (HTTP-safe). Alternative: `uv run tapps-mcp memory search --query "..."`. Skip silently when brain auth is unavailable."""
@@ -232,7 +239,7 @@ description: >-
   ending a session, handing off to a fresh chat, or the user says hand
   off, save session state, or continue next time.
 allowed-tools: mcp__nlt-memory__tapps_handoff_save mcp__nlt-build__tapps_session_start Bash
-argument-hint: "[optional Linear issue id e.g. TAP-1234]"
+argument-hint: "[slot] [optional Linear issue id e.g. TAP-1234]"
 disable-model-invocation: true
 ---
 
@@ -280,7 +287,7 @@ description: >-
   manifesto. Use when the user says continue, pick up where we left off, resume,
   or start a new session on an existing task (optional TAP-#### argument).
 allowed-tools: mcp__nlt-build__tapps_session_start mcp__plugin_linear_linear__get_issue Bash Read
-argument-hint: "[optional Linear issue id e.g. TAP-1234]"
+argument-hint: "[slot] [optional Linear issue id e.g. TAP-1234]"
 ---
 
 Start work in a fresh context window by assembling structured state — not a user paste.

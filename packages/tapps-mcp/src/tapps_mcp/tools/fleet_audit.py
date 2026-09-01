@@ -18,7 +18,7 @@ from tapps_core.metrics.brain_telemetry import (
     sync_load_tool_call_metrics_from_brain,
 )
 from tapps_core.metrics.execution_metrics import ToolCallMetric, ToolCallMetricsCollector
-from tapps_mcp.tools.handoff_schema import handoff_path
+from tapps_mcp.tools.handoff_schema import handoff_path, list_handoffs
 from tapps_mcp.tools.loop_metrics import aggregate_skills_used, compute_rolling_stats
 
 _PERIOD_DAYS: dict[str, int] = {"1d": 1, "7d": 7, "30d": 30}
@@ -280,6 +280,11 @@ def audit_project_root(
             "path": str(handoff_file.relative_to(root)),
             "exists": handoff_file.is_file(),
             "updated_at": handoff_mtime,
+            # A repo running concurrent programs keeps its live state in slots,
+            # so a fleet row that reports only the default file reports a repo
+            # as handoff-less while several are in flight. Enumerated through
+            # the one site, never by globbing handoffs/ here (TAP-6874).
+            "slots": [row["slot"] for row in list_handoffs(root) if row["slot"] is not None],
         },
     }
 

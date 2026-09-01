@@ -181,7 +181,7 @@ the pipeline below.
 ### Stage 1: Discover
 - Run `tapps_session_start` at the beginning of each session to initialize context
 - {MEMORY_RECALL_SESSION_START}
-- Recall prior decisions: `uv run tapps-mcp memory search --query "..."` or read `.tapps-mcp/session-handoff.md`
+- Recall prior decisions: `uv run tapps-mcp memory search --query "..."` or read `.tapps-mcp/session-handoff.md` (`uv run tapps-mcp handoff list` when several programs share the repo)
 
 ### Stage 2: Research
 - Use `tapps_lookup_docs` to verify library API signatures

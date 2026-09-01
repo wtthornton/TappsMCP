@@ -40,6 +40,7 @@ from tapps_mcp.server_helpers import (
     collect_session_hive_status,
     emit_ctx_info,
     error_response,
+    gateway_refusal_response,
     initial_session_hive_status,
     success_response,
 )
@@ -1607,14 +1608,30 @@ async def tapps_handoff_save(
     session_end: bool = False,
     mirror_brain: bool = True,
     allow_lint_warnings: bool = False,
+    slot: str | None = None,
+    owner: str | None = None,
+    force: bool = False,
 ) -> dict[str, Any]:
     """Atomically write session handoff file, mirror to brain, and lint schema.
 
     Writes ``.tapps-mcp/session-handoff.md``, mirrors the full markdown body to
     brain key ``session-handoff``, and runs TAP-3573 schema lint. Optionally
     closes the session lifecycle when ``session_end`` is true.
+
+    Args:
+        slot: Namespace the file *and* the brain row — ``handoffs/<slot>.md``
+            and ``session-handoff.<slot>`` — so concurrent programs stop
+            overwriting one another. Omit for the unchanged shared default.
+        owner: The program that owns this write, when the body's
+            ``**Program:**`` header does not state it. Ownership only; it never
+            edits the markdown.
+        force: Overwrite another program's handoff under
+            ``handoff_conflict_mode: block``. The incumbent is archived first,
+            as on every other write.
     """
     from tapps_mcp.server import _record_call, _record_execution
+    from tapps_mcp.tools.handoff_guard import HandoffOwnerConflictError
+    from tapps_mcp.tools.handoff_schema import InvalidHandoffSlotError
     from tapps_mcp.tools.handoff_write import HandoffWriteError, write_handoff
 
     start = time.perf_counter_ns()
@@ -1627,10 +1644,22 @@ async def tapps_handoff_save(
         result = await write_handoff(
             root,
             markdown,
+            slot=slot,
+            owner=owner,
             mirror_brain=mirror_brain,
             run_session_end=session_end,
             session_start_iso=_session_state.session_start_iso,
             fail_on_lint_errors=True,
+            force=force,
+        )
+    except (InvalidHandoffSlotError, HandoffOwnerConflictError) as exc:
+        # Both carry an Agent Gateway refusal envelope: the agent gets the
+        # machine-readable code and the exact retry rather than a traceback.
+        _record_execution("tapps_handoff_save", start)
+        return gateway_refusal_response(
+            "tapps_handoff_save",
+            exc.envelope,
+            (time.perf_counter_ns() - start) // 1_000_000,
         )
     except HandoffWriteError as exc:
         elapsed_ms = (time.perf_counter_ns() - start) // 1_000_000
@@ -1667,8 +1696,12 @@ async def tapps_handoff_save(
 
     data: dict[str, Any] = {
         "file_path": result.file_path,
+        "slot": slot,
         "linear_p0": result.doc.linear_p0,
         "metadata": result.metadata,
+        # Under ``warn`` the guard writes and *reports*; absent here the whole
+        # conflict signal stops at the Python boundary (spec §2.2).
+        "conflict": result.conflict,
         "handoff_sections": handoff_sections_from_doc(result.doc),
         "lint": {
             "ok": result.lint.ok,

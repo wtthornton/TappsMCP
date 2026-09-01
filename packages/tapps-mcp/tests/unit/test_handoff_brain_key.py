@@ -115,12 +115,22 @@ class TestEnrichmentSurvivesTheSlot:
     ) -> None:
         """Both enrichment branches fire for a key that came back from a save.
 
-        ``details_json`` is attached to the stored row rather than passed
-        through ``save``: it is not a ``MemoryEntry`` field in the pinned brain
-        (``>=3.28.0,<4``) and the in-process store drops the kwarg, while the
-        HTTP brain the mirror actually writes to persists it. The value is not
-        invented — it is what ``build_handoff_metadata`` composes for this
-        document, which is what ``mirror_handoff_to_brain`` sends.
+        What this brackets is the **read side**: given a row whose key is
+        slotted, ``enrich_memory_get_entry`` attaches ``handoff_sections`` from
+        the stored value and ``handoff_metadata`` from ``details_json``. The key
+        is the one a real save accepted above; only the ``details_json`` field
+        is set here by hand.
+
+        It has to be set by hand, because no brain at the pinned floor
+        (``>=3.28.0,<4``) persists it: ``details_json`` is neither a
+        ``MemoryEntry`` field nor a parameter of ``MemoryStore.save`` or of the
+        brain's ``memory_save`` MCP tool — it belongs to
+        ``brain_record_feedback``. The mirror therefore no longer sends it
+        (TAP-6874); handoff metadata travels in the tool response instead. So
+        the ``handoff_metadata`` branch asserted here is a contract for any
+        caller that *does* hold such a row, not a claim that the mirror writes
+        one. The value is still not invented — it is exactly what
+        ``build_handoff_metadata`` composes for this document.
         """
         key = handoff_memory_key(_SLOT)
         await bridge.save(key, _HANDOFF, tier="context", tags=["handoff"])
@@ -155,18 +165,29 @@ class TestTheRejectionSurfacesAsBrainValidationFailed:
             MemoryEntry(key=_COLON_KEY, value=_HANDOFF)
         return str(exc_info.value)
 
-    def test_colon_rejection_is_classified_brain_validation_failed(self) -> None:
+    # ``_classify_http_bridge_result`` is deliberately value-agnostic — it asks
+    # ``if err:``, and its own docstring names ``invalid_source`` as the shape it
+    # was written for. Pinning one literal let a narrowing to
+    # ``if err == "validation_error":`` stay green while every other brain error
+    # came back as ``success: true`` with the failure buried under ``data.entry``
+    # (TAP-6874, refuter survivor M7). More than one real value is what makes
+    # that mutation impossible.
+    _BRAIN_ERROR_CODES = ("validation_error", "invalid_source", "rate_limited")
+
+    @pytest.mark.parametrize("brain_error", _BRAIN_ERROR_CODES)
+    def test_a_brain_error_is_classified_brain_validation_failed(self, brain_error: str) -> None:
         from tapps_mcp.server_memory_tools import _classify_http_bridge_result
 
         message = self._real_rejection_message()
         assert "Key must be a lowercase slug" in message
 
         classified = _classify_http_bridge_result(
-            "save", {"entry": {"error": "validation_error", "message": message}}
+            "save", {"entry": {"error": brain_error, "message": message}}
         )
 
         assert classified is not None
         assert classified["error"]["code"] == "brain_validation_failed"
+        assert classified["error"]["brain_error"] == brain_error
         assert "Key must be a lowercase slug" in classified["error"]["message"]
 
     def test_an_accepted_save_is_not_classified_as_a_failure(self) -> None:
