@@ -225,11 +225,13 @@ async def write_handoff(
 ) -> HandoffWriteResult:
     """Write handoff file, optionally mirror to brain and close session lifecycle.
 
-    ``slot`` selects both the file *and* the brain row: it reaches
-    :func:`~tapps_mcp.tools.handoff_schema.handoff_path` through
-    :func:`write_handoff_file` and :func:`~tapps_mcp.tools.handoff_schema.handoff_memory_key`
-    through :func:`mirror_handoff_to_brain`, so the two halves of a handoff can
-    never end up in different namespaces.
+    ``slot`` selects the file, the brain row *and* the session-end search: it
+    reaches :func:`~tapps_mcp.tools.handoff_schema.handoff_path` through
+    :func:`write_handoff_file`, :func:`~tapps_mcp.tools.handoff_schema.handoff_memory_key`
+    through :func:`mirror_handoff_to_brain`, and
+    :func:`~tapps_mcp.tools.handoff_schema.load_and_lint_handoff` through
+    :func:`~tapps_mcp.tools.session_end_helpers.run_session_end`, so no part of
+    a handoff can end up in a different namespace from the rest.
     """
     doc = parse_handoff_markdown(markdown)
     lint = lint_handoff(doc)
@@ -263,9 +265,14 @@ async def write_handoff(
             run_session_end as _run_session_end,
         )
 
+        # The slot goes with it: a session ended under a slotted handoff must
+        # search on that handoff, not on whichever program owns the default
+        # file. Without this the third half of the write escapes the namespace
+        # the docstring above promises.
         session_end_result = await _run_session_end(
             session_start_iso,
             project_root=project_root,
+            slot=slot,
         )
 
     return HandoffWriteResult(

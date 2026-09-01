@@ -362,6 +362,53 @@ class TestTheCliSurface:
         assert "list" in result.output
 
 
+class TestTheSlotReachesTheSessionEnd:
+    """The third half of a slotted write — ``load_and_lint_handoff(slot=)``.
+
+    ``write_handoff`` routes the file and the brain row by slot, then ran
+    ``session_end`` against whatever program owned the *default* handoff. The
+    read-side ``slot`` argument had no production caller at all, so the
+    retrieval query for a slotted session was keyed off an unrelated program.
+    These drive the real entry point, never ``load_and_lint_handoff`` directly.
+    """
+
+    @pytest.mark.asyncio
+    async def test_a_slotted_write_searches_on_its_own_handoff(self, tmp_path: Path) -> None:
+        from tapps_mcp.tools.handoff_write import write_handoff
+
+        _seed(tmp_path, None, _handoff("default-program", p0="TAP-0000"))
+
+        result = await write_handoff(
+            tmp_path,
+            _handoff("ceg-hub", p0="TAP-6874"),
+            slot="ceg-hub",
+            mirror_brain=False,
+            run_session_end=True,
+        )
+
+        assert result.session_end is not None
+        assert result.session_end["session_search_query"] == "TAP-6874"
+
+    @pytest.mark.asyncio
+    async def test_an_unslotted_write_still_searches_on_the_default_handoff(
+        self, tmp_path: Path
+    ) -> None:
+        """Negative control: the ~35 repos that never pass a slot see no change."""
+        from tapps_mcp.tools.handoff_write import write_handoff
+
+        _seed(tmp_path, "ceg-hub", _handoff("ceg-hub", p0="TAP-6874"))
+
+        result = await write_handoff(
+            tmp_path,
+            _handoff("default-program", p0="TAP-0000"),
+            mirror_brain=False,
+            run_session_end=True,
+        )
+
+        assert result.session_end is not None
+        assert result.session_end["session_search_query"] == "TAP-0000"
+
+
 class TestOneEnumerationSite:
     """Scope item 2 — three consumers, one ``list_handoffs``."""
 
@@ -383,6 +430,50 @@ class TestOneEnumerationSite:
         text = (self._SRC / module).read_text(encoding="utf-8")
         assert '.md"' not in text
         assert "'.md'" not in text
+
+    def test_fleet_audit_reports_every_live_slot(self, tmp_path: Path) -> None:
+        """Behavioural counterpart to the two source-text assertions above.
+
+        Those prove ``list_handoffs`` is *named* in the consumer; they cannot
+        prove it is *called*. Returning a constant ``[]`` from the slots row
+        left them both green, which is how the wiring stayed unpinned.
+        """
+        from tapps_mcp.tools.fleet_audit import audit_project_root
+
+        (tmp_path / ".tapps-mcp.yaml").write_text("", encoding="utf-8")
+        _seed(tmp_path, None, _handoff("default-program"))
+        _seed(tmp_path, "ceg-hub", _handoff("ceg-hub"))
+        _seed(tmp_path, "merch-imagery", _handoff("merch-imagery"))
+
+        row = audit_project_root(
+            tmp_path,
+            since=datetime.now(UTC) - timedelta(days=1),
+            include_brain=False,
+        )
+
+        assert sorted(row["handoff"]["slots"]) == ["ceg-hub", "merch-imagery"]
+        # The default file is a handoff but not a slot; it is reported by
+        # ``path``/``exists`` and must not be smuggled into the slot list.
+        assert row["handoff"]["exists"] is True
+        assert None not in row["handoff"]["slots"]
+
+    def test_fleet_audit_reports_no_slots_when_only_the_default_exists(
+        self, tmp_path: Path
+    ) -> None:
+        """Negative control — an empty row must mean 'none', not 'never looked'."""
+        from tapps_mcp.tools.fleet_audit import audit_project_root
+
+        (tmp_path / ".tapps-mcp.yaml").write_text("", encoding="utf-8")
+        _seed(tmp_path, None, _handoff("default-program"))
+
+        row = audit_project_root(
+            tmp_path,
+            since=datetime.now(UTC) - timedelta(days=1),
+            include_brain=False,
+        )
+
+        assert row["handoff"]["slots"] == []
+        assert row["handoff"]["exists"] is True
 
 
 class TestTheEmittedSkillBodyTeachesSlots:
