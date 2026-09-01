@@ -114,6 +114,8 @@ async def _validate_single_file(
     sem: asyncio.Semaphore,
     tracker: _ProgressTracker | None = None,
     ctx: Context[Any, Any, Any] | None = None,
+    baseline_ref: str = "",
+    project_root: Path | None = None,
 ) -> dict[str, Any]:
     """Score and optionally security-scan a single file under concurrency limit.
 
@@ -123,6 +125,11 @@ async def _validate_single_file(
     - TypeScript/JavaScript (.ts, .tsx, .js, .jsx, .mjs, .cjs) -> TypeScriptScorer
     - Go (.go) -> GoScorer
     - Rust (.rs) -> RustScorer
+
+    ``baseline_ref`` (TAP-6904, default ``""`` = off) opts into the
+    monotonic ratchet: a file already below threshold at that ref may pass
+    on holding or improving instead of failing outright. See
+    :mod:`tapps_mcp.gates.ratchet` for the three rules.
     """
     from tapps_mcp.gates.evaluator import evaluate_gate
     from tapps_mcp.server_helpers import _get_scorer_for_file
@@ -172,6 +179,26 @@ async def _validate_single_file(
             file_result["gate_passed"] = gate.passed
             if gate.failures:
                 file_result["gate_failures"] = [f.model_dump() for f in gate.failures]
+
+            if baseline_ref:
+                from tapps_mcp.gates.ratchet import apply_ratchet_to_gate
+
+                ratchet_info = await apply_ratchet_to_gate(
+                    gate,
+                    score=score,
+                    path=path,
+                    scorer=scorer,
+                    quick=quick,
+                    baseline_ref=baseline_ref,
+                    repo_root=project_root if project_root is not None else path.parent,
+                )
+                if ratchet_info is not None:
+                    file_result["ratchet"] = ratchet_info
+                    file_result["gate_passed"] = gate.passed
+                    if gate.failures:
+                        file_result["gate_failures"] = [f.model_dump() for f in gate.failures]
+                    else:
+                        file_result.pop("gate_failures", None)
 
             from tapps_mcp.tools.validate_changed_diagnostics import (
                 attach_improvement_hints,

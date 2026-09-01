@@ -51,13 +51,29 @@ def _echo_validate_changed_data(data: dict[str, object]) -> None:
     help="Security scan depth (overrides --quick/--full default).",
 )
 @click.option(
+    "--baseline-ref",
+    default="",
+    help=(
+        "Git ref (e.g. a PR base SHA) to ratchet against (TAP-6904). Default: "
+        "off -- absent this flag, behaviour is identical to today's. When set, "
+        "a file already below the overall-score threshold at this ref may "
+        "pass by holding or improving instead of failing outright; new files "
+        "and files that regress still fail. Never relaxes a category minimum "
+        "or the security floor."
+    ),
+)
+@click.option(
     "--project-root",
     default=".",
     type=click.Path(exists=True, file_okay=False, path_type=str),
     help="Project root (default: current directory).",
 )
 def validate_changed_cmd(
-    quick: bool, file_paths: str, security_depth: str | None, project_root: str
+    quick: bool,
+    file_paths: str,
+    security_depth: str | None,
+    baseline_ref: str,
+    project_root: str,
 ) -> None:
     """Validate changed Python files (same logic as the MCP tool).
 
@@ -70,10 +86,12 @@ def validate_changed_cmd(
     if project_root != ".":
         os.chdir(project_root)
 
-    asyncio.run(_run_validate_changed(quick, file_paths, security_depth))
+    asyncio.run(_run_validate_changed(quick, file_paths, security_depth, baseline_ref))
 
 
-async def _run_validate_changed(quick: bool, file_paths: str, security_depth: str | None) -> None:
+async def _run_validate_changed(
+    quick: bool, file_paths: str, security_depth: str | None, baseline_ref: str = ""
+) -> None:
     """Run validation and render its CLI result."""
     from tapps_mcp.server_pipeline_tools import tapps_validate_changed
     from tapps_mcp.tools.validate_changed_cli_exit import validate_changed_cli_exit_code
@@ -82,6 +100,7 @@ async def _run_validate_changed(quick: bool, file_paths: str, security_depth: st
         "file_paths": file_paths,
         "quick": quick,
         "include_security": not quick if security_depth is None else security_depth != "none",
+        "baseline_ref": baseline_ref,
     }
     if security_depth is not None:
         kwargs["security_depth"] = security_depth
