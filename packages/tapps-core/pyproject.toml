@@ -47,6 +47,12 @@ include = ["src/tapps_core/"]
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/tapps_core"]
+# playbooks/data ships exclusively via force-include below. Without this
+# exclude, a real (non-editable) wheel build double-adds the same archive
+# path once via `packages`'s own directory walk and once via force-include,
+# which hatchling rejects (TAP-6897). Editable installs are unaffected --
+# they never run the packages-driven file walk that this exclude prunes.
+exclude = ["src/tapps_core/playbooks/data"]
 
 [tool.hatch.build.targets.wheel.force-include]
 "src/tapps_core/playbooks/data" = "tapps_core/playbooks/data"

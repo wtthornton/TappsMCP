@@ -168,6 +168,18 @@ def build_release(checkout: Path, release: ReleaseRef, *, force: bool = False) -
         f"{checkout / 'packages' / 'docs-mcp'}[treesitter]",
         f"{checkout / 'packages' / 'tapps-mcp'}[treesitter]",
     ]
+    # --no-sources-package: the root workspace declares tapps-core and
+    # docs-mcp as `{ workspace = true }` in [tool.uv.sources], which uv
+    # resolves as *editable* by default -- there is no `--no-editable` flag
+    # on `uv pip install` (verified: uv 0.11.3's `--help` lists only `-e`).
+    # Left alone, a release directory holds `_editable_impl_*.pth` files
+    # pointing back at this checkout instead of real copies (TAP-6897): not
+    # self-contained, and a rollback to an older release silently keeps
+    # running the checkout's current code for these two packages. Scoping
+    # `--no-sources-package` to just the three local packages (rather than
+    # a blanket `--no-sources`) keeps the tapps-brain git-tag source in
+    # [tool.uv.sources] intact -- that one is not a workspace path and must
+    # still resolve, since tapps-brain isn't published to PyPI.
     # Force the CPU torch wheels. tapps-brain depends on sentence-transformers
     # unconditionally, which drags in torch and ~4.5 GB of CUDA wheels that no
     # release env can use on a CPU host. --torch-backend=cpu resolves the whole
@@ -175,7 +187,21 @@ def build_release(checkout: Path, release: ReleaseRef, *, force: bool = False) -
     # See docs/handoff/BRAIN-sentence-transformers-optional.md for the upstream
     # fix that would remove the dependency entirely.
     proc = _run(
-        ["uv", "pip", "install", "--python", str(python), "--torch-backend=cpu", *pkg_specs],
+        [
+            "uv",
+            "pip",
+            "install",
+            "--python",
+            str(python),
+            "--torch-backend=cpu",
+            "--no-sources-package",
+            "tapps-core",
+            "--no-sources-package",
+            "docs-mcp",
+            "--no-sources-package",
+            "tapps-mcp",
+            *pkg_specs,
+        ],
         cwd=checkout,
         timeout=900,
     )
