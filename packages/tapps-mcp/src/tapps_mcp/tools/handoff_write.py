@@ -10,12 +10,16 @@ from typing import Any
 
 import structlog
 
+from tapps_mcp.tools.handoff_guard import (
+    ConflictMode,
+    HandoffGuardResult,
+    guarded_write,
+)
 from tapps_mcp.tools.handoff_schema import (
     SESSION_HANDOFF_MEMORY_KEY,
     HandoffDocument,
     HandoffLintResult,
     empty_parse_error,
-    handoff_path,
     handoff_sections_from_doc,
     handoff_size_report,
     lint_handoff,
@@ -46,6 +50,7 @@ class HandoffWriteResult:
     brain_mirror: dict[str, Any] | None = None
     session_end: dict[str, Any] | None = None
     metadata: dict[str, str] = field(default_factory=dict)
+    conflict: dict[str, Any] | None = None
 
 
 def _git_context_sync(project_root: Path) -> dict[str, str]:
@@ -134,7 +139,9 @@ async def mirror_handoff_to_brain(
         if hasattr(bridge, "close"):
             bridge.close()
 
-    payload: dict[str, Any] = result if isinstance(result, dict) else {"key": SESSION_HANDOFF_MEMORY_KEY}
+    payload: dict[str, Any] = (
+        result if isinstance(result, dict) else {"key": SESSION_HANDOFF_MEMORY_KEY}
+    )
     # Sizes travel with the payload so a rejection is self-explaining. The
     # brain caps a memory value, and the handoff template routinely produces
     # bodies past it; without these the caller sees only "bad_request".
@@ -164,12 +171,31 @@ def best_effort_status(payload: dict[str, Any] | None) -> str:
     return "ok"
 
 
-def write_handoff_file(project_root: Path, markdown: str) -> Path:
-    """Persist canonical handoff markdown under ``.tapps-mcp/``."""
-    path = handoff_path(project_root)
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(markdown, encoding="utf-8")
-    return path
+def write_handoff_file(
+    project_root: Path,
+    markdown: str,
+    *,
+    slot: str | None = None,
+    conflict_mode: ConflictMode | None = None,
+    conflict_window_hours: int | None = None,
+    force: bool = False,
+) -> HandoffGuardResult:
+    """Persist canonical handoff markdown under ``.tapps-mcp/``.
+
+    Delegates to :func:`~tapps_mcp.tools.handoff_guard.guarded_write`, which
+    archives the incumbent and promotes the replacement with ``os.replace``.
+    The blind ``write_text`` this replaced could both silently destroy another
+    program's handoff and, on a crash mid-write, leave a truncated one
+    (TAP-6871).
+    """
+    return guarded_write(
+        project_root,
+        markdown,
+        slot=slot,
+        mode=conflict_mode,
+        window_hours=conflict_window_hours,
+        force=force,
+    )
 
 
 async def write_handoff(
@@ -180,6 +206,9 @@ async def write_handoff(
     run_session_end: bool = False,
     session_start_iso: str = "",
     fail_on_lint_errors: bool = True,
+    conflict_mode: ConflictMode | None = None,
+    conflict_window_hours: int | None = None,
+    force: bool = False,
 ) -> HandoffWriteResult:
     """Write handoff file, optionally mirror to brain and close session lifecycle."""
     doc = parse_handoff_markdown(markdown)
@@ -192,7 +221,13 @@ async def write_handoff(
     if fail_on_lint_errors and not lint.ok:
         raise HandoffWriteError(lint.errors, lint.warnings)
 
-    path = write_handoff_file(project_root, markdown)
+    written = write_handoff_file(
+        project_root,
+        markdown,
+        conflict_mode=conflict_mode,
+        conflict_window_hours=conflict_window_hours,
+        force=force,
+    )
     git_ctx = _git_context_sync(project_root)
     metadata = build_handoff_metadata(doc, git_ctx)
 
@@ -212,12 +247,13 @@ async def write_handoff(
         )
 
     return HandoffWriteResult(
-        file_path=str(path),
+        file_path=str(written.path),
         lint=lint,
         doc=doc,
         brain_mirror=brain_result,
         session_end=session_end_result,
         metadata=metadata,
+        conflict=written.conflict,
     )
 
 
