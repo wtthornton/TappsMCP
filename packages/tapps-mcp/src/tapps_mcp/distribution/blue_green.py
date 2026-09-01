@@ -529,12 +529,24 @@ def deploy_blue_green(
             return report
 
     if dry_run:
+        # The incoming release directory does not exist yet (build hasn't
+        # run), so it never appears among _release_dirs() -- there is
+        # nothing to preview-delete for it. The pre-flip `current` is the
+        # release an operator would roll back to if this deploy proceeded;
+        # _resolve_protected_reasons protecting it as "current" here previews
+        # the same outcome gc_releases reaches post-flip (TAP-6896), via the
+        # identical helper the real GC uses -- not a second copy of the rules.
+        protected_reasons = _resolve_protected_reasons(protect=release.path, protect_extra=None)
+        gc_preview = _plan_gc(
+            _release_dirs(), keep=keep_releases, protected_reasons=protected_reasons
+        )
         report["ok"] = True
         report["planned"] = {
             "build": str(release.path),
             "flip": str(CURRENT_LINK),
             "keep_releases": keep_releases,
         }
+        report["gc_preview"] = gc_preview
         return report
 
     with deploy_lock():
