@@ -80,7 +80,10 @@ def test_dry_run_previews_evictions_and_deletes_nothing(
             "--dry-run",
             "--skip-gate",
             "--keep-releases",
-            "1",
+            # TAP-6896: the preview models post-flip state, so the incoming
+            # (not-yet-built) release occupies the newest keep-slot too --
+            # 2, not 1, is required for one existing release to still fit.
+            "2",
         ],
     )
 
@@ -92,8 +95,8 @@ def test_dry_run_previews_evictions_and_deletes_nothing(
     assert report["dry_run"] is True
 
     preview = report["gc_preview"]
-    # Known-positive: with --keep-releases 1, the older of the two existing
-    # releases would be evicted by index -- the preview must say so.
+    # Known-positive: with --keep-releases 2, one incoming slot + one
+    # existing slot -- the older of the two existing releases is evicted.
     assert evictable.name in preview["to_delete"]
     # Known-negative: the release within keep is not slated for deletion.
     assert kept_by_index.name in preview["kept"]
@@ -140,11 +143,14 @@ def test_dry_run_honours_keep_releases_from_command_line(
     report = json.loads(result.output)
     preview = report["gc_preview"]
 
-    # Known-positive: with the CLI's --keep-releases 2 (below the library
-    # default of 3), the two most-recent releases are kept by index.
+    # Known-positive: with the CLI's --keep-releases 2, the incoming release
+    # occupies the newest keep-slot (post-flip modeling, TAP-6896) and
+    # `newest` occupies the other.
     assert newest.name in preview["kept"]
-    assert middle.name in preview["kept"]
-    # Known-negative: the third-oldest is evicted -- proves the CLI value
-    # of 2, not the library default of 3, reached the preview.
+    # Known-negative: `middle` is evicted at keep=2 once the incoming release
+    # consumes a slot -- under the library default of 3 it would still be
+    # kept, so this proves the CLI's 2, not the default 3, reached the
+    # preview.
+    assert middle.name in preview["to_delete"]
     assert oldest.name in preview["to_delete"]
     assert all(p.exists() for p in (oldest, middle, newest))

@@ -269,6 +269,27 @@ def _smoke_required_binaries(release: ReleaseRef) -> dict[str, Any]:
     return {"ok": True, "versions": versions}
 
 
+def _previous_protect_extra(
+    previous_release: Path | None, incoming_path: Path
+) -> dict[Path, str] | None:
+    """Build the ``protect_extra`` map for the outgoing (pre-flip) release.
+
+    Shared by the real post-flip GC call (:func:`_reap_superseded_then_gc`)
+    and the ``--dry-run`` preview (:func:`deploy_blue_green`) so the two
+    never compute "previous" by two different rules (TAP-6895 / TAP-6896).
+
+    Scope: protection is one deploy deep. R0 is protected as "previous"
+    during the deploy that supersedes it with R1. At the *next* deploy
+    (R1 -> R2), "previous" becomes R1 and R0 falls back to index-only
+    (``--keep-releases``) protection -- it is not permanently pinned. A
+    later reader should not take "the rollback target is protected" as an
+    unconditional guarantee spanning more than one deploy.
+    """
+    if previous_release is not None and previous_release.resolve() != incoming_path.resolve():
+        return {previous_release: "previous"}
+    return None
+
+
 def _reap_superseded_then_gc(
     release: ReleaseRef, previous_release: Path | None, keep_releases: int
 ) -> dict[str, Any]:
@@ -330,9 +351,7 @@ def _reap_superseded_then_gc(
             },
         }
 
-    protect_extra: dict[Path, str] | None = None
-    if previous_release is not None and previous_release.resolve() != release.path.resolve():
-        protect_extra = {previous_release: "previous"}
+    protect_extra = _previous_protect_extra(previous_release, release.path)
     gc = gc_releases(keep=keep_releases, protect=release.path, protect_extra=protect_extra)
     return {"superseded_reap": superseded_reap, "gc": gc}
 
@@ -416,11 +435,18 @@ def _deploy_under_lock(
 
 def _resolve_protected_reasons(
     *,
+    current: Path | None,
     protect: Path | None,
     protect_extra: Mapping[Path, str] | None,
 ) -> dict[Path, str]:
-    """Build the {resolved_path: reason} map GC (real or previewed) protects."""
-    current = current_release_path()
+    """Build the {resolved_path: reason} map GC (real or previewed) protects.
+
+    ``current`` is passed explicitly rather than read live via
+    :func:`current_release_path` here, so a caller modeling post-flip state
+    (the ``--dry-run`` preview, TAP-6896) can pass the *incoming* release --
+    what ``current`` will resolve to once the real flip runs -- instead of
+    the pre-flip value that is still on disk at preview time.
+    """
     protected_reasons: dict[Path, str] = {}
     if current is not None:
         protected_reasons[current.resolve()] = "current"
@@ -487,7 +513,9 @@ def gc_releases(
     protect the pre-flip rollback target alongside the incoming release
     (TAP-6895), so it survives index-based eviction the way ``current`` does.
     """
-    protected_reasons = _resolve_protected_reasons(protect=protect, protect_extra=protect_extra)
+    protected_reasons = _resolve_protected_reasons(
+        current=current_release_path(), protect=protect, protect_extra=protect_extra
+    )
     plan = _plan_gc(_release_dirs(), keep=keep, protected_reasons=protected_reasons)
     for name in plan["to_delete"]:
         shutil.rmtree(RELEASES_DIR / name, ignore_errors=True)
@@ -557,15 +585,27 @@ def deploy_blue_green(
 
     if dry_run:
         # The incoming release directory does not exist yet (build hasn't
-        # run), so it never appears among _release_dirs() -- there is
-        # nothing to preview-delete for it. The pre-flip `current` is the
-        # release an operator would roll back to if this deploy proceeded;
-        # _resolve_protected_reasons protecting it as "current" here previews
-        # the same outcome gc_releases reaches post-flip (TAP-6896), via the
-        # identical helper the real GC uses -- not a second copy of the rules.
-        protected_reasons = _resolve_protected_reasons(protect=release.path, protect_extra=None)
+        # run) and `current` still resolves to the pre-flip release on disk.
+        # The real GC runs post-flip: the incoming release has been built
+        # (present, newest by mtime) and `current` resolves to it. Modeling
+        # pre-flip state here previews a different, smaller GC than the one
+        # that actually runs (TAP-6896) -- every existing release would sit
+        # one index lower in the preview than it does at real GC time.
+        #
+        # So build the same inputs the post-flip real GC call would see:
+        # the incoming release prepended at the newest position, `current`
+        # modeled as resolving to it, and the outgoing (pre-flip current)
+        # release protected exactly like TAP-6895 protects it for real.
+        # Still the identical `_plan_gc` helper the real GC uses -- not a
+        # second copy of the rules, only different (correct) inputs.
+        previous_release = current_release_path()
+        protect_extra = _previous_protect_extra(previous_release, release.path)
+        protected_reasons = _resolve_protected_reasons(
+            current=release.path, protect=release.path, protect_extra=protect_extra
+        )
+        existing_dirs = [d for d in _release_dirs() if d.resolve() != release.path.resolve()]
         gc_preview = _plan_gc(
-            _release_dirs(), keep=keep_releases, protected_reasons=protected_reasons
+            [release.path, *existing_dirs], keep=keep_releases, protected_reasons=protected_reasons
         )
         report["ok"] = True
         report["planned"] = {

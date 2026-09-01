@@ -362,6 +362,141 @@ class TestSupersededReapGatesGC:
         assert result["gc"]["ok"] is True
 
 
+class TestDryRunPreviewMatchesPostFlipGC:
+    """TAP-6896: the --dry-run preview must model post-flip state.
+
+    Pre-fix, the preview called _plan_gc against _release_dirs() as it
+    stood *before* build/flip -- the incoming release absent, `current`
+    still resolving to the outgoing release. The real GC runs *after*
+    build/flip, with one more directory present and `current` resolving
+    to the incoming release. Every existing release therefore sat one
+    index lower in the preview than it would at real GC time, and a
+    release an operator saw as KEPT in the preview could be DELETED for
+    real.
+    """
+
+    def _setup_releases(self, releases_dir: Path) -> list[Path]:
+        now = time.time()
+        names = [
+            "3.12.70-1111111",
+            "3.12.71-2222222",
+            "3.12.72-dd5c4e06",
+            "3.12.72-5f808ecb",
+            "3.12.73-6a29cf7f",
+        ]
+        dirs = []
+        for i, name in enumerate(names):
+            release_dir = _make_release(releases_dir, name)
+            os.utime(release_dir, (now - (100 - i * 10), now - (100 - i * 10)))
+            dirs.append(release_dir)
+        return dirs
+
+    def _make_checkout(self, tmp_path: Path, version: str) -> Path:
+        checkout = tmp_path / "checkout"
+        (checkout / "packages" / "tapps-mcp").mkdir(parents=True)
+        (checkout / "packages" / "tapps-mcp" / "pyproject.toml").write_text(
+            f'[project]\nversion = "{version}"\n', encoding="utf-8"
+        )
+        return checkout
+
+    def test_preview_equals_real_gc_report(
+        self, bg_home: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Equivalence (mandatory): from one starting state, the preview's
+        deleted/kept/skipped sets equal the real post-flip GC report's --
+        computed through the actual deploy_blue_green() dry-run branch and
+        the actual (stubbed-build, real-flip, real-gc) deploy path, not by
+        calling _plan_gc twice by hand."""
+        releases_dir = bg_home / "releases"
+        dirs = self._setup_releases(releases_dir)
+        bg.flip_current(bg.ReleaseRef("3.12.73", "6a29cf7f", dirs[-1]))
+
+        checkout = self._make_checkout(tmp_path, "3.12.74")
+        monkeypatch.setattr(bg, "_read_short_sha", lambda _c: "incoming")
+
+        preview_report = bg.deploy_blue_green(checkout, dry_run=True, skip_gate=True, keep_releases=3)
+        assert preview_report["ok"] is True
+        preview = preview_report["gc_preview"]
+
+        # dry-run must not have touched the filesystem.
+        assert sorted(p.name for p in releases_dir.iterdir()) == sorted(d.name for d in dirs)
+
+        monkeypatch.setattr(bg, "build_release", self._fake_build_for(releases_dir))
+        monkeypatch.setattr(bg, "smoke_test_release", lambda *a, **k: {"ok": True, "versions": {}})
+        monkeypatch.setattr(
+            "tapps_mcp.distribution.mcp_zombie_reap.reap_orphan_mcp_serves",
+            lambda: {"ok": True, "reaped": []},
+        )
+        monkeypatch.setattr(
+            "tapps_mcp.distribution.fleet_control.fleet_any_running", lambda: False
+        )
+        monkeypatch.setattr(
+            "tapps_mcp.distribution.fleet_control.reap_superseded_fleet",
+            lambda: {"superseded_pids": [], "reaped": [], "errors": []},
+        )
+        monkeypatch.setattr(
+            "tapps_mcp.distribution.setup_generator.is_tapps_mcp_dev_monorepo",
+            lambda _checkout: False,
+        )
+        real_report = bg.deploy_blue_green(checkout, skip_gate=True, keep_releases=3)
+        assert real_report["ok"] is True
+        real_gc = real_report["gc"]
+
+        assert set(preview["to_delete"]) == set(real_gc["deleted"])
+        assert set(preview["kept"]) == set(real_gc["kept"])
+        assert set(preview["skipped_in_use"]) == set(real_gc["skipped_in_use"])
+
+    def _fake_build_for(self, releases_dir: Path) -> Any:
+        def _fake_build(
+            _checkout: Path, release: bg.ReleaseRef, *, force: bool = False
+        ) -> dict[str, Any]:
+            _make_release(releases_dir, release.name)
+            return {
+                "ok": True,
+                "skipped": False,
+                "release": release.name,
+                "path": str(release.path),
+            }
+
+        return _fake_build
+
+    def test_known_negative_idx_keep_minus_one_previews_as_deleted(
+        self, bg_home: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """The exact off-by-one case: pre-flip, '3.12.72-dd5c4e06' sits at
+        idx == keep-1 (idx=2, keep=3) and would preview as kept under the
+        pre-fix pre-flip model. Post-flip it shifts to idx=3 (>= keep) and
+        must preview as deleted, named explicitly."""
+        releases_dir = bg_home / "releases"
+        dirs = self._setup_releases(releases_dir)
+        bg.flip_current(bg.ReleaseRef("3.12.73", "6a29cf7f", dirs[-1]))
+
+        checkout = self._make_checkout(tmp_path, "3.12.74")
+        monkeypatch.setattr(bg, "_read_short_sha", lambda _c: "incoming")
+
+        preview_report = bg.deploy_blue_green(checkout, dry_run=True, skip_gate=True, keep_releases=3)
+        preview = preview_report["gc_preview"]
+
+        assert "3.12.72-dd5c4e06" in preview["to_delete"]
+        assert "3.12.72-dd5c4e06" not in preview["kept"]
+
+    def test_positive_release_comfortably_within_keep_still_previews_as_kept(
+        self, bg_home: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        releases_dir = bg_home / "releases"
+        dirs = self._setup_releases(releases_dir)
+        bg.flip_current(bg.ReleaseRef("3.12.73", "6a29cf7f", dirs[-1]))
+
+        checkout = self._make_checkout(tmp_path, "3.12.74")
+        monkeypatch.setattr(bg, "_read_short_sha", lambda _c: "incoming")
+
+        preview_report = bg.deploy_blue_green(checkout, dry_run=True, skip_gate=True, keep_releases=3)
+        preview = preview_report["gc_preview"]
+
+        # idx=1 pre-flip and idx=2 post-flip -- inside keep=3 either way.
+        assert "3.12.73-6a29cf7f" in preview["kept"]
+
+
 class TestGcProtectsPreviousRelease:
     """TAP-6895: gc_releases must protect the outgoing (pre-flip) release too."""
 
