@@ -3,8 +3,11 @@
 from __future__ import annotations
 
 import json
+import os
+import time
 from pathlib import Path
-from unittest.mock import patch
+from typing import Any
+from unittest.mock import MagicMock, patch
 
 import pytest
 
@@ -208,3 +211,390 @@ class TestQuiescenceGate:
         with patch.object(bg.Path, "is_dir", return_value=False):
             gate = bg.quiescence_gate(checkout)
         assert gate["ok"] is True
+
+
+def _run_deploy(
+    bg_home: Path,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    *,
+    keep_releases: int,
+    reap_fn: Any,
+) -> dict[str, Any]:
+    """Drive deploy_blue_green end-to-end with build/smoke/fleet stubbed out.
+
+    Only build_release, smoke_test_release, mcp_zombie_reap, fleet_control,
+    and setup_generator are stubbed -- flip_current and gc_releases run for
+    real against bg_home so GC-gating (TAP-6894) and protection (TAP-6895)
+    are exercised, not mocked away.
+    """
+    releases_dir = bg_home / "releases"
+    checkout = tmp_path / "checkout"
+    (checkout / "packages" / "tapps-mcp").mkdir(parents=True, exist_ok=True)
+    (checkout / "packages" / "tapps-mcp" / "pyproject.toml").write_text(
+        '[project]\nversion = "3.12.36"\n', encoding="utf-8"
+    )
+    monkeypatch.setattr(bg, "_read_short_sha", lambda _c: "3333333")
+
+    def _fake_build(
+        _checkout: Path, release: bg.ReleaseRef, *, force: bool = False
+    ) -> dict[str, Any]:
+        _make_release(releases_dir, release.name)
+        return {"ok": True, "skipped": False, "release": release.name, "path": str(release.path)}
+
+    monkeypatch.setattr(bg, "build_release", _fake_build)
+    monkeypatch.setattr(bg, "smoke_test_release", lambda *a, **k: {"ok": True, "versions": {}})
+    monkeypatch.setattr(
+        "tapps_mcp.distribution.mcp_zombie_reap.reap_orphan_mcp_serves",
+        lambda: {"ok": True, "reaped": []},
+    )
+    monkeypatch.setattr("tapps_mcp.distribution.fleet_control.fleet_any_running", lambda: False)
+    monkeypatch.setattr("tapps_mcp.distribution.fleet_control.reap_superseded_fleet", reap_fn)
+    monkeypatch.setattr(
+        "tapps_mcp.distribution.setup_generator.is_tapps_mcp_dev_monorepo",
+        lambda _checkout: False,
+    )
+    return bg.deploy_blue_green(checkout, skip_gate=True, keep_releases=keep_releases)
+
+
+class TestSupersededReapGatesGC:
+    """TAP-6894: a failed superseded-fleet reap must block GC, not be swallowed."""
+
+    def test_raising_reap_blocks_gc(
+        self, bg_home: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        gc_spy = MagicMock(wraps=bg.gc_releases)
+        monkeypatch.setattr(bg, "gc_releases", gc_spy)
+
+        def _raising_reap() -> dict[str, Any]:
+            raise RuntimeError("pidfile corrupt")
+
+        result = _run_deploy(bg_home, tmp_path, monkeypatch, keep_releases=0, reap_fn=_raising_reap)
+
+        # A good deploy (build/smoke/flip all succeeded) is still reported ok.
+        assert result["ok"] is True
+        assert result["superseded_reap"]["ok"] is False
+        assert result["gc"] == {
+            "ok": False,
+            "skipped": True,
+            "reason": "superseded_reap raised; GC blocked until reap succeeds",
+        }
+        # Known-negative: GC genuinely never ran -- not just "ran and kept
+        # everything by coincidence."
+        gc_spy.assert_not_called()
+
+    def test_reap_with_recorded_error_blocks_gc_without_raising(
+        self, bg_home: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """TAP-6894 follow-up: a reap that fails without raising must still gate GC."""
+        gc_spy = MagicMock(wraps=bg.gc_releases)
+        monkeypatch.setattr(bg, "gc_releases", gc_spy)
+
+        result = _run_deploy(
+            bg_home,
+            tmp_path,
+            monkeypatch,
+            keep_releases=0,
+            reap_fn=lambda: {
+                "errors": ["1234: EPERM"],
+                "superseded_pids": [1234],
+                "reaped": [],
+            },
+        )
+
+        assert result["ok"] is True
+        assert result["superseded_reap"]["ok"] is False
+        assert result["gc"] == {
+            "ok": False,
+            "skipped": True,
+            "reason": "superseded_reap reported failure; GC blocked until reap succeeds",
+        }
+        # Known-negative: assert on the call itself, not a report field -- a
+        # report field can read "skipped" while GC still ran underneath it.
+        gc_spy.assert_not_called()
+
+    def test_reap_with_pid_missing_from_reaped_blocks_gc(
+        self, bg_home: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """A pid absent from ``reaped`` with no recorded error is still a failure."""
+        gc_spy = MagicMock(wraps=bg.gc_releases)
+        monkeypatch.setattr(bg, "gc_releases", gc_spy)
+
+        result = _run_deploy(
+            bg_home,
+            tmp_path,
+            monkeypatch,
+            keep_releases=0,
+            reap_fn=lambda: {
+                "superseded_pids": [1234],
+                "reaped": [],
+                "errors": [],
+            },
+        )
+
+        assert result["ok"] is True
+        assert result["superseded_reap"]["ok"] is False
+        assert result["gc"]["skipped"] is True
+        gc_spy.assert_not_called()
+
+    def test_succeeding_reap_still_reaches_gc(
+        self, bg_home: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        gc_spy = MagicMock(wraps=bg.gc_releases)
+        monkeypatch.setattr(bg, "gc_releases", gc_spy)
+
+        result = _run_deploy(
+            bg_home,
+            tmp_path,
+            monkeypatch,
+            keep_releases=3,
+            reap_fn=lambda: {"superseded_pids": [], "reaped": [], "errors": []},
+        )
+
+        assert result["ok"] is True
+        assert result["superseded_reap"]["ok"] is True
+        # Known-positive: a succeeding reap still reaches GC, with the same
+        # arguments as today -- not just "called."
+        gc_spy.assert_called_once()
+        assert gc_spy.call_args.kwargs["keep"] == 3
+        assert gc_spy.call_args.kwargs["protect"].name == "3.12.36-3333333"
+        assert gc_spy.call_args.kwargs["protect_extra"] is None
+        assert result["gc"]["ok"] is True
+
+
+class TestDryRunPreviewMatchesPostFlipGC:
+    """TAP-6896: the --dry-run preview must model post-flip state.
+
+    Pre-fix, the preview called _plan_gc against _release_dirs() as it
+    stood *before* build/flip -- the incoming release absent, `current`
+    still resolving to the outgoing release. The real GC runs *after*
+    build/flip, with one more directory present and `current` resolving
+    to the incoming release. Every existing release therefore sat one
+    index lower in the preview than it would at real GC time, and a
+    release an operator saw as KEPT in the preview could be DELETED for
+    real.
+    """
+
+    def _setup_releases(self, releases_dir: Path) -> list[Path]:
+        now = time.time()
+        names = [
+            "3.12.70-1111111",
+            "3.12.71-2222222",
+            "3.12.72-dd5c4e06",
+            "3.12.72-5f808ecb",
+            "3.12.73-6a29cf7f",
+        ]
+        dirs = []
+        for i, name in enumerate(names):
+            release_dir = _make_release(releases_dir, name)
+            os.utime(release_dir, (now - (100 - i * 10), now - (100 - i * 10)))
+            dirs.append(release_dir)
+        return dirs
+
+    def _make_checkout(self, tmp_path: Path, version: str) -> Path:
+        checkout = tmp_path / "checkout"
+        (checkout / "packages" / "tapps-mcp").mkdir(parents=True)
+        (checkout / "packages" / "tapps-mcp" / "pyproject.toml").write_text(
+            f'[project]\nversion = "{version}"\n', encoding="utf-8"
+        )
+        return checkout
+
+    def test_preview_equals_real_gc_report(
+        self, bg_home: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Equivalence (mandatory): from one starting state, the preview's
+        deleted/kept/skipped sets equal the real post-flip GC report's --
+        computed through the actual deploy_blue_green() dry-run branch and
+        the actual (stubbed-build, real-flip, real-gc) deploy path, not by
+        calling _plan_gc twice by hand."""
+        releases_dir = bg_home / "releases"
+        dirs = self._setup_releases(releases_dir)
+        bg.flip_current(bg.ReleaseRef("3.12.73", "6a29cf7f", dirs[-1]))
+
+        checkout = self._make_checkout(tmp_path, "3.12.74")
+        monkeypatch.setattr(bg, "_read_short_sha", lambda _c: "incoming")
+
+        preview_report = bg.deploy_blue_green(checkout, dry_run=True, skip_gate=True, keep_releases=3)
+        assert preview_report["ok"] is True
+        preview = preview_report["gc_preview"]
+
+        # dry-run must not have touched the filesystem.
+        assert sorted(p.name for p in releases_dir.iterdir()) == sorted(d.name for d in dirs)
+
+        monkeypatch.setattr(bg, "build_release", self._fake_build_for(releases_dir))
+        monkeypatch.setattr(bg, "smoke_test_release", lambda *a, **k: {"ok": True, "versions": {}})
+        monkeypatch.setattr(
+            "tapps_mcp.distribution.mcp_zombie_reap.reap_orphan_mcp_serves",
+            lambda: {"ok": True, "reaped": []},
+        )
+        monkeypatch.setattr(
+            "tapps_mcp.distribution.fleet_control.fleet_any_running", lambda: False
+        )
+        monkeypatch.setattr(
+            "tapps_mcp.distribution.fleet_control.reap_superseded_fleet",
+            lambda: {"superseded_pids": [], "reaped": [], "errors": []},
+        )
+        monkeypatch.setattr(
+            "tapps_mcp.distribution.setup_generator.is_tapps_mcp_dev_monorepo",
+            lambda _checkout: False,
+        )
+        real_report = bg.deploy_blue_green(checkout, skip_gate=True, keep_releases=3)
+        assert real_report["ok"] is True
+        real_gc = real_report["gc"]
+
+        assert set(preview["to_delete"]) == set(real_gc["deleted"])
+        assert set(preview["kept"]) == set(real_gc["kept"])
+        assert set(preview["skipped_in_use"]) == set(real_gc["skipped_in_use"])
+
+    def _fake_build_for(self, releases_dir: Path) -> Any:
+        def _fake_build(
+            _checkout: Path, release: bg.ReleaseRef, *, force: bool = False
+        ) -> dict[str, Any]:
+            _make_release(releases_dir, release.name)
+            return {
+                "ok": True,
+                "skipped": False,
+                "release": release.name,
+                "path": str(release.path),
+            }
+
+        return _fake_build
+
+    def test_known_negative_idx_keep_minus_one_previews_as_deleted(
+        self, bg_home: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """The exact off-by-one case: pre-flip, '3.12.72-dd5c4e06' sits at
+        idx == keep-1 (idx=2, keep=3) and would preview as kept under the
+        pre-fix pre-flip model. Post-flip it shifts to idx=3 (>= keep) and
+        must preview as deleted, named explicitly."""
+        releases_dir = bg_home / "releases"
+        dirs = self._setup_releases(releases_dir)
+        bg.flip_current(bg.ReleaseRef("3.12.73", "6a29cf7f", dirs[-1]))
+
+        checkout = self._make_checkout(tmp_path, "3.12.74")
+        monkeypatch.setattr(bg, "_read_short_sha", lambda _c: "incoming")
+
+        preview_report = bg.deploy_blue_green(checkout, dry_run=True, skip_gate=True, keep_releases=3)
+        preview = preview_report["gc_preview"]
+
+        assert "3.12.72-dd5c4e06" in preview["to_delete"]
+        assert "3.12.72-dd5c4e06" not in preview["kept"]
+
+    def test_positive_release_comfortably_within_keep_still_previews_as_kept(
+        self, bg_home: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        releases_dir = bg_home / "releases"
+        dirs = self._setup_releases(releases_dir)
+        bg.flip_current(bg.ReleaseRef("3.12.73", "6a29cf7f", dirs[-1]))
+
+        checkout = self._make_checkout(tmp_path, "3.12.74")
+        monkeypatch.setattr(bg, "_read_short_sha", lambda _c: "incoming")
+
+        preview_report = bg.deploy_blue_green(checkout, dry_run=True, skip_gate=True, keep_releases=3)
+        preview = preview_report["gc_preview"]
+
+        # idx=1 pre-flip and idx=2 post-flip -- inside keep=3 either way.
+        assert "3.12.73-6a29cf7f" in preview["kept"]
+
+
+class TestGcProtectsPreviousRelease:
+    """TAP-6895: gc_releases must protect the outgoing (pre-flip) release too."""
+
+    def test_outgoing_release_survives_index_eviction(
+        self, bg_home: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        releases_dir = bg_home / "releases"
+        now = time.time()
+        delete_target = _make_release(releases_dir, "3.12.30-0000001")
+        os.utime(delete_target, (now - 400, now - 400))
+        outgoing = _make_release(releases_dir, "3.12.34-1111111")
+        os.utime(outgoing, (now - 300, now - 300))
+        filler = _make_release(releases_dir, "3.12.35-2222222")
+        os.utime(filler, (now - 200, now - 200))
+        bg.flip_current(bg.ReleaseRef("3.12.34", "1111111", outgoing))
+
+        result = _run_deploy(
+            bg_home,
+            tmp_path,
+            monkeypatch,
+            keep_releases=2,
+            reap_fn=lambda: {"ok": True, "reaped": [], "errors": []},
+        )
+
+        assert result["ok"] is True
+        gc = result["gc"]
+        # Known-positive: outgoing (what `current` resolved to pre-flip)
+        # survives even though keep=2 fills both index-kept slots with the
+        # new incoming release and filler, which would otherwise evict it.
+        assert outgoing.name in gc["kept"]
+        assert gc["protected"][outgoing.name] == "previous"
+        assert outgoing.exists()
+        # Known-negative: an unprotected, un-kept, unreferenced release is
+        # still deleted -- proves the fix protects specific paths, not
+        # everything.
+        assert delete_target.name in gc["deleted"]
+        assert not delete_target.exists()
+        # keep semantics unchanged for filler: kept by index, not by name.
+        assert filler.name in gc["kept"]
+        assert filler.name not in gc["protected"]
+
+    def test_previous_release_survives_mtime_reorder(
+        self, bg_home: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """previous_release is captured from current_release_path() before
+        the flip (blue_green.py `_deploy_under_lock`) -- not inferred from
+        _release_dirs()[1], which sorts by st_mtime and can disagree with
+        deploy order. Touch an older, unrelated release so it jumps to the
+        front of the mtime sort, then prove the release protected as
+        "previous" is still the one `current` pointed at pre-flip, not
+        whatever now sits at index 1.
+        """
+        releases_dir = bg_home / "releases"
+        now = time.time()
+        older_unrelated = _make_release(releases_dir, "3.12.20-0000000")
+        os.utime(older_unrelated, (now - 500, now - 500))
+        outgoing = _make_release(releases_dir, "3.12.34-1111111")
+        os.utime(outgoing, (now - 300, now - 300))
+        filler = _make_release(releases_dir, "3.12.35-2222222")
+        os.utime(filler, (now - 100, now - 100))
+        bg.flip_current(bg.ReleaseRef("3.12.34", "1111111", outgoing))
+
+        # Reorder: touch the unrelated OLDEST release so it now sorts
+        # newest by mtime -- deploy order (older_unrelated < outgoing <
+        # filler) and mtime order now disagree.
+        os.utime(older_unrelated, (now + 1000, now + 1000))
+        # Sanity check on the setup itself: mtime order (older_unrelated,
+        # filler, outgoing) now disagrees with deploy order (older_unrelated,
+        # outgoing, filler) -- `outgoing`, the actual previous release, is
+        # NOT at mtime-sorted index 1. Any "previous" inferred from position
+        # rather than from the pre-flip `current` symlink would misidentify
+        # it here.
+        pre_deploy_order = [d.name for d in bg._release_dirs()]
+        assert pre_deploy_order[0] == older_unrelated.name
+        assert pre_deploy_order[1] != outgoing.name
+
+        result = _run_deploy(
+            bg_home,
+            tmp_path,
+            monkeypatch,
+            keep_releases=1,
+            reap_fn=lambda: {"superseded_pids": [], "reaped": [], "errors": []},
+        )
+
+        assert result["ok"] is True
+        gc = result["gc"]
+        # Known-positive: `outgoing` -- what `current` resolved to before
+        # the flip -- is protected as "previous" despite the reorder.
+        assert gc["protected"].get(outgoing.name) == "previous"
+        assert outgoing.name in gc["kept"]
+        assert outgoing.exists()
+        # Known-negative: `filler`, which is not the pre-flip previous
+        # release, is NOT protected and is evicted -- proves the fix names
+        # the right release, not a release that happens to still survive
+        # for some other reason.
+        assert filler.name not in gc["protected"]
+        assert filler.name in gc["deleted"]
+        assert not filler.exists()
+        # `older_unrelated` is kept by index (idx=0 < keep=1), unrelated to
+        # the previous-release protection being tested here.
+        assert older_unrelated.name in gc["kept"]
