@@ -316,6 +316,72 @@ class TestTheToolSurfaceAcceptsSlotOwnerAndForce:
         assert result["success"] is True
 
 
+class TestTheConflictSignalReachesTheAgent:
+    """Warn mode writes *and reports* — the report has to leave Python.
+
+    ``block`` mode refuses through the gateway envelope, which is loud by
+    construction. ``warn`` — the default, and the mode the ~35 consuming repos
+    run — completes the write and hands the displacement back in the response.
+    Embedding it as an unclassified sub-result is the TAP-5656 shape: a caller
+    reading only the top level sees a plain success over somebody else's
+    archived handoff.
+    """
+
+    @staticmethod
+    async def _save(root: Path, markdown: str, **kwargs: Any) -> dict[str, Any]:
+        return await TestTheToolSurfaceAcceptsSlotOwnerAndForce._save(root, markdown, **kwargs)
+
+    @pytest.mark.asyncio
+    async def test_a_warn_mode_overwrite_surfaces_through_the_envelope(
+        self, tmp_path: Path
+    ) -> None:
+        incumbent = _handoff("program-a")
+        _seed(tmp_path, None, incumbent)
+
+        result = await self._save(tmp_path, _handoff("program-b"))
+
+        assert result["success"] is True
+        # The raw payload keeps every field it had — the classification is
+        # additive, never a replacement for the record.
+        conflict = result["data"]["conflict"]
+        assert conflict["foreign"] is True
+        assert conflict["mode"] == "warn"
+        assert conflict["previous"]["program"] == "program-a"
+        assert Path(conflict["archived_to"]).read_text(encoding="utf-8") == incumbent
+        # And the envelope itself now says so, at the top level and in prose.
+        assert result["data"]["conflict_status"] == "overwritten"
+        assert result["degraded"] is True
+        assert any("program-a" in w for w in result["data"]["warnings"])
+
+    @pytest.mark.asyncio
+    async def test_a_clean_write_is_classified_clear_and_not_degraded(self, tmp_path: Path) -> None:
+        """Negative control: nothing displaced, nothing to warn about."""
+        result = await self._save(tmp_path, _handoff("program-a"))
+
+        assert result["data"]["conflict_status"] == "clear"
+        assert "degraded" not in result
+        assert "warnings" not in result["data"]
+
+    @pytest.mark.asyncio
+    async def test_an_unownable_incumbent_is_reported_but_does_not_degrade(
+        self, tmp_path: Path
+    ) -> None:
+        """Every handoff written before TAP-6872 lacks the header.
+
+        ``classify_foreign`` answers ``"unknown"`` for those and never blocks
+        them; degrading on it would make the ordinary re-handoff in every
+        legacy repo read as a displacement.
+        """
+        legacy = _handoff("program-a").replace("**Program:** program-a\n", "")
+        _seed(tmp_path, None, legacy)
+
+        result = await self._save(tmp_path, _handoff("program-b"))
+
+        assert result["data"]["conflict"]["foreign"] == "unknown"
+        assert result["data"]["conflict_status"] == "unknown"
+        assert "degraded" not in result
+
+
 class TestTheCliSurface:
     """Scope item 4 — ``--slot`` on write, and a new ``handoff list``."""
 

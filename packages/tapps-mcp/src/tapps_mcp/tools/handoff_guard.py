@@ -93,6 +93,68 @@ class HandoffGuardResult:
     conflict: dict[str, Any] | None = None
 
 
+def conflict_status(payload: dict[str, Any] | None) -> str:
+    """Classify a guard conflict report for a response envelope.
+
+    The counterpart of
+    :func:`~tapps_mcp.tools.handoff_write.best_effort_status` for the third
+    thing :class:`~tapps_mcp.tools.handoff_write.HandoffWriteResult` carries.
+    A conflict is not a best-effort sub-result — the write completed either
+    way — so it gets its own vocabulary rather than being forced into
+    ``ok``/``skipped``/``failed``:
+
+    * ``off`` — ``handoff_conflict_mode=off``; the guard archived the incumbent
+      and deliberately reported nothing. Absence of a signal, not a clean write.
+    * ``clear`` — the guard ran and found no foreign incumbent.
+    * ``unknown`` — an incumbent was replaced whose ownership could not be
+      established (see :func:`classify_foreign`). Every handoff written before
+      TAP-6872 lacks the header, so this is the ordinary legacy case and is
+      reported without being treated as a displacement.
+    * ``overwritten`` — a *named* different program's recent handoff was
+      archived and replaced. The only value that warrants degrading the
+      envelope, and the only one ``block`` mode refuses on.
+    """
+    if not payload:
+        return "off"
+    foreign = payload.get("foreign")
+    if foreign is True:
+        return "overwritten"
+    if foreign is False:
+        return "clear"
+    return "unknown"
+
+
+def conflict_advisory(payload: dict[str, Any]) -> tuple[str, list[str], list[str]]:
+    """Classify a conflict report and say what the agent should do about it.
+
+    Returns ``(status, warnings, next_steps)``. Both lists are empty unless the
+    status is ``overwritten``: that is the one value naming a specific program
+    whose recent handoff this write archived, so it is the one value that has
+    something to tell the agent.
+
+    The prose is built from the same payload the response carries under
+    ``conflict``, so the sentence and the machine-readable record can never
+    disagree. It lives here rather than at the response site because the shape
+    of the payload is this module's to know.
+    """
+    status = conflict_status(payload)
+    if status != "overwritten":
+        return status, [], []
+    previous = payload.get("previous") or {}
+    program = previous.get("program") or "an unidentified program"
+    archived_to = payload.get("archived_to")
+    where = f" — its copy is at {archived_to}" if archived_to else ""
+    forced = " (forced)" if payload.get("forced") else ""
+    return (
+        status,
+        [f"Replaced the handoff of {program}{forced}{where}"],
+        [
+            "Confirm that program is not still running before you continue; "
+            "restore its handoff from the archived copy if it is."
+        ],
+    )
+
+
 class HandoffOwnerConflictError(Exception):
     """A ``block``-mode write would have overwritten another program's handoff.
 
@@ -405,6 +467,8 @@ __all__ = [
     "HandoffOwnerConflictError",
     "archive_incumbent",
     "classify_foreign",
+    "conflict_advisory",
+    "conflict_status",
     "guarded_write",
     "handoff_archive_dir",
     "identity_from_markdown",

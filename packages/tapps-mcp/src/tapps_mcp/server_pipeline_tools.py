@@ -1688,11 +1688,19 @@ async def tapps_handoff_save(
     elapsed_ms = (time.perf_counter_ns() - start) // 1_000_000
     _record_execution("tapps_handoff_save", start)
 
+    from tapps_mcp.tools.handoff_guard import conflict_advisory
     from tapps_mcp.tools.handoff_schema import handoff_sections_from_doc
     from tapps_mcp.tools.handoff_write import best_effort_status
 
     mirror_status = best_effort_status(result.brain_mirror)
     session_end_status = best_effort_status(result.session_end)
+    # A conflict is not a failed sub-result — the write completed. It is a
+    # completed write that displaced somebody else's, which a caller reading
+    # only the top level would not know: the same escape as TAP-5656 from a
+    # different cause. Only ``overwritten`` speaks up; ``unknown`` is the
+    # ordinary pre-TAP-6872 incumbent and must not make every legacy repo's
+    # handoff read as a displacement.
+    conflict_state, warnings, next_steps = conflict_advisory(result.conflict or {})
 
     data: dict[str, Any] = {
         "file_path": result.file_path,
@@ -1700,8 +1708,11 @@ async def tapps_handoff_save(
         "linear_p0": result.doc.linear_p0,
         "metadata": result.metadata,
         # Under ``warn`` the guard writes and *reports*; absent here the whole
-        # conflict signal stops at the Python boundary (spec §2.2).
+        # conflict signal stops at the Python boundary (spec §2.2). The raw
+        # payload is the record; ``conflict_status`` is the classification a
+        # caller can branch on without parsing it.
         "conflict": result.conflict,
+        "conflict_status": conflict_state,
         "handoff_sections": handoff_sections_from_doc(result.doc),
         "lint": {
             "ok": result.lint.ok,
@@ -1728,11 +1739,6 @@ async def tapps_handoff_save(
     if session_end_status == "failed":
         failed.append(("Session end", result.session_end or {}))
 
-    if not failed:
-        return success_response("tapps_handoff_save", elapsed_ms, data)
-
-    warnings: list[str] = []
-    next_steps: list[str] = []
     for label, payload in failed:
         detail = str(
             payload.get("detail")
@@ -1748,7 +1754,15 @@ async def tapps_handoff_save(
                 f"{label}: {length} chars against a {cap}-char cap — shorten it and re-run."
             )
 
-    warnings.append(f"The handoff file at {result.file_path} is intact.")
+    if failed:
+        warnings.append(f"The handoff file at {result.file_path} is intact.")
+
+    # Every note is collected before the envelope is chosen: a conflict alone
+    # degrades exactly as a failed sub-result alone does, and neither has to
+    # know the other exists.
+    if not warnings:
+        return success_response("tapps_handoff_save", elapsed_ms, data)
+
     next_steps.insert(0, "; ".join(warnings))
     data["warnings"] = warnings
     return success_response(
