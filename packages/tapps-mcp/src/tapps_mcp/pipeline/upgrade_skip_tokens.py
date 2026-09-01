@@ -55,6 +55,18 @@ def unknown_skip_tokens(configured: object) -> list[str]:
     return sorted({str(entry) for entry in configured} - ALL_SKIP_TOKENS)
 
 
+def applied_skip_tokens(configured: object) -> list[str]:
+    """Return the sorted ``upgrade_skip_files`` entries that matched the vocabulary.
+
+    Companion to :func:`unknown_skip_tokens` (TAP-6891): without this, a
+    working entry and an unconfigured project produce identical (silent)
+    output — "applied" and "not configured" were indistinguishable.
+    """
+    if not isinstance(configured, (list, tuple, set, frozenset)):
+        return []
+    return sorted({str(entry) for entry in configured} & ALL_SKIP_TOKENS)
+
+
 def nearest_token(entry: str) -> str | None:
     """Return the directory token covering *entry*, when one does.
 
@@ -97,6 +109,7 @@ def describe_unknown_skip_tokens(unknown: list[str]) -> list[str]:
 __all__ = [
     "ALL_SKIP_TOKENS",
     "SKIP_TOKENS",
+    "applied_skip_tokens",
     "describe_unknown_skip_token",
     "describe_unknown_skip_tokens",
     "nearest_token",

@@ -87,6 +87,7 @@ from tapps_core.common.logging import get_logger
 from tapps_mcp.pipeline.upgrade_skip_tokens import (
     ALL_SKIP_TOKENS,
     SKIP_TOKENS,
+    applied_skip_tokens,
     describe_unknown_skip_tokens,
     unknown_skip_tokens,
 )
@@ -303,6 +304,20 @@ def _record_unknown_skip_tokens(result: dict[str, Any], skip_files: set[str]) ->
         unknown=unknown,
         detail="; ".join(explanations),
     )
+
+
+def _record_applied_skip_tokens(result: dict[str, Any], skip_files: set[str]) -> None:
+    """Record ``upgrade_skip_files`` entries that matched the vocabulary and were applied.
+
+    Companion to :func:`_record_unknown_skip_tokens` (TAP-6891): before this, a
+    working entry and an unconfigured project produced identical (silent)
+    output — "applied" and "not configured" were indistinguishable in the run.
+    """
+    applied = applied_skip_tokens(skip_files)
+    if not applied:
+        return
+    result["applied_skip_tokens"] = applied
+    log.info("upgrade.applied_skip_tokens", applied=applied)
 
 
 def _lift_asset_overwrite_warnings(
@@ -2364,6 +2379,7 @@ def upgrade_pipeline(
     if skip_files:
         result["skipped_files"] = sorted(skip_files)
         _record_unknown_skip_tokens(result, skip_files)
+        _record_applied_skip_tokens(result, skip_files)
 
     stamp_results = _bump_skipped_version_stamps(project_root, skip_files, dry_run=dry_run)
     if stamp_results:
