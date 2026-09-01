@@ -328,12 +328,28 @@ def _deploy_under_lock(
     # connections for nothing, and would keep a GC'd release dir alive. Runs
     # after the restart so the pidfiles already name the new live set, and
     # before GC so nothing is executing out of a directory about to be deleted.
+    #
+    # The reap touches pidfiles, /proc, and signal delivery -- any of which
+    # can fail in ways this call site cannot enumerate in advance (a pidfile
+    # written by a different tapps-mcp version, a race on process exit, a
+    # permissions quirk). Broad `except Exception` is kept deliberately: the
+    # point of this comment is that narrowing it to "the exceptions we
+    # thought of" would silently let an unanticipated one fall through and
+    # reach gc_releases anyway, which is precisely the defect being fixed
+    # (TAP-6894). What changed is that failure now *gates* GC instead of
+    # being swallowed and ignored.
     try:
-        report["superseded_reap"] = reap_superseded_fleet()
-    except Exception as exc:  # never fail a good deploy on cleanup
+        superseded_reap = reap_superseded_fleet()
+    except Exception as exc:  # gate GC below instead of narrowing, see comment above
         report["superseded_reap"] = {"ok": False, "error": str(exc)}
-
-    report["gc"] = gc_releases(keep=keep_releases, protect=release.path)
+        report["gc"] = {
+            "ok": False,
+            "skipped": True,
+            "reason": "superseded_reap raised; GC blocked until reap succeeds",
+        }
+    else:
+        report["superseded_reap"] = superseded_reap
+        report["gc"] = gc_releases(keep=keep_releases, protect=release.path)
     report["ok"] = True
     report["current"] = str(CURRENT_LINK)
     try:

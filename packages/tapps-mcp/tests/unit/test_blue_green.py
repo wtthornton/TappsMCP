@@ -4,7 +4,8 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
-from unittest.mock import patch
+from typing import Any
+from unittest.mock import MagicMock, patch
 
 import pytest
 
@@ -208,3 +209,94 @@ class TestQuiescenceGate:
         with patch.object(bg.Path, "is_dir", return_value=False):
             gate = bg.quiescence_gate(checkout)
         assert gate["ok"] is True
+
+
+def _run_deploy(
+    bg_home: Path,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    *,
+    keep_releases: int,
+    reap_fn: Any,
+) -> dict[str, Any]:
+    """Drive deploy_blue_green end-to-end with build/smoke/fleet stubbed out.
+
+    Only build_release, smoke_test_release, mcp_zombie_reap, fleet_control,
+    and setup_generator are stubbed -- flip_current and gc_releases run for
+    real against bg_home so GC-gating (TAP-6894) and protection (TAP-6895)
+    are exercised, not mocked away.
+    """
+    releases_dir = bg_home / "releases"
+    checkout = tmp_path / "checkout"
+    (checkout / "packages" / "tapps-mcp").mkdir(parents=True, exist_ok=True)
+    (checkout / "packages" / "tapps-mcp" / "pyproject.toml").write_text(
+        '[project]\nversion = "3.12.36"\n', encoding="utf-8"
+    )
+    monkeypatch.setattr(bg, "_read_short_sha", lambda _c: "3333333")
+
+    def _fake_build(
+        _checkout: Path, release: bg.ReleaseRef, *, force: bool = False
+    ) -> dict[str, Any]:
+        _make_release(releases_dir, release.name)
+        return {"ok": True, "skipped": False, "release": release.name, "path": str(release.path)}
+
+    monkeypatch.setattr(bg, "build_release", _fake_build)
+    monkeypatch.setattr(bg, "smoke_test_release", lambda *a, **k: {"ok": True, "versions": {}})
+    monkeypatch.setattr(
+        "tapps_mcp.distribution.mcp_zombie_reap.reap_orphan_mcp_serves",
+        lambda: {"ok": True, "reaped": []},
+    )
+    monkeypatch.setattr("tapps_mcp.distribution.fleet_control.fleet_any_running", lambda: False)
+    monkeypatch.setattr("tapps_mcp.distribution.fleet_control.reap_superseded_fleet", reap_fn)
+    monkeypatch.setattr(
+        "tapps_mcp.distribution.setup_generator.is_tapps_mcp_dev_monorepo",
+        lambda _checkout: False,
+    )
+    return bg.deploy_blue_green(checkout, skip_gate=True, keep_releases=keep_releases)
+
+
+class TestSupersededReapGatesGC:
+    """TAP-6894: a failed superseded-fleet reap must block GC, not be swallowed."""
+
+    def test_raising_reap_blocks_gc(
+        self, bg_home: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        gc_spy = MagicMock(wraps=bg.gc_releases)
+        monkeypatch.setattr(bg, "gc_releases", gc_spy)
+
+        def _raising_reap() -> dict[str, Any]:
+            raise RuntimeError("pidfile corrupt")
+
+        result = _run_deploy(bg_home, tmp_path, monkeypatch, keep_releases=0, reap_fn=_raising_reap)
+
+        # A good deploy (build/smoke/flip all succeeded) is still reported ok.
+        assert result["ok"] is True
+        assert result["superseded_reap"]["ok"] is False
+        assert result["gc"] == {
+            "ok": False,
+            "skipped": True,
+            "reason": "superseded_reap raised; GC blocked until reap succeeds",
+        }
+        # Known-negative: GC genuinely never ran -- not just "ran and kept
+        # everything by coincidence."
+        gc_spy.assert_not_called()
+
+    def test_succeeding_reap_still_reaches_gc(
+        self, bg_home: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        gc_spy = MagicMock(wraps=bg.gc_releases)
+        monkeypatch.setattr(bg, "gc_releases", gc_spy)
+
+        result = _run_deploy(
+            bg_home,
+            tmp_path,
+            monkeypatch,
+            keep_releases=3,
+            reap_fn=lambda: {"ok": True, "reaped": [], "errors": []},
+        )
+
+        assert result["ok"] is True
+        assert result["superseded_reap"]["ok"] is True
+        # Known-positive: a succeeding reap still reaches GC, unchanged.
+        gc_spy.assert_called_once()
+        assert result["gc"]["ok"] is True
