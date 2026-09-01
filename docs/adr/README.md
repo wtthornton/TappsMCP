@@ -44,6 +44,7 @@ CLAUDE.md and per-package CLAUDE.md files point at ADRs by number rather than em
 | [0034](0034-orchestration-prompt-missions-contract-loop.md) | orchestration-prompt ships Missions-inspired contract + expected-fail loops | Accepted |
 | [0035](0035-ci-cost-model-and-scope.md) | CI cost model: free by visibility, guarded by assertion | Accepted |
 | [0036](0036-auto-capture-write-hook-uses-seeder-not-coder-profile.md) | Auto-capture write hook uses "seeder", not "coder", profile | Accepted (corrects one call site in [0012](0012-brain-capability-profile-per-consumer-role.md)) |
+| [0037](0037-session-handoff-slots-and-ownership-guard.md) | Session-handoff slots and an ownership guard | Accepted |
 
 ## Adding a new ADR
 

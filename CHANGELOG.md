@@ -7,6 +7,40 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **Handoff slots and an ownership guard for `.tapps-mcp/session-handoff.md`**
+  (TAP-6868, TAP-6870, TAP-6871, TAP-6872, TAP-6873, TAP-6874) — the shared
+  default handoff file was a blind truncating write: whoever saved last
+  silently replaced every other concurrent program's cold-start channel, file
+  and brain row, with nothing in the artifact for the read side to detect it
+  by. `tapps_handoff_save` / CLI `handoff write` now accept an optional
+  `slot=` that namespaces both halves of the write — `.tapps-mcp/handoffs/<slot>.md`
+  and brain key `session-handoff.<slot>` (a **dot**, not the originally
+  spec'd colon — the brain's key validator rejects `:` server-side, caught
+  by a live `save` rather than a string-only assertion). Every write, slotted
+  or not, is now read-before-write guarded: the incumbent is fingerprinted
+  from its `**Program:**` header, archived to `.tapps-mcp/handoffs/archive/`
+  (newest 20 kept) whether or not a conflict is detected, and the replacement
+  is promoted atomically (`os.replace` from a same-directory temp file, with
+  parent-directory `fsync`) so a crash mid-write can no longer leave a
+  truncated handoff. New `handoff_conflict_mode` (`off`/`warn`/`block`,
+  default `warn`) and `handoff_conflict_window_hours` (default 12) settings
+  in `.tapps-mcp.yaml` control whether a differing, recent incumbent is
+  merely reported (`conflict_status: overwritten` in the response, degrading
+  the envelope with a warning) or refused outright (`block`, code
+  `handoff_owner_conflict`, retryable with `slot=` or `force=true`). An
+  incumbent whose ownership cannot be established — every handoff written
+  before this change, since none of them carry the new header — classifies
+  as `unknown` and is archived, never blocked. New CLI `handoff list` and MCP
+  read helper `list_handoffs()` enumerate the default file plus every slot
+  (never the archive) from one site, consumed by `tapps-continue-session`,
+  the CLI, and `fleet_audit`. The default path, default brain key, and
+  behaviour for any caller that never passes `slot=` are unchanged.
+  **Fleet deploy is operator-gated and has not happened yet** — this ships
+  the capability in tapps-mcp; it reaches the running MCP fleet only after a
+  release and blue/green flip.
+
 ## [3.12.78] - 2026-08-28
 
 ### Fixed

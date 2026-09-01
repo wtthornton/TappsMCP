@@ -224,6 +224,19 @@ For moving work between fresh chats (not just compaction recovery):
 
 `tapps doctor` verifies both skills are deployed under `.claude/skills/` and/or `.cursor/skills/`. `tapps_init` records `session_handoff_skills` in its result after skill generation.
 
+### Slotted handoff brain key (TAP-6871/6873)
+
+A concurrent program passes `slot=` to `tapps_handoff_save` (or CLI `--slot`) to get its own brain row instead of overwriting the shared `session-handoff` key: `handoff_memory_key(slot)` returns `session-handoff.<slot>` — **a dot, not a colon**. This is not a style choice: the brain validates every `MemoryEntry.key` against a slug pattern that excludes `:`, so a colon-separated key is rejected server-side on every real `save`, not merely awkward. Verified live against the pinned dependency (`tapps-brain>=3.28.0,<4`; workspace source pinned to tag `v3.29.0`, `pyproject.toml:33`):
+
+```
+_KEY_SLUG_PATTERN = re.compile(r"^[a-z0-9][a-z0-9._-]{0,127}$")   # tapps_brain/models.py:42
+```
+
+`session-handoff:ceg-hub` — **rejected**, `:` is outside the pattern; a `save` with this key returns `brain_validation_failed` ("Key must be a lowercase slug (letters, digits, dots, hyphens, underscores)").
+`session-handoff.ceg-hub` — **accepted**, the form this codebase actually writes.
+
+A dot also reverse-parses unambiguously: the slot's own validator (`^[a-z0-9][a-z0-9-]{0,47}$` in `handoff_schema.py`) forbids dots, so `key.split(".", 1)` can never be ambiguous between the prefix and the slot. `is_session_handoff_key(key)` (exact `session-handoff` match or `session-handoff.` prefix) gates the `handoff_sections` / `handoff_metadata` enrichment above for both the default and every slotted key — replacing a bare `key == SESSION_HANDOFF_MEMORY_KEY` equality that silently dropped enrichment for any slot.
+
 ## Hive / Agent Teams (M3)
 
 Requires `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS` for live Hive usage; actions still return structured payloads when Hive is disabled.
