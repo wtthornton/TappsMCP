@@ -39,9 +39,21 @@ def proc_references_path(link: Path, target: Path) -> bool:
 
 
 def pids_referencing(path: Path) -> set[int]:
-    """Return PIDs whose exe or cwd lives under *path* (best-effort Linux)."""
+    """Return PIDs whose exe, cwd, or cmdline reference *path* (best-effort Linux).
+
+    A blue/green release can be held without ever showing up in ``exe`` or
+    ``cwd``: the shared uv-managed CPython is ``exe``, the operator's home
+    dir is ``cwd``, and the release directory is only visible in argv (the
+    server execs ``<release>/bin/python`` with that path as argv[0]) --
+    verified live via ``readlink /proc/<pid>/exe`` / ``cwd`` against running
+    MCP servers, TAP-6893. Checking ``cmdline`` is a single bounded read per
+    process, already paid for by :func:`pytest_blockers`; scanning every fd
+    or the full ``maps`` of every process on the host would be unbounded and
+    is deliberately avoided here.
+    """
     refs: set[int] = set()
     target = path.resolve()
+    target_s = str(target)
     proc_root = Path("/proc")
     if not proc_root.is_dir():
         return refs
@@ -50,5 +62,8 @@ def pids_referencing(path: Path) -> set[int]:
             continue
         pid = int(entry.name)
         if any(proc_references_path(entry / attr, target) for attr in ("exe", "cwd")):
+            refs.add(pid)
+            continue
+        if target_s in proc_cmdline(entry):
             refs.add(pid)
     return refs
