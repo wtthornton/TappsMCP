@@ -72,10 +72,9 @@ class TestOwnershipGuard:
         assert result.conflict is not None
         assert result.conflict["foreign"] is True
         assert result.conflict["previous"]["title"] == "Program A"
-        # ``program`` arrives with the **Program:** parser (SG-4). Until then the
-        # title carries the identity, so the key is present and unset — asserting
-        # its shape keeps this test honest across that change.
-        assert "program" in result.conflict["previous"]
+        # The parsed ``**Program:**`` is what decided this, not the title
+        # (TAP-6872) — so the payload must carry the value, not just the key.
+        assert result.conflict["previous"]["program"] == "alpha"
         archived_to = Path(result.conflict["archived_to"])
         assert archived_to.is_file()
         assert archived_to.parent == handoff_archive_dir(tmp_path)
@@ -194,6 +193,109 @@ class TestGuardNegativeControls:
         assert result.path.read_text(encoding="utf-8") == incoming
         archived_to = Path(result.conflict["archived_to"])
         assert archived_to.read_text(encoding="utf-8") == ("no heading, no program, no timestamp\n")
+
+
+class TestProgramIsTheIdentity:
+    """TAP-6872: ``**Program:**`` decides ownership, and the title never does.
+
+    Before the header parsed, ``classify_foreign`` fell through to a raw string
+    compare of the H1 heading. Every test here pins a case where the heading and
+    the program disagree, which is exactly where that fallback answered wrong.
+    """
+
+    def test_different_programs_sharing_one_title_are_foreign(self, tmp_path: Path) -> None:
+        # The false negative the title compare shipped: a generic heading is a
+        # plausible convention, and under it two unrelated programs read as one.
+        _seed_incumbent(tmp_path, _handoff("Session handoff", program="alpha"))
+        incoming = _handoff("Session handoff", program="beta")
+
+        result = guarded_write(tmp_path, incoming, mode="warn")
+
+        assert result.conflict is not None
+        assert result.conflict["foreign"] is True
+        assert result.conflict["previous"]["program"] == "alpha"
+
+    def test_different_programs_sharing_one_title_block(self, tmp_path: Path) -> None:
+        # The consequence of the case above: under ``block`` the write that the
+        # whole effort exists to refuse was being silently permitted.
+        incumbent = _seed_incumbent(tmp_path, _handoff("Session handoff", program="alpha"))
+        before = _sha256(incumbent)
+
+        with pytest.raises(HandoffOwnerConflictError) as exc_info:
+            guarded_write(tmp_path, _handoff("Session handoff", program="beta"), mode="block")
+
+        assert _sha256(incumbent) == before
+        assert "alpha" in exc_info.value.envelope["hint"]
+
+    def test_same_program_under_different_titles_is_not_foreign(self, tmp_path: Path) -> None:
+        # The matching false positive: one program that puts a round number in
+        # its heading tripped a conflict against itself.
+        _seed_incumbent(tmp_path, _handoff("Handoff slots — round 1", program="alpha"))
+        incoming = _handoff("Handoff slots — round 2", program="alpha")
+
+        result = guarded_write(tmp_path, incoming, mode="block")
+
+        assert result.conflict is not None
+        assert result.conflict["foreign"] is False
+
+
+class TestHeaderAbsentIsUnknownNotATitleCompare:
+    """Backcompat: a handoff written before TAP-6872 carries no ``**Program:**``.
+
+    Its ownership is unprovable, so it reports ``"unknown"`` — archived, never
+    blocked. ``"unknown"`` and "the titles happened to match" are different
+    answers, and collapsing them is the gap the title fallback created.
+    """
+
+    def test_legacy_incumbent_with_a_different_title_is_unknown_not_foreign(
+        self, tmp_path: Path
+    ) -> None:
+        _seed_incumbent(tmp_path, _handoff("Program A"))
+        incoming = _handoff("Program B", program="beta")
+
+        result = guarded_write(tmp_path, incoming, mode="block", window_hours=12)
+
+        assert result.conflict is not None
+        assert result.conflict["foreign"] == "unknown"
+        assert result.path.read_text(encoding="utf-8") == incoming
+        assert Path(result.conflict["archived_to"]).is_file()
+
+    def test_legacy_incumbent_with_a_matching_title_is_unknown_not_no_conflict(
+        self, tmp_path: Path
+    ) -> None:
+        previous = _handoff("Session handoff")
+        _seed_incumbent(tmp_path, previous)
+        incoming = _handoff("Session handoff", program="beta")
+
+        result = guarded_write(tmp_path, incoming, mode="block", window_hours=12)
+
+        assert result.conflict is not None
+        assert result.conflict["foreign"] == "unknown"
+        assert Path(result.conflict["archived_to"]).read_text(encoding="utf-8") == previous
+
+    def test_legacy_incoming_against_a_stated_incumbent_is_unknown(self, tmp_path: Path) -> None:
+        # The other direction: a repo that has not adopted the header yet must
+        # not be blocked out of a handoff path a stated program now owns.
+        _seed_incumbent(tmp_path, _handoff("Program A", program="alpha"))
+        incoming = _handoff("Program B")
+
+        result = guarded_write(tmp_path, incoming, mode="block", window_hours=12)
+
+        assert result.conflict is not None
+        assert result.conflict["foreign"] == "unknown"
+        assert result.path.read_text(encoding="utf-8") == incoming
+
+    def test_neither_side_states_a_program_is_unknown(self, tmp_path: Path) -> None:
+        # Two legacy repos: the pre-TAP-6872 fleet. Unprovable either way, so
+        # reported and archived, and never a refusal.
+        _seed_incumbent(tmp_path, _handoff("Program A"))
+        incoming = _handoff("Program B")
+
+        result = guarded_write(tmp_path, incoming, mode="block", window_hours=12)
+
+        assert result.conflict is not None
+        assert result.conflict["foreign"] == "unknown"
+        assert result.path.read_text(encoding="utf-8") == incoming
 
 
 class TestGuardModeSetting:

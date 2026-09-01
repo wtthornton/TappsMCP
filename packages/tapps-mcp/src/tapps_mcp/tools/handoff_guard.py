@@ -15,10 +15,11 @@ halves of the fix.
   ``os.replace`` from a temp file in the *same* directory, so the file at the
   handoff path is always one complete document.
 
-``HandoffDocument`` does not carry ``program`` yet (that header and its parser
-are TAP-6870/SG-4). Until it does, :func:`identity_from_markdown` reads it
-through ``getattr`` and every handoff degrades to the title comparison the spec
-defines as the fallback — expected at this point in the series, not a defect.
+Identity is the ``**Program:**`` header (TAP-6872), never the ``# `` title. The
+title is still fingerprinted and reported, because it is what names the other
+program in a refusal, but it does not decide: two programs under one generic
+heading are different programs, and one program that renumbers its heading
+between saves is still itself.
 """
 
 from __future__ import annotations
@@ -64,11 +65,6 @@ class HandoffIdentity:
     title: str | None = None
     updated: datetime | None = None
     linear_p0: str | None = None
-
-    @property
-    def stated(self) -> bool:
-        """Whether the document names an owner at all."""
-        return self.program is not None or self.title is not None
 
     @property
     def owner(self) -> str:
@@ -134,9 +130,7 @@ def identity_from_markdown(markdown: str) -> HandoffIdentity:
     doc = parse_handoff_markdown(markdown)
     title_match = _TITLE_RE.search(markdown)
     return HandoffIdentity(
-        # ``program`` arrives with the ``**Program:**`` parser (SG-4). Until then
-        # this is ``None`` for every document and the title carries the identity.
-        program=getattr(doc, "program", None),
+        program=doc.program,
         title=title_match.group(1).strip() if title_match else None,
         updated=doc.updated,
         linear_p0=doc.linear_p0,
@@ -170,22 +164,30 @@ def classify_foreign(
 ) -> Foreign:
     """Decide whether *incoming* would overwrite somebody else's live handoff.
 
-    ``True`` only when identity is established on the incumbent, differs from
-    the incoming document, and the incumbent is recent enough to still be in
-    use. ``"unknown"`` whenever the question cannot be answered — an incumbent
-    that names no owner, or one whose ``Updated`` line is missing so the window
-    cannot be applied. ``"unknown"`` is reported and archived but never blocked:
-    blocking on an unprovable conflict would strand every legacy repo.
+    Three answers, and the middle one is the point:
+
+    * ``False`` — both sides state the same ``**Program:**``, or the incumbent
+      is older than the conflict window and nobody is still reading it.
+    * ``True`` — both sides state a program, they differ, and the incumbent is
+      recent. This is the only answer ``block`` mode refuses on.
+    * ``"unknown"`` — the question cannot be answered: either side is missing
+      the header, or the incumbent has no ``Updated`` line so the window cannot
+      be applied. Reported and archived, never blocked; every handoff written
+      before TAP-6872 lacks the header, and none of them may start refusing
+      writes.
+
+    Identity is the header alone. Falling back to a title compare when it is
+    absent looks like a safe default and is not: it answers ``False`` for two
+    different programs that share a generic heading — the exact silent
+    overwrite this guard exists to stop — and ``True`` for one program that put
+    a round number in its own. ``"unknown"`` and "the titles happened to match"
+    are different answers, so they get different values.
     """
     if previous is None:
         return False
-    if not previous.stated:
+    if previous.program is None or incoming.program is None:
         return "unknown"
-    if previous.program is not None or incoming.program is not None:
-        differs = previous.program != incoming.program
-    else:
-        differs = previous.title != incoming.title
-    if not differs:
+    if previous.program == incoming.program:
         return False
     if previous.updated is None:
         return "unknown"

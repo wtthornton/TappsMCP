@@ -53,6 +53,7 @@ if TYPE_CHECKING:
 _HANDOFF_MARKDOWN_SHAPE = """\
 ```markdown
 # Session handoff
+**Program:** <program or campaign name>
 **Updated:** <ISO-8601 UTC from date -u>
 **Git:** <short-sha or omit>
 **Linear P0:** <TAP-#### or none>
@@ -96,6 +97,7 @@ _HANDOFF_PERSIST = """\
 2. **Persist (one atomic call when MCP is available).** Do **not** write the file separately before MCP — `tapps_handoff_save` writes `.tapps-mcp/session-handoff.md`, lints, mirrors to brain, and can close the session lifecycle.
 
    Draft the full markdown in memory using the shape above:
+   - **Program:** the program or campaign this session belongs to. It is the ownership key: the guard compares it against whoever wrote the file last, and only a *different* stated program is a conflict. Leave the placeholder in and the write is reported as unknown ownership — archived, never refused, but nobody can tell your handoff from anyone else's.
    - **Updated:** run `date -u +%Y-%m-%dT%H:%M:%SZ` — never a placeholder like `T00:00:00Z`
    - **Git:** `git rev-parse --short HEAD` when inside a git repo
    - **Linear P0:** TAP-#### when known (preferred retrieval key for brain session search)

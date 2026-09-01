@@ -12,6 +12,8 @@ _HANDOFF_RELATIVE = Path(".tapps-mcp") / "session-handoff.md"
 _HANDOFF_SLOT_DIR = Path(".tapps-mcp") / "handoffs"
 _SLOT_RE = re.compile(r"^[a-z0-9][a-z0-9-]{0,47}$")
 SESSION_HANDOFF_MEMORY_KEY = "session-handoff"
+SESSION_HANDOFF_SLOT_PREFIX = f"{SESSION_HANDOFF_MEMORY_KEY}."
+_PROGRAM_RE = re.compile(r"^\*\*Program:\*\*\s*(.+)$", re.IGNORECASE | re.MULTILINE)
 _UPDATED_RE = re.compile(r"^\*\*Updated:\*\*\s*(.+)$", re.IGNORECASE | re.MULTILINE)
 _LINEAR_P0_RE = re.compile(r"^\*\*Linear P0:\*\*\s*(.+)$", re.IGNORECASE | re.MULTILINE)
 _SECTION_RE = re.compile(r"^##\s+(.+)$", re.MULTILINE)
@@ -49,6 +51,7 @@ _SECTION_FIELDS: tuple[str, ...] = (
 class HandoffDocument:
     """Structured view of a session handoff markdown file."""
 
+    program: str | None = None
     updated: datetime | None = None
     linear_p0: str | None = None
     done: list[str] = field(default_factory=list)
@@ -166,11 +169,31 @@ def handoff_memory_key(slot: str | None = None) -> str:
 
     No slot returns :data:`SESSION_HANDOFF_MEMORY_KEY` unchanged, so the ~35
     repos that never pass a slot keep writing the row they already have.
+
+    A slot is joined with a **dot**. The brain validates every ``MemoryEntry.key``
+    against ``^[a-z0-9][a-z0-9._-]{0,127}$`` server-side, so the ``:`` this
+    originally used produced a key no production write could store (TAP-6873).
+    A dot also reverse-parses exactly — :func:`validate_handoff_slot` forbids
+    dots in a slot, so ``key.split(".", 1)`` cannot be ambiguous — and matches
+    the compound keys the rest of the codebase already writes
+    (``mission.<id>.<run>.<kind>``, ``audit.coverage.<path>``).
     """
     if slot is None:
         return SESSION_HANDOFF_MEMORY_KEY
     validate_handoff_slot(slot)
-    return f"{SESSION_HANDOFF_MEMORY_KEY}:{slot}"
+    return f"{SESSION_HANDOFF_SLOT_PREFIX}{slot}"
+
+
+def is_session_handoff_key(key: str) -> bool:
+    """Whether *key* names a handoff row — the default one or any slot.
+
+    Replaces the ``key == SESSION_HANDOFF_MEMORY_KEY`` equality that gated
+    handoff enrichment: under it a slotted row silently came back without its
+    ``handoff_sections`` and ``handoff_metadata`` (TAP-6873). Anchored on the
+    prefix *including* its dot, so neighbouring keys such as
+    ``session-handoffs`` do not match.
+    """
+    return key == SESSION_HANDOFF_MEMORY_KEY or key.startswith(SESSION_HANDOFF_SLOT_PREFIX)
 
 
 def _normalize_header(name: str) -> str:
@@ -264,6 +287,21 @@ def _parse_updated(raw: str) -> datetime | None:
     return ts
 
 
+def _parse_program(raw: str) -> str | None:
+    """The program that owns this handoff, or ``None`` when it is not stated.
+
+    An unedited ``<program or campaign name>`` placeholder is *not* an identity:
+    two agents that both left it would otherwise read as the same program and
+    the ownership guard would wave the overwrite through (TAP-6872).
+    """
+    value = raw.strip()
+    if not value or value.lower() in _IGNORE_BULLETS:
+        return None
+    if value.startswith("<") and value.endswith(">"):
+        return None
+    return value
+
+
 def _parse_linear_p0(raw: str) -> str | None:
     value = raw.strip()
     if not value or value.lower() in {"none", "n/a", "..."}:
@@ -276,6 +314,9 @@ def _parse_linear_p0(raw: str) -> str | None:
 def parse_handoff_markdown(text: str) -> HandoffDocument:
     """Parse handoff markdown into structured sections."""
     doc = HandoffDocument(raw_text=text)
+    program_match = _PROGRAM_RE.search(text)
+    if program_match:
+        doc.program = _parse_program(program_match.group(1))
     updated_match = _UPDATED_RE.search(text)
     if updated_match:
         doc.updated = _parse_updated(updated_match.group(1))
@@ -513,6 +554,7 @@ def load_and_lint_handoff(project_root: Path) -> tuple[HandoffDocument | None, H
 __all__ = [
     "RECOGNIZED_SECTION_HEADINGS",
     "SESSION_HANDOFF_MEMORY_KEY",
+    "SESSION_HANDOFF_SLOT_PREFIX",
     "HandoffDocument",
     "HandoffLintResult",
     "HandoffSizeReport",
@@ -522,6 +564,7 @@ __all__ = [
     "handoff_path",
     "handoff_sections_from_doc",
     "handoff_size_report",
+    "is_session_handoff_key",
     "lint_handoff",
     "load_and_lint_handoff",
     "parse_handoff_markdown",

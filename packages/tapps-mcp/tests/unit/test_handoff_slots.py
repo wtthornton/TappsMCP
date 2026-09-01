@@ -250,7 +250,11 @@ class TestSlottedPath:
         )
 
     def test_slot_brain_key_is_namespaced(self) -> None:
-        assert handoff_memory_key("ceg-hub") == "session-handoff:ceg-hub"
+        # A dot, not a colon: the brain's key slug pattern excludes ``:``, so the
+        # colon form was unwritable (TAP-6873). The string is pinned here; that
+        # the brain actually accepts it is proved by a real save in
+        # ``test_handoff_brain_key.py`` — this assertion alone cannot show it.
+        assert handoff_memory_key("ceg-hub") == "session-handoff.ceg-hub"
 
     @pytest.mark.parametrize("slot", ["a", "0", "handoff-slots", "a" * 48])
     def test_allowlist_accepts_legal_slots(self, tmp_path: Path, slot: str) -> None:

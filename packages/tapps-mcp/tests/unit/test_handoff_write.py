@@ -10,7 +10,11 @@ import pytest
 from click.testing import CliRunner
 
 from tapps_mcp.cli import main
-from tapps_mcp.tools.handoff_schema import handoff_path, parse_handoff_markdown
+from tapps_mcp.tools.handoff_schema import (
+    handoff_memory_key,
+    handoff_path,
+    parse_handoff_markdown,
+)
 from tapps_mcp.tools.handoff_write import (
     HandoffWriteError,
     build_handoff_metadata,
@@ -67,7 +71,7 @@ class TestHandoffWriteCore:
         with patch(
             "tapps_mcp.tools.handoff_write.mirror_handoff_to_brain",
             new_callable=AsyncMock,
-            return_value={"success": True, "key": "session-handoff"},
+            return_value={"success": True, "key": handoff_memory_key()},
         ):
             result = await write_handoff(
                 tmp_path,
@@ -184,9 +188,7 @@ class TestTappsHandoffSaveMcp:
             result = await spt.tapps_handoff_save(_VALID_HANDOFF)
 
         assert result["success"] is True
-        assert result["data"]["handoff_sections"]["next_p0"] == [
-            "Implement handoff write CLI"
-        ]
+        assert result["data"]["handoff_sections"]["next_p0"] == ["Implement handoff write CLI"]
 
     @pytest.mark.asyncio
     async def test_mcp_handoff_save_lint_failure_returns_structured_error(
@@ -214,9 +216,7 @@ class TestTappsHandoffSaveMcp:
         assert result["elapsed_ms"] >= 0
         assert result["error"]["code"] == "handoff_lint_failed"
         assert "Next (P0)" in result["error"]["message"]
-        assert result["error"]["errors"] == [
-            "Next (P0) is missing or empty when Open has items"
-        ]
+        assert result["error"]["errors"] == ["Next (P0) is missing or empty when Open has items"]
 
 
 class TestSessionSearchQuery:
@@ -334,7 +334,7 @@ class TestBrainMirrorStatusSurfacing:
 
     @pytest.mark.asyncio
     async def test_successful_mirror_is_not_degraded(self, tmp_path: Path) -> None:
-        result = await self._save(tmp_path, {"key": "session-handoff", "success": True})
+        result = await self._save(tmp_path, {"key": handoff_memory_key(), "success": True})
 
         assert result["data"]["brain_mirror_status"] == "ok"
         assert result.get("degraded") is not True
@@ -377,7 +377,9 @@ class TestBrainMirrorStatusSurfacing:
             patch("tapps_mcp.server._record_execution"),
         ):
             mock_settings.return_value.project_root = tmp_path
-            result_stub = self._mock_result(tmp_path, {"key": "session-handoff", "success": True})
+            result_stub = self._mock_result(
+                tmp_path, {"key": handoff_memory_key(), "success": True}
+            )
             result_stub.session_end = {"success": False, "error": "flywheel_process timed out"}
             mock_write.return_value = result_stub
             result = await spt.tapps_handoff_save(_VALID_HANDOFF)
@@ -389,7 +391,7 @@ class TestBrainMirrorStatusSurfacing:
 
     @pytest.mark.asyncio
     async def test_absent_session_end_is_skipped_not_failed(self, tmp_path: Path) -> None:
-        result = await self._save(tmp_path, {"key": "session-handoff", "success": True})
+        result = await self._save(tmp_path, {"key": handoff_memory_key(), "success": True})
 
         assert result["data"]["session_end_status"] == "skipped"
         assert result.get("degraded") is not True
@@ -516,7 +518,7 @@ class TestOverCapMirrorIsRefusedUpFront:
         from tapps_mcp.tools.handoff_write import mirror_handoff_to_brain
 
         bridge = MagicMock()
-        bridge.save = AsyncMock(return_value={"success": True, "key": "session-handoff"})
+        bridge.save = AsyncMock(return_value={"success": True, "key": handoff_memory_key()})
         payload = await mirror_handoff_to_brain(_VALID_HANDOFF, {}, bridge=bridge)
 
         bridge.save.assert_awaited_once()
@@ -585,7 +587,7 @@ class TestOverCapSaveEnvelopeIsNotPlainSuccess:
             patch(
                 "tapps_mcp.tools.handoff_write.mirror_handoff_to_brain",
                 new_callable=AsyncMock,
-                return_value={"success": True, "key": "session-handoff"},
+                return_value={"success": True, "key": handoff_memory_key()},
             ),
             patch("tapps_mcp.server._record_call"),
             patch("tapps_mcp.server._record_execution"),

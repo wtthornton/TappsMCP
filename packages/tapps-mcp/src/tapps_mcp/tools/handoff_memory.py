@@ -6,8 +6,8 @@ import json
 from typing import Any
 
 from tapps_mcp.tools.handoff_schema import (
-    SESSION_HANDOFF_MEMORY_KEY,
     handoff_sections_from_doc,
+    is_session_handoff_key,
     parse_handoff_markdown,
 )
 
@@ -29,7 +29,9 @@ _MEMORY_GROUP_NOTE = (
 def enrich_memory_get_entry(key: str, entry: dict[str, Any]) -> dict[str, Any]:
     """Strip embedding vectors and attach handoff section pointers when applicable."""
     out: dict[str, Any] = {k: v for k, v in entry.items() if k not in _EMBEDDING_KEYS}
-    if key != SESSION_HANDOFF_MEMORY_KEY:
+    # A slotted key is still a handoff. The equality this replaced dropped both
+    # enrichments for every slot, silently (TAP-6873).
+    if not is_session_handoff_key(key):
         return out
 
     value = str(entry.get("value", ""))

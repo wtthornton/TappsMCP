@@ -472,3 +472,44 @@ class TestDocumentedTemplateRoundTrip:
         sections = handoff_sections_from_doc(parse_handoff_markdown(self._filled_template()))
         assert sections["changed_files"]
         assert sections["cumulative"]
+
+    def test_program_header_round_trips_from_the_template(self) -> None:
+        """TAP-6872: the template writes ``**Program:**`` and the parser reads it.
+
+        Both halves in one assertion on purpose — a header the template omits
+        never reaches a real handoff, and one the parser drops never reaches the
+        ownership guard.
+        """
+        filled = self._filled_template().replace(
+            "**Program:** <program or campaign name>", "**Program:** handoff-slots"
+        )
+        assert "**Program:** handoff-slots" in filled
+        assert parse_handoff_markdown(filled).program == "handoff-slots"
+
+
+class TestProgramHeader:
+    """``**Program:**`` is the ownership key the guard compares (TAP-6872)."""
+
+    _BODY = "\n## Done\n- shipped it\n\n## Open\n- none\n"
+
+    def test_stated_program_parses(self) -> None:
+        text = "# Session handoff\n**Program:** ceg-hub\n" + self._BODY
+        assert parse_handoff_markdown(text).program == "ceg-hub"
+
+    def test_absent_header_parses_to_none(self) -> None:
+        assert parse_handoff_markdown("# Session handoff\n" + self._BODY).program is None
+
+    def test_unfilled_placeholder_parses_to_none(self) -> None:
+        """An unedited template must not name a program called ``<...>``.
+
+        Two agents that both left the placeholder would otherwise share an
+        identity and read as the same program.
+        """
+        text = "# Session handoff\n**Program:** <program or campaign name>\n" + self._BODY
+        assert parse_handoff_markdown(text).program is None
+
+    def test_program_is_not_mistaken_for_a_section(self) -> None:
+        text = "# Session handoff\n**Program:** ceg-hub\n" + self._BODY
+        doc = parse_handoff_markdown(text)
+        assert doc.unrecognized_headings == []
+        assert doc.done == ["shipped it"]
