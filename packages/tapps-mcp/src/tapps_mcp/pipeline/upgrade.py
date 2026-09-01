@@ -1182,6 +1182,7 @@ def _upgrade_claude_code_live(
     from tapps_mcp.pipeline.platform_bundles import generate_claude_pipeline_rule
     from tapps_mcp.pipeline.platform_generators import (
         generate_claude_agent_scope_rule,
+        generate_claude_agent_to_agent_rule,
         generate_claude_autonomy_rule,
         generate_claude_config_files_rule,
         generate_claude_hooks,
@@ -1348,6 +1349,15 @@ def _upgrade_claude_code_live(
         result["components"]["agent_scope_rule"] = "skipped (upgrade_skip_files)"
     else:
         result["components"]["agent_scope_rule"] = generate_claude_agent_scope_rule(project_root)
+
+    # agent-to-agent.md is universal — the multi-session protocol applies to any
+    # deployed agent regardless of language (TAP-6886).
+    if _skipped("agent_to_agent_rule", skip):
+        result["components"]["agent_to_agent_rule"] = "skipped (upgrade_skip_files)"
+    else:
+        result["components"]["agent_to_agent_rule"] = generate_claude_agent_to_agent_rule(
+            project_root
+        )
 
     # autonomy.md is universal — flips the agent default to "act within scope, no HITL"
     # and pins Linear assignee to the agent identity (never the OAuth human).
