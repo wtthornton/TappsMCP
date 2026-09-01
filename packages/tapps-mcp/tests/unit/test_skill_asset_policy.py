@@ -9,10 +9,13 @@ asset had no way to know it would vanish.
 
 from __future__ import annotations
 
+import subprocess
+import sys
 from pathlib import Path
 
 import pytest
 
+from tapps_mcp import __version__
 from tapps_mcp.distribution.doctor_skills import check_skill_asset_drift
 from tapps_mcp.pipeline.platform_skills import (
     SKILL_COMPANION_FILES,
@@ -25,6 +28,7 @@ from tapps_mcp.pipeline.skill_asset_policy import (
     ASSET_MARKER_END,
     ASSET_PROJECT_REGION_HEADING,
     POLICY_NOTES,
+    asset_block,
     has_asset_customization,
     install_or_refresh_asset,
     is_delimitable,
@@ -33,6 +37,7 @@ from tapps_mcp.pipeline.skill_asset_policy import (
     policy_header,
     strip_asset_scaffolding,
     wrap_asset,
+    write_project_script,
 )
 
 SKILL = "orchestration-prompt"
@@ -256,3 +261,176 @@ class TestUpgradeSurfacesOverwrites:
         result = generate_skills(tmp_path, "claude", overwrite=True)
         warnings = result["asset_overwrite_warnings"]
         assert any("settings.json" in w for w in warnings)
+
+
+class TestExistingSuffixesUnchanged:
+    """Evidence item 5 (TAP-6884): the three original suffixes must keep
+
+    emitting the exact html-comment marker shape captured from origin/master
+    at a739ca14, byte for byte — a regression here silently rewrites every
+    consuming project's skill assets.
+    """
+
+    @pytest.mark.parametrize("rel_path", [ASSET, "SKILL.md", "notes.markdown", "page.html"])
+    def test_asset_block_is_still_html_comments(self, rel_path: str) -> None:
+        assert asset_block("canonical body", SKILL, rel_path) == (
+            f"<!-- BEGIN: tapps-skill-asset {SKILL}/{rel_path} v{__version__} -->\n"
+            "canonical body\n"
+            "<!-- END: tapps-skill-asset -->"
+        )
+
+    @pytest.mark.parametrize("rel_path", [ASSET, "SKILL.md", "notes.markdown", "page.html", ""])
+    def test_policy_header_is_still_html_comments(self, rel_path: str) -> None:
+        for policy, note in POLICY_NOTES.items():
+            assert policy_header(policy, rel_path) == f"<!-- {note} -->"
+
+    def test_wrap_asset_matches_captured_baseline(self) -> None:
+        # Captured 2026-09-01 from origin/master @ a739ca14 by calling
+        # wrap_asset("canonical body", SKILL, ASSET) against the pre-lane module.
+        expected = (
+            f"<!-- {POLICY_NOTES['managed_block']} -->\n"
+            f"<!-- BEGIN: tapps-skill-asset {SKILL}/{ASSET} v{__version__} -->\n"
+            "canonical body\n"
+            "<!-- END: tapps-skill-asset -->\n"
+        )
+        assert wrap_asset("canonical body", SKILL, ASSET) == expected
+        assert ASSET_MARKER_BEGIN_PREFIX == "<!-- BEGIN: tapps-skill-asset"
+        assert ASSET_MARKER_END == "<!-- END: tapps-skill-asset -->"
+
+
+class TestSyntaxAwareMarkers:
+    """Evidence items 1-4 (TAP-6884): .sh/.py/.js get a comment syntax that
+
+    parses in their own language, and the managed-block mechanism (outside
+    survives, inside is replaced, round-trip strips exactly) still holds.
+    """
+
+    @pytest.mark.parametrize(
+        "rel_path,open_tok,close_tok",
+        [
+            ("scripts/canary.sh", "#", ""),
+            ("scripts/canary.py", "#", ""),
+            ("workflows/canary.js", "//", ""),
+        ],
+    )
+    def test_new_suffixes_get_a_line_comment_marker(
+        self, rel_path: str, open_tok: str, close_tok: str
+    ) -> None:
+        assert is_delimitable(rel_path)
+        assert policy_for(rel_path) == "managed_block"
+        block = asset_block("echo hi", SKILL, rel_path)
+        assert (
+            block.splitlines()[0]
+            == f"{open_tok} BEGIN: tapps-skill-asset {SKILL}/{rel_path} v{__version__}"
+        )
+        assert block.splitlines()[-1] == f"{open_tok} END: tapps-skill-asset"
+        assert "<!--" not in block
+        assert "-->" not in block
+        header = policy_header("managed_block", rel_path)
+        assert header.startswith(f"{open_tok} upgrade-policy: managed-block")
+        assert not header.endswith("-->")
+
+    def test_naive_suffix_widening_without_syntax_change_would_break_bash_parsing(
+        self, tmp_path: Path
+    ) -> None:
+        """Regression guard for the exact defect this lane exists to fix.
+
+        Simulates "suffix added, marker still html-comments" — the naive
+        change called out in the goal doc — by wrapping a .sh body in the
+        html marker shape directly, then asserting that shape does NOT
+        parse as bash. The real writer (below) must not produce this.
+        """
+        naive_sh = (
+            "<!-- upgrade-policy: managed-block ... -->\n"
+            f"<!-- BEGIN: tapps-skill-asset {SKILL}/scripts/canary.sh v0 -->\n"
+            "echo hi\n"
+            "<!-- END: tapps-skill-asset -->\n"
+        )
+        target = tmp_path / "naive-canary.sh"
+        target.write_text(naive_sh, encoding="utf-8")
+        result = subprocess.run(
+            ["bash", "-n", str(target)], capture_output=True, text=True, timeout=10
+        )
+        assert result.returncode != 0, "planted defect should fail bash -n but did not"
+
+    def test_scaffolded_sh_lands_executable_and_parses_as_bash(self, tmp_path: Path) -> None:
+        action = write_project_script(tmp_path, "scripts/canary.sh", "echo 'tapps canary'\n", SKILL)
+        target = tmp_path / "scripts" / "canary.sh"
+        assert action == "created"
+        assert target.stat().st_mode & 0o111
+        result = subprocess.run(
+            ["bash", "-n", str(target)], capture_output=True, text=True, timeout=10
+        )
+        assert result.returncode == 0, result.stderr
+
+    def test_scaffolded_py_lands_executable_and_compiles(self, tmp_path: Path) -> None:
+        action = write_project_script(
+            tmp_path, "scripts/canary.py", 'print("tapps canary")\n', SKILL
+        )
+        target = tmp_path / "scripts" / "canary.py"
+        assert action == "created"
+        assert target.stat().st_mode & 0o111
+        result = subprocess.run(
+            [sys.executable, "-m", "py_compile", str(target)],
+            capture_output=True,
+            text=True,
+            timeout=10,
+        )
+        assert result.returncode == 0, result.stderr
+
+    def test_edit_outside_markers_survives_refresh_for_sh(self, tmp_path: Path) -> None:
+        """Evidence item 2, for the new hash-comment class — byte-for-byte."""
+        write_project_script(tmp_path, "scripts/canary.sh", "echo v1\n", SKILL)
+        target = tmp_path / "scripts" / "canary.sh"
+        addendum = "\n# project addendum: keep me\n"
+        target.write_text(target.read_text(encoding="utf-8") + addendum, encoding="utf-8")
+
+        action = write_project_script(tmp_path, "scripts/canary.sh", "echo v2\n", SKILL)
+        text = target.read_text(encoding="utf-8")
+        assert action == "refreshed"
+        expected = wrap_asset("echo v2", SKILL, "scripts/canary.sh") + addendum
+        assert text == expected, f"outside-marker edit not preserved byte-for-byte:\n{text!r}"
+
+    def test_edit_inside_markers_is_replaced_on_refresh_for_py(self, tmp_path: Path) -> None:
+        """Evidence item 3, for the new hash-comment class — byte-for-byte."""
+        write_project_script(tmp_path, "scripts/canary.py", 'print("v1")\n', SKILL)
+        target = tmp_path / "scripts" / "canary.py"
+        hacked = target.read_text(encoding="utf-8").replace('print("v1")', 'print("HACKED")')
+        target.write_text(hacked, encoding="utf-8")
+
+        write_project_script(tmp_path, "scripts/canary.py", 'print("v2")\n', SKILL)
+        text = target.read_text(encoding="utf-8")
+        expected = wrap_asset('print("v2")', SKILL, "scripts/canary.py")
+        assert text == expected, f"inside-marker edit not replaced byte-for-byte:\n{text!r}"
+
+    def test_find_asset_block_round_trips_a_hash_commented_file(self) -> None:
+        """Evidence item 4: strip_asset_scaffolding recovers the exact body."""
+        wrapped = wrap_asset("echo canary", SKILL, "scripts/canary.sh")
+        assert strip_asset_scaffolding(wrapped) == "echo canary"
+
+    def test_find_asset_block_round_trips_a_slash_commented_file(self) -> None:
+        wrapped = wrap_asset("console.log('canary')", SKILL, "workflows/canary.js")
+        assert strip_asset_scaffolding(wrapped) == "console.log('canary')"
+
+    def test_has_asset_customization_for_hash_commented_file(self) -> None:
+        clean = wrap_asset("echo hi", SKILL, "scripts/canary.sh")
+        assert not has_asset_customization(clean)
+        assert has_asset_customization(clean + "\n# mine\n")
+
+
+class TestWriteProjectScript:
+    def test_writes_under_project_root_scripts_dir(self, tmp_path: Path) -> None:
+        write_project_script(tmp_path, "scripts/canary.sh", "echo hi\n", SKILL)
+        assert (tmp_path / "scripts" / "canary.sh").exists()
+
+    def test_version_stamp_is_present_in_the_begin_marker(self, tmp_path: Path) -> None:
+        write_project_script(tmp_path, "scripts/canary.py", 'print("hi")\n', SKILL)
+        text = (tmp_path / "scripts" / "canary.py").read_text(encoding="utf-8")
+        assert f"v{__version__}" in text
+
+    def test_dry_run_writes_nothing_and_does_not_chmod(self, tmp_path: Path) -> None:
+        action = write_project_script(
+            tmp_path, "scripts/canary.sh", "echo hi\n", SKILL, dry_run=True
+        )
+        assert action == "created"
+        assert not (tmp_path / "scripts" / "canary.sh").exists()
