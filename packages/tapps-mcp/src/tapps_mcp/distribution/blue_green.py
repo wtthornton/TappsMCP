@@ -288,6 +288,18 @@ def _reap_superseded_then_gc(
     reach gc_releases anyway, which is precisely the defect being fixed
     (TAP-6894). What changed is that failure now *gates* GC instead of being
     swallowed and ignored.
+
+    ``reap_superseded_fleet`` can also fail *without* raising: it catches
+    ``OSError`` per pid, records it in ``errors``, and continues -- so a pid
+    that could not be terminated still comes back as a normal return value.
+    ``ok`` is therefore computed here, not trusted from the reap result: a
+    reap "fails" when it recorded any error, or when any pid it targeted is
+    missing from ``reaped``. Both cases mean a stranded server may still be
+    executing out of the release GC is about to delete, so GC is gated on
+    this computed ``ok`` exactly like the raise path above. The dict this
+    function returns as ``superseded_reap`` always carries ``ok`` -- on the
+    raise path (synthesized above) and here -- so no caller ever reads a key
+    that only exists on one branch.
     """
     from tapps_mcp.distribution.fleet_control import reap_superseded_fleet
 
@@ -300,6 +312,21 @@ def _reap_superseded_then_gc(
                 "ok": False,
                 "skipped": True,
                 "reason": "superseded_reap raised; GC blocked until reap succeeds",
+            },
+        }
+
+    stranded = set(superseded_reap.get("superseded_pids", [])) - set(
+        superseded_reap.get("reaped", [])
+    )
+    reap_ok = not superseded_reap.get("errors") and not stranded
+    superseded_reap = {**superseded_reap, "ok": reap_ok}
+    if not reap_ok:
+        return {
+            "superseded_reap": superseded_reap,
+            "gc": {
+                "ok": False,
+                "skipped": True,
+                "reason": "superseded_reap reported failure; GC blocked until reap succeeds",
             },
         }
 

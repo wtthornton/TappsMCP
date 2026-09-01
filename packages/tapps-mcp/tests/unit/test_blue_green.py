@@ -283,6 +283,60 @@ class TestSupersededReapGatesGC:
         # everything by coincidence."
         gc_spy.assert_not_called()
 
+    def test_reap_with_recorded_error_blocks_gc_without_raising(
+        self, bg_home: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """TAP-6894 follow-up: a reap that fails without raising must still gate GC."""
+        gc_spy = MagicMock(wraps=bg.gc_releases)
+        monkeypatch.setattr(bg, "gc_releases", gc_spy)
+
+        result = _run_deploy(
+            bg_home,
+            tmp_path,
+            monkeypatch,
+            keep_releases=0,
+            reap_fn=lambda: {
+                "errors": ["1234: EPERM"],
+                "superseded_pids": [1234],
+                "reaped": [],
+            },
+        )
+
+        assert result["ok"] is True
+        assert result["superseded_reap"]["ok"] is False
+        assert result["gc"] == {
+            "ok": False,
+            "skipped": True,
+            "reason": "superseded_reap reported failure; GC blocked until reap succeeds",
+        }
+        # Known-negative: assert on the call itself, not a report field -- a
+        # report field can read "skipped" while GC still ran underneath it.
+        gc_spy.assert_not_called()
+
+    def test_reap_with_pid_missing_from_reaped_blocks_gc(
+        self, bg_home: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """A pid absent from ``reaped`` with no recorded error is still a failure."""
+        gc_spy = MagicMock(wraps=bg.gc_releases)
+        monkeypatch.setattr(bg, "gc_releases", gc_spy)
+
+        result = _run_deploy(
+            bg_home,
+            tmp_path,
+            monkeypatch,
+            keep_releases=0,
+            reap_fn=lambda: {
+                "superseded_pids": [1234],
+                "reaped": [],
+                "errors": [],
+            },
+        )
+
+        assert result["ok"] is True
+        assert result["superseded_reap"]["ok"] is False
+        assert result["gc"]["skipped"] is True
+        gc_spy.assert_not_called()
+
     def test_succeeding_reap_still_reaches_gc(
         self, bg_home: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
@@ -294,13 +348,17 @@ class TestSupersededReapGatesGC:
             tmp_path,
             monkeypatch,
             keep_releases=3,
-            reap_fn=lambda: {"ok": True, "reaped": [], "errors": []},
+            reap_fn=lambda: {"superseded_pids": [], "reaped": [], "errors": []},
         )
 
         assert result["ok"] is True
         assert result["superseded_reap"]["ok"] is True
-        # Known-positive: a succeeding reap still reaches GC, unchanged.
+        # Known-positive: a succeeding reap still reaches GC, with the same
+        # arguments as today -- not just "called."
         gc_spy.assert_called_once()
+        assert gc_spy.call_args.kwargs["keep"] == 3
+        assert gc_spy.call_args.kwargs["protect"].name == "3.12.36-3333333"
+        assert gc_spy.call_args.kwargs["protect_extra"] is None
         assert result["gc"]["ok"] is True
 
 
