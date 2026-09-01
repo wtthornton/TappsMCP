@@ -200,3 +200,75 @@ def check_skill_asset_drift(project_root: Path) -> CheckResult:
         True,
         f"{checked} managed skill(s): SKILL.md and assets share one upgrade policy",
     )
+
+
+# Checked on every scaffolded ``.claude/workflows/*.js``, regardless of shape: a
+# multi-agent fan-out that never checks its own token budget can run away.
+_WORKFLOW_BUDGET_INVARIANT = "budget.remaining("
+
+# Checked only on workflows that opt into the val-verify adversarial-verdict
+# shape (detected via _is_verdict_pattern below), never on every workflow —
+# a read-only evidence pipeline like linear-disposition-verify has no
+# negative/positive control or suppression concept to carry.
+_WORKFLOW_VERDICT_INVARIANTS: tuple[str, ...] = (
+    "negative_control_result",
+    "positive_control_result",
+    "green_by_suppression",
+)
+
+# Structural fingerprint for "this file is a val-verify-pattern workflow": the
+# literal GREEN/RED verdict enum, not prose about what the file claims to do.
+_VERDICT_ENUM_MARKERS: tuple[str, ...] = ("'GREEN', 'RED'", '"GREEN", "RED"')
+
+
+def _is_verdict_pattern(content: str) -> bool:
+    return any(marker in content for marker in _VERDICT_ENUM_MARKERS)
+
+
+def check_workflow_scripts_current(project_root: Path) -> CheckResult:
+    """Flag scaffolded ``.claude/workflows/*.js`` missing a safety invariant (TAP-6890).
+
+    Fingerprints on the invariants the val-verify pattern exists to enforce —
+    ``budget.remaining(`` on every workflow, plus ``negative_control_result``,
+    ``positive_control_result``, and ``green_by_suppression`` on any workflow
+    that carries a GREEN/RED verdict schema — never on prose describing what a
+    workflow claims to check. A workflow that dropped one of these (or never
+    had it) went green on fewer guarantees than the pattern promises, the way
+    a stale ``SKILL.md`` drifts from its template; this is that check's
+    sibling for the executable-asset class.
+    """
+    from tapps_mcp.distribution.doctor_result import CheckResult
+
+    workflows_dir = project_root / ".claude" / "workflows"
+    if not workflows_dir.is_dir():
+        return CheckResult("Workflow safety invariants", True, "no .claude/workflows/ present")
+
+    js_paths = sorted(workflows_dir.glob("*.js"))
+    if not js_paths:
+        return CheckResult("Workflow safety invariants", True, "no .claude/workflows/*.js present")
+
+    problems: list[str] = []
+    for js_path in js_paths:
+        content = js_path.read_text(encoding="utf-8")
+        missing = []
+        if _WORKFLOW_BUDGET_INVARIANT not in content:
+            missing.append(_WORKFLOW_BUDGET_INVARIANT)
+        if _is_verdict_pattern(content):
+            missing.extend(inv for inv in _WORKFLOW_VERDICT_INVARIANTS if inv not in content)
+        if missing:
+            problems.append(f"{js_path.name} (missing {', '.join(missing)})")
+
+    if problems:
+        return CheckResult(
+            "Workflow safety invariants",
+            False,
+            f"{len(problems)}/{len(js_paths)} workflow(s) missing a safety invariant: "
+            f"{'; '.join(problems)}",
+            "Add the missing invariant(s), or fold the script through val-verify's pattern.",
+            severity="warn",
+        )
+    return CheckResult(
+        "Workflow safety invariants",
+        True,
+        f"{len(js_paths)} workflow(s) in .claude/workflows/ carry every safety invariant they need",
+    )
