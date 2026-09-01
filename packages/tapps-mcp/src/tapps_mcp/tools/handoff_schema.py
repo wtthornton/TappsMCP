@@ -9,6 +9,8 @@ from pathlib import Path
 from typing import Any
 
 _HANDOFF_RELATIVE = Path(".tapps-mcp") / "session-handoff.md"
+_HANDOFF_SLOT_DIR = Path(".tapps-mcp") / "handoffs"
+_SLOT_RE = re.compile(r"^[a-z0-9][a-z0-9-]{0,47}$")
 SESSION_HANDOFF_MEMORY_KEY = "session-handoff"
 _UPDATED_RE = re.compile(r"^\*\*Updated:\*\*\s*(.+)$", re.IGNORECASE | re.MULTILINE)
 _LINEAR_P0_RE = re.compile(r"^\*\*Linear P0:\*\*\s*(.+)$", re.IGNORECASE | re.MULTILINE)
@@ -75,8 +77,100 @@ class HandoffLintResult:
         return not self.errors
 
 
-def handoff_path(project_root: Path) -> Path:
-    return project_root / _HANDOFF_RELATIVE
+class InvalidHandoffSlotError(ValueError):
+    """A handoff slot failed validation, before any path was written.
+
+    Carries an Agent Gateway refusal envelope (docs/architecture/gateway-envelope.md)
+    so the MCP and CLI surfaces can hand the agent a machine-readable ``code``
+    instead of a stringified traceback.
+    """
+
+    def __init__(self, slot: str, reason: str, hint: str) -> None:
+        self.slot = slot
+        self.reason = reason
+        self.envelope: dict[str, Any] = {
+            "ok": False,
+            "code": "invalid_handoff_slot",
+            "gate": "handoff_slot_validation",
+            "hint": hint,
+            "extra": {"slot": slot, "reason": reason},
+        }
+        super().__init__(hint)
+
+
+def validate_handoff_slot(slot: str) -> str:
+    """First of two defences: the allowlist that states the slot policy.
+
+    Rejects anything containing ``/``, ``.`` or ``..`` before the value can
+    reach ``Path``, so traversal never becomes a path-join question.
+    """
+    if _SLOT_RE.match(slot) is None:
+        raise InvalidHandoffSlotError(
+            slot,
+            "failed_allowlist",
+            "Handoff slot must match ^[a-z0-9][a-z0-9-]{0,47}$ — lowercase letters, "
+            "digits and dashes, starting with a letter or digit, at most 48 characters. "
+            'Try slot="my-program".',
+        )
+    return slot
+
+
+def _assert_slot_contained(candidate: Path, project_root: Path, slot: str) -> None:
+    """Second of two defences: containment, checked after the join.
+
+    Independent of :func:`validate_handoff_slot` on purpose. The allowlist is
+    the policy and could be loosened; this check is what still holds if it is,
+    and it is the only one that sees a symlinked ``handoffs/`` directory, which
+    no regex can inspect.
+
+    ``is_relative_to`` is purely lexical — on a non-resolved path it answers
+    ``True`` for ``handoffs/../../../outside/x.md``. Both sides are therefore
+    resolved first. Two anchors are needed and neither is redundant:
+    the project root catches a ``handoffs/`` symlinked outside the repo (whose
+    own ``resolve()`` would happily contain the target), and the slot directory
+    catches a shallow ``../`` that stays inside the repo.
+    """
+    resolved = candidate.resolve()
+    if not resolved.is_relative_to(project_root.resolve()):
+        raise InvalidHandoffSlotError(
+            slot,
+            "escapes_project_root",
+            f"Handoff slot {slot!r} resolves to {resolved}, outside the project root. "
+            "Check whether .tapps-mcp/handoffs is a symlink.",
+        )
+    if not resolved.is_relative_to((project_root / _HANDOFF_SLOT_DIR).resolve()):
+        raise InvalidHandoffSlotError(
+            slot,
+            "escapes_slot_dir",
+            f"Handoff slot {slot!r} resolves to {resolved}, outside {_HANDOFF_SLOT_DIR}.",
+        )
+
+
+def handoff_path(project_root: Path, slot: str | None = None) -> Path:
+    """The single site that names a handoff file.
+
+    No slot returns the path this repo has always used. A slot namespaces the
+    handoff under ``.tapps-mcp/handoffs/`` so concurrent programs stop
+    overwriting one another (TAP-6870).
+    """
+    if slot is None:
+        return project_root / _HANDOFF_RELATIVE
+    validate_handoff_slot(slot)
+    candidate = project_root / _HANDOFF_SLOT_DIR / f"{slot}.md"
+    _assert_slot_contained(candidate, project_root, slot)
+    return candidate
+
+
+def handoff_memory_key(slot: str | None = None) -> str:
+    """The single site that names a handoff's brain row.
+
+    No slot returns :data:`SESSION_HANDOFF_MEMORY_KEY` unchanged, so the ~35
+    repos that never pass a slot keep writing the row they already have.
+    """
+    if slot is None:
+        return SESSION_HANDOFF_MEMORY_KEY
+    validate_handoff_slot(slot)
+    return f"{SESSION_HANDOFF_MEMORY_KEY}:{slot}"
 
 
 def _normalize_header(name: str) -> str:
@@ -422,7 +516,9 @@ __all__ = [
     "HandoffDocument",
     "HandoffLintResult",
     "HandoffSizeReport",
+    "InvalidHandoffSlotError",
     "empty_parse_error",
+    "handoff_memory_key",
     "handoff_path",
     "handoff_sections_from_doc",
     "handoff_size_report",
@@ -430,4 +526,5 @@ __all__ = [
     "load_and_lint_handoff",
     "parse_handoff_markdown",
     "populated_sections",
+    "validate_handoff_slot",
 ]

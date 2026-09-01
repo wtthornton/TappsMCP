@@ -18,11 +18,11 @@ from tapps_core.metrics.brain_telemetry import (
     sync_load_tool_call_metrics_from_brain,
 )
 from tapps_core.metrics.execution_metrics import ToolCallMetric, ToolCallMetricsCollector
+from tapps_mcp.tools.handoff_schema import handoff_path
 from tapps_mcp.tools.loop_metrics import aggregate_skills_used, compute_rolling_stats
 
 _PERIOD_DAYS: dict[str, int] = {"1d": 1, "7d": 7, "30d": 30}
 _BOOTSTRAP_MARKER = ".tapps-mcp.yaml"
-_HANDOFF_PATH = Path(".tapps-mcp") / "session-handoff.md"
 
 
 def _top_tools(metrics: list[ToolCallMetric], *, limit: int = 10) -> list[dict[str, Any]]:
@@ -255,10 +255,10 @@ def audit_project_root(
     collector = ToolCallMetricsCollector(metrics_dir)
     summary = collector._compute_summary(metrics)
 
-    handoff_path = root / _HANDOFF_PATH
+    handoff_file = handoff_path(root)
     handoff_mtime: str | None = None
-    if handoff_path.is_file():
-        handoff_mtime = datetime.fromtimestamp(handoff_path.stat().st_mtime, tz=UTC).isoformat()
+    if handoff_file.is_file():
+        handoff_mtime = datetime.fromtimestamp(handoff_file.stat().st_mtime, tz=UTC).isoformat()
 
     gates = _gate_telemetry(root)
     return {
@@ -277,8 +277,8 @@ def audit_project_root(
         "pipeline": _pipeline_compliance(root, window_days=window_days),
         "gates": gates,
         "handoff": {
-            "path": str(_HANDOFF_PATH),
-            "exists": handoff_path.is_file(),
+            "path": str(handoff_file.relative_to(root)),
+            "exists": handoff_file.is_file(),
             "updated_at": handoff_mtime,
         },
     }

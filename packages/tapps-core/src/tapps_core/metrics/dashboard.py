@@ -31,6 +31,10 @@ logger = structlog.get_logger(__name__)
 
 _DOCS_TOOL_PREFIX = "docs_"
 _DOCS_MCP_MARKER = "docs-mcp__"
+# Restated rather than imported: tapps-core cannot depend on tapps-mcp, where
+# ``handoff_schema.handoff_path`` is the naming site. A divergence check pins
+# the two together — packages/tapps-mcp/tests/unit/test_handoff_slots.py
+# ``test_dashboard_constant_has_not_diverged`` (TAP-6870).
 _HANDOFF_RELATIVE = Path(".tapps-mcp") / "session-handoff.md"
 _HANDOFF_STALE_DAYS = 7
 _FUNNEL_MIN_SESSION_STARTS = 3
