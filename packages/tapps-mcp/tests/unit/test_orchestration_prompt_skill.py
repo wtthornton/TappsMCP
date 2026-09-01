@@ -140,11 +140,7 @@ class TestScaffold:
     def test_feature_map_mirrors_all_eight_loops_anti_patterns(self, tmp_path):
         """TAP-5759: the canonical loops.md smell-list ships with the skill."""
         generate_skills(tmp_path, "claude")
-        ref = (
-            (_skill_dir(tmp_path) / "references" / "claude-feature-map.md")
-            .read_text()
-            .lower()
-        )
+        ref = (_skill_dir(tmp_path) / "references" / "claude-feature-map.md").read_text().lower()
         for canonical in (
             "vacuous verify",
             "prose judge",
@@ -156,7 +152,6 @@ class TestScaffold:
             "critic grades the tool, not the artifact",
         ):
             assert canonical in ref, f"missing loops.md anti-pattern: {canonical}"
-
 
     def test_body_carries_shift_boundaries_and_host_map(self, tmp_path):
         """v3.12.74: §7 shift boundaries + host-feature-map companion."""
@@ -177,6 +172,42 @@ class TestScaffold:
         generate_skills(tmp_path, "cursor")
         assert (_skill_dir(tmp_path, "cursor") / "SKILL.md").exists()
         assert (_skill_dir(tmp_path, "cursor") / "references" / "claude-feature-map.md").exists()
+
+    def test_multi_session_and_cost_discipline_sections_ship_inside_the_managed_block(
+        self, tmp_path
+    ):
+        """TAP-6885: these two sections used to survive only in one repo below its
+
+        END marker, where upgrade never touches them. Both must now be emitted
+        from the shipped template, and — the whole point of the fix — sit
+        *inside* the BEGIN/END span so a refresh actually propagates them.
+        """
+        generate_skills(tmp_path, "claude")
+        content = (_skill_dir(tmp_path) / "SKILL.md").read_text()
+
+        begin_idx = content.index(f"{MARKER_BEGIN_PREFIX} {SKILL} v")
+        end_idx = content.index(MARKER_END)
+        multi_session_idx = content.index("## Multi-session programs")
+        cost_discipline_idx = content.index("### Cost discipline")
+
+        assert begin_idx < multi_session_idx < end_idx, (
+            "Multi-session programs section is not inside the managed block"
+        )
+        assert begin_idx < cost_discipline_idx < end_idx, (
+            "Cost discipline section is not inside the managed block"
+        )
+
+        # References the standalone rule rather than restating its protocol.
+        assert ".claude/rules/agent-to-agent.md" in content
+        assert "nine bad probes were nearly all" not in content
+        assert "All-pairs is N(N-1)/2" not in content
+        assert "the other three were never asked" not in content
+
+    def test_multi_session_sections_are_absent_from_the_nlt_orchestrator_source(self, tmp_path):
+        """The platform template must never carry the source repo's identity."""
+        generate_skills(tmp_path, "claude")
+        content = (_skill_dir(tmp_path) / "SKILL.md").read_text()
+        assert "nlt-orchestrator" not in content
 
 
 class TestSmartMerge:
@@ -283,9 +314,9 @@ class TestDoctorCheck:
         # Also strip from managed body so combined check fails.
         text = skill_md.read_text()
         skill_md.write_text(
-            text.replace("validation contract", "plan checklist").replace(
-                "Expected-fail", "Retry"
-            ).replace("expected-fail", "retry"),
+            text.replace("validation contract", "plan checklist")
+            .replace("Expected-fail", "Retry")
+            .replace("expected-fail", "retry"),
             encoding="utf-8",
         )
         result = check_orchestration_prompt_skill_current(tmp_path)
