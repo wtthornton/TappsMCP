@@ -1143,6 +1143,12 @@ def _upgrade_claude_code_dry_run(
             else "skipped (no python or infra detected)"
         )
     )
+    result["components"]["measure_script"] = (
+        "skipped (upgrade_skip_files)" if _skipped("measure_script", skip) else "would-regenerate"
+    )
+    result["components"]["gitfacts_script"] = (
+        "skipped (upgrade_skip_files)" if _skipped("gitfacts_script", skip) else "would-regenerate"
+    )
 
 
 def _record_managed_json_error(result: dict[str, Any], key: str, exc: Any) -> None:
@@ -1195,6 +1201,10 @@ def _upgrade_claude_code_live(
         generate_subagent_definitions,
     )
     from tapps_mcp.pipeline.platform_hooks import ManagedJsonError
+    from tapps_mcp.pipeline.platform_project_scripts import (
+        generate_gitfacts_script,
+        generate_measure_script,
+    )
 
     # CLAUDE.md — merges into user content via _replace_tapps_section.
     if _skipped("claude_md", skip):
@@ -1445,6 +1455,19 @@ def _upgrade_claude_code_live(
         result["components"]["config_files_rule"] = generate_claude_config_files_rule(
             project_root,
         )
+
+    # scripts/measure.py + scripts/gitfacts.sh are project-root scaffolded probe
+    # scripts, not under .claude/ — host-agnostic, so unconditional like
+    # agent_scope_rule/agent_to_agent_rule (TAP-6884).
+    if _skipped("measure_script", skip):
+        result["components"]["measure_script"] = "skipped (upgrade_skip_files)"
+    else:
+        result["components"]["measure_script"] = generate_measure_script(project_root)
+
+    if _skipped("gitfacts_script", skip):
+        result["components"]["gitfacts_script"] = "skipped (upgrade_skip_files)"
+    else:
+        result["components"]["gitfacts_script"] = generate_gitfacts_script(project_root)
 
 
 def _upgrade_cursor_dry_run(

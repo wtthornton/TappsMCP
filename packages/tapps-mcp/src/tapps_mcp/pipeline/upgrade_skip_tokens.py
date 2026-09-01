@@ -39,6 +39,9 @@ SKIP_TOKENS: dict[str, frozenset[str]] = {
     "config_files_rule": frozenset({".claude/rules/config-files.md"}),
     "mcp_config": frozenset({".mcp.json"}),
     "karpathy": frozenset({"karpathy"}),
+    # TAP-6884: project-root scaffolded scripts, not under .claude/.
+    "measure_script": frozenset({"scripts/measure.py"}),
+    "gitfacts_script": frozenset({"scripts/gitfacts.sh"}),
 }
 
 ALL_SKIP_TOKENS: frozenset[str] = frozenset().union(*SKIP_TOKENS.values())
