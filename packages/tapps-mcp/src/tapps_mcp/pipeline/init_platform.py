@@ -376,6 +376,23 @@ def _generate_claude_scoped_rules(cfg: BootstrapConfig, state: _BootstrapState) 
     state.result["config_files_rule"] = generate_claude_config_files_rule(root)
 
 
+def _generate_project_scripts(state: _BootstrapState) -> None:
+    """Generate project-root scaffolded scripts (TAP-6884).
+
+    ``scripts/measure.py`` and ``scripts/gitfacts.sh`` live at the project
+    root, not under ``.claude/`` — host-agnostic like the scoped rule files,
+    generated unconditionally to match that pattern.
+    """
+    from tapps_mcp.pipeline.platform_project_scripts import (
+        generate_gitfacts_script,
+        generate_measure_script,
+    )
+
+    root = state.project_root
+    state.result["measure_script"] = generate_measure_script(root)
+    state.result["gitfacts_script"] = generate_gitfacts_script(root)
+
+
 def _generate_docs_automation(state: _BootstrapState, platform: str) -> None:
     """Generate doc-automation wiring when DocsMCP is detected (Epic 86)."""
     from tapps_mcp.pipeline.platform_docs_automation import generate_docs_automation
@@ -412,6 +429,7 @@ def _generate_claude_components(cfg: BootstrapConfig, state: _BootstrapState) ->
     )
     _persist_skill_tier(state.project_root, cfg.skill_tier, dry_run=cfg.dry_run)
     _generate_claude_scoped_rules(cfg, state)
+    _generate_project_scripts(state)
 
     if cfg.docs_automation and state.result.get("docsmcp_detected", False):
         _generate_docs_automation(state, "claude")

@@ -73,6 +73,7 @@ from __future__ import annotations
 
 import contextlib
 import re
+from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
@@ -337,6 +338,30 @@ def _lift_asset_overwrite_warnings(
 
 def _skipped(artifact: str, skip: set[str]) -> bool:
     return bool(_SKIP_TOKENS.get(artifact, frozenset()) & skip)
+
+
+def _dry_run_status(name: str, skip: set[str]) -> str:
+    """Dry-run status for an artifact that is regenerated unconditionally when not skipped."""
+    return "skipped (upgrade_skip_files)" if _skipped(name, skip) else "would-regenerate"
+
+
+def _apply_or_skip(
+    result: dict[str, Any],
+    name: str,
+    skip: set[str],
+    generate: Callable[[Path], Any],
+    project_root: Path,
+) -> None:
+    """Write ``generate(project_root)`` into ``result["components"][name]``, or the skip marker.
+
+    For artifacts whose dict key equals their ``upgrade_skip_files`` token and
+    which take only ``project_root`` — the shape repeated throughout the
+    claude-code live upgrade.
+    """
+    if _skipped(name, skip):
+        result["components"][name] = "skipped (upgrade_skip_files)"
+    else:
+        result["components"][name] = generate(project_root)
 
 
 def _has_python_signals(project_root: Path) -> bool:
@@ -1136,14 +1161,10 @@ def _upgrade_claude_code_dry_run(
         "would-regenerate" if python_ok else "skipped (no python detected)"
     )
     result["components"]["agent_scope_rule"] = "would-regenerate"
-    result["components"]["autonomy_rule"] = (
-        "skipped (upgrade_skip_files)" if _skipped("autonomy_rule", skip) else "would-regenerate"
-    )
+    result["components"]["autonomy_rule"] = _dry_run_status("autonomy_rule", skip)
     result["components"]["linear_standards_rule"] = "would-regenerate"
-    result["components"]["integration_hygiene_rule"] = (
-        "skipped (upgrade_skip_files)"
-        if _skipped("integration_hygiene_rule", skip)
-        else "would-regenerate"
+    result["components"]["integration_hygiene_rule"] = _dry_run_status(
+        "integration_hygiene_rule", skip
     )
     result["components"]["pipeline_rule"] = (
         "would-regenerate" if (python_ok or infra_ok) else "skipped (no python or infra detected)"
@@ -1168,6 +1189,8 @@ def _upgrade_claude_code_dry_run(
             else "skipped (no python or infra detected)"
         )
     )
+    result["components"]["measure_script"] = _dry_run_status("measure_script", skip)
+    result["components"]["gitfacts_script"] = _dry_run_status("gitfacts_script", skip)
 
 
 def _record_managed_json_error(result: dict[str, Any], key: str, exc: Any) -> None:
@@ -1220,6 +1243,10 @@ def _upgrade_claude_code_live(
         generate_subagent_definitions,
     )
     from tapps_mcp.pipeline.platform_hooks import ManagedJsonError
+    from tapps_mcp.pipeline.platform_project_scripts import (
+        generate_gitfacts_script,
+        generate_measure_script,
+    )
 
     # CLAUDE.md — merges into user content via _replace_tapps_section.
     if _skipped("claude_md", skip):
@@ -1377,43 +1404,32 @@ def _upgrade_claude_code_live(
         )
 
     # agent-scope.md is universal — applies to any deployed agent regardless of language.
-    if _skipped("agent_scope_rule", skip):
-        result["components"]["agent_scope_rule"] = "skipped (upgrade_skip_files)"
-    else:
-        result["components"]["agent_scope_rule"] = generate_claude_agent_scope_rule(project_root)
+    _apply_or_skip(result, "agent_scope_rule", skip, generate_claude_agent_scope_rule, project_root)
 
     # agent-to-agent.md is universal — the multi-session protocol applies to any
     # deployed agent regardless of language (TAP-6886).
-    if _skipped("agent_to_agent_rule", skip):
-        result["components"]["agent_to_agent_rule"] = "skipped (upgrade_skip_files)"
-    else:
-        result["components"]["agent_to_agent_rule"] = generate_claude_agent_to_agent_rule(
-            project_root
-        )
+    _apply_or_skip(
+        result, "agent_to_agent_rule", skip, generate_claude_agent_to_agent_rule, project_root
+    )
 
     # autonomy.md is universal — flips the agent default to "act within scope, no HITL"
     # and pins Linear assignee to the agent identity (never the OAuth human).
-    if _skipped("autonomy_rule", skip):
-        result["components"]["autonomy_rule"] = "skipped (upgrade_skip_files)"
-    else:
-        result["components"]["autonomy_rule"] = generate_claude_autonomy_rule(project_root)
+    _apply_or_skip(result, "autonomy_rule", skip, generate_claude_autonomy_rule, project_root)
 
     # linear-standards.md is universal — enforces Linear write routing through docs-mcp templates.
-    if _skipped("linear_standards_rule", skip):
-        result["components"]["linear_standards_rule"] = "skipped (upgrade_skip_files)"
-    else:
-        result["components"]["linear_standards_rule"] = generate_claude_linear_standards_rule(
-            project_root,
-        )
+    _apply_or_skip(
+        result, "linear_standards_rule", skip, generate_claude_linear_standards_rule, project_root
+    )
 
     # integration-hygiene.md is universal — three patterns the agent has been bitten by:
     # Linear-is-OAuth, don't-mirror-server-state, verify-subagent-claims (TAP-1215).
-    if _skipped("integration_hygiene_rule", skip):
-        result["components"]["integration_hygiene_rule"] = "skipped (upgrade_skip_files)"
-    else:
-        result["components"]["integration_hygiene_rule"] = generate_claude_integration_hygiene_rule(
-            project_root
-        )
+    _apply_or_skip(
+        result,
+        "integration_hygiene_rule",
+        skip,
+        generate_claude_integration_hygiene_rule,
+        project_root,
+    )
 
     if _skipped("pipeline_rule", skip):
         result["components"]["pipeline_rule"] = "skipped (upgrade_skip_files)"
@@ -1477,6 +1493,12 @@ def _upgrade_claude_code_live(
         result["components"]["config_files_rule"] = generate_claude_config_files_rule(
             project_root,
         )
+
+    # scripts/measure.py + scripts/gitfacts.sh are project-root scaffolded probe
+    # scripts, not under .claude/ — host-agnostic, so unconditional like
+    # agent_scope_rule/agent_to_agent_rule (TAP-6884).
+    _apply_or_skip(result, "measure_script", skip, generate_measure_script, project_root)
+    _apply_or_skip(result, "gitfacts_script", skip, generate_gitfacts_script, project_root)
 
 
 def _upgrade_cursor_dry_run(

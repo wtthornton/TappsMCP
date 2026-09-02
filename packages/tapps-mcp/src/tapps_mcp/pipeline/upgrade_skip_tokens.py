@@ -41,6 +41,9 @@ SKIP_TOKENS: dict[str, frozenset[str]] = {
     "karpathy": frozenset({"karpathy"}),
     # TAP-6890: scaffolded Workflow scripts (val-verify.js, linear-disposition-verify.js).
     "claude_workflows": frozenset({".claude/workflows"}),
+    # TAP-6884: project-root scaffolded scripts, not under .claude/.
+    "measure_script": frozenset({"scripts/measure.py"}),
+    "gitfacts_script": frozenset({"scripts/gitfacts.sh"}),
 }
 
 ALL_SKIP_TOKENS: frozenset[str] = frozenset().union(*SKIP_TOKENS.values())
