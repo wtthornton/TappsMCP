@@ -2,11 +2,13 @@
 
 from __future__ import annotations
 
+import math
 import time
 
 import pytest
 
 from tapps_mcp.tools.session_health import (
+    _MARKER_EPOCH_MAX_S,
     DEFAULT_STALE_MEMO_S,
     attach_session_health,
     collect_build_skew,
@@ -50,6 +52,41 @@ def test_read_marker_epoch_falls_back_to_mtime_on_garbage(tmp_path):
     got = read_marker_epoch(tmp_path)
     assert got is not None
     assert got == pytest.approx(marker.stat().st_mtime)
+
+
+_LEGAL_VERDICTS = {"never_bootstrapped", "fresh", "memoized", "stale_memo", "stale_marker"}
+
+
+@pytest.mark.parametrize(
+    "marker_content",
+    ["nan", "inf", "-inf", "1e400", "99999999999999999999"],
+)
+def test_hostile_marker_values_are_rejected_not_raised(tmp_path, marker_content):
+    """VAL-06: non-finite and out-of-range marker content must not reach
+    datetime.fromtimestamp or otherwise take the probe down."""
+    _write_marker(tmp_path, 0)  # placeholder so the sidecar dir exists
+    marker = tmp_path / ".tapps-mcp" / ".session-start-marker"
+    marker.write_text(marker_content, encoding="utf-8")
+
+    got = read_marker_epoch(tmp_path)
+    assert got is None or (math.isfinite(got) and 0.0 <= got <= _MARKER_EPOCH_MAX_S)
+
+    block = collect_session_start_health(tmp_path, memo_present=False)
+    assert block["verdict"] in _LEGAL_VERDICTS
+
+
+def test_hostile_marker_test_accepts_a_known_good_value(tmp_path):
+    """Validates the instrument above: a guard that rejects everything would
+    also pass the hostile-value cases and be a false green."""
+    now = time.time()
+    _write_marker(tmp_path, now - 5)
+
+    got = read_marker_epoch(tmp_path)
+    assert got is not None
+    assert got == pytest.approx(now - 5, abs=1)
+
+    block = collect_session_start_health(tmp_path, memo_present=False, now=now)
+    assert block["verdict"] == "fresh"
 
 
 # --------------------------------------------------------------------------
@@ -96,12 +133,52 @@ def test_stale_memo_warns_and_names_the_age(tmp_path):
 
 
 def test_old_marker_without_memo_is_not_a_stale_memo(tmp_path):
-    """Negative control: age alone is not the defect — it takes a pending memo hit."""
+    """VAL-03: age alone is not `stale_memo` — it takes a pending memo hit.
+
+    But it is also not silently `fresh`: an ancient marker with no memo must
+    surface as `stale_marker`, and the verdict must never contradict its own
+    reported age.
+    """
     now = time.time()
     _write_marker(tmp_path, now - (DEFAULT_STALE_MEMO_S + 1_000))
     block = collect_session_start_health(tmp_path, memo_present=False, now=now)
+    assert block["verdict"] == "stale_marker"
+    assert block["verdict"] != "stale_memo"
+    assert block["marker_age_s"] > block["stale_after_s"]
+    assert str(block["marker_age_s"]) in block["warning"]
+
+
+def test_recent_marker_without_memo_is_still_fresh(tmp_path):
+    """VAL-04 (negative control): a fix that always returns `stale_marker`
+    would also pass VAL-03, so a recent marker must still report `fresh`."""
+    now = time.time()
+    _write_marker(tmp_path, now - 5)
+    block = collect_session_start_health(tmp_path, memo_present=False, now=now)
     assert block["verdict"] == "fresh"
     assert "warning" not in block
+    assert block["marker_age_s"] <= block["stale_after_s"]
+
+
+@pytest.mark.parametrize(
+    "age_s",
+    [
+        0,
+        1,
+        DEFAULT_STALE_MEMO_S - 1,
+        DEFAULT_STALE_MEMO_S,
+        DEFAULT_STALE_MEMO_S + 1,
+        DEFAULT_STALE_MEMO_S * 10,
+    ],
+)
+def test_fresh_verdict_never_contradicts_marker_age(tmp_path, age_s):
+    """Invariant: whatever the age, `verdict == "fresh"` implies the marker is
+    within the threshold. The bug this defends against is exactly a `fresh`
+    verdict sitting beside a marker_age_s that exceeds stale_after_s."""
+    now = time.time()
+    _write_marker(tmp_path, now - age_s)
+    block = collect_session_start_health(tmp_path, memo_present=False, now=now)
+    if block["verdict"] == "fresh":
+        assert block["marker_age_s"] <= block["stale_after_s"]
 
 
 def test_marker_older_than_process_is_not_within_this_process(tmp_path):

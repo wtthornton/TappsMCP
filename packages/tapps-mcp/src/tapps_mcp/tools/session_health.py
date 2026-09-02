@@ -15,12 +15,16 @@ Two questions an agent cannot currently answer from a successful
    process import, so a server can outlive several ``uv tool install`` upgrades
    of the package it was launched from and never say so.
 
-Both probes are read-only and never raise: a diagnostic that can break the
-doctor is worse than no diagnostic.
+Both probes are read-only. ``read_marker_epoch`` rejects non-finite and
+out-of-range marker content rather than raising on it, and
+``attach_session_health`` catches any residual failure from either probe and
+reports it as an ``error`` field instead of propagating it: a diagnostic that
+can break the doctor is worse than no diagnostic.
 """
 
 from __future__ import annotations
 
+import math
 import os
 import time
 from collections.abc import Callable
@@ -53,12 +57,22 @@ def _iso(epoch: float) -> str:
     return datetime.fromtimestamp(epoch, UTC).isoformat().replace("+00:00", "Z")
 
 
+#: Upper bound for an accepted marker epoch: a few decades past "now" is far
+#: beyond any plausible clock skew or clock-format bug, while still rejecting
+#: overflow-inducing values like ``1e20`` before they reach
+#: ``datetime.fromtimestamp`` (which raises OverflowError/OSError/ValueError
+#: for those, depending on platform).
+_MARKER_EPOCH_MAX_S = 4_102_444_800.0  # 2100-01-01T00:00:00Z
+
+
 def read_marker_epoch(project_root: Path | str) -> float | None:
     """Return the epoch recorded in the TAP-975 session-start marker.
 
     Prefers the file's *content* (an epoch written by
     ``write_session_start_marker``) over its mtime, so a copy or a touch cannot
-    silently age the reading. Falls back to mtime when the content is unusable.
+    silently age the reading. Falls back to mtime when the content is unusable
+    or out of a sane epoch range (rejects non-finite values and anything
+    outside ``[0, _MARKER_EPOCH_MAX_S]``).
     """
     marker = Path(project_root).joinpath(*_MARKER_RELPATH)
     try:
@@ -66,9 +80,11 @@ def read_marker_epoch(project_root: Path | str) -> float | None:
     except OSError:
         return None
     try:
-        return float(raw)
+        parsed = float(raw)
     except ValueError:
-        pass
+        parsed = None
+    if parsed is not None and math.isfinite(parsed) and 0.0 <= parsed <= _MARKER_EPOCH_MAX_S:
+        return parsed
     try:
         return marker.stat().st_mtime
     except OSError:
@@ -188,6 +204,15 @@ def collect_session_start_health(
         )
     elif memo_present:
         block["verdict"] = "memoized"
+    elif age > threshold:
+        block["verdict"] = "stale_marker"
+        block["warning"] = (
+            f"Session-start marker for this project root is {age}s old "
+            f"(threshold {threshold}s) with no bootstrap memoized. The marker "
+            "predates any live memo for this root, so the last recorded "
+            "bootstrap is almost certainly stale. Call tapps_session_start() "
+            "to record a current one."
+        )
     else:
         block["verdict"] = "fresh"
     return block
