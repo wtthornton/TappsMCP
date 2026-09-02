@@ -182,5 +182,72 @@ class TestUpgradeScope:
 
 
 # ---------------------------------------------------------------------------
+# TAP-6952: drift-blocked upgrade must fail closed (exit != 0), not exit 0
+# ---------------------------------------------------------------------------
+
+
+class TestRunUpgradeDriftBlockedFailsClosed:
+    """A drift-blocked upgrade must be reported as a failure by run_upgrade."""
+
+    def test_drift_blocked_upgrade_returns_false(self, tmp_path, capsys):
+        """End-to-end: install drift blocks the real upgrade_pipeline path,
+        and run_upgrade must surface that as a non-success outcome."""
+        from tapps_mcp import __version__
+        from tapps_mcp.common.models import InstallDriftDiagnostic, InstallDriftEntry
+
+        drift = InstallDriftDiagnostic(
+            drift_detected=True,
+            entries=[
+                InstallDriftEntry(
+                    binary="docsmcp",
+                    binary_path="/fake/docsmcp",
+                    binary_version="0.0.1",
+                    source_version=__version__,
+                    drifted=True,
+                )
+            ],
+            remediation_hint="Refresh global tools: uv tool install -e --reinstall <path>",
+        )
+        with (
+            patch("tapps_mcp.distribution.setup_generator.Path.home", return_value=tmp_path),
+            patch("tapps_mcp.diagnostics.check_install_drift", return_value=drift),
+        ):
+            ok = run_upgrade(
+                mcp_host="auto",
+                project_root=str(tmp_path),
+            )
+        assert ok is False
+        captured = capsys.readouterr()
+        assert "blocked" in captured.out.lower() or "drift" in captured.out.lower()
+
+    def test_missing_success_key_defaults_to_failure(self, tmp_path):
+        """Regression for the exact reported bug: an unexpected result shape
+        (no ``success`` key at all) must fail closed, not default to True."""
+        with patch(
+            "tapps_mcp.pipeline.upgrade.upgrade_pipeline",
+            return_value={
+                "version": "0.8.0",
+                "components": {},
+                "errors": ["Upgrade blocked: install drift detected"],
+            },
+        ):
+            ok = run_upgrade(
+                mcp_host="claude-code",
+                project_root=str(tmp_path),
+            )
+        assert ok is False
+
+    def test_happy_path_still_returns_success(self, tmp_path):
+        """Negative control: a clean, non-drifted, real upgrade still reports
+        success — the flipped default must not regress the golden path."""
+        with patch("tapps_mcp.distribution.setup_generator.Path.home", return_value=tmp_path):
+            ok = run_upgrade(
+                mcp_host="claude-code",
+                project_root=str(tmp_path),
+            )
+        assert ok is True
+
+
+# ---------------------------------------------------------------------------
 # Issue #80.2: env var migration across scopes
 # ---------------------------------------------------------------------------

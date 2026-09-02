@@ -242,4 +242,4 @@ def run_upgrade(
         # output to keep stdout pure, and for dry runs (nothing changed).
         if not dry_run:
             _verify_context7_live(root)
-    return bool(result.get("success", True))
+    return bool(result.get("success", False))

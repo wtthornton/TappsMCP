@@ -2388,6 +2388,7 @@ def upgrade_pipeline(
         if _drift.drift_detected:
             result["errors"].append(format_upgrade_blocked_by_drift(_drift))
             result["install_drift"] = _drift.model_dump()
+            result["success"] = False
             return result
 
     # Pre-upgrade backup (skip in dry-run mode)
@@ -2418,6 +2419,7 @@ def upgrade_pipeline(
                 f"Upgrade aborted: backup failed ({exc}). "
                 "Fix the backup issue or run with dry_run=True to preview changes."
             )
+            result["success"] = False
             return result
 
     # Resolve engagement level and Docker config from settings. Pass the
