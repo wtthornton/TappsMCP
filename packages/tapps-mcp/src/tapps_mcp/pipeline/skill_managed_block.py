@@ -411,8 +411,13 @@ def install_or_refresh_skill(
             return "unchanged"
         action: Action = "refreshed"
     else:
-        # Legacy unmarked skill: preserve the whole prior body as a project region.
-        preserved = original.strip("\n")
+        # Legacy unmarked skill: preserve the prior body as a project region,
+        # minus its own frontmatter — frontmatter is platform-owned and already
+        # rewritten above (mirrors the marker-present branch's split_frontmatter
+        # call), so a stale ``tools:`` grant from before TAP-6497 does not
+        # survive the migration.
+        _, legacy_body = split_frontmatter(original)
+        preserved = legacy_body.strip("\n")
         updated = f"{frontmatter}{new_block}\n\n{PROJECT_REGION_HEADING}\n\n{preserved}\n"
         action = "migrated"
 
