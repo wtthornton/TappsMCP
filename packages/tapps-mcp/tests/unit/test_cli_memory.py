@@ -225,6 +225,51 @@ class TestMemorySave:
         assert "TAPPS_MCP_MEMORY_BRAIN_AUTH_TOKEN" in result.output
 
 
+class TestMemorySaveHandoffOverCap:
+    """A handoff over the brain's 4096-char value cap must land durably on
+    disk via the manual `memory save` fallback, not be handed to a brain
+    write that rejects or truncates it with no local copy anywhere (TAP-6853).
+    Slot routing / non-handoff-key exemption are unit-tested against
+    ``try_persist_oversized_handoff`` in test_handoff_write.py; this class
+    covers only the CLI wiring.
+    """
+
+    _OVER_CAP_VALUE = "x" * 4200
+
+    def test_over_cap_writes_file_not_brain(self, runner: CliRunner, tmp_path: Path) -> None:
+        """Before this fix the CLI had no durable fallback for an over-cap
+        handoff: it went straight to `bridge.save()`, which the brain would
+        reject or truncate, leaving no copy anywhere."""
+        bridge = _mock_bridge()
+        with patch(_ROOT_PATCH, return_value=tmp_path), patch(_BRIDGE_PATCH, return_value=bridge):
+            result = runner.invoke(
+                main,
+                ["memory", "save", "--key", "session-handoff", "--value", self._OVER_CAP_VALUE],
+            )
+        assert result.exit_code == 0
+        data = json.loads(result.stdout)
+        assert data["success"] is True
+        assert data["brain_mirror"] == "skipped_value_over_cap"
+        target = tmp_path / ".tapps-mcp" / "session-handoff.md"
+        assert data["persisted_to"] == str(target)
+        assert target.read_text(encoding="utf-8") == self._OVER_CAP_VALUE
+        bridge.save.assert_not_awaited()
+
+    def test_under_cap_handoff_key_still_uses_brain(
+        self, runner: CliRunner, tmp_path: Path
+    ) -> None:
+        """The file fallback is over-cap-only — an ordinary handoff still
+        mirrors to the brain exactly as it did before this fix."""
+        bridge = _mock_bridge()
+        with patch(_ROOT_PATCH, return_value=tmp_path), patch(_BRIDGE_PATCH, return_value=bridge):
+            result = runner.invoke(
+                main, ["memory", "save", "--key", "session-handoff", "--value", "short body"]
+            )
+        assert result.exit_code == 0
+        bridge.save.assert_awaited_once()
+        assert not (tmp_path / ".tapps-mcp" / "session-handoff.md").exists()
+
+
 class TestMemoryGet:
     def test_get_found(self, runner: CliRunner) -> None:
         bridge = _mock_bridge(get_result={"key": "test-key", "value": "test value"})

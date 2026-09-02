@@ -18,9 +18,12 @@ Start work in a fresh context by assembling structured state.
    - **CLI fallback** (MCP unavailable): Run `uv run tapps-mcp doctor --quick` and read `.tapps-mcp.yaml` for project context. Proceed without blocking.
 - **Usage gaps:** `usage_gaps.recurring_validation_skips` is 7-day rolling fleet telemetry — not proof this call failed. Still run validate + checklist at epic boundaries in execution repos.
 
-2. **Load handoff (priority order).**
-   - Read `.tapps-mcp/session-handoff.md` if it exists — primary source.
-   - Else best-effort CLI (no `tapps_memory` MCP — removed v3.12.0): `uv run tapps-mcp memory get --key session-handoff` (brain offline or auth missing → skip).
+2. **Choose the handoff, then load it.** A repo can hold several: the shared `.tapps-mcp/session-handoff.md` plus one per slot under `.tapps-mcp/handoffs/`. Enumerate before reading — `uv run tapps-mcp handoff list` prints every one, newest first, with its slot, program, **Updated** and age.
+   - **A slot argument was given** (`/tapps-continue-session <slot>`) → load that one: `.tapps-mcp/handoffs/<slot>.md`. Say so if it does not exist; do not silently fall back to the shared file.
+   - **Exactly one fresh handoff** → load it and continue.
+   - **More than one** → **list the slots and ask which to resume — never silently pick one.** Print slot, program, **Updated** and age for each, then stop and wait. Picking for the user is how one program resumes another program's state without either noticing. Recency is not consent: the newest handoff is frequently the *other* program's.
+   - Then read the chosen file — primary source.
+   - Else best-effort CLI (no `tapps_memory` MCP — removed v3.12.0): `uv run tapps-mcp memory get --key session-handoff` (slotted: `--key session-handoff.<slot>`; brain offline or auth missing → skip).
    - Optional supplements (only if present): `docs/NEXT_SESSION_PROMPT.md`, `docs/TAPPS_HANDOFF.md` (**Next:** section).
    - **P0 fallback:** If **Next (P0)** is empty but **Open** has bullets, promote the first Open item as provisional P0 and flag it in the continue block.
    - **Memory context (optional):** `uv run tapps-mcp memory recall --recall-key session-handoff --query "<P0 text or Linear id>"` pins the handoff mirror then adds semantic hits (HTTP-safe). Alternative: `uv run tapps-mcp memory search --query "..."`. Skip silently when brain auth is unavailable.

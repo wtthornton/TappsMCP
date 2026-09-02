@@ -72,6 +72,43 @@ def memory_list(tier: str | None, scope: str | None, as_json: bool) -> None:
         )
 
 
+def _emit_memory_save_result(result: dict[str, object]) -> None:
+    """Print a `memory save` result, or exit non-zero on an error/degraded response."""
+    import json
+
+    if isinstance(result, dict) and result.get("error"):
+        click.echo(f"Error: {result.get('message', result['error'])}", err=True)
+        raise SystemExit(1)
+    if isinstance(result, dict) and result.get("degraded") and not result.get("success", True):
+        click.echo(f"Error: {result.get('reason', 'degraded')}", err=True)
+        raise SystemExit(1)
+    from tapps_mcp.tools.handoff_memory import enrich_memory_save_result
+
+    payload = enrich_memory_save_result(result) if isinstance(result, dict) else result
+    click.echo(json.dumps(payload, indent=2))
+
+
+def _save_oversized_handoff_to_file(key: str, value: str) -> bool:
+    """CLI presentation for the over-cap handoff file fallback (TAP-6853)."""
+    import json
+
+    from tapps_mcp.cli import _get_project_root
+    from tapps_mcp.server_helpers import gateway_refusal_response
+    from tapps_mcp.tools.handoff_guard import HandoffOwnerConflictError
+    from tapps_mcp.tools.handoff_schema import InvalidHandoffSlotError
+    from tapps_mcp.tools.handoff_write import try_persist_oversized_handoff
+
+    try:
+        payload = try_persist_oversized_handoff(_get_project_root(), key, value)
+    except (InvalidHandoffSlotError, HandoffOwnerConflictError) as exc:
+        click.echo(json.dumps(gateway_refusal_response("memory_save", exc.envelope, 0), indent=2))
+        raise SystemExit(1) from exc
+    if payload is None:
+        return False
+    click.echo(json.dumps(payload, indent=2))
+    return True
+
+
 @memory_group.command("save")
 @click.option("--key", required=True, help="Memory key (lowercase slug).")
 @click.option("--value", required=True, help="Memory content.")
@@ -90,9 +127,11 @@ def memory_list(tier: str | None, scope: str | None, as_json: bool) -> None:
 def memory_save(key: str, value: str, tier: str, tags: str, memory_group: str | None) -> None:
     """Save a memory entry via BrainBridge (HTTP or in-process DSN)."""
     import asyncio
-    import json
 
     from tapps_mcp.cli import _brain_bridge_unavailable_message, _create_cli_brain_bridge
+
+    if _save_oversized_handoff_to_file(key, value):
+        return
 
     tag_list = [t.strip() for t in tags.split(",") if t.strip()] if tags else []
 
@@ -118,18 +157,7 @@ def memory_save(key: str, value: str, tier: str, tags: str, memory_group: str | 
             click.echo(_brain_bridge_unavailable_message(), err=True)
             raise SystemExit(2) from None
         raise
-
-    if isinstance(result, dict) and result.get("error"):
-        message = result.get("message", result["error"])
-        click.echo(f"Error: {message}", err=True)
-        raise SystemExit(1)
-    if isinstance(result, dict) and result.get("degraded") and not result.get("success", True):
-        click.echo(f"Error: {result.get('reason', 'degraded')}", err=True)
-        raise SystemExit(1)
-    from tapps_mcp.tools.handoff_memory import enrich_memory_save_result
-
-    payload = enrich_memory_save_result(result) if isinstance(result, dict) else result
-    click.echo(json.dumps(payload, indent=2))
+    _emit_memory_save_result(result)
 
 
 @memory_group.command("get")

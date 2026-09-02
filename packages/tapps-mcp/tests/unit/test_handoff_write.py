@@ -535,6 +535,51 @@ class TestOverCapMirrorIsRefusedUpFront:
         assert payload["success"] is True
 
 
+class TestTryPersistOversizedHandoff:
+    """The generic `memory save` CLI fallback (TAP-6853): an over-cap handoff
+    must land on disk instead of being handed to a brain write that would
+    reject or truncate it with no local copy anywhere.
+    """
+
+    def test_over_cap_default_key_writes_shared_file(self, tmp_path: Path) -> None:
+        from tapps_mcp.tools.handoff_write import try_persist_oversized_handoff
+
+        body = _over_cap_handoff()
+        payload = try_persist_oversized_handoff(tmp_path, "session-handoff", body)
+
+        assert payload is not None
+        assert payload["success"] is True
+        assert payload["brain_mirror"] == "skipped_value_over_cap"
+        target = tmp_path / ".tapps-mcp" / "session-handoff.md"
+        assert payload["persisted_to"] == str(target)
+        assert target.read_text(encoding="utf-8") == body
+
+    def test_over_cap_slotted_key_writes_slot_file(self, tmp_path: Path) -> None:
+        from tapps_mcp.tools.handoff_write import try_persist_oversized_handoff
+
+        body = _over_cap_handoff()
+        payload = try_persist_oversized_handoff(tmp_path, "session-handoff.burndown", body)
+
+        assert payload is not None
+        target = tmp_path / ".tapps-mcp" / "handoffs" / "burndown.md"
+        assert payload["persisted_to"] == str(target)
+        assert target.read_text(encoding="utf-8") == body
+
+    def test_under_cap_handoff_key_returns_none(self, tmp_path: Path) -> None:
+        from tapps_mcp.tools.handoff_write import try_persist_oversized_handoff
+
+        assert try_persist_oversized_handoff(tmp_path, "session-handoff", _VALID_HANDOFF) is None
+
+    def test_non_handoff_key_over_cap_returns_none(self, tmp_path: Path) -> None:
+        """Only `session-handoff` / `session-handoff.<slot>` keys route here —
+        an unrelated over-cap value is not this fallback's concern."""
+        from tapps_mcp.tools.handoff_write import try_persist_oversized_handoff
+
+        body = _over_cap_handoff()
+        assert try_persist_oversized_handoff(tmp_path, "unrelated-key", body) is None
+        assert not (tmp_path / ".tapps-mcp").exists()
+
+
 class TestOverCapSaveEnvelopeIsNotPlainSuccess:
     """The whole point of TAP-6444: the envelope must not claim the mirror landed."""
 

@@ -21,8 +21,10 @@ from tapps_mcp.tools.handoff_schema import (
     handoff_memory_key,
     handoff_sections_from_doc,
     handoff_size_report,
+    is_session_handoff_key,
     lint_handoff,
     parse_handoff_markdown,
+    slot_from_handoff_key,
 )
 
 _logger = structlog.get_logger(__name__)
@@ -209,6 +211,38 @@ def write_handoff_file(
     )
 
 
+def try_persist_oversized_handoff(
+    project_root: Path, key: str, value: str
+) -> dict[str, Any] | None:
+    """Write *value* straight to its handoff file when over the brain's cap.
+
+    Backs the generic ``memory save`` CLI fallback (TAP-6853), which has no
+    other durable landing place for a handoff the brain would reject or
+    truncate. Returns a JSON-ready result payload, or ``None`` when
+    *key*/*value* are not an over-cap handoff — the caller then proceeds with
+    its normal brain save. May raise
+    :class:`~tapps_mcp.tools.handoff_schema.InvalidHandoffSlotError` or
+    :class:`~tapps_mcp.tools.handoff_guard.HandoffOwnerConflictError`, same
+    as :func:`write_handoff_file`.
+    """
+    if not is_session_handoff_key(key):
+        return None
+    size = handoff_size_report(value)
+    if not size.over:
+        return None
+    written = write_handoff_file(project_root, value, slot=slot_from_handoff_key(key))
+    return {
+        "success": True,
+        "key": key,
+        "persisted_to": str(written.path),
+        "brain_mirror": "skipped_value_over_cap",
+        "value_length": size.length,
+        "max_value_length": size.cap,
+        "detail": size.message(),
+        "conflict": written.conflict,
+    }
+
+
 async def write_handoff(
     project_root: Path,
     markdown: str,
@@ -302,6 +336,7 @@ __all__ = [
     "HandoffWriteResult",
     "build_handoff_metadata",
     "mirror_handoff_to_brain",
+    "try_persist_oversized_handoff",
     "write_handoff",
     "write_handoff_file",
     "write_handoff_sync",
