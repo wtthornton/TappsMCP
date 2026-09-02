@@ -181,12 +181,12 @@ _SUBJECT_OVERLAP_THRESHOLD = 0.3
 _NEAR_DUPLICATE_JACCARD = 0.7
 
 
-def _bullet_spans(text: str) -> list[tuple[int, int, str]]:
+def bullet_spans(text: str) -> list[tuple[int, int, str]]:
     """Return ``(start, end, raw_line)`` for every top-level ``-``/``*`` bullet."""
     return [(m.start(), m.end(), m.group(0)) for m in _BULLET_RE.finditer(text)]
 
 
-def _normalize_bullet_text(raw: str) -> str:
+def normalize_bullet_text(raw: str) -> str:
     """Collapse a bullet line to comparable prose: no marker, markup, or case."""
     stripped = re.sub(r"^[ \t]*[-*][ \t]+", "", raw)
     stripped = _MARKDOWN_EMPHASIS_RE.sub("", stripped)
@@ -194,11 +194,11 @@ def _normalize_bullet_text(raw: str) -> str:
     return _WHITESPACE_RE.sub(" ", stripped).strip()
 
 
-def _significant_words(normalized: str) -> frozenset[str]:
+def significant_words(normalized: str) -> frozenset[str]:
     return frozenset(w for w in normalized.split(" ") if len(w) >= 3 and w not in _STOPWORDS)
 
 
-def _line_number(content: str, offset: int) -> int:
+def line_number(content: str, offset: int) -> int:
     return content.count("\n", 0, offset) + 1
 
 
@@ -234,21 +234,21 @@ def find_contradictions(content: str) -> list[Contradiction]:
     begin, end = span
 
     managed_bullets = [
-        (begin + s, begin + e, raw) for s, e, raw in _bullet_spans(content[begin:end])
+        (begin + s, begin + e, raw) for s, e, raw in bullet_spans(content[begin:end])
     ]
-    project_bullets = [(s, e, raw) for s, e, raw in _bullet_spans(content[:begin])]
-    project_bullets += [(end + s, end + e, raw) for s, e, raw in _bullet_spans(content[end:])]
+    project_bullets = [(s, e, raw) for s, e, raw in bullet_spans(content[:begin])]
+    project_bullets += [(end + s, end + e, raw) for s, e, raw in bullet_spans(content[end:])]
 
     findings: list[Contradiction] = []
     for m_start, _m_end, m_raw in managed_bullets:
-        m_words = _significant_words(_normalize_bullet_text(m_raw))
+        m_words = significant_words(normalize_bullet_text(m_raw))
         if not m_words:
             continue
         for p_start, _p_end, p_raw in project_bullets:
-            p_norm = _normalize_bullet_text(p_raw)
-            if p_norm == _normalize_bullet_text(m_raw):
+            p_norm = normalize_bullet_text(p_raw)
+            if p_norm == normalize_bullet_text(m_raw):
                 continue
-            p_words = _significant_words(p_norm)
+            p_words = significant_words(p_norm)
             if not p_words:
                 continue
             shared = m_words & p_words
@@ -263,9 +263,9 @@ def find_contradictions(content: str) -> list[Contradiction]:
             findings.append(
                 Contradiction(
                     managed_text=m_raw.strip(),
-                    managed_line=_line_number(content, m_start),
+                    managed_line=line_number(content, m_start),
                     project_text=p_raw.strip(),
-                    project_line=_line_number(content, p_start),
+                    project_line=line_number(content, p_start),
                 )
             )
     return findings
@@ -284,7 +284,7 @@ class PromoteOutcome:
     generator_file: str | None = None
 
 
-def _resolve_region(content: str, offset: int) -> Region:
+def resolve_region(content: str, offset: int) -> Region:
     span = _find_block_span(content)
     if span is not None:
         begin, end = span
@@ -310,7 +310,7 @@ def promote_rule(content: str, insertion_offset: int, *, generator_file: str) ->
     never auto-resolves a refusal.
     """
     if UPGRADE_POLICY_OVERWRITE_MARKER in content:
-        region = _resolve_region(content, insertion_offset)
+        region = resolve_region(content, insertion_offset)
         return PromoteOutcome(
             accepted=False,
             region=region,
@@ -322,7 +322,7 @@ def promote_rule(content: str, insertion_offset: int, *, generator_file: str) ->
             generator_file=generator_file,
         )
 
-    region = _resolve_region(content, insertion_offset)
+    region = resolve_region(content, insertion_offset)
     if region == "managed_block":
         return PromoteOutcome(
             accepted=False,
@@ -488,13 +488,18 @@ __all__ = [
     "LearningsSizeFinding",
     "PromoteOutcome",
     "Region",
+    "bullet_spans",
     "extract_block",
     "find_contradictions",
     "install_or_refresh_skill",
     "learnings_size_finding",
+    "line_number",
     "normalize_block_version",
+    "normalize_bullet_text",
     "prepend_below_frontmatter",
     "promote_rule",
+    "resolve_region",
+    "significant_words",
     "split_frontmatter",
     "wrap_with_markers",
 ]
