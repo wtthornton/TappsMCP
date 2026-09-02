@@ -127,6 +127,65 @@ def check_validation_contract_skill_current(project_root: Path) -> CheckResult:
     )
 
 
+def check_skill_mirror_parity(project_root: Path) -> CheckResult:
+    """Compare each managed skill's block across every deployed host mirror (TAP-6944).
+
+    The Claude and Cursor copies of a smart-merge skill are generated from the
+    same host-agnostic body (see the ``CLAUDE_SKILLS["orchestration-prompt"] =
+    ...`` / ``CURSOR_SKILLS["orchestration-prompt"] = ...`` pair in
+    platform_skills), so wherever a project deploys both, their managed blocks
+    should be byte-identical. A divergence means one mirror drifted — hand-edited,
+    or refreshed at a different time than its sibling — without anyone
+    noticing: the TAP-6948 freshness check only ever compares a host against
+    the emitter, never against the other host.
+    """
+    from tapps_mcp.distribution.doctor_pipeline import _tapps_skill_bases
+    from tapps_mcp.distribution.doctor_result import CheckResult
+    from tapps_mcp.pipeline.platform_skills import SMART_MERGE_SKILL_NAMES
+    from tapps_mcp.pipeline.skill_managed_block import extract_block
+
+    bases = _tapps_skill_bases(project_root)
+    mismatches: list[str] = []
+    compared = 0
+    for skill_name in sorted(SMART_MERGE_SKILL_NAMES):
+        blocks: dict[str, tuple[Path, str]] = {}
+        for host_label, base in bases:
+            skill_path = base / skill_name / "SKILL.md"
+            if not skill_path.exists():
+                continue
+            block = extract_block(skill_path.read_text(encoding="utf-8"))
+            if block is not None:
+                blocks[host_label] = (skill_path, block)
+        if len(blocks) < 2:
+            continue
+        compared += 1
+        hosts = sorted(blocks)
+        reference_host = hosts[0]
+        reference_path, reference_block = blocks[reference_host]
+        for host_label in hosts[1:]:
+            other_path, other_block = blocks[host_label]
+            if other_block != reference_block:
+                mismatches.append(
+                    f"{skill_name}: {reference_path} ({reference_host}) != "
+                    f"{other_path} ({host_label})"
+                )
+
+    if mismatches:
+        return CheckResult(
+            "Skill mirror parity",
+            False,
+            f"{len(mismatches)} skill mirror(s) diverge: {'; '.join(mismatches)}",
+            "Run: tapps-mcp upgrade --force to re-sync every host mirror",
+        )
+    if not compared:
+        return CheckResult("Skill mirror parity", True, "no skill deployed to more than one host")
+    return CheckResult(
+        "Skill mirror parity",
+        True,
+        f"{compared} managed skill(s) match byte-for-byte across every deployed host",
+    )
+
+
 def check_skill_asset_drift(project_root: Path) -> CheckResult:
     """Flag SKILL.md-customization-vs-asset drift in scaffolded skills (TAP-6497).
 

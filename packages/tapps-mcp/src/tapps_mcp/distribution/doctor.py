@@ -209,6 +209,7 @@ from tapps_mcp.distribution.doctor_runner import (
 from tapps_mcp.distribution.doctor_skills import (
     check_orchestration_prompt_skill_current,
     check_skill_asset_drift,
+    check_skill_mirror_parity,
     check_validation_contract_skill_current,
     check_wayfind_skill_current,
 )
@@ -303,6 +304,7 @@ __all__ = [
     "check_session_handoff_skills",
     "check_session_sentinel",
     "check_skill_asset_drift",
+    "check_skill_mirror_parity",
     "check_stale_exe_backups",
     "check_tapps_brain",
     "check_tapps_mcp_yaml",
