@@ -95,6 +95,9 @@ TOOL_DESCRIPTIONS: dict[str, str] = {
     "tapps_domain_playbook": (
         "Return a bundled domain checklist and suggested TAPPS tool order (deterministic)."
     ),
+    "tapps_skill_learnings": (
+        "Audit/promote/verify/trim a skill's SKILL.md vs learnings.md pair (byte-deterministic)."
+    ),
     "tapps_linear_snapshot_get": (
         "Cache-first Linear read: return cached issues or signal a cache miss."
     ),

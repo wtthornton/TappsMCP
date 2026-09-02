@@ -77,6 +77,11 @@ TOOL_REASONS: dict[str, str] = {
         "Close an audit finding's brain coverage after a fix lands — updates the file's"
         " audited SHA and links the fix/finding tickets. Call after committing an audit fix."
     ),
+    "tapps_skill_learnings": (
+        "Audit a skill's SKILL.md vs learnings.md for size, duplicate, and contradiction"
+        " drift; promote/verify/trim to consolidate. Use when a skill's learnings.md is"
+        " growing unchecked or before hand-editing a managed block."
+    ),
 }
 
 
