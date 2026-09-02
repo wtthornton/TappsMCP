@@ -27,6 +27,7 @@ strings programmatically.
 |---|---|---|---|
 | `gate_miss` | `linear_cache_first_read` | `list_issues` called without a prior `snapshot_get` on the same `(team, project, state)` slice. | Call `tapps_linear_snapshot_get(team, project, state)` first; on miss fetch + `snapshot_put`, on hit use cached issues. |
 | `validate_missing` | `linear_write_validation` | `save_issue` called without a recent `docs_validate_linear_issue` sentinel. | Call `docs_validate_linear_issue(title, description)` first; must return `agent_ready: true`. |
+| `payload_mismatch` | `linear_write_validation` | `docs_save_linear_issue` called with a `(title, description)` that does not match the payload the last (fresh) `docs_validate_linear_issue` call approved (TAP-6924). | Call `docs_validate_linear_issue` with this exact title/description, confirm `agent_ready: true`, then retry `docs_save_linear_issue`. |
 | `checklist_missing` | `completion_gate` | Session ended without `tapps_checklist` on a loop that edited Python files. | Call `tapps_checklist(task_type="feature"|"bug"|"refactor")` before declaring work complete. |
 | `cross_project` | `linear_cache_first_read` | `list_issues` targeted a `(team, project)` not belonging to the deploying repo. | Read `agent-scope.md` — writes to foreign projects are forbidden; reads pass through but are logged. |
 
@@ -59,6 +60,25 @@ strings programmatically.
   "use": "docs_validate_linear_issue",
   "args": {"title": "<issue title>", "description": "<body>"},
   "hint": "Call docs_validate_linear_issue(title, description) and confirm agent_ready=true before calling save_issue. The sentinel expires after 30 minutes.",
+  "bypass_env": "TAPPS_LINEAR_SKIP_VALIDATE",
+  "logged_to": ".tapps-mcp/.bypass-log.jsonl"
+}
+```
+
+### `payload_mismatch` (Linear write gate, payload-keyed — TAP-6924)
+
+Fired when a fresh validation exists but was recorded for a *different*
+`(title, description)` than the one handed to `docs_save_linear_issue` —
+e.g. a real body was validated and a placeholder was then submitted for save.
+
+```json
+{
+  "ok": false,
+  "code": "payload_mismatch",
+  "gate": "linear_write_validation",
+  "use": "docs_validate_linear_issue",
+  "args": {"title": "<issue title>", "description": "<the mismatched body>"},
+  "hint": "The title/description passed to docs_save_linear_issue do not match the payload docs_validate_linear_issue last approved. Call docs_validate_linear_issue with this exact title and description, confirm agent_ready=true, then retry docs_save_linear_issue.",
   "bypass_env": "TAPPS_LINEAR_SKIP_VALIDATE",
   "logged_to": ".tapps-mcp/.bypass-log.jsonl"
 }

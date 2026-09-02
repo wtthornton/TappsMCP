@@ -357,6 +357,7 @@ Full field spec: [docs/architecture/gateway-envelope.md](architecture/gateway-en
 |---|---|---|---|
 | Linear cache-first read | tapps-mcp PreToolUse hook | `list_issues` without prior `snapshot_get` | `gate_miss` |
 | Linear write validation | tapps-mcp PreToolUse hook | `save_issue` without prior `docs_validate_linear_issue` | `validate_missing` |
+| Linear write payload identity (TAP-6924) | docs-mcp `docs_save_linear_issue` | `save_issue` payload does not match the last validated `(title, description)` | `payload_mismatch` |
 | Completion gate | tapps-mcp Stop hook | session end without `tapps_checklist` | `checklist_missing` |
 
 ### How to add a new gate
