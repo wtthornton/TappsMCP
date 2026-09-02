@@ -410,6 +410,7 @@ a = Analysis(
         "tapps_mcp.distribution.mcp_bundle_cli",
         "tapps_mcp.gates.ratchet",
         "tapps_mcp.memory_project_id",
+        "tapps_mcp.http_fleet_scope",
         "tapps_mcp.pipeline.linear_mcp_names",
         "tapps_mcp.pipeline.platform_project_scripts",
         "tapps_mcp.pipeline.platform_skill_continuous_learning",

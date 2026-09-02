@@ -1017,7 +1017,27 @@ def run_server(
         from starlette.responses import HTMLResponse
         from starlette.routing import Route
 
+        from tapps_core.http.bind_policy import resolve_fleet_auth
         from tapps_core.http.middleware import wrap_streamable_http_app
+        from tapps_mcp.http_fleet_scope import (
+            install_fleet_request_guards,
+            server_allows_runtime_scope,
+        )
+
+        # resolve_fleet_auth also enforces the bind guard: an off-loopback
+        # bind dies here, before uvicorn, unless a token is set (TAP-6062).
+        allow_runtime_scope = server_allows_runtime_scope(settings.tool_preset)
+        auth = resolve_fleet_auth(host, allow_runtime_scope=allow_runtime_scope)
+        install_fleet_request_guards(
+            mcp, runtime_scope=allow_runtime_scope and bool(auth.runtime_token)
+        )
+        logger.info(
+            "tapps_mcp_http_bind",
+            host=host,
+            port=port,
+            auth_enabled=auth.enabled,
+            runtime_scope=allow_runtime_scope and bool(auth.runtime_token),
+        )
 
         mcp_app = mcp.streamable_http_app()
 
@@ -1030,7 +1050,7 @@ def run_server(
             )
 
         mcp_app.routes.insert(0, Route("/", _root))
-        wrapped_app = wrap_streamable_http_app(mcp_app)
+        wrapped_app = wrap_streamable_http_app(mcp_app, auth=auth)
         uvicorn.run(wrapped_app, host=host, port=port)
     else:
         msg = f"Unsupported transport: {transport}"

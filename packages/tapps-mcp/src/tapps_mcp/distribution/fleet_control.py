@@ -11,8 +11,10 @@ import time
 from pathlib import Path
 from typing import Any
 
+from tapps_core.http.bind_policy import resolve_fleet_auth
 from tapps_mcp.distribution.fleet_ownership import find_port_owner, process_release
 from tapps_mcp.distribution.nlt_http_fleet import (
+    DEFAULT_FLEET_HOST_ENV,
     FLEET_ENV_FILE,
     FLEET_LOG_DIR,
     FLEET_PID_DIR,
@@ -292,7 +294,14 @@ def start_fleet(*, force: bool = False) -> dict[str, Any]:
     FLEET_PID_DIR.mkdir(parents=True, exist_ok=True)
     FLEET_LOG_DIR.mkdir(parents=True, exist_ok=True)
     env = _build_fleet_process_env()
-    host = resolve_fleet_host()
+    # The children read the merged env (fleet.env + operator env), so the bind
+    # host they will actually use comes from there too -- resolving it from the
+    # parent's os.environ alone would miss a TAPPS_FLEET_HOST set in fleet.env,
+    # which is exactly where the sample file documents it (TAP-6062).
+    host = env.get(DEFAULT_FLEET_HOST_ENV, "").strip() or resolve_fleet_host()
+    # Fail the whole start, not six children one at a time: an off-loopback
+    # bind is refused unless bearer auth is configured.
+    resolve_fleet_auth(host, env=env)
     started: list[str] = []
     skipped: list[str] = []
     errors: list[str] = []

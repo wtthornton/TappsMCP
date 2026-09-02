@@ -587,6 +587,19 @@ _ERROR_METADATA: dict[str, dict[str, Any]] = {
             "anyway. Retrying unchanged returns this same response."
         ),
     },
+    # TAP-6062: a shared HTTP fleet request that carries no project root has
+    # no tree to scan. Scanning the fleet process's CWD would answer about
+    # somebody else's repo, and returning an empty result would read as "no
+    # findings" -- so the tool refuses and names what is missing.
+    "workspace_required": {
+        "category": "user_input",
+        "retryable": False,
+        "remediation": (
+            "Send the X-Tapps-Project-Root header with an absolute path to the "
+            "repository to scan, or pass an explicit project_root argument. "
+            "Docs and research tools work without one; scanners do not."
+        ),
+    },
 }
 
 _DEFAULT_ERROR_METADATA: dict[str, Any] = {
@@ -594,6 +607,29 @@ _DEFAULT_ERROR_METADATA: dict[str, Any] = {
     "retryable": True,
     "remediation": "Retry the call; if it persists, file an issue with the message above.",
 }
+
+
+def workspace_free_refusal(tool_name: str) -> dict[str, Any] | None:
+    """Refuse a tree-scanning tool when the request has no workspace (TAP-6062).
+
+    Returns ``None`` in every mode that *does* have a workspace -- stdio, and
+    HTTP requests carrying ``X-Tapps-Project-Root`` -- so the caller can treat
+    a non-``None`` return as "stop here, this is the response".
+    """
+    from tapps_core.http.request_context import PROJECT_ROOT_HEADER, workspace_mode
+
+    if workspace_mode() != "workspace-free":
+        return None
+    return error_response(
+        tool_name,
+        "workspace_required",
+        (
+            f"{tool_name} needs a project root and this request has none: the "
+            f"{PROJECT_ROOT_HEADER} header was absent. Refusing rather than "
+            "scanning the fleet server's own working directory."
+        ),
+        extra={"missing": PROJECT_ROOT_HEADER, "workspace_mode": "workspace-free"},
+    )
 
 
 def error_response(

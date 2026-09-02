@@ -437,16 +437,17 @@ def load_docs_settings(project_root: Path | None = None) -> DocsMCPSettings:
     """
     global _cached_settings
 
-    from tapps_core.http.request_context import get_request_project_root
+    from tapps_core.http.request_context import http_request_root_override
 
-    request_root = get_request_project_root()
-    if project_root is None and request_root is not None:
-        project_root = request_root
+    # TAP-6062: a fleet request without a project root is workspace-free; the
+    # CWD walk-up below would climb the fleet process's own tree.
+    project_root, cacheable = http_request_root_override(project_root)
 
-    if project_root is None and _cached_settings is not None:
+    if project_root is None and cacheable and _cached_settings is not None:
         return _cached_settings
 
-    # Determine root: explicit arg > request header > env var > CWD walk-up.
+    # Determine root: explicit arg > request header > env var > CWD walk-up
+    # (the walk-up is stdio-only).
     if project_root:
         root = _expand_path(str(project_root))
     else:
@@ -484,7 +485,7 @@ def load_docs_settings(project_root: Path | None = None) -> DocsMCPSettings:
             hint="Directory does not exist yet - it may be created later.",
         )
 
-    if project_root is None and request_root is None:
+    if project_root is None and cacheable:
         _cached_settings = result
 
     return result

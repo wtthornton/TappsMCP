@@ -259,9 +259,14 @@ def run_combined_server(
     elif transport == "http":
         import uvicorn
 
+        from tapps_core.http.bind_policy import resolve_fleet_auth
         from tapps_core.http.middleware import wrap_streamable_http_app
 
-        app = wrap_streamable_http_app(combined.streamable_http_app())
+        # nlt-linear-issues / nlt-release-ship: operator token only. The
+        # runtime token type is not accepted here (TAP-6062).
+        auth = resolve_fleet_auth(host, allow_runtime_scope=False)
+
+        app = wrap_streamable_http_app(combined.streamable_http_app(), auth=auth)
         uvicorn.run(app, host=host, port=port)
     else:
         msg = f"Unknown transport: {transport}"

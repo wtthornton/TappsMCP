@@ -1797,16 +1797,16 @@ def load_settings(project_root: Path | None = None) -> TappsMCPSettings:
     """
     global _cached_settings
 
-    from tapps_core.http.request_context import get_request_project_root
+    from tapps_core.http.request_context import http_request_root_override
 
-    request_root = get_request_project_root()
-    if project_root is None and request_root is not None:
-        project_root = request_root
+    # TAP-6062: a fleet request with no project root is workspace-free, and the
+    # CWD below belongs to the fleet rather than the caller. Stdio only.
+    project_root, cacheable = http_request_root_override(project_root)
 
-    if project_root is None and _cached_settings is not None:
+    if project_root is None and cacheable and _cached_settings is not None:
         return _cached_settings
 
-    # Determine root: explicit arg > request header > env var > CWD
+    # Determine root: explicit arg > request header > env var > CWD (stdio only)
     if project_root:
         root = Path(project_root)
     else:
@@ -1823,7 +1823,7 @@ def load_settings(project_root: Path | None = None) -> TappsMCPSettings:
 
     result = TappsMCPSettings(**yaml_data)
 
-    if project_root is None and request_root is None:
+    if project_root is None and cacheable:
         _cached_settings = result
 
     return result

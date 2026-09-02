@@ -44,6 +44,51 @@ PLATFORM_NLT_PROFILES: Final[dict[str, frozenset[str]]] = {
     "nlt-release-ship": TOOL_PROFILE_NLT_RELEASE_SHIP,
 }
 
+# TAP-6062: the tool surface an out-of-process agent runtime (AgentForge) may
+# reach with a fleet *runtime* bearer token. Deliberately far narrower than
+# ``nlt-build``'s registered profile: read-only lookups plus the two scanners,
+# nothing that writes a file, bootstraps a session, or touches Linear/memory.
+# Enforced server-side per request on both ``tools/list`` and ``tools/call``
+# (see :mod:`tapps_mcp.http_fleet_scope`) -- the client's advertised list is
+# never the gate.
+TOOL_PROFILE_FLEET_RUNTIME: Final[frozenset[str]] = frozenset(
+    {
+        "tapps_lookup_docs",
+        "tapps_research",
+        "tapps_security_scan",
+        "tapps_dependency_scan",
+    }
+)
+
+# TAP-6062: tools that read a repository tree. On a workspace-free HTTP
+# request they must refuse -- scanning the fleet process's own directory
+# reports on the wrong repo, and an empty result reads as "no findings".
+WORKSPACE_REQUIRED_TOOLS: Final[frozenset[str]] = frozenset(
+    {
+        "tapps_security_scan",
+        "tapps_dependency_scan",
+    }
+)
+
+#: Fleet server ids that accept the runtime token type at all.
+RUNTIME_SCOPE_SERVERS: Final[frozenset[str]] = frozenset({"nlt-build"})
+
+FLEET_SCOPE_PROFILES: Final[dict[str, frozenset[str]]] = {
+    "runtime": TOOL_PROFILE_FLEET_RUNTIME,
+}
+
+
+def resolve_fleet_scope_tools(scope: str | None) -> frozenset[str] | None:
+    """Return the allowlist for a fleet auth *scope*, or ``None`` when unscoped.
+
+    ``None`` means "no per-request narrowing" -- an operator-scoped request, or
+    a stdio call. Any scope we do not recognise is treated as unscoped by this
+    resolver; the auth layer has already refused unknown credentials.
+    """
+    if scope is None:
+        return None
+    return FLEET_SCOPE_PROFILES.get(scope)
+
 
 def resolve_platform_allowed_tools(profile: str | None) -> frozenset[str] | None:
     """Return allowed tool names for *profile*, or ``None`` for full combined mode."""
