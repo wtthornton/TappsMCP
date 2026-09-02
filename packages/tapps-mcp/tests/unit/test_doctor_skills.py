@@ -58,12 +58,23 @@ def test_truncated_managed_block_fails_even_with_every_old_probed_phrase_present
     full_lines = full.splitlines(keepends=True)
     assert len(full_lines) > 600, "fixture assumes the real template is well over 600 lines"
 
-    # Every phrase the retired substring probe checked for lives at or before
-    # line 530 — truncating there reproduces a block that would have PASSED
-    # the old check while being materially shorter (~530 vs 735+ lines) than
-    # what the current emitter actually produces.
-    truncated_body = "".join(full_lines[:530]) + MARKER_END + "\n"
-    for phrase in ("validation contract", "expected-fail", "shift boundary", "host-feature-map"):
+    # Derived from content, not a hardcoded line number: as the emitter grows,
+    # a literal cut (e.g. line 530) can drift past where a probed phrase now
+    # lives, silently breaking the fixture (TAP-6854 round 2 — the emitter
+    # grew from 616 to 992+ lines and pushed "expected-fail" from line 527 to
+    # 864). Cut just after the LAST probed phrase's line, so every phrase is
+    # always retained regardless of emitter length.
+    probed_phrases = ("validation contract", "expected-fail", "shift boundary", "host-feature-map")
+    lower_lines = [line.lower() for line in full_lines]
+    last_phrase_line = max(
+        idx for idx, line in enumerate(lower_lines) if any(p in line for p in probed_phrases)
+    )
+    cut = last_phrase_line + 5  # small margin past the last probed phrase
+    assert cut < len(full_lines) * 0.9, (
+        "fixture must remain a genuine truncation, not a near-full copy of the emitter"
+    )
+    truncated_body = "".join(full_lines[:cut]) + MARKER_END + "\n"
+    for phrase in probed_phrases:
         assert phrase in truncated_body.lower(), (
             f"fixture must retain {phrase!r} to prove the old blind spot"
         )
