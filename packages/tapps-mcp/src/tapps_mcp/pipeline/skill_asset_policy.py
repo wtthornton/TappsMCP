@@ -159,6 +159,20 @@ def policy_header(policy: Policy, rel_path: str = "") -> str:
     return _header_text(policy, _syntax_for(rel_path))
 
 
+def _split_shebang(body: str) -> tuple[str, str]:
+    """Split a leading ``#!`` line (with its newline) off *body*, if present.
+
+    The kernel only honors a shebang on line 1, so callers lift it ahead of
+    the policy header instead of leaving it inside the managed block.
+    """
+    if not body.startswith("#!"):
+        return "", body
+    newline_idx = body.find("\n")
+    if newline_idx == -1:
+        return f"{body}\n", ""
+    return body[: newline_idx + 1], body[newline_idx + 1 :]
+
+
 def _asset_marker_begin(skill_name: str, rel_path: str, version: str) -> str:
     syntax = _syntax_for(rel_path)
     prefix = _marker_begin_prefix(syntax)
@@ -186,9 +200,16 @@ def wrap_asset(
     *,
     version: str = __version__,
 ) -> str:
-    """Return the full scaffolded file: policy header + managed block."""
-    block = asset_block(body, skill_name, rel_path, version=version)
-    return f"{policy_header('managed_block', rel_path)}\n{block}\n"
+    """Return the full scaffolded file: policy header + managed block.
+
+    When *body* starts with a ``#!`` shebang, it is kept on line 1 of the
+    file — the policy header and marker block follow after it — so a
+    scaffolded script with its executable bit set can still run directly
+    (TAP-6903).
+    """
+    shebang, rest = _split_shebang(body)
+    block = asset_block(rest, skill_name, rel_path, version=version)
+    return f"{shebang}{policy_header('managed_block', rel_path)}\n{block}\n"
 
 
 class _AssetSpan(NamedTuple):
@@ -233,7 +254,9 @@ def strip_asset_scaffolding(content: str) -> str:
     if span is None:
         return content
     inner = content[span.inner_start : span.end - len(_marker_end(span.syntax))]
-    return inner.strip("\n")
+    body = inner.strip("\n")
+    shebang, _ = _split_shebang(content)
+    return f"{shebang}{body}"
 
 
 def has_asset_customization(content: str) -> bool:
@@ -271,9 +294,11 @@ def install_or_refresh_asset(
       duplicate. An unmodified pre-marker copy is *not* preserved — it is
       byte-identical to canonical and would only add noise.
     """
+    shebang, rest = _split_shebang(body)
     header = policy_header("managed_block", rel_path)
-    block = asset_block(body, skill_name, rel_path, version=version)
-    fresh = f"{header}\n{block}\n"
+    block = asset_block(rest, skill_name, rel_path, version=version)
+    prefix = f"{shebang}{header}\n"
+    fresh = f"{prefix}{block}\n"
 
     if not path.exists():
         if not dry_run:
@@ -286,9 +311,14 @@ def install_or_refresh_asset(
 
     if span is not None:
         begin, end = span.begin, span.end
-        # Project content above the block, minus the header the platform owns.
-        head = original[:begin].replace(header, "").lstrip("\n")
-        updated = f"{header}\n{head}{block}{original[end:]}"
+        # Project content above the block, minus the shebang + header the
+        # platform owns.
+        before = original[:begin]
+        if before.startswith(prefix):
+            head = before[len(prefix) :]
+        else:
+            head = before.replace(header, "").lstrip("\n")
+        updated = f"{prefix}{head}{block}{original[end:]}"
         if updated == original:
             return "unchanged"
         action: AssetAction = "refreshed"
