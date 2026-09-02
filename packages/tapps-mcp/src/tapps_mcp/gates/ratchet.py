@@ -70,12 +70,18 @@ def _read_file_at_ref(repo_root: Path, baseline_ref: str, rel_path: str) -> str 
     Uses ``git show`` rather than checking the ref out — the working tree is
     never touched, so there is nothing to restore and nothing a crash mid-run
     can corrupt.
+
+    Decoded as UTF-8 explicitly rather than via the ambient locale: the
+    ratchet's whole contract is that byte-identical content scores
+    identically, and a locale-dependent decode would break that for any
+    source file with a non-ASCII character.
     """
     proc = subprocess.run(
         ["git", "show", f"{baseline_ref}:{rel_path}"],
         cwd=repo_root,
         capture_output=True,
         text=True,
+        encoding="utf-8",
         check=False,
     )
     if proc.returncode != 0:
@@ -84,17 +90,40 @@ def _read_file_at_ref(repo_root: Path, baseline_ref: str, rel_path: str) -> str 
 
 
 async def _score_base_content(path: Path, content: str, scorer: Any, quick: bool) -> float:
-    """Score *content* (the file as it existed at the baseline ref).
+    """Score *content* (the file as it existed at the baseline ref) **as** ``path``.
 
-    Written to a throwaway directory created *next to* ``path`` — never to
-    ``path`` itself — so a crash mid-score leaves at most an orphaned scratch
-    directory, never a corrupted tracked file. The scratch copy keeps the
-    original basename and sits one directory below the file's real parent,
-    so the project-root walk that ``test_coverage``/``structure``/``devex``
-    heuristics perform (looking for ``pyproject.toml``/``.git`` in an
-    ancestor directory) resolves to the exact same project root it would for
-    ``path`` itself — scoring from an unrelated location such as ``/tmp``
-    would silently change those three categories' verdicts.
+    The bytes are written to a throwaway directory created *next to* ``path``
+    — never to ``path`` itself — so a crash mid-score leaves at most an
+    orphaned scratch directory, never a corrupted tracked file.
+
+    That scratch location is not a neutral place to score from, because the
+    scorer derives several *weighted* categories from the path rather than
+    from the bytes:
+
+    * ``test_coverage`` builds the module's dotted import name from the path
+      relative to the project root and asks whether any test imports it. An
+      extra directory segment turns ``pkg.mod`` into
+      ``pkg..ratchet-base-XXXX.mod``, which nothing imports, so the 4.0
+      "a test imports this module" branch is missed (TAP-6921: 107 of this
+      repo's 577 source files, each losing 5.20 points of baseline).
+    * ``structure`` and ``devex`` look for project markers in an ancestor
+      directory. Keeping the scratch dir one level below the file's real
+      parent does preserve the project-root walk for these two — that part
+      of the original design is sound and measured (both categories differ
+      on zero files) — but preserving the project root was never sufficient,
+      because the module name is derived from the *whole* relative path.
+    * The non-Python scorers additionally look for sibling manifests
+      (``go.mod``, ``Cargo.toml``, ``package.json``) and sibling test files,
+      none of which exist next to the scratch copy.
+
+    So the read path and the identity path are passed separately: the tools
+    run against the scratch copy (that is where the bytes are), while every
+    path-derived category is told to judge the content as ``path``. What
+    remains path-derived after this is only what an *external tool* resolves
+    for itself from the file it is handed — ruff's ``per-file-ignores``,
+    bandit/pylint per-path config. Those feed the zero-weight ``linting``
+    and ``type_checking`` categories, so they cannot move the overall score
+    the ratchet compares.
     """
     scratch_dir = Path(tempfile.mkdtemp(dir=path.parent, prefix=".ratchet-base-"))
     try:
@@ -104,9 +133,11 @@ async def _score_base_content(path: Path, content: str, scorer: Any, quick: bool
             from tapps_core.config.settings import load_settings
             from tapps_mcp.server_scoring_tools import score_and_scan_quick
 
-            score_result, _sec = await score_and_scan_quick(scratch_path, scorer, load_settings())
+            score_result, _sec = await score_and_scan_quick(
+                scratch_path, scorer, load_settings(), identity_path=path
+            )
         else:
-            score_result = await scorer.score_file(scratch_path)
+            score_result = await scorer.score_file(scratch_path, identity_path=path)
         return round(score_result.overall_score, 2)
     finally:
         shutil.rmtree(scratch_dir, ignore_errors=True)

@@ -119,25 +119,35 @@ class ScorerBase(abc.ABC):
     # ------------------------------------------------------------------
 
     @abc.abstractmethod
-    async def score_file(self, file_path: Path, *, mode: str = "subprocess") -> ScoreResult:
+    async def score_file(
+        self,
+        file_path: Path,
+        *,
+        mode: str = "subprocess",
+        identity_path: Path | None = None,
+    ) -> ScoreResult:
         """Score a file using all available tools (full mode).
 
         This method runs language-specific linters, type checkers, security
         scanners, and complexity analyzers to produce a comprehensive score.
 
         Args:
-            file_path: Path to the file to score.
+            file_path: Path the bytes are read from.
             mode: Execution mode for external tools. One of:
                 - ``"subprocess"``: Run tools as subprocesses (default)
                 - ``"direct"``: Use library APIs when available
                 - ``"auto"``: Choose based on availability
+            identity_path: Path the content is judged *as* — see
+                :meth:`_identity_of`. Defaults to ``file_path``.
 
         Returns:
             A ScoreResult with per-category scores and an overall score.
         """
 
     @abc.abstractmethod
-    def score_file_quick(self, file_path: Path) -> ScoreResult:
+    def score_file_quick(
+        self, file_path: Path, *, identity_path: Path | None = None
+    ) -> ScoreResult:
         """Score a file using only fast linting (quick mode).
 
         This method runs only the fastest linting tool (e.g., ruff for Python,
@@ -145,20 +155,42 @@ class ScorerBase(abc.ABC):
         Target latency is < 500ms.
 
         Args:
-            file_path: Path to the file to score.
+            file_path: Path the bytes are read from.
+            identity_path: Path the content is judged *as* — see
+                :meth:`_identity_of`. Defaults to ``file_path``.
 
         Returns:
             A ScoreResult with a linting-only score. The ``degraded`` flag
             will typically be False since quick mode is intentionally limited.
         """
 
-    def score_file_quick_enriched(self, file_path: Path) -> ScoreResult:
+    def score_file_quick_enriched(
+        self, file_path: Path, *, identity_path: Path | None = None
+    ) -> ScoreResult:
         """Quick mode with AST enrichment (Python only).
 
         Default implementation delegates to ``score_file_quick``. The Python
         scorer overrides this to add AST-based heuristics on top of ruff.
         """
-        return self.score_file_quick(file_path)
+        return self.score_file_quick(file_path, identity_path=identity_path)
+
+    @staticmethod
+    def _identity_of(file_path: Path, identity_path: Path | None) -> Path:
+        """Resolve the path *content* is judged as, defaulting to where it is read from.
+
+        Several weighted categories are derived from the path rather than the
+        bytes — ``test_coverage`` resolves the project root and the module's
+        dotted import name from it, ``structure`` and ``devex`` look for
+        project markers relative to it, and the language scorers look for
+        sibling manifests (``go.mod``, ``Cargo.toml``, ``package.json``) and
+        sibling test files. Callers that hold content in a location other
+        than the file's real path — the quality-gate ratchet scoring a
+        baseline revision (TAP-6921) is the only one today — pass the real
+        path as *identity_path* so those categories answer the question the
+        caller is actually asking: "what would this content score *as* this
+        file?" rather than "what does this scratch copy score?".
+        """
+        return (file_path if identity_path is None else identity_path).resolve()
 
     # ------------------------------------------------------------------
     # Concrete methods (shared by all scorers)

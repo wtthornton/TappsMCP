@@ -15,6 +15,11 @@ at this ref, and what did it look like"). Scoring itself is stubbed via
 ``_FakeScorer`` so these tests don't depend on ruff/radon/bandit output;
 the scorer's own correctness is covered by ``test_gate_evaluator.py`` and
 the scorer suite.
+
+``_FakeScorer`` is deliberately path-independent, so it is blind to how the
+ratchet scores the baseline copy -- the defect TAP-6921 found. The rules are
+therefore *also* covered against the real scorer, plus the
+unchanged-content scoring invariant, in ``test_gate_ratchet_invariant.py``.
 """
 
 from __future__ import annotations
@@ -39,13 +44,27 @@ THRESHOLD = 70.0
 
 
 class _FakeScorer:
-    """Scorer stub: overall score is just the file's text content, as a float."""
+    """Scorer stub: overall score is just the file's text content, as a float.
+
+    Path-independent by construction, which is the point here (these tests
+    are about the rule arithmetic and the git plumbing) and also the reason
+    it cannot see TAP-6921 -- see ``test_gate_ratchet_invariant.py``, which
+    covers the same rules with the real scorer.
+    """
 
     language = "python"
 
-    async def score_file(self, path: Path) -> ScoreResult:
+    async def score_file(self, path: Path, *, identity_path: Path | None = None) -> ScoreResult:
+        """Score the bytes at *path*, reporting them as *identity_path*.
+
+        The stub mirrors the real scorer's split (TAP-6921): content is read
+        from where it actually sits, while the identity the caller supplies
+        is what the result is labelled with.
+        """
         overall = float(path.read_text(encoding="utf-8").strip())
-        return ScoreResult(file_path=str(path), categories={}, overall_score=overall)
+        return ScoreResult(
+            file_path=str(identity_path or path), categories={}, overall_score=overall
+        )
 
 
 def _git(repo: Path, *args: str) -> None:
