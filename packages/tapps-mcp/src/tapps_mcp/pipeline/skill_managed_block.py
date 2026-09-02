@@ -89,6 +89,33 @@ def _find_block_span(content: str) -> tuple[int, int] | None:
     return begin, end_idx + len(MARKER_END)
 
 
+def extract_block(content: str) -> str | None:
+    """Return the ``BEGIN..END`` managed-block substring, or ``None`` if absent.
+
+    Shared by doctor's content-fingerprint checks (TAP-6948, TAP-6944) so the
+    span logic lives in one place instead of each caller re-deriving it from
+    :data:`MARKER_BEGIN_PREFIX` / :data:`MARKER_END`.
+    """
+    span = _find_block_span(content)
+    if span is None:
+        return None
+    begin, end = span
+    return content[begin:end]
+
+
+def normalize_block_version(block: str) -> str:
+    """Blank the version stamp in a managed block's BEGIN marker.
+
+    A smart-merge block is unconditionally refreshed on every
+    ``generate_skills`` run, so a bare version bump between releases is not
+    itself staleness — the content-fingerprint checks in
+    :mod:`tapps_mcp.distribution.doctor_skills` compare blocks after this
+    normalization so they catch real drift without flagging every project
+    that hasn't re-run ``tapps-mcp upgrade`` since the last patch release.
+    """
+    return _VERSION_RE.sub(lambda m: f"<!-- BEGIN: tapps-skill {m.group(1)} vX -->", block)
+
+
 def wrap_with_markers(body: str, skill_name: str, *, version: str = __version__) -> str:
     """Return *body* as ``frontmatter + BEGIN..END block``, frontmatter first.
 
@@ -171,7 +198,9 @@ __all__ = [
     "MARKER_END",
     "PROJECT_REGION_HEADING",
     "Action",
+    "extract_block",
     "install_or_refresh_skill",
+    "normalize_block_version",
     "prepend_below_frontmatter",
     "split_frontmatter",
     "wrap_with_markers",
