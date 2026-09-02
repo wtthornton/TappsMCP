@@ -521,6 +521,19 @@ def _setup_cursor_platform(cfg: BootstrapConfig, state: _BootstrapState) -> str:
     return platform_action
 
 
+def _setup_start_program_script(state: _BootstrapState) -> None:
+    """Place ``scripts/start-program.sh``, the multi-session program kickoff (TAP-6885)."""
+    try:
+        from tapps_mcp.pipeline.platform_skill_orchestration import (
+            generate_start_program_script,
+        )
+
+        state.result["start_program_script"] = generate_start_program_script(state.project_root)
+    except Exception as exc:
+        state.errors.append(f"start-program.sh: {exc}")
+        state.result["start_program_script"] = {"error": str(exc)}
+
+
 def _finalize_platform_setup(
     cfg: BootstrapConfig, state: _BootstrapState, platform_action: str | None
 ) -> None:
@@ -538,6 +551,8 @@ def _finalize_platform_setup(
         _setup_github_ci(state)
         _setup_github_copilot(state)
         _setup_github_governance(state)
+        if not cfg.dry_run:
+            _setup_start_program_script(state)
 
 
 def _setup_platform(cfg: BootstrapConfig, state: _BootstrapState) -> None:
