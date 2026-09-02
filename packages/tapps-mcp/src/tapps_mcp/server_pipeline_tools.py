@@ -1603,6 +1603,50 @@ async def tapps_pipeline(
     return success_response("tapps_pipeline", elapsed_ms, data)
 
 
+def _append_handoff_subresult_warnings(
+    mirror_status: str,
+    session_end_status: str,
+    brain_mirror: dict[str, Any] | None,
+    session_end: dict[str, Any] | None,
+    file_path: str,
+    warnings: list[str],
+    next_steps: list[str],
+) -> None:
+    """Append warnings/next_steps for any failed best-effort sub-result.
+
+    A failed mirror means the handoff file exists but the cross-session copy
+    does not; a failed session-end means the feedback loop never closed.
+    Callers reading only the top level saw neither (TAP-5656).
+    """
+    candidates = (
+        ("Brain mirror", mirror_status, brain_mirror),
+        ("Session end", session_end_status, session_end),
+    )
+    failed = [(label, payload or {}) for label, status, payload in candidates if status == "failed"]
+
+    for label, payload in failed:
+        detail = str(
+            next(
+                (
+                    v
+                    for v in (payload.get("detail"), payload.get("error"), payload.get("reason"))
+                    if v
+                ),
+                "unknown error",
+            )
+        )
+        warnings.append(f"{label} failed ({detail})")
+        cap = payload.get("max_value_length")
+        length = payload.get("value_length")
+        if isinstance(cap, int) and isinstance(length, int) and length > cap:
+            next_steps.append(
+                f"{label}: {length} chars against a {cap}-char cap — shorten it and re-run."
+            )
+
+    if failed:
+        warnings.append(f"The handoff file at {file_path} is intact.")
+
+
 async def tapps_handoff_save(
     markdown: str,
     session_end: bool = False,
@@ -1729,33 +1773,15 @@ async def tapps_handoff_save(
     # success envelope. A failed mirror means the handoff file exists but the
     # cross-session copy does not; a failed session-end means the feedback loop
     # never closed. Callers reading only the top level saw neither (TAP-5656).
-    failed = (
-        [
-            ("Brain mirror", result.brain_mirror or {}),
-        ]
-        if mirror_status == "failed"
-        else []
+    _append_handoff_subresult_warnings(
+        mirror_status,
+        session_end_status,
+        result.brain_mirror,
+        result.session_end,
+        result.file_path,
+        warnings,
+        next_steps,
     )
-    if session_end_status == "failed":
-        failed.append(("Session end", result.session_end or {}))
-
-    for label, payload in failed:
-        detail = str(
-            payload.get("detail")
-            or payload.get("error")
-            or payload.get("reason")
-            or "unknown error"
-        )
-        warnings.append(f"{label} failed ({detail})")
-        cap = payload.get("max_value_length")
-        length = payload.get("value_length")
-        if isinstance(cap, int) and isinstance(length, int) and length > cap:
-            next_steps.append(
-                f"{label}: {length} chars against a {cap}-char cap — shorten it and re-run."
-            )
-
-    if failed:
-        warnings.append(f"The handoff file at {result.file_path} is intact.")
 
     # Every note is collected before the envelope is chosen: a conflict alone
     # degrades exactly as a failed sub-result alone does, and neither has to
