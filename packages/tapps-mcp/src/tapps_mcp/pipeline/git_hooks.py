@@ -22,12 +22,29 @@ GIT_PRE_COMMIT_SCRIPT: str = """\
 # TappsMCP git pre-commit hook (TAP-979)
 # Runs `tapps-mcp validate-changed --quick` on staged Python files,
 # ratcheted against HEAD (TAP-6904).
-# Bypass with TAPPS_SKIP_GATE=1 (logged to stderr).
+# Bypass with TAPPS_SKIP_GATE=1, logged to .tapps-mcp/.bypass-log.jsonl.
 
 set -e
 
+# Resolve the ledger dir to the primary checkout, not a linked worktree's own
+# cwd (TAP-6931) -- --git-common-dir is identical across a repo's primary
+# checkout and all its linked worktrees, so bypasses taken from a worktree
+# land in the one ledger the operator actually audits.
+_common="$(git rev-parse --path-format=absolute --git-common-dir 2>/dev/null || true)"
+if [ -n "$_common" ]; then
+  COMMIT_LOG_DIR="$_common/../.tapps-mcp"
+else
+  COMMIT_LOG_DIR=".tapps-mcp"
+fi
+
 if [ "${TAPPS_SKIP_GATE:-}" = "1" ]; then
-  echo "tapps-mcp pre-commit: bypassed via TAPPS_SKIP_GATE=1" >&2
+  mkdir -p "$COMMIT_LOG_DIR" 2>/dev/null || true
+  ts="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+  staged="$(git diff --cached --name-only --diff-filter=ACM | paste -sd, - || true)"
+  printf '{"ts":"%s","hook":"pre-commit","reason":"TAPPS_SKIP_GATE=1","staged":"%s"}\\n' \\
+    "$ts" "$staged" \\
+    >> "$COMMIT_LOG_DIR/.bypass-log.jsonl" 2>/dev/null || true
+  echo "tapps-mcp pre-commit: bypassed via TAPPS_SKIP_GATE=1. Logged to $COMMIT_LOG_DIR/.bypass-log.jsonl" >&2
   exit 0
 fi
 

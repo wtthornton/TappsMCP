@@ -33,7 +33,16 @@ set -euo pipefail
 if [[ -n "${TAPPS_SKIP_POSTMERGE:-}" ]]; then
   ts="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
   sha="$(git rev-parse HEAD 2>/dev/null || echo unknown)"
-  log_dir=".tapps-mcp"
+  # Resolve the ledger dir to the primary checkout, not a linked worktree's
+  # own cwd (TAP-6931) -- --git-common-dir is identical across a repo's
+  # primary checkout and all its linked worktrees, so bypasses taken from a
+  # worktree land in the one ledger the operator actually audits.
+  _common="$(git rev-parse --path-format=absolute --git-common-dir 2>/dev/null || true)"
+  if [ -n "$_common" ]; then
+    log_dir="$_common/../.tapps-mcp"
+  else
+    log_dir=".tapps-mcp"
+  fi
   mkdir -p "$log_dir" 2>/dev/null || true
   printf '{"ts":"%s","commit":"%s","reason":"TAPPS_SKIP_POSTMERGE=%s"}\n' \
     "$ts" "$sha" "${TAPPS_SKIP_POSTMERGE}" \

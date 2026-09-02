@@ -129,3 +129,49 @@ class TestPreCommitRatchet:
         text = hook.read_text(encoding="utf-8")
         assert "--baseline-ref HEAD" in text
         assert "git rev-parse --verify --quiet HEAD" in text
+
+
+class TestBypassLedgerResolvesToSharedRepo:
+    """TAP-6931: the bypass ledger must resolve to the primary checkout.
+
+    A linked worktree's cwd is not the repo the operator audits. Fixing the
+    path resolution in only one of the two copies (the installed hook or the
+    template shipped to consumers) is exactly the drift that made this bug:
+    one copy silently regresses to a per-worktree throwaway ledger. Assert
+    the common-dir resolution specifically, in both, same shape as the
+    ratchet-flag check above.
+    """
+
+    def test_template_resolves_ledger_via_git_common_dir(self):
+        assert "--git-common-dir" in GIT_PRE_COMMIT_SCRIPT
+        assert "--path-format=absolute" in GIT_PRE_COMMIT_SCRIPT
+
+    def test_template_falls_back_when_common_dir_is_unresolvable(self):
+        assert 'COMMIT_LOG_DIR=".tapps-mcp"' in GIT_PRE_COMMIT_SCRIPT
+
+    def test_this_repo_hook_resolves_ledger_via_git_common_dir(self):
+        repo_root = Path(__file__).resolve().parents[4]
+        hook = repo_root / ".githooks" / "pre-commit"
+        if not hook.exists():  # pragma: no cover - source checkouts only
+            pytest.skip(f"no .githooks/pre-commit at {hook}")
+        text = hook.read_text(encoding="utf-8")
+        assert "--git-common-dir" in text
+        assert "--path-format=absolute" in text
+
+    def test_pre_push_hook_resolves_ledger_via_git_common_dir(self):
+        repo_root = Path(__file__).resolve().parents[4]
+        hook = repo_root / ".githooks" / "pre-push"
+        if not hook.exists():  # pragma: no cover - source checkouts only
+            pytest.skip(f"no .githooks/pre-push at {hook}")
+        text = hook.read_text(encoding="utf-8")
+        assert "--git-common-dir" in text
+        assert "--path-format=absolute" in text
+
+    def test_post_merge_hook_resolves_ledger_via_git_common_dir(self):
+        repo_root = Path(__file__).resolve().parents[4]
+        hook = repo_root / ".githooks" / "post-merge"
+        if not hook.exists():  # pragma: no cover - source checkouts only
+            pytest.skip(f"no .githooks/post-merge at {hook}")
+        text = hook.read_text(encoding="utf-8")
+        assert "--git-common-dir" in text
+        assert "--path-format=absolute" in text
