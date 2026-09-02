@@ -102,6 +102,7 @@ class TestFinalizeOutcomeZeroDeltaDebt:
             start=0,
             settings=SimpleNamespace(project_root=tmp_path),
             paths=[path],
+            baseline_ref="",
             capped=False,
             extra_count=0,
             tracker=MagicMock(),
