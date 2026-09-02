@@ -2067,6 +2067,67 @@ class TestCheckSessionHandoffSchema:
         assert result.severity == "fail"
         assert "zero populated sections" in result.message
 
+    def test_slot_only_valid_handoff_passes(self, tmp_path):
+        """TAP-6888: a slotted-only repo (no default file) gets real lint coverage."""
+        from datetime import UTC, datetime
+
+        from tapps_mcp.distribution.doctor import check_session_handoff_schema
+
+        stamp = datetime.now(tz=UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
+        path = tmp_path / ".tapps-mcp" / "handoffs" / "worker-a.md"
+        path.parent.mkdir(parents=True)
+        path.write_text(
+            f"# Session handoff\n**Updated:** {stamp}\n\n"
+            "## Open\n- none\n\n## Next (P0)\n- ship wave 2\n",
+            encoding="utf-8",
+        )
+        result = check_session_handoff_schema(tmp_path)
+        assert result.ok is True
+        assert result.severity == "pass"
+
+    def test_slot_only_invalid_handoff_fails_naming_slot(self, tmp_path):
+        """TAP-6888: a schema-violating slotted handoff fails, naming the slot."""
+        from tapps_mcp.distribution.doctor import check_session_handoff_schema
+
+        path = tmp_path / ".tapps-mcp" / "handoffs" / "worker-b.md"
+        path.parent.mkdir(parents=True)
+        path.write_text(
+            "# Session handoff\n**Updated:** 2026-06-11T12:00:00Z\n\n"
+            "## Open\n- unfinished\n\n## Next (P0)\n- none\n",
+            encoding="utf-8",
+        )
+        result = check_session_handoff_schema(tmp_path)
+        assert result.ok is False
+        assert result.severity == "fail"
+        assert "worker-b" in result.message
+        assert "p0" in result.message.lower()
+
+    def test_mixed_default_absent_one_valid_one_invalid_slot(self, tmp_path):
+        """TAP-6888: with no default handoff, a valid + a violating slot both lint;
+        the aggregate fails and names only the violating slot."""
+        from datetime import UTC, datetime
+
+        from tapps_mcp.distribution.doctor import check_session_handoff_schema
+
+        stamp = datetime.now(tz=UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
+        slot_dir = tmp_path / ".tapps-mcp" / "handoffs"
+        slot_dir.mkdir(parents=True)
+        (slot_dir / "worker-a.md").write_text(
+            f"# Session handoff\n**Updated:** {stamp}\n\n"
+            "## Open\n- none\n\n## Next (P0)\n- ship wave 2\n",
+            encoding="utf-8",
+        )
+        (slot_dir / "worker-b.md").write_text(
+            "# Session handoff\n**Updated:** 2026-06-11T12:00:00Z\n\n"
+            "## Open\n- unfinished\n\n## Next (P0)\n- none\n",
+            encoding="utf-8",
+        )
+        result = check_session_handoff_schema(tmp_path)
+        assert result.ok is False
+        assert result.severity == "fail"
+        assert "worker-b" in result.message
+        assert "worker-a" not in result.message
+
 
 class TestCheckCacheGateBlockHint:
     def test_block_mode_ok(self, tmp_path):
