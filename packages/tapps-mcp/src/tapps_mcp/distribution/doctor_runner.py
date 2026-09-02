@@ -121,16 +121,17 @@ from tapps_mcp.distribution.doctor_platform import (
     check_upgrade_skip_tokens,
 )
 from tapps_mcp.distribution.doctor_result import CheckResult, doctor_facade_attr
+from tapps_mcp.distribution.doctor_skill_learnings import check_skill_learnings_hygiene
 from tapps_mcp.distribution.doctor_skills import (
     check_orchestration_prompt_learnings_ceiling,
     check_orchestration_prompt_skill_current,
     check_skill_asset_drift,
     check_skill_mirror_parity,
+    check_skills_manifest_directory,
     check_validation_contract_skill_current,
     check_wayfind_skill_current,
     check_workflow_scripts_current,
 )
-from tapps_mcp.distribution.doctor_skill_learnings import check_skill_learnings_hygiene
 from tapps_mcp.distribution.doctor_skip_drift import check_upgrade_skip_token_drift
 from tapps_mcp.distribution.doctor_telemetry import (
     _read_engagement_level,
@@ -234,6 +235,10 @@ def _collect_checks(root: Path, *, quick: bool = False) -> list[CheckResult]:
         ),
         ("Skill mirror parity", lambda: check_skill_mirror_parity(root)),
         ("Skill asset drift", lambda: check_skill_asset_drift(root)),
+        (
+            "Skills manifest directory diff",
+            lambda: check_skills_manifest_directory(root),
+        ),
         (
             "orchestration-prompt learnings ceiling",
             lambda: check_orchestration_prompt_learnings_ceiling(root),

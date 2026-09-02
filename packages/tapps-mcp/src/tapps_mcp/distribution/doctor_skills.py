@@ -127,6 +127,112 @@ def check_validation_contract_skill_current(project_root: Path) -> CheckResult:
     )
 
 
+def _load_skills_manifest(project_root: Path) -> dict[str, object] | None:
+    """Read ``.tapps-mcp/skills-manifest.json``, or ``None`` if absent/unparseable."""
+    import json
+
+    from tapps_mcp.pipeline.platform_skills import SKILLS_MANIFEST_REL_PATH
+
+    manifest_path = project_root.joinpath(*SKILLS_MANIFEST_REL_PATH)
+    if not manifest_path.is_file():
+        return None
+    try:
+        data = json.loads(manifest_path.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return None
+    return data if isinstance(data, dict) else None
+
+
+def check_skills_manifest_directory(project_root: Path) -> CheckResult:
+    """Diff the whole deployed skills directory against the emission-time manifest.
+
+    TAP-6948 s2. **Partition with** :func:`_check_managed_skill_current`
+    (mirrors how :mod:`tapps_mcp.distribution.doctor_skill_learnings` cedes
+    size/ceiling to the learnings-ceiling check): the three smart-merge
+    skills in :data:`tapps_mcp.pipeline.platform_skills.SMART_MERGE_SKILL_NAMES`
+    already get a deep, emitter-vs-disk content comparison (missing
+    companions, version-normalized fingerprint) from that check and its three
+    thin wrappers. This check does not re-report those three — it owns every
+    *other* marker-bearing skill (the ~24 the TAP-6948 s3 customizations-block
+    change gave a managed block to), comparing the deployed block's hash
+    against ``.tapps-mcp/skills-manifest.json`` — the snapshot
+    :func:`tapps_mcp.pipeline.platform_skills.generate_skills` wrote the last
+    time it ran. One hash compare per skill, no emitter re-render, so it is
+    cheap enough to cover the whole directory instead of one skill at a time.
+
+    A project that has never run an upgrade under TAP-6948 s2 has no
+    manifest at all — that is reported as a ``warn``, not folded into a
+    silent pass, so the operator knows to run ``tapps-mcp upgrade``.
+    """
+    import hashlib
+
+    from tapps_mcp.distribution.doctor_pipeline import _tapps_skill_bases
+    from tapps_mcp.distribution.doctor_result import CheckResult
+    from tapps_mcp.pipeline.platform_skills import SMART_MERGE_SKILL_NAMES
+    from tapps_mcp.pipeline.skill_managed_block import extract_block, normalize_block_version
+
+    check_name = "Skills manifest directory diff"
+    manifest = _load_skills_manifest(project_root)
+    if manifest is None:
+        return CheckResult(
+            check_name,
+            False,
+            "no manifest — run upgrade",
+            "Run: tapps-mcp upgrade (writes .tapps-mcp/skills-manifest.json)",
+            severity="warn",
+        )
+
+    problems: list[str] = []
+    checked = 0
+    for host_label, base in _tapps_skill_bases(project_root):
+        host_manifest = manifest.get(host_label)
+        host_manifest = host_manifest if isinstance(host_manifest, dict) else {}
+
+        deployed: set[str] = set()
+        if base.is_dir():
+            for skill_dir in sorted(base.iterdir()):
+                skill_name = skill_dir.name
+                if not skill_dir.is_dir() or skill_name in SMART_MERGE_SKILL_NAMES:
+                    continue
+                skill_path = skill_dir / "SKILL.md"
+                if not skill_path.exists():
+                    continue
+                block = extract_block(skill_path.read_text(encoding="utf-8"))
+                if block is None:
+                    continue  # not yet force-refreshed onto the marker mechanism
+                deployed.add(skill_name)
+                checked += 1
+                expected = host_manifest.get(skill_name)
+                if expected is None:
+                    problems.append(f"{host_label}/{skill_name} not in manifest (unknown)")
+                    continue
+                actual = hashlib.sha256(normalize_block_version(block).encode("utf-8")).hexdigest()
+                if actual != expected:
+                    problems.append(f"{host_label}/{skill_name} stale on disk")
+
+        for skill_name in sorted(host_manifest):
+            if skill_name in SMART_MERGE_SKILL_NAMES or skill_name in deployed:
+                continue
+            skill_path = base / skill_name / "SKILL.md"
+            if not skill_path.exists():
+                problems.append(f"{host_label}/{skill_name} missing (in manifest)")
+            else:
+                problems.append(f"{host_label}/{skill_name} stale (managed-block marker removed)")
+
+    if problems:
+        return CheckResult(
+            check_name,
+            False,
+            f"{len(problems)} skill(s) drifted from the manifest: {'; '.join(problems)}",
+            "Run: tapps-mcp upgrade --force",
+        )
+    return CheckResult(
+        check_name,
+        True,
+        f"{checked} skill(s) match the skills manifest byte-for-byte",
+    )
+
+
 def check_skill_mirror_parity(project_root: Path) -> CheckResult:
     """Compare each managed skill's block across every deployed host mirror (TAP-6944).
 

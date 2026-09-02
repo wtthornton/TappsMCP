@@ -9,6 +9,8 @@ Cursor skills use ``mcp_tools`` (YAML list); Cursor applies tool restrictions vi
 
 from __future__ import annotations
 
+import hashlib
+import json
 from typing import TYPE_CHECKING, Any
 
 from tapps_mcp.pipeline.agent_contract import (
@@ -35,11 +37,12 @@ from tapps_mcp.pipeline.platform_skill_wayfind import (
     WAYFIND_SKILL_BODY,
 )
 from tapps_mcp.pipeline.skill_asset_policy import (
-    policy_header,
     write_companions,
 )
 from tapps_mcp.pipeline.skill_managed_block import (
+    extract_block,
     install_or_refresh_skill,
+    normalize_block_version,
     prepend_below_frontmatter,
 )
 
@@ -1550,6 +1553,90 @@ def _write_skill_companions(
     overwrite_warnings.extend(result["overwrite_warnings"])
 
 
+SKILLS_MANIFEST_REL_PATH = (".tapps-mcp", "skills-manifest.json")
+
+
+def _skill_manifest_hash(target: Path) -> str | None:
+    """Hash *target*'s managed block, version-normalized, or ``None`` if absent.
+
+    ``None`` covers both a missing file and one that exists but carries no
+    ``BEGIN``/``END`` marker yet (a not-yet-force-refreshed skill from before
+    TAP-6948 s3) — either way there is nothing on disk for the manifest to
+    track until the next refresh gives the file a managed block.
+    """
+    if not target.exists():
+        return None
+    block = extract_block(target.read_text(encoding="utf-8"))
+    if block is None:
+        return None
+    return hashlib.sha256(normalize_block_version(block).encode("utf-8")).hexdigest()
+
+
+def _write_skills_manifest(project_root: Path, platform: str, entries: dict[str, str]) -> None:
+    """Merge *entries* into ``.tapps-mcp/skills-manifest.json`` under *platform*.
+
+    Written at the end of every :func:`generate_skills` call — init and
+    upgrade both route through here, so the manifest always reflects the
+    emitter's most recent run. Records the hash actually written to disk
+    (not re-derived from the templates at doctor-check time), so the
+    directory-diff check (TAP-6948 s2,
+    :func:`tapps_mcp.distribution.doctor_skills.check_skills_manifest_directory`)
+    never has to reconstruct engagement-note-dependent content itself — it
+    only ever compares two already-computed hashes. Merges rather than
+    overwrites so a Claude-only run does not erase a previously written
+    Cursor section, and vice versa.
+    """
+    manifest_path = project_root.joinpath(*SKILLS_MANIFEST_REL_PATH)
+    try:
+        raw = json.loads(manifest_path.read_text(encoding="utf-8"))
+        manifest = raw if isinstance(raw, dict) else {}
+    except (OSError, json.JSONDecodeError):
+        manifest = {}
+    manifest[platform] = entries
+    manifest_path.parent.mkdir(parents=True, exist_ok=True)
+    manifest_path.write_text(
+        json.dumps(manifest, indent=2, sort_keys=True) + "\n", encoding="utf-8"
+    )
+
+
+def _install_unmanaged_skill(
+    target: Path,
+    skill_dir: Path,
+    skill_name: str,
+    content: str,
+    engagement_note: str,
+    *,
+    overwrite: bool,
+    asset_actions: dict[str, dict[str, str]],
+    overwrite_warnings: list[str],
+) -> str:
+    """Install/refresh one non-smart-merge skill; return its result bucket.
+
+    TAP-6948 s3: every registry skill outside :data:`SMART_MERGE_SKILL_NAMES`
+    now carries the same BEGIN/END managed-block marker as the smart-merge
+    trio, so a force-refresh preserves whatever a project wrote in the
+    ``tapps-skill-project-customizations`` region below the block instead of
+    replacing the file wholesale (TAP-6497's old ``overwrite`` policy for
+    non-smart-merge SKILL.md is retired). Split out of :func:`generate_skills`
+    to keep that function's branching flat.
+    """
+    body_with_note = prepend_below_frontmatter(content, engagement_note)
+    if target.exists():
+        refresh = overwrite or skill_name in SESSION_TRANSFER_SKILL_NAMES
+        if not refresh:
+            return "skipped"
+        action = install_or_refresh_skill(target, body_with_note, skill_name)
+        bucket = "skipped" if action == "unchanged" else "updated"
+    else:
+        install_or_refresh_skill(target, body_with_note, skill_name)
+        bucket = "created"
+
+    # Refresh registered companions under their declared policy.
+    if skill_name in SKILL_COMPANION_FILES or skill_name in SKILL_CREATE_ONLY_FILES:
+        _write_skill_companions(skill_dir, skill_name, asset_actions, overwrite_warnings)
+    return bucket
+
+
 def generate_skills(
     project_root: Path,
     platform: str,
@@ -1566,7 +1653,12 @@ def generate_skills(
     *overwrite* is ``True`` (used by the upgrade path to refresh
     corrected frontmatter) or the skill is in
     :data:`SESSION_TRANSFER_SKILL_NAMES` (always refreshed so handoff
-    workflows stay aligned with doctor checks).
+    workflows stay aligned with doctor checks). When a refresh does happen,
+    every non-smart-merge skill now goes through the same BEGIN/END
+    managed-block marker as :data:`SMART_MERGE_SKILL_NAMES`
+    (:func:`tapps_mcp.pipeline.skill_managed_block.install_or_refresh_skill`,
+    TAP-6948 s3) instead of a wholesale overwrite, so anything a project wrote
+    below the block survives.
     When *engagement_level* is set, prepends a note (MANDATORY vs optional).
     When *skill_tier* is ``"core"``, only :data:`CORE_SKILL_NAMES` are written;
     other registry skills are listed under ``skipped_tier``.
@@ -1574,7 +1666,9 @@ def generate_skills(
     Returns a summary dict with ``created``, ``updated``, ``skipped``, and
     ``skipped_tier`` lists, plus ``assets`` (per-skill companion actions) and
     ``asset_overwrite_warnings`` (customized companions upgrade will replace
-    wholesale because their format carries no marker — TAP-6497).
+    wholesale because their format carries no marker — TAP-6497). Also writes
+    ``.tapps-mcp/skills-manifest.json`` (TAP-6948 s2) — see
+    :func:`_write_skills_manifest`.
     """
     if platform == "claude":
         skills_base = project_root / ".claude" / "skills"
@@ -1603,6 +1697,7 @@ def generate_skills(
     skipped_tier: list[str] = []
     asset_actions: dict[str, dict[str, str]] = {}
     overwrite_warnings: list[str] = []
+    manifest_entries: dict[str, str] = {}
     for skill_name, content in templates.items():
         if tier == "core" and skill_name not in CORE_SKILL_NAMES:
             skipped_tier.append(skill_name)
@@ -1622,28 +1717,24 @@ def generate_skills(
                 skipped.append(skill_name)
             else:  # refreshed | migrated
                 updated.append(skill_name)
-            continue
-
-        # TAP-6497: upgrade calls this with overwrite=True, so a non-smart-merge
-        # SKILL.md is replaced wholesale — say so in the file rather than letting
-        # the next customizer find out by losing work.
-        full_content = prepend_below_frontmatter(
-            content, f"{policy_header('overwrite')}\n\n{engagement_note}"
-        )
-        if target.exists():
-            refresh = overwrite or skill_name in SESSION_TRANSFER_SKILL_NAMES
-            if refresh:
-                target.write_text(full_content, encoding="utf-8")
-                updated.append(skill_name)
-            else:
-                skipped.append(skill_name)
         else:
-            target.write_text(full_content, encoding="utf-8")
-            created.append(skill_name)
+            bucket = _install_unmanaged_skill(
+                target,
+                skill_dir,
+                skill_name,
+                content,
+                engagement_note,
+                overwrite=overwrite,
+                asset_actions=asset_actions,
+                overwrite_warnings=overwrite_warnings,
+            )
+            {"created": created, "updated": updated, "skipped": skipped}[bucket].append(skill_name)
 
-        # Refresh registered companions under their declared policy.
-        if skill_name in SKILL_COMPANION_FILES or skill_name in SKILL_CREATE_ONLY_FILES:
-            _write_skill_companions(skill_dir, skill_name, asset_actions, overwrite_warnings)
+        block_hash = _skill_manifest_hash(target)
+        if block_hash is not None:
+            manifest_entries[skill_name] = block_hash
+
+    _write_skills_manifest(project_root, platform, manifest_entries)
 
     return {
         "created": created,

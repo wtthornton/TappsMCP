@@ -151,8 +151,11 @@ class TestSkipExisting:
         assert (tmp_path / ".claude" / "skills" / "tapps-review-pipeline" / "SKILL.md").exists()
 
     def test_refreshes_session_transfer_skills_without_overwrite(self, tmp_path):
-        from tapps_mcp.pipeline.platform_skills import CLAUDE_SKILLS, SESSION_TRANSFER_SKILL_NAMES
-        from tapps_mcp.pipeline.skill_asset_policy import policy_header
+        from tapps_mcp.pipeline.platform_skills import SESSION_TRANSFER_SKILL_NAMES
+        from tapps_mcp.pipeline.skill_managed_block import (
+            PROJECT_REGION_HEADING,
+            extract_block,
+        )
 
         for skill_name in SESSION_TRANSFER_SKILL_NAMES:
             skill_dir = tmp_path / ".claude" / "skills" / skill_name
@@ -164,12 +167,12 @@ class TestSkipExisting:
         for skill_name in SESSION_TRANSFER_SKILL_NAMES:
             assert skill_name in result["updated"]
             content = (tmp_path / ".claude" / "skills" / skill_name / "SKILL.md").read_text()
-            # TAP-6497: the body is the template plus a one-line in-file
-            # statement of the upgrade policy that governs the file.
-            assert policy_header("overwrite") in content
-            assert (
-                content.replace(f"{policy_header('overwrite')}\n", "") == CLAUDE_SKILLS[skill_name]
-            )
+            # TAP-6948 s3: no markers on disk yet, so refresh migrates the
+            # stale body into the preserved project region below a fresh
+            # managed block instead of overwriting it wholesale.
+            assert extract_block(content) is not None
+            assert PROJECT_REGION_HEADING in content
+            assert "# stale handoff" in content
         assert "tapps-finish-task" in result["created"]
 
     def test_creates_directories(self, tmp_path):
@@ -187,3 +190,5 @@ class TestSkipExisting:
     def test_unknown_platform_returns_error(self, tmp_path):
         result = generate_skills(tmp_path, "unknown")
         assert "error" in result
+
+
