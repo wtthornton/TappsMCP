@@ -319,6 +319,97 @@ def test_grep_for_xfail_is_a_known_false_positive_ceiling(tmp_path: Path) -> Non
 
 
 # ---------------------------------------------------------------------------
+# TAP-6908: mid-compound "&" and subshell backgrounding, plus a recursive
+# check into a literal `bash -c '...'` payload. Every case here runs through
+# the real emitted hook script via `_run` (REACHABILITY), the same helper
+# used above -- not a standalone parsing function.
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    "command",
+    [
+        "pytest packages/tapps-mcp/tests -v & echo done",
+        "sleep 5 & echo next",
+        "( pytest -v & )",
+        "( sleep 5 & )",
+        "true&false",
+        "cmd&;echo done",
+    ],
+)
+def test_mid_compound_and_subshell_backgrounding_blocked_under_dispatch(
+    tmp_path: Path, command: str
+) -> None:
+    result = _run(tmp_path, command, dispatch=True)
+    assert result.returncode == 2, f"expected block for {command!r}: {result.stderr}"
+
+
+@pytest.mark.parametrize(
+    "command",
+    [
+        "pytest packages/tapps-mcp/tests -v & echo done",
+        "( pytest -v & )",
+    ],
+)
+def test_mid_compound_and_subshell_backgrounding_allowed_without_dispatch(
+    tmp_path: Path, command: str
+) -> None:
+    result = _run(tmp_path, command, dispatch=False)
+    assert result.returncode == 0, f"expected allow for {command!r}: {result.stderr}"
+
+
+@pytest.mark.parametrize(
+    "command",
+    [
+        "a && b",
+        "cmd 2>&1",
+        'echo "a & b"',
+    ],
+)
+def test_amp_negative_controls_pass_under_dispatch(tmp_path: Path, command: str) -> None:
+    """The exact negative controls called out in the TAP-6908 lane brief."""
+    result = _run(tmp_path, command, dispatch=True)
+    assert result.returncode == 0, f"expected allow for {command!r}: {result.stderr}"
+
+
+@pytest.mark.parametrize(
+    "command",
+    [
+        "bash -c 'nohup pytest -v'",
+        "bash -c 'sleep 5 &'",
+        "sh -c 'disown %1'",
+        "zsh -c 'setsid pytest -v'",
+        "bash -c 'cd /tmp/some-sibling-checkout && ls'",
+    ],
+)
+def test_bash_c_payload_recursively_checked_under_dispatch(
+    tmp_path: Path, command: str
+) -> None:
+    result = _run(tmp_path, command, dispatch=True)
+    assert result.returncode == 2, f"expected block for {command!r}: {result.stderr}"
+
+
+def test_bash_c_payload_allowed_without_dispatch(tmp_path: Path) -> None:
+    result = _run(tmp_path, "bash -c 'nohup pytest -v'", dispatch=False)
+    assert result.returncode == 0
+
+
+def test_bash_c_variable_indirection_not_recursively_checked(tmp_path: Path) -> None:
+    """Documented, tested gap: the recursive bash -c check only follows a
+    literal string argument resolved by shlex. It does not expand shell
+    variables, so smuggling a guarded word through a variable defeats it.
+    This is pinned (a deliberate, tested decision -- not silence) so a
+    future change to the recursion cannot silently widen or narrow it
+    without a test noticing."""
+    result = _run(
+        tmp_path,
+        "CMD='nohup pytest -v'; bash -c \"$CMD\"",
+        dispatch=True,
+    )
+    assert result.returncode == 0, result.stderr
+
+
+# ---------------------------------------------------------------------------
 # Existing destructive-command blocks and fail-closed path (must be unchanged)
 # ---------------------------------------------------------------------------
 
