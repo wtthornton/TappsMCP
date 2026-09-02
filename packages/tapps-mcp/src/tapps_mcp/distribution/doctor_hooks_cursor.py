@@ -24,8 +24,11 @@ def check_claude_settings(project_root: Path) -> CheckResult:
     """Check ``.claude/settings.json`` for permissions and hook schema validity.
 
     Verifies:
-    - Permission entries: both ``mcp__tapps-mcp`` and ``mcp__tapps-mcp__*``
-      (work around Claude Code permission bugs #3107, #13077, #27139).
+    - Permission entries: bare + wildcard (``mcp__<name>``, ``mcp__<name>__*``,
+      working around Claude Code permission bugs #3107, #13077, #27139) for
+      every MCP server the project actually configures (TAP-6953). Falls
+      back to the legacy ``mcp__tapps-mcp`` pair when the project has no
+      discoverable ``.mcp.json`` / ``.cursor/mcp.json`` / ``.vscode/mcp.json``.
     - Hook keys: only schema-supported keys (e.g. no PostCompact); invalid
       keys cause Claude Code to skip the entire settings file.
     """
@@ -46,8 +49,13 @@ def check_claude_settings(project_root: Path) -> CheckResult:
             False,
             "Invalid JSON in .claude/settings.json",
         )
+    from tapps_mcp.distribution.nlt_mcp_config import configured_server_permission_entries
+
     allow_list = data.get("permissions", {}).get("allow", [])
-    required = ["mcp__tapps-mcp", "mcp__tapps-mcp__*"]
+    required = configured_server_permission_entries(project_root) or [
+        "mcp__tapps-mcp",
+        "mcp__tapps-mcp__*",
+    ]
     missing = [e for e in required if e not in allow_list]
     if missing:
         return CheckResult(
@@ -160,7 +168,9 @@ def _check_cursor_mcp_zombie_cleanup(project_root: Path) -> CheckResult | None:
     )
 
 
-def _parse_cursor_hooks_json(cursor_hooks_json: Path) -> tuple[dict[str, Any], list[str], list[str]]:
+def _parse_cursor_hooks_json(
+    cursor_hooks_json: Path,
+) -> tuple[dict[str, Any], list[str], list[str]]:
     """Parse ``.cursor/hooks.json`` and return ``(data, format_errors, hook_warnings)``."""
     format_errors: list[str] = []
     hook_warnings: list[str] = []

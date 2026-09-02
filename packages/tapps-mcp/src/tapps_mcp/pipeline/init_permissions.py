@@ -76,18 +76,25 @@ def generate_permission_settings(
     keys and deduplicating the ``permissions.allow`` list).
 
     Args:
-        project_root: Target project root (unused today but reserved
-            for future per-project customisation).
+        project_root: Target project root. When it has a discoverable MCP
+            server config (``.mcp.json`` / ``.cursor/mcp.json`` /
+            ``.vscode/mcp.json``), the permission allow entries are derived
+            from that project's actual configured servers (TAP-6953) instead
+            of the hardcoded legacy/NLT lists.
         engagement_level: ``"high"``, ``"medium"`` (default), or ``"low"``.
         existing_settings: Parsed contents of an existing ``settings.json``.
             ``None`` starts from an empty dict.
         docsmcp_detected: When True, include DocsMCP permission entries (legacy monolith).
+            Only consulted when *project_root* has no discoverable MCP server config.
         use_nlt_plugin: When True (default), include Epic 109 ``nlt-*`` server entries.
+            Only consulted when *project_root* has no discoverable MCP server config.
 
     Returns:
         The merged settings dict ready to be serialised to JSON.
     """
     import copy
+
+    from tapps_mcp.distribution.nlt_mcp_config import configured_server_permission_entries
 
     config: dict[str, Any] = copy.deepcopy(existing_settings) if existing_settings else {}
 
@@ -106,12 +113,16 @@ def generate_permission_settings(
     permissions: dict[str, Any] = config.setdefault("permissions", {})
     allow_list: list[str] = permissions.setdefault("allow", [])
 
-    desired: list[str] = list(_CLAUDE_PERMISSION_ENTRIES)
-    if use_nlt_plugin:
-        desired.extend(_NLT_PERMISSION_ENTRIES)
-    if docsmcp_detected and not use_nlt_plugin:
-        desired.extend(_DOCSMCP_PERMISSION_ENTRIES)
-        desired.extend(_PLATFORM_PERMISSION_ENTRIES)
+    configured = configured_server_permission_entries(project_root)
+    if configured is not None:
+        desired: list[str] = list(configured)
+    else:
+        desired = list(_CLAUDE_PERMISSION_ENTRIES)
+        if use_nlt_plugin:
+            desired.extend(_NLT_PERMISSION_ENTRIES)
+        if docsmcp_detected and not use_nlt_plugin:
+            desired.extend(_DOCSMCP_PERMISSION_ENTRIES)
+            desired.extend(_PLATFORM_PERMISSION_ENTRIES)
     if engagement_level == "high":
         desired.extend(_CLAUDE_HIGH_ENGAGEMENT_PERMISSIONS)
 

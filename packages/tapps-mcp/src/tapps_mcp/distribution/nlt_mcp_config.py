@@ -370,6 +370,35 @@ def _load_enabled_mcp_servers(project_root: Path) -> dict[str, Any]:
     return merged
 
 
+def configured_server_permission_entries(project_root: Path) -> list[str] | None:
+    """Derive Claude-settings permission allow entries from the project's own MCP config.
+
+    Reads the ``mcpServers``/``servers`` keys out of whichever of the
+    project's ``.mcp.json`` (Claude Code), ``.cursor/mcp.json``, or
+    ``.vscode/mcp.json`` exist (TAP-6953) and returns ``mcp__<name>`` +
+    ``mcp__<name>__*`` for each configured server name — no hardcoded server
+    vocabulary, so a project that prunes an entry for a server it does not
+    run does not get it back on the next upgrade, and one that only runs a
+    subset of ``nlt-*`` aliases is not asked for entries it has no server for.
+
+    Returns ``None`` when the project has no discoverable MCP server config
+    at all — callers should fall back to their own legacy default entries so
+    existing (non-.mcp.json) projects keep prior behavior unchanged.
+    """
+    try:
+        servers = _load_enabled_mcp_servers(project_root)
+    except Exception:
+        return None
+    if not servers:
+        return None
+    entries: list[str] = []
+    for name in sorted(servers):
+        for entry in (f"mcp__{name}", f"mcp__{name}__*"):
+            if entry not in entries:
+                entries.append(entry)
+    return entries
+
+
 def tools_on_enabled_nlt_servers(project_root: Path | None) -> frozenset[str]:
     """Union of tapps tool names available on enabled NLT servers in MCP config."""
     if project_root is None:
