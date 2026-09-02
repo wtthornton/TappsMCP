@@ -1122,13 +1122,13 @@ def run_server(
     elif transport == "http":
         import uvicorn
 
-        from tapps_core.http.auth import FleetAuthConfig
+        from tapps_core.http.bind_policy import resolve_fleet_auth
         from tapps_core.http.middleware import wrap_streamable_http_app
 
         # docs-mcp is never a runtime-scoped fleet server: the trimmed
         # AgentForge profile lives on nlt-build only (TAP-6062), so a runtime
         # token presented here is a 401, not a downgrade.
-        auth = FleetAuthConfig.from_env(allow_runtime_scope=False)
+        auth = resolve_fleet_auth(host, allow_runtime_scope=False)
 
         mcp_app = wrap_streamable_http_app(mcp.streamable_http_app(), auth=auth)
         uvicorn.run(mcp_app, host=host, port=port)

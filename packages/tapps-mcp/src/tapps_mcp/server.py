@@ -1017,10 +1017,12 @@ def run_server(
         from starlette.responses import HTMLResponse
         from starlette.routing import Route
 
-        from tapps_core.http.auth import FleetAuthConfig
+        from tapps_core.http.bind_policy import resolve_fleet_auth
         from tapps_core.http.middleware import wrap_streamable_http_app
 
-        auth = FleetAuthConfig.from_env()
+        # resolve_fleet_auth also enforces the bind guard: an off-loopback
+        # bind dies here, before uvicorn, unless a token is set (TAP-6062).
+        auth = resolve_fleet_auth(host)
         logger.info(
             "tapps_mcp_http_bind",
             host=host,

@@ -10,6 +10,12 @@ from tapps_core.http.auth import (
     FleetAuthConfig,
     extract_presented_token,
 )
+from tapps_core.http.bind_policy import (
+    NonLoopbackBindRefusedError,
+    is_loopback_host,
+    require_safe_bind,
+    resolve_fleet_auth,
+)
 from tapps_core.http.middleware import (
     TappsFleetAuthMiddleware,
     TappsProjectRootMiddleware,
@@ -34,13 +40,17 @@ __all__ = [
     "SCOPE_OPERATOR",
     "SCOPE_RUNTIME",
     "FleetAuthConfig",
+    "NonLoopbackBindRefusedError",
     "TappsFleetAuthMiddleware",
     "TappsProjectRootMiddleware",
     "extract_presented_token",
     "get_request_auth_scope",
     "get_request_project_root",
+    "is_loopback_host",
+    "require_safe_bind",
     "reset_request_auth_scope",
     "reset_request_project_root",
+    "resolve_fleet_auth",
     "set_request_auth_scope",
     "set_request_project_root",
     "wrap_streamable_http_app",

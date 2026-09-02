@@ -64,7 +64,35 @@ def default_fleet_code_root() -> Path:
 
 
 def resolve_fleet_host() -> str:
+    """Bind/URL host for the fleet -- loopback unless the operator opts out.
+
+    ``TAPPS_FLEET_HOST`` has always been readable here; TAP-6062 makes the
+    non-loopback case a *deliberate* opt-in rather than an accident, by
+    pairing it with :func:`ensure_fleet_bind_allowed` at startup.
+    """
     return os.environ.get(DEFAULT_FLEET_HOST_ENV, DEFAULT_FLEET_HOST).strip() or DEFAULT_FLEET_HOST
+
+
+def fleet_bind_is_loopback(host: str | None = None) -> bool:
+    """True when the fleet bind host is reachable only from this machine."""
+    from tapps_core.http.bind_policy import is_loopback_host
+
+    return is_loopback_host(host if host is not None else resolve_fleet_host())
+
+
+def ensure_fleet_bind_allowed(host: str | None = None) -> None:
+    """Raise unless the configured bind host is safe for the configured auth.
+
+    Structural enforcement of the Story 1 -> Story 2 ordering: exposing the
+    fleet off loopback is only permitted once a bearer token exists.
+    """
+    from tapps_core.http.auth import FleetAuthConfig
+    from tapps_core.http.bind_policy import require_safe_bind
+
+    require_safe_bind(
+        host if host is not None else resolve_fleet_host(),
+        auth=FleetAuthConfig.from_env(),
+    )
 
 
 def resolve_fleet_code_root() -> Path:
@@ -277,6 +305,15 @@ def sample_fleet_env_content() -> str:
         "",
         "# Fleet processes inherit brain/context7 from ~/.tapps-operator.env",
         "# Per-project identity is sent by Cursor via X-Tapps-Project-Root header.",
+        "",
+        "# Bearer auth (TAP-6062). Unset = no auth, and the fleet then REFUSES",
+        "# to start on any non-loopback TAPPS_FLEET_HOST.",
+        "#   TAPPS_FLEET_AUTH_TOKEN    operator credential, all six servers",
+        "#   TAPPS_FLEET_RUNTIME_TOKEN agent-runtime credential, nlt-build only,",
+        "#                             narrowed to the trimmed runtime profile",
+        "# See docs/operations/AGENTFORGE-FLEET-CONSUMPTION.md",
+        "# TAPPS_FLEET_AUTH_TOKEN=",
+        "# TAPPS_FLEET_RUNTIME_TOKEN=",
         "",
     ]
     for server_id, port in NLT_HTTP_FLEET_PORTS.items():
