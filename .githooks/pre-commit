@@ -6,7 +6,16 @@
 
 set -e
 
-COMMIT_LOG_DIR=".tapps-mcp"
+# Resolve the ledger dir to the primary checkout, not a linked worktree's own
+# cwd (TAP-6931) -- --git-common-dir is identical across a repo's primary
+# checkout and all its linked worktrees, so bypasses taken from a worktree
+# land in the one ledger the operator actually audits.
+_common="$(git rev-parse --path-format=absolute --git-common-dir 2>/dev/null || true)"
+if [ -n "$_common" ]; then
+  COMMIT_LOG_DIR="$_common/../.tapps-mcp"
+else
+  COMMIT_LOG_DIR=".tapps-mcp"
+fi
 
 if [ "${TAPPS_SKIP_GATE:-}" = "1" ]; then
   # Log to the same ledger as the pre-push bypass. Echoing to stderr alone

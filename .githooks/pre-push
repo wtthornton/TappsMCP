@@ -52,7 +52,16 @@ if [[ "$gating_master" -eq 0 ]]; then
   exit 0
 fi
 
-PUSH_LOG_DIR=".tapps-mcp"
+# Resolve the ledger dir to the primary checkout, not a linked worktree's own
+# cwd (TAP-6931) -- --git-common-dir is identical across a repo's primary
+# checkout and all its linked worktrees, so bypasses taken from a worktree
+# land in the one ledger the operator actually audits.
+_common="$(git rev-parse --path-format=absolute --git-common-dir 2>/dev/null || true)"
+if [ -n "$_common" ]; then
+  PUSH_LOG_DIR="$_common/../.tapps-mcp"
+else
+  PUSH_LOG_DIR=".tapps-mcp"
+fi
 mkdir -p "$PUSH_LOG_DIR" 2>/dev/null || true
 
 if [[ -n "${TAPPS_SKIP_PREPUSH:-}" ]]; then
