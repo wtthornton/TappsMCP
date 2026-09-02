@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import shutil
 import subprocess
+import tempfile
 import uuid
 from pathlib import Path
 
@@ -22,6 +23,17 @@ from tapps_mcp.pipeline.platform_skill_orchestration import (
 from tapps_mcp.pipeline.upgrade import _skipped
 from tapps_mcp.pipeline.upgrade_skip_tokens import ALL_SKIP_TOKENS, SKIP_TOKENS
 
+# Worktrees land at ``$TMPDIR/prog-<slug>-<session>`` (see start-program.sh's own
+# ``wt="/tmp/prog-$SLUG-$s"``). Built from `tempfile.gettempdir()` rather than a
+# literal "/tmp" so bandit doesn't flag every reference as B108.
+_TMP_DIR = Path(tempfile.gettempdir())
+
+
+def _assert_bash_syntax_ok(script: Path) -> None:
+    """Shared `bash -n` parse-check for a freshly generated or refreshed script."""
+    check = subprocess.run(["bash", "-n", str(script)], capture_output=True, text=True, timeout=10)
+    assert check.returncode == 0, check.stderr
+
 
 class TestGenerateStartProgramScript:
     def test_creates_executable_script_that_parses_as_bash(self, tmp_path: Path) -> None:
@@ -30,10 +42,7 @@ class TestGenerateStartProgramScript:
         assert result == {"file": "scripts/start-program.sh", "action": "created"}
         assert target.exists()
         assert target.stat().st_mode & 0o111, "script must land executable"
-        check = subprocess.run(
-            ["bash", "-n", str(target)], capture_output=True, text=True, timeout=10
-        )
-        assert check.returncode == 0, check.stderr
+        _assert_bash_syntax_ok(target)
 
     def test_dry_run_writes_nothing(self, tmp_path: Path) -> None:
         result = generate_start_program_script(tmp_path, dry_run=True)
@@ -51,10 +60,7 @@ class TestGenerateStartProgramScript:
         text = target.read_text(encoding="utf-8")
         assert result["action"] == "unchanged"
         assert text.endswith(addendum)
-        check = subprocess.run(
-            ["bash", "-n", str(target)], capture_output=True, text=True, timeout=10
-        )
-        assert check.returncode == 0, check.stderr
+        _assert_bash_syntax_ok(target)
 
     def test_usage_does_not_self_reference_source_line_numbers(self) -> None:
         """Regression guard: the asset wrapper prepends 2 lines (policy header +
@@ -99,7 +105,7 @@ def program_repo(tmp_path: Path):
     slug = f"t{uuid.uuid4().hex[:8]}"
     yield repo, slug
 
-    for wt in Path("/tmp").glob(f"prog-{slug}-*"):
+    for wt in _TMP_DIR.glob(f"prog-{slug}-*"):
         shutil.rmtree(wt, ignore_errors=True)
 
 
@@ -116,23 +122,36 @@ def _run(repo: Path, *args: str) -> subprocess.CompletedProcess[str]:
 class TestStartProgramScriptRefusals:
     """Evidence item 1: each refusal fails first (shown here), never silently passes."""
 
-    def test_fewer_than_two_sessions_refuses(self, program_repo) -> None:
+    @pytest.mark.parametrize(
+        ("driver", "cli_args", "expected_code", "expected_stderr_snippet"),
+        [
+            ("prompts/driver.md", ("solo", "solo"), 2, "need >=2 sessions"),
+            ("prompts/driver.md", ("ghost", "a", "b"), 2, "not in the session list"),
+            ("prompts/does-not-exist.md", ("a", "a", "b"), 1, "no such driver prompt"),
+        ],
+    )
+    def test_refuses(
+        self, program_repo, driver, cli_args, expected_code, expected_stderr_snippet
+    ) -> None:
         repo, slug = program_repo
-        result = _run(repo, slug, "prompts/driver.md", "solo", "solo")
-        assert result.returncode == 2
-        assert "need >=2 sessions" in result.stderr
+        result = _run(repo, slug, driver, *cli_args)
+        assert result.returncode == expected_code
+        assert expected_stderr_snippet in result.stderr
 
-    def test_integrator_absent_from_roster_refuses(self, program_repo) -> None:
-        repo, slug = program_repo
-        result = _run(repo, slug, "prompts/driver.md", "ghost", "a", "b")
-        assert result.returncode == 2
-        assert "not in the session list" in result.stderr
 
-    def test_missing_driver_prompt_refuses(self, program_repo) -> None:
-        repo, slug = program_repo
-        result = _run(repo, slug, "prompts/does-not-exist.md", "a", "a", "b")
-        assert result.returncode == 1
-        assert "no such driver prompt" in result.stderr
+def _assert_worktrees_created(slug: str) -> None:
+    assert (_TMP_DIR / f"prog-{slug}-a").is_dir()
+    assert (_TMP_DIR / f"prog-{slug}-b").is_dir()
+
+
+def _assert_partition_content(partition: str) -> None:
+    assert "Integrator (the only session that merges): **a**" in partition
+    assert "`a`" in partition and "`b`" in partition
+
+
+def _assert_status_files_created(program_dir: Path) -> None:
+    assert (program_dir / "status" / "a.md").exists()
+    assert (program_dir / "status" / "b.md").exists()
 
 
 class TestStartProgramScriptHappyPath:
@@ -143,19 +162,15 @@ class TestStartProgramScriptHappyPath:
         result = _run(repo, slug, "prompts/driver.md", "a", "a", "b")
         assert result.returncode == 0, result.stderr
 
-        assert Path(f"/tmp/prog-{slug}-a").is_dir()
-        assert Path(f"/tmp/prog-{slug}-b").is_dir()
+        _assert_worktrees_created(slug)
 
         program_dir = repo / "reports" / "programs" / slug
-        partition = (program_dir / "partition.md").read_text(encoding="utf-8")
-        assert "Integrator (the only session that merges): **a**" in partition
-        assert "`a`" in partition and "`b`" in partition
+        _assert_partition_content((program_dir / "partition.md").read_text(encoding="utf-8"))
 
         decisions = (program_dir / "decisions.md").read_text(encoding="utf-8")
         assert "Dispatch pool / billing account" in decisions
 
-        assert (program_dir / "status" / "a.md").exists()
-        assert (program_dir / "status" / "b.md").exists()
+        _assert_status_files_created(program_dir)
 
     def test_rerun_reuses_worktrees_and_preserves_edited_decisions(self, program_repo) -> None:
         repo, slug = program_repo

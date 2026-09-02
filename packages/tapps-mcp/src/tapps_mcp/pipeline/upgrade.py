@@ -2147,6 +2147,36 @@ def _dry_run_github_artifacts(project_root: Path, result: dict[str, Any]) -> Non
     result["components"]["governance"] = {"action": "would-regenerate"}
 
 
+def _install_start_program_script(
+    project_root: Path,
+    result: dict[str, Any],
+    *,
+    mcp_only: bool,
+    skip_files: set[str],
+    dry_run: bool,
+) -> None:
+    """Regenerate ``scripts/start-program.sh`` — platform-agnostic kickoff for a
+    MULTI-SESSION program; companion to the orchestration-prompt skill (TAP-6885).
+    """
+    if mcp_only:
+        result["components"]["start_program_script"] = {"action": "skipped (mcp_only)"}
+        return
+    if _skipped("start_program_script", skip_files):
+        result["components"]["start_program_script"] = "skipped (upgrade_skip_files)"
+        return
+    try:
+        from tapps_mcp.pipeline.platform_skill_orchestration import (
+            generate_start_program_script,
+        )
+
+        result["components"]["start_program_script"] = generate_start_program_script(
+            project_root, dry_run=dry_run
+        )
+    except Exception as exc:
+        log.exception("start_program_script_failed")
+        result["errors"].append(f"start-program.sh: {exc}")
+
+
 def _run_github_artifacts(
     project_root: Path, result: dict[str, Any], *, force: bool = False
 ) -> None:
@@ -2565,24 +2595,9 @@ def upgrade_pipeline(
     else:
         _dry_run_github_artifacts(project_root, result)
 
-    # scripts/start-program.sh — platform-agnostic kickoff for a MULTI-SESSION
-    # program; companion to the orchestration-prompt skill (TAP-6885).
-    if mcp_only:
-        result["components"]["start_program_script"] = {"action": "skipped (mcp_only)"}
-    elif _skipped("start_program_script", skip_files):
-        result["components"]["start_program_script"] = "skipped (upgrade_skip_files)"
-    else:
-        try:
-            from tapps_mcp.pipeline.platform_skill_orchestration import (
-                generate_start_program_script,
-            )
-
-            result["components"]["start_program_script"] = generate_start_program_script(
-                project_root, dry_run=dry_run
-            )
-        except Exception as exc:
-            log.exception("start_program_script_failed")
-            result["errors"].append(f"start-program.sh: {exc}")
+    _install_start_program_script(
+        project_root, result, mcp_only=mcp_only, skip_files=skip_files, dry_run=dry_run
+    )
 
     # Refresh Linear SDLC templates when previously installed (TAP-417).
     # Detection is file-system based: check if the primary template file exists.
