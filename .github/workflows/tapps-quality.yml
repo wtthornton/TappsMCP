@@ -9,6 +9,7 @@ on:
       - "packages/**/*.py"
       - "packages/**/pyproject.toml"
       - "pyproject.toml"
+      - "*.spec"
       - ".tapps-mcp.yaml"
       - ".github/workflows/tapps-quality.yml"
   workflow_dispatch:
@@ -140,6 +141,9 @@ jobs:
 
       - name: Validate TAPPS skill frontmatter (source templates)
         run: uv run pytest packages/tapps-mcp/tests/unit/test_platform_skills.py::TestSkillsSpecValidator -q
+
+      - name: PyInstaller spec covers all project modules (TAP-6887)
+        run: uv run pytest packages/tapps-mcp/tests/unit/test_pyinstaller_spec.py -q
 
       - name: AGENTS.md version stamp
         run: uv run tapps-mcp check-agents-md-stamp --project-root .
