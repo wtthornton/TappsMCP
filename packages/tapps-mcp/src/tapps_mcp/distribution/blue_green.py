@@ -1,8 +1,21 @@
 """Blue/green deploy for the dev-monorepo shared MCP CLI install.
 
-Builds immutable versioned release venvs under ``~/.tapps-mcp/releases/`` and
-atomically flips ``~/.tapps-mcp/current``. Running MCP servers stay pinned to
-their release dir (inode-held); only new launches pick up the flipped ``current``.
+Builds immutable versioned release venvs under ``~/.tapps-mcp/releases/``.
+``build_release`` installs all three local packages (tapps-core, docs-mcp,
+tapps-mcp) as real, non-editable copies via ``--no-sources-package``
+(TAP-6897) -- a release does not hold ``_editable_impl_*.pth`` redirects
+back into the checkout, so it stays intact regardless of what the checkout
+does afterwards (branch switch, rebase, deletion).
+
+``flip_current`` atomically points ``~/.tapps-mcp/current`` at a release
+directory. Rollback is: flip ``current`` back to an older release. That
+changes which release directory *future* process launches read their code
+from. It does **not**: retroactively affect already-running MCP servers,
+which stay pinned to the release dir they were launched from (inode-held)
+until they are restarted or MCP is reloaded in the host; revert state
+outside a release directory, such as tapps-brain's Postgres data or
+scaffolding files (`AGENTS.md`, hooks, skills) that ``tapps_upgrade``
+already wrote into a consumer repo -- those need their own rollback path.
 """
 
 from __future__ import annotations
