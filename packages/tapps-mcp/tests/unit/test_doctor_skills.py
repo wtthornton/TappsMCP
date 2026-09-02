@@ -5,6 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from tapps_mcp.distribution.doctor_skills import (
+    check_orchestration_prompt_learnings_ceiling,
     check_orchestration_prompt_skill_current,
     check_validation_contract_skill_current,
     check_wayfind_skill_current,
@@ -72,3 +73,61 @@ def test_truncated_managed_block_fails_even_with_every_old_probed_phrase_present
     assert result.ok is False
     assert "stale content" in result.message
     assert "orchestration-prompt" in result.message
+
+
+def test_check_learnings_ceiling_absent_passes(tmp_path: Path) -> None:
+    """No learnings.md deployed at all: nothing to measure, not a failure."""
+    result = check_orchestration_prompt_learnings_ceiling(tmp_path)
+    assert result.ok is True
+    assert "no learnings.md" in result.message
+
+
+def test_check_learnings_ceiling_under_ceiling_passes(tmp_path: Path) -> None:
+    """TAP-6854 criterion 5 positive control: a small learnings.md must not flag.
+
+    Without this, a check that always fails (or always passes) would look
+    identical to a real ceiling check in the over-ceiling test below.
+    """
+    (tmp_path / ".mcp.json").write_text("{}", encoding="utf-8")
+    generate_skills(tmp_path, "claude")
+    learnings = tmp_path / ".claude" / "skills" / "orchestration-prompt" / "learnings.md"
+    learnings.write_text("- one short lesson (2026-09-02)\n", encoding="utf-8")
+
+    result = check_orchestration_prompt_learnings_ceiling(tmp_path)
+    assert result.ok is True
+    assert "under ceiling" in result.message
+
+
+def test_check_learnings_ceiling_over_bullet_count_fails(tmp_path: Path) -> None:
+    """TAP-6854 criterion 5: 'the ceiling is enforced by a check, not by prose'.
+
+    The emitted SKILL.md says 'Past roughly 120 bullets or 40 KB, merge' —
+    until this check, nothing ever measured either number. This fixture is
+    121 top-level bullets, each far under the byte ceiling on its own, so
+    only the bullet-count half of the OR can be responsible for the flag.
+    """
+    (tmp_path / ".mcp.json").write_text("{}", encoding="utf-8")
+    generate_skills(tmp_path, "claude")
+    learnings = tmp_path / ".claude" / "skills" / "orchestration-prompt" / "learnings.md"
+    bullets = "\n".join(f"- lesson {i} (2026-09-02)" for i in range(121))
+    learnings.write_text(bullets + "\n", encoding="utf-8")
+
+    result = check_orchestration_prompt_learnings_ceiling(tmp_path)
+    assert result.ok is False
+    assert "past ceiling" in result.message
+    assert "orchestration-prompt/learnings.md" in result.message
+
+
+def test_check_learnings_ceiling_over_byte_size_fails(tmp_path: Path) -> None:
+    """Same check, other half of the OR: a handful of bullets well over 40 KB."""
+    (tmp_path / ".mcp.json").write_text("{}", encoding="utf-8")
+    generate_skills(tmp_path, "claude")
+    learnings = tmp_path / ".claude" / "skills" / "orchestration-prompt" / "learnings.md"
+    long_bullet = "- " + ("x" * 500) + " (2026-09-02)"
+    content = "\n".join(long_bullet for _ in range(100))
+    assert len(content.encode("utf-8")) > 40_000, "fixture must clear the byte ceiling"
+    learnings.write_text(content + "\n", encoding="utf-8")
+
+    result = check_orchestration_prompt_learnings_ceiling(tmp_path)
+    assert result.ok is False
+    assert "past ceiling" in result.message
