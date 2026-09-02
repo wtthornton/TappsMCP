@@ -196,6 +196,18 @@ def is_session_handoff_key(key: str) -> bool:
     return key == SESSION_HANDOFF_MEMORY_KEY or key.startswith(SESSION_HANDOFF_SLOT_PREFIX)
 
 
+def slot_from_handoff_key(key: str) -> str | None:
+    """Recover the slot a handoff memory *key* names, or ``None`` for the shared default.
+
+    Inverse of :func:`handoff_memory_key`. Callers must confirm
+    :func:`is_session_handoff_key` first — an unrelated key has no slot to
+    recover and this function does not check.
+    """
+    if key == SESSION_HANDOFF_MEMORY_KEY:
+        return None
+    return key[len(SESSION_HANDOFF_SLOT_PREFIX) :]
+
+
 def _normalize_header(name: str) -> str:
     return name.strip().lower()
 
@@ -633,5 +645,6 @@ __all__ = [
     "load_and_lint_handoff",
     "parse_handoff_markdown",
     "populated_sections",
+    "slot_from_handoff_key",
     "validate_handoff_slot",
 ]

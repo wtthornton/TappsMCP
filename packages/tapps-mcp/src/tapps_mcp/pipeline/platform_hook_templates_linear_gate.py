@@ -775,8 +775,11 @@ TOOL=$(printf '%s' "$INPUT" | sed -n 's/.*"tool_name"[[:space:]]*:[[:space:]]*"\
 SID=$(printf '%s' "$INPUT" | sed -n 's/.*"session_id"[[:space:]]*:[[:space:]]*"\\([^"]*\\)".*/\\1/p' | head -n1)
 # Never gate session_start itself or cheap discovery/diagnostic tools — they
 # establish the context or must stay reachable to repair a broken setup.
+# tapps_memory is included: cross-session recall/handoff recovery (continue-session,
+# the manual handoff fallback) has to work even when session_start has not run yet
+# this session — that is exactly the broken-setup case this exemption exists for.
 case "$TOOL" in
-  *tapps_session_start|*tapps_server_info|*tapps_doctor|*tapps_usage|*tapps_stats) exit 0 ;;
+  *tapps_session_start|*tapps_server_info|*tapps_doctor|*tapps_usage|*tapps_stats|*tapps_memory) exit 0 ;;
 esac
 # Only gate the TappsMCP quality tool family (the matcher already scopes this;
 # re-checked so a stray broad matcher can't over-block foreign tools).
@@ -883,7 +886,7 @@ try {
     if ($d.session_id) { $sid = [string]$d.session_id }
     elseif ($d.sessionId) { $sid = [string]$d.sessionId }
 } catch { exit 0 }
-if ($tool -match 'tapps_(session_start|server_info|doctor|usage|stats)$') { exit 0 }
+if ($tool -match 'tapps_(session_start|server_info|doctor|usage|stats|memory)$') { exit 0 }
 if ($tool -notmatch '^mcp__(nlt-build|nlt-memory|nlt-setup|nlt-code-quality|nlt-platform-admin|tapps-mcp)__') { exit 0 }
 if ($mode -eq 'off') { exit 0 }
 $root = if ($env:CLAUDE_PROJECT_DIR) { $env:CLAUDE_PROJECT_DIR } else { $PWD.Path }

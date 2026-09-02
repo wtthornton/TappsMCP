@@ -58,6 +58,17 @@ class TestSessionStartGateConfig:
         assert "tapps_session_start" in SESSION_START_GATE_PRE_SCRIPT
         assert "tapps_doctor" in SESSION_START_GATE_PRE_SCRIPT
 
+    def test_pre_gate_whitelists_tapps_memory(self) -> None:
+        # TAP-6853: cross-session recall/handoff recovery must stay reachable
+        # even before tapps_session_start has run this session — the same
+        # broken-setup exemption tapps_doctor already gets. Anchored to the
+        # exemption case line itself, not a bare substring, so a match
+        # elsewhere in the script (e.g. the matcher list) can't fake a pass.
+        assert (
+            "*tapps_session_start|*tapps_server_info|*tapps_doctor|*tapps_usage|"
+            "*tapps_stats|*tapps_memory) exit 0 ;;"
+        ) in SESSION_START_GATE_PRE_SCRIPT
+
     def test_pre_gate_labels_hook_only_refusal_layer(self) -> None:
         assert "layer=hook-only/defense-in-depth" in SESSION_START_GATE_PRE_SCRIPT
         assert "layer=hook-only/defense-in-depth" in SESSION_START_GATE_PRE_SCRIPT_PS
@@ -166,6 +177,12 @@ class TestPowerShellTemplates:
         scripts = render_session_start_gate_scripts("block", win=True)
         assert "$mode = 'block'" in scripts["tapps-pre-session-start-gate.ps1"]
 
+    def test_ps_pre_gate_whitelists_tapps_memory(self) -> None:
+        # TAP-6853: Windows parity with the bash exemption above.
+        assert "tapps_(session_start|server_info|doctor|usage|stats|memory)$" in (
+            SESSION_START_GATE_PRE_SCRIPT_PS
+        )
+
 
 @pytest.mark.skipif(sys.platform == "win32", reason="bash-only behavioral tests")
 class TestSessionStartGateScriptBehavior:
@@ -204,6 +221,17 @@ class TestSessionStartGateScriptBehavior:
         )
         assert rc == 2
         assert "session-start gate (block)" in err
+
+    def test_tapps_memory_allowed_without_sentinel(self, tmp_path: Path) -> None:
+        # TAP-6853: cross-session recall/handoff recovery must work even when
+        # tapps_session_start has not run yet this session.
+        hooks = self._setup(tmp_path, "block")
+        rc, _ = self._run(
+            hooks / "tapps-pre-session-start-gate.sh",
+            {"tool_name": "mcp__nlt-memory__tapps_memory", "session_id": "s1"},
+            cwd=tmp_path,
+        )
+        assert rc == 0
 
     def test_session_start_itself_allowed(self, tmp_path: Path) -> None:
         hooks = self._setup(tmp_path, "block")

@@ -23,6 +23,7 @@ End the session with a durable handoff the next chat loads via `tapps-continue-s
 
 ```markdown
 # Session handoff
+**Program:** <program or campaign name>
 **Updated:** <ISO-8601 UTC from date -u>
 **Git:** <short-sha or omit>
 **Linear P0:** <TAP-#### or none>
@@ -59,6 +60,7 @@ End the session with a durable handoff the next chat loads via `tapps-continue-s
 2. **Persist (one atomic call when MCP is available).** Do **not** write the file separately before MCP — `tapps_handoff_save` writes `.tapps-mcp/session-handoff.md`, lints, mirrors to brain, and can close the session lifecycle.
 
    Draft the full markdown in memory using the shape above:
+   - **Program:** the program or campaign this session belongs to. It is the ownership key: the guard compares it against whoever wrote the file last, and only a *different* stated program is a conflict. Leave the placeholder in and the write is reported as unknown ownership — archived, never refused, but nobody can tell your handoff from anyone else's.
    - **Updated:** run `date -u +%Y-%m-%dT%H:%M:%SZ` — never a placeholder like `T00:00:00Z`
    - **Git:** `git rev-parse --short HEAD` when inside a git repo
    - **Linear P0:** TAP-#### when known (preferred retrieval key for brain session search)
@@ -68,9 +70,13 @@ End the session with a durable handoff the next chat loads via `tapps-continue-s
    | Priority | When | How |
    |----------|------|-----|
    | 1 (MCP) | `nlt-memory` available | `tapps_handoff_save(markdown=..., session_end=true)` — single call; do **not** also call `tapps_session_end` |
-   | 2 (CLI atomic) | Shell auth; no MCP write | `uv run tapps-mcp handoff write --file .tapps-mcp/session-handoff.md --session-end` after writing the file locally |
+   | 2 (CLI atomic) | Shell auth; no MCP write | `uv run tapps-mcp handoff write --file <draft.md> [--slot <your-program>] --session-end` — `--file` is the **input** to read, `--slot` picks the **destination** |
    | 3 (manual) | Brain HTTP only | `uv run tapps-mcp memory save --key session-handoff --tier context --tags handoff,cross-session --value "$(cat .tapps-mcp/session-handoff.md)"` — full markdown body |
    | 4 (skip) | Brain offline | File-only via Bash heredoc: `mkdir -p .tapps-mcp && cat > .tapps-mcp/session-handoff.md <<'EOF'` … `EOF` |
+
+   **Slots — when another program shares this repo.** `slot="<your-program>"` writes `.tapps-mcp/handoffs/<slot>.md` and brain key `session-handoff.<slot>` instead of the shared default, so concurrent programs stop overwriting each other. Lowercase letters, digits and dashes, at most 48 characters. Omit it and you write the shared file, which is correct for a repo running one program at a time.
+
+   **When the response carries `conflict`.** Print it. `foreign: true` means you replaced another program's handoff — name the program from `conflict.previous` and the recovery path from `conflict.archived_to`; the right fix is almost always to re-save under your own `slot=`. `foreign: "unknown"` means nobody could tell (no **Program:** header on one side) — say so rather than reporting a clean write. Under `handoff_conflict_mode: block` the save is **refused** with `handoff_owner_conflict`: retry with `slot=`, or pass `force=true` only when you genuinely mean to take over the shared file (the incumbent is archived first either way).
 
    Handoff **Updated** older than 7 days: pass `allow_lint_warnings=true` on `tapps_handoff_save` if lint warns on age.
 
