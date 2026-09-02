@@ -19,22 +19,38 @@ def _check_managed_skill_current(
     *,
     skill_name: str,
     check_name: str,
-    companions: tuple[str, ...],
-    required_phrases: tuple[str, ...],
-    phrase_sources: tuple[str, ...] = (),
 ) -> CheckResult:
-    """Shared required-on-full skill freshness check.
+    """Shared required-on-full skill freshness check (TAP-6948).
 
-    ``phrase_sources`` are paths relative to the skill dir whose text is
-    concatenated with SKILL.md when looking for ``required_phrases``. Empty
-    means body-only fingerprints.
+    Fingerprints the deployed managed block against what the *current*
+    emitter would produce for *skill_name* — a content comparison (normalized
+    for the version stamp), not a probe for a handful of representative
+    phrases. A block that shrank, grew, or was hand-edited fails even when it
+    still happens to contain every phrase the old check probed for.
+
+    Companions and the expected body are both read from the emitter's own
+    registries (``SKILL_COMPANION_FILES``, ``CLAUDE_SKILLS`` / ``CURSOR_SKILLS``)
+    rather than duplicated here as literal lists, so a new managed skill only
+    needs a thin wrapper — this worker already knows how to check it.
     """
     from tapps_mcp.distribution.context_budget import _skill_tier
     from tapps_mcp.distribution.doctor_pipeline import _tapps_skill_bases
     from tapps_mcp.distribution.doctor_result import CheckResult
+    from tapps_mcp.pipeline.platform_skills import (
+        CLAUDE_SKILLS,
+        CURSOR_SKILLS,
+        SKILL_COMPANION_FILES,
+    )
+    from tapps_mcp.pipeline.skill_managed_block import (
+        extract_block,
+        normalize_block_version,
+        wrap_with_markers,
+    )
 
-    marker = f"<!-- BEGIN: tapps-skill {skill_name}"
     tier = _skill_tier(project_root)
+    companions = tuple(sorted(SKILL_COMPANION_FILES.get(skill_name, {})))
+    emitter_bodies = {"claude": CLAUDE_SKILLS, "cursor": CURSOR_SKILLS}
+
     valid_hosts: list[str] = []
     problems: list[str] = []
     for host_label, base in _tapps_skill_bases(project_root):
@@ -45,21 +61,24 @@ def _check_managed_skill_current(
                 problems.append(f"{host_label}/{skill_name} missing")
             continue
         content = skill_path.read_text(encoding="utf-8")
-        if marker not in content:
+        deployed_block = extract_block(content)
+        if deployed_block is None:
             problems.append(f"{host_label}/{skill_name} stale (no managed-block marker)")
             continue
         missing = [c for c in companions if not (skill_dir / c).exists()]
         if missing:
             problems.append(f"{host_label}/{skill_name} missing {', '.join(missing)}")
             continue
-        combined = content.lower()
-        for rel in phrase_sources:
-            combined = f"{combined}\n{(skill_dir / rel).read_text(encoding='utf-8').lower()}"
-        missing_phrases = [p for p in required_phrases if p not in combined]
-        if missing_phrases:
+        body = emitter_bodies.get(host_label, {}).get(skill_name)
+        expected_block = (
+            extract_block(wrap_with_markers(body, skill_name)) if body is not None else None
+        )
+        if expected_block is None or normalize_block_version(
+            deployed_block
+        ) != normalize_block_version(expected_block):
             problems.append(
                 f"{host_label}/{skill_name} stale content "
-                f"(missing {', '.join(missing_phrases)}; run upgrade --force)"
+                "(managed block no longer matches the current emitter; run upgrade --force)"
             )
             continue
         valid_hosts.append(host_label)
@@ -82,57 +101,88 @@ def _check_managed_skill_current(
 
 
 def check_orchestration_prompt_skill_current(project_root: Path) -> CheckResult:
-    """Check ``orchestration-prompt`` is deployed with companions (TAP-5496)."""
+    """Check ``orchestration-prompt`` is deployed current, by content (TAP-5496, TAP-6948)."""
     return _check_managed_skill_current(
         project_root,
         skill_name="orchestration-prompt",
         check_name="orchestration-prompt skill",
-        companions=(
-            "assets/prompt-template.md",
-            "references/claude-feature-map.md",
-            "references/cold-start-and-verify.md",
-            "references/host-feature-map.md",
-        ),
-        required_phrases=(
-            "validation contract",
-            "expected-fail",
-            "shift boundary",
-            "host-feature-map",
-        ),
-        phrase_sources=(
-            "assets/prompt-template.md",
-            "references/host-feature-map.md",
-        ),
     )
 
 
 def check_wayfind_skill_current(project_root: Path) -> CheckResult:
-    """Check ``tapps-wayfind`` is deployed with companions (TAP-5496)."""
+    """Check ``tapps-wayfind`` is deployed current, by content (TAP-5496, TAP-6948)."""
     return _check_managed_skill_current(
         project_root,
         skill_name="tapps-wayfind",
         check_name="tapps-wayfind skill",
-        companions=(
-            "assets/map-template.md",
-            "references/ticket-types.md",
-            "references/linear-ops.md",
-        ),
-        required_phrases=("fog", "orchestration-prompt"),
     )
 
 
 def check_validation_contract_skill_current(project_root: Path) -> CheckResult:
-    """Check ``tapps-validation-contract`` is deployed with companions (TAP-5541)."""
+    """Check ``tapps-validation-contract`` is deployed current, by content (TAP-5541, TAP-6948)."""
     return _check_managed_skill_current(
         project_root,
         skill_name="tapps-validation-contract",
         check_name="tapps-validation-contract skill",
-        companions=(
-            "assets/contract-template.md",
-            "references/assertion-schema.md",
-            "references/when-to-use.md",
-        ),
-        required_phrases=("validation contract",),
+    )
+
+
+def check_skill_mirror_parity(project_root: Path) -> CheckResult:
+    """Compare each managed skill's block across every deployed host mirror (TAP-6944).
+
+    The Claude and Cursor copies of a smart-merge skill are generated from the
+    same host-agnostic body (see the ``CLAUDE_SKILLS["orchestration-prompt"] =
+    ...`` / ``CURSOR_SKILLS["orchestration-prompt"] = ...`` pair in
+    platform_skills), so wherever a project deploys both, their managed blocks
+    should be byte-identical. A divergence means one mirror drifted — hand-edited,
+    or refreshed at a different time than its sibling — without anyone
+    noticing: the TAP-6948 freshness check only ever compares a host against
+    the emitter, never against the other host.
+    """
+    from tapps_mcp.distribution.doctor_pipeline import _tapps_skill_bases
+    from tapps_mcp.distribution.doctor_result import CheckResult
+    from tapps_mcp.pipeline.platform_skills import SMART_MERGE_SKILL_NAMES
+    from tapps_mcp.pipeline.skill_managed_block import extract_block
+
+    bases = _tapps_skill_bases(project_root)
+    mismatches: list[str] = []
+    compared = 0
+    for skill_name in sorted(SMART_MERGE_SKILL_NAMES):
+        blocks: dict[str, tuple[Path, str]] = {}
+        for host_label, base in bases:
+            skill_path = base / skill_name / "SKILL.md"
+            if not skill_path.exists():
+                continue
+            block = extract_block(skill_path.read_text(encoding="utf-8"))
+            if block is not None:
+                blocks[host_label] = (skill_path, block)
+        if len(blocks) < 2:
+            continue
+        compared += 1
+        hosts = sorted(blocks)
+        reference_host = hosts[0]
+        reference_path, reference_block = blocks[reference_host]
+        for host_label in hosts[1:]:
+            other_path, other_block = blocks[host_label]
+            if other_block != reference_block:
+                mismatches.append(
+                    f"{skill_name}: {reference_path} ({reference_host}) != "
+                    f"{other_path} ({host_label})"
+                )
+
+    if mismatches:
+        return CheckResult(
+            "Skill mirror parity",
+            False,
+            f"{len(mismatches)} skill mirror(s) diverge: {'; '.join(mismatches)}",
+            "Run: tapps-mcp upgrade --force to re-sync every host mirror",
+        )
+    if not compared:
+        return CheckResult("Skill mirror parity", True, "no skill deployed to more than one host")
+    return CheckResult(
+        "Skill mirror parity",
+        True,
+        f"{compared} managed skill(s) match byte-for-byte across every deployed host",
     )
 
 
