@@ -111,7 +111,9 @@ class RustScorer(ScorerBase):
         """Return Rust file extensions."""
         return frozenset({".rs"})
 
-    def score_file_quick(self, file_path: Path) -> ScoreResult:
+    def score_file_quick(
+        self, file_path: Path, *, identity_path: Path | None = None
+    ) -> ScoreResult:
         """Quick mode scoring for Rust files.
 
         Uses regex-based analysis for fast feedback.
@@ -124,11 +126,12 @@ class RustScorer(ScorerBase):
             A ScoreResult with quick-mode scoring.
         """
         resolved = file_path.resolve()
+        identity = self._identity_of(file_path, identity_path)
         try:
             code = resolved.read_text(encoding="utf-8", errors="replace")
         except (OSError, PermissionError):
             logger.exception("file_read_failed", path=str(resolved))
-            return self._error_result(str(resolved))
+            return self._error_result(str(identity))
 
         # Quick mode: regex-based lint check
         issues = self._regex_lint_check(code)
@@ -144,14 +147,20 @@ class RustScorer(ScorerBase):
         }
 
         return ScoreResult(
-            file_path=str(resolved),
+            file_path=str(identity),
             categories=categories,
             overall_score=clamp_overall(lint_score * 10.0),
             degraded=False,
             language="rust",
         )
 
-    async def score_file(self, file_path: Path, *, mode: str = "subprocess") -> ScoreResult:
+    async def score_file(
+        self,
+        file_path: Path,
+        *,
+        mode: str = "subprocess",
+        identity_path: Path | None = None,
+    ) -> ScoreResult:
         """Full mode scoring for Rust files.
 
         Uses tree-sitter parsing when available for comprehensive analysis.
@@ -159,43 +168,49 @@ class RustScorer(ScorerBase):
         Args:
             file_path: Path to the file to score.
             mode: Execution mode (reserved for future clippy integration).
+            identity_path: Path the content is judged *as* for the
+                path-derived categories (sibling manifests, sibling test
+                files). Defaults to ``file_path``; see
+                ``ScorerBase._identity_of``.
 
         Returns:
             A ScoreResult with full scoring.
         """
         resolved = await asyncio.to_thread(file_path.resolve)
+        identity = await asyncio.to_thread(self._identity_of, file_path, identity_path)
         str_path = str(resolved)
+        identity_str = str(identity)
 
         # Check file size
         try:
             size = (await asyncio.to_thread(resolved.stat)).st_size
             if size > _MAX_FILE_SIZE:
                 logger.warning("file_too_large", path=str_path, size=size)
-                return self._error_result(str_path)
+                return self._error_result(identity_str)
         except OSError:
-            return self._error_result(str_path)
+            return self._error_result(identity_str)
 
         # Read file content
         try:
             code = await asyncio.to_thread(resolved.read_text, encoding="utf-8", errors="replace")
         except (OSError, PermissionError):
             logger.exception("file_read_failed", path=str_path)
-            return self._error_result(str_path)
+            return self._error_result(identity_str)
 
         # Build category scores
         if HAS_TREE_SITTER:
-            categories = self._score_with_treesitter(code, resolved)
+            categories = self._score_with_treesitter(code, identity)
             degraded = False
             missing_tools: list[str] = []
         else:
-            categories = self._score_with_regex(code, resolved)
+            categories = self._score_with_regex(code, identity)
             degraded = True
             missing_tools = ["tree-sitter"]
 
         overall = self._calculate_overall(categories)
 
         return ScoreResult(
-            file_path=str_path,
+            file_path=identity_str,
             categories=categories,
             overall_score=overall,
             degraded=degraded,

@@ -174,9 +174,12 @@ class CodeScorer(CategoryScorersMixin):
     # Public API
     # ------------------------------------------------------------------
 
-    def score_file_quick(self, file_path: Path) -> ScoreResult:
+    def score_file_quick(
+        self, file_path: Path, *, identity_path: Path | None = None
+    ) -> ScoreResult:
         """Quick mode: ruff-only scoring (< 500 ms target)."""
         resolved = file_path.resolve()
+        identity = self._identity_of(file_path, identity_path)
         issues = run_ruff_check(str(resolved), cwd=str(resolved.parent))
         ruff_failed = issues is None
         if issues is None:
@@ -193,7 +196,7 @@ class CodeScorer(CategoryScorersMixin):
         }
 
         return ScoreResult(
-            file_path=str(resolved),
+            file_path=str(identity),
             categories=categories,
             overall_score=clamp_overall(lint_score * 10.0),
             lint_issues=issues,
@@ -201,7 +204,9 @@ class CodeScorer(CategoryScorersMixin):
             missing_tools=["ruff"] if ruff_failed else [],
         )
 
-    def score_file_quick_enriched(self, file_path: Path) -> ScoreResult:
+    def score_file_quick_enriched(
+        self, file_path: Path, *, identity_path: Path | None = None
+    ) -> ScoreResult:
         """Quick-enriched mode: ruff + real tool data (when available) for all 7 categories.
 
         Runs ruff for linting, then uses radon in-process (``_radon_cc_direct``,
@@ -216,6 +221,7 @@ class CodeScorer(CategoryScorersMixin):
         present.
         """
         resolved = file_path.resolve()
+        identity = self._identity_of(file_path, identity_path)
         str_path = str(resolved)
         cwd = str(resolved.parent)
         missing: list[str] = []
@@ -229,7 +235,7 @@ class CodeScorer(CategoryScorersMixin):
             code = resolved.read_text(encoding="utf-8", errors="replace")
         except (OSError, PermissionError):
             logger.exception("file_read_failed", path=str_path)
-            return self._error_result(str_path)
+            return self._error_result(str(identity))
 
         w = self._weights
         cats: dict[str, CategoryScore] = {}
@@ -292,13 +298,14 @@ class CodeScorer(CategoryScorersMixin):
             details=maint_details,
         )
 
-        # 4) Test coverage (heuristic — no external tool)
-        coverage = self._coverage_heuristic(resolved)
+        # 4) Test coverage (heuristic — no external tool). Path-derived, so it
+        # asks about `identity`, not about wherever the bytes were read from.
+        coverage = self._coverage_heuristic(identity)
         cats["test_coverage"] = CategoryScore(
             name="test_coverage",
             score=coverage,
             weight=w.test_coverage,
-            details={"stem": resolved.stem},
+            details={"stem": identity.stem},
         )
 
         # 5) Performance (AST heuristics + Halstead via radon_hal_direct when available)
@@ -317,16 +324,16 @@ class CodeScorer(CategoryScorersMixin):
             details={"issues_found": perf_all_issues},
         )
 
-        # 6) Structure
-        structure = self._structure_score(resolved)
+        # 6) Structure (path-derived)
+        structure = self._structure_score(identity)
         cats["structure"] = CategoryScore(
             name="structure",
             score=structure,
             weight=w.structure,
         )
 
-        # 7) DevEx
-        devex = self._devex_score(resolved)
+        # 7) DevEx (path-derived)
+        devex = self._devex_score(identity)
         cats["devex"] = CategoryScore(
             name="devex",
             score=devex,
@@ -351,7 +358,7 @@ class CodeScorer(CategoryScorersMixin):
         ]
 
         return ScoreResult(
-            file_path=str(resolved),
+            file_path=str(identity),
             categories=cats,
             overall_score=overall,
             lint_issues=issues,
@@ -360,15 +367,25 @@ class CodeScorer(CategoryScorersMixin):
             degraded_categories=degraded_cats,
         )
 
-    async def score_file(self, file_path: Path, *, mode: str = "subprocess") -> ScoreResult:
+    async def score_file(
+        self,
+        file_path: Path,
+        *,
+        mode: str = "subprocess",
+        identity_path: Path | None = None,
+    ) -> ScoreResult:
         """Full mode: parallel ruff + mypy + bandit + radon → 7-category score.
 
         Args:
-            file_path: Path to the Python file to score.
+            file_path: Path the Python source is read from.
             mode: Execution mode for external tools - ``"subprocess"``,
                 ``"direct"``, or ``"auto"``.
+            identity_path: Path the content is judged *as* for the
+                path-derived categories. Defaults to ``file_path``; see
+                ``ScorerBase._identity_of``.
         """
         resolved = await asyncio.to_thread(file_path.resolve)
+        identity = await asyncio.to_thread(self._identity_of, file_path, identity_path)
         str_path = str(resolved)
         cwd = str(resolved.parent)
         timeout = self._settings.tool_timeout
@@ -378,7 +395,7 @@ class CodeScorer(CategoryScorersMixin):
             code = await asyncio.to_thread(resolved.read_text, encoding="utf-8", errors="replace")
         except (OSError, PermissionError):
             logger.exception("file_read_failed", path=str_path)
-            return self._error_result(str_path)
+            return self._error_result(str(identity))
 
         # Run external tools in parallel
         parallel = await run_all_tools(
@@ -398,7 +415,7 @@ class CodeScorer(CategoryScorersMixin):
 
         async with heavy_cpu():
             categories, dep_vuln_count = await asyncio.to_thread(
-                self._build_categories, code, resolved, parallel
+                self._build_categories, code, identity, parallel
             )
         overall = self._calculate_overall(categories)
 
@@ -411,7 +428,7 @@ class CodeScorer(CategoryScorersMixin):
         ]
 
         return ScoreResult(
-            file_path=str_path,
+            file_path=str(identity),
             categories=categories,
             overall_score=overall,
             lint_issues=parallel.lint_issues,
@@ -436,7 +453,12 @@ class CodeScorer(CategoryScorersMixin):
         file_path: Path,
         parallel: ParallelResults,
     ) -> tuple[dict[str, CategoryScore], int]:
-        """Build all category scores, returning (categories, dependency_vuln_count)."""
+        """Build all category scores, returning (categories, dependency_vuln_count).
+
+        *file_path* is the file's **identity** path — the three categories
+        below that take it (``test_coverage``, ``structure``, ``devex``)
+        derive their verdict from the path, not from *code*.
+        """
         cats: dict[str, CategoryScore] = {}
 
         cats["complexity"] = self._score_complexity_category(code, parallel)

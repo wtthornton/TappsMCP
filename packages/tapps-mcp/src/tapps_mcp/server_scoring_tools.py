@@ -784,6 +784,8 @@ async def score_and_scan_quick(
     resolved: Path,
     scorer: Any,
     settings: Any,
+    *,
+    identity_path: Path | None = None,
 ) -> tuple[ScoreResult, SecurityScanResult]:
     """Quick-mode score + security scan, shared by quick_check and validate_changed.
 
@@ -794,11 +796,20 @@ async def score_and_scan_quick(
     ``tapps_validate_changed``, the documented pre-completion gate, could
     return ``gate_passed=True`` for a file ``tapps_quick_check`` failed. This
     is the single scoring path; do not reintroduce a second one.
+
+    *identity_path* (TAP-6921) separates the two halves of "the same bytes at
+    the same path": *resolved* is where the bytes are read from and the
+    external tools run, *identity_path* is the path the content is judged
+    *as* by the path-derived categories. They differ only for the
+    quality-gate ratchet, which holds a baseline revision's content in a
+    scratch directory but must score it as the file it came from.
     """
     from tapps_mcp.security.security_scanner import SecurityScanResult, run_security_scan
 
     if scorer.language != "python":
-        score_result = await asyncio.to_thread(scorer.score_file_quick, resolved)
+        score_result = await asyncio.to_thread(
+            scorer.score_file_quick, resolved, identity_path=identity_path
+        )
         return score_result, SecurityScanResult(
             passed=True,
             bandit_issues=[],
@@ -808,7 +819,7 @@ async def score_and_scan_quick(
         )
 
     score_result, sec_result = await asyncio.gather(
-        asyncio.to_thread(scorer.score_file_quick_enriched, resolved),
+        asyncio.to_thread(scorer.score_file_quick_enriched, resolved, identity_path=identity_path),
         asyncio.to_thread(
             run_security_scan,
             str(resolved),
