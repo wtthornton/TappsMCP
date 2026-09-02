@@ -54,7 +54,11 @@ def test_size_finding_does_not_double_report_with_ceiling_check(tmp_path: Path) 
     different names. ``check_orchestration_prompt_learnings_ceiling`` owns
     size/ceiling; this check stays clean on it even when over-ceiling.
     """
-    dirty_learnings = "- padding bullet that repeats itself needlessly.\n" * 2000
+    # A single over-ceiling bullet (one "- " top-level line, nothing else to
+    # pair it against) isolates the size dimension: over_ceiling=True in the
+    # underlying audit, but near_duplicate and contradiction both stay empty
+    # since there is no sibling bullet or managed block to compare against.
+    dirty_learnings = "- " + ("padding word repeated many times in one bullet " * 3000) + "\n"
     _write_skill_pair(tmp_path, skill_name="dirty-skill", learnings_md=dirty_learnings)
 
     result = check_skill_learnings_hygiene(tmp_path)
