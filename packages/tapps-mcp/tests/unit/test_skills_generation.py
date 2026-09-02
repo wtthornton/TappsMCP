@@ -192,3 +192,72 @@ class TestSkipExisting:
         assert "error" in result
 
 
+class TestCustomizationsBlock:
+    """TAP-6948 s3: unmanaged skills carry a preserved customizations region."""
+
+    def test_skill_without_prior_content_gains_an_empty_region(self, tmp_path):
+        from tapps_mcp.pipeline.platform_skills import SMART_MERGE_SKILL_NAMES
+        from tapps_mcp.pipeline.skill_managed_block import MARKER_END, extract_block
+
+        generate_skills(tmp_path, "claude")
+        content = (tmp_path / ".claude" / "skills" / "tapps-finish-task" / "SKILL.md").read_text(
+            encoding="utf-8"
+        )
+
+        assert "tapps-finish-task" not in SMART_MERGE_SKILL_NAMES
+        assert extract_block(content) is not None
+        below_end = content[content.find(MARKER_END) + len(MARKER_END) :]
+        assert below_end.strip() == ""
+
+    def test_local_customization_survives_a_force_refresh_byte_for_byte(self, tmp_path):
+        generate_skills(tmp_path, "claude")
+        target = tmp_path / ".claude" / "skills" / "tapps-finish-task" / "SKILL.md"
+        custom = "\n\n<!-- project note: we always run this after lunch -->\n"
+        target.write_text(target.read_text(encoding="utf-8") + custom, encoding="utf-8")
+
+        generate_skills(tmp_path, "claude", overwrite=True)
+
+        # Byte-for-byte: the customization survives even though the managed
+        # block itself did not change (so this refresh is a no-op on the
+        # platform body — "unchanged" or "refreshed" both preserve the tail).
+        assert target.read_text(encoding="utf-8").endswith(custom)
+
+    def test_covered_skill_count_is_derived_not_hardcoded(self, tmp_path):
+        from tapps_mcp.pipeline.platform_skills import (
+            CLAUDE_SKILLS,
+            SMART_MERGE_SKILL_NAMES,
+        )
+        from tapps_mcp.pipeline.skill_managed_block import extract_block
+
+        generate_skills(tmp_path, "claude")
+        expected_unmanaged = set(CLAUDE_SKILLS) - SMART_MERGE_SKILL_NAMES
+        assert expected_unmanaged, "registry must contain at least one unmanaged skill"
+
+        marker_bearing = {
+            skill_name
+            for skill_name in expected_unmanaged
+            if extract_block(
+                (tmp_path / ".claude" / "skills" / skill_name / "SKILL.md").read_text(
+                    encoding="utf-8"
+                )
+            )
+            is not None
+        }
+        assert marker_bearing == expected_unmanaged
+
+    def test_legacy_unmarked_skill_migrates_old_body_below_new_block(self, tmp_path):
+        from tapps_mcp.pipeline.skill_managed_block import PROJECT_REGION_HEADING, extract_block
+
+        skill_dir = tmp_path / ".claude" / "skills" / "tapps-security"
+        skill_dir.mkdir(parents=True)
+        (skill_dir / "SKILL.md").write_text(
+            "---\nname: tapps-security\n---\n\nhand-authored body\n", encoding="utf-8"
+        )
+
+        result = generate_skills(tmp_path, "claude", overwrite=True)
+
+        assert "tapps-security" in result["updated"]
+        content = (skill_dir / "SKILL.md").read_text(encoding="utf-8")
+        assert extract_block(content) is not None
+        assert PROJECT_REGION_HEADING in content
+        assert "hand-authored body" in content
