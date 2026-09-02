@@ -266,6 +266,22 @@ the design, not just the wording — full tables in `references/claude-feature-m
    cheap model's verdict gate an irreversible step**; re-derive load-bearing
    conclusions from the evidence it returned.
 
+**Floor first; escalate only with a stated reason.** "Tier by question shape" reads as
+neutral and so loses to whatever the session was already set to — which is how a
+mechanical burndown and a contested identity read came to cost the same. State the
+floor instead: **the emitted runner default is `sonnet` + `medium`** (and `haiku` +
+`low` for closed transcription), carried literally in the emitted prompt's Session
+setup line and in the launch block. A cell above the floor is legitimate, but it
+carries a **one-clause reason in the same Plane-map row** — "gates a merge", "open
+judgement", "cheaper tier failed this step twice". Those three are the escalation
+criteria; a row that escalates without naming one is an unpriced default, not a
+decision.
+
+This is a change in posture, not in rigour. The proof-shape table (§5) still governs
+verifier tiers, so a cheap *driver* never yields a cheap *verdict* on an irreversible
+step — floor-and-justify sets where tiering starts, the table still says where a
+verifier must end up.
+
 **The top session dispatches, reads verdicts, and checkpoints — it does not do the work.**
 The plane split says *where* a chunk runs; it never says the orchestrator itself is off the
 hook, so prompts routinely assign half their sub-goals to `inline` and the one context that
@@ -278,7 +294,7 @@ context. Each of those is a dispatch.
 
 **Give the orchestrator a measured budget, not an intention.** Target **under 15%** of the
 run's total tokens for the top session, and require the emitted prompt's SCORE line to carry
-an `orch-spend <n>%` field so the share is visible every iteration rather than discovered at
+an `orch-spend <n>%` field — alongside `pct <n>%` and `elapsed` — so the share is visible every iteration rather than discovered at
 the end. An unmeasured share is one nobody notices growing.
 
 **Two mechanical detectors — run them on the Plane map you just wrote, before you save:**
@@ -642,6 +658,14 @@ resolve cases the proof-shape table does not spell out on its own.
 - **Every dispatch carries a return schema** alongside `agentType` + `model` — a
   schema-less dispatch comes back as prose the driver must re-read, spending exactly
   the tokens the delegation was meant to save.
+- **Test scope — no regression or full-suite run until the plan is complete.** Per-item
+  proof runs **only the tests the change adds or touches**, with the command and its
+  exit code pasted. A whole-suite run proves nothing that item owns, and on a large
+  suite it approaches the wall-clock ceiling that kills a headless lane outright. One
+  full **enumeration** per wave is enough to catch a collection error (a
+  `--collect-only` count, not an execution), and exactly one regression run at program
+  end, after the plan is complete — that run is the operator's call, not a per-item
+  step.
 - **Tier by question shape, not importance** — closed and evidence-checkable (line
   counts, string presence, exit codes) goes cheap *even at high stakes*; open judgement
   gating an irreversible step goes frontier *even when it looks small*. Defaulting
@@ -773,6 +797,15 @@ Produce *solutions*, not band-aids: root-cause not workarounds; **no
 green-by-suppression** (never skip/disable a check to pass); **right-sized** (the
 simplest thing that fully solves it); durable over expedient; match repo conventions;
 no silent scope creep.
+
+**Scope admission is announced, not forbidden.** A flat "no scope creep" is right about
+*silence* and wrong about *scope* — it tells a lane to walk past a live Urgent defect it
+is standing on. File everything you find. Admit into the current run only what is filed
+**Urgent or High**, say so out loud in the same report that discovers it, and add it to
+the SCORE denominator so `pct` tells the truth about the larger population rather than
+quietly shrinking its own target. Everything below High is filed and left for the
+operator. What stays forbidden is the *silent* version: work that appears in the diff
+and nowhere in the report.
 
 ## Output
 
@@ -1051,7 +1084,7 @@ then enforces it row by row.>
 <`/goal "<condition>"` alone does NOT load this file's body, so the launch line must
 read the file first, then loop. Run Prerequisites / Wayfind gate recall before Loop.>
 
-- **Session setup (paste these two lines first):** `/model <model>` then `/effort <effort>` — a launched session inherits whatever the pasting session was set to, so an unstated tier is a silently inherited one. Fill both with concrete values; the Plane map row states the reason for any lane above the floor.
+- **Session setup (paste these two lines first):** `/model <model>` then `/effort <effort>` — a launched session inherits whatever the pasting session was set to, so an unstated tier is a silently inherited one. Fill both with concrete values; the floor is `sonnet` + `medium`, and any lane above it states its one-clause reason in its Plane-map row.
 - **Goal loop (recommended):** `Read prompts/<slug>.md in full, run Prerequisites / Wayfind gate (incl. wayfind resume recall), then execute it as a goal loop — run the Loop section repeatedly until Done-when holds, printing the score line every iteration. Establish your own preconditions per Sub-goal 0; do not stop unless an Autonomy hard-stop fires.`
 - **Durable / recurring:** save as a Routine (one item per run) so it survives the terminal.
 - **Resuming mid-run (after a checkpoint):** `/tapps-continue-session` first, then the Goal-loop line above — the handoff supplies current sub-goal, cumulative caps, and refuted strategies. Re-verify live state before acting on any handoff claim.
@@ -1073,6 +1106,13 @@ For software behavior: every validation-contract ID below is verified by an
 independent verifier (paste evidence per ID).
 MUST include one clause where a count must NOT shrink (">= N tests collected",
 "36/36 of an enumerated total") — otherwise the goal is satisfiable by deletion.>
+
+**REQUIRED for tracker-driven runs:** every touched issue ends **terminal** in the
+tracker — Done, Cancelled with a written reason, or explicitly re-scoped and left open
+with the new scope stated. "The work landed" is not the same as "the queue reflects it".
+The **driver** performs these writes: a dispatched lane structurally cannot reach a
+hook-gated or plugin-only tracker call, which is why lanes hand back an evidence block
+instead. Paste the id → final-state list.
 
 **REQUIRED final clause (never delete this one):** the lessons-learned pass has run
 and the project's `orchestration-prompt/learnings.md` carries this run's transferable
@@ -1096,7 +1136,8 @@ Coverage rule: every ID claimed exactly once; Done-when requires all IDs green.
    - **Smoke + health gate (after any deploy, before the real run):** `/health` is `ok|degraded` and one cheap end-to-end call succeeds.
    - **Harness compatibility:** <PreToolUse gates + MCP standing nudges the loop's tool calls will hit → bake unlock/refresh steps here; adopt-or-override each nudge in Guardrails>
    - proof: <preconditions verified; for live targets — image no older than latest merged commit + a 200/non-error smoke pasted>
-1. **(Software behavior) Finalize validation contract** — proof: contract table above complete + coverage check pasted
+1. **(Tracker-driven runs) Triage the queue before executing any of it.** <A queue that has not been checked is a plan built on claims: an issue can be stale, already fixed, mis-scoped, or duplicated, and a prompt's own summary of tracker state has been wrong in both directions.> Read every in-scope id and give each one a **disposition** — `execute` / `already-done` / `rescope` / `duplicate-of-<id>` / `cancel` (with a reason) — and write the disposition back to the tracker. — proof: a table of every in-scope id with its disposition, pasted; done means **every id is dispositioned, not merely read**.
+1b. **(Software behavior) Finalize validation contract** — proof: contract table above complete + coverage check pasted
 2. <narrow, verifiable execution> — fulfills: <VAL-…> — proof: <ground-truth artifact>
 3. <…>
 N. **Lessons learned (REQUIRED — always the last sub-goal, never dropped when trimming).**
@@ -1143,6 +1184,13 @@ human-supervised work). If `driver` appears on a body of work, the prompt is wro
 Cheap-model rule: `haiku` answers closed, evidence-checkable questions. It does not
 render verdicts that gate irreversible steps — narrow the question or pay for `opus`.
 Tier by **question shape, not importance**: a high-stakes line count is still a line count.
+
+**Floor and justify.** The floor is `sonnet` + `medium` (`haiku` + `low` for closed
+transcription), and it is what the Session setup line and the launch block carry. Any
+cell above the floor states its one-clause reason in that row's **Notes** — "gates a
+merge", "open judgement", "cheaper tier failed this step twice" are the escalation
+criteria. A row that escalates with no reason in it is an unpriced default, not a
+decision.
 
 **Verifier tiering follows the proof shape** — deterministic → `haiku`/`low`,
 comparative → `sonnet`/`medium`, semantic → `opus`/`high`+, and anything gating an
@@ -1197,7 +1245,7 @@ for each of them: **what set does it read that the other writes?**>
 - **On fail (expected-fail fix loop):** record structured handoff → scope narrow fix sub-goal → re-execute → re-verify; ≤**3** validation rounds per sub-goal (override: N=…), then escalate once, then stop with a diagnosis. Never weaken the contract to go green.
 - **Record (structured handoff):** completed · undone · commands+exit codes · issues · procedures followed? · failure-and-why → brain
 - **Context hygiene:** prune stale reads; carry a compact state summary, not raw transcripts.
-- **Print every iteration:** `SCORE: <metric>/<total> · <metric2> · orch-spend <n>% · sub-goal <k>/<n> · iteration <i>/<cap>` — `orch-spend` is the driver's own share of run tokens, target under 15%; a long autonomous loop with no per-iteration signal is unmonitorable, and the trend is what tells a watching human whether to intervene.
+- **Print every iteration:** `SCORE: <metric>/<total> · pct <n>% · elapsed <hh:mm> · <metric2> · orch-spend <n>% · sub-goal <k>/<n> · iteration <i>/<cap>` — `pct` is `<metric>/<total>` rendered as a percentage, so its denominator is the same **countable population** the metric names (issues dispositioned, files migrated, lanes landed) and never an estimate of effort remaining; `elapsed` is wall-clock since kickoff, because speed is an objective and not only an argument for dispatching waves; `orch-spend` is the driver's own share of run tokens, target under 15%. Without `pct` and `elapsed` an operator has to read the whole loop to find out where it is. A long autonomous loop with no per-iteration signal is unmonitorable, and the trend is what tells a watching human whether to intervene.
 - **Recycle (context boundary — at each sub-goal boundary or ~50% context, whichever first):** `/tapps-handoff-session` → **re-verify** → clear for real (autonomous: the next `claude -p`; attended: operator `/clear`; Cursor: new chat) → `/tapps-continue-session`. Never instruct yourself to run `/clear` — an agent cannot invoke a built-in CLI command. **The re-verify gate is mandatory:** clearing destroys the context that would catch a stale handoff, so before clearing check the handoff `Git:` sha against `git log -1` (`git log --oneline <sha>..HEAD` names what landed), re-read every named PR/issue state from the tracker, and re-read every quoted metric from its newest artifact. On mismatch, fix the handoff *before* clearing and treat every **Open** item as unverified until re-probed. Skip the boundary only inside a tightly-coupled sub-goal or when the remaining work is smaller than the cycle's overhead — say which and why. One runner per handoff file — or one `slot=` each: two loops sharing the default file overwrite each other, and the guard's `conflict` report is a diagnosis, not a plan. See Checkpoint protocol below.
 - **Repeat or stop:** loop until **Done-when** holds; caps: <N iterations> AND <token budget> — **both cumulative across shifts**, read from the handoff, never reset by a checkpoint
 
