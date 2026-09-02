@@ -9,6 +9,9 @@ from __future__ import annotations
 
 import pytest
 
+from tapps_mcp.pipeline.platform_skill_orchestration import (
+    ORCHESTRATION_PROMPT_COMPANION_FILES as COMPANIONS,
+)
 from tapps_mcp.pipeline.platform_skills import CLAUDE_SKILLS
 
 
@@ -181,3 +184,75 @@ class TestVerifierTierAuthorityAndRulings:
         section = self._rulings_section()
         for n in range(1, 9):
             assert f"\n{n}. " in section
+
+
+class TestTerminalContract:
+    """TAP-6946 — the skill authors prompts and must never implement the work."""
+
+    def test_terminal_contract_precedes_the_autonomy_contract(self) -> None:
+        body = CLAUDE_SKILLS["orchestration-prompt"]
+        assert "## Terminal contract" in body
+        assert body.index("## Terminal contract") < body.index("## Autonomy contract")
+
+    def test_states_it_authors_and_never_implements(self) -> None:
+        body = CLAUDE_SKILLS["orchestration-prompt"]
+        section = body.split("## Terminal contract", 1)[1].split("\n## ", 1)[0]
+        assert "AUTHORS a prompt" in section
+        assert "never implements the work" in section
+
+    def test_work_order_shaped_input_is_not_authorization_to_implement(self) -> None:
+        body = CLAUDE_SKILLS["orchestration-prompt"]
+        section = body.split("## Terminal contract", 1)[1].split("\n## ", 1)[0]
+        assert "work-order-shaped" in section
+        assert "Autonomy is about not pausing, not about scope." in section
+
+    def test_names_the_only_permitted_writes(self) -> None:
+        body = CLAUDE_SKILLS["orchestration-prompt"]
+        section = body.split("## Terminal contract", 1)[1].split("\n## ", 1)[0]
+        assert "The only writes you may perform" in section
+        for allowed in ("`prompts/<slug>.md`", "`.claude/workflows/<slug>.js`", "`learnings.md`"):
+            assert allowed in section
+
+    def test_cargo_convention_is_explained_once(self) -> None:
+        body = CLAUDE_SKILLS["orchestration-prompt"]
+        section = body.split("## Terminal contract", 1)[1].split("\n## ", 1)[0]
+        assert "**Cargo convention.**" in section
+        assert "> **CARGO" in section
+
+    @pytest.mark.parametrize(
+        "heading",
+        [
+            "## Guardrails every emitted prompt must carry",
+            "## Autonomy contract (every emitted prompt carries this)",
+            "## Failure handling (diagnose, don't repeat)",
+            "## Expected-fail fix loop (Missions-inspired)",
+            "## Engineering discipline (emit in every prompt's guardrails)",
+        ],
+    )
+    def test_every_cargo_section_is_marked_as_cargo(self, heading: str) -> None:
+        body = CLAUDE_SKILLS["orchestration-prompt"]
+        assert heading in body, f"missing cargo section {heading!r}"
+        following = body.split(heading, 1)[1][:200]
+        assert "> **CARGO" in following, f"{heading!r} is not marked as cargo"
+
+    def test_completeness_check_asserts_no_stray_writes(self) -> None:
+        body = CLAUDE_SKILLS["orchestration-prompt"]
+        output = body.split("## Output", 1)[1].split("\n## ", 1)[0]
+        assert "assert no files were written outside" in output
+
+    def test_output_has_a_required_final_launch_block_step(self) -> None:
+        body = CLAUDE_SKILLS["orchestration-prompt"]
+        output = body.split("## Output", 1)[1].split("\n## ", 1)[0]
+        step9 = output.split("\n9. ", 1)[1]
+        assert "Launch block" in step9
+        assert "/model sonnet" in step9
+        assert "/effort medium" in step9
+        assert "Read prompts/<slug>.md in full" in step9
+        assert "Do not create a branch" in step9
+
+    def test_template_how_to_run_carries_a_session_setup_line(self) -> None:
+        template = COMPANIONS["assets/prompt-template.md"]
+        section = template.split("\n## How to run (cold start", 1)[1].split("\n## ", 1)[0]
+        assert "Session setup" in section
+        assert "`/model <model>`" in section
+        assert "`/effort <effort>`" in section

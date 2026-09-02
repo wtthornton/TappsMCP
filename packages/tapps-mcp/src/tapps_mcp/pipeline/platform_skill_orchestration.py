@@ -39,6 +39,31 @@ You produce **prompts, not actions**. The output is a self-contained orchestrati
 prompt (a markdown file under `prompts/`) that the user — or a Routine, or a `/goal`
 run — executes later. You write the *loop*; you do not run it.
 
+## Terminal contract (hard stop — read before anything below)
+
+**This skill AUTHORS a prompt. It never implements the work the prompt describes.** A
+run terminates at exactly two things: a markdown file under `prompts/` and one fenced
+launch block printed to the user (Output step 9). Branches, edits, dispatches, commits,
+PRs and tracker writes that belong to the objective are the *runner's* job. Producing
+any of them means this skill failed, however good the work itself was.
+
+The input is always work-order-shaped — "orchestrate the burndown", "work the backlog",
+"ship the epic" — so the shape of the sentence is never authorization to do the work. A
+project autonomy rule that says to treat the request as standing authorization for every
+step authorizes you to **write the prompt without asking**; it does not widen the scope
+from authoring to implementing. Autonomy is about not pausing, not about scope.
+
+**The only writes you may perform** are `prompts/<slug>.md`, the optional companion
+`.claude/workflows/<slug>.js`, and `learnings.md`. Any other file touched on disk is a
+defect, and Output step 7 checks for exactly that.
+
+**Cargo convention.** Much of what follows is *cargo*: second-person text destined for
+the emitted prompt and addressed to **its runner**, not to you. Every cargo section
+opens with a `> **CARGO` marker line. When a cargo sentence says "decide and act on
+every reversible, in-scope step", it is telling the runner to do that. Unmarked text is
+method — addressed to you, the authoring session. If a second-person instruction is not
+under a `> **CARGO` marker, it is for you; if it is, it is freight.
+
 ## Why this exists
 
 The leverage is in the loop's shape — goal, termination, verification, model tier
@@ -576,6 +601,9 @@ resolve cases the proof-shape table does not spell out on its own.
 
 ## Guardrails every emitted prompt must carry
 
+> **CARGO — text for the emitted prompt, addressed to its runner.** Not an
+> instruction to you, the authoring session (see Terminal contract).
+
 - **Verifiable termination** — the Goal condition *and* a hard cap (max iterations
   or a token budget) so a stuck loop stops instead of burning quota.
 - **Independent verification** — the sub-goal's proof is confirmed by a verifier that
@@ -688,6 +716,9 @@ resolve cases the proof-shape table does not spell out on its own.
 
 ## Autonomy contract (every emitted prompt carries this)
 
+> **CARGO — text for the emitted prompt, addressed to its runner.** Not an
+> instruction to you, the authoring session (see Terminal contract).
+
 Run like an operator, not an intern. Decide and act on every reversible, in-scope
 step — never insert "should I proceed?" checkpoints. For an irreversible/outward step,
 produce the *reversible precursor* (draft PR, staged diff, written proposal) and
@@ -703,6 +734,9 @@ expensive and unrecoverable. Enforce the cost gate mechanically via the Workflow
 
 ## Failure handling (diagnose, don't repeat)
 
+> **CARGO — text for the emitted prompt, addressed to its runner.** Not an
+> instruction to you, the authoring session (see Terminal contract).
+
 On a failed verify, do **not** re-run the same action. Diagnose first: read the
 actual error, inspect state/files, recall prior failures from the brain, research the
 cause. Form a specific hypothesis, apply a fix, retry with *something changed*. Bound
@@ -711,6 +745,9 @@ model / different approach), then **stop and surface a concise diagnosis**. Repe
 the same action on the same error is forbidden.
 
 ## Expected-fail fix loop (Missions-inspired)
+
+> **CARGO — text for the emitted prompt, addressed to its runner.** Not an
+> instruction to you, the authoring session (see Terminal contract).
 
 Independent verification **almost never passes on the first attempt** for non-trivial
 work. Treat that as the design, not a crisis:
@@ -728,6 +765,9 @@ work. Treat that as the design, not a crisis:
 Infinite fix spirals and "green by suppression" are forbidden.
 
 ## Engineering discipline (emit in every prompt's guardrails)
+
+> **CARGO — text for the emitted prompt, addressed to its runner.** Not an
+> instruction to you, the authoring session (see Terminal contract).
 
 Produce *solutions*, not band-aids: root-cause not workarounds; **no
 green-by-suppression** (never skip/disable a check to pass); **right-sized** (the
@@ -771,9 +811,30 @@ no silent scope creep.
    `/clear` the loop cannot invoke. A template supplies the boundary by default, so a
    prompt that quietly drops it looks finished — this is the one guardrail whose failure
    mode is silence.
+   **Then assert no files were written outside `prompts/<slug>.md`, the optional
+   `.claude/workflows/<slug>.js`, and `learnings.md`.** A stray branch, edit or commit
+   means the terminal contract was broken and the run is a failure whatever the prompt
+   scored.
 8. Tell the user exactly how to run it — the `/goal` line, the `/loop` cadence, the
    Routine schedule, or "invoke the Workflow tool `<script>`" — and from which
    session.
+9. **Launch block — REQUIRED, and the last thing the run produces.** Print exactly one
+   fenced block and nothing after it. It carries a concrete `/model` and a concrete
+   `/effort` — real values, never placeholders, because the runner otherwise inherits
+   whatever the pasting session happened to be set to — and a line that reads the prompt
+   file *before* looping, since `/goal "<condition>"` does not load the file's body:
+
+   ```text
+   /model sonnet
+   /effort medium
+   Read prompts/<slug>.md in full, then execute it as a goal loop from <cwd>: run the
+   Loop section once per iteration, print the SCORE line every iteration, establish
+   your own preconditions per Sub-goal 0, and stop only when Done-when holds or an
+   Autonomy hard-stop fires.
+   ```
+
+   Then stop. Do not create a branch, dispatch a lane, or start Sub-goal 0 yourself —
+   that is the terminal contract, and this block is where the skill ends.
 
 ## Learn as you go (measured evolution)
 
@@ -990,6 +1051,7 @@ then enforces it row by row.>
 <`/goal "<condition>"` alone does NOT load this file's body, so the launch line must
 read the file first, then loop. Run Prerequisites / Wayfind gate recall before Loop.>
 
+- **Session setup (paste these two lines first):** `/model <model>` then `/effort <effort>` — a launched session inherits whatever the pasting session was set to, so an unstated tier is a silently inherited one. Fill both with concrete values; the Plane map row states the reason for any lane above the floor.
 - **Goal loop (recommended):** `Read prompts/<slug>.md in full, run Prerequisites / Wayfind gate (incl. wayfind resume recall), then execute it as a goal loop — run the Loop section repeatedly until Done-when holds, printing the score line every iteration. Establish your own preconditions per Sub-goal 0; do not stop unless an Autonomy hard-stop fires.`
 - **Durable / recurring:** save as a Routine (one item per run) so it survives the terminal.
 - **Resuming mid-run (after a checkpoint):** `/tapps-continue-session` first, then the Goal-loop line above — the handoff supplies current sub-goal, cumulative caps, and refuted strategies. Re-verify live state before acting on any handoff claim.
