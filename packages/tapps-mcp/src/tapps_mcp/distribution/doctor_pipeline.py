@@ -452,46 +452,62 @@ def check_session_handoff_skills(project_root: Path) -> CheckResult:
 
 
 def check_session_handoff_schema(project_root: Path) -> CheckResult:
-    """Lint ``.tapps-mcp/session-handoff.md`` for P0/Open consistency (TAP-3573)."""
-    from tapps_mcp.tools.handoff_schema import handoff_path, load_and_lint_handoff
+    """Lint every live handoff — default plus slotted — for P0/Open consistency.
 
-    path = handoff_path(project_root)
-    if not path.is_file():
+    TAP-3573 covered only the default ``.tapps-mcp/session-handoff.md``. A repo
+    whose programs write exclusively to slots (``handoffs/<slot>.md``, TAP-6870)
+    got zero lint coverage: the default file was never present, so the check
+    always returned the optional-pass early exit. Enumerating via
+    :func:`list_handoffs` — the same single enumeration site the CLI and
+    fleet_audit use — closes that gap (TAP-6888).
+    """
+    from tapps_mcp.tools.handoff_schema import list_handoffs, load_and_lint_handoff
+
+    rows = list_handoffs(project_root)
+    if not rows:
         return CheckResult(
             "session handoff schema",
             True,
             "No session-handoff.md (optional until handoff)",
         )
 
-    _doc, lint = load_and_lint_handoff(project_root)
-    if not lint.ok:
+    fail_parts: list[str] = []
+    warn_parts: list[str] = []
+    for row in rows:
+        label = row["slot"] if row["slot"] is not None else "default"
+        _doc, lint = load_and_lint_handoff(project_root, row["slot"])
+        if lint.errors:
+            fail_parts.append(f"{label}: {'; '.join(lint.errors)}")
+        elif lint.warnings:
+            warn_parts.append(f"{label}: {'; '.join(lint.warnings)}")
+
+    if fail_parts:
         return CheckResult(
             "session handoff schema",
             False,
-            "; ".join(lint.errors),
-            "Fix `.tapps-mcp/session-handoff.md` — add Next (P0) when Open has items, "
+            "; ".join(fail_parts),
+            "Fix the failing handoff(s) — add Next (P0) when Open has items, "
             "or invoke `/tapps-handoff-session` with a complete handoff.",
         )
 
-    if lint.warnings:
-        rel = path.name
-        try:
-            rel = str(path.relative_to(project_root.resolve()))
-        except ValueError:
-            pass
+    if warn_parts:
         # Non-blocking, but not a pass: an over-cap body means the cross-session
         # mirror is being rejected, and grading that "pass with a warning string"
         # is how it stayed invisible (TAP-6444, ADR-0031 warn semantics).
         return CheckResult(
             "session handoff schema",
             False,
-            f"Handoff present with warnings: {'; '.join(lint.warnings)}",
-            rel,
+            f"Handoff present with warnings: {'; '.join(warn_parts)}",
+            ", ".join(str(row["slot"] or Path(row["path"]).name) for row in rows),
             severity="warn",
         )
 
+    if len(rows) == 1 and rows[0]["slot"] is None:
+        message = "session-handoff.md schema OK"
+    else:
+        message = f"{len(rows)} handoff(s) schema OK"
     return CheckResult(
         "session handoff schema",
         True,
-        "session-handoff.md schema OK",
+        message,
     )
