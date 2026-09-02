@@ -1,0 +1,151 @@
+"""cursor artifact upgrades under one shared plan (TAP-6913).
+
+Cursor artifacts sit outside the ``upgrade_skip_files`` vocabulary, so every
+component here passes ``skip_key=None``. Otherwise the shape is the same as the
+claude-code host: one plan, one write step selected by ``dry_run``.
+"""
+
+from __future__ import annotations
+
+from typing import Any
+
+from tapps_core.common.logging import get_logger
+from tapps_mcp.pipeline.upgrade_host_context import (
+    HostContext,
+    apply_docs_automation,
+    apply_skills,
+    docsmcp_gate,
+    plan_skills,
+    record_hooks_parse_error,
+    resolve_component,
+)
+from tapps_mcp.pipeline.upgrade_report import enumerate_preserved
+
+log = get_logger(__name__)
+
+
+def _plan_cursor_hooks(ctx: HostContext) -> dict[str, Any]:
+    """Preview the ``.cursor/hooks.json`` merge and the scripts it would write."""
+    from tapps_mcp.pipeline.platform_hooks import preview_cursor_hooks_merge
+
+    hooks_dir = ctx.project_root / ".cursor" / "hooks"
+    managed_hooks = (
+        frozenset(p.name for p in hooks_dir.glob("tapps-*")) if hooks_dir.is_dir() else frozenset()
+    )
+    preview = preview_cursor_hooks_merge(ctx.project_root)
+    would_remove = preview.get("would_remove_keys") or []
+    return {
+        "action": "would-write-managed-scripts",
+        "note": (
+            f"hooks.json would-remove-keys: {', '.join(would_remove)}"
+            if would_remove
+            else "hooks.json entries merged — third-party keys preserved"
+        ),
+        "preserved_hook_keys": preview.get("preserved_hook_keys", []),
+        "third_party_hook_keys": preview.get("third_party_hook_keys", []),
+        "would_remove_keys": would_remove,
+        "preserved_files": enumerate_preserved(hooks_dir, managed_hooks),
+    }
+
+
+def _apply_cursor_hooks(ctx: HostContext) -> dict[str, Any]:
+    from tapps_mcp.pipeline.platform_generators import generate_cursor_hooks
+    from tapps_mcp.pipeline.platform_hooks import wire_memory_hooks
+
+    hooks_result = generate_cursor_hooks(ctx.project_root)
+    component = {
+        "scripts_created": hooks_result.get("scripts_created", []),
+        "hooks_added": hooks_result.get("hooks_added", 0),
+        "third_party_hook_keys": hooks_result.get("third_party_hook_keys", []),
+        "preserved_hook_keys": hooks_result.get("preserved_hook_keys", []),
+    }
+    ctx.result["components"]["memory_hooks"] = wire_memory_hooks(
+        ctx.project_root, platform="cursor"
+    )
+    return component
+
+
+def upgrade_cursor(ctx: HostContext) -> None:
+    """Upgrade every cursor artifact under one shared plan.
+
+    Cursor artifacts are outside the ``upgrade_skip_files`` vocabulary, so every
+    component here passes ``skip_key=None``.
+    """
+    from tapps_mcp.pipeline.init import _bootstrap_cursor
+    from tapps_mcp.pipeline.platform_docs_automation import CURSOR_DOCS_SKILLS
+    from tapps_mcp.pipeline.platform_generators import (
+        generate_cursor_rules,
+        generate_skills,
+        generate_subagent_definitions,
+    )
+    from tapps_mcp.pipeline.platform_hooks import ManagedJsonError
+    from tapps_mcp.pipeline.platform_skills import CURSOR_SKILLS
+    from tapps_mcp.pipeline.platform_subagents import CURSOR_AGENTS
+
+    resolve_component(
+        ctx,
+        "cursor_rules",
+        skip_key=None,
+        plan=lambda: "would-refresh" if ctx.force else "check-needed",
+        apply=lambda: _bootstrap_cursor(ctx.project_root, overwrite=ctx.force),
+    )
+
+    try:
+        resolve_component(
+            ctx,
+            "hooks",
+            skip_key=None,
+            plan=lambda: _plan_cursor_hooks(ctx),
+            apply=lambda: _apply_cursor_hooks(ctx),
+        )
+    except ManagedJsonError as exc:
+        record_hooks_parse_error(ctx, exc)
+
+    managed_agents = frozenset(CURSOR_AGENTS.keys())
+    resolve_component(
+        ctx,
+        "agents",
+        skip_key=None,
+        plan=lambda: {
+            "action": "would-write-managed-files",
+            "managed_files": sorted(managed_agents),
+            "preserved_files": enumerate_preserved(
+                ctx.project_root / ".cursor" / "agents", managed_agents
+            ),
+        },
+        apply=lambda: generate_subagent_definitions(ctx.project_root, "cursor", overwrite=True),
+    )
+
+    resolve_component(
+        ctx,
+        "skills",
+        skip_key=None,
+        plan=lambda: plan_skills(ctx, "cursor", CURSOR_SKILLS),
+        apply=lambda: apply_skills(
+            ctx,
+            "cursor",
+            lambda: generate_skills(
+                ctx.project_root, "cursor", overwrite=True, skill_tier=ctx.skill_tier
+            ),
+        ),
+    )
+
+    resolve_component(
+        ctx,
+        "docs_automation",
+        skip_key=None,
+        gate=docsmcp_gate(ctx.project_root),
+        plan=lambda: {
+            "action": "would-write-managed-skills",
+            "managed_skills": sorted(CURSOR_DOCS_SKILLS.keys()),
+        },
+        apply=lambda: apply_docs_automation(ctx, "cursor"),
+    )
+
+    resolve_component(
+        ctx,
+        "cursor_rule_types",
+        skip_key=None,
+        plan=lambda: "would-regenerate",
+        apply=lambda: generate_cursor_rules(ctx.project_root, overwrite=ctx.force),
+    )

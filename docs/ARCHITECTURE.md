@@ -138,9 +138,16 @@ src/tapps_mcp/
 │               impact_analyzer.py, report.py, import_graph.py,
 │               cycle_detector.py, coupling_metrics.py,
 │               vulnerability_impact.py
-├── pipeline/   models.py, upgrade.py, handoff.py, agents_md.py, claude_md.py,
+├── pipeline/   models.py, handoff.py, agents_md.py, claude_md.py,
 │               version_stamps.py, karpathy_block.py, git_hooks.py,
 │               ci_install.py, document_judges.py, agent_contract.py
+│               upgrade*.py — upgrade.py facade + upgrade_report/_signals/
+│                 _docs/_mcp_config/_hooks_migration/_hosts/_host_context/
+│                 _host_claude/_host_cursor/_github/_backup/_content_return/
+│                 _skip_tokens leaves (TAP-6913 split). upgrade.py re-exports
+│                 the moved names under their historical private spellings;
+│                 tests/unit/test_upgrade_split_guard.py holds the size and
+│                 complexity budgets that keep the split from regrowing
 │               init*.py — init.py facade + init_state/_platform/
 │                 _verification/_permissions/_config_yaml/_claude_md/
 │                 _tech_stack/_github siblings (TAP-5733 split). init.py
