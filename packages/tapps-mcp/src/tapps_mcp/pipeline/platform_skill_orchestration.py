@@ -1251,9 +1251,9 @@ Coverage rule: every ID claimed exactly once; Done-when requires all IDs green.
    - **Harness compatibility:** <PreToolUse gates + MCP standing nudges the loop's tool calls will hit → bake unlock/refresh steps here; adopt-or-override each nudge in Guardrails>
    - proof: <preconditions verified; for live targets — image no older than latest merged commit + a 200/non-error smoke pasted>
 1. **(Tracker-driven runs) Triage the queue before executing any of it.** <A queue that has not been checked is a plan built on claims: an issue can be stale, already fixed, mis-scoped, or duplicated, and a prompt's own summary of tracker state has been wrong in both directions.> Read every in-scope id and give each one a **disposition** — `execute` / `already-done` / `rescope` / `duplicate-of-<id>` / `cancel` (with a reason) — and write the disposition back to the tracker. — proof: a table of every in-scope id with its disposition, pasted; done means **every id is dispositioned, not merely read**.
-1b. **(Software behavior) Finalize validation contract** — proof: contract table above complete + coverage check pasted
-2. <narrow, verifiable execution> — fulfills: <VAL-…> — proof: <ground-truth artifact>
-3. <…>
+2. **(Software behavior) Finalize validation contract** — proof: contract table above complete + coverage check pasted
+3. <narrow, verifiable execution> — fulfills: <VAL-…> — proof: <ground-truth artifact>
+4. <…>
 N. **Lessons learned (REQUIRED — always the last sub-goal, never dropped when trimming).**
    Run the pass in "Lessons learned" below and append to the project's
    `orchestration-prompt/learnings.md`. — proof: the appended bullets pasted, or one
