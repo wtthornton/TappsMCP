@@ -457,6 +457,79 @@ cap, budget, and refuted strategies live in the transcript you just dropped, so 
 that recycles three times has, in effect, no cap. Carry-forward contract and the
 re-verify-on-resume rule: `references/cold-start-and-verify.md`.
 
+## Field rules
+
+Twelve rules distilled from postmortems of this skill's own emitted prompts. Follow
+each — they are not optional flavor text.
+
+1. **Validate the instrument on a known-bad and a known-positive before trusting its
+   verdict.** Method §6 preflights that a *mechanism* executes; nothing preflights
+   that a *judgement instrument* — a verifier, linter, or scorer — actually
+   discriminates. Before trusting a verdict, run the instrument once against a
+   known-bad input and once against a known-good input and confirm it tells them
+   apart. An instrument that passes everything (or fails everything) is a silent
+   rubber stamp, not a check.
+2. **Green-by-citation is distinct from green-by-suppression.** A cited source ("per
+   the docs…") can be just as unearned as a deleted test if the citation is not tied
+   to the claim it is supposed to establish. Every citation is quoted beside one
+   sentence naming the exact proposition it establishes — a citation with no adjacent
+   claim is decoration, not evidence.
+3. **The verifier's control is the pre-change tree, not the fix's own tests.** A fix's
+   own test suite is not a control group — it was written by the same actor with the
+   same blind spots. Run the fix's proof against the unpatched tree and confirm it
+   fails there; a proof that never ran against a failing baseline proves nothing about
+   whether the fix did anything.
+4. **A merge-gating verifier reports the PR's own CI by name and state, and re-runs
+   the CI job's own command.** When a verdict gates a merge, name the actual CI
+   check(s) on that PR and their actual state — not a locally-run proxy — and re-run
+   the CI job's own command rather than an invented equivalent. A local pass that
+   diverges from the CI command is not evidence the gate will pass.
+5. **A measured number is a floor until the instrument is proven able to express it.**
+   A wrapper script or CLI flag can silently discard the value it claims to report (a
+   `--json` flag ignored, a count capped by a page size). Treat every measured number
+   as a floor, not a fact, until the instrument is confirmed to express the true
+   value — "0 failures" can mean "zero were counted", not "zero exist".
+6. **Prove freshness per deployed layer and diff config per key hash; treat every
+   deployment fact as point-in-time.** A multi-layer deploy (image, config map,
+   running container, edge cache) can have one stale layer while the others are
+   current — freshness is proven per layer, never once for the whole stack.
+   Configuration is diffed by hashing each key, not by eyeballing a diff. No
+   deployment fact survives past the moment it was checked.
+7. **Run a blast-radius preflight before any state-touching verify step.** A command
+   that reads as inert ("just checking the count") can still mutate or destroy state —
+   a dry-run flag that is not actually a no-op, a script with a side-effecting import.
+   Before running a verify step against live state, name what it could destroy and
+   confirm the command is inert, rather than assuming from its name.
+8. **A return schema separates queried-and-got-zero from the-query-failed;
+   identifiers are resolved live at Sub-goal 0.** "Zero results" and "the query
+   errored" are distinguishable fields in a return schema, never collapsed into one
+   falsy value — a caller that cannot tell them apart treats a broken query as a
+   clean negative. Identifiers (issue ids, repo paths, image tags) are resolved live
+   at Sub-goal 0, never hardcoded from a stale prior run.
+9. **Round-2 fix prompts gate on the delta and also sweep siblings by symbol.** A
+   second-round fix sub-goal proves the specific delta the verifier flagged, and
+   separately greps for other call sites of the same symbol or pattern — a bug fixed
+   at one call site and left in three siblings is how a round-2 verify still turns up
+   a fresh, different failure.
+10. **A successor to a partially-failed program needs a disposition disjunction with
+    a numeric floor and an anti-escape guard.** When a prior run stopped short, the
+    next prompt's Done-when states an explicit disjunction of acceptable dispositions
+    (e.g. "fixed OR cancelled with a written reason"), each with a numeric floor (N of
+    M resolved), plus a guard against the trivial escape of cancelling everything to
+    make the count balance.
+11. **Agreement among artifacts is not corroboration — read the component with
+    authority.** Two documents, dashboards, or logs that agree can both be downstream
+    copies of the same stale source rather than independent confirmations. When a
+    claim matters, read the component that actually has authority over it (the
+    running config, the source serializer, the database row), not the artifact that
+    merely displays it.
+12. **A dispatched headless lane's structural limits are the author's problem,
+    including that it dies when it returns.** A `claude -p` lane or a subagent that
+    has returned cannot be polled, resumed, or asked a follow-up — and it cannot
+    background work across its own return without losing it. Design the dispatch so
+    the lane's own return is the last useful signal it gives; never assume a lane can
+    pick back up after the dispatching call returns.
+
 ## Guardrails every emitted prompt must carry
 
 - **Verifiable termination** — the Goal condition *and* a hard cap (max iterations
