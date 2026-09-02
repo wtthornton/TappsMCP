@@ -210,6 +210,10 @@ GITFACTS_SH_BODY = r"""#!/usr/bin/env bash
 #   scripts/gitfacts.sh content <repo> <string>     when did <string> enter/leave origin/main?
 #   scripts/gitfacts.sh stale   <repo>              is this checkout behind origin/main?
 #   scripts/gitfacts.sh sessions <repo>             live sessions sharing this working tree
+#     (exits 0 whenever it successfully counts sessions, regardless of the count --
+#      a caller doing `if gitfacts.sh sessions .; then` must see 0 in BOTH the safe
+#      case (0 or 1 sessions) and the hazard case (2+); only a failure to determine
+#      the count at all should exit non-zero)
 #
 # Every one of these was hand-rolled during the 2026-09-01 program and every one was
 # got wrong at least once. The errors were not carelessness, they were the commands
@@ -307,7 +311,9 @@ case "$CMD" in
       [ "$d" = "$(cd "$REPO" && pwd)" ] && { echo "  pid $p"; n=$((n + 1)); }
     done
     echo "VERDICT: $n live session(s) share this working tree and its single git index."
-    [ "$n" -gt 1 ] && echo "  Any 'git add -A' by any of them stages the others' work. Use per-session worktrees."
+    if [ "$n" -gt 1 ]; then
+      echo "  Any 'git add -A' by any of them stages the others' work. Use per-session worktrees."
+    fi
     ;;
 
   *) usage ;;
