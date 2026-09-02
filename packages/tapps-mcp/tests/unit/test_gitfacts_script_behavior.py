@@ -19,11 +19,15 @@ Covers evidence-bar items:
 5. ``stale`` reports ``--assume-unchanged`` files — proven with a planted one,
    and proven that ``git status`` cannot see it (the reason the subcommand
    exists at all).
+6. ``sessions`` exits 0 regardless of the session count it finds — both the
+   safe case (0/1) and the hazard case (2+) — proven with a negative and a
+   positive control (TAP-6981).
 """
 
 from __future__ import annotations
 
 import subprocess
+import time
 from pathlib import Path
 
 from tapps_mcp.pipeline.platform_project_scripts import GITFACTS_SH_REL_PATH
@@ -163,3 +167,76 @@ class TestEvidenceItem5StaleReportsAssumeUnchangedFiles:
         assert result.returncode == 0, result.stderr
         assert "ASSUME-UNCHANGED FILES PRESENT" not in result.stdout
         assert "VERDICT: current." in result.stdout
+
+
+def _spawn_fake_session(cwd: Path) -> subprocess.Popen[bytes]:
+    """Spawn a real process whose argv0 matches ``sessions``'s
+    ``pgrep -f 'native-binary/claude'`` pattern and whose cwd is *cwd*.
+
+    ``bash -c 'exec -a NAME sleep N'`` execs sleep IN PLACE of the launched
+    bash (same pid throughout), so ``/proc/<pid>/cmdline`` reports NAME as
+    argv0 -- exactly what a real claude binary's invocation path looks like
+    to pgrep -- and ``/proc/<pid>/cwd`` is whatever this Popen's cwd was.
+    """
+    return subprocess.Popen(
+        ["bash", "-c", "exec -a /fake/native-binary/claude sleep 30"],
+        cwd=str(cwd),
+    )
+
+
+class TestSessionsExitCodeContract:
+    """``sessions`` inverted its exit code: the final statement of its case arm
+    was a bare ``[ "$n" -gt 1 ] && echo ...`` with no else, so a false test (the
+    SAFE case, 0 or 1 sessions) left the branch's status as the failed test's
+    (1), while a true test (the HAZARD case, 2+) ran the echo and exited 0 --
+    backwards for any caller writing ``if gitfacts.sh sessions .; then``.
+
+    A single-case test passes under the inverted behaviour (the hazard case
+    already exited 0 before the fix) and is worthless -- both a negative
+    control (safe count) and a positive control (hazard count) are required,
+    and both must exit 0.
+    """
+
+    def test_safe_case_zero_sessions_exits_zero(self, tmp_path: Path) -> None:
+        """Negative control: no matching process at all -- the count is 0,
+        which is the case the pre-fix bug got wrong (exited 1)."""
+        script = _scaffold(tmp_path)
+        work = _make_repo_with_origin(tmp_path)
+
+        result = _run_gitfacts(script, "sessions", str(work))
+
+        assert result.returncode == 0, (
+            f"safe case (0 sessions) must exit 0, got {result.returncode}: "
+            f"stdout={result.stdout!r} stderr={result.stderr!r}"
+        )
+        assert "VERDICT: 0 live session(s)" in result.stdout
+
+    def test_hazard_case_two_sessions_also_exits_zero(self, tmp_path: Path) -> None:
+        """Positive control: two matching processes with cwd == work -- the
+        shared-index hazard the subcommand exists to detect. This case already
+        exited 0 under the pre-fix bug, so alone it would not have caught the
+        defect; paired with the negative control above, it proves the fix
+        makes BOTH counts exit 0 rather than just flipping which one is wrong."""
+        script = _scaffold(tmp_path)
+        work = _make_repo_with_origin(tmp_path)
+
+        procs = [_spawn_fake_session(work) for _ in range(2)]
+        try:
+            time.sleep(0.3)  # let each process's /proc/<pid>/cwd resolve
+            result = _run_gitfacts(script, "sessions", str(work))
+        finally:
+            for p in procs:
+                p.terminate()
+            for p in procs:
+                try:
+                    p.wait(timeout=5)
+                except subprocess.TimeoutExpired:
+                    p.kill()
+                    p.wait(timeout=5)
+
+        assert result.returncode == 0, (
+            f"hazard case (2 sessions) must exit 0, got {result.returncode}: "
+            f"stdout={result.stdout!r} stderr={result.stderr!r}"
+        )
+        assert "VERDICT: 2 live session(s)" in result.stdout
+        assert "Any 'git add -A' by any of them stages the others' work." in result.stdout
