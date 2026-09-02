@@ -317,7 +317,7 @@ async def docs_validate_linear_issue(
 
     data = report.model_dump()
     if data.get("agent_ready"):
-        _persist_validate_sentinel(project_root)
+        _persist_validate_sentinel(project_root, title, description)
 
     elapsed_ms = (time.perf_counter_ns() - start) // 1_000_000
     next_steps = _validate_next_steps(data)
@@ -330,18 +330,28 @@ async def docs_validate_linear_issue(
     )
 
 
-def _persist_validate_sentinel(project_root: str) -> None:
-    """Write the linear-write gate sentinel after a passing validation."""
+def _persist_validate_sentinel(project_root: str, title: str, description: str) -> None:
+    """Write the linear-write gate sentinels after a passing validation.
+
+    Writes both the legacy timestamp-only sentinel (shared format with the
+    Claude Code hook pair) and the TAP-6924 payload-keyed sentinel (recording
+    *which* title/description this validation approved).
+    """
     from pathlib import Path
 
     from docs_mcp.config.settings import load_docs_settings
-    from docs_mcp.integrations.linear_gateway import write_validate_sentinel
+    from docs_mcp.integrations.linear_gateway import (
+        write_payload_sentinel,
+        write_validate_sentinel,
+    )
 
     try:
         root_override = Path(project_root) if project_root.strip() else None
         settings = load_docs_settings(root_override)
         if not write_validate_sentinel(settings.project_root):
             _logger.warning("validate_sentinel_write_failed", root=str(settings.project_root))
+        if not write_payload_sentinel(settings.project_root, title, description):
+            _logger.warning("payload_sentinel_write_failed", root=str(settings.project_root))
     except Exception:
         _logger.warning("validate_sentinel_write_failed", exc_info=True)
 
@@ -477,28 +487,34 @@ async def docs_save_linear_issue(
     description: str = "",
     project_root: str = "",
 ) -> dict[str, Any]:
-    """Pre-save gate for Linear issues (TAP-2009).
+    """Pre-save gate for Linear issues (TAP-2009 / TAP-6924).
 
-    Checks whether ``docs_validate_linear_issue`` has been called recently
-    (within 30 minutes) before allowing a Linear ``save_issue`` to proceed.
+    Checks that ``docs_validate_linear_issue`` was called recently (within 30
+    minutes) *for this exact ``(title, description)`` payload* before
+    allowing a Linear ``save_issue`` to proceed. Validating one payload does
+    not authorize saving a different one — the gate is keyed on a digest of
+    the normalised payload, not on elapsed time alone.
 
     When the gate passes, returns ``{ok: true}`` — the agent should then call
-    ``mcp__plugin_linear_linear__save_issue`` with the same title and
-    description.  When the gate fires, returns the standard
-    ``validate_missing`` refusal envelope (see
-    ``docs/architecture/gateway-envelope.md``); call
-    ``docs_validate_linear_issue`` first to satisfy the gate.
+    ``mcp__plugin_linear_linear__save_issue`` with this same title and
+    description; a different payload will be refused even inside the 30
+    minute window.  When the gate fires, returns a refusal envelope (see
+    ``docs/architecture/gateway-envelope.md``): ``validate_missing`` when no
+    fresh validation exists at all, ``payload_mismatch`` when a fresh
+    validation exists but was recorded for a different payload. Call
+    ``docs_validate_linear_issue`` with this exact title/description to
+    satisfy the gate.
 
     This is the server-side counterpart to
     ``.claude/hooks/tapps-pre-linear-write.sh``, providing defence-in-depth
     when hooks are absent (other MCP clients, CI, read-only Claude Code
-    configs).
+    configs). The hook only checks staleness, not payload identity — this
+    tool is the payload-keyed layer.
 
     Args:
-        title: Issue title — passed through to the refusal envelope so the
-            agent knows which ``docs_validate_linear_issue`` call will satisfy
-            the gate.
-        description: Issue description (markdown) — same pass-through purpose.
+        title: Issue title. Compared against the last validated payload.
+        description: Issue description (markdown). Compared against the
+            last validated payload.
         project_root: Optional override for project root directory. Defaults
             to the DocsMCP project root detected from settings.
     """
@@ -537,8 +553,10 @@ async def docs_save_linear_issue(
         {
             "ok": True,
             "message": (
-                "Gate passed — call mcp__plugin_linear_linear__save_issue "
-                "with the same title and description params."
+                "Gate passed for this exact title/description — call "
+                "mcp__plugin_linear_linear__save_issue with these same params. "
+                "A different title or description will be refused, even within "
+                "the 30-minute validation window."
             ),
         },
         next_steps=[
