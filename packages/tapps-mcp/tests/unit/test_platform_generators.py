@@ -204,13 +204,15 @@ class TestSkillTemplates:
         assert "Optional" in content
 
     def test_generate_skills_skips_existing(self, tmp_path: Path) -> None:
-        from tapps_mcp.pipeline.platform_skills import SESSION_TRANSFER_SKILL_NAMES
-
         generate_skills(tmp_path, "claude")
         result = generate_skills(tmp_path, "claude")
-        # orchestration-prompt re-generates identically → "unchanged" → skipped.
-        assert len(result["skipped"]) == len(CLAUDE_SKILLS) - len(SESSION_TRANSFER_SKILL_NAMES)
-        assert set(result["updated"]) == set(SESSION_TRANSFER_SKILL_NAMES)
+        # TAP-6948 s3: every skill — including the always-refreshed session-
+        # transfer pair — now goes through install_or_refresh_skill, which
+        # detects a byte-identical regeneration as "unchanged" regardless of
+        # whether it was force-refreshed. Nothing here actually changed
+        # between the two calls, so everything lands in "skipped".
+        assert len(result["skipped"]) == len(CLAUDE_SKILLS)
+        assert result["updated"] == []
         assert len(result["created"]) == 0
 
 

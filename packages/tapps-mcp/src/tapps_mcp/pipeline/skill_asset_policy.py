@@ -23,13 +23,13 @@ are named, documented here, and stamped into each generated file:
     Project-owned state, written once and never rewritten. ``learnings.md``.
 
 ``OVERWRITE``
-    Whole-file refresh with no preserved region. Two files land here: a
-    non-smart-merge ``SKILL.md`` (``tapps_upgrade`` calls ``generate_skills``
-    with ``overwrite=True``, so every one is replaced — only ``tapps_init``
-    leaves an existing copy alone), and a companion whose format cannot carry a
-    comment marker. For the latter, upgrade **reports** each path whose on-disk
-    content differs from canonical before replacing it, so the overwrite is
-    never silent (:func:`plan_overwrite_report`).
+    Whole-file refresh with no preserved region. Applies to a companion whose
+    format cannot carry a comment marker — upgrade **reports** each path whose
+    on-disk content differs from canonical before replacing it, so the
+    overwrite is never silent (:func:`plan_overwrite_report`). Every
+    ``SKILL.md`` — smart-merge or not — instead carries a managed block since
+    TAP-6948 s3 (:mod:`tapps_mcp.pipeline.skill_managed_block`); there is no
+    longer a wholesale-overwritten ``SKILL.md``.
 """
 
 from __future__ import annotations
