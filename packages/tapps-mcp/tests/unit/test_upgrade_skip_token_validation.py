@@ -20,7 +20,12 @@ import pytest
 
 from tapps_core.config.settings import _reset_settings_cache
 from tapps_mcp.distribution.doctor_platform import check_upgrade_skip_tokens
+from tapps_mcp.distribution.doctor_skip_drift import check_upgrade_skip_token_drift
 from tapps_mcp.pipeline import upgrade_report as upgrade_report_mod
+from tapps_mcp.pipeline.platform_bundles import (
+    generate_claude_agent_scope_rule,
+    generate_claude_autonomy_rule,
+)
 from tapps_mcp.pipeline.upgrade import upgrade_pipeline
 from tapps_mcp.pipeline.upgrade_skip_tokens import (
     ALL_SKIP_TOKENS,
@@ -226,6 +231,111 @@ class TestDoctorFinding:
         from tapps_mcp.distribution.doctor_runner import _collect_checks
 
         assert "upgrade_skip_files" in _collect_checks.__code__.co_consts
+
+
+class TestSkipTokenDriftReport:
+    """TAP-6600: a skip entry's silence cuts both ways — report which."""
+
+    def test_no_configured_tokens_is_quiet(self, tmp_path: Path) -> None:
+        check = check_upgrade_skip_token_drift(tmp_path)
+        assert check.ok
+        assert "no recognized skip tokens" in check.message
+
+    def test_identical_file_reported_as_removable(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        generate_claude_autonomy_rule(tmp_path)
+        monkeypatch.setenv(
+            "TAPPS_MCP_UPGRADE_SKIP_FILES", json.dumps([".claude/rules/autonomy.md"])
+        )
+
+        check = check_upgrade_skip_token_drift(tmp_path)
+
+        assert check.ok
+        assert check.severity == "pass"
+        assert "identical" in check.message
+        assert ".claude/rules/autonomy.md" in check.message
+
+    def test_diverged_file_is_reported_not_blocked(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        generate_claude_autonomy_rule(tmp_path)
+        (tmp_path / ".claude" / "rules" / "autonomy.md").write_text(
+            "local customization the operator wants to keep\n", encoding="utf-8"
+        )
+        monkeypatch.setenv(
+            "TAPPS_MCP_UPGRADE_SKIP_FILES", json.dumps([".claude/rules/autonomy.md"])
+        )
+
+        check = check_upgrade_skip_token_drift(tmp_path)
+
+        # Reported (severity=warn, ok=False) but never blocking (doctor's
+        # exit code is driven by fail_count only, not warn_count).
+        assert check.severity == "warn"
+        assert not check.ok
+        assert "diverged" in check.message
+        assert ".claude/rules/autonomy.md" in check.message
+
+    def test_missing_path_reported_distinctly_from_diverged(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setenv(
+            "TAPPS_MCP_UPGRADE_SKIP_FILES", json.dumps([".claude/rules/autonomy.md"])
+        )
+
+        check = check_upgrade_skip_token_drift(tmp_path)
+
+        assert check.severity == "warn"
+        assert "no longer exists" in check.message
+        assert "diverged" not in check.message
+
+    def test_directory_token_reported_as_unsupported_not_guessed(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        (tmp_path / ".claude" / "hooks").mkdir(parents=True)
+        monkeypatch.setenv("TAPPS_MCP_UPGRADE_SKIP_FILES", json.dumps([".claude/hooks"]))
+
+        check = check_upgrade_skip_token_drift(tmp_path)
+
+        assert check.ok  # unsupported is not itself a problem
+        assert "not yet drift-checkable" in check.message
+
+    def test_multiple_entries_each_get_their_own_state(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        generate_claude_autonomy_rule(tmp_path)
+        generate_claude_agent_scope_rule(tmp_path)
+        (tmp_path / ".claude" / "rules" / "autonomy.md").write_text("drifted\n", encoding="utf-8")
+        monkeypatch.setenv(
+            "TAPPS_MCP_UPGRADE_SKIP_FILES",
+            json.dumps([".claude/rules/autonomy.md", ".claude/rules/agent-scope.md"]),
+        )
+
+        check = check_upgrade_skip_token_drift(tmp_path)
+
+        assert "diverged" in check.message
+        assert "identical" in check.message
+        assert ".claude/rules/autonomy.md" in check.message
+        assert ".claude/rules/agent-scope.md" in check.message
+
+    def test_never_writes_to_the_project(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        generate_claude_autonomy_rule(tmp_path)
+        target = tmp_path / ".claude" / "rules" / "autonomy.md"
+        before = target.read_bytes()
+        monkeypatch.setenv(
+            "TAPPS_MCP_UPGRADE_SKIP_FILES", json.dumps([".claude/rules/autonomy.md"])
+        )
+
+        check_upgrade_skip_token_drift(tmp_path)
+
+        assert target.read_bytes() == before
+
+    def test_check_is_registered_in_the_doctor_run(self) -> None:
+        from tapps_mcp.distribution.doctor_runner import _collect_checks
+
+        assert "upgrade_skip_files drift" in _collect_checks.__code__.co_consts
 
 
 class TestSettingsDocumentation:
