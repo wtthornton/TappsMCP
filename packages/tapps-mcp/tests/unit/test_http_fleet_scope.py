@@ -14,7 +14,7 @@ from tapps_core.http.request_context import (
 )
 from tapps_mcp.http_fleet_scope import (
     allowed_tools_for_request,
-    install_runtime_scope_guard,
+    install_fleet_request_guards,
     server_allows_runtime_scope,
 )
 from tapps_mcp.platform.nlt_profiles import (
@@ -73,7 +73,7 @@ def _guarded_server() -> FastMCP:
     def tapps_upgrade() -> dict[str, Any]:
         return {"ok": "upgraded"}
 
-    install_runtime_scope_guard(mcp)
+    install_fleet_request_guards(mcp)
     return mcp
 
 
@@ -142,8 +142,8 @@ class TestRuntimeScopeGuard:
 
     async def test_guard_is_idempotent(self) -> None:
         mcp = _guarded_server()
-        install_runtime_scope_guard(mcp)
-        install_runtime_scope_guard(mcp)
+        install_fleet_request_guards(mcp)
+        install_fleet_request_guards(mcp)
         token = set_request_auth_scope("runtime")
         try:
             assert await _list_tools(mcp) == ["tapps_lookup_docs"]

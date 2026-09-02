@@ -361,9 +361,11 @@ def _session_start_cache_root() -> str:
     """Resolved project root for the current request (fleet) or process (stdio)."""
     import os
 
-    from tapps_core.http.request_context import get_request_project_root
+    from tapps_core.http.request_context import http_request_root_override
 
-    request_root = get_request_project_root()
+    # A workspace-free fleet request keys on the shared sentinel rather than
+    # the fleet's own CWD, which is nobody's project (TAP-6062).
+    request_root, _ = http_request_root_override(None)
     if request_root is not None:
         return str(request_root.resolve())
     env_root = os.environ.get("TAPPS_MCP_PROJECT_ROOT", "").strip()

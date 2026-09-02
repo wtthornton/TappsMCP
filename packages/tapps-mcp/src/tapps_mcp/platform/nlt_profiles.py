@@ -60,6 +60,16 @@ TOOL_PROFILE_FLEET_RUNTIME: Final[frozenset[str]] = frozenset(
     }
 )
 
+# TAP-6062: tools that read a repository tree. On a workspace-free HTTP
+# request they must refuse -- scanning the fleet process's own directory
+# reports on the wrong repo, and an empty result reads as "no findings".
+WORKSPACE_REQUIRED_TOOLS: Final[frozenset[str]] = frozenset(
+    {
+        "tapps_security_scan",
+        "tapps_dependency_scan",
+    }
+)
+
 #: Fleet server ids that accept the runtime token type at all.
 RUNTIME_SCOPE_SERVERS: Final[frozenset[str]] = frozenset({"nlt-build"})
 

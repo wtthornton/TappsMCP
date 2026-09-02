@@ -23,12 +23,17 @@ from tapps_core.http.middleware import (
 )
 from tapps_core.http.request_context import (
     PROJECT_ROOT_HEADER,
+    WORKSPACE_FREE_ROOT,
     get_request_auth_scope,
     get_request_project_root,
+    is_http_request,
+    mark_http_request,
+    reset_http_request,
     reset_request_auth_scope,
     reset_request_project_root,
     set_request_auth_scope,
     set_request_project_root,
+    workspace_mode,
 )
 
 __all__ = [
@@ -39,6 +44,7 @@ __all__ = [
     "PROJECT_ROOT_HEADER",
     "SCOPE_OPERATOR",
     "SCOPE_RUNTIME",
+    "WORKSPACE_FREE_ROOT",
     "FleetAuthConfig",
     "NonLoopbackBindRefusedError",
     "TappsFleetAuthMiddleware",
@@ -46,12 +52,16 @@ __all__ = [
     "extract_presented_token",
     "get_request_auth_scope",
     "get_request_project_root",
+    "is_http_request",
     "is_loopback_host",
+    "mark_http_request",
     "require_safe_bind",
+    "reset_http_request",
     "reset_request_auth_scope",
     "reset_request_project_root",
     "resolve_fleet_auth",
     "set_request_auth_scope",
     "set_request_project_root",
+    "workspace_mode",
     "wrap_streamable_http_app",
 ]

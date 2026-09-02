@@ -1020,7 +1020,7 @@ def run_server(
         from tapps_core.http.bind_policy import resolve_fleet_auth
         from tapps_core.http.middleware import wrap_streamable_http_app
         from tapps_mcp.http_fleet_scope import (
-            install_runtime_scope_guard,
+            install_fleet_request_guards,
             server_allows_runtime_scope,
         )
 
@@ -1028,8 +1028,9 @@ def run_server(
         # bind dies here, before uvicorn, unless a token is set (TAP-6062).
         allow_runtime_scope = server_allows_runtime_scope(settings.tool_preset)
         auth = resolve_fleet_auth(host, allow_runtime_scope=allow_runtime_scope)
-        if allow_runtime_scope and auth.runtime_token:
-            install_runtime_scope_guard(mcp)
+        install_fleet_request_guards(
+            mcp, runtime_scope=allow_runtime_scope and bool(auth.runtime_token)
+        )
         logger.info(
             "tapps_mcp_http_bind",
             host=host,

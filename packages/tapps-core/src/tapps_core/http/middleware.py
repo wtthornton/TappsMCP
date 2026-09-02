@@ -18,6 +18,8 @@ from tapps_core.http.auth import (
 )
 from tapps_core.http.request_context import (
     PROJECT_ROOT_HEADER,
+    mark_http_request,
+    reset_http_request,
     reset_request_auth_scope,
     reset_request_project_root,
     set_request_auth_scope,
@@ -59,6 +61,11 @@ class TappsProjectRootMiddleware:
         if header_value:
             with contextlib.suppress(OSError):
                 token = set_request_project_root(Path(header_value))
+        # Set for every HTTP request, header or not: downstream code needs to
+        # tell "fleet request without a project root" (workspace-free) apart
+        # from "stdio server, use CWD" (TAP-6062).
+        http_token = mark_http_request()
+
         response_started = False
 
         async def _send(message: Message) -> None:
@@ -78,6 +85,7 @@ class TappsProjectRootMiddleware:
             logger.warning("http.shutdown_window_request", error=str(exc))
             await _send_retryable_503(send)
         finally:
+            reset_http_request(http_token)
             if token is not None:
                 reset_request_project_root(token)
 
