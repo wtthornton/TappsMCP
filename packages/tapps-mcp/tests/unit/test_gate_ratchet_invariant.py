@@ -32,7 +32,11 @@ from typing import Any
 
 import pytest
 
-from tapps_mcp.gates.ratchet import RULE_RATCHETED_FAIL, evaluate_ratchet
+from tapps_mcp.gates.ratchet import (
+    RULE_RATCHETED_FAIL,
+    SAME_FILE_SIMILARITY_PCT,
+    evaluate_ratchet,
+)
 from tapps_mcp.scoring.ast_metrics import AstMetricsMixin
 from tapps_mcp.server_helpers import _get_scorer_for_file
 
@@ -178,30 +182,33 @@ def scale(values: list[int], factor: int) -> list[int]:
     return [value * factor for value in values]
 '''
 
-# Same module, degraded: an eval() (bandit), a bare except (ruff/security),
-# and four levels of nesting (radon complexity).
+# The *same* module, degraded: an eval() (bandit) and a bare except
+# (ruff/security), grafted onto the clean module's own lines.
+#
+# TAP-6922: "same module" has to be true line-for-line now, not just in
+# spirit. This fixture used to swap in an unrelated body that shared 11.8% of
+# its lines with the baseline, which rule 1 correctly classifies as materially
+# new code -- so the test would have stopped exercising rule 3 at all. The
+# degradation is therefore applied in place, and
+# ``test_rule_three_regression_is_caught_by_the_real_scorer`` asserts the
+# overlap stays on the rule-3 side of ``SAME_FILE_SIMILARITY_PCT`` so this
+# cannot drift back without the test saying so.
 _DEGRADED_MODULE = '''"""A small, tidy module."""
 
 from __future__ import annotations
 
 
-def add(left, right):
+def add(left: int, right: int) -> int:
+    """Return the sum of two integers."""
     return eval(f"{left} + {right}")
 
 
-def scale(values, factor):
-    out = []
-    for value in values:
-        if value:
-            for _ in range(factor):
-                if value > 0:
-                    for _ in range(2):
-                        if factor > 1:
-                            try:
-                                out.append(value * factor)
-                            except:
-                                pass
-    return out
+def scale(values: list[int], factor: int) -> list[int]:
+    """Return *values* with every element multiplied by *factor*."""
+    try:
+        return [value * factor for value in values]
+    except:
+        return []
 '''
 
 
@@ -240,6 +247,12 @@ async def test_rule_three_regression_is_caught_by_the_real_scorer(tmp_path: Path
         quick=True,
     )
 
+    assert outcome.shared_pct is not None
+    assert outcome.shared_pct >= SAME_FILE_SIMILARITY_PCT, (
+        f"the degraded fixture shares only {outcome.shared_pct}% of its lines with the "
+        f"baseline, so rule 1 judges it materially new code and this test no longer "
+        f"exercises rule 3 at all (rule fired: {outcome.rule})"
+    )
     assert outcome.base_score is not None
     assert outcome.current_score < outcome.base_score, (
         f"the degraded module scored {outcome.current_score} against a baseline of "

@@ -116,6 +116,7 @@ async def _validate_single_file(
     ctx: Context[Any, Any, Any] | None = None,
     baseline_ref: str = "",
     project_root: Path | None = None,
+    renames: Any = None,
 ) -> dict[str, Any]:
     """Score and optionally security-scan a single file under concurrency limit.
 
@@ -130,6 +131,12 @@ async def _validate_single_file(
     monotonic ratchet: a file already below threshold at that ref may pass
     on holding or improving instead of failing outright. See
     :mod:`tapps_mcp.gates.ratchet` for the three rules.
+
+    ``renames`` is the batch's shared
+    :class:`~tapps_mcp.gates.ratchet.RenameIndex` (TAP-6922). It is built
+    once per ``validate_changed`` run and handed to every file so rule 1's
+    rename lookup costs one ``git diff`` for the run rather than one per
+    file; ``None`` makes each call build its own.
     """
     from tapps_mcp.gates.evaluator import evaluate_gate
     from tapps_mcp.server_helpers import _get_scorer_for_file
@@ -191,6 +198,7 @@ async def _validate_single_file(
                     quick=quick,
                     baseline_ref=baseline_ref,
                     repo_root=project_root if project_root is not None else path.parent,
+                    renames=renames,
                 )
                 if ratchet_info is not None:
                     file_result["ratchet"] = ratchet_info

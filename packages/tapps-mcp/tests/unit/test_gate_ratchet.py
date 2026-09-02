@@ -27,13 +27,19 @@ from __future__ import annotations
 import asyncio
 import subprocess
 from pathlib import Path
+from typing import Any
+
+import pytest
 
 from tapps_mcp.gates.models import GateFailure, GateResult, GateThresholds
 from tapps_mcp.gates.ratchet import (
+    RULE_MATERIALLY_NEW_CONTENT,
     RULE_NEW_FILE,
     RULE_PASSING_AT_BASE,
     RULE_RATCHET_HOLD_OR_IMPROVE,
     RULE_RATCHETED_FAIL,
+    SAME_FILE_SIMILARITY_PCT,
+    RenameIndex,
     apply_ratchet_to_gate,
     evaluate_ratchet,
 )
@@ -44,12 +50,16 @@ THRESHOLD = 70.0
 
 
 class _FakeScorer:
-    """Scorer stub: overall score is just the file's text content, as a float.
+    """Scorer stub: overall score is the file's *first* line, as a float.
 
     Path-independent by construction, which is the point here (these tests
     are about the rule arithmetic and the git plumbing) and also the reason
     it cannot see TAP-6921 -- see ``test_gate_ratchet_invariant.py``, which
     covers the same rules with the real scorer.
+
+    Only the first line is read (TAP-6922) so a fixture can carry a score
+    *and* a body. Rule 1 now keys on how much of the content survives from
+    the baseline, which is not a question a one-line fixture can pose.
     """
 
     language = "python"
@@ -61,7 +71,7 @@ class _FakeScorer:
         from where it actually sits, while the identity the caller supplies
         is what the result is labelled with.
         """
-        overall = float(path.read_text(encoding="utf-8").strip())
+        overall = float(path.read_text(encoding="utf-8").splitlines()[0].strip())
         return ScoreResult(
             file_path=str(identity_path or path), categories={}, overall_score=overall
         )
@@ -301,3 +311,329 @@ async def test_validate_single_file_without_baseline_ref_carries_no_ratchet_key(
     )
 
     assert "ratchet" not in result
+
+
+def _lines(score: str, body: list[str]) -> str:
+    """A fixture file: ``score`` on line 1 (what ``_FakeScorer`` reads), then ``body``."""
+    return "\n".join([score, *body]) + "\n"
+
+
+def _make_repo_with_body(tmp_path: Path, score: str, body: list[str]) -> Path:
+    """A real git repo whose single commit holds ``pkg/module.py`` = ``score`` + ``body``."""
+    root = tmp_path / "repo"
+    (root / "pkg").mkdir(parents=True)
+    _git(root, "init", "-q")
+    _git(root, "config", "user.email", "test@example.com")
+    _git(root, "config", "user.name", "Test")
+    (root / "pkg" / "module.py").write_text(_lines(score, body), encoding="utf-8")
+    _git(root, "add", "-A")
+    _git(root, "commit", "-q", "-m", "baseline")
+    return root
+
+
+class TestRuleOneKeysOnContentNotPath:
+    """TAP-6922: rule 1 asks "is this materially new code", not "is this a new path".
+
+    The path key produced two holes pointing opposite ways -- too generous to
+    a file whose content was replaced, too harsh on a file that only moved --
+    and each of these is a control for one of them. The controls that matter
+    are the ones the *old* code fails: ``test_wholly_replaced_content_...``
+    passed (ratcheted) before this change, and ``test_below_threshold_file_
+    moved_unchanged_...`` failed (absolute) before it.
+    """
+
+    async def test_wholly_replaced_content_does_not_inherit_the_old_baseline(
+        self, tmp_path: Path
+    ) -> None:
+        """NEGATIVE (hole A): replacing a below-threshold file's content wholesale
+        must not hand the new code the old content's low baseline.
+
+        Against ``c1e381ad`` this returned a ratcheted PASS: the path still
+        resolved at the baseline, so rule 3 compared brand-new code against a
+        score derived from content that no longer existed anywhere.
+        """
+        repo = _make_repo_with_body(tmp_path, "65.0", [f"legacy_line_{i}" for i in range(20)])
+        baseline = _sha(repo)
+        # Every line replaced; the only survivor is the score line the stub reads.
+        (repo / "pkg" / "module.py").write_text(
+            _lines("65.0", [f"unrelated_new_line_{i}" for i in range(20)]), encoding="utf-8"
+        )
+
+        outcome = await evaluate_ratchet(
+            path=repo / "pkg" / "module.py",
+            repo_root=repo,
+            baseline_ref=baseline,
+            current_score=68.0,  # better than the 65.0 baseline, still under 70
+            threshold=THRESHOLD,
+            scorer=_FakeScorer(),
+            quick=False,
+        )
+
+        assert outcome.passes is False
+        assert outcome.rule == RULE_MATERIALLY_NEW_CONTENT
+        assert outcome.shared_pct is not None
+        assert outcome.shared_pct < SAME_FILE_SIMILARITY_PCT
+
+    async def test_genuinely_new_path_still_gets_the_absolute_threshold(
+        self, tmp_path: Path
+    ) -> None:
+        """NEGATIVE (no-regression): new code at a new path is still never grandfathered.
+
+        Deliberately run in a repo where a *different* file was renamed, so
+        the rename map is non-empty. A map lookup that fell through to "some
+        rename, therefore an ancestor" would grandfather this file; the map
+        must be keyed strictly on this path.
+        """
+        repo = _make_repo_with_body(tmp_path, "65.0", [f"legacy_line_{i}" for i in range(20)])
+        baseline = _sha(repo)
+        _git(repo, "mv", "pkg/module.py", "pkg/moved.py")  # unrelated rename, same run
+
+        brand_new = repo / "pkg" / "brand_new.py"
+        brand_new.write_text(_lines("99.0", ["something = 1"]), encoding="utf-8")
+
+        outcome = await evaluate_ratchet(
+            path=brand_new,
+            repo_root=repo,
+            baseline_ref=baseline,
+            current_score=99.0,
+            threshold=THRESHOLD,
+            scorer=_FakeScorer(),
+            quick=False,
+        )
+
+        assert outcome.rule == RULE_NEW_FILE
+        assert outcome.passes is False
+        assert outcome.base_score is None
+        assert outcome.base_path is None
+
+    async def test_below_threshold_file_moved_unchanged_is_judged_against_its_content(
+        self, tmp_path: Path
+    ) -> None:
+        """POSITIVE (hole B): a move must not re-deadlock a legacy file.
+
+        Against ``c1e381ad`` the new path was absent at the baseline, so rule
+        1 fired and the absolute threshold was applied to code that did not
+        change -- the exact deadlock TAP-6904 was filed to remove, reachable
+        by any refactor that relocates a legacy module.
+        """
+        repo = _make_repo_with_body(tmp_path, "65.0", [f"legacy_line_{i}" for i in range(20)])
+        baseline = _sha(repo)
+        (repo / "pkg" / "relocated").mkdir()
+        _git(repo, "mv", "pkg/module.py", "pkg/relocated/module.py")
+
+        outcome = await evaluate_ratchet(
+            path=repo / "pkg" / "relocated" / "module.py",
+            repo_root=repo,
+            baseline_ref=baseline,
+            current_score=65.0,  # unchanged content, unchanged score
+            threshold=THRESHOLD,
+            scorer=_FakeScorer(),
+            quick=False,
+        )
+
+        assert outcome.rule == RULE_RATCHET_HOLD_OR_IMPROVE
+        assert outcome.passes is True
+        assert outcome.base_score == 65.0
+        assert outcome.base_path == "pkg/module.py"
+        assert outcome.shared_pct == 100.0
+
+    async def test_moved_file_that_regresses_still_fails(self, tmp_path: Path) -> None:
+        """A move is not an amnesty: rules 2 and 3 apply normally to the moved content.
+
+        Without this, closing hole B would open a new one -- move a file and
+        degrade it in the same commit, and the ratchet would have nothing to
+        compare against.
+        """
+        repo = _make_repo_with_body(tmp_path, "65.0", [f"legacy_line_{i}" for i in range(20)])
+        baseline = _sha(repo)
+        (repo / "pkg" / "relocated").mkdir()
+        _git(repo, "mv", "pkg/module.py", "pkg/relocated/module.py")
+
+        outcome = await evaluate_ratchet(
+            path=repo / "pkg" / "relocated" / "module.py",
+            repo_root=repo,
+            baseline_ref=baseline,
+            current_score=60.0,  # moved *and* degraded
+            threshold=THRESHOLD,
+            scorer=_FakeScorer(),
+            quick=False,
+        )
+
+        assert outcome.rule == RULE_RATCHETED_FAIL
+        assert outcome.passes is False
+        assert outcome.base_score == 65.0
+
+    async def test_deleting_most_of_a_file_is_not_materially_new_code(self, tmp_path: Path) -> None:
+        """A megafile split leaves a small remnant at the original path. Nothing
+        new arrived there, so rule 1 must not fire -- which is why the measure
+        is directional rather than a symmetric diff percentage."""
+        repo = _make_repo_with_body(tmp_path, "65.0", [f"legacy_line_{i}" for i in range(40)])
+        baseline = _sha(repo)
+        # 36 of 40 body lines moved out to sibling modules; the rest untouched.
+        (repo / "pkg" / "module.py").write_text(
+            _lines("65.0", [f"legacy_line_{i}" for i in range(4)]), encoding="utf-8"
+        )
+
+        outcome = await evaluate_ratchet(
+            path=repo / "pkg" / "module.py",
+            repo_root=repo,
+            baseline_ref=baseline,
+            current_score=66.0,
+            threshold=THRESHOLD,
+            scorer=_FakeScorer(),
+            quick=False,
+        )
+
+        assert outcome.shared_pct == 100.0
+        assert outcome.rule == RULE_RATCHET_HOLD_OR_IMPROVE
+        assert outcome.passes is True
+
+
+class TestSimilarityThresholdBoundary:
+    """One case each side of ``SAME_FILE_SIMILARITY_PCT``.
+
+    Both fixtures hold exactly 20 significant lines in the working tree, so
+    each shared line is worth 5 percentage points and the two cases sit one
+    line apart across the boundary. ``SAME_FILE_SIMILARITY_PCT`` is inclusive:
+    at exactly half surviving, it is still the same file.
+    """
+
+    @staticmethod
+    def _repo_with_survivors(tmp_path: Path, survivors: int) -> Path:
+        """Baseline of 20 body lines; working tree keeps ``survivors`` of them
+        and fills the rest with new lines, for 20 lines either way."""
+        repo = _make_repo_with_body(tmp_path, "65.0", [f"legacy_line_{i}" for i in range(19)])
+        body = [f"legacy_line_{i}" for i in range(survivors - 1)]
+        body += [f"new_line_{i}" for i in range(20 - survivors)]
+        (repo / "pkg" / "module.py").write_text(_lines("65.0", body), encoding="utf-8")
+        return repo
+
+    async def _judge(self, repo: Path, baseline: str) -> Any:
+        return await evaluate_ratchet(
+            path=repo / "pkg" / "module.py",
+            repo_root=repo,
+            baseline_ref=baseline,
+            current_score=68.0,  # above the 65.0 baseline, below the 70.0 threshold
+            threshold=THRESHOLD,
+            scorer=_FakeScorer(),
+            quick=False,
+        )
+
+    async def test_exactly_at_the_threshold_is_still_the_same_file(self, tmp_path: Path) -> None:
+        """10 of 20 lines survive -> 50.0%, the threshold itself -> rule 3 applies."""
+        repo = self._repo_with_survivors(tmp_path, survivors=10)
+        outcome = await self._judge(repo, _sha(repo))
+
+        assert outcome.shared_pct == float(SAME_FILE_SIMILARITY_PCT)
+        assert outcome.rule == RULE_RATCHET_HOLD_OR_IMPROVE
+        assert outcome.passes is True
+
+    async def test_one_line_below_the_threshold_is_materially_new(self, tmp_path: Path) -> None:
+        """9 of 20 lines survive -> 45.0%, one line under -> rule 1 applies."""
+        repo = self._repo_with_survivors(tmp_path, survivors=9)
+        outcome = await self._judge(repo, _sha(repo))
+
+        assert outcome.shared_pct == 45.0
+        assert outcome.rule == RULE_MATERIALLY_NEW_CONTENT
+        assert outcome.passes is False
+
+
+class TestRenameInformationCost:
+    """How rename information is obtained, and what happens without it."""
+
+    async def test_rename_map_is_built_once_for_a_whole_batch(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Rule 1 must not cost a subprocess per file.
+
+        The index is lazy *and* shared: judging three moved files through one
+        :class:`RenameIndex` shells out to git once, not three times.
+        """
+        repo = _make_repo_with_body(tmp_path, "65.0", [f"legacy_line_{i}" for i in range(20)])
+        for name in ("b", "c"):
+            src = repo / "pkg" / f"{name}.py"
+            src.write_text(
+                _lines("65.0", [f"legacy_line_{i}" for i in range(20)]), encoding="utf-8"
+            )
+        _git(repo, "add", "-A")
+        _git(repo, "commit", "-q", "-m", "three-below-threshold-files")
+        baseline = _sha(repo)
+        for name in ("module", "b", "c"):
+            _git(repo, "mv", f"pkg/{name}.py", f"pkg/moved_{name}.py")
+
+        renames = RenameIndex(repo, baseline)
+        builds = 0
+        real_build = RenameIndex._build
+
+        def counting_build(self: RenameIndex) -> dict[str, str]:
+            nonlocal builds
+            builds += 1
+            return real_build(self)
+
+        monkeypatch.setattr(RenameIndex, "_build", counting_build)
+
+        for name in ("module", "b", "c"):
+            outcome = await evaluate_ratchet(
+                path=repo / "pkg" / f"moved_{name}.py",
+                repo_root=repo,
+                baseline_ref=baseline,
+                current_score=65.0,
+                threshold=THRESHOLD,
+                scorer=_FakeScorer(),
+                quick=False,
+                renames=renames,
+            )
+            assert outcome.rule == RULE_RATCHET_HOLD_OR_IMPROVE
+            assert outcome.base_path == f"pkg/{name}.py"
+
+        assert builds == 1
+
+    async def test_unchanged_run_never_shells_out_for_renames(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Laziness: every path resolves at the baseline, so nothing is asked of git."""
+        repo = _make_repo_with_body(tmp_path, "65.0", [f"legacy_line_{i}" for i in range(20)])
+        baseline = _sha(repo)
+
+        renames = RenameIndex(repo, baseline)
+
+        def fail_build(self: RenameIndex) -> dict[str, str]:
+            raise AssertionError("rename detection ran for a file that never moved")
+
+        monkeypatch.setattr(RenameIndex, "_build", fail_build)
+
+        outcome = await evaluate_ratchet(
+            path=repo / "pkg" / "module.py",
+            repo_root=repo,
+            baseline_ref=baseline,
+            current_score=66.0,
+            threshold=THRESHOLD,
+            scorer=_FakeScorer(),
+            quick=False,
+            renames=renames,
+        )
+
+        assert outcome.rule == RULE_RATCHET_HOLD_OR_IMPROVE
+
+    async def test_without_rename_information_it_degrades_to_the_path_lookup(
+        self, tmp_path: Path
+    ) -> None:
+        """``validate-changed`` accepts an arbitrary ``--file-paths`` list that need
+        not be a git diff at all. When git cannot answer -- here the baseline ref
+        does not resolve -- rule 1 falls back to the pre-TAP-6922 path lookup and
+        applies the absolute threshold, which is the stricter of the two answers.
+        """
+        repo = _make_repo_with_body(tmp_path, "65.0", [f"legacy_line_{i}" for i in range(20)])
+
+        outcome = await evaluate_ratchet(
+            path=repo / "pkg" / "module.py",
+            repo_root=repo,
+            baseline_ref="refs/heads/no-such-branch",
+            current_score=66.0,
+            threshold=THRESHOLD,
+            scorer=_FakeScorer(),
+            quick=False,
+        )
+
+        assert outcome.rule == RULE_NEW_FILE
+        assert outcome.passes is False
