@@ -306,3 +306,48 @@ class TestUpgradePipelineDriftGate:
 
         drift_block_errors = [e for e in result.get("errors", []) if "Upgrade blocked" in e]
         assert not drift_block_errors, "dry_run should bypass the drift gate"
+
+    def test_drift_block_sets_success_false(self, tmp_path: Path) -> None:
+        """TAP-6952: the drift-block early return must set success=False explicitly.
+
+        Before the fix, ``result`` had no ``success`` key on this path at all —
+        callers defaulting a missing key to True (the old ``run_upgrade``
+        behavior) would report a blocked upgrade as successful.
+        """
+        from tapps_mcp.pipeline.upgrade import upgrade_pipeline
+
+        with patch("tapps_mcp.diagnostics.check_install_drift", return_value=_drifted_diagnostic()):
+            result = upgrade_pipeline(tmp_path)
+
+        assert "success" in result, "drift-block return must set the success key explicitly"
+        assert result["success"] is False
+
+
+class TestUpgradePipelineBackupFailureSuccessKey:
+    """TAP-6952 audit: the backup-failure early return had the same gap."""
+
+    def test_backup_failure_sets_success_false(self, tmp_path: Path) -> None:
+        from unittest.mock import MagicMock
+
+        from tapps_mcp.pipeline.upgrade import upgrade_pipeline
+
+        # A backup target must exist for BackupManager.create_backup to be reached.
+        (tmp_path / "AGENTS.md").write_text("<!-- tapps-agents-version: 0.0.1 -->\n", encoding="utf-8")
+
+        no_drift = MagicMock(drift_detected=False)
+        with (
+            patch("tapps_mcp.diagnostics.check_install_drift", return_value=no_drift),
+            patch(
+                "tapps_mcp.distribution.rollback.BackupManager.create_backup",
+                side_effect=OSError("disk full"),
+            ),
+            patch(
+                "tapps_mcp.distribution.rollback.BackupManager.find_recent_backup",
+                return_value=None,
+            ),
+        ):
+            result = upgrade_pipeline(tmp_path)
+
+        assert "success" in result, "backup-failure return must set the success key explicitly"
+        assert result["success"] is False
+        assert any("backup failed" in e for e in result["errors"])
