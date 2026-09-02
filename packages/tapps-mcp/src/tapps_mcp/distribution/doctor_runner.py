@@ -122,6 +122,7 @@ from tapps_mcp.distribution.doctor_platform import (
 )
 from tapps_mcp.distribution.doctor_result import CheckResult, doctor_facade_attr
 from tapps_mcp.distribution.doctor_skills import (
+    check_orchestration_prompt_learnings_ceiling,
     check_orchestration_prompt_skill_current,
     check_skill_asset_drift,
     check_skill_mirror_parity,
@@ -230,6 +231,10 @@ def _collect_checks(root: Path, *, quick: bool = False) -> list[CheckResult]:
         ),
         ("Skill mirror parity", lambda: check_skill_mirror_parity(root)),
         ("Skill asset drift", lambda: check_skill_asset_drift(root)),
+        (
+            "orchestration-prompt learnings ceiling",
+            lambda: check_orchestration_prompt_learnings_ceiling(root),
+        ),
         ("Workflow safety invariants", lambda: check_workflow_scripts_current(root)),
         ("finish-task skill", lambda: check_finish_task_skill(root)),
         ("Deprecated wrapper skills", lambda: check_deprecated_wrapper_skills(root)),

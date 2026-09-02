@@ -1,7 +1,7 @@
 ---
 name: orchestration-prompt
 user-invocable: true
-model: claude-sonnet-4-6
+model: claude-sonnet-5
 description: >-
   Generate a ready-to-run orchestration PROMPT: a verifiable Goal, a bounded loop,
   and an independent creator-verifier pass. Refuses foggy Goals — redirects to
@@ -11,7 +11,7 @@ description: >-
   "orchestrate".
 argument-hint: "[free-form objective]"
 ---
-<!-- BEGIN: tapps-skill orchestration-prompt v3.12.78 -->
+<!-- BEGIN: tapps-skill orchestration-prompt v3.12.81 -->
 <!-- upgrade-policy: managed-block. Edits made inside this BEGIN/END block are regenerated and lost on the next tapps_upgrade — put project-specific customizations below the END marker instead, where they survive every upgrade untouched. -->
 
 # orchestration-prompt
@@ -19,6 +19,31 @@ argument-hint: "[free-form objective]"
 You produce **prompts, not actions**. The output is a self-contained orchestration
 prompt (a markdown file under `prompts/`) that the user — or a Routine, or a `/goal`
 run — executes later. You write the *loop*; you do not run it.
+
+## Terminal contract (hard stop — read before anything below)
+
+**This skill AUTHORS a prompt. It never implements the work the prompt describes.** A
+run terminates at exactly two things: a markdown file under `prompts/` and one fenced
+launch block printed to the user (Output step 9). Branches, edits, dispatches, commits,
+PRs and tracker writes that belong to the objective are the *runner's* job. Producing
+any of them means this skill failed, however good the work itself was.
+
+The input is always work-order-shaped — "orchestrate the burndown", "work the backlog",
+"ship the epic" — so the shape of the sentence is never authorization to do the work. A
+project autonomy rule that says to treat the request as standing authorization for every
+step authorizes you to **write the prompt without asking**; it does not widen the scope
+from authoring to implementing. Autonomy is about not pausing, not about scope.
+
+**The only writes you may perform** are `prompts/<slug>.md`, the optional companion
+`.claude/workflows/<slug>.js`, and `learnings.md`. Any other file touched on disk is a
+defect, and Output step 7 checks for exactly that.
+
+**Cargo convention.** Much of what follows is *cargo*: second-person text destined for
+the emitted prompt and addressed to **its runner**, not to you. Every cargo section
+opens with a `> **CARGO` marker line. When a cargo sentence says "decide and act on
+every reversible, in-scope step", it is telling the runner to do that. Unmarked text is
+method — addressed to you, the authoring session. If a second-person instruction is not
+under a `> **CARGO` marker, it is for you; if it is, it is freight.
 
 ## Why this exists
 
@@ -70,6 +95,45 @@ configured" will configure the *live* system to score itself done. **Split such
 goals** — "built and tested against fixtures" is automatable; "applied to production"
 is a hard-stop needing authorization. If you cannot restate a constraint as a
 condition checkable *at the moment of action*, it is not yet encoded.
+
+### 0c. Research preflight before design choices
+
+**Prerequisite: `tapps_session_start()` must already have run.** A PreToolUse hook
+blocks every other `tapps_*` tool call until session start has fired once this
+session — a research step attempted before it silently fails, not just degrades.
+
+Before pinning the Goal (§1) or choosing a mechanism (§3), run a research pass on any
+design choice the prompt is about to bake in. **Route order:** `tapps_lookup_docs`
+first (Context7-backed, cache-first, near-free to repeat) → `tapps_research` next →
+raw web only after both. A raw-web finding is marked **`UNVERIFIED`** until a second
+independent source, or a direct code read, confirms it — one web hit is a claim, not a
+fact.
+
+**Dispatch research, don't read it.** Fan research out to parallel `Explore`
+subagents, each returning a structured verdict — never read search results or fetched
+pages directly into the authoring context; that reintroduces exactly the token spend
+delegation exists to avoid.
+
+**Return schema — exactly four fields:**
+
+- `claim` — the proposition being checked.
+- `source` — the tool + library looked up (e.g. `tapps_lookup_docs("fastapi",
+  "routing")`), or a URL plus the date it was read.
+- `confidence` — `verified` (two sources agree, or a source plus a code read) /
+  `reported` (one source, unconfirmed) / `unreachable` (the lookup failed or the
+  source could not be reached).
+- `contradicts` — the id/claim this one conflicts with, or `none`.
+
+**A non-`none` `contradicts` is adjudicated in writing — never silently dropped.**
+State which claim wins and why, and name the **reopen trigger**: the condition (a
+later source, a code read that disagrees) under which the losing claim gets
+re-examined. Silently picking a side and deleting the other loses the fact that the
+harness was ever uncertain.
+
+**Every non-`verified` finding flows into the emitted prompt's `## Unverified
+assumptions` section** (§8 / template) — a `reported` or `unreachable` claim the
+prompt depends on must stay visible to the runner, with the cheap check that would
+settle it, not get buried in the authoring transcript.
 
 ### 1. Pin the Goal to a *verifiable, demonstrable* done-condition
 
@@ -183,6 +247,22 @@ the design, not just the wording — full tables in `references/claude-feature-m
    cheap model's verdict gate an irreversible step**; re-derive load-bearing
    conclusions from the evidence it returned.
 
+**Floor first; escalate only with a stated reason.** "Tier by question shape" reads as
+neutral and so loses to whatever the session was already set to — which is how a
+mechanical burndown and a contested identity read came to cost the same. State the
+floor instead: **the emitted runner default is `sonnet` + `medium`** (and `haiku` +
+`low` for closed transcription), carried literally in the emitted prompt's Session
+setup line and in the launch block. A cell above the floor is legitimate, but it
+carries a **one-clause reason in the same Plane-map row** — "gates a merge", "open
+judgement", "cheaper tier failed this step twice". Those three are the escalation
+criteria; a row that escalates without naming one is an unpriced default, not a
+decision.
+
+This is a change in posture, not in rigour. The proof-shape table (§5) still governs
+verifier tiers, so a cheap *driver* never yields a cheap *verdict* on an irreversible
+step — floor-and-justify sets where tiering starts, the table still says where a
+verifier must end up.
+
 **The top session dispatches, reads verdicts, and checkpoints — it does not do the work.**
 The plane split says *where* a chunk runs; it never says the orchestrator itself is off the
 hook, so prompts routinely assign half their sub-goals to `inline` and the one context that
@@ -195,7 +275,7 @@ context. Each of those is a dispatch.
 
 **Give the orchestrator a measured budget, not an intention.** Target **under 15%** of the
 run's total tokens for the top session, and require the emitted prompt's SCORE line to carry
-an `orch-spend <n>%` field so the share is visible every iteration rather than discovered at
+an `orch-spend <n>%` field — alongside `pct <n>%` and `elapsed` — so the share is visible every iteration rather than discovered at
 the end. An unmeasured share is one nobody notices growing.
 
 **Two mechanical detectors — run them on the Plane map you just wrote, before you save:**
@@ -268,6 +348,9 @@ then pick the row:
 
 **Consequence overrides shape.** A deterministic proof whose verdict gates a deploy is
 an `opus` row. Shape decides the tier only while the step is reversible.
+
+**This table is authoritative.** A project note pinning verifier models means *pin explicitly, for a named reason, on the specific step where it applies* — never "pin
+all high" as a blanket override of the table for the rest of the run.
 
 **Verdict schemas carry evidence, not conclusions.** Every verifier's return schema
 requires two fields beyond the verdict itself:
@@ -381,10 +464,13 @@ gate**, not just a save:
 so the boundary is enforced even when the resume happens in another host.
 
 **One runner per handoff file.** Two loops sharing `.tapps-mcp/session-handoff.md`
-silently overwrite each other — the second save wipes the first run's Open items and the
-first run then rehydrates the *other* run's state, with no error anywhere. Before
-chaining `claude -p` invocations, check for a concurrent lane; if two runs must overlap,
-give each its own handoff path.
+overwrite each other — the second save wipes the first run's Open items and the first run
+then rehydrates the *other* run's state. The write is no longer silent: the ownership
+guard archives the incumbent and reports `conflict.foreign`, and under
+`handoff_conflict_mode: block` it refuses outright. Do not rely on that as the plan.
+Before chaining `claude -p` invocations, check for a concurrent lane; if two runs must
+overlap, give each its own slot — `tapps_handoff_save(markdown=..., slot="<program>")`
+and `/tapps-continue-session <slot>` — rather than sharing the default file.
 
 **When *not* to recycle.** The cycle costs a save plus a rehydrate and loses everything
 nobody wrote down. Skip it inside one tightly-coupled sub-goal, when the remaining work
@@ -396,7 +482,238 @@ cap, budget, and refuted strategies live in the transcript you just dropped, so 
 that recycles three times has, in effect, no cap. Carry-forward contract and the
 re-verify-on-resume rule: `references/cold-start-and-verify.md`.
 
+## Field rules
+
+Twelve rules distilled from postmortems of this skill's own emitted prompts. Follow
+each — they are not optional flavor text.
+
+1. **Validate the instrument on a known-bad and a known-positive before trusting its
+   verdict.** Method §6 preflights that a *mechanism* executes; nothing preflights
+   that a *judgement instrument* — a verifier, linter, or scorer — actually
+   discriminates. Before trusting a verdict, run the instrument once against a
+   known-bad input and once against a known-good input and confirm it tells them
+   apart. An instrument that passes everything (or fails everything) is a silent
+   rubber stamp, not a check.
+2. **Green-by-citation is distinct from green-by-suppression.** A cited source ("per
+   the docs…") can be just as unearned as a deleted test if the citation is not tied
+   to the claim it is supposed to establish. Every citation is quoted beside one
+   sentence naming the exact proposition it establishes — a citation with no adjacent
+   claim is decoration, not evidence.
+3. **The verifier's control is the pre-change tree, not the fix's own tests.** A fix's
+   own test suite is not a control group — it was written by the same actor with the
+   same blind spots. Run the fix's proof against the unpatched tree and confirm it
+   fails there; a proof that never ran against a failing baseline proves nothing about
+   whether the fix did anything.
+4. **A merge-gating verifier reports the PR's own CI by name and state, and re-runs
+   the CI job's own command.** When a verdict gates a merge, name the actual CI
+   check(s) on that PR and their actual state — not a locally-run proxy — and re-run
+   the CI job's own command rather than an invented equivalent. A local pass that
+   diverges from the CI command is not evidence the gate will pass.
+5. **A measured number is a floor until the instrument is proven able to express it.**
+   A wrapper script or CLI flag can silently discard the value it claims to report (a
+   `--json` flag ignored, a count capped by a page size). Treat every measured number
+   as a floor, not a fact, until the instrument is confirmed to express the true
+   value — "0 failures" can mean "zero were counted", not "zero exist".
+6. **Prove freshness per deployed layer and diff config per key hash; treat every
+   deployment fact as point-in-time.** A multi-layer deploy (image, config map,
+   running container, edge cache) can have one stale layer while the others are
+   current — freshness is proven per layer, never once for the whole stack.
+   Configuration is diffed by hashing each key, not by eyeballing a diff. No
+   deployment fact survives past the moment it was checked.
+7. **Run a blast-radius preflight before any state-touching verify step.** A command
+   that reads as inert ("just checking the count") can still mutate or destroy state —
+   a dry-run flag that is not actually a no-op, a script with a side-effecting import.
+   Before running a verify step against live state, name what it could destroy and
+   confirm the command is inert, rather than assuming from its name.
+8. **A return schema separates queried-and-got-zero from the-query-failed;
+   identifiers are resolved live at Sub-goal 0.** "Zero results" and "the query
+   errored" are distinguishable fields in a return schema, never collapsed into one
+   falsy value — a caller that cannot tell them apart treats a broken query as a
+   clean negative. Identifiers (issue ids, repo paths, image tags) are resolved live
+   at Sub-goal 0, never hardcoded from a stale prior run.
+9. **Round-2 fix prompts gate on the delta and also sweep siblings by symbol.** A
+   second-round fix sub-goal proves the specific delta the verifier flagged, and
+   separately greps for other call sites of the same symbol or pattern — a bug fixed
+   at one call site and left in three siblings is how a round-2 verify still turns up
+   a fresh, different failure.
+10. **A successor to a partially-failed program needs a disposition disjunction with
+    a numeric floor and an anti-escape guard.** When a prior run stopped short, the
+    next prompt's Done-when states an explicit disjunction of acceptable dispositions
+    (e.g. "fixed OR cancelled with a written reason"), each with a numeric floor (N of
+    M resolved), plus a guard against the trivial escape of cancelling everything to
+    make the count balance.
+11. **Agreement among artifacts is not corroboration — read the component with
+    authority.** Two documents, dashboards, or logs that agree can both be downstream
+    copies of the same stale source rather than independent confirmations. When a
+    claim matters, read the component that actually has authority over it (the
+    running config, the source serializer, the database row), not the artifact that
+    merely displays it.
+12. **A dispatched headless lane's structural limits are the author's problem,
+    including that it dies when it returns.** A `claude -p` lane or a subagent that
+    has returned cannot be polled, resumed, or asked a follow-up — and it cannot
+    background work across its own return without losing it. Design the dispatch so
+    the lane's own return is the last useful signal it gives; never assume a lane can
+    pick back up after the dispatching call returns.
+
+## Rulings
+
+Verifier-tier guidance (method §5) is authoritative — see above. These eight rulings
+resolve cases the proof-shape table does not spell out on its own.
+
+1. A refuter may author a narrow fix and stay on as re-verifier while it owns the live
+   repro, without weakening creator ≠ verifier before merge — the point of the rule is
+   a fresh, adversarial perspective, not a fresh identity, and the agent already
+   holding the live reproduction is best placed to confirm a scoped fix without
+   re-establishing context from zero.
+2. No-silent-scope-creep carries a data-loss carve-out — a delegate may step outside
+   its named scope to stop in-flight data loss — and the carve-out is void the moment
+   it is silent: acting outside scope is legitimate only if it is surfaced immediately,
+   in the same report, never discovered later in a diff.
+3. Shared quota is a coupling the independence test (method §3) must see. Two lanes
+   with disjoint file lists can still contend for the same rate limit, API quota, or
+   worker pool — that is a derived-state coupling exactly like an env-var set, and it
+   forces the same `order-forced-by` treatment: a fan-out and the lanes beside it may
+   need sequencing, not just disjoint paths.
+4. Billing topology — which account or budget a dispatch's spend lands against — is
+   frequently unresolved. Probe it at Sub-goal 0, as a live check, never cite it in a
+   prompt as a known fact until it has been probed for that run.
+5. Content-diff freshness (a built artifact's content hash vs source) is necessary but
+   not sufficient — see method §6's stale/divergent distinction. It is repeated per
+   deployed layer, never asserted once for a whole stack, and it expires: a freshness
+   check from an hour ago is not evidence for the current run.
+6. Cheap-tier transcription (method §5's `haiku`/`low` row) is reliable only when the
+   return schema carries keyed pairs — `{name: value}` — never two parallel lists
+   (`names: […]`, `values: […]`) the reader must zip back together by position. A
+   cheap model transcribing two lists can silently misalign them; a keyed schema makes
+   that structurally impossible.
+7. On visual/UI work, one named artifact handover to the operator — a screenshot, a
+   rendered page, a design-canvas link — is allowed before the verification tail
+   spends its budget, so a human sees the actual visual result once early rather than
+   only after several rounds of automated verify already ran. This is a single named
+   handover, not a standing checkpoint.
+8. The word "plane" is reserved for the coordination-versus-execution distinction
+   (method §3). Do not reuse it for the build-time-versus-runtime distinction — use
+   "surface" there instead ("build surface" vs "runtime surface"), so a reader can
+   rely on "plane" meaning one specific thing throughout an emitted prompt.
+
+## Verification routing and honest reporting
+
+Ten rules promoted from a consuming project's local region, where they were working and
+reaching nobody else. The Field rules above are about *whether a proof is sound*; these
+are about *who runs it, over what population, and how its result gets reported*.
+
+1. **Route a verifier by the permission its proof needs — a third axis beside proof
+   shape and blast radius.** An adversarial brief that says "break the code and count the
+   failures" cannot run on `Explore`: it is read-only, so `git init`, `git worktree add`,
+   a scratch commit and every temporary mutation are refused. The agent behaves correctly
+   and fabricates nothing — it reports the write-requiring steps UNVERIFIED — so a whole
+   verification round buys static analysis instead of the mutation evidence that was
+   asked for. Mutation tests, negative controls and scratch-repo reproductions need
+   `general-purpose`; `Explore` stays the default only for genuinely read-only proofs.
+   This is the routing axis whose failure returns a *non-answer*, so state the proof's
+   write needs in the dispatch alongside `agentType` and `model`.
+2. **Dry-run every string a verifier will execute, on the target tree, before the
+   verifier launches — an amendment is a proof command too.** A proof command that is
+   wrong about reality (a path that does not exist in that worktree, a venv binary in a
+   venv-less tree, a summary table the page never had) makes the verifier report RED
+   honestly, which is the right failure mode and still costs a whole fresh-context round.
+   A clause *appended* to an already-verified proof row is a new command and gets the same
+   dry-run. Every numeric floor also names the artifact it is counted from. Three riders
+   on Workflow spend: a cached resume replays results keyed on (prompt, opts) and is blind
+   to repo state, so any stage reading mutable state is re-launched fresh rather than
+   resumed; guard the cheap pre-stage of an expensive gate, or a pre-stage failing for
+   environment reasons silently cancels the stage that was the point; and a *mechanical*
+   merge gate needs no fresh context at all — `git range-diff` printing `=` proves a
+   rebase patch-identical for a few hundred tokens where a two-agent verification round
+   costs six figures. Reserve fresh contexts for reads that actually need independence.
+3. **Scope verification to the artifact, not to the diff.** Every mechanism in a program
+   scoped to *change* is structurally blind to a falsehood already on the main line: a
+   claim that contradicts the record beside it can survive round after round of review,
+   because every reviewer was scoped to the diff and nobody was ever asked *is what is
+   already here true?* A clean identity read is evidence about what the reader looked at,
+   never proof of absence. Attribute a defect with a content search over history (`git
+   log -S` on the string), never from the most recent nearby merge.
+4. **Give every cross-cutting claim exactly one owner.** Per-artifact ownership makes
+   cross-artifact truth nobody's job — splitting findings per page and fixing each page
+   against its own record produces a second round whose findings are almost entirely
+   *between* the pages. Either one lane owns a **claim** across every artifact that makes
+   it, or the shared fact moves into one record the artifacts derive from. Scope
+   owner-facing lanes by **what the recipient actually opens** (the zip, the PDF inside
+   it, the email), not by file ownership: enumerate the shipped manifest first and make
+   it the lane's file list. And a lane whose evidence runs a tool it does not own
+   *reports* the failing line — it does not edit the tool, or two lanes fix the same
+   shared bug two different ways and the fold conflicts irreconcilably.
+5. **"Disjoint files" is measured, not argued.** The derived-shared-state test (§3) is the
+   sophisticated half of the independence question and it can be right while the trivial
+   half was never checked at all — a plan can correctly serialise one lane behind a shared
+   derived set and, in the same paragraph, call two others "disjoint files *and* disjoint
+   derived sets" when both edit the same module and both append to the same test file.
+   Intersect the intended file lists mechanically before fanning out and record the result
+   in the Parallelization plan. An elaborate dependency argument is not evidence that
+   anyone ran the simple check.
+6. **Prose is the unguarded surface — and a prose rule beside the code it governs does not
+   stop the code.** The defects that survive their author's own review are overwhelmingly
+   *prose*, and the code beside them is usually correct, which is exactly why nobody looks:
+   a comment asserting that a dry-run previews what the real run does, when it compares
+   pre-change state; a runbook naming a file that does not exist; a generator comment
+   naming a failure mode precisely, a few hundred lines above the shipped instance of it.
+   None is reachable by any test. Two consequences. Prose can assert a *consumer* that was
+   never built, which makes an unshipped feature read as shipped and leaves every artifact
+   agreeing about it — so grep for the reader, not just the writer. And where a preview and
+   a real run must agree, **assert that they are equal**, never that both were "computed by
+   the same logic": the latter is satisfiable by calling the right helper on the wrong
+   state, which is the bug it was meant to exclude. Whenever you are about to add a standing
+   constraint to a prompt, ask first whether the *dispatcher* could refuse the thing
+   mechanically — an injected rule is still a reminder, and reminders lose to defaults.
+7. **Never read tracker state as evidence that work happened.** An integration can write
+   it: merging a PR whose title carried an issue id has auto-completed that issue seconds
+   later, `completedAt` matching the merge, with most acceptance boxes unticked and no
+   agent or human write behind it. Keep ids out of PR titles and branch names and put them
+   in the body; make "is this PR attached to that issue?" a **pre-merge** check; re-read
+   every issue that must stay open after every merge. The claim runs both ways — a
+   prompt's own summary of tracker state is a handoff claim, not a fact, so a prompt that
+   restates tracker state says so in the same breath. Close an issue by ticking each box
+   with its evidence pointer, or leaving it unticked and saying in the body why:
+   unticked-and-silent is the only version that is not honest.
+8. **"Blocked" is a first-class lane outcome — say so, or lanes optimise for the number.**
+   A lane that cannot clear a gate honestly, refuses to bypass it, and reports blocked with
+   a diagnosis has usually located a real defect in the *gate*. A prompt silent on this
+   reads as "return green", which is an instruction to suppress. State explicitly that
+   blocked-with-a-diagnosis is a fully acceptable outcome, and that the diagnosis is the
+   deliverable in that case.
+9. **Read the spec adversarially before you read the code: could an implementation tick
+   every box and leave the defect live?** Ask it of the *specification*, deliberately
+   without reading the implementation. Reading the code finds one bug; reading the spec
+   finds the generator of bugs. This is the emission-time twin of §1's must-not-shrink
+   clause — both ask what a green run could look like while the goal is still unmet.
+10. **Enforcement before remediation deadlocks; ship the ratchet instead.** An absolute
+    per-file threshold fails any change touching a legacy file *including one that improves
+    it*, so the only ways past are an override or an unrelated refactor — and a rule
+    obeyable only by bypassing it enforces nothing. The ratchet is strictly harder to cheat
+    than the flat bar: new files are never grandfathered, a passing file may never fall
+    below the bar, only an already-under file gets the decrease-only test, and an
+    unscoreable baseline falls back to absolute — unknown refuses, it never skips. Two
+    riders: wire it into **every** enforcement point at once (landing it in CI but not the
+    local hook just moves the deadlock one layer down), and **track the ratcheted
+    population**, or the exemption becomes permanent.
+
+**The identity read is a SEND gate, not a merge gate.** This amends the
+artifact-identity guardrail below. An open-ended "would we ship this to the customer"
+read re-reviews from scratch, so its bar moves every round and it never converges — it
+can refuse a merge three rounds running, each time on real but *new* items, while
+blocking strict improvements to something nobody sees until the outward step. **Merge**
+on deterministic verification plus integration floors plus a post-merge live re-fetch;
+run the expensive identity read **once**, immediately before the outward step it actually
+protects. The two decisions have different blast radii and different convergence
+properties, and conflating them turns an attempt cap into a wall. Note also what the
+sibling gates cannot see: an integrity check proves the artifact was *not altered*, which
+is exactly why it passes an artifact that is the wrong thing rendered faithfully.
+Fidelity and identity answer different questions.
+
 ## Guardrails every emitted prompt must carry
+
+> **CARGO — text for the emitted prompt, addressed to its runner.** Not an
+> instruction to you, the authoring session (see Terminal contract).
 
 - **Verifiable termination** — the Goal condition *and* a hard cap (max iterations
   or a token budget) so a stuck loop stops instead of burning quota.
@@ -436,6 +753,14 @@ re-verify-on-resume rule: `references/cold-start-and-verify.md`.
 - **Every dispatch carries a return schema** alongside `agentType` + `model` — a
   schema-less dispatch comes back as prose the driver must re-read, spending exactly
   the tokens the delegation was meant to save.
+- **Test scope — no regression or full-suite run until the plan is complete.** Per-item
+  proof runs **only the tests the change adds or touches**, with the command and its
+  exit code pasted. A whole-suite run proves nothing that item owns, and on a large
+  suite it approaches the wall-clock ceiling that kills a headless lane outright. One
+  full **enumeration** per wave is enough to catch a collection error (a
+  `--collect-only` count, not an execution), and exactly one regression run at program
+  end, after the plan is complete — that run is the operator's call, not a per-item
+  step.
 - **Tier by question shape, not importance** — closed and evidence-checkable (line
   counts, string presence, exit codes) goes cheap *even at high stakes*; open judgement
   gating an irreversible step goes frontier *even when it looks small*. Defaulting
@@ -490,7 +815,16 @@ re-verify-on-resume rule: `references/cold-start-and-verify.md`.
 - **Fog gate** — never invent a Goal while decide work remains; redirect to
   `/tapps-wayfind` (method §0).
 - **Scope** — name the exact repos/paths; reads can be fleet-wide, writes go through
-  the owning repo's channel.
+  the owning repo's channel. **The session's workspace directory list is the scope
+  fence — a fleet-registry row is not an in-scope target by itself**; a manifest can
+  list far more repos than this session actually has open. Naming a repo in the
+  prompt is inert: the boundary is crossed only when a tool call's *path argument*
+  points outside the workspace. Audit by grepping the transcript for path
+  **arguments**, never for repo names — a mention proves nothing either way. Every
+  fan-out brief names the permitted paths and the dispatched agent's return schema
+  reports the paths it actually read, so the fence stays auditable after the fact.
+  Out-of-scope work discovered mid-run is a hard-stop to surface immediately, never a
+  silent skip.
 - **Budget** — every loop carries *both* an iteration cap and a token budget; set a
   Workflow `budget` to a token ceiling (≈ the autonomy cost gate) so it self-aborts.
 - **Memory** — recall at the start, record the outcome (incl. failures) at each
@@ -500,6 +834,9 @@ re-verify-on-resume rule: `references/cold-start-and-verify.md`.
   nudge is explicitly adopted or overridden (method §6).
 
 ## Autonomy contract (every emitted prompt carries this)
+
+> **CARGO — text for the emitted prompt, addressed to its runner.** Not an
+> instruction to you, the authoring session (see Terminal contract).
 
 Run like an operator, not an intern. Decide and act on every reversible, in-scope
 step — never insert "should I proceed?" checkpoints. For an irreversible/outward step,
@@ -516,6 +853,9 @@ expensive and unrecoverable. Enforce the cost gate mechanically via the Workflow
 
 ## Failure handling (diagnose, don't repeat)
 
+> **CARGO — text for the emitted prompt, addressed to its runner.** Not an
+> instruction to you, the authoring session (see Terminal contract).
+
 On a failed verify, do **not** re-run the same action. Diagnose first: read the
 actual error, inspect state/files, recall prior failures from the brain, research the
 cause. Form a specific hypothesis, apply a fix, retry with *something changed*. Bound
@@ -524,6 +864,9 @@ model / different approach), then **stop and surface a concise diagnosis**. Repe
 the same action on the same error is forbidden.
 
 ## Expected-fail fix loop (Missions-inspired)
+
+> **CARGO — text for the emitted prompt, addressed to its runner.** Not an
+> instruction to you, the authoring session (see Terminal contract).
 
 Independent verification **almost never passes on the first attempt** for non-trivial
 work. Treat that as the design, not a crisis:
@@ -542,10 +885,22 @@ Infinite fix spirals and "green by suppression" are forbidden.
 
 ## Engineering discipline (emit in every prompt's guardrails)
 
+> **CARGO — text for the emitted prompt, addressed to its runner.** Not an
+> instruction to you, the authoring session (see Terminal contract).
+
 Produce *solutions*, not band-aids: root-cause not workarounds; **no
 green-by-suppression** (never skip/disable a check to pass); **right-sized** (the
 simplest thing that fully solves it); durable over expedient; match repo conventions;
 no silent scope creep.
+
+**Scope admission is announced, not forbidden.** A flat "no scope creep" is right about
+*silence* and wrong about *scope* — it tells a lane to walk past a live Urgent defect it
+is standing on. File everything you find. Admit into the current run only what is filed
+**Urgent or High**, say so out loud in the same report that discovers it, and add it to
+the SCORE denominator so `pct` tells the truth about the larger population rather than
+quietly shrinking its own target. Everything below High is filed and left for the
+operator. What stays forbidden is the *silent* version: work that appears in the diff
+and nowhere in the report.
 
 ## Output
 
@@ -553,7 +908,10 @@ no silent scope creep.
    do not emit a prompt. If clear, recall `memory_group=wayfind` resume when present.
 2. Read `references/host-feature-map.md` when the runner host is Cursor or when Run-as / checkpoint lanes differ by host.
 3. Read the workspace manifest (e.g. `fleet.md`) for the repos / Linear projects /
-   brain ids involved, if the project has one.
+   brain ids involved, if the project has one. **The manifest is a registry, not a
+   scope grant** — it can list far more repos than this session's actual workspace
+   directory list has open. Treat a manifest row as a candidate to confirm against the
+   open workspace, never as authorization by itself.
 4. Fill `assets/prompt-template.md` — keep only the sections the task needs. Always
    keep **Prerequisites / Wayfind gate**, the **"How to run (cold start)"** block,
    **`## Driver discipline`** with its Owner-column Plane map and
@@ -581,9 +939,30 @@ no silent scope creep.
    `/clear` the loop cannot invoke. A template supplies the boundary by default, so a
    prompt that quietly drops it looks finished — this is the one guardrail whose failure
    mode is silence.
+   **Then assert no files were written outside `prompts/<slug>.md`, the optional
+   `.claude/workflows/<slug>.js`, and `learnings.md`.** A stray branch, edit or commit
+   means the terminal contract was broken and the run is a failure whatever the prompt
+   scored.
 8. Tell the user exactly how to run it — the `/goal` line, the `/loop` cadence, the
    Routine schedule, or "invoke the Workflow tool `<script>`" — and from which
    session.
+9. **Launch block — REQUIRED, and the last thing the run produces.** Print exactly one
+   fenced block and nothing after it. It carries a concrete `/model` and a concrete
+   `/effort` — real values, never placeholders, because the runner otherwise inherits
+   whatever the pasting session happened to be set to — and a line that reads the prompt
+   file *before* looping, since `/goal "<condition>"` does not load the file's body:
+
+   ```text
+   /model sonnet
+   /effort medium
+   Read prompts/<slug>.md in full, then execute it as a goal loop from <cwd>: run the
+   Loop section once per iteration, print the SCORE line every iteration, establish
+   your own preconditions per Sub-goal 0, and stop only when Done-when holds or an
+   Autonomy hard-stop fires.
+   ```
+
+   Then stop. Do not create a branch, dispatch a lane, or start Sub-goal 0 yourself —
+   that is the terminal contract, and this block is where the skill ends.
 
 ## Learn as you go (measured evolution)
 
@@ -626,6 +1005,109 @@ Treat this as a *measured* loop, not a scratchpad: the harness improves by obser
 its own runs. When a golden set (`evals/evals.json`) and a gated improvement loop
 (`SELF_IMPROVEMENT.md`) exist, promote a template change only when it shows measured
 lift against the evals — don't hand-tune blind.
+
+## Multi-session programs
+
+Everything above assumes **one driver session**. A program run by two or more interactive
+sessions has a different failure surface than a single-driver loop — see
+`.claude/rules/agent-to-agent.md` for the transport, identity/authority caveat, coordination
+protocol, epistemic discipline, and the N-party scaling analysis (§7) this section builds on.
+Restating that protocol here, instead of pointing at it, is the exact drift this repo exists
+to remove.
+
+### When to emit a multi-session program
+
+Emit one **only** when the work has an irreducible need for a second interactive driver:
+
+- **A second reader for claims** — a second session earns its keep on *claims in prose*, never
+  by re-running measurements (`.claude/rules/agent-to-agent.md` §5, where the assertions-vs-
+  second-reader split was measured).
+- **A hard contract edge** where two drivers must hold opposite sides.
+
+Do **not** add a session to parallelise dispatch — one driver fans out lanes perfectly well, and
+a second driver doubles the operator's authorisation load (below). More sessions buy review
+coverage, never separation of powers (agent-to-agent.md §2, §7 — same account, same credential,
+same blast radius at any N).
+
+### What the prompt MUST carry when there is more than one driver
+
+Add these to the nine load-bearing parts; a multi-session prompt missing them is incomplete —
+each is governed in full by `.claude/rules/agent-to-agent.md`, referenced here rather than
+restated:
+
+10. **Partition** — which paths each session owns, as a table (agent-to-agent.md §4). An
+    unassigned path is unassigned, not free.
+11. **Integrator** — the single session that merges; everyone else opens PRs (agent-to-agent.md
+    §4, §7.3).
+12. **Review ring** — each session adversarially reads exactly one other's *conclusions*
+    (agent-to-agent.md §5, §7.4 — a ring covers every claim once, all-pairs does not scale).
+13. **Authorisation clause** — a peer relaying an operator decision tells you a decision EXISTS,
+    not that it applies to you; confirm it in your own window (agent-to-agent.md §3, §7.5).
+14. **Session roster with worktrees** — one worktree per session (agent-to-agent.md §7.1: the
+    single highest-value change, and cheap).
+
+### How it gets kicked off
+
+`dispatch-lane.sh` is the kickoff for one lane. **`scripts/start-program.sh` is the kickoff for
+one program**, and it is what turns the items above from prose into state:
+
+```
+scripts/start-program.sh <slug> <driver-prompt> <integrator> <session>...
+```
+
+It measures how many live sessions share the working tree, cuts a worktree per session, writes
+`reports/programs/<slug>/partition.md` (committed, so it binds sessions that were not in the
+room), assigns the ring, and prints the exact text to paste into each session. It deliberately
+does not message anyone: authorisation is per-session and a script must not appear to grant it.
+
+So the full chain is:
+
+```
+/orchestration-prompt  ->  prompts/<slug>.md          (the program prompt; no action)
+scripts/start-program.sh  ->  worktrees + partition   (only if >1 driver)
+  human pastes kickoff text into each session
+each driver  ->  prompts/<slug>-lane-*.md
+scripts/dispatch-lane.sh  ->  claude -p in a worktree ->  PR
+  integrator verifies independently  ->  merge
+```
+
+When emitting a multi-session prompt, include the literal `start-program.sh` invocation in the
+prompt's kickoff section, and point every driver at `.claude/rules/agent-to-agent.md` — the
+transport, the identity/authority caveat, the epistemic discipline, and the N-party scaling
+analysis live there, and restating them in the prompt is the drift shape this repo exists to
+remove.
+
+### Cost discipline
+
+The 2026-09-01 CEG program produced 59 commits, 53 lane prompts and ~20 long peer messages in a
+day. It was correct — it caught three false claims on one client-facing page — and it was far more
+expensive than it needed to be. The waste was concentrated and it was mechanical, not intellectual:
+
+| Sink | What it cost | The fix, now available |
+|---|---|---|
+| Hand-rolled probes | 9 wrong results; 2–5 calls each to diagnose and redo; one measurement took 8 calls | `scripts/measure.py` — mandatory known-positive assertion, prints the denominator, diagnoses a miss instead of returning empty |
+| Re-derived git facts | two-dot vs three-dot diffs, stale HEAD searches, "is this branch really unmerged" | `scripts/gitfacts.sh adds\|landed\|content\|stale\|sessions` |
+| Peer status prose | ~20 messages, much of it status | `status/<session>.md` in the program dir; peers **read** state |
+| Operator interrupts | ~6 separate asks across two windows | `decisions.md` — one table answered at kickoff |
+
+**Emit these into every multi-session prompt:**
+
+- Point at `measure.py` / `gitfacts.sh` by name and forbid hand-rolled equivalents. An ad-hoc
+  one-liner used as evidence never gets the validation a test would get.
+- Require a **denominator** with every count. "16 lines", "16 shown heroes" and "89 candidate
+  records" are three different answers to what sounds like one question, and conflating two of
+  them while holding a green assertion is how a wrong finding reaches a peer's queue.
+- Put the **decision budget** in the prompt's kickoff, not in the loop. Authorisation cannot be
+  relayed between sessions (`agent-to-agent.md` §3), so every un-batched decision costs one
+  operator interrupt *per session*.
+- Say explicitly that a second session reviews **conclusions, not measurements**. Re-running a
+  peer's greps is the lowest-value work a second session can do, and it is the default thing an
+  idle one will reach for.
+
+**The single highest-leverage change is not a rule, it is that the checks became commands.** Nine
+probe failures in one day were nine defaults being wrong; a prose rule saying "validate your probe"
+was already in force and did not prevent any of them. `measure.py` refuses to emit results at all
+unless a known-positive assertion passes — the constraint that replaces the reminder.
 <!-- END: tapps-skill -->
 
 <!-- tapps-skill-project-customizations: preserved from the pre-marker version — review and trim any content the managed block above now covers -->

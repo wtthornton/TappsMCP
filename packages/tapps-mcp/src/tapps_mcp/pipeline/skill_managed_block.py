@@ -17,6 +17,7 @@ three are intentionally similar so a future refactor can share infrastructure.
 from __future__ import annotations
 
 import re
+from dataclasses import dataclass
 from typing import TYPE_CHECKING, Literal
 
 from tapps_mcp import __version__
@@ -193,13 +194,71 @@ def install_or_refresh_skill(
     return action
 
 
+# TAP-6854 criterion 5 ("the learnings.md ceiling is enforced by a check, not
+# by prose"). The orchestration-prompt SKILL.md body (platform_skill_orchestration.py)
+# tells the agent "Past roughly 120 bullets or 40 KB, merge overlapping lines" —
+# prose only, nothing ever measured it. TAP-6861 (branch tap-6861-skill-learnings,
+# PR #345, unmerged at the time this was written) ships a fuller learnings.md audit
+# — near-duplicate detection, contradiction detection, single-home verification —
+# built on bullet_spans()/Region primitives this branch does not have. Pulling that
+# whole module in would mean depending on unmerged code at runtime, which this fix
+# does not do. This is the minimal standalone half: the same two thresholds the
+# prose names, measured from file bytes alone, with no other dependency. Once
+# TAP-6861 lands, this should be replaced by (or delegate to) its size_finding().
+LEARNINGS_CEILING_BYTES = 40_000
+LEARNINGS_CEILING_BULLETS = 120
+
+# A top-level bullet: a line starting with "- " at column 0. Continuation text
+# and nested detail lines are indented, so they are not counted — this matches
+# how the prose instruction ("120 bullets") reads: one bullet per lesson.
+_TOP_LEVEL_BULLET_RE = re.compile(r"^- ", re.MULTILINE)
+
+
+@dataclass(frozen=True)
+class LearningsSizeFinding:
+    """``learnings.md`` byte size and top-level bullet count against the ceiling."""
+
+    size_bytes: int
+    bullet_count: int
+    ceiling_bytes: int
+    ceiling_bullets: int
+    over_ceiling: bool
+
+
+def learnings_size_finding(
+    learnings_md: str,
+    *,
+    ceiling_bytes: int = LEARNINGS_CEILING_BYTES,
+    ceiling_bullets: int = LEARNINGS_CEILING_BULLETS,
+) -> LearningsSizeFinding:
+    """Measure *learnings_md* against the ceiling the skill's own prose names.
+
+    Flags ``over_ceiling`` when either threshold is exceeded — matching "Past
+    roughly 120 bullets **or** 40 KB, merge" in the emitted SKILL.md body.
+    """
+    size_bytes = len(learnings_md.encode("utf-8"))
+    bullet_count = len(_TOP_LEVEL_BULLET_RE.findall(learnings_md))
+    over = size_bytes > ceiling_bytes or bullet_count > ceiling_bullets
+    return LearningsSizeFinding(
+        size_bytes=size_bytes,
+        bullet_count=bullet_count,
+        ceiling_bytes=ceiling_bytes,
+        ceiling_bullets=ceiling_bullets,
+        over_ceiling=over,
+    )
+
+
 __all__ = [
+    "LEARNINGS_CEILING_BULLETS",
+    "LEARNINGS_CEILING_BYTES",
     "MARKER_BEGIN_PREFIX",
     "MARKER_END",
     "PROJECT_REGION_HEADING",
     "Action",
+    "LearningsSizeFinding",
     "extract_block",
     "install_or_refresh_skill",
+    "learnings_size_finding",
     "normalize_block_version",
     "prepend_below_frontmatter",
     "split_frontmatter",

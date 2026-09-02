@@ -207,6 +207,7 @@ from tapps_mcp.distribution.doctor_runner import (
     run_doctor_structured,
 )
 from tapps_mcp.distribution.doctor_skills import (
+    check_orchestration_prompt_learnings_ceiling,
     check_orchestration_prompt_skill_current,
     check_skill_asset_drift,
     check_skill_mirror_parity,
@@ -291,6 +292,7 @@ __all__ = [
     "check_memory_pipeline_config",
     "check_memory_profile_resolvable",
     "check_nlt_partial_enablement",
+    "check_orchestration_prompt_learnings_ceiling",
     "check_orchestration_prompt_skill_current",
     "check_pipeline_enforce_recommendations",
     "check_plaintext_secrets",
