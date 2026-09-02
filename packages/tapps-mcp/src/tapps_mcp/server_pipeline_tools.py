@@ -1763,9 +1763,9 @@ async def tapps_handoff_save(
             "errors": result.lint.errors,
             "warnings": result.lint.warnings,
         },
-        "brain_mirror": result.brain_mirror,
+        "brain_mirror": result.brain_mirror,  # envelope-ok: examined below by _append_handoff_subresult_warnings
         "brain_mirror_status": mirror_status,
-        "session_end": result.session_end,
+        "session_end": result.session_end,  # envelope-ok: examined below by _append_handoff_subresult_warnings
         "session_end_status": session_end_status,
     }
 
