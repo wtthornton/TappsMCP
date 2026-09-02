@@ -20,6 +20,18 @@ out-of-range marker content rather than raising on it, and
 ``attach_session_health`` catches any residual failure from either probe and
 reports it as an ``error`` field instead of propagating it: a diagnostic that
 can break the doctor is worse than no diagnostic.
+
+Two surfaces consume these blocks — the ``tapps_doctor`` MCP tool and the
+``tapps-mcp doctor`` CLI — and they run in *different kinds of process*. The
+uptime fields therefore name the process that ran the probe
+(``probe_process_*``) rather than asserting it is a server, and
+``probe_process_role`` says which kind it was. Under the CLI the uptime is a
+few milliseconds and means "this CLI invocation"; calling that
+``server_process_uptime_s`` would be true as arithmetic and false as a
+sentence. For the same reason ``memo_hit_pending`` is ``None`` — not
+``False`` — when the caller holds no memo cache to inspect: the CLI cannot see
+the server's memo, and reporting ``False`` would assert that the next
+``tapps_session_start`` would really run.
 """
 
 from __future__ import annotations
@@ -38,6 +50,19 @@ from typing import Any
 DEFAULT_STALE_MEMO_S = 3600
 
 _MARKER_RELPATH = (".tapps-mcp", ".session-start-marker")
+
+#: The long-lived MCP server process that answers ``tapps_doctor``.
+PROBE_ROLE_SERVER = "mcp_server"
+
+#: A short-lived process that exits when the command does — ``tapps-mcp
+#: doctor`` and any in-process library caller. Chosen as the default because it
+#: under-claims: mislabelling a CLI as a server is the defect, not the reverse.
+PROBE_ROLE_CLI = "cli"
+
+#: The blocks :func:`attach_session_health` writes. Both doctor surfaces render
+#: from this tuple, so a third block reaches both of them at once and the
+#: CLI/MCP parity test has something to assert against.
+SESSION_HEALTH_BLOCK_KEYS = ("session_start", "build_skew")
 
 
 def stale_memo_threshold_s() -> int:
@@ -92,7 +117,11 @@ def read_marker_epoch(project_root: Path | str) -> float | None:
 
 
 def process_start_epoch() -> float | None:
-    """Best-effort start time of *this* server process.
+    """Best-effort start time of the process that is running this probe.
+
+    Deliberately not "the server process": under ``tapps-mcp doctor`` this is
+    the CLI invocation, which started milliseconds ago. Callers label it with
+    ``probe_process_role`` rather than assuming.
 
     Linux exposes it as the ctime of ``/proc/self``. Elsewhere we return
     ``None`` rather than guess — an invented uptime would be worse than an
@@ -153,7 +182,8 @@ def collect_build_skew() -> dict[str, Any]:
 def collect_session_start_health(
     project_root: Path | str,
     *,
-    memo_present: bool,
+    memo_present: bool | None,
+    probe_role: str = PROBE_ROLE_CLI,
     now: float | None = None,
 ) -> dict[str, Any]:
     """Report whether a real ``tapps_session_start`` bootstrap backs this session.
@@ -162,7 +192,14 @@ def collect_session_start_health(
         project_root: Root whose marker is read.
         memo_present: Whether ``_SESSION_START_CACHE`` already holds an entry
             for this root, i.e. whether the next ``tapps_session_start`` call
-            would be served from memo without running.
+            would be served from memo without running. ``None`` when the caller
+            has no memo cache to inspect (the CLI cannot see the server's), in
+            which case no memo verdict is reachable and the marker's age alone
+            decides between ``fresh`` and ``stale_marker``.
+        probe_role: Which kind of process is running this probe —
+            :data:`PROBE_ROLE_SERVER` or :data:`PROBE_ROLE_CLI`. Reported as
+            ``probe_process_role`` so a reader knows whose uptime the
+            ``probe_process_*`` fields describe.
         now: Injected clock for tests.
     """
     now = time.time() if now is None else now
@@ -176,8 +213,9 @@ def collect_session_start_health(
         "stale_after_s": threshold,
         "marker_mtime": _iso(marker_epoch) if marker_epoch is not None else None,
         "marker_age_s": int(now - marker_epoch) if marker_epoch is not None else None,
-        "server_process_started": _iso(proc_start) if proc_start is not None else None,
-        "server_process_uptime_s": int(now - proc_start) if proc_start is not None else None,
+        "probe_process_role": probe_role,
+        "probe_process_started": _iso(proc_start) if proc_start is not None else None,
+        "probe_process_uptime_s": int(now - proc_start) if proc_start is not None else None,
     }
 
     if marker_epoch is None:
@@ -194,6 +232,8 @@ def collect_session_start_health(
     block["bootstrap_within_this_process"] = within
 
     age = int(now - marker_epoch)
+    # An unobservable memo (``memo_present is None``) is falsy here on purpose:
+    # neither memo verdict can be claimed, so the marker's age decides alone.
     if memo_present and age > threshold:
         block["verdict"] = "stale_memo"
         block["warning"] = (
@@ -221,7 +261,9 @@ def collect_session_start_health(
 def attach_session_health(
     result: dict[str, Any],
     project_root: Path | str,
-    memo_cache: dict[Any, Any],
+    memo_cache: dict[Any, Any] | None,
+    *,
+    probe_role: str,
 ) -> None:
     """Add the ``session_start`` and ``build_skew`` blocks to a doctor result.
 
@@ -230,16 +272,32 @@ def attach_session_health(
     1800-line module scoring below the gate threshold, and every line added
     there makes an existing failure worse.
 
+    This is the single seam both doctor surfaces wire through, so ``probe_role``
+    is required with no default: adding a third surface has to state what kind
+    of process it is rather than inherit a claim that happens to be wrong.
+
+    Args:
+        result: Doctor payload to populate; gains exactly
+            :data:`SESSION_HEALTH_BLOCK_KEYS`.
+        project_root: Root whose marker is read.
+        memo_cache: The server's ``_SESSION_START_CACHE``, or ``None`` when the
+            caller has no such cache to inspect — the CLI runs in a different
+            process from the server and cannot observe its memo.
+        probe_role: :data:`PROBE_ROLE_SERVER` or :data:`PROBE_ROLE_CLI`.
+
     Neither block raises. A probe that dies is recorded as an ``error`` field —
     never omitted, since an absent block would read as a clean bill of health.
     """
     root_key = str(Path(project_root).resolve())
     try:
-        memo_present = any(
-            isinstance(key, tuple) and len(key) >= 3 and key[2] == root_key for key in memo_cache
-        )
+        memo_present: bool | None = None
+        if memo_cache is not None:
+            memo_present = any(
+                isinstance(key, tuple) and len(key) >= 3 and key[2] == root_key
+                for key in memo_cache
+            )
         result["session_start"] = collect_session_start_health(
-            project_root, memo_present=memo_present
+            project_root, memo_present=memo_present, probe_role=probe_role
         )
     except Exception as exc:
         result["session_start"] = {"error": f"session_start_probe_unavailable: {exc}"}
@@ -283,6 +341,9 @@ def prepend_session_health_warnings(
 
 __all__ = [
     "DEFAULT_STALE_MEMO_S",
+    "PROBE_ROLE_CLI",
+    "PROBE_ROLE_SERVER",
+    "SESSION_HEALTH_BLOCK_KEYS",
     "attach_session_health",
     "collect_build_skew",
     "collect_session_start_health",

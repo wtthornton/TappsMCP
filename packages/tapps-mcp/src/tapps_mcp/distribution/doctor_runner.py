@@ -4,6 +4,15 @@ Wires every ``check_*`` function from the ``doctor_*`` sibling modules into
 :func:`_collect_checks`, then exposes :func:`run_doctor` (CLI report) and
 :func:`run_doctor_structured` (MCP tool payload) — the two public entry
 points every other doctor caller uses.
+
+The two entry points are siblings, not layers: :func:`run_doctor` renders
+straight from :func:`_collect_checks` and never calls
+:func:`run_doctor_structured`. That is how the ``session_start`` and
+``build_skew`` blocks came to exist on the MCP surface only — they were wired
+into the MCP caller, and the CLI had no seam to inherit them through. Both now
+go through :func:`collect_session_health_blocks`, and both render every key in
+``SESSION_HEALTH_BLOCK_KEYS``, so a block added to one surface reaches the
+other by construction.
 """
 
 from __future__ import annotations
@@ -131,6 +140,11 @@ from tapps_mcp.distribution.doctor_telemetry import (
 )
 from tapps_mcp.distribution.doctor_telemetry_pipeline import (
     check_pipeline_enforce_recommendations,
+)
+from tapps_mcp.tools.session_health import (
+    PROBE_ROLE_CLI,
+    SESSION_HEALTH_BLOCK_KEYS,
+    attach_session_health,
 )
 
 log = get_logger(__name__)
@@ -292,8 +306,59 @@ def _collect_checks(root: Path, *, quick: bool = False) -> list[CheckResult]:
     return checks
 
 
+def collect_session_health_blocks(
+    root: Path,
+    *,
+    memo_cache: dict[Any, Any] | None,
+    probe_role: str,
+) -> dict[str, Any]:
+    """Build the ``session_start`` + ``build_skew`` blocks for either surface.
+
+    The one place both doctor entry points get these blocks from. ``run_doctor``
+    does not call ``run_doctor_structured`` — they are siblings over
+    ``_collect_checks`` — so a shared helper is what keeps the surfaces from
+    drifting apart again.
+
+    Args:
+        root: Resolved project root.
+        memo_cache: The MCP server's session-start memo, or ``None`` when the
+            caller is a process that has none to inspect.
+        probe_role: Which kind of process is asking (``PROBE_ROLE_SERVER`` /
+            ``PROBE_ROLE_CLI``); labels the ``probe_process_*`` fields.
+    """
+    blocks: dict[str, Any] = {}
+    attach_session_health(blocks, root, memo_cache, probe_role=probe_role)
+    return blocks
+
+
+def _render_session_health(blocks: dict[str, Any]) -> None:
+    """Print the session-health blocks as ``key: field=value`` CLI rows.
+
+    Emits the literal block names so ``tapps-mcp doctor`` output can be grepped
+    for the same keys the MCP payload carries, and iterates every field rather
+    than a hand-picked list so a new field shows up here without a second edit.
+    """
+    click.echo("")
+    click.echo(click.style("=== Session health ===", bold=True))
+    for key in SESSION_HEALTH_BLOCK_KEYS:
+        block = blocks.get(key)
+        if not isinstance(block, dict):
+            click.echo(f"  {key}: unavailable")
+            continue
+        fields = " ".join(f"{k}={v}" for k, v in block.items() if k != "warning")
+        click.echo(f"  {key}: {fields}")
+        warning = block.get("warning")
+        if warning:
+            click.echo(click.style(f"        {warning}", fg="yellow"))
+
+
 def run_doctor_structured(
-    *, project_root: str = ".", quick: bool = False, include_passing: bool = True
+    *,
+    project_root: str = ".",
+    quick: bool = False,
+    include_passing: bool = True,
+    memo_cache: dict[Any, Any] | None = None,
+    probe_role: str = PROBE_ROLE_CLI,
 ) -> dict[str, Any]:
     """Run all diagnostic checks and return structured results.
 
@@ -307,6 +372,13 @@ def run_doctor_structured(
             rows — only warn/fail rows are returned (TAP-6433). Aggregate
             counts (``pass_count``, ``all_passed``, ...) always reflect the
             full check set regardless of this flag.
+        memo_cache: The MCP server's session-start memo, when the caller has
+            one. ``None`` (the default) means the caller cannot observe a memo,
+            which is reported as ``memo_hit_pending: None`` rather than
+            ``False``.
+        probe_role: Which kind of process is running the probes. Defaults to
+            ``PROBE_ROLE_CLI`` because that under-claims: only the long-lived
+            server may call itself one, and it passes the value explicitly.
     """
     root = Path(project_root).resolve()
     log.info("doctor_structured", project_root=str(root))
@@ -352,6 +424,11 @@ def run_doctor_structured(
     engagement = _read_engagement_level(root)
     if engagement is not None:
         out["llm_engagement_level"] = engagement
+
+    # TAP-6900 / TAP-6901: was this root bootstrapped for real, and is this the
+    # build installed on disk? Attached here rather than by the MCP caller so
+    # the CLI cannot be wired without them (F3).
+    out.update(collect_session_health_blocks(root, memo_cache=memo_cache, probe_role=probe_role))
     return out
 
 
@@ -397,6 +474,13 @@ def run_doctor(*, project_root: str = ".", quick: bool = False) -> bool:
     engagement = _read_engagement_level(root)
     if engagement is not None:
         click.echo(click.style(f"  Config  llm_engagement_level: {engagement}", fg="cyan"))
+
+    # Same blocks the MCP payload carries, through the same helper. The CLI
+    # holds no session-start memo — it is not the server process — so it passes
+    # None and is labelled PROBE_ROLE_CLI rather than inheriting either claim.
+    _render_session_health(
+        collect_session_health_blocks(root, memo_cache=None, probe_role=PROBE_ROLE_CLI)
+    )
 
     click.echo("")
     click.echo(f"Results: {pass_count} passed, {fail_count} failed, {warn_count} warnings")

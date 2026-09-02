@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import asyncio
 from pathlib import Path
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import ANY, AsyncMock, MagicMock, patch
 
 import pytest
 
@@ -610,7 +610,11 @@ class TestTappsDoctor:
 
         tapps_doctor(project_root="/custom/root")
         mock_doctor.assert_called_once_with(
-            project_root="/custom/root", quick=False, include_passing=False
+            project_root="/custom/root",
+            quick=False,
+            include_passing=False,
+            memo_cache=ANY,
+            probe_role="mcp_server",
         )
 
     @patch("tapps_mcp.server_pipeline_tools.load_settings")
@@ -626,7 +630,11 @@ class TestTappsDoctor:
         result = tapps_doctor(quick=True)
         assert result["success"] is True
         mock_doctor.assert_called_once_with(
-            project_root=str(tmp_path), quick=True, include_passing=False
+            project_root=str(tmp_path),
+            quick=True,
+            include_passing=False,
+            memo_cache=ANY,
+            probe_role="mcp_server",
         )
 
     @patch("tapps_mcp.server_pipeline_tools.load_settings")
@@ -642,7 +650,11 @@ class TestTappsDoctor:
 
         tapps_doctor(include_passing=True)
         mock_doctor.assert_called_once_with(
-            project_root=str(tmp_path), quick=False, include_passing=True
+            project_root=str(tmp_path),
+            quick=False,
+            include_passing=True,
+            memo_cache=ANY,
+            probe_role="mcp_server",
         )
 
 

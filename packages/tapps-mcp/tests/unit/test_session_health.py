@@ -10,6 +10,9 @@ import pytest
 from tapps_mcp.tools.session_health import (
     _MARKER_EPOCH_MAX_S,
     DEFAULT_STALE_MEMO_S,
+    PROBE_ROLE_CLI,
+    PROBE_ROLE_SERVER,
+    SESSION_HEALTH_BLOCK_KEYS,
     attach_session_health,
     collect_build_skew,
     collect_session_start_health,
@@ -261,8 +264,8 @@ def test_build_skew_unreadable_metadata_is_reported_not_raised(monkeypatch):
 
 def test_attach_populates_both_blocks(tmp_path):
     result: dict = {}
-    attach_session_health(result, tmp_path, {})
-    assert set(result) == {"session_start", "build_skew"}
+    attach_session_health(result, tmp_path, {}, probe_role=PROBE_ROLE_SERVER)
+    assert set(result) == set(SESSION_HEALTH_BLOCK_KEYS)
     assert result["session_start"]["verdict"] == "never_bootstrapped"
 
 
@@ -270,18 +273,24 @@ def test_attach_matches_memo_key_for_this_root_only(tmp_path):
     """Per-root isolation: another root's memo must not read as this root's."""
     _write_marker(tmp_path, time.time())
     other: dict = {}
-    attach_session_health(other, tmp_path, {("sid", True, "/somewhere/else"): {}})
+    attach_session_health(
+        other, tmp_path, {("sid", True, "/somewhere/else"): {}}, probe_role=PROBE_ROLE_SERVER
+    )
     assert other["session_start"]["memo_hit_pending"] is False
 
     mine: dict = {}
-    attach_session_health(mine, tmp_path, {("sid", True, str(tmp_path.resolve())): {}})
+    attach_session_health(
+        mine, tmp_path, {("sid", True, str(tmp_path.resolve())): {}}, probe_role=PROBE_ROLE_SERVER
+    )
     assert mine["session_start"]["memo_hit_pending"] is True
 
 
 def test_attach_tolerates_a_malformed_memo_key(tmp_path):
     """A cache holding an unexpected key shape must not take the doctor down."""
     result: dict = {}
-    attach_session_health(result, tmp_path, {"not-a-tuple": {}, ("a", "b"): {}})
+    attach_session_health(
+        result, tmp_path, {"not-a-tuple": {}, ("a", "b"): {}}, probe_role=PROBE_ROLE_SERVER
+    )
     assert "error" not in result["session_start"]
     assert result["session_start"]["memo_hit_pending"] is False
 
@@ -294,7 +303,7 @@ def test_attach_records_probe_failure_rather_than_omitting_the_block(tmp_path):
             raise RuntimeError("cache exploded")
 
     result: dict = {}
-    attach_session_health(result, tmp_path, Hostile())
+    attach_session_health(result, tmp_path, Hostile(), probe_role=PROBE_ROLE_SERVER)
     assert "cache exploded" in result["session_start"]["error"]
     assert "build_skew" in result
 
@@ -317,7 +326,7 @@ def test_warnings_put_build_skew_before_session_start(monkeypatch):
 def test_warnings_empty_when_healthy(tmp_path):
     result: dict = {}
     _write_marker(tmp_path, time.time())
-    attach_session_health(result, tmp_path, {})
+    attach_session_health(result, tmp_path, {}, probe_role=PROBE_ROLE_SERVER)
     assert session_health_warnings(result) == []
 
 
@@ -345,7 +354,102 @@ def test_prepend_pushes_skew_to_the_front(monkeypatch):
 def test_prepend_is_a_noop_when_healthy(tmp_path):
     result: dict = {}
     _write_marker(tmp_path, time.time())
-    attach_session_health(result, tmp_path, {})
+    attach_session_health(result, tmp_path, {}, probe_role=PROBE_ROLE_SERVER)
     resp: dict = {"data": {"next_steps": ["existing"]}}
     prepend_session_health_warnings(resp, result, lambda t, x: t["data"]["next_steps"].insert(0, x))
     assert resp["data"]["next_steps"] == ["existing"]
+
+
+# --------------------------------------------------------------------------
+# probe-process honesty (F3): the uptime fields must not claim to be a server
+# --------------------------------------------------------------------------
+
+
+def test_uptime_field_does_not_claim_to_be_the_server(tmp_path):
+    """The renamed field. `server_process_uptime_s` under `tapps-mcp doctor`
+    reported the CLI invocation's age under a name that says "server" — true as
+    arithmetic, false as a sentence. The name may no longer appear at all."""
+    now = time.time()
+    _write_marker(tmp_path, now - 5)
+    block = collect_session_start_health(
+        tmp_path, memo_present=False, probe_role=PROBE_ROLE_CLI, now=now
+    )
+    assert "server_process_uptime_s" not in block
+    assert "server_process_started" not in block
+    assert "probe_process_uptime_s" in block
+    assert "probe_process_started" in block
+
+
+@pytest.mark.parametrize("role", [PROBE_ROLE_CLI, PROBE_ROLE_SERVER])
+def test_probe_role_says_whose_uptime_it_is(tmp_path, role):
+    """The field is honest on both surfaces because it names the process that
+    ran the probe, and `probe_process_role` says which kind that was."""
+    now = time.time()
+    _write_marker(tmp_path, now - 5)
+    block = collect_session_start_health(tmp_path, memo_present=False, probe_role=role, now=now)
+    assert block["probe_process_role"] == role
+
+
+def test_both_roles_produce_identical_keys(tmp_path):
+    """Parity: renaming rather than omitting keeps one block shape, so the two
+    surfaces cannot drift into reporting different fields."""
+    now = time.time()
+    _write_marker(tmp_path, now - 5)
+    cli = collect_session_start_health(
+        tmp_path, memo_present=None, probe_role=PROBE_ROLE_CLI, now=now
+    )
+    server = collect_session_start_health(
+        tmp_path, memo_present=False, probe_role=PROBE_ROLE_SERVER, now=now
+    )
+    assert set(cli) == set(server)
+
+
+def test_probe_role_defaults_to_the_under_claiming_value(tmp_path):
+    """A caller that forgets to say what it is must not be promoted to server."""
+    block = collect_session_start_health(tmp_path, memo_present=False)
+    assert block["probe_process_role"] == PROBE_ROLE_CLI
+
+
+# --------------------------------------------------------------------------
+# unobservable memo: the CLI cannot see the server's cache
+# --------------------------------------------------------------------------
+
+
+def test_absent_memo_cache_reports_unknown_not_false(tmp_path):
+    """`memo_hit_pending: False` from the CLI would assert that the next
+    tapps_session_start really runs — a claim about a process it cannot see."""
+    _write_marker(tmp_path, time.time())
+    result: dict = {}
+    attach_session_health(result, tmp_path, None, probe_role=PROBE_ROLE_CLI)
+    assert result["session_start"]["memo_hit_pending"] is None
+    assert result["session_start"]["probe_process_role"] == PROBE_ROLE_CLI
+
+
+def test_unobservable_memo_cannot_reach_a_memo_verdict(tmp_path):
+    """With no observable memo, an old marker is `stale_marker` — never
+    `stale_memo`, which would name a memo nobody looked at."""
+    now = time.time()
+    _write_marker(tmp_path, now - (DEFAULT_STALE_MEMO_S + 1_000))
+    block = collect_session_start_health(
+        tmp_path, memo_present=None, probe_role=PROBE_ROLE_CLI, now=now
+    )
+    assert block["verdict"] == "stale_marker"
+    assert block["verdict"] in _LEGAL_VERDICTS
+
+
+def test_unobservable_memo_still_reports_fresh_for_a_new_marker(tmp_path):
+    """Negative control for the test above: `memo_present=None` must not
+    collapse every verdict to `stale_marker`."""
+    now = time.time()
+    _write_marker(tmp_path, now - 5)
+    block = collect_session_start_health(
+        tmp_path, memo_present=None, probe_role=PROBE_ROLE_CLI, now=now
+    )
+    assert block["verdict"] == "fresh"
+
+
+def test_attach_requires_an_explicit_probe_role(tmp_path):
+    """The wiring seam both surfaces pass through. A default here is what let a
+    second surface inherit the server's field meanings without deciding."""
+    with pytest.raises(TypeError):
+        attach_session_health({}, tmp_path, None)  # type: ignore[call-arg]

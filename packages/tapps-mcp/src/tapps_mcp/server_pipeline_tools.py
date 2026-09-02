@@ -1397,7 +1397,20 @@ def tapps_doctor(
     settings = load_settings()
     root = project_root or str(settings.project_root)
 
-    result = run_doctor_structured(project_root=root, quick=quick, include_passing=include_passing)
+    # TAP-6900 / TAP-6901: was this session bootstrapped for real, and is this
+    # the build that is installed on disk? A memoized session_start answers
+    # success without running, and __version__ is frozen at process import.
+    # run_doctor_structured attaches both blocks, so `tapps-mcp doctor` reports
+    # them from the same helper instead of the MCP path alone. This is the only
+    # caller holding a session-start memo, and the only one entitled to call
+    # itself the server process — every other caller under-claims by default.
+    result = run_doctor_structured(
+        project_root=root,
+        quick=quick,
+        include_passing=include_passing,
+        memo_cache=_SESSION_START_CACHE,
+        probe_role=_sh.PROBE_ROLE_SERVER,
+    )
 
     # TAP-1333: surface 7-day MCP-call ratio + gate-skip rate.
     try:
@@ -1489,13 +1502,6 @@ def tapps_doctor(
             result["completion_gate_hook"]["warning"] = " ".join(warnings)
     except Exception:
         pass
-
-    # TAP-6900 / TAP-6901: was this session bootstrapped for real, and is this
-    # the build that is installed on disk? A memoized session_start answers
-    # success without running, and __version__ is frozen at process import.
-    # Both probes live in tools.session_health so this module stays flat: it is
-    # ratcheted at its current score, and added complexity here fails CI.
-    _sh.attach_session_health(result, root, _SESSION_START_CACHE)
 
     # Usage gap summary (per-session). Surfaces edits-without-validation,
     # lookup-docs-underused, etc. from tapps_usage tool data sources.
