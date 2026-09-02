@@ -90,6 +90,45 @@ goals** — "built and tested against fixtures" is automatable; "applied to prod
 is a hard-stop needing authorization. If you cannot restate a constraint as a
 condition checkable *at the moment of action*, it is not yet encoded.
 
+### 0c. Research preflight before design choices
+
+**Prerequisite: `tapps_session_start()` must already have run.** A PreToolUse hook
+blocks every other `tapps_*` tool call until session start has fired once this
+session — a research step attempted before it silently fails, not just degrades.
+
+Before pinning the Goal (§1) or choosing a mechanism (§3), run a research pass on any
+design choice the prompt is about to bake in. **Route order:** `tapps_lookup_docs`
+first (Context7-backed, cache-first, near-free to repeat) → `tapps_research` next →
+raw web only after both. A raw-web finding is marked **`UNVERIFIED`** until a second
+independent source, or a direct code read, confirms it — one web hit is a claim, not a
+fact.
+
+**Dispatch research, don't read it.** Fan research out to parallel `Explore`
+subagents, each returning a structured verdict — never read search results or fetched
+pages directly into the authoring context; that reintroduces exactly the token spend
+delegation exists to avoid.
+
+**Return schema — exactly four fields:**
+
+- `claim` — the proposition being checked.
+- `source` — the tool + library looked up (e.g. `tapps_lookup_docs("fastapi",
+  "routing")`), or a URL plus the date it was read.
+- `confidence` — `verified` (two sources agree, or a source plus a code read) /
+  `reported` (one source, unconfirmed) / `unreachable` (the lookup failed or the
+  source could not be reached).
+- `contradicts` — the id/claim this one conflicts with, or `none`.
+
+**A non-`none` `contradicts` is adjudicated in writing — never silently dropped.**
+State which claim wins and why, and name the **reopen trigger**: the condition (a
+later source, a code read that disagrees) under which the losing claim gets
+re-examined. Silently picking a side and deleting the other loses the fact that the
+harness was ever uncertain.
+
+**Every non-`verified` finding flows into the emitted prompt's `## Unverified
+assumptions` section** (§8 / template) — a `reported` or `unreachable` claim the
+prompt depends on must stay visible to the runner, with the cheap check that would
+settle it, not get buried in the authoring transcript.
+
 ### 1. Pin the Goal to a *verifiable, demonstrable* done-condition
 
 A `/goal` evaluator judges only what Claude *surfaced in its output* — it does not
