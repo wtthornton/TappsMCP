@@ -551,7 +551,16 @@ re-verify-on-resume rule: `references/cold-start-and-verify.md`.
 - **Fog gate** — never invent a Goal while decide work remains; redirect to
   `/tapps-wayfind` (method §0).
 - **Scope** — name the exact repos/paths; reads can be fleet-wide, writes go through
-  the owning repo's channel.
+  the owning repo's channel. **The session's workspace directory list is the scope
+  fence — a fleet-registry row is not an in-scope target by itself**; a manifest can
+  list far more repos than this session actually has open. Naming a repo in the
+  prompt is inert: the boundary is crossed only when a tool call's *path argument*
+  points outside the workspace. Audit by grepping the transcript for path
+  **arguments**, never for repo names — a mention proves nothing either way. Every
+  fan-out brief names the permitted paths and the dispatched agent's return schema
+  reports the paths it actually read, so the fence stays auditable after the fact.
+  Out-of-scope work discovered mid-run is a hard-stop to surface immediately, never a
+  silent skip.
 - **Budget** — every loop carries *both* an iteration cap and a token budget; set a
   Workflow `budget` to a token ceiling (≈ the autonomy cost gate) so it self-aborts.
 - **Memory** — recall at the start, record the outcome (incl. failures) at each
@@ -614,7 +623,10 @@ no silent scope creep.
    do not emit a prompt. If clear, recall `memory_group=wayfind` resume when present.
 2. Read `references/host-feature-map.md` when the runner host is Cursor or when Run-as / checkpoint lanes differ by host.
 3. Read the workspace manifest (e.g. `fleet.md`) for the repos / Linear projects /
-   brain ids involved, if the project has one.
+   brain ids involved, if the project has one. **The manifest is a registry, not a
+   scope grant** — it can list far more repos than this session's actual workspace
+   directory list has open. Treat a manifest row as a candidate to confirm against the
+   open workspace, never as authorization by itself.
 4. Fill `assets/prompt-template.md` — keep only the sections the task needs. Always
    keep **Prerequisites / Wayfind gate**, the **"How to run (cold start)"** block,
    **`## Driver discipline`** with its Owner-column Plane map and
