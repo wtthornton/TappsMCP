@@ -1623,15 +1623,19 @@ def _install_unmanaged_skill(
     body_with_note = prepend_below_frontmatter(content, engagement_note)
     if target.exists():
         refresh = overwrite or skill_name in SESSION_TRANSFER_SKILL_NAMES
-        if not refresh:
-            return "skipped"
-        action = install_or_refresh_skill(target, body_with_note, skill_name)
-        bucket = "skipped" if action == "unchanged" else "updated"
+        if refresh:
+            action = install_or_refresh_skill(target, body_with_note, skill_name)
+            bucket = "skipped" if action == "unchanged" else "updated"
+        else:
+            bucket = "skipped"
     else:
         install_or_refresh_skill(target, body_with_note, skill_name)
         bucket = "created"
 
-    # Refresh registered companions under their declared policy.
+    # Refresh registered companions under their declared policy, regardless of
+    # whether SKILL.md itself was skipped — a project customizing SKILL.md
+    # still wants its companion docs kept current (matches pre-TAP-6948 s3
+    # behavior, where this ran unconditionally after the skip/refresh branch).
     if skill_name in SKILL_COMPANION_FILES or skill_name in SKILL_CREATE_ONLY_FILES:
         _write_skill_companions(skill_dir, skill_name, asset_actions, overwrite_warnings)
     return bucket
