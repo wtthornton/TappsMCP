@@ -10,7 +10,11 @@ import pytest
 from click.testing import CliRunner
 
 from tapps_mcp.cli import main
-from tapps_mcp.tools.handoff_schema import handoff_path, parse_handoff_markdown
+from tapps_mcp.tools.handoff_schema import (
+    handoff_memory_key,
+    handoff_path,
+    parse_handoff_markdown,
+)
 from tapps_mcp.tools.handoff_write import (
     HandoffWriteError,
     build_handoff_metadata,
@@ -67,7 +71,7 @@ class TestHandoffWriteCore:
         with patch(
             "tapps_mcp.tools.handoff_write.mirror_handoff_to_brain",
             new_callable=AsyncMock,
-            return_value={"success": True, "key": "session-handoff"},
+            return_value={"success": True, "key": handoff_memory_key()},
         ):
             result = await write_handoff(
                 tmp_path,
@@ -91,15 +95,22 @@ class TestHandoffWriteCore:
 
     @pytest.mark.asyncio
     async def test_mirror_uses_full_markdown(self, tmp_path: Path) -> None:
+        """The mirror gets the whole body, and the metadata reaches the caller.
+
+        The metadata used to be a second argument to the mirror, forwarded as
+        ``details_json=``; no brain at the pinned floor has a field for it, so
+        the mirror no longer takes it (TAP-6874). It is still built and still
+        returned — asserted here on the result, which is where it now lands.
+        """
         mock_mirror = AsyncMock(return_value={"success": True})
         with patch("tapps_mcp.tools.handoff_write.mirror_handoff_to_brain", mock_mirror):
-            await write_handoff(tmp_path, _VALID_HANDOFF, mirror_brain=True)
+            result = await write_handoff(tmp_path, _VALID_HANDOFF, mirror_brain=True)
 
         mock_mirror.assert_awaited_once()
         assert mock_mirror.await_args.args[0] == _VALID_HANDOFF
-        metadata = mock_mirror.await_args.args[1]
-        assert metadata["linear_p0"] == "TAP-3790"
-        assert "updated_at" in metadata
+        assert mock_mirror.await_args.kwargs["slot"] is None
+        assert result.metadata["linear_p0"] == "TAP-3790"
+        assert "updated_at" in result.metadata
 
     def test_build_handoff_metadata_includes_git(self, tmp_path: Path) -> None:
         from tapps_mcp.tools.handoff_schema import parse_handoff_markdown
@@ -128,6 +139,9 @@ class TestHandoffWriteCli:
                     lint=MagicMock(ok=True, errors=[], warnings=[]),
                     brain_mirror={"success": True},
                     session_end=None,
+                    # The guard's conflict report is part of the CLI payload
+                    # (TAP-6874); left as a MagicMock it is not serializable.
+                    conflict=None,
                 ),
             ),
             patch("tapps_mcp.cli._get_project_root", return_value=tmp_path),
@@ -184,9 +198,7 @@ class TestTappsHandoffSaveMcp:
             result = await spt.tapps_handoff_save(_VALID_HANDOFF)
 
         assert result["success"] is True
-        assert result["data"]["handoff_sections"]["next_p0"] == [
-            "Implement handoff write CLI"
-        ]
+        assert result["data"]["handoff_sections"]["next_p0"] == ["Implement handoff write CLI"]
 
     @pytest.mark.asyncio
     async def test_mcp_handoff_save_lint_failure_returns_structured_error(
@@ -214,9 +226,7 @@ class TestTappsHandoffSaveMcp:
         assert result["elapsed_ms"] >= 0
         assert result["error"]["code"] == "handoff_lint_failed"
         assert "Next (P0)" in result["error"]["message"]
-        assert result["error"]["errors"] == [
-            "Next (P0) is missing or empty when Open has items"
-        ]
+        assert result["error"]["errors"] == ["Next (P0) is missing or empty when Open has items"]
 
 
 class TestSessionSearchQuery:
@@ -334,7 +344,7 @@ class TestBrainMirrorStatusSurfacing:
 
     @pytest.mark.asyncio
     async def test_successful_mirror_is_not_degraded(self, tmp_path: Path) -> None:
-        result = await self._save(tmp_path, {"key": "session-handoff", "success": True})
+        result = await self._save(tmp_path, {"key": handoff_memory_key(), "success": True})
 
         assert result["data"]["brain_mirror_status"] == "ok"
         assert result.get("degraded") is not True
@@ -377,7 +387,9 @@ class TestBrainMirrorStatusSurfacing:
             patch("tapps_mcp.server._record_execution"),
         ):
             mock_settings.return_value.project_root = tmp_path
-            result_stub = self._mock_result(tmp_path, {"key": "session-handoff", "success": True})
+            result_stub = self._mock_result(
+                tmp_path, {"key": handoff_memory_key(), "success": True}
+            )
             result_stub.session_end = {"success": False, "error": "flywheel_process timed out"}
             mock_write.return_value = result_stub
             result = await spt.tapps_handoff_save(_VALID_HANDOFF)
@@ -389,7 +401,7 @@ class TestBrainMirrorStatusSurfacing:
 
     @pytest.mark.asyncio
     async def test_absent_session_end_is_skipped_not_failed(self, tmp_path: Path) -> None:
-        result = await self._save(tmp_path, {"key": "session-handoff", "success": True})
+        result = await self._save(tmp_path, {"key": handoff_memory_key(), "success": True})
 
         assert result["data"]["session_end_status"] == "skipped"
         assert result.get("degraded") is not True
@@ -491,7 +503,7 @@ class TestOverCapMirrorIsRefusedUpFront:
 
         bridge = MagicMock()
         bridge.save = AsyncMock(return_value={"success": True})
-        payload = await mirror_handoff_to_brain(_over_cap_handoff(), {}, bridge=bridge)
+        payload = await mirror_handoff_to_brain(_over_cap_handoff(), bridge=bridge)
 
         bridge.save.assert_not_awaited()
         assert payload["success"] is False
@@ -503,7 +515,7 @@ class TestOverCapMirrorIsRefusedUpFront:
 
         bridge = MagicMock()
         bridge.save = AsyncMock()
-        payload = await mirror_handoff_to_brain(_over_cap_handoff(), {}, bridge=bridge)
+        payload = await mirror_handoff_to_brain(_over_cap_handoff(), bridge=bridge)
 
         detail = payload["detail"]
         assert str(payload["value_length"]) in detail
@@ -516,8 +528,8 @@ class TestOverCapMirrorIsRefusedUpFront:
         from tapps_mcp.tools.handoff_write import mirror_handoff_to_brain
 
         bridge = MagicMock()
-        bridge.save = AsyncMock(return_value={"success": True, "key": "session-handoff"})
-        payload = await mirror_handoff_to_brain(_VALID_HANDOFF, {}, bridge=bridge)
+        bridge.save = AsyncMock(return_value={"success": True, "key": handoff_memory_key()})
+        payload = await mirror_handoff_to_brain(_VALID_HANDOFF, bridge=bridge)
 
         bridge.save.assert_awaited_once()
         assert payload["success"] is True
@@ -585,7 +597,7 @@ class TestOverCapSaveEnvelopeIsNotPlainSuccess:
             patch(
                 "tapps_mcp.tools.handoff_write.mirror_handoff_to_brain",
                 new_callable=AsyncMock,
-                return_value={"success": True, "key": "session-handoff"},
+                return_value={"success": True, "key": handoff_memory_key()},
             ),
             patch("tapps_mcp.server._record_call"),
             patch("tapps_mcp.server._record_execution"),

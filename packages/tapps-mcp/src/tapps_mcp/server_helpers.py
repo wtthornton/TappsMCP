@@ -636,6 +636,30 @@ def error_response(
     }
 
 
+def gateway_refusal_response(
+    tool_name: str,
+    envelope: dict[str, Any],
+    elapsed_ms: int,
+) -> dict[str, Any]:
+    """Return an Agent Gateway refusal as a tool error envelope (TAP-6874).
+
+    Gates that refuse rather than fail carry a prepared envelope on the
+    exception — ``code``, ``gate``, ``hint`` and a ``extra`` payload naming the
+    exact retry (docs/architecture/gateway-envelope.md). Handing that to
+    :func:`error_response` verbatim is what keeps a refusal machine-readable
+    instead of a stringified traceback, and every gate that grows one should
+    surface it the same way rather than restating this shape.
+    """
+    response = error_response(
+        tool_name,
+        str(envelope["code"]),
+        str(envelope["hint"]),
+        extra={"gate": envelope["gate"], **envelope["extra"]},
+    )
+    response["elapsed_ms"] = elapsed_ms
+    return response
+
+
 _SENTINEL = object()
 
 

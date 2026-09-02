@@ -393,10 +393,13 @@ gate**, not just a save:
 so the boundary is enforced even when the resume happens in another host.
 
 **One runner per handoff file.** Two loops sharing `.tapps-mcp/session-handoff.md`
-silently overwrite each other — the second save wipes the first run's Open items and the
-first run then rehydrates the *other* run's state, with no error anywhere. Before
-chaining `claude -p` invocations, check for a concurrent lane; if two runs must overlap,
-give each its own handoff path.
+overwrite each other — the second save wipes the first run's Open items and the first run
+then rehydrates the *other* run's state. The write is no longer silent: the ownership
+guard archives the incumbent and reports `conflict.foreign`, and under
+`handoff_conflict_mode: block` it refuses outright. Do not rely on that as the plan.
+Before chaining `claude -p` invocations, check for a concurrent lane; if two runs must
+overlap, give each its own slot — `tapps_handoff_save(markdown=..., slot="<program>")`
+and `/tapps-continue-session <slot>` — rather than sharing the default file.
 
 **When *not* to recycle.** The cycle costs a save plus a rehydrate and loses everything
 nobody wrote down. Skip it inside one tightly-coupled sub-goal, when the remaining work
@@ -766,7 +769,7 @@ N. **Lessons learned (REQUIRED — always the last sub-goal, never dropped when 
 Autonomous runs take it as a **process** boundary — one `claude -p` per sub-goal — since
 `/clear` is a built-in CLI command the loop cannot invoke itself. Skip the boundary
 inside a tightly-coupled sub-goal or when the remaining work is smaller than the cycle's
-overhead; say which sub-goals skip it and why. One runner per handoff file.
+overhead; say which sub-goals skip it and why. One runner per handoff file, or one slot each.
 
 ## Plane map  (mechanism + literal dispatch parameters per chunk)
 <`effort` applies only inside a Workflow — the Agent tool has no effort parameter and
@@ -855,7 +858,7 @@ for each of them: **what set does it read that the other writes?**>
 - **Record (structured handoff):** completed · undone · commands+exit codes · issues · procedures followed? · failure-and-why → brain
 - **Context hygiene:** prune stale reads; carry a compact state summary, not raw transcripts.
 - **Print every iteration:** `SCORE: <metric>/<total> · <metric2> · orch-spend <n>% · sub-goal <k>/<n> · iteration <i>/<cap>` — `orch-spend` is the driver's own share of run tokens, target under 15%; a long autonomous loop with no per-iteration signal is unmonitorable, and the trend is what tells a watching human whether to intervene.
-- **Recycle (context boundary — at each sub-goal boundary or ~50% context, whichever first):** `/tapps-handoff-session` → **re-verify** → clear for real (autonomous: the next `claude -p`; attended: operator `/clear`; Cursor: new chat) → `/tapps-continue-session`. Never instruct yourself to run `/clear` — an agent cannot invoke a built-in CLI command. **The re-verify gate is mandatory:** clearing destroys the context that would catch a stale handoff, so before clearing check the handoff `Git:` sha against `git log -1` (`git log --oneline <sha>..HEAD` names what landed), re-read every named PR/issue state from the tracker, and re-read every quoted metric from its newest artifact. On mismatch, fix the handoff *before* clearing and treat every **Open** item as unverified until re-probed. Skip the boundary only inside a tightly-coupled sub-goal or when the remaining work is smaller than the cycle's overhead — say which and why. One runner per handoff file: two loops sharing it overwrite each other silently. See Checkpoint protocol below.
+- **Recycle (context boundary — at each sub-goal boundary or ~50% context, whichever first):** `/tapps-handoff-session` → **re-verify** → clear for real (autonomous: the next `claude -p`; attended: operator `/clear`; Cursor: new chat) → `/tapps-continue-session`. Never instruct yourself to run `/clear` — an agent cannot invoke a built-in CLI command. **The re-verify gate is mandatory:** clearing destroys the context that would catch a stale handoff, so before clearing check the handoff `Git:` sha against `git log -1` (`git log --oneline <sha>..HEAD` names what landed), re-read every named PR/issue state from the tracker, and re-read every quoted metric from its newest artifact. On mismatch, fix the handoff *before* clearing and treat every **Open** item as unverified until re-probed. Skip the boundary only inside a tightly-coupled sub-goal or when the remaining work is smaller than the cycle's overhead — say which and why. One runner per handoff file — or one `slot=` each: two loops sharing the default file overwrite each other, and the guard's `conflict` report is a diagnosis, not a plan. See Checkpoint protocol below.
 - **Repeat or stop:** loop until **Done-when** holds; caps: <N iterations> AND <token budget> — **both cumulative across shifts**, read from the handoff, never reset by a checkpoint
 
 ## Checkpoint protocol (context shift boundary)
@@ -863,7 +866,7 @@ for each of them: **what set does it read that the other writes?**>
 
 - **Lane:** <delegated (subagents/Workflow) · process boundary (`claude -p` / Routine, one iteration per process) · declared checkpoint (operator types `/clear`)>
 - **Trigger:** sub-goal boundary, or ~50% context / before a fan-out wave — whichever first.
-- **Write:** `/tapps-handoff-session` → `.tapps-mcp/session-handoff.md` (lints + mirrors to brain in one call).
+- **Write:** `/tapps-handoff-session` → `.tapps-mcp/session-handoff.md`, or `.tapps-mcp/handoffs/<slot>.md` when this program shares the repo (lints + mirrors to brain in one call). Print any `conflict` the response carries.
 - **Resume:** `/tapps-continue-session` → rehydrates ~15 lines, not a transcript.
 - **Carry-forward (must survive the clear, or the guardrails stop binding):**
   - Current sub-goal + the VAL IDs it must turn green
@@ -975,7 +978,7 @@ ones overtaken by a fixed tool or a changed codebase.
 - `/goal <condition>` — only if this file is already in context. **or**
 - invoke the Workflow tool with `.claude/workflows/<script>.js` (fan-out only). **or**
 - Routine: schedule `<cadence>` with this prompt, push=draft-PR. **or**
-- **Chained (autonomous, context-recycling):** one `claude -p` per sub-goal, each run starting from `.tapps-mcp/session-handoff.md` and ending by rewriting it. The process boundary is the clear, so per-turn context cost stays flat and every sub-goal gets a fresh executor. Re-verify the handoff at the start of each run; one runner at a time — check for a concurrent lane before starting.
+- **Chained (autonomous, context-recycling):** one `claude -p` per sub-goal, each run starting from this program's handoff and ending by rewriting it. The process boundary is the clear, so per-turn context cost stays flat and every sub-goal gets a fresh executor. Re-verify the handoff at the start of each run; one runner per handoff — take a `slot=` when another program shares the repo, and run `uv run tapps-mcp handoff list` before starting to see whether one already does.
 """
 
 _FEATURE_MAP = r"""# Claude feature map — intent → mechanism → model tier
@@ -1022,7 +1025,7 @@ Fog chunks belong on `/tapps-wayfind`; clear chunks belong to orchestration-prom
 | **Issue-tracker write** (Linear/Jira/GitHub) | Creating or updating backlog items from inside the loop | Backlog-driven loops that file, close, or re-scope work as implementation reveals reality | Often **hook-gated** (e.g. a validation sentinel with a short TTL, plus a cache-first read gate). Route through the owning skill, never the raw API — and re-satisfy the gate if the loop has outlived the sentinel |
 | **AgentForge agent / workflow** | Durable, versioned, published cognition running on the AF platform — survives the session, is Git-authored and independently invocable | Domain reasoning a project needs repeatedly: authoring, judging, analysis. **Where a project's agents should live**, rather than as LLM calls inside its own services | AF cannot see your repo or network — collect source locally and pass it as a declared workflow input. Side effects stay in the consumer |
 | **AgentForge `expert-*` agents** | Pre-published platform experts (architecture, testing, security, performance, database, api-design, observability, …) | A second opinion during planning or review, at no authoring cost | They return analysis, not actions. Record where you *rejected* the advice and why |
-| **`/tapps-handoff-session`** | Writes `.tapps-mcp/session-handoff.md`, lints, mirrors to brain, closes the session lifecycle — one call | Closing a shift: the checkpoint a cleared session resumes from | Must carry *cumulative* attempt-count + budget + refuted strategies, else the clear resets the loop's caps |
+| **`/tapps-handoff-session`** | Writes `.tapps-mcp/session-handoff.md` (or `handoffs/<slot>.md` with `slot=`), lints, mirrors to brain, closes the session lifecycle — one call | Closing a shift: the checkpoint a cleared session resumes from | Must carry *cumulative* attempt-count + budget + refuted strategies, else the clear resets the loop's caps |
 | **`/tapps-continue-session`** | Rehydrates a fresh session from the handoff (~15 lines) + `tapps_session_start` | Opening a shift; cold-starting a loop mid-run | Handoff is a pointer, not a proof — re-verify live state before acting on it |
 | **`/clear`** | Built-in CLI command that drops the transcript | Operator-driven shift boundary in an attended run | **No agent can invoke it.** A prompt that tells the loop to run `/clear` silently no-ops — use a subagent, a new process, or an operator checkpoint |
 
@@ -1276,9 +1279,10 @@ On any mismatch, **correct the handoff before clearing**. A known-wrong handoff 
 by a fresh context is worse than no handoff: it reads as evidence.
 
 **One runner per handoff file.** Two loops writing `.tapps-mcp/session-handoff.md`
-overwrite each other with no error — the second save wipes the first run's state and the
-first run rehydrates the other's. Check for a concurrent lane before chaining `claude -p`
-invocations; give overlapping runs separate handoff paths.
+overwrite each other — the second save wipes the first run's state and the first run
+rehydrates the other's. Check for a concurrent lane before chaining `claude -p`
+invocations (`uv run tapps-mcp handoff list`); give overlapping runs separate slots —
+`slot="<program>"` on the save, `/tapps-continue-session <slot>` on the resume.
 
 **Declared-checkpoint block** (interactive lane — print verbatim, then stop):
 

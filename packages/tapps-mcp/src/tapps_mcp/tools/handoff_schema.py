@@ -9,7 +9,11 @@ from pathlib import Path
 from typing import Any
 
 _HANDOFF_RELATIVE = Path(".tapps-mcp") / "session-handoff.md"
+_HANDOFF_SLOT_DIR = Path(".tapps-mcp") / "handoffs"
+_SLOT_RE = re.compile(r"^[a-z0-9][a-z0-9-]{0,47}$")
 SESSION_HANDOFF_MEMORY_KEY = "session-handoff"
+SESSION_HANDOFF_SLOT_PREFIX = f"{SESSION_HANDOFF_MEMORY_KEY}."
+_PROGRAM_RE = re.compile(r"^\*\*Program:\*\*\s*(.+)$", re.IGNORECASE | re.MULTILINE)
 _UPDATED_RE = re.compile(r"^\*\*Updated:\*\*\s*(.+)$", re.IGNORECASE | re.MULTILINE)
 _LINEAR_P0_RE = re.compile(r"^\*\*Linear P0:\*\*\s*(.+)$", re.IGNORECASE | re.MULTILINE)
 _SECTION_RE = re.compile(r"^##\s+(.+)$", re.MULTILINE)
@@ -47,6 +51,7 @@ _SECTION_FIELDS: tuple[str, ...] = (
 class HandoffDocument:
     """Structured view of a session handoff markdown file."""
 
+    program: str | None = None
     updated: datetime | None = None
     linear_p0: str | None = None
     done: list[str] = field(default_factory=list)
@@ -75,8 +80,120 @@ class HandoffLintResult:
         return not self.errors
 
 
-def handoff_path(project_root: Path) -> Path:
-    return project_root / _HANDOFF_RELATIVE
+class InvalidHandoffSlotError(ValueError):
+    """A handoff slot failed validation, before any path was written.
+
+    Carries an Agent Gateway refusal envelope (docs/architecture/gateway-envelope.md)
+    so the MCP and CLI surfaces can hand the agent a machine-readable ``code``
+    instead of a stringified traceback.
+    """
+
+    def __init__(self, slot: str, reason: str, hint: str) -> None:
+        self.slot = slot
+        self.reason = reason
+        self.envelope: dict[str, Any] = {
+            "ok": False,
+            "code": "invalid_handoff_slot",
+            "gate": "handoff_slot_validation",
+            "hint": hint,
+            "extra": {"slot": slot, "reason": reason},
+        }
+        super().__init__(hint)
+
+
+def validate_handoff_slot(slot: str) -> str:
+    """First of two defences: the allowlist that states the slot policy.
+
+    Rejects anything containing ``/``, ``.`` or ``..`` before the value can
+    reach ``Path``, so traversal never becomes a path-join question.
+    """
+    if _SLOT_RE.match(slot) is None:
+        raise InvalidHandoffSlotError(
+            slot,
+            "failed_allowlist",
+            "Handoff slot must match ^[a-z0-9][a-z0-9-]{0,47}$ — lowercase letters, "
+            "digits and dashes, starting with a letter or digit, at most 48 characters. "
+            'Try slot="my-program".',
+        )
+    return slot
+
+
+def _assert_slot_contained(candidate: Path, project_root: Path, slot: str) -> None:
+    """Second of two defences: containment, checked after the join.
+
+    Independent of :func:`validate_handoff_slot` on purpose. The allowlist is
+    the policy and could be loosened; this check is what still holds if it is,
+    and it is the only one that sees a symlinked ``handoffs/`` directory, which
+    no regex can inspect.
+
+    ``is_relative_to`` is purely lexical — on a non-resolved path it answers
+    ``True`` for ``handoffs/../../../outside/x.md``. Both sides are therefore
+    resolved first. Two anchors are needed and neither is redundant:
+    the project root catches a ``handoffs/`` symlinked outside the repo (whose
+    own ``resolve()`` would happily contain the target), and the slot directory
+    catches a shallow ``../`` that stays inside the repo.
+    """
+    resolved = candidate.resolve()
+    if not resolved.is_relative_to(project_root.resolve()):
+        raise InvalidHandoffSlotError(
+            slot,
+            "escapes_project_root",
+            f"Handoff slot {slot!r} resolves to {resolved}, outside the project root. "
+            "Check whether .tapps-mcp/handoffs is a symlink.",
+        )
+    if not resolved.is_relative_to((project_root / _HANDOFF_SLOT_DIR).resolve()):
+        raise InvalidHandoffSlotError(
+            slot,
+            "escapes_slot_dir",
+            f"Handoff slot {slot!r} resolves to {resolved}, outside {_HANDOFF_SLOT_DIR}.",
+        )
+
+
+def handoff_path(project_root: Path, slot: str | None = None) -> Path:
+    """The single site that names a handoff file.
+
+    No slot returns the path this repo has always used. A slot namespaces the
+    handoff under ``.tapps-mcp/handoffs/`` so concurrent programs stop
+    overwriting one another (TAP-6870).
+    """
+    if slot is None:
+        return project_root / _HANDOFF_RELATIVE
+    validate_handoff_slot(slot)
+    candidate = project_root / _HANDOFF_SLOT_DIR / f"{slot}.md"
+    _assert_slot_contained(candidate, project_root, slot)
+    return candidate
+
+
+def handoff_memory_key(slot: str | None = None) -> str:
+    """The single site that names a handoff's brain row.
+
+    No slot returns :data:`SESSION_HANDOFF_MEMORY_KEY` unchanged, so the ~35
+    repos that never pass a slot keep writing the row they already have.
+
+    A slot is joined with a **dot**. The brain validates every ``MemoryEntry.key``
+    against ``^[a-z0-9][a-z0-9._-]{0,127}$`` server-side, so the ``:`` this
+    originally used produced a key no production write could store (TAP-6873).
+    A dot also reverse-parses exactly — :func:`validate_handoff_slot` forbids
+    dots in a slot, so ``key.split(".", 1)`` cannot be ambiguous — and matches
+    the compound keys the rest of the codebase already writes
+    (``mission.<id>.<run>.<kind>``, ``audit.coverage.<path>``).
+    """
+    if slot is None:
+        return SESSION_HANDOFF_MEMORY_KEY
+    validate_handoff_slot(slot)
+    return f"{SESSION_HANDOFF_SLOT_PREFIX}{slot}"
+
+
+def is_session_handoff_key(key: str) -> bool:
+    """Whether *key* names a handoff row — the default one or any slot.
+
+    Replaces the ``key == SESSION_HANDOFF_MEMORY_KEY`` equality that gated
+    handoff enrichment: under it a slotted row silently came back without its
+    ``handoff_sections`` and ``handoff_metadata`` (TAP-6873). Anchored on the
+    prefix *including* its dot, so neighbouring keys such as
+    ``session-handoffs`` do not match.
+    """
+    return key == SESSION_HANDOFF_MEMORY_KEY or key.startswith(SESSION_HANDOFF_SLOT_PREFIX)
 
 
 def _normalize_header(name: str) -> str:
@@ -170,6 +287,21 @@ def _parse_updated(raw: str) -> datetime | None:
     return ts
 
 
+def _parse_program(raw: str) -> str | None:
+    """The program that owns this handoff, or ``None`` when it is not stated.
+
+    An unedited ``<program or campaign name>`` placeholder is *not* an identity:
+    two agents that both left it would otherwise read as the same program and
+    the ownership guard would wave the overwrite through (TAP-6872).
+    """
+    value = raw.strip()
+    if not value or value.lower() in _IGNORE_BULLETS:
+        return None
+    if value.startswith("<") and value.endswith(">"):
+        return None
+    return value
+
+
 def _parse_linear_p0(raw: str) -> str | None:
     value = raw.strip()
     if not value or value.lower() in {"none", "n/a", "..."}:
@@ -182,6 +314,9 @@ def _parse_linear_p0(raw: str) -> str | None:
 def parse_handoff_markdown(text: str) -> HandoffDocument:
     """Parse handoff markdown into structured sections."""
     doc = HandoffDocument(raw_text=text)
+    program_match = _PROGRAM_RE.search(text)
+    if program_match:
+        doc.program = _parse_program(program_match.group(1))
     updated_match = _UPDATED_RE.search(text)
     if updated_match:
         doc.updated = _parse_updated(updated_match.group(1))
@@ -406,9 +541,16 @@ def handoff_sections_from_doc(doc: HandoffDocument) -> dict[str, Any]:
     }
 
 
-def load_and_lint_handoff(project_root: Path) -> tuple[HandoffDocument | None, HandoffLintResult]:
-    """Load handoff file if present and lint it."""
-    path = handoff_path(project_root)
+def load_and_lint_handoff(
+    project_root: Path,
+    slot: str | None = None,
+) -> tuple[HandoffDocument | None, HandoffLintResult]:
+    """Load handoff file if present and lint it.
+
+    The path comes from :func:`handoff_path`, never from a literal composed
+    here — the read side and the write side must agree on what a slot names.
+    """
+    path = handoff_path(project_root, slot)
     if not path.is_file():
         return None, HandoffLintResult()
     text = path.read_text(encoding="utf-8")
@@ -416,18 +558,80 @@ def load_and_lint_handoff(project_root: Path) -> tuple[HandoffDocument | None, H
     return doc, lint_handoff(doc)
 
 
+def _handoff_row(path: Path, slot: str | None, now: datetime) -> dict[str, Any]:
+    """One enumerated handoff, described from the document itself."""
+    doc = parse_handoff_markdown(path.read_text(encoding="utf-8"))
+    updated: str | None = None
+    age_hours: float | None = None
+    if doc.updated is not None:
+        updated = doc.updated.astimezone(UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
+        age_hours = (now - doc.updated).total_seconds() / 3600.0
+    return {
+        "slot": slot,
+        "path": str(path),
+        "program": doc.program,
+        "updated": updated,
+        "linear_p0": doc.linear_p0,
+        "age_hours": age_hours,
+    }
+
+
+def list_handoffs(project_root: Path, *, now: datetime | None = None) -> list[dict[str, Any]]:
+    """Every live handoff in *project_root*, newest first.
+
+    The **single enumeration site**: the continue-session skill, the
+    ``handoff list`` CLI and ``fleet_audit`` all read this rather than each
+    globbing ``handoffs/`` for itself. A second glob is the restatement
+    :func:`handoff_path` exists to prevent, one directory up.
+
+    Covers the default file plus one row per ``handoffs/<slot>.md``. The
+    archive is excluded structurally, not by a name filter: it lives at
+    ``handoffs/archive/`` and the glob below is non-recursive, so a superseded
+    handoff can never be offered as a live one.
+
+    Rows carry ``{slot, path, program, updated, linear_p0, age_hours}``. There
+    is deliberately no ``git_sha``: the only source for it is the ``**Git:**``
+    header, whose parsing spec §6 places out of scope for this program, and a
+    key that is permanently ``None`` reads as data while carrying none.
+    """
+    clock = now if now is not None else datetime.now(tz=UTC)
+    rows: list[dict[str, Any]] = []
+
+    default = handoff_path(project_root)
+    if default.is_file():
+        rows.append(_handoff_row(default, None, clock))
+
+    slot_dir = project_root / _HANDOFF_SLOT_DIR
+    if slot_dir.is_dir():
+        for path in sorted(slot_dir.glob("*.md")):
+            if path.is_file():
+                rows.append(_handoff_row(path, path.stem, clock))
+
+    # ``updated`` is optional, so it cannot be the sort key on its own. A
+    # handoff that never stated one sorts last rather than crashing the sort or
+    # jumping the queue on a falsy comparison.
+    rows.sort(key=lambda row: (row["updated"] is not None, row["updated"] or ""), reverse=True)
+    return rows
+
+
 __all__ = [
     "RECOGNIZED_SECTION_HEADINGS",
     "SESSION_HANDOFF_MEMORY_KEY",
+    "SESSION_HANDOFF_SLOT_PREFIX",
     "HandoffDocument",
     "HandoffLintResult",
     "HandoffSizeReport",
+    "InvalidHandoffSlotError",
     "empty_parse_error",
+    "handoff_memory_key",
     "handoff_path",
     "handoff_sections_from_doc",
     "handoff_size_report",
+    "is_session_handoff_key",
     "lint_handoff",
+    "list_handoffs",
     "load_and_lint_handoff",
     "parse_handoff_markdown",
     "populated_sections",
+    "validate_handoff_slot",
 ]

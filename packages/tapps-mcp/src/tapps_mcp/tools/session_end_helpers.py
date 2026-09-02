@@ -106,16 +106,22 @@ async def call_memory_search_sessions(
 def build_session_search_query(
     session_start_iso: str,
     project_root: Path | None = None,
+    slot: str | None = None,
 ) -> tuple[str, str]:
     """Choose a retrievable ``memory_search_sessions`` query (TAP-3793).
 
     Prefers handoff Linear id, then Next (P0) prose, then ``session_start_iso``.
     Timestamps are poor semantic retrieval keys when the session index stores chunks.
+
+    ``slot`` names which program's handoff to read. A session ending under a
+    slot must derive its query from *that* handoff: reading the default file
+    would key the search off whatever unrelated program happens to own it
+    (TAP-6874).
     """
     if project_root is not None:
         from tapps_mcp.tools.handoff_schema import load_and_lint_handoff
 
-        doc, _lint = load_and_lint_handoff(project_root)
+        doc, _lint = load_and_lint_handoff(project_root, slot)
         if doc is not None:
             if doc.linear_p0:
                 return doc.linear_p0, "handoff_linear_p0"
@@ -132,14 +138,19 @@ async def run_session_end(
     session_start_iso: str = "",
     *,
     project_root: Path | None = None,
+    slot: str | None = None,
 ) -> dict[str, Any]:
     """Shared session-end logic for the MCP tool and CLI (TAP-3174).
+
+    ``slot`` is threaded through to :func:`build_session_search_query` so a
+    session ended as part of a slotted handoff write searches on that slot's
+    handoff rather than the default one (TAP-6874).
 
     Best-effort — brain outages surface in the result dict, never as exceptions.
     """
     since, since_source = resolve_session_start_iso(session_start_iso, project_root)
     flywheel = await call_flywheel_process(since)
-    query, query_source = build_session_search_query(since, project_root)
+    query, query_source = build_session_search_query(since, project_root, slot)
     session_search = await call_memory_search_sessions(query)
     if isinstance(session_search, dict):
         session_search = {**session_search, "query_source": query_source}

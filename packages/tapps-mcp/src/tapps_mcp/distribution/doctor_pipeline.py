@@ -389,12 +389,22 @@ def _handoff_skill_content_ok(skill_name: str, content: str) -> bool:
             return False
         if "p0 gate" not in lowered:
             return False
+        # The ownership header the whole read side keys off, pinned *in the
+        # markdown shape the author copies* — not merely mentioned in prose.
+        # A body that lost it from the template still passes every other marker
+        # here while every handoff it produces is unattributable, so the guard
+        # can never call a collision (TAP-6874).
+        if "# session handoff\n**program:**" not in lowered:
+            return False
         return "tapps_session_start" in lowered
     if skill_name == "tapps-continue-session":
         return (
             "tapps_session_start" in lowered
             and "memory search" in lowered
             and "p0 fallback" in lowered
+            # Without this the body may silently pick one of several handoffs,
+            # which is resuming another program's state by coin flip.
+            and "never silently pick" in lowered
         )
     return False
 

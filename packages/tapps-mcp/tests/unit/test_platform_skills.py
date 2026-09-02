@@ -347,9 +347,9 @@ class TestLinearIssueSkillUpdated:
 
     def test_generated_linear_issue_has_save_issue(self, tmp_path: Path) -> None:
         generate_skills(tmp_path, "claude")
-        content = (
-            tmp_path / ".claude" / "skills" / "linear-issue" / "SKILL.md"
-        ).read_text(encoding="utf-8")
+        content = (tmp_path / ".claude" / "skills" / "linear-issue" / "SKILL.md").read_text(
+            encoding="utf-8"
+        )
         assert "mcp__plugin_linear_linear__save_issue" in content
 
 
@@ -562,7 +562,11 @@ class TestSessionHandoffSkills:
     def test_continue_session_body_parity(self) -> None:
         """Cursor and Claude continue-session share the same core steps (TAP-3581)."""
         markers = (
-            "Load handoff (priority order)",
+            # Step 2 became a *choice* before a load in TAP-6874: a repo can
+            # hold several handoffs and picking one silently resumes another
+            # program's state.
+            "Choose the handoff, then load it",
+            "never silently pick",
             "P0 fallback",
             "memory recall",
             "Emit continue block",

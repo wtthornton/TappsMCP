@@ -1373,6 +1373,33 @@ class TappsMCPSettings(BaseSettings):
         ),
     )
 
+    # Handoff ownership guard (TAP-6871) — mode key follows the
+    # linear_enforce_cache_gate precedent above: same three-value Literal,
+    # same warn-first rollout.
+    handoff_conflict_mode: Literal["off", "warn", "block"] = Field(
+        default="warn",
+        description=(
+            "Mode for the session-handoff ownership guard (TAP-6871). "
+            "'off' archives the incumbent but reports nothing. 'warn' (default) "
+            "writes and returns a conflict payload naming the program that was "
+            "overwritten and where its handoff was archived. 'block' refuses a "
+            "write that would replace another program's recent handoff with "
+            "code handoff_owner_conflict, leaving the incumbent byte-identical; "
+            "retry with a slot or force=true. An incumbent whose owner cannot "
+            "be established reports 'unknown' and is never blocked."
+        ),
+    )
+    handoff_conflict_window_hours: int = Field(
+        default=12,
+        ge=1,
+        description=(
+            "How recent an incumbent handoff must be for a differing owner to "
+            "count as a live conflict (TAP-6871). Older than this and the write "
+            "is treated as succeeding an abandoned handoff, not colliding with "
+            "a running program."
+        ),
+    )
+
     # Release update config (TAP-1112, TAP-1114)
     linear_team: str = Field(
         default="",

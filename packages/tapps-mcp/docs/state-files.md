@@ -10,6 +10,8 @@ the project root, and the outcome of any audit / cleanup decisions.
 | `.tapps-mcp/` | `tapps_init` / `bootstrap_pipeline` | Root runtime state directory |
 | `.tapps-mcp-cache/` | Various tools | Cache: Linear snapshots, doc warm, validate-ok markers |
 | `.tapps-mcp-cache/linear-snapshots/` | Cache gate hooks | Linear issue snapshot JSON files |
+| `.tapps-mcp/handoffs/` | `handoff_guard.guarded_write` (via `tapps_handoff_save(slot=...)` / CLI `handoff write --slot`) | Namespaced handoff files, one per concurrent program: `<slot>.md`. Named by the single site `handoff_schema.handoff_path()`; never globbed independently (TAP-6870). |
+| `.tapps-mcp/handoffs/archive/` | `handoff_guard.archive_incumbent` | Superseded handoffs, renamed aside on every write (conflict or not) before the replacement is promoted. Filenames are `<UTC-timestamp>-<slot\|default>.md`; pruned to the newest 20 (`ARCHIVE_KEEP` in `handoff_guard.py`) after each write. |
 
 ## Deprecated / removed directories
 
@@ -37,7 +39,7 @@ unknown files are present and leaves them alone.
 
 | Path | Writer | Purpose |
 |---|---|---|
-| `.tapps-mcp/session-handoff.md` | `tapps-handoff-session` skill (or manual) | Cross-session continue block; read by `tapps-continue-session` on next chat. Brain mirror via `tapps-mcp memory save --key session-handoff`. |
+| `.tapps-mcp/session-handoff.md` | `tapps-handoff-session` skill (or manual) | Cross-session continue block for the shared default program; read by `tapps-continue-session` on next chat. Brain mirror via `tapps-mcp memory save --key session-handoff`. A concurrent program that passes `slot=` writes `.tapps-mcp/handoffs/<slot>.md` and brain key `session-handoff.<slot>` instead — this default path and key are byte-identical to before slots existed (TAP-6870). Every write is read-before-write guarded: the incumbent (default or slotted) is archived to `.tapps-mcp/handoffs/archive/` and the replacement is promoted atomically via `os.replace` from a same-directory temp file (TAP-6871). |
 | `.tapps-mcp/metrics/tool_calls_*.jsonl` | TappsMCP tool handlers | Daily execution metrics (local leg of `dual` storage). Feeds `tapps_dashboard` / `tapps_stats` including `docs_metrics` and `session_funnel` sections. |
 | `.tapps-mcp/session-capture.json` | legacy (pre-TAP-1999) | Session summary from the removed `tapps-memory-capture.sh` Stop hook. Superseded by `call_memory_index_session_start` (TAP-1999); the hook, its templates, and the `tapps_init(memory_capture=)` opt-in were removed. `tapps_session_start` still reads a stale file if present, for backward compat. |
 | `.tapps-mcp/.linear-validate-sentinel` | `tapps-post-docs-validate.sh` | Confirms `docs_validate_linear_issue` ran before `save_issue` |

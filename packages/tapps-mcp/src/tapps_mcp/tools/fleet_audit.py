@@ -18,16 +18,21 @@ from tapps_core.metrics.brain_telemetry import (
     sync_load_tool_call_metrics_from_brain,
 )
 from tapps_core.metrics.execution_metrics import ToolCallMetric, ToolCallMetricsCollector
+from tapps_mcp.tools.handoff_schema import handoff_path, list_handoffs
 from tapps_mcp.tools.loop_metrics import aggregate_skills_used, compute_rolling_stats
 
 _PERIOD_DAYS: dict[str, int] = {"1d": 1, "7d": 7, "30d": 30}
 _BOOTSTRAP_MARKER = ".tapps-mcp.yaml"
-_HANDOFF_PATH = Path(".tapps-mcp") / "session-handoff.md"
 
 
 def _top_tools(metrics: list[ToolCallMetric], *, limit: int = 10) -> list[dict[str, Any]]:
     counts: Counter[str] = Counter(m.tool_name for m in metrics if m.tool_name)
     return [{"name": name, "count": count} for name, count in counts.most_common(limit)]
+
+
+def _accumulate_top_tools(counts: Counter[str], project: dict[str, Any]) -> None:
+    for entry in project.get("top_tools", []):
+        counts[str(entry.get("name", ""))] += int(entry.get("count", 0))
 
 
 def _aggregate_fleet_top_tools(
@@ -37,9 +42,13 @@ def _aggregate_fleet_top_tools(
 ) -> list[dict[str, Any]]:
     counts: Counter[str] = Counter()
     for project in projects:
-        for entry in project.get("top_tools", []):
-            counts[str(entry.get("name", ""))] += int(entry.get("count", 0))
+        _accumulate_top_tools(counts, project)
     return [{"name": name, "count": count} for name, count in counts.most_common(limit) if name]
+
+
+def _accumulate_top_skills(skill_counts: Counter[str], skills: dict[str, Any]) -> None:
+    for entry in skills.get("top_skills", []):
+        skill_counts[str(entry.get("name", ""))] += int(entry.get("count", 0))
 
 
 def _aggregate_fleet_skills(
@@ -56,8 +65,7 @@ def _aggregate_fleet_skills(
         loops += int(skills.get("loops", 0))
         finish_total += int(skills.get("skill_orchestrated_closes", 0))
         direct_total += int(skills.get("direct_mcp_validate_loops", 0))
-        for entry in skills.get("top_skills", []):
-            skill_counts[str(entry.get("name", ""))] += int(entry.get("count", 0))
+        _accumulate_top_skills(skill_counts, skills)
     return {
         "loops": loops,
         "top_skills": [
@@ -92,17 +100,25 @@ def discover_project_roots(
 ) -> list[Path]:
     """Resolve bootstrapped project roots for a fleet audit."""
     if explicit_roots:
-        return [_normalize_root(r) for r in explicit_roots if _is_bootstrapped(_normalize_root(r))]
+        return _bootstrapped_only(explicit_roots)
 
     env_roots = os.environ.get("TAPPS_FLEET_ROOTS", "").strip()
     if env_roots:
         candidates = [Path(p.strip()) for p in env_roots.split(",") if p.strip()]
-        return [_normalize_root(r) for r in candidates if _is_bootstrapped(_normalize_root(r))]
+        return _bootstrapped_only(candidates)
 
     parent = (scan_parent or Path.cwd()).resolve()
     if _is_bootstrapped(parent):
         return [parent]
+    return _bootstrapped_children(parent)
 
+
+def _bootstrapped_only(candidates: list[Path]) -> list[Path]:
+    normalized = [_normalize_root(r) for r in candidates]
+    return [root for root in normalized if _is_bootstrapped(root)]
+
+
+def _bootstrapped_children(parent: Path) -> list[Path]:
     if not parent.is_dir():
         return []
     return [
@@ -120,6 +136,45 @@ def _is_bootstrapped(root: Path) -> bool:
     return (root / _BOOTSTRAP_MARKER).is_file()
 
 
+def _file_date_in_window(path: Path, since: datetime, until: datetime | None) -> bool:
+    try:
+        file_date = datetime.fromisoformat(path.stem.replace("tool_calls_", "")).replace(
+            tzinfo=UTC
+        )
+    except ValueError:
+        return False
+    if file_date.date() < since.date():
+        return False
+    return not (until is not None and file_date.date() > until.date())
+
+
+def _parse_metric_line(raw_line: str) -> ToolCallMetric | None:
+    line = raw_line.strip()
+    if not line:
+        return None
+    try:
+        data = json.loads(line)
+        if not isinstance(data, dict):
+            return None
+        return ToolCallMetric.from_dict(data)
+    except (json.JSONDecodeError, TypeError):
+        return None
+
+
+def _metrics_from_text(
+    text: str,
+    *,
+    since: datetime,
+    until: datetime | None,
+) -> list[ToolCallMetric]:
+    found: list[ToolCallMetric] = []
+    for raw_line in text.splitlines():
+        metric = _parse_metric_line(raw_line)
+        if metric is not None and _metric_in_window(metric, since, until):
+            found.append(metric)
+    return found
+
+
 def load_jsonl_metrics(
     metrics_dir: Path,
     *,
@@ -132,33 +187,13 @@ def load_jsonl_metrics(
 
     metrics: list[ToolCallMetric] = []
     for path in sorted(metrics_dir.glob("tool_calls_*.jsonl")):
-        try:
-            file_date = datetime.fromisoformat(path.stem.replace("tool_calls_", "")).replace(
-                tzinfo=UTC
-            )
-        except ValueError:
-            continue
-        if file_date.date() < since.date():
-            continue
-        if until is not None and file_date.date() > until.date():
+        if not _file_date_in_window(path, since, until):
             continue
         try:
             text = path.read_text(encoding="utf-8")
         except OSError:
             continue
-        for raw_line in text.splitlines():
-            line = raw_line.strip()
-            if not line:
-                continue
-            try:
-                data = json.loads(line)
-                if not isinstance(data, dict):
-                    continue
-                metric = ToolCallMetric.from_dict(data)
-            except (json.JSONDecodeError, TypeError):
-                continue
-            if _metric_in_window(metric, since, until):
-                metrics.append(metric)
+        metrics.extend(_metrics_from_text(text, since=since, until=until))
     return metrics
 
 
@@ -231,6 +266,21 @@ def _gate_telemetry(project_root: Path) -> dict[str, int]:
     }
 
 
+def _collect_project_metrics(
+    metrics_dir: Path,
+    *,
+    since: datetime,
+    until: datetime | None,
+    include_brain: bool,
+) -> tuple[list[ToolCallMetric], int, int]:
+    """Return ``(merged metrics, local row count, brain row count)``."""
+    local = load_jsonl_metrics(metrics_dir, since=since, until=until)
+    if include_brain and brain_metrics_bridge_available():
+        brain = sync_load_tool_call_metrics_from_brain(since=since, until=until, limit=5000)
+        return merge_metrics(local, brain), len(local), len(brain)
+    return local, len(local), 0
+
+
 def audit_project_root(
     project_root: Path,
     *,
@@ -242,23 +292,17 @@ def audit_project_root(
     """Audit a single bootstrapped project root."""
     root = _normalize_root(project_root)
     metrics_dir = root / ".tapps-mcp" / "metrics"
-    local = load_jsonl_metrics(metrics_dir, since=since, until=until)
-
-    brain_count = 0
-    if include_brain and brain_metrics_bridge_available():
-        brain = sync_load_tool_call_metrics_from_brain(since=since, until=until, limit=5000)
-        brain_count = len(brain)
-        metrics = merge_metrics(local, brain)
-    else:
-        metrics = local
+    metrics, local_count, brain_count = _collect_project_metrics(
+        metrics_dir, since=since, until=until, include_brain=include_brain
+    )
 
     collector = ToolCallMetricsCollector(metrics_dir)
     summary = collector._compute_summary(metrics)
 
-    handoff_path = root / _HANDOFF_PATH
+    handoff_file = handoff_path(root)
     handoff_mtime: str | None = None
-    if handoff_path.is_file():
-        handoff_mtime = datetime.fromtimestamp(handoff_path.stat().st_mtime, tz=UTC).isoformat()
+    if handoff_file.is_file():
+        handoff_mtime = datetime.fromtimestamp(handoff_file.stat().st_mtime, tz=UTC).isoformat()
 
     gates = _gate_telemetry(root)
     return {
@@ -267,7 +311,7 @@ def audit_project_root(
         "top_tools": _top_tools(metrics),
         "metrics": {
             "total_calls": summary.total_calls,
-            "local_jsonl_rows": len(local),
+            "local_jsonl_rows": local_count,
             "brain_rows_merged": brain_count,
             "success_rate": summary.success_rate,
             "gate_pass_rate": summary.gate_pass_rate,
@@ -277,9 +321,14 @@ def audit_project_root(
         "pipeline": _pipeline_compliance(root, window_days=window_days),
         "gates": gates,
         "handoff": {
-            "path": str(_HANDOFF_PATH),
-            "exists": handoff_path.is_file(),
+            "path": str(handoff_file.relative_to(root)),
+            "exists": handoff_file.is_file(),
             "updated_at": handoff_mtime,
+            # A repo running concurrent programs keeps its live state in slots,
+            # so a fleet row that reports only the default file reports a repo
+            # as handoff-less while several are in flight. Enumerated through
+            # the one site, never by globbing handoffs/ here (TAP-6874).
+            "slots": [row["slot"] for row in list_handoffs(root) if row["slot"] is not None],
         },
     }
 
@@ -331,16 +380,8 @@ def run_fleet_audit(
     }
 
 
-def format_fleet_audit_markdown(report: dict[str, Any]) -> str:
-    """Render fleet audit report as Markdown."""
+def _render_project_table(report: dict[str, Any]) -> list[str]:
     lines = [
-        "# TAPPS fleet audit",
-        "",
-        f"- **Period:** {report.get('period', '?')}",
-        f"- **Since:** {report.get('since', '?')}",
-        f"- **Projects:** {report.get('project_count', 0)}",
-        f"- **Total tool calls:** {report.get('total_tool_calls', 0)}",
-        "",
         "| Project | Calls | Gate pass | Lookup/session | Handoff |",
         "|---------|------:|----------:|---------------:|---------|",
     ]
@@ -355,14 +396,22 @@ def format_fleet_audit_markdown(report: dict[str, Any]) -> str:
         lines.append(
             f"| {name} | {metrics.get('total_calls', 0)} | {gate_str} | {ratio_str} | {handoff} |"
         )
+    return lines
 
+
+def _render_fleet_top_tools(report: dict[str, Any]) -> list[str]:
     fleet_tools = report.get("fleet_top_tools") or []
-    if fleet_tools:
-        lines.extend(["", "## Fleet top tools", ""])
-        lines.extend(
-            f"- `{entry.get('name', '?')}`: {entry.get('count', 0)}" for entry in fleet_tools[:10]
-        )
+    if not fleet_tools:
+        return []
+    lines = ["", "## Fleet top tools", ""]
+    lines.extend(
+        f"- `{entry.get('name', '?')}`: {entry.get('count', 0)}" for entry in fleet_tools[:10]
+    )
+    return lines
 
+
+def _render_per_project_top_tools(report: dict[str, Any]) -> list[str]:
+    lines: list[str] = []
     for project in report.get("projects", []):
         top_tools = project.get("top_tools") or []
         if not top_tools:
@@ -372,31 +421,50 @@ def format_fleet_audit_markdown(report: dict[str, Any]) -> str:
         lines.extend(
             f"- `{entry.get('name', '?')}`: {entry.get('count', 0)}" for entry in top_tools[:10]
         )
+    return lines
 
+
+def _render_skill_utilization(report: dict[str, Any]) -> list[str]:
     fleet_skills = report.get("fleet_skills") or {}
-    if fleet_skills.get("top_skills"):
-        lines.extend(
-            [
-                "",
-                "## Skill utilization (loop-metrics)",
-                "",
-                f"- **Loops sampled:** {fleet_skills.get('loops', 0)}",
-                (
-                    "- **Skill-orchestrated closes:** "
-                    f"{fleet_skills.get('skill_orchestrated_closes', 0)}"
-                ),
-                (
-                    "- **Direct MCP validate/checklist loops:** "
-                    f"{fleet_skills.get('direct_mcp_validate_loops', 0)}"
-                ),
-                "",
-            ]
-        )
-        lines.extend(
-            f"- `{entry.get('name', '?')}`: {entry.get('count', 0)}"
-            for entry in fleet_skills.get("top_skills", [])[:10]
-        )
+    if not fleet_skills.get("top_skills"):
+        return []
+    lines = [
+        "",
+        "## Skill utilization (loop-metrics)",
+        "",
+        f"- **Loops sampled:** {fleet_skills.get('loops', 0)}",
+        (
+            "- **Skill-orchestrated closes:** "
+            f"{fleet_skills.get('skill_orchestrated_closes', 0)}"
+        ),
+        (
+            "- **Direct MCP validate/checklist loops:** "
+            f"{fleet_skills.get('direct_mcp_validate_loops', 0)}"
+        ),
+        "",
+    ]
+    lines.extend(
+        f"- `{entry.get('name', '?')}`: {entry.get('count', 0)}"
+        for entry in fleet_skills.get("top_skills", [])[:10]
+    )
+    return lines
 
+
+def format_fleet_audit_markdown(report: dict[str, Any]) -> str:
+    """Render fleet audit report as Markdown."""
+    lines = [
+        "# TAPPS fleet audit",
+        "",
+        f"- **Period:** {report.get('period', '?')}",
+        f"- **Since:** {report.get('since', '?')}",
+        f"- **Projects:** {report.get('project_count', 0)}",
+        f"- **Total tool calls:** {report.get('total_tool_calls', 0)}",
+        "",
+    ]
+    lines.extend(_render_project_table(report))
+    lines.extend(_render_fleet_top_tools(report))
+    lines.extend(_render_per_project_top_tools(report))
+    lines.extend(_render_skill_utilization(report))
     return "\n".join(lines) + "\n"
 
 
