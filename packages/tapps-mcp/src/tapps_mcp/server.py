@@ -284,6 +284,8 @@ ALL_TOOL_NAMES: frozenset[str] = frozenset(
         "tapps_memory",
         # ADR-0025: deterministic domain playbooks (deferred on nlt-build)
         "tapps_domain_playbook",
+        # TAP-6861: skill-learnings consolidation (audit/promote/verify/trim)
+        "tapps_skill_learnings",
     }
 )
 
@@ -903,6 +905,7 @@ def _register_tool_modules() -> None:
         server_research_tools,
         server_resources,
         server_scoring_tools,
+        server_skill_tools,
         server_system_tools,
     )
 
@@ -917,6 +920,7 @@ def _register_tool_modules() -> None:
     server_research_tools.register(mcp, allowed_tools)
     server_system_tools.register(mcp, allowed_tools)
     server_checklist_tools.register(mcp, allowed_tools)
+    server_skill_tools.register(mcp, allowed_tools)
     # Pipeline prompts/resources are build-owned; skip on memory/setup profiles
     # so they do not spam every tapps-mcp process catalog.
     _skip_pipeline_resources = frozenset({"nlt-memory", "nlt-setup", "nlt-platform-admin"})

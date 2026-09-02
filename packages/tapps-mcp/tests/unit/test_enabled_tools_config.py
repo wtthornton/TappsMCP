@@ -215,9 +215,9 @@ class TestResolveAllowedTools:
         )
 
         shared = {"tapps_session_start"}
-        assert (TOOL_PROFILE_NLT_BUILD & TOOL_PROFILE_NLT_MEMORY) == shared
-        assert (TOOL_PROFILE_NLT_BUILD & TOOL_PROFILE_NLT_SETUP) == shared
-        assert (TOOL_PROFILE_NLT_MEMORY & TOOL_PROFILE_NLT_SETUP) == shared
+        assert shared == (TOOL_PROFILE_NLT_BUILD & TOOL_PROFILE_NLT_MEMORY)
+        assert shared == (TOOL_PROFILE_NLT_BUILD & TOOL_PROFILE_NLT_SETUP)
+        assert shared == (TOOL_PROFILE_NLT_MEMORY & TOOL_PROFILE_NLT_SETUP)
 
 
 class TestConditionalRegistration:
@@ -373,4 +373,5 @@ class TestToolPresetConstants:
         # + 2 Epic 114 tools (tapps_call_graph, tapps_diff_impact) = 42.
         # + 1 tapps_domain_playbook = 43.
         # + 1 tapps_research (TAP-5365 / ADR-0030) = 44.
-        assert len(ALL_TOOL_NAMES) == 44
+        # + 1 tapps_skill_learnings (TAP-6861) = 45.
+        assert len(ALL_TOOL_NAMES) == 45

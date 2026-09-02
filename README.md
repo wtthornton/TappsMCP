@@ -2,7 +2,7 @@
 
 ## Overview
 
-**Tapps Platform** ships two MCP servers for AI-assisted development: **TappsMCP** (code quality, security, shared memory) and **DocsMCP** (documentation generation and maintenance). Together they expose **86 tools** (44 TappsMCP + 42 DocsMCP) with structured, deterministic outputs suitable for Claude Code, Cursor, VS Code, and any MCP host.
+**Tapps Platform** ships two MCP servers for AI-assisted development: **TappsMCP** (code quality, security, shared memory) and **DocsMCP** (documentation generation and maintenance). Together they expose **87 tools** (45 TappsMCP + 42 DocsMCP) with structured, deterministic outputs suitable for Claude Code, Cursor, VS Code, and any MCP host.
 
 ### What's new in v3.12.49
 
@@ -47,14 +47,14 @@ See [CHANGELOG.md](CHANGELOG.md) for the full history.
 Install is from the local checkout (`uv tool install -e packages/tapps-mcp`); the packages are not published to PyPI. See [Install](#install).
 
 ```
-tapps-brain (standalone)  <──  tapps-core (shared infra)  <──  tapps-mcp (44 tools)
+tapps-brain (standalone)  <──  tapps-core (shared infra)  <──  tapps-mcp (45 tools)
                                                           <──  docs-mcp  (42 tools)
                                                                       = 85 MCP tools
 ```
 
 ### Key highlights
 
-- **86 deterministic MCP tools** (44 TappsMCP + 42 DocsMCP) — no LLM calls in the tool chain; same input always produces same output
+- **87 deterministic MCP tools** (45 TappsMCP + 42 DocsMCP) — no LLM calls in the tool chain; same input always produces same output
 - **Multi-language code scoring** - Python, TypeScript/JavaScript, Go, Rust across 7 categories (complexity, security, maintainability, test coverage, performance, structure, devex)
 - **Documentation lookup** via Context7 and LlmsTxt providers with local caching
 - **Persistent shared memory** via [tapps-brain](https://github.com/wtthornton/tapps-brain) — project decisions survive across sessions. TappsMCP accesses the Dockerized brain service over HTTP via BrainBridge; use `uv run tapps-mcp memory` (44 actions) or enable `nlt-memory` for MCP-exposed recall/save/handoff tools. See the [tapps-brain repo](https://github.com/wtthornton/tapps-brain) for retrieval, decay, consolidation, and federation internals.
@@ -101,7 +101,7 @@ Any MCP-capable client (Claude Code, Cursor, VS Code Copilot, Claude Desktop, cu
 
 ## Features
 
-The platform exposes **86 MCP tools** (44 TappsMCP + 42 DocsMCP) plus workflow prompts. All tools are **deterministic** (no LLM calls in the tool chain).
+The platform exposes **87 MCP tools** (45 TappsMCP + 42 DocsMCP) plus workflow prompts. All tools are **deterministic** (no LLM calls in the tool chain).
 
 ### Code quality & scoring
 
@@ -1076,7 +1076,7 @@ tapps-core (shared infrastructure)
     ^              ^
     |              |
 tapps-mcp      docs-mcp
-(44 tools)     (42 tools)
+(45 tools)     (42 tools)
 ```
 
 **[tapps-brain](https://github.com/wtthornton/tapps-brain)** is the standalone memory service extracted from tapps-core. It runs as a Dockerized Postgres-backed service that TappsMCP clients reach over HTTP at `localhost:8080`. Storage engine, retrieval (BM25 + boosts), time-based decay, contradiction detection, consolidation, federation, and GC internals all live in the [tapps-brain repo](https://github.com/wtthornton/tapps-brain) and its README/CHANGELOG — refer there for the authoritative description so this page doesn't drift. tapps-brain has its own release cycle and test suite.
@@ -1191,7 +1191,7 @@ packages/
 │       ├── metrics/                   # Collector, dashboard, alerts, trends, OTel export
 │       └── adaptive/                  # Adaptive scoring, expert voting, weight distribution
 │
-├── tapps-mcp/                         # Code quality MCP server (44 tools)
+├── tapps-mcp/                         # Code quality MCP server (45 tools)
 │   └── src/tapps_mcp/
 │       ├── server.py, cli.py          # Entry points and MCP server
 │       ├── server_*.py                # Tool modules (scoring, pipeline, metrics, memory, analysis)

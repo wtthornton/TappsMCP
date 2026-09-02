@@ -39,10 +39,12 @@ Eager tapps-mcp tools (full `tapps-mcp serve`): `tapps_session_start`, `tapps_va
 `tapps_score_file`, `tapps_quality_gate`, `tapps_quick_check`, `tapps_lookup_docs`,
 `tapps_checklist`, `tapps_impact_analysis`, `tapps_usage`, `tapps_memory` (10 total).
 `tapps_research` is listed but deferred (TAP-5365 / TAP-1986 eager budget).
+`tapps_skill_learnings` (TAP-6861: deterministic audit/promote/verify/trim for a skill's
+`SKILL.md`/`learnings.md` pair) is registered `defer_loading=True` — not a daily-driver tool.
 
 | Server | Mode | Eager tools | Deferred tools | Total |
 |---|---|---|---|---|
-| `tapps-mcp` | full (no `--mode`) | 10 | 34 | 44 |
+| `tapps-mcp` | full (no `--mode`) | 10 | 35 | 45 |
 | `tapps-quality` | `--mode quality` | 9 | 7 | 16 |
 | `tapps-admin` | `--mode admin` | 1 | 12 | 13 |
 | `docs-mcp` | full `docsmcp serve` | 7 | 35 | 42 |
@@ -53,7 +55,7 @@ Eager docs-mcp tools (full serve): `docs_generate_changelog`, `docs_generate_epi
 `docs_save_linear_issue`, `docs_release_gate` (7 total). The `nlt-project-docs` profile
 registers 29 tools with **all** `defer_loading=True` (loaded via Tool Search).
 
-> **Note:** Full-catalog sizes are `ALL_TOOL_NAMES` / `ALL_DOCS_TOOL_NAMES` (44 / 42, 86
+> **Note:** Full-catalog sizes are `ALL_TOOL_NAMES` / `ALL_DOCS_TOOL_NAMES` (45 / 42, 87
 > combined). NLT profiles expose subsets — e.g. `nlt-build` (20 tools, 9 eager; includes deferred
 > `tapps_research`), `nlt-memory` (5 tools, including bootstrap `tapps_session_start`),
 > `nlt-project-docs` (29 tools, 0 eager). Cursor catalogs all **listed** tools; eager counts are Claude Tool Search only.
@@ -67,7 +69,7 @@ Set `doctor_tool_budget_limit` in `.tapps-mcp.yaml`:
 doctor_tool_budget_limit: 30
 ```
 
-If you intentionally run tapps-mcp in full mode (44 tools) and accept the context cost,
+If you intentionally run tapps-mcp in full mode (45 tools) and accept the context cost,
 raise the budget to 10 (or higher) to silence the WARN. If you want a stricter check, lower it to 15
 to enforce quality-preset-level discipline.
 

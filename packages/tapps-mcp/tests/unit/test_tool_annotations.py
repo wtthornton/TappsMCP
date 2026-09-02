@@ -55,6 +55,17 @@ _DESTRUCTIVE_IDEMPOTENT = ToolAnnotations(
     openWorldHint=False,
 )
 
+# tapps_skill_learnings (TAP-6861) legitimately marks destructiveHint=True —
+# its trim action deletes bullets from learnings.md. Re-running the same
+# trim plan a second time refuses (the hash no longer resolves once the
+# bullet is gone), so unlike cache invalidation this is not idempotent.
+_DESTRUCTIVE_NON_IDEMPOTENT = ToolAnnotations(
+    readOnlyHint=False,
+    destructiveHint=True,
+    idempotentHint=False,
+    openWorldHint=False,
+)
+
 EXPECTED_ANNOTATIONS: dict[str, ToolAnnotations] = {
     # Read-only, idempotent, closed-world (19 tools)
     "tapps_server_info": _READ_ONLY,
@@ -95,12 +106,16 @@ EXPECTED_ANNOTATIONS: dict[str, ToolAnnotations] = {
     "tapps_feedback": _SIDE_EFFECT,
     # Destructive, idempotent (1 tool — cache eviction)
     "tapps_linear_snapshot_invalidate": _DESTRUCTIVE_IDEMPOTENT,
+    # Destructive, non-idempotent (1 tool — TAP-6861: trim deletes learnings.md bullets)
+    "tapps_skill_learnings": _DESTRUCTIVE_NON_IDEMPOTENT,
 }
 
-# Tools allowed to set destructiveHint=True. Cache eviction is the only one
-# today; expand explicitly when adding new destructive tools so it is a
-# deliberate decision rather than a silent regression.
-_ALLOWED_DESTRUCTIVE: frozenset[str] = frozenset({"tapps_linear_snapshot_invalidate"})
+# Tools allowed to set destructiveHint=True. Expand explicitly when adding
+# new destructive tools so it is a deliberate decision rather than a silent
+# regression.
+_ALLOWED_DESTRUCTIVE: frozenset[str] = frozenset(
+    {"tapps_linear_snapshot_invalidate", "tapps_skill_learnings"}
+)
 
 
 class TestToolAnnotationsPresent:
@@ -175,9 +190,7 @@ class TestAnnotationCategories:
         # + 1 tapps_finding_to_story (TAP-2717) + 1 tapps_memory (TAP-3895)
         # + 2 Epic 114 read-only tools + 1 tapps_domain_playbook (ADR-0025)
         # + 1 tapps_research (TAP-5365) = 32
-        assert len(read_only) == 32, (
-            f"Expected 32 read-only tools, got {len(read_only)}"
-        )
+        assert len(read_only) == 32, f"Expected 32 read-only tools, got {len(read_only)}"
 
     def test_side_effect_count(self) -> None:
         tools = mcp._tool_manager._tools
@@ -190,9 +203,8 @@ class TestAnnotationCategories:
         # + linear-snapshot-invalidate = 8 (TAP-1994: tapps_memory removed)
         # + 2 hive elevation tools (TAP-2014)
         # + 1 tapps_audit_close_coverage (TAP-2798) + 1 tapps_handoff_save (TAP-3792) = 12.
-        assert len(side_effect) == 12, (
-            f"Expected 12 side-effect tools, got {len(side_effect)}"
-        )
+        # + 1 tapps_skill_learnings (TAP-6861) = 13.
+        assert len(side_effect) == 13, f"Expected 13 side-effect tools, got {len(side_effect)}"
 
     def test_open_world_count(self) -> None:
         tools = mcp._tool_manager._tools
@@ -330,9 +342,6 @@ class TestLargeOutputMeta:
         key = "anthropic/maxResultSizeChars"
         assert key in meta, f"{tool_name}._meta missing {key!r}: {meta}"
         assert meta[key] == self._EXPECTED_CEILINGS[tool_name], (
-            f"{tool_name}._meta[{key}]={meta[key]}, "
-            f"expected {self._EXPECTED_CEILINGS[tool_name]}"
+            f"{tool_name}._meta[{key}]={meta[key]}, expected {self._EXPECTED_CEILINGS[tool_name]}"
         )
-        assert meta[key] < 500_000, (
-            f"{tool_name} ceiling {meta[key]} exceeds MCP spec max 500000"
-        )
+        assert meta[key] < 500_000, f"{tool_name} ceiling {meta[key]} exceeds MCP spec max 500000"

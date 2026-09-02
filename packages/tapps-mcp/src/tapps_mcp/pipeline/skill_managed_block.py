@@ -28,8 +28,16 @@ if TYPE_CHECKING:
 
 Action = Literal["created", "refreshed", "migrated", "unchanged"]
 
+# A finding's kind discriminates a genuine conflict (``contradiction``) from a
+# harmless restatement (``near_duplicate``, not currently produced by any
+# detector below but reserved so the two are never conflated in code or in a
+# response payload).
+FindingKind = Literal["contradiction", "near_duplicate"]
+
 MARKER_BEGIN_PREFIX = "<!-- BEGIN: tapps-skill"
 MARKER_END = "<!-- END: tapps-skill -->"
+
+UPGRADE_POLICY_OVERWRITE_MARKER = "upgrade-policy: overwrite"
 
 # Heading that introduces the preserved project region on a legacy migration.
 PROJECT_REGION_HEADING = (
@@ -115,6 +123,225 @@ def normalize_block_version(block: str) -> str:
     that hasn't re-run ``tapps-mcp upgrade`` since the last patch release.
     """
     return _VERSION_RE.sub(lambda m: f"<!-- BEGIN: tapps-skill {m.group(1)} vX -->", block)
+
+
+_BULLET_RE = re.compile(r"^[ \t]*[-*][ \t]+\S.*$", re.MULTILINE)
+_MARKDOWN_EMPHASIS_RE = re.compile(r"[*_`]")
+_NON_WORD_RE = re.compile(r"[^\w\s]")
+_WHITESPACE_RE = re.compile(r"\s+")
+
+_STOPWORDS = frozenset(
+    {
+        "the",
+        "a",
+        "an",
+        "and",
+        "or",
+        "of",
+        "to",
+        "in",
+        "on",
+        "for",
+        "is",
+        "are",
+        "at",
+        "by",
+        "as",
+        "that",
+        "this",
+        "it",
+        "its",
+        "be",
+        "with",
+        "not",
+        "no",
+        "never",
+        "always",
+        "from",
+        "into",
+        "than",
+        "then",
+        "when",
+        "which",
+        "each",
+        "any",
+        "all",
+        "one",
+    }
+)
+
+# Two bullets that share at least this fraction of their significant words
+# (relative to the smaller bullet) are "about the same thing." Below it they
+# are treated as unrelated, which is what lets a genuinely new project-region
+# rule pass through acceptance criterion 3 without ever being compared.
+_SUBJECT_OVERLAP_THRESHOLD = 0.3
+# Above this Jaccard similarity, two same-subject bullets are a restatement
+# (near_duplicate), not a conflict — the discriminator between "adds detail"
+# and "disagrees."
+_NEAR_DUPLICATE_JACCARD = 0.7
+
+
+def bullet_spans(text: str) -> list[tuple[int, int, str]]:
+    """Return ``(start, end, raw_line)`` for every top-level ``-``/``*`` bullet."""
+    return [(m.start(), m.end(), m.group(0)) for m in _BULLET_RE.finditer(text)]
+
+
+def normalize_bullet_text(raw: str) -> str:
+    """Collapse a bullet line to comparable prose: no marker, markup, or case."""
+    stripped = re.sub(r"^[ \t]*[-*][ \t]+", "", raw)
+    stripped = _MARKDOWN_EMPHASIS_RE.sub("", stripped)
+    stripped = _NON_WORD_RE.sub(" ", stripped.lower())
+    return _WHITESPACE_RE.sub(" ", stripped).strip()
+
+
+def significant_words(normalized: str) -> frozenset[str]:
+    return frozenset(w for w in normalized.split(" ") if len(w) >= 3 and w not in _STOPWORDS)
+
+
+def line_number(content: str, offset: int) -> int:
+    return content.count("\n", 0, offset) + 1
+
+
+@dataclass(frozen=True)
+class Contradiction:
+    """A managed-block bullet and a project-region bullet that disagree.
+
+    ``kind`` is always ``"contradiction"`` here — see :data:`FindingKind`.
+    Both anchors are reported; the check never decides which side is right.
+    """
+
+    managed_text: str
+    managed_line: int
+    project_text: str
+    project_line: int
+    kind: FindingKind = "contradiction"
+
+
+def find_contradictions(content: str) -> list[Contradiction]:
+    """Flag managed-block / project-region bullets that share a subject but disagree.
+
+    Deterministic and reproducible from *content*'s bytes alone — no model call.
+    A project-region bullet whose significant words don't overlap any
+    managed-block bullet (a genuinely new rule) is never compared, so it never
+    flags. A near-identical restatement (Jaccard >= 0.7) is treated as
+    agreement, not conflict. Returns ``[]`` when *content* has no managed
+    block. Never resolves a conflict — both sides are reported for a human (or
+    a later adjudication step) to decide.
+    """
+    span = _find_block_span(content)
+    if span is None:
+        return []
+    begin, end = span
+
+    managed_bullets = [
+        (begin + s, begin + e, raw) for s, e, raw in bullet_spans(content[begin:end])
+    ]
+    project_bullets = [(s, e, raw) for s, e, raw in bullet_spans(content[:begin])]
+    project_bullets += [(end + s, end + e, raw) for s, e, raw in bullet_spans(content[end:])]
+
+    findings: list[Contradiction] = []
+    for m_start, _m_end, m_raw in managed_bullets:
+        m_words = significant_words(normalize_bullet_text(m_raw))
+        if not m_words:
+            continue
+        for p_start, _p_end, p_raw in project_bullets:
+            p_norm = normalize_bullet_text(p_raw)
+            if p_norm == normalize_bullet_text(m_raw):
+                continue
+            p_words = significant_words(p_norm)
+            if not p_words:
+                continue
+            shared = m_words & p_words
+            if not shared:
+                continue
+            overlap = len(shared) / min(len(m_words), len(p_words))
+            if overlap < _SUBJECT_OVERLAP_THRESHOLD:
+                continue
+            jaccard = len(shared) / len(m_words | p_words)
+            if jaccard >= _NEAR_DUPLICATE_JACCARD:
+                continue
+            findings.append(
+                Contradiction(
+                    managed_text=m_raw.strip(),
+                    managed_line=line_number(content, m_start),
+                    project_text=p_raw.strip(),
+                    project_line=line_number(content, p_start),
+                )
+            )
+    return findings
+
+
+Region = Literal["managed_block", "project_region"]
+
+
+@dataclass(frozen=True)
+class PromoteOutcome:
+    """Result of a :func:`promote_rule` call."""
+
+    accepted: bool
+    region: Region
+    reason: str
+    generator_file: str | None = None
+
+
+def resolve_region(content: str, offset: int) -> Region:
+    span = _find_block_span(content)
+    if span is not None:
+        begin, end = span
+        if begin <= offset < end:
+            return "managed_block"
+    return "project_region"
+
+
+def promote_rule(content: str, insertion_offset: int, *, generator_file: str) -> PromoteOutcome:
+    """Guard a promotion's destination before it is written anywhere.
+
+    A promotion moves a rule out of a skill file to a more durable home. Two
+    destinations are unsafe regardless of what the caller intended:
+
+    - **Inside the managed block** — the next ``tapps_upgrade`` regenerates
+      that span from *generator_file* and silently erases the promoted rule.
+    - **Anywhere in a file marked** ``upgrade-policy: overwrite`` — the whole
+      file is replaced wholesale on upgrade, so no position in it is safe.
+
+    Promoting to a point below the END marker (or anywhere outside the block
+    in a non-overwrite file) is accepted and reports ``region="project_region"``.
+    Resolves the region from :func:`_find_block_span`'s existing marker spans;
+    never auto-resolves a refusal.
+    """
+    if UPGRADE_POLICY_OVERWRITE_MARKER in content:
+        region = resolve_region(content, insertion_offset)
+        return PromoteOutcome(
+            accepted=False,
+            region=region,
+            reason=(
+                f"promotion refused: this file carries {UPGRADE_POLICY_OVERWRITE_MARKER!r} — "
+                "the whole file is replaced wholesale on the next tapps_upgrade, so no "
+                "position in it survives. Fold the change upstream into the generator instead."
+            ),
+            generator_file=generator_file,
+        )
+
+    region = resolve_region(content, insertion_offset)
+    if region == "managed_block":
+        return PromoteOutcome(
+            accepted=False,
+            region=region,
+            reason=(
+                "promotion refused: the insertion point falls inside the managed block, "
+                "where it will be silently erased on the next tapps_upgrade. Promote it "
+                f"into {generator_file} instead — the upstream generator that produces "
+                "this block."
+            ),
+            generator_file=generator_file,
+        )
+
+    return PromoteOutcome(
+        accepted=True,
+        region="project_region",
+        reason="promoted below the END marker; this region survives every tapps_upgrade.",
+        generator_file=None,
+    )
 
 
 def wrap_with_markers(body: str, skill_name: str, *, version: str = __version__) -> str:
@@ -254,13 +481,25 @@ __all__ = [
     "MARKER_BEGIN_PREFIX",
     "MARKER_END",
     "PROJECT_REGION_HEADING",
+    "UPGRADE_POLICY_OVERWRITE_MARKER",
     "Action",
+    "Contradiction",
+    "FindingKind",
     "LearningsSizeFinding",
+    "PromoteOutcome",
+    "Region",
+    "bullet_spans",
     "extract_block",
+    "find_contradictions",
     "install_or_refresh_skill",
     "learnings_size_finding",
+    "line_number",
     "normalize_block_version",
+    "normalize_bullet_text",
     "prepend_below_frontmatter",
+    "promote_rule",
+    "resolve_region",
+    "significant_words",
     "split_frontmatter",
     "wrap_with_markers",
 ]
