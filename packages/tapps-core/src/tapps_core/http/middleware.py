@@ -10,9 +10,17 @@ from typing import Any
 
 import structlog
 
+from tapps_core.http.auth import (
+    AUTHORIZATION_HEADER,
+    FLEET_CREDENTIAL_HEADER,
+    FleetAuthConfig,
+    extract_presented_token,
+)
 from tapps_core.http.request_context import (
     PROJECT_ROOT_HEADER,
+    reset_request_auth_scope,
     reset_request_project_root,
+    set_request_auth_scope,
     set_request_project_root,
 )
 
@@ -51,7 +59,6 @@ class TappsProjectRootMiddleware:
         if header_value:
             with contextlib.suppress(OSError):
                 token = set_request_project_root(Path(header_value))
-
         response_started = False
 
         async def _send(message: Message) -> None:
@@ -110,6 +117,76 @@ def _header_value(scope: Message, name: str) -> str | None:
     return None
 
 
-def wrap_streamable_http_app(app: ASGIApp) -> ASGIApp:
-    """Wrap a Streamable HTTP ASGI app with project-root middleware."""
-    return TappsProjectRootMiddleware(app)
+class TappsFleetAuthMiddleware:
+    """Reject fleet requests that do not present a configured bearer token.
+
+    Sits *outside* :class:`TappsProjectRootMiddleware` so an unauthenticated
+    request never reaches the MCP app at all -- not even to have its
+    ``X-Tapps-Project-Root`` header bound.
+    """
+
+    def __init__(self, app: ASGIApp, config: FleetAuthConfig) -> None:
+        self.app = app
+        self.config = config
+
+    async def __call__(self, scope: Message, receive: Receive, send: Send) -> None:
+        if scope.get("type") != "http" or not self.config.enabled:
+            await self.app(scope, receive, send)
+            return
+
+        presented = extract_presented_token(_scope_headers(scope))
+        auth_scope = self.config.authenticate(presented)
+        if auth_scope is None:
+            logger.warning(
+                "http.auth_rejected",
+                path=scope.get("path"),
+                credential_presented=bool(presented),
+            )
+            await _send_unauthorized(send)
+            return
+
+        scope_token = set_request_auth_scope(auth_scope)
+        try:
+            await self.app(scope, receive, send)
+        finally:
+            reset_request_auth_scope(scope_token)
+
+
+async def _send_unauthorized(send: Send) -> None:
+    """Emit a 401 with a ``WWW-Authenticate`` challenge and no detail leak."""
+    body = json.dumps(
+        {
+            "error": "unauthorized",
+            "detail": (
+                "This TappsMCP fleet endpoint requires a bearer token. Send it as "
+                f"'{AUTHORIZATION_HEADER}: Bearer <token>' or '{FLEET_CREDENTIAL_HEADER}: <token>'."
+            ),
+        }
+    ).encode("utf-8")
+    await send(
+        {
+            "type": "http.response.start",
+            "status": 401,
+            "headers": [
+                (b"content-type", b"application/json"),
+                (b"www-authenticate", b'Bearer realm="tapps-fleet"'),
+                (b"content-length", str(len(body)).encode("ascii")),
+            ],
+        }
+    )
+    await send({"type": "http.response.body", "body": body})
+
+
+def _scope_headers(scope: Message) -> dict[str, str]:
+    return {
+        raw_key.decode("ascii", errors="replace"): raw_value.decode("utf-8", errors="replace")
+        for raw_key, raw_value in scope.get("headers", ())
+    }
+
+
+def wrap_streamable_http_app(app: ASGIApp, *, auth: FleetAuthConfig | None = None) -> ASGIApp:
+    """Wrap a Streamable HTTP ASGI app with fleet auth + project-root middleware."""
+    wrapped: ASGIApp = TappsProjectRootMiddleware(app)
+    if auth is not None and auth.enabled:
+        wrapped = TappsFleetAuthMiddleware(wrapped, auth)
+    return wrapped

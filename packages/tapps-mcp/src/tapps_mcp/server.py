@@ -1017,7 +1017,16 @@ def run_server(
         from starlette.responses import HTMLResponse
         from starlette.routing import Route
 
+        from tapps_core.http.auth import FleetAuthConfig
         from tapps_core.http.middleware import wrap_streamable_http_app
+
+        auth = FleetAuthConfig.from_env()
+        logger.info(
+            "tapps_mcp_http_bind",
+            host=host,
+            port=port,
+            auth_enabled=auth.enabled,
+        )
 
         mcp_app = mcp.streamable_http_app()
 
@@ -1030,7 +1039,7 @@ def run_server(
             )
 
         mcp_app.routes.insert(0, Route("/", _root))
-        wrapped_app = wrap_streamable_http_app(mcp_app)
+        wrapped_app = wrap_streamable_http_app(mcp_app, auth=auth)
         uvicorn.run(wrapped_app, host=host, port=port)
     else:
         msg = f"Unsupported transport: {transport}"
