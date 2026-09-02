@@ -18,7 +18,7 @@ linear_enforce_cache_gate: off
 
 Emergency bypass at call time: `TAPPS_LINEAR_SKIP_CACHE_GATE=1 <command>` (logged to `.tapps-mcp/.bypass-log.jsonl`). Same envelope as the existing `TAPPS_LINEAR_SKIP_VALIDATE=1` for the TAP-981 write gate.
 
-The **`linear-standards.md` rule** also gains a new `### Reads (TAP-1224)` enforcement subsection alongside the existing `### Writes (TAP-981)` block. The deployed copy is regenerated on `tapps_upgrade`. If you've hand-edited it, add `linear_standards_rule` to `upgrade_skip_files` in `.tapps-mcp.yaml` to preserve your edits.
+The **`linear-standards.md` rule** also gains a new `### Reads (TAP-1224)` enforcement subsection alongside the existing `### Writes (TAP-981)` block. The deployed copy is regenerated on `tapps_upgrade`. If you've hand-edited it, add `.claude/rules/linear-standards.md` to `upgrade_skip_files` in `.tapps-mcp.yaml` to preserve your edits.
 
 ---
 
