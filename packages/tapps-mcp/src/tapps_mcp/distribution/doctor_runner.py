@@ -130,6 +130,7 @@ from tapps_mcp.distribution.doctor_skills import (
     check_wayfind_skill_current,
     check_workflow_scripts_current,
 )
+from tapps_mcp.distribution.doctor_skill_learnings import check_skill_learnings_hygiene
 from tapps_mcp.distribution.doctor_skip_drift import check_upgrade_skip_token_drift
 from tapps_mcp.distribution.doctor_telemetry import (
     _read_engagement_level,
@@ -237,6 +238,7 @@ def _collect_checks(root: Path, *, quick: bool = False) -> list[CheckResult]:
             "orchestration-prompt learnings ceiling",
             lambda: check_orchestration_prompt_learnings_ceiling(root),
         ),
+        ("Skill learnings hygiene", lambda: check_skill_learnings_hygiene(root)),
         ("Workflow safety invariants", lambda: check_workflow_scripts_current(root)),
         ("finish-task skill", lambda: check_finish_task_skill(root)),
         ("Deprecated wrapper skills", lambda: check_deprecated_wrapper_skills(root)),
