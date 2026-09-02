@@ -140,3 +140,44 @@ class TestFieldRulesTwelve:
         section = self._field_rules_section()
         for n in range(1, 13):
             assert f"\n{n}. " in section or section.startswith(f"{n}. ")
+
+
+class TestVerifierTierAuthorityAndRulings:
+    """TAP-6859 — the proof-shape table is authoritative; eight rulings pin edge cases."""
+
+    def test_no_restatement_of_losing_verifier_tier_formulation(self) -> None:
+        body = CLAUDE_SKILLS["orchestration-prompt"]
+        assert "inherit the runner at high effort" not in body
+
+    def test_authority_statement_present(self) -> None:
+        body = CLAUDE_SKILLS["orchestration-prompt"]
+        assert "This table is authoritative" in body
+        assert "pin explicitly, for a named reason" in body
+        assert "never" in body.split("This table is authoritative", 1)[1][:300]
+
+    def _rulings_section(self) -> str:
+        body = CLAUDE_SKILLS["orchestration-prompt"]
+        section = body.split("## Rulings", 1)[1]
+        return section.split("\n## Guardrails", 1)[0]
+
+    @pytest.mark.parametrize(
+        "marker",
+        [
+            "may author a narrow fix and stay on as re-verifier",
+            "data-loss carve-out",
+            "Shared quota is a coupling the independence test",
+            "Billing topology",
+            "Content-diff freshness",
+            "Cheap-tier transcription",
+            "one named artifact handover to the operator",
+            "reserved for the coordination-versus-execution distinction",
+        ],
+    )
+    def test_each_ruling_present(self, marker: str) -> None:
+        section = self._rulings_section()
+        assert marker in section, f"missing ruling marker {marker!r}"
+
+    def test_eight_rulings_numbered(self) -> None:
+        section = self._rulings_section()
+        for n in range(1, 9):
+            assert f"\n{n}. " in section

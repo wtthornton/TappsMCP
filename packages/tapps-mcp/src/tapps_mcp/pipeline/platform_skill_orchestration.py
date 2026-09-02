@@ -327,6 +327,9 @@ then pick the row:
 **Consequence overrides shape.** A deterministic proof whose verdict gates a deploy is
 an `opus` row. Shape decides the tier only while the step is reversible.
 
+**This table is authoritative.** A project note pinning verifier models means *pin explicitly, for a named reason, on the specific step where it applies* — never "pin
+all high" as a blanket override of the table for the rest of the run.
+
 **Verdict schemas carry evidence, not conclusions.** Every verifier's return schema
 requires two fields beyond the verdict itself:
 
@@ -529,6 +532,47 @@ each — they are not optional flavor text.
     background work across its own return without losing it. Design the dispatch so
     the lane's own return is the last useful signal it gives; never assume a lane can
     pick back up after the dispatching call returns.
+
+## Rulings
+
+Verifier-tier guidance (method §5) is authoritative — see above. These eight rulings
+resolve cases the proof-shape table does not spell out on its own.
+
+1. A refuter may author a narrow fix and stay on as re-verifier while it owns the live
+   repro, without weakening creator ≠ verifier before merge — the point of the rule is
+   a fresh, adversarial perspective, not a fresh identity, and the agent already
+   holding the live reproduction is best placed to confirm a scoped fix without
+   re-establishing context from zero.
+2. No-silent-scope-creep carries a data-loss carve-out — a delegate may step outside
+   its named scope to stop in-flight data loss — and the carve-out is void the moment
+   it is silent: acting outside scope is legitimate only if it is surfaced immediately,
+   in the same report, never discovered later in a diff.
+3. Shared quota is a coupling the independence test (method §3) must see. Two lanes
+   with disjoint file lists can still contend for the same rate limit, API quota, or
+   worker pool — that is a derived-state coupling exactly like an env-var set, and it
+   forces the same `order-forced-by` treatment: a fan-out and the lanes beside it may
+   need sequencing, not just disjoint paths.
+4. Billing topology — which account or budget a dispatch's spend lands against — is
+   frequently unresolved. Probe it at Sub-goal 0, as a live check, never cite it in a
+   prompt as a known fact until it has been probed for that run.
+5. Content-diff freshness (a built artifact's content hash vs source) is necessary but
+   not sufficient — see method §6's stale/divergent distinction. It is repeated per
+   deployed layer, never asserted once for a whole stack, and it expires: a freshness
+   check from an hour ago is not evidence for the current run.
+6. Cheap-tier transcription (method §5's `haiku`/`low` row) is reliable only when the
+   return schema carries keyed pairs — `{name: value}` — never two parallel lists
+   (`names: […]`, `values: […]`) the reader must zip back together by position. A
+   cheap model transcribing two lists can silently misalign them; a keyed schema makes
+   that structurally impossible.
+7. On visual/UI work, one named artifact handover to the operator — a screenshot, a
+   rendered page, a design-canvas link — is allowed before the verification tail
+   spends its budget, so a human sees the actual visual result once early rather than
+   only after several rounds of automated verify already ran. This is a single named
+   handover, not a standing checkpoint.
+8. The word "plane" is reserved for the coordination-versus-execution distinction
+   (method §3). Do not reuse it for the build-time-versus-runtime distinction — use
+   "surface" there instead ("build surface" vs "runtime surface"), so a reader can
+   rely on "plane" meaning one specific thing throughout an emitted prompt.
 
 ## Guardrails every emitted prompt must carry
 
