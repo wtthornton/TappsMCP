@@ -4,6 +4,30 @@ Provides :func:`upgrade_pipeline` which is called by the
 ``tapps_upgrade`` MCP tool. Reuses existing generators but operates
 in ``upgrade_mode`` so custom command paths are never overwritten.
 
+Module layout (TAP-6913)
+========================
+
+This module is the orchestrator and the public surface; the work lives in
+focused leaf modules:
+
+- :mod:`~tapps_mcp.pipeline.upgrade_skip_tokens` — the ``upgrade_skip_files``
+  vocabulary (imported by ``tapps doctor`` without dragging in the pipeline)
+- :mod:`~tapps_mcp.pipeline.upgrade_report` — skip gating, preserved-file
+  enumeration, and the dry-run summary
+- :mod:`~tapps_mcp.pipeline.upgrade_signals` — project-shape detection
+  (Python/infra signals, consent, host detection)
+- :mod:`~tapps_mcp.pipeline.upgrade_docs` — AGENTS.md / CLAUDE.md / Karpathy
+- :mod:`~tapps_mcp.pipeline.upgrade_mcp_config` — per-host ``.mcp.json``
+- :mod:`~tapps_mcp.pipeline.upgrade_hooks_migration` — canonical hook manifest
+  and retired-hook rewiring
+- :mod:`~tapps_mcp.pipeline.upgrade_hosts` — per-host component resolution
+- :mod:`~tapps_mcp.pipeline.upgrade_github` — ``.github/`` and root scripts
+- :mod:`~tapps_mcp.pipeline.upgrade_backup` — rollback snapshot
+- :mod:`~tapps_mcp.pipeline.upgrade_content_return` — read-only-filesystem mode
+
+The historical private names are re-exported at the bottom of this module, so
+``from tapps_mcp.pipeline.upgrade import _skipped`` keeps working.
+
 Design notes — merge over skip
 ==============================
 
@@ -42,7 +66,8 @@ For an MCP-server-only install, call ``tapps_upgrade(mcp_only=True)``.
 ``.claude/rules/tapps-pipeline.md``, ``.claude/settings.json``,
 ``.claude/hooks``, ``.claude/agents``, ``.claude/skills``, ``karpathy``).
 Each token now skips *only* its artifact; in particular ``CLAUDE.md`` no
-longer gates hooks/agents/skills/rules.
+longer gates hooks/agents/skills/rules. Tokens are honored identically in
+dry-run and live mode (TAP-6913).
 
 Dry-run result shape
 ====================
@@ -71,2241 +96,419 @@ so consumers can audit exactly which paths would change:
 
 from __future__ import annotations
 
-import contextlib
-import re
 from collections.abc import Callable
+from dataclasses import dataclass
+from functools import partial
 from pathlib import Path
 from typing import Any
 
-from tapps_core.common.file_operations import (
-    AgentInstructions,
-    FileManifest,
-    FileOperation,
-    WriteMode,
-    detect_write_mode,
-)
+from tapps_core.common.file_operations import WriteMode, detect_write_mode
 from tapps_core.common.logging import get_logger
-from tapps_mcp.pipeline.upgrade_skip_tokens import (
-    ALL_SKIP_TOKENS,
-    SKIP_TOKENS,
-    applied_skip_tokens,
-    describe_unknown_skip_tokens,
-    unknown_skip_tokens,
+from tapps_mcp.pipeline.upgrade_backup import collect_upgrade_targets, create_pre_upgrade_backup
+from tapps_mcp.pipeline.upgrade_content_return import (
+    build_upgrade_manifest,
+    upgrade_agents_md_content_return,
+    upgrade_content_return,
+    upgrade_platform_content_return,
 )
+from tapps_mcp.pipeline.upgrade_docs import (
+    bump_skipped_version_stamps,
+    dry_run_claude_md_status,
+    refresh_karpathy_blocks,
+    upgrade_agents_md,
+)
+from tapps_mcp.pipeline.upgrade_github import (
+    dry_run_github_artifacts,
+    install_start_program_script,
+    run_github_artifacts,
+)
+from tapps_mcp.pipeline.upgrade_hooks_migration import (
+    CANONICAL_HOOK_MANIFEST,
+    is_managed_hook_filename,
+    migrate_retired_hooks,
+    verify_hook_manifest,
+)
+from tapps_mcp.pipeline.upgrade_hosts import upgrade_platform
+from tapps_mcp.pipeline.upgrade_mcp_config import (
+    mcp_json_has_unresolved_workspacefolder,
+    upgrade_mcp_config,
+)
+from tapps_mcp.pipeline.upgrade_report import (
+    apply_or_skip,
+    build_dry_run_summary,
+    dry_run_status,
+    enumerate_preserved,
+    lift_asset_overwrite_warnings,
+    record_applied_skip_tokens,
+    record_managed_json_error,
+    record_unknown_skip_tokens,
+    skipped,
+)
+from tapps_mcp.pipeline.upgrade_signals import (
+    AGENTS_MD_OPT_OUT_SENTINEL,
+    CONSENT_HOSTS,
+    agents_md_opt_out,
+    detect_platform,
+    has_infra_signals,
+    has_python_signals,
+    hosts_for_platform,
+    mcp_json_has_tapps_entry,
+)
+from tapps_mcp.pipeline.upgrade_skip_tokens import ALL_SKIP_TOKENS, SKIP_TOKENS
 
 log = get_logger(__name__)
 
 
-# The skip-token vocabulary lives in a leaf module so ``tapps doctor`` can
-# validate a project's ``upgrade_skip_files`` without importing this one
-# (TAP-6499). Re-exported under the historical private names.
-_SKIP_TOKENS = SKIP_TOKENS
-_ALL_SKIP_TOKENS = ALL_SKIP_TOKENS
+@dataclass(frozen=True)
+class _RunOptions:
+    """Per-run configuration resolved once from ``.tapps-mcp.yaml``."""
 
-_AGENTS_MD_OPT_OUT_SENTINEL = "<!-- tapps:agents-md-disabled -->"
-
-# TAP-1332: Canonical hook manifest. Every project upgraded with tapps_upgrade
-# must end up with this exact set of `tapps-*` hook scripts under
-# `.claude/hooks/`. Drift between projects (AgentForge vs external consumers on
-# the same TappsMCP version) was caused by silent opt-in install paths; this
-# manifest is authoritative for verification reporting.
-_CANONICAL_HOOK_MANIFEST: frozenset[str] = frozenset(
-    {
-        "tapps-session-start.sh",
-        "tapps-session-compact.sh",
-        "tapps-user-prompt-submit.sh",
-        "tapps-pre-bash.sh",
-        "tapps-pre-compact.sh",
-        "tapps-post-edit.sh",
-        "tapps-post-validate.sh",
-        "tapps-post-report.sh",
-        "tapps-post-docs-validate.sh",
-        "tapps-post-linear-snapshot-get.sh",
-        "tapps-post-linear-list.sh",
-        "tapps-pre-linear-write.sh",
-        "tapps-pre-linear-list.sh",
-        "tapps-stop.sh",
-        "tapps-task-completed.sh",
-        "tapps-subagent-start.sh",
-        "tapps-subagent-stop.sh",
-        "tapps-memory-auto-capture.sh",
-        # NOTE: tapps-session-end.sh and tapps-tool-failure.sh deploy ONLY at
-        # engagement_level=high (SessionEnd / PostToolUseFailure events live in
-        # ENGAGEMENT_HOOK_EVENTS["high"] only). They are intentionally omitted
-        # from the canonical manifest so medium/low projects don't false-positive.
-    }
-)
+    settings: Any
+    skip_files: set[str]
+    mcp_bundle: str | None
 
 
-def _verify_hook_manifest(project_root: Path) -> dict[str, Any]:
-    """TAP-1332: report missing/stale hooks against the canonical manifest.
+def _check_install_drift(result: dict[str, Any]) -> bool:
+    """TAP-2200: refuse to upgrade while sibling CLIs lag the in-process version.
 
-    Returns a structured report (always populated; never raises). Used by
-    ``_upgrade_claude_code_live`` to surface drift in the upgrade result so
-    operators can see at a glance whether their project matches the platform
-    contract. ``stale`` entries are scripts older than the tapps-mcp module
-    file by ``mtime`` — a heuristic for "this hook predates a template
-    update and should be re-deployed".
+    When docsmcp / tapps-brain-mcp are behind, the upgrade plan is not
+    trustworthy — templates reference capabilities the lagging binary does not
+    yet expose. Returns ``True`` when the run may proceed. Dry-run callers skip
+    this gate so operators can still preview the diff while drift is present.
     """
-    hooks_dir = project_root / ".claude" / "hooks"
-    if not hooks_dir.is_dir():
-        return {
-            "ok": False,
-            "missing": sorted(_CANONICAL_HOOK_MANIFEST),
-            "extra": [],
-            "stale": [],
-            "hint": "Run tapps_upgrade with destructive_guard / linear_enforce_gate flags appropriate to the project.",
-        }
-    present = {p.name for p in hooks_dir.glob("tapps-*.sh") if p.is_file()}
-    missing = sorted(_CANONICAL_HOOK_MANIFEST - present)
-    extra = sorted(present - _CANONICAL_HOOK_MANIFEST)
-    return {
-        "ok": not missing,
-        "missing": missing,
-        "extra": extra,
-        "stale": [],
-        "manifest_size": len(_CANONICAL_HOOK_MANIFEST),
-        "deployed_size": len(present),
-    }
+    from tapps_mcp.diagnostics import check_install_drift, format_upgrade_blocked_by_drift
 
-
-# Hooks retired across versions. Settings ``hooks`` entries are merge-only on
-# upgrade (existing entries are preserved, never removed), so a project that
-# wired one of these before it was superseded keeps running it forever unless
-# upgrade actively migrates the wiring. Renames swap the command in place
-# (matcher/structure preserved) so a safety guard is upgraded, never dropped;
-# unwires remove the entry for pure no-op hooks.
-_RETIRED_HOOK_RENAMES: dict[str, str] = {
-    # Fail-OPEN destructive guard -> fail-closed replacement (TAP-1785). The old
-    # hook had no ``[ -z "$PYBIN" ]`` guard, so a missing interpreter let
-    # ``rm -rf`` through (exit 0).
-    "tapps-pre-tooluse.sh": "tapps-pre-bash.sh",
-    "tapps-pre-tooluse.ps1": "tapps-pre-bash.ps1",
-}
-# No-op hooks to unwire (session capture went brain-native via
-# ``memory_index_session``, TAP-1999). memory-capture is fully retired — its
-# template, generator, and tapps_init opt-in were removed — so the wiring is
-# stripped AND the file is deleted (see ``_RETIRED_HOOK_DELETE``).
-_RETIRED_HOOK_UNWIRE: frozenset[str] = frozenset(
-    {"tapps-memory-capture.sh", "tapps-memory-capture.ps1"}
-)
-# Retired hook *files* no longer shipped by canonical generation — safe to
-# delete outright. tapps-pre-tooluse is renamed (its wiring repoints to the
-# fail-closed replacement, which canonical generation ships); memory-capture is
-# gone entirely.
-_RETIRED_HOOK_DELETE: frozenset[str] = frozenset(
-    {
-        "tapps-pre-tooluse.sh",
-        "tapps-pre-tooluse.ps1",
-        "tapps-memory-capture.sh",
-        "tapps-memory-capture.ps1",
-    }
-)
-
-
-def _migrate_retired_hooks(project_root: Path) -> dict[str, Any]:
-    """Rewire/strip retired hooks in an existing project's Claude settings.
-
-    * Renames a retired hook's command in place to its fail-closed replacement
-      (``tapps-pre-tooluse.sh`` -> ``tapps-pre-bash.sh``) so the destructive
-      guard is upgraded rather than silently dropped.
-    * Drops the wiring for pure no-op hooks (``tapps-memory-capture.sh``).
-    * Deletes retired hook script files canonical generation no longer ships.
-
-    Always returns a summary; never raises into the upgrade flow.
-    """
-    from tapps_mcp.pipeline.platform_hooks import (
-        ManagedJsonError,
-        _load_managed_json,
-        _write_managed_json,
-    )
-
-    summary: dict[str, Any] = {"renamed": [], "unwired": [], "removed_files": []}
-
-    for settings_name in ("settings.json", "settings.local.json"):
-        settings_file = project_root / ".claude" / settings_name
-        if not settings_file.exists():
-            continue
-        try:
-            config = _load_managed_json(settings_file)
-        except ManagedJsonError:
-            continue
-        hooks = config.get("hooks")
-        if not isinstance(hooks, dict):
-            continue
-        changed = False
-        for event in list(hooks.keys()):
-            entries = hooks.get(event)
-            if not isinstance(entries, list):
-                continue
-            new_entries: list[Any] = []
-            for entry in entries:
-                if not isinstance(entry, dict) or not isinstance(entry.get("hooks"), list):
-                    new_entries.append(entry)
-                    continue
-                kept_inner: list[Any] = []
-                for inner in entry["hooks"]:
-                    cmd = inner.get("command") if isinstance(inner, dict) else None
-                    if isinstance(cmd, str):
-                        for old, new in _RETIRED_HOOK_RENAMES.items():
-                            if old in cmd:
-                                inner["command"] = cmd.replace(old, new)
-                                cmd = inner["command"]
-                                summary["renamed"].append(f"{old} -> {new}")
-                                changed = True
-                        unwired = next((n for n in _RETIRED_HOOK_UNWIRE if n in cmd), None)
-                        if unwired is not None:
-                            summary["unwired"].append(unwired)
-                            changed = True
-                            continue  # drop this inner hook
-                    kept_inner.append(inner)
-                if kept_inner:
-                    entry["hooks"] = kept_inner
-                    new_entries.append(entry)
-                else:
-                    changed = True  # entry held only unwired hooks -> drop it
-            if new_entries:
-                hooks[event] = new_entries
-            else:
-                del hooks[event]
-                changed = True
-        if changed:
-            with contextlib.suppress(OSError):  # disk errors are non-fatal here
-                _write_managed_json(settings_file, config)
-
-    hooks_dir = project_root / ".claude" / "hooks"
-    for name in sorted(_RETIRED_HOOK_DELETE):
-        retired_file = hooks_dir / name
-        if retired_file.is_file():
-            try:
-                retired_file.unlink()
-                summary["removed_files"].append(name)
-            except OSError:  # pragma: no cover - disk error
-                pass
-
-    return summary
-
-
-def _record_unknown_skip_tokens(result: dict[str, Any], skip_files: set[str]) -> None:
-    """Warn loudly about ``upgrade_skip_files`` entries that protect nothing.
-
-    TAP-6499: these used to land in the result dict and be rendered nowhere, so
-    a consumer who wrote file paths instead of tokens watched two upgrades
-    overwrite a customized skill in silence.
-    """
-    unknown = unknown_skip_tokens(skip_files)
-    if not unknown:
-        return
-    explanations = describe_unknown_skip_tokens(unknown)
-    result["unknown_skip_tokens"] = unknown
-    result["unknown_skip_token_warnings"] = explanations
-    result.setdefault("warnings", []).extend(explanations)
-    log.warning(
-        "upgrade.unknown_skip_tokens",
-        unknown=unknown,
-        detail="; ".join(explanations),
-    )
-
-
-def _record_applied_skip_tokens(result: dict[str, Any], skip_files: set[str]) -> None:
-    """Record ``upgrade_skip_files`` entries that matched the vocabulary and were applied.
-
-    Companion to :func:`_record_unknown_skip_tokens` (TAP-6891): before this, a
-    working entry and an unconfigured project produced identical (silent)
-    output — "applied" and "not configured" were indistinguishable in the run.
-    """
-    applied = applied_skip_tokens(skip_files)
-    if not applied:
-        return
-    result["applied_skip_tokens"] = applied
-    log.info("upgrade.applied_skip_tokens", applied=applied)
-
-
-def _lift_asset_overwrite_warnings(
-    result: dict[str, Any], platform_results: list[dict[str, Any]]
-) -> None:
-    """Surface per-host "about to overwrite a customized asset" lines at top level.
-
-    TAP-6497: a scaffolded asset whose format cannot carry a managed-block
-    marker is replaced wholesale. Lifting the report here puts it next to the
-    skip-token warnings in CLI output instead of burying it per host.
-    """
-    for host_result in platform_results:
-        skills = host_result.get("components", {}).get("skills")
-        if isinstance(skills, dict) and skills.get("asset_overwrite_warnings"):
-            result.setdefault("warnings", []).extend(skills["asset_overwrite_warnings"])
-
-
-def _skipped(artifact: str, skip: set[str]) -> bool:
-    return bool(_SKIP_TOKENS.get(artifact, frozenset()) & skip)
-
-
-def _dry_run_status(name: str, skip: set[str]) -> str:
-    """Dry-run status for an artifact that is regenerated unconditionally when not skipped."""
-    return "skipped (upgrade_skip_files)" if _skipped(name, skip) else "would-regenerate"
-
-
-def _apply_or_skip(
-    result: dict[str, Any],
-    name: str,
-    skip: set[str],
-    generate: Callable[[Path], Any],
-    project_root: Path,
-) -> None:
-    """Write ``generate(project_root)`` into ``result["components"][name]``, or the skip marker.
-
-    For artifacts whose dict key equals their ``upgrade_skip_files`` token and
-    which take only ``project_root`` — the shape repeated throughout the
-    claude-code live upgrade.
-    """
-    if _skipped(name, skip):
-        result["components"][name] = "skipped (upgrade_skip_files)"
-    else:
-        result["components"][name] = generate(project_root)
-
-
-def _has_python_signals(project_root: Path) -> bool:
-    """Shallow check: does this project look like Python?
-
-    Returns True if any marker file exists (``pyproject.toml``, ``setup.py``,
-    ``setup.cfg``, ``requirements*.txt``) or the first ``*.py`` outside
-    well-known virtualenv/build dirs is found. Stops at the first hit.
-    """
-    for marker in ("pyproject.toml", "setup.py", "setup.cfg"):
-        if (project_root / marker).exists():
-            return True
-    try:
-        if any(project_root.glob("requirements*.txt")):
-            return True
-    except OSError:
-        pass
-
-    # TAP-686: prune skip_dirs in-place (rglob doesn't — it walks everything
-    # and filters in Python, so monorepos with large vendor trees waste time
-    # even though the loop short-circuits). Also budget the scan so a
-    # pathologically-nested tree can't hang the session.
-    import os
-
-    skip_dirs = {
-        ".venv",
-        "venv",
-        "env",
-        "node_modules",
-        ".git",
-        "__pycache__",
-        "dist",
-        "build",
-        ".tox",
-        ".pytest_cache",
-        ".eggs",
-        "htmlcov",
-        ".mypy_cache",
-        "site-packages",
-        ".tapps-mcp-cache",
-    }
-    budget = 2000
-    try:
-        for _dirpath, dirs, files in os.walk(project_root):
-            dirs[:] = [d for d in dirs if d not in skip_dirs]
-            for name in files:
-                if name.endswith(".py"):
-                    return True
-                budget -= 1
-                if budget <= 0:
-                    return False
-    except OSError as exc:
-        log.warning("python_signals_walk_failed", project_root=str(project_root), error=str(exc))
-        return False
+    drift = check_install_drift()
+    if not drift.drift_detected:
+        return True
+    result["errors"].append(format_upgrade_blocked_by_drift(drift))
+    result["install_drift"] = drift.model_dump()
+    result["success"] = False
     return False
 
 
-def _has_infra_signals(project_root: Path) -> bool:
-    """True if the repo has Dockerfile or docker-compose files.
-
-    Used to gate ``tapps-pipeline.md`` on non-Python projects: the rule's path
-    scope includes ``Dockerfile*`` and ``docker-compose*.yml``, so infra-heavy
-    bash repos may still want it even without Python code.
-    """
-    if any(project_root.glob("Dockerfile*")):
-        return True
-    if any(project_root.glob("docker-compose*.yml")):
-        return True
-    return any(project_root.glob("docker-compose*.yaml"))
-
-
-_CONSENT_HOSTS = ("claude-code", "cursor")
-
-
-def _mcp_json_has_tapps_entry(project_root: Path) -> bool:
-    """True if the user has previously opted in to TappsMCP on *any* host.
-
-    Consent is about intent to use TappsMCP, not about a specific host.
-    A user who added tapps-mcp to Cursor and is now running a Claude Code
-    upgrade should be treated as opted in — checking a single host would
-    refuse to regenerate the Claude Code config even though they clearly want
-    it.  We accept an entry on any configured host as proof of consent.
-
-    Upgrade never implicitly opts a consumer *in* to TappsMCP. We only
-    regenerate the config when the user has previously opted in (entry exists
-    but is broken). For greenfield, ``tapps_init`` is the right entry point.
-    """
-    import json
-
-    from tapps_mcp.distribution.setup_generator import (
-        _get_config_path,
-        _get_servers_key,
-        _strip_jsonc_comments,
-    )
-
-    def _has_entry(h: str) -> bool:
-        path = _get_config_path(h, project_root)
-        if not path.exists():
-            return False
-        try:
-            raw = path.read_text(encoding="utf-8")
-            data = json.loads(_strip_jsonc_comments(raw))
-        except (OSError, ValueError, json.JSONDecodeError):
-            return False
-        servers = data.get(_get_servers_key(h)) or {}
-        if not isinstance(servers, dict):
-            return False
-        if "tapps-mcp" in servers:
-            return True
-        from tapps_mcp.distribution.nlt_mcp_config import list_nlt_server_ids_in_config
-
-        return bool(list_nlt_server_ids_in_config(servers))
-
-    return any(_has_entry(h) for h in _CONSENT_HOSTS)
-
-
-def _agents_md_opt_out(project_root: Path, *, create_flag: bool) -> str | None:
-    """Return a human reason to skip AGENTS.md creation, or ``None`` to proceed.
-
-    Checked only when AGENTS.md does *not* yet exist; existing files are
-    always merged.
-    """
-    if not create_flag:
-        return "upgrade_create_agents_md=false"
-    claude_md = project_root / "CLAUDE.md"
-    if claude_md.exists():
-        try:
-            if _AGENTS_MD_OPT_OUT_SENTINEL in claude_md.read_text(encoding="utf-8"):
-                return f"CLAUDE.md contains {_AGENTS_MD_OPT_OUT_SENTINEL}"
-        except OSError:
-            pass
-    return None
-
-
-def _upgrade_agents_md(
-    project_root: Path,
-    *,
-    dry_run: bool = False,
-    create_agents_md: bool = True,
-    force_merge: bool = False,
-) -> dict[str, Any]:
-    """Validate and update AGENTS.md to the latest template.
-
-    If ``AGENTS.md`` does not exist, creation is gated:
-    - ``create_agents_md=False`` skips creation entirely.
-    - A ``<!-- tapps:agents-md-disabled -->`` sentinel inside ``CLAUDE.md``
-      also skips creation (for repos where CLAUDE.md is the single source of
-      truth).
-
-    Existing ``AGENTS.md`` files always get the section-aware smart merge —
-    opting out of creation does not regress upgrades for users who already
-    have the file.
-
-    Returns a result dict with ``action`` and optional ``detail``.
-    """
-    from tapps_mcp.pipeline.agents_md import AgentsValidation, update_agents_md
-    from tapps_mcp.prompts.prompt_loader import load_agents_template
-
-    agents_path = project_root / "AGENTS.md"
-    template_content = load_agents_template()
-
-    if not agents_path.exists():
-        reason = _agents_md_opt_out(project_root, create_flag=create_agents_md)
-        if reason is not None:
-            return {"action": "skipped", "detail": reason}
-        if not dry_run:
-            _tmp = agents_path.with_name(agents_path.name + ".tmp")
-            try:
-                _tmp.write_text(template_content, encoding="utf-8")
-                _tmp.replace(agents_path)
-            except BaseException:
-                _tmp.unlink(missing_ok=True)
-                raise
-        return {"action": "created"}
-
-    validation = AgentsValidation(agents_path.read_text(encoding="utf-8"))
-    if validation.is_up_to_date and not force_merge:
-        return {"action": "up-to-date", "detail": validation.to_dict()}
-
-    issues: list[str] = []
-    if validation.sections_missing:
-        issues.append(f"missing sections: {', '.join(validation.sections_missing)}")
-    if validation.tools_missing:
-        issues.append(f"missing tools: {', '.join(validation.tools_missing)}")
-    detail = "; ".join(issues) or ("force merge" if force_merge else "version mismatch")
-
-    if dry_run:
-        return {"action": "needs-update", "detail": detail}
-    action, merge_detail = update_agents_md(agents_path, template_content, force_merge=force_merge)
-    return {"action": action, "detail": merge_detail or detail}
-
-
-def _refresh_karpathy_blocks(
-    project_root: Path,
-    *,
-    dry_run: bool = False,
-    include_karpathy: bool = True,
-    skip_files: set[str] | None = None,
-    force: bool = False,
-) -> dict[str, Any]:
-    """Install or refresh Karpathy guidelines into a single primary home.
-
-    Prefers ``AGENTS.md`` when present, otherwise ``CLAUDE.md``. Dual installs
-    are reported; the secondary copy is removed only when ``force=True`` and
-    ``karpathy`` is not in ``upgrade_skip_files``.
-
-    When ``.cursor/rules/`` exists, also refreshes the Cursor ``.mdc`` rule
-    (or removes it when opted out and ``force=True``).
-    """
-    from tapps_mcp.pipeline import karpathy_block
-    from tapps_mcp.pipeline.init import _karpathy_primary_home
-
-    skip = skip_files or set()
-    opted_out = (not include_karpathy) or _skipped("karpathy", skip)
-    primary = _karpathy_primary_home(project_root)
-
-    per_file: dict[str, str] = {}
-
-    for rel in ("AGENTS.md", "CLAUDE.md"):
-        target = project_root / rel
-        if not target.exists():
-            per_file[rel] = "skipped_file_missing"
-            continue
-        try:
-            is_primary = primary is not None and rel == primary
-            has = karpathy_block.has_block(target)
-            if is_primary:
-                if opted_out and not has:
-                    per_file[rel] = "skipped (opt-out)"
-                    continue
-                per_file[rel] = karpathy_block.install_or_refresh(target, dry_run=dry_run)
-                continue
-            if not has:
-                per_file[rel] = "skipped (single-home)"
-                continue
-            if force and not opted_out:
-                action = karpathy_block.remove_block(target, dry_run=dry_run)
-                per_file[rel] = (
-                    "would_remove (dual-home)" if dry_run else f"removed (dual-home): {action}"
-                )
-            else:
-                per_file[rel] = "WARN dual-home (use upgrade --force to strip)"
-        except (OSError, ValueError) as exc:
-            log.exception("karpathy_block_failed", file=rel)
-            per_file[rel] = f"error: {exc}"
-
-    cursor_rule: str
-    try:
-        cursor_path = karpathy_block.cursor_rule_path(project_root)
-        has_cursor = cursor_path.is_file()
-        if opted_out:
-            if has_cursor and force:
-                cursor_rule = karpathy_block.remove_cursor_rule(project_root, dry_run=dry_run)
-            elif has_cursor:
-                cursor_rule = "unchanged (opt-out keeps existing)"
-            else:
-                cursor_rule = "skipped (opt-out)"
-        else:
-            cursor_rule = karpathy_block.install_or_refresh_cursor_rule(
-                project_root, dry_run=dry_run
-            )
-    except (OSError, ValueError) as exc:
-        log.exception("karpathy_cursor_rule_failed")
-        cursor_rule = f"error: {exc}"
-
-    # TAP-5361: report on-disk homes *after* install/strip, not the pre-pass
-    # snapshot (installing into an empty preferred home used to yield
-    # dual_homes=[] while files.* still said WARN dual-home).
-    on_disk_homes = [
-        name for name in ("AGENTS.md", "CLAUDE.md") if karpathy_block.has_block(project_root / name)
-    ]
-    dual_homes = on_disk_homes if len(on_disk_homes) >= 2 else []
-    retained_dual = any(str(v).startswith("WARN dual-home") for v in per_file.values())
-    payload: dict[str, Any] = {
-        "source_sha": karpathy_block.KARPATHY_GUIDELINES_SOURCE_SHA,
-        "files": per_file,
-        "cursor_rule": cursor_rule,
-        "opted_out": opted_out,
-        "primary": primary,
-        "dual_homes": dual_homes,
-    }
-    if retained_dual:
-        payload["dual_home_note"] = (
-            "Secondary Karpathy copy retained on disk; "
-            "non-force upgrade will not strip it — pass --force to remove."
-        )
-    return payload
-
-
-def _mcp_json_has_unresolved_workspacefolder(project_root: Path, host: str) -> bool:
-    """TAP-2199: return ``True`` when the on-disk ``.mcp.json`` still contains the
-    broken literal ``${workspaceFolder}`` in the tapps-mcp or docs-mcp env block.
-
-    Used by :func:`_upgrade_mcp_config` to force a regenerate even when the
-    file would otherwise pass :func:`_validate_config_file`. Without this,
-    consumers who installed before the fix never get the env block rewritten.
-    """
-    import json as _json
-
-    from tapps_mcp.distribution.setup_generator import _get_config_path, _get_servers_key
-
-    config_path = _get_config_path(host, project_root)
-    if not config_path.exists():
-        return False
-    try:
-        data = _json.loads(config_path.read_text(encoding="utf-8"))
-    except (OSError, _json.JSONDecodeError):
-        return False
-    if not isinstance(data, dict):
-        return False
-    servers = data.get(_get_servers_key(host))
-    if not isinstance(servers, dict):
-        return False
-    for entry in servers.values():
-        if not isinstance(entry, dict):
-            continue
-        env = entry.get("env")
-        if not isinstance(env, dict):
-            continue
-        for key in ("TAPPS_MCP_PROJECT_ROOT", "DOCS_MCP_PROJECT_ROOT"):
-            value = env.get(key)
-            if isinstance(value, str) and "${" in value:
-                return True
-    return False
-
-
-def _upgrade_mcp_config(
-    host: str,
-    project_root: Path,
-    result: dict[str, Any],
-    *,
-    force: bool,
-    dry_run: bool,
-    mcp_bundle: str | None = "full",
-) -> None:
-    """Populate result["components"]["mcp_config"] for one host.
-
-    The ``mcp_config`` skip token is handled by the caller before this
-    function is invoked.
-
-    Consent gate: only regenerates ``.mcp.json`` when the user has previously
-    opted in (entry exists) or ``force=True``.  Missing entries are not
-    treated as broken — greenfield projects should go through ``tapps_init``.
-
-    When *mcp_bundle* is ``None``, a custom on-disk ``nlt-*`` set is preserved
-    (no rewrite to ``full``). Use ``tapps-mcp mcp-bundle set <name>`` to opt in
-    to a named bundle sync.
-
-    TAP-2199: when the on-disk env block still contains the literal
-    ``${workspaceFolder}`` we self-heal by forcing a regen regardless of
-    ``_validate_config_file`` verdict. The merge in :func:`_generate_config`
-    overlays the new (absolute) env values over the broken ones, so user
-    customizations on other keys survive.
-    """
-    from tapps_mcp.distribution.nlt_mcp_config import (
-        DEFAULT_NLT_BUNDLE,
-        bundle_matches_mcp_config,
-        match_bundle_for_servers,
-        needs_legacy_nlt_migration,
-        normalize_mcp_bundle,
-    )
-    from tapps_mcp.distribution.setup_generator import (
-        _build_uv_run_tapps_launch,
-        _generate_config,
-        _get_config_path,
-        _get_servers_key,
-        _should_include_docs_mcp,
-        _should_use_uv_launch,
-        _validate_config_file,
-    )
-
-    config_path = _get_config_path(host, project_root)
-    servers_key = _get_servers_key(host)
-    existing: dict[str, object] = {}
-    if config_path.exists():
-        from tapps_mcp.distribution.setup_generator import _load_mcp_config_json
-
-        parsed = _load_mcp_config_json(config_path)
-        if isinstance(parsed, dict):
-            existing = parsed
-    include_docs_mcp = _should_include_docs_mcp(
-        False,
-        existing=existing,
-        servers_key=servers_key,
-    )
-    use_uv, extra_auto, _ = _should_use_uv_launch(project_root, uv_mode=None)
-    uv_launch = _build_uv_run_tapps_launch(extra_auto) if use_uv else None
-    error = _validate_config_file(config_path, servers_key)
-    already_opted_in = _mcp_json_has_tapps_entry(project_root)
-    needs_heal = _mcp_json_has_unresolved_workspacefolder(project_root, host)
-    raw_servers = existing.get(servers_key)
-    servers_dict = raw_servers if isinstance(raw_servers, dict) else {}
-    needs_nlt_migration = needs_legacy_nlt_migration(servers_dict)
-    # None = preserve custom on-disk set (do not sync / re-expand to full).
-    sync_bundle = mcp_bundle is not None
-    normalized_bundle = normalize_mcp_bundle(mcp_bundle) if sync_bundle else DEFAULT_NLT_BUNDLE
-    bundle_mismatch = (
-        sync_bundle
-        and already_opted_in
-        and not bundle_matches_mcp_config(servers_dict, normalized_bundle)
-    )
-    # When preserving a custom set, only regenerate when on-disk matches a
-    # named bundle (heal/migrate); never silently expand custom → full.
-    on_disk_bundle = match_bundle_for_servers(servers_dict)
-    generate_bundle = normalized_bundle if sync_bundle else (on_disk_bundle or DEFAULT_NLT_BUNDLE)
-    if needs_heal and already_opted_in:
-        if not sync_bundle and on_disk_bundle is None:
-            result["components"]["mcp_config"] = (
-                "needs-heal deferred: custom nlt-* set with ${workspaceFolder}; "
-                "run: tapps-mcp mcp-bundle set <bundle> (or fix env paths manually)"
-            )
-        elif dry_run:
-            result["components"]["mcp_config"] = (
-                "needs-heal: ${workspaceFolder} in env block "
-                "(TAP-2199 — rerun without dry_run to fix)"
-            )
-        else:
-            _generate_config(
-                host,
-                project_root,
-                force=True,
-                upgrade_mode=True,
-                with_docs_mcp=include_docs_mcp,
-                uv_launch=uv_launch,
-                use_nlt_plugin=True,
-                mcp_bundle=generate_bundle,
-            )
-            result["components"]["mcp_config"] = (
-                "healed: rewrote ${workspaceFolder} to absolute project root (TAP-2199)"
-            )
-    elif needs_nlt_migration and already_opted_in and force:
-        if dry_run:
-            result["components"]["mcp_config"] = (
-                "needs-migration: legacy tapps-mcp/docs-mcp → NLT nlt-* servers"
-            )
-        else:
-            _generate_config(
-                host,
-                project_root,
-                force=True,
-                upgrade_mode=True,
-                with_docs_mcp=include_docs_mcp,
-                uv_launch=uv_launch,
-                use_nlt_plugin=True,
-                mcp_bundle=generate_bundle,
-            )
-            result["components"]["mcp_config"] = (
-                "migrated: legacy monolith → NLT plugin (nlt-code-quality + nlt-platform-admin)"
-            )
-    elif not sync_bundle and already_opted_in:
-        result["components"]["mcp_config"] = (
-            "ok (custom nlt-* set preserved; run: tapps-mcp mcp-bundle set <bundle> to sync)"
-        )
-    elif bundle_mismatch and already_opted_in:
-        if dry_run:
-            result["components"]["mcp_config"] = (
-                f"needs-bundle-sync: enabled servers != mcp_bundle={normalized_bundle!r}"
-            )
-        else:
-            _generate_config(
-                host,
-                project_root,
-                force=True,
-                upgrade_mode=True,
-                with_docs_mcp=include_docs_mcp,
-                uv_launch=uv_launch,
-                use_nlt_plugin=True,
-                mcp_bundle=normalized_bundle,
-            )
-            result["components"]["mcp_config"] = (
-                f"synced: rewrote MCP config for mcp_bundle={normalized_bundle!r}"
-            )
-    elif error is None:
-        result["components"]["mcp_config"] = "ok"
-    elif not already_opted_in and not force:
-        result["components"]["mcp_config"] = {
-            "action": "skipped (no existing tapps-mcp entry)",
-            "hint": (
-                "Run `tapps_init` or pass force=True to create "
-                f"{config_path.name} with the tapps-mcp server entry."
-            ),
-        }
-    elif not dry_run:
-        _generate_config(
-            host,
-            project_root,
-            force=True,
-            upgrade_mode=True,
-            with_docs_mcp=include_docs_mcp,
-            uv_launch=uv_launch,
-            use_nlt_plugin=True,
-            mcp_bundle=generate_bundle,
-        )
-        result["components"]["mcp_config"] = "regenerated"
-    else:
-        result["components"]["mcp_config"] = f"needs-fix: {error}"
-
-
-def _build_dry_run_summary(result: dict[str, Any]) -> dict[str, Any]:
-    """Build a human-readable verdict from per-component dry-run details.
-
-    Walks ``result["components"]["platforms"]`` and aggregates:
-    - ``managed_file_count``: tapps-* files the upgrade would write
-    - ``preserved_file_count``: consumer-custom files the upgrade would NOT touch
-    - ``skipped_components``: components opted out via ``upgrade_skip_files``
-    - ``verdict``: one of ``"safe-to-run"``, ``"review-recommended"``, ``"blocked"``
-
-    ``review-recommended`` fires when an upgrade would touch a
-    user-editable file (``CLAUDE.md``, settings merge) so the consumer
-    should inspect diffs before running live. Pure ``tapps-*`` writes
-    plus preserved custom files → ``safe-to-run``.
-
-    ``blocked`` fires when a managed JSON config (``.claude/settings.json``,
-    ``.cursor/hooks.json``) fails to parse — repair the file before upgrading.
-    """
-    managed = 0
-    preserved_items: list[str] = []
-    skipped: list[str] = []
-    review_flags: list[str] = []
-    parse_errors: list[str] = []
-
-    def _absorb_component(scope: str, name: str, value: Any) -> None:
-        if isinstance(value, dict):
-            if value.get("action") == "error":
-                parse_errors.append(f"{scope}:{name}: {value.get('error', '')}")
-            managed_files = value.get("managed_files", [])
-            managed_skills = value.get("managed_skills", [])
-            nonlocal managed
-            managed += len(managed_files) + len(managed_skills)
-            preserved_items.extend(
-                f"{scope}:{name}/{item}"
-                for key in ("preserved_files", "preserved_skills")
-                for item in value.get(key, [])
-            )
-        elif isinstance(value, str):
-            if value.startswith("skipped"):
-                skipped.append(f"{scope}:{name}")
-            elif value.startswith(("would-refresh", "would-merge")):
-                review_flags.append(f"{scope}:{name}")
-
-    platforms = result.get("components", {}).get("platforms", [])
-    for host_result in platforms:
-        host = host_result.get("host", "?")
-        for name, value in host_result.get("components", {}).items():
-            _absorb_component(host, name, value)
-
-    # Top-level (platform-agnostic) components: GitHub artifacts, Karpathy, etc.
-    for name in ("ci_workflows", "github_templates"):
-        value = result.get("components", {}).get(name)
-        _absorb_component("repo", name, value)
-
-    claude_md = result.get("components", {}).get("claude_md")
-    if isinstance(claude_md, str) and claude_md.startswith("would-merge"):
-        review_flags.append("claude_md")
-    agents_md = result.get("components", {}).get("agents_md")
-    if isinstance(agents_md, dict) and agents_md.get("action", "").startswith("would"):
-        review_flags.append("agents_md")
-
-    verdict = (
-        "blocked" if parse_errors else ("review-recommended" if review_flags else "safe-to-run")
-    )
-    if verdict == "blocked":
-        message = "Managed JSON parse failure — repair before upgrading: " + "; ".join(parse_errors)
-    elif verdict == "safe-to-run":
-        message = (
-            f"Upgrade is additive: {managed} tapps-managed files would be "
-            f"written, {len(preserved_items)} custom files preserved."
-        )
-    else:
-        message = (
-            f"Upgrade touches user-editable files ({', '.join(review_flags)}); "
-            f"review diffs before running live. {len(preserved_items)} custom "
-            "files preserved."
-        )
-
-    # TAP-2201: Surface would_recreate_deleted_files from github_templates component.
-    would_recreate: list[dict[str, str]] = []
-    for name in ("github_templates",):
-        value = result.get("components", {}).get(name)
-        if isinstance(value, dict):
-            would_recreate.extend(value.get("would_recreate_deleted_files", []))
-
-    return {
-        "verdict": verdict,
-        "message": message,
-        "managed_file_count": managed,
-        "preserved_file_count": len(preserved_items),
-        "preserved_files": sorted(preserved_items),
-        "skipped_components": sorted(skipped),
-        "review_recommended_for": sorted(review_flags),
-        "parse_errors": sorted(parse_errors),
-        "would_recreate_deleted_files": would_recreate,
-    }
-
-
-def _enumerate_preserved(
-    target_dir: Path,
-    managed_names: frozenset[str],
-    *,
-    is_dir_target: bool = False,
-) -> list[str]:
-    """Return existing entries in *target_dir* that upgrade would not touch.
-
-    ``managed_names`` lists the base names tapps-mcp actively manages. Anything
-    else in the directory is preserved by the upgrade. The names are returned
-    sorted so dry-run output is stable across platforms.
-    """
-    if not target_dir.is_dir():
-        return []
-    preserved: list[str] = []
-    for entry in target_dir.iterdir():
-        if entry.name in managed_names:
-            continue
-        if is_dir_target and not entry.is_dir():
-            continue
-        preserved.append(entry.name)
-    return sorted(preserved)
-
-
-def _dry_run_claude_md_status(project_root: Path, *, force: bool) -> str:
-    """Report the would-do verdict for CLAUDE.md based on the version stamp.
-
-    TAP-2334: parallel to the AGENTS.md stamp check. The verdict drives
-    whether the dry-run summary flags CLAUDE.md as ``review-recommended``.
-    """
-    from tapps_mcp.pipeline.claude_md import ClaudeValidation
-
-    claude_md = project_root / "CLAUDE.md"
-    from tapps_mcp import __version__
-
-    if not claude_md.exists():
-        return "would-create"
-    if force:
-        return "would-refresh (force)"
-    try:
-        validation = ClaudeValidation(claude_md.read_text(encoding="utf-8"))
-    except OSError as exc:
-        return f"check-needed: {exc}"
-    if validation.is_up_to_date:
-        return "up-to-date"
-    if validation.needs_stamp:
-        return "would-add-stamp (legacy CLAUDE.md, no version marker)"
-    return f"would-merge (stamp {validation.existing_version or '<none>'} != {__version__})"
-
-
-def _upgrade_claude_code_dry_run(
-    project_root: Path,
-    result: dict[str, Any],
-    *,
-    force: bool,
-    python_ok: bool,
-    infra_ok: bool,
-    skip: set[str],
-    destructive_guard: bool = True,
-    linear_enforce_gate: bool = False,
-    linear_enforce_cache_gate: str = "off",
-    session_start_gate: str = "off",
-    skill_tier: str = "full",
-) -> None:
-    """Populate dry-run component hints for the claude-code host.
-
-    Enumerates the exact tapps-managed files that would be written and the
-    existing non-managed files that would be preserved, so consumers can see
-    that custom agents/skills/hooks are safe from the upgrade.
-    """
-    from tapps_mcp.pipeline.platform_hooks import dry_run_managed_json_status
-    from tapps_mcp.pipeline.platform_skills import CLAUDE_SKILLS
-    from tapps_mcp.pipeline.platform_subagents import CLAUDE_AGENTS
-
-    if _skipped("claude_md", skip):
-        result["components"]["claude_md"] = "skipped (upgrade_skip_files)"
-    else:
-        result["components"]["claude_md"] = _dry_run_claude_md_status(project_root, force=force)
-    settings_status = (
-        "skipped (upgrade_skip_files)"
-        if _skipped("claude_settings", skip)
-        else dry_run_managed_json_status(
-            project_root / ".claude" / "settings.json",
-            ok_message="would-merge (hooks merged by matcher; existing entries preserved)",
-        )
-    )
-    result["components"]["settings"] = settings_status
-
-    if _skipped("claude_hooks", skip):
-        result["components"]["hooks"] = "skipped (upgrade_skip_files)"
-    elif isinstance(settings_status, dict) and settings_status.get("action") == "error":
-        result["components"]["hooks"] = {
-            "action": "skipped",
-            "note": "blocked by malformed .claude/settings.json (see settings component)",
-        }
-    else:
-        hooks_dir = project_root / ".claude" / "hooks"
-        managed_hooks = (
-            frozenset(p.name for p in hooks_dir.glob("tapps-*"))
-            if hooks_dir.is_dir()
-            else frozenset()
-        )
-        # Opt-in gate scripts that only ship when the corresponding flag is
-        # enabled in .tapps-mcp.yaml — surface them explicitly so consumers
-        # can see what the flags will write. Bash-only (no Windows variants).
-        conditional_managed: list[str] = []
-        if destructive_guard:
-            conditional_managed.append("tapps-pre-bash.sh")
-        if linear_enforce_gate:
-            conditional_managed.extend(["tapps-pre-linear-write.sh", "tapps-post-docs-validate.sh"])
-        if linear_enforce_cache_gate in {"warn", "block"}:
-            conditional_managed.extend(
-                [
-                    "tapps-pre-linear-list.sh",
-                    "tapps-post-linear-snapshot-get.sh",
-                    "tapps-post-linear-list.sh",
-                ]
-            )
-        if session_start_gate in {"warn", "block"}:
-            conditional_managed.extend(
-                [
-                    "tapps-pre-session-start-gate.sh",
-                    "tapps-post-session-start.sh",
-                ]
-            )
-        hooks_component: dict[str, Any] = {
-            "action": "would-write-managed-scripts",
-            "note": "settings.json hooks merged by matcher — existing entries preserved",
-            "preserved_files": _enumerate_preserved(hooks_dir, managed_hooks),
-        }
-        if conditional_managed:
-            hooks_component["managed_files"] = sorted(conditional_managed)
-        hooks_component["destructive_guard"] = destructive_guard
-        hooks_component["linear_enforce_gate"] = linear_enforce_gate
-        hooks_component["linear_enforce_cache_gate"] = linear_enforce_cache_gate
-        hooks_component["session_start_gate"] = session_start_gate
-        result["components"]["hooks"] = hooks_component
-
-    if _skipped("claude_agents", skip):
-        result["components"]["agents"] = "skipped (upgrade_skip_files)"
-    else:
-        agents_dir = project_root / ".claude" / "agents"
-        managed_agents = frozenset(CLAUDE_AGENTS.keys())
-        result["components"]["agents"] = {
-            "action": "would-write-managed-files",
-            "managed_files": sorted(managed_agents),
-            "preserved_files": _enumerate_preserved(agents_dir, managed_agents),
-        }
-
-    if _skipped("claude_skills", skip):
-        result["components"]["skills"] = "skipped (upgrade_skip_files)"
-    else:
-        from tapps_mcp.pipeline.platform_skills import CORE_SKILL_NAMES, prune_skills_for_tier
-
-        skills_dir = project_root / ".claude" / "skills"
-        managed_skills = (
-            frozenset(name for name in CLAUDE_SKILLS if name in CORE_SKILL_NAMES)
-            if skill_tier == "core"
-            else frozenset(CLAUDE_SKILLS.keys())
-        )
-        prune_preview = prune_skills_for_tier(
-            project_root, "claude", skill_tier=skill_tier, dry_run=True
-        )
-        result["components"]["skills"] = {
-            "action": "would-write-managed-skills",
-            "skill_tier": skill_tier,
-            "managed_skills": sorted(managed_skills),
-            "preserved_skills": _enumerate_preserved(
-                skills_dir, frozenset(CLAUDE_SKILLS.keys()), is_dir_target=True
-            ),
-            "would_prune": prune_preview.get("would_prune", []),
-            "bytes_freed": prune_preview.get("bytes_freed", 0),
-        }
-
-    if _skipped("claude_workflows", skip):
-        result["components"]["workflows"] = "skipped (upgrade_skip_files)"
-    else:
-        from tapps_mcp.pipeline.platform_workflow_scripts import WORKFLOW_SCRIPTS
-
-        result["components"]["workflows"] = {
-            "action": "would-write-managed-files",
-            "managed_files": sorted(WORKFLOW_SCRIPTS.keys()),
-        }
-
-    if _skipped("docs_automation", skip):
-        result["components"]["docs_automation"] = "skipped (upgrade_skip_files)"
-    else:
-        from tapps_mcp.pipeline.platform_docs_automation import (
-            CLAUDE_DOCS_SKILLS,
-            detect_docsmcp,
-        )
-
-        if detect_docsmcp(project_root):
-            result["components"]["docs_automation"] = {
-                "action": "would-write-managed-skills",
-                "managed_skills": sorted(CLAUDE_DOCS_SKILLS.keys()),
-            }
-        else:
-            result["components"]["docs_automation"] = "skipped (no docsmcp detected)"
-
-    result["components"]["python_quality_rule"] = (
-        "would-regenerate" if python_ok else "skipped (no python detected)"
-    )
-    result["components"]["agent_scope_rule"] = "would-regenerate"
-    result["components"]["autonomy_rule"] = _dry_run_status("autonomy_rule", skip)
-    result["components"]["linear_standards_rule"] = "would-regenerate"
-    result["components"]["integration_hygiene_rule"] = _dry_run_status(
-        "integration_hygiene_rule", skip
-    )
-    result["components"]["pipeline_rule"] = (
-        "would-regenerate" if (python_ok or infra_ok) else "skipped (no python or infra detected)"
-    )
-    # TAP-978: scoped quality rules.
-    result["components"]["security_rule"] = (
-        "skipped (upgrade_skip_files)"
-        if _skipped("security_rule", skip)
-        else ("would-regenerate" if python_ok else "skipped (no python detected)")
-    )
-    result["components"]["test_quality_rule"] = (
-        "skipped (upgrade_skip_files)"
-        if _skipped("test_quality_rule", skip)
-        else ("would-regenerate" if python_ok else "skipped (no python detected)")
-    )
-    result["components"]["config_files_rule"] = (
-        "skipped (upgrade_skip_files)"
-        if _skipped("config_files_rule", skip)
-        else (
-            "would-regenerate"
-            if (python_ok or infra_ok)
-            else "skipped (no python or infra detected)"
-        )
-    )
-    result["components"]["measure_script"] = _dry_run_status("measure_script", skip)
-    result["components"]["gitfacts_script"] = _dry_run_status("gitfacts_script", skip)
-
-
-def _record_managed_json_error(result: dict[str, Any], key: str, exc: Any) -> None:
-    """Isolate a malformed managed-JSON failure to a single component.
-
-    Records a structured, actionable error under ``result["components"][key]``
-    and stashes it on ``component_errors`` so the orchestrator can surface it at
-    the top level. The rest of the platform scope keeps upgrading instead of
-    aborting on a bare ``JSONDecodeError`` when ``.claude/settings.json`` or
-    ``.cursor/hooks.json`` is malformed (e.g. a dropped opening brace).
-    """
-    result["components"][key] = {
-        "action": "error",
-        "error": str(exc),
-        "hint": getattr(exc, "remediation", ""),
-    }
-    result.setdefault("component_errors", []).append(f"{key}: {exc}")
-
-
-def _upgrade_claude_code_live(
-    project_root: Path,
-    result: dict[str, Any],
-    *,
-    force: bool,
-    engagement_level: str,
-    skip: set[str],
-    python_ok: bool,
-    infra_ok: bool,
-    destructive_guard: bool = True,
-    linear_enforce_gate: bool = False,
-    linear_enforce_cache_gate: str = "off",
-    session_start_gate: str = "off",
-    skill_tier: str = "full",
-) -> None:
-    """Run live (non-dry-run) artifact upgrades for the claude-code host."""
-    from tapps_mcp.pipeline.init import _bootstrap_claude, _bootstrap_claude_settings
-    from tapps_mcp.pipeline.platform_bundles import generate_claude_pipeline_rule
-    from tapps_mcp.pipeline.platform_generators import (
-        generate_claude_agent_scope_rule,
-        generate_claude_agent_to_agent_rule,
-        generate_claude_autonomy_rule,
-        generate_claude_config_files_rule,
-        generate_claude_hooks,
-        generate_claude_integration_hygiene_rule,
-        generate_claude_linear_standards_rule,
-        generate_claude_python_quality_rule,
-        generate_claude_security_rule,
-        generate_claude_test_quality_rule,
-        generate_skills,
-        generate_subagent_definitions,
-    )
-    from tapps_mcp.pipeline.platform_hooks import ManagedJsonError
-    from tapps_mcp.pipeline.platform_project_scripts import (
-        generate_gitfacts_script,
-        generate_measure_script,
-    )
-
-    # CLAUDE.md — merges into user content via _replace_tapps_section.
-    if _skipped("claude_md", skip):
-        result["components"]["claude_md"] = "skipped (upgrade_skip_files)"
-    else:
-        result["components"]["claude_md"] = _bootstrap_claude(project_root, overwrite=force)
-
-    if _skipped("claude_settings", skip):
-        result["components"]["settings"] = "skipped (upgrade_skip_files)"
-    else:
-        result["components"]["settings"] = _bootstrap_claude_settings(
-            project_root, engagement_level=engagement_level
-        )
-
-    if _skipped("claude_hooks", skip):
-        result["components"]["hooks"] = "skipped (upgrade_skip_files)"
-    else:
-        # TAP-1333: auto-promote linear_enforce_cache_gate from warn to block
-        # when 7-day telemetry shows < 5% gate-skip rate.
-        try:
-            from tapps_core.config.settings import load_settings as _ls
-            from tapps_mcp.tools.loop_metrics import should_auto_promote_cache_gate
-
-            _settings = _ls()
-            _auto = getattr(_settings, "linear_enforce_cache_gate_auto_promote", True)
-            promote, telemetry = should_auto_promote_cache_gate(
-                project_root,
-                current_mode=linear_enforce_cache_gate,
-                auto_promote_enabled=_auto,
-            )
-            result.setdefault("auto_promote", {})["cache_gate"] = telemetry
-            if promote:
-                linear_enforce_cache_gate = "block"
-                result["auto_promote"]["cache_gate"]["promoted"] = True
-                result["auto_promote"]["cache_gate"]["from"] = "warn"
-                result["auto_promote"]["cache_gate"]["to"] = "block"
-        except Exception:
-            pass
-        # Same auto-promote for the session-start gate: warn → block once the
-        # 7-day session-start skip rate is clean.
-        try:
-            from tapps_core.config.settings import load_settings as _ls
-            from tapps_mcp.tools.loop_metrics import (
-                should_auto_promote_session_start_gate,
-            )
-
-            _settings = _ls()
-            _auto_ss = getattr(_settings, "session_start_gate_auto_promote", True)
-            promote_ss, telemetry_ss = should_auto_promote_session_start_gate(
-                project_root,
-                current_mode=session_start_gate,
-                auto_promote_enabled=_auto_ss,
-            )
-            result.setdefault("auto_promote", {})["session_start_gate"] = telemetry_ss
-            if promote_ss:
-                session_start_gate = "block"
-                result["auto_promote"]["session_start_gate"]["promoted"] = True
-                result["auto_promote"]["session_start_gate"]["from"] = "warn"
-                result["auto_promote"]["session_start_gate"]["to"] = "block"
-        except Exception:
-            pass
-        try:
-            hooks_result = generate_claude_hooks(
-                project_root,
-                engagement_level=engagement_level,
-                destructive_guard=destructive_guard,
-                linear_enforce_gate=linear_enforce_gate,
-                linear_enforce_cache_gate=linear_enforce_cache_gate,
-                session_start_gate=session_start_gate,
-            )
-            result["components"]["hooks"] = {
-                "scripts_created": hooks_result.get("scripts_created", []),
-                "hooks_added": hooks_result.get("hooks_added", 0),
-                "destructive_guard": hooks_result.get("destructive_guard", False),
-                "linear_enforce_gate": hooks_result.get("linear_enforce_gate", False),
-                "linear_enforce_cache_gate": hooks_result.get("linear_enforce_cache_gate", "off"),
-                "session_start_gate": hooks_result.get("session_start_gate", "off"),
-                "manifest_verification": _verify_hook_manifest(project_root),
-            }
-            # Migrate retired hook wiring: rename the fail-open destructive guard
-            # to its fail-closed replacement, unwire the no-op memory-capture
-            # hook, and delete retired files. Runs after generation (which
-            # redeploys the canonical replacement) so the rename target exists.
-            result["components"]["retired_hooks"] = _migrate_retired_hooks(project_root)
-            from tapps_mcp.pipeline.platform_hooks import wire_memory_hooks
-
-            result["components"]["memory_hooks"] = wire_memory_hooks(
-                project_root,
-                platform="claude",
-            )
-        except ManagedJsonError as exc:
-            _record_managed_json_error(result, "hooks", exc)
-
-    if _skipped("claude_agents", skip):
-        result["components"]["agents"] = "skipped (upgrade_skip_files)"
-    else:
-        result["components"]["agents"] = generate_subagent_definitions(
-            project_root, "claude", overwrite=True
-        )
-
-    if _skipped("claude_skills", skip):
-        result["components"]["skills"] = "skipped (upgrade_skip_files)"
-    else:
-        from tapps_mcp.pipeline.platform_skills import prune_skills_for_tier
-
-        skills_result = generate_skills(
-            project_root,
-            "claude",
-            overwrite=True,
-            engagement_level=engagement_level,
-            skill_tier=skill_tier,
-        )
-        prune_result = prune_skills_for_tier(
-            project_root, "claude", skill_tier=skill_tier, dry_run=False
-        )
-        skills_result["pruned"] = prune_result.get("pruned", [])
-        skills_result["bytes_freed"] = prune_result.get("bytes_freed", 0)
-        result["components"]["skills"] = skills_result
-
-    if _skipped("claude_workflows", skip):
-        result["components"]["workflows"] = "skipped (upgrade_skip_files)"
-    else:
-        from tapps_mcp.pipeline.platform_workflow_scripts import generate_workflow_scripts
-
-        result["components"]["workflows"] = generate_workflow_scripts(project_root, dry_run=False)
-
-    if _skipped("docs_automation", skip):
-        result["components"]["docs_automation"] = "skipped (upgrade_skip_files)"
-    else:
-        from tapps_mcp.pipeline.platform_docs_automation import (
-            detect_docsmcp,
-            generate_docs_automation,
-        )
-
-        if detect_docsmcp(project_root):
-            result["components"]["docs_automation"] = generate_docs_automation(
-                project_root, "claude", overwrite=True
-            )
-        else:
-            result["components"]["docs_automation"] = "skipped (no docsmcp detected)"
-
-    if _skipped("python_quality_rule", skip):
-        result["components"]["python_quality_rule"] = "skipped (upgrade_skip_files)"
-    elif not python_ok:
-        result["components"]["python_quality_rule"] = {
-            "action": "skipped (no python detected)",
-            "hint": (
-                "Set force_python_quality_rule=true in .tapps-mcp.yaml "
-                "to install on non-Python repos."
-            ),
-        }
-    else:
-        result["components"]["python_quality_rule"] = generate_claude_python_quality_rule(
-            project_root, engagement_level=engagement_level
-        )
-
-    # agent-scope.md is universal — applies to any deployed agent regardless of language.
-    _apply_or_skip(result, "agent_scope_rule", skip, generate_claude_agent_scope_rule, project_root)
-
-    # agent-to-agent.md is universal — the multi-session protocol applies to any
-    # deployed agent regardless of language (TAP-6886).
-    _apply_or_skip(
-        result, "agent_to_agent_rule", skip, generate_claude_agent_to_agent_rule, project_root
-    )
-
-    # autonomy.md is universal — flips the agent default to "act within scope, no HITL"
-    # and pins Linear assignee to the agent identity (never the OAuth human).
-    _apply_or_skip(result, "autonomy_rule", skip, generate_claude_autonomy_rule, project_root)
-
-    # linear-standards.md is universal — enforces Linear write routing through docs-mcp templates.
-    _apply_or_skip(
-        result, "linear_standards_rule", skip, generate_claude_linear_standards_rule, project_root
-    )
-
-    # integration-hygiene.md is universal — three patterns the agent has been bitten by:
-    # Linear-is-OAuth, don't-mirror-server-state, verify-subagent-claims (TAP-1215).
-    _apply_or_skip(
-        result,
-        "integration_hygiene_rule",
-        skip,
-        generate_claude_integration_hygiene_rule,
-        project_root,
-    )
-
-    if _skipped("pipeline_rule", skip):
-        result["components"]["pipeline_rule"] = "skipped (upgrade_skip_files)"
-    elif not (python_ok or infra_ok):
-        result["components"]["pipeline_rule"] = {
-            "action": "skipped (no python or infra detected)",
-            "hint": (
-                "Set force_python_quality_rule=true, or add a "
-                "Dockerfile/docker-compose file, to install."
-            ),
-        }
-    else:
-        result["components"]["pipeline_rule"] = generate_claude_pipeline_rule(project_root)
-
-    # TAP-978: security.md ships scoped to security/auth/validator paths and
-    # references Bandit + Python-specific guard rails. Python-gated, mirroring
-    # python_quality_rule.
-    if _skipped("security_rule", skip):
-        result["components"]["security_rule"] = "skipped (upgrade_skip_files)"
-    elif not python_ok:
-        result["components"]["security_rule"] = {
-            "action": "skipped (no python detected)",
-            "hint": (
-                "Set force_python_quality_rule=true in .tapps-mcp.yaml "
-                "to install on non-Python repos."
-            ),
-        }
-    else:
-        result["components"]["security_rule"] = generate_claude_security_rule(project_root)
-
-    # TAP-978: test-quality.md scoped to pytest test files. Python-gated.
-    if _skipped("test_quality_rule", skip):
-        result["components"]["test_quality_rule"] = "skipped (upgrade_skip_files)"
-    elif not python_ok:
-        result["components"]["test_quality_rule"] = {
-            "action": "skipped (no python detected)",
-            "hint": (
-                "Set force_python_quality_rule=true in .tapps-mcp.yaml "
-                "to install on non-Python repos."
-            ),
-        }
-    else:
-        result["components"]["test_quality_rule"] = generate_claude_test_quality_rule(
-            project_root,
-        )
-
-    # TAP-978: config-files.md scoped to YAML/TOML/JSON/Dockerfile. Python or
-    # infra-gated, mirroring pipeline_rule (Docker + pyproject.toml are both
-    # plausible triggers).
-    if _skipped("config_files_rule", skip):
-        result["components"]["config_files_rule"] = "skipped (upgrade_skip_files)"
-    elif not (python_ok or infra_ok):
-        result["components"]["config_files_rule"] = {
-            "action": "skipped (no python or infra detected)",
-            "hint": (
-                "Set force_python_quality_rule=true, or add a "
-                "Dockerfile/docker-compose file, to install."
-            ),
-        }
-    else:
-        result["components"]["config_files_rule"] = generate_claude_config_files_rule(
-            project_root,
-        )
-
-    # scripts/measure.py + scripts/gitfacts.sh are project-root scaffolded probe
-    # scripts, not under .claude/ — host-agnostic, so unconditional like
-    # agent_scope_rule/agent_to_agent_rule (TAP-6884).
-    _apply_or_skip(result, "measure_script", skip, generate_measure_script, project_root)
-    _apply_or_skip(result, "gitfacts_script", skip, generate_gitfacts_script, project_root)
-
-
-def _upgrade_cursor_dry_run(
-    project_root: Path,
-    result: dict[str, Any],
-    *,
-    force: bool,
-    skill_tier: str = "full",
-) -> None:
-    """Populate dry-run component hints for the cursor host.
-
-    Mirrors :func:`_upgrade_claude_code_dry_run` — enumerates managed vs
-    preserved files so consumers can see which custom assets stay untouched.
-    """
-    from tapps_mcp.pipeline.platform_hooks import ManagedJsonError, preview_cursor_hooks_merge
-    from tapps_mcp.pipeline.platform_skills import CURSOR_SKILLS
-    from tapps_mcp.pipeline.platform_subagents import CURSOR_AGENTS
-
-    result["components"]["cursor_rules"] = "would-refresh" if force else "check-needed"
-
-    hooks_dir = project_root / ".cursor" / "hooks"
-    managed_hooks = (
-        frozenset(p.name for p in hooks_dir.glob("tapps-*")) if hooks_dir.is_dir() else frozenset()
-    )
-    try:
-        hooks_preview = preview_cursor_hooks_merge(project_root)
-    except ManagedJsonError as exc:
-        result["components"]["hooks"] = {
-            "action": "error",
-            "error": str(exc),
-            "hint": exc.remediation,
-        }
-        hooks_preview = None
-
-    if hooks_preview is not None:
-        hooks_note = "hooks.json entries merged — third-party keys preserved"
-        would_remove = hooks_preview.get("would_remove_keys") or []
-        if would_remove:
-            hooks_note = f"hooks.json would-remove-keys: {', '.join(would_remove)}"
-        result["components"]["hooks"] = {
-            "action": "would-write-managed-scripts",
-            "note": hooks_note,
-            "preserved_hook_keys": hooks_preview.get("preserved_hook_keys", []),
-            "third_party_hook_keys": hooks_preview.get("third_party_hook_keys", []),
-            "would_remove_keys": would_remove,
-            "preserved_files": _enumerate_preserved(hooks_dir, managed_hooks),
-        }
-
-    agents_dir = project_root / ".cursor" / "agents"
-    managed_agents = frozenset(CURSOR_AGENTS.keys())
-    result["components"]["agents"] = {
-        "action": "would-write-managed-files",
-        "managed_files": sorted(managed_agents),
-        "preserved_files": _enumerate_preserved(agents_dir, managed_agents),
-    }
-
-    from tapps_mcp.pipeline.platform_skills import CORE_SKILL_NAMES, prune_skills_for_tier
-
-    skills_dir = project_root / ".cursor" / "skills"
-    managed_skills = (
-        frozenset(name for name in CURSOR_SKILLS if name in CORE_SKILL_NAMES)
-        if skill_tier == "core"
-        else frozenset(CURSOR_SKILLS.keys())
-    )
-    prune_preview = prune_skills_for_tier(
-        project_root, "cursor", skill_tier=skill_tier, dry_run=True
-    )
-    result["components"]["skills"] = {
-        "action": "would-write-managed-skills",
-        "skill_tier": skill_tier,
-        "managed_skills": sorted(managed_skills),
-        "preserved_skills": _enumerate_preserved(
-            skills_dir, frozenset(CURSOR_SKILLS.keys()), is_dir_target=True
-        ),
-        "would_prune": prune_preview.get("would_prune", []),
-        "bytes_freed": prune_preview.get("bytes_freed", 0),
-    }
-
-    from tapps_mcp.pipeline.platform_docs_automation import (
-        CURSOR_DOCS_SKILLS,
-        detect_docsmcp,
-    )
-
-    if detect_docsmcp(project_root):
-        result["components"]["docs_automation"] = {
-            "action": "would-write-managed-skills",
-            "managed_skills": sorted(CURSOR_DOCS_SKILLS.keys()),
-        }
-    else:
-        result["components"]["docs_automation"] = "skipped (no docsmcp detected)"
-
-
-def _upgrade_cursor_live(
-    project_root: Path,
-    result: dict[str, Any],
-    *,
-    force: bool,
-    skill_tier: str = "full",
-) -> None:
-    """Run live (non-dry-run) artifact upgrades for the cursor host."""
-    from tapps_mcp.pipeline.init import _bootstrap_cursor
-    from tapps_mcp.pipeline.platform_generators import (
-        generate_cursor_hooks,
-        generate_cursor_rules,
-        generate_skills,
-        generate_subagent_definitions,
-    )
-    from tapps_mcp.pipeline.platform_hooks import ManagedJsonError
-
-    result["components"]["cursor_rules"] = _bootstrap_cursor(project_root, overwrite=force)
-    try:
-        hooks_result = generate_cursor_hooks(project_root)
-        result["components"]["hooks"] = {
-            "scripts_created": hooks_result.get("scripts_created", []),
-            "hooks_added": hooks_result.get("hooks_added", 0),
-            "third_party_hook_keys": hooks_result.get("third_party_hook_keys", []),
-            "preserved_hook_keys": hooks_result.get("preserved_hook_keys", []),
-        }
-        from tapps_mcp.pipeline.platform_hooks import wire_memory_hooks
-
-        result["components"]["memory_hooks"] = wire_memory_hooks(
-            project_root,
-            platform="cursor",
-        )
-    except ManagedJsonError as exc:
-        _record_managed_json_error(result, "hooks", exc)
-    result["components"]["agents"] = generate_subagent_definitions(
-        project_root, "cursor", overwrite=True
-    )
-    from tapps_mcp.pipeline.platform_skills import prune_skills_for_tier
-
-    skills_result = generate_skills(project_root, "cursor", overwrite=True, skill_tier=skill_tier)
-    prune_result = prune_skills_for_tier(
-        project_root, "cursor", skill_tier=skill_tier, dry_run=False
-    )
-    skills_result["pruned"] = prune_result.get("pruned", [])
-    skills_result["bytes_freed"] = prune_result.get("bytes_freed", 0)
-    result["components"]["skills"] = skills_result
-
-    from tapps_mcp.pipeline.platform_docs_automation import (
-        detect_docsmcp,
-        generate_docs_automation,
-    )
-
-    if detect_docsmcp(project_root):
-        result["components"]["docs_automation"] = generate_docs_automation(
-            project_root, "cursor", overwrite=True
-        )
-    else:
-        result["components"]["docs_automation"] = "skipped (no docsmcp detected)"
-
-    result["components"]["cursor_rule_types"] = generate_cursor_rules(project_root, overwrite=force)
-
-
-def _upgrade_platform(
-    host: str,
-    project_root: Path,
-    *,
-    force: bool = False,
-    dry_run: bool = False,
-    engagement_level: str = "medium",
-    skill_tier: str = "full",
-    skip_files: set[str] | None = None,
-    mcp_only: bool = False,
-    force_python_rule: bool = False,
-    destructive_guard: bool = True,
-    linear_enforce_gate: bool = False,
-    linear_enforce_cache_gate: str = "off",
-    session_start_gate: str = "off",
-    mcp_bundle: str | None = "full",
-) -> dict[str, Any]:
-    """Upgrade platform-specific files for a single host.
-
-    Parameters
-    ----------
-    mcp_only:
-        When True, only the ``.mcp.json`` (when already opted in) and
-        ``.claude/settings.json`` permissions merge run.
-    force_python_rule:
-        When True, skip the Python-language gate and always generate
-        ``python-quality.md`` / ``tapps-pipeline.md``.
-    destructive_guard:
-        Forwarded to ``generate_claude_hooks`` so the destructive-command
-        PreToolUse hook is regenerated on upgrade (TAP-987).
-    linear_enforce_gate:
-        Forwarded to ``generate_claude_hooks`` so the Linear routing gate
-        scripts land (or get removed) based on the current flag value
-        (TAP-987).
-
-    Per-artifact skip tokens (via ``skip_files``) are honored independently —
-    skipping ``CLAUDE.md`` no longer gates hooks/agents/skills/rules.
-    """
-    from tapps_mcp.pipeline.init import _bootstrap_claude_settings
-
-    result: dict[str, Any] = {"host": host, "components": {}}
-    _skip = skip_files or set()
-    python_ok = force_python_rule or _has_python_signals(project_root)
-    infra_ok = _has_infra_signals(project_root)
-
-    if _skipped("mcp_config", _skip):
-        result["components"]["mcp_config"] = "skipped (upgrade_skip_files)"
-    else:
-        _upgrade_mcp_config(
-            host,
-            project_root,
-            result,
-            force=force,
-            dry_run=dry_run,
-            mcp_bundle=mcp_bundle,
-        )
-
-    if mcp_only:
-        # Still run settings merge — it's the other half of the "just wire the MCP server in".
-        if host == "claude-code" and not dry_run and not _skipped("claude_settings", _skip):
-            result["components"]["settings"] = _bootstrap_claude_settings(
-                project_root, engagement_level=engagement_level
-            )
-        result["components"]["mcp_only_skipped"] = {
-            "reason": "mcp_only=True",
-            "skipped": [
-                "claude_md",
-                "hooks",
-                "agents",
-                "skills",
-                "python_quality_rule",
-                "agent_scope_rule",
-                "autonomy_rule",
-                "linear_standards_rule",
-                "pipeline_rule",
-                "security_rule",
-                "test_quality_rule",
-                "config_files_rule",
-                "cursor_rules",
-            ],
-        }
-        return result
-
-    if host == "claude-code":
-        if dry_run:
-            _upgrade_claude_code_dry_run(
-                project_root,
-                result,
-                force=force,
-                python_ok=python_ok,
-                infra_ok=infra_ok,
-                skip=_skip,
-                destructive_guard=destructive_guard,
-                linear_enforce_gate=linear_enforce_gate,
-                linear_enforce_cache_gate=linear_enforce_cache_gate,
-                session_start_gate=session_start_gate,
-                skill_tier=skill_tier,
-            )
-        else:
-            _upgrade_claude_code_live(
-                project_root,
-                result,
-                force=force,
-                engagement_level=engagement_level,
-                skip=_skip,
-                python_ok=python_ok,
-                infra_ok=infra_ok,
-                destructive_guard=destructive_guard,
-                linear_enforce_gate=linear_enforce_gate,
-                linear_enforce_cache_gate=linear_enforce_cache_gate,
-                session_start_gate=session_start_gate,
-                skill_tier=skill_tier,
-            )
-    elif host == "cursor":
-        if dry_run:
-            _upgrade_cursor_dry_run(project_root, result, force=force, skill_tier=skill_tier)
-        else:
-            _upgrade_cursor_live(project_root, result, force=force, skill_tier=skill_tier)
-    elif host == "vscode":
-        result["components"]["note"] = "no platform rules to upgrade"
-
-    if not dry_run and host in {"claude-code", "cursor"}:
-        from tapps_mcp.distribution.doctor import check_session_handoff_skills
-
-        handoff_check = check_session_handoff_skills(project_root)
-        result["session_handoff_skills"] = {
-            "ok": handoff_check.ok,
-            "message": handoff_check.message,
-            "detail": handoff_check.detail,
-        }
-
-    return result
-
-
-def _upgrade_agents_md_content_return(
-    project_root: Path,
-) -> tuple[FileOperation, dict[str, Any]]:
-    """Generate a FileOperation for AGENTS.md upgrade in content-return mode.
-
-    Returns ``(file_op, result_dict)`` with the appropriate mode
-    (``"create"`` or ``"merge"``) depending on whether AGENTS.md exists.
-    """
-    from tapps_mcp.pipeline.agents_md import AgentsValidation, merge_agents_md
-    from tapps_mcp.prompts.prompt_loader import load_agents_template
-
-    agents_path = project_root / "AGENTS.md"
-    template_content = load_agents_template()
-
-    if not agents_path.exists():
-        op = FileOperation(
-            path="AGENTS.md",
-            content=template_content,
-            mode="create",
-            description="AGENTS.md — AI assistant workflow and tool reference.",
-            priority=1,
-        )
-        return op, {"action": "created"}
-
-    existing = agents_path.read_text(encoding="utf-8")
-    validation = AgentsValidation(existing)
-
-    if validation.is_up_to_date:
-        # Still return the file op so the agent has full context
-        op = FileOperation(
-            path="AGENTS.md",
-            content=existing,
-            mode="overwrite",
-            description="AGENTS.md is already up-to-date (no changes needed).",
-            priority=1,
-        )
-        return op, {"action": "up-to-date"}
-
-    # Smart merge — produce merged content for the agent to write
-    merged, changes = merge_agents_md(existing, template_content)
-    op = FileOperation(
-        path="AGENTS.md",
-        content=merged,
-        mode="merge",
-        description=(
-            "AGENTS.md — merged with latest template. "
-            "User customizations are preserved; only managed sections updated."
-        ),
-        priority=1,
-    )
-    issues: list[str] = []
-    if validation.sections_missing:
-        issues.append(f"missing sections: {', '.join(validation.sections_missing)}")
-    if validation.tools_missing:
-        issues.append(f"missing tools: {', '.join(validation.tools_missing)}")
-    detail = "; ".join(issues) or "version mismatch"
-    return op, {"action": "merged", "detail": detail, "changes": changes}
-
-
-def _upgrade_platform_content_return(
-    host: str,
-    project_root: Path,
-    *,
-    force: bool = False,
-    engagement_level: str = "medium",
-) -> tuple[list[FileOperation], dict[str, Any]]:
-    """Generate FileOperations for platform upgrade in content-return mode.
-
-    Returns ``(file_ops, result_dict)`` with platform-specific file operations.
-    """
-    from tapps_mcp.prompts.prompt_loader import load_platform_rules
-
-    ops: list[FileOperation] = []
-    result: dict[str, Any] = {"host": host, "components": {}}
-
-    if host == "claude-code":
-        from tapps_mcp.pipeline.claude_md import merge_claude_md, render_fresh_claude_md
-
-        content = load_platform_rules("claude", engagement_level=engagement_level)
-        claude_md_path = project_root / "CLAUDE.md"
-        if claude_md_path.exists() and not force:
-            existing = claude_md_path.read_text(encoding="utf-8")
-            merged, _changes = merge_claude_md(existing, content)
-            payload = merged
-            mode = "overwrite"
-        else:
-            payload = render_fresh_claude_md(content)
-            mode = "overwrite" if force and claude_md_path.exists() else "create"
-        ops.append(
-            FileOperation(
-                path="CLAUDE.md",
-                content=payload,
-                mode=mode,
-                description="Claude Code platform rules with TappsMCP pipeline.",
-                priority=2,
-            )
-        )
-        result["components"]["claude_md"] = "content_return"
-
-    elif host == "cursor":
-        content = load_platform_rules("cursor", engagement_level=engagement_level)
-        cursor_path = project_root / ".cursor" / "rules" / "tapps-pipeline.md"
-        mode = "overwrite" if (cursor_path.exists() or force) else "create"
-        ops.append(
-            FileOperation(
-                path=".cursor/rules/tapps-pipeline.md",
-                content=content,
-                mode=mode,
-                description="Cursor platform rules with TappsMCP pipeline.",
-                priority=2,
-            )
-        )
-        result["components"]["cursor_rules"] = "content_return"
-
-    elif host == "vscode":
-        result["components"]["note"] = "no platform rules to upgrade"
-
-    # Hooks, skills, agents, CI are skipped in content-return mode
-    result["components"]["generators_skipped"] = {
-        "reason": "content_return",
-        "skipped": ["hooks", "skills", "agents", "mcp_config", "settings"],
-        "hint": "Run 'tapps_upgrade' locally to generate these components.",
-    }
-
-    return ops, result
-
-
-def _build_upgrade_manifest(
-    file_ops: list[FileOperation],
-    version: str,
-) -> FileManifest:
-    """Build a :class:`FileManifest` for the upgrade pipeline."""
-    return FileManifest(
-        summary=(f"TappsMCP upgrade v{version}: {len(file_ops)} file(s) to write"),
-        source_version=version,
-        files=file_ops,
-        agent_instructions=AgentInstructions(
-            persona=(
-                "You are a project upgrade assistant updating TappsMCP "
-                "scaffolding to the latest version.  Write each file "
-                "exactly as provided — do not modify content, add "
-                "comments, or reformat."
-            ),
-            tool_preference=(
-                "Use Write for files with mode 'create' or 'overwrite'.  "
-                "For files with mode 'merge', read the existing file first, "
-                "then replace the entire content with the merged version "
-                "provided (merge has already been computed)."
-            ),
-            verification_steps=[
-                "After writing all files, run 'git diff' to review changes.",
-                "Verify AGENTS.md exists and has the expected sections.",
-                "Check that no user customizations were lost in merged files.",
-                "Run 'git status' to show the user what changed.",
-            ],
-            warnings=[
-                "Backup your project before applying (git stash or git commit).",
-                "AGENTS.md merge preserves user customizations — review the diff.",
-                "Hooks, skills, and agents are not included — run "
-                "'tapps_upgrade' locally to generate those.",
-            ],
-        ),
-    )
-
-
-def _upgrade_content_return(
-    project_root: Path,
-    *,
-    platform: str = "",
-    force: bool = False,
-    mcp_only: bool = False,
-) -> dict[str, Any]:
-    """Run upgrade pipeline in content-return mode (Epic 87.3).
-
-    Instead of writing files, accumulates :class:`FileOperation` objects
-    and returns a :class:`FileManifest` the AI client can apply.
-
-    TAP-690: ``mcp_only=True`` mirrors the direct-write narrow install —
-    AGENTS.md, per-host platform files, and rule regeneration are all
-    skipped; only MCP config + settings operations land in the manifest.
-    """
+def _resolve_run_options(
+    project_root: Path, result: dict[str, Any], *, dry_run: bool
+) -> _RunOptions:
+    """Load settings, resolve the MCP bundle, and record the skip-token report."""
     from tapps_core.config.settings import load_settings
-    from tapps_mcp import __version__
+    from tapps_mcp.distribution.nlt_mcp_config import (
+        persist_mcp_bundle_yaml,
+        resolve_upgrade_mcp_bundle,
+    )
 
-    file_ops: list[FileOperation] = []
-    result: dict[str, Any] = {
-        "version": __version__,
-        "dry_run": False,
-        "content_return": True,
-        "components": {},
-        "errors": [],
+    # Pass the target project_root explicitly so the per-project
+    # ``.tapps-mcp.yaml`` (not this process's CWD) drives the upgrade knobs.
+    settings = load_settings(project_root=project_root)
+
+    mcp_bundle, bundle_explicit, bundle_note = resolve_upgrade_mcp_bundle(
+        project_root,
+        settings_bundle=settings.mcp_bundle,
+    )
+    # Persist inferred named bundles so the next upgrade does not fall through
+    # to full and re-expand a trimmed Cursor/Claude set.
+    if (
+        not dry_run
+        and not bundle_explicit
+        and mcp_bundle is not None
+        and settings.mcp_bundle is None
+    ):
+        try:
+            persist_mcp_bundle_yaml(project_root, mcp_bundle)
+            bundle_note = f"{bundle_note}; persisted mcp_bundle={mcp_bundle!r}"
+        except Exception:
+            log.debug("persist_mcp_bundle_yaml_failed", exc_info=True)
+    result["mcp_bundle"] = mcp_bundle if mcp_bundle is not None else "custom"
+    result["mcp_bundle_note"] = bundle_note
+
+    # Load skip list from settings (Issue #86)
+    skip_files: set[str] = set(settings.upgrade_skip_files)
+    if skip_files:
+        result["skipped_files"] = sorted(skip_files)
+        record_unknown_skip_tokens(result, skip_files)
+        record_applied_skip_tokens(result, skip_files)
+
+    stamp_results = bump_skipped_version_stamps(project_root, skip_files, dry_run=dry_run)
+    if stamp_results:
+        result["components"]["version_stamps"] = stamp_results
+
+    return _RunOptions(settings=settings, skip_files=skip_files, mcp_bundle=mcp_bundle)
+
+
+def _upgrade_root_documents(
+    project_root: Path,
+    result: dict[str, Any],
+    options: _RunOptions,
+    *,
+    dry_run: bool,
+    force: bool,
+    mcp_only: bool,
+) -> None:
+    """AGENTS.md, TECH_STACK.md, and the bridge-only ``.mcp.json`` strip."""
+    # AGENTS.md (platform-independent) — merge-first, with sentinel / config
+    # opt-out for greenfield creation only.
+    if mcp_only:
+        result["components"]["agents_md"] = {"action": "skipped (mcp_only)"}
+    elif skipped("agents_md", options.skip_files):
+        result["components"]["agents_md"] = {"action": "skipped (upgrade_skip_files)"}
+    else:
+        try:
+            result["components"]["agents_md"] = upgrade_agents_md(
+                project_root,
+                dry_run=dry_run,
+                create_agents_md=options.settings.upgrade_create_agents_md,
+                force_merge=force,
+            )
+        except Exception as exc:
+            result["errors"].append(f"AGENTS.md: {exc}")
+            result["components"]["agents_md"] = {"action": "error", "detail": str(exc)}
+
+    result["components"]["tech_stack_md"] = _tech_stack_status(
+        project_root, options.skip_files, mcp_only=mcp_only
+    )
+
+    # TAP-1888: strip direct tapps-brain MCP entries (ADR-0001 bridge-only policy).
+    if skipped("mcp_config", options.skip_files):
+        result["components"]["brain_mcp_strip"] = "skipped (upgrade_skip_files)"
+    else:
+        from tapps_mcp.distribution.doctor import strip_brain_mcp_entries
+
+        result["components"]["brain_mcp_strip"] = strip_brain_mcp_entries(
+            project_root,
+            dry_run=dry_run,
+        )
+
+
+def _tech_stack_status(
+    project_root: Path, skip_files: set[str], *, mcp_only: bool
+) -> dict[str, Any]:
+    """TECH_STACK.md is preserve-only — generated once by ``tapps_init``.
+
+    Never refreshed by upgrade because the content captures user tech choices,
+    not tapps-managed scaffolding. Surfaced in the report so consumers see it
+    as a known artifact, with a hint when it is missing.
+    """
+    if mcp_only:
+        return {"action": "skipped (mcp_only)"}
+    if skipped("tech_stack_md", skip_files):
+        return {"action": "skipped (upgrade_skip_files)"}
+    if (project_root / "TECH_STACK.md").exists():
+        return {"action": "preserved"}
+    return {
+        "action": "missing",
+        "hint": (
+            "TECH_STACK.md was not generated. Run `tapps-mcp init` "
+            "(or re-run with --create-tech-stack-md) to render it "
+            "from the detected stack profile."
+        ),
     }
 
-    if mcp_only:
-        result["components"]["mcp_only_skipped"] = {
-            "reason": "mcp_only=True",
-            "skipped": [
-                "agents_md",
-                "claude_md",
-                "platforms",
-                "rules",
-                "ci_workflows",
-                "github_copilot",
-                "github_templates",
-                "governance",
-            ],
-        }
-        # Detect platform for diagnostic completeness.
-        detected = platform or _detect_platform(project_root)
-        result["detected_platform"] = detected
-        manifest = _build_upgrade_manifest(file_ops, __version__)
-        result["file_manifest"] = manifest.to_full_response_data()
-        result["success"] = True
-        return result
 
-    # AGENTS.md
-    try:
-        agents_op, agents_result = _upgrade_agents_md_content_return(project_root)
-        file_ops.append(agents_op)
-        result["components"]["agents_md"] = agents_result
-    except Exception as exc:
-        result["errors"].append(f"AGENTS.md: {exc}")
-        result["components"]["agents_md"] = {"action": "error", "detail": str(exc)}
-
-    # Detect platform
-    detected = platform or _detect_platform(project_root)
+def _upgrade_all_hosts(
+    project_root: Path,
+    result: dict[str, Any],
+    options: _RunOptions,
+    *,
+    platform: str,
+    dry_run: bool,
+    force: bool,
+    mcp_only: bool,
+) -> None:
+    """Run the per-host upgrade for each detected platform host."""
+    detected = platform or detect_platform(project_root)
     result["detected_platform"] = detected
 
-    hosts: list[str] = []
-    if detected in {"claude", "both"}:
-        hosts.append("claude-code")
-    if detected in {"cursor", "both"}:
-        hosts.append("cursor")
+    settings = options.settings
+    skill_tier = settings.skill_tier if settings.skill_tier in {"core", "full"} else "full"
 
-    settings = load_settings(project_root=project_root)
-    engagement_level = settings.llm_engagement_level
-
-    # Per-host platform files
     platform_results: list[dict[str, Any]] = []
-    for host in hosts:
+    for host in hosts_for_platform(detected):
         try:
-            host_ops, host_result = _upgrade_platform_content_return(
+            host_result = upgrade_platform(
                 host,
                 project_root,
                 force=force,
-                engagement_level=engagement_level,
+                dry_run=dry_run,
+                engagement_level=settings.llm_engagement_level,
+                skill_tier=skill_tier,
+                skip_files=options.skip_files,
+                mcp_only=mcp_only,
+                force_python_rule=settings.force_python_quality_rule,
+                destructive_guard=settings.destructive_guard,
+                linear_enforce_gate=settings.linear_enforce_gate_resolved(),
+                linear_enforce_cache_gate=settings.linear_enforce_cache_gate_resolved(),
+                session_start_gate=settings.session_start_gate_resolved(),
+                mcp_bundle=options.mcp_bundle,
             )
-            file_ops.extend(host_ops)
             platform_results.append(host_result)
+            # Surface isolated managed-JSON component failures (malformed
+            # settings.json / hooks.json) at the top level so `success` is
+            # False and the CLI prints them — without aborting the scope.
+            for component_error in host_result.get("component_errors", []):
+                result["errors"].append(f"{host}: {component_error}")
         except Exception as exc:
             result["errors"].append(f"{host}: {exc}")
             platform_results.append({"host": host, "error": str(exc)})
 
     result["components"]["platforms"] = platform_results
-
-    # GitHub artifacts skipped in content-return mode
-    for component in ("ci_workflows", "github_copilot", "github_templates", "governance"):
-        result["components"][component] = {"action": "skipped", "reason": "content_return"}
-
-    # Build manifest
-    manifest = _build_upgrade_manifest(file_ops, __version__)
-    result["file_manifest"] = manifest.to_full_response_data()
-    result["success"] = len(result["errors"]) == 0
-
-    return result
+    lift_asset_overwrite_warnings(result, platform_results)
 
 
-def _detect_platform(project_root: Path) -> str:
-    """Detect the platform from existing config files."""
-    claude_dir = project_root / ".claude"
-    cursor_dir = project_root / ".cursor"
+def _upgrade_repo_artifacts(
+    project_root: Path,
+    result: dict[str, Any],
+    options: _RunOptions,
+    *,
+    dry_run: bool,
+    force: bool,
+    mcp_only: bool,
+) -> None:
+    """Karpathy block, GitHub artifacts, and the start-program script."""
+    # Refreshed after per-host upgrades have potentially created/updated
+    # CLAUDE.md. Opt-out never strips existing blocks.
+    if mcp_only:
+        result["components"]["karpathy_guidelines"] = {"action": "skipped (mcp_only)"}
+    else:
+        try:
+            result["components"]["karpathy_guidelines"] = refresh_karpathy_blocks(
+                project_root,
+                dry_run=dry_run,
+                include_karpathy=options.settings.include_karpathy_guidelines,
+                skip_files=options.skip_files,
+                force=force,
+            )
+        except Exception as exc:
+            result["errors"].append(f"Karpathy guidelines: {exc}")
+            result["components"]["karpathy_guidelines"] = {"action": "error", "detail": str(exc)}
 
-    # Check for Claude Code config indicators
-    has_claude = claude_dir.is_dir() or (project_root / "CLAUDE.md").exists()
-    has_cursor = cursor_dir.is_dir()
+    if mcp_only:
+        for component in ("ci_workflows", "github_copilot", "github_templates", "governance"):
+            result["components"][component] = {"action": "skipped (mcp_only)"}
+    elif dry_run:
+        dry_run_github_artifacts(project_root, result)
+    else:
+        run_github_artifacts(project_root, result, force=force)
 
-    if has_claude and has_cursor:
-        return "both"
-    if has_claude:
-        return "claude"
-    if has_cursor:
-        return "cursor"
-    return ""
-
-
-def _dry_run_github_artifacts(project_root: Path, result: dict[str, Any]) -> None:
-    """Populate dry-run hints for GitHub-hosted artifact generators.
-
-    Mirrors the agents/skills precision pattern for ``ci_workflows`` and
-    ``github_templates`` — enumerates managed vs preserved files so consumers
-    can see custom workflows / issue forms are safe. ``github_copilot`` and
-    ``governance`` stay on the simpler ``would-regenerate`` hint for now;
-    their generators span multiple directories with version markers and
-    don't benefit from enumeration the way shared directories do.
-    """
-    from tapps_mcp.pipeline.github_ci import MANAGED_WORKFLOW_FILES
-    from tapps_mcp.pipeline.github_templates import (
-        MANAGED_GITHUB_ROOT_FILES,
-        MANAGED_ISSUE_TEMPLATE_FILES,
+    install_start_program_script(
+        project_root, result, mcp_only=mcp_only, skip_files=options.skip_files, dry_run=dry_run
     )
 
-    workflows_dir = project_root / ".github" / "workflows"
-    managed_workflows = frozenset(MANAGED_WORKFLOW_FILES)
-    result["components"]["ci_workflows"] = {
-        "action": "would-write-managed-files",
-        "managed_files": sorted(managed_workflows),
-        "preserved_files": _enumerate_preserved(workflows_dir, managed_workflows),
-    }
 
-    issue_template_dir = project_root / ".github" / "ISSUE_TEMPLATE"
-    managed_issue_templates = frozenset(MANAGED_ISSUE_TEMPLATE_FILES)
-    github_root_dir = project_root / ".github"
-    managed_github_root = frozenset(MANAGED_GITHUB_ROOT_FILES)
-    # Exclude the subdirectories the upgrade writes into from the "preserved"
-    # roll-up at ``.github/`` — they're enumerated separately.
-    github_root_managed_for_listing = managed_github_root | {
-        "ISSUE_TEMPLATE",
-        "workflows",
-    }
+def _guarded(result: dict[str, Any], component: str, run: Callable[[], None]) -> None:
+    """Run one optional refresh, recording a failure under *component*."""
+    try:
+        run()
+    except Exception as exc:
+        result["errors"].append(f"{component}: {exc}")
+        result["components"][component] = {"action": "error", "detail": str(exc)}
 
-    # TAP-2201: Detect managed root files absent from an established project.
-    # "Established" = AGENTS.md exists (tapps was previously initialised).
-    # Fresh installs are excluded so their safe-to-run verdicts stay unchanged.
-    is_established = (project_root / "AGENTS.md").exists()
-    would_recreate_deleted: list[dict[str, str]] = []
-    if is_established:
-        would_recreate_deleted.extend(
-            {
-                "file": f".github/{fname}",
-                "note": (
-                    "File is absent from repo. If deleted intentionally, "
-                    f"add '{fname}' to upgrade_skip_files in "
-                    ".tapps-mcp.yaml to suppress recreation."
-                ),
-            }
-            for fname in MANAGED_GITHUB_ROOT_FILES
-            if not (github_root_dir / fname).exists()
+
+def _refresh_linear_sdlc(project_root: Path, result: dict[str, Any], *, dry_run: bool) -> None:
+    """Refresh Linear SDLC templates when previously installed (TAP-417).
+
+    Detection is file-system based: check if the primary template file exists.
+    """
+    from tapps_mcp.pipeline.linear_sdlc.installer import refresh_linear_sdlc
+    from tapps_mcp.pipeline.linear_sdlc.renderer import TEMPLATE_PATHS
+
+    if (project_root / TEMPLATE_PATHS[0]).exists():
+        result["components"]["linear_sdlc_refresh"] = refresh_linear_sdlc(
+            project_root,
+            dry_run=dry_run,
         )
 
-    result["components"]["github_templates"] = {
-        "action": "would-write-managed-files",
-        "managed_files": sorted(
-            [*(f"ISSUE_TEMPLATE/{n}" for n in managed_issue_templates), *managed_github_root]
-        ),
-        "preserved_files": sorted(
-            [
-                *(
-                    f"ISSUE_TEMPLATE/{n}"
-                    for n in _enumerate_preserved(issue_template_dir, managed_issue_templates)
-                ),
-                *_enumerate_preserved(github_root_dir, github_root_managed_for_listing),
-            ]
-        ),
-        "would_recreate_deleted_files": would_recreate_deleted,
+
+def _refresh_document_judges(project_root: Path, result: dict[str, Any], *, dry_run: bool) -> None:
+    """Merge the document-judge config and memory profile into consumer YAML."""
+    from tapps_mcp.pipeline.document_judges import (
+        is_document_consumer,
+        merge_document_judges_into_yaml,
+        merge_document_memory_profile,
+    )
+
+    if not is_document_consumer(project_root):
+        return
+    result["components"]["document_judges"] = merge_document_judges_into_yaml(
+        project_root,
+        dry_run=dry_run,
+    )
+    result["components"]["document_memory_profile"] = merge_document_memory_profile(
+        project_root,
+        dry_run=dry_run,
+    )
+
+
+def _refresh_cursor_stop_gate(project_root: Path, result: dict[str, Any], *, dry_run: bool) -> None:
+    from tapps_mcp.pipeline.init import _ensure_cursor_stop_completion_gate_config
+
+    result["components"]["cursor_stop_completion_gate"] = {
+        "action": _ensure_cursor_stop_completion_gate_config(project_root, dry_run=dry_run)
     }
 
-    result["components"]["github_copilot"] = {"action": "would-regenerate"}
-    result["components"]["governance"] = {"action": "would-regenerate"}
+
+def _refresh_call_graph_cache(project_root: Path, result: dict[str, Any], *, dry_run: bool) -> None:
+    from tapps_mcp.project.call_graph_cache import invalidate_call_graph_cache_if_schema_stale
+
+    result["components"]["call_graph_cache"] = invalidate_call_graph_cache_if_schema_stale(
+        project_root,
+        dry_run=dry_run,
+    )
 
 
-def _install_start_program_script(
+def _refresh_optional_integrations(
     project_root: Path,
     result: dict[str, Any],
     *,
+    dry_run: bool,
     mcp_only: bool,
-    skip_files: set[str],
-    dry_run: bool,
 ) -> None:
-    """Regenerate ``scripts/start-program.sh`` — platform-agnostic kickoff for a
-    MULTI-SESSION program; companion to the orchestration-prompt skill (TAP-6885).
-    """
-    if mcp_only:
-        result["components"]["start_program_script"] = {"action": "skipped (mcp_only)"}
-        return
-    if _skipped("start_program_script", skip_files):
-        result["components"]["start_program_script"] = "skipped (upgrade_skip_files)"
-        return
-    try:
-        from tapps_mcp.pipeline.platform_skill_orchestration import (
-            generate_start_program_script,
+    """Opt-in integrations refreshed only where the consumer already uses them."""
+    refreshers: tuple[tuple[str, Callable[..., None]], ...] = (
+        ("linear_sdlc_refresh", _refresh_linear_sdlc),
+        ("document_judges", _refresh_document_judges),
+        ("cursor_stop_completion_gate", _refresh_cursor_stop_gate),
+        ("call_graph_cache", _refresh_call_graph_cache),
+    )
+    for component, refresh in refreshers:
+        _guarded(result, component, partial(refresh, project_root, result, dry_run=dry_run))
+
+    if not dry_run and not mcp_only:
+        from tapps_mcp.pipeline.platform_hooks import cleanup_legacy_hook_sidecars
+
+        result["components"]["hook_sidecar_cleanup"] = cleanup_legacy_hook_sidecars(
+            project_root,
+            dry_run=False,
         )
 
-        result["components"]["start_program_script"] = generate_start_program_script(
-            project_root, dry_run=dry_run
+    if not dry_run:
+        from tapps_mcp.distribution.setup_generator import ensure_tapps_runtime_gitignore
+
+        added = ensure_tapps_runtime_gitignore(project_root)
+        result["components"]["runtime_gitignore"] = {
+            "action": "updated" if added else "unchanged",
+            "added": added,
+        }
+
+
+def _finalize_result(result: dict[str, Any], *, dry_run: bool) -> None:
+    """Roll up demotions and the dry-run verdict, then stamp ``success``."""
+    demoted: list[str] = []
+    for key, val in result.get("components", {}).items():
+        if isinstance(val, dict) and val.get("alwaysApply_demoted"):
+            demoted.append(Path(str(val.get("file", key))).name)
+    if demoted:
+        result["always_apply_demotions"] = demoted
+        result["always_apply_demotion_note"] = (
+            f"demoted {len(demoted)} rule(s) from alwaysApply to satisfy the "
+            f"context budget: {', '.join(demoted)}"
         )
-    except Exception as exc:
-        log.exception("start_program_script_failed")
-        result["errors"].append(f"start-program.sh: {exc}")
 
+    if dry_run:
+        result["dry_run_summary"] = build_dry_run_summary(result)
+        result["errors"].extend(result["dry_run_summary"].get("parse_errors", []))
 
-def _run_github_artifacts(
-    project_root: Path, result: dict[str, Any], *, force: bool = False
-) -> None:
-    """Run GitHub-hosted artifact generators (CI, Copilot, templates, governance).
-
-    Each generator is called independently; failures are recorded in
-    ``result["errors"]`` rather than aborting the whole upgrade.
-    """
-    try:
-        from tapps_mcp.pipeline.github_ci import generate_all_ci_workflows
-
-        result["components"]["ci_workflows"] = generate_all_ci_workflows(
-            project_root, upgrade_mode=True
-        )
-    except Exception as exc:
-        log.exception("ci_workflows_failed")
-        result["errors"].append(f"CI workflows: {exc}")
-
-    try:
-        from tapps_mcp.pipeline.github_copilot import generate_all_copilot_config
-
-        result["components"]["github_copilot"] = generate_all_copilot_config(
-            project_root, upgrade_mode=True, force=force
-        )
-    except Exception as exc:
-        log.exception("copilot_config_failed")
-        result["errors"].append(f"Copilot config: {exc}")
-
-    try:
-        from tapps_mcp.pipeline.github_templates import generate_all_github_templates
-
-        result["components"]["github_templates"] = generate_all_github_templates(project_root)
-    except Exception as exc:
-        log.exception("github_templates_failed")
-        result["errors"].append(f"GitHub templates: {exc}")
-
-    try:
-        from tapps_mcp.pipeline.github_governance import generate_all_governance
-
-        result["components"]["governance"] = generate_all_governance(project_root)
-    except Exception as exc:
-        log.exception("governance_failed")
-        result["errors"].append(f"Governance: {exc}")
-
-
-def _is_managed_hook_filename(name: str) -> bool:
-    """True for live tapps hook scripts, not co-located ``.pre-upgrade.*`` sidecars."""
-    if ".pre-upgrade." in name:
-        return False
-    return bool(re.match(r"^tapps-[a-z0-9-]+\.(sh|ps1)$", name))
-
-
-def _bump_skipped_version_stamps(
-    project_root: Path,
-    skip_files: set[str],
-    *,
-    dry_run: bool,
-) -> dict[str, Any]:
-    """Refresh version markers on skip-listed AGENTS.md / CLAUDE.md only."""
-    from tapps_mcp import __version__
-    from tapps_mcp.pipeline.version_stamps import bump_stamp_if_stale
-
-    results: dict[str, Any] = {}
-    if "AGENTS.md" in skip_files:
-        results["AGENTS.md"] = bump_stamp_if_stale(
-            project_root / "AGENTS.md",
-            "tapps-agents-version",
-            __version__,
-            dry_run=dry_run,
-        )
-    if "CLAUDE.md" in skip_files:
-        results["CLAUDE.md"] = bump_stamp_if_stale(
-            project_root / "CLAUDE.md",
-            "tapps-claude-version",
-            __version__,
-            dry_run=dry_run,
-        )
-    return results
-
-
-def _collect_upgrade_targets(project_root: Path) -> list[Path]:
-    """Collect files that upgrade_pipeline will overwrite."""
-    targets: list[Path] = []
-    candidates = [
-        project_root / "AGENTS.md",
-        project_root / "CLAUDE.md",
-        project_root / ".claude" / "settings.json",
-        project_root / ".cursor" / "rules" / "tapps-pipeline.md",
-        project_root / ".mcp.json",
-        project_root / ".cursor" / "mcp.json",
-        project_root / ".cursor" / "hooks.json",
-        project_root / ".vscode" / "mcp.json",
-        # Docker-related config files (Epic 46)
-        project_root / ".tapps-mcp.yaml",
-    ]
-    # Hook scripts
-    hooks_dir = project_root / ".claude" / "hooks"
-    if hooks_dir.is_dir():
-        targets.extend(
-            f for f in hooks_dir.iterdir() if f.is_file() and _is_managed_hook_filename(f.name)
-        )
-    cursor_hooks_dir = project_root / ".cursor" / "hooks"
-    if cursor_hooks_dir.is_dir():
-        targets.extend(
-            f
-            for f in cursor_hooks_dir.iterdir()
-            if f.is_file() and _is_managed_hook_filename(f.name)
-        )
-    # Skills
-    skills_dir = project_root / ".claude" / "skills"
-    if skills_dir.is_dir():
-        for f in skills_dir.iterdir():
-            if f.is_dir() and f.name.startswith("tapps-"):
-                skill_file = f / "SKILL.md"
-                if skill_file.exists():
-                    targets.append(skill_file)
-    # Agents
-    agents_dir = project_root / ".claude" / "agents"
-    if agents_dir.is_dir():
-        targets.extend(f for f in agents_dir.iterdir() if f.name.startswith("tapps-"))
-    # TAP-689: rule files that the upgrade regenerates. Without backing
-    # these up, a consumer's hand-edits to python-quality.md / agent-scope.md
-    # / tapps-pipeline.md are lost with no rollback path.
-    for rules_subdir in (".claude/rules", ".cursor/rules"):
-        rules_dir = project_root / rules_subdir
-        if rules_dir.is_dir():
-            targets.extend(rules_dir.glob("*.md"))
-    targets.extend(c for c in candidates if c.exists())
-    return targets
+    result["success"] = len(result["errors"]) == 0
+    result["consumer_requirements"] = "docs/TAPPS_MCP_REQUIREMENTS.md"
 
 
 def upgrade_pipeline(
@@ -2352,15 +555,13 @@ def upgrade_pipeline(
 
     # Epic 87: Detect write mode (content-return for Docker/read-only)
     write_mode = WriteMode.DIRECT_WRITE if dry_run else detect_write_mode(project_root)
-    content_return = write_mode == WriteMode.CONTENT_RETURN
-
-    if content_return:
+    if write_mode == WriteMode.CONTENT_RETURN:
         log.info(
             "content_return_mode",
             project_root=str(project_root),
             reason="read-only filesystem or TAPPS_WRITE_MODE=content",
         )
-        return _upgrade_content_return(
+        return upgrade_content_return(
             project_root,
             platform=platform,
             force=force,
@@ -2374,331 +575,74 @@ def upgrade_pipeline(
         "errors": [],
     }
 
-    # TAP-2200: Gate on install drift before running the upgrade.
-    # When sibling tools (docsmcp, tapps-brain-mcp) are behind the in-process
-    # version, the upgrade plan is not trustworthy — templates reference
-    # capabilities the lagging binary does not yet expose. Block with a clear
-    # error and the literal remediation command so the operator can fix the
-    # install before proceeding. Dry-run bypasses the gate so operators can
-    # still preview the diff while drift is present.
-    if not dry_run:
-        from tapps_mcp.diagnostics import check_install_drift, format_upgrade_blocked_by_drift
+    if not dry_run and not _check_install_drift(result):
+        return result
+    if not dry_run and not create_pre_upgrade_backup(project_root, result):
+        return result
 
-        _drift = check_install_drift()
-        if _drift.drift_detected:
-            result["errors"].append(format_upgrade_blocked_by_drift(_drift))
-            result["install_drift"] = _drift.model_dump()
-            result["success"] = False
-            return result
-
-    # Pre-upgrade backup (skip in dry-run mode)
-    if not dry_run:
-        try:
-            from tapps_mcp.distribution.rollback import BackupManager
-
-            mgr = BackupManager(project_root)
-            backup_targets = _collect_upgrade_targets(project_root)
-            if backup_targets:
-                recent = mgr.find_recent_backup(max_age_seconds=60)
-                if recent is not None:
-                    result["backup"] = f"reused: {recent} (deduped within 60s)"
-                else:
-                    backup_dir = mgr.create_backup(
-                        backup_targets,
-                        reason="pre-upgrade backup",
-                        version=__version__,
-                    )
-                    result["backup"] = str(backup_dir)
-                mgr.cleanup_old_backups(keep=5)
-            else:
-                result["backup"] = "skipped (no targets)"
-        except Exception as exc:
-            log.exception("backup_failed")
-            result["backup"] = f"failed: {exc}"
-            result["errors"].append(
-                f"Upgrade aborted: backup failed ({exc}). "
-                "Fix the backup issue or run with dry_run=True to preview changes."
-            )
-            result["success"] = False
-            return result
-
-    # Resolve engagement level and Docker config from settings. Pass the
-    # target project_root explicitly so the per-project ``.tapps-mcp.yaml``
-    # (not this process's CWD) is what drives upgrade knobs like
-    # ``upgrade_skip_files``.
-    from tapps_core.config.settings import load_settings
-
-    settings = load_settings(project_root=project_root)
-
-    from tapps_mcp.distribution.nlt_mcp_config import (
-        persist_mcp_bundle_yaml,
-        resolve_upgrade_mcp_bundle,
+    options = _resolve_run_options(project_root, result, dry_run=dry_run)
+    _upgrade_root_documents(
+        project_root, result, options, dry_run=dry_run, force=force, mcp_only=mcp_only
     )
-
-    mcp_bundle, bundle_explicit, bundle_note = resolve_upgrade_mcp_bundle(
+    _upgrade_all_hosts(
         project_root,
-        settings_bundle=settings.mcp_bundle,
+        result,
+        options,
+        platform=platform,
+        dry_run=dry_run,
+        force=force,
+        mcp_only=mcp_only,
     )
-    # Persist inferred named bundles so the next upgrade does not fall through
-    # to full and re-expand a trimmed Cursor/Claude set.
-    if (
-        not dry_run
-        and not bundle_explicit
-        and mcp_bundle is not None
-        and settings.mcp_bundle is None
-    ):
-        try:
-            persist_mcp_bundle_yaml(project_root, mcp_bundle)
-            bundle_note = f"{bundle_note}; persisted mcp_bundle={mcp_bundle!r}"
-        except Exception:
-            log.debug("persist_mcp_bundle_yaml_failed", exc_info=True)
-    result["mcp_bundle"] = mcp_bundle if mcp_bundle is not None else "custom"
-    result["mcp_bundle_note"] = bundle_note
-
-    # Load skip list from settings (Issue #86)
-    skip_files: set[str] = set(settings.upgrade_skip_files)
-    if skip_files:
-        result["skipped_files"] = sorted(skip_files)
-        _record_unknown_skip_tokens(result, skip_files)
-        _record_applied_skip_tokens(result, skip_files)
-
-    stamp_results = _bump_skipped_version_stamps(project_root, skip_files, dry_run=dry_run)
-    if stamp_results:
-        result["components"]["version_stamps"] = stamp_results
-
-    # AGENTS.md (platform-independent) — merge-first, with sentinel / config
-    # opt-out for greenfield creation only.
-    if mcp_only:
-        result["components"]["agents_md"] = {"action": "skipped (mcp_only)"}
-    elif _skipped("agents_md", skip_files):
-        result["components"]["agents_md"] = {"action": "skipped (upgrade_skip_files)"}
-    else:
-        try:
-            agents_result = _upgrade_agents_md(
-                project_root,
-                dry_run=dry_run,
-                create_agents_md=settings.upgrade_create_agents_md,
-                force_merge=force,
-            )
-            result["components"]["agents_md"] = agents_result
-        except Exception as exc:
-            result["errors"].append(f"AGENTS.md: {exc}")
-            result["components"]["agents_md"] = {"action": "error", "detail": str(exc)}
-
-    # TECH_STACK.md (platform-independent) — preserve only. Generated once
-    # by tapps_init from the detected stack profile; never refreshed by
-    # upgrade because the content captures user tech choices, not
-    # tapps-managed scaffolding. Surface its existence in the upgrade
-    # report so consumers see it as a known artifact, and hint at
-    # ``tapps_init --create-tech-stack-md=True`` when it is missing.
-    if mcp_only:
-        result["components"]["tech_stack_md"] = {"action": "skipped (mcp_only)"}
-    elif _skipped("tech_stack_md", skip_files):
-        result["components"]["tech_stack_md"] = {"action": "skipped (upgrade_skip_files)"}
-    elif (project_root / "TECH_STACK.md").exists():
-        result["components"]["tech_stack_md"] = {"action": "preserved"}
-    else:
-        result["components"]["tech_stack_md"] = {
-            "action": "missing",
-            "hint": (
-                "TECH_STACK.md was not generated. Run `tapps-mcp init` "
-                "(or re-run with --create-tech-stack-md) to render it "
-                "from the detected stack profile."
-            ),
-        }
-
-    # TAP-1888: strip direct tapps-brain MCP entries (ADR-0001 bridge-only policy).
-    if _skipped("mcp_config", skip_files):
-        result["components"]["brain_mcp_strip"] = "skipped (upgrade_skip_files)"
-    else:
-        from tapps_mcp.distribution.doctor import strip_brain_mcp_entries
-
-        result["components"]["brain_mcp_strip"] = strip_brain_mcp_entries(
-            project_root,
-            dry_run=dry_run,
-        )
-
-    # Detect platform if not specified
-    detected = platform or _detect_platform(project_root)
-    result["detected_platform"] = detected
-
-    hosts: list[str] = []
-    if detected in {"claude", "both"}:
-        hosts.append("claude-code")
-    if detected in {"cursor", "both"}:
-        hosts.append("cursor")
-
-    engagement_level = settings.llm_engagement_level
-    skill_tier = settings.skill_tier if settings.skill_tier in {"core", "full"} else "full"
-
-    # Per-host upgrades
-    platform_results: list[dict[str, Any]] = []
-    for host in hosts:
-        try:
-            host_result = _upgrade_platform(
-                host,
-                project_root,
-                force=force,
-                dry_run=dry_run,
-                engagement_level=engagement_level,
-                skill_tier=skill_tier,
-                skip_files=skip_files,
-                mcp_only=mcp_only,
-                force_python_rule=settings.force_python_quality_rule,
-                destructive_guard=settings.destructive_guard,
-                linear_enforce_gate=settings.linear_enforce_gate_resolved(),
-                linear_enforce_cache_gate=settings.linear_enforce_cache_gate_resolved(),
-                session_start_gate=settings.session_start_gate_resolved(),
-                mcp_bundle=mcp_bundle,
-            )
-            platform_results.append(host_result)
-            # Surface isolated managed-JSON component failures (malformed
-            # settings.json / hooks.json) at the top level so `success` is
-            # False and the CLI prints them — without aborting the scope.
-            for component_error in host_result.get("component_errors", []):
-                result["errors"].append(f"{host}: {component_error}")
-        except Exception as exc:
-            result["errors"].append(f"{host}: {exc}")
-            platform_results.append(
-                {
-                    "host": host,
-                    "error": str(exc),
-                }
-            )
-
-    result["components"]["platforms"] = platform_results
-
-    _lift_asset_overwrite_warnings(result, platform_results)
-
-    # Karpathy guidelines block — refresh in AGENTS.md and CLAUDE.md after
-    # per-host upgrades have potentially created/updated CLAUDE.md. Opt-out
-    # never strips existing blocks.
-    if mcp_only:
-        result["components"]["karpathy_guidelines"] = {"action": "skipped (mcp_only)"}
-    else:
-        try:
-            result["components"]["karpathy_guidelines"] = _refresh_karpathy_blocks(
-                project_root,
-                dry_run=dry_run,
-                include_karpathy=settings.include_karpathy_guidelines,
-                skip_files=skip_files,
-                force=force,
-            )
-        except Exception as exc:
-            result["errors"].append(f"Karpathy guidelines: {exc}")
-            result["components"]["karpathy_guidelines"] = {"action": "error", "detail": str(exc)}
-
-    # GitHub templates, CI, Copilot, governance, and issue/PR templates (platform-agnostic)
-    if mcp_only:
-        for component in ("ci_workflows", "github_copilot", "github_templates", "governance"):
-            result["components"][component] = {"action": "skipped (mcp_only)"}
-    elif not dry_run:
-        _run_github_artifacts(project_root, result, force=force)
-    else:
-        _dry_run_github_artifacts(project_root, result)
-
-    _install_start_program_script(
-        project_root, result, mcp_only=mcp_only, skip_files=skip_files, dry_run=dry_run
+    _upgrade_repo_artifacts(
+        project_root, result, options, dry_run=dry_run, force=force, mcp_only=mcp_only
     )
-
-    # Refresh Linear SDLC templates when previously installed (TAP-417).
-    # Detection is file-system based: check if the primary template file exists.
-    try:
-        from tapps_mcp.pipeline.linear_sdlc.installer import refresh_linear_sdlc
-        from tapps_mcp.pipeline.linear_sdlc.renderer import TEMPLATE_PATHS as _SDLC_PATHS
-
-        if (project_root / _SDLC_PATHS[0]).exists():
-            result["components"]["linear_sdlc_refresh"] = refresh_linear_sdlc(
-                project_root,
-                dry_run=dry_run,
-            )
-    except Exception as exc:
-        result["errors"].append(f"linear_sdlc_refresh: {exc}")
-        result["components"]["linear_sdlc_refresh"] = {"action": "error", "detail": str(exc)}
-
-    try:
-        from tapps_mcp.pipeline.document_judges import (
-            is_document_consumer,
-            merge_document_judges_into_yaml,
-        )
-
-        if is_document_consumer(project_root):
-            from tapps_mcp.pipeline.document_judges import merge_document_memory_profile
-
-            result["components"]["document_judges"] = merge_document_judges_into_yaml(
-                project_root,
-                dry_run=dry_run,
-            )
-            result["components"]["document_memory_profile"] = merge_document_memory_profile(
-                project_root,
-                dry_run=dry_run,
-            )
-    except Exception as exc:
-        result["errors"].append(f"document_judges: {exc}")
-        result["components"]["document_judges"] = {"action": "error", "detail": str(exc)}
-
-    try:
-        from tapps_mcp.pipeline.init import _ensure_cursor_stop_completion_gate_config
-
-        result["components"]["cursor_stop_completion_gate"] = {
-            "action": _ensure_cursor_stop_completion_gate_config(
-                project_root,
-                dry_run=dry_run,
-            )
-        }
-    except Exception as exc:
-        result["errors"].append(f"cursor_stop_completion_gate: {exc}")
-        result["components"]["cursor_stop_completion_gate"] = {
-            "action": "error",
-            "detail": str(exc),
-        }
-
-    try:
-        from tapps_mcp.project.call_graph_cache import invalidate_call_graph_cache_if_schema_stale
-
-        result["components"]["call_graph_cache"] = invalidate_call_graph_cache_if_schema_stale(
-            project_root,
-            dry_run=dry_run,
-        )
-    except Exception as exc:
-        result["errors"].append(f"call_graph_cache: {exc}")
-        result["components"]["call_graph_cache"] = {"action": "error", "detail": str(exc)}
-
-    if not dry_run and not mcp_only:
-        from tapps_mcp.pipeline.platform_hooks import cleanup_legacy_hook_sidecars
-
-        result["components"]["hook_sidecar_cleanup"] = cleanup_legacy_hook_sidecars(
-            project_root,
-            dry_run=False,
-        )
-
-    if not dry_run:
-        from tapps_mcp.distribution.setup_generator import ensure_tapps_runtime_gitignore
-
-        added = ensure_tapps_runtime_gitignore(project_root)
-        result["components"]["runtime_gitignore"] = {
-            "action": "updated" if added else "unchanged",
-            "added": added,
-        }
-
-    demoted: list[str] = []
-    for _key, val in result.get("components", {}).items():
-        if isinstance(val, dict) and val.get("alwaysApply_demoted"):
-            name = Path(str(val.get("file", _key))).name
-            demoted.append(name)
-    if demoted:
-        result["always_apply_demotions"] = demoted
-        result["always_apply_demotion_note"] = (
-            f"demoted {len(demoted)} rule(s) from alwaysApply to satisfy the "
-            f"context budget: {', '.join(demoted)}"
-        )
-
-    if dry_run:
-        result["dry_run_summary"] = _build_dry_run_summary(result)
-        for parse_error in result["dry_run_summary"].get("parse_errors", []):
-            result["errors"].append(parse_error)
-
-    result["success"] = len(result["errors"]) == 0
-    result["consumer_requirements"] = "docs/TAPPS_MCP_REQUIREMENTS.md"
-
+    _refresh_optional_integrations(project_root, result, dry_run=dry_run, mcp_only=mcp_only)
+    _finalize_result(result, dry_run=dry_run)
     return result
+
+
+# ---------------------------------------------------------------------------
+# Backwards-compatible private aliases.
+#
+# The split (TAP-6913) moved these out of this module; call sites and tests
+# still import them from here under their historical names.
+# ---------------------------------------------------------------------------
+
+_SKIP_TOKENS = SKIP_TOKENS
+_ALL_SKIP_TOKENS = ALL_SKIP_TOKENS
+_AGENTS_MD_OPT_OUT_SENTINEL = AGENTS_MD_OPT_OUT_SENTINEL
+_CONSENT_HOSTS = CONSENT_HOSTS
+_CANONICAL_HOOK_MANIFEST = CANONICAL_HOOK_MANIFEST
+
+_agents_md_opt_out = agents_md_opt_out
+_apply_or_skip = apply_or_skip
+_build_dry_run_summary = build_dry_run_summary
+_build_upgrade_manifest = build_upgrade_manifest
+_bump_skipped_version_stamps = bump_skipped_version_stamps
+_collect_upgrade_targets = collect_upgrade_targets
+_detect_platform = detect_platform
+_dry_run_claude_md_status = dry_run_claude_md_status
+_dry_run_github_artifacts = dry_run_github_artifacts
+_dry_run_status = dry_run_status
+_enumerate_preserved = enumerate_preserved
+_has_infra_signals = has_infra_signals
+_has_python_signals = has_python_signals
+_install_start_program_script = install_start_program_script
+_is_managed_hook_filename = is_managed_hook_filename
+_lift_asset_overwrite_warnings = lift_asset_overwrite_warnings
+_mcp_json_has_tapps_entry = mcp_json_has_tapps_entry
+_mcp_json_has_unresolved_workspacefolder = mcp_json_has_unresolved_workspacefolder
+_migrate_retired_hooks = migrate_retired_hooks
+_record_applied_skip_tokens = record_applied_skip_tokens
+_record_managed_json_error = record_managed_json_error
+_record_unknown_skip_tokens = record_unknown_skip_tokens
+_refresh_karpathy_blocks = refresh_karpathy_blocks
+_run_github_artifacts = run_github_artifacts
+_skipped = skipped
+_upgrade_agents_md = upgrade_agents_md
+_upgrade_agents_md_content_return = upgrade_agents_md_content_return
+_upgrade_content_return = upgrade_content_return
+_upgrade_mcp_config = upgrade_mcp_config
+_upgrade_platform = upgrade_platform
+_upgrade_platform_content_return = upgrade_platform_content_return
+_verify_hook_manifest = verify_hook_manifest

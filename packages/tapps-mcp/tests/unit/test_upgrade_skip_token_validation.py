@@ -20,7 +20,7 @@ import pytest
 
 from tapps_core.config.settings import _reset_settings_cache
 from tapps_mcp.distribution.doctor_platform import check_upgrade_skip_tokens
-from tapps_mcp.pipeline import upgrade as upgrade_mod
+from tapps_mcp.pipeline import upgrade_report as upgrade_report_mod
 from tapps_mcp.pipeline.upgrade import upgrade_pipeline
 from tapps_mcp.pipeline.upgrade_skip_tokens import (
     ALL_SKIP_TOKENS,
@@ -90,8 +90,9 @@ class TestUpgradeSignal:
         monkeypatch.setenv("TAPPS_MCP_UPGRADE_SKIP_FILES", json.dumps([BAD_ENTRY]))
 
         logged: list[tuple[str, dict[str, Any]]] = []
+        # TAP-6913: the warning is emitted from the extracted reporting module.
         monkeypatch.setattr(
-            upgrade_mod.log,
+            upgrade_report_mod.log,
             "warning",
             lambda event, **kw: logged.append((event, kw)),
         )
@@ -165,8 +166,9 @@ class TestAppliedSkipTokens:
         monkeypatch.setenv("TAPPS_MCP_UPGRADE_SKIP_FILES", json.dumps([BAD_ENTRY]))
 
         logged: list[tuple[str, dict[str, Any]]] = []
+        # TAP-6913: the warning is emitted from the extracted reporting module.
         monkeypatch.setattr(
-            upgrade_mod.log,
+            upgrade_report_mod.log,
             "warning",
             lambda event, **kw: logged.append((event, kw)),
         )

@@ -64,6 +64,7 @@ def read_internal_pin(path: Path, dep_name: str) -> str | None:
     match = _internal_pin_regex(dep_name).search(path.read_text(encoding="utf-8"))
     return match.group(1) if match else None
 
+
 # Files containing a TappsMCP version stamp that must match tapps-mcp pyproject.
 # Each entry is ``(relative_path, stamp_key)`` where stamp_key is the HTML
 # comment marker name (without surrounding ``<!-- ... -->``).
@@ -164,18 +165,24 @@ def all_template_hook_names() -> set[str]:
 
 
 def actual_hook_manifest() -> set[str]:
-    """Read the current `_CANONICAL_HOOK_MANIFEST` from pipeline/upgrade.py."""
-    src_path = REPO_ROOT / "packages/tapps-mcp/src/tapps_mcp/pipeline/upgrade.py"
-    src = src_path.read_text(encoding="utf-8")
-    match = re.search(
+    """Read the current `CANONICAL_HOOK_MANIFEST` from the pipeline upgrade modules.
+
+    TAP-6913 moved the manifest out of `pipeline/upgrade.py` into
+    `pipeline/upgrade_hooks_migration.py`, so the scan globs `upgrade*.py` and
+    accepts either spelling of the name — the same shape as
+    `all_template_hook_names`, so another split can't silently starve the guard.
+    """
+    pipeline_dir = REPO_ROOT / "packages/tapps-mcp/src/tapps_mcp/pipeline"
+    pattern = re.compile(
         # Tolerate ruff's formatting: frozenset( <newline+indent> { ... } <newline> )
-        r"_CANONICAL_HOOK_MANIFEST:\s*frozenset\[str\]\s*=\s*frozenset\(\s*\{(.*?)\}\s*\)",
-        src,
+        r"_?CANONICAL_HOOK_MANIFEST:\s*frozenset\[str\]\s*=\s*frozenset\(\s*\{(.*?)\}\s*\)",
         re.DOTALL,
     )
-    if not match:
-        raise ValueError(f"Could not locate _CANONICAL_HOOK_MANIFEST in {src_path}")
-    return set(re.findall(r'"(tapps-[a-z-]+\.sh)"', match.group(1)))
+    for src_path in sorted(pipeline_dir.glob("upgrade*.py")):
+        match = pattern.search(src_path.read_text(encoding="utf-8"))
+        if match:
+            return set(re.findall(r'"(tapps-[a-z-]+\.sh)"', match.group(1)))
+    raise ValueError(f"Could not locate CANONICAL_HOOK_MANIFEST under {pipeline_dir}")
 
 
 def collect_drift(target_version: str) -> list[str]:
@@ -186,7 +193,7 @@ def collect_drift(target_version: str) -> list[str]:
     Surfaces:
       - AGENTS.md (and any future stamped file) lagging the tapps-mcp
         pyproject version.
-      - `_CANONICAL_HOOK_MANIFEST` containing a phantom hook name that has
+      - `CANONICAL_HOOK_MANIFEST` containing a phantom hook name that has
         no template (the 79ef6e3 / 2e2f378 root cause). Hook ADDITIONS to
         the templates registry are not flagged automatically — those are
         deliberate and the manifest edit happens in the same commit.
@@ -247,7 +254,7 @@ def collect_drift(target_version: str) -> list[str]:
     actual = actual_hook_manifest()
     phantom = sorted(actual - templates)
     if phantom:
-        findings.append(f"_CANONICAL_HOOK_MANIFEST lists {phantom} but no template exists for them")
+        findings.append(f"CANONICAL_HOOK_MANIFEST lists {phantom} but no template exists for them")
 
     return findings
 
@@ -380,7 +387,7 @@ def collect_bump_changes(part: str | None) -> list[tuple[Path, str, str, str]]:
     phantom = sorted(actual - templates)
     if phantom:
         raise SystemExit(
-            f"BUMP REFUSED: _CANONICAL_HOOK_MANIFEST in pipeline/upgrade.py "
+            f"BUMP REFUSED: CANONICAL_HOOK_MANIFEST in pipeline/upgrade_hooks_migration.py "
             f"lists {phantom} but no template exists for them. Fix the "
             f"manifest first, then re-run the bump so the change ships in "
             f"a single commit."

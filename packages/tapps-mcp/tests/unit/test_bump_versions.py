@@ -77,14 +77,14 @@ def fake_repo(tmp_path: Path, bump_module: ModuleType) -> Path:
             "platform_hook_templates*.py"
         )
     ):
-        shutil.copy(
-            src, tmp_path / "packages/tapps-mcp/src/tapps_mcp/pipeline" / src.name
-        )
-    upgrade = REPO_ROOT / "packages/tapps-mcp/src/tapps_mcp/pipeline/upgrade.py"
-    shutil.copy(
-        upgrade,
-        tmp_path / "packages/tapps-mcp/src/tapps_mcp/pipeline/upgrade.py",
-    )
+        shutil.copy(src, tmp_path / "packages/tapps-mcp/src/tapps_mcp/pipeline" / src.name)
+    # TAP-6913 split upgrade.py into upgrade*.py siblings; the manifest now
+    # lives in upgrade_hooks_migration.py. Glob mirrors the production checker
+    # (scripts/bump_versions.py::actual_hook_manifest) for the same reason.
+    for src in sorted(
+        (REPO_ROOT / "packages/tapps-mcp/src/tapps_mcp/pipeline").glob("upgrade*.py")
+    ):
+        shutil.copy(src, tmp_path / "packages/tapps-mcp/src/tapps_mcp/pipeline" / src.name)
 
     bump_module.REPO_ROOT = tmp_path
     return tmp_path
@@ -104,9 +104,7 @@ class TestStampRewrite:
             bump_module.rewrite_stamp(target, "tapps-agents-version", "2.0.0")
 
     def test_read_stamp_extracts_version(self, fake_repo: Path, bump_module) -> None:
-        assert (
-            bump_module.read_stamp(fake_repo / "AGENTS.md", "tapps-agents-version") == "1.0.0"
-        )
+        assert bump_module.read_stamp(fake_repo / "AGENTS.md", "tapps-agents-version") == "1.0.0"
 
     def test_rewrite_claude_stamp(self, fake_repo: Path, bump_module) -> None:
         path = fake_repo / "CLAUDE.md"
@@ -115,9 +113,7 @@ class TestStampRewrite:
         assert "<!-- tapps-claude-version: 2.5.0 -->" in new_content
 
     def test_read_claude_stamp(self, fake_repo: Path, bump_module) -> None:
-        assert (
-            bump_module.read_stamp(fake_repo / "CLAUDE.md", "tapps-claude-version") == "1.0.0"
-        )
+        assert bump_module.read_stamp(fake_repo / "CLAUDE.md", "tapps-claude-version") == "1.0.0"
 
 
 class TestCheckMode:
@@ -139,25 +135,25 @@ class TestCheckMode:
     def test_fails_when_manifest_has_phantom_hook(
         self, fake_repo: Path, bump_module, capsys
     ) -> None:
-        # Inject a phantom hook into _CANONICAL_HOOK_MANIFEST — the
+        # Inject a phantom hook into CANONICAL_HOOK_MANIFEST — the
         # 05caaaa root cause (pre-tooluse.sh listed but no template).
-        upgrade = fake_repo / "packages/tapps-mcp/src/tapps_mcp/pipeline/upgrade.py"
-        content = upgrade.read_text()
+        manifest_module = (
+            fake_repo / "packages/tapps-mcp/src/tapps_mcp/pipeline/upgrade_hooks_migration.py"
+        )
+        content = manifest_module.read_text()
         content = content.replace(
             '"tapps-session-start.sh",',
             '"tapps-session-start.sh",\n    "tapps-phantom-nope.sh",',
             1,
         )
-        upgrade.write_text(content)
+        manifest_module.write_text(content)
         rc = bump_module.run_check()
         assert rc == 1
         assert "tapps-phantom-nope.sh" in capsys.readouterr().out
 
 
 class TestBumpAtomicity:
-    def test_bump_refreshes_pyproject_and_stamp(
-        self, fake_repo: Path, bump_module, capsys
-    ) -> None:
+    def test_bump_refreshes_pyproject_and_stamp(self, fake_repo: Path, bump_module, capsys) -> None:
         changes = bump_module.collect_bump_changes("patch")
         for path, _, _, content in changes:
             path.write_text(content, encoding="utf-8")
@@ -166,21 +162,19 @@ class TestBumpAtomicity:
             bump_module.read_pyproject_version(fake_repo / "packages/tapps-mcp/pyproject.toml")
             == "1.0.1"
         )
-        assert (
-            bump_module.read_stamp(fake_repo / "AGENTS.md", "tapps-agents-version") == "1.0.1"
-        )
-        assert (
-            bump_module.read_stamp(fake_repo / "CLAUDE.md", "tapps-claude-version") == "1.0.1"
-        )
+        assert bump_module.read_stamp(fake_repo / "AGENTS.md", "tapps-agents-version") == "1.0.1"
+        assert bump_module.read_stamp(fake_repo / "CLAUDE.md", "tapps-claude-version") == "1.0.1"
         # Post-bump must pass --check immediately.
         assert bump_module.run_check() == 0
 
     def test_bump_refuses_when_manifest_has_phantom_hook(
         self, fake_repo: Path, bump_module
     ) -> None:
-        upgrade = fake_repo / "packages/tapps-mcp/src/tapps_mcp/pipeline/upgrade.py"
-        content = upgrade.read_text()
-        upgrade.write_text(
+        manifest_module = (
+            fake_repo / "packages/tapps-mcp/src/tapps_mcp/pipeline/upgrade_hooks_migration.py"
+        )
+        content = manifest_module.read_text()
+        manifest_module.write_text(
             content.replace(
                 '"tapps-session-start.sh",',
                 '"tapps-session-start.sh",\n    "tapps-phantom-nope.sh",',
@@ -201,9 +195,7 @@ class TestUnifiedVersioning:
     it to every pyproject + npm + the AGENTS.md stamp.
     """
 
-    def test_drifted_packages_bump_to_same_target(
-        self, fake_repo: Path, bump_module
-    ) -> None:
+    def test_drifted_packages_bump_to_same_target(self, fake_repo: Path, bump_module) -> None:
         # Mimic the real-world drift that motivated this change: tapps-mcp
         # ahead, the other two languishing on an older release.
         (fake_repo / "packages/tapps-mcp/pyproject.toml").write_text(
@@ -227,13 +219,11 @@ class TestUnifiedVersioning:
             "packages/tapps-mcp/pyproject.toml",
             "packages/docs-mcp/pyproject.toml",
         ):
-            assert (
-                bump_module.read_pyproject_version(fake_repo / rel) == "1.0.6"
-            ), f"{rel} did not converge on the unified bump target"
+            assert bump_module.read_pyproject_version(fake_repo / rel) == "1.0.6", (
+                f"{rel} did not converge on the unified bump target"
+            )
         assert bump_module.read_npm_version(fake_repo / "npm/package.json") == "1.0.6"
-        assert (
-            bump_module.read_npm_version(fake_repo / "npm-docs-mcp/package.json") == "1.0.6"
-        )
+        assert bump_module.read_npm_version(fake_repo / "npm-docs-mcp/package.json") == "1.0.6"
         # TAP-5876: internal-package exact pins converge on the same target too.
         assert (
             bump_module.read_internal_pin(
@@ -253,18 +243,12 @@ class TestUnifiedVersioning:
             )
             == "1.0.6"
         )
-        assert (
-            bump_module.read_stamp(fake_repo / "AGENTS.md", "tapps-agents-version") == "1.0.6"
-        )
-        assert (
-            bump_module.read_stamp(fake_repo / "CLAUDE.md", "tapps-claude-version") == "1.0.6"
-        )
+        assert bump_module.read_stamp(fake_repo / "AGENTS.md", "tapps-agents-version") == "1.0.6"
+        assert bump_module.read_stamp(fake_repo / "CLAUDE.md", "tapps-claude-version") == "1.0.6"
         # Post-bump --check must pass.
         assert bump_module.run_check() == 0
 
-    def test_sync_realigns_without_bumping(
-        self, fake_repo: Path, bump_module
-    ) -> None:
+    def test_sync_realigns_without_bumping(self, fake_repo: Path, bump_module) -> None:
         """`part=None` (the --sync mode) brings everyone to current max.
 
         Used as a one-time fix after drift; should NOT advance the version.
@@ -297,14 +281,12 @@ class TestUnifiedVersioning:
             == "1.0.9"
         )
 
-    def test_check_flags_drift_between_packages(
-        self, fake_repo: Path, bump_module, capsys
-    ) -> None:
+    def test_check_flags_drift_between_packages(self, fake_repo: Path, bump_module, capsys) -> None:
         """`--check` must catch a tapps-mcp / tapps-core mismatch."""
         (fake_repo / "packages/tapps-mcp/pyproject.toml").write_text(
             '[project]\nname = "tapps-mcp"\nversion = "1.0.5"\n'
             'dependencies = [\n    "tapps-core==1.0.5",\n    "docs-mcp==1.0.5",\n]\n',
-            encoding="utf-8"
+            encoding="utf-8",
         )
         (fake_repo / "AGENTS.md").write_text(
             "<!-- tapps-agents-version: 1.0.5 -->\n", encoding="utf-8"
