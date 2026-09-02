@@ -1,8 +1,21 @@
 """Blue/green deploy for the dev-monorepo shared MCP CLI install.
 
-Builds immutable versioned release venvs under ``~/.tapps-mcp/releases/`` and
-atomically flips ``~/.tapps-mcp/current``. Running MCP servers stay pinned to
-their release dir (inode-held); only new launches pick up the flipped ``current``.
+Builds immutable versioned release venvs under ``~/.tapps-mcp/releases/``.
+``build_release`` installs all three local packages (tapps-core, docs-mcp,
+tapps-mcp) as real, non-editable copies via ``--no-sources-package``
+(TAP-6897) -- a release does not hold ``_editable_impl_*.pth`` redirects
+back into the checkout, so it stays intact regardless of what the checkout
+does afterwards (branch switch, rebase, deletion).
+
+``flip_current`` atomically points ``~/.tapps-mcp/current`` at a release
+directory. Rollback is: flip ``current`` back to an older release. That
+changes which release directory *future* process launches read their code
+from. It does **not**: retroactively affect already-running MCP servers,
+which stay pinned to the release dir they were launched from (inode-held)
+until they are restarted or MCP is reloaded in the host; revert state
+outside a release directory, such as tapps-brain's Postgres data or
+scaffolding files (`AGENTS.md`, hooks, skills) that ``tapps_upgrade``
+already wrote into a consumer repo -- those need their own rollback path.
 """
 
 from __future__ import annotations
@@ -168,6 +181,18 @@ def build_release(checkout: Path, release: ReleaseRef, *, force: bool = False) -
         f"{checkout / 'packages' / 'docs-mcp'}[treesitter]",
         f"{checkout / 'packages' / 'tapps-mcp'}[treesitter]",
     ]
+    # --no-sources-package: the root workspace declares tapps-core and
+    # docs-mcp as `{ workspace = true }` in [tool.uv.sources], which uv
+    # resolves as *editable* by default -- there is no `--no-editable` flag
+    # on `uv pip install` (verified: uv 0.11.3's `--help` lists only `-e`).
+    # Left alone, a release directory holds `_editable_impl_*.pth` files
+    # pointing back at this checkout instead of real copies (TAP-6897): not
+    # self-contained, and a rollback to an older release silently keeps
+    # running the checkout's current code for these two packages. Scoping
+    # `--no-sources-package` to just the three local packages (rather than
+    # a blanket `--no-sources`) keeps the tapps-brain git-tag source in
+    # [tool.uv.sources] intact -- that one is not a workspace path and must
+    # still resolve, since tapps-brain isn't published to PyPI.
     # Force the CPU torch wheels. tapps-brain depends on sentence-transformers
     # unconditionally, which drags in torch and ~4.5 GB of CUDA wheels that no
     # release env can use on a CPU host. --torch-backend=cpu resolves the whole
@@ -175,7 +200,21 @@ def build_release(checkout: Path, release: ReleaseRef, *, force: bool = False) -
     # See docs/handoff/BRAIN-sentence-transformers-optional.md for the upstream
     # fix that would remove the dependency entirely.
     proc = _run(
-        ["uv", "pip", "install", "--python", str(python), "--torch-backend=cpu", *pkg_specs],
+        [
+            "uv",
+            "pip",
+            "install",
+            "--python",
+            str(python),
+            "--torch-backend=cpu",
+            "--no-sources-package",
+            "tapps-core",
+            "--no-sources-package",
+            "docs-mcp",
+            "--no-sources-package",
+            "tapps-mcp",
+            *pkg_specs,
+        ],
         cwd=checkout,
         timeout=900,
     )

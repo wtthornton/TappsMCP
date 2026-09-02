@@ -160,16 +160,42 @@ class TestBuildRelease:
         assert result["ok"] is True
 
         install_cmd = next(c for c in commands if c[:3] == ["uv", "pip", "install"])
-        specs = [
-            arg
-            for arg in install_cmd[install_cmd.index("--python") + 2 :]
-            if not arg.startswith("-")
-        ]
+        specs = install_cmd[-3:]
         assert specs == [
             str(checkout / "packages" / "tapps-core"),
             f"{checkout / 'packages' / 'docs-mcp'}[treesitter]",
             f"{checkout / 'packages' / 'tapps-mcp'}[treesitter]",
         ]
+
+    def test_disables_workspace_sources_for_local_packages_only(
+        self, bg_home: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """TAP-6897: `[tool.uv.sources]` maps tapps-core/docs-mcp to
+        `workspace = true`, which uv resolves as editable by default (there is
+        no `--no-editable` flag on `uv pip install`). Scoping
+        `--no-sources-package` to just the three local packages defeats that
+        override without touching the tapps-brain git-tag source, which is
+        not a workspace path and must still resolve (it isn't on PyPI)."""
+        checkout = tmp_path / "checkout"
+        checkout.mkdir()
+        commands: list[list[str]] = []
+
+        def _fake_run(cmd: list[str], **_kwargs: object) -> object:
+            commands.append(cmd)
+            if cmd[:2] == ["uv", "venv"]:
+                (bg.RELEASES_DIR / "3.12.35-abc1234").mkdir(parents=True, exist_ok=True)
+            return type("P", (), {"returncode": 0, "stdout": "", "stderr": ""})()
+
+        monkeypatch.setattr(bg, "_run", _fake_run)
+        ref = bg.ReleaseRef("3.12.35", "abc1234", bg.RELEASES_DIR / "3.12.35-abc1234")
+        assert bg.build_release(checkout, ref)["ok"] is True
+
+        install_cmd = next(c for c in commands if c[:3] == ["uv", "pip", "install"])
+        no_sources = {
+            install_cmd[i + 1] for i, arg in enumerate(install_cmd) if arg == "--no-sources-package"
+        }
+        assert no_sources == {"tapps-core", "docs-mcp", "tapps-mcp"}
+        assert "--no-sources" not in install_cmd
 
     def test_installs_cpu_torch_wheels(
         self, bg_home: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
@@ -193,6 +219,33 @@ class TestBuildRelease:
 
         install_cmd = next(c for c in commands if c[:3] == ["uv", "pip", "install"])
         assert "--torch-backend=cpu" in install_cmd
+
+    def test_pip_install_failure_removes_partial_release_dir(
+        self, bg_home: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """A build failure must not leave a half-built release directory
+        behind for a later deploy to mistake for a real one."""
+        checkout = tmp_path / "checkout"
+        checkout.mkdir()
+        release_dir = bg.RELEASES_DIR / "3.12.35-abc1234"
+
+        def _fake_run(cmd: list[str], **_kwargs: object) -> object:
+            if cmd[:2] == ["uv", "venv"]:
+                release_dir.mkdir(parents=True, exist_ok=True)
+                return type("P", (), {"returncode": 0, "stdout": "", "stderr": ""})()
+            if cmd[:3] == ["uv", "pip", "install"]:
+                return type(
+                    "P", (), {"returncode": 1, "stdout": "", "stderr": "simulated failure"}
+                )()
+            raise AssertionError(f"unexpected command: {cmd}")
+
+        monkeypatch.setattr(bg, "_run", _fake_run)
+        ref = bg.ReleaseRef("3.12.35", "abc1234", release_dir)
+        result = bg.build_release(checkout, ref)
+
+        assert result["ok"] is False
+        assert result["step"] == "uv pip install"
+        assert not release_dir.exists()
 
 
 class TestSmokeTestRelease:
@@ -414,7 +467,9 @@ class TestDryRunPreviewMatchesPostFlipGC:
         checkout = self._make_checkout(tmp_path, "3.12.74")
         monkeypatch.setattr(bg, "_read_short_sha", lambda _c: "incoming")
 
-        preview_report = bg.deploy_blue_green(checkout, dry_run=True, skip_gate=True, keep_releases=3)
+        preview_report = bg.deploy_blue_green(
+            checkout, dry_run=True, skip_gate=True, keep_releases=3
+        )
         assert preview_report["ok"] is True
         preview = preview_report["gc_preview"]
 
@@ -427,9 +482,7 @@ class TestDryRunPreviewMatchesPostFlipGC:
             "tapps_mcp.distribution.mcp_zombie_reap.reap_orphan_mcp_serves",
             lambda: {"ok": True, "reaped": []},
         )
-        monkeypatch.setattr(
-            "tapps_mcp.distribution.fleet_control.fleet_any_running", lambda: False
-        )
+        monkeypatch.setattr("tapps_mcp.distribution.fleet_control.fleet_any_running", lambda: False)
         monkeypatch.setattr(
             "tapps_mcp.distribution.fleet_control.reap_superseded_fleet",
             lambda: {"superseded_pids": [], "reaped": [], "errors": []},
@@ -474,7 +527,9 @@ class TestDryRunPreviewMatchesPostFlipGC:
         checkout = self._make_checkout(tmp_path, "3.12.74")
         monkeypatch.setattr(bg, "_read_short_sha", lambda _c: "incoming")
 
-        preview_report = bg.deploy_blue_green(checkout, dry_run=True, skip_gate=True, keep_releases=3)
+        preview_report = bg.deploy_blue_green(
+            checkout, dry_run=True, skip_gate=True, keep_releases=3
+        )
         preview = preview_report["gc_preview"]
 
         assert "3.12.72-dd5c4e06" in preview["to_delete"]
@@ -490,7 +545,9 @@ class TestDryRunPreviewMatchesPostFlipGC:
         checkout = self._make_checkout(tmp_path, "3.12.74")
         monkeypatch.setattr(bg, "_read_short_sha", lambda _c: "incoming")
 
-        preview_report = bg.deploy_blue_green(checkout, dry_run=True, skip_gate=True, keep_releases=3)
+        preview_report = bg.deploy_blue_green(
+            checkout, dry_run=True, skip_gate=True, keep_releases=3
+        )
         preview = preview_report["gc_preview"]
 
         # idx=1 pre-flip and idx=2 post-flip -- inside keep=3 either way.
