@@ -67,6 +67,19 @@ def _marker_end(syntax: _Syntax) -> str:
     return f"{syntax.open} END: tapps-skill-asset"
 
 
+def _wrap_note(note: str, syntax: _Syntax) -> str:
+    """Wrap *note* as a single-line comment in *syntax*.
+
+    The one place that turns a plain note into an in-file comment — shared by
+    :func:`_header_text` (policy headers) and
+    :func:`asset_project_region_heading` (the migrated-region heading), so a
+    third caller can never reinvent the html-only shape that TAP-6981 fixed.
+    """
+    if syntax.close:
+        return f"{syntax.open} {note} {syntax.close}"
+    return f"{syntax.open} {note}"
+
+
 # The three comment styles a scaffolded asset can carry. Every delimitable
 # suffix maps to exactly one of these; adding a suffix means picking one of
 # these (or defining a new one), never inventing an ad hoc marker shape.
@@ -81,12 +94,20 @@ _ALL_SYNTAXES: tuple[_Syntax, ...] = (_HTML_SYNTAX, _HASH_SYNTAX, _SLASH_SYNTAX)
 ASSET_MARKER_BEGIN_PREFIX = _marker_begin_prefix(_HTML_SYNTAX)
 ASSET_MARKER_END = _marker_end(_HTML_SYNTAX)
 
-# Heading introducing the preserved region when a pre-marker asset is migrated.
-ASSET_PROJECT_REGION_HEADING = (
-    "<!-- tapps-skill-asset-project-customizations: preserved from the "
+# Note text for the migrated-region heading, and its historical HTML-wrapped
+# form. TAP-6884 made every OTHER marker in this module language-aware via
+# _syntax_for(); this constant was the one spot still hardcoded to HTML, so a
+# non-Markdown asset (.sh/.py/.js) got an HTML comment migrated straight into
+# it — a syntax error in every one of those languages (TAP-6981). Kept here,
+# HTML-wrapped, for the existing .md/.html callers (including this module's
+# own tests); use asset_project_region_heading(rel_path) for anything that
+# needs the syntax-aware form.
+_ASSET_PROJECT_REGION_NOTE = (
+    "tapps-skill-asset-project-customizations: preserved from the "
     "pre-marker version — review and trim anything the managed block above now "
-    "covers -->"
+    "covers"
 )
+ASSET_PROJECT_REGION_HEADING = _wrap_note(_ASSET_PROJECT_REGION_NOTE, _HTML_SYNTAX)
 
 #: One line per policy, rendered into each generated file so the rule that
 #: governs it is readable without consulting this module.
@@ -144,10 +165,7 @@ def policy_for(rel_path: str, *, create_only: bool = False) -> Policy:
 
 
 def _header_text(policy: Policy, syntax: _Syntax) -> str:
-    note = POLICY_NOTES[policy]
-    if syntax.close:
-        return f"{syntax.open} {note} {syntax.close}"
-    return f"{syntax.open} {note}"
+    return _wrap_note(POLICY_NOTES[policy], syntax)
 
 
 def policy_header(policy: Policy, rel_path: str = "") -> str:
@@ -157,6 +175,20 @@ def policy_header(policy: Policy, rel_path: str = "") -> str:
     style — every existing caller that omits it keeps today's output exactly.
     """
     return _header_text(policy, _syntax_for(rel_path))
+
+
+def asset_project_region_heading(rel_path: str = "") -> str:
+    """Return the migrated-region heading in *rel_path*'s own comment syntax.
+
+    Mirrors :func:`policy_header` exactly. Before this, the heading emitted by
+    the ``migrated`` branch of :func:`install_or_refresh_asset` was always
+    ``ASSET_PROJECT_REGION_HEADING`` — an unconditional html comment — so a
+    ``.sh``/``.py``/``.js`` asset with a hand-edited pre-marker copy got an
+    ``<!-- ... -->`` line written into it, which does not parse in any of
+    those languages (TAP-6981). *rel_path* defaults to ``""``, matching
+    :func:`policy_header`'s html fallback.
+    """
+    return _wrap_note(_ASSET_PROJECT_REGION_NOTE, _syntax_for(rel_path))
 
 
 def _split_shebang(body: str) -> tuple[str, str]:
@@ -328,7 +360,8 @@ def install_or_refresh_asset(
         action = "refreshed"
     else:
         preserved = original.strip("\n")
-        updated = f"{fresh}\n{ASSET_PROJECT_REGION_HEADING}\n\n{preserved}\n"
+        heading = asset_project_region_heading(rel_path)
+        updated = f"{fresh}\n{heading}\n\n{preserved}\n"
         action = "migrated"
 
     if not dry_run:
@@ -444,6 +477,7 @@ __all__ = [
     "AssetAction",
     "Policy",
     "asset_block",
+    "asset_project_region_heading",
     "create_only_body",
     "has_asset_customization",
     "install_or_refresh_asset",

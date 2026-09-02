@@ -9,8 +9,10 @@ asset had no way to know it would vanish.
 
 from __future__ import annotations
 
+import shutil
 import subprocess
 import sys
+from collections.abc import Callable
 from pathlib import Path
 
 import pytest
@@ -46,6 +48,41 @@ ASSET = "assets/prompt-template.md"
 
 def _skill_dir(root: Path, skill: str = SKILL) -> Path:
     return root / ".claude" / "skills" / skill
+
+
+def _check_sh_syntax(path: Path) -> None:
+    bash = shutil.which("bash")
+    assert bash is not None, "bash not found on PATH"
+    result = subprocess.run([bash, "-n", str(path)], capture_output=True, text=True, timeout=10)
+    assert result.returncode == 0, result.stderr
+
+
+def _check_py_syntax(path: Path) -> None:
+    result = subprocess.run(
+        [sys.executable, "-m", "py_compile", str(path)],
+        capture_output=True,
+        text=True,
+        timeout=10,
+    )
+    assert result.returncode == 0, result.stderr
+
+
+def _check_js_syntax(path: Path) -> None:
+    node = shutil.which("node")
+    if node is None:
+        pytest.skip("node is not available on this host -- .js syntax not checked")
+    result = subprocess.run([node, "--check", str(path)], capture_output=True, text=True, timeout=10)
+    assert result.returncode == 0, result.stderr
+
+
+#: Dispatch table for the migrated x non-Markdown regression test below --
+#: one syntax checker per suffix, each with a single assert, so the test
+#: itself carries no per-suffix branching.
+_MIGRATED_SYNTAX_CHECKS: dict[str, Callable[[Path], None]] = {
+    "sh": _check_sh_syntax,
+    "py": _check_py_syntax,
+    "js": _check_js_syntax,
+}
 
 
 class TestPolicyVocabulary:
@@ -416,6 +453,53 @@ class TestSyntaxAwareMarkers:
         clean = wrap_asset("echo hi", SKILL, "scripts/canary.sh")
         assert not has_asset_customization(clean)
         assert has_asset_customization(clean + "\n# mine\n")
+
+    @pytest.mark.parametrize(
+        "rel_path,body,hand_edit_line,checker",
+        [
+            ("scripts/canary.sh", "echo v1\n", "local_leftover=1\n", "sh"),
+            ("scripts/canary.py", 'print("v1")\n', "leftover = 1\n", "py"),
+            ("workflows/canary.js", "console.log('v1')\n", "const leftover = 1;\n", "js"),
+        ],
+    )
+    def test_migrated_non_markdown_asset_is_syntax_valid_and_preserves_content(
+        self,
+        tmp_path: Path,
+        rel_path: str,
+        body: str,
+        hand_edit_line: str,
+        checker: str,
+    ) -> None:
+        """TAP-6981: the ``migrated`` branch x non-Markdown hole.
+
+        ``TestAssetManagedBlock.test_edited_pre_marker_copy_is_migrated_not_discarded``
+        exercises ``migrated`` but only for a ``.md`` asset (where the hardcoded HTML
+        heading is correct); this class covers ``.sh``/``.py``/``.js`` but only for
+        ``created``/``refreshed``. Nothing exercised ``migrated`` for a non-Markdown
+        suffix — exactly the path that emitted ``ASSET_PROJECT_REGION_HEADING``'s
+        unconditional ``<!-- ... -->`` HTML comment into a ``.sh``/``.py``/``.js`` file,
+        breaking its syntax (live proof: ``nlt-orchestrator/scripts/gitfacts.sh``,
+        ``bash -n`` exit 2).
+        """
+        target = tmp_path / rel_path
+        target.parent.mkdir(parents=True, exist_ok=True)
+        # A pre-existing, hand-edited, pre-marker copy -- the exact shape that
+        # drives install_or_refresh_asset's "migrated" branch.
+        target.write_text(body + hand_edit_line, encoding="utf-8")
+
+        action = write_project_script(tmp_path, rel_path, body, SKILL)
+        assert action == "migrated"
+
+        text = target.read_text(encoding="utf-8")
+        assert hand_edit_line.strip() in text, (
+            "the point of the migrated branch is preservation -- a fix that produces "
+            "a parseable file by discarding local content would be worse than the bug"
+        )
+        assert "<!--" not in text and "-->" not in text, (
+            f"a non-Markdown asset must never carry an HTML comment marker:\n{text!r}"
+        )
+
+        _MIGRATED_SYNTAX_CHECKS[checker](target)
 
 
 class TestWriteProjectScript:
