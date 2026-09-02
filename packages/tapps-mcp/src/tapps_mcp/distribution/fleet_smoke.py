@@ -14,6 +14,7 @@ import urllib.request
 from pathlib import Path
 from typing import Any
 
+from tapps_core.http.auth import FLEET_CREDENTIAL_HEADER, FleetAuthConfig
 from tapps_core.http.request_context import PROJECT_ROOT_HEADER
 from tapps_mcp.distribution.nlt_http_fleet import (
     NLT_HTTP_FLEET_PORTS,
@@ -24,6 +25,21 @@ from tapps_mcp.distribution.nlt_http_fleet import (
 
 _MCP_ACCEPT = "application/json, text/event-stream"
 _INIT_PROTOCOL = "2025-03-26"
+
+
+def _fleet_auth_headers() -> dict[str, str]:
+    """Operator-token header for the in-flight probe, when one is configured.
+
+    Reads the same ``TAPPS_FLEET_AUTH_TOKEN`` config the fleet servers
+    themselves resolve (:class:`FleetAuthConfig`). Without this, an
+    auth-enabled fleet 401s every smoke/watchdog probe and the watchdog
+    restart-loops all six servers as ``initialize_timeout`` (TAP-6062). No
+    token configured -> no header, behavior unchanged.
+    """
+    operator_token = FleetAuthConfig.from_env().operator_token
+    if not operator_token:
+        return {}
+    return {FLEET_CREDENTIAL_HEADER: operator_token}
 
 
 def parse_sse_json(body: str) -> dict[str, Any] | None:
@@ -57,6 +73,7 @@ def _post_mcp(
         "Content-Type": "application/json",
         "Accept": _MCP_ACCEPT,
         PROJECT_ROOT_HEADER: project_root,
+        **_fleet_auth_headers(),
     }
     if session_id:
         headers["mcp-session-id"] = session_id

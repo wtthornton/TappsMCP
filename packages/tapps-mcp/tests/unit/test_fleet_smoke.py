@@ -3,11 +3,16 @@
 from __future__ import annotations
 
 import json
+import threading
+import time
 from typing import Any
 from unittest.mock import patch
 
 import pytest
+import uvicorn
 
+from tapps_core.http.auth import FLEET_AUTH_ENV, FleetAuthConfig
+from tapps_core.http.middleware import wrap_streamable_http_app
 from tapps_mcp.distribution import fleet_smoke
 
 
@@ -206,3 +211,90 @@ class TestRestartFleetWithSmoke:
         report = fleet_control.restart_fleet_with_smoke()
         assert report["ok"] is False
         assert report["not_ready"] == ["nlt-build"]
+
+
+class _FakeMcpApp:
+    """Minimal ASGI app returning a valid ``initialize`` SSE response."""
+
+    async def __call__(self, scope: Any, receive: Any, send: Any) -> None:
+        body = b""
+        while True:
+            message = await receive()
+            body += message.get("body", b"")
+            if not message.get("more_body"):
+                break
+        payload = json.loads(body or b"{}")
+        if payload.get("method") != "initialize":
+            await send({"type": "http.response.start", "status": 404, "headers": []})
+            await send({"type": "http.response.body", "body": b""})
+            return
+        result = _sse(
+            {
+                "jsonrpc": "2.0",
+                "id": payload.get("id"),
+                "result": {"serverInfo": {"name": "fake-fleet"}},
+            }
+        ).encode()
+        await send(
+            {
+                "type": "http.response.start",
+                "status": 200,
+                "headers": [
+                    (b"content-type", b"text/event-stream"),
+                    (b"mcp-session-id", b"sess-test"),
+                ],
+            }
+        )
+        await send({"type": "http.response.body", "body": result})
+
+
+class _LiveAuthServer:
+    """A real loopback ASGI server behind :class:`TappsFleetAuthMiddleware`."""
+
+    def __init__(self, operator_token: str) -> None:
+        app = wrap_streamable_http_app(
+            _FakeMcpApp(), auth=FleetAuthConfig(operator_token=operator_token)
+        )
+        config = uvicorn.Config(app, host="127.0.0.1", port=0, log_level="critical")
+        self.server = uvicorn.Server(config)
+        self.thread = threading.Thread(target=self.server.run, daemon=True)
+
+    def __enter__(self) -> str:
+        self.thread.start()
+        deadline = time.monotonic() + 5.0
+        while not self.server.started:
+            if time.monotonic() > deadline:  # pragma: no cover - startup guard
+                raise TimeoutError("fake fleet server did not start in time")
+            time.sleep(0.01)
+        port = self.server.servers[0].sockets[0].getsockname()[1]
+        return f"http://127.0.0.1:{port}/mcp"
+
+    def __exit__(self, *_exc: object) -> None:
+        self.server.should_exit = True
+        self.thread.join(timeout=5.0)
+
+
+class TestProbeAuthNegativeControl:
+    """TAP-6062 gap: an auth-enabled fleet must not 401 every watchdog probe."""
+
+    def test_probe_succeeds_with_matching_token(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        with _LiveAuthServer(operator_token="op-secret") as url:
+            monkeypatch.setattr(fleet_smoke, "build_http_fleet_url", lambda *_a, **_k: url)
+            monkeypatch.setenv(FLEET_AUTH_ENV, "op-secret")
+
+            result = fleet_smoke.probe_fleet_mcp_initialize("nlt-build")
+
+        assert result["ok"] is True
+
+    def test_probe_401s_without_the_token(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """Negative control: this is what the watchdog saw before the fix --
+        every probe against an auth-enabled server reads as an initialize
+        failure, and the watchdog would restart-loop the whole fleet."""
+        with _LiveAuthServer(operator_token="op-secret") as url:
+            monkeypatch.setattr(fleet_smoke, "build_http_fleet_url", lambda *_a, **_k: url)
+            monkeypatch.delenv(FLEET_AUTH_ENV, raising=False)
+
+            result = fleet_smoke.probe_fleet_mcp_initialize("nlt-build")
+
+        assert result["ok"] is False
+        assert result["http_status"] == 401

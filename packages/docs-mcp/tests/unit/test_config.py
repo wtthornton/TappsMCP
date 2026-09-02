@@ -5,6 +5,7 @@ from __future__ import annotations
 import os
 import platform
 from pathlib import Path
+from typing import Any
 from unittest.mock import patch
 
 import pytest
@@ -15,6 +16,13 @@ from docs_mcp.config.settings import (
     _reset_docs_settings_cache,
     _resolve_workspace_root,
     load_docs_settings,
+)
+from tapps_core.http.request_context import (
+    WORKSPACE_FREE_ROOT,
+    mark_http_request,
+    reset_http_request,
+    reset_request_project_root,
+    set_request_project_root,
 )
 
 
@@ -408,3 +416,80 @@ class TestToolCurationSettings:
         )
         result = load_docs_settings(project_root=tmp_path)
         assert result.enabled_tools == ["docs_session_start", "docs_check_drift"]
+
+
+class TestLoadDocsSettingsWorkspaceFree:
+    """Symmetric with tapps_core.config.settings' ``TestLoadSettingsWorkspaceFree``
+    (TAP-6062): the CWD walk-up in ``load_docs_settings`` is stdio-only. An HTTP
+    fleet request without an explicit project root must not fall back to the
+    fleet process's own CWD.
+    """
+
+    def test_stdio_still_falls_back_to_cwd(self, tmp_path: Path, monkeypatch: Any) -> None:
+        """Unchanged behavior for stdio: CWD is the workspace."""
+        monkeypatch.delenv("DOCS_MCP_PROJECT_ROOT", raising=False)
+        monkeypatch.chdir(tmp_path)
+        _reset_docs_settings_cache()
+
+        assert load_docs_settings().project_root == tmp_path.resolve()
+
+    def test_workspace_free_request_does_not_use_cwd(
+        self, tmp_path: Path, monkeypatch: Any
+    ) -> None:
+        monkeypatch.delenv("DOCS_MCP_PROJECT_ROOT", raising=False)
+        monkeypatch.chdir(tmp_path)
+        _reset_docs_settings_cache()
+
+        token = mark_http_request()
+        try:
+            resolved = load_docs_settings().project_root
+        finally:
+            reset_http_request(token)
+
+        assert resolved != tmp_path.resolve()
+        assert resolved == WORKSPACE_FREE_ROOT.resolve()
+
+    def test_workspace_free_request_ignores_env_root(
+        self, tmp_path: Path, monkeypatch: Any
+    ) -> None:
+        """The fleet's own DOCS_MCP_PROJECT_ROOT is not the caller's workspace."""
+        monkeypatch.setenv("DOCS_MCP_PROJECT_ROOT", str(tmp_path))
+        _reset_docs_settings_cache()
+
+        token = mark_http_request()
+        try:
+            resolved = load_docs_settings().project_root
+        finally:
+            reset_http_request(token)
+
+        assert resolved == WORKSPACE_FREE_ROOT.resolve()
+
+    def test_scoped_request_uses_the_header_root(self, tmp_path: Path, monkeypatch: Any) -> None:
+        monkeypatch.delenv("DOCS_MCP_PROJECT_ROOT", raising=False)
+        _reset_docs_settings_cache()
+
+        http_token = mark_http_request()
+        root_token = set_request_project_root(tmp_path)
+        try:
+            resolved = load_docs_settings().project_root
+        finally:
+            reset_request_project_root(root_token)
+            reset_http_request(http_token)
+
+        assert resolved == tmp_path.resolve()
+
+    def test_workspace_free_result_is_not_cached_into_the_singleton(
+        self, tmp_path: Path, monkeypatch: Any
+    ) -> None:
+        """A fleet request must not pin later stdio callers to the empty root."""
+        monkeypatch.delenv("DOCS_MCP_PROJECT_ROOT", raising=False)
+        monkeypatch.chdir(tmp_path)
+        _reset_docs_settings_cache()
+
+        token = mark_http_request()
+        try:
+            load_docs_settings()
+        finally:
+            reset_http_request(token)
+
+        assert load_docs_settings().project_root == tmp_path.resolve()
