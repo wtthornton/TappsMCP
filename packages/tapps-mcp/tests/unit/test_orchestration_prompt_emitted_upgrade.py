@@ -66,12 +66,30 @@ class TestEmittedOrchestrationSkill:
         for marker in SKILL_SECTIONS:
             assert skill.index(marker) < end, f"{marker!r} landed outside the managed block"
 
-    def test_repo_checked_in_copy_matches_the_emitter(self, emitted: dict[str, str]) -> None:
-        """The tracked copy under .claude/ is regenerated, never hand-edited."""
+    @pytest.mark.parametrize(
+        ("host_dir", "platform"),
+        [(".claude", "claude"), (".cursor", "cursor")],
+    )
+    def test_repo_checked_in_copy_matches_the_emitter(
+        self, host_dir: str, platform: str
+    ) -> None:
+        """The tracked copy under .claude/ AND .cursor/ is regenerated, never hand-edited.
+
+        TAP-6854 round 2: the original version of this test asserted only the
+        .claude copy, so a .cursor mirror could go stale (regenerated content
+        never reaching a consumer's disk on that host) without this test
+        noticing — exactly what happened to the orchestration-prompt skill's
+        .cursor copy. Both hosts share the same section markers because
+        CLAUDE_SKILLS and CURSOR_SKILLS both point at
+        ORCHESTRATION_PROMPT_SKILL_BODY (platform_skills.py), so the same
+        marker list applies regardless of which host emitted the file.
+        """
         repo_root = Path(__file__).resolve().parents[4]
-        tracked = repo_root / ".claude" / "skills" / "orchestration-prompt" / "SKILL.md"
+        tracked = repo_root / host_dir / "skills" / "orchestration-prompt" / "SKILL.md"
         if not tracked.exists():  # pragma: no cover - consumer checkouts have no copy
-            pytest.skip("this checkout does not track an emitted copy of the skill")
+            pytest.skip(f"this checkout does not track an emitted {platform} copy of the skill")
         body = tracked.read_text(encoding="utf-8")
         for marker in SKILL_SECTIONS:
-            assert marker in body, f"{marker!r} missing from the tracked emitted copy"
+            assert marker in body, (
+                f"{marker!r} missing from the tracked emitted {platform} copy"
+            )
