@@ -342,6 +342,16 @@ async def _execute_validation_batch(
     sem = asyncio.Semaphore(_VALIDATE_CONCURRENCY)
     do_security_full = _resolve_security_depth(bc.security_depth, bc.include_security, bc.quick)
 
+    # TAP-6922: one rename index for the whole batch. Rule 1 asks git which
+    # current paths are moves of baseline paths; building that per file would
+    # be a subprocess per file, so it is built here and shared. It is lazy, so
+    # a run with no moved files never shells out at all.
+    renames = None
+    if bc.baseline_ref:
+        from tapps_mcp.gates.ratchet import RenameIndex
+
+        renames = RenameIndex(bc.settings.project_root, bc.baseline_ref)
+
     tasks = [
         asyncio.create_task(
             _host._validate_single_file(
@@ -354,6 +364,7 @@ async def _execute_validation_batch(
                 bc.ctx,
                 baseline_ref=bc.baseline_ref,
                 project_root=bc.settings.project_root,
+                renames=renames,
             )
         )
         for p in bc.uncached_paths
