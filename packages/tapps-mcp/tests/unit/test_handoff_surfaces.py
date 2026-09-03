@@ -363,14 +363,17 @@ class TestTheConflictSignalReachesTheAgent:
         assert "warnings" not in result["data"]
 
     @pytest.mark.asyncio
-    async def test_an_unownable_incumbent_is_reported_but_does_not_degrade(
+    async def test_an_unownable_recent_incumbent_is_advised_and_degrades(
         self, tmp_path: Path
     ) -> None:
-        """Every handoff written before TAP-6872 lacks the header.
+        """A header-less incumbent updated inside the conflict window (TAP-7008).
 
-        ``classify_foreign`` answers ``"unknown"`` for those and never blocks
-        them; degrading on it would make the ordinary re-handoff in every
-        legacy repo read as a displacement.
+        ``classify_foreign`` still answers ``"unknown"`` — the header really
+        is missing, so this is not a named displacement — but "somebody wrote
+        this a moment ago" and "this is TAP-6872's dated legacy population"
+        are not the same event. Only the window tells them apart, and this
+        one is inside it: it gets an advisory, and the advisory is a warning
+        like any other, so the envelope degrades.
         """
         legacy = _handoff("program-a").replace("**Program:** program-a\n", "")
         _seed(tmp_path, None, legacy)
@@ -379,7 +382,67 @@ class TestTheConflictSignalReachesTheAgent:
 
         assert result["data"]["conflict"]["foreign"] == "unknown"
         assert result["data"]["conflict_status"] == "unknown"
+        assert result["degraded"] is True
+        assert any("unestablished ownership" in w for w in result["data"]["warnings"])
+
+    @pytest.mark.asyncio
+    async def test_a_stale_unownable_incumbent_is_reported_but_does_not_degrade(
+        self, tmp_path: Path
+    ) -> None:
+        """Every handoff written before TAP-6872 lacks the header.
+
+        ``classify_foreign`` answers ``"unknown"`` for those and never blocks
+        them; degrading on it would make the ordinary re-handoff in every
+        legacy repo read as a displacement. This is TAP-6872's population —
+        dated, and outside the conflict window — and it must stay the negative
+        control: still classified ``"unknown"``, still silent, still
+        undegraded, no matter what the recent-unknown case above does.
+        """
+        stale = datetime.now(UTC) - timedelta(hours=13)
+        legacy = _handoff("program-a", updated=stale).replace("**Program:** program-a\n", "")
+        _seed(tmp_path, None, legacy)
+
+        result = await self._save(tmp_path, _handoff("program-b"))
+
+        assert result["data"]["conflict"]["foreign"] == "unknown"
+        assert result["data"]["conflict_status"] == "unknown"
         assert "degraded" not in result
+        assert "warnings" not in result["data"]
+
+    @pytest.mark.asyncio
+    async def test_an_undated_unknown_incumbent_is_advised(self, tmp_path: Path) -> None:
+        """No ``**Program:**`` header *and* no ``**Updated:**`` line.
+
+        The window test in :func:`~tapps_mcp.tools.handoff_guard._unknown_advisory`
+        cannot be applied to an incumbent it cannot date, and "cannot be shown
+        to be stale" is not the same claim as "shown to be stale". Refuse to
+        guess: this one gets the advisory, same as a recent one would.
+        """
+        legacy = """\
+# Session handoff
+**Linear P0:** TAP-6874
+
+## Done
+- legacy write, pre-header and pre-timestamp
+
+## Open
+- none
+
+## Next (P0)
+- run the surfaces suite
+
+## Success criterion
+- the surface reaches the mechanism
+"""
+        _seed(tmp_path, None, legacy)
+
+        result = await self._save(tmp_path, _handoff("program-b"))
+
+        assert result["data"]["conflict"]["foreign"] == "unknown"
+        assert result["data"]["conflict"]["previous"]["updated"] is None
+        assert result["data"]["conflict_status"] == "unknown"
+        assert result["degraded"] is True
+        assert any("unestablished ownership" in w for w in result["data"]["warnings"])
 
 
 class TestTheCliSurface:

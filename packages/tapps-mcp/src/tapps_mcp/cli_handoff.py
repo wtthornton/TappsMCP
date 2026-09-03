@@ -76,7 +76,7 @@ def handoff_write(
 
     from tapps_mcp.cli import _get_project_root
     from tapps_mcp.server_helpers import gateway_refusal_response
-    from tapps_mcp.tools.handoff_guard import HandoffOwnerConflictError
+    from tapps_mcp.tools.handoff_guard import HandoffOwnerConflictError, conflict_advisory
     from tapps_mcp.tools.handoff_schema import InvalidHandoffSlotError
     from tapps_mcp.tools.handoff_write import HandoffWriteError, write_handoff_sync
 
@@ -123,12 +123,18 @@ def handoff_write(
             click.echo(f"  warning: {warn}", err=True)
         raise SystemExit(1)
 
+    # Mirrors server_pipeline_tools.py:1764 so the shell surface classifies a
+    # conflict identically to the MCP one instead of leaving it to whoever
+    # reads the raw record.
+    conflict_state, warnings, next_steps = conflict_advisory(result.conflict or {})
+
     payload = {
         "file_path": result.file_path,
         "slot": slot,
         "linear_p0": result.doc.linear_p0,
         "metadata": result.metadata,
         "conflict": result.conflict,
+        "conflict_status": conflict_state,
         "lint": {
             "ok": result.lint.ok,
             "errors": result.lint.errors,
@@ -137,6 +143,13 @@ def handoff_write(
         "brain_mirror": result.brain_mirror,
         "session_end": result.session_end,
     }
+    # stderr, not stdout: the JSON document on stdout is parsed by slicing
+    # from its first "{" (tests/unit/test_handoff_surfaces.py:389-395), and a
+    # prose line on stdout would break that.
+    for warning in warnings:
+        click.echo(f"warning: {warning}", err=True)
+    for next_step in next_steps:
+        click.echo(f"next step: {next_step}", err=True)
     click.echo(json.dumps(payload, indent=2))
 
 
