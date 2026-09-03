@@ -64,6 +64,7 @@ class HandoffDocument:
     cumulative: list[str] = field(default_factory=list)
     recognized_headings: list[str] = field(default_factory=list)
     unrecognized_headings: list[str] = field(default_factory=list)
+    dropped_sections: list[str] = field(default_factory=list)
     section_lengths: dict[str, int] = field(default_factory=dict)
     raw_text: str = ""
 
@@ -283,6 +284,24 @@ def _extract_bullets(block: str) -> list[str]:
     return items
 
 
+def _section_content_dropped(block: str) -> bool:
+    """True iff *block* holds prose that ``_extract_bullets`` silently discarded.
+
+    Judges the raw block, not the parsed field: a block with no non-blank
+    lines, or where every non-blank line is a bullet (placeholder bullets like
+    ``- none`` included — those are a parser judgment call, not a dropped
+    line), stays quiet. True only when at least one non-blank line exists and
+    none of them match ``_BULLET_RE``.
+    """
+    has_content = False
+    for raw_line in block.splitlines():
+        if _BULLET_RE.match(raw_line) is not None:
+            return False
+        if raw_line.strip():
+            has_content = True
+    return has_content
+
+
 def _parse_updated(raw: str) -> datetime | None:
     value = raw.strip()
     if not value:
@@ -351,6 +370,8 @@ def parse_handoff_markdown(text: str) -> HandoffDocument:
             doc.unrecognized_headings.append(header)
         else:
             doc.recognized_headings.append(header)
+            if _section_content_dropped(body):
+                doc.dropped_sections.append(header)
         if key == "done":
             doc.done = _extract_bullets(body)
         elif key == "open":
@@ -433,6 +454,13 @@ def lint_handoff(
     empty = empty_parse_error(doc)
     if empty is not None:
         result.errors.append(empty)
+    else:
+        for header in doc.dropped_sections:
+            result.warnings.append(
+                f"Handoff section '## {header}' held content that did not parse as "
+                "bullets and was dropped — section content must be '-' bullets to be "
+                "picked up"
+            )
 
     if doc.open_items and not doc.next_p0:
         near_misses = _near_miss_next_headers(doc.raw_text)
