@@ -124,13 +124,22 @@ def conflict_status(payload: dict[str, Any] | None) -> str:
     return "unknown"
 
 
-def conflict_advisory(payload: dict[str, Any]) -> tuple[str, list[str], list[str]]:
+def conflict_advisory(
+    payload: dict[str, Any],
+    *,
+    now: datetime | None = None,
+) -> tuple[str, list[str], list[str]]:
     """Classify a conflict report and say what the agent should do about it.
 
-    Returns ``(status, warnings, next_steps)``. Both lists are empty unless the
-    status is ``overwritten``: that is the one value naming a specific program
-    whose recent handoff this write archived, so it is the one value that has
-    something to tell the agent.
+    Returns ``(status, warnings, next_steps)``. Both lists are empty for
+    ``off`` and ``clear`` — nothing was displaced. ``overwritten`` names a
+    specific program whose recent handoff this write archived. ``unknown``
+    is narrower: TAP-6872 established that an incumbent without a
+    ``**Program:**`` header must not read as a named displacement, but a
+    header-less incumbent that was updated *inside* the conflict window is
+    still worth a look — it just cannot be attributed to anyone. ``now`` is
+    the clock to compare that incumbent's ``updated`` against; it exists so
+    tests do not depend on wall-clock time.
 
     The prose is built from the same payload the response carries under
     ``conflict``, so the sentence and the machine-readable record can never
@@ -138,6 +147,8 @@ def conflict_advisory(payload: dict[str, Any]) -> tuple[str, list[str], list[str
     of the payload is this module's to know.
     """
     status = conflict_status(payload)
+    if status == "unknown":
+        return _unknown_advisory(payload, now=now)
     if status != "overwritten":
         return status, [], []
     previous = payload.get("previous") or {}
@@ -152,6 +163,39 @@ def conflict_advisory(payload: dict[str, Any]) -> tuple[str, list[str], list[str
             "Confirm that program is not still running before you continue; "
             "restore its handoff from the archived copy if it is."
         ],
+    )
+
+
+def _unknown_advisory(
+    payload: dict[str, Any],
+    *,
+    now: datetime | None,
+) -> tuple[str, list[str], list[str]]:
+    """The ``unknown`` half of :func:`conflict_advisory`.
+
+    Silent when the incumbent is dated and that date falls outside the
+    conflict window (TAP-6872's population: every pre-header handoff, which
+    must never read as a displacement). Advisory otherwise — either the
+    incumbent is recent enough that a live program could still be reading
+    it, or it has no date at all and so cannot be shown to be stale. Worded
+    as what it is: an incumbent of unestablished ownership was archived, and
+    where — never as a named displacement, which is ``overwritten``'s claim
+    alone.
+    """
+    previous = payload.get("previous") or {}
+    updated_raw = previous.get("updated")
+    if updated_raw is not None:
+        updated = datetime.strptime(updated_raw, "%Y-%m-%dT%H:%M:%SZ").replace(tzinfo=UTC)
+        window_hours = payload.get("window_hours") or 12
+        clock = now if now is not None else datetime.now(UTC)
+        if clock - updated > timedelta(hours=window_hours):
+            return "unknown", [], []
+    archived_to = payload.get("archived_to")
+    where = f" — its copy is at {archived_to}" if archived_to else ""
+    return (
+        "unknown",
+        [f"Archived an incumbent handoff of unestablished ownership{where}"],
+        ["Confirm the archived handoff is not still needed before you continue."],
     )
 
 
