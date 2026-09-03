@@ -440,6 +440,59 @@ class TestEmptyParseIsAnError:
         assert result.ok
 
 
+class TestDroppedSectionsWarning:
+    """TAP-7007: a section that parsed to zero because it holds prose (not
+    because it holds only placeholders) must warn, not lint clean."""
+
+    _PROSE_SUCCESS = _VALID_HANDOFF.replace(
+        "## Success criterion\n- Doctor passes handoff lint\n",
+        "## Success criterion\nDoctor passes handoff lint, no bullets here.\n",
+    )
+
+    def test_prose_section_warns_once_and_states_the_fix(self) -> None:
+        doc = parse_handoff_markdown(self._PROSE_SUCCESS)
+        assert doc.dropped_sections == ["Success criterion"]
+        result = lint_handoff(doc, now=datetime(2026, 6, 11, tzinfo=UTC))
+        assert result.ok
+        matches = [w for w in result.warnings if "Success criterion" in w]
+        assert len(matches) == 1
+        assert "bullets" in matches[0].lower()
+
+    def test_negative_controls_stay_quiet(self) -> None:
+        """Bulleted Success criterion and placeholder-only Blockers stay quiet."""
+        doc = parse_handoff_markdown(_VALID_HANDOFF)
+        assert doc.dropped_sections == []
+        assert not lint_handoff(doc, now=datetime(2026, 6, 11, tzinfo=UTC)).warnings
+
+    def test_all_empty_parse_has_no_per_section_warnings(self) -> None:
+        """Acceptance 4: the TAP-6493 error fires and nothing piles on top."""
+        text = (
+            "# Session handoff\n**Updated:** 2026-06-11T12:00:00Z\n\n"
+            "## Done\nprose with no bullets\n\n## Open\nmore prose\n"
+        )
+        doc = parse_handoff_markdown(text)
+        assert doc.dropped_sections == ["Done", "Open"]
+        result = lint_handoff(doc, now=datetime(2026, 6, 11, tzinfo=UTC))
+        assert not result.ok
+        assert any("zero populated sections" in e for e in result.errors)
+        assert not result.warnings
+
+    def test_duplicate_heading_first_block_prose_is_named(self) -> None:
+        """The field is overwritten by the later duplicate block, but the
+        first block's dropped prose must still be named."""
+        text = (
+            "# Session handoff\n**Updated:** 2026-06-11T12:00:00Z\n\n"
+            "## Done\nprose that never became a bullet\n\n"
+            "## Done\n- shipped it\n\n## Open\n- none\n"
+        )
+        doc = parse_handoff_markdown(text)
+        assert doc.done == ["shipped it"]
+        assert doc.dropped_sections == ["Done"]
+        result = lint_handoff(doc, now=datetime(2026, 6, 11, tzinfo=UTC))
+        assert result.ok
+        assert any("Done" in w for w in result.warnings)
+
+
 class TestDocumentedTemplateRoundTrip:
     """Acceptance 5: every heading the shipped skill documents must map.
 
