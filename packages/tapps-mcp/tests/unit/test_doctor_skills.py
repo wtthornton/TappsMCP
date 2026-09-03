@@ -50,13 +50,20 @@ def test_truncated_managed_block_fails_even_with_every_old_probed_phrase_present
     everything else — real-world false PASS, measured twice by a peer session
     (a 375-line deployed block against a 616-line current emitter). The
     fingerprint check must FAIL on content, not phrase presence.
+
+    TAP-7017 shrank the managed block itself (progressive disclosure moved the
+    bulk of the skill's prose into ``references/``, from ~1,097 lines to under
+    400), so the size floor and the probed-phrase list below track the
+    post-TAP-7017 SKILL.md rather than the pre-TAP-7017 one — the truncation
+    scenario this test exists to catch is unaffected by how large the
+    un-truncated block is.
     """
     (tmp_path / ".mcp.json").write_text("{}", encoding="utf-8")
     generate_skills(tmp_path, "claude")
     skill_md = tmp_path / ".claude" / "skills" / "orchestration-prompt" / "SKILL.md"
     full = skill_md.read_text(encoding="utf-8")
     full_lines = full.splitlines(keepends=True)
-    assert len(full_lines) > 600, "fixture assumes the real template is well over 600 lines"
+    assert len(full_lines) > 100, "fixture assumes the real template is well over 100 lines"
 
     # Derived from content, not a hardcoded line number: as the emitter grows,
     # a literal cut (e.g. line 530) can drift past where a probed phrase now
@@ -64,7 +71,12 @@ def test_truncated_managed_block_fails_even_with_every_old_probed_phrase_present
     # grew from 616 to 992+ lines and pushed "expected-fail" from line 527 to
     # 864). Cut just after the LAST probed phrase's line, so every phrase is
     # always retained regardless of emitter length.
-    probed_phrases = ("validation contract", "expected-fail", "shift boundary", "host-feature-map")
+    probed_phrases = (
+        "validation contract",
+        "expected-fail",
+        "context lifecycle",
+        "host-feature-map",
+    )
     lower_lines = [line.lower() for line in full_lines]
     last_phrase_line = max(
         idx for idx, line in enumerate(lower_lines) if any(p in line for p in probed_phrases)

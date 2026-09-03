@@ -1,4 +1,11 @@
-"""Emitted-body assertions for the orchestration-prompt skill: field rules and verifier-tier rulings (TAP-6858, TAP-6859).
+"""Reference-file assertions for the orchestration-prompt skill: field rules and verifier-tier rulings (TAP-6858, TAP-6859).
+
+TAP-7017 moved "## Field rules" and "## Rulings" out of the SKILL.md managed
+block (which was pushing 19% of a 200k context before any work started) into
+``references/field-rules-and-rulings.md``, reachable from SKILL.md by an
+explicit pointer under "## Field rules, rulings, and verification routing".
+These assertions now read the reference file the emitter produces, not the
+managed block.
 
 Split per topic rather than appended to ``test_platform_skills.py``: that module
 already sits at the maintainability-index gate floor, and a single combined module
@@ -9,15 +16,19 @@ from __future__ import annotations
 
 import pytest
 
-from tapps_mcp.pipeline.platform_skills import CLAUDE_SKILLS
+from tapps_mcp.pipeline.platform_skill_orchestration import (
+    ORCHESTRATION_PROMPT_COMPANION_FILES as COMPANIONS,
+)
 
+_FIELD_RULES_AND_RULINGS = COMPANIONS["references/field-rules-and-rulings.md"]
+_METHOD_DETAIL = COMPANIONS["references/method-detail.md"]
 
 
 class TestFieldRulesTwelve:
     """TAP-6858 — twelve field rules absent from the method, verified by grep."""
 
     def _field_rules_section(self) -> str:
-        body = CLAUDE_SKILLS["orchestration-prompt"]
+        body = _FIELD_RULES_AND_RULINGS
         section = body.split("## Field rules", 1)[1]
         return section.split("\n## Rulings", 1)[0]
 
@@ -47,23 +58,25 @@ class TestFieldRulesTwelve:
         for n in range(1, 13):
             assert f"\n{n}. " in section or section.startswith(f"{n}. ")
 
+
 class TestVerifierTierAuthorityAndRulings:
     """TAP-6859 — the proof-shape table is authoritative; eight rulings pin edge cases."""
 
     def test_no_restatement_of_losing_verifier_tier_formulation(self) -> None:
-        body = CLAUDE_SKILLS["orchestration-prompt"]
-        assert "inherit the runner at high effort" not in body
+        assert "inherit the runner at high effort" not in _METHOD_DETAIL
 
     def test_authority_statement_present(self) -> None:
-        body = CLAUDE_SKILLS["orchestration-prompt"]
+        # "This table is authoritative" refers to the proof-shape tier table in
+        # method §5 (the verifier-tiering discussion), which lives in
+        # references/method-detail.md — not the field-rules-and-rulings file.
+        body = _METHOD_DETAIL
         assert "This table is authoritative" in body
         assert "pin explicitly, for a named reason" in body
         assert "never" in body.split("This table is authoritative", 1)[1][:300]
 
     def _rulings_section(self) -> str:
-        body = CLAUDE_SKILLS["orchestration-prompt"]
-        section = body.split("## Rulings", 1)[1]
-        return section.split("\n## Guardrails", 1)[0]
+        body = _FIELD_RULES_AND_RULINGS
+        return body.split("## Rulings", 1)[1]
 
     @pytest.mark.parametrize(
         "marker",

@@ -10,12 +10,18 @@ Covers three concerns:
 
 from __future__ import annotations
 
+import pytest
+
 from tapps_mcp.distribution.doctor import check_orchestration_prompt_skill_current
+from tapps_mcp.pipeline.platform_skill_orchestration import (
+    ORCHESTRATION_PROMPT_SKILL_BODY,
+)
 from tapps_mcp.pipeline.platform_skills import generate_skills
 from tapps_mcp.pipeline.skill_asset_policy import policy_header
 from tapps_mcp.pipeline.skill_managed_block import (
     MARKER_BEGIN_PREFIX,
     MARKER_END,
+    extract_block,
     install_or_refresh_skill,
     wrap_with_markers,
 )
@@ -56,17 +62,23 @@ class TestScaffold:
         assert content[begin_line_end:].startswith(warning)
 
     def test_body_carries_the_four_enhancements(self, tmp_path):
+        """TAP-7017 moved most method elaboration to references/method-detail.md,
+        reachable from SKILL.md by an explicit pointer; the disclosure surface
+        (managed block + reference) is what carries these phrases now."""
         generate_skills(tmp_path, "claude")
-        content = (_skill_dir(tmp_path) / "SKILL.md").read_text().lower()
+        d = _skill_dir(tmp_path)
+        content = (d / "SKILL.md").read_text().lower()
+        method = (d / "references" / "method-detail.md").read_text().lower()
+        surface = content + "\n" + method
         # 1. independent adversarial verifier
-        assert "verifier subagent" in content
-        assert "refute" in content
+        assert "verifier subagent" in surface
+        assert "refute" in surface
         # 2. model / effort tiering
-        assert "model tier" in content
+        assert "model tier" in surface
         # 3. ground-truth over LLM-judge
-        assert "ground truth" in content or "ground-truth" in content
+        assert "ground truth" in surface or "ground-truth" in surface
         # 4. context hygiene
-        assert "context hygiene" in content
+        assert "context hygiene" in surface
 
     def test_body_and_template_carry_missions_contract_loop(self, tmp_path):
         """TAP-5552 / ADR-0034: validation contract + expected-fail fix loop."""
@@ -84,21 +96,29 @@ class TestScaffold:
         assert "missions → orchestration-prompt" in ref or "missions" in ref
 
     def test_body_and_template_carry_wayfind_fog_gate(self, tmp_path):
-        """TAP-5495: fog preflight, decide-vs-execute taxonomy, wayfind resume."""
+        """TAP-5495: fog preflight, decide-vs-execute taxonomy, wayfind resume.
+
+        TAP-7017: SKILL.md carries the condensed index (fog preflight refusal +
+        the /tapps-wayfind redirect); the full elaboration — the "do not invent
+        a Goal" statement, the taxonomy subheading, the cold-start resume detail
+        — lives in references/method-detail.md, pointed at from SKILL.md.
+        """
         generate_skills(tmp_path, "claude")
         d = _skill_dir(tmp_path)
         content = (d / "SKILL.md").read_text().lower()
+        method = (d / "references" / "method-detail.md").read_text().lower()
         tpl = (d / "assets" / "prompt-template.md").read_text().lower()
         ref = (d / "references" / "claude-feature-map.md").read_text().lower()
-        # method §0 fog preflight + redirect
+        # method §0 fog preflight + redirect — condensed index, in SKILL.md itself
         assert "wayfind fog preflight" in content
         assert "/tapps-wayfind" in content
-        assert "do not invent a goal while the route is still foggy" in content
+        # full elaboration — references/method-detail.md
+        assert "do not invent a goal while the route is still foggy" in method
         # decide-vs-execute taxonomy
-        assert "decide-vs-execute chunk taxonomy" in content
-        assert "research-to-decide" in content
+        assert "decide-vs-execute chunk taxonomy" in method
+        assert "research-to-decide" in method
         # cold-start resume
-        assert "memory_group=wayfind" in content
+        assert "memory_group=wayfind" in method
         # companion Prerequisites / Wayfind gate
         assert "prerequisites / wayfind gate" in tpl
         assert "memory_group=wayfind" in tpl
@@ -114,14 +134,17 @@ class TestScaffold:
         assert "verifier subagent" in tpl
 
     def test_body_and_template_carry_harness_compatibility(self, tmp_path):
+        """TAP-7017: method §6's harness-preflight rule and the Guardrails'
+        adopt-or-override phrasing both moved to reference files — full
+        elaboration in method-detail.md, the Guardrails restatement in
+        guardrails-and-contracts.md — reachable from SKILL.md by pointer."""
         generate_skills(tmp_path, "claude")
         d = _skill_dir(tmp_path)
-        content = (d / "SKILL.md").read_text().lower()
-        # method §6: the emitted prompt must survive the project's own hooks
-        # (PreToolUse gates) and MCP standing nudges — adopt or override each.
-        # The rule stays in SKILL.md; the sweep checklist lives in the companion.
-        assert "harness preflight" in content
-        assert "adopt or override" in content or "adopted or overridden" in content
+        method = (d / "references" / "method-detail.md").read_text().lower()
+        guardrails = (d / "references" / "guardrails-and-contracts.md").read_text().lower()
+        assert "harness preflight" in method
+        assert "adopt or override" in method or "adopted or overridden" in method
+        assert "adopt or override" in guardrails or "adopted or overridden" in guardrails
         ref = (d / "references" / "cold-start-and-verify.md").read_text().lower()
         assert "harness-compatibility sweep" in ref
         tpl = (d / "assets" / "prompt-template.md").read_text().lower()
@@ -129,11 +152,14 @@ class TestScaffold:
 
     def test_capability_preflight_is_carried(self, tmp_path):
         """A granted tool that silently refuses is the AgentForge cornhole failure:
-        the loop degrades into a confident wrong answer that reads as success."""
+        the loop degrades into a confident wrong answer that reads as success.
+
+        TAP-7017: the rule lives in references/method-detail.md now, alongside
+        the rest of method §3's elaboration."""
         generate_skills(tmp_path, "claude")
         d = _skill_dir(tmp_path)
-        content = (d / "SKILL.md").read_text().lower()
-        assert "preflight the mechanism before you commit" in content
+        method = (d / "references" / "method-detail.md").read_text().lower()
+        assert "preflight the mechanism before you commit" in method
         ref = (d / "references" / "cold-start-and-verify.md").read_text().lower()
         assert "a grant is not a capability" in ref
 
@@ -154,12 +180,18 @@ class TestScaffold:
             assert canonical in ref, f"missing loops.md anti-pattern: {canonical}"
 
     def test_body_carries_shift_boundaries_and_host_map(self, tmp_path):
-        """v3.12.74: §7 shift boundaries + host-feature-map companion."""
+        """v3.12.74: §7 shift boundaries + host-feature-map companion.
+
+        TAP-7017: method §7's full elaboration moved to references/method-detail.md;
+        SKILL.md keeps only the one-line index item ("Context lifecycle — recycle
+        at every sub-goal boundary"), and Output (kept in full) still requires the
+        prompt to name the boundary explicitly.
+        """
         generate_skills(tmp_path, "claude")
         d = _skill_dir(tmp_path)
-        content = (d / "SKILL.md").read_text().lower()
-        assert "checkpoint the context window" in content or "shift boundary" in content
-        assert "handoff-session" in content
+        method = (d / "references" / "method-detail.md").read_text().lower()
+        assert "checkpoint the context window" in method or "shift boundary" in method
+        assert "handoff-session" in method
         host = d / "references" / "host-feature-map.md"
         assert host.exists()
         assert "claude code" in host.read_text().lower()
@@ -173,40 +205,52 @@ class TestScaffold:
         assert (_skill_dir(tmp_path, "cursor") / "SKILL.md").exists()
         assert (_skill_dir(tmp_path, "cursor") / "references" / "claude-feature-map.md").exists()
 
-    def test_multi_session_and_cost_discipline_sections_ship_inside_the_managed_block(
+    def test_multi_session_and_cost_discipline_sections_ship_in_a_regenerated_reference(
         self, tmp_path
     ):
-        """TAP-6885: these two sections used to survive only in one repo below its
+        """TAP-6885: these two sections used to survive only in one repo below the
 
-        END marker, where upgrade never touches them. Both must now be emitted
-        from the shipped template, and — the whole point of the fix — sit
-        *inside* the BEGIN/END span so a refresh actually propagates them.
+        SKILL.md END marker, where upgrade never touches them. The fix was to ship
+        them from the platform emitter so a refresh actually propagates them.
+
+        TAP-7017: SKILL.md's managed block was pushing 19% of a 200k context before
+        any work started, so the section moved out of the block into
+        ``references/multi-session-programs.md`` — a companion doc that
+        ``generate_skills(..., overwrite=True)`` regenerates on every upgrade
+        exactly like the managed block does (see TestSmartMerge.
+        test_companion_docs_refresh_on_upgrade). Being *regenerated on upgrade* was
+        the actual property TAP-6885 needed; the managed block was one way to get
+        it, not the only one. SKILL.md carries an explicit pointer to the file.
         """
         generate_skills(tmp_path, "claude")
-        content = (_skill_dir(tmp_path) / "SKILL.md").read_text()
+        d = _skill_dir(tmp_path)
+        skill_md = (d / "SKILL.md").read_text()
+        multi_session = (d / "references" / "multi-session-programs.md").read_text()
 
-        begin_idx = content.index(f"{MARKER_BEGIN_PREFIX} {SKILL} v")
-        end_idx = content.index(MARKER_END)
-        multi_session_idx = content.index("## Multi-session programs")
-        cost_discipline_idx = content.index("### Cost discipline")
-
-        assert begin_idx < multi_session_idx < end_idx, (
-            "Multi-session programs section is not inside the managed block"
+        assert "references/multi-session-programs.md" in skill_md, (
+            "SKILL.md must point at the moved section explicitly"
         )
-        assert begin_idx < cost_discipline_idx < end_idx, (
-            "Cost discipline section is not inside the managed block"
-        )
+        assert "## Multi-session programs" in multi_session
+        assert "### Cost discipline" in multi_session
 
         # References the standalone rule rather than restating its protocol.
-        assert ".claude/rules/agent-to-agent.md" in content
-        assert "nine bad probes were nearly all" not in content
-        assert "All-pairs is N(N-1)/2" not in content
-        assert "the other three were never asked" not in content
+        assert ".claude/rules/agent-to-agent.md" in multi_session
+        assert "nine bad probes were nearly all" not in multi_session
+        assert "All-pairs is N(N-1)/2" not in multi_session
+        assert "the other three were never asked" not in multi_session
+
+        # The reference regenerates on upgrade, same as any other companion doc.
+        ref_path = d / "references" / "multi-session-programs.md"
+        ref_path.write_text("stale\n", encoding="utf-8")
+        generate_skills(tmp_path, "claude", overwrite=True)
+        assert "## Multi-session programs" in ref_path.read_text()
 
     def test_multi_session_sections_are_absent_from_the_nlt_orchestrator_source(self, tmp_path):
         """The platform template must never carry the source repo's identity."""
         generate_skills(tmp_path, "claude")
-        content = (_skill_dir(tmp_path) / "SKILL.md").read_text()
+        d = _skill_dir(tmp_path)
+        content = (d / "SKILL.md").read_text()
+        content += (d / "references" / "multi-session-programs.md").read_text()
         assert "nlt-orchestrator" not in content
 
 
@@ -322,3 +366,50 @@ class TestDoctorCheck:
         result = check_orchestration_prompt_skill_current(tmp_path)
         assert not result.ok
         assert "stale content" in result.message
+
+
+class TestManagedBlockLineCeiling:
+    """TAP-7017 — the managed block must stay under 400 lines.
+
+    Before TAP-7017 the emitted managed block was 1,097 lines (148,723 B,
+    ~37,000 tokens in nlt-orchestrator) — roughly 19% of a 200k context spent
+    before any work started. Progressive disclosure moved the bulk into
+    ``references/``; this is the negative control that keeps it from creeping
+    back: it demonstrates the assertion actually *fails* on an oversized
+    block, not just that today's block happens to pass.
+    """
+
+    LINE_CEILING = 400
+
+    @staticmethod
+    def _managed_block_line_count(skill_md_text: str) -> int:
+        block = extract_block(skill_md_text)
+        assert block is not None, "no managed block found in SKILL.md"
+        return len(block.splitlines())
+
+    def test_emitted_managed_block_is_under_the_ceiling(self, tmp_path) -> None:
+        generate_skills(tmp_path, "claude")
+        skill_md = (_skill_dir(tmp_path) / "SKILL.md").read_text(encoding="utf-8")
+        count = self._managed_block_line_count(skill_md)
+        assert count < self.LINE_CEILING, (
+            f"managed block grew to {count} lines (ceiling {self.LINE_CEILING}) — "
+            "move the new content behind an explicit references/ pointer instead "
+            "of inlining it in SKILL.md"
+        )
+
+    def test_the_ceiling_assertion_actually_fails_on_an_oversized_block(self) -> None:
+        """Negative control: prove the check discriminates, not just that it's green.
+
+        A padded copy of the real block, well past the ceiling, must fail the
+        same assertion the previous test makes — otherwise the "ceiling" is a
+        rubber stamp that would never catch a regression.
+        """
+        padding = "\nfiller line for the negative control\n" * self.LINE_CEILING
+        oversized_body = ORCHESTRATION_PROMPT_SKILL_BODY + padding
+        oversized_skill_md = wrap_with_markers(oversized_body, SKILL, version="9.9.9")
+
+        count = self._managed_block_line_count(oversized_skill_md)
+        assert count >= self.LINE_CEILING, "test setup failed to actually exceed the ceiling"
+
+        with pytest.raises(AssertionError):
+            assert count < self.LINE_CEILING

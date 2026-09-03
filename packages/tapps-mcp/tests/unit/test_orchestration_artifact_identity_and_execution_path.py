@@ -55,7 +55,19 @@ def skill_dir(consumer_root):
 
 @pytest.fixture
 def body(skill_dir):
-    return (skill_dir / "SKILL.md").read_text(encoding="utf-8")
+    """TAP-7017: the Guardrails-every-prompt list (which carries both the
+
+    artifact-identity and execution-path-proof bullets) and method §3/§5
+    (which carry the proof-shape table and the derived-state coupling test)
+    moved out of SKILL.md's managed block into reference files, reachable
+    from SKILL.md by an explicit pointer.
+    """
+    skill_md = (skill_dir / "SKILL.md").read_text(encoding="utf-8")
+    method = (skill_dir / "references" / "method-detail.md").read_text(encoding="utf-8")
+    guardrails = (skill_dir / "references" / "guardrails-and-contracts.md").read_text(
+        encoding="utf-8"
+    )
+    return "\n".join((skill_md, method, guardrails))
 
 
 @pytest.fixture
