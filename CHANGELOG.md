@@ -41,6 +41,34 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   the capability in tapps-mcp; it reaches the running MCP fleet only after a
   release and blue/green flip.
 
+## [3.12.82] - 2026-09-03
+
+### Fixed
+
+- **The handoff CLI now speaks the conflict advisory, and `unknown` is
+  narrowed to recency** (TAP-7008, `543b758e`) — `cli_handoff.handoff_write`
+  now calls `conflict_advisory` and prints its warnings and `next_steps` to
+  stderr, and carries `conflict_status` in its JSON payload, matching the
+  MCP `tapps_handoff_save` path. `conflict_advisory` gains a live `unknown`
+  branch: an incumbent with no `**Program**` header is advised when its
+  `Updated` timestamp is inside the conflict window or missing entirely, and
+  stays silent only when it is dated and demonstrably stale.
+- **Handoff lint now warns when a recognized section holds prose, not just
+  zero bullets** (TAP-7007, `53b5012b`) — `_extract_bullets` silently
+  dropped any line that was not a bullet, so a recognized section written
+  as prose parsed to `[]` with no signal. `HandoffDocument.dropped_sections`
+  now names each dropped heading (per-block, so a duplicate heading's lost
+  first block is still named), and `lint_handoff` warns on it, guarded on
+  `empty_parse_error` being `None` so the all-empty case still reports
+  exactly one error.
+- **`_unknown_advisory` no longer crashes on an unparseable date** (TAP-7008,
+  `14ac1bf6`) — `previous.updated` could arrive as anything the guard's own
+  payload didn't guarantee (a mocked write result hands it back as a
+  `MagicMock`), and `datetime.strptime` raised `TypeError` straight out of
+  an otherwise successful handoff write. A value that cannot be parsed is
+  now treated the same as a missing one: it cannot be shown to be stale, so
+  it gets the advisory instead of a crash.
+
 ## [3.12.78] - 2026-08-28
 
 ### Fixed
