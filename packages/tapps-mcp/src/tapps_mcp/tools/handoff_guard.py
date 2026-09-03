@@ -177,15 +177,29 @@ def _unknown_advisory(
     conflict window (TAP-6872's population: every pre-header handoff, which
     must never read as a displacement). Advisory otherwise — either the
     incumbent is recent enough that a live program could still be reading
-    it, or it has no date at all and so cannot be shown to be stale. Worded
-    as what it is: an incumbent of unestablished ownership was archived, and
-    where — never as a named displacement, which is ``overwritten``'s claim
-    alone.
+    it, or it has no date at all (or one that cannot be parsed) and so
+    cannot be shown to be stale. Worded as what it is: an incumbent of
+    unestablished ownership was archived, and where — never as a named
+    displacement, which is ``overwritten``'s claim alone.
+
+    A ``previous`` that is present but not itself a ``dict`` (never true of a
+    real :func:`guarded_write` payload — ``HandoffIdentity.as_payload`` always
+    returns one, or ``previous`` is ``None``) means there is no incumbent
+    record to read a date from at all; that is reported exactly like
+    ``off``/``clear``, with nothing to say, rather than guessed at.
     """
-    previous = payload.get("previous") or {}
+    previous_raw = payload.get("previous")
+    if previous_raw is not None and not isinstance(previous_raw, dict):
+        return "unknown", [], []
+    previous = previous_raw or {}
     updated_raw = previous.get("updated")
+    updated: datetime | None = None
     if updated_raw is not None:
-        updated = datetime.strptime(updated_raw, "%Y-%m-%dT%H:%M:%SZ").replace(tzinfo=UTC)
+        try:
+            updated = datetime.strptime(updated_raw, "%Y-%m-%dT%H:%M:%SZ").replace(tzinfo=UTC)
+        except (TypeError, ValueError):
+            updated = None
+    if updated is not None:
         window_hours = payload.get("window_hours") or 12
         clock = now if now is not None else datetime.now(UTC)
         if clock - updated > timedelta(hours=window_hours):

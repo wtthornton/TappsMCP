@@ -15,12 +15,12 @@ import json
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 from click.testing import CliRunner
 
-from tapps_mcp.tools.handoff_guard import handoff_archive_dir
+from tapps_mcp.tools.handoff_guard import conflict_advisory, handoff_archive_dir
 from tapps_mcp.tools.handoff_schema import (
     handoff_memory_key,
     handoff_path,
@@ -443,6 +443,29 @@ class TestTheConflictSignalReachesTheAgent:
         assert result["data"]["conflict_status"] == "unknown"
         assert result["degraded"] is True
         assert any("unestablished ownership" in w for w in result["data"]["warnings"])
+
+    def test_an_unparseable_updated_value_is_advised_not_raised(self) -> None:
+        """``previous.updated`` that is not a parseable timestamp (TAP-7008 regression).
+
+        The MCP save path drives a mocked write result in
+        ``test_handoff_write.py``, so ``updated`` can arrive as something
+        that is not even a string (a ``MagicMock``, in that suite). A value
+        that fails to parse cannot be shown to be stale any more than a
+        missing one can, so it must take the same branch as ``None`` — the
+        advisory — rather than propagating a ``TypeError``/``ValueError``
+        out of ``strptime``.
+        """
+        payload = {
+            "foreign": "unknown",
+            "previous": {"updated": MagicMock()},
+            "archived_to": None,
+        }
+
+        status, warnings, next_steps = conflict_advisory(payload)
+
+        assert status == "unknown"
+        assert any("unestablished ownership" in w for w in warnings)
+        assert next_steps
 
 
 class TestTheCliSurface:
