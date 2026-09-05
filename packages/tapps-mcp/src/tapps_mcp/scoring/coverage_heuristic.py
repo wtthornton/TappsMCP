@@ -68,15 +68,41 @@ def _test_roots(root: Path) -> tuple[Path, ...]:
     )
 
 
+@lru_cache(maxsize=256)
+def _member_defines_stem(member: Path, stem: str) -> bool:
+    """True when *member* has its own source file literally named ``{stem}.py``.
+
+    A workspace member's ``test_{stem}.py`` tests *that member's* ``{stem}.py``
+    when one exists there — it is already spoken for and must not also be
+    credited to an unrelated top-level file (e.g. a ``scripts/`` entry) that
+    merely happens to share the stem (TAP-5847: ``scripts/eval-descriptions/
+    report.py`` was being credited by ``packages/tapps-mcp/tests/unit/
+    test_report.py``, which actually tests ``tapps_mcp/project/report.py``).
+    """
+    return any(
+        not any(part in {"tests", "test"} for part in candidate.relative_to(member).parts)
+        for candidate in member.rglob(f"{stem}.py")
+    )
+
+
 def _count_test_files(root: Path, stem: str) -> tuple[int, int]:
     """Count exact and fuzzy test file matches for a module stem.
 
     Returns (exact_count, fuzzy_count).
+
+    Workspace-member test directories (TAP-5619) are searched like the local
+    ``root/tests`` — except when the member itself defines a same-stem source
+    file, in which case its matching test file is already claimed by that
+    file and is skipped for this ``root`` (TAP-5847 stem collision).
     """
     exact_patterns = [f"test_{stem}.py", f"{stem}_test.py"]
     exact_count = 0
     fuzzy_count = 0
+    members = set(_workspace_members(root))
     for td_path in _test_roots(root):
+        member = next((m for m in members if td_path == m or m in td_path.parents), None)
+        if member is not None and _member_defines_stem(member, stem):
+            continue
         for pat in exact_patterns:
             if (td_path / pat).exists():
                 exact_count += 1
@@ -120,6 +146,15 @@ def _text_imports_module(text: str, module: str) -> bool:
             rf"(?m)^\s*from\s+[\w.]+\s+import\s+\(.*?\b{escaped}\b",
             rf"(?m)^\s*from\s+[\w.]+\s+import\s+[^\n]*\b{escaped}\b",
         ])
+        if "importlib" in text and re.search(rf"""['"]{escaped}['"]""", text):
+            # TAP-5847: a script with no importable package path (a bare
+            # `scripts/` entry) is often loaded by path instead of a plain
+            # `import` statement — importlib.import_module(...),
+            # spec_from_file_location(...), or a local wrapper around either
+            # — always naming the module by its bare stem as a string
+            # literal, never as an `import <name>` statement a regex for
+            # real imports can match.
+            return True
     return any(re.search(pat, text) for pat in patterns)
 
 

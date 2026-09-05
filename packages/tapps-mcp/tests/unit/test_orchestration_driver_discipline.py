@@ -57,7 +57,18 @@ def template(skill_dir):
 
 @pytest.fixture
 def body(skill_dir):
-    return (skill_dir / "SKILL.md").read_text(encoding="utf-8")
+    """TAP-7017: method §3's elaboration and the Guardrails-every-prompt list
+
+    moved out of SKILL.md's managed block into reference files, reachable from
+    SKILL.md by an explicit pointer. Callers that need the full driver-discipline
+    prose read the union of SKILL.md + those two references.
+    """
+    skill_md = (skill_dir / "SKILL.md").read_text(encoding="utf-8")
+    method = (skill_dir / "references" / "method-detail.md").read_text(encoding="utf-8")
+    guardrails = (skill_dir / "references" / "guardrails-and-contracts.md").read_text(
+        encoding="utf-8"
+    )
+    return "\n".join((skill_md, method, guardrails))
 
 
 class TestTemplateDriverDiscipline:

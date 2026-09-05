@@ -22,7 +22,9 @@ from tapps_mcp.distribution.doctor_result import CheckResult, consumer_staleness
 # with other required inputs (``agents_md``, ``tech_stack_md``,
 # ``mcp_config``, ...) has no single honest "shadow render" to diff against
 # without dragging in that generator's whole call graph. Those report
-# ``unsupported`` below rather than a guessed verdict.
+# ``unsupported`` below rather than a guessed verdict. ``claude_md`` is
+# handled separately (see :func:`_claude_md_drift_state`) — it is a
+# managed-*block* file, not a full-overwrite template.
 _DRIFT_CHECKABLE_RULE_GENERATORS: dict[str, str] = {
     "python_quality_rule": "generate_claude_python_quality_rule",
     "agent_scope_rule": "generate_claude_agent_scope_rule",
@@ -63,6 +65,28 @@ def _shadow_render_skip_key(skip_key: str, rel_path: str, engagement_level: str)
         return rendered_path.read_text(encoding="utf-8")
 
 
+def _claude_md_drift_state(project_root: Path, rel_path: str, engagement_level: str) -> str:
+    """Return ``"identical"`` or ``"diverged"`` for the ``claude_md`` token.
+
+    CLAUDE.md is not a full-overwrite template like the ten rule files above
+    — most of it is project-specific prose ``tapps_upgrade`` never touches.
+    Only the marker-wrapped TAPPS obligations block (plus the version stamp)
+    is upgrade-managed, so drift is judged by actually running the real
+    merge the upgrade would run and checking whether it changes anything —
+    not by diffing the whole file, which would call every project's own
+    prose "diverged".
+
+    Assumes *rel_path* exists; the caller checks that first.
+    """
+    from tapps_mcp.pipeline.claude_md import merge_claude_md
+    from tapps_mcp.prompts.prompt_loader import load_platform_rules
+
+    current = (project_root / rel_path).read_text(encoding="utf-8")
+    obligations_content = load_platform_rules("claude", engagement_level=engagement_level)
+    merged, changes = merge_claude_md(current, obligations_content)
+    return "diverged" if changes or merged != current else "identical"
+
+
 @consumer_staleness
 def check_upgrade_skip_token_drift(project_root: Path) -> CheckResult:
     """Report identical/diverged/missing/unsupported for each applied skip token.
@@ -101,7 +125,14 @@ def check_upgrade_skip_token_drift(project_root: Path) -> CheckResult:
         if not target.exists():
             missing.append(rel_path)
             continue
-        if target.is_dir() or skip_key not in _DRIFT_CHECKABLE_RULE_GENERATORS:
+        if target.is_dir():
+            unsupported.append(rel_path)
+            continue
+        if skip_key == "claude_md":
+            state = _claude_md_drift_state(project_root, rel_path, engagement_level)
+            (identical if state == "identical" else diverged).append(rel_path)
+            continue
+        if skip_key not in _DRIFT_CHECKABLE_RULE_GENERATORS:
             unsupported.append(rel_path)
             continue
         rendered = _shadow_render_skip_key(skip_key, rel_path, engagement_level)

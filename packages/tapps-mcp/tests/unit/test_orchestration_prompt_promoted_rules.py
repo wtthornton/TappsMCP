@@ -1,33 +1,41 @@
-"""Emitted-body assertions for the orchestration-prompt skill: verification routing
-and honest reporting (TAP-6948 Story 4).
+"""Reference-file assertions for the orchestration-prompt skill: verification
+routing and honest reporting (TAP-6948 Story 4).
 
 These rules were working only in a consuming project's region below the END marker,
-so they reached no other project. The tests pin them to the managed block.
+so they reached no other project. TAP-7017 promoted them into the managed skill and
+then, once promoted, moved the section out of SKILL.md's managed block (which was
+approaching 20% of a 200k context before any work started) into
+``references/verification-routing.md`` — reachable from SKILL.md via an explicit
+pointer under "## Field rules, rulings, and verification routing". These tests
+now read that reference file, which the emitter regenerates on every
+``tapps_upgrade`` exactly like the managed block.
 """
 
 from __future__ import annotations
 
 import pytest
 
-from tapps_mcp.pipeline.platform_skills import CLAUDE_SKILLS
+from tapps_mcp.pipeline.platform_skill_orchestration import (
+    ORCHESTRATION_PROMPT_COMPANION_FILES as COMPANIONS,
+)
+
+_VERIFICATION_ROUTING = COMPANIONS["references/verification-routing.md"]
 
 
 def _section() -> str:
-    body = CLAUDE_SKILLS["orchestration-prompt"]
-    return body.split("## Verification routing and honest reporting", 1)[1].split(
-        "\n## Guardrails every emitted prompt must carry", 1
-    )[0]
+    body = _VERIFICATION_ROUTING
+    return body.split("## Verification routing and honest reporting", 1)[1]
 
 
 class TestPromotedVerificationRules:
     """TAP-6948 Story 4 — transferable local content merged into the managed block."""
 
     def test_section_precedes_the_guardrails_cargo(self) -> None:
-        body = CLAUDE_SKILLS["orchestration-prompt"]
+        # The Guardrails-every-prompt section now lives in a separate reference
+        # file (references/guardrails-and-contracts.md); this section's job is
+        # simply to exist, in full, ahead of its own next content.
+        body = _VERIFICATION_ROUTING
         assert "## Verification routing and honest reporting" in body
-        assert body.index("## Verification routing and honest reporting") < body.index(
-            "## Guardrails every emitted prompt must carry"
-        )
 
     @pytest.mark.parametrize(
         "marker",

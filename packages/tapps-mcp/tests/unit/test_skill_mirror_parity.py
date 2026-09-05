@@ -59,8 +59,12 @@ def test_single_byte_divergence_in_one_skill_does_not_mask_others(tmp_path: Path
     generate_skills(tmp_path, "cursor")
 
     cursor_path = _skill_md(tmp_path, "cursor", "orchestration-prompt")
+    cursor_text = cursor_path.read_text(encoding="utf-8")
+    assert "context lifecycle" in cursor_text.lower(), (
+        "fixture assumes this phrase is present in the managed block"
+    )
     cursor_path.write_text(
-        cursor_path.read_text(encoding="utf-8").replace("shift boundary", "shift limit"),
+        cursor_text.replace("Context lifecycle", "Context limit"),
         encoding="utf-8",
     )
 

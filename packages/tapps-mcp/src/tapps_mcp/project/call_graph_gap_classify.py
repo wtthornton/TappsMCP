@@ -177,7 +177,16 @@ def reclassify_external_attr_gaps(
     that ``update_call_graph_index`` persists stays at its original reason and the
     derived label is recomputed on every finalize (byte-equivalence, ADR-0004).
     """
-    simple_names = {name.rsplit(".", maxsplit=1)[-1] for name in symbol_names}
+    # TAP-6641: a qualified name like ``mymod.Widget.__init__`` only exposes
+    # ``__init__`` as its leaf — the middle segment ``Widget`` is the in-repo
+    # class itself, and an attribute call naming that class on an untyped
+    # receiver (``mod.Widget()``) must not be relabelled external just because
+    # no symbol's *leaf* is literally "Widget". The index has no dedicated
+    # class kind (``SymbolKind`` is function/method only), so every dotted
+    # segment of a qualified name is a candidate in-repo name, not only the
+    # last — consistent with this function's existing over-count-never-under-
+    # count direction (see module docstring).
+    simple_names = {part for name in symbol_names for part in name.split(".") if part}
     out: list[ResolutionGap] = []
     for gap in gaps:
         if (

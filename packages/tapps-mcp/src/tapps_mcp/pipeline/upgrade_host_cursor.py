@@ -1,8 +1,11 @@
 """cursor artifact upgrades under one shared plan (TAP-6913).
 
-Cursor artifacts sit outside the ``upgrade_skip_files`` vocabulary, so every
-component here passes ``skip_key=None``. Otherwise the shape is the same as the
-claude-code host: one plan, one write step selected by ``dry_run``.
+``hooks``, ``agents``, and ``skills`` mirror the Cursor directory tokens added
+in TAP-7054 (``cursor_hooks``, ``cursor_agents``, ``cursor_skills``). The
+remaining components (``cursor_rules``, ``docs_automation``,
+``cursor_rule_types``) have no covering token, so they keep ``skip_key=None``.
+Otherwise the shape is the same as the claude-code host: one plan, one write
+step selected by ``dry_run``.
 """
 
 from __future__ import annotations
@@ -68,8 +71,9 @@ def _apply_cursor_hooks(ctx: HostContext) -> dict[str, Any]:
 def upgrade_cursor(ctx: HostContext) -> None:
     """Upgrade every cursor artifact under one shared plan.
 
-    Cursor artifacts are outside the ``upgrade_skip_files`` vocabulary, so every
-    component here passes ``skip_key=None``.
+    ``hooks``, ``agents``, and ``skills`` are covered by the ``cursor_hooks``,
+    ``cursor_agents``, and ``cursor_skills`` tokens (TAP-7054); the rest of the
+    components have no covering token and pass ``skip_key=None``.
     """
     from tapps_mcp.pipeline.init import _bootstrap_cursor
     from tapps_mcp.pipeline.platform_docs_automation import CURSOR_DOCS_SKILLS
@@ -94,7 +98,7 @@ def upgrade_cursor(ctx: HostContext) -> None:
         resolve_component(
             ctx,
             "hooks",
-            skip_key=None,
+            skip_key="cursor_hooks",
             plan=lambda: _plan_cursor_hooks(ctx),
             apply=lambda: _apply_cursor_hooks(ctx),
         )
@@ -105,7 +109,7 @@ def upgrade_cursor(ctx: HostContext) -> None:
     resolve_component(
         ctx,
         "agents",
-        skip_key=None,
+        skip_key="cursor_agents",
         plan=lambda: {
             "action": "would-write-managed-files",
             "managed_files": sorted(managed_agents),
@@ -119,7 +123,7 @@ def upgrade_cursor(ctx: HostContext) -> None:
     resolve_component(
         ctx,
         "skills",
-        skip_key=None,
+        skip_key="cursor_skills",
         plan=lambda: plan_skills(ctx, "cursor", CURSOR_SKILLS),
         apply=lambda: apply_skills(
             ctx,

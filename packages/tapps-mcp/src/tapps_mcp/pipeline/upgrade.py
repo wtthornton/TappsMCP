@@ -385,9 +385,11 @@ def _upgrade_repo_artifacts(
         for component in ("ci_workflows", "github_copilot", "github_templates", "governance"):
             result["components"][component] = {"action": "skipped (mcp_only)"}
     elif dry_run:
-        dry_run_github_artifacts(project_root, result)
+        dry_run_github_artifacts(project_root, result, skip_files=options.skip_files)
     else:
-        run_github_artifacts(project_root, result, force=force)
+        run_github_artifacts(
+            project_root, result, force=force, skip_files=options.skip_files
+        )
 
     install_start_program_script(
         project_root, result, mcp_only=mcp_only, skip_files=options.skip_files, dry_run=dry_run
