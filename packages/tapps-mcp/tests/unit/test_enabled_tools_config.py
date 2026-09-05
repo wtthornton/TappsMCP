@@ -177,10 +177,11 @@ class TestResolveAllowedTools:
         settings.tool_preset = "nlt-setup"
         allowed = _resolve_allowed_tools(settings)
         assert allowed == TOOL_PROFILE_NLT_SETUP
-        # 7 setup/bootstrap tools + tapps_session_start (shared bootstrap tool
-        # so a bare session_start() resolves on nlt-setup, not just nlt-build).
-        assert len(allowed) == 8
-        assert "tapps_session_start" in allowed
+        # TAP-7018: tapps_session_start's real implementation moved to
+        # nlt-build only; nlt-setup resolves the name via a pointer stub
+        # registered in server_pipeline_tools.register(), not this frozenset.
+        assert len(allowed) == 7
+        assert "tapps_session_start" not in allowed
 
     def test_preset_nlt_code_quality_alias(self) -> None:
         from tapps_mcp.server import TOOL_PROFILE_NLT_BUILD, _resolve_allowed_tools
@@ -203,21 +204,22 @@ class TestResolveAllowedTools:
         assert allowed == TOOL_PROFILE_NLT_SETUP
 
     def test_nlt_profiles_disjoint(self) -> None:
-        # The three tapps-mcp profiles are disjoint EXCEPT for tapps_session_start,
-        # which is intentionally shared: the server banner + session_start_gate
-        # require it to be callable first on whichever profile the agent reaches,
-        # so it is registered on build, memory, and setup. Any OTHER overlap is
-        # still a bug this guard should catch.
+        # TAP-7018: the three tapps-mcp profiles are now fully disjoint.
+        # tapps_session_start used to be intentionally duplicated across all
+        # three so the name would resolve on whichever profile the agent
+        # reached first; it now registers its real implementation on
+        # nlt-build only, and nlt-memory/nlt-setup resolve it via a pointer
+        # stub (server_pipeline_tools.register()) instead of a frozenset
+        # entry, so no overlap is expected here at all.
         from tapps_mcp.server import (
             TOOL_PROFILE_NLT_BUILD,
             TOOL_PROFILE_NLT_MEMORY,
             TOOL_PROFILE_NLT_SETUP,
         )
 
-        shared = {"tapps_session_start"}
-        assert shared == (TOOL_PROFILE_NLT_BUILD & TOOL_PROFILE_NLT_MEMORY)
-        assert shared == (TOOL_PROFILE_NLT_BUILD & TOOL_PROFILE_NLT_SETUP)
-        assert shared == (TOOL_PROFILE_NLT_MEMORY & TOOL_PROFILE_NLT_SETUP)
+        assert not (TOOL_PROFILE_NLT_BUILD & TOOL_PROFILE_NLT_MEMORY)
+        assert not (TOOL_PROFILE_NLT_BUILD & TOOL_PROFILE_NLT_SETUP)
+        assert not (TOOL_PROFILE_NLT_MEMORY & TOOL_PROFILE_NLT_SETUP)
 
 
 class TestConditionalRegistration:
@@ -347,6 +349,18 @@ class TestToolPresetConstants:
             "tapps_pipeline",
         }
         assert expected == TOOL_PRESET_CORE
+
+    def test_session_start_registered_on_exactly_one_nlt_server(self) -> None:
+        # TAP-7018 negative control: tapps_session_start used to be
+        # registered on nlt-build, nlt-memory, AND nlt-setup (n=3). This
+        # must fail again if a second server's preset re-adds the name.
+        from tapps_mcp.server import _NLT_TAPPS_TOOL_PRESETS
+
+        n = sum(
+            "tapps_session_start" in _NLT_TAPPS_TOOL_PRESETS[key]
+            for key in ("nlt-build", "nlt-memory", "nlt-setup")
+        )
+        assert n == 1
 
     def test_pipeline_includes_core_and_tier2(self) -> None:
         from tapps_mcp.server import TOOL_PRESET_CORE, TOOL_PRESET_PIPELINE

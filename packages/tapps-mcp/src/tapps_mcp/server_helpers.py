@@ -563,6 +563,13 @@ _ERROR_METADATA: dict[str, dict[str, Any]] = {
         "retryable": False,
         "remediation": "Switch to the listed alternative tool.",
     },
+    # TAP-7018: the name still resolves (no hard 404 for a live consumer
+    # calling a retired per-server registration) but the real work moved.
+    "tool_relocated": {
+        "category": "deprecated",
+        "retryable": False,
+        "remediation": "Re-call the same tool name on the server named in 'owner_preset'.",
+    },
     "timeout": {
         "category": "timeout",
         "retryable": True,

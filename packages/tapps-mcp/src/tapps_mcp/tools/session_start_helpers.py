@@ -1352,3 +1352,69 @@ def _schedule_call_graph_rebuild(
     if _fire_and_forget(_runner, _host._background_tasks):
         return {"scheduled": True, "reason": status or "stale"}
     return {"scheduled": False, "skipped": "no_running_loop"}
+
+
+# ---------------------------------------------------------------------------
+# TAP-7018: tapps_session_start retired-registration pointer
+# ---------------------------------------------------------------------------
+
+#: The single NLT preset that owns the real ``tapps_session_start``.
+SESSION_START_OWNER_PRESET = "nlt-build"
+
+#: NLT presets whose ``TOOL_PROFILE_NLT_*`` frozenset no longer carries
+#: ``tapps_session_start`` but still need the name to resolve to a pointer
+#: instead of a 404 (every fleet consumer calls it on nlt-memory today).
+SESSION_START_POINTER_PRESETS = frozenset({"nlt-memory", "nlt-setup"})
+
+
+async def tapps_session_start_pointer(
+    project_root: str = "",
+    quick: bool = True,
+    force: bool = False,
+) -> dict[str, Any]:
+    """Pointer for a retired ``tapps_session_start`` registration (TAP-7018)."""
+    del project_root, quick, force
+    from tapps_mcp.server_helpers import error_response
+
+    return error_response(
+        "tapps_session_start",
+        "tool_relocated",
+        (
+            "tapps_session_start now runs only on the "
+            f"'{SESSION_START_OWNER_PRESET}' NLT server. Call it there."
+        ),
+        extra={"owner_preset": SESSION_START_OWNER_PRESET},
+    )
+
+
+def resolve_session_start_impl(
+    allowed_tools: frozenset[str],
+    tool_preset: str | None,
+) -> Callable[..., Any] | None:
+    """Pick the ``tapps_session_start`` handler ``register()`` should wire up.
+
+    TAP-7018: this used to be a full implementation registered on three NLT
+    servers (nlt-build, nlt-memory, nlt-setup). Since every fleet consumer
+    and this driver call it on nlt-memory today, dropping the name outright
+    from a retired preset would turn a live first-call into a hard 404.
+
+    Args:
+        allowed_tools: Tool names permitted for this server process (Epic
+            79.1). When it contains ``"tapps_session_start"``, this server
+            owns the real implementation.
+        tool_preset: The raw ``settings.tool_preset`` string. When it names
+            a preset that used to own the real tool (``nlt-memory`` /
+            ``nlt-setup``), the pointer is picked instead so the name still
+            resolves to something.
+
+    Returns:
+        The real ``tapps_session_start``, the pointer, or ``None`` when
+        neither applies -- so ``register()`` itself stays a single ``if``.
+    """
+    from tapps_mcp.server_pipeline_tools import tapps_session_start
+
+    if "tapps_session_start" in allowed_tools:
+        return tapps_session_start
+    if tool_preset in SESSION_START_POINTER_PRESETS:
+        return tapps_session_start_pointer
+    return None

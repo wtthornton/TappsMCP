@@ -74,6 +74,16 @@ from tapps_mcp.tools.session_start_helpers import (
     _schedule_background_maintenance,
     call_memory_index_session_start,
 )
+
+# TAP-7018: the retired-registration pointer, and the logic that picks it
+# vs. the real tapps_session_start, live in session_start_helpers.py, not
+# here, so the already oversized register() below stays a single ``if``.
+from tapps_mcp.tools.session_start_helpers import (
+    resolve_session_start_impl as resolve_session_start_impl,
+)
+from tapps_mcp.tools.session_start_helpers import (
+    tapps_session_start_pointer as tapps_session_start_pointer,
+)
 from tapps_mcp.tools.validate_changed import (
     _AUTO_DETECT_BUDGET_S as _AUTO_DETECT_BUDGET_S,
 )
@@ -166,6 +176,7 @@ if TYPE_CHECKING:
     from mcp.server.fastmcp import FastMCP
 
 __all__ = [
+    "SESSION_START_QUICK_RECOMMENDED_NEXT",
     "_AUTO_DETECT_BUDGET_S",
     "_DOCS_COVERED",
     "_PROGRESS_HEARTBEAT_INTERVAL",
@@ -173,7 +184,6 @@ __all__ = [
     "_VALIDATE_CONCURRENCY",
     "_VALIDATE_OK_MARKER",
     "_VALIDATION_PROGRESS_FILE",
-    "SESSION_START_QUICK_RECOMMENDED_NEXT",
     # Re-exports for backward compatibility
     "TaskUnit",
     "_ProgressTracker",
@@ -229,6 +239,7 @@ __all__ = [
     "error_response",
     "load_settings",
     "register",
+    "resolve_session_start_impl",
     "tapps_decompose",
     "tapps_doctor",
     "tapps_handoff_save",
@@ -236,6 +247,7 @@ __all__ = [
     "tapps_pipeline",
     "tapps_session_end",
     "tapps_session_start",
+    "tapps_session_start_pointer",
     "tapps_set_engagement_level",
     "tapps_upgrade",
     "tapps_validate_changed",
@@ -1869,19 +1881,36 @@ async def tapps_session_end() -> dict[str, Any]:
 # ---------------------------------------------------------------------------
 
 
-def register(mcp_instance: FastMCP, allowed_tools: frozenset[str]) -> None:
+def register(
+    mcp_instance: FastMCP,
+    allowed_tools: frozenset[str],
+    *,
+    tool_preset: str | None = None,
+) -> None:
     """Register pipeline/validation tools on *mcp_instance*.
 
-    TAP-1986: tapps_session_start and tapps_validate_changed are eager daily drivers.
-    All other pipeline tools carry defer_loading=True.
+    TAP-1986: tapps_session_start and tapps_validate_changed are eager daily
+    drivers. All other pipeline tools carry defer_loading=True.
+
+    Args:
+        mcp_instance: The FastMCP server to register tools on.
+        allowed_tools: Tool names permitted for this server process (Epic 79.1).
+        tool_preset: The raw ``settings.tool_preset`` string (e.g.
+            ``"nlt-memory"``). When it names a retired ``tapps_session_start``
+            registration (TAP-7018) and the real tool is not in
+            *allowed_tools*, :func:`tapps_session_start_pointer` is
+            registered under the same name instead, so the name still
+            resolves to something rather than 404-ing.
     """
     if "tapps_validate_changed" in allowed_tools:
         register_tool(mcp_instance, tapps_validate_changed, annotations=_ANNOTATIONS_READ_ONLY)
-    if "tapps_session_start" in allowed_tools:
+    session_start_impl = resolve_session_start_impl(allowed_tools, tool_preset)
+    if session_start_impl is not None:
         register_tool(
             mcp_instance,
-            tapps_session_start,
+            session_start_impl,
             annotations=_ANNOTATIONS_SIDE_EFFECT_IDEMPOTENT,
+            name="tapps_session_start",
         )
     if "tapps_session_end" in allowed_tools:
         register_tool(

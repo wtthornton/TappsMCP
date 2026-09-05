@@ -25,15 +25,19 @@ from mcp.types import ToolAnnotations
 from tapps_mcp.tool_descriptions import TOOL_DESCRIPTIONS
 
 
-def _with_ledger(fn: Callable[..., Any]) -> Callable[..., Any]:
+def _with_ledger(fn: Callable[..., Any], *, name: str | None = None) -> Callable[..., Any]:
     """Wrap *fn* so one ledger row is recorded per call (TAP-6615 round 2).
 
     Lazily imports ``_record_ledger_entry`` from ``tapps_mcp.server`` --
     that module is already fully loaded by the time any registered tool is
     actually invoked, since ``register_tool`` itself only runs from inside
     ``tapps_mcp.server._register_tool_modules()``.
+
+    *name* overrides the ledgered tool name when *fn* is registered under a
+    different MCP tool name than its ``__name__`` (e.g. a pointer handler
+    standing in for a retired registration).
     """
-    name = fn.__name__
+    name = name or fn.__name__
 
     def _ledger(response: Any) -> None:
         if not isinstance(response, dict):
@@ -67,16 +71,24 @@ def register_tool(
     *,
     annotations: ToolAnnotations,
     meta: dict[str, Any] | None = None,
+    name: str | None = None,
 ) -> None:
-    """Register *fn* on *mcp_instance* with a budgeted MCP description."""
-    name = fn.__name__
+    """Register *fn* on *mcp_instance* with a budgeted MCP description.
+
+    *name* overrides the registered MCP tool name (and the
+    ``TOOL_DESCRIPTIONS``/ledger key) when it differs from ``fn.__name__`` --
+    e.g. a pointer handler registered under the name of the tool it stands
+    in for on a server that no longer owns the real implementation.
+    """
+    tool_name = name or fn.__name__
     try:
-        description = TOOL_DESCRIPTIONS[name]
+        description = TOOL_DESCRIPTIONS[tool_name]
     except KeyError as exc:
-        msg = f"Missing TOOL_DESCRIPTIONS entry for {name!r}"
+        msg = f"Missing TOOL_DESCRIPTIONS entry for {tool_name!r}"
         raise KeyError(msg) from exc
     mcp_instance.tool(
+        name=tool_name,
         annotations=annotations,
         meta=meta,
         description=description,
-    )(_with_ledger(fn))
+    )(_with_ledger(fn, name=tool_name))
