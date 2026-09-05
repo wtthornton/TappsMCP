@@ -13,6 +13,7 @@ from typing import Any
 
 from mcp.server.fastmcp import Context
 
+from tapps_mcp.distribution.nlt_mcp_config import DEFAULT_NLT_BUNDLE
 from tapps_mcp.server_helpers import emit_ctx_info, success_response
 
 
@@ -120,8 +121,6 @@ def resolve_init_mcp_bundle(mcp_bundle: str | None, settings: Any) -> tuple[str,
     (ADR-0018's greenfield default), sourced from the constant rather than
     restated as a second literal. Returns ``(bundle, reason)``.
     """
-    from tapps_mcp.distribution.nlt_mcp_config import DEFAULT_NLT_BUNDLE
-
     settings_bundle = getattr(settings, "mcp_bundle", None)
     if mcp_bundle is not None:
         return mcp_bundle, "explicit caller argument"
@@ -137,7 +136,7 @@ def maybe_write_mcp_config(
     mcp_config: bool,
     dry_run: bool,
     *,
-    mcp_bundle: str = "full",
+    mcp_bundle: str = DEFAULT_NLT_BUNDLE,
 ) -> None:
     """Write project-scoped MCP config (Epic 47.2; default on for ``tapps_init``).
 

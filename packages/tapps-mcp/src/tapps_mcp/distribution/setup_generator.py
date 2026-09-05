@@ -28,6 +28,7 @@ from pathlib import Path
 import click
 
 from tapps_core.common.logging import get_logger
+from tapps_mcp.distribution.nlt_mcp_config import DEFAULT_NLT_BUNDLE
 from tapps_mcp.distribution.setup_config_gen import _generate_config
 from tapps_mcp.distribution.setup_config_io import (
     _check_config,
@@ -294,7 +295,7 @@ def _configure_multiple_hosts(
     with_docs_mcp: bool = False,
     uv_launch: tuple[str, list[str]] | None = None,
     extra_env: dict[str, str] | None = None,
-    mcp_bundle: str = "full",
+    mcp_bundle: str = DEFAULT_NLT_BUNDLE,
     use_nlt_plugin: bool = False,
     engagement_level: str | None = None,
     mcp_transport: str | None = None,
@@ -522,7 +523,7 @@ def run_init(
     uv_extra: str | None = None,
     context7_api_key: str | None = None,
     overwrite_tech_stack: bool = False,
-    mcp_bundle: str = "full",
+    mcp_bundle: str = DEFAULT_NLT_BUNDLE,
     use_nlt_plugin: bool = True,
     mcp_transport: str | None = None,
 ) -> bool:

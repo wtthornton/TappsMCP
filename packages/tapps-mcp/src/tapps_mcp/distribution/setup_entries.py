@@ -15,6 +15,7 @@ from typing import Any
 from tapps_core.brain_bridge import BRAIN_PROFILE_FACADE, BRAIN_PROFILE_SERVER
 from tapps_mcp.distribution.nlt_mcp_config import (
     _LEGACY_MCP_SERVER_IDS,
+    DEFAULT_NLT_BUNDLE,
     NLT_SERVER_ORDER,
     NLT_SERVER_SPECS,
     commented_servers_for_bundle,
@@ -426,7 +427,7 @@ def _merge_nlt_config(
     existing: dict[str, Any],
     host: str,
     *,
-    mcp_bundle: str = "full",
+    mcp_bundle: str = DEFAULT_NLT_BUNDLE,
     upgrade_mode: bool = False,
     uv_launch: tuple[str, list[str]] | None = None,
     project_root: Path | None = None,

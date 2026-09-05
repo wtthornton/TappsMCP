@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import ast
 import json
 from pathlib import Path
 from unittest.mock import patch
@@ -68,6 +69,64 @@ class TestNltBundles:
         assert bundle_matches_mcp_config(dev_servers, "developer") is True
         assert bundle_matches_mcp_config(full_servers, "full") is True
         assert bundle_matches_mcp_config(full_servers, "developer") is False
+
+
+def _mcp_bundle_string_literal_defaults(tree: ast.AST) -> list[int]:
+    """Line numbers of ``mcp_bundle`` parameters/fields defaulting to a string literal.
+
+    Covers both function-parameter defaults (positional-or-keyword and
+    keyword-only) and dataclass-field defaults (``AnnAssign`` at class scope).
+    A derived default (``= DEFAULT_NLT_BUNDLE``) is an ``ast.Name``, not an
+    ``ast.Constant``, so it never matches here (TAP-7020).
+    """
+    offenders: list[int] = []
+    for node in ast.walk(tree):
+        if isinstance(node, ast.FunctionDef | ast.AsyncFunctionDef):
+            args = node.args
+            positional = args.posonlyargs + args.args
+            offset = len(positional) - len(args.defaults)
+            for arg, default in zip(positional[offset:], args.defaults, strict=True):
+                if (
+                    arg.arg == "mcp_bundle"
+                    and isinstance(default, ast.Constant)
+                    and isinstance(default.value, str)
+                ):
+                    offenders.append(default.lineno)
+            for arg, kw_default in zip(args.kwonlyargs, args.kw_defaults, strict=True):
+                if (
+                    arg.arg == "mcp_bundle"
+                    and isinstance(kw_default, ast.Constant)
+                    and isinstance(kw_default.value, str)
+                ):
+                    offenders.append(kw_default.lineno)
+        elif (
+            isinstance(node, ast.AnnAssign)
+            and isinstance(node.target, ast.Name)
+            and node.target.id == "mcp_bundle"
+            and isinstance(node.value, ast.Constant)
+            and isinstance(node.value.value, str)
+        ):
+            offenders.append(node.lineno)
+    return offenders
+
+
+def test_default_bundle_single_source() -> None:
+    """TAP-7020: every ``mcp_bundle`` default must derive from DEFAULT_NLT_BUNDLE.
+
+    A literal ``"full"`` (or any other bundle name) restated as a default
+    silently diverges the moment ``DEFAULT_NLT_BUNDLE`` changes — the exact
+    drift TAP-7020 was filed to close (8 sites found restating it by hand).
+    """
+    src_root = Path(__file__).resolve().parents[2] / "src" / "tapps_mcp"
+    offenders: list[str] = []
+    for path in sorted(src_root.rglob("*.py")):
+        tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+        for lineno in _mcp_bundle_string_literal_defaults(tree):
+            offenders.append(f"{path.relative_to(src_root)}:{lineno}")
+    assert not offenders, (
+        "mcp_bundle default(s) restate a string literal instead of deriving "
+        f"from DEFAULT_NLT_BUNDLE: {offenders}"
+    )
 
 
 class TestNltMcpJsonGeneration:

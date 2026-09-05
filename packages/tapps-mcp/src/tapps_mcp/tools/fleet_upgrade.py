@@ -13,6 +13,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Literal
 
+from tapps_mcp.distribution.nlt_mcp_config import DEFAULT_NLT_BUNDLE
 from tapps_mcp.tools.fleet_audit import discover_project_roots
 
 UvMode = Literal["auto", "on", "off"]
@@ -133,7 +134,7 @@ def upgrade_project_root(
     force: bool = True,
     dry_run: bool = False,
     mcp_host: str = "auto",
-    mcp_bundle: str = "full",
+    mcp_bundle: str = DEFAULT_NLT_BUNDLE,
     refresh_mcp: bool = True,
     uv_mode: UvMode = "auto",
     run_doctor: bool = True,
@@ -238,7 +239,7 @@ def run_fleet_upgrade(
     force: bool = True,
     dry_run: bool = False,
     mcp_host: str = "auto",
-    mcp_bundle: str = "full",
+    mcp_bundle: str = DEFAULT_NLT_BUNDLE,
     refresh_mcp: bool = True,
     uv_mode: UvMode = "auto",
     run_doctor: bool = True,
@@ -351,9 +352,7 @@ def _reinstall_global_clis(
     elif use_blue_green:
         strategy = "blue_green_auto" if live_pids else "blue_green"
     elif live_pids:
-        use_blue_green = True
-        strategy = "blue_green_auto"
-        auto_promoted = True
+        use_blue_green, strategy, auto_promoted = True, "blue_green_auto", True
     else:
         strategy = "inplace"
 
