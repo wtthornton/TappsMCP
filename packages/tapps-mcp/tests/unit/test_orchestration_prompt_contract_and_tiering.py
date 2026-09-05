@@ -143,6 +143,45 @@ class TestPlaneMapDetector:
         assert "does not count against the driver's five-row budget" in section
 
 
+class TestSurfaceAxis:
+    """TAP-6601 — surface (build-time vs runtime) is an axis orthogonal to plane."""
+
+    def test_plane_map_header_carries_a_surface_column(self) -> None:
+        template = COMPANIONS["assets/prompt-template.md"]
+        assert "| Surface |" in template
+
+    def test_surface_column_sits_after_effort_before_notes(self) -> None:
+        # Keeps the nlt-orchestrator check-prompt-shape.js `cells[7]` (effort)
+        # and `cells[2]` (Owner) indices intact — Surface is appended, not
+        # inserted ahead of an index that script already reads positionally.
+        template = COMPANIONS["assets/prompt-template.md"]
+        header = template.split("| Step | Owner |", 1)[1].split("\n", 1)[0]
+        cols = [c.strip() for c in ("Step | Owner |" + header).split("|") if c.strip()]
+        assert cols.index("effort") < cols.index("Surface") < cols.index("Notes")
+        assert cols.index("Owner") == 1
+
+    def test_body_defines_surface_as_orthogonal_axis_with_deploy_channels(self) -> None:
+        body = CLAUDE_SKILLS["orchestration-prompt"]
+        assert "Surface is a separate axis from plane" in body
+        assert "authoring surface" in body.lower()
+        assert "runtime surface" in body.lower()
+
+    def test_method_detail_states_shared_substrate_additive_only_rule(self) -> None:
+        body = COMPANIONS["references/method-detail.md"]
+        assert "orthogonal to plane" in body
+        assert "additive-only" in body
+        assert "Shared-substrate rule" in body
+
+    def test_body_warns_against_reusing_plane_for_surface(self) -> None:
+        body = CLAUDE_SKILLS["orchestration-prompt"]
+        assert "never reuse \"plane\"" in body.lower() or "never reuse plane" in body.lower()
+
+    def test_template_instructs_naming_surface_and_deploy_channel_per_sub_goal(self) -> None:
+        body = COMPANIONS["references/method-detail.md"]
+        assert "Name every sub-goal's" in body
+        assert "surface and deploy channel" in body
+
+
 class TestCheapestViableTiering:
     """TAP-6947 — a stated floor, a visible SCORE line, and tracker discipline."""
 

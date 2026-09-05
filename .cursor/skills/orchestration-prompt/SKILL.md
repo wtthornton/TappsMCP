@@ -81,6 +81,12 @@ in `references/method-detail.md` — read it before drafting a Goal or a Loop.
    session dispatches, adjudicates verifier verdicts, and checkpoints — it
    does not do the work. Target under 15% of run tokens for the orchestrator.
    Full intent → mechanism → model-tier tables: `references/claude-feature-map.md`.
+   **Surface is a separate axis from plane** — authoring surface (a template or
+   generator constant, shipped by regenerating) versus runtime surface (a live
+   loop or process, shipped by restarting it) — never reuse "plane" for it; name
+   each sub-goal's surface and deploy channel, and treat a substrate shared
+   across surfaces as additive-only until every consuming path is verified.
+   Full elaboration: `references/method-detail.md`.
 4. **Write the loop** with termination + guardrails: state → decide →
    execute → verify → record → repeat or stop.
 5. **Add an independent verification pass** (creator ≠ verifier), tiered by

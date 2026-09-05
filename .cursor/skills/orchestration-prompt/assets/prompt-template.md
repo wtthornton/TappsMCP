@@ -147,27 +147,33 @@ inherits the session's. If a step's effort is load-bearing, run it in a Workflow
 `driver` belongs only on the five jobs; every other row is `delegate` (or `operator` for
 human-supervised work). If `driver` appears on a body of work, the prompt is wrong.
 
-| Step | Owner | Plane | Mechanism | agentType | model | effort | Notes |
-|------|-------|-------|-----------|-----------|-------|--------|-------|
-| <preflight probes> | delegate | coordination | subagent, one call, schema'd | `Explore` | `haiku` | `low` | closed questions; raw output never reaches the driver |
-| <per-iteration state gather> | delegate | coordination | subagent, one call, schema'd | `Explore` | `haiku` | `low` | git + tracker + PR state → one struct; flat cost per iteration instead of monotonic growth |
-| <lane log tail / progress poll> | delegate | coordination | subagent | `Explore` | `haiku` | `low` | logs run to thousands of lines; poll on a cadence matched to the work |
-| <audit/research> | delegate | coordination | Workflow / 3–5 subagents | `Explore` | `haiku` | `low` | read-only enforced by agent type, not prose; research-to-*decide* stays on wayfind |
-| <multi-file synthesis> | delegate | coordination | subagent | `Explore` | `sonnet` | `medium` | judgement about what matters |
-| <code change> | delegate | execution | dispatch to <repo> via PR | `general-purpose` | `sonnet` | `low` | **serial writes** — one repo at a time |
-| <hard/ambiguous fix> | delegate | execution | `/goal` drive | `general-purpose` | `opus` | `high` | load-bearing judgement |
-| <verify — deterministic proof> | delegate | coordination | verifier subagent (fresh context) | `general-purpose` | `haiku` | `low` | deterministic shape: exit code / `grep -c` / test-count line — it re-runs one command and transcribes; read its `observed_output`, never its conclusion |
-| <verify — closed check> | delegate | coordination | verifier subagent (fresh context) | `general-purpose` | `sonnet` | `medium` | comparative shape: two outputs differ, a count did not shrink, a diff confined to N files — closed, but it must compare the right two things |
-| <verify — open judgement> | delegate | coordination | **verifier subagent (fresh context)** | `general-purpose` | **`opus`** | **`high`–`xhigh`** | semantic shape: creator ≠ verifier; refutes proof; a weak verifier defeats the pattern |
-| <verify — gates an irreversible step> | delegate | coordination | verifier subagent (fresh context) | `general-purpose` | **`opus`** | **`high`+** | consequence overrides shape: merge / deploy / delete / publish — a wrong PASS is unrecoverable, so tier by consequence even when the proof is a one-line exit code |
-| <fix after fail> | delegate | execution | fresh worker on scoped fix sub-goal | `general-purpose` | `sonnet` | `low` | expected-fail loop; do not reopen whole feature |
-| <recurring check> | delegate | execution | Routine / `claude -p`+cron | `Explore` | `haiku` | `low` | human-gated |
-| <human-supervised lane> | **operator** | execution | human session in <repo> | — | operator's | — | never dispatched; say why the repo cannot take a headless lane |
-| <decide next dispatch> | **driver** | coordination | inline | — | runner | — | the orchestration itself |
-| <dispatch> | **driver** | coordination | inline (fires the chosen call) | — | runner | — | the one job a delegate structurally cannot do for itself |
-| <adjudicate verdicts> | **driver** | coordination | inline | — | runner | — | accept / reject / scope a fix |
-| <gated or plugin-only write> | **driver** | coordination | skill/tool call | — | runner | — | e.g. a hook-gated tracker write a headless lane cannot reach |
-| <checkpoint> | **driver** | coordination | `/tapps-handoff-session` | — | runner | — | shift boundary |
+| Step | Owner | Plane | Mechanism | agentType | model | effort | Surface | Notes |
+|------|-------|-------|-----------|-----------|-------|--------|---------|-------|
+| <preflight probes> | delegate | coordination | subagent, one call, schema'd | `Explore` | `haiku` | `low` | runtime | closed questions; raw output never reaches the driver |
+| <per-iteration state gather> | delegate | coordination | subagent, one call, schema'd | `Explore` | `haiku` | `low` | runtime | git + tracker + PR state → one struct; flat cost per iteration instead of monotonic growth |
+| <lane log tail / progress poll> | delegate | coordination | subagent | `Explore` | `haiku` | `low` | runtime | logs run to thousands of lines; poll on a cadence matched to the work |
+| <audit/research> | delegate | coordination | Workflow / 3–5 subagents | `Explore` | `haiku` | `low` | runtime | read-only enforced by agent type, not prose; research-to-*decide* stays on wayfind |
+| <multi-file synthesis> | delegate | coordination | subagent | `Explore` | `sonnet` | `medium` | runtime | judgement about what matters |
+| <code change> | delegate | execution | dispatch to <repo> via PR | `general-purpose` | `sonnet` | `low` | runtime | **serial writes** — one repo at a time |
+| <hard/ambiguous fix> | delegate | execution | `/goal` drive | `general-purpose` | `opus` | `high` | runtime | load-bearing judgement |
+| <verify — deterministic proof> | delegate | coordination | verifier subagent (fresh context) | `general-purpose` | `haiku` | `low` | runtime | deterministic shape: exit code / `grep -c` / test-count line — it re-runs one command and transcribes; read its `observed_output`, never its conclusion |
+| <verify — closed check> | delegate | coordination | verifier subagent (fresh context) | `general-purpose` | `sonnet` | `medium` | runtime | comparative shape: two outputs differ, a count did not shrink, a diff confined to N files — closed, but it must compare the right two things |
+| <verify — open judgement> | delegate | coordination | **verifier subagent (fresh context)** | `general-purpose` | **`opus`** | **`high`–`xhigh`** | runtime | semantic shape: creator ≠ verifier; refutes proof; a weak verifier defeats the pattern |
+| <verify — gates an irreversible step> | delegate | coordination | verifier subagent (fresh context) | `general-purpose` | **`opus`** | **`high`+** | runtime | consequence overrides shape: merge / deploy / delete / publish — a wrong PASS is unrecoverable, so tier by consequence even when the proof is a one-line exit code |
+| <fix after fail> | delegate | execution | fresh worker on scoped fix sub-goal | `general-purpose` | `sonnet` | `low` | runtime | expected-fail loop; do not reopen whole feature |
+| <recurring check> | delegate | execution | Routine / `claude -p`+cron | `Explore` | `haiku` | `low` | runtime | human-gated |
+| <human-supervised lane> | **operator** | execution | human session in <repo> | — | operator's | — | runtime | never dispatched; say why the repo cannot take a headless lane |
+| <decide next dispatch> | **driver** | coordination | inline | — | runner | — | runtime | the orchestration itself |
+| <dispatch> | **driver** | coordination | inline (fires the chosen call) | — | runner | — | runtime | the one job a delegate structurally cannot do for itself |
+| <adjudicate verdicts> | **driver** | coordination | inline | — | runner | — | runtime | accept / reject / scope a fix |
+| <gated or plugin-only write> | **driver** | coordination | skill/tool call | — | runner | — | runtime | e.g. a hook-gated tracker write a headless lane cannot reach |
+| <checkpoint> | **driver** | coordination | `/tapps-handoff-session` | — | runner | — | runtime | shift boundary |
+
+Every row above is **runtime surface** — it describes how the emitted loop executes
+itself. A program that also edits an authoring artifact (a template, a skill body, a
+generator constant a downstream regenerate step consumes) adds rows with `authoring`
+in this column, each naming its own deploy channel (`tapps_upgrade` / regenerate /
+merge-to-source) in **Notes** rather than sharing the runtime rows' channel.
 
 Cheap-model rule: `haiku` answers closed, evidence-checkable questions. It does not
 render verdicts that gate irreversible steps — narrow the question or pay for `opus`.
