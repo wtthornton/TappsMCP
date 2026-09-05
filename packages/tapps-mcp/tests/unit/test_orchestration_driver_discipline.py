@@ -109,7 +109,7 @@ class TestTemplateDriverDiscipline:
         assert "under 15%" in template
 
     def test_two_mechanical_detectors(self, template):
-        assert "in the `agentType` column is orchestrator work" in template
+        assert "in the `agentType` column whose Owner is `driver` is orchestrator work" in template
         assert "effort` column means effort control was surrendered" in template
         assert "Workflow-only" in template
 
@@ -122,7 +122,7 @@ class TestTemplateDriverDiscipline:
 class TestPlaneMapOwnerColumn:
     def test_owner_column_header(self, template):
         assert (
-            "| Step | Owner | Plane | Mechanism | agentType | model | effort | Notes |" in template
+            "| Step | Owner | Plane | Mechanism | agentType | model | effort | Surface | Notes |" in template
         )
 
     def test_worked_row_for_each_owner_value(self, template):
@@ -181,7 +181,7 @@ class TestSkillBodyOrchestratorDiscipline:
         assert "orch-spend <n>%" in body
 
     def test_body_carries_both_detectors(self, body):
-        assert "in the `agentType` column is orchestrator work" in body
+        assert "in the `agentType` column whose Owner is `driver` is orchestrator work" in body
         assert "effort` column means effort control was surrendered" in body
 
     def test_guardrails_list_has_an_orchestrator_discipline_entry(self, body):
