@@ -8,6 +8,7 @@ from unittest.mock import ANY, AsyncMock, MagicMock, patch
 
 import pytest
 
+from tapps_core.metrics.collector import MetricsHub
 from tapps_mcp.tools.checklist import CallTracker
 
 pytestmark = pytest.mark.usefixtures("envelope_guard")
@@ -426,6 +427,14 @@ class TestEnrichHealthWithAsyncNative:
 class TestTappsSetEngagementLevel:
     def setup_method(self) -> None:
         CallTracker.reset()
+
+    @pytest.fixture(autouse=True)
+    def _pin_metrics_hub(self, tmp_path: Path) -> None:
+        """VAL-TAP-6639: pin _record_execution's hub so rows never reach the
+        live .tapps-mcp/metrics/ dir this suite happens to run under."""
+        hub = MetricsHub(tmp_path / "metrics-hub")
+        with patch("tapps_mcp.server._get_metrics_hub", return_value=hub):
+            yield
 
     def test_invalid_level_returns_error(self) -> None:
         from tapps_mcp.server_pipeline_tools import tapps_set_engagement_level
