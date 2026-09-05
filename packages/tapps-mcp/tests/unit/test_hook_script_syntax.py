@@ -174,12 +174,6 @@ def _flatten_ps1() -> tuple[list[tuple[str, str, str]], list[str]]:
 _PS1_ROWS, _PS1_IDS = _flatten_ps1()
 
 
-@pytest.mark.skipif(
-    shutil.which("pwsh") is None,
-    reason="pwsh not available -- PowerShell parse check needs a real "
-    "PowerShell (TAP-6737); CI runs pwsh on ubuntu-latest so this is "
-    "un-skippable there.",
-)
 @pytest.mark.parametrize(("source_label", "script_name", "body"), _PS1_ROWS, ids=_PS1_IDS)
 def test_ps1_template_parses(
     tmp_path: Path,
@@ -190,6 +184,12 @@ def test_ps1_template_parses(
     """Every shipped .ps1 template must parse cleanly under
     ``[System.Management.Automation.Language.Parser]`` -- the PR 304 failure
     mode where a parse error survived seven green CI checks (TAP-6737)."""
+    if shutil.which("pwsh") is None:
+        pytest.skip(
+            "pwsh not available -- PowerShell parse check needs a real "
+            "PowerShell (TAP-6737); CI runs pwsh on ubuntu-latest so this is "
+            "un-skippable there."
+        )
     rendered = tmp_path / script_name
     rendered.write_text(body, encoding="utf-8")
     check = (
