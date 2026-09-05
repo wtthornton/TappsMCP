@@ -1165,10 +1165,23 @@ async def tapps_init(
     await _pih.emit_init_progress(ctx, result)
 
     elapsed_ms = (time.perf_counter_ns() - start) // 1_000_000
+    init_errors = result["errors"]
+    # TAP-6442: error_code aggregates the metrics row over a stable code
+    # instead of the raw first-error string, which embeds an exception
+    # message or path and would otherwise never repeat across calls.
+    #
+    # Only the first error is classified -- one code per failed call,
+    # matching the one status per call the row already records. The
+    # classification table itself lives in pipeline_init_helpers.py,
+    # next to the other tapps_init-only helpers, not here, so this
+    # already-oversized module stays a thin caller of that table
+    # rather than a second place a new producer's error has to be
+    # registered.
     _record_execution(
         "tapps_init",
         start,
-        status="success" if not result["errors"] else "failed",
+        status="success" if not init_errors else "failed",
+        error_code=_pih.classify_init_error_code(init_errors[0]) if init_errors else None,
     )
 
     _pih.enrich_init_result_hints(result, add_other_mcps_hint=add_other_mcps_hint)

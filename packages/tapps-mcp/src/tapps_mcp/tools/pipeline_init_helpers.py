@@ -305,8 +305,56 @@ def enrich_init_result_hints(
     )
 
 
+#: TAP-6442: bootstrap_pipeline's error producers (pipeline/init*.py,
+#: skills_validator.py) write free-form strings with no structured code, and
+#: each embeds a variable substring (an exception message, a relative path)
+#: that makes the raw string unstable to aggregate over. This maps the fixed
+#: portion of each known message to a stable code; ordered by first match,
+#: most specific first. Extend this list -- do not derive a code by slugging
+#: the raw message -- when a new producer's error needs to be told apart.
+_INIT_ERROR_CODE_PATTERNS: tuple[tuple[str, str], ...] = (
+    ("Karpathy guidelines install failed for", "karpathy_guidelines_failed"),
+    ("Karpathy Cursor rule install failed", "karpathy_cursor_rule_failed"),
+    ("GitHub templates:", "github_templates_failed"),
+    ("CI workflows:", "ci_workflows_failed"),
+    ("Copilot config:", "copilot_config_failed"),
+    ("Governance:", "governance_failed"),
+    ("start-program.sh:", "start_program_sh_failed"),
+    ("Unknown platform:", "unknown_platform"),
+    ("path escapes project root", "path_escapes_project_root"),
+    ("Project profile detection failed", "project_profile_detection_failed"),
+    ("Could not create TECH_STACK.md", "tech_stack_md_creation_failed"),
+    ("AGENTS.md update failed", "agents_md_update_failed"),
+    ("Cache warming failed", "cache_warming_failed"),
+    ("Expert RAG failed for domains", "expert_rag_failed"),
+    ("frontmatter missing", "skill_frontmatter_missing_field"),
+    ("must be a string", "skill_frontmatter_wrong_type"),
+    ("must be lowercase alphanumeric", "skill_name_invalid_format"),
+    ("exceeds", "skill_frontmatter_field_too_long"),
+)
+
+INIT_ERROR_CODE_FALLBACK = "other_init_error"
+
+
+def classify_init_error_code(message: str) -> str:
+    """Derive a stable, aggregable error_code from the first tapps_init error.
+
+    See :data:`_INIT_ERROR_CODE_PATTERNS`. Falls back to
+    :data:`INIT_ERROR_CODE_FALLBACK` for a message this table does not
+    recognise, rather than slugging the raw text -- a slug of free text
+    carries no aggregation value once the variable part (an exception
+    message, a path) dominates the string.
+    """
+    for needle, code in _INIT_ERROR_CODE_PATTERNS:
+        if needle in message:
+            return code
+    return INIT_ERROR_CODE_FALLBACK
+
+
 __all__ = [
+    "INIT_ERROR_CODE_FALLBACK",
     "build_init_bootstrap_config",
+    "classify_init_error_code",
     "emit_init_progress",
     "emit_upgrade_progress",
     "enrich_init_result_hints",

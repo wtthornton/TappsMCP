@@ -663,6 +663,41 @@ class TestTappsDoctor:
 # ---------------------------------------------------------------------------
 
 
+class TestClassifyInitErrorCode:
+    def test_known_messages_map_to_stable_codes(self) -> None:
+        from tapps_mcp.tools.pipeline_init_helpers import classify_init_error_code
+
+        cases = {
+            "AGENTS.md update failed: boom": "agents_md_update_failed",
+            "Karpathy guidelines install failed for foo.md: boom": (
+                "karpathy_guidelines_failed"
+            ),
+            "some/path.md: path escapes project root": "path_escapes_project_root",
+            "Unknown platform: 'vim'. Use 'claude' or 'cursor'.": "unknown_platform",
+        }
+        for message, expected_code in cases.items():
+            assert classify_init_error_code(message) == expected_code
+
+    def test_unrecognized_message_falls_back_to_stable_generic_code(self) -> None:
+        from tapps_mcp.tools.pipeline_init_helpers import (
+            INIT_ERROR_CODE_FALLBACK,
+            classify_init_error_code,
+        )
+
+        assert classify_init_error_code("a brand new producer wrote this") == (
+            INIT_ERROR_CODE_FALLBACK
+        )
+
+    def test_same_error_family_with_different_exception_text_same_code(self) -> None:
+        # The stability requirement: two failures from the same producer but
+        # with different exception text must aggregate under one code.
+        from tapps_mcp.tools.pipeline_init_helpers import classify_init_error_code
+
+        code_a = classify_init_error_code("Cache warming failed: disk full")
+        code_b = classify_init_error_code("Cache warming failed: timeout")
+        assert code_a == code_b == "cache_warming_failed"
+
+
 class TestTappsInit:
     def setup_method(self) -> None:
         CallTracker.reset()
@@ -751,6 +786,38 @@ class TestTappsInit:
 
         result = await tapps_init(dry_run=True)
         assert result["success"] is False
+
+    @pytest.mark.asyncio
+    @patch("tapps_mcp.server._record_execution")
+    @patch("tapps_mcp.server_pipeline_tools.load_settings")
+    @patch("tapps_mcp.pipeline.init.bootstrap_pipeline")
+    async def test_init_failure_records_error_code(
+        self,
+        mock_bootstrap: MagicMock,
+        mock_settings: MagicMock,
+        mock_record_execution: MagicMock,
+        tmp_path: Path,
+    ) -> None:
+        from tapps_mcp.server_pipeline_tools import tapps_init
+
+        mock_settings.return_value = MagicMock(
+            project_root=tmp_path,
+            memory=MagicMock(enabled=False),
+        )
+        mock_bootstrap.return_value = {
+            "errors": ["AGENTS.md update failed: permission denied"],
+        }
+
+        result = await tapps_init(dry_run=True)
+        assert result["success"] is False
+
+        error_code_calls = [
+            call.kwargs.get("error_code")
+            for call in mock_record_execution.call_args_list
+            if call.args and call.args[0] == "tapps_init"
+        ]
+        assert error_code_calls == ["agents_md_update_failed"]
+        assert all(code is not None for code in error_code_calls)
 
     @pytest.mark.asyncio
     @patch("tapps_mcp.server_pipeline_tools.load_settings")
