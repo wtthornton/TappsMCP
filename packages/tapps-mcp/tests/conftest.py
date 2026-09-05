@@ -11,7 +11,7 @@ calls must be reset here.  When adding a new cache:
 2. Import and call it in ``_reset_caches()`` below.
 3. Verify isolation by running the new tests twice in a row.
 
-Current resets (13 total):
+Current resets (14 total):
   - settings              — ``tapps_core.config.settings._reset_settings_cache``
   - feature_flags         — ``tapps_core.config.feature_flags.feature_flags.reset``
   - scorer           — ``tapps_mcp.server_helpers._reset_scorer_cache``
@@ -25,6 +25,8 @@ Current resets (13 total):
   - dependency_cache — ``tapps_mcp.tools.dependency_scan_cache.clear_dependency_cache``
   - quick_check_recurring — ``tapps_mcp.quick_check_recurring._reset_recurring_quick_check_state``
   - memory_project_id     — ``tapps_mcp.memory_project_id.uninstall_memory_project_id_patch``
+  - context7_circuit_breaker — ``_reset_context7_circuit_breaker`` (this file; the
+    source module exposes no reset hook of its own, see that function's docstring)
 """
 
 from __future__ import annotations
@@ -522,6 +524,26 @@ def no_session_sentinel(monkeypatch: pytest.MonkeyPatch) -> None:
     _reset_session_start_cache()
 
 
+def _reset_context7_circuit_breaker() -> None:
+    """Reset the process-global Context7 circuit-breaker singleton (TAP-6592 follow-on).
+
+    ``get_context7_circuit_breaker()`` lazily creates a module-level singleton
+    with no reset hook of its own. A test that reaches ``LookupEngine``'s legacy
+    Context7 path with a real (unmocked) client hits the root socket guard's
+    ``AssertionError``, which ``CircuitBreaker.call`` treats as a generic
+    failure and counts against that shared breaker. Once it trips open, every
+    *other* test in the process that also defaults to the shared singleton --
+    including ones with a fully mocked client -- immediately gets "circuit
+    breaker open" without the mock ever being called, because ``call()``
+    checks state before invoking the wrapped callable. The leak is cross-test
+    state, not a live dial, so the fix is resetting it here rather than
+    marking any of those tests ``live_network``.
+    """
+    import tapps_core.knowledge.circuit_breaker as _cb
+
+    _cb._context7_breaker = None
+
+
 def _clear_test_singleton_caches() -> None:
     """Reset module-level singletons (see module docstring for registry)."""
     from tapps_core.config.feature_flags import feature_flags
@@ -529,6 +551,7 @@ def _clear_test_singleton_caches() -> None:
 
     _reset_settings_cache()
     feature_flags.reset()
+    _reset_context7_circuit_breaker()
 
     from tapps_mcp.quick_check_recurring import _reset_recurring_quick_check_state
     from tapps_mcp.server_helpers import (
@@ -890,6 +913,51 @@ def _isolate_metrics_hub(
             f"{request.node.nodeid} leaked to live metrics dir "
             f"{_LIVE_METRICS_DIR}: changed files {changed}"
         )
+
+
+@pytest.fixture(autouse=True)
+def _deny_real_sockets(request: pytest.FixtureRequest) -> Generator[None, None, None]:
+    """TAP-6592: fail loudly if a test under ``packages/tapps-mcp/tests/`` dials
+    a real socket without an explicit ``live_network`` marker.
+
+    Generalises ``test_server_pipeline_tools.py``'s old module-local
+    ``_deny_real_sockets`` fixture (TAP-6694) to the whole suite so hermeticity
+    does not depend on a test author remembering to request it. Silenced only
+    by ``@pytest.mark.live_network`` -- opt-in via marker, not opt-out via a
+    monkeypatch a test could quietly undo.
+
+    Suites granted ``live_network`` (or living outside this fixture's scope,
+    documented here for completeness since socket hermeticity is a suite-wide
+    concern per TAP-6592's own ``Where``):
+
+    - ``packages/tapps-mcp/tests/integration/`` -- subprocess, real MCP
+      handshake, and real-tool tests (see that directory's own
+      ``pytest_collection_modifyitems`` below, which auto-applies the marker
+      to every item collected there rather than annotating each test file).
+    - ``packages/tapps-core/tests/contract/test_brain_bridge_profile.py`` --
+      a deliberate live-network contract suite against a real tapps-brain;
+      outside this fixture's scope (different ``tests/`` tree, different
+      conftest) but named here for the allowlist's own documentation.
+    - ``real_brain_bridge``-marked unit tests (``test_server_helpers.py``,
+      ``test_server_pipeline_tools.py``) opt out of the conftest brain-bridge
+      *stub* to exercise ``_get_brain_bridge`` itself, but every one of them
+      fully mocks ``create_brain_bridge`` / the bridge object -- none dials a
+      real socket, so none needs ``live_network`` despite the stub opt-out.
+    """
+    if request.node.get_closest_marker("live_network") is not None:
+        yield
+        return
+
+    import socket
+
+    def _deny(self: socket.socket, address: object) -> None:
+        raise AssertionError(
+            f"unit test dialed {address!r} -- no live_network marker; "
+            "see packages/tapps-mcp/tests/conftest.py for the allowlist"
+        )
+
+    with patch.object(socket.socket, "connect", _deny):
+        yield
 
 
 @pytest.fixture(autouse=True)

@@ -7,7 +7,20 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
+from tapps_core.common.models import Context7Diagnostic
 from tapps_core.metrics.dashboard import DashboardGenerator
+
+# TAP-6592: quick=False drives a real Context7 network probe unless stubbed
+# (see test_server_pipeline_tools.py's identical fixture for the full
+# explanation) -- only test_session_start_consolidation_hint needs this
+# explicitly; test_session_start_enriched_memory_stats runs first in file
+# order and its probe result gets throttle-cached to disk for the rest of
+# the session, but the two tests aren't guaranteed to run in that order in
+# isolation, so both are safer stubbed explicitly by any caller that hits
+# this module standalone.
+_FAKE_CONTEXT7_DIAGNOSTIC = Context7Diagnostic(
+    api_key_set=True, status="available", reachable=True, http_status=200, latency_ms=1.0
+)
 
 
 @pytest.fixture()
@@ -40,7 +53,17 @@ def generator_no_memory(metrics_dir: Path) -> DashboardGenerator:
     return DashboardGenerator(metrics_dir)
 
 
+@pytest.mark.live_network
 class TestDashboardMemoryMetrics:
+    """TAP-6592: the ``memory_store`` fixture constructs a real
+    ``tapps_brain.store.MemoryStore`` directly (bypassing tapps-mcp's own
+    settings, where semantic search defaults to disabled) -- that external,
+    pinned dependency's own default embeds saved content via
+    sentence-transformers on ``.save()``, which downloads its model from
+    HuggingFace Hub on a cache miss. That is out of this repo's boundary to
+    fix (tapps-brain is a pinned external package, not owned by tapps-mcp);
+    marked live_network rather than silently broken by the new root guard.
+    """
     def test_dashboard_includes_memory_metrics(
         self,
         generator_with_memory: DashboardGenerator,
@@ -268,6 +291,10 @@ class TestSessionStartEnrichedMemory:
                 "tapps_mcp.server_helpers._get_brain_bridge",
                 return_value=None,
             ),
+            patch(
+                "tapps_mcp.diagnostics.probe_context7",
+                return_value=_FAKE_CONTEXT7_DIAGNOSTIC,
+            ),
         ):
             result = await tapps_session_start(quick=False, force=True)
 
@@ -344,6 +371,10 @@ class TestSessionStartEnrichedMemory:
             patch(
                 "tapps_mcp.server_helpers._get_brain_bridge",
                 return_value=None,
+            ),
+            patch(
+                "tapps_mcp.diagnostics.probe_context7",
+                return_value=_FAKE_CONTEXT7_DIAGNOSTIC,
             ),
         ):
             result = await tapps_session_start(quick=False, force=True)

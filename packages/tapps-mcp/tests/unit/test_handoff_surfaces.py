@@ -150,8 +150,16 @@ class TestTheReadSideSeesSlots:
         assert list_handoffs(tmp_path) == []
 
 
+@pytest.mark.live_network
 class TestTheSlotReachesTheBrainKey:
     """Inherited findings 1 and 2, proved together over one real save.
+
+    TAP-6592: ``_store`` constructs a real ``tapps_brain.store.MemoryStore``
+    directly. That external, pinned dependency's own default embeds saved
+    content via sentence-transformers on ``.save()``, downloading its model
+    from HuggingFace Hub on a cache miss -- out of this repo's boundary to
+    fix (tapps-brain is a pinned external package). Marked live_network
+    rather than silently broken by the new root guard.
 
     Finding 1: ``handoff_memory_key`` had no caller — the write path handed the
     bare constant to the mirror, so no slotted handoff could reach the brain

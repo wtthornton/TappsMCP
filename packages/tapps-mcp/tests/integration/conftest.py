@@ -11,6 +11,20 @@ from pathlib import Path
 import pytest
 
 
+def pytest_collection_modifyitems(items: list[pytest.Item]) -> None:
+    """TAP-6592: this whole directory is the allowlisted live-network suite.
+
+    ``packages/tapps-mcp/tests/conftest.py`` wires an autouse socket-deny
+    guard for every test collected under ``tests/`` unless it carries the
+    ``live_network`` marker. Integration tests deliberately exercise real
+    subprocesses, the real MCP handshake, and real-tool invocations -- that
+    is the point of this directory -- so mark every item here rather than
+    annotating each test file individually.
+    """
+    for item in items:
+        item.add_marker(pytest.mark.live_network)
+
+
 @pytest.fixture
 def scored_project(tmp_path: Path) -> Path:
     """Create a Python project with scoreable source files.

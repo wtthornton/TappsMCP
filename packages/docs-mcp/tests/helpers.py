@@ -5,7 +5,7 @@ them instead of re-defining identical copies.
 
 Usage::
 
-    from tests.helpers import run_async, make_settings, make_commit, make_version
+    from tests.helpers import run_async, make_settings, make_commit, make_version, make_story_config
 """
 
 from __future__ import annotations
@@ -17,6 +17,7 @@ from unittest.mock import MagicMock
 
 from docs_mcp.analyzers.git_history import CommitInfo
 from docs_mcp.analyzers.version_detector import VersionBoundary
+from docs_mcp.generators.stories import StoryConfig, StoryTask
 
 
 def run_async(coro: Any) -> Any:
@@ -103,3 +104,42 @@ def make_version(
         commit_count=len(commits) if commits else 0,
         commits=commits or [],
     )
+
+
+def make_story_config(**kwargs: Any) -> StoryConfig:
+    """Build a ``StoryConfig`` with sensible defaults.
+
+    TAP-5622: moved here from ``test_stories.py`` when that megafile was
+    split by concern, so both halves (and any future story test file) share
+    one definition instead of duplicating it.
+    """
+    defaults: dict[str, Any] = {
+        "title": "Test Story",
+        "epic_number": 23,
+        "story_number": 1,
+        "role": "developer",
+        "want": "to validate login credentials",
+        "so_that": "invalid logins are rejected",
+        "description": "Implement client-side validation for the login form.",
+        "points": 3,
+        "size": "M",
+        "tasks": [
+            StoryTask(description="Create validation module", file_path="src/validators.py"),
+            StoryTask(description="Write unit tests"),
+        ],
+        "acceptance_criteria": ["Validation rejects empty fields", "Error messages displayed"],
+        "test_cases": ["Test empty email", "Test invalid password format"],
+        "dependencies": ["Story 23.0"],
+        "files": ["src/validators.py", "tests/test_validators.py"],
+        "technical_notes": ["Use Pydantic for validation"],
+        "criteria_format": "checkbox",
+        "style": "standard",
+        # STORY-104.1: existing tests were written against the human-shape
+        # output. The default flipped to "agent" but these tests still
+        # assert on the rich product-review sections -- keep them pointed
+        # at the human renderer. Agent-audience tests live in
+        # TestAgentAudience (test_stories_audience.py).
+        "audience": "human",
+    }
+    defaults.update(kwargs)
+    return StoryConfig(**defaults)
