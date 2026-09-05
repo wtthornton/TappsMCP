@@ -17,43 +17,57 @@ def _skill_dir(root, host="claude"):
     return root / f".{host}" / "skills" / SKILL
 
 
+def _method_detail(root, host="claude"):
+    """TAP-7017: method §7's full elaboration lives in references/method-detail.md,
+    pointed at from SKILL.md's condensed index item 7 ("Context lifecycle —
+    recycle at every sub-goal boundary...")."""
+    return (_skill_dir(root, host) / "references" / "method-detail.md").read_text()
+
+
+def _guardrails_and_contracts(root, host="claude"):
+    """TAP-7017: the Guardrails-every-prompt list moved to its own reference file."""
+    return (_skill_dir(root, host) / "references" / "guardrails-and-contracts.md").read_text()
+
+
 class TestContextRecycling:
     def test_body_has_the_four_step_cycle(self, tmp_path):
         """Acceptance 1 — handoff → re-verify → clear → continue, per sub-goal."""
         generate_skills(tmp_path, "claude")
         content = (_skill_dir(tmp_path) / "SKILL.md").read_text()
-        assert "Context lifecycle — recycle at every sub-goal boundary" in content
-        assert "handoff → re-verify → clear → continue" in content
+        assert "Context lifecycle" in content  # condensed index item, SKILL.md
+        method = _method_detail(tmp_path)
+        assert "Context lifecycle — recycle at every sub-goal boundary" in method
+        assert "handoff → re-verify → clear → continue" in method
         for step in ("/tapps-handoff-session", "/tapps-continue-session"):
-            assert step in content
+            assert step in method
 
     def test_body_names_clear_as_uninvokable_and_maps_run_shapes(self, tmp_path):
         """Acceptance 2 — /clear is a CLI built-in; name what replaces it."""
         generate_skills(tmp_path, "claude")
-        content = (_skill_dir(tmp_path) / "SKILL.md").read_text()
-        assert "built-in CLI command the model cannot invoke" in content
-        assert "Attended operator" in content
-        assert "One `claude -p` invocation per sub-goal" in content
-        assert "Workflow / subagents" in content
+        method = _method_detail(tmp_path)
+        assert "built-in CLI command the model cannot invoke" in method
+        assert "Attended operator" in method
+        assert "One `claude -p` invocation per sub-goal" in method
+        assert "Workflow / subagents" in method
 
     def test_body_specifies_the_mandatory_reverify_gate(self, tmp_path):
         """Acceptance 3 — sha, tracker, metric. All three, before the clear."""
         generate_skills(tmp_path, "claude")
-        content = (_skill_dir(tmp_path) / "SKILL.md").read_text()
-        assert "mandatory re-verify\ngate" in content or "mandatory re-verify gate" in content
-        assert "`git log -1`" in content
-        assert "git log --oneline <handoff-sha>..HEAD" in content
-        assert "re-read from the tracker" in content
-        assert "re-read from its newest artifact" in content
-        assert "correct the handoff *before* clearing" in content
+        method = _method_detail(tmp_path)
+        assert "mandatory re-verify\ngate" in method or "mandatory re-verify gate" in method
+        assert "`git log -1`" in method
+        assert "git log --oneline <handoff-sha>..HEAD" in method
+        assert "re-read from the tracker" in method
+        assert "re-read from its newest artifact" in method
+        assert "correct the handoff *before* clearing" in method
 
     def test_body_names_when_not_to_recycle(self, tmp_path):
         """Acceptance 6 — the cycle has a cost; say when it is not worth paying."""
         generate_skills(tmp_path, "claude")
-        content = (_skill_dir(tmp_path) / "SKILL.md").read_text()
-        assert "When *not* to recycle" in content
-        assert "tightly-coupled sub-goal" in content
-        assert "smaller than the cycle's overhead" in content
+        method = _method_detail(tmp_path)
+        assert "When *not* to recycle" in method
+        assert "tightly-coupled sub-goal" in method
+        assert "smaller than the cycle's overhead" in method
 
     def test_body_warns_about_two_runners_on_one_handoff(self, tmp_path):
         """Acceptance 7 — concurrent runners overwrite each other.
@@ -64,16 +78,16 @@ class TestContextRecycling:
         "separate handoff paths".
         """
         generate_skills(tmp_path, "claude")
-        content = (_skill_dir(tmp_path) / "SKILL.md").read_text()
-        assert "One runner per handoff file" in content
-        assert "overwrite each other" in content
-        assert "conflict.foreign" in content
-        assert "give each its own slot" in content
+        method = _method_detail(tmp_path)
+        assert "One runner per handoff file" in method
+        assert "overwrite each other" in method
+        assert "conflict.foreign" in method
+        assert "give each its own slot" in method
 
     def test_body_guardrail_restates_context_lifecycle(self, tmp_path):
         generate_skills(tmp_path, "claude")
-        content = (_skill_dir(tmp_path) / "SKILL.md").read_text()
-        guardrails = content.split("## Guardrails every emitted prompt must carry", 1)[1]
+        guardrails_doc = _guardrails_and_contracts(tmp_path)
+        guardrails = guardrails_doc.split("## Guardrails every emitted prompt must carry", 1)[1]
         assert "**Context lifecycle**" in guardrails
         assert "Never clear on an unverified handoff" in guardrails
         assert (
@@ -137,8 +151,8 @@ class TestContextRecycling:
     def test_lessons_pass_survives_alongside_recycling(self, tmp_path):
         """TAP-6578 guard: the terminal lessons pass must not be edited away."""
         generate_skills(tmp_path, "claude")
-        content = (_skill_dir(tmp_path) / "SKILL.md").read_text()
+        guardrails_doc = _guardrails_and_contracts(tmp_path)
         tpl = (_skill_dir(tmp_path) / "assets" / "prompt-template.md").read_text()
-        assert "**Terminal lessons-learned pass**" in content
+        assert "**Terminal lessons-learned pass**" in guardrails_doc
         assert "Lessons learned (REQUIRED" in tpl
-        assert "the one sub-goal that survives" in tpl.lower() + content.lower()
+        assert "the one sub-goal that survives" in tpl.lower() + guardrails_doc.lower()
