@@ -131,7 +131,11 @@ protocol, Expected-fail fix loop, and Engineering-discipline text that ride
 along with them. The full list and cargo text (each marked `> **CARGO`, for
 the emitted prompt's runner, not for you) is
 `references/guardrails-and-contracts.md`. Fill Output step 4's template
-from that list; do not freehand a shorter one.
+from that list; do not freehand a shorter one. Test scope is part of that
+list: a per-sub-goal verifier's charge sheet is scoped to the diff audit, the
+sub-goal's proof artifact, its new or changed test files, and a
+`--collect-only` enumeration — bulk suite re-runs are excluded there and
+reserved for the single end-of-program regression proof.
 
 ## Output
 
@@ -1458,7 +1462,7 @@ for each of them: **what set does it read that the other writes?**>
 - **State:** <read first — wayfind resume (`memory_group=wayfind`), status, brain recall of prior attempts, Linear, last handoff>
 - **Decide:** <how to pick the next *execute* action / sub-goal — never invent decide work; if fog reappears → stop and `/tapps-wayfind`>
 - **Execute:** <the action, on the committed mechanism + tier>
-- **Verify (independent):** spawn a fresh-context verifier — **tiered by proof shape**, not uniformly frontier (deterministic → `haiku`/`low` · comparative → `sonnet`/`medium` · semantic → `opus`/`high`+ · anything gating an irreversible step → `opus` whatever its shape) — to *refute* the sub-goal's proof — re-run scrutiny + behavioral checks against the validation contract. Hand it the **exact proof command, expected artifact, file:line anchors, and environment quirks** (non-default ports, which interpreter, auth source) — never the executor's narrative, or it will reason about plausibility instead of running anything. Its return schema requires `observed_output` (the literal text it saw — **an empty value is a FAIL**, it means the verifier reasoned instead of running) and `green_by_suppression` (true when the proof went green by deleting what it measures; a flagged proof is a fail). For cheap-tier verdicts read `observed_output`, never the conclusion sentence. The verifier's verdict advances the loop.
+- **Verify (independent):** spawn a fresh-context verifier — **tiered by proof shape**, not uniformly frontier (deterministic → `haiku`/`low` · comparative → `sonnet`/`medium` · semantic → `opus`/`high`+ · anything gating an irreversible step → `opus` whatever its shape) — to *refute* the sub-goal's proof — re-run scrutiny + behavioral checks against the validation contract. Hand it the **exact proof command, expected artifact, file:line anchors, and environment quirks** (non-default ports, which interpreter, auth source) — never the executor's narrative, or it will reason about plausibility instead of running anything. Its return schema requires `observed_output` (the literal text it saw — **an empty value is a FAIL**, it means the verifier reasoned instead of running) and `green_by_suppression` (true when the proof went green by deleting what it measures; a flagged proof is a fail). For cheap-tier verdicts read `observed_output`, never the conclusion sentence. The verifier's verdict advances the loop. **Scope the per-sub-goal verifier's charge sheet** to the diff audit, the sub-goal's own proof artifact, the sub-goal's new or changed test files, and a `--collect-only` enumeration — never a bulk suite re-run; a whole-suite re-run belongs only to the single end-of-program regression sub-goal, never to a per-sub-goal charge sheet.
 - **On fail (expected-fail fix loop):** record structured handoff → scope narrow fix sub-goal → re-execute → re-verify; ≤**3** validation rounds per sub-goal (override: N=…), then escalate once, then stop with a diagnosis. Never weaken the contract to go green.
 - **Record (structured handoff):** completed · undone · commands+exit codes · issues · procedures followed? · failure-and-why → brain
 - **Context hygiene:** prune stale reads; carry a compact state summary, not raw transcripts.

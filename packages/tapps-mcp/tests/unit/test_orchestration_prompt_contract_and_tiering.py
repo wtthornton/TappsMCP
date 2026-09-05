@@ -149,6 +149,22 @@ class TestCheapestViableTiering:
         assert "One\n  full **enumeration** per wave" in guardrails
         assert "exactly one regression run at program\n  end" in guardrails
 
+    def test_verifier_dispatch_charge_sheet_scoped_and_excludes_bulk_reruns(self) -> None:
+        template = COMPANIONS["assets/prompt-template.md"]
+        loop = template.split("\n## Loop", 1)[1].split("\n## ", 1)[0]
+        verify = loop.split("- **Verify (independent):**", 1)[1].split("\n- ", 1)[0]
+        assert "charge sheet" in verify
+        assert "diff audit" in verify
+        assert "proof artifact" in verify
+        assert "new or changed test files" in verify
+        assert "--collect-only" in verify
+        assert "never a bulk suite re-run" in verify
+
+    def test_skill_body_pointer_names_the_test_execution_policy(self) -> None:
+        body = CLAUDE_SKILLS["orchestration-prompt"]
+        assert "charge sheet" in body
+        assert "--collect-only" in body
+
     def test_score_line_carries_pct_with_denominator_and_elapsed(self) -> None:
         template = COMPANIONS["assets/prompt-template.md"]
         assert "pct <n>%" in template
