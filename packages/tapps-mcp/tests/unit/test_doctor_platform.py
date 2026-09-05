@@ -30,7 +30,7 @@ def test_check_claude_md_missing_fails(tmp_path: Path) -> None:
 def test_check_claude_md_missing_soft_passes_with_cursor_rules(tmp_path: Path) -> None:
     rules_dir = tmp_path / ".cursor" / "rules"
     rules_dir.mkdir(parents=True)
-    (rules_dir / "tapps-pipeline.md").write_text("rules", encoding="utf-8")
+    (rules_dir / "tapps-pipeline.mdc").write_text("rules", encoding="utf-8")
     result = check_claude_md(tmp_path)
     assert result.ok is True
 

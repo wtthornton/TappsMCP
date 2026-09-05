@@ -2,7 +2,8 @@
 
 Verifies that generate_cursor_rules() creates three distinct .mdc rule files
 with different rule types: alwaysApply, autoAttach (globs), and agentRequested
-(description).
+(description). The pipeline rule (``tapps-pipeline.mdc``) is generated
+separately by ``_bootstrap_cursor`` (TAP-6440) -- not covered here.
 """
 
 from __future__ import annotations
@@ -26,9 +27,9 @@ class TestRuleCreation:
     def test_creates_three_rules(self, tmp_path):
         generate_cursor_rules(tmp_path)
         rules_dir = tmp_path / ".cursor" / "rules"
-        assert (rules_dir / "tapps-pipeline.mdc").exists()
         assert (rules_dir / "tapps-python-quality.mdc").exists()
         assert (rules_dir / "tapps-expert-consultation.mdc").exists()
+        assert (rules_dir / "tapps-agent-scope.mdc").exists()
 
     def test_creates_rules_dir(self, tmp_path):
         generate_cursor_rules(tmp_path)
@@ -36,35 +37,13 @@ class TestRuleCreation:
 
     def test_result_dict(self, tmp_path):
         result = generate_cursor_rules(tmp_path)
-        assert len(result["created"]) == 4
+        assert len(result["created"]) == 3
         assert len(result["skipped"]) == 0
 
-
-class TestPipelineRule:
-    """Tests for tapps-pipeline.mdc (alwaysApply rule)."""
-
-    def test_always_apply_true(self, tmp_path):
+    def test_does_not_write_the_pipeline_rule(self, tmp_path):
+        """``tapps-pipeline.mdc`` is _bootstrap_cursor's file, not this one's (TAP-6440)."""
         generate_cursor_rules(tmp_path)
-        content = (tmp_path / ".cursor" / "rules" / "tapps-pipeline.mdc").read_text()
-        fm = _parse_frontmatter(content)
-        assert fm["alwaysApply"] is True
-
-    def test_no_globs(self, tmp_path):
-        generate_cursor_rules(tmp_path)
-        content = (tmp_path / ".cursor" / "rules" / "tapps-pipeline.mdc").read_text()
-        fm = _parse_frontmatter(content)
-        assert "globs" not in fm
-
-    def test_no_description(self, tmp_path):
-        generate_cursor_rules(tmp_path)
-        content = (tmp_path / ".cursor" / "rules" / "tapps-pipeline.mdc").read_text()
-        fm = _parse_frontmatter(content)
-        assert "description" not in fm
-
-    def test_body_references_session_start(self, tmp_path):
-        generate_cursor_rules(tmp_path)
-        content = (tmp_path / ".cursor" / "rules" / "tapps-pipeline.mdc").read_text()
-        assert "tapps_session_start" in content
+        assert not (tmp_path / ".cursor" / "rules" / "tapps-pipeline.mdc").exists()
 
 
 class TestPythonQualityRule:
@@ -131,12 +110,12 @@ class TestSkipExisting:
         rules_dir = tmp_path / ".cursor" / "rules"
         rules_dir.mkdir(parents=True)
         custom = "# My custom rule\n"
-        (rules_dir / "tapps-pipeline.mdc").write_text(custom)
+        (rules_dir / "tapps-python-quality.mdc").write_text(custom)
 
         result = generate_cursor_rules(tmp_path)
 
-        assert "tapps-pipeline.mdc" in result["skipped"]
-        assert (rules_dir / "tapps-pipeline.mdc").read_text() == custom
+        assert "tapps-python-quality.mdc" in result["skipped"]
+        assert (rules_dir / "tapps-python-quality.mdc").read_text() == custom
         # Other rules should still be created
-        assert (rules_dir / "tapps-python-quality.mdc").exists()
         assert (rules_dir / "tapps-expert-consultation.mdc").exists()
+        assert (rules_dir / "tapps-agent-scope.mdc").exists()

@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import pytest
+
 from tapps_mcp.pipeline.agent_contract import (
     CHECKLIST_SKIPPED_REC,
     FINISH_TASK_VALIDATE_CALL_GRAPH_NOTE,
@@ -18,7 +20,7 @@ from tapps_mcp.pipeline.agent_contract import (
     lookup_gap_recommendation,
 )
 from tapps_mcp.pipeline.platform_hook_templates import CLAUDE_HOOK_SCRIPTS, CURSOR_HOOK_SCRIPTS
-from tapps_mcp.pipeline.platform_rules import CURSOR_RULE_TEMPLATES
+from tapps_mcp.pipeline.platform_rules import CURSOR_RULE_TEMPLATES, render_cursor_pipeline_rule
 from tapps_mcp.pipeline.platform_skills import CLAUDE_SKILLS, CURSOR_SKILLS
 from tapps_mcp.tools.usage import (
     compute_gaps,
@@ -95,6 +97,12 @@ class TestUsageGapStringsMatchContract:
 
 
 class TestGeneratedSurfacesEchoContract:
+    """``tapps-pipeline.mdc`` moved out of ``CURSOR_RULE_TEMPLATES`` and is now
+    rendered by ``render_cursor_pipeline_rule`` (_bootstrap_cursor's source)
+    from the engagement-level templates plus the spliced-in agent-contract
+    constants (TAP-6440 round 2).
+    """
+
     def test_claude_stop_hook_finish_reminder(self) -> None:
         assert STOP_FINISH_REMINDER in CLAUDE_HOOK_SCRIPTS["tapps-stop.sh"]
 
@@ -102,10 +110,17 @@ class TestGeneratedSurfacesEchoContract:
         assert POST_EDIT_IMPORT_LOOKUP_BASH in CLAUDE_HOOK_SCRIPTS["tapps-post-edit.sh"]
         assert "before editing" in POST_EDIT_IMPORT_LOOKUP_BASH
 
-    def test_cursor_pipeline_lookup_before_edit(self) -> None:
-        body = CURSOR_RULE_TEMPLATES["tapps-pipeline.mdc"]
+    @pytest.mark.parametrize("engagement_level", ["low", "medium", "high"])
+    def test_cursor_pipeline_lookup_before_edit(self, engagement_level: str) -> None:
+        body = render_cursor_pipeline_rule(engagement_level=engagement_level)
         assert "before the first edit" in body
         assert "lookup_docs_underused" in body
+
+    @pytest.mark.parametrize("engagement_level", ["low", "medium", "high"])
+    def test_cursor_pipeline_memory_and_validation(self, engagement_level: str) -> None:
+        body = render_cursor_pipeline_rule(engagement_level=engagement_level)
+        assert MEMORY_RECALL_SESSION_START in body
+        assert "/tapps-finish-task" in body
 
     def test_cursor_python_quality_lookup_before_edit(self) -> None:
         body = CURSOR_RULE_TEMPLATES["tapps-python-quality.mdc"]
@@ -118,11 +133,6 @@ class TestGeneratedSurfacesEchoContract:
         assert SUBAGENT_START_TOOLS_LINE in script
         assert "mcp__tapps-mcp__tapps_memory" not in script
         assert "nlt-memory" in script
-
-    def test_cursor_pipeline_memory_and_validation(self) -> None:
-        body = CURSOR_RULE_TEMPLATES["tapps-pipeline.mdc"]
-        assert MEMORY_RECALL_SESSION_START in body
-        assert "/tapps-finish-task" in body
 
     def test_finish_task_skill_has_adr_0021_and_checklist(self) -> None:
         for skills in (CURSOR_SKILLS, CLAUDE_SKILLS):

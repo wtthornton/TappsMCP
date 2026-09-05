@@ -89,7 +89,7 @@ class TestTap686PythonSignals:
 
 
 class TestTap689RulesBackup:
-    """Pre-upgrade backup includes .claude/rules/*.md and .cursor/rules/*.md."""
+    """Pre-upgrade backup includes .claude/rules/*.md and .cursor/rules/*.md|*.mdc."""
 
     def test_collect_targets_includes_rule_files(self, tmp_path: Path) -> None:
         from tapps_mcp.pipeline.upgrade import _collect_upgrade_targets
@@ -101,7 +101,7 @@ class TestTap689RulesBackup:
 
         cursor_rules = tmp_path / ".cursor" / "rules"
         cursor_rules.mkdir(parents=True)
-        cq = cursor_rules / "tapps-pipeline.md"
+        cq = cursor_rules / "tapps-pipeline.mdc"
         cq.write_text("# user edits\n")
 
         targets = _collect_upgrade_targets(tmp_path)

@@ -141,8 +141,8 @@ class TestBootstrapPipeline:
             warm_cache_from_tech_stack=False,
             platform="cursor",
         )
-        assert ".cursor/rules/tapps-pipeline.md" in result["created"]
-        content = (tmp_path / ".cursor" / "rules" / "tapps-pipeline.md").read_text()
+        assert ".cursor/rules/tapps-pipeline.mdc" in result["created"]
+        content = (tmp_path / ".cursor" / "rules" / "tapps-pipeline.mdc").read_text()
         assert "TAPPS" in content
 
     def test_unknown_platform_errors(self, tmp_path):

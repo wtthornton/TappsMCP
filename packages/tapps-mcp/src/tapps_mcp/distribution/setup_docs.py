@@ -83,7 +83,7 @@ def _generate_cursor_scaffolding(project_root: Path, engagement_level: str) -> N
     )
 
     action = _bootstrap_cursor(project_root, engagement_level=engagement_level)
-    _echo_bootstrap_action(action, ".cursor/rules/tapps-pipeline.md")
+    _echo_bootstrap_action(action, ".cursor/rules/tapps-pipeline.mdc")
 
     _echo_gen_result(
         "hooks", generate_cursor_hooks(project_root, engagement_level=engagement_level)
@@ -215,7 +215,7 @@ _PREVIEW_FILES_BY_HOST: dict[str, tuple[str, ...]] = {
         ".github/copilot-instructions.md",
     ),
     "cursor": (
-        ".cursor/rules/tapps-pipeline.md",
+        ".cursor/rules/tapps-pipeline.mdc",
         ".cursor/hooks/ (tapps-before-mcp, ...)",
         ".cursor/agents/ (tapps-reviewer, tapps-validator, ...)",
         ".cursor/skills/ (tapps-score, tapps-validate, ...)",

@@ -536,7 +536,7 @@ def run_init(
         scope: ``"project"`` for project-scope ``.mcp.json`` (default) or
             ``"user"`` for user-scope config. Only affects ``claude-code`` host.
         rules: If ``True``, also generate platform rule files (CLAUDE.md or
-            .cursor/rules/tapps-pipeline.md) alongside MCP config.
+            .cursor/rules/tapps-pipeline.mdc) alongside MCP config.
         dry_run: If ``True``, show what would be written without making changes.
         engagement_level: When set (high/medium/low), write to .tapps-mcp.yaml and
             use for platform rules. When ``None``, rules use medium or existing config.

@@ -23,6 +23,7 @@ from tapps_mcp.pipeline.init_github import (
     _setup_github_templates,
 )
 from tapps_mcp.pipeline.init_permissions import _bootstrap_claude_settings
+from tapps_mcp.pipeline.platform_rules import render_cursor_pipeline_rule
 from tapps_mcp.prompts.prompt_loader import load_platform_rules
 
 if TYPE_CHECKING:
@@ -185,17 +186,17 @@ def _generate_platform_file_ops(cfg: BootstrapConfig, state: _BootstrapState) ->
         )
         state.created.append("CLAUDE.md")
     elif platform == "cursor":
-        content = load_platform_rules("cursor", engagement_level=engagement)
+        content = render_cursor_pipeline_rule(engagement_level=engagement)
         state.file_ops.append(
             FileOperation(
-                path=".cursor/rules/tapps-pipeline.md",
+                path=".cursor/rules/tapps-pipeline.mdc",
                 content=content,
                 mode="create",
                 description="Cursor platform rules with TappsMCP pipeline reference.",
                 priority=2,
             )
         )
-        state.created.append(".cursor/rules/tapps-pipeline.md")
+        state.created.append(".cursor/rules/tapps-pipeline.mdc")
 
     state.result["platform_rules"] = {
         "platform": platform,
@@ -491,9 +492,9 @@ def _setup_cursor_platform(cfg: BootstrapConfig, state: _BootstrapState) -> str:
         state.project_root, cfg.overwrite_platform_rules, engagement_level=engagement
     )
     if platform_action in {"created", "updated"}:
-        state.created.append(".cursor/rules/tapps-pipeline.md")
+        state.created.append(".cursor/rules/tapps-pipeline.mdc")
     elif platform_action == "skipped":
-        state.skipped.append(".cursor/rules/tapps-pipeline.md")
+        state.skipped.append(".cursor/rules/tapps-pipeline.mdc")
 
     if not cfg.minimal:
         state.result["hooks"] = generate_cursor_hooks(

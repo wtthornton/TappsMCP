@@ -165,11 +165,11 @@ def check_retired_hooks(project_root: Path) -> CheckResult:
 def check_claude_md(project_root: Path) -> CheckResult:
     """Check if CLAUDE.md exists and contains TAPPS reference.
 
-    When Cursor rules are present (``.cursor/rules/tapps-pipeline.md``),
+    When Cursor rules are present (``.cursor/rules/tapps-pipeline.mdc``),
     a missing CLAUDE.md reference is reported as a soft pass rather than a
     failure, since the project may target Cursor rather than Claude Code.
     """
-    cursor_rules_present = (project_root / ".cursor" / "rules" / "tapps-pipeline.md").exists()
+    cursor_rules_present = (project_root / ".cursor" / "rules" / "tapps-pipeline.mdc").exists()
     claude_md = project_root / "CLAUDE.md"
     if not claude_md.exists():
         if cursor_rules_present:
@@ -203,14 +203,14 @@ def check_claude_md(project_root: Path) -> CheckResult:
 
 @consumer_staleness
 def check_cursor_rules(project_root: Path) -> CheckResult:
-    """Check if ``.cursor/rules/tapps-pipeline.md`` exists."""
-    rules_path = project_root / ".cursor" / "rules" / "tapps-pipeline.md"
+    """Check if ``.cursor/rules/tapps-pipeline.mdc`` exists."""
+    rules_path = project_root / ".cursor" / "rules" / "tapps-pipeline.mdc"
     if rules_path.exists():
         return CheckResult("Cursor rules", True, f"Present: {rules_path}")
     return CheckResult(
         "Cursor rules",
         False,
-        ".cursor/rules/tapps-pipeline.md not found",
+        ".cursor/rules/tapps-pipeline.mdc not found",
         "Run: tapps-mcp init --host cursor --rules",
     )
 
@@ -227,7 +227,7 @@ def check_claude_md_stamp(project_root: Path) -> CheckResult:
     """
     claude_md = project_root / "CLAUDE.md"
     if not claude_md.exists():
-        cursor_rules = project_root / ".cursor" / "rules" / "tapps-pipeline.md"
+        cursor_rules = project_root / ".cursor" / "rules" / "tapps-pipeline.mdc"
         if cursor_rules.exists():
             return CheckResult(
                 "CLAUDE.md stamp",

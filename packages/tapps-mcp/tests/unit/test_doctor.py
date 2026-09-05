@@ -499,7 +499,7 @@ class TestPlatformRuleChecks:
         assert "not found" in result.message
 
     def test_cursor_rules_present(self, tmp_path):
-        rules = tmp_path / ".cursor" / "rules" / "tapps-pipeline.md"
+        rules = tmp_path / ".cursor" / "rules" / "tapps-pipeline.mdc"
         rules.parent.mkdir(parents=True)
         rules.write_text("TAPPS rules")
         result = check_cursor_rules(tmp_path)

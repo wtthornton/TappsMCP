@@ -20,7 +20,6 @@ _CANDIDATE_FILES = (
     "AGENTS.md",
     "CLAUDE.md",
     ".claude/settings.json",
-    ".cursor/rules/tapps-pipeline.md",
     ".mcp.json",
     ".cursor/mcp.json",
     ".cursor/hooks.json",
@@ -32,7 +31,8 @@ _CANDIDATE_FILES = (
 _HOOK_DIRS = (".claude/hooks", ".cursor/hooks")
 # TAP-689: rule files that the upgrade regenerates. Without backing these up, a
 # consumer's hand-edits to python-quality.md / agent-scope.md /
-# tapps-pipeline.md are lost with no rollback path.
+# tapps-pipeline.mdc (Cursor's canonical pipeline rule, TAP-6440) are lost with
+# no rollback path. Covered by the ``_RULE_DIRS`` glob below, not this list.
 _RULE_DIRS = (".claude/rules", ".cursor/rules")
 
 
@@ -76,6 +76,7 @@ def collect_upgrade_targets(project_root: Path) -> list[Path]:
         rules_dir = project_root / rel
         if rules_dir.is_dir():
             targets.extend(rules_dir.glob("*.md"))
+            targets.extend(rules_dir.glob("*.mdc"))
 
     targets.extend(
         candidate

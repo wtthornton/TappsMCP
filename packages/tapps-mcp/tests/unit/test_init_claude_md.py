@@ -100,8 +100,8 @@ class TestReplaceTappsSection:
 def platform_rules(monkeypatch: pytest.MonkeyPatch) -> str:
     content = "# Cursor Pipeline\nrendered rules\n"
     monkeypatch.setattr(
-        "tapps_mcp.pipeline.init_claude_md.load_platform_rules",
-        lambda platform, engagement_level="medium": content,
+        "tapps_mcp.pipeline.init_claude_md.render_cursor_pipeline_rule",
+        lambda engagement_level="medium": content,
     )
     return content
 
@@ -109,14 +109,14 @@ def platform_rules(monkeypatch: pytest.MonkeyPatch) -> str:
 class TestBootstrapCursor:
     def test_creates_the_rule_file(self, tmp_path: Path, platform_rules: str) -> None:
         assert _bootstrap_cursor(tmp_path) == "created"
-        rules = tmp_path / ".cursor" / "rules" / "tapps-pipeline.md"
+        rules = tmp_path / ".cursor" / "rules" / "tapps-pipeline.mdc"
         assert rules.read_text(encoding="utf-8") == platform_rules
 
     def test_skips_an_existing_file_without_overwrite(
         self, tmp_path: Path, platform_rules: str
     ) -> None:
         del platform_rules
-        rules = tmp_path / ".cursor" / "rules" / "tapps-pipeline.md"
+        rules = tmp_path / ".cursor" / "rules" / "tapps-pipeline.mdc"
         rules.parent.mkdir(parents=True)
         rules.write_text("hand-written", encoding="utf-8")
 
@@ -126,7 +126,7 @@ class TestBootstrapCursor:
     def test_overwrites_an_existing_file_when_asked(
         self, tmp_path: Path, platform_rules: str
     ) -> None:
-        rules = tmp_path / ".cursor" / "rules" / "tapps-pipeline.md"
+        rules = tmp_path / ".cursor" / "rules" / "tapps-pipeline.mdc"
         rules.parent.mkdir(parents=True)
         rules.write_text("hand-written", encoding="utf-8")
 
@@ -136,15 +136,17 @@ class TestBootstrapCursor:
     def test_passes_the_engagement_level_through(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        seen: list[tuple[str, str]] = []
+        seen: list[str] = []
 
-        def _load(platform: str, engagement_level: str = "medium") -> str:
-            seen.append((platform, engagement_level))
+        def _render(engagement_level: str = "medium") -> str:
+            seen.append(engagement_level)
             return "rules"
 
-        monkeypatch.setattr("tapps_mcp.pipeline.init_claude_md.load_platform_rules", _load)
+        monkeypatch.setattr(
+            "tapps_mcp.pipeline.init_claude_md.render_cursor_pipeline_rule", _render
+        )
         _bootstrap_cursor(tmp_path, engagement_level="high")
-        assert seen == [("cursor", "high")]
+        assert seen == ["high"]
 
 
 class TestFacadeReExport:

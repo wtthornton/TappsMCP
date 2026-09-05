@@ -34,6 +34,7 @@ are named, documented here, and stamped into each generated file:
 
 from __future__ import annotations
 
+import re
 import stat
 from typing import TYPE_CHECKING, Any, Literal, NamedTuple
 
@@ -189,6 +190,174 @@ def asset_project_region_heading(rel_path: str = "") -> str:
     :func:`policy_header`'s html fallback.
     """
     return _wrap_note(_ASSET_PROJECT_REGION_NOTE, _syntax_for(rel_path))
+
+
+# A markdown ATX heading: 1-6 '#' at column 0, a space, then non-empty text.
+# Captures the level (the '#' run) separately from the text so a section
+# boundary can be computed by level, and "## Foo" / "### Foo" never collide.
+_HEADING_RE = re.compile(r"^(#{1,6}) (.+)$", re.MULTILINE)
+
+
+class _Section(NamedTuple):
+    """One ATX heading line, plus everything under it up to the next boundary."""
+
+    heading: str
+    body: str
+
+
+def _sections(text: str) -> list[_Section]:
+    """Split *text* into heading+body sections.
+
+    A section's body runs until the next heading whose level is the same or
+    higher (an equal or smaller '#' run) — a more-nested subheading stays
+    inside its parent's body, matching how a Markdown reader treats the
+    hierarchy. Text before the first heading has no section and is ignored:
+    there is no heading to key a comparison on.
+    """
+    matches = list(_HEADING_RE.finditer(text))
+    sections: list[_Section] = []
+    for i, match in enumerate(matches):
+        level = len(match.group(1))
+        body_start = match.end()
+        body_end = len(text)
+        for later in matches[i + 1 :]:
+            if len(later.group(1)) <= level:
+                body_end = later.start()
+                break
+        sections.append(_Section(match.group(0).strip(), text[body_start:body_end]))
+    return sections
+
+
+def _normalize_body(body: str) -> str:
+    """Whitespace-normalise a section body for equality comparison.
+
+    Normalises line endings, strips trailing whitespace per line, and
+    collapses runs of blank lines to one — so a preserved region that
+    differs from canonical only in incidental whitespace still counts as
+    ``duplicate``, never ``modified`` (TAP-6943 fix round 1, box 4e).
+    """
+    lines = body.replace("\r\n", "\n").replace("\r", "\n").split("\n")
+    collapsed: list[str] = []
+    for line in (raw.rstrip() for raw in lines):
+        if line == "" and collapsed and collapsed[-1] == "":
+            continue
+        collapsed.append(line)
+    return "\n".join(collapsed).strip("\n")
+
+
+class SectionRedundancy(NamedTuple):
+    """How much of a preserved region's section structure the managed block already covers.
+
+    Sections are matched by heading text; a match only counts as
+    ``duplicate`` when the body is *also* identical after whitespace
+    normalisation — this is the section-body ``comm`` TAP-6943's fix round 1
+    requires, replacing the heading-only comparison that let a preserved
+    region with a genuinely different body (real local customisation) be
+    reported ``fully_redundant`` and stamped "safe to delete this entire
+    region" merely because its heading text happened to match upstream.
+
+    ``modified`` is a heading present upstream whose body differs — local
+    content, never removable. ``unique`` is a heading absent upstream
+    entirely — also never removable. Only ``duplicate`` sections carry zero
+    local content.
+    """
+
+    duplicate: tuple[str, ...]
+    modified: tuple[str, ...]
+    unique: tuple[str, ...]
+
+    @property
+    def duplicate_count(self) -> int:
+        return len(self.duplicate)
+
+    @property
+    def modified_count(self) -> int:
+        return len(self.modified)
+
+    @property
+    def unique_count(self) -> int:
+        return len(self.unique)
+
+    @property
+    def total_count(self) -> int:
+        return self.duplicate_count + self.modified_count + self.unique_count
+
+    @property
+    def fully_redundant(self) -> bool:
+        return self.total_count > 0 and self.modified_count == 0 and self.unique_count == 0
+
+    @property
+    def partially_redundant(self) -> bool:
+        return self.total_count > 0 and not self.fully_redundant and self.duplicate_count > 0
+
+
+def heading_redundancy(preserved: str, canonical_block_body: str) -> SectionRedundancy:
+    """Compare *preserved*'s sections against *canonical_block_body*'s, body included.
+
+    A section counts as ``duplicate`` only when both its heading and its
+    whitespace-normalised body match a canonical section exactly. A heading
+    that recurs upstream with a different body is ``modified``, not
+    ``duplicate`` — the bug this function replaces treated heading text
+    alone as the whole comparison, so a hand-edited ``## Setup`` section was
+    indistinguishable from an untouched one.
+    """
+    preserved_sections = _sections(preserved)
+    canonical_by_heading = {
+        section.heading: _normalize_body(section.body)
+        for section in _sections(canonical_block_body)
+    }
+
+    duplicate: list[str] = []
+    modified: list[str] = []
+    unique: list[str] = []
+    for section in preserved_sections:
+        canonical_body = canonical_by_heading.get(section.heading)
+        if canonical_body is None:
+            unique.append(section.heading)
+        elif _normalize_body(section.body) == canonical_body:
+            duplicate.append(section.heading)
+        else:
+            modified.append(section.heading)
+
+    return SectionRedundancy(tuple(duplicate), tuple(modified), tuple(unique))
+
+
+def asset_project_region_heading_with_redundancy(
+    rel_path: str, redundancy: SectionRedundancy
+) -> str:
+    """Return the migrated-region heading, plus a redundancy verdict when sections exist.
+
+    Appends a second comment line naming how much of the preserved region's
+    section structure the managed block above already covers — the
+    per-asset signal TAP-6943 asks for, surfaced directly in the file that
+    ``tapps_upgrade`` or ``tapps doctor`` next reads.
+
+    ``fully_redundant`` is the only case that may say "safe to delete"; any
+    other case with sections at all names the modified/unique headings and
+    says the region carries local content — never "safe to delete", because
+    it is not (TAP-6943 fix round 1: this is what the previous heading-only
+    comparison got wrong).
+    """
+    base = asset_project_region_heading(rel_path)
+    if redundancy.total_count == 0:
+        # No sections to compare: nothing here is redundant with the managed
+        # block, one way or the other.
+        return base
+    syntax = _syntax_for(rel_path)
+    if redundancy.fully_redundant:
+        verdict = (
+            f"fully redundant: all {redundancy.total_count} heading(s) below already "
+            f"appear in the managed block above — safe to delete this entire region"
+        )
+    else:
+        local = [*redundancy.modified, *redundancy.unique]
+        verdict = (
+            f"carries local content: {redundancy.modified_count} modified, "
+            f"{redundancy.unique_count} unique, {redundancy.duplicate_count} duplicate of "
+            f"{redundancy.total_count} heading(s) below ({', '.join(local)}) — do not delete "
+            f"without review"
+        )
+    return f"{base}\n{_wrap_note(verdict, syntax)}"
 
 
 def _split_shebang(body: str) -> tuple[str, str]:
@@ -360,7 +529,8 @@ def install_or_refresh_asset(
         action = "refreshed"
     else:
         preserved = original.strip("\n")
-        heading = asset_project_region_heading(rel_path)
+        redundancy = heading_redundancy(preserved, rest)
+        heading = asset_project_region_heading_with_redundancy(rel_path, redundancy)
         updated = f"{fresh}\n{heading}\n\n{preserved}\n"
         action = "migrated"
 
@@ -408,14 +578,17 @@ def plan_overwrite_report(path: Path, body: str) -> str | None:
 
     Returns ``None`` when the file is absent or already matches canonical —
     there is nothing to report. TAP-6497 acceptance item 2: a whole-file
-    overwrite of customized content must be named before it happens.
+    overwrite of customized content must be named before it happens. An
+    unreadable file (permissions, non-UTF-8 bytes) is reported as its own
+    warning entry rather than silently treated as "nothing to report"
+    (TAP-6612) — the overwrite still happens; the operator should know why.
     """
     if not path.exists():
         return None
     try:
         current = path.read_text(encoding="utf-8")
-    except (OSError, UnicodeDecodeError):
-        return None
+    except (OSError, UnicodeDecodeError) as exc:
+        return f"{path} could not be read ({exc}) before tapps_upgrade overwrites it wholesale."
     expected = f"{policy_header('overwrite')}\n{body.lstrip('\n')}"
     if current in (expected, body):
         return None
@@ -476,10 +649,13 @@ __all__ = [
     "POLICY_NOTES",
     "AssetAction",
     "Policy",
+    "SectionRedundancy",
     "asset_block",
     "asset_project_region_heading",
+    "asset_project_region_heading_with_redundancy",
     "create_only_body",
     "has_asset_customization",
+    "heading_redundancy",
     "install_or_refresh_asset",
     "is_delimitable",
     "plan_overwrite_report",

@@ -523,16 +523,23 @@ def generate_docs_skills(
     """Generate documentation skill definitions.
 
     Creates doc-focused skill directories with SKILL.md files in
-    ``.claude/skills/`` or ``.cursor/skills/``.
+    ``.claude/skills/`` or ``.cursor/skills/``. Each ``SKILL.md`` is routed
+    through the same BEGIN/END managed-block marker as every other registry
+    skill (:func:`~tapps_mcp.pipeline.skill_managed_block.install_or_refresh_skill`),
+    so it carries the one-line upgrade-policy header instead of being
+    written verbatim (TAP-6612).
 
     Args:
         project_root: Project root directory.
         platform: ``"claude"`` or ``"cursor"``.
-        overwrite: Whether to overwrite existing skill files.
+        overwrite: Whether to refresh an existing ``SKILL.md``'s managed
+            block. When ``False``, an existing file is left untouched.
 
     Returns:
         Summary dict with ``created``, ``updated``, ``skipped`` lists.
     """
+    from tapps_mcp.pipeline.skill_managed_block import install_or_refresh_skill
+
     if platform == "claude":
         skills_dir = project_root / ".claude" / "skills"
         templates = CLAUDE_DOCS_SKILLS
@@ -551,12 +558,12 @@ def generate_docs_skills(
         target = skill_dir / "SKILL.md"
         if target.exists():
             if overwrite:
-                target.write_text(content, encoding="utf-8")
-                updated.append(skill_name)
+                action = install_or_refresh_skill(target, content, skill_name)
+                (skipped if action == "unchanged" else updated).append(skill_name)
             else:
                 skipped.append(skill_name)
         else:
-            target.write_text(content, encoding="utf-8")
+            install_or_refresh_skill(target, content, skill_name)
             created.append(skill_name)
 
     return {"created": created, "updated": updated, "skipped": skipped}
