@@ -39,11 +39,16 @@ that package.
 
 ## Notes
 
-- This lane's own measured floor (from the drain program's Pinned facts) was
-  `13076` tests collected on `BASE_SHA` (`ca31e2f1`, whole-repo `--collect-only`).
-  The per-directory sum above (`13092`) is measured on this lane's own branch,
-  after TAP-6592's fixes and this inventory's own file additions — it is higher,
-  not lower, satisfying the "count unchanged or higher" acceptance box.
+- Re-measured per the independent verifier's finding (this round, L12-fix-r1):
+  `pytest --collect-only -q packages/tapps-core/tests packages/tapps-mcp/tests
+  packages/docs-mcp/tests | tail -1` on `ca31e2f1` (this lane's own base) also
+  collects `13092` — the same number as the per-directory sum above. The
+  `13076` figure previously cited here as "measured on BASE_SHA" was not; it is
+  the count at `7090b953`, a different commit. `ca31e2f1 → 13092`,
+  head (as of this fix round) → `13093`, delta `+1` (this round's item 3 split
+  one test into two while proving the same invariant; see PR #375). The prior
+  sentence attributing the delta to "TAP-6592's fixes and this inventory's own
+  file additions" was fabricated causal narrative and is removed.
 - No test was deleted to produce this inventory.
 - Overlap/redundancy clustering, wall-clock-assertion inventory, and a
   reduction plan with target runtime are **out of scope for this lane** — see
