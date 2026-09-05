@@ -110,6 +110,26 @@ def skill_tier_from_wizard(wizard_answers: Any, settings: Any) -> str:
     return tier if tier in {"core", "full"} else "full"
 
 
+def resolve_init_mcp_bundle(mcp_bundle: str | None, settings: Any) -> tuple[str, str]:
+    """Resolve the ``mcp_bundle`` ``tapps_init`` actually deploys with (TAP-7020).
+
+    Precedence: an explicit caller argument wins; else an existing
+    ``.tapps-mcp.yaml`` value (so a re-run never silently re-expands a
+    project someone already narrowed); else
+    :data:`tapps_mcp.distribution.nlt_mcp_config.DEFAULT_NLT_BUNDLE`
+    (ADR-0018's greenfield default), sourced from the constant rather than
+    restated as a second literal. Returns ``(bundle, reason)``.
+    """
+    from tapps_mcp.distribution.nlt_mcp_config import DEFAULT_NLT_BUNDLE
+
+    settings_bundle = getattr(settings, "mcp_bundle", None)
+    if mcp_bundle is not None:
+        return mcp_bundle, "explicit caller argument"
+    if isinstance(settings_bundle, str):
+        return settings_bundle, "from .tapps-mcp.yaml"
+    return DEFAULT_NLT_BUNDLE, "greenfield default (ADR-0018)"
+
+
 def maybe_write_mcp_config(
     result: dict[str, Any],
     settings: Any,

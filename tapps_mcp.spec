@@ -140,6 +140,7 @@ a = Analysis(
         "tapps_mcp.tools.session_health",
         "tapps_mcp.tools.decompose_helpers",
         "tapps_mcp.tools.pipeline_init_helpers",
+        "tapps_mcp.tools.admin_tools",
         "tapps_mcp.tools.pipeline_orchestrator",
         "tapps_mcp.tools.engagement_level",
         "tapps_mcp.tools.loop_metrics",
