@@ -133,6 +133,41 @@ def _recent_degraded_graph_tools(
     return sorted(name for name, degraded in latest_by_tool.items() if degraded)
 
 
+def _project_scorable_profile(project_root: Path, *, timeout: int = 5) -> str:
+    """Whole-repo profile: does *project_root* contain any scorable source file?
+
+    An orchestration-plane repo (edits only markdown/shell by design) has a
+    ``gate_skip_rate`` of 1.0 for the correct reason — there is no Python/TS/
+    Go/Rust file for the gate to ever run against. Escalating "raise
+    engagement to high so the stop hook blocks" in that repo would deadlock
+    every session in it (TAP-7016). This distinguishes that repo from one
+    with real source and a genuinely high skip rate.
+
+    Returns ``"has_source"``, ``"no_source"``, or ``"unknown"`` when git
+    can't answer (not a repo, git error/timeout). Callers must treat
+    ``"unknown"`` the same as ``"has_source"`` — the guardrail is that a gap
+    in detection can only ever add a recommendation, never silently drop a
+    real one.
+    """
+    from tapps_mcp.scoring.language_detector import get_supported_extensions
+    from tapps_mcp.tools.subprocess_runner import run_command
+
+    extensions = get_supported_extensions()
+    names: set[str] = set()
+    for args in (["ls-files"], ["ls-files", "--others", "--exclude-standard"]):
+        result = run_command(["git", *args], cwd=str(project_root), timeout=timeout)
+        if result.returncode != 0:
+            return "unknown"
+        names.update(line for line in result.stdout.splitlines() if line.strip())
+    has_source = any(Path(name).suffix in extensions for name in names)
+    return "has_source" if has_source else "no_source"
+
+
+def _recurring_skip_escalation_applies(skip_rate: float, source_profile: str) -> bool:
+    """Whether the recurring-skip escalation recommendation should fire (TAP-7016)."""
+    return skip_rate >= 0.5 and source_profile != "no_source"
+
+
 def _session_called_tools() -> set[str]:
     """Return tools called in the current MCP server session. Empty on import failure."""
     try:
@@ -328,9 +363,7 @@ def _append_lookup_docs_underused(
             recs.append(
                 lookup_docs_underused_recommendation(
                     uncached_libs,
-                    kind=_lookup_underused_kind(
-                        used_lookup=used_lookup, loops_with_lookup=0
-                    ),
+                    kind=_lookup_underused_kind(used_lookup=used_lookup, loops_with_lookup=0),
                     loops_without_lookup=recent_edit_loops,
                 )
             )
@@ -343,9 +376,7 @@ def _append_lookup_docs_underused(
     recs.append(
         lookup_docs_underused_recommendation(
             uncached_libs,
-            kind=_lookup_underused_kind(
-                used_lookup=used_lookup, loops_with_lookup=with_lookup
-            ),
+            kind=_lookup_underused_kind(used_lookup=used_lookup, loops_with_lookup=with_lookup),
             loops_without_lookup=without,
         )
     )
@@ -414,10 +445,12 @@ def compute_gaps(
 
     used_lookup = _LOOKUP_TOOL in called or _telemetry_used_lookup(rows, project_root)
 
+    source_profile = _project_scorable_profile(project_root)
+
     recent_edit_loops = int(recent_edits.get("loops", 0))
     if recent_edit_loops >= 3:
         skip_rate = float(recent_edits.get("gate_skip_rate", 0.0))
-        if skip_rate >= 0.5:
+        if _recurring_skip_escalation_applies(skip_rate, source_profile):
             gaps.append("recurring_validation_skips")
             pct = round(skip_rate * 100)
             recs.append(
@@ -518,6 +551,7 @@ def compute_gaps(
         "called_tools_count": len(called),
         "edited_files_recent": edited_recent[:20],
         "libraries_without_lookup": libraries_without_lookup,
+        "source_profile": source_profile,
         "rolling_stats": rolling,
         "recent_edit_stats": recent_edits,
         "recent_violations": violations,
