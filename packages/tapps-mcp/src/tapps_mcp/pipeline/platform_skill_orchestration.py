@@ -1010,6 +1010,21 @@ The full Guardrails-every-prompt list, and the Autonomy / Failure-handling / Exp
   Parallelization plan's `order-forced-by` field. Disjoint file lists are not evidence of
   independence (method §3) — the coupling that fails silently is the one where each half
   is internally consistent.
+- **Concurrent writers — a running loop is never the only writer.** Shared scripts, git
+  config, and temp directories may change under a running loop — another session,
+  another lane, or an operator can edit `scripts/`, rewrite `.git/config`, or clean
+  `/tmp` while this loop is mid-run. Record the **version of any shared tool actually
+  used** (its printed `--version`, a content hash, a resolved path) rather than
+  inferring it from documentation that may already be stale for this run. Every lane
+  copies its own log out of the temp directory on completion, before the directory can
+  be reused or cleaned by something else. **Gate any corrective git command on a
+  re-observation, never on a single status snapshot** — a snapshot taken before a
+  concurrent writer's edit is stale by the time the correction runs. The triage order
+  before any corrective git action: (1) confirm the files still on disk match what the
+  snapshot claimed, (2) confirm HEAD is still the commit the snapshot named intact, (3)
+  confirm nothing was pushed out from under this check, (4) confirm the recovery is a
+  single command — then **observe again immediately before acting**, because the
+  triage itself takes wall-clock time a concurrent writer can fill.
 - **Context hygiene** — prune stale reads each iteration; targeted grep over full
   re-Read (method §4).
 - **Context lifecycle** — a long loop recycles instead of growing: at each sub-goal
