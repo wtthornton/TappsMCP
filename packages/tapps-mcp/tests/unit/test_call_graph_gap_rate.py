@@ -188,6 +188,21 @@ class TestReclassificationIsSound:
         assert out[0].reason == "external_attr_call"
         assert gap.reason == "unresolved_static_call"
 
+    def test_attr_call_naming_an_in_repo_class_stays_in_repo(self) -> None:
+        """TAP-6641: ``mod.Widget()`` on an untyped receiver names an in-repo
+
+        class, not a method. ``SymbolKind`` has no "class" kind, so ``Widget``
+        only ever appears as a middle segment of a qualified method name
+        (``mymod.Widget.__init__``) — never as a symbol's own leaf. It must
+        still count as in-repo, not be relabelled ``external_attr_call``.
+        """
+        gaps = [
+            ResolutionGap("mod.func", "mod.Widget()", 10, "unresolved_static_call")
+        ]
+        out = reclassify_external_attr_gaps(gaps, ["mymod.Widget.__init__", "mymod.func"])
+        assert out[0].reason == "unresolved_static_call"
+        assert is_external_gap(out[0]) is False
+
     def test_typescript_gaps_are_untouched(self) -> None:
         gap = ResolutionGap(
             "consumer.run", "svc.load", 1, "receiver_untyped", language="typescript"
