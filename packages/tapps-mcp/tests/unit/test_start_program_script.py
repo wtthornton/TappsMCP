@@ -81,12 +81,37 @@ class TestGenerateStartProgramScript:
 
 
 _NODE = shutil.which("node")
-_no_node = pytest.mark.skipif(_NODE is None, reason="node not on PATH")
 
 _GOOD_PROMPT = """\
 ## Goal
 
 Do the thing.
+
+## Prerequisites / Wayfind gate
+
+None outstanding.
+
+## Driver discipline
+
+Driver owns at most 5 rows; no exception needed here.
+
+## Plane map
+
+| ID | Owner | Task | Files | Command | Model | Effort | Notes |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| P1 | driver | Do the thing | file.py | run cmd | sonnet | medium | routine work |
+
+### Parallel wave schedule
+
+Single wave; P1 only.
+
+## Parallelization plan
+
+order-forced-by: P1 has no dependents.
+
+## How to run
+
+- **Session setup**: `/model sonnet` `/effort medium`
 
 ## Loop
 
@@ -97,6 +122,33 @@ Done-when: the thing is done.
 ## Sub-goal 0
 
 Establish preconditions.
+
+## Guardrails
+
+Stay in scope.
+
+## Autonomy
+
+Proceed without confirmation for in-scope steps.
+
+## Done-when
+
+The thing is done and the result must not shrink below what it started with;
+the lessons-learned pass has run.
+
+## Unverified assumptions
+
+None.
+
+## Lane briefs
+
+| Lane | Brief |
+| --- | --- |
+| L1 | brief.md |
+
+## Run-as
+
+Operator.
 
 ## Lessons learned
 
@@ -116,8 +168,9 @@ class TestCheckPromptShapeScript:
         assert target.exists()
         assert target.stat().st_mode & 0o111, "script must land executable"
 
-    @_no_node
     def test_passes_on_a_known_good_prompt(self, tmp_path: Path) -> None:
+        if _NODE is None:
+            pytest.skip("node not on PATH")
         generate_check_prompt_shape_script(tmp_path)
         prompt = tmp_path / "prompt.md"
         prompt.write_text(_GOOD_PROMPT, encoding="utf-8")
@@ -129,9 +182,10 @@ class TestCheckPromptShapeScript:
         )
         assert result.returncode == 0, result.stderr
 
-    @_no_node
     def test_fails_on_a_known_bad_prompt(self, tmp_path: Path) -> None:
         """The template's own placeholders, with no real sections filled in."""
+        if _NODE is None:
+            pytest.skip("node not on PATH")
         generate_check_prompt_shape_script(tmp_path)
         prompt = tmp_path / "prompt.md"
         prompt.write_text(_BAD_PROMPT, encoding="utf-8")
@@ -155,8 +209,9 @@ class TestCheckLearningsSizeScript:
         assert target.exists()
         assert target.stat().st_mode & 0o111, "script must land executable"
 
-    @_no_node
     def test_passes_on_a_known_good_learnings_file(self, tmp_path: Path) -> None:
+        if _NODE is None:
+            pytest.skip("node not on PATH")
         generate_check_learnings_size_script(tmp_path)
         learnings = tmp_path / "learnings.md"
         learnings.write_text("- one short lesson\n", encoding="utf-8")
@@ -168,14 +223,16 @@ class TestCheckLearningsSizeScript:
         )
         assert result.returncode == 0, result.stderr
 
-    @_no_node
     def test_fails_on_a_known_bad_learnings_file_over_bullet_ceiling(
         self, tmp_path: Path
     ) -> None:
+        if _NODE is None:
+            pytest.skip("node not on PATH")
         generate_check_learnings_size_script(tmp_path)
         learnings = tmp_path / "learnings.md"
         learnings.write_text(
-            "\n".join(f"- lesson {i}" for i in range(121)) + "\n", encoding="utf-8"
+            "\n".join(f"- [med] lesson {i} — (source, 2026-09-05)" for i in range(95)) + "\n",
+            encoding="utf-8",
         )
         result = subprocess.run(
             ["node", str(tmp_path / "scripts" / "check-learnings-size.js"), str(learnings)],
@@ -187,8 +244,8 @@ class TestCheckLearningsSizeScript:
         assert "over ceiling" in result.stderr
 
     def test_script_body_names_both_ceilings(self) -> None:
-        assert "CEILING_BYTES = 40000" in CHECK_LEARNINGS_SIZE_SCRIPT_BODY
-        assert "CEILING_BULLETS = 120" in CHECK_LEARNINGS_SIZE_SCRIPT_BODY
+        assert "maxBytes = flag(args, \"--bytes\", 48 * 1024)" in CHECK_LEARNINGS_SIZE_SCRIPT_BODY
+        assert "maxBullets = flag(args, \"--bullets\", 90)" in CHECK_LEARNINGS_SIZE_SCRIPT_BODY
 
     def test_shape_script_body_checks_required_sections(self) -> None:
         for marker in ("## Goal", "## Loop", "Done-when", "Sub-goal 0", "Lessons learned"):

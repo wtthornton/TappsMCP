@@ -2348,23 +2348,23 @@ def generate_start_program_script(
 
 
 # TAP-7078 box 6: Output step 7's "Completeness self-check" names these two
-# scripts by filename but nothing shipped or ran either of them. Both are
-# functionally-scoped implementations of the check a consuming project
-# (nlt-orchestrator) already runs locally against its own emitted prompts —
-# reading that project's actual scripts was not possible from this worktree
-# (standing constraint: stay inside this worktree, never read a sibling
-# checkout that another session may have mid-edit), so these are written
-# fresh against the acceptance behavior rather than ported byte-for-byte.
+# scripts by filename. They are a verified superset of nlt-orchestrator's own
+# check-prompt-shape.js / check-learnings-size.js (staged read-only copies
+# reviewed 2026-09-05) -- same CLI shape, same exit codes (0 = holds, 1 =
+# named defect(s), 2 = usage/read error), same failure classes, plus this
+# project's own extra checks kept on top. The orchestrator adopts these
+# emitted copies on its next `tapps_upgrade`.
 CHECK_PROMPT_SHAPE_SCRIPT_BODY = r"""#!/usr/bin/env node
 // Validate an emitted orchestration prompt carries every required shape
-// element before it is handed to a runner. Exit 0 when every required
-// section is present; exit 1 naming what is missing.
+// element before it is handed to a runner. Exit 0 when the shape holds;
+// exit 1 naming every defect found; exit 2 on a usage/read error.
 //
-// Usage: node scripts/check-prompt-shape.js <prompt.md>
+// Usage: node scripts/check-prompt-shape.js <prompt.md> [--driver-rows N]
 "use strict";
 
 const fs = require("fs");
 
+// Legacy substring checks, kept for backward compatibility with earlier callers.
 const REQUIRED_SECTIONS = [
   ["## Goal", "no stated Goal"],
   ["## Loop", "no Loop section -- the goal loop has no repeatable body"],
@@ -2376,27 +2376,178 @@ const REQUIRED_SECTIONS = [
   ],
 ];
 
+// The full structural list the orchestrator's reference enforces.
+const REQUIRED_HEADINGS = [
+  "## Driver discipline",
+  "## Prerequisites / Wayfind gate",
+  "## How to run",
+  "## Done-when",
+  "## Plane map",
+  "### Parallel wave schedule",
+  "## Parallelization plan",
+  "## Loop",
+  "## Guardrails",
+  "## Autonomy",
+  "## Lessons learned",
+  "## Run-as",
+  "## Unverified assumptions",
+  "## Lane briefs",
+];
+
+function section(lines, heading) {
+  const s = lines.findIndex((l) => l.startsWith(heading));
+  if (s < 0) return "";
+  const e = lines.findIndex((l, i) => i > s && /^#{1,3} /.test(l));
+  return lines.slice(s, e < 0 ? undefined : e).join("\n");
+}
+
 function main(argv) {
-  const path = argv[2];
+  const args = argv.slice(2);
+  const path = args.find((a) => !a.startsWith("--"));
+  const rowsFlag = args.indexOf("--driver-rows");
+  const driverCap = rowsFlag >= 0 ? Number(args[rowsFlag + 1]) : 5;
+
   if (!path) {
-    console.error("usage: check-prompt-shape.js <prompt.md>");
+    console.error("usage: check-prompt-shape.js <prompt.md> [--driver-rows N]");
     process.exit(2);
   }
-  const text = fs.readFileSync(path, "utf8");
-  const missing = REQUIRED_SECTIONS.filter(([marker]) => !text.includes(marker));
-  if (missing.length > 0) {
-    for (const [marker, reason] of missing) {
-      console.error(`missing: ${marker} -- ${reason}`);
-    }
-    process.exit(1);
+  if (!Number.isInteger(driverCap) || driverCap < 5) {
+    console.error("--driver-rows must be an integer >= 5");
+    process.exit(2);
   }
+
+  let text;
+  try {
+    text = fs.readFileSync(path, "utf8");
+  } catch (err) {
+    console.error(`cannot read ${path}: ${err.message}`);
+    process.exit(2);
+  }
+  const lines = text.split("\n");
+  const problems = [];
+
+  for (const [marker, reason] of REQUIRED_SECTIONS) {
+    if (!text.includes(marker)) problems.push(`missing: ${marker} -- ${reason}`);
+  }
+
+  for (const h of REQUIRED_HEADINGS) {
+    if (!lines.some((l) => l.startsWith(h))) problems.push(`missing required heading: ${h}`);
+  }
+
   // A prompt that dispatches lanes needs a table naming their briefs, or
   // the lanes it names have nothing to run (TAP-7078 ruling 12).
   const dispatchesLanes = /dispatch-lane\.sh|claude -p/.test(text);
-  if (dispatchesLanes && !text.includes("## Lane briefs")) {
-    console.error(
-      "missing: ## Lane briefs -- a prompt that dispatches lanes needs a briefs table"
+  if (dispatchesLanes && !lines.some((l) => l.startsWith("## Lane briefs"))) {
+    problems.push("missing: ## Lane briefs -- a prompt that dispatches lanes needs a briefs table");
+  }
+
+  // Plane map detectors.
+  const tableRows = lines.filter((l) => /^\|/.test(l)).map((l) => l.split("|").map((c) => c.trim()));
+  const planeRows = tableRows.filter(
+    (cells) => cells.length >= 9 && /^\*{0,2}(driver|delegate|operator)\*{0,2}$/.test(cells[2])
+  );
+  const setup = lines.find((l) => /^- \*\*Session setup/.test(l)) ?? "";
+  if (planeRows.length === 0) {
+    problems.push(
+      "Plane map has no rows with an Owner column (driver|delegate|operator) -- the Owner column is what makes Driver discipline auditable"
     );
+  } else {
+    const driverRows = planeRows.filter((c) => /driver/.test(c[2]));
+    if (driverRows.length > driverCap) {
+      problems.push(
+        `detector 1: ${driverRows.length} driver-owned Plane-map rows, cap ${driverCap} -- a row nobody was dispatched for is work the top session does. ` +
+          `Delegate it, or declare the exception in Driver discipline and pass --driver-rows ${driverRows.length}.`
+      );
+    }
+    if (driverRows.length > 5 && !/\*\*Exception, named:?\*\*|named exception/i.test(text)) {
+      problems.push("detector 1: more than five driver rows but Driver discipline names no exception");
+    }
+    const effortCells = planeRows.map((c) => c[7] ?? "—");
+    const anyEffort = effortCells.some((e) => e && e !== "—" && e !== "-");
+    const declaresNoWorkflow = /no Workflow|effort control (was|is) surrendered|Agent tool has no effort/i.test(
+      text
+    );
+    if (!anyEffort && !declaresNoWorkflow) {
+      problems.push(
+        "detector 2: the effort column is all — and the prompt does not say it has no Workflow -- effort control was surrendered silently"
+      );
+    }
+
+    const driverRowText = driverRows.map((c) => c.join(" ")).join("\n");
+    const driverIsAboveFloor = /gh pr merge|\bmerge\b|deploy|plugin install|scop\w+ (a )?(continuation|fix)/i.test(
+      driverRowText
+    );
+    if (driverIsAboveFloor && /`\/model (haiku|sonnet)`/.test(setup)) {
+      problems.push(
+        "driver rows mention merge/deploy/install/scoping a fix but Session setup pins `/model sonnet` -- that driver is above the floor by construction"
+      );
+    }
+
+    for (const c of planeRows) {
+      if (/driver|operator/.test(c[2])) continue;
+      const model = (c[6] ?? "").replace(/[`*]/g, "").trim();
+      const effort = (c[7] ?? "").replace(/[`*]/g, "").trim();
+      const notes = (c[8] ?? "").trim();
+      const above = /^(opus|fable)$/.test(model) || /^(high|xhigh|max)$/.test(effort);
+      if (above && notes.length < 8) {
+        problems.push(
+          `Plane-map row "${(c[1] ?? "").slice(0, 50)}" is above the floor (${model || "—"}/${
+            effort || "—"
+          }) with no reason in Notes -- an unpriced default, not a decision`
+        );
+      }
+    }
+  }
+
+  // Session setup carries concrete /model and /effort.
+  const modelOk = /`\/model (haiku|sonnet|opus|fable)`/.test(setup);
+  const effortOk = /`\/effort (low|medium|high|xhigh)`/.test(setup);
+  if (!modelOk) {
+    problems.push(
+      "Session setup line has no concrete `/model <haiku|sonnet|opus|fable>` -- the runner would inherit the pasting session's tier"
+    );
+  }
+  if (!effortOk) problems.push("Session setup line has no concrete `/effort <low|medium|high|xhigh>`");
+  if (/`\/model <|`\/effort </.test(setup)) problems.push("Session setup line still carries a template placeholder");
+
+  // Must-not-shrink + lessons-learned gate inside Done-when.
+  const doneStart = lines.findIndex((l) => l.startsWith("## Done-when"));
+  const doneEnd = lines.findIndex((l, i) => i > doneStart && /^## /.test(l));
+  const done = doneStart >= 0 ? lines.slice(doneStart, doneEnd < 0 ? undefined : doneEnd).join("\n") : "";
+  if (doneStart >= 0 && !/(≥|>=|must not shrink|not shrink|no fewer|at least)/i.test(done)) {
+    problems.push(
+      "Done-when has no must-not-shrink clause (≥ N / \"must not shrink\") -- the goal is satisfiable by deleting what is measured"
+    );
+  }
+  if (doneStart >= 0 && !/lessons/i.test(done)) {
+    problems.push(
+      "Done-when does not gate on the lessons-learned pass -- without a clause it is advisory and gets dropped when the goal goes green"
+    );
+  }
+
+  // Parallelization plan must enumerate the derived order.
+  if (!/order-forced-by/i.test(section(lines, "## Parallelization plan"))) {
+    problems.push(
+      "Parallelization plan has no `order-forced-by:` line -- derived shared state between lanes was not enumerated"
+    );
+  }
+
+  // Validation contract, when present, must be Workflow-shaped.
+  const contract = section(lines, "## Validation contract");
+  if (contract) {
+    const header = contract.split("\n").find((l) => /^\|\s*ID\s*\|/i.test(l)) ?? "";
+    if (!/\|\s*kind\s*\|/i.test(header)) {
+      problems.push("Validation contract table has no `kind` column -- the verify Workflow cannot tier a VAL it cannot classify");
+    }
+    if (!/negative control/i.test(contract) || !/positive control/i.test(contract)) {
+      problems.push(
+        "Validation contract never names both a negative control and a positive control -- the Workflow refuses a VAL without both, so the driver would invent them at verify time"
+      );
+    }
+  }
+
+  if (problems.length > 0) {
+    for (const p of problems) console.error(p);
     process.exit(1);
   }
   console.log(`ok: ${path} carries every required section`);
@@ -2407,40 +2558,90 @@ main(process.argv);
 """
 
 CHECK_LEARNINGS_SIZE_SCRIPT_BODY = r"""#!/usr/bin/env node
-// Measure a learnings.md file against the byte/bullet ceilings and name
-// which one actually breached -- bullet count alone is misleading (see
+// Measure a learnings.md file against the byte/bullet/per-bullet ceilings and
+// the required trailing-date house style, mirroring nlt-orchestrator's
+// check-learnings-size.js (TAP-7078 box 6). See
 // tapps_mcp.pipeline.skill_managed_block.LEARNINGS_CEILING_BYTES /
-// LEARNINGS_CEILING_BULLETS, which this mirrors).
+// LEARNINGS_CEILING_BULLETS for the Python-side constants this parallels.
 //
-// Usage: node scripts/check-learnings-size.js <learnings.md>
+// Usage: node scripts/check-learnings-size.js <learnings.md> [--bytes N] [--bullets N] [--bullet-bytes N]
 "use strict";
 
 const fs = require("fs");
 
-const CEILING_BYTES = 40000;
-const CEILING_BULLETS = 120;
+// A lesson is `- [conf] ...` or a `- **bolded**` lead; prose lines are not lessons.
+const LESSON = /^- (\[(high|med|medium|low)\]|\*\*)/;
+// Trailing provenance: an em-dash, then a parenthesis carrying an ISO date.
+const DATED = /— \([^()]*\d{4}-\d{2}-\d{2}[^()]*\)\s*$/;
 
-function main(argv) {
-  const path = argv[2];
-  if (!path) {
-    console.error("usage: check-learnings-size.js <learnings.md>");
+function flag(args, name, dflt) {
+  const i = args.indexOf(name);
+  if (i < 0) return dflt;
+  const v = Number(args[i + 1]);
+  if (!Number.isFinite(v) || v <= 0) {
+    console.error(`${name} needs a positive number`);
     process.exit(2);
   }
-  const text = fs.readFileSync(path, "utf8");
-  const sizeBytes = Buffer.byteLength(text, "utf8");
-  const bulletCount = (text.match(/^- /gm) || []).length;
-  const bytesOver = sizeBytes > CEILING_BYTES;
-  const bulletsOver = bulletCount > CEILING_BULLETS;
-  if (bytesOver || bulletsOver) {
-    const breached =
-      bytesOver && bulletsOver ? "both" : bytesOver ? "byte ceiling" : "bullet ceiling";
+  return v;
+}
+
+function main(argv) {
+  const args = argv.slice(2);
+  const path = args.find((a) => !a.startsWith("--"));
+  if (!path) {
     console.error(
-      `over ceiling (${breached}): ${sizeBytes}B / ${bulletCount} bullets ` +
-        `(ceiling ${CEILING_BYTES}B / ${CEILING_BULLETS} bullets)`
+      "usage: check-learnings-size.js <learnings.md> [--bytes N] [--bullets N] [--bullet-bytes N]"
     );
+    process.exit(2);
+  }
+  const maxBytes = flag(args, "--bytes", 48 * 1024);
+  const maxBullets = flag(args, "--bullets", 90);
+  const maxBulletBytes = flag(args, "--bullet-bytes", 900);
+
+  let text, bytes;
+  try {
+    text = fs.readFileSync(path, "utf8");
+    bytes = Buffer.byteLength(text, "utf8");
+  } catch (err) {
+    console.error(`cannot read ${path}: ${err.message}`);
+    process.exit(2);
+  }
+
+  const lines = text.split("\n");
+  const bullets = [];
+  for (let i = 0; i < lines.length; i++) {
+    if (!LESSON.test(lines[i])) continue;
+    let j = i + 1;
+    while (j < lines.length && /^  /.test(lines[j])) j++;
+    bullets.push({ line: i + 1, text: lines.slice(i, j).join("\n") });
+    i = j - 1;
+  }
+
+  const over = [];
+  if (bytes > maxBytes) over.push(`${bytes} bytes > ${maxBytes}`);
+  if (bullets.length > maxBullets) over.push(`${bullets.length} lesson bullets > ${maxBullets}`);
+  for (const b of bullets) {
+    const size = Buffer.byteLength(b.text, "utf8");
+    if (size > maxBulletBytes) {
+      over.push(
+        `line ${b.line}: ${size} B bullet > ${maxBulletBytes} -- a narration, not a lesson; cut to the rule + its detector`
+      );
+    }
+    if (!DATED.test(b.text)) {
+      over.push(
+        `line ${b.line}: no trailing — (source, YYYY-MM-DD) -- a bullet with no date can never be retired on evidence`
+      );
+    }
+  }
+
+  if (over.length > 0) {
+    console.error(`over ceiling:\n  ${over.join("\n  ")}`);
     process.exit(1);
   }
-  console.log(`ok: ${sizeBytes}B / ${bulletCount} bullets, under ceiling`);
+  const maxBulletSize = bullets.length ? Math.max(...bullets.map((b) => Buffer.byteLength(b.text, "utf8"))) : 0;
+  console.log(
+    `ok: ${bytes}B, ${bullets.length} lesson bullets, max bullet ${maxBulletSize}B -- within ceiling (${maxBytes}B / ${maxBullets} / ${maxBulletBytes}B each)`
+  );
   process.exit(0);
 }
 
