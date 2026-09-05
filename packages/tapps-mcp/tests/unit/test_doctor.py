@@ -3587,3 +3587,32 @@ class TestContextBudgetChecks:
         result = check_karpathy_dual_install(tmp_path)
         assert result.ok is True
         assert "AGENTS.md" in result.message
+
+
+class TestDoctorPayloadSize:
+    """TAP-6436 remainder: default (include_passing=False) payload size."""
+
+    def test_default_payload_under_3000_bytes_on_healthy_repo(self, tmp_path: Path) -> None:
+        """A repo where almost every check passes trims to a small payload.
+
+        include_passing=False (the tapps_doctor MCP tool's default) drops
+        every "pass" row; only the few warn/fail rows on an otherwise
+        healthy repo survive. run_doctor_structured's own default
+        (include_passing=True) is the opposite -- callers must opt in here,
+        matching what the MCP wrapper actually passes.
+        """
+        healthy_checks = [CheckResult(f"check_{i}", True, "ok") for i in range(90)]
+        healthy_checks.append(CheckResult("one_warning", False, "WARN: heads up"))
+
+        with patch(
+            "tapps_mcp.distribution.doctor._collect_checks",
+            return_value=healthy_checks,
+        ):
+            result = run_doctor_structured(
+                project_root=str(tmp_path), quick=True, include_passing=False
+            )
+
+        assert result["pass_count"] == 90
+        assert len(result["checks"]) == 1  # only the warn row survives the trim
+        payload_bytes = len(json.dumps(result).encode("utf-8"))
+        assert payload_bytes < 3000
