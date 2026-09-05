@@ -409,7 +409,13 @@ TAPPS_TOOL_PRESET_ADMIN: frozenset[str] = frozenset(
 # Epic 109 / ADR-0016 NLT plugin profiles — see docs/architecture/nlt-mcp-plugin-spec.yaml
 TOOL_PROFILE_NLT_BUILD: frozenset[str] = frozenset(
     {
-        "tapps_session_start",
+        # TAP-7018: tapps_session_start no longer registers its real
+        # implementation here -- nlt-memory is now the single owner (every
+        # fleet consumer calls it there). A bare tapps_session_start() call
+        # still resolves on this server via a pointer stub registered in
+        # server_pipeline_tools.register() (keyed off settings.tool_preset,
+        # not this frozenset), so an existing consumer calling it here gets
+        # a pointer, not a 404.
         "tapps_quick_check",
         "tapps_validate_changed",
         "tapps_quality_gate",
@@ -434,12 +440,10 @@ TOOL_PROFILE_NLT_BUILD: frozenset[str] = frozenset(
 
 TOOL_PROFILE_NLT_MEMORY: frozenset[str] = frozenset(
     {
-        # TAP-7018: tapps_session_start no longer registers its real
-        # implementation here -- nlt-build is now the single owner. A bare
-        # tapps_session_start() call still resolves on this server via a
-        # pointer stub registered in server_pipeline_tools.register()
-        # (keyed off settings.tool_preset, not this frozenset), so an
-        # existing consumer calling it here gets a pointer, not a 404.
+        # TAP-7018: nlt-memory is the single owner of the real
+        # tapps_session_start implementation -- every fleet consumer and
+        # this driver call it here today.
+        "tapps_session_start",
         "tapps_memory",
         "tapps_session_notes",
         "tapps_session_end",
@@ -450,7 +454,7 @@ TOOL_PROFILE_NLT_MEMORY: frozenset[str] = frozenset(
 TOOL_PROFILE_NLT_SETUP: frozenset[str] = frozenset(
     {
         # TAP-7018: tapps_session_start no longer registers its real
-        # implementation here -- nlt-build is now the single owner. A bare
+        # implementation here -- nlt-memory is now the single owner. A bare
         # tapps_session_start() call still resolves on this server via a
         # pointer stub registered in server_pipeline_tools.register()
         # (keyed off settings.tool_preset, not this frozenset), so the

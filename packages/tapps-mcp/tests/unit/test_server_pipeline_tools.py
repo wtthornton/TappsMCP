@@ -2127,16 +2127,16 @@ class TestRegister:
         assert mock_mcp.tool.call_count == 6
 
     def test_register_pointer_for_session_start_on_retired_preset(self) -> None:
-        # TAP-7018: nlt-memory no longer carries tapps_session_start in its
-        # TOOL_PROFILE_NLT_MEMORY frozenset, but a bare tapps_session_start()
+        # TAP-7018: nlt-build no longer carries tapps_session_start in its
+        # TOOL_PROFILE_NLT_BUILD frozenset, but a bare tapps_session_start()
         # call on that server must still resolve -- to a pointer, not a 404.
         from mcp.server.fastmcp import FastMCP
 
         from tapps_mcp.server_pipeline_tools import register
 
         mcp_instance = FastMCP("test")
-        allowed = frozenset({"tapps_memory"})
-        register(mcp_instance, allowed, tool_preset="nlt-memory")
+        allowed = frozenset({"tapps_quick_check"})
+        register(mcp_instance, allowed, tool_preset="nlt-build")
         assert "tapps_session_start" in mcp_instance._tool_manager._tools
 
     def test_register_no_pointer_for_non_retired_preset(self) -> None:
@@ -2158,7 +2158,7 @@ class TestRegister:
         result = asyncio.run(tapps_session_start_pointer())
         assert result["success"] is False
         assert result["error"]["code"] == "tool_relocated"
-        assert result["error"]["owner_preset"] == "nlt-build"
+        assert result["error"]["owner_preset"] == "nlt-memory"
 
 
 # ---------------------------------------------------------------------------

@@ -246,7 +246,71 @@ class TestSessionStartGateScriptBehavior:
         hooks = self._setup(tmp_path, "block")
         rc, _ = self._run(
             hooks / "tapps-post-session-start.sh",
-            {"tool_name": "mcp__nlt-build__tapps_session_start", "session_id": "s1"},
+            {
+                "tool_name": "mcp__nlt-memory__tapps_session_start",
+                "session_id": "s1",
+                "tool_response": {"success": True, "tool": "tapps_session_start"},
+            },
+            cwd=tmp_path,
+        )
+        assert rc == 0
+        assert (tmp_path / ".tapps-mcp" / ".session-start-done-s1").exists()
+        rc, _ = self._run(
+            hooks / "tapps-pre-session-start-gate.sh",
+            {"tool_name": "mcp__nlt-build__tapps_quick_check", "session_id": "s1"},
+            cwd=tmp_path,
+        )
+        assert rc == 0
+
+    def test_writer_ignores_pointer_relocation_error(self, tmp_path: Path) -> None:
+        # TAP-7018: a retired-preset pointer stub returns success=false with
+        # code=tool_relocated. That must NOT satisfy the gate — session_start
+        # never actually ran. Then a real success on the owning server DOES
+        # satisfy it, for the same session_id.
+        hooks = self._setup(tmp_path, "block")
+
+        # (a) gate is blocked before anything runs.
+        rc, err = self._run(
+            hooks / "tapps-pre-session-start-gate.sh",
+            {"tool_name": "mcp__nlt-build__tapps_quick_check", "session_id": "s1"},
+            cwd=tmp_path,
+        )
+        assert rc == 2
+        assert "session-start gate (block)" in err
+
+        # (b) a pointer-relocation error must not write the sentinel.
+        rc, _ = self._run(
+            hooks / "tapps-post-session-start.sh",
+            {
+                "tool_name": "mcp__nlt-build__tapps_session_start",
+                "session_id": "s1",
+                "tool_response": {
+                    "success": False,
+                    "tool": "tapps_session_start",
+                    "error": {"code": "tool_relocated", "owner_preset": "nlt-memory"},
+                },
+            },
+            cwd=tmp_path,
+        )
+        assert rc == 0
+        assert not (tmp_path / ".tapps-mcp" / ".session-start-done-s1").exists()
+        rc, err = self._run(
+            hooks / "tapps-pre-session-start-gate.sh",
+            {"tool_name": "mcp__nlt-build__tapps_quick_check", "session_id": "s1"},
+            cwd=tmp_path,
+        )
+        assert rc == 2
+        assert "session-start gate (block)" in err
+
+        # (c) a real success on the owning server writes the sentinel and
+        # releases the gate.
+        rc, _ = self._run(
+            hooks / "tapps-post-session-start.sh",
+            {
+                "tool_name": "mcp__nlt-memory__tapps_session_start",
+                "session_id": "s1",
+                "tool_response": {"success": True, "tool": "tapps_session_start"},
+            },
             cwd=tmp_path,
         )
         assert rc == 0
@@ -262,7 +326,11 @@ class TestSessionStartGateScriptBehavior:
         hooks = self._setup(tmp_path, "block")
         self._run(
             hooks / "tapps-post-session-start.sh",
-            {"tool_name": "mcp__nlt-build__tapps_session_start", "session_id": "s1"},
+            {
+                "tool_name": "mcp__nlt-memory__tapps_session_start",
+                "session_id": "s1",
+                "tool_response": {"success": True, "tool": "tapps_session_start"},
+            },
             cwd=tmp_path,
         )
         # A different session_id must still be blocked.
@@ -312,3 +380,78 @@ class TestSessionStartGateScriptBehavior:
         assert rc == 0
         assert "warn" in err
         assert (tmp_path / ".tapps-mcp" / ".session-start-gate-violations.jsonl").exists()
+
+
+class TestSessionStartGateScriptBehaviorPS:
+    """PowerShell twin of TAP-7018's sentinel-writer correctness check.
+
+    Runtime-skipped when ``pwsh`` is not on PATH (not a ``skipif`` marker,
+    so a host that does have pwsh on PATH still runs this).
+    """
+
+    def _setup(self, tmp_path: Path, mode: str) -> Path:
+        generate_claude_hooks(tmp_path, force_windows=True, session_start_gate=mode)
+        return tmp_path / ".claude" / "hooks"
+
+    def _run(
+        self,
+        pwsh: str,
+        script: Path,
+        payload: dict[str, object],
+        *,
+        cwd: Path,
+    ) -> tuple[int, str]:
+        proc = subprocess.run(
+            [pwsh, "-NoProfile", "-NonInteractive", "-File", str(script)],
+            input=json.dumps(payload),
+            capture_output=True,
+            text=True,
+            env=dict(os.environ),
+            cwd=str(cwd),
+            timeout=10,
+        )
+        return proc.returncode, proc.stderr
+
+    def test_writer_ignores_pointer_relocation_error_then_accepts_success(
+        self, tmp_path: Path
+    ) -> None:
+        pwsh_path = None
+        for candidate in ("pwsh", "pwsh.exe"):
+            found = subprocess.run(["which", candidate], capture_output=True, text=True)
+            if found.returncode == 0 and found.stdout.strip():
+                pwsh_path = found.stdout.strip()
+                break
+        if pwsh_path is None:
+            pytest.skip("pwsh not found on PATH")
+
+        hooks = self._setup(tmp_path, "block")
+
+        rc, _ = self._run(
+            pwsh_path,
+            hooks / "tapps-post-session-start.ps1",
+            {
+                "tool_name": "mcp__nlt-build__tapps_session_start",
+                "session_id": "s1",
+                "tool_response": {
+                    "success": False,
+                    "tool": "tapps_session_start",
+                    "error": {"code": "tool_relocated", "owner_preset": "nlt-memory"},
+                },
+            },
+            cwd=tmp_path,
+        )
+        assert rc == 0
+        assert not (tmp_path / ".tapps-mcp" / ".session-start-done-s1").exists()
+
+        rc, _ = self._run(
+            pwsh_path,
+            hooks / "tapps-post-session-start.ps1",
+            {
+                "tool_name": "mcp__nlt-memory__tapps_session_start",
+                "session_id": "s1",
+                "tool_response": {"success": True, "tool": "tapps_session_start"},
+            },
+            cwd=tmp_path,
+        )
+        assert rc == 0
+        assert (tmp_path / ".tapps-mcp" / ".session-start-done-s1").exists()

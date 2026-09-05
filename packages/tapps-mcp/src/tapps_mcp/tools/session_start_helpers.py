@@ -1422,12 +1422,12 @@ def _schedule_call_graph_rebuild(
 # ---------------------------------------------------------------------------
 
 #: The single NLT preset that owns the real ``tapps_session_start``.
-SESSION_START_OWNER_PRESET = "nlt-build"
+SESSION_START_OWNER_PRESET = "nlt-memory"
 
 #: NLT presets whose ``TOOL_PROFILE_NLT_*`` frozenset no longer carries
 #: ``tapps_session_start`` but still need the name to resolve to a pointer
 #: instead of a 404 (every fleet consumer calls it on nlt-memory today).
-SESSION_START_POINTER_PRESETS = frozenset({"nlt-memory", "nlt-setup"})
+SESSION_START_POINTER_PRESETS = frozenset({"nlt-build", "nlt-setup"})
 
 
 async def tapps_session_start_pointer(
@@ -1466,7 +1466,7 @@ def resolve_session_start_impl(
             79.1). When it contains ``"tapps_session_start"``, this server
             owns the real implementation.
         tool_preset: The raw ``settings.tool_preset`` string. When it names
-            a preset that used to own the real tool (``nlt-memory`` /
+            a preset that used to own the real tool (``nlt-build`` /
             ``nlt-setup``), the pointer is picked instead so the name still
             resolves to something.
 

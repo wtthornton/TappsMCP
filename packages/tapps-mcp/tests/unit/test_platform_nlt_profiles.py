@@ -53,12 +53,13 @@ class TestPlatformNltProfileDefinitions:
 
     def test_session_start_registered_on_exactly_one_profile(self) -> None:
         # TAP-7018: tapps_session_start used to be duplicated across all
-        # three NLT presets. nlt-build is now the single owner; nlt-memory
-        # and nlt-setup resolve the name via a pointer stub registered in
+        # three NLT presets. nlt-memory is the single owner (every fleet
+        # consumer calls it there); nlt-build and nlt-setup resolve the
+        # name via a pointer stub registered in
         # server_pipeline_tools.register() instead of their own frozenset
         # entry (see test_server_pipeline_tools.py for the pointer test).
-        assert "tapps_session_start" in TOOL_PROFILE_NLT_BUILD
-        assert "tapps_session_start" not in TOOL_PROFILE_NLT_MEMORY
+        assert "tapps_session_start" not in TOOL_PROFILE_NLT_BUILD
+        assert "tapps_session_start" in TOOL_PROFILE_NLT_MEMORY
         assert "tapps_session_start" not in TOOL_PROFILE_NLT_SETUP
 
     def test_unknown_profile_raises(self) -> None:
