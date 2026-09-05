@@ -213,6 +213,15 @@ class TestEpicGeneratorSections:
         assert "- Mobile app" in content
         assert "- i18n" in content
 
+    def test_non_goals_item_with_internal_comma_renders_as_one_bullet(self) -> None:
+        """TAP-6495: an item with a comma inside it stays one unbroken bullet."""
+        config = _make_config(
+            non_goals=["Offline mode, including caching", "Mobile app"]
+        )
+        content = self.gen.generate(config)
+        assert "- Offline mode, including caching" in content
+        assert "- Mobile app" in content
+
     def test_non_goals_placeholder(self) -> None:
         config = _make_config(non_goals=[])
         content = self.gen.generate(config)

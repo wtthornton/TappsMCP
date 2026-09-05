@@ -99,14 +99,21 @@ def _strip_wire_tags(value: str) -> str:
 
 
 def _split_csv(value: str) -> list[str]:
-    """Split a comma-separated string into a trimmed list, dropping blanks.
+    """Split a newline- or comma-separated string into a trimmed list.
 
-    Each item is passed through :func:`_strip_wire_tags` so leaked wire-format
-    wrappers do not reach the generator's template (TAP-1552).
+    Splits on newlines when *value* contains one — so free-form prose (e.g.
+    ``non_goals``) with commas inside an item survives as one item per line
+    instead of being shredded on every internal comma (TAP-6495). Falls back
+    to comma-splitting only when there is no newline, preserving the
+    single-line CSV shape short-token fields (``dependencies``, ``files``)
+    have always used. Each item is passed through :func:`_strip_wire_tags`
+    so leaked wire-format wrappers do not reach the generator's template
+    (TAP-1552).
     """
     if not value:
         return []
-    return [_strip_wire_tags(item.strip()) for item in value.split(",") if item.strip()]
+    separator = "\n" if "\n" in value else ","
+    return [_strip_wire_tags(item.strip()) for item in value.split(separator) if item.strip()]
 
 
 # Leading checkbox / bullet markers agents paste when supplying criteria.
