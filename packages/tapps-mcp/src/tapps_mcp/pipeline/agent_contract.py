@@ -93,9 +93,11 @@ SESSION_START_CHECKLIST_GAP_HINT = (
     "tapps_validate_changed + tapps_checklist before declaring done."
 )
 CHECKLIST_SKIPPED_REC = (
-    "tapps_checklist was not called this session. Invoke "
-    "/tapps-finish-task or tapps_checklist(task_type=<feature|bugfix|refactor|security>) "
-    "before declaring done."
+    "This session edited a scorable source file but tapps_checklist was not "
+    "called. Invoke /tapps-finish-task or "
+    "tapps_checklist(task_type=<feature|bugfix|refactor|security>) before "
+    "declaring done. (Only raised when the session touched scorable files -- "
+    "TAP-7019.)"
 )
 
 # Lookup gap remediation (ADR-0021 telemetry vs cache — ADR-0022 timing)

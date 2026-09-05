@@ -613,6 +613,12 @@ def _add_optional_quick_check_fields(
         data["gate_failures"] = [f.model_dump() for f in gate_result.failures]
     if score_result.lint_issues:
         data["lint_issues"] = serialize_issues(score_result.lint_issues)
+    # TAP-6608: carried inside `data` (not just the envelope) so a cache-hit
+    # replay -- which rehydrates the envelope from this dict alone -- still
+    # knows the original run was degraded.
+    if score_result.degraded:
+        data["degraded"] = True
+        data["missing_tools"] = score_result.missing_tools
     if sec_result.total_issues > 0:
         data["security_issues"] = serialize_issues(
             sec_result.bandit_issues + sec_result.secret_findings,
@@ -1062,7 +1068,15 @@ async def tapps_quick_check(
                     ),
                 }
                 cached_structured = hit_data.pop("__structured_content__", None)
-                resp = success_response("tapps_quick_check", elapsed_ms, hit_data)
+                # TAP-6608: replay the original run's degraded flag rather than
+                # dropping it -- `_add_optional_quick_check_fields` stores it
+                # inside `data` precisely so it survives the cache round-trip.
+                resp = success_response(
+                    "tapps_quick_check",
+                    elapsed_ms,
+                    hit_data,
+                    degraded=bool(hit_data.get("degraded", False)),
+                )
                 if cached_structured is not None:
                     resp["structuredContent"] = cached_structured
                 return _with_nudges(
@@ -1177,11 +1191,15 @@ async def tapps_quick_check(
         _attach_cross_file_analysis(data, resolved, settings.project_root)
         _attach_symbol_impact(data, resolved, settings.project_root)
 
+    # TAP-6608: `score_result.degraded` already folds in ruff/radon (and, post
+    # `_merge_bandit_into_score_result`, bandit) -- reporting only
+    # `not sec_result.bandit_available` silently cleared the flag whenever
+    # bandit was fine but ruff or radon was not.
     resp = success_response(
         "tapps_quick_check",
         elapsed_ms,
         data,
-        degraded=not sec_result.bandit_available,
+        degraded=score_result.degraded,
     )
     # TAP-5272: document warm vs cold latency profile (cold = first
     # ensure_session_initialized / checker warm; excluded from warm budget).

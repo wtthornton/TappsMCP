@@ -54,6 +54,10 @@ _LOOKUP_TOOL = "tapps_lookup_docs"
 _IMPACT_TOOL = "tapps_impact_analysis"
 _SESSION_INIT_TOOL = "tapps_session_start"
 _GRAPH_TOOLS = frozenset({"tapps_call_graph", "tapps_diff_impact"})
+# TAP-6615: default single-result size that earns a "this is a lot" warning
+# in the session ledger summary. Not a gate -- purely advisory guidance in
+# the tapps_usage report; callers may override per-call via summarize_session_ledger.
+_DEFAULT_RESULT_WARN_KB = 25
 _PRIORITY_GAPS: tuple[str, ...] = (
     "edits_without_validation",
     "checklist_skipped",
@@ -382,6 +386,63 @@ def _append_lookup_docs_underused(
     )
 
 
+def summarize_session_ledger(
+    project_root: Path,
+    *,
+    warn_kb: int = _DEFAULT_RESULT_WARN_KB,  # caller may override per invocation
+) -> dict[str, Any] | None:
+    """Per-session byte/context-growth summary from the ledger (TAP-6615).
+
+    Returns ``None`` when the ledger has no rows yet.
+    """
+    # Ledger rows come from contract_telemetry.record_tool_result_bytes.
+    from tapps_mcp.tools.contract_telemetry import read_session_ledger
+
+    rows = read_session_ledger(project_root)
+    if not rows:
+        return None
+
+    # Estimated-context-growth proxy: total bytes across every recorded result.
+    sizes = [int(r.get("bytes", 0)) for r in rows]
+    # Delegated subagent results are broken out separately from direct tool calls.
+    subagent = [int(r.get("bytes", 0)) for r in rows if r.get("source") == "subagent"]
+    # Threshold guidance: flag any single result heavier than warn_kb.
+    warn_bytes = warn_kb * 1024
+    over = [
+        {"tool": r.get("tool"), "bytes": int(r.get("bytes", 0))}
+        for r in rows
+        if int(r.get("bytes", 0)) > warn_bytes
+    ]
+    # Both figures below are MEASURED, not guessed: each ledger row's
+    # "bytes" is the real len(json.dumps(response).encode()) of the tool's
+    # final serialized response, recorded at the server._with_nudges /
+    # server._record_ledger_entry dispatch seam (TAP-6615). "Estimated" in
+    # estimated_context_growth_bytes names what byte count is a *proxy for*
+    # (LLM context growth is measured in tokens, not bytes) -- not that the
+    # byte count itself is a guess. tool_result_bytes_ingested duplicates the
+    # same measured sum under the name the original acceptance criteria
+    # used, so callers can key on either field name.
+    return {
+        "tool_call_count": len(rows),
+        "estimated_context_growth_bytes": sum(sizes),
+        "tool_result_bytes_ingested": sum(sizes),
+        "subagent_result_count": len(subagent),
+        "subagent_result_bytes": sum(subagent),
+        "single_result_warn_kb": warn_kb,
+        "results_over_warn_threshold": over,
+    }
+
+
+def _session_telemetry_field(project_root: Path) -> dict[str, Any]:
+    """``{}`` or ``{"session_telemetry": ...}`` for the compute_gaps report.
+
+    Kept out of compute_gaps' own branch count (TAP-6615).
+    """
+    # None means "nothing recorded yet" -- omit the key rather than reporting zeros.
+    summary = summarize_session_ledger(project_root)
+    return {"session_telemetry": summary} if summary is not None else {}
+
+
 def compute_gaps(
     project_root: Path,
     *,
@@ -545,7 +606,7 @@ def compute_gaps(
     if not gaps:
         recs.append("No gaps detected. Pipeline coverage looks healthy.")
 
-    return {
+    report: dict[str, Any] = {
         "gaps": gaps,
         "called_tools": sorted(called),
         "called_tools_count": len(called),
@@ -558,6 +619,9 @@ def compute_gaps(
         "recommendations": recs,
         "generated_ts": int(time.time()),
     }
+    # TAP-6615: telemetry only -- adds a key, never changes any gap/rec above.
+    report.update(_session_telemetry_field(project_root))
+    return report
 
 
 def format_session_start_gap_hint(project_root: Path) -> str | None:
@@ -722,4 +786,5 @@ __all__ = [
     "format_stop_gap_followup",
     "read_recent_violations",
     "render_markdown",
+    "summarize_session_ledger",
 ]
