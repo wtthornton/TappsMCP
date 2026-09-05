@@ -28,7 +28,7 @@
 ```
                          MCP Tool Layer
                    ┌──────────────────────┐
-                   │  tapps_memory(action) │  33 actions
+                   │  tapps_memory(action) │  23 actions (v2; current: 44 — see intro)
                    │  server_memory_tools  │
                    └──────────┬───────────┘
                               │
@@ -532,7 +532,7 @@ Source: [`packages/tapps-core/src/tapps_core/memory/io.py`](../packages/tapps-co
 
 ---
 
-## 18. The 23 MCP Actions
+## 18. The v2 MCP Actions (23; current count is 44 — see docs/ARCHITECTURE.md)
 
 All dispatched through `tapps_memory(action, ...)` in `server_memory_tools.py`:
 
