@@ -165,6 +165,7 @@ def _absorb_component(
             for key in ("preserved_files", "preserved_skills")
             for item in value.get(key, [])
         )
+        tally["preserved_regions"].update(value.get("preserved_regions", {}))
     elif isinstance(value, str):
         if value.startswith("skipped"):
             tally["skipped"].append(f"{scope}:{name}")
@@ -177,6 +178,7 @@ def _collect_dry_run_tally(result: dict[str, Any]) -> dict[str, Any]:
     tally: dict[str, Any] = {
         "managed": 0,
         "preserved": [],
+        "preserved_regions": {},
         "skipped": [],
         "review": [],
         "parse_errors": [],
@@ -257,6 +259,7 @@ def build_dry_run_summary(result: dict[str, Any]) -> dict[str, Any]:
         "managed_file_count": tally["managed"],
         "preserved_file_count": len(tally["preserved"]),
         "preserved_files": sorted(tally["preserved"]),
+        "preserved_regions": dict(sorted(tally["preserved_regions"].items())),
         "skipped_components": sorted(tally["skipped"]),
         "review_recommended_for": sorted(tally["review"]),
         "parse_errors": sorted(tally["parse_errors"]),

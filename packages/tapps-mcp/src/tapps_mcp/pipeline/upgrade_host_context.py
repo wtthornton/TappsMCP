@@ -144,6 +144,30 @@ def apply_docs_automation(ctx: HostContext, platform: str) -> Any:
     return generate_docs_automation(ctx.project_root, platform, overwrite=True)
 
 
+def _preserved_regions(skills_dir: Path, all_skills: frozenset[str]) -> dict[str, int]:
+    """Per-skill consumer-region line count below ``MARKER_END`` (TAP-7078 box 1).
+
+    ``enumerate_preserved`` above is a whole-skill-directory membership test —
+    it can never see a local region *inside* one managed file. A skill like
+    ``orchestration-prompt`` is always in the platform catalogue, so it can
+    never appear under ``preserved_skills`` no matter how large its local
+    region grows. This reads each skill's actual ``SKILL.md`` and reports the
+    span after the marker instead — distinct from, and never rolled into,
+    ``preserved_skills``.
+    """
+    from tapps_mcp.pipeline.skill_managed_block import preserved_region_line_count
+
+    regions: dict[str, int] = {}
+    for name in sorted(all_skills):
+        skill_md = skills_dir / name / "SKILL.md"
+        if not skill_md.is_file():
+            continue
+        count = preserved_region_line_count(skill_md.read_text(encoding="utf-8"))
+        if count:
+            regions[name] = count
+    return regions
+
+
 def plan_skills(ctx: HostContext, platform: str, catalogue: dict[str, Any]) -> dict[str, Any]:
     """Managed/preserved/pruned skill preview for one host."""
     from tapps_mcp.pipeline.platform_skills import CORE_SKILL_NAMES, prune_skills_for_tier
@@ -163,6 +187,7 @@ def plan_skills(ctx: HostContext, platform: str, catalogue: dict[str, Any]) -> d
         "skill_tier": ctx.skill_tier,
         "managed_skills": sorted(managed_skills),
         "preserved_skills": enumerate_preserved(skills_dir, all_skills, is_dir_target=True),
+        "preserved_regions": _preserved_regions(skills_dir, all_skills),
         "would_prune": prune_preview.get("would_prune", []),
         "bytes_freed": prune_preview.get("bytes_freed", 0),
     }
