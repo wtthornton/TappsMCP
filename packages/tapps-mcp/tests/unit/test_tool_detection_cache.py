@@ -354,8 +354,23 @@ class TestDiskCacheIntegration:
                 "tapps_mcp.tools.tool_detection._get_disk_cache_path",
                 return_value=cache_file,
             ),
+            # TAP-6962: _read_disk_cache() compares this cache's timestamp
+            # against the real venv's uv-receipt.toml/pyvenv.cfg mtime to
+            # decide freshness. Pinning it to "no receipt files" removes the
+            # test's dependence on how recently *this host's* venv happened
+            # to be (re)created -- without it, a venv touched within the
+            # last 60s makes the disk cache look stale and falls through to
+            # the live probe path below.
+            patch(
+                "tapps_mcp.tools.tool_detection._venv_receipt_mtime",
+                return_value=None,
+            ),
+            # Scoped to a real string so that even if the live probe path is
+            # ever reached (a leak this pin is meant to prevent), Popen never
+            # receives a MagicMock as an argv entry.
             patch(
                 "tapps_mcp.tools.tool_detection.shutil.which",
+                return_value=None,
             ) as mock_which,
         ):
             # First call reads from disk
