@@ -57,6 +57,7 @@ from tapps_mcp.tools.decompose_helpers import (
     _summarize_quick_check,
     tapps_decompose,
 )
+from tapps_mcp.tools.pipeline_tool_sets import SOURCE_FILE_SUFFIXES
 from tapps_mcp.tools.session_start_helpers import (
     _DOCS_COVERED,
     _build_search_first,
@@ -869,9 +870,16 @@ async def tapps_session_start(
 # "always do this" -- a turn that edits only non-scorable files (docs,
 # shell, config) never triggers the middle two calls. Module-level so tests
 # can assert on it directly instead of scraping the response dict.
+#
+# TAP-7019 (round 2): the suffix list is DERIVED from SOURCE_FILE_SUFFIXES,
+# never hand-copied -- a prior version hardcoded ".py/.ts/.go/.rs", silently
+# dropping 6 of the 10 authoritative suffixes (.pyi/.tsx/.js/.jsx/.mjs/.cjs),
+# so e.g. an app.tsx-only turn was told the obligation didn't apply while
+# the gate flagged it anyway.
+_SCORABLE_SUFFIX_PHRASE = "/".join(SOURCE_FILE_SUFFIXES)
 SESSION_START_QUICK_RECOMMENDED_NEXT = (
     "Session started. Next: tapps_lookup_docs before using a library API. "
-    "If you edit a scorable source file (.py/.ts/.go/.rs), run "
+    f"If you edit a scorable source file ({_SCORABLE_SUFFIX_PHRASE}), run "
     "tapps_quick_check after that edit, then tapps_validate_changed + "
     "tapps_checklist before declaring done. Run tapps_doctor() for diagnostics."
 )

@@ -21,6 +21,7 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
+import json
 import os
 import sys
 import time
@@ -708,13 +709,57 @@ def _get_metrics_hub() -> MetricsHub:
 _PIPELINE_PROGRESS_TOOLS = frozenset({"tapps_checklist", "tapps_session_start"})
 
 
+def _record_ledger_entry(tool_name: str, response: dict[str, Any]) -> None:
+    """Write one session-ledger line for the real, final tool response (TAP-6615).
+
+    Measures the actual serialized bytes of *response* -- after
+    ``_with_nudges`` has appended ``next_steps`` / ``pipeline_progress`` /
+    ``suggested_workflow`` for a success response, so the recorded size
+    matches what the client actually receives, not the pre-nudge draft.
+
+    Telemetry must never fail a tool call: this is the one place a broad
+    except is deliberately correct. An ``OSError``/``ValueError`` while
+    resolving the project root or writing the ledger (e.g. a read-only
+    ``.tapps-mcp/`` directory) is logged at warning level with the ledger
+    path and swallowed.
+
+    Known gap (documented, not silent): tool paths that build a response via
+    ``success_response``/``error_response`` in ``server_helpers.py`` and
+    return it directly without passing through this seam are not yet
+    ledgered -- instrumenting those call sites lives in the individual
+    ``server_*_tools.py`` files, outside this round's file partition.
+    """
+    from tapps_mcp.tools.contract_telemetry import record_tool_result_bytes
+
+    byte_size = len(json.dumps(response, default=str).encode("utf-8"))
+    settings = load_settings()
+    ledger_path = settings.project_root / ".tapps-mcp" / ".session-token-ledger.jsonl"
+    try:
+        record_tool_result_bytes(
+            settings.project_root,
+            tool_name=tool_name,
+            byte_size=byte_size,
+            success=bool(response.get("success", False)),
+        )
+    except (OSError, ValueError) as exc:
+        logger.warning(
+            "session_ledger.write_failed",
+            tool=tool_name,
+            path=str(ledger_path),
+            error=str(exc),
+        )
+
+
 def _with_nudges(
     tool_name: str,
     response: dict[str, Any],
     context: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
-    """Inject ``next_steps``, ``pipeline_progress``, and ``suggested_workflow`` into a response."""
+    """Inject ``next_steps``, ``pipeline_progress``, and ``suggested_workflow``
+    into a response, then record the final serialized response to the
+    per-session ledger (TAP-6615)."""
     if not response.get("success", False):
+        _record_ledger_entry(tool_name, response)
         return response
     from tapps_mcp.common.nudges import (
         compute_next_steps,
@@ -736,6 +781,7 @@ def _with_nudges(
         data["pipeline_progress"] = progress
     if workflow:
         data["suggested_workflow"] = workflow
+    _record_ledger_entry(tool_name, response)
     return response
 
 

@@ -413,8 +413,15 @@ def summarize_session_ledger(
         for r in rows
         if int(r.get("bytes", 0)) > warn_bytes
     ]
-    # tool_result_bytes_ingested duplicates the growth figure under the name
-    # the acceptance criteria used, so callers can key on either field name.
+    # Both figures below are MEASURED, not guessed: each ledger row's
+    # "bytes" is the real len(json.dumps(response).encode()) of the tool's
+    # final serialized response, recorded at the server._with_nudges /
+    # server._record_ledger_entry dispatch seam (TAP-6615). "Estimated" in
+    # estimated_context_growth_bytes names what byte count is a *proxy for*
+    # (LLM context growth is measured in tokens, not bytes) -- not that the
+    # byte count itself is a guess. tool_result_bytes_ingested duplicates the
+    # same measured sum under the name the original acceptance criteria
+    # used, so callers can key on either field name.
     return {
         "tool_call_count": len(rows),
         "estimated_context_growth_bytes": sum(sizes),
