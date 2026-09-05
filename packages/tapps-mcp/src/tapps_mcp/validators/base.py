@@ -24,6 +24,9 @@ CONFIG_PATTERNS: dict[str, list[re.Pattern[str]]] = {
         re.compile(r"^brands/.+\.ya?ml$", re.IGNORECASE),
         re.compile(r"^templates/.+\.ya?ml$", re.IGNORECASE),
     ],
+    "github_actions": [
+        re.compile(r"(?:^|/)\.github/workflows/.+\.ya?ml$", re.IGNORECASE),
+    ],
     "websocket": [re.compile(r"\.py$|\.ts$|\.js$", re.IGNORECASE)],
     "mqtt": [re.compile(r"\.py$|\.ts$|\.js$", re.IGNORECASE)],
     "influxdb": [re.compile(r"\.py$|\.ts$|\.js$", re.IGNORECASE)],
@@ -66,7 +69,7 @@ def detect_config_type(file_path: str, content: str | None = None) -> str | None
     for config_type, patterns in CONFIG_PATTERNS.items():
         if config_type in {"websocket", "mqtt", "influxdb"}:
             continue  # These need content signatures
-        search_target = path_str if config_type == "yaml_manifest" else name
+        search_target = path_str if config_type in {"yaml_manifest", "github_actions"} else name
         for pattern in patterns:
             if pattern.search(search_target):
                 return config_type

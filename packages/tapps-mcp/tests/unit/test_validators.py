@@ -40,6 +40,35 @@ class TestDetectConfigType:
         assert detect_config_type("brands/acme/brand.yaml") == "yaml_manifest"
         assert detect_config_type("templates/report/template.yml") == "yaml_manifest"
 
+    def test_github_actions_detected_by_path(self):
+        assert detect_config_type(".github/workflows/ci.yml") == "github_actions"
+        assert detect_config_type(".github/workflows/release.yaml") == "github_actions"
+
+    def test_github_actions_wins_over_content_signature(self):
+        """TAP-6607: a workflow whose matrix names a websocket service must not
+
+        be misdetected as the ``websocket`` content-signature type — filename
+        classification for ``.github/workflows/*`` is definitive.
+        """
+        content = "name: x\nstrategy:\n  matrix:\n    service: [websocket-ingestion]\n"
+        assert detect_config_type(".github/workflows/docker-security-scan.yml", content) == (
+            "github_actions"
+        )
+
+    def test_no_workflow_path_never_misclassified_as_github_actions(self):
+        assert detect_config_type("workflows/ci.yml") != "github_actions"
+        assert detect_config_type("ci.yml") != "github_actions"
+
+    def test_github_actions_never_content_misdetected(self):
+        contents = [
+            "matrix:\n  service: [websocket-ingestion]\n",
+            "steps:\n  - run: mqtt.Client()\n",
+            "steps:\n  - run: InfluxDBClient(url='...')\n",
+        ]
+        for content in contents:
+            result = detect_config_type(".github/workflows/x.yml", content)
+            assert result not in {"websocket", "mqtt", "influxdb"}, (content, result)
+
 
 class TestValidateConfig:
     def test_auto_detect_dockerfile(self):
