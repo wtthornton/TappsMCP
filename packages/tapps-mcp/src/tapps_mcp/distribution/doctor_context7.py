@@ -298,6 +298,53 @@ def check_consumer_context7_env(root: Path) -> CheckResult:
     )
 
 
+def check_context7_configured_without_key(root: Path) -> CheckResult:
+    """TAP-6443: flag a repo where Context7 is the active docs route but no
+    key is resolvable anywhere ``_operator_secret_available`` looks.
+
+    ``check_context7_live``'s ``no_key`` branch treats this as informational
+    (``ok=True``) since the llms.txt fallback means lookups still work --
+    but it never raises the failure signal for the fleet-audit case this
+    check closes: a repo configured for Context7 (not ``docs_via_brain``)
+    whose key silently stopped resolving.
+    """
+    from tapps_core.config.settings import load_settings
+    from tapps_core.knowledge.brain_docs import docs_via_brain_enabled
+
+    try:
+        settings = load_settings(project_root=root)
+    except Exception:
+        return CheckResult(
+            "context7_configured_without_key",
+            True,
+            "Skipped (could not load settings)",
+        )
+
+    if docs_via_brain_enabled(settings):
+        return CheckResult(
+            "context7_configured_without_key",
+            True,
+            "Skipped (docs_via_brain enabled — Context7 not used)",
+        )
+
+    if _operator_secret_available("TAPPS_MCP_CONTEXT7_API_KEY", project_root=root):
+        return CheckResult(
+            "context7_configured_without_key",
+            True,
+            "Context7 API key resolvable",
+        )
+
+    return CheckResult(
+        "context7_configured_without_key",
+        False,
+        "Context7 is the active docs route but no API key is resolvable "
+        "(tapps_lookup_docs will fall back to llms.txt or fail)",
+        "Set TAPPS_MCP_CONTEXT7_API_KEY (shell env, ~/.tapps-operator.env, "
+        "or project .env), or enable docs_via_brain if a tapps-brain "
+        "fallback is reachable.",
+    )
+
+
 def check_context7_live(root: Path, *, quick: bool = False) -> CheckResult:
     """Live Context7 liveness probe (TAP — lookup-docs discipline).
 

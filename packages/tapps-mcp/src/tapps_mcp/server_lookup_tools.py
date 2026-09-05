@@ -65,6 +65,7 @@ async def _fallback_to_brain(
     ``None`` (no fallback content) when no bridge is configured or brain
     does not yet expose ``docs_lookup``.
     """
+    from tapps_core.brain_bridge import BrainBridgeUnavailable
     from tapps_core.knowledge.brain_docs import lookup_via_brain
     from tapps_mcp.server_helpers import _get_brain_bridge
 
@@ -73,7 +74,7 @@ async def _fallback_to_brain(
         return None
     try:
         return await lookup_via_brain(bridge, library, topic, mode=mode)
-    except Exception:
+    except BrainBridgeUnavailable:
         logger.debug("lookup_brain_fallback_failed", library=library, topic=topic, exc_info=True)
         return None
 

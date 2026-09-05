@@ -47,6 +47,7 @@ from tapps_mcp.distribution.doctor_consumer import (
 from tapps_mcp.distribution.doctor_context7 import (
     check_brain_docs_tools,
     check_consumer_context7_env,
+    check_context7_configured_without_key,
     check_context7_live,
     check_mcp_operator_secrets,
 )
@@ -309,6 +310,7 @@ def _check_specs(root: Path, *, quick: bool = False) -> list[tuple[str, Callable
         ("Brain docs tools", lambda: check_brain_docs_tools(root)),
         ("MCP operator secrets", lambda: check_mcp_operator_secrets(root)),
         ("Consumer Context7 env", lambda: check_consumer_context7_env(root)),
+        ("Context7 configured without key", lambda: check_context7_configured_without_key(root)),
         ("Context7 live", lambda: check_context7_live(root, quick=quick)),
     ]
     return specs
