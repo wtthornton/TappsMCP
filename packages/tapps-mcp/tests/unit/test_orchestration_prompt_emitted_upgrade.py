@@ -79,6 +79,7 @@ def emitted(tmp_path_factory: pytest.TempPathFactory) -> dict[str, str]:
         "guardrails-and-contracts": (refs / "guardrails-and-contracts.md").read_text(
             encoding="utf-8"
         ),
+        "references-dir": str(refs),
     }
 
 
@@ -135,16 +136,18 @@ class TestEmittedOrchestrationSkill:
     def test_skill_points_at_every_reference_file_it_moved_content_into(
         self, emitted: dict[str, str]
     ) -> None:
-        """Progressive disclosure only works if the pointer is loud (TAP-7017)."""
+        """Progressive disclosure only works if the pointer is loud (TAP-7017).
+
+        Derived from the actual ``references/`` directory the emitter writes, not a
+        hardcoded list — a hardcoded subset structurally cannot notice a file that
+        the emitter later adds without a pointer.
+        """
         skill = emitted["skill"]
-        for ref in (
-            "references/method-detail.md",
-            "references/field-rules-and-rulings.md",
-            "references/verification-routing.md",
-            "references/guardrails-and-contracts.md",
-            "references/learnings-protocol.md",
-            "references/multi-session-programs.md",
-        ):
+        refs_dir = Path(emitted["references-dir"])
+        names = sorted(p.name for p in refs_dir.glob("*.md"))
+        assert names, "no reference files were emitted"
+        for name in names:
+            ref = f"references/{name}"
             assert ref in skill, f"SKILL.md carries no pointer to {ref!r}"
 
     @pytest.mark.parametrize(

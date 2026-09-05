@@ -80,6 +80,7 @@ in `references/method-detail.md` — read it before drafting a Goal or a Loop.
 3. **Map each chunk** to a plane, a mechanism, and a model tier. The top
    session dispatches, adjudicates verifier verdicts, and checkpoints — it
    does not do the work. Target under 15% of run tokens for the orchestrator.
+   Full intent → mechanism → model-tier tables: `references/claude-feature-map.md`.
 4. **Write the loop** with termination + guardrails: state → decide →
    execute → verify → record → repeat or stop.
 5. **Add an independent verification pass** (creator ≠ verifier), tiered by
@@ -128,7 +129,8 @@ from that list; do not freehand a shorter one.
    **`## Driver discipline`** with its Owner-column Plane map and
    **`### Parallel wave schedule`**, the **`## Parallelization plan`** that says which
    lanes are serial and why, a
-   **Sub-goal 0** for self-healing preconditions, the **Verify** step wired to an
+   **Sub-goal 0** for self-healing preconditions (checklists:
+   `references/cold-start-and-verify.md`), the **Verify** step wired to an
    independent verifier, the **Lessons learned** section with its REQUIRED final
    sub-goal *and* its Done-when clause, and — when changing software behavior — a
    **Validation contract** filled *before* execution sub-goals plus an
