@@ -86,6 +86,59 @@ class TestVocabulary:
         assert applied_skip_tokens([BAD_ENTRY, "not_a_real_token"]) == []
 
 
+class TestCursorAndCopilotTokens:
+    """TAP-7054: .cursor/* and .github/copilot-instructions.md were writable
+    by upgrade but had no covering skip token, so an operator had no way to
+    pin them — the ten uncovered entries this issue's acceptance references."""
+
+    def test_cursor_directories_and_copilot_file_are_known_tokens(self) -> None:
+        assert (
+            unknown_skip_tokens(
+                [
+                    ".cursor/hooks",
+                    ".cursor/agents",
+                    ".cursor/skills",
+                    ".github/copilot-instructions.md",
+                ]
+            )
+            == []
+        )
+
+    def test_cursor_tokens_cover_every_path_the_upgrade_writes(self) -> None:
+        """Acceptance box 4: every path these two modules write is a token."""
+        written_paths = {
+            ".cursor/hooks",  # platform_hooks.py: generate_cursor_hooks()
+            ".github/copilot-instructions.md",  # github_copilot.py
+        }
+        assert unknown_skip_tokens(written_paths) == []
+
+    def test_entry_inside_cursor_hooks_names_the_directory_token(self) -> None:
+        """Acceptance box 3: inside-a-directory-token is distinguished from
+        no-covering-token at all — same shape as the pre-existing
+        ``.claude/hooks`` case, now extended to the Cursor mirror."""
+        bad_entry = ".cursor/hooks/tapps-mcp-zombie-cleanup.sh"
+        assert nearest_token(bad_entry) == ".cursor/hooks"
+        message = describe_unknown_skip_token(bad_entry)
+        assert "directory granularity" in message
+        assert ".cursor/hooks" in message
+
+    def test_entry_inside_cursor_skills_names_the_directory_token(self) -> None:
+        bad_entry = ".cursor/skills/orchestration-prompt/SKILL.md"
+        assert nearest_token(bad_entry) == ".cursor/skills"
+
+    def test_entry_inside_cursor_agents_names_the_directory_token(self) -> None:
+        bad_entry = ".cursor/agents/reviewer.md"
+        assert nearest_token(bad_entry) == ".cursor/agents"
+
+    def test_unrelated_path_still_has_no_nearest_token(self) -> None:
+        """Negative control: an entry outside every directory token still
+        reports no-covering-token, proving the distinction isn't vacuous."""
+        assert nearest_token(".github/workflows/ci.yml") is None
+        message = describe_unknown_skip_token(".github/workflows/ci.yml")
+        assert "directory granularity" not in message
+        assert "not a recognized skip token" in message
+
+
 class TestUpgradeSignal:
     def test_single_file_path_entry_warns_loudly(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
