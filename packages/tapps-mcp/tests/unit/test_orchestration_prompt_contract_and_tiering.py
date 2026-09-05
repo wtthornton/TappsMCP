@@ -106,6 +106,82 @@ class TestTerminalContract:
         assert "`/effort <effort>`" in section
 
 
+class TestPlaneMapDetector:
+    """TAP-6692 — the worked Plane map must satisfy its own detector 1."""
+
+    def _rows(self) -> list[list[str]]:
+        template = COMPANIONS["assets/prompt-template.md"]
+        plane = template.split("\n## Plane map", 1)[1].split("\n## ", 1)[0]
+        rows = []
+        for line in plane.splitlines():
+            line = line.strip()
+            if not line.startswith("|") or line.startswith("|---") or line.startswith("|------"):
+                continue
+            cells = [c.strip() for c in line.strip("|").split("|")]
+            if cells and cells[0] not in ("Step", ""):
+                rows.append(cells)
+        return rows
+
+    def test_plane_map_detector_1_five_driver_rows_no_operator(self) -> None:
+        rows = self._rows()
+        # columns: Step, Owner, Plane, Mechanism, agentType, model, effort, Notes
+        dash_agent_rows = [r for r in rows if r[4] == "—"]
+        driver_dash_rows = [r for r in dash_agent_rows if "driver" in r[1].lower()]
+        operator_dash_rows = [r for r in dash_agent_rows if "operator" in r[1].lower()]
+        assert len(driver_dash_rows) == 5
+        assert len(operator_dash_rows) == 1
+        assert not any("operator" in r[1].lower() for r in driver_dash_rows)
+
+    def test_plane_map_detector_dispatch_has_its_own_driver_row(self) -> None:
+        rows = self._rows()
+        assert any("dispatch" in r[0].lower() and "driver" in r[1].lower() for r in rows)
+
+    def test_plane_map_detector_text_excludes_operator_from_five_row_budget(self) -> None:
+        body = _FULL_SURFACE
+        section = body.split("**Two mechanical detectors", 1)[1][:1200]
+        assert "whose Owner is `driver`" in section
+        assert "does not count against the driver's five-row budget" in section
+
+
+class TestSurfaceAxis:
+    """TAP-6601 — surface (build-time vs runtime) is an axis orthogonal to plane."""
+
+    def test_plane_map_header_carries_a_surface_column(self) -> None:
+        template = COMPANIONS["assets/prompt-template.md"]
+        assert "| Surface |" in template
+
+    def test_surface_column_sits_after_effort_before_notes(self) -> None:
+        # Keeps the nlt-orchestrator check-prompt-shape.js `cells[7]` (effort)
+        # and `cells[2]` (Owner) indices intact — Surface is appended, not
+        # inserted ahead of an index that script already reads positionally.
+        template = COMPANIONS["assets/prompt-template.md"]
+        header = template.split("| Step | Owner |", 1)[1].split("\n", 1)[0]
+        cols = [c.strip() for c in ("Step | Owner |" + header).split("|") if c.strip()]
+        assert cols.index("effort") < cols.index("Surface") < cols.index("Notes")
+        assert cols.index("Owner") == 1
+
+    def test_body_defines_surface_as_orthogonal_axis_with_deploy_channels(self) -> None:
+        body = CLAUDE_SKILLS["orchestration-prompt"]
+        assert "Surface is a separate axis from plane" in body
+        assert "authoring surface" in body.lower()
+        assert "runtime surface" in body.lower()
+
+    def test_method_detail_states_shared_substrate_additive_only_rule(self) -> None:
+        body = COMPANIONS["references/method-detail.md"]
+        assert "orthogonal to plane" in body
+        assert "additive-only" in body
+        assert "Shared-substrate rule" in body
+
+    def test_body_warns_against_reusing_plane_for_surface(self) -> None:
+        body = CLAUDE_SKILLS["orchestration-prompt"]
+        assert "never reuse \"plane\"" in body.lower() or "never reuse plane" in body.lower()
+
+    def test_template_instructs_naming_surface_and_deploy_channel_per_sub_goal(self) -> None:
+        body = COMPANIONS["references/method-detail.md"]
+        assert "Name every sub-goal's" in body
+        assert "surface and deploy channel" in body
+
+
 class TestCheapestViableTiering:
     """TAP-6947 — a stated floor, a visible SCORE line, and tracker discipline."""
 
@@ -149,6 +225,22 @@ class TestCheapestViableTiering:
         assert "One\n  full **enumeration** per wave" in guardrails
         assert "exactly one regression run at program\n  end" in guardrails
 
+    def test_verifier_dispatch_charge_sheet_scoped_and_excludes_bulk_reruns(self) -> None:
+        template = COMPANIONS["assets/prompt-template.md"]
+        loop = template.split("\n## Loop", 1)[1].split("\n## ", 1)[0]
+        verify = loop.split("- **Verify (independent):**", 1)[1].split("\n- ", 1)[0]
+        assert "charge sheet" in verify
+        assert "diff audit" in verify
+        assert "proof artifact" in verify
+        assert "new or changed test files" in verify
+        assert "--collect-only" in verify
+        assert "never a bulk suite re-run" in verify
+
+    def test_skill_body_pointer_names_the_test_execution_policy(self) -> None:
+        body = CLAUDE_SKILLS["orchestration-prompt"]
+        assert "charge sheet" in body
+        assert "--collect-only" in body
+
     def test_score_line_carries_pct_with_denominator_and_elapsed(self) -> None:
         template = COMPANIONS["assets/prompt-template.md"]
         assert "pct <n>%" in template
@@ -181,14 +273,19 @@ class TestCheapestViableTiering:
 
     def test_scope_rule_permits_announced_admission_of_urgent_and_high(self) -> None:
         body = _FULL_SURFACE
-        section = body.split("**Scope admission is announced, not forbidden.**", 1)[1][:1200]
-        assert "walk past a live Urgent" in section
+        section = body.split("**Two mechanisms, two actors", 1)[1][:1200]
+        assert "DRIVER, announced" in section
         assert "**Urgent or High**" in section
-        assert "SCORE denominator" in section
-        assert "What stays forbidden is the *silent* version" in section
+        assert "SCORE\n  denominator" in section
+        assert "What stays forbidden in both mechanisms" in section
 
     def test_flat_no_scope_creep_is_no_longer_the_last_word(self) -> None:
+        # TAP-6605 round 2: the flat "no scope creep." ban is gone from every
+        # rendered site (SKILL.md summary, ruling 2, this CARGO paragraph, and
+        # the prompt-template Guardrails line) in favor of a derived, carve-out
+        # aware one-liner shared across all four.
         body = _FULL_SURFACE
-        assert "no silent scope creep." in body
-        after = body.split("no silent scope creep.", 1)[1][:200]
-        assert "announced, not forbidden" in after
+        assert "no scope creep." not in body
+        assert "no silent scope creep — carve-out for in-flight" in body
+        after = body.split("no silent scope creep — carve-out for in-flight", 1)[1][:200]
+        assert "driver's announced call" in after

@@ -15,6 +15,28 @@ from tapps_mcp.pipeline.skill_asset_policy import write_project_script
 if TYPE_CHECKING:
     from pathlib import Path
 
+#: The exactly-two exception categories a LANE may act on in-flight, outside its
+#: named scope, without filing first (TAP-6605). Every rendered site that names
+#: this pair — the SKILL.md summary sentence, Ruling 2, the Engineering-discipline
+#: CARGO paragraph, and the prompt-template Guardrails line — derives its wording
+#: from this tuple via the tokens below, so the pair can never drift between sites.
+SCOPE_CARVE_OUT_CATEGORIES: tuple[str, str] = ("data-loss", "security")
+
+_CARVE_OUT_TOKEN_AND = "CARVE_OUT_CATEGORIES_AND"
+_CARVE_OUT_TOKEN_NEITHER_NOR = "CARVE_OUT_CATEGORIES_NEITHER_NOR"
+_CARVE_OUT_TEXT_AND = " and ".join(SCOPE_CARVE_OUT_CATEGORIES)
+_CARVE_OUT_TEXT_NEITHER_NOR = (
+    f"neither {SCOPE_CARVE_OUT_CATEGORIES[0]} nor {SCOPE_CARVE_OUT_CATEGORIES[1]}"
+)
+
+
+def _render_carve_out_categories(text: str) -> str:
+    """Substitute the carve-out category tokens with the derived wording."""
+    return text.replace(_CARVE_OUT_TOKEN_AND, _CARVE_OUT_TEXT_AND).replace(
+        _CARVE_OUT_TOKEN_NEITHER_NOR, _CARVE_OUT_TEXT_NEITHER_NOR
+    )
+
+
 ORCHESTRATION_PROMPT_SKILL_FRONTMATTER = """\
 ---
 name: orchestration-prompt
@@ -100,6 +122,12 @@ in `references/method-detail.md` — read it before drafting a Goal or a Loop.
    session dispatches, adjudicates verifier verdicts, and checkpoints — it
    does not do the work. Target under 15% of run tokens for the orchestrator.
    Full intent → mechanism → model-tier tables: `references/claude-feature-map.md`.
+   **Surface is a separate axis from plane** — authoring surface (a template or
+   generator constant, shipped by regenerating) versus runtime surface (a live
+   loop or process, shipped by restarting it) — never reuse "plane" for it; name
+   each sub-goal's surface and deploy channel, and treat a substrate shared
+   across surfaces as additive-only until every consuming path is verified.
+   Full elaboration: `references/method-detail.md`.
 4. **Write the loop** with termination + guardrails: state → decide →
    execute → verify → record → repeat or stop.
 5. **Add an independent verification pass** (creator ≠ verifier), tiered by
@@ -114,7 +142,7 @@ in `references/method-detail.md` — read it before drafting a Goal or a Loop.
 
 Postmortem-derived rules that govern whether a *proof* is sound live in
 `references/field-rules-and-rulings.md` (twelve field rules plus eight
-rulings that pin edge cases the proof-shape table doesn't spell out on its
+rulings — including a no-silent-scope-creep carve-out naming exactly two exception categories, CARVE_OUT_CATEGORIES_AND, reported loudly in the evidence block rather than filed and walked past — that pin edge cases the proof-shape table doesn't spell out on its
 own). Rules governing *who* runs verification, over what population, and how
 its result gets reported — as distinct from whether the proof itself is
 sound — live in `references/verification-routing.md`. Read both before
@@ -131,13 +159,17 @@ protocol, Expected-fail fix loop, and Engineering-discipline text that ride
 along with them. The full list and cargo text (each marked `> **CARGO`, for
 the emitted prompt's runner, not for you) is
 `references/guardrails-and-contracts.md`. Fill Output step 4's template
-from that list; do not freehand a shorter one.
+from that list; do not freehand a shorter one. Test scope is part of that
+list: a per-sub-goal verifier's charge sheet is scoped to the diff audit, the
+sub-goal's proof artifact, its new or changed test files, and a
+`--collect-only` enumeration — bulk suite re-runs are excluded there and
+reserved for the single end-of-program regression proof.
 
 ## Output
 
 1. **Fog preflight (method §0).** If foggy, refuse and point at `/tapps-wayfind` —
    do not emit a prompt. If clear, recall `memory_group=wayfind` resume when present.
-2. Read `references/host-feature-map.md` when the runner host is Cursor or when Run-as / checkpoint lanes differ by host.
+2. Read `references/host-feature-map.md` when the runner host is Cursor or when Run-as / checkpoint lanes differ by host. **Refuse to emit a prompt whose Run-as names only one execution home.** Every emitted Run-as names both the in-session runner (this session edits directly) and the orchestrator-driven dispatch-lane home (a `claude -p` lane in its own worktree that ends in a `LINEAR EVIDENCE` block and a PR, with verify/merge/tracker-write retained by the dispatching orchestrator) — a single-home Run-as silently picks a default the runner never chose.
 3. Read the workspace manifest (e.g. `fleet.md`) for the repos / Linear projects /
    brain ids involved, if the project has one. **The manifest is a registry, not a
    scope grant** — it can list far more repos than this session's actual workspace
@@ -210,6 +242,7 @@ work has an irreducible need for a second driver
 (`.claude/rules/agent-to-agent.md`).
 """
 )
+ORCHESTRATION_PROMPT_SKILL_BODY = _render_carve_out_categories(ORCHESTRATION_PROMPT_SKILL_BODY)
 
 
 _METHOD_DETAIL = r"""# Method detail — the nine load-bearing parts, in full
@@ -383,6 +416,26 @@ spend the strong model only where judgement is load-bearing (independent verify 
 tiered by **proof shape** — see the table in method §5 — never uniformly maximal).
 Selector table: `references/claude-feature-map.md`. For host-specific Run-as, checkpoint lanes, and MCP scope, read `references/host-feature-map.md`.
 
+**Surface is a separate axis, orthogonal to plane — never reuse "plane" for it.**
+`plane` is coordination-versus-execution (above); `surface` is *when the change takes
+effect*: **authoring surface** (a template, a skill body, a generator constant — takes
+effect the next time something regenerates from it) versus **runtime surface** (a
+running loop, a deployed hook, a live consumer session — takes effect immediately, in
+the process executing right now). Each surface has its own deploy channel: authoring
+surface ships via `tapps_upgrade` / a regenerate step / a merge to the template source;
+runtime surface ships via restarting or re-dispatching the running process itself. A
+chunk can sit on either plane *and* either surface — the two axes are independent, and
+collapsing them (treating "coordination" as if it implied "authoring") mis-routes the
+chunk to the wrong deploy channel. **Shared-substrate rule: additive-only.** When a
+change touches a substrate multiple consumer paths read (a shared template, a shared
+schema, a shared config key), the change must be additive-only until every consumer
+path has been verified against it — removing or renaming what an unverified path still
+reads is exactly the failure mode method §3's derived-state coupling test exists to
+catch, applied to build-time state instead of runtime state. Name every sub-goal's
+surface and deploy channel explicitly; a program touching both surfaces must label
+every lane so no lane's acceptance criteria is silently assigned to the other surface's
+verification path.
+
 **Preflight the mechanism before you commit a chunk to it.** A mechanism that is
 listed is not a mechanism that works: a granted tool with no targets, a degraded
 index, an unreachable MCP server all fail *silently* and the loop degrades into a
@@ -441,10 +494,13 @@ the end. An unmeasured share is one nobody notices growing.
 
 **Two mechanical detectors — run them on the Plane map you just wrote, before you save:**
 
-1. **Every `—` in the `agentType` column is orchestrator work.** A row with no agentType is a
-   row nobody was dispatched for, so the top session does it. Five such rows is the whole
-   budget (decide · dispatch · adjudicate · gated write · checkpoint); a sixth means a body of
-   work leaked inline.
+1. **Every `—` in the `agentType` column whose Owner is `driver` is orchestrator work.**
+   A driver row with no agentType is a row nobody was dispatched for, so the top session
+   does it. Five such driver rows is the whole budget (decide · dispatch · adjudicate ·
+   gated write · checkpoint); a sixth means a body of work leaked inline. An `operator`
+   row also carries `—` in `agentType` — it is human-supervised work, never dispatched at
+   all — and does not count against the driver's five-row budget; count only rows whose
+   Owner column reads `driver`.
 2. **An all-`—` `effort` column means effort control was surrendered** — `effort` is
    Workflow-only and an Agent subagent inherits the session's, so a prompt with no Workflow
    has no effort knob at all. That is a legitimate state; the prompt must *say* so. Silence
@@ -731,10 +787,15 @@ resolve cases the proof-shape table does not spell out on its own.
    a fresh, adversarial perspective, not a fresh identity, and the agent already
    holding the live reproduction is best placed to confirm a scoped fix without
    re-establishing context from zero.
-2. No-silent-scope-creep carries a data-loss carve-out — a delegate may step outside
-   its named scope to stop in-flight data loss — and the carve-out is void the moment
-   it is silent: acting outside scope is legitimate only if it is surfaced immediately,
-   in the same report, never discovered later in a diff.
+2. No-silent-scope-creep carries a carve-out naming exactly two exception categories, CARVE_OUT_CATEGORIES_AND — a delegate may step outside its named scope only to stop in-flight
+   data loss or a live security defect, and the carve-out is void the moment it is
+   silent: acting outside scope is legitimate only if it is surfaced loudly in the same
+   evidence block, never filed and walked past, never discovered later in a diff. An
+   ordinary adjacent problem that is CARVE_OUT_CATEGORIES_NEITHER_NOR still routes to a
+   separate item, with no change in behaviour; the carve-out names these two categories
+   and stops there — it is not a general licence to widen the diff. This carve-out is
+   lane-level and in-flight only: a filed finding's admission into the current run
+   (Urgent-or-High, driver-announced) is a separate mechanism, below.
 3. Shared quota is a coupling the independence test (method §3) must see. Two lanes
    with disjoint file lists can still contend for the same rate limit, API quota, or
    worker pool — that is a derived-state coupling exactly like an env-var set, and it
@@ -762,6 +823,7 @@ resolve cases the proof-shape table does not spell out on its own.
    "surface" there instead ("build surface" vs "runtime surface"), so a reader can
    rely on "plane" meaning one specific thing throughout an emitted prompt.
 """
+_FIELD_RULES_AND_RULINGS = _render_carve_out_categories(_FIELD_RULES_AND_RULINGS)
 
 _VERIFICATION_ROUTING = r"""# Verification routing and honest reporting
 
@@ -974,6 +1036,21 @@ The full Guardrails-every-prompt list, and the Autonomy / Failure-handling / Exp
   Parallelization plan's `order-forced-by` field. Disjoint file lists are not evidence of
   independence (method §3) — the coupling that fails silently is the one where each half
   is internally consistent.
+- **Concurrent writers — a running loop is never the only writer.** Shared scripts, git
+  config, and temp directories may change under a running loop — another session,
+  another lane, or an operator can edit `scripts/`, rewrite `.git/config`, or clean
+  `/tmp` while this loop is mid-run. Record the **version of any shared tool actually
+  used** (its printed `--version`, a content hash, a resolved path) rather than
+  inferring it from documentation that may already be stale for this run. Every lane
+  copies its own log out of the temp directory on completion, before the directory can
+  be reused or cleaned by something else. **Gate any corrective git command on a
+  re-observation, never on a single status snapshot** — a snapshot taken before a
+  concurrent writer's edit is stale by the time the correction runs. The triage order
+  before any corrective git action: (1) confirm the files still on disk match what the
+  snapshot claimed, (2) confirm HEAD is still the commit the snapshot named intact, (3)
+  confirm nothing was pushed out from under this check, (4) confirm the recovery is a
+  single command — then **observe again immediately before acting**, because the
+  triage itself takes wall-clock time a concurrent writer can fill.
 - **Context hygiene** — prune stale reads each iteration; targeted grep over full
   re-Read (method §4).
 - **Context lifecycle** — a long loop recycles instead of growing: at each sub-goal
@@ -1067,17 +1144,28 @@ Infinite fix spirals and "green by suppression" are forbidden.
 Produce *solutions*, not band-aids: root-cause not workarounds; **no
 green-by-suppression** (never skip/disable a check to pass); **right-sized** (the
 simplest thing that fully solves it); durable over expedient; match repo conventions;
-no silent scope creep.
+no silent scope creep — carve-out for in-flight CARVE_OUT_CATEGORIES_AND only, reported
+loudly; everything else filed, admission is the driver's announced call.
 
-**Scope admission is announced, not forbidden.** A flat "no scope creep" is right about
-*silence* and wrong about *scope* — it tells a lane to walk past a live Urgent defect it
-is standing on. File everything you find. Admit into the current run only what is filed
-**Urgent or High**, say so out loud in the same report that discovers it, and add it to
-the SCORE denominator so `pct` tells the truth about the larger population rather than
-quietly shrinking its own target. Everything below High is filed and left for the
-operator. What stays forbidden is the *silent* version: work that appears in the diff
-and nowhere in the report.
+**Two mechanisms, two actors — do not conflate them.**
+
+- **In-flight carve-out (LANE, immediate).** A lane may step outside its named scope
+  ONLY to stop in-flight data loss or a live security defect — the
+  CARVE_OUT_CATEGORIES_AND pair, and nothing wider — and must report doing so loudly
+  in its own evidence block the moment it acts. Everything else it finds, it FILES; it
+  does not fix it in flight.
+- **Scope admission (DRIVER, announced).** The driver may admit a filed finding into
+  the current run as a new lane or VAL only if it is triaged **Urgent or High**, says
+  so out loud in the same report that discovers it, and adds it to the SCORE
+  denominator so `pct` tells the truth about the larger population rather than
+  quietly shrinking its own target. The lane never self-admits.
+
+An adjacent Urgent defect that is CARVE_OUT_CATEGORIES_NEITHER_NOR is FILED by the
+lane and may be ADMITTED by the driver — the lane does not fix it in flight. Everything
+below High is filed and left for the operator. What stays forbidden in both mechanisms
+is the *silent* version: work that appears in the diff and nowhere in the report.
 """
+_GUARDRAILS_AND_CONTRACTS = _render_carve_out_categories(_GUARDRAILS_AND_CONTRACTS)
 
 _LEARNINGS_PROTOCOL = r"""# Learn as you go — the learnings.md protocol
 
@@ -1272,9 +1360,12 @@ then enforces it row by row.>
 - **Orchestrator token share: under 15%** of the run's total. Report it every iteration as
   `orch-spend <n>%` in the SCORE line — an unmeasured share is one nobody notices growing.
 - **Two mechanical detectors — run them on this prompt's own Plane map before shipping it:**
-  1. **Every `—` in the `agentType` column is orchestrator work.** A row with no agentType is
-     a row nobody was dispatched for, so the driver does it. Five such rows is the budget
-     (the five jobs); a sixth means a body of work leaked into the top session.
+  1. **Every `—` in the `agentType` column whose Owner is `driver` is orchestrator work.**
+     A driver row with no agentType is a row nobody was dispatched for, so the driver does
+     it. Five such driver rows is the budget (the five jobs); a sixth means a body of work
+     leaked into the top session. An `operator` row also carries `—` in `agentType` — it is
+     human-supervised work, never dispatched at all — and does not count against this
+     five-row budget.
   2. **An all-`—` `effort` column means effort control was surrendered**, because `effort` is
      Workflow-only and an Agent subagent inherits the session's. That is a legitimate state —
      say so explicitly. Silence reads as an omission, and the fix is to move the
@@ -1374,26 +1465,33 @@ inherits the session's. If a step's effort is load-bearing, run it in a Workflow
 `driver` belongs only on the five jobs; every other row is `delegate` (or `operator` for
 human-supervised work). If `driver` appears on a body of work, the prompt is wrong.
 
-| Step | Owner | Plane | Mechanism | agentType | model | effort | Notes |
-|------|-------|-------|-----------|-----------|-------|--------|-------|
-| <preflight probes> | delegate | coordination | subagent, one call, schema'd | `Explore` | `haiku` | `low` | closed questions; raw output never reaches the driver |
-| <per-iteration state gather> | delegate | coordination | subagent, one call, schema'd | `Explore` | `haiku` | `low` | git + tracker + PR state → one struct; flat cost per iteration instead of monotonic growth |
-| <lane log tail / progress poll> | delegate | coordination | subagent | `Explore` | `haiku` | `low` | logs run to thousands of lines; poll on a cadence matched to the work |
-| <audit/research> | delegate | coordination | Workflow / 3–5 subagents | `Explore` | `haiku` | `low` | read-only enforced by agent type, not prose; research-to-*decide* stays on wayfind |
-| <multi-file synthesis> | delegate | coordination | subagent | `Explore` | `sonnet` | `medium` | judgement about what matters |
-| <code change> | delegate | execution | dispatch to <repo> via PR | `general-purpose` | `sonnet` | `low` | **serial writes** — one repo at a time |
-| <hard/ambiguous fix> | delegate | execution | `/goal` drive | `general-purpose` | `opus` | `high` | load-bearing judgement |
-| <verify — deterministic proof> | delegate | coordination | verifier subagent (fresh context) | `general-purpose` | `haiku` | `low` | deterministic shape: exit code / `grep -c` / test-count line — it re-runs one command and transcribes; read its `observed_output`, never its conclusion |
-| <verify — closed check> | delegate | coordination | verifier subagent (fresh context) | `general-purpose` | `sonnet` | `medium` | comparative shape: two outputs differ, a count did not shrink, a diff confined to N files — closed, but it must compare the right two things |
-| <verify — open judgement> | delegate | coordination | **verifier subagent (fresh context)** | `general-purpose` | **`opus`** | **`high`–`xhigh`** | semantic shape: creator ≠ verifier; refutes proof; a weak verifier defeats the pattern |
-| <verify — gates an irreversible step> | delegate | coordination | verifier subagent (fresh context) | `general-purpose` | **`opus`** | **`high`+** | consequence overrides shape: merge / deploy / delete / publish — a wrong PASS is unrecoverable, so tier by consequence even when the proof is a one-line exit code |
-| <fix after fail> | delegate | execution | fresh worker on scoped fix sub-goal | `general-purpose` | `sonnet` | `low` | expected-fail loop; do not reopen whole feature |
-| <recurring check> | delegate | execution | Routine / `claude -p`+cron | `Explore` | `haiku` | `low` | human-gated |
-| <human-supervised lane> | **operator** | execution | human session in <repo> | — | operator's | — | never dispatched; say why the repo cannot take a headless lane |
-| <adjudicate verdicts> | **driver** | coordination | inline | — | runner | — | accept / reject / scope a fix |
-| <gated or plugin-only write> | **driver** | coordination | skill/tool call | — | runner | — | e.g. a hook-gated tracker write a headless lane cannot reach |
-| <decide next dispatch> | **driver** | coordination | inline | — | runner | — | the orchestration itself |
-| <checkpoint> | **driver** | coordination | `/tapps-handoff-session` | — | runner | — | shift boundary |
+| Step | Owner | Plane | Mechanism | agentType | model | effort | Surface | Notes |
+|------|-------|-------|-----------|-----------|-------|--------|---------|-------|
+| <preflight probes> | delegate | coordination | subagent, one call, schema'd | `Explore` | `haiku` | `low` | runtime | closed questions; raw output never reaches the driver |
+| <per-iteration state gather> | delegate | coordination | subagent, one call, schema'd | `Explore` | `haiku` | `low` | runtime | git + tracker + PR state → one struct; flat cost per iteration instead of monotonic growth |
+| <lane log tail / progress poll> | delegate | coordination | subagent | `Explore` | `haiku` | `low` | runtime | logs run to thousands of lines; poll on a cadence matched to the work |
+| <audit/research> | delegate | coordination | Workflow / 3–5 subagents | `Explore` | `haiku` | `low` | runtime | read-only enforced by agent type, not prose; research-to-*decide* stays on wayfind |
+| <multi-file synthesis> | delegate | coordination | subagent | `Explore` | `sonnet` | `medium` | runtime | judgement about what matters |
+| <code change> | delegate | execution | dispatch to <repo> via PR | `general-purpose` | `sonnet` | `low` | runtime | **serial writes** — one repo at a time |
+| <hard/ambiguous fix> | delegate | execution | `/goal` drive | `general-purpose` | `opus` | `high` | runtime | load-bearing judgement |
+| <verify — deterministic proof> | delegate | coordination | verifier subagent (fresh context) | `general-purpose` | `haiku` | `low` | runtime | deterministic shape: exit code / `grep -c` / test-count line — it re-runs one command and transcribes; read its `observed_output`, never its conclusion |
+| <verify — closed check> | delegate | coordination | verifier subagent (fresh context) | `general-purpose` | `sonnet` | `medium` | runtime | comparative shape: two outputs differ, a count did not shrink, a diff confined to N files — closed, but it must compare the right two things |
+| <verify — open judgement> | delegate | coordination | **verifier subagent (fresh context)** | `general-purpose` | **`opus`** | **`high`–`xhigh`** | runtime | semantic shape: creator ≠ verifier; refutes proof; a weak verifier defeats the pattern |
+| <verify — gates an irreversible step> | delegate | coordination | verifier subagent (fresh context) | `general-purpose` | **`opus`** | **`high`+** | runtime | consequence overrides shape: merge / deploy / delete / publish — a wrong PASS is unrecoverable, so tier by consequence even when the proof is a one-line exit code |
+| <fix after fail> | delegate | execution | fresh worker on scoped fix sub-goal | `general-purpose` | `sonnet` | `low` | runtime | expected-fail loop; do not reopen whole feature |
+| <recurring check> | delegate | execution | Routine / `claude -p`+cron | `Explore` | `haiku` | `low` | runtime | human-gated |
+| <human-supervised lane> | **operator** | execution | human session in <repo> | — | operator's | — | runtime | never dispatched; say why the repo cannot take a headless lane |
+| <decide next dispatch> | **driver** | coordination | inline | — | runner | — | runtime | the orchestration itself |
+| <dispatch> | **driver** | coordination | inline (fires the chosen call) | — | runner | — | runtime | the one job a delegate structurally cannot do for itself |
+| <adjudicate verdicts> | **driver** | coordination | inline | — | runner | — | runtime | accept / reject / scope a fix |
+| <gated or plugin-only write> | **driver** | coordination | skill/tool call | — | runner | — | runtime | e.g. a hook-gated tracker write a headless lane cannot reach |
+| <checkpoint> | **driver** | coordination | `/tapps-handoff-session` | — | runner | — | runtime | shift boundary |
+
+Every row above is **runtime surface** — it describes how the emitted loop executes
+itself. A program that also edits an authoring artifact (a template, a skill body, a
+generator constant a downstream regenerate step consumes) adds rows with `authoring`
+in this column, each naming its own deploy channel (`tapps_upgrade` / regenerate /
+merge-to-source) in **Notes** rather than sharing the runtime rows' channel.
 
 Cheap-model rule: `haiku` answers closed, evidence-checkable questions. It does not
 render verdicts that gate irreversible steps — narrow the question or pay for `opus`.
@@ -1455,7 +1553,7 @@ for each of them: **what set does it read that the other writes?**>
 - **State:** <read first — wayfind resume (`memory_group=wayfind`), status, brain recall of prior attempts, Linear, last handoff>
 - **Decide:** <how to pick the next *execute* action / sub-goal — never invent decide work; if fog reappears → stop and `/tapps-wayfind`>
 - **Execute:** <the action, on the committed mechanism + tier>
-- **Verify (independent):** spawn a fresh-context verifier — **tiered by proof shape**, not uniformly frontier (deterministic → `haiku`/`low` · comparative → `sonnet`/`medium` · semantic → `opus`/`high`+ · anything gating an irreversible step → `opus` whatever its shape) — to *refute* the sub-goal's proof — re-run scrutiny + behavioral checks against the validation contract. Hand it the **exact proof command, expected artifact, file:line anchors, and environment quirks** (non-default ports, which interpreter, auth source) — never the executor's narrative, or it will reason about plausibility instead of running anything. Its return schema requires `observed_output` (the literal text it saw — **an empty value is a FAIL**, it means the verifier reasoned instead of running) and `green_by_suppression` (true when the proof went green by deleting what it measures; a flagged proof is a fail). For cheap-tier verdicts read `observed_output`, never the conclusion sentence. The verifier's verdict advances the loop.
+- **Verify (independent):** spawn a fresh-context verifier — **tiered by proof shape**, not uniformly frontier (deterministic → `haiku`/`low` · comparative → `sonnet`/`medium` · semantic → `opus`/`high`+ · anything gating an irreversible step → `opus` whatever its shape) — to *refute* the sub-goal's proof — re-run scrutiny + behavioral checks against the validation contract. Hand it the **exact proof command, expected artifact, file:line anchors, and environment quirks** (non-default ports, which interpreter, auth source) — never the executor's narrative, or it will reason about plausibility instead of running anything. Its return schema requires `observed_output` (the literal text it saw — **an empty value is a FAIL**, it means the verifier reasoned instead of running) and `green_by_suppression` (true when the proof went green by deleting what it measures; a flagged proof is a fail). For cheap-tier verdicts read `observed_output`, never the conclusion sentence. The verifier's verdict advances the loop. **Scope the per-sub-goal verifier's charge sheet** to the diff audit, the sub-goal's own proof artifact, the sub-goal's new or changed test files, and a `--collect-only` enumeration — never a bulk suite re-run; a whole-suite re-run belongs only to the single end-of-program regression sub-goal, never to a per-sub-goal charge sheet.
 - **On fail (expected-fail fix loop):** record structured handoff → scope narrow fix sub-goal → re-execute → re-verify; ≤**3** validation rounds per sub-goal (override: N=…), then escalate once, then stop with a diagnosis. Never weaken the contract to go green.
 - **Record (structured handoff):** completed · undone · commands+exit codes · issues · procedures followed? · failure-and-why → brain
 - **Context hygiene:** prune stale reads; carry a compact state summary, not raw transcripts.
@@ -1509,7 +1607,7 @@ Next: /clear   then   /tapps-continue-session
 - Memory: recall wayfind resume + prior attempts at start; record structured handoff (incl. failures) at each checkpoint.
 - Lessons learned: the final sub-goal runs the "Lessons learned" pass and appends to `learnings.md`. It is REQUIRED and is the one sub-goal that survives any trim — a run that fixes the problem and teaches the harness nothing has paid full price for half the value. Mine what the verifier refuted first.
 - Harness compatibility: <gated tool calls → unlock/refresh steps; MCP standing nudges → adopted or overridden>.
-- Discipline: root-cause not workarounds; no green-by-suppression; right-sized; durable; match conventions; no scope creep.
+- Discipline: root-cause not workarounds; no green-by-suppression; right-sized; durable; match conventions; no silent scope creep — carve-out for in-flight CARVE_OUT_CATEGORIES_AND only, reported loudly; everything else filed, admission is the driver's announced call.
 
 ## Autonomy
 - Act on every reversible, in-scope step — no "should I proceed?" checkpoints.
@@ -1575,13 +1673,30 @@ bullets or ~40 KB, spend part of this pass merging overlapping bullets and delet
 ones overtaken by a fixed tool or a changed codebase.
 
 ## Run-as
-<exact invocation, e.g.:>
+<Name BOTH execution homes this loop may run in — never only one. A prompt whose
+Run-as names a single home leaves the other implicit, and the runner defaults to
+whichever one it happens to be sitting in.>
+
+**In-session runner (this session edits directly):**
 - **Cold-start loop (recommended):** the paste line from "How to run" above. **or**
 - `/goal <condition>` — only if this file is already in context. **or**
 - invoke the Workflow tool with `.claude/workflows/<script>.js` (fan-out only). **or**
 - Routine: schedule `<cadence>` with this prompt, push=draft-PR. **or**
 - **Chained (autonomous, context-recycling):** one `claude -p` per sub-goal, each run starting from this program's handoff and ending by rewriting it. The process boundary is the clear, so per-turn context cost stays flat and every sub-goal gets a fresh executor. Re-verify the handoff at the start of each run; one runner per handoff — take a `slot=` when another program shares the repo, and run `uv run tapps-mcp handoff list` before starting to see whether one already does.
+
+**Orchestrator-driven dispatch lane (a `claude -p` lane in its own worktree, launched
+by `dispatch-lane.sh` or equivalent):** the lane edits and commits inside its own
+worktree only, opens a PR, and ends every run by printing a `--- LINEAR EVIDENCE ---`
+block (proof commands, exit codes, before/after counts) plus the literal sentinel
+`LANE-COMPLETE: <done|blocked>`. The dispatching orchestrator retains everything a
+lane structurally cannot reach: verifying the lane's proof from a fresh context,
+merging the PR, and any tracker (Linear) write — a lane never merges its own PR or
+writes to the tracker on its own authority.
+
+Pick one before emitting the Loop section below; a Run-as that names only one home
+is a defect in this skill's output, not a legitimate simplification.
 """
+_PROMPT_TEMPLATE = _render_carve_out_categories(_PROMPT_TEMPLATE)
 
 _FEATURE_MAP = r"""# Claude feature map — intent → mechanism → model tier
 
@@ -2195,6 +2310,7 @@ __all__ = [
     "ORCHESTRATION_PROMPT_COMPANION_FILES",
     "ORCHESTRATION_PROMPT_CREATE_ONLY_FILES",
     "ORCHESTRATION_PROMPT_SKILL_BODY",
+    "SCOPE_CARVE_OUT_CATEGORIES",
     "START_PROGRAM_SCRIPT_BODY",
     "generate_start_program_script",
 ]

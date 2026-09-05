@@ -48,7 +48,7 @@ VERIFICATION_ROUTING_SECTIONS = [
 # Markers moved to references/guardrails-and-contracts.md (TAP-7017).
 GUARDRAILS_AND_CONTRACTS_SECTIONS = [
     "workspace directory list is the scope",  # TAP-6856
-    "**Scope admission is announced, not forbidden.**",  # TAP-6947
+    "**Two mechanisms, two actors — do not conflate them.**",  # TAP-6605 round 2
 ]
 
 TEMPLATE_SECTIONS = [

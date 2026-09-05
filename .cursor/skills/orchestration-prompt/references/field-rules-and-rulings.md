@@ -87,10 +87,15 @@ resolve cases the proof-shape table does not spell out on its own.
    a fresh, adversarial perspective, not a fresh identity, and the agent already
    holding the live reproduction is best placed to confirm a scoped fix without
    re-establishing context from zero.
-2. No-silent-scope-creep carries a data-loss carve-out — a delegate may step outside
-   its named scope to stop in-flight data loss — and the carve-out is void the moment
-   it is silent: acting outside scope is legitimate only if it is surfaced immediately,
-   in the same report, never discovered later in a diff.
+2. No-silent-scope-creep carries a carve-out naming exactly two exception categories, data-loss and security — a delegate may step outside its named scope only to stop in-flight
+   data loss or a live security defect, and the carve-out is void the moment it is
+   silent: acting outside scope is legitimate only if it is surfaced loudly in the same
+   evidence block, never filed and walked past, never discovered later in a diff. An
+   ordinary adjacent problem that is neither data-loss nor security still routes to a
+   separate item, with no change in behaviour; the carve-out names these two categories
+   and stops there — it is not a general licence to widen the diff. This carve-out is
+   lane-level and in-flight only: a filed finding's admission into the current run
+   (Urgent-or-High, driver-announced) is a separate mechanism, below.
 3. Shared quota is a coupling the independence test (method §3) must see. Two lanes
    with disjoint file lists can still contend for the same rate limit, API quota, or
    worker pool — that is a derived-state coupling exactly like an env-var set, and it

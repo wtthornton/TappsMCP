@@ -171,6 +171,26 @@ spend the strong model only where judgement is load-bearing (independent verify 
 tiered by **proof shape** — see the table in method §5 — never uniformly maximal).
 Selector table: `references/claude-feature-map.md`. For host-specific Run-as, checkpoint lanes, and MCP scope, read `references/host-feature-map.md`.
 
+**Surface is a separate axis, orthogonal to plane — never reuse "plane" for it.**
+`plane` is coordination-versus-execution (above); `surface` is *when the change takes
+effect*: **authoring surface** (a template, a skill body, a generator constant — takes
+effect the next time something regenerates from it) versus **runtime surface** (a
+running loop, a deployed hook, a live consumer session — takes effect immediately, in
+the process executing right now). Each surface has its own deploy channel: authoring
+surface ships via `tapps_upgrade` / a regenerate step / a merge to the template source;
+runtime surface ships via restarting or re-dispatching the running process itself. A
+chunk can sit on either plane *and* either surface — the two axes are independent, and
+collapsing them (treating "coordination" as if it implied "authoring") mis-routes the
+chunk to the wrong deploy channel. **Shared-substrate rule: additive-only.** When a
+change touches a substrate multiple consumer paths read (a shared template, a shared
+schema, a shared config key), the change must be additive-only until every consumer
+path has been verified against it — removing or renaming what an unverified path still
+reads is exactly the failure mode method §3's derived-state coupling test exists to
+catch, applied to build-time state instead of runtime state. Name every sub-goal's
+surface and deploy channel explicitly; a program touching both surfaces must label
+every lane so no lane's acceptance criteria is silently assigned to the other surface's
+verification path.
+
 **Preflight the mechanism before you commit a chunk to it.** A mechanism that is
 listed is not a mechanism that works: a granted tool with no targets, a degraded
 index, an unreachable MCP server all fail *silently* and the loop degrades into a
@@ -229,10 +249,13 @@ the end. An unmeasured share is one nobody notices growing.
 
 **Two mechanical detectors — run them on the Plane map you just wrote, before you save:**
 
-1. **Every `—` in the `agentType` column is orchestrator work.** A row with no agentType is a
-   row nobody was dispatched for, so the top session does it. Five such rows is the whole
-   budget (decide · dispatch · adjudicate · gated write · checkpoint); a sixth means a body of
-   work leaked inline.
+1. **Every `—` in the `agentType` column whose Owner is `driver` is orchestrator work.**
+   A driver row with no agentType is a row nobody was dispatched for, so the top session
+   does it. Five such driver rows is the whole budget (decide · dispatch · adjudicate ·
+   gated write · checkpoint); a sixth means a body of work leaked inline. An `operator`
+   row also carries `—` in `agentType` — it is human-supervised work, never dispatched at
+   all — and does not count against the driver's five-row budget; count only rows whose
+   Owner column reads `driver`.
 2. **An all-`—` `effort` column means effort control was surrendered** — `effort` is
    Workflow-only and an Agent subagent inherits the session's, so a prompt with no Workflow
    has no effort knob at all. That is a legitimate state; the prompt must *say* so. Silence

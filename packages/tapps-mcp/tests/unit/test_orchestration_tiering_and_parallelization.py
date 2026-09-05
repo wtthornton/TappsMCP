@@ -258,11 +258,11 @@ class TestRulingFourCoexistence:
         [
             "## Driver discipline — dispatch, don't execute",
             "### Parallel wave schedule",
-            "| Step | Owner | Plane | Mechanism | agentType | model | effort | Notes |",
+            "| Step | Owner | Plane | Mechanism | agentType | model | effort | Surface | Notes |",
             "**The driver MAY:**",
             "**The driver MUST NOT:**",
             "orch-spend <n>%",
-            "in the `agentType` column is orchestrator work",
+            "in the `agentType` column whose Owner is `driver` is orchestrator work",
         ],
     )
     def test_pr_302_template_surface_intact(self, template, fragment):

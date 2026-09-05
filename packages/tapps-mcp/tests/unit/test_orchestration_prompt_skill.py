@@ -205,6 +205,31 @@ class TestScaffold:
         assert (_skill_dir(tmp_path, "cursor") / "SKILL.md").exists()
         assert (_skill_dir(tmp_path, "cursor") / "references" / "claude-feature-map.md").exists()
 
+    def test_run_as_names_both_execution_homes(self, tmp_path):
+        """TAP-6589: an emitted Run-as naming only one home leaves the other
+        implicit and the runner defaults to whichever one it's sitting in."""
+        generate_skills(tmp_path, "claude")
+        tpl = (_skill_dir(tmp_path) / "assets" / "prompt-template.md").read_text()
+        run_as = tpl.split("## Run-as", 1)[1].split("\n## ", 1)[0]
+        assert "in-session runner" in run_as.lower()
+        assert "dispatch lane" in run_as.lower()
+        assert "LINEAR EVIDENCE" in run_as
+        assert "verify, merge" in run_as.lower() or (
+            "verify" in run_as.lower() and "merge" in run_as.lower()
+        )
+
+    def test_skill_body_refuses_a_single_home_run_as(self, tmp_path):
+        generate_skills(tmp_path, "claude")
+        content = (_skill_dir(tmp_path) / "SKILL.md").read_text()
+        assert "Refuse to emit a prompt whose Run-as names only one execution home" in content
+
+    def test_claude_and_cursor_run_as_mirrors_are_byte_identical(self, tmp_path):
+        generate_skills(tmp_path, "claude")
+        generate_skills(tmp_path, "cursor")
+        claude_tpl = (_skill_dir(tmp_path, "claude") / "assets" / "prompt-template.md").read_text()
+        cursor_tpl = (_skill_dir(tmp_path, "cursor") / "assets" / "prompt-template.md").read_text()
+        assert claude_tpl == cursor_tpl
+
     def test_multi_session_and_cost_discipline_sections_ship_in_a_regenerated_reference(
         self, tmp_path
     ):
@@ -327,6 +352,19 @@ class TestDoctorCheck:
     def test_ok_when_fully_deployed(self, tmp_path):
         (tmp_path / ".mcp.json").write_text("{}", encoding="utf-8")
         generate_skills(tmp_path, "claude")
+        result = check_orchestration_prompt_skill_current(tmp_path)
+        assert result.ok
+        assert "current" in result.message
+
+    def test_ok_when_fully_deployed_both_hosts(self, tmp_path):
+        """TAP-6589: the .claude and .cursor scaffolded copies must both stay
+        current — ``_tapps_skill_bases`` validates every host with a deployed
+        MCP config or skills dir, so deploying both must pass for both."""
+        (tmp_path / ".mcp.json").write_text("{}", encoding="utf-8")
+        (tmp_path / ".cursor" / "mcp.json").parent.mkdir(parents=True, exist_ok=True)
+        (tmp_path / ".cursor" / "mcp.json").write_text("{}", encoding="utf-8")
+        generate_skills(tmp_path, "claude")
+        generate_skills(tmp_path, "cursor")
         result = check_orchestration_prompt_skill_current(tmp_path)
         assert result.ok
         assert "current" in result.message

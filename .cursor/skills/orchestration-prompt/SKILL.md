@@ -81,6 +81,12 @@ in `references/method-detail.md` — read it before drafting a Goal or a Loop.
    session dispatches, adjudicates verifier verdicts, and checkpoints — it
    does not do the work. Target under 15% of run tokens for the orchestrator.
    Full intent → mechanism → model-tier tables: `references/claude-feature-map.md`.
+   **Surface is a separate axis from plane** — authoring surface (a template or
+   generator constant, shipped by regenerating) versus runtime surface (a live
+   loop or process, shipped by restarting it) — never reuse "plane" for it; name
+   each sub-goal's surface and deploy channel, and treat a substrate shared
+   across surfaces as additive-only until every consuming path is verified.
+   Full elaboration: `references/method-detail.md`.
 4. **Write the loop** with termination + guardrails: state → decide →
    execute → verify → record → repeat or stop.
 5. **Add an independent verification pass** (creator ≠ verifier), tiered by
@@ -95,7 +101,7 @@ in `references/method-detail.md` — read it before drafting a Goal or a Loop.
 
 Postmortem-derived rules that govern whether a *proof* is sound live in
 `references/field-rules-and-rulings.md` (twelve field rules plus eight
-rulings that pin edge cases the proof-shape table doesn't spell out on its
+rulings — including a no-silent-scope-creep carve-out naming exactly two exception categories, data-loss and security, reported loudly in the evidence block rather than filed and walked past — that pin edge cases the proof-shape table doesn't spell out on its
 own). Rules governing *who* runs verification, over what population, and how
 its result gets reported — as distinct from whether the proof itself is
 sound — live in `references/verification-routing.md`. Read both before
@@ -112,13 +118,17 @@ protocol, Expected-fail fix loop, and Engineering-discipline text that ride
 along with them. The full list and cargo text (each marked `> **CARGO`, for
 the emitted prompt's runner, not for you) is
 `references/guardrails-and-contracts.md`. Fill Output step 4's template
-from that list; do not freehand a shorter one.
+from that list; do not freehand a shorter one. Test scope is part of that
+list: a per-sub-goal verifier's charge sheet is scoped to the diff audit, the
+sub-goal's proof artifact, its new or changed test files, and a
+`--collect-only` enumeration — bulk suite re-runs are excluded there and
+reserved for the single end-of-program regression proof.
 
 ## Output
 
 1. **Fog preflight (method §0).** If foggy, refuse and point at `/tapps-wayfind` —
    do not emit a prompt. If clear, recall `memory_group=wayfind` resume when present.
-2. Read `references/host-feature-map.md` when the runner host is Cursor or when Run-as / checkpoint lanes differ by host.
+2. Read `references/host-feature-map.md` when the runner host is Cursor or when Run-as / checkpoint lanes differ by host. **Refuse to emit a prompt whose Run-as names only one execution home.** Every emitted Run-as names both the in-session runner (this session edits directly) and the orchestrator-driven dispatch-lane home (a `claude -p` lane in its own worktree that ends in a `LINEAR EVIDENCE` block and a PR, with verify/merge/tracker-write retained by the dispatching orchestrator) — a single-home Run-as silently picks a default the runner never chose.
 3. Read the workspace manifest (e.g. `fleet.md`) for the repos / Linear projects /
    brain ids involved, if the project has one. **The manifest is a registry, not a
    scope grant** — it can list far more repos than this session's actual workspace

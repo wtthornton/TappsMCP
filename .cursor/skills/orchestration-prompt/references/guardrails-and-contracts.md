@@ -92,6 +92,21 @@ The full Guardrails-every-prompt list, and the Autonomy / Failure-handling / Exp
   Parallelization plan's `order-forced-by` field. Disjoint file lists are not evidence of
   independence (method §3) — the coupling that fails silently is the one where each half
   is internally consistent.
+- **Concurrent writers — a running loop is never the only writer.** Shared scripts, git
+  config, and temp directories may change under a running loop — another session,
+  another lane, or an operator can edit `scripts/`, rewrite `.git/config`, or clean
+  `/tmp` while this loop is mid-run. Record the **version of any shared tool actually
+  used** (its printed `--version`, a content hash, a resolved path) rather than
+  inferring it from documentation that may already be stale for this run. Every lane
+  copies its own log out of the temp directory on completion, before the directory can
+  be reused or cleaned by something else. **Gate any corrective git command on a
+  re-observation, never on a single status snapshot** — a snapshot taken before a
+  concurrent writer's edit is stale by the time the correction runs. The triage order
+  before any corrective git action: (1) confirm the files still on disk match what the
+  snapshot claimed, (2) confirm HEAD is still the commit the snapshot named intact, (3)
+  confirm nothing was pushed out from under this check, (4) confirm the recovery is a
+  single command — then **observe again immediately before acting**, because the
+  triage itself takes wall-clock time a concurrent writer can fill.
 - **Context hygiene** — prune stale reads each iteration; targeted grep over full
   re-Read (method §4).
 - **Context lifecycle** — a long loop recycles instead of growing: at each sub-goal
@@ -185,14 +200,24 @@ Infinite fix spirals and "green by suppression" are forbidden.
 Produce *solutions*, not band-aids: root-cause not workarounds; **no
 green-by-suppression** (never skip/disable a check to pass); **right-sized** (the
 simplest thing that fully solves it); durable over expedient; match repo conventions;
-no silent scope creep.
+no silent scope creep — carve-out for in-flight data-loss and security only, reported
+loudly; everything else filed, admission is the driver's announced call.
 
-**Scope admission is announced, not forbidden.** A flat "no scope creep" is right about
-*silence* and wrong about *scope* — it tells a lane to walk past a live Urgent defect it
-is standing on. File everything you find. Admit into the current run only what is filed
-**Urgent or High**, say so out loud in the same report that discovers it, and add it to
-the SCORE denominator so `pct` tells the truth about the larger population rather than
-quietly shrinking its own target. Everything below High is filed and left for the
-operator. What stays forbidden is the *silent* version: work that appears in the diff
-and nowhere in the report.
+**Two mechanisms, two actors — do not conflate them.**
+
+- **In-flight carve-out (LANE, immediate).** A lane may step outside its named scope
+  ONLY to stop in-flight data loss or a live security defect — the
+  data-loss and security pair, and nothing wider — and must report doing so loudly
+  in its own evidence block the moment it acts. Everything else it finds, it FILES; it
+  does not fix it in flight.
+- **Scope admission (DRIVER, announced).** The driver may admit a filed finding into
+  the current run as a new lane or VAL only if it is triaged **Urgent or High**, says
+  so out loud in the same report that discovers it, and adds it to the SCORE
+  denominator so `pct` tells the truth about the larger population rather than
+  quietly shrinking its own target. The lane never self-admits.
+
+An adjacent Urgent defect that is neither data-loss nor security is FILED by the
+lane and may be ADMITTED by the driver — the lane does not fix it in flight. Everything
+below High is filed and left for the operator. What stays forbidden in both mechanisms
+is the *silent* version: work that appears in the diff and nowhere in the report.
 <!-- END: tapps-skill-asset -->
