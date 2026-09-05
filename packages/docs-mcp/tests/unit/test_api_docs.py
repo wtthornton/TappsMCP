@@ -579,6 +579,26 @@ class TestAPIDocCrossRefs:
         text = "See `something`."
         assert gen._resolve_cross_refs(text, set()) == text
 
+    def test_unheaded_symbol_no_heading_gets_no_anchor_link(self) -> None:
+        """A module constant is rendered in a table, never as its own heading —
+        so it must not be collected as a cross-referenceable anchor (TAP-5894).
+        Regenerating a module with such a constant referenced in a docstring
+        must not produce a `#constant-name` anchor that resolves nowhere.
+        """
+        module = APIDocModule(
+            name="mymod",
+            docstring="See `MAX_RETRIES` for the retry ceiling.",
+            constants=[APIDocParam(name="MAX_RETRIES", type="int", default="3")],
+        )
+        gen = APIDocGenerator()
+        known_symbols = gen._collect_symbols(module)
+
+        assert "MAX_RETRIES" not in known_symbols
+
+        rendered = gen._render_markdown(module)
+        assert "[`MAX_RETRIES`](#max-retries)" not in rendered
+        assert "`MAX_RETRIES`" in rendered  # stays plain inline code
+
 
 # ---------------------------------------------------------------------------
 # 10. TestAPIDocExamples
