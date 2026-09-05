@@ -16,6 +16,8 @@ Do not use legacy `mcp__tapps-mcp__tapps_memory` routing (removed from default b
 
 **Architectural saves:** when `memory.auto_supersede_architectural` is true, `save` with `tier=architectural` uses `MemoryStore.supersede` (via `store.history`) so prior versions stay in the temporal chain; responses may include `status`, `superseded_old_key`, `new_key`, `version_count`.
 
+**History:** memory was v2 (in-process `MemoryStore`, SQLite + WAL, FTS5 full-text search, local `memory.db`) until it was retired in [TAP-1995](https://linear.app/tappscodingagents/issue/TAP-1995) — v3 is the current Postgres-backed `tapps-brain` service, accessed exclusively via `BrainBridge` / the `tapps_memory` tool described in this document. There is no live SQLite path; every module path under `packages/tapps-core/src/tapps_core/memory/*` referenced by older docs no longer exists.
+
 ## Memory tiers
 
 | Tier | Half-life | Use for | Examples |
@@ -40,7 +42,7 @@ Do not use legacy `mcp__tapps-mcp__tapps_memory` routing (removed from default b
 |--------|-----------|-------------|
 | **save** | `key`, `value`, `tier`, `scope`, `tags`, `source` | Save a memory entry (architectural tier may supersede; see intro) |
 | **save_bulk** | `entries` (list, max 50) | Batch save entries |
-| **get** | `key` | Retrieve by key (includes provenance for consolidated) |
+| **get** | `key`, `projection` | Retrieve by key (includes provenance for consolidated) |
 | **list** | `scope`, `tier`, `tags`, `limit`, `include_sources` | List with filters (max 50) |
 | **delete** | `key` | Delete by key |
 
@@ -48,7 +50,33 @@ Do not use legacy `mcp__tapps-mcp__tapps_memory` routing (removed from default b
 
 | Action | Parameters | Description |
 |--------|-----------|-------------|
-| **search** | `query`, `ranked`, `limit`, `scope`, `tier`, `tags` | BM25 composite scoring (40% relevance + 30% confidence + 15% recency + 15% frequency) |
+| **search** | `query`, `ranked`, `limit`, `scope`, `tier`, `tags`, `projection` | BM25 composite scoring (40% relevance + 30% confidence + 15% recency + 15% frequency) |
+
+### Projection (TAP-6616)
+
+`get` and `search` accept `projection="compact"` (matched case-insensitively)
+to shrink the response: each entry is reduced to `key`, `tier`,
+`confidence`, `tags`, and a `summary` capped at **200 chars, so compact is
+<=30% of any entry >=1KB** — dropping the full `value` field, which
+usually dominates payload size. This cuts response size by 70%+ on
+entries >=1KB, including exactly at the 1KB boundary (measured: 70.0% at
+1024B, 72.1% at 1100B, 79.5% at 1500B, 97.0% at 10240B). A 280-char cap
+was tried first and fails the guarantee at the boundary (64.0% reduction
+at exactly 1024B, short of 70%+); 200 chars was chosen to clear it with
+margin.
+
+Default is `projection="full"` — unchanged existing behavior, the entire
+entry (including `value`) is returned. A `projection` value that is
+neither `full` nor `compact` (case-insensitive) — e.g. a typo like
+`"brief"` — is served as full and flagged rather than silently treated as
+full: the response carries `requested_projection` (the verbatim value
+sent), `projection="full"`, and `projection_downgraded=true`.
+
+Recall compact when triaging many results (backlog scans, "what do we
+know about X") where the summary is enough to decide whether to fetch the
+full entry. Recall full when the value itself is what you need (recalling
+a saved decision, replaying architectural context) — a compact hit that
+turns out relevant still requires a second full `get` by key.
 
 ## Intelligence & maintenance
 

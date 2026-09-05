@@ -155,6 +155,7 @@ a = Analysis(
         "tapps_mcp.tools.fleet_upgrade",
         "tapps_mcp.tools.handoff_guard",
         "tapps_mcp.tools.handoff_memory",
+        "tapps_mcp.tools.memory_projection",
         "tapps_mcp.tools.handoff_schema",
         "tapps_mcp.tools.handoff_write",
         "tapps_mcp.tools.pipeline_tool_sets",

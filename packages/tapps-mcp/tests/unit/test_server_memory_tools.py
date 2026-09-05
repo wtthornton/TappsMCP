@@ -9,10 +9,12 @@ all non-lifecycle behaviour remains as before (refused envelope redirects).
 from __future__ import annotations
 
 import asyncio
+import json
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
+from tapps_mcp import server_memory_tools
 from tapps_mcp.server_memory_tools import (
     _LIFECYCLE_ACTIONS,
     _REFUSED_BRAIN_TOOL,
@@ -243,3 +245,218 @@ class TestMcpCatalogRemoval:
         from tapps_mcp.server import ALL_TOOL_NAMES
 
         assert "tapps_memory" in ALL_TOOL_NAMES
+
+
+def _big_entry(key: str = "k1") -> dict[str, object]:
+    return {
+        "key": key,
+        "value": "x" * 2000,
+        "tier": "pattern",
+        "confidence": 0.9,
+        "tags": ["a", "b"],
+    }
+
+
+_ENTRY_SHELL: dict[str, object] = {
+    "key": "k1",
+    "value": "",
+    "tier": "pattern",
+    "confidence": 0.9,
+    "tags": ["a", "b"],
+}
+_ENTRY_SHELL_OVERHEAD_BYTES = len(json.dumps(_ENTRY_SHELL).encode("utf-8"))
+
+
+def _entry_of_full_json_size(target_bytes: int, key: str = "k1") -> dict[str, object]:
+    """Build an entry whose ``json.dumps`` (full, unprojected form) is
+    exactly ``target_bytes`` long — the plain "x" filler has no chars that
+    need escaping, so padding length is `target - <fixed-field overhead>`.
+    """
+    entry = dict(_ENTRY_SHELL)
+    entry["key"] = key
+    entry["value"] = "x" * (target_bytes - _ENTRY_SHELL_OVERHEAD_BYTES)
+    assert len(json.dumps(entry).encode("utf-8")) == target_bytes
+    return entry
+
+
+@pytest.mark.asyncio()
+class TestCompactProjection:
+    """TAP-6616: get/search accept projection='compact'; default stays full."""
+
+    @pytest.fixture(autouse=True)
+    def _mock_session(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setattr(
+            "tapps_mcp.server_memory_tools.ensure_session_initialized",
+            _noop_init,
+        )
+
+    async def test_get_default_projection_is_unchanged_full(self) -> None:
+        entry = _big_entry()
+        with (
+            patch("tapps_mcp.server_memory_tools._MCP_MEMORY_MODE", "slim"),
+            patch("tapps_mcp.server_memory_tools._get_memory_store", return_value=MagicMock()),
+            patch("tapps_mcp.server_memory_tools._get_brain_bridge", return_value=None),
+            patch.dict(
+                server_memory_tools._DISPATCH,
+                {
+                    "get": lambda _store, _p: {
+                        "action": "get",
+                        "found": True,
+                        "entry": dict(entry),
+                        "store_metadata": {},
+                    }
+                },
+                clear=False,
+            ),
+        ):
+            result = await tapps_memory(action="get", key="k1")
+
+        assert result["data"]["entry"]["value"] == entry["value"]
+        assert "summary" not in result["data"]["entry"]
+
+    async def test_get_compact_projection_reduces_payload_by_70_percent(self) -> None:
+        entry = _big_entry()
+        with (
+            patch("tapps_mcp.server_memory_tools._MCP_MEMORY_MODE", "slim"),
+            patch("tapps_mcp.server_memory_tools._get_memory_store", return_value=MagicMock()),
+            patch("tapps_mcp.server_memory_tools._get_brain_bridge", return_value=None),
+            patch.dict(
+                server_memory_tools._DISPATCH,
+                {
+                    "get": lambda _store, _p: {
+                        "action": "get",
+                        "found": True,
+                        "entry": dict(entry),
+                        "store_metadata": {},
+                    }
+                },
+                clear=False,
+            ),
+        ):
+            result = await tapps_memory(action="get", key="k1", projection="compact")
+
+        compact_entry = result["data"]["entry"]
+        assert set(compact_entry) == {"key", "tier", "confidence", "tags", "summary"}
+        assert len(compact_entry["summary"]) <= 203  # 200 chars + "..."
+
+        full_bytes = len(json.dumps(entry).encode("utf-8"))
+        compact_bytes = len(json.dumps(compact_entry).encode("utf-8"))
+        assert full_bytes > 1024
+        assert compact_bytes <= full_bytes * 0.3
+
+    @pytest.mark.parametrize("target_bytes", [1024, 1100, 1500, 10240])
+    async def test_get_compact_projection_holds_70_percent_at_boundary_sizes(
+        self, target_bytes: int
+    ) -> None:
+        """TAP-6616 refutation: the ">=70% reduction on entries over 1KB"
+        guarantee must hold AT the 1KB boundary itself, not just on far
+        larger entries. On pre-fix HEAD (280-char summary cap) this failed
+        at 1024B: compact was 369/1024 = 36.0% of full (a 64.0% reduction,
+        short of the promised 70%+)."""
+        entry = _entry_of_full_json_size(target_bytes)
+        with (
+            patch("tapps_mcp.server_memory_tools._MCP_MEMORY_MODE", "slim"),
+            patch("tapps_mcp.server_memory_tools._get_memory_store", return_value=MagicMock()),
+            patch("tapps_mcp.server_memory_tools._get_brain_bridge", return_value=None),
+            patch.dict(
+                server_memory_tools._DISPATCH,
+                {
+                    "get": lambda _store, _p: {
+                        "action": "get",
+                        "found": True,
+                        "entry": dict(entry),
+                        "store_metadata": {},
+                    }
+                },
+                clear=False,
+            ),
+        ):
+            result = await tapps_memory(action="get", key="k1", projection="compact")
+
+        compact_entry = result["data"]["entry"]
+        full_bytes = len(json.dumps(entry).encode("utf-8"))
+        compact_bytes = len(json.dumps(compact_entry).encode("utf-8"))
+        assert full_bytes == target_bytes
+        assert compact_bytes <= full_bytes * 0.3, (
+            f"{target_bytes}B: compact={compact_bytes} is "
+            f"{compact_bytes / full_bytes:.1%} of full, want <=30%"
+        )
+
+    async def test_get_projection_case_insensitive_compact(self) -> None:
+        entry = _big_entry()
+        with (
+            patch("tapps_mcp.server_memory_tools._MCP_MEMORY_MODE", "slim"),
+            patch("tapps_mcp.server_memory_tools._get_memory_store", return_value=MagicMock()),
+            patch("tapps_mcp.server_memory_tools._get_brain_bridge", return_value=None),
+            patch.dict(
+                server_memory_tools._DISPATCH,
+                {
+                    "get": lambda _store, _p: {
+                        "action": "get",
+                        "found": True,
+                        "entry": dict(entry),
+                        "store_metadata": {},
+                    }
+                },
+                clear=False,
+            ),
+        ):
+            result = await tapps_memory(action="get", key="k1", projection="Compact")
+
+        compact_entry = result["data"]["entry"]
+        assert set(compact_entry) == {"key", "tier", "confidence", "tags", "summary"}
+        assert result["data"]["projection"] == "compact"
+        assert "projection_downgraded" not in result["data"]
+
+    async def test_get_projection_unrecognized_value_downgrades_honestly(self) -> None:
+        entry = _big_entry()
+        with (
+            patch("tapps_mcp.server_memory_tools._MCP_MEMORY_MODE", "slim"),
+            patch("tapps_mcp.server_memory_tools._get_memory_store", return_value=MagicMock()),
+            patch("tapps_mcp.server_memory_tools._get_brain_bridge", return_value=None),
+            patch.dict(
+                server_memory_tools._DISPATCH,
+                {
+                    "get": lambda _store, _p: {
+                        "action": "get",
+                        "found": True,
+                        "entry": dict(entry),
+                        "store_metadata": {},
+                    }
+                },
+                clear=False,
+            ),
+        ):
+            result = await tapps_memory(action="get", key="k1", projection="brief")
+
+        assert result["data"]["entry"]["value"] == entry["value"]
+        assert result["data"]["projection"] == "full"
+        assert result["data"]["requested_projection"] == "brief"
+        assert result["data"]["projection_downgraded"] is True
+
+    async def test_search_compact_projection_applies_to_every_result(self) -> None:
+        entries = [_big_entry("k1"), _big_entry("k2")]
+        with (
+            patch("tapps_mcp.server_memory_tools._MCP_MEMORY_MODE", "slim"),
+            patch("tapps_mcp.server_memory_tools._get_memory_store", return_value=MagicMock()),
+            patch("tapps_mcp.server_memory_tools._get_brain_bridge", return_value=None),
+            patch.dict(
+                server_memory_tools._DISPATCH,
+                {
+                    "search": lambda _store, _p: {
+                        "action": "search",
+                        "ranked": False,
+                        "results": [dict(e) for e in entries],
+                        "total_count": 2,
+                        "returned_count": 2,
+                        "query": "q",
+                        "store_metadata": {},
+                    }
+                },
+                clear=False,
+            ),
+        ):
+            result = await tapps_memory(action="search", query="q", projection="compact")
+
+        for item in result["data"]["results"]:
+            assert set(item) == {"key", "tier", "confidence", "tags", "summary"}

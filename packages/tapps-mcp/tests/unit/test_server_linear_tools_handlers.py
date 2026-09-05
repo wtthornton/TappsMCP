@@ -5,12 +5,17 @@ from __future__ import annotations
 import json
 import time
 from pathlib import Path
-from unittest.mock import MagicMock
+from typing import Any
+from unittest.mock import MagicMock, patch
+
+import pytest
 
 from tapps_mcp.server_linear_tools_handlers import (
     _record_call,
     _scan_snapshot_file,
     register,
+    tapps_linear_snapshot_get,
+    tapps_linear_snapshot_put,
 )
 
 
@@ -51,3 +56,32 @@ def test_register_gates_tools_by_allowed_set() -> None:
     mcp_instance = MagicMock()
     register(mcp_instance, frozenset({"tapps_linear_count"}))
     assert mcp_instance.tool.call_count == 1
+
+
+@pytest.fixture
+def fake_settings(tmp_path: Path) -> Any:
+    class _Stub:
+        project_root = tmp_path
+        linear_cache_ttl_open_seconds: int = 300
+        linear_cache_ttl_closed_seconds: int = 3600
+
+    return _Stub()
+
+
+@pytest.mark.asyncio
+async def test_snapshot_put_id_only_rows_refuses_with_named_verdict(
+    fake_settings: Any,
+) -> None:
+    """TAP-6636: id-only rows (no title) are below the compact floor and must
+    not be stored as a plain ``stored: True`` hit."""
+    with patch(
+        "tapps_mcp.server_linear_tools.load_settings", return_value=fake_settings
+    ):
+        issues = [{"id": "LIN-1"}, {"id": "LIN-2"}]
+        result = await tapps_linear_snapshot_put(
+            team="T", project="P", issues_json=json.dumps(issues), state="backlog"
+        )
+        assert result["data"]["stored"] is False
+        assert result["data"]["stored_projection"] == "none"
+        get_result = await tapps_linear_snapshot_get(team="T", project="P", state="backlog")
+        assert get_result["data"]["cached"] is False
