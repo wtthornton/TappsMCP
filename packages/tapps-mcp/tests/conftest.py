@@ -877,9 +877,9 @@ def _snapshot_live_metrics_dir() -> dict[str, tuple[int, int]]:
 
 @pytest.fixture(autouse=True)
 def _isolate_metrics_hub(
-    tmp_path: Path, request: pytest.FixtureRequest
+    tmp_path_factory: pytest.TempPathFactory, request: pytest.FixtureRequest
 ) -> Generator[None, None, None]:
-    """VAL-TAP-6639: pin every test's metrics hub to a tmp_path instance, and
+    """VAL-TAP-6639: pin every test's metrics hub to a tmp instance, and
     fail the test loudly if anything still reaches the live metrics dir.
 
     ``_record_execution`` (server.py) and the umbrella handlers in
@@ -890,6 +890,12 @@ def _isolate_metrics_hub(
     takes its directory only via constructor arg, with no env/config
     injection point, so patching the accessor (rather than adding a new
     injection seam to MetricsHub itself) is the smallest correct fix.
+
+    Uses ``tmp_path_factory.mktemp`` (a sibling dir) rather than the test's
+    own ``tmp_path``: a test that asserts on the *contents* of its own
+    ``tmp_path`` (e.g. ``test_session_start_marker_ignores_mock_root``)
+    would otherwise see this fixture's own metrics-hub directory as
+    unexplained pollution it never created.
 
     That patch is a redirect, not a guarantee: any other path to the live
     ``.tapps-mcp/metrics/`` dir (a module that builds its own MetricsHub,
@@ -902,7 +908,7 @@ def _isolate_metrics_hub(
     from tapps_core.metrics.collector import MetricsHub
 
     before = _snapshot_live_metrics_dir()
-    hub = MetricsHub(tmp_path / "metrics-hub")
+    hub = MetricsHub(tmp_path_factory.mktemp("metrics-hub"))
     with patch("tapps_mcp.server._get_metrics_hub", return_value=hub):
         yield
     after = _snapshot_live_metrics_dir()
