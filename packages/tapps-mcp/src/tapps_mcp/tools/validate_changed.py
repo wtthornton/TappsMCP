@@ -66,6 +66,7 @@ from tapps_mcp.tools.validate_changed_orchestrator import (
 )
 from tapps_mcp.tools.validate_changed_output import (
     _SEVERITY_RANK,
+    _build_impact_reports,
     _build_per_file_results,
     _build_response_data,
     _build_structured_validation_output,
@@ -417,11 +418,23 @@ async def _finalize_outcome(
         # Impact / call-graph work is sync CPU — must not run on the HTTP
         # event loop (shared nlt-build fleet starves Cursor handshakes).
         async with heavy_cpu():
+            # TAP-6618: compute each path's ImpactReport once and reuse it for
+            # both impact_summary and affected_tests — previously each ran
+            # its own analyze_impact pass over the same paths.
+            impact_reports = await asyncio.to_thread(
+                _build_impact_reports, bc.paths, bc.settings.project_root
+            )
             impact_data = await asyncio.to_thread(
-                _host._compute_impact_analysis, bc.paths, bc.settings.project_root
+                _host._compute_impact_analysis,
+                bc.paths,
+                bc.settings.project_root,
+                impact_reports=impact_reports,
             )
             affected_tests_data = await asyncio.to_thread(
-                _host._compute_affected_tests, bc.paths, bc.settings.project_root
+                _host._compute_affected_tests,
+                bc.paths,
+                bc.settings.project_root,
+                impact_reports=impact_reports,
             )
             diff_impact_data = await asyncio.to_thread(
                 _compute_diff_impact, bc.paths, bc.settings.project_root
@@ -499,7 +512,20 @@ async def _assemble_response(
         summary = apply_judge_payload(resp_data, judge_payload, summary=summary)
         overall_passed = bool(resp_data.get("all_gates_passed", overall_passed))
 
-    resp = success_response("tapps_validate_changed", elapsed_ms, resp_data)
+    # TAP-6618: impact/affected-tests enrichment degrades into an embedded
+    # ``error`` instead of raising, so a plain success envelope over that
+    # shape was the "envelope lie" the TAP-5659 sweep flagged as a live
+    # inconsistency. Fold it into ``degraded`` here so no caller reading only
+    # the top level of the response ever misses it.
+    impact_data = outcome.impact_data or {}
+    impact_degraded = bool(
+        impact_data.get("error")
+        or any(e.get("error") for e in impact_data.get("per_file", []))
+        or (outcome.affected_tests_data or {}).get("error")
+    )
+    resp = success_response(
+        "tapps_validate_changed", elapsed_ms, resp_data, degraded=impact_degraded
+    )
     _build_structured_validation_output(
         outcome.results,
         overall_passed,

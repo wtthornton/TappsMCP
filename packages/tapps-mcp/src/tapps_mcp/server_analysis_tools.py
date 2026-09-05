@@ -909,7 +909,7 @@ async def tapps_report(
         report_data["skipped_files"] = skipped_files
     elapsed_ms = (time.perf_counter_ns() - start) // 1_000_000
     _record_execution("tapps_report", start, file_path=file_path or None)
-    resp = success_response("tapps_report", elapsed_ms, report_data)
+    resp = success_response("tapps_report", elapsed_ms, report_data, degraded=bool(skipped_files))
     return _with_nudges("tapps_report", resp)
 
 
@@ -1250,7 +1250,7 @@ async def tapps_dependency_scan(
     if result.error:
         data["error"] = result.error
 
-    resp = success_response("tapps_dependency_scan", elapsed_ms, data)
+    resp = success_response("tapps_dependency_scan", elapsed_ms, data, degraded=bool(result.error))
     return _with_nudges("tapps_dependency_scan", resp)
 
 

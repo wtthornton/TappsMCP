@@ -125,10 +125,6 @@ class TestProjectWideScale:
 class TestPartialResults:
     """One bad file must not abort the whole report."""
 
-    # TODO(TAP-5656): a report that skipped files is an incomplete report, but the
-    # envelope claims plain success over data.skipped_files[].error. Recorded by
-    # the TAP-5659 sweep; degrading the envelope is the tool's fix, not this test's.
-    @pytest.mark.envelope_allow("skipped_files")
     @pytest.mark.asyncio
     async def test_one_failing_file_is_skipped_not_fatal(self) -> None:
         from tapps_mcp.server_analysis_tools import tapps_report
@@ -154,14 +150,13 @@ class TestPartialResults:
             result = await tapps_report(report_format="json", max_files=10)
 
         assert result["success"] is True
+        assert result["degraded"] is True
         skipped = result["data"]["skipped_files"]
         assert len(skipped) == 1
         assert skipped[0]["file"] == "/fake/project/bad.py"
         assert "ValueError" in skipped[0]["error"]
         assert "syntax explosion" in skipped[0]["error"]
 
-    # TODO(TAP-5656): same shape as above — plain success over a skipped file.
-    @pytest.mark.envelope_allow("skipped_files")
     @pytest.mark.asyncio
     async def test_non_valueerror_failure_also_skipped(self) -> None:
         """The pre-fix except only caught (ValueError, OSError, RuntimeError)."""
@@ -184,6 +179,7 @@ class TestPartialResults:
             result = await tapps_report(report_format="json", max_files=10)
 
         assert result["success"] is True
+        assert result["degraded"] is True
         assert len(result["data"]["skipped_files"]) == 1
         assert "KeyError" in result["data"]["skipped_files"][0]["error"]
 

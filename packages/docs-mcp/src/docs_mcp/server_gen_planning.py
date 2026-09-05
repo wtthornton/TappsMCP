@@ -101,7 +101,9 @@ async def docs_generate_epic(
             Example: [{"title": "Data Models", "points": 3}]
         technical_notes: Comma-separated list of technical notes.
         risks: Comma-separated list of risks (comprehensive style only).
-        non_goals: Comma-separated list of out-of-scope items.
+        non_goals: Newline-separated list of out-of-scope items (TAP-6495).
+            Commas inside an item are preserved; do not use commas as
+            delimiters between items.
         success_metrics: Comma-separated or pipe-delimited success metrics
             (comprehensive only). Example: "MTTR|4h|1h|PagerDuty"
         stakeholders: Comma-separated or pipe-delimited stakeholders

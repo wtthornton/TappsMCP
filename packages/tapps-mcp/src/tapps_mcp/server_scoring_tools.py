@@ -1005,7 +1005,8 @@ async def tapps_quick_check(
         elapsed_ms = (time.perf_counter_ns() - start) // 1_000_000
         _record_execution("tapps_quick_check", start)
 
-        if failure_count > 0:
+        degraded = failure_count > 0
+        if degraded:
             _record_call("tapps_quick_check", success=False)
 
         return success_response(
@@ -1013,10 +1014,10 @@ async def tapps_quick_check(
             elapsed_ms,
             {
                 "files_checked": len(result_list),
-                "all_passed": failure_count == 0,
+                "all_passed": not degraded,
                 "failure_count": failure_count,
                 "results": result_list,
-            },
+            }, degraded=degraded,
         )
 
     # --- Single-file mode (original behavior) ---

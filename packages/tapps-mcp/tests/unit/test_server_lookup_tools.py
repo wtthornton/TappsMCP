@@ -144,10 +144,54 @@ class TestTappsLookupDocs:
         engine.lookup.return_value = _lookup_result(
             success=False, error="No Context7 API key configured.", content=None
         )
-        with patch("tapps_mcp.server_helpers._get_lookup_engine", return_value=engine):
+        with (
+            patch("tapps_mcp.server_helpers._get_lookup_engine", return_value=engine),
+            patch("tapps_mcp.server_helpers._get_brain_bridge", return_value=None),
+        ):
             result = await tapps_lookup_docs("httpx")
         assert result["success"] is False
         assert result["error"]["code"] == "api_key_missing"
+
+    @pytest.mark.asyncio
+    async def test_api_key_missing_fallback_uses_brain_when_reachable(self) -> None:
+        """TAP-6443: an api_key_missing failure falls back to brain docs."""
+        engine = AsyncMock()
+        engine.lookup.return_value = _lookup_result(
+            success=False, error="No Context7 API key configured.", content=None
+        )
+        brain_result = _lookup_result(source="brain", content="brain docs body")
+        with (
+            patch("tapps_mcp.server_helpers._get_lookup_engine", return_value=engine),
+            patch("tapps_mcp.server_helpers._get_brain_bridge", return_value=object()),
+            patch(
+                "tapps_core.knowledge.brain_docs.lookup_via_brain",
+                new_callable=AsyncMock,
+                return_value=brain_result,
+            ),
+        ):
+            result = await tapps_lookup_docs("httpx")
+        assert result["success"] is True
+        assert result["data"]["content"] == "brain docs body"
+        assert result["data"]["source"] == "brain"
+
+    @pytest.mark.asyncio
+    async def test_api_key_missing_fallback_names_setting_and_repo_when_no_route(
+        self,
+    ) -> None:
+        """TAP-6443: with no brain route, the error names the setting and repo."""
+        engine = AsyncMock()
+        engine.lookup.return_value = _lookup_result(
+            success=False, error="No Context7 API key configured.", content=None
+        )
+        with (
+            patch("tapps_mcp.server_helpers._get_lookup_engine", return_value=engine),
+            patch("tapps_mcp.server_helpers._get_brain_bridge", return_value=None),
+        ):
+            result = await tapps_lookup_docs("httpx")
+        assert result["success"] is False
+        assert result["error"]["code"] == "api_key_missing"
+        assert "TAPPS_MCP_CONTEXT7_API_KEY" in result["error"]["message"]
+        assert "project_root=" in result["error"]["message"]
 
     @pytest.mark.asyncio
     async def test_warning_is_propagated(self) -> None:

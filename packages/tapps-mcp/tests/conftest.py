@@ -590,25 +590,34 @@ def _iter_failed_sub_results(
     node: Any,
     path: str = "data",
     allow: tuple[str, ...] = (),
+    *,
+    root: bool = True,
 ) -> Iterator[tuple[str, dict[str, Any]]]:
-    """Yield ``(path, payload)`` for every nested dict that reports failure."""
+    """Yield ``(path, payload)`` for every nested dict that reports failure.
+
+    ``allow`` is key-scoped: a named key is never descended into, so any
+    failure signal nested under it is already unreachable without special
+    casing. The one shape that escapes that mechanism is a failure marker
+    sitting at the *root* of ``data`` itself, which has no enclosing key to
+    name — so ``allow`` additionally silences the root node's own
+    ``error``/``success`` fields (TAP-5659). It must NOT silence those fields
+    on nodes below the root: that would let ``allow=("error",)`` hide an
+    unrelated ``error`` key anywhere in the tree, wider than a single named
+    key was ever meant to cover (TAP-6618).
+    """
     if isinstance(node, dict):
-        # A key named in ``allow`` is not read as a failure signal on this node,
-        # and is not descended into — one meaning of "skip this key", applied at
-        # both ends. Without the first half a payload whose failure marker sits
-        # at the root of ``data`` is unreachable by ``allow`` (TAP-5659).
-        looks_failed = ("error" not in allow and bool(node.get("error"))) or (
-            "success" not in allow and node.get("success") is False
+        looks_failed = (not (root and "error" in allow) and bool(node.get("error"))) or (
+            not (root and "success" in allow) and node.get("success") is False
         )
         if looks_failed and not node.get("skipped"):
             yield path, node
         for key, value in node.items():
             if key in allow:
                 continue
-            yield from _iter_failed_sub_results(value, f"{path}.{key}", allow)
+            yield from _iter_failed_sub_results(value, f"{path}.{key}", allow, root=False)
     elif isinstance(node, list):
         for index, value in enumerate(node):
-            yield from _iter_failed_sub_results(value, f"{path}[{index}]", allow)
+            yield from _iter_failed_sub_results(value, f"{path}[{index}]", allow, root=root)
 
 
 def assert_envelope_consistent(
@@ -625,10 +634,12 @@ def assert_envelope_consistent(
     reads the top level and believes work happened that never did.
 
     ``allow`` names data keys to skip, for genuinely informational payloads
-    that embed failure-shaped records (a report *about* failures, say). A named
-    key is skipped both as a subtree to walk and as a failure signal on the node
-    that carries it, so ``allow=("error",)`` also covers a marker sitting at the
-    root of ``data`` where there is no parent key to name.
+    that embed failure-shaped records (a report *about* failures, say). Its
+    scope is per key, not global: a named key is skipped both as a subtree to
+    walk and, on the node reached *through that key*, as a failure signal —
+    it does not silence an ``error``/``success`` field on any other node.
+    The one exception is the root of ``data`` itself, which has no enclosing
+    key to name: ``allow=("error",)`` also covers a marker sitting there.
     ``skipped`` sub-results are not failures — that flag means never attempted.
 
     The static counterpart is ``scripts/check-response-envelope.py``; the lint

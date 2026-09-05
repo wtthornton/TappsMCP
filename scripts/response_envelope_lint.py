@@ -31,6 +31,37 @@ Put ``# envelope-ok: <reason>`` on the line where the value enters ``data``.
 The reason is required; a bare marker is itself an error. Silence should cost
 a sentence.
 
+Known gaps (TAP-6618)
+----------------------
+The six live envelope inconsistencies the TAP-5659 sweep found were all
+outside this lint's shape, for two independent reasons — neither is a small
+extension, so they are documented here rather than papered over with a
+speculative rewrite of the AST matcher:
+
+1. **List-shaped best-effort results.** ``collect_best_effort_fields`` only
+   recognises ``dict[str, Any] | None`` (``Optional[dict[...]]``) fields.
+   ``skipped_files: list[dict[str, str]]`` (``server_analysis_tools.py``) and
+   the batch ``results: list[dict[str, Any]]`` (``server_scoring_tools.py``)
+   are lists of best-effort records, not an optional dict — extending the
+   type match to "any container of dicts" would also have to teach the
+   per-element "is *this* dict a failure" judgment the runtime
+   ``assert_envelope_consistent`` fixture already does, duplicating that
+   logic in the static checker with no shared source of truth.
+2. **Cross-function payload assembly.** ``_dict_literal_for`` resolves the
+   ``data``/``resp_data`` argument to a dict *literal* in the same function
+   as the ``success_response`` call. ``tapps_validate_changed`` builds its
+   payload in ``_build_response_data`` (a different function, in a different
+   module) and passes the already-built dict by name — there is no local
+   literal for the ``ast.Assign`` walk to find, so the site is invisible to
+   this pass regardless of field typing. Following the value across a
+   function-call boundary needs a call graph, not a per-function AST walk.
+
+Both gaps are covered instead by the runtime ``envelope_guard`` fixture
+(``tests/conftest.py``), which patches ``success_response`` itself and
+therefore sees every envelope regardless of how ``data`` was assembled or
+shaped. New best-effort sub-results should get a covering test using that
+fixture; this lint remains a same-function early-warning for the simple case.
+
 Usage
 -----
     python3 scripts/check-response-envelope.py            # scan packages/*/src
