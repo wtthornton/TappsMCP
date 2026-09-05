@@ -826,6 +826,61 @@ def _no_install_drift() -> Generator[None, None, None]:
         yield
 
 
+_METRICS_REPO_ROOT = Path(__file__).resolve().parents[3]
+_LIVE_METRICS_DIR = _METRICS_REPO_ROOT / ".tapps-mcp" / "metrics"
+
+
+def _snapshot_live_metrics_dir() -> dict[str, tuple[int, int]]:
+    """Map filename -> (size, mtime_ns) for every file in the live metrics dir."""
+    if not _LIVE_METRICS_DIR.is_dir():
+        return {}
+    return {
+        entry.name: (entry.stat().st_size, entry.stat().st_mtime_ns)
+        for entry in _LIVE_METRICS_DIR.iterdir()
+        if entry.is_file()
+    }
+
+
+@pytest.fixture(autouse=True)
+def _isolate_metrics_hub(
+    tmp_path: Path, request: pytest.FixtureRequest
+) -> Generator[None, None, None]:
+    """VAL-TAP-6639: pin every test's metrics hub to a tmp_path instance, and
+    fail the test loudly if anything still reaches the live metrics dir.
+
+    ``_record_execution`` (server.py) and the umbrella handlers in
+    server_metrics_tools.py / server_analysis_tools.py all resolve the hub
+    via ``tapps_mcp.server._get_metrics_hub`` (looked up by name at call
+    time, even where it's re-imported locally) -- patching that one seam
+    covers every caller. ``MetricsHub`` (tapps_core/metrics/collector.py)
+    takes its directory only via constructor arg, with no env/config
+    injection point, so patching the accessor (rather than adding a new
+    injection seam to MetricsHub itself) is the smallest correct fix.
+
+    That patch is a redirect, not a guarantee: any other path to the live
+    ``.tapps-mcp/metrics/`` dir (a module that builds its own MetricsHub,
+    a future accessor, a subprocess) would leak unobserved. So this fixture
+    also snapshots the live directory's file set + (size, mtime_ns) before
+    and after each test and ``pytest.fail``s on any difference, naming the
+    test's node id and the changed files -- the isolation proves itself
+    instead of relying on an external md5 check to catch drift.
+    """
+    from tapps_core.metrics.collector import MetricsHub
+
+    before = _snapshot_live_metrics_dir()
+    hub = MetricsHub(tmp_path / "metrics-hub")
+    with patch("tapps_mcp.server._get_metrics_hub", return_value=hub):
+        yield
+    after = _snapshot_live_metrics_dir()
+    if after != before:
+        changed = sorted(set(before) | set(after))
+        changed = [name for name in changed if before.get(name) != after.get(name)]
+        pytest.fail(
+            f"{request.node.nodeid} leaked to live metrics dir "
+            f"{_LIVE_METRICS_DIR}: changed files {changed}"
+        )
+
+
 @pytest.fixture(autouse=True)
 def _reset_caches() -> Generator[None, None, None]:
     """Reset module-level singletons before and after each test."""

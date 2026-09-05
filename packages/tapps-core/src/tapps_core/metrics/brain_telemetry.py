@@ -64,9 +64,12 @@ def brain_metrics_bridge_available() -> bool:
         return isinstance(bridge, HttpBrainBridge)
     try:
         report = health_fn()
-    except Exception:
+    except Exception as exc:
+        logger.info("brain_metrics_bridge_unavailable", reason=str(exc))
         return False
-    return bool(isinstance(report, dict) and report.get("ok"))
+    ok = bool(isinstance(report, dict) and report.get("ok"))
+    logger.info("brain_metrics_bridge_health", ok=ok)
+    return ok
 
 
 def metric_memory_key(call_id: str) -> str:

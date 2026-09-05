@@ -77,6 +77,12 @@ _BRAIN_VERSION_FLOOR: str = "3.28.0"
 _BRAIN_VERSION_CEILING: str = "4.0.0"
 _BRAIN_HEALTH_TIMEOUT_SECONDS: float = 5.0
 
+# TAP-6591: health_check() is called synchronously from metrics collection's
+# hot read path (execution_metrics._load_from_disk -> brain_metrics_bridge_available),
+# so it needs a much tighter budget than the other (already-bounded,
+# already-retried) brain calls that share _BRAIN_HEALTH_TIMEOUT_SECONDS.
+_HEALTH_CHECK_PROBE_TIMEOUT_SECONDS: float = 1.0
+
 # --- Shutdown drain ---------------------------------------------------------
 # Bounded deadline (seconds) that ``close`` / ``drain_blocking`` waits for the
 # offline write queue to drain on shutdown before giving up (TAP-517).
@@ -3092,10 +3098,22 @@ class HttpBrainBridge(BrainBridge):
         on 404 (brains <3.19.0). The HTTP status is still authoritative
         for the ``ok`` flag (200 ⇒ healthy, 503 ⇒ degraded) — the JSON
         body just enriches ``details`` with the offending phase.
+
+        TAP-6591: consults the circuit breaker before dialing (returns a
+        failure envelope immediately when the circuit is open) and bounds
+        the probe to ``_HEALTH_CHECK_PROBE_TIMEOUT_SECONDS`` (~1s) rather
+        than the longer ``_BRAIN_HEALTH_TIMEOUT_SECONDS`` used by other
+        bridge calls — callers on the metrics read hot path
+        (``brain_metrics_bridge_available``) cannot afford to block for a
+        full HTTP timeout against a stalling brain.
         """
         details: dict[str, Any] = {"http_url": self._http_url, "mode": "http"}
+        if self.circuit_open:
+            return self._health_check_failure(details, BrainBridgeUnavailable("circuit open"))
         try:
-            response = httpx.get(f"{self._http_url}/healthz", timeout=_BRAIN_HEALTH_TIMEOUT_SECONDS)
+            response = httpx.get(
+                f"{self._http_url}/healthz", timeout=_HEALTH_CHECK_PROBE_TIMEOUT_SECONDS
+            )
         except Exception as exc:
             return self._health_check_failure(details, exc)
         if response.status_code == 404:
@@ -3187,7 +3205,9 @@ class HttpBrainBridge(BrainBridge):
     def _health_check_legacy(self, details: dict[str, Any]) -> dict[str, Any]:
         """Fallback for pre-v3.19.0 brains that don't expose ``/healthz``."""
         try:
-            response = httpx.get(f"{self._http_url}/health", timeout=_BRAIN_HEALTH_TIMEOUT_SECONDS)
+            response = httpx.get(
+                f"{self._http_url}/health", timeout=_HEALTH_CHECK_PROBE_TIMEOUT_SECONDS
+            )
             response.raise_for_status()
         except Exception as exc:
             return self._health_check_failure(details, exc)

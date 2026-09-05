@@ -1,10 +1,13 @@
 """Tests for execution metrics collector."""
 
 import asyncio
+import threading
+import time
 from datetime import UTC, datetime, timedelta
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
+from structlog.testing import capture_logs
 
 from tapps_core.metrics.execution_metrics import (
     ToolCallMetric,
@@ -381,3 +384,120 @@ class TestBrainTelemetryDualWrite:
         from tapps_core.metrics.brain_telemetry import metrics_storage_mode
 
         assert metrics_storage_mode() == "dual"
+
+
+class _StallingSocket:
+    """A real 127.0.0.1 listener that accepts connections and never responds.
+
+    TAP-6591: a stub that raises immediately does not exercise the HTTP
+    client's timeout handling at all -- only a peer that actually accepts
+    the TCP connection and then goes silent forces httpx to wait out the
+    configured timeout, which is what proves the bound is real.
+    """
+
+    def __init__(self) -> None:
+        import socket
+
+        self._server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        self._server.bind(("127.0.0.1", 0))
+        self._server.listen(1)
+        self._server.settimeout(0.2)
+        self.port = self._server.getsockname()[1]
+        self._stop = threading.Event()
+        self._thread = threading.Thread(target=self._accept_loop, daemon=True)
+        self._thread.start()
+
+    def _accept_loop(self) -> None:
+        while not self._stop.is_set():
+            try:
+                conn, _ = self._server.accept()
+            except TimeoutError:
+                continue
+            try:
+                while not self._stop.is_set():
+                    time.sleep(0.05)
+            finally:
+                conn.close()
+
+    @property
+    def url(self) -> str:
+        return f"http://127.0.0.1:{self.port}"
+
+    def close(self) -> None:
+        self._stop.set()
+        self._thread.join(timeout=1)
+        self._server.close()
+
+
+class TestStallingBrainHealthProbe:
+    """TAP-6591: the brain half of ``_load_from_disk`` must be bounded to a
+    ~1s budget and consult the circuit breaker before dialing, instead of
+    blocking its caller for the full HTTP timeout against a stalling brain.
+    """
+
+    def test_health_check_against_stalling_brain_returns_within_budget(self) -> None:
+        from tapps_core.brain_bridge import HttpBrainBridge
+
+        stalling = _StallingSocket()
+        try:
+            bridge = HttpBrainBridge(stalling.url, {})
+            start = time.perf_counter()
+            report = bridge.health_check()
+            elapsed = time.perf_counter() - start
+        finally:
+            stalling.close()
+
+        assert elapsed < 2.0, f"health_check blocked {elapsed:.2f}s against a stalling peer"
+        assert report["ok"] is False
+
+    def test_stalling_brain_bridge_reports_unavailable_and_logs(self, monkeypatch) -> None:
+        from tapps_core.brain_bridge import HttpBrainBridge
+        from tapps_core.metrics.brain_telemetry import brain_metrics_bridge_available
+
+        monkeypatch.setenv("TAPPS_METRICS_STORAGE", "dual")
+        stalling = _StallingSocket()
+        try:
+            bridge = HttpBrainBridge(stalling.url, {})
+            with (
+                patch("tapps_core.brain_bridge.create_brain_bridge", return_value=bridge),
+                capture_logs() as logs,
+            ):
+                start = time.perf_counter()
+                available = brain_metrics_bridge_available()
+                elapsed = time.perf_counter() - start
+        finally:
+            stalling.close()
+
+        assert available is False
+        assert elapsed < 2.0, f"brain_metrics_bridge_available blocked {elapsed:.2f}s"
+        assert any(
+            entry.get("event") in {"brain_metrics_bridge_unavailable", "brain_metrics_bridge_health"}
+            for entry in logs
+        )
+
+    def test_stalling_brain_collector_load_degrades_to_disk_only(
+        self, metrics_dir, monkeypatch
+    ) -> None:
+        """The end-to-end read path (``get_metrics`` -> ``_load_from_disk``)
+        returns within budget and falls back to the on-disk JSONL rows
+        rather than blocking on the stalling brain."""
+        from tapps_core.brain_bridge import HttpBrainBridge
+
+        monkeypatch.setenv("TAPPS_METRICS_STORAGE", "dual")
+        collector = ToolCallMetricsCollector(metrics_dir)
+        now = datetime.now(tz=UTC)
+        collector.record("tapps_score_file", now, now + timedelta(milliseconds=5), score=90.0)
+
+        stalling = _StallingSocket()
+        try:
+            bridge = HttpBrainBridge(stalling.url, {})
+            with patch("tapps_core.brain_bridge.create_brain_bridge", return_value=bridge):
+                start = time.perf_counter()
+                metrics = collector.get_metrics()
+                elapsed = time.perf_counter() - start
+        finally:
+            stalling.close()
+
+        assert elapsed < 2.0, f"get_metrics blocked {elapsed:.2f}s against a stalling brain"
+        assert len(metrics) == 1
+        assert metrics[0].tool_name == "tapps_score_file"
