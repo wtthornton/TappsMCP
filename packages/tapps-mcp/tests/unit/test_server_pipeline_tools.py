@@ -231,8 +231,10 @@ class TestTappsSessionStart:
             ),
         ):
             result = await tapps_session_start(quick=False, force=True)
-
-        _reset_brain_bridge_cache()  # clean up singleton after test
+            # TAP-6694: close the singleton while httpx is still mocked --
+            # closing it after the patches unwind would drain any queued
+            # writes via a real (unmocked) httpx.post to "brain:8080".
+            _reset_brain_bridge_cache()
 
         data = result["data"]
         assert result["success"] is True
@@ -244,7 +246,19 @@ class TestTappsSessionStart:
     async def test_brain_bridge_health_enabled_in_http_mode(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        """Integration: brain_bridge_health.enabled=True when HTTP bridge is active."""
+        """Integration: brain_bridge_health.enabled=True when HTTP bridge is active.
+
+        TAP-6694: this test previously mocked only ``httpx.get`` (used by
+        ``health_check``), leaving ``auth_probe``'s ``httpx.post`` call to
+        the fake ``http://brain:8080/mcp/`` host unmocked. Under xdist
+        oversubscription that real dial intermittently reached a live
+        endpoint and got rejected (three 403s, then the circuit breaker
+        opened), producing a teardown error unrelated to what this test
+        actually verifies. Mocking ``auth_probe`` -- as the sibling
+        ``test_memory_status_enabled_in_http_mode`` above already does --
+        removes the real network call entirely rather than adding a retry
+        or bound around a call this unit test should never make.
+        """
         from tapps_mcp.server_pipeline_tools import tapps_session_start
 
         monkeypatch.setenv("TAPPS_MCP_MEMORY_BRAIN_HTTP_URL", "http://brain:8080")
@@ -270,6 +284,7 @@ class TestTappsSessionStart:
             "errors": [],
             "warnings": [],
         }
+        _ok_auth_probe = {"ok": True, "http_status": 200}
 
         with (
             patch(
@@ -277,10 +292,16 @@ class TestTappsSessionStart:
                 return_value=_skip_version_check,
             ),
             patch("httpx.get", return_value=mock_health_response),
+            patch(
+                "tapps_core.brain_bridge.HttpBrainBridge.auth_probe",
+                return_value=_ok_auth_probe,
+            ),
         ):
             result = await tapps_session_start(quick=False, force=True)
-
-        _reset_brain_bridge_cache()
+            # Close the singleton while httpx is still mocked: closing it
+            # after the patches unwind would drain any queued writes via a
+            # real (unmocked) httpx.post to the fake "brain:8080" host.
+            _reset_brain_bridge_cache()
 
         data = result["data"]
         assert data["brain_bridge_health"]["enabled"] is True
@@ -345,8 +366,10 @@ class TestTappsSessionStart:
             ),
         ):
             result = await tapps_session_start(quick=False, force=True)
-
-        _reset_brain_bridge_cache()
+            # TAP-6694: close the singleton while httpx is still mocked --
+            # closing it after the patches unwind would drain any queued
+            # writes via a real (unmocked) httpx.post to "brain:8080".
+            _reset_brain_bridge_cache()
 
         details = result["data"]["brain_bridge_health"]["details"]
         assert details["suggested_profile"] == "operator"
