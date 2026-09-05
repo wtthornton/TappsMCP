@@ -51,6 +51,42 @@ def _lookup_error_code(error: str | None) -> str | None:
     return "api_key_missing" if "API key" in error else "lookup_failed"
 
 
+async def _fallback_to_brain(
+    library: str, topic: str, mode: str
+) -> LookupResult | None:
+    """Retry a failed lookup via tapps-brain when a brain route is reachable.
+
+    TAP-6443: ``docs_via_brain`` is an opt-in config toggle for *routing every
+    lookup* through the brain; it says nothing about whether brain is
+    *reachable* as a fallback for a repo whose Context7 key is missing. A
+    fallback gated on that same toggle fixes nothing for the 93% of repos
+    that never turned it on. So this fires on the ``api_key_missing``
+    classification itself, independent of the toggle, and simply returns
+    ``None`` (no fallback content) when no bridge is configured or brain
+    does not yet expose ``docs_lookup``.
+    """
+    from tapps_core.knowledge.brain_docs import lookup_via_brain
+    from tapps_mcp.server_helpers import _get_brain_bridge
+
+    bridge = _get_brain_bridge()
+    if bridge is None:
+        return None
+    try:
+        return await lookup_via_brain(bridge, library, topic, mode=mode)
+    except Exception:
+        logger.debug("lookup_brain_fallback_failed", library=library, topic=topic, exc_info=True)
+        return None
+
+
+def _no_route_error_message(project_root: Any) -> str:
+    """TAP-6443: name the exact setting and the repo it was resolved from."""
+    return (
+        "No documentation route available: Context7 API key is missing and no "
+        "tapps-brain fallback is reachable. Set TAPPS_MCP_CONTEXT7_API_KEY "
+        f"(or context7_api_key in .tapps-mcp.yaml) for project_root={project_root}."
+    )
+
+
 def _build_lookup_data(result: LookupResult) -> dict[str, Any]:
     """Build the data dict from a LookupResult, including optional fields."""
     data: dict[str, Any] = {
@@ -177,6 +213,16 @@ async def tapps_lookup_docs(
             "lookup_failed",
             f"Documentation lookup failed for '{library}' / '{topic}'.",
         )
+
+    err_code = _lookup_error_code(result.error)
+    if err_code == "api_key_missing":
+        fallback = await _fallback_to_brain(library, topic, mode)
+        if fallback is not None and fallback.success:
+            result = fallback
+        elif result.error:
+            from tapps_core.config.settings import load_settings
+
+            result.error = _no_route_error_message(load_settings().project_root)
 
     elapsed_ms = (time.perf_counter_ns() - start) // 1_000_000
 
