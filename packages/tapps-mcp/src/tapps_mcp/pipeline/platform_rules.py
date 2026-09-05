@@ -7,6 +7,7 @@ to reduce file size.
 
 from __future__ import annotations
 
+import re
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
@@ -14,9 +15,11 @@ if TYPE_CHECKING:
 
 from tapps_mcp.pipeline.agent_contract import (
     COPILOT_PROJECT_SCOPE_SECTION,
+    CURSOR_PIPELINE_BEFORE_EDIT_LOOKUP,
     CURSOR_PYTHON_QUALITY_ACTIONS,
     MEMORY_RECALL_SESSION_START,
     MEMORY_SYSTEMS_BULLET,
+    STOP_FINISH_REMINDER,
 )
 
 # ---------------------------------------------------------------------------
@@ -25,11 +28,61 @@ from tapps_mcp.pipeline.agent_contract import (
 #
 # The pipeline rule itself (``tapps-pipeline.mdc``) is NOT generated here.
 # ``_bootstrap_cursor`` (pipeline/init_claude_md.py) is the sole writer of
-# that file, using the engagement-level-aware ``load_platform_rules("cursor",
-# ...)`` templates -- the same content shape as ``.claude/rules/tapps-pipeline.md``.
-# A second, non-engagement-aware pipeline template used to live in this
-# dict too, producing a duplicate ``.cursor/rules/tapps-pipeline.mdc`` /
-# ``.md`` pair with drifting content (TAP-6440).
+# that file, calling ``render_cursor_pipeline_rule`` below, which loads the
+# engagement-level-aware ``load_platform_rules("cursor", ...)`` templates --
+# the same content shape as ``.claude/rules/tapps-pipeline.md`` -- and splices
+# in the agent-contract constants those static templates do not carry. A
+# second, non-engagement-aware pipeline template used to live in this dict
+# too, producing a duplicate ``.cursor/rules/tapps-pipeline.mdc`` / ``.md``
+# pair with drifting content (TAP-6440).
+
+_SECTION_APPEND_RE_TEMPLATE = r"(^#{{2,3}} {heading}.*$\n(?:(?!^#{{2,3}} ).*\n?)*)"
+
+
+def _append_to_cursor_section(content: str, heading_prefix: str, addition: str) -> str:
+    """Append *addition* to the end of the section whose heading starts with
+    *heading_prefix* (suffixes like "(REQUIRED)" / "(BLOCKING)" vary by
+    engagement level), just before the next ``##``/``###`` heading.
+    """
+    pattern = re.compile(
+        _SECTION_APPEND_RE_TEMPLATE.format(heading=re.escape(heading_prefix)),
+        re.MULTILINE,
+    )
+
+    def _sub(match: re.Match[str]) -> str:
+        block = match.group(1)
+        return block.rstrip("\n") + "\n\n" + addition.strip() + "\n\n"
+
+    new_content, count = pattern.subn(_sub, content, count=1)
+    if count != 1:
+        msg = f"expected exactly one {heading_prefix!r} section, found {count}"
+        raise ValueError(msg)
+    return new_content
+
+
+def render_cursor_pipeline_rule(engagement_level: str = "medium") -> str:
+    """Render the canonical ``.cursor/rules/tapps-pipeline.mdc`` body.
+
+    TAP-6440 round 2: deduping the two Cursor pipeline writers onto the
+    engagement-level-aware ``platform_cursor_*.md`` templates dropped the
+    agent-contract strings (``CURSOR_PIPELINE_BEFORE_EDIT_LOOKUP``,
+    ``MEMORY_RECALL_SESSION_START``, the ``/tapps-finish-task`` reminder)
+    that the retired template literal used to carry. Splice those
+    constants back in verbatim -- at every engagement level -- instead of
+    hand-typing prose that can drift from ``agent_contract.py`` again.
+    """
+    from tapps_mcp.prompts.prompt_loader import load_platform_rules
+
+    content = load_platform_rules("cursor", engagement_level=engagement_level)
+    content = _append_to_cursor_section(content, "Session Start", MEMORY_RECALL_SESSION_START)
+    content = _append_to_cursor_section(
+        content, "Before Using Any Library API", CURSOR_PIPELINE_BEFORE_EDIT_LOOKUP
+    )
+    content = _append_to_cursor_section(
+        content, "Before Declaring Work Complete", STOP_FINISH_REMINDER
+    )
+    return content
+
 
 _CURSOR_RULE_PYTHON_QUALITY = (
     """\

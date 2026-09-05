@@ -12,14 +12,14 @@ from tapps_mcp.pipeline.agent_contract import (
     tapps_mcp_tool_count,
 )
 from tapps_mcp.pipeline.platform_hook_templates import CLAUDE_HOOK_SCRIPTS, CURSOR_HOOK_SCRIPTS
-from tapps_mcp.pipeline.platform_rules import CURSOR_RULE_TEMPLATES
+from tapps_mcp.pipeline.platform_rules import render_cursor_pipeline_rule
 from tapps_mcp.pipeline.platform_skills import (
-    CLAUDE_SKILLS,
-    CURSOR_SKILLS,
     _FINISH_TASK_CHECKLIST_AND_DOC_GAPS_CLAUDE,
     _FINISH_TASK_CHECKLIST_AND_DOC_GAPS_CURSOR,
+    CLAUDE_SKILLS,
+    CURSOR_SKILLS,
 )
-from tapps_mcp.prompts.prompt_loader import load_agents_template, load_platform_rules
+from tapps_mcp.prompts.prompt_loader import load_agents_template
 from tapps_mcp.server import ALL_TOOL_NAMES
 
 
@@ -43,11 +43,13 @@ class TestAgentContractConstants:
 
 class TestGeneratedSurfacesIncludeSharedStrings:
     def test_cursor_pipeline_rule_uses_cli_memory(self) -> None:
-        """``tapps-pipeline.mdc`` is _bootstrap_cursor's file, not
-        ``CURSOR_RULE_TEMPLATES`` (TAP-6440) -- check its actual source."""
-        body = load_platform_rules("cursor", engagement_level="medium")
+        """``tapps-pipeline.mdc`` is rendered by ``render_cursor_pipeline_rule``
+        (_bootstrap_cursor's source), not ``CURSOR_RULE_TEMPLATES`` (TAP-6440)
+        -- check its actual source."""
+        body = render_cursor_pipeline_rule(engagement_level="medium")
         assert "tapps_memory(action=" not in body
         assert "uv run tapps-mcp memory search" in body
+        assert "/tapps-finish-task" in body
 
     def test_claude_post_edit_hook_uses_contract_lookup_msg(self) -> None:
         script = CLAUDE_HOOK_SCRIPTS["tapps-post-edit.sh"]

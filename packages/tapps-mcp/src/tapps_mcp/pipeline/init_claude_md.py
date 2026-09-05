@@ -8,6 +8,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
+from tapps_mcp.pipeline.platform_rules import render_cursor_pipeline_rule
 from tapps_mcp.prompts.prompt_loader import load_platform_rules
 
 if TYPE_CHECKING:
@@ -130,7 +131,7 @@ def _bootstrap_cursor(
 
     Returns ``'created'``, ``'updated'``, or ``'skipped'``.
     """
-    content = load_platform_rules("cursor", engagement_level=engagement_level)
+    content = render_cursor_pipeline_rule(engagement_level=engagement_level)
     rules_path = project_root / ".cursor" / "rules" / "tapps-pipeline.mdc"
     rules_path.parent.mkdir(parents=True, exist_ok=True)
 
