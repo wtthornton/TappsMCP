@@ -139,7 +139,9 @@ def upgrade_platform_content_return(
         result["components"]["claude_md"] = "content_return"
 
     elif host == "cursor":
-        content = load_platform_rules("cursor", engagement_level=engagement_level)
+        from tapps_mcp.pipeline.platform_rules import render_cursor_pipeline_rule
+
+        content = render_cursor_pipeline_rule(engagement_level=engagement_level)
         cursor_path = project_root / ".cursor" / "rules" / "tapps-pipeline.mdc"
         mode = "overwrite" if (cursor_path.exists() or force) else "create"
         ops.append(

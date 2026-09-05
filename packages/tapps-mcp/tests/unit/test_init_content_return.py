@@ -6,8 +6,12 @@ import os
 from pathlib import Path
 from unittest.mock import patch
 
+import pytest
+
 from tapps_core.common.file_operations import WriteMode
 from tapps_mcp.pipeline.init import BootstrapConfig, _BootstrapState, bootstrap_pipeline
+
+_CURSOR_PIPELINE_RULE_PATH = ".cursor/rules/tapps-pipeline.mdc"
 
 # ---------------------------------------------------------------------------
 # _BootstrapState content-return tests
@@ -194,6 +198,8 @@ class TestBootstrapPipelineContentReturn:
         assert result["platform_rules"]["action"] == "content_return"
 
     def test_content_return_with_cursor_platform(self, tmp_path: Path) -> None:
+        from tapps_mcp.pipeline.platform_rules import render_cursor_pipeline_rule
+
         with patch.dict(os.environ, {"TAPPS_WRITE_MODE": "content"}):
             result = bootstrap_pipeline(
                 tmp_path,
@@ -208,7 +214,14 @@ class TestBootstrapPipelineContentReturn:
 
         manifest = result["file_manifest"]
         file_paths = [f["path"] for f in manifest["files"]]
-        assert ".cursor/rules/tapps-pipeline.mdc" in file_paths
+        assert _CURSOR_PIPELINE_RULE_PATH in file_paths
+        preview = next(
+            f["content"] for f in manifest["files"] if f["path"] == _CURSOR_PIPELINE_RULE_PATH
+        )
+        # TAP-6440 round 3: content-return must render via the same canonical
+        # function the real writer (_bootstrap_cursor) uses, not a raw
+        # load_platform_rules() call that drops the agent-contract splices.
+        assert preview == render_cursor_pipeline_rule(engagement_level="medium")
 
     def test_content_return_includes_agents_md(self, tmp_path: Path) -> None:
         with patch.dict(os.environ, {"TAPPS_WRITE_MODE": "content"}):
@@ -328,3 +341,84 @@ class TestBootstrapPipelineContentReturn:
 
         assert result.get("content_return") is not True
         assert "file_manifest" not in result
+
+
+# ---------------------------------------------------------------------------
+# TAP-6440 round 3: content-return / direct-write parity for the Cursor
+# pipeline rule, at every engagement level.
+# ---------------------------------------------------------------------------
+
+
+class TestCursorPipelineRuleContentParity:
+    """The content-return preview bytes must equal the direct-write file.
+
+    Both paths must funnel through ``render_cursor_pipeline_rule`` — the
+    direct-write path via ``_bootstrap_cursor`` (init_claude_md.py), the
+    content-return path via ``_generate_platform_file_ops``
+    (init_platform.py). Before this fix, the content-return branch called a
+    raw ``load_platform_rules("cursor", ...)`` instead, dropping the
+    agent-contract splices (``MEMORY_RECALL_SESSION_START``,
+    ``CURSOR_PIPELINE_BEFORE_EDIT_LOOKUP``, ``STOP_FINISH_REMINDER``) and
+    diverging in size at every engagement level.
+    """
+
+    @pytest.mark.parametrize("engagement_level", ["low", "medium", "high"])
+    def test_content_return_matches_direct_write(
+        self, tmp_path: Path, engagement_level: str
+    ) -> None:
+        write_root = tmp_path / "write"
+        write_root.mkdir()
+        bootstrap_pipeline(
+            write_root,
+            config=BootstrapConfig(
+                platform="cursor",
+                llm_engagement_level=engagement_level,
+                verify_server=False,
+                warm_cache_from_tech_stack=False,
+                warm_expert_rag_from_tech_stack=False,
+                minimal=True,
+            ),
+        )
+        written = (write_root / _CURSOR_PIPELINE_RULE_PATH).read_text(encoding="utf-8")
+
+        preview_root = tmp_path / "preview"
+        preview_root.mkdir()
+        with patch.dict(os.environ, {"TAPPS_WRITE_MODE": "content"}):
+            result = bootstrap_pipeline(
+                preview_root,
+                config=BootstrapConfig(
+                    platform="cursor",
+                    llm_engagement_level=engagement_level,
+                    verify_server=False,
+                    warm_cache_from_tech_stack=False,
+                    warm_expert_rag_from_tech_stack=False,
+                    minimal=True,
+                ),
+            )
+        manifest = result["file_manifest"]
+        preview = next(
+            f["content"] for f in manifest["files"] if f["path"] == _CURSOR_PIPELINE_RULE_PATH
+        )
+
+        assert preview == written, (
+            f"content-return preview diverges from the direct-write file at "
+            f"engagement_level={engagement_level!r}: "
+            f"written={len(written)} chars, preview={len(preview)} chars"
+        )
+
+    def test_upgrade_content_return_matches_canonical_renderer(self, tmp_path: Path) -> None:
+        """upgrade_platform_content_return's cursor branch must also route
+        through render_cursor_pipeline_rule (the third caller of
+        load_platform_rules("cursor", ...) found by the TAP-6440 round-3 grep).
+        """
+        from tapps_mcp.pipeline.platform_rules import render_cursor_pipeline_rule
+        from tapps_mcp.pipeline.upgrade_content_return import (
+            upgrade_platform_content_return,
+        )
+
+        ops, _result = upgrade_platform_content_return(
+            "cursor", tmp_path, engagement_level="medium"
+        )
+        preview = next(op.content for op in ops if op.path == _CURSOR_PIPELINE_RULE_PATH)
+
+        assert preview == render_cursor_pipeline_rule(engagement_level="medium")

@@ -23,6 +23,7 @@ from tapps_mcp.pipeline.init_github import (
     _setup_github_templates,
 )
 from tapps_mcp.pipeline.init_permissions import _bootstrap_claude_settings
+from tapps_mcp.pipeline.platform_rules import render_cursor_pipeline_rule
 from tapps_mcp.prompts.prompt_loader import load_platform_rules
 
 if TYPE_CHECKING:
@@ -185,7 +186,7 @@ def _generate_platform_file_ops(cfg: BootstrapConfig, state: _BootstrapState) ->
         )
         state.created.append("CLAUDE.md")
     elif platform == "cursor":
-        content = load_platform_rules("cursor", engagement_level=engagement)
+        content = render_cursor_pipeline_rule(engagement_level=engagement)
         state.file_ops.append(
             FileOperation(
                 path=".cursor/rules/tapps-pipeline.mdc",
