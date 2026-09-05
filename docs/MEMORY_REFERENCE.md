@@ -52,14 +52,23 @@ Do not use legacy `mcp__tapps-mcp__tapps_memory` routing (removed from default b
 
 ### Projection (TAP-6616)
 
-`get` and `search` accept `projection="compact"` to shrink the response:
-each entry is reduced to `key`, `tier`, `confidence`, `tags`, and a
-`summary` capped at ~280 chars — dropping the full `value` field, which
-usually dominates payload size. On entries over 1KB this cuts response
-size by 70%+.
+`get` and `search` accept `projection="compact"` (matched case-insensitively)
+to shrink the response: each entry is reduced to `key`, `tier`,
+`confidence`, `tags`, and a `summary` capped at **200 chars, so compact is
+<=30% of any entry >=1KB** — dropping the full `value` field, which
+usually dominates payload size. This cuts response size by 70%+ on
+entries >=1KB, including exactly at the 1KB boundary (measured: 70.0% at
+1024B, 72.1% at 1100B, 79.5% at 1500B, 97.0% at 10240B). A 280-char cap
+was tried first and fails the guarantee at the boundary (64.0% reduction
+at exactly 1024B, short of 70%+); 200 chars was chosen to clear it with
+margin.
 
 Default is `projection="full"` — unchanged existing behavior, the entire
-entry (including `value`) is returned.
+entry (including `value`) is returned. A `projection` value that is
+neither `full` nor `compact` (case-insensitive) — e.g. a typo like
+`"brief"` — is served as full and flagged rather than silently treated as
+full: the response carries `requested_projection` (the verbatim value
+sent), `projection="full"`, and `projection_downgraded=true`.
 
 Recall compact when triaging many results (backlog scans, "what do we
 know about X") where the summary is enough to decide whether to fetch the

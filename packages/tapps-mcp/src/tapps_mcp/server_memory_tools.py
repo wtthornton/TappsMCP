@@ -660,9 +660,12 @@ async def tapps_memory(
             Agent/inferred sources cannot self-bypass. (H3c)
         projection: "full" (default, unchanged existing behavior) or "compact"
             for get/search. Compact replaces each entry with key, tier,
-            confidence, tags, and a summary capped at 280 chars — cuts payload
-            size by 70%+ on entries over 1KB. Any other value is treated as
-            "full". (TAP-6616)
+            confidence, tags, and a summary capped at 200 chars — cuts payload
+            size by 70%+ on entries >=1KB, including at the 1KB boundary. The
+            value is matched case-insensitively; anything else (e.g. a typo)
+            is served as full with `requested_projection` and
+            `projection_downgraded=true` set on the response rather than
+            silently returned as plain full. (TAP-6616)
 
     Actions:
         save: [DEPRECATED 2026-Q3 — use mcp__tapps-brain__brain_remember] Store a
