@@ -195,7 +195,10 @@ reserved for the single end-of-program regression proof.
 6. Save the prompt to `prompts/<short-slug>.md`.
 7. **Completeness self-check** — walk the **Guardrails** list above and confirm the
    emitted prompt satisfies every line; then run the **cold-start test** (a fresh
-   session with nothing loaded can run it). Fix anything weak before saving.
+   session with nothing loaded can run it). Fix anything weak before saving. Run
+   `node scripts/check-prompt-shape.js prompts/<slug>.md` and, when the program
+   carries a `learnings.md`, `node scripts/check-learnings-size.js learnings.md` —
+   fix whatever either names before saving.
    **Context lifecycle is checked explicitly**, because nothing else catches its
    absence: confirm the prompt names a context boundary per sub-goal (or says which
    sub-goals skip it and why), that the boundary carries the re-verify gate, and that
@@ -824,6 +827,40 @@ resolve cases the proof-shape table does not spell out on its own.
    (method §3). Do not reuse it for the build-time-versus-runtime distinction — use
    "surface" there instead ("build surface" vs "runtime surface"), so a reader can
    rely on "plane" meaning one specific thing throughout an emitted prompt.
+
+## Rulings folded from a consuming project's local region
+
+Five rulings nlt-orchestrator carried in its own local region below this skill's
+managed block — folded here (TAP-7078 box 5) so an upgrade absorbs them instead of
+leaving them to silently re-diverge every time the block refreshes.
+
+9. A driver that merges, deploys, installs, or scopes a fix from a RED verdict is above
+   the `sonnet`+`medium` floor by construction. The floor is for read/triage-only
+   drivers; a driver-row that merges, deploys, installs, or scopes a fix runs at
+   `opus`+`high`, and a driver-row contesting identity (whose session actually sent a
+   message) runs `fable`/`opus` at `high`-`xhigh`.
+10. Input is an existing PLAN with an evidence file → §0c is already done; cite it, don't
+    redo it. When the request names a `reports/<program>/PLAN*.md` backed by a review or
+    STATE file: derive `## Unverified assumptions` from that file's stated non-verified
+    claims, cite the evidence file by path, and run the `tapps_lookup_docs` calls the
+    lanes will need into a `/tmp` docs file the briefs may read (lanes have no MCP) — or
+    state in the Research grant that no external library API is written against.
+11. After a `/clear`, every unattributed artifact in the tree is possibly your own —
+    and `ListAgents` absence is not authorship. Before naming an author, compare the
+    `from=` socket path on your own incoming and outgoing messages with the session
+    you are about to name; one socket is one process regardless of what the context
+    remembers.
+12. Two effort knobs. The Plane map's `effort` column is Workflow `opts.effort`; a
+    lane's effort is `dispatch-lane.sh`'s fourth argument; an Agent-tool subagent has
+    neither. Say which a cell means. A prompt that does not name its brief files has
+    lanes nobody can dispatch, and the shape check requires the `## Lane briefs`
+    table.
+13. `learnings.md` is read by an extractor, not in full; its ceiling is a check. The
+    managed "Read `learnings.md` before drafting" contradicts the delegation
+    doctrine at this file's size. Dispatch `Explore` + `sonnet` with the program's
+    shape and a 40-bullet cap; fold the struct. `node scripts/check-learnings-size.js`
+    owns the ceilings (bullets, bytes, bytes-per-bullet, and the trailing-date house
+    style).
 """
 _FIELD_RULES_AND_RULINGS = _render_carve_out_categories(_FIELD_RULES_AND_RULINGS)
 
@@ -2310,11 +2347,148 @@ def generate_start_program_script(
     return {"file": "scripts/start-program.sh", "action": action}
 
 
+# TAP-7078 box 6: Output step 7's "Completeness self-check" names these two
+# scripts by filename but nothing shipped or ran either of them. Both are
+# functionally-scoped implementations of the check a consuming project
+# (nlt-orchestrator) already runs locally against its own emitted prompts —
+# reading that project's actual scripts was not possible from this worktree
+# (standing constraint: stay inside this worktree, never read a sibling
+# checkout that another session may have mid-edit), so these are written
+# fresh against the acceptance behavior rather than ported byte-for-byte.
+CHECK_PROMPT_SHAPE_SCRIPT_BODY = r"""#!/usr/bin/env node
+// Validate an emitted orchestration prompt carries every required shape
+// element before it is handed to a runner. Exit 0 when every required
+// section is present; exit 1 naming what is missing.
+//
+// Usage: node scripts/check-prompt-shape.js <prompt.md>
+"use strict";
+
+const fs = require("fs");
+
+const REQUIRED_SECTIONS = [
+  ["## Goal", "no stated Goal"],
+  ["## Loop", "no Loop section -- the goal loop has no repeatable body"],
+  ["Done-when", "no Done-when clause -- the loop cannot terminate"],
+  ["Sub-goal 0", "no Sub-goal 0 -- self-healing preconditions are missing"],
+  [
+    "Lessons learned",
+    "no Lessons learned section -- the run-time learnings write is missing",
+  ],
+];
+
+function main(argv) {
+  const path = argv[2];
+  if (!path) {
+    console.error("usage: check-prompt-shape.js <prompt.md>");
+    process.exit(2);
+  }
+  const text = fs.readFileSync(path, "utf8");
+  const missing = REQUIRED_SECTIONS.filter(([marker]) => !text.includes(marker));
+  if (missing.length > 0) {
+    for (const [marker, reason] of missing) {
+      console.error(`missing: ${marker} -- ${reason}`);
+    }
+    process.exit(1);
+  }
+  // A prompt that dispatches lanes needs a table naming their briefs, or
+  // the lanes it names have nothing to run (TAP-7078 ruling 12).
+  const dispatchesLanes = /dispatch-lane\.sh|claude -p/.test(text);
+  if (dispatchesLanes && !text.includes("## Lane briefs")) {
+    console.error(
+      "missing: ## Lane briefs -- a prompt that dispatches lanes needs a briefs table"
+    );
+    process.exit(1);
+  }
+  console.log(`ok: ${path} carries every required section`);
+  process.exit(0);
+}
+
+main(process.argv);
+"""
+
+CHECK_LEARNINGS_SIZE_SCRIPT_BODY = r"""#!/usr/bin/env node
+// Measure a learnings.md file against the byte/bullet ceilings and name
+// which one actually breached -- bullet count alone is misleading (see
+// tapps_mcp.pipeline.skill_managed_block.LEARNINGS_CEILING_BYTES /
+// LEARNINGS_CEILING_BULLETS, which this mirrors).
+//
+// Usage: node scripts/check-learnings-size.js <learnings.md>
+"use strict";
+
+const fs = require("fs");
+
+const CEILING_BYTES = 40000;
+const CEILING_BULLETS = 120;
+
+function main(argv) {
+  const path = argv[2];
+  if (!path) {
+    console.error("usage: check-learnings-size.js <learnings.md>");
+    process.exit(2);
+  }
+  const text = fs.readFileSync(path, "utf8");
+  const sizeBytes = Buffer.byteLength(text, "utf8");
+  const bulletCount = (text.match(/^- /gm) || []).length;
+  const bytesOver = sizeBytes > CEILING_BYTES;
+  const bulletsOver = bulletCount > CEILING_BULLETS;
+  if (bytesOver || bulletsOver) {
+    const breached =
+      bytesOver && bulletsOver ? "both" : bytesOver ? "byte ceiling" : "bullet ceiling";
+    console.error(
+      `over ceiling (${breached}): ${sizeBytes}B / ${bulletCount} bullets ` +
+        `(ceiling ${CEILING_BYTES}B / ${CEILING_BULLETS} bullets)`
+    );
+    process.exit(1);
+  }
+  console.log(`ok: ${sizeBytes}B / ${bulletCount} bullets, under ceiling`);
+  process.exit(0);
+}
+
+main(process.argv);
+"""
+
+
+def generate_check_prompt_shape_script(
+    project_root: Path,
+    *,
+    dry_run: bool = False,
+) -> dict[str, Any]:
+    """Install or refresh ``scripts/check-prompt-shape.js`` (TAP-7078 box 6)."""
+    action = write_project_script(
+        project_root,
+        "scripts/check-prompt-shape.js",
+        CHECK_PROMPT_SHAPE_SCRIPT_BODY,
+        "orchestration-prompt",
+        dry_run=dry_run,
+    )
+    return {"file": "scripts/check-prompt-shape.js", "action": action}
+
+
+def generate_check_learnings_size_script(
+    project_root: Path,
+    *,
+    dry_run: bool = False,
+) -> dict[str, Any]:
+    """Install or refresh ``scripts/check-learnings-size.js`` (TAP-7078 box 6)."""
+    action = write_project_script(
+        project_root,
+        "scripts/check-learnings-size.js",
+        CHECK_LEARNINGS_SIZE_SCRIPT_BODY,
+        "orchestration-prompt",
+        dry_run=dry_run,
+    )
+    return {"file": "scripts/check-learnings-size.js", "action": action}
+
+
 __all__ = [
+    "CHECK_LEARNINGS_SIZE_SCRIPT_BODY",
+    "CHECK_PROMPT_SHAPE_SCRIPT_BODY",
     "ORCHESTRATION_PROMPT_COMPANION_FILES",
     "ORCHESTRATION_PROMPT_CREATE_ONLY_FILES",
     "ORCHESTRATION_PROMPT_SKILL_BODY",
     "SCOPE_CARVE_OUT_CATEGORIES",
     "START_PROGRAM_SCRIPT_BODY",
+    "generate_check_learnings_size_script",
+    "generate_check_prompt_shape_script",
     "generate_start_program_script",
 ]
