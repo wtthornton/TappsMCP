@@ -106,6 +106,43 @@ class TestTerminalContract:
         assert "`/effort <effort>`" in section
 
 
+class TestPlaneMapDetector:
+    """TAP-6692 — the worked Plane map must satisfy its own detector 1."""
+
+    def _rows(self) -> list[list[str]]:
+        template = COMPANIONS["assets/prompt-template.md"]
+        plane = template.split("\n## Plane map", 1)[1].split("\n## ", 1)[0]
+        rows = []
+        for line in plane.splitlines():
+            line = line.strip()
+            if not line.startswith("|") or line.startswith("|---") or line.startswith("|------"):
+                continue
+            cells = [c.strip() for c in line.strip("|").split("|")]
+            if cells and cells[0] not in ("Step", ""):
+                rows.append(cells)
+        return rows
+
+    def test_plane_map_detector_1_five_driver_rows_no_operator(self) -> None:
+        rows = self._rows()
+        # columns: Step, Owner, Plane, Mechanism, agentType, model, effort, Notes
+        dash_agent_rows = [r for r in rows if r[4] == "—"]
+        driver_dash_rows = [r for r in dash_agent_rows if "driver" in r[1].lower()]
+        operator_dash_rows = [r for r in dash_agent_rows if "operator" in r[1].lower()]
+        assert len(driver_dash_rows) == 5
+        assert len(operator_dash_rows) == 1
+        assert not any("operator" in r[1].lower() for r in driver_dash_rows)
+
+    def test_plane_map_detector_dispatch_has_its_own_driver_row(self) -> None:
+        rows = self._rows()
+        assert any("dispatch" in r[0].lower() and "driver" in r[1].lower() for r in rows)
+
+    def test_plane_map_detector_text_excludes_operator_from_five_row_budget(self) -> None:
+        body = _FULL_SURFACE
+        section = body.split("**Two mechanical detectors", 1)[1][:1200]
+        assert "whose Owner is `driver`" in section
+        assert "does not count against the driver's five-row budget" in section
+
+
 class TestCheapestViableTiering:
     """TAP-6947 — a stated floor, a visible SCORE line, and tracker discipline."""
 

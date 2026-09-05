@@ -445,10 +445,13 @@ the end. An unmeasured share is one nobody notices growing.
 
 **Two mechanical detectors — run them on the Plane map you just wrote, before you save:**
 
-1. **Every `—` in the `agentType` column is orchestrator work.** A row with no agentType is a
-   row nobody was dispatched for, so the top session does it. Five such rows is the whole
-   budget (decide · dispatch · adjudicate · gated write · checkpoint); a sixth means a body of
-   work leaked inline.
+1. **Every `—` in the `agentType` column whose Owner is `driver` is orchestrator work.**
+   A driver row with no agentType is a row nobody was dispatched for, so the top session
+   does it. Five such driver rows is the whole budget (decide · dispatch · adjudicate ·
+   gated write · checkpoint); a sixth means a body of work leaked inline. An `operator`
+   row also carries `—` in `agentType` — it is human-supervised work, never dispatched at
+   all — and does not count against the driver's five-row budget; count only rows whose
+   Owner column reads `driver`.
 2. **An all-`—` `effort` column means effort control was surrendered** — `effort` is
    Workflow-only and an Agent subagent inherits the session's, so a prompt with no Workflow
    has no effort knob at all. That is a legitimate state; the prompt must *say* so. Silence
@@ -1279,9 +1282,12 @@ then enforces it row by row.>
 - **Orchestrator token share: under 15%** of the run's total. Report it every iteration as
   `orch-spend <n>%` in the SCORE line — an unmeasured share is one nobody notices growing.
 - **Two mechanical detectors — run them on this prompt's own Plane map before shipping it:**
-  1. **Every `—` in the `agentType` column is orchestrator work.** A row with no agentType is
-     a row nobody was dispatched for, so the driver does it. Five such rows is the budget
-     (the five jobs); a sixth means a body of work leaked into the top session.
+  1. **Every `—` in the `agentType` column whose Owner is `driver` is orchestrator work.**
+     A driver row with no agentType is a row nobody was dispatched for, so the driver does
+     it. Five such driver rows is the budget (the five jobs); a sixth means a body of work
+     leaked into the top session. An `operator` row also carries `—` in `agentType` — it is
+     human-supervised work, never dispatched at all — and does not count against this
+     five-row budget.
   2. **An all-`—` `effort` column means effort control was surrendered**, because `effort` is
      Workflow-only and an Agent subagent inherits the session's. That is a legitimate state —
      say so explicitly. Silence reads as an omission, and the fix is to move the
@@ -1397,9 +1403,10 @@ human-supervised work). If `driver` appears on a body of work, the prompt is wro
 | <fix after fail> | delegate | execution | fresh worker on scoped fix sub-goal | `general-purpose` | `sonnet` | `low` | expected-fail loop; do not reopen whole feature |
 | <recurring check> | delegate | execution | Routine / `claude -p`+cron | `Explore` | `haiku` | `low` | human-gated |
 | <human-supervised lane> | **operator** | execution | human session in <repo> | — | operator's | — | never dispatched; say why the repo cannot take a headless lane |
+| <decide next dispatch> | **driver** | coordination | inline | — | runner | — | the orchestration itself |
+| <dispatch> | **driver** | coordination | inline (fires the chosen call) | — | runner | — | the one job a delegate structurally cannot do for itself |
 | <adjudicate verdicts> | **driver** | coordination | inline | — | runner | — | accept / reject / scope a fix |
 | <gated or plugin-only write> | **driver** | coordination | skill/tool call | — | runner | — | e.g. a hook-gated tracker write a headless lane cannot reach |
-| <decide next dispatch> | **driver** | coordination | inline | — | runner | — | the orchestration itself |
 | <checkpoint> | **driver** | coordination | `/tapps-handoff-session` | — | runner | — | shift boundary |
 
 Cheap-model rule: `haiku` answers closed, evidence-checkable questions. It does not
