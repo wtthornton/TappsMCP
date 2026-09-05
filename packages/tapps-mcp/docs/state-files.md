@@ -44,7 +44,7 @@ unknown files are present and leaves them alone.
 | `.tapps-mcp/session-capture.json` | legacy (pre-TAP-1999) | Session summary from the removed `tapps-memory-capture.sh` Stop hook. Superseded by `call_memory_index_session_start` (TAP-1999); the hook, its templates, and the `tapps_init(memory_capture=)` opt-in were removed. `tapps_session_start` still reads a stale file if present, for backward compat. |
 | `.tapps-mcp/.linear-validate-sentinel` | `tapps-post-docs-validate.sh` | Confirms `docs_validate_linear_issue` ran before `save_issue` |
 | `.tapps-mcp/.linear-snapshot-sentinel-*` | `tapps-post-linear-snapshot-get.sh` | Per-key unlock for Linear list-issues cache gate |
-| `.tapps-mcp/.bypass-log.jsonl` | Hook bypass paths | Audit log of guarded-operation bypasses |
+| `.tapps-mcp/.bypass-log.jsonl` | Hook bypass paths (`tapps-pre-bash.sh`, `tapps-pre-linear-write.sh`, `tapps-pre-linear-list.sh`, `tapps-pre-session-start-gate.sh`, and their `.ps1` variants) | Audit log of guarded-operation bypasses. Read by `doctor_pipeline._count_bypass_log_24h` (TAP-6929), same 24h-window shape as the completion/session-start/cache-gate violation counters — but not yet surfaced as a `tapps doctor` `CheckResult` (that wiring lives in `doctor_telemetry.py` / `doctor_runner.py`, outside this counter's module). Path resolves via the same `--git-common-dir` fallback the writers use (TAP-6928), so a bypass from a linked worktree lands in the primary checkout's copy. |
 | `.tapps-mcp/.cache-gate-violations.jsonl` | `tapps-pre-linear-list.sh` | Linear cache-gate violation log |
 | `.tapps-mcp/.push-test-log` | `.githooks/pre-push` | Tier-2 background test results |
 | `.tapps-mcp/.validation-marker` | `tapps_validate_changed` | Marks a successful validation run |
