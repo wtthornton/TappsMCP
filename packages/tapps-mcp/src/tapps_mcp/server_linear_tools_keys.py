@@ -130,6 +130,16 @@ _PROJECTION_NONE = "none"
 _PROJECTION_COMPACT = "compact"
 _PROJECTION_FULL = "full"
 
+# TAP-6636: the only projections a caller may request. Anything else is
+# normalized to "full" at the boundary rather than echoed back verbatim —
+# an unrecognised value must not leak into ``requested_projection``.
+_VALID_REQUEST_PROJECTIONS: frozenset[str] = frozenset({_PROJECTION_FULL, _PROJECTION_COMPACT})
+
+
+def _normalize_projection(projection: str) -> str:
+    """Normalize a caller-supplied ``projection`` to a value this module honours."""
+    return projection if projection in _VALID_REQUEST_PROJECTIONS else _PROJECTION_FULL
+
 
 def _row_satisfies_compact(issue: Any) -> bool:
     """Return True if *issue* carries the compact floor (identity + title)."""

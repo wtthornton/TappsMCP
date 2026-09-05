@@ -42,6 +42,7 @@ from tapps_mcp.server_linear_tools_keys import (
     _extract_status_type,
     _fetch_hint_for_state,
     _list_issues_pass_payload,
+    _normalize_projection,
     _resolve_cache_key,
     _stored_projection,
     _ttl_for_state,
@@ -146,6 +147,7 @@ async def tapps_linear_snapshot_get(
     """
     _record_call("tapps_linear_snapshot_get")
     start_ns = time.perf_counter_ns()
+    projection = _normalize_projection(projection)
 
     if not team or not project:
         return error_response(
@@ -338,6 +340,31 @@ async def tapps_linear_snapshot_put(
         ttl_closed=settings.linear_cache_ttl_closed_seconds,
     )
     key = _resolve_cache_key(team, project, state, label, limit)
+
+    # TAP-6636: write-side floor guard. Reuse the same _stored_projection
+    # verdict snapshot_get relies on to MISS unservable rows — refusing the
+    # write here means a degraded payload never reaches the cache in the
+    # first place, instead of only being caught on read.
+    stored_projection = _stored_projection(issues)
+    if issues and stored_projection == _PROJECTION_NONE:
+        elapsed_ms = (time.perf_counter_ns() - start_ns) // 1_000_000
+        return success_response(
+            "tapps_linear_snapshot_put",
+            elapsed_ms,
+            {
+                "stored": False,
+                "cache_key": key,
+                "issue_count": len(issues),
+                "stored_projection": stored_projection,
+                "hint": (
+                    "Refused: one or more rows are below the compact floor "
+                    "(missing an identifier/id, or missing title) and cannot "
+                    "be served under any projection. Fetch fuller rows "
+                    "(include at least id/identifier and title) before "
+                    "calling tapps_linear_snapshot_put again."
+                ),
+            },
+        )
 
     now = time.time()
     ttl = _ttl_for_state(

@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import ast
+
 import pytest
 
 from tapps_mcp.pipeline.linear_mcp_names import (
@@ -113,4 +115,4 @@ class TestListIssuesNamesRepr:
 
     def test_names_repr_is_a_valid_set_literal(self) -> None:
         rendered = resolve_linear_host_placeholders("__LINEAR_LIST_ISSUES_NAMES_REPR__")
-        assert eval(rendered) == set(linear_plugin_tool_names("list_issues"))  # noqa: S307
+        assert ast.literal_eval(rendered) == set(linear_plugin_tool_names("list_issues"))
