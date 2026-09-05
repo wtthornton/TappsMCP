@@ -26,6 +26,14 @@ SKIP_TOKENS: dict[str, frozenset[str]] = {
     "claude_hooks": frozenset({".claude/hooks"}),
     "claude_agents": frozenset({".claude/agents"}),
     "claude_skills": frozenset({".claude/skills"}),
+    # TAP-7054: Cursor mirrors of the three Claude directory tokens above —
+    # written by generate_cursor_hooks() (platform_hooks.py) and the Cursor
+    # agent/skill generators (platform_subagents.py, platform_skills.py).
+    "cursor_hooks": frozenset({".cursor/hooks"}),
+    "cursor_agents": frozenset({".cursor/agents"}),
+    "cursor_skills": frozenset({".cursor/skills"}),
+    # TAP-7054: same file-path granularity already given to CLAUDE.md/AGENTS.md.
+    "copilot_instructions": frozenset({".github/copilot-instructions.md"}),
     "python_quality_rule": frozenset({".claude/rules/python-quality.md"}),
     "agent_scope_rule": frozenset({".claude/rules/agent-scope.md"}),
     "agent_to_agent_rule": frozenset({".claude/rules/agent-to-agent.md"}),
@@ -57,6 +65,9 @@ _DIRECTORY_TOKENS: tuple[str, ...] = (
     ".claude/agents",
     ".claude/skills",
     ".claude/workflows",
+    ".cursor/hooks",
+    ".cursor/agents",
+    ".cursor/skills",
 )
 
 

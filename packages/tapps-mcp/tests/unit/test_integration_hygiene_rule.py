@@ -80,6 +80,9 @@ class TestGenerateClaudeIntegrationHygieneRule:
         assert result["action"] == "updated"
 
     def test_reports_always_apply_demotion(self, tmp_path: Path) -> None:
+        """TAP-6987: the pre-existing file differs from the template, so the
+        write is refused (``action: "diverged"``) — but the alwaysApply flip
+        is still surfaced in the same report."""
         rules = tmp_path / ".claude" / "rules"
         rules.mkdir(parents=True)
         (rules / "integration-hygiene.md").write_text(
@@ -87,6 +90,7 @@ class TestGenerateClaudeIntegrationHygieneRule:
             encoding="utf-8",
         )
         result = generate_claude_integration_hygiene_rule(tmp_path)
+        assert result["action"] == "diverged"
         assert result.get("alwaysApply_demoted") is True
         assert result["alwaysApply_changed"] == {"from": True, "to": False}
 

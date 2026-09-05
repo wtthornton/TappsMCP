@@ -9,6 +9,7 @@ Extracted from ``platform_generators.py`` to reduce file size.
 from __future__ import annotations
 
 import base64
+import difflib
 import json
 import re
 import stat
@@ -63,25 +64,70 @@ def _parse_always_apply(text: str) -> bool | None:
     return match.group(1).lower() in {"true", "yes", "1"}
 
 
+def _rule_line_delta(before: str, after: str) -> str:
+    """Summarize a content diff as ``+<added>/-<removed>`` line counts."""
+    diff = difflib.unified_diff(before.splitlines(), after.splitlines(), lineterm="")
+    added = removed = 0
+    for line in diff:
+        if line.startswith(("+++", "---")):
+            continue
+        if line.startswith("+"):
+            added += 1
+        elif line.startswith("-"):
+            removed += 1
+    return f"+{added}/-{removed}"
+
+
+def _read_existing_rule(target: Path) -> str | None:
+    """Return *target*'s current text, or ``None`` if absent/unreadable."""
+    if not target.exists():
+        return None
+    try:
+        return target.read_text(encoding="utf-8")
+    except OSError:
+        return None
+
+
+def _annotate_always_apply_flip(
+    out: dict[str, Any], prev_aa: bool | None, new_aa: bool | None
+) -> None:
+    """Record an ``alwaysApply`` flip on *out*, in-place, if one occurred."""
+    if prev_aa is None or new_aa is None or prev_aa == new_aa:
+        return
+    out["alwaysApply_changed"] = {"from": prev_aa, "to": new_aa}
+    if prev_aa and not new_aa:
+        out["alwaysApply_demoted"] = True
+
+
 def _write_claude_rule_file(target: Path, content: str) -> dict[str, Any]:
-    """Write a managed Claude rule and report ``alwaysApply`` flips explicitly."""
+    """Write a managed Claude rule; report ``alwaysApply`` flips explicitly.
+
+    TAP-6987: an existing file whose content no longer matches what would be
+    generated is treated as a local edit and never silently replaced — the
+    call reports ``action: "diverged"`` plus a line delta instead of writing.
+    This is deliberately conservative: it cannot distinguish "hand-edited" from
+    "stale relative to a newer shipped template" (there is no version marker
+    on these files), so both count as diverged. That tradeoff is the accepted
+    minimal fix here; see ``doctor_skip_drift.py`` for the same non-distinction.
+    """
+    current = _read_existing_rule(target)
     existed = target.exists()
-    prev_aa: bool | None = None
-    if existed:
-        try:
-            prev_aa = _parse_always_apply(target.read_text(encoding="utf-8"))
-        except OSError:
-            prev_aa = None
+    prev_aa = _parse_always_apply(current) if current is not None else None
     new_aa = _parse_always_apply(content)
+
+    if current is not None and current != content:
+        out: dict[str, Any] = {
+            "file": str(target),
+            "action": "diverged",
+            "diverged": True,
+            "line_delta": _rule_line_delta(current, content),
+        }
+        _annotate_always_apply_flip(out, prev_aa, new_aa)
+        return out
+
     target.write_text(content, encoding="utf-8")
-    out: dict[str, Any] = {
-        "file": str(target),
-        "action": "updated" if existed else "created",
-    }
-    if prev_aa is not None and new_aa is not None and prev_aa != new_aa:
-        out["alwaysApply_changed"] = {"from": prev_aa, "to": new_aa}
-        if prev_aa and not new_aa:
-            out["alwaysApply_demoted"] = True
+    out = {"file": str(target), "action": "updated" if existed else "created"}
+    _annotate_always_apply_flip(out, prev_aa, new_aa)
     return out
 
 
@@ -789,11 +835,8 @@ def generate_claude_python_quality_rule(
     rules_dir = project_root / ".claude" / "rules"
     rules_dir.mkdir(parents=True, exist_ok=True)
     target = rules_dir / "python-quality.md"
-    existed = target.exists()
     content = generate_python_quality_rule(engagement_level)
-    target.write_text(content, encoding="utf-8")
-    action = "updated" if existed else "created"
-    return {"file": str(target), "action": action}
+    return _write_claude_rule_file(target, content)
 
 
 _CLAUDE_AGENT_SCOPE_RULE = """\
@@ -853,9 +896,7 @@ def generate_claude_agent_scope_rule(
     rules_dir = project_root / ".claude" / "rules"
     rules_dir.mkdir(parents=True, exist_ok=True)
     target = rules_dir / "agent-scope.md"
-    existed = target.exists()
-    target.write_text(_CLAUDE_AGENT_SCOPE_RULE, encoding="utf-8")
-    return {"file": str(target), "action": "updated" if existed else "created"}
+    return _write_claude_rule_file(target, _CLAUDE_AGENT_SCOPE_RULE)
 
 
 _CLAUDE_AGENT_TO_AGENT_RULE = """\
@@ -1265,9 +1306,7 @@ def generate_claude_autonomy_rule(
     rules_dir = project_root / ".claude" / "rules"
     rules_dir.mkdir(parents=True, exist_ok=True)
     target = rules_dir / "autonomy.md"
-    existed = target.exists()
-    target.write_text(_CLAUDE_AUTONOMY_RULE, encoding="utf-8")
-    return {"file": str(target), "action": "updated" if existed else "created"}
+    return _write_claude_rule_file(target, _CLAUDE_AUTONOMY_RULE)
 
 
 def generate_claude_pipeline_rule(
@@ -1288,7 +1327,6 @@ def generate_claude_pipeline_rule(
     rules_dir = project_root / ".claude" / "rules"
     rules_dir.mkdir(parents=True, exist_ok=True)
     target = rules_dir / "tapps-pipeline.md"
-    existed = target.exists()
 
     content = (
         f"""\
@@ -1365,9 +1403,7 @@ TappsMCP can run in CI. Use `TAPPS_MCP_PROJECT_ROOT` and `tapps-mcp validate-cha
 """
     )
 
-    target.write_text(content, encoding="utf-8")
-    action = "updated" if existed else "created"
-    return {"file": str(target), "action": action}
+    return _write_claude_rule_file(target, content)
 
 
 _CLAUDE_LINEAR_STANDARDS_RULE = """\
@@ -1571,9 +1607,7 @@ def generate_claude_security_rule(
     rules_dir = project_root / ".claude" / "rules"
     rules_dir.mkdir(parents=True, exist_ok=True)
     target = rules_dir / "security.md"
-    existed = target.exists()
-    target.write_text(_CLAUDE_SECURITY_RULE, encoding="utf-8")
-    return {"file": str(target), "action": "updated" if existed else "created"}
+    return _write_claude_rule_file(target, _CLAUDE_SECURITY_RULE)
 
 
 _CLAUDE_TEST_QUALITY_RULE = """\
@@ -1649,9 +1683,7 @@ def generate_claude_test_quality_rule(
     rules_dir = project_root / ".claude" / "rules"
     rules_dir.mkdir(parents=True, exist_ok=True)
     target = rules_dir / "test-quality.md"
-    existed = target.exists()
-    target.write_text(_CLAUDE_TEST_QUALITY_RULE, encoding="utf-8")
-    return {"file": str(target), "action": "updated" if existed else "created"}
+    return _write_claude_rule_file(target, _CLAUDE_TEST_QUALITY_RULE)
 
 
 _CLAUDE_CONFIG_FILES_RULE = """\
@@ -1706,6 +1738,4 @@ def generate_claude_config_files_rule(
     rules_dir = project_root / ".claude" / "rules"
     rules_dir.mkdir(parents=True, exist_ok=True)
     target = rules_dir / "config-files.md"
-    existed = target.exists()
-    target.write_text(_CLAUDE_CONFIG_FILES_RULE, encoding="utf-8")
-    return {"file": str(target), "action": "updated" if existed else "created"}
+    return _write_claude_rule_file(target, _CLAUDE_CONFIG_FILES_RULE)

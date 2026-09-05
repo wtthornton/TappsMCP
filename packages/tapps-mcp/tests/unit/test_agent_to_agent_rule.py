@@ -10,6 +10,7 @@ current -> True).
 
 from __future__ import annotations
 
+import re
 from pathlib import Path
 
 import yaml
@@ -87,18 +88,29 @@ class TestGenerateClaudeAgentToAgentRule:
         written = (tmp_path / ".claude" / "rules" / "agent-to-agent.md").read_text(encoding="utf-8")
         assert written == _CLAUDE_AGENT_TO_AGENT_RULE
 
-    def test_regenerating_overwrites_hand_edited_copy(self, tmp_path: Path) -> None:
-        """Managed-block behaviour: same unconditional overwrite as every other
-        shipped rule (agent-scope.md, autonomy.md, integration-hygiene.md) —
-        there is no diff/merge/preserve step, confirmed by reading
-        ``_write_claude_rule_file`` in platform_bundles.py."""
+    def test_regenerating_preserves_hand_edited_copy(self, tmp_path: Path) -> None:
+        """TAP-6987: a diverged ``.claude/rules/*.md`` is never silently
+        replaced — ``_write_claude_rule_file`` refuses the write and reports
+        ``action: "diverged"`` instead, so the local edit survives."""
         rules = tmp_path / ".claude" / "rules"
         rules.mkdir(parents=True)
         (rules / "agent-to-agent.md").write_text("hand-edited nonsense\n", encoding="utf-8")
-        generate_claude_agent_to_agent_rule(tmp_path)
+        result = generate_claude_agent_to_agent_rule(tmp_path)
         written = (rules / "agent-to-agent.md").read_text(encoding="utf-8")
-        assert written == _CLAUDE_AGENT_TO_AGENT_RULE
-        assert "hand-edited nonsense" not in written
+        assert written == "hand-edited nonsense\n"
+        assert result["action"] == "diverged"
+        assert result["diverged"] is True
+        assert "line_delta" in result
+
+    def test_diverged_report_names_the_file_and_a_line_delta(self, tmp_path: Path) -> None:
+        """Acceptance box 2 (TAP-6987): report file + line delta, not silence."""
+        rules = tmp_path / ".claude" / "rules"
+        rules.mkdir(parents=True)
+        target = rules / "agent-to-agent.md"
+        target.write_text("one\ntwo\n", encoding="utf-8")
+        result = generate_claude_agent_to_agent_rule(tmp_path)
+        assert result["file"] == str(target)
+        assert re.fullmatch(r"\+\d+/-\d+", result["line_delta"])
 
 
 class TestInitIntegration:
@@ -135,6 +147,29 @@ class TestUpgradeIntegration:
         assert "agent_to_agent_rule" in claude_result["components"]
         assert claude_result["components"]["agent_to_agent_rule"]["action"] == "created"
         assert (tmp_path / ".claude" / "rules" / "agent-to-agent.md").exists()
+
+    def test_upgrade_preserves_hand_edited_rule_without_skip_token(self, tmp_path: Path) -> None:
+        """TAP-6987 acceptance box 3: a fixture project with a locally-edited
+        ``.claude/rules/*.md`` survives ``upgrade_pipeline`` even with no
+        ``upgrade_skip_files`` entry configured — divergence alone protects it."""
+        (tmp_path / ".claude" / "rules").mkdir(parents=True)
+        (tmp_path / "CLAUDE.md").write_text("# TAPPS Quality Pipeline\n")
+        (tmp_path / "pyproject.toml").write_text("", encoding="utf-8")
+        edited = "LOCAL EDIT: do not clobber this\n"
+        (tmp_path / ".claude" / "rules" / "agent-to-agent.md").write_text(
+            edited, encoding="utf-8"
+        )
+
+        from tapps_mcp.pipeline.upgrade import upgrade_pipeline
+
+        result = upgrade_pipeline(tmp_path, platform="claude", dry_run=False)
+
+        platforms = result["components"]["platforms"]
+        claude_result = next(p for p in platforms if p["host"] == "claude-code")
+        assert claude_result["components"]["agent_to_agent_rule"]["action"] == "diverged"
+        assert (
+            tmp_path / ".claude" / "rules" / "agent-to-agent.md"
+        ).read_text(encoding="utf-8") == edited
 
     def test_upgrade_respects_skip_token(self, tmp_path: Path) -> None:
         (tmp_path / ".claude").mkdir()

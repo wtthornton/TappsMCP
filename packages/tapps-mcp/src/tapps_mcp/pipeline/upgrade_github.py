@@ -91,7 +91,9 @@ def _plan_github_templates(project_root: Path) -> dict[str, Any]:
     }
 
 
-def dry_run_github_artifacts(project_root: Path, result: dict[str, Any]) -> None:
+def dry_run_github_artifacts(
+    project_root: Path, result: dict[str, Any], *, skip_files: set[str] | None = None
+) -> None:
     """Populate dry-run hints for GitHub-hosted artifact generators.
 
     Mirrors the agents/skills precision pattern for ``ci_workflows`` and
@@ -99,11 +101,16 @@ def dry_run_github_artifacts(project_root: Path, result: dict[str, Any]) -> None
     can see custom workflows / issue forms are safe. ``github_copilot`` and
     ``governance`` stay on the simpler ``would-regenerate`` hint for now;
     their generators span multiple directories with version markers and
-    don't benefit from enumeration the way shared directories do.
+    don't benefit from enumeration the way shared directories do. TAP-7054:
+    ``github_copilot`` reports the skip marker when pinned.
     """
     result["components"]["ci_workflows"] = _plan_ci_workflows(project_root)
     result["components"]["github_templates"] = _plan_github_templates(project_root)
-    result["components"]["github_copilot"] = {"action": "would-regenerate"}
+    result["components"]["github_copilot"] = (
+        "skipped (upgrade_skip_files)"
+        if skipped("copilot_instructions", skip_files or set())
+        else {"action": "would-regenerate"}
+    )
     result["components"]["governance"] = {"action": "would-regenerate"}
 
 
@@ -147,12 +154,17 @@ def _generate_governance(project_root: Path) -> Any:
 
 
 def run_github_artifacts(
-    project_root: Path, result: dict[str, Any], *, force: bool = False
+    project_root: Path,
+    result: dict[str, Any],
+    *,
+    force: bool = False,
+    skip_files: set[str] | None = None,
 ) -> None:
     """Run GitHub-hosted artifact generators (CI, Copilot, templates, governance).
 
     Each generator is called independently; failures are recorded in
-    ``result["errors"]`` rather than aborting the whole upgrade.
+    ``result["errors"]`` rather than aborting the whole upgrade. TAP-7054:
+    ``github_copilot`` honors the ``copilot_instructions`` skip token.
     """
     _run_generator(
         result,
@@ -161,13 +173,16 @@ def run_github_artifacts(
         "ci_workflows_failed",
         lambda: _generate_ci_workflows(project_root),
     )
-    _run_generator(
-        result,
-        "github_copilot",
-        "Copilot config",
-        "copilot_config_failed",
-        lambda: _generate_copilot_config(project_root, force=force),
-    )
+    if skipped("copilot_instructions", skip_files or set()):
+        result["components"]["github_copilot"] = "skipped (upgrade_skip_files)"
+    else:
+        _run_generator(
+            result,
+            "github_copilot",
+            "Copilot config",
+            "copilot_config_failed",
+            lambda: _generate_copilot_config(project_root, force=force),
+        )
     _run_generator(
         result,
         "github_templates",
