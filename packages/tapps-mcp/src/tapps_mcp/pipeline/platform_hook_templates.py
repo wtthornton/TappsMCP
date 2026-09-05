@@ -26,6 +26,12 @@ from tapps_mcp.pipeline.linear_mcp_names import (
     resolve_linear_script_map,
 )
 from tapps_mcp.pipeline.platform_hook_templates_linear_gate import (
+    LEDGER_ROOT_RESOLVE_BASH as LEDGER_ROOT_RESOLVE_BASH,
+)
+from tapps_mcp.pipeline.platform_hook_templates_linear_gate import (
+    LEDGER_ROOT_RESOLVE_PS as LEDGER_ROOT_RESOLVE_PS,
+)
+from tapps_mcp.pipeline.platform_hook_templates_linear_gate import (
     LINEAR_CACHE_GATE_HOOKS_CONFIG as LINEAR_CACHE_GATE_HOOKS_CONFIG,
 )
 from tapps_mcp.pipeline.platform_hook_templates_linear_gate import (
@@ -880,7 +886,8 @@ if [ -n "$LINE" ]; then
 fi
 exit 0
 """,
-    "tapps-pre-bash.sh": """\
+    "tapps-pre-bash.sh": (
+        """\
 #!/usr/bin/env bash
 # TappsMCP PreToolUse hook (Bash) - destructive command guard (opt-in)
 # Blocks commands containing rm -rf, format c:, etc. Exit 2 = block, 0 = allow.
@@ -891,7 +898,9 @@ INPUT=$(cat)
 PYBIN=$(command -v python3 2>/dev/null || command -v python 2>/dev/null)
 if [ -z "$PYBIN" ]; then
   # TAP-1785: enforcement gate fails closed when python is unavailable.
-  ROOT="${CLAUDE_PROJECT_DIR:-$PWD}"
+"""
+        + LEDGER_ROOT_RESOLVE_BASH
+        + """
   mkdir -p "$ROOT/.tapps-mcp" 2>/dev/null
   echo "{\\"ts\\":\\"$(date -u +%FT%TZ)\\",\\"hook\\":\\"tapps-pre-bash\\",\\"reason\\":\\"no_python\\"}" \\
     >> "$ROOT/.tapps-mcp/.bypass-log.jsonl" 2>/dev/null
@@ -1083,7 +1092,8 @@ else:
   esac
 fi
 exit 0
-""",
+"""
+    ),
     "tapps-memory-auto-capture.sh": """\
 #!/usr/bin/env bash
 # TappsMCP Stop hook - Auto-Capture (Epic 65.5)
@@ -2447,7 +2457,8 @@ date +%s > "$ROOT/.tapps-mcp/.linear-validate-sentinel" 2>/dev/null
 exit 0
 """
 
-LINEAR_GATE_PRE_SAVE_SCRIPT = """\
+LINEAR_GATE_PRE_SAVE_SCRIPT = (
+    """\
 #!/usr/bin/env bash
 # TappsMCP PreToolUse hook — Linear write gate (TAP-981)
 # Blocks mcp__plugin_linear_linear__save_issue if no recent
@@ -2457,7 +2468,9 @@ INPUT=$(cat)
 PYBIN=$(command -v python3 2>/dev/null || command -v python 2>/dev/null)
 if [ -z "$PYBIN" ]; then
   # TAP-1785: enforcement gate fails closed when python is unavailable.
-  ROOT="${CLAUDE_PROJECT_DIR:-$PWD}"
+"""
+    + LEDGER_ROOT_RESOLVE_BASH
+    + """
   mkdir -p "$ROOT/.tapps-mcp" 2>/dev/null
   echo "{\\"ts\\":\\"$(date -u +%FT%TZ)\\",\\"hook\\":\\"tapps-pre-linear-write\\",\\"reason\\":\\"no_python\\"}" \\
     >> "$ROOT/.tapps-mcp/.bypass-log.jsonl" 2>/dev/null
@@ -2492,7 +2505,9 @@ if [ "$UPDATE_ONLY" = "1" ]; then
   exit 0
 fi
 if [ "${TAPPS_LINEAR_SKIP_VALIDATE:-0}" = "1" ]; then
-  ROOT="${CLAUDE_PROJECT_DIR:-$PWD}"
+"""
+    + LEDGER_ROOT_RESOLVE_BASH
+    + """
   mkdir -p "$ROOT/.tapps-mcp" 2>/dev/null
   echo "{\\"ts\\":\\"$(date -u +%FT%TZ)\\",\\"bypass\\":\\"TAPPS_LINEAR_SKIP_VALIDATE\\"}" \\
     >> "$ROOT/.tapps-mcp/.bypass-log.jsonl" 2>/dev/null
@@ -2533,6 +2548,7 @@ See .claude/rules/linear-standards.md.
 MSG
 exit 2
 """
+)
 
 LINEAR_GATE_HOOKS_CONFIG: dict[str, list[dict[str, Any]]] = {
     "PreToolUse": [
@@ -2597,7 +2613,8 @@ if ($tool -eq 'mcp__docs-mcp__docs_validate_linear_issue' -or $tool -eq 'mcp__nl
 exit 0
 """
 
-LINEAR_GATE_PRE_SAVE_SCRIPT_PS = """\
+LINEAR_GATE_PRE_SAVE_SCRIPT_PS = (
+    """\
 # TappsMCP PreToolUse hook — Linear write gate (TAP-981/TAP-986)
 # Blocks mcp__plugin_linear_linear__save_issue if no recent
 # docs_validate_linear_issue sentinel (within 30 minutes). Bypass with
@@ -2628,7 +2645,9 @@ if (-not (__LINEAR_SAVE_ISSUE_PS_EQ__)) {
 if ($updateOnly) {
     exit 0
 }
-$root = if ($env:CLAUDE_PROJECT_DIR) { $env:CLAUDE_PROJECT_DIR } else { $PWD.Path }
+"""
+    + LEDGER_ROOT_RESOLVE_PS
+    + """
 $dir = Join-Path $root '.tapps-mcp'
 if ($env:TAPPS_LINEAR_SKIP_VALIDATE -eq '1') {
     if (-not (Test-Path $dir)) {
@@ -2673,6 +2692,7 @@ if ($age -le 1800) {
 [Console]::Error.WriteLine("See .claude/rules/linear-standards.md.")
 exit 2
 """
+)
 
 LINEAR_GATE_HOOKS_CONFIG_PS: dict[str, list[dict[str, Any]]] = {
     "PreToolUse": [

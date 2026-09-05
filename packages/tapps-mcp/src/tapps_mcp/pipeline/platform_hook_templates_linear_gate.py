@@ -17,6 +17,40 @@ from tapps_mcp.pipeline.linear_mcp_names import (
 )
 
 # ---------------------------------------------------------------------------
+# Ledger root resolution (TAP-6928)
+# ---------------------------------------------------------------------------
+# CLAUDE_PROJECT_DIR is trusted verbatim when set — Claude Code populates it
+# with the project root. But in a linked worktree session it can be unset,
+# and the naive `${CLAUDE_PROJECT_DIR:-$PWD}` fallback then resolves to the
+# worktree's own cwd, splitting the bypass ledger across every worktree
+# instead of the one primary-checkout file an operator audits. The fallback
+# instead asks git for --git-common-dir, which is identical across a repo's
+# primary checkout and all its linked worktrees (same fix shape as
+# git_hooks.py's GIT_PRE_COMMIT_SCRIPT for TAP-6931).
+LEDGER_ROOT_RESOLVE_BASH = """\
+ROOT="${CLAUDE_PROJECT_DIR:-}"
+if [ -z "$ROOT" ]; then
+  _common="$(git rev-parse --path-format=absolute --git-common-dir 2>/dev/null || true)"
+  if [ -n "$_common" ]; then
+    ROOT="$(cd "$_common/.." && pwd)"
+  else
+    ROOT="$PWD"
+  fi
+fi"""
+
+LEDGER_ROOT_RESOLVE_PS = """\
+$root = $env:CLAUDE_PROJECT_DIR
+if (-not $root) {
+    $commonDir = $null
+    try { $commonDir = (git rev-parse --path-format=absolute --git-common-dir 2>$null) } catch {}
+    if ($LASTEXITCODE -eq 0 -and $commonDir) {
+        $root = (Resolve-Path (Join-Path $commonDir '..')).Path
+    } else {
+        $root = $PWD.Path
+    }
+}"""
+
+# ---------------------------------------------------------------------------
 # Linear cache-first read gate (TAP-1224) — opt-in via linear_enforce_cache_gate
 # ---------------------------------------------------------------------------
 # Two cooperating hooks gate raw mcp__plugin_linear_linear__list_issues calls
@@ -182,7 +216,9 @@ esac
 if [ -z "$KEY" ]; then
   exit 0
 fi
-ROOT="${CLAUDE_PROJECT_DIR:-$PWD}"
+"""
+    + LEDGER_ROOT_RESOLVE_BASH
+    + """
 if [ "${TAPPS_LINEAR_SKIP_CACHE_GATE:-0}" = "1" ]; then
   mkdir -p "$ROOT/.tapps-mcp" 2>/dev/null
   echo "{\\"ts\\":\\"$(date -u +%FT%TZ)\\",\\"bypass\\":\\"TAPPS_LINEAR_SKIP_CACHE_GATE\\",\\"key\\":\\"${KEY}\\"}" \\
@@ -619,7 +655,9 @@ if (-not (__LINEAR_LIST_ISSUES_PS_EQ__)) {
     + LINEAR_CACHE_GATE_KEY_PS
     + """\
 if (-not $key) { exit 0 }
-$root = if ($env:CLAUDE_PROJECT_DIR) { $env:CLAUDE_PROJECT_DIR } else { $PWD.Path }
+"""
+    + LEDGER_ROOT_RESOLVE_PS
+    + """
 $dir = Join-Path $root '.tapps-mcp'
 if ($env:TAPPS_LINEAR_SKIP_CACHE_GATE -eq '1') {
     if (-not (Test-Path $dir)) { New-Item -ItemType Directory -Force -Path $dir | Out-Null }
@@ -760,7 +798,8 @@ find "$ROOT/.tapps-mcp" -maxdepth 1 -name '.session-start-done-*' -mtime +1 -del
 exit 0
 """
 
-SESSION_START_GATE_PRE_SCRIPT = """\
+SESSION_START_GATE_PRE_SCRIPT = (
+    """\
 #!/usr/bin/env bash
 # TappsMCP PreToolUse hook — session-start enforcement gate.
 # Blocks TappsMCP quality tools until tapps_session_start has actually run this
@@ -788,7 +827,9 @@ case "$TOOL" in
   *) exit 0 ;;
 esac
 [ "$MODE" = "off" ] && exit 0
-ROOT="${CLAUDE_PROJECT_DIR:-$PWD}"
+"""
+    + LEDGER_ROOT_RESOLVE_BASH
+    + """
 if [ "${TAPPS_SKIP_SESSION_START_GATE:-0}" = "1" ]; then
   mkdir -p "$ROOT/.tapps-mcp" 2>/dev/null
   echo "{\\"ts\\":\\"$(date -u +%FT%TZ)\\",\\"bypass\\":\\"TAPPS_SKIP_SESSION_START_GATE\\",\\"tool\\":\\"${TOOL}\\"}" \\
@@ -820,6 +861,7 @@ Emergency bypass: TAPPS_SKIP_SESSION_START_GATE=1 (logged to .tapps-mcp/.bypass-
 MSG
 exit 2
 """
+)
 
 SESSION_START_GATE_SCRIPTS: dict[str, str] = {
     "tapps-pre-session-start-gate.sh": SESSION_START_GATE_PRE_SCRIPT,
@@ -874,7 +916,8 @@ Get-ChildItem -Path $dir -Filter '.session-start-done-*' -ErrorAction SilentlyCo
 exit 0
 """
 
-SESSION_START_GATE_PRE_SCRIPT_PS = """\
+SESSION_START_GATE_PRE_SCRIPT_PS = (
+    """\
 # TappsMCP PreToolUse hook — session-start enforcement gate.
 $mode = '__SESSION_START_GATE_MODE__'
 $stdin = [Console]::In.ReadToEnd()
@@ -889,7 +932,9 @@ try {
 if ($tool -match 'tapps_(session_start|server_info|doctor|usage|stats|memory)$') { exit 0 }
 if ($tool -notmatch '^mcp__(nlt-build|nlt-memory|nlt-setup|nlt-code-quality|nlt-platform-admin|tapps-mcp)__') { exit 0 }
 if ($mode -eq 'off') { exit 0 }
-$root = if ($env:CLAUDE_PROJECT_DIR) { $env:CLAUDE_PROJECT_DIR } else { $PWD.Path }
+"""
+    + LEDGER_ROOT_RESOLVE_PS
+    + """
 $dir = Join-Path $root '.tapps-mcp'
 if ($env:TAPPS_SKIP_SESSION_START_GATE -eq '1') {
     if (-not (Test-Path $dir)) { New-Item -ItemType Directory -Force -Path $dir | Out-Null }
@@ -907,6 +952,7 @@ if ($mode -eq 'warn') {
 [Console]::Error.WriteLine("[TappsMCP refusal layer=hook-only/defense-in-depth] session-start gate (block) — $tool called before tapps_session_start ran this session. Call tapps_session_start() NOW, then retry. Bypass: TAPPS_SKIP_SESSION_START_GATE=1.")
 exit 2
 """
+)
 
 SESSION_START_GATE_SCRIPTS_PS: dict[str, str] = {
     "tapps-pre-session-start-gate.ps1": SESSION_START_GATE_PRE_SCRIPT_PS,
