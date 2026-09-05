@@ -310,6 +310,13 @@ def scorable_extensions() -> tuple[str, ...]:
 #: ``('.cjs', '.go', …)`` — literal for embedding in generated Python snippets.
 SCORABLE_EXT_PY_TUPLE: str = repr(scorable_extensions())
 
+#: ``*.cjs|*.go|*.js|...`` — the same extension set as a bash `case` glob
+#: alternation, for hooks that branch on the file extension directly instead
+#: of shelling out to Python (TAP-6739). One source (``scorable_extensions``)
+#: for every representation avoids a site hand-restating the list and
+#: silently drifting when an extension is added.
+SCORABLE_EXT_BASH_CASE: str = "|".join(f"*{ext}" for ext in scorable_extensions())
+
 
 CLAUDE_HOOK_SCRIPTS: dict[str, str] = {
     "tapps-session-start.sh": """\
@@ -414,8 +421,8 @@ if [ "$SKILL_GUARD" = "1" ]; then
         + f'  echo "{MANAGED_SKILL_BLOCK_EDIT_WARNING_BASH}" >&2\n'
         + """fi
 case "$FILE" in
-  *.py|*.pyi|*.ts|*.tsx|*.js|*.jsx|*.go|*.rs)
 """
+        + f"  {SCORABLE_EXT_BASH_CASE})\n"
         + f'    echo "{POST_EDIT_QUICK_CHECK_BASH}" >&2\n'
         + '    if [ -n "$LIBS" ]; then\n'
         + f'      echo "{POST_EDIT_IMPORT_LOOKUP_BASH}" >&2\n'
@@ -1880,8 +1887,8 @@ if [ "$SKILL_GUARD" = "1" ]; then
         + f'  echo "{MANAGED_SKILL_BLOCK_EDIT_WARNING_BASH}" >&2\n'
         + """fi
 case "$FILE" in
-  *.py|*.pyi|*.ts|*.tsx|*.js|*.jsx|*.go|*.rs)
 """
+        + f"  {SCORABLE_EXT_BASH_CASE})\n"
         + f'    echo "{POST_EDIT_QUICK_CHECK_BASH}" >&2\n'
         + '    if [ -n "$LIBS" ]; then\n'
         + f'      echo "{POST_EDIT_IMPORT_LOOKUP_BASH}" >&2\n'

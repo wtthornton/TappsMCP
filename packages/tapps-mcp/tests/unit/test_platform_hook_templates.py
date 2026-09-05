@@ -25,8 +25,11 @@ from tapps_mcp.pipeline.git_hooks import GIT_PRE_COMMIT_SCRIPT
 from tapps_mcp.pipeline.platform_hook_templates import (
     CLAUDE_HOOK_SCRIPTS,
     CLAUDE_HOOK_SCRIPTS_PS,
+    CURSOR_HOOK_SCRIPTS,
     LINEAR_GATE_SCRIPTS,
     LINEAR_GATE_SCRIPTS_PS,
+    SCORABLE_EXT_BASH_CASE,
+    scorable_extensions,
 )
 from tapps_mcp.pipeline.platform_hook_templates_linear_gate import (
     LEDGER_ROOT_RESOLVE_BASH,
@@ -217,3 +220,59 @@ def test_ps_ledger_writer_carries_shared_resolution(name: str) -> None:
     assert LEDGER_ROOT_RESOLVE_PS in body, (
         f"{name} does not use the shared LEDGER_ROOT_RESOLVE_PS resolution"
     )
+
+
+# ---------------------------------------------------------------------------
+# TAP-6739 — post-edit hooks derive their extension list from
+# get_supported_extensions() instead of hand-restating it
+# ---------------------------------------------------------------------------
+
+
+def _run_post_edit_hook(script_body: str, hook_dir: Path, file_path: str) -> subprocess.CompletedProcess[str]:
+    hook_path = hook_dir / "post-edit.sh"
+    hook_path.write_text(script_body, encoding="utf-8")
+    payload = json.dumps({"tool_name": "Write", "tool_input": {"file_path": file_path}})
+    env = dict(os.environ)
+    env["TAPPS_HOOK_INPUT"] = payload
+    return subprocess.run(
+        ["/usr/bin/bash", str(hook_path)],
+        input=payload,
+        capture_output=True,
+        text=True,
+        env=env,
+        check=False,
+    )
+
+
+@pytest.mark.parametrize(
+    ("scripts", "name"),
+    [
+        (CLAUDE_HOOK_SCRIPTS, "tapps-post-edit.sh"),
+        (CURSOR_HOOK_SCRIPTS, "tapps-after-edit.sh"),
+    ],
+)
+@pytest.mark.parametrize("ext", [".mjs", ".cjs"])
+def test_mjs_and_cjs_trigger_post_edit_reminder(
+    tmp_path: Path, scripts: dict[str, str], name: str, ext: str
+) -> None:
+    result = _run_post_edit_hook(scripts[name], tmp_path, f"foo{ext}")
+    assert result.returncode == 0, result.stderr
+    assert "tapps_quick_check" in result.stderr, (
+        f"{name} did not trigger the post-edit reminder for a {ext} edit: "
+        f"stderr={result.stderr!r}"
+    )
+
+
+def test_extension_set_equals_supported_on_every_generated_hook() -> None:
+    """Every generated hook's extension set must equal get_supported_extensions(),
+    so adding a scorable extension there cannot leave one of these sites behind."""
+    expected = set(scorable_extensions())
+    case_exts = {token.removeprefix("*") for token in SCORABLE_EXT_BASH_CASE.split("|")}
+    assert case_exts == expected
+
+    for scripts, name in (
+        (CLAUDE_HOOK_SCRIPTS, "tapps-post-edit.sh"),
+        (CURSOR_HOOK_SCRIPTS, "tapps-after-edit.sh"),
+    ):
+        body = scripts[name]
+        assert SCORABLE_EXT_BASH_CASE in body, f"{name} does not use the shared case pattern"
