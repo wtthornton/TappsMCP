@@ -211,7 +211,7 @@ def collect_session_start_health(
     block: dict[str, Any] = {
         "memo_hit_pending": memo_present,
         "stale_after_s": threshold,
-        "marker_mtime": _iso(marker_epoch) if marker_epoch is not None else None,
+        "marker_recorded_at": _iso(marker_epoch) if marker_epoch is not None else None,
         "marker_age_s": int(now - marker_epoch) if marker_epoch is not None else None,
         "probe_process_role": probe_role,
         "probe_process_started": _iso(proc_start) if proc_start is not None else None,

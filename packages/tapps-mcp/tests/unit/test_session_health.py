@@ -8,6 +8,7 @@ import time
 import pytest
 
 from tapps_mcp.tools.session_health import (
+    _iso,
     _MARKER_EPOCH_MAX_S,
     DEFAULT_STALE_MEMO_S,
     PROBE_ROLE_CLI,
@@ -453,3 +454,57 @@ def test_attach_requires_an_explicit_probe_role(tmp_path):
     second surface inherit the server's field meanings without deciding."""
     with pytest.raises(TypeError):
         attach_session_health({}, tmp_path, None)  # type: ignore[call-arg]
+
+
+# --------------------------------------------------------------------------
+# TAP-6927: the emitted field name must match its source
+# --------------------------------------------------------------------------
+
+
+def test_marker_name_matches_source(tmp_path):
+    """Dissociate the content epoch from the real file mtime: the emitted
+    field must equal the content epoch (content is preferred), be named for
+    what it is, and never carry the old `marker_mtime` name that claimed the
+    file's real mtime while actually reporting the content."""
+    content_epoch = 1_700_000_000.0
+    _write_marker(tmp_path, content_epoch)
+    marker = tmp_path / ".tapps-mcp" / ".session-start-marker"
+    real_mtime = marker.stat().st_mtime
+    # Sanity: the two really are different, or this test proves nothing.
+    assert real_mtime != pytest.approx(content_epoch)
+
+    block = collect_session_start_health(tmp_path, memo_present=None)
+
+    assert "marker_mtime" not in block
+    assert block["marker_recorded_at"] == _iso(content_epoch)
+    assert block["marker_recorded_at"] != _iso(real_mtime)
+
+
+def test_marker_name_matches_source_on_mtime_fallback(tmp_path):
+    """Negative control: when the marker content is unusable and
+    read_marker_epoch falls back to mtime, the emitted field must still
+    match its name — i.e. equal the file's real mtime in that case."""
+    sidecar = tmp_path / ".tapps-mcp"
+    sidecar.mkdir(parents=True)
+    marker = sidecar / ".session-start-marker"
+    marker.write_text("garbage", encoding="utf-8")
+    real_mtime = marker.stat().st_mtime
+
+    block = collect_session_start_health(tmp_path, memo_present=None)
+
+    assert block["marker_recorded_at"] == _iso(real_mtime)
+
+
+def test_cli_and_mcp_emit_the_same_renamed_key(tmp_path):
+    """Both surfaces share collect_session_start_health, so the renamed key
+    is identical on both — the existing parity test only compares key sets,
+    this asserts the specific name directly."""
+    _write_marker(tmp_path, time.time())
+    cli_block = collect_session_start_health(tmp_path, memo_present=None, probe_role=PROBE_ROLE_CLI)
+    server_block = collect_session_start_health(
+        tmp_path, memo_present=True, probe_role=PROBE_ROLE_SERVER
+    )
+    assert "marker_recorded_at" in cli_block
+    assert "marker_recorded_at" in server_block
+    assert "marker_mtime" not in cli_block
+    assert "marker_mtime" not in server_block
