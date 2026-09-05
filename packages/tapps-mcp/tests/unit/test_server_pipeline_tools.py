@@ -1900,6 +1900,11 @@ class TestSessionStartProjectRoot:
 class TestScheduleBackgroundMaintenance:
     """Tests for _schedule_background_maintenance (Epic 68.2)."""
 
+    def setup_method(self) -> None:
+        from tapps_mcp.server_pipeline_tools import _reset_session_maintenance_flag
+
+        _reset_session_maintenance_flag()
+
     @pytest.mark.asyncio
     async def test_schedules_all_maintenance_ops(self) -> None:
         """Background task calls GC, consolidation, doc validation, session index."""
@@ -1980,6 +1985,122 @@ class TestScheduleBackgroundMaintenance:
 
         # TAP-1999: session index still called despite earlier failures
         mock_index.assert_awaited_once()
+
+    def test_second_call_same_session_does_not_reschedule(self) -> None:
+        """TAP-6638: the scheduled-once guard is on the function itself."""
+        from tapps_mcp.server_pipeline_tools import _schedule_background_maintenance
+
+        mock_store = MagicMock()
+        mock_snapshot = MagicMock()
+        mock_snapshot.total_count = 100
+        mock_settings = MagicMock()
+        mock_settings.project_root = Path("/fake")
+
+        with patch(
+            "tapps_mcp.tools.session_start_helpers.asyncio.create_task",
+            side_effect=lambda coro: (coro.close(), MagicMock())[1],
+        ) as mock_task:
+            _schedule_background_maintenance(mock_store, mock_snapshot, mock_settings)
+            _schedule_background_maintenance(mock_store, mock_snapshot, mock_settings)
+
+        mock_task.assert_called_once()
+
+
+class TestQuickPathMaintenanceScheduling:
+    """TAP-6638: session_start_quick schedules maintenance in in-process mode."""
+
+    @pytest.fixture(autouse=True)
+    def _no_session_sentinel(self, no_session_sentinel: None) -> None:
+        """Ensure full session_start payloads (not on-disk sentinel cache)."""
+
+    def setup_method(self) -> None:
+        from tapps_mcp.server_pipeline_tools import (
+            _reset_session_maintenance_flag,
+            _reset_session_start_cache,
+        )
+
+        CallTracker.reset()
+        _reset_session_start_cache()
+        _reset_session_maintenance_flag()
+
+    @pytest.mark.asyncio
+    async def test_default_call_schedules_maintenance_in_inprocess_mode(self) -> None:
+        from tapps_mcp.server_pipeline_tools import tapps_session_start
+
+        mock_store = MagicMock()
+        mock_store.snapshot.return_value = MagicMock(total_count=1)
+
+        with (
+            patch(
+                "tapps_mcp.server_helpers._get_brain_bridge",
+                return_value=None,
+            ),
+            patch(
+                "tapps_mcp.server_helpers._get_memory_store",
+                return_value=mock_store,
+            ),
+            patch(
+                "tapps_mcp.tools.session_start_helpers.asyncio.create_task",
+                side_effect=lambda coro: (coro.close(), MagicMock())[1],
+            ) as mock_create_task,
+        ):
+            result = await tapps_session_start()
+
+        assert result["success"] is True
+        mock_create_task.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_http_mode_does_not_schedule(self) -> None:
+        from tapps_mcp.server_pipeline_tools import tapps_session_start
+
+        mock_bridge = MagicMock(is_http_mode=True)
+
+        with (
+            patch(
+                "tapps_mcp.server_helpers._get_brain_bridge",
+                return_value=mock_bridge,
+            ),
+            patch(
+                "tapps_mcp.tools.session_start_helpers.asyncio.create_task"
+            ) as mock_create_task,
+        ):
+            result = await tapps_session_start()
+
+        assert result["success"] is True
+        mock_create_task.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_maintenance_scheduled_from_quick_path_not_double_scheduled(self) -> None:
+        """quick=True schedules once; a following quick=False does not reschedule."""
+        from tapps_mcp.server_pipeline_tools import tapps_session_start
+
+        mock_store = MagicMock()
+        mock_store.snapshot.return_value = MagicMock(total_count=1, entries=[])
+
+        with (
+            patch(
+                "tapps_mcp.server_helpers._get_brain_bridge",
+                return_value=None,
+            ),
+            patch(
+                "tapps_mcp.server_helpers._get_memory_store",
+                return_value=mock_store,
+            ),
+            patch(
+                "tapps_mcp.tools.session_start_helpers.asyncio.create_task",
+                side_effect=lambda coro: (coro.close(), MagicMock())[1],
+            ) as mock_create_task,
+        ):
+            await tapps_session_start()
+            # The quick call itself must already have scheduled maintenance --
+            # asserted before the quick=False call so a reverted quick-path
+            # wire-up (which would leave scheduling to the full path below)
+            # cannot make this pass for the wrong reason.
+            mock_create_task.assert_called_once()
+
+            await tapps_session_start(quick=False, force=True)
+
+        mock_create_task.assert_called_once()
 
 
 class TestRegister:

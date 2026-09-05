@@ -73,6 +73,7 @@ from tapps_mcp.tools.session_start_helpers import (
     _process_session_capture,
     _schedule_background_maintenance,
     call_memory_index_session_start,
+    maybe_schedule_quick_maintenance,
 )
 
 # TAP-7018: the retired-registration pointer, and the logic that picks it
@@ -221,6 +222,7 @@ __all__ = [
     "_reset_session_consolidation_flag",
     "_reset_session_doc_validation_flag",
     "_reset_session_gc_flag",
+    "_reset_session_maintenance_flag",
     "_reset_session_state",
     "_resolve_security_depth",
     "_schedule_background_maintenance",
@@ -238,6 +240,7 @@ __all__ = [
     "call_memory_index_session_start",
     "error_response",
     "load_settings",
+    "maybe_schedule_quick_maintenance",
     "register",
     "resolve_session_start_impl",
     "tapps_decompose",
@@ -290,6 +293,10 @@ class _SessionFlags:
     gc_done: bool = False
     consolidation_done: bool = False
     doc_validation_done: bool = False
+    # TAP-6638: guards _schedule_background_maintenance itself (not just the
+    # individual ops it calls) so a quick=True call and a quick=False call in
+    # the same session schedule the fire-and-forget maintenance task once.
+    maintenance_scheduled: bool = False
     # TAP-2005: ISO-8601 timestamp of the most recent session start; consumed
     # by tapps_session_end to scope flywheel_process to this session's events.
     session_start_iso: str = ""
@@ -334,11 +341,17 @@ def _reset_session_doc_validation_flag() -> None:
     _session_state.doc_validation_done = False
 
 
+def _reset_session_maintenance_flag() -> None:
+    """Reset the background-maintenance-scheduled flag (for testing)."""
+    _session_state.maintenance_scheduled = False
+
+
 def _reset_session_state() -> None:
     """Reset all session state flags (for testing)."""
     _session_state.gc_done = False
     _session_state.consolidation_done = False
     _session_state.doc_validation_done = False
+    _session_state.maintenance_scheduled = False
     _session_state.session_start_iso = ""
 
 
@@ -760,17 +773,11 @@ async def tapps_session_start(
     except Exception:
         _logger.debug("call_graph_session_start_failed", exc_info=True)
 
-    # TAP-2017: Detect and surface compaction rehydration data when the
-    # PreCompact hook indexed the prior session in brain.  Best-effort —
-    # a missing marker or brain outage must not block session start.
-    try:
-        from tapps_mcp.tools.session_start_helpers import _check_compaction_rehydration
-
-        rehydration = await _check_compaction_rehydration(settings.project_root)
-        if rehydration is not None:
-            data["compaction_rehydration"] = rehydration
-    except Exception:
-        _logger.debug("compaction_rehydration_session_start_failed", exc_info=True)
+    # TAP-2017 / TAP-6638: Detect and surface compaction rehydration data when
+    # the PreCompact hook indexed the prior session in brain. Routed through
+    # the shared helper (also used by the quick path) instead of a second
+    # inline copy of the same marker-check + best-effort-swallow logic.
+    await _ssc.attach_compaction_rehydration(Path(settings.project_root), data)
 
     # TAP-3578: surface prior-session usage gaps from disk telemetry.
     try:
@@ -960,6 +967,7 @@ async def _session_start_quick(
     }
 
     await _ssc.attach_compaction_rehydration(Path(settings.project_root), data)
+    maybe_schedule_quick_maintenance(settings)
 
     # TAP-1414: Surface ruff/mypy missing on Python projects as a loud warning.
     degraded_checkers, degraded_warning = _ssc.compute_python_degraded_checkers(

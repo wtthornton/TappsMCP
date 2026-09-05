@@ -551,8 +551,20 @@ def _schedule_background_maintenance(
     ``_maybe_validate_memories``, and ``call_memory_index_session_start`` on the
     ``server_pipeline_tools`` module at call time so that tests patching
     those symbols on the host module are honoured.
+
+    TAP-6638: guarded by ``_session_state.maintenance_scheduled`` so a
+    quick=True call and a following quick=False call in the same session
+    schedule this fire-and-forget task once, not twice.
     """
     from tapps_mcp import server_pipeline_tools as _host
+
+    # Check-and-set before anything else: both call sites (the quick path's
+    # maybe_schedule_quick_maintenance and the full path's
+    # _collect_memory_status) reach this function, and only the first one
+    # in a given session should actually spawn the background task.
+    if _host._session_state.maintenance_scheduled:
+        return
+    _host._session_state.maintenance_scheduled = True
 
     async def _run_maintenance() -> None:
         """Execute all maintenance ops sequentially in the background."""
@@ -589,6 +601,57 @@ def _schedule_background_maintenance(
     task = asyncio.create_task(_run_maintenance())
     _host._background_tasks.add(task)
     task.add_done_callback(_host._background_tasks.discard)
+
+
+def maybe_schedule_quick_maintenance(settings: TappsMCPSettings) -> None:
+    """Schedule background maintenance from the quick session-start path.
+
+    TAP-6638: ``_session_start_quick`` never assembles the full memory
+    status payload (``_collect_memory_status`` -- tallies, hints, profile
+    enrichment), so it never reached the ``_schedule_background_maintenance``
+    call buried at the end of that function. In-process mode only: HTTP
+    fleet mode has no local ``MemoryStore`` snapshot to hand it, and no
+    single request owns a shared server process's maintenance cadence.
+    Best-effort -- a brain outage here must not block session start.
+
+    Safe to call unconditionally from the quick path: a disabled memory
+    subsystem, an absent store, or a later call from the full path all
+    resolve to a no-op rather than an exception surfacing to the caller.
+
+    Args:
+        settings: The resolved ``TappsMCPSettings`` for the current
+            request; read for ``memory.enabled`` and passed through to
+            :func:`_schedule_background_maintenance` unchanged.
+
+    Returns:
+        None. All effects are the fire-and-forget background task
+        :func:`_schedule_background_maintenance` schedules, or nothing at
+        all when this call is a no-op.
+    """
+    try:
+        if not settings.memory.enabled:
+            return
+        from tapps_mcp.server_helpers import _get_brain_bridge, _get_memory_store
+
+        bridge = _get_brain_bridge()
+        # Same in-process-vs-HTTP check _collect_memory_status uses, just
+        # without the tally/hints work only the full status payload needs.
+        if bridge is not None and getattr(bridge, "is_http_mode", False):
+            # HTTP fleet mode: no local MemoryStore to snapshot here, and the
+            # brain-side process (not this request) owns its own maintenance.
+            return
+        mem_store = _get_memory_store()
+        if mem_store is None:
+            # No in-process store yet (brain not configured, or first call
+            # raced construction) -- nothing to snapshot or schedule against.
+            return
+        # Only the snapshot _schedule_background_maintenance itself needs
+        # (total_count) -- not the full tally/hints/profile-enrichment work
+        # _collect_memory_status does for the diagnostic payload.
+        _schedule_background_maintenance(mem_store, mem_store.snapshot(), settings)
+    except Exception:
+        # Never let a brain hiccup here fail session start (best-effort).
+        _logger.debug("quick_maintenance_schedule_failed", exc_info=True)
 
 
 def _collect_brain_bridge_health() -> dict[str, Any]:
