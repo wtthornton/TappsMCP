@@ -712,29 +712,29 @@ _PIPELINE_PROGRESS_TOOLS = frozenset({"tapps_checklist", "tapps_session_start"})
 def _record_ledger_entry(tool_name: str, response: dict[str, Any]) -> None:
     """Write one session-ledger line for the real, final tool response (TAP-6615).
 
-    Measures the actual serialized bytes of *response* -- after
-    ``_with_nudges`` has appended ``next_steps`` / ``pipeline_progress`` /
-    ``suggested_workflow`` for a success response, so the recorded size
-    matches what the client actually receives, not the pre-nudge draft.
+    Called from the single dispatch seam every registered tool passes
+    through -- ``mcp_register.register_tool`` (TAP-6615 round 2) -- so it
+    sees the actual final payload the client receives (post-``_with_nudges``
+    for a success response) exactly once per call, regardless of which
+    response helper (``success_response``/``error_response``/
+    ``_with_nudges``) built it.
 
-    Telemetry must never fail a tool call: this is the one place a broad
-    except is deliberately correct. An ``OSError``/``ValueError`` while
-    resolving the project root or writing the ledger (e.g. a read-only
-    ``.tapps-mcp/`` directory) is logged at warning level with the ledger
-    path and swallowed.
-
-    Known gap (documented, not silent): tool paths that build a response via
-    ``success_response``/``error_response`` in ``server_helpers.py`` and
-    return it directly without passing through this seam are not yet
-    ledgered -- instrumenting those call sites lives in the individual
-    ``server_*_tools.py`` files, outside this round's file partition.
+    Telemetry must never fail a tool call: ``json.dumps`` (which raises
+    ``ValueError`` on a circular-reference payload) and ``load_settings()``
+    both run inside the try below, alongside the ledger write itself, so any
+    failure here -- including a bad payload, not just a bad ledger path --
+    is logged at warning level with the tool name and swallowed rather than
+    propagated to the caller.
     """
     from tapps_mcp.tools.contract_telemetry import record_tool_result_bytes
 
-    byte_size = len(json.dumps(response, default=str).encode("utf-8"))
-    settings = load_settings()
-    ledger_path = settings.project_root / ".tapps-mcp" / ".session-token-ledger.jsonl"
+    ledger_path_str = "<unresolved>"
     try:
+        byte_size = len(json.dumps(response, default=str).encode("utf-8"))
+        settings = load_settings()
+        ledger_path_str = str(
+            settings.project_root / ".tapps-mcp" / ".session-token-ledger.jsonl"
+        )
         record_tool_result_bytes(
             settings.project_root,
             tool_name=tool_name,
@@ -745,7 +745,7 @@ def _record_ledger_entry(tool_name: str, response: dict[str, Any]) -> None:
         logger.warning(
             "session_ledger.write_failed",
             tool=tool_name,
-            path=str(ledger_path),
+            path=ledger_path_str,
             error=str(exc),
         )
 
@@ -756,10 +756,14 @@ def _with_nudges(
     context: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Inject ``next_steps``, ``pipeline_progress``, and ``suggested_workflow``
-    into a response, then record the final serialized response to the
-    per-session ledger (TAP-6615)."""
+    into a response.
+
+    Ledgering happens at the dispatch seam (``mcp_register.register_tool``),
+    not here -- this function is one of several response builders a tool
+    handler may return through (TAP-6615 round 2), and ledgering here too
+    would double-count every successful call.
+    """
     if not response.get("success", False):
-        _record_ledger_entry(tool_name, response)
         return response
     from tapps_mcp.common.nudges import (
         compute_next_steps,
@@ -781,7 +785,6 @@ def _with_nudges(
         data["pipeline_progress"] = progress
     if workflow:
         data["suggested_workflow"] = workflow
-    _record_ledger_entry(tool_name, response)
     return response
 
 
