@@ -186,14 +186,33 @@ def _degraded_note_for_reason(
     return None
 
 
+def _report_for_changed(
+    changed: Path,
+    project_root: Path,
+    graph: dict[str, set[str]],
+    impact_reports: dict[Path, object] | None,
+) -> object:
+    """Reuse a precomputed ``ImpactReport`` when available, else compute it."""
+    report = impact_reports.get(changed) if impact_reports else None
+    if report is None:
+        report = analyze_impact(changed.resolve(), project_root.resolve(), graph=graph)
+    return report
+
+
 def analyze_diff_impact(
     changed_files: list[Path],
     project_root: Path,
     *,
     max_tests: int = DEFAULT_AFFECTED_TESTS_LIMIT,
     doc_drift_caller_threshold: int = DEFAULT_DOC_DRIFT_CALLER_THRESHOLD,
+    impact_reports: dict[Path, object] | None = None,
 ) -> dict[str, object]:
-    """Rank tests affected by *changed_files* using TESTS edges and import impact."""
+    """Rank tests affected by *changed_files* using TESTS edges and import impact.
+
+    ``impact_reports`` lets a caller that already ran ``analyze_impact`` for
+    these files (e.g. for ``impact_summary``) pass the results in, so this
+    does not repeat that walk per file (TAP-6618).
+    """
     index = build_call_graph_index(project_root)
     test_edges = load_or_build_test_edges_for_index(project_root, index)
     graph = build_import_graph(project_root)
@@ -250,7 +269,7 @@ def analyze_diff_impact(
                         sym,
                     )
 
-        report = analyze_impact(changed.resolve(), project_root.resolve(), graph=graph)
+        report = _report_for_changed(changed, project_root, graph, impact_reports)
         for test in report.test_files:
             bump(test.file_path.replace("\\", "/"), 3.0, test.reason)
 

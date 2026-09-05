@@ -29,38 +29,63 @@ _logger = structlog.get_logger(__name__)
 _SEVERITY_RANK = {"critical": 3, "high": 2, "medium": 1, "low": 0}
 
 
-def _impact_entry_for_path(p: Path, project_root: Path, import_graph: Any) -> dict[str, Any]:
-    """Compute the per-file impact entry for one path."""
-    from tapps_mcp.project.impact_analyzer import analyze_impact
+def _build_impact_reports(paths: list[Path], project_root: Path) -> dict[Path, Any]:
+    """Compute one ``ImpactReport`` per path, shared by the impact summary and
+    the affected-tests ranking (TAP-6618).
 
-    try:
-        impact_report = analyze_impact(p, project_root, graph=import_graph)
-        return {
-            "file": str(p),
-            "severity": impact_report.severity,
-            "direct_dependents": len(impact_report.direct_dependents),
-            "transitive_dependents": len(impact_report.transitive_dependents),
-            "test_files": len(impact_report.test_files),
-        }
-    except Exception:
-        _logger.debug("impact_analysis_file_failed", file=str(p), exc_info=True)
+    ``analyze_impact`` walks the transitive dependent graph and is the
+    expensive part of ``include_impact=True`` — computing it once per path
+    per ``validate_changed`` call (instead of once for the summary and again
+    for affected-tests) avoids doing that walk twice. Paths that fail are
+    simply omitted; callers treat a missing entry as "unknown/error".
+    """
+    from tapps_mcp.project.impact_analyzer import analyze_impact, build_import_graph
+
+    import_graph = build_import_graph(project_root)
+    reports: dict[Path, Any] = {}
+    for p in paths:
+        try:
+            reports[p] = analyze_impact(p, project_root, graph=import_graph)
+        except Exception:
+            _logger.debug("impact_analysis_file_failed", file=str(p), exc_info=True)
+    return reports
+
+
+def _impact_entry_from_report(p: Path, impact_report: Any | None) -> dict[str, Any]:
+    """Build the per-file impact entry from an already-computed report."""
+    if impact_report is None:
         return {"file": str(p), "severity": "unknown", "error": True}
+    return {
+        "file": str(p),
+        "severity": impact_report.severity,
+        "direct_dependents": len(impact_report.direct_dependents),
+        "transitive_dependents": len(impact_report.transitive_dependents),
+        "test_files": len(impact_report.test_files),
+    }
 
 
 def _compute_impact_analysis(
     paths: list[Path],
     project_root: Path,
+    *,
+    impact_reports: dict[Path, Any] | None = None,
 ) -> dict[str, Any] | None:
     """Build impact analysis data for the given file paths.
 
     Returns a summary dict or ``None`` if impact analysis is not requested.
     On failure, returns ``{"error": "impact analysis failed"}``.
+
+    ``impact_reports`` lets a caller that already computed the per-path
+    ``ImpactReport``s (via :func:`_build_impact_reports`) reuse them instead
+    of triggering a second ``analyze_impact`` pass.
     """
     try:
-        from tapps_mcp.project.impact_analyzer import build_import_graph
-
-        import_graph = build_import_graph(project_root)
-        impact_results = [_impact_entry_for_path(p, project_root, import_graph) for p in paths]
+        reports = (
+            impact_reports
+            if impact_reports is not None
+            else _build_impact_reports(paths, project_root)
+        )
+        impact_results = [_impact_entry_from_report(p, reports.get(p)) for p in paths]
 
         max_severity = "low"
         for ir in impact_results:
@@ -87,8 +112,14 @@ def _compute_affected_tests(
     project_root: Path,
     *,
     limit: int = 20,
+    impact_reports: dict[Path, Any] | None = None,
 ) -> dict[str, Any] | None:
-    """Rank tests affected by changed Python source files (Epic 114 / TAP-4054)."""
+    """Rank tests affected by changed Python source files (Epic 114 / TAP-4054).
+
+    ``impact_reports`` (from :func:`_build_impact_reports`) lets this reuse
+    per-path ``ImpactReport``s already computed for ``impact_summary`` instead
+    of recomputing them inside ``analyze_diff_impact`` (TAP-6618).
+    """
     from tapps_mcp.project.diff_impact import DEFAULT_AFFECTED_TESTS_LIMIT, analyze_diff_impact
     from tapps_mcp.project.impact_analyzer import _is_test_file
 
@@ -99,7 +130,9 @@ def _compute_affected_tests(
         return None
     cap = max(1, limit if limit > 0 else DEFAULT_AFFECTED_TESTS_LIMIT)
     try:
-        data = analyze_diff_impact(py_sources, project_root, max_tests=cap)
+        data = analyze_diff_impact(
+            py_sources, project_root, max_tests=cap, impact_reports=impact_reports
+        )
         affected = data.get("affected_tests", [])
         return {
             "total_affected_tests": data.get("total_affected_tests", 0),
@@ -615,6 +648,7 @@ __all__ = [
     "_SEVERITY_RANK",
     "_append_judge_summary",
     "_build_file_entry",
+    "_build_impact_reports",
     "_build_judge_summary_rows",
     "_build_per_file_results",
     "_build_response_data",
