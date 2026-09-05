@@ -391,6 +391,61 @@ class TestSkipTokenDriftReport:
         assert "upgrade_skip_files drift" in _collect_checks.__code__.co_consts
 
 
+class TestClaudeMdDriftReport:
+    """TAP-6600 residual: ``claude_md`` reported 'not yet drift-checkable' even
+    though it's the issue's own motivating example (nlt-orchestrator's only
+    upgrade_skip_files entry). CLAUDE.md isn't a full-overwrite template like
+    the ten rule files — most of it is project-specific prose — so drift is
+    judged on the marker-wrapped obligations block via the real merge, not a
+    whole-file diff."""
+
+    def test_claude_md_drift_reports_identical_for_a_fresh_render(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        from tapps_mcp.pipeline.claude_md import render_fresh_claude_md
+        from tapps_mcp.prompts.prompt_loader import load_platform_rules
+
+        obligations = load_platform_rules("claude", engagement_level="medium")
+        (tmp_path / "CLAUDE.md").write_text(
+            render_fresh_claude_md(obligations), encoding="utf-8"
+        )
+        monkeypatch.setenv("TAPPS_MCP_UPGRADE_SKIP_FILES", json.dumps(["CLAUDE.md"]))
+
+        check = check_upgrade_skip_token_drift(tmp_path)
+
+        assert check.ok
+        assert check.severity == "pass"
+        assert "identical" in check.message
+        assert "CLAUDE.md" in check.message
+        assert "not yet drift-checkable" not in check.message
+
+    def test_claude_md_drift_reports_diverged_for_a_hand_edit(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        (tmp_path / "CLAUDE.md").write_text(
+            "<!-- tapps-claude-version: 0.0.1 -->\n# Stale hand-edited content\n",
+            encoding="utf-8",
+        )
+        monkeypatch.setenv("TAPPS_MCP_UPGRADE_SKIP_FILES", json.dumps(["CLAUDE.md"]))
+
+        check = check_upgrade_skip_token_drift(tmp_path)
+
+        assert check.severity == "warn"
+        assert not check.ok
+        assert "diverged" in check.message
+        assert "CLAUDE.md" in check.message
+
+    def test_claude_md_drift_reports_missing_not_unsupported(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setenv("TAPPS_MCP_UPGRADE_SKIP_FILES", json.dumps(["CLAUDE.md"]))
+
+        check = check_upgrade_skip_token_drift(tmp_path)
+
+        assert "no longer exists" in check.message
+        assert "not yet drift-checkable" not in check.message
+
+
 class TestSettingsDocumentation:
     def test_field_description_states_the_three_facts(self) -> None:
         """Acceptance item 4: fixed tokens, directory granularity, upstream fold."""
