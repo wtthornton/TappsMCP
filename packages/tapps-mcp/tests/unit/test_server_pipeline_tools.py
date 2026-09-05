@@ -4,14 +4,41 @@ from __future__ import annotations
 
 import asyncio
 from pathlib import Path
+from typing import Any
 from unittest.mock import ANY, AsyncMock, MagicMock, patch
 
 import pytest
 
-from tapps_core.metrics.collector import MetricsHub
+from tapps_core.brain_bridge import BrainBridgeUnavailable, HttpBrainBridge
 from tapps_mcp.tools.checklist import CallTracker
 
 pytestmark = pytest.mark.usefixtures("envelope_guard")
+
+
+async def _stub_http_mcp_call(
+    self: HttpBrainBridge,
+    tool_name: str,
+    arguments: dict[str, Any],
+    *,
+    project_id: str | None = None,
+) -> Any:
+    """TAP-6694: block every brain MCP call a ``real_brain_bridge`` test doesn't mock.
+
+    ``tapps_session_start`` also drives ``hive_status`` and ``docs_warm`` (and,
+    in the default ``dual`` metrics-storage mode, an async ``brain_record_event``
+    quality-metric emission) through :meth:`HttpBrainBridge._http_mcp_call` --
+    none of which the ``auth_probe``/``httpx.get`` mocks below touch. Because
+    this repo's ``.tapps-mcp.yaml`` pins ``memory.brain_http_url`` and
+    ``load_settings()`` passes that as an explicit ``TappsMCPSettings(**yaml_data)``
+    init kwarg -- which pydantic-settings ranks above env vars -- the tests'
+    ``TAPPS_MCP_MEMORY_BRAIN_HTTP_URL=http://brain:8080`` override never takes
+    effect; the bridge always points at the real ``http://localhost:8080``
+    brain this repo runs, and these calls dialled it for real (3 retries with
+    backoff, then ``circuit_opened``). Stubbing this one seam closes every such
+    call without depending on that (currently broken) env-var override.
+    """
+    raise BrainBridgeUnavailable(f"stubbed for test: {tool_name}")
+
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -189,6 +216,14 @@ class TestTappsSessionStart:
 
         monkeypatch.setenv("TAPPS_MCP_MEMORY_BRAIN_HTTP_URL", "http://brain:8080")
         monkeypatch.setenv("TAPPS_MCP_MEMORY_BRAIN_AUTH_TOKEN", "test-token")
+        # TAP-6694: the default "dual" metrics-storage mode fires an
+        # unawaited asyncio.create_task() that emits a quality_metric event
+        # via its OWN create_brain_bridge(load_settings()) call -- a bridge
+        # class-level _http_mcp_call patch inside the `with` block below does
+        # not help once that task outlives the block and runs after the
+        # patches unwind. "local" mode short-circuits before any bridge is
+        # created.
+        monkeypatch.setenv("TAPPS_METRICS_STORAGE", "local")
         monkeypatch.delenv("TAPPS_BRAIN_DATABASE_URL", raising=False)
 
         # Reset the singleton so it will be re-created with HTTP settings.
@@ -229,6 +264,7 @@ class TestTappsSessionStart:
                 "tapps_core.brain_bridge.HttpBrainBridge.auth_probe",
                 return_value=_ok_auth_probe,
             ),
+            patch.object(HttpBrainBridge, "_http_mcp_call", _stub_http_mcp_call),
         ):
             result = await tapps_session_start(quick=False, force=True)
             # TAP-6694: close the singleton while httpx is still mocked --
@@ -248,21 +284,34 @@ class TestTappsSessionStart:
     ) -> None:
         """Integration: brain_bridge_health.enabled=True when HTTP bridge is active.
 
-        TAP-6694: this test previously mocked only ``httpx.get`` (used by
-        ``health_check``), leaving ``auth_probe``'s ``httpx.post`` call to
-        the fake ``http://brain:8080/mcp/`` host unmocked. Under xdist
-        oversubscription that real dial intermittently reached a live
-        endpoint and got rejected (three 403s, then the circuit breaker
-        opened), producing a teardown error unrelated to what this test
-        actually verifies. Mocking ``auth_probe`` -- as the sibling
-        ``test_memory_status_enabled_in_http_mode`` above already does --
-        removes the real network call entirely rather than adding a retry
-        or bound around a call this unit test should never make.
+        TAP-6694 round 2: mocking ``auth_probe`` did not stop the dial. The
+        real culprit -- found via strace -- is ``session_start`` also driving
+        ``hive_status``/``docs_warm`` through ``HttpBrainBridge._http_mcp_call``,
+        which neither ``auth_probe`` nor ``httpx.get`` mocks touch. Worse,
+        ``TAPPS_MCP_MEMORY_BRAIN_HTTP_URL=http://brain:8080`` never took
+        effect: this repo's ``.tapps-mcp.yaml`` pins ``memory.brain_http_url``
+        to the real local brain, and ``load_settings()`` passes that YAML
+        value as an explicit ``TappsMCPSettings(**yaml_data)`` init kwarg --
+        which pydantic-settings ranks above env vars -- so the bridge always
+        pointed at the real ``http://localhost:8080`` brain regardless of the
+        monkeypatched env var. That real brain rejected the fake
+        ``test-token`` bearer with three real 403s (~1.5s of retry backoff)
+        before ``circuit_opened``. ``_stub_http_mcp_call`` closes that seam
+        directly instead of depending on the (currently broken) env-var
+        override -- see the settings-precedence bug reported in the PR body.
         """
         from tapps_mcp.server_pipeline_tools import tapps_session_start
 
         monkeypatch.setenv("TAPPS_MCP_MEMORY_BRAIN_HTTP_URL", "http://brain:8080")
         monkeypatch.setenv("TAPPS_MCP_MEMORY_BRAIN_AUTH_TOKEN", "test-token")
+        # TAP-6694: the default "dual" metrics-storage mode fires an
+        # unawaited asyncio.create_task() that emits a quality_metric event
+        # via its OWN create_brain_bridge(load_settings()) call -- a bridge
+        # class-level _http_mcp_call patch inside the `with` block below does
+        # not help once that task outlives the block and runs after the
+        # patches unwind. "local" mode short-circuits before any bridge is
+        # created.
+        monkeypatch.setenv("TAPPS_METRICS_STORAGE", "local")
         monkeypatch.delenv("TAPPS_BRAIN_DATABASE_URL", raising=False)
 
         from tapps_mcp.server_helpers import _reset_brain_bridge_cache
@@ -296,6 +345,7 @@ class TestTappsSessionStart:
                 "tapps_core.brain_bridge.HttpBrainBridge.auth_probe",
                 return_value=_ok_auth_probe,
             ),
+            patch.object(HttpBrainBridge, "_http_mcp_call", _stub_http_mcp_call),
         ):
             result = await tapps_session_start(quick=False, force=True)
             # Close the singleton while httpx is still mocked: closing it
@@ -305,6 +355,12 @@ class TestTappsSessionStart:
 
         data = result["data"]
         assert data["brain_bridge_health"]["enabled"] is True
+        # Box 2 (TAP-6694): the real brain rejected hive_status/docs_warm with
+        # 403s under contention -- session_start must treat that as
+        # "unavailable" (a swallowed BrainBridgeUnavailable from a
+        # best-effort call) rather than surfacing it as a session_start
+        # failure.
+        assert result["success"] is True
 
     @pytest.mark.asyncio
     @pytest.mark.real_brain_bridge
@@ -319,6 +375,14 @@ class TestTappsSessionStart:
 
         monkeypatch.setenv("TAPPS_MCP_MEMORY_BRAIN_HTTP_URL", "http://brain:8080")
         monkeypatch.setenv("TAPPS_MCP_MEMORY_BRAIN_AUTH_TOKEN", "test-token")
+        # TAP-6694: the default "dual" metrics-storage mode fires an
+        # unawaited asyncio.create_task() that emits a quality_metric event
+        # via its OWN create_brain_bridge(load_settings()) call -- a bridge
+        # class-level _http_mcp_call patch inside the `with` block below does
+        # not help once that task outlives the block and runs after the
+        # patches unwind. "local" mode short-circuits before any bridge is
+        # created.
+        monkeypatch.setenv("TAPPS_METRICS_STORAGE", "local")
         monkeypatch.delenv("TAPPS_BRAIN_DATABASE_URL", raising=False)
         monkeypatch.setattr(
             "tapps_mcp.server_pipeline_tools._detect_brain_auth_failure",
@@ -364,6 +428,7 @@ class TestTappsSessionStart:
                 "tapps_core.brain_bridge.HttpBrainBridge.auth_probe",
                 return_value=gated_probe,
             ),
+            patch.object(HttpBrainBridge, "_http_mcp_call", _stub_http_mcp_call),
         ):
             result = await tapps_session_start(quick=False, force=True)
             # TAP-6694: close the singleton while httpx is still mocked --
@@ -450,14 +515,6 @@ class TestEnrichHealthWithAsyncNative:
 class TestTappsSetEngagementLevel:
     def setup_method(self) -> None:
         CallTracker.reset()
-
-    @pytest.fixture(autouse=True)
-    def _pin_metrics_hub(self, tmp_path: Path) -> None:
-        """VAL-TAP-6639: pin _record_execution's hub so rows never reach the
-        live .tapps-mcp/metrics/ dir this suite happens to run under."""
-        hub = MetricsHub(tmp_path / "metrics-hub")
-        with patch("tapps_mcp.server._get_metrics_hub", return_value=hub):
-            yield
 
     def test_invalid_level_returns_error(self) -> None:
         from tapps_mcp.server_pipeline_tools import tapps_set_engagement_level

@@ -827,6 +827,26 @@ def _no_install_drift() -> Generator[None, None, None]:
 
 
 @pytest.fixture(autouse=True)
+def _isolate_metrics_hub(tmp_path: Path) -> Generator[None, None, None]:
+    """VAL-TAP-6639: pin every test's metrics hub to a tmp_path instance.
+
+    ``_record_execution`` (server.py) and the umbrella handlers in
+    server_metrics_tools.py / server_analysis_tools.py all resolve the hub
+    via ``tapps_mcp.server._get_metrics_hub`` (looked up by name at call
+    time, even where it's re-imported locally) -- patching that one seam
+    covers every caller. Before this fixture, only
+    ``TestTappsSetEngagementLevel`` pinned the hub; the other 91 tests in
+    test_server_pipeline_tools.py and all 47 in test_composite_tools.py
+    wrote real rows to the live ``.tapps-mcp/metrics/`` directory.
+    """
+    from tapps_core.metrics.collector import MetricsHub
+
+    hub = MetricsHub(tmp_path / "metrics-hub")
+    with patch("tapps_mcp.server._get_metrics_hub", return_value=hub):
+        yield
+
+
+@pytest.fixture(autouse=True)
 def _reset_caches() -> Generator[None, None, None]:
     """Reset module-level singletons before and after each test."""
     _clear_test_singleton_caches()
