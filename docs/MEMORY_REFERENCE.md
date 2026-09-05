@@ -16,6 +16,8 @@ Do not use legacy `mcp__tapps-mcp__tapps_memory` routing (removed from default b
 
 **Architectural saves:** when `memory.auto_supersede_architectural` is true, `save` with `tier=architectural` uses `MemoryStore.supersede` (via `store.history`) so prior versions stay in the temporal chain; responses may include `status`, `superseded_old_key`, `new_key`, `version_count`.
 
+**History:** memory was v2 (in-process `MemoryStore`, SQLite + WAL, FTS5 full-text search, local `memory.db`) until it was retired in [TAP-1995](https://linear.app/tappscodingagents/issue/TAP-1995) — v3 is the current Postgres-backed `tapps-brain` service, accessed exclusively via `BrainBridge` / the `tapps_memory` tool described in this document. There is no live SQLite path; every module path under `packages/tapps-core/src/tapps_core/memory/*` referenced by older docs no longer exists.
+
 ## Memory tiers
 
 | Tier | Half-life | Use for | Examples |
