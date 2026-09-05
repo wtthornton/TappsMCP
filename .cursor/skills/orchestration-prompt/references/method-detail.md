@@ -229,10 +229,13 @@ the end. An unmeasured share is one nobody notices growing.
 
 **Two mechanical detectors — run them on the Plane map you just wrote, before you save:**
 
-1. **Every `—` in the `agentType` column is orchestrator work.** A row with no agentType is a
-   row nobody was dispatched for, so the top session does it. Five such rows is the whole
-   budget (decide · dispatch · adjudicate · gated write · checkpoint); a sixth means a body of
-   work leaked inline.
+1. **Every `—` in the `agentType` column whose Owner is `driver` is orchestrator work.**
+   A driver row with no agentType is a row nobody was dispatched for, so the top session
+   does it. Five such driver rows is the whole budget (decide · dispatch · adjudicate ·
+   gated write · checkpoint); a sixth means a body of work leaked inline. An `operator`
+   row also carries `—` in `agentType` — it is human-supervised work, never dispatched at
+   all — and does not count against the driver's five-row budget; count only rows whose
+   Owner column reads `driver`.
 2. **An all-`—` `effort` column means effort control was surrendered** — `effort` is
    Workflow-only and an Agent subagent inherits the session's, so a prompt with no Workflow
    has no effort knob at all. That is a legitimate state; the prompt must *say* so. Silence

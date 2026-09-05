@@ -141,7 +141,7 @@ reserved for the single end-of-program regression proof.
 
 1. **Fog preflight (method §0).** If foggy, refuse and point at `/tapps-wayfind` —
    do not emit a prompt. If clear, recall `memory_group=wayfind` resume when present.
-2. Read `references/host-feature-map.md` when the runner host is Cursor or when Run-as / checkpoint lanes differ by host.
+2. Read `references/host-feature-map.md` when the runner host is Cursor or when Run-as / checkpoint lanes differ by host. **Refuse to emit a prompt whose Run-as names only one execution home.** Every emitted Run-as names both the in-session runner (this session edits directly) and the orchestrator-driven dispatch-lane home (a `claude -p` lane in its own worktree that ends in a `LINEAR EVIDENCE` block and a PR, with verify/merge/tracker-write retained by the dispatching orchestrator) — a single-home Run-as silently picks a default the runner never chose.
 3. Read the workspace manifest (e.g. `fleet.md`) for the repos / Linear projects /
    brain ids involved, if the project has one. **The manifest is a registry, not a
    scope grant** — it can list far more repos than this session's actual workspace
@@ -1589,12 +1589,28 @@ bullets or ~40 KB, spend part of this pass merging overlapping bullets and delet
 ones overtaken by a fixed tool or a changed codebase.
 
 ## Run-as
-<exact invocation, e.g.:>
+<Name BOTH execution homes this loop may run in — never only one. A prompt whose
+Run-as names a single home leaves the other implicit, and the runner defaults to
+whichever one it happens to be sitting in.>
+
+**In-session runner (this session edits directly):**
 - **Cold-start loop (recommended):** the paste line from "How to run" above. **or**
 - `/goal <condition>` — only if this file is already in context. **or**
 - invoke the Workflow tool with `.claude/workflows/<script>.js` (fan-out only). **or**
 - Routine: schedule `<cadence>` with this prompt, push=draft-PR. **or**
 - **Chained (autonomous, context-recycling):** one `claude -p` per sub-goal, each run starting from this program's handoff and ending by rewriting it. The process boundary is the clear, so per-turn context cost stays flat and every sub-goal gets a fresh executor. Re-verify the handoff at the start of each run; one runner per handoff — take a `slot=` when another program shares the repo, and run `uv run tapps-mcp handoff list` before starting to see whether one already does.
+
+**Orchestrator-driven dispatch lane (a `claude -p` lane in its own worktree, launched
+by `dispatch-lane.sh` or equivalent):** the lane edits and commits inside its own
+worktree only, opens a PR, and ends every run by printing a `--- LINEAR EVIDENCE ---`
+block (proof commands, exit codes, before/after counts) plus the literal sentinel
+`LANE-COMPLETE: <done|blocked>`. The dispatching orchestrator retains everything a
+lane structurally cannot reach: verifying the lane's proof from a fresh context,
+merging the PR, and any tracker (Linear) write — a lane never merges its own PR or
+writes to the tracker on its own authority.
+
+Pick one before emitting the Loop section below; a Run-as that names only one home
+is a defect in this skill's output, not a legitimate simplification.
 """
 
 _FEATURE_MAP = r"""# Claude feature map — intent → mechanism → model tier

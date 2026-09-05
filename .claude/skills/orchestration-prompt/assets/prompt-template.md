@@ -42,9 +42,12 @@ then enforces it row by row.>
 - **Orchestrator token share: under 15%** of the run's total. Report it every iteration as
   `orch-spend <n>%` in the SCORE line — an unmeasured share is one nobody notices growing.
 - **Two mechanical detectors — run them on this prompt's own Plane map before shipping it:**
-  1. **Every `—` in the `agentType` column is orchestrator work.** A row with no agentType is
-     a row nobody was dispatched for, so the driver does it. Five such rows is the budget
-     (the five jobs); a sixth means a body of work leaked into the top session.
+  1. **Every `—` in the `agentType` column whose Owner is `driver` is orchestrator work.**
+     A driver row with no agentType is a row nobody was dispatched for, so the driver does
+     it. Five such driver rows is the budget (the five jobs); a sixth means a body of work
+     leaked into the top session. An `operator` row also carries `—` in `agentType` — it is
+     human-supervised work, never dispatched at all — and does not count against this
+     five-row budget.
   2. **An all-`—` `effort` column means effort control was surrendered**, because `effort` is
      Workflow-only and an Agent subagent inherits the session's. That is a legitimate state —
      say so explicitly. Silence reads as an omission, and the fix is to move the
@@ -160,9 +163,10 @@ human-supervised work). If `driver` appears on a body of work, the prompt is wro
 | <fix after fail> | delegate | execution | fresh worker on scoped fix sub-goal | `general-purpose` | `sonnet` | `low` | expected-fail loop; do not reopen whole feature |
 | <recurring check> | delegate | execution | Routine / `claude -p`+cron | `Explore` | `haiku` | `low` | human-gated |
 | <human-supervised lane> | **operator** | execution | human session in <repo> | — | operator's | — | never dispatched; say why the repo cannot take a headless lane |
+| <decide next dispatch> | **driver** | coordination | inline | — | runner | — | the orchestration itself |
+| <dispatch> | **driver** | coordination | inline (fires the chosen call) | — | runner | — | the one job a delegate structurally cannot do for itself |
 | <adjudicate verdicts> | **driver** | coordination | inline | — | runner | — | accept / reject / scope a fix |
 | <gated or plugin-only write> | **driver** | coordination | skill/tool call | — | runner | — | e.g. a hook-gated tracker write a headless lane cannot reach |
-| <decide next dispatch> | **driver** | coordination | inline | — | runner | — | the orchestration itself |
 | <checkpoint> | **driver** | coordination | `/tapps-handoff-session` | — | runner | — | shift boundary |
 
 Cheap-model rule: `haiku` answers closed, evidence-checkable questions. It does not
@@ -225,7 +229,7 @@ for each of them: **what set does it read that the other writes?**>
 - **State:** <read first — wayfind resume (`memory_group=wayfind`), status, brain recall of prior attempts, Linear, last handoff>
 - **Decide:** <how to pick the next *execute* action / sub-goal — never invent decide work; if fog reappears → stop and `/tapps-wayfind`>
 - **Execute:** <the action, on the committed mechanism + tier>
-- **Verify (independent):** spawn a fresh-context verifier — **tiered by proof shape**, not uniformly frontier (deterministic → `haiku`/`low` · comparative → `sonnet`/`medium` · semantic → `opus`/`high`+ · anything gating an irreversible step → `opus` whatever its shape) — to *refute* the sub-goal's proof — re-run scrutiny + behavioral checks against the validation contract. Hand it the **exact proof command, expected artifact, file:line anchors, and environment quirks** (non-default ports, which interpreter, auth source) — never the executor's narrative, or it will reason about plausibility instead of running anything. Its return schema requires `observed_output` (the literal text it saw — **an empty value is a FAIL**, it means the verifier reasoned instead of running) and `green_by_suppression` (true when the proof went green by deleting what it measures; a flagged proof is a fail). For cheap-tier verdicts read `observed_output`, never the conclusion sentence. The verifier's verdict advances the loop.
+- **Verify (independent):** spawn a fresh-context verifier — **tiered by proof shape**, not uniformly frontier (deterministic → `haiku`/`low` · comparative → `sonnet`/`medium` · semantic → `opus`/`high`+ · anything gating an irreversible step → `opus` whatever its shape) — to *refute* the sub-goal's proof — re-run scrutiny + behavioral checks against the validation contract. Hand it the **exact proof command, expected artifact, file:line anchors, and environment quirks** (non-default ports, which interpreter, auth source) — never the executor's narrative, or it will reason about plausibility instead of running anything. Its return schema requires `observed_output` (the literal text it saw — **an empty value is a FAIL**, it means the verifier reasoned instead of running) and `green_by_suppression` (true when the proof went green by deleting what it measures; a flagged proof is a fail). For cheap-tier verdicts read `observed_output`, never the conclusion sentence. The verifier's verdict advances the loop. **Scope the per-sub-goal verifier's charge sheet** to the diff audit, the sub-goal's own proof artifact, the sub-goal's new or changed test files, and a `--collect-only` enumeration — never a bulk suite re-run; a whole-suite re-run belongs only to the single end-of-program regression sub-goal, never to a per-sub-goal charge sheet.
 - **On fail (expected-fail fix loop):** record structured handoff → scope narrow fix sub-goal → re-execute → re-verify; ≤**3** validation rounds per sub-goal (override: N=…), then escalate once, then stop with a diagnosis. Never weaken the contract to go green.
 - **Record (structured handoff):** completed · undone · commands+exit codes · issues · procedures followed? · failure-and-why → brain
 - **Context hygiene:** prune stale reads; carry a compact state summary, not raw transcripts.
@@ -345,12 +349,28 @@ bullets or ~40 KB, spend part of this pass merging overlapping bullets and delet
 ones overtaken by a fixed tool or a changed codebase.
 
 ## Run-as
-<exact invocation, e.g.:>
+<Name BOTH execution homes this loop may run in — never only one. A prompt whose
+Run-as names a single home leaves the other implicit, and the runner defaults to
+whichever one it happens to be sitting in.>
+
+**In-session runner (this session edits directly):**
 - **Cold-start loop (recommended):** the paste line from "How to run" above. **or**
 - `/goal <condition>` — only if this file is already in context. **or**
 - invoke the Workflow tool with `.claude/workflows/<script>.js` (fan-out only). **or**
 - Routine: schedule `<cadence>` with this prompt, push=draft-PR. **or**
 - **Chained (autonomous, context-recycling):** one `claude -p` per sub-goal, each run starting from this program's handoff and ending by rewriting it. The process boundary is the clear, so per-turn context cost stays flat and every sub-goal gets a fresh executor. Re-verify the handoff at the start of each run; one runner per handoff — take a `slot=` when another program shares the repo, and run `uv run tapps-mcp handoff list` before starting to see whether one already does.
+
+**Orchestrator-driven dispatch lane (a `claude -p` lane in its own worktree, launched
+by `dispatch-lane.sh` or equivalent):** the lane edits and commits inside its own
+worktree only, opens a PR, and ends every run by printing a `--- LINEAR EVIDENCE ---`
+block (proof commands, exit codes, before/after counts) plus the literal sentinel
+`LANE-COMPLETE: <done|blocked>`. The dispatching orchestrator retains everything a
+lane structurally cannot reach: verifying the lane's proof from a fresh context,
+merging the PR, and any tracker (Linear) write — a lane never merges its own PR or
+writes to the tracker on its own authority.
+
+Pick one before emitting the Loop section below; a Run-as that names only one home
+is a defect in this skill's output, not a legitimate simplification.
 <!-- END: tapps-skill-asset -->
 
 <!-- tapps-skill-asset-project-customizations: preserved from the pre-marker version — review and trim anything the managed block above now covers -->

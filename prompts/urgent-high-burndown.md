@@ -326,6 +326,11 @@ Next: /clear   then   /tapps-continue-session
 
 ## Run-as
 
+**In-session runner (recommended for this prompt):**
 - **Cold-start loop (recommended):** the paste line from "How to run (cold start)" above, from a
   new session with cwd = this repo, `/model fable` + `/effort high`.
 - Not a Workflow — one repo, coupled code, serial edits (see Plane map).
+
+**Orchestrator-driven dispatch lane:** also viable — a `claude -p` lane in its own
+worktree of this repo, ending in a `--- LINEAR EVIDENCE ---` block and an open PR;
+the dispatching orchestrator retains verify, merge, and any tracker write (TAP-6589).
