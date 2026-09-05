@@ -43,6 +43,7 @@ from __future__ import annotations
 
 import collections
 import dataclasses
+import json
 import shutil
 import subprocess
 import tempfile
@@ -108,6 +109,68 @@ class RatchetOutcome:
 
     def as_dict(self) -> dict[str, Any]:
         return dataclasses.asdict(self)
+
+
+_POPULATION_REGISTRY_REL_PATH = Path(".tapps-mcp") / ".ratchet-population.json"
+"""TAP-6907: where the tracked-population registry lives, relative to ``repo_root``.
+
+A ratcheted pass (rule 3, hold-or-improve) is a standing exemption from the
+absolute threshold. Without a record of *which* files hold that exemption, the
+population is invisible between runs -- each ``validate_changed`` call only
+sees the files it happened to touch. This registry is the durable list.
+"""
+
+
+def _population_registry_path(repo_root: Path) -> Path:
+    return repo_root / _POPULATION_REGISTRY_REL_PATH
+
+
+def load_ratchet_population(repo_root: Path) -> dict[str, dict[str, Any]]:
+    """Return the persisted ratchet population: ``rel_path -> {base_score, threshold, ...}``.
+
+    Enumerable on demand (TAP-6907 acceptance box 2) -- callable at any time,
+    independent of a ``validate_changed`` run, since the registry is a plain
+    file rather than in-memory state.
+    """
+    path = _population_registry_path(repo_root)
+    if not path.exists():
+        return {}
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        _logger.warning("ratchet_population_registry_unreadable", path=str(path))
+        return {}
+    return data if isinstance(data, dict) else {}
+
+
+def _save_ratchet_population(repo_root: Path, population: dict[str, dict[str, Any]]) -> None:
+    path = _population_registry_path(repo_root)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(population, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+
+
+def record_ratchet_member(
+    repo_root: Path,
+    rel_path: str,
+    *,
+    base_score: float,
+    threshold: float,
+) -> bool:
+    """Record *rel_path* as a currently-ratcheted file; return ``True`` if newly added.
+
+    TAP-6907 acceptance box 3: a newly sub-threshold file entering the
+    tracked population is a *new exemption*, distinguishable from an existing
+    member merely holding steady (the return value / negative control).
+    """
+    population = load_ratchet_population(repo_root)
+    is_new = rel_path not in population
+    population[rel_path] = {
+        "base_score": base_score,
+        "threshold": threshold,
+        "distance_from_threshold": round(threshold - base_score, 2),
+    }
+    _save_ratchet_population(repo_root, population)
+    return is_new
 
 
 def _read_file_at_ref(repo_root: Path, baseline_ref: str, rel_path: str) -> str | None:
@@ -494,6 +557,40 @@ async def evaluate_ratchet(
     )
 
 
+def summarize_ratchet_results(results: list[dict[str, Any]]) -> dict[str, Any] | None:
+    """Batch-level ratchet summary for ``validate_changed`` (TAP-6907).
+
+    ``None`` when nothing in *results* carries a hold-or-improve ratchet
+    outcome. Otherwise the ratcheted-pass count, the new-exemption count, and
+    each member's baseline score / distance from threshold -- distinct from
+    the plain pass count so a ratcheted pass never reads as a clean one.
+    """
+    ratcheted = [
+        r for r in results if (r.get("ratchet") or {}).get("rule") == RULE_RATCHET_HOLD_OR_IMPROVE
+    ]
+    if not ratcheted:
+        return None
+    population = [_population_entry(r) for r in ratcheted]
+    new_count = sum(1 for p in population if p["is_new_exemption"])
+    return {
+        "ratcheted_passes": len(ratcheted),
+        "new_exemptions": new_count,
+        "population": population,
+    }
+
+
+def _population_entry(result: dict[str, Any]) -> dict[str, Any]:
+    ratchet = result["ratchet"]
+    base_score = ratchet.get("base_score") or 0
+    threshold = ratchet.get("threshold") or 0
+    return {
+        "file_path": result.get("file_path"),
+        "base_score": ratchet.get("base_score"),
+        "distance_from_threshold": round(threshold - base_score, 2),
+        "is_new_exemption": bool(ratchet.get("is_new_exemption")),
+    }
+
+
 async def apply_ratchet_to_gate(
     gate: Any,
     *,
@@ -540,4 +637,17 @@ async def apply_ratchet_to_gate(
     if outcome.passes:
         gate.failures = [f for f in gate.failures if f.category != "overall"]
         gate.passed = len(gate.failures) == 0
-    return outcome.as_dict()
+
+    outcome_dict = outcome.as_dict()
+    if outcome.rule == RULE_RATCHET_HOLD_OR_IMPROVE and outcome.base_score is not None:
+        try:
+            rel_path = path.resolve().relative_to(repo_root.resolve()).as_posix()
+        except ValueError:
+            rel_path = str(path)
+        outcome_dict["is_new_exemption"] = record_ratchet_member(
+            repo_root,
+            rel_path,
+            base_score=outcome.base_score,
+            threshold=outcome.threshold,
+        )
+    return outcome_dict

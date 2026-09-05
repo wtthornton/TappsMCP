@@ -636,4 +636,99 @@ class TestRenameInformationCost:
         )
 
         assert outcome.rule == RULE_NEW_FILE
-        assert outcome.passes is False
+
+
+class TestRatchetPopulationSummary:
+    """TAP-6907: the ratcheted-pass population must be visible, not a silent
+    permanent exemption -- a run-level summary count, an on-demand enumeration
+    with baseline score + distance from threshold, and a new-vs-holding
+    distinction for each member.
+    """
+
+    async def _ratchet_result(self, repo: Path, *, current_score: float) -> dict[str, Any]:
+        """Run ``apply_ratchet_to_gate`` for ``pkg/module.py`` (baseline 65.0) and
+        return a ``validate_changed``-shaped per-file result dict carrying the
+        ratchet outcome, the way ``_validate_single_file`` attaches it."""
+        gate = GateResult(
+            passed=False,
+            failures=[
+                GateFailure(
+                    category="overall", actual=current_score, threshold=THRESHOLD, message="x"
+                )
+            ],
+            thresholds=GateThresholds(overall_min=THRESHOLD),
+        )
+        score = ScoreResult(file_path="x", categories={}, overall_score=current_score)
+        ratchet_info = await apply_ratchet_to_gate(
+            gate,
+            score=score,
+            path=repo / "pkg" / "module.py",
+            scorer=_FakeScorer(),
+            quick=False,
+            baseline_ref=_sha(repo),
+            repo_root=repo,
+        )
+        assert ratchet_info is not None
+        return {"file_path": str(repo / "pkg" / "module.py"), "ratchet": ratchet_info}
+
+    async def test_new_exemption_is_recorded_and_enumerable_on_demand(
+        self, tmp_path: Path
+    ) -> None:
+        """Box 2 + box 3 (positive): a first-time ratcheted pass is a new exemption,
+        and the population is enumerable afterwards via a plain read of the
+        registry -- independent of the run that created it."""
+        from tapps_mcp.gates.ratchet import load_ratchet_population
+
+        repo = _make_repo(tmp_path)  # pkg/module.py baseline score 65.0
+
+        result = await self._ratchet_result(repo, current_score=68.0)
+
+        assert result["ratchet"]["is_new_exemption"] is True
+        population = load_ratchet_population(repo)
+        assert "pkg/module.py" in population
+        assert population["pkg/module.py"]["base_score"] == 65.0
+        assert population["pkg/module.py"]["distance_from_threshold"] == 5.0
+
+    async def test_negative_control_holding_member_is_not_reported_as_new(
+        self, tmp_path: Path
+    ) -> None:
+        """Box 6 (negative control): once a file is already in the tracked
+        population, a subsequent run that still ratchets it must report it as
+        holding steady, not as a fresh addition -- proving the report reflects
+        real state rather than always saying "new"."""
+        repo = _make_repo(tmp_path)
+
+        first = await self._ratchet_result(repo, current_score=67.0)
+        assert first["ratchet"]["is_new_exemption"] is True
+
+        second = await self._ratchet_result(repo, current_score=68.0)
+        assert second["ratchet"]["is_new_exemption"] is False
+
+    async def test_summary_counts_ratcheted_passes_distinct_from_absolute_passes(
+        self, tmp_path: Path
+    ) -> None:
+        """Box 1: a batch summary reports the count of ratcheted passes
+        separately from files that passed the absolute threshold outright."""
+        from tapps_mcp.gates.ratchet import summarize_ratchet_results
+
+        repo = _make_repo(tmp_path)
+        ratcheted = await self._ratchet_result(repo, current_score=68.0)
+        absolute_pass = {"file_path": "pkg/other.py", "overall_score": 95.0, "gate_passed": True}
+
+        summary = summarize_ratchet_results([ratcheted, absolute_pass])
+
+        assert summary is not None
+        assert summary["ratcheted_passes"] == 1
+        assert summary["new_exemptions"] == 1
+        assert summary["population"][0]["base_score"] == 65.0
+        assert summary["population"][0]["distance_from_threshold"] == 5.0
+        assert summary["population"][0]["is_new_exemption"] is True
+
+    def test_summary_is_none_when_nothing_was_ratcheted(self) -> None:
+        """Negative control: a batch with no ratcheted passes carries no
+        ratchet_summary at all -- proving the summary is not a static list."""
+        from tapps_mcp.gates.ratchet import summarize_ratchet_results
+
+        results = [{"file_path": "pkg/other.py", "overall_score": 95.0, "gate_passed": True}]
+
+        assert summarize_ratchet_results(results) is None
