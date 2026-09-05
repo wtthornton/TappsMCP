@@ -4,6 +4,7 @@ from unittest.mock import AsyncMock, patch
 
 import pytest
 
+from tapps_core.common.models import Context7Diagnostic
 from tapps_mcp.gates.models import GateResult, GateThresholds
 from tapps_mcp.scoring.models import CategoryScore, ScoreResult
 from tapps_mcp.security.security_scanner import SecurityScanResult
@@ -22,13 +23,21 @@ pytestmark = [
     pytest.mark.usefixtures("envelope_guard"),
 ]
 
+# tapps_server_info drives a real Context7 network probe via
+# collect_diagnostics -> probe_context7 unless stubbed (same seam as
+# test_dashboard_memory.py / test_setup_upgrade_cli.py).
+_FAKE_CONTEXT7_DIAGNOSTIC = Context7Diagnostic(
+    api_key_set=True, status="available", reachable=True, http_status=200, latency_ms=1.0
+)
+
 
 class TestTappsServerInfo:
     def setup_method(self):
         CallTracker.reset()
 
     @pytest.mark.asyncio
-    async def test_returns_success(self):
+    @patch("tapps_mcp.diagnostics.probe_context7", return_value=_FAKE_CONTEXT7_DIAGNOSTIC)
+    async def test_returns_success(self, mock_probe):
         result = await tapps_server_info()
         assert result["success"] is True
         assert result["tool"] == "tapps_server_info"
@@ -37,12 +46,14 @@ class TestTappsServerInfo:
         assert result["data"]["server"]["name"] == "TappsMCP"
 
     @pytest.mark.asyncio
-    async def test_includes_version(self):
+    @patch("tapps_mcp.diagnostics.probe_context7", return_value=_FAKE_CONTEXT7_DIAGNOSTIC)
+    async def test_includes_version(self, mock_probe):
         result = await tapps_server_info()
         assert "version" in result["data"]["server"]
 
     @pytest.mark.asyncio
-    async def test_configuration_dropped_as_duplicate_of_quick_session_start(self):
+    @patch("tapps_mcp.diagnostics.probe_context7", return_value=_FAKE_CONTEXT7_DIAGNOSTIC)
+    async def test_configuration_dropped_as_duplicate_of_quick_session_start(self, mock_probe):
         """TAP-6433: configuration duplicates tapps_session_start(quick=True)'s
         payload byte-for-byte, so the standalone tool response drops it.
         """
@@ -50,7 +61,8 @@ class TestTappsServerInfo:
         assert "configuration" not in result["data"]
 
     @pytest.mark.asyncio
-    async def test_records_call(self):
+    @patch("tapps_mcp.diagnostics.probe_context7", return_value=_FAKE_CONTEXT7_DIAGNOSTIC)
+    async def test_records_call(self, mock_probe):
         CallTracker.reset()
         await tapps_server_info()
         assert "tapps_server_info" in CallTracker.get_called_tools()
@@ -235,7 +247,17 @@ class TestTappsChecklist:
         assert result["data"]["complete"] is False
 
     @pytest.mark.asyncio
-    async def test_with_calls(self):
+    @patch(
+        "tapps_mcp.tools.usage.compute_gaps",
+        return_value={"gaps": [], "recommendations": [], "libraries_without_lookup": []},
+    )
+    async def test_with_calls(self, mock_compute_gaps):
+        # compute_gaps reads real repo/session state (git diff, contract/
+        # verifier markers) and hard-blocks review/feature completion on
+        # contract_assertions_unverified / creator_verifier_skipped (TAP-5543)
+        # -- unrelated to the required-tool-call assertion this test makes,
+        # and would otherwise make this test's outcome depend on whatever
+        # real session activity happened to precede it in this working tree.
         CallTracker.record("tapps_score_file")
         CallTracker.record("tapps_security_scan")
         CallTracker.record("tapps_quality_gate")
