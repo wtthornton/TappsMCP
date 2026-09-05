@@ -20,6 +20,7 @@ from pathlib import Path
 
 import pytest
 
+from tapps_mcp.pipeline import platform_hook_templates
 from tapps_mcp.pipeline.platform_hook_templates import (
     AGENT_TEAMS_HOOK_SCRIPTS,
     CLAUDE_HOOK_SCRIPTS,
@@ -131,4 +132,81 @@ def test_pre_bash_allows_benign_command(tmp_path: Path) -> None:
     )
     assert proc.returncode == 0, (
         f"Benign command was blocked unexpectedly. stderr={proc.stderr}"
+    )
+
+
+# ---------------------------------------------------------------------------
+# TAP-6737 box 6 — every shipped .ps1 hook template must parse under pwsh
+# ---------------------------------------------------------------------------
+#
+# ``platform_hook_templates`` re-exports every ``*_SCRIPTS_PS`` dict defined
+# in ``platform_hook_templates_linear_gate`` (see its import block), so
+# introspecting this one module's namespace reaches all of them without a
+# hand-maintained list -- a new ``_PS`` script dict is picked up automatically
+# the moment it is imported into (or defined in) this module.
+
+
+def _iter_ps1_script_dicts() -> dict[str, dict[str, str]]:
+    """Every module-level ``dict[str, str]`` whose keys are ``.ps1``
+    filenames, keyed by the attribute name that holds it."""
+    sources: dict[str, dict[str, str]] = {}
+    for name, value in vars(platform_hook_templates).items():
+        if not isinstance(value, dict) or not value:
+            continue
+        if all(
+            isinstance(k, str) and k.endswith(".ps1") and isinstance(v, str)
+            for k, v in value.items()
+        ):
+            sources[name] = value
+    return sources
+
+
+def _flatten_ps1() -> tuple[list[tuple[str, str, str]], list[str]]:
+    rows: list[tuple[str, str, str]] = []
+    ids: list[str] = []
+    for source_label, script_map in _iter_ps1_script_dicts().items():
+        for script_name, body in script_map.items():
+            rows.append((source_label, script_name, body))
+            ids.append(f"{source_label}/{script_name}")
+    return rows, ids
+
+
+_PS1_ROWS, _PS1_IDS = _flatten_ps1()
+
+
+@pytest.mark.skipif(
+    shutil.which("pwsh") is None,
+    reason="pwsh not available -- PowerShell parse check needs a real "
+    "PowerShell (TAP-6737); CI runs pwsh on ubuntu-latest so this is "
+    "un-skippable there.",
+)
+@pytest.mark.parametrize(("source_label", "script_name", "body"), _PS1_ROWS, ids=_PS1_IDS)
+def test_ps1_template_parses(
+    tmp_path: Path,
+    source_label: str,
+    script_name: str,
+    body: str,
+) -> None:
+    """Every shipped .ps1 template must parse cleanly under
+    ``[System.Management.Automation.Language.Parser]`` -- the PR 304 failure
+    mode where a parse error survived seven green CI checks (TAP-6737)."""
+    rendered = tmp_path / script_name
+    rendered.write_text(body, encoding="utf-8")
+    check = (
+        "$errors = $null; "
+        f"[System.Management.Automation.Language.Parser]::ParseFile("
+        f"'{rendered}', [ref]$null, [ref]$errors) | Out-Null; "
+        "if ($errors.Count -gt 0) { $errors | ForEach-Object { Write-Error $_ }; exit 1 } "
+        "else { exit 0 }"
+    )
+    proc = subprocess.run(
+        ["pwsh", "-NoProfile", "-Command", check],
+        capture_output=True,
+        text=True,
+        timeout=10,
+    )
+    assert proc.returncode == 0, (
+        f"pwsh parse failed on {source_label}/{script_name}:\n"
+        f"stderr={proc.stderr}\n"
+        f"--- script ---\n{body}"
     )
