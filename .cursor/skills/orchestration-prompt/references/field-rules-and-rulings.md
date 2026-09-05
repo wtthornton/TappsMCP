@@ -93,7 +93,9 @@ resolve cases the proof-shape table does not spell out on its own.
    evidence block, never filed and walked past, never discovered later in a diff. An
    ordinary adjacent problem that is neither data-loss nor security still routes to a
    separate item, with no change in behaviour; the carve-out names these two categories
-   and stops there — it is not a general licence to widen the diff.
+   and stops there — it is not a general licence to widen the diff. This carve-out is
+   lane-level and in-flight only: a filed finding's admission into the current run
+   (Urgent-or-High, driver-announced) is a separate mechanism, below.
 3. Shared quota is a coupling the independence test (method §3) must see. Two lanes
    with disjoint file lists can still contend for the same rate limit, API quota, or
    worker pool — that is a derived-state coupling exactly like an env-var set, and it

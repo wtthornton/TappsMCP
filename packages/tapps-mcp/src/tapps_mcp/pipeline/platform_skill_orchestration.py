@@ -15,6 +15,28 @@ from tapps_mcp.pipeline.skill_asset_policy import write_project_script
 if TYPE_CHECKING:
     from pathlib import Path
 
+#: The exactly-two exception categories a LANE may act on in-flight, outside its
+#: named scope, without filing first (TAP-6605). Every rendered site that names
+#: this pair — the SKILL.md summary sentence, Ruling 2, the Engineering-discipline
+#: CARGO paragraph, and the prompt-template Guardrails line — derives its wording
+#: from this tuple via the tokens below, so the pair can never drift between sites.
+SCOPE_CARVE_OUT_CATEGORIES: tuple[str, str] = ("data-loss", "security")
+
+_CARVE_OUT_TOKEN_AND = "CARVE_OUT_CATEGORIES_AND"
+_CARVE_OUT_TOKEN_NEITHER_NOR = "CARVE_OUT_CATEGORIES_NEITHER_NOR"
+_CARVE_OUT_TEXT_AND = " and ".join(SCOPE_CARVE_OUT_CATEGORIES)
+_CARVE_OUT_TEXT_NEITHER_NOR = (
+    f"neither {SCOPE_CARVE_OUT_CATEGORIES[0]} nor {SCOPE_CARVE_OUT_CATEGORIES[1]}"
+)
+
+
+def _render_carve_out_categories(text: str) -> str:
+    """Substitute the carve-out category tokens with the derived wording."""
+    return text.replace(_CARVE_OUT_TOKEN_AND, _CARVE_OUT_TEXT_AND).replace(
+        _CARVE_OUT_TOKEN_NEITHER_NOR, _CARVE_OUT_TEXT_NEITHER_NOR
+    )
+
+
 ORCHESTRATION_PROMPT_SKILL_FRONTMATTER = """\
 ---
 name: orchestration-prompt
@@ -120,7 +142,7 @@ in `references/method-detail.md` — read it before drafting a Goal or a Loop.
 
 Postmortem-derived rules that govern whether a *proof* is sound live in
 `references/field-rules-and-rulings.md` (twelve field rules plus eight
-rulings — including a no-silent-scope-creep carve-out naming exactly two exception categories, data-loss and security, reported loudly in the evidence block rather than filed and walked past — that pin edge cases the proof-shape table doesn't spell out on its
+rulings — including a no-silent-scope-creep carve-out naming exactly two exception categories, CARVE_OUT_CATEGORIES_AND, reported loudly in the evidence block rather than filed and walked past — that pin edge cases the proof-shape table doesn't spell out on its
 own). Rules governing *who* runs verification, over what population, and how
 its result gets reported — as distinct from whether the proof itself is
 sound — live in `references/verification-routing.md`. Read both before
@@ -220,6 +242,7 @@ work has an irreducible need for a second driver
 (`.claude/rules/agent-to-agent.md`).
 """
 )
+ORCHESTRATION_PROMPT_SKILL_BODY = _render_carve_out_categories(ORCHESTRATION_PROMPT_SKILL_BODY)
 
 
 _METHOD_DETAIL = r"""# Method detail — the nine load-bearing parts, in full
@@ -764,13 +787,15 @@ resolve cases the proof-shape table does not spell out on its own.
    a fresh, adversarial perspective, not a fresh identity, and the agent already
    holding the live reproduction is best placed to confirm a scoped fix without
    re-establishing context from zero.
-2. No-silent-scope-creep carries a carve-out naming exactly two exception categories, data-loss and security — a delegate may step outside its named scope only to stop in-flight
+2. No-silent-scope-creep carries a carve-out naming exactly two exception categories, CARVE_OUT_CATEGORIES_AND — a delegate may step outside its named scope only to stop in-flight
    data loss or a live security defect, and the carve-out is void the moment it is
    silent: acting outside scope is legitimate only if it is surfaced loudly in the same
    evidence block, never filed and walked past, never discovered later in a diff. An
-   ordinary adjacent problem that is neither data-loss nor security still routes to a
+   ordinary adjacent problem that is CARVE_OUT_CATEGORIES_NEITHER_NOR still routes to a
    separate item, with no change in behaviour; the carve-out names these two categories
-   and stops there — it is not a general licence to widen the diff.
+   and stops there — it is not a general licence to widen the diff. This carve-out is
+   lane-level and in-flight only: a filed finding's admission into the current run
+   (Urgent-or-High, driver-announced) is a separate mechanism, below.
 3. Shared quota is a coupling the independence test (method §3) must see. Two lanes
    with disjoint file lists can still contend for the same rate limit, API quota, or
    worker pool — that is a derived-state coupling exactly like an env-var set, and it
@@ -798,6 +823,7 @@ resolve cases the proof-shape table does not spell out on its own.
    "surface" there instead ("build surface" vs "runtime surface"), so a reader can
    rely on "plane" meaning one specific thing throughout an emitted prompt.
 """
+_FIELD_RULES_AND_RULINGS = _render_carve_out_categories(_FIELD_RULES_AND_RULINGS)
 
 _VERIFICATION_ROUTING = r"""# Verification routing and honest reporting
 
@@ -1118,17 +1144,28 @@ Infinite fix spirals and "green by suppression" are forbidden.
 Produce *solutions*, not band-aids: root-cause not workarounds; **no
 green-by-suppression** (never skip/disable a check to pass); **right-sized** (the
 simplest thing that fully solves it); durable over expedient; match repo conventions;
-no silent scope creep.
+no silent scope creep — carve-out for in-flight CARVE_OUT_CATEGORIES_AND only, reported
+loudly; everything else filed, admission is the driver's announced call.
 
-**Scope admission is announced, not forbidden.** A flat "no scope creep" is right about
-*silence* and wrong about *scope* — it tells a lane to walk past a live Urgent defect it
-is standing on. File everything you find. Admit into the current run only what is filed
-**Urgent or High**, say so out loud in the same report that discovers it, and add it to
-the SCORE denominator so `pct` tells the truth about the larger population rather than
-quietly shrinking its own target. Everything below High is filed and left for the
-operator. What stays forbidden is the *silent* version: work that appears in the diff
-and nowhere in the report.
+**Two mechanisms, two actors — do not conflate them.**
+
+- **In-flight carve-out (LANE, immediate).** A lane may step outside its named scope
+  ONLY to stop in-flight data loss or a live security defect — the
+  CARVE_OUT_CATEGORIES_AND pair, and nothing wider — and must report doing so loudly
+  in its own evidence block the moment it acts. Everything else it finds, it FILES; it
+  does not fix it in flight.
+- **Scope admission (DRIVER, announced).** The driver may admit a filed finding into
+  the current run as a new lane or VAL only if it is triaged **Urgent or High**, says
+  so out loud in the same report that discovers it, and adds it to the SCORE
+  denominator so `pct` tells the truth about the larger population rather than
+  quietly shrinking its own target. The lane never self-admits.
+
+An adjacent Urgent defect that is CARVE_OUT_CATEGORIES_NEITHER_NOR is FILED by the
+lane and may be ADMITTED by the driver — the lane does not fix it in flight. Everything
+below High is filed and left for the operator. What stays forbidden in both mechanisms
+is the *silent* version: work that appears in the diff and nowhere in the report.
 """
+_GUARDRAILS_AND_CONTRACTS = _render_carve_out_categories(_GUARDRAILS_AND_CONTRACTS)
 
 _LEARNINGS_PROTOCOL = r"""# Learn as you go — the learnings.md protocol
 
@@ -1570,7 +1607,7 @@ Next: /clear   then   /tapps-continue-session
 - Memory: recall wayfind resume + prior attempts at start; record structured handoff (incl. failures) at each checkpoint.
 - Lessons learned: the final sub-goal runs the "Lessons learned" pass and appends to `learnings.md`. It is REQUIRED and is the one sub-goal that survives any trim — a run that fixes the problem and teaches the harness nothing has paid full price for half the value. Mine what the verifier refuted first.
 - Harness compatibility: <gated tool calls → unlock/refresh steps; MCP standing nudges → adopted or overridden>.
-- Discipline: root-cause not workarounds; no green-by-suppression; right-sized; durable; match conventions; no scope creep.
+- Discipline: root-cause not workarounds; no green-by-suppression; right-sized; durable; match conventions; no silent scope creep — carve-out for in-flight CARVE_OUT_CATEGORIES_AND only, reported loudly; everything else filed, admission is the driver's announced call.
 
 ## Autonomy
 - Act on every reversible, in-scope step — no "should I proceed?" checkpoints.
@@ -1659,6 +1696,7 @@ writes to the tracker on its own authority.
 Pick one before emitting the Loop section below; a Run-as that names only one home
 is a defect in this skill's output, not a legitimate simplification.
 """
+_PROMPT_TEMPLATE = _render_carve_out_categories(_PROMPT_TEMPLATE)
 
 _FEATURE_MAP = r"""# Claude feature map — intent → mechanism → model tier
 
@@ -2272,6 +2310,7 @@ __all__ = [
     "ORCHESTRATION_PROMPT_COMPANION_FILES",
     "ORCHESTRATION_PROMPT_CREATE_ONLY_FILES",
     "ORCHESTRATION_PROMPT_SKILL_BODY",
+    "SCOPE_CARVE_OUT_CATEGORIES",
     "START_PROGRAM_SCRIPT_BODY",
     "generate_start_program_script",
 ]

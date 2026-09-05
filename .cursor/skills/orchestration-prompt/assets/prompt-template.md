@@ -289,7 +289,7 @@ Next: /clear   then   /tapps-continue-session
 - Memory: recall wayfind resume + prior attempts at start; record structured handoff (incl. failures) at each checkpoint.
 - Lessons learned: the final sub-goal runs the "Lessons learned" pass and appends to `learnings.md`. It is REQUIRED and is the one sub-goal that survives any trim — a run that fixes the problem and teaches the harness nothing has paid full price for half the value. Mine what the verifier refuted first.
 - Harness compatibility: <gated tool calls → unlock/refresh steps; MCP standing nudges → adopted or overridden>.
-- Discipline: root-cause not workarounds; no green-by-suppression; right-sized; durable; match conventions; no scope creep.
+- Discipline: root-cause not workarounds; no green-by-suppression; right-sized; durable; match conventions; no silent scope creep — carve-out for in-flight data-loss and security only, reported loudly; everything else filed, admission is the driver's announced call.
 
 ## Autonomy
 - Act on every reversible, in-scope step — no "should I proceed?" checkpoints.

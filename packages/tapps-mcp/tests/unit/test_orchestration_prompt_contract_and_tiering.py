@@ -273,14 +273,19 @@ class TestCheapestViableTiering:
 
     def test_scope_rule_permits_announced_admission_of_urgent_and_high(self) -> None:
         body = _FULL_SURFACE
-        section = body.split("**Scope admission is announced, not forbidden.**", 1)[1][:1200]
-        assert "walk past a live Urgent" in section
+        section = body.split("**Two mechanisms, two actors", 1)[1][:1200]
+        assert "DRIVER, announced" in section
         assert "**Urgent or High**" in section
-        assert "SCORE denominator" in section
-        assert "What stays forbidden is the *silent* version" in section
+        assert "SCORE\n  denominator" in section
+        assert "What stays forbidden in both mechanisms" in section
 
     def test_flat_no_scope_creep_is_no_longer_the_last_word(self) -> None:
+        # TAP-6605 round 2: the flat "no scope creep." ban is gone from every
+        # rendered site (SKILL.md summary, ruling 2, this CARGO paragraph, and
+        # the prompt-template Guardrails line) in favor of a derived, carve-out
+        # aware one-liner shared across all four.
         body = _FULL_SURFACE
-        assert "no silent scope creep." in body
-        after = body.split("no silent scope creep.", 1)[1][:200]
-        assert "announced, not forbidden" in after
+        assert "no scope creep." not in body
+        assert "no silent scope creep — carve-out for in-flight" in body
+        after = body.split("no silent scope creep — carve-out for in-flight", 1)[1][:200]
+        assert "driver's announced call" in after
