@@ -15,7 +15,7 @@ from pathlib import Path
 from typing import Any
 
 from tapps_core.common.logging import get_logger
-from tapps_mcp.distribution.doctor_result import CheckResult
+from tapps_mcp.distribution.doctor_result import CheckResult, consumer_staleness
 
 log = get_logger(__name__)
 
@@ -91,6 +91,7 @@ def _validate_json_config(config_path: Path, servers_key: str) -> str | None:
     return _validate_mcp_entry_command(entry, config_path)
 
 
+@consumer_staleness
 def check_claude_code_user(
     home: Path | None = None,
     project_root: Path | None = None,
@@ -116,11 +117,13 @@ def check_claude_code_user(
     return check_json_config(user_path, "mcpServers", "Claude Code (user)")
 
 
+@consumer_staleness
 def check_claude_code_project(project_root: Path) -> CheckResult:
     """Check ``.mcp.json`` in project root for tapps-mcp entry."""
     return check_json_config(project_root / ".mcp.json", "mcpServers", "Claude Code (project)")
 
 
+@consumer_staleness
 def check_cursor_config(project_root: Path) -> CheckResult:
     """Check ``.cursor/mcp.json`` for tapps-mcp entry."""
     return check_json_config(
@@ -137,6 +140,7 @@ def _other_mcp_host_configured(project_root: Path) -> bool:
     ).is_file()
 
 
+@consumer_staleness
 def check_vscode_config(
     project_root: Path,
     *,
@@ -260,6 +264,7 @@ def _brain_mcp_offenses(project_root: Path) -> list[str]:
     return offenses
 
 
+@consumer_staleness
 def check_brain_mcp_entry(project_root: Path) -> CheckResult:
     """Fail when MCP configs declare a direct tapps-brain server (ADR-0001).
 
@@ -332,6 +337,7 @@ def strip_brain_mcp_entries(
     return {"stripped": stripped, "dry_run": dry_run}
 
 
+@consumer_staleness
 def check_mcp_client_config(
     project_root: Path,
     home: Path | None = None,
@@ -449,6 +455,7 @@ def _unresolved_project_root_in_mcp_json(
     return findings
 
 
+@consumer_staleness
 def check_mcp_config_unresolved_project_root(project_root: Path) -> CheckResult:
     """TAP-2199: detect broken ``${workspaceFolder}`` in any .mcp.json on disk.
 

@@ -20,7 +20,7 @@ from tapps_mcp.distribution.doctor_pipeline import (
     _memory_skill_content_ok,
     _tapps_skill_bases,
 )
-from tapps_mcp.distribution.doctor_result import CheckResult
+from tapps_mcp.distribution.doctor_result import CheckResult, consumer_staleness
 
 
 def _read_engagement_level(project_root: Path) -> str | None:
@@ -380,6 +380,7 @@ def check_install_git_hooks_hint(project_root: Path) -> CheckResult:
     return _git_hooks_gate_pass_result(gate_pass)
 
 
+@consumer_staleness
 def check_continuous_learning_v2_skill(project_root: Path) -> CheckResult:
     """Check the ``continuous-learning-v2`` skill is deployed (ECC v2.1).
 

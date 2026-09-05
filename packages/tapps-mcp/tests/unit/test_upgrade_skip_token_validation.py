@@ -281,9 +281,9 @@ class TestDoctorFinding:
 
     def test_check_is_registered_in_the_doctor_run(self) -> None:
         """Registered in the spec list — an unwired check reports nothing."""
-        from tapps_mcp.distribution.doctor_runner import _collect_checks
+        from tapps_mcp.distribution.doctor_runner import _check_specs
 
-        assert "upgrade_skip_files" in _collect_checks.__code__.co_consts
+        assert "upgrade_skip_files" in _check_specs.__code__.co_consts
 
 
 class TestSkipTokenDriftReport:
@@ -386,9 +386,9 @@ class TestSkipTokenDriftReport:
         assert target.read_bytes() == before
 
     def test_check_is_registered_in_the_doctor_run(self) -> None:
-        from tapps_mcp.distribution.doctor_runner import _collect_checks
+        from tapps_mcp.distribution.doctor_runner import _check_specs
 
-        assert "upgrade_skip_files drift" in _collect_checks.__code__.co_consts
+        assert "upgrade_skip_files drift" in _check_specs.__code__.co_consts
 
 
 class TestClaudeMdDriftReport:

@@ -11,9 +11,10 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from tapps_mcp.distribution.doctor_result import CheckResult
+from tapps_mcp.distribution.doctor_result import CheckResult, consumer_staleness
 
 
+@consumer_staleness
 def check_agents_md(project_root: Path) -> CheckResult:
     """Check if AGENTS.md exists and its version matches the installed TappsMCP."""
     agents_md = project_root / "AGENTS.md"
@@ -117,6 +118,7 @@ def _karpathy_preferred_home_failure(
     return None
 
 
+@consumer_staleness
 def check_karpathy_guidelines(project_root: Path) -> CheckResult:
     """Check the Karpathy guidelines block (ADR-0031 single-home).
 

@@ -12,7 +12,7 @@ import tempfile
 from pathlib import Path
 
 from tapps_mcp.distribution.doctor_platform import _upgrade_skip_tokens
-from tapps_mcp.distribution.doctor_result import CheckResult
+from tapps_mcp.distribution.doctor_result import CheckResult, consumer_staleness
 
 # Recognized-token -> generator function name for the single-file ``.claude/rules/*.md``
 # artifacts. Each generator writes exactly one file, taking either only
@@ -87,6 +87,7 @@ def _claude_md_drift_state(project_root: Path, rel_path: str, engagement_level: 
     return "diverged" if changes or merged != current else "identical"
 
 
+@consumer_staleness
 def check_upgrade_skip_token_drift(project_root: Path) -> CheckResult:
     """Report identical/diverged/missing/unsupported for each applied skip token.
 
