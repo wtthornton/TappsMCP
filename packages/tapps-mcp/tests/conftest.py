@@ -893,6 +893,51 @@ def _isolate_metrics_hub(
 
 
 @pytest.fixture(autouse=True)
+def _deny_real_sockets(request: pytest.FixtureRequest) -> Generator[None, None, None]:
+    """TAP-6592: fail loudly if a test under ``packages/tapps-mcp/tests/`` dials
+    a real socket without an explicit ``live_network`` marker.
+
+    Generalises ``test_server_pipeline_tools.py``'s old module-local
+    ``_deny_real_sockets`` fixture (TAP-6694) to the whole suite so hermeticity
+    does not depend on a test author remembering to request it. Silenced only
+    by ``@pytest.mark.live_network`` -- opt-in via marker, not opt-out via a
+    monkeypatch a test could quietly undo.
+
+    Suites granted ``live_network`` (or living outside this fixture's scope,
+    documented here for completeness since socket hermeticity is a suite-wide
+    concern per TAP-6592's own ``Where``):
+
+    - ``packages/tapps-mcp/tests/integration/`` -- subprocess, real MCP
+      handshake, and real-tool tests (see that directory's own
+      ``pytest_collection_modifyitems`` below, which auto-applies the marker
+      to every item collected there rather than annotating each test file).
+    - ``packages/tapps-core/tests/contract/test_brain_bridge_profile.py`` --
+      a deliberate live-network contract suite against a real tapps-brain;
+      outside this fixture's scope (different ``tests/`` tree, different
+      conftest) but named here for the allowlist's own documentation.
+    - ``real_brain_bridge``-marked unit tests (``test_server_helpers.py``,
+      ``test_server_pipeline_tools.py``) opt out of the conftest brain-bridge
+      *stub* to exercise ``_get_brain_bridge`` itself, but every one of them
+      fully mocks ``create_brain_bridge`` / the bridge object -- none dials a
+      real socket, so none needs ``live_network`` despite the stub opt-out.
+    """
+    if request.node.get_closest_marker("live_network") is not None:
+        yield
+        return
+
+    import socket
+
+    def _deny(self: socket.socket, address: object) -> None:
+        raise AssertionError(
+            f"unit test dialed {address!r} -- no live_network marker; "
+            "see packages/tapps-mcp/tests/conftest.py for the allowlist"
+        )
+
+    with patch.object(socket.socket, "connect", _deny):
+        yield
+
+
+@pytest.fixture(autouse=True)
 def _reset_caches() -> Generator[None, None, None]:
     """Reset module-level singletons before and after each test."""
     _clear_test_singleton_caches()
