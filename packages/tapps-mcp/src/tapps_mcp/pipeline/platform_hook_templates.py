@@ -26,6 +26,12 @@ from tapps_mcp.pipeline.linear_mcp_names import (
     resolve_linear_script_map,
 )
 from tapps_mcp.pipeline.platform_hook_templates_linear_gate import (
+    LEDGER_ROOT_RESOLVE_BASH as LEDGER_ROOT_RESOLVE_BASH,
+)
+from tapps_mcp.pipeline.platform_hook_templates_linear_gate import (
+    LEDGER_ROOT_RESOLVE_PS as LEDGER_ROOT_RESOLVE_PS,
+)
+from tapps_mcp.pipeline.platform_hook_templates_linear_gate import (
     LINEAR_CACHE_GATE_HOOKS_CONFIG as LINEAR_CACHE_GATE_HOOKS_CONFIG,
 )
 from tapps_mcp.pipeline.platform_hook_templates_linear_gate import (
@@ -304,156 +310,31 @@ def scorable_extensions() -> tuple[str, ...]:
 #: ``('.cjs', '.go', …)`` — literal for embedding in generated Python snippets.
 SCORABLE_EXT_PY_TUPLE: str = repr(scorable_extensions())
 
+#: ``*.cjs|*.go|*.js|...`` — the same extension set as a bash `case` glob
+#: alternation, for hooks that branch on the file extension directly instead
+#: of shelling out to Python (TAP-6739). One source (``scorable_extensions``)
+#: for every representation avoids a site hand-restating the list and
+#: silently drifting when an extension is added.
+SCORABLE_EXT_BASH_CASE: str = "|".join(f"*{ext}" for ext in scorable_extensions())
 
-CLAUDE_HOOK_SCRIPTS: dict[str, str] = {
-    "tapps-session-start.sh": """\
-#!/usr/bin/env bash
-# TappsMCP SessionStart hook (startup/resume)
-# Directs the agent to call tapps_session_start as the first MCP action.
-# TAP-1379: Short-circuits on subsequent fires within the same Claude session
-# (resume/compact re-fire the SessionStart hook; emitting the REQUIRED prompt
-# every time caused agents to re-call tapps_session_start ~23x per session).
-INPUT=$(cat)
-SID=$(printf '%s' "$INPUT" | sed -n 's/.*"session_id"[[:space:]]*:[[:space:]]*"\\([^"]*\\)".*/\\1/p' | head -n1)
-SENTINEL_DIR="${TAPPS_PROJECT_ROOT:-.}/.tapps-mcp"
-if [ -n "$SID" ]; then
-  SENTINEL="$SENTINEL_DIR/.session-start-fired-$SID"
-  if [ -f "$SENTINEL" ]; then
-    # Already prompted the agent for this Claude session; stay silent on resume.
-    exit 0
-  fi
-  mkdir -p "$SENTINEL_DIR" 2>/dev/null || true
-  : > "$SENTINEL" 2>/dev/null || true
-fi
-# ADR-0005: Kill MCP server processes older than 2 hours to prevent zombie
-# accumulation. Claude Code spawns a new tapps-mcp/docsmcp process per session
-# but does not consistently reap old children — after several sessions this
-# becomes a significant resource and Postgres connection leak.
-"""
-    + _mcp_zombie_cleanup_bash(reap_nlt_duplicates=True, reap_stale_nlt_profiles=True)
-    + """\
-# TAP-1927: Pre-warm the brain tools-list cache so _negotiate_profile_locked
-# can skip the live MCP tools/list round-trip on the first bridge call.
-# Runs in the background (does not block session start) and is best-effort
-# (curl failure leaves the cache absent; bridge falls through to live fetch).
-if [ -n "${TAPPS_MCP_MEMORY_BRAIN_HTTP_URL:-}" ] && command -v curl &>/dev/null; then
-    _BRAIN_PROFILE="${TAPPS_BRAIN_PROFILE:-}"
-    _CACHE_DIR="${TAPPS_PROJECT_ROOT:-.}/.tapps-mcp"
-    _SAFE_PROFILE=$(printf '%s' "$_BRAIN_PROFILE" | tr -c 'A-Za-z0-9_-' '_')
-    _CACHE_FILE="$_CACHE_DIR/.brain-tools-list.${_SAFE_PROFILE}.json"
-    mkdir -p "$_CACHE_DIR" 2>/dev/null || true
-    _BRAIN_URL="${TAPPS_MCP_MEMORY_BRAIN_HTTP_URL%/}/v1/tools/list"
-    if [ -n "$_BRAIN_PROFILE" ]; then
-        _BRAIN_URL="${_BRAIN_URL}?profile=${_BRAIN_PROFILE}"
-    fi
-    curl -sf --max-time 1 "$_BRAIN_URL" -o "$_CACHE_FILE" 2>/dev/null &
-fi
-echo "REQUIRED: Call tapps_session_start() NOW as your first action."
-echo "This initializes project context for all TappsMCP quality tools."
-echo "Tools called without session_start will have degraded accuracy."
-# TAP-3578: Prior-session pipeline gap reminder from disk telemetry.
-PROJECT="${TAPPS_PROJECT_ROOT:-${CLAUDE_PROJECT_DIR:-.}}"
-USAGE_HINT=""
-if command -v tapps-mcp >/dev/null 2>&1; then
-  USAGE_HINT=$(tapps-mcp usage-gaps-hint --project-root "$PROJECT" 2>/dev/null || true)
-elif command -v uv >/dev/null 2>&1 && [ -f "$PROJECT/pyproject.toml" ]; then
-  USAGE_HINT=$(cd "$PROJECT" && uv run tapps-mcp usage-gaps-hint 2>/dev/null || true)
-fi
-if [ -n "$USAGE_HINT" ]; then
-  echo "TappsMCP prior-session reminder: $USAGE_HINT"
-fi
-exit 0
-""",
-    "tapps-session-compact.sh": """\
-#!/usr/bin/env bash
-# TappsMCP SessionStart hook (compact)
-# Re-injects TappsMCP context after context compaction.
-INPUT=$(cat)
-echo "[TappsMCP] Context was compacted — re-injecting TappsMCP awareness."
-# Compaction can drop the original session_start result from context. Re-prompt
-# so the agent re-establishes it; the session-start gate (if enabled) already
-# has its per-session sentinel from the initial run, so no gate re-trip occurs.
-echo "If tapps_session_start context was lost in compaction, call tapps_session_start() again."
-echo "Remember: use tapps_quick_check after editing Python files."
-echo "Run tapps_validate_changed before declaring work complete."
-PROJECT="${TAPPS_PROJECT_ROOT:-${CLAUDE_PROJECT_DIR:-.}}"
-if command -v tapps-mcp >/dev/null 2>&1; then
-  USAGE_HINT=$(tapps-mcp usage-gaps-hint --project-root "$PROJECT" 2>/dev/null || true)
-  if [ -n "$USAGE_HINT" ]; then
-    echo "TappsMCP prior-session reminder: $USAGE_HINT"
-  fi
-fi
-exit 0
-""",
-    "tapps-post-edit.sh": (
+
+def _stop_hook_gate_scan_py() -> str:
+    """TAP-1326/1327 Stop-hook transcript scan, shared by the bash and
+    PowerShell warn-mode Stop hooks (TAP-6737).
+
+    Reads ``TAPPS_STOP_TRANSCRIPT`` / ``TAPPS_STOP_PROJECT_DIR`` from the
+    environment rather than having each shell interpolate the values into the
+    script text, so the exact same Python source runs unchanged whether piped
+    in via a bash heredoc or a PowerShell here-string — one source for the
+    scorable-extension list, the violation-log JSON shape, and the transcript
+    parsing, so the two branches cannot independently drift the way the PR
+    304 regression (a parse error surviving seven green CI checks) did.
+    """
+    return (
         """\
-#!/usr/bin/env bash
-# TappsMCP PostToolUse hook (Edit/Write) — TAP-1326 / TAP-1330
-# Detects new external imports requiring tapps_lookup_docs. Advisory only;
-# the Stop hook enforces the completion gate.
-INPUT=$(cat)
-PYBIN=$(command -v python3 2>/dev/null || command -v python 2>/dev/null)
-PARSED=$(TAPPS_HOOK_INPUT="$INPUT" "$PYBIN" - <<'PYEOF' 2>/dev/null
-"""
-        + _CURSOR_AFTER_EDIT_IMPORT_PARSE_PY
-        + """\
-PYEOF
-)
-FILE=$(echo "$PARSED" | sed -n '1p')
-LIBS=$(echo "$PARSED" | sed -n '2p')
-API=$(echo "$PARSED" | sed -n '3p')
-SKILL_GUARD=$(echo "$PARSED" | sed -n '4p')
-if [ "$SKILL_GUARD" = "1" ]; then
-"""
-        + f'  echo "{MANAGED_SKILL_BLOCK_EDIT_WARNING_BASH}" >&2\n'
-        + """fi
-case "$FILE" in
-  *.py|*.pyi|*.ts|*.tsx|*.js|*.jsx|*.go|*.rs)
-"""
-        + f'    echo "{POST_EDIT_QUICK_CHECK_BASH}" >&2\n'
-        + '    if [ -n "$LIBS" ]; then\n'
-        + f'      echo "{POST_EDIT_IMPORT_LOOKUP_BASH}" >&2\n'
-        + "    fi\n"
-        + '    if [ "$API" = "1" ]; then\n'
-        + f'      echo "{POST_EDIT_PUBLIC_API_DRIFT_BASH}" >&2\n'
-        + f'      echo "{POST_EDIT_PUBLIC_API_CALL_GRAPH_BASH}" >&2\n'
-        + """    fi
-    ;;
-esac
-exit 0
-"""
-    ),
-    "tapps-stop.sh": (
-        """\
-#!/usr/bin/env bash
-# TappsMCP Stop hook — TAP-1326 / TAP-1327
-# Phase 1 (always when transcript exists): scan tool calls, write loop-metrics.jsonl
-#   + write .tapps-mcp/.completion-gate-violations.jsonl when files were edited
-#   without tapps_validate_changed / tapps_quality_gate / tapps_checklist (warn-mode telemetry).
-# Phase 2 (always): conditional reminder to stderr — only fires when violations detected.
-# IMPORTANT: Must check stop_hook_active to prevent infinite loops.
-INPUT=$(cat)
-PYBIN=$(command -v python3 2>/dev/null || command -v python 2>/dev/null)
-PARSED=$(echo "$INPUT" | "$PYBIN" -c \
-  "import sys,json
-try:
-    d=json.load(sys.stdin)
-    print(d.get('stop_hook_active','false'))
-    print(d.get('transcript_path',''))
-except Exception:
-    print('false'); print('')" 2>/dev/null)
-ACTIVE=$(echo "$PARSED" | sed -n '1p')
-TRANSCRIPT=$(echo "$PARSED" | sed -n '2p')
-if [ "$ACTIVE" = "True" ] || [ "$ACTIVE" = "true" ]; then
-  exit 0
-fi
-PROJECT_DIR="${CLAUDE_PROJECT_DIR:-.}"
-GATE_REPORT=""
-if [ -n "$TRANSCRIPT" ] && [ -f "$TRANSCRIPT" ]; then
-  GATE_REPORT=$("$PYBIN" - <<PYEOF 2>/dev/null
 import json,os,time
-transcript='$TRANSCRIPT'
-project_dir='$PROJECT_DIR'
+transcript=os.environ.get('TAPPS_STOP_TRANSCRIPT','')
+project_dir=os.environ.get('TAPPS_STOP_PROJECT_DIR','.')
 gate_tools={'tapps_quick_check','tapps_validate_changed','tapps_quality_gate',
             'mcp__tapps-mcp__tapps_quick_check','mcp__tapps-mcp__tapps_validate_changed',
             'mcp__tapps-mcp__tapps_quality_gate','mcp__tapps-quality__tapps_quick_check',
@@ -567,6 +448,159 @@ if miss:
     except Exception:
         pass
 print('|'.join(miss))
+"""
+    )
+
+
+CLAUDE_HOOK_SCRIPTS: dict[str, str] = {
+    "tapps-session-start.sh": """\
+#!/usr/bin/env bash
+# TappsMCP SessionStart hook (startup/resume)
+# Directs the agent to call tapps_session_start as the first MCP action.
+# TAP-1379: Short-circuits on subsequent fires within the same Claude session
+# (resume/compact re-fire the SessionStart hook; emitting the REQUIRED prompt
+# every time caused agents to re-call tapps_session_start ~23x per session).
+INPUT=$(cat)
+SID=$(printf '%s' "$INPUT" | sed -n 's/.*"session_id"[[:space:]]*:[[:space:]]*"\\([^"]*\\)".*/\\1/p' | head -n1)
+SENTINEL_DIR="${TAPPS_PROJECT_ROOT:-.}/.tapps-mcp"
+if [ -n "$SID" ]; then
+  SENTINEL="$SENTINEL_DIR/.session-start-fired-$SID"
+  if [ -f "$SENTINEL" ]; then
+    # Already prompted the agent for this Claude session; stay silent on resume.
+    exit 0
+  fi
+  mkdir -p "$SENTINEL_DIR" 2>/dev/null || true
+  : > "$SENTINEL" 2>/dev/null || true
+fi
+# ADR-0005: Kill MCP server processes older than 2 hours to prevent zombie
+# accumulation. Claude Code spawns a new tapps-mcp/docsmcp process per session
+# but does not consistently reap old children — after several sessions this
+# becomes a significant resource and Postgres connection leak.
+"""
+    + _mcp_zombie_cleanup_bash(reap_nlt_duplicates=True, reap_stale_nlt_profiles=True)
+    + """\
+# TAP-1927: Pre-warm the brain tools-list cache so _negotiate_profile_locked
+# can skip the live MCP tools/list round-trip on the first bridge call.
+# Runs in the background (does not block session start) and is best-effort
+# (curl failure leaves the cache absent; bridge falls through to live fetch).
+if [ -n "${TAPPS_MCP_MEMORY_BRAIN_HTTP_URL:-}" ] && command -v curl &>/dev/null; then
+    _BRAIN_PROFILE="${TAPPS_BRAIN_PROFILE:-}"
+    _CACHE_DIR="${TAPPS_PROJECT_ROOT:-.}/.tapps-mcp"
+    _SAFE_PROFILE=$(printf '%s' "$_BRAIN_PROFILE" | tr -c 'A-Za-z0-9_-' '_')
+    _CACHE_FILE="$_CACHE_DIR/.brain-tools-list.${_SAFE_PROFILE}.json"
+    mkdir -p "$_CACHE_DIR" 2>/dev/null || true
+    _BRAIN_URL="${TAPPS_MCP_MEMORY_BRAIN_HTTP_URL%/}/v1/tools/list"
+    if [ -n "$_BRAIN_PROFILE" ]; then
+        _BRAIN_URL="${_BRAIN_URL}?profile=${_BRAIN_PROFILE}"
+    fi
+    curl -sf --max-time 1 "$_BRAIN_URL" -o "$_CACHE_FILE" 2>/dev/null &
+fi
+echo "REQUIRED: Call tapps_session_start() NOW as your first action."
+echo "This initializes project context for all TappsMCP quality tools."
+echo "Tools called without session_start will have degraded accuracy."
+# TAP-3578: Prior-session pipeline gap reminder from disk telemetry.
+PROJECT="${TAPPS_PROJECT_ROOT:-${CLAUDE_PROJECT_DIR:-.}}"
+USAGE_HINT=""
+if command -v tapps-mcp >/dev/null 2>&1; then
+  USAGE_HINT=$(tapps-mcp usage-gaps-hint --project-root "$PROJECT" 2>/dev/null || true)
+elif command -v uv >/dev/null 2>&1 && [ -f "$PROJECT/pyproject.toml" ]; then
+  USAGE_HINT=$(cd "$PROJECT" && uv run tapps-mcp usage-gaps-hint 2>/dev/null || true)
+fi
+if [ -n "$USAGE_HINT" ]; then
+  echo "TappsMCP prior-session reminder: $USAGE_HINT"
+fi
+exit 0
+""",
+    "tapps-session-compact.sh": """\
+#!/usr/bin/env bash
+# TappsMCP SessionStart hook (compact)
+# Re-injects TappsMCP context after context compaction.
+INPUT=$(cat)
+echo "[TappsMCP] Context was compacted — re-injecting TappsMCP awareness."
+# Compaction can drop the original session_start result from context. Re-prompt
+# so the agent re-establishes it; the session-start gate (if enabled) already
+# has its per-session sentinel from the initial run, so no gate re-trip occurs.
+echo "If tapps_session_start context was lost in compaction, call tapps_session_start() again."
+echo "Remember: use tapps_quick_check after editing Python files."
+echo "Run tapps_validate_changed before declaring work complete."
+PROJECT="${TAPPS_PROJECT_ROOT:-${CLAUDE_PROJECT_DIR:-.}}"
+if command -v tapps-mcp >/dev/null 2>&1; then
+  USAGE_HINT=$(tapps-mcp usage-gaps-hint --project-root "$PROJECT" 2>/dev/null || true)
+  if [ -n "$USAGE_HINT" ]; then
+    echo "TappsMCP prior-session reminder: $USAGE_HINT"
+  fi
+fi
+exit 0
+""",
+    "tapps-post-edit.sh": (
+        """\
+#!/usr/bin/env bash
+# TappsMCP PostToolUse hook (Edit/Write) — TAP-1326 / TAP-1330
+# Detects new external imports requiring tapps_lookup_docs. Advisory only;
+# the Stop hook enforces the completion gate.
+INPUT=$(cat)
+PYBIN=$(command -v python3 2>/dev/null || command -v python 2>/dev/null)
+PARSED=$(TAPPS_HOOK_INPUT="$INPUT" "$PYBIN" - <<'PYEOF' 2>/dev/null
+"""
+        + _CURSOR_AFTER_EDIT_IMPORT_PARSE_PY
+        + """\
+PYEOF
+)
+FILE=$(echo "$PARSED" | sed -n '1p')
+LIBS=$(echo "$PARSED" | sed -n '2p')
+API=$(echo "$PARSED" | sed -n '3p')
+SKILL_GUARD=$(echo "$PARSED" | sed -n '4p')
+if [ "$SKILL_GUARD" = "1" ]; then
+"""
+        + f'  echo "{MANAGED_SKILL_BLOCK_EDIT_WARNING_BASH}" >&2\n'
+        + """fi
+case "$FILE" in
+"""
+        + f"  {SCORABLE_EXT_BASH_CASE})\n"
+        + f'    echo "{POST_EDIT_QUICK_CHECK_BASH}" >&2\n'
+        + '    if [ -n "$LIBS" ]; then\n'
+        + f'      echo "{POST_EDIT_IMPORT_LOOKUP_BASH}" >&2\n'
+        + "    fi\n"
+        + '    if [ "$API" = "1" ]; then\n'
+        + f'      echo "{POST_EDIT_PUBLIC_API_DRIFT_BASH}" >&2\n'
+        + f'      echo "{POST_EDIT_PUBLIC_API_CALL_GRAPH_BASH}" >&2\n'
+        + """    fi
+    ;;
+esac
+exit 0
+"""
+    ),
+    "tapps-stop.sh": (
+        """\
+#!/usr/bin/env bash
+# TappsMCP Stop hook — TAP-1326 / TAP-1327
+# Phase 1 (always when transcript exists): scan tool calls, write loop-metrics.jsonl
+#   + write .tapps-mcp/.completion-gate-violations.jsonl when files were edited
+#   without tapps_validate_changed / tapps_quality_gate / tapps_checklist (warn-mode telemetry).
+# Phase 2 (always): conditional reminder to stderr — only fires when violations detected.
+# IMPORTANT: Must check stop_hook_active to prevent infinite loops.
+INPUT=$(cat)
+PYBIN=$(command -v python3 2>/dev/null || command -v python 2>/dev/null)
+PARSED=$(echo "$INPUT" | "$PYBIN" -c \
+  "import sys,json
+try:
+    d=json.load(sys.stdin)
+    print(d.get('stop_hook_active','false'))
+    print(d.get('transcript_path',''))
+except Exception:
+    print('false'); print('')" 2>/dev/null)
+ACTIVE=$(echo "$PARSED" | sed -n '1p')
+TRANSCRIPT=$(echo "$PARSED" | sed -n '2p')
+if [ "$ACTIVE" = "True" ] || [ "$ACTIVE" = "true" ]; then
+  exit 0
+fi
+PROJECT_DIR="${CLAUDE_PROJECT_DIR:-.}"
+GATE_REPORT=""
+if [ -n "$TRANSCRIPT" ] && [ -f "$TRANSCRIPT" ]; then
+  GATE_REPORT=$(TAPPS_STOP_TRANSCRIPT="$TRANSCRIPT" TAPPS_STOP_PROJECT_DIR="$PROJECT_DIR" "$PYBIN" - <<PYEOF 2>/dev/null
+"""
+        + _stop_hook_gate_scan_py()
+        + """\
 PYEOF
 )
 fi
@@ -880,7 +914,8 @@ if [ -n "$LINE" ]; then
 fi
 exit 0
 """,
-    "tapps-pre-bash.sh": """\
+    "tapps-pre-bash.sh": (
+        """\
 #!/usr/bin/env bash
 # TappsMCP PreToolUse hook (Bash) - destructive command guard (opt-in)
 # Blocks commands containing rm -rf, format c:, etc. Exit 2 = block, 0 = allow.
@@ -891,7 +926,9 @@ INPUT=$(cat)
 PYBIN=$(command -v python3 2>/dev/null || command -v python 2>/dev/null)
 if [ -z "$PYBIN" ]; then
   # TAP-1785: enforcement gate fails closed when python is unavailable.
-  ROOT="${CLAUDE_PROJECT_DIR:-$PWD}"
+"""
+        + LEDGER_ROOT_RESOLVE_BASH
+        + """
   mkdir -p "$ROOT/.tapps-mcp" 2>/dev/null
   echo "{\\"ts\\":\\"$(date -u +%FT%TZ)\\",\\"hook\\":\\"tapps-pre-bash\\",\\"reason\\":\\"no_python\\"}" \\
     >> "$ROOT/.tapps-mcp/.bypass-log.jsonl" 2>/dev/null
@@ -1083,7 +1120,8 @@ else:
   esac
 fi
 exit 0
-""",
+"""
+    ),
     "tapps-memory-auto-capture.sh": """\
 #!/usr/bin/env bash
 # TappsMCP Stop hook - Auto-Capture (Epic 65.5)
@@ -1160,23 +1198,48 @@ if ($file -and $file -match '\\.py$') {
 }
 exit 0
 """,
-    "tapps-stop.ps1": """\
-# TappsMCP Stop hook
-# Reminds to run tapps_validate_changed but does NOT block.
+    "tapps-stop.ps1": (
+        """\
+# TappsMCP Stop hook — TAP-1326/1327 (warn mode) / TAP-6737
+# Phase 1: transcript scan for needs_gate/gate_called/checklist_called, always
+# writes .tapps-mcp/loop-metrics.jsonl and appends
+# .tapps-mcp/.completion-gate-violations.jsonl on a miss — ported from the
+# bash branch via the shared _stop_hook_gate_scan_py() source so the two
+# cannot independently drift (TAP-6737; the PR 304 regression was exactly a
+# parse error surviving seven green CI checks on one branch only).
+# Phase 2: reminds to run tapps_validate_changed but does NOT block.
 # Reads sidecar progress file for richer context when available.
 # IMPORTANT: Must check stop_hook_active to prevent infinite loops.
 $rawInput = @($input) -join "`n"
 try {
     $data = $rawInput | ConvertFrom-Json
     $active = $data.stop_hook_active
+    $transcript = [string]$data.transcript_path
 } catch {
     $active = $false
+    $transcript = ""
 }
 if ($active -eq $true -or $active -eq "true" -or $active -eq "True") {
     exit 0
 }
 $projDir = $env:CLAUDE_PROJECT_DIR
 if (-not $projDir) { $projDir = "." }
+$gateReport = ""
+if ($transcript -and (Test-Path $transcript)) {
+    $py = Get-Command python3 -ErrorAction SilentlyContinue
+    if (-not $py) { $py = Get-Command python -ErrorAction SilentlyContinue }
+    if ($py) {
+        $env:TAPPS_STOP_TRANSCRIPT = $transcript
+        $env:TAPPS_STOP_PROJECT_DIR = $projDir
+        $scanScript = @'
+"""
+        + _stop_hook_gate_scan_py()
+        + """\
+'@
+        $scanLines = @($scanScript | & $py.Source - 2>$null)
+        if ($scanLines.Count -gt 0) { $gateReport = [string]$scanLines[-1] }
+    }
+}
 $progress = "$projDir/.tapps-mcp/.validation-progress.json"
 if (Test-Path $progress) {
     try {
@@ -1205,9 +1268,15 @@ if (Test-Path $reportProgress) {
         }
     } catch {}
 }
+if ($gateReport) {
+    [Console]::Error.WriteLine("TappsMCP completion-gate (warn): $gateReport")
+"""
+        + f'    [Console]::Error.WriteLine("{STOP_FINISH_REMINDER}")\n'
+        + """}
 Write-Host "Reminder: Before declaring complete, run /tapps-finish-task (or tapps_validate_changed + tapps_checklist manually)." -ForegroundColor Yellow
 exit 0
-""",
+"""
+    ),
     "tapps-user-prompt-submit.ps1": """\
 # TappsMCP UserPromptSubmit hook (TAP-975 / TAP-2000)
 # Re-surfaces pipeline state per user turn so long sessions don't drift.
@@ -1870,8 +1939,8 @@ if [ "$SKILL_GUARD" = "1" ]; then
         + f'  echo "{MANAGED_SKILL_BLOCK_EDIT_WARNING_BASH}" >&2\n'
         + """fi
 case "$FILE" in
-  *.py|*.pyi|*.ts|*.tsx|*.js|*.jsx|*.go|*.rs)
 """
+        + f"  {SCORABLE_EXT_BASH_CASE})\n"
         + f'    echo "{POST_EDIT_QUICK_CHECK_BASH}" >&2\n'
         + '    if [ -n "$LIBS" ]; then\n'
         + f'      echo "{POST_EDIT_IMPORT_LOOKUP_BASH}" >&2\n'
@@ -2447,7 +2516,8 @@ date +%s > "$ROOT/.tapps-mcp/.linear-validate-sentinel" 2>/dev/null
 exit 0
 """
 
-LINEAR_GATE_PRE_SAVE_SCRIPT = """\
+LINEAR_GATE_PRE_SAVE_SCRIPT = (
+    """\
 #!/usr/bin/env bash
 # TappsMCP PreToolUse hook — Linear write gate (TAP-981)
 # Blocks mcp__plugin_linear_linear__save_issue if no recent
@@ -2457,7 +2527,9 @@ INPUT=$(cat)
 PYBIN=$(command -v python3 2>/dev/null || command -v python 2>/dev/null)
 if [ -z "$PYBIN" ]; then
   # TAP-1785: enforcement gate fails closed when python is unavailable.
-  ROOT="${CLAUDE_PROJECT_DIR:-$PWD}"
+"""
+    + LEDGER_ROOT_RESOLVE_BASH
+    + """
   mkdir -p "$ROOT/.tapps-mcp" 2>/dev/null
   echo "{\\"ts\\":\\"$(date -u +%FT%TZ)\\",\\"hook\\":\\"tapps-pre-linear-write\\",\\"reason\\":\\"no_python\\"}" \\
     >> "$ROOT/.tapps-mcp/.bypass-log.jsonl" 2>/dev/null
@@ -2492,7 +2564,9 @@ if [ "$UPDATE_ONLY" = "1" ]; then
   exit 0
 fi
 if [ "${TAPPS_LINEAR_SKIP_VALIDATE:-0}" = "1" ]; then
-  ROOT="${CLAUDE_PROJECT_DIR:-$PWD}"
+"""
+    + LEDGER_ROOT_RESOLVE_BASH
+    + """
   mkdir -p "$ROOT/.tapps-mcp" 2>/dev/null
   echo "{\\"ts\\":\\"$(date -u +%FT%TZ)\\",\\"bypass\\":\\"TAPPS_LINEAR_SKIP_VALIDATE\\"}" \\
     >> "$ROOT/.tapps-mcp/.bypass-log.jsonl" 2>/dev/null
@@ -2533,6 +2607,7 @@ See .claude/rules/linear-standards.md.
 MSG
 exit 2
 """
+)
 
 LINEAR_GATE_HOOKS_CONFIG: dict[str, list[dict[str, Any]]] = {
     "PreToolUse": [
@@ -2597,7 +2672,8 @@ if ($tool -eq 'mcp__docs-mcp__docs_validate_linear_issue' -or $tool -eq 'mcp__nl
 exit 0
 """
 
-LINEAR_GATE_PRE_SAVE_SCRIPT_PS = """\
+LINEAR_GATE_PRE_SAVE_SCRIPT_PS = (
+    """\
 # TappsMCP PreToolUse hook — Linear write gate (TAP-981/TAP-986)
 # Blocks mcp__plugin_linear_linear__save_issue if no recent
 # docs_validate_linear_issue sentinel (within 30 minutes). Bypass with
@@ -2628,7 +2704,9 @@ if (-not (__LINEAR_SAVE_ISSUE_PS_EQ__)) {
 if ($updateOnly) {
     exit 0
 }
-$root = if ($env:CLAUDE_PROJECT_DIR) { $env:CLAUDE_PROJECT_DIR } else { $PWD.Path }
+"""
+    + LEDGER_ROOT_RESOLVE_PS
+    + """
 $dir = Join-Path $root '.tapps-mcp'
 if ($env:TAPPS_LINEAR_SKIP_VALIDATE -eq '1') {
     if (-not (Test-Path $dir)) {
@@ -2673,6 +2751,7 @@ if ($age -le 1800) {
 [Console]::Error.WriteLine("See .claude/rules/linear-standards.md.")
 exit 2
 """
+)
 
 LINEAR_GATE_HOOKS_CONFIG_PS: dict[str, list[dict[str, Any]]] = {
     "PreToolUse": [

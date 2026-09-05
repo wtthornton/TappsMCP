@@ -135,6 +135,7 @@ from tapps_mcp.distribution.doctor_skills import (
 from tapps_mcp.distribution.doctor_skip_drift import check_upgrade_skip_token_drift
 from tapps_mcp.distribution.doctor_telemetry import (
     _read_engagement_level,
+    check_bypass_log_violations,
     check_cache_gate_block_hint,
     check_completion_gate_violations,
     check_continuous_learning_v2_skill,
@@ -269,6 +270,10 @@ def _check_specs(root: Path, *, quick: bool = False) -> list[tuple[str, Callable
         (
             "Completion gate violations",
             lambda: check_completion_gate_violations(root),
+        ),
+        (
+            "Bypass log violations",
+            lambda: check_bypass_log_violations(root),
         ),
         (
             "continuous-learning-v2 skill",

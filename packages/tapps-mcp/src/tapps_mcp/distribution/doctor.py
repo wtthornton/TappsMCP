@@ -219,6 +219,7 @@ from tapps_mcp.distribution.doctor_telemetry import (
     _read_engagement_level as _read_engagement_level,
 )
 from tapps_mcp.distribution.doctor_telemetry import (
+    check_bypass_log_violations,
     check_cache_gate_block_hint,
     check_completion_gate_violations,
     check_continuous_learning_v2_skill,
@@ -248,6 +249,7 @@ __all__ = [
     "check_brain_profile",
     "check_brain_version_delta",
     "check_brain_version_floor",
+    "check_bypass_log_violations",
     "check_cache_gate_block_hint",
     "check_call_graph_index_cache",
     "check_call_graph_tools_profile",

@@ -13,6 +13,7 @@ from pathlib import Path
 from typing import Any
 
 from tapps_mcp.distribution.doctor_pipeline import (
+    _count_bypass_log_24h,
     _count_cache_gate_violations_24h,
     _count_completion_gate_violations_24h,
     _detect_cache_gate_mode,
@@ -273,6 +274,30 @@ def check_completion_gate_violations(project_root: Path) -> CheckResult:
         "Sessions ended with edited code and no checklist. Finish with "
         "/tapps-finish-task (or tapps_checklist, which now runs the missing "
         "validation itself) so the gate has real evidence to read.",
+    )
+
+
+def check_bypass_log_violations(project_root: Path) -> CheckResult:
+    """Report the enforcement-bypass 24 h count (TAP-6929).
+
+    Sibling of :func:`check_completion_gate_violations`: every enforcement
+    hook that supports a ``TAPPS_SKIP_*`` / ``TAPPS_LINEAR_SKIP_*`` escape
+    hatch appends one row to ``.tapps-mcp/.bypass-log.jsonl`` when used. Until
+    this check existed, nobody read that ledger — ``tapps doctor`` surfaced
+    nothing about how often gates were bypassed. Always reports (no mode
+    dependency): the bypass log applies across every gate that has one.
+    """
+    viol_24h = _count_bypass_log_24h(project_root)
+    message = f"{viol_24h} enforcement bypasses in 24h"
+    if viol_24h == 0:
+        return CheckResult("Bypass log violations", True, message)
+    return CheckResult(
+        "Bypass log violations",
+        True,
+        message,
+        "Enforcement hooks were bypassed via a TAPPS_SKIP_* / "
+        "TAPPS_LINEAR_SKIP_* env var. Review .tapps-mcp/.bypass-log.jsonl "
+        "for routine bypasses masking a gate that should be fixed instead.",
     )
 
 

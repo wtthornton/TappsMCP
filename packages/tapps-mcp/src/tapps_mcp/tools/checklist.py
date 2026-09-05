@@ -457,6 +457,8 @@ class CallTracker:
             if cls._persist_path is not None:
                 cls._calls.clear()
                 cls._load_persisted()
+                claimed_ids_path = cls._claimed_ids_path()
+                registry_is_new = claimed_ids_path is not None and not claimed_ids_path.is_file()
                 claimed = cls._load_claimed_ids() | {sid}
                 if cls._active_session_id is not None:
                     # The marker's line-1 id is always a real prior session,
@@ -470,11 +472,27 @@ class CallTracker:
                         newest_by_id[c.session_id] = max(
                             newest_by_id.get(c.session_id, c.timestamp), c.timestamp
                         )
-                orphans = {
+                orphan_candidates = {
                     oid
                     for oid, newest in newest_by_id.items()
                     if now - newest <= cls._ORPHAN_ADOPTION_WINDOW_SECONDS
                 }
+                if registry_is_new and len(orphan_candidates) > 1:
+                    # TAP-6814: the registry's *absence* cannot distinguish a
+                    # migration ledger's pre-existing history (many distinct
+                    # ids, e.g. an upgrade landing right after a burst of real
+                    # sessions) from a genuine live sibling (always exactly
+                    # one anonymous pre-session window -- TAP-6738). More than
+                    # one simultaneously-unclaimed recent id at the very first
+                    # begin_session() is the migration shape, not a sibling:
+                    # seed the registry with all of them and adopt none, so a
+                    # brand-new session is never credited with a whole
+                    # project's history. A single candidate still goes through
+                    # the recency check below exactly as before.
+                    cls._append_claimed_ids(frozenset(orphan_candidates))
+                    orphans: set[str] = set()
+                else:
+                    orphans = orphan_candidates
                 adopted |= orphans
             cls._adopted_window_ids = frozenset(adopted)
             cls._active_session_id = sid

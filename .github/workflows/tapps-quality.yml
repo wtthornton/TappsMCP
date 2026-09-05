@@ -150,3 +150,54 @@ jobs:
 
       - name: Version pins in sync (bump-versions --check)
         run: python3 scripts/bump-versions.py --check
+
+  ps1-parse-check:
+    # TAP-6737: nothing else in CI parses the generated .ps1 hook templates,
+    # so a parse error (the PR 304 failure mode) can survive an all-green
+    # run. ubuntu-latest ships pwsh, so this is the fix, not a new gap.
+    name: powershell hook templates parse under pwsh
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@v7
+        with:
+          enable-cache: true
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+
+      - name: Install workspace
+        run: uv sync --all-packages --group dev
+
+      - name: Render and parse every generated .ps1 hook template
+        run: |
+          set -euo pipefail
+          uv run pytest -q -p no:randomly \
+            packages/tapps-mcp/tests/unit/test_hook_script_syntax.py \
+            -k ps1_template_parses -rs \
+            | tee /tmp/ps1-template-parses.log
+          skipped=$(grep -c "SKIPPED" /tmp/ps1-template-parses.log || true)
+          if [ "${skipped}" -ne 0 ]; then
+            echo "::error::${skipped} test_ps1_template_parses case(s) were SKIPPED on a pwsh-equipped runner -- the pwsh probe is broken." >&2
+            exit 1
+          fi
+
+      - name: Run the ps1 Stop hook tests (must not skip on this runner)
+        run: |
+          set -euo pipefail
+          uv run pytest -q -p no:randomly \
+            packages/tapps-mcp/tests/unit/test_platform_hook_templates.py \
+            -k ps1_stop_hook -rs \
+            | tee /tmp/ps1-stop-hook.log
+          skipped=$(grep -c "SKIPPED" /tmp/ps1-stop-hook.log || true)
+          if [ "${skipped}" -ne 0 ]; then
+            echo "::error::${skipped} ps1_stop_hook test(s) were SKIPPED on a pwsh-equipped runner -- the pwsh probe is broken." >&2
+            exit 1
+          fi

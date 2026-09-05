@@ -362,6 +362,77 @@ class TestCrossProcessChecklistCredit:
         assert result.called == []
         assert result.missing_required != []
 
+    def test_seed_claimed_ids_at_first_creation(self, _ledger: Path) -> None:
+        """TAP-6814: the round-2 recency window alone still adopted a
+        pre-existing id if its newest row happened to be RECENT — e.g. two
+        sibling sessions (sessA, sessB) both wrote within the adoption window
+        just before the very first begin_session() ran on an existing
+        install. Live probe: with no claimed_ids file and sessA/sessB in the
+        adoption window, first begin_session() adopted both. The registry
+        must instead be seeded with every distinct id already in the ledger
+        at first creation, so the first begin_session() adopts nothing.
+        """
+        recent_timestamp = time.time() - 30.0
+        _ledger.parent.mkdir(parents=True, exist_ok=True)
+        with _ledger.open("w", encoding="utf-8") as fh:
+            for sid in ("sessA", "sessB"):
+                record = ToolCallRecord(
+                    tool_name="tapps_score_file", timestamp=recent_timestamp, session_id=sid
+                )
+                fh.write(
+                    json.dumps(
+                        {
+                            "tool_name": record.tool_name,
+                            "timestamp": record.timestamp,
+                            "session_id": record.session_id,
+                            "success": record.success,
+                        }
+                    )
+                    + "\n"
+                )
+
+        registry_path = _ledger.parent / "checklist_claimed_ids"
+        assert not registry_path.exists()
+
+        self._rebind(_ledger)
+        CallTracker.begin_session("new-session")
+
+        assert CallTracker._adopted_window_ids == frozenset()
+        result = CallTracker.evaluate("feature", engagement_level="medium")
+        assert result.total_calls == 0
+        assert result.complete is False
+
+        # The registry now exists and was seeded with the pre-existing ids
+        # (plus the new session id), so a later begin_session on the same
+        # ledger would still adopt nothing from this history.
+        assert registry_path.exists()
+        seeded = frozenset(
+            ln.strip() for ln in registry_path.read_text(encoding="utf-8").splitlines() if ln.strip()
+        )
+        assert {"sessA", "sessB"} <= seeded
+
+    def test_sibling_adoption_still_works_once_registry_exists(self, _ledger: Path) -> None:
+        """Negative control / regression guard: seeding must only fire on
+        first creation. Once the registry already exists (pre-created here,
+        so this run's begin_session sees ``registry_is_new is False``), a
+        genuine cross-process sibling window must still be adopted (TAP-6738)
+        exactly as before this fix."""
+        registry_path = _ledger.parent / "checklist_claimed_ids"
+        registry_path.parent.mkdir(parents=True, exist_ok=True)
+        registry_path.write_text("", encoding="utf-8")
+
+        self._rebind(_ledger)
+        CallTracker.record("tapps_lookup_docs")
+        sibling_window = CallTracker._window_id
+        assert sibling_window is not None
+
+        self._rebind(_ledger)
+        CallTracker.begin_session("sess-1")
+
+        assert sibling_window in CallTracker._adopted_window_ids
+        result = CallTracker.evaluate("feature", engagement_level="medium")
+        assert "tapps_lookup_docs" in result.called
+
     def test_marker_named_prior_session_is_not_adopted_as_orphan(self, _ledger: Path) -> None:
         """TAP-6738 round 3 (verifier refutation): on an upgrade boundary the
         PRIOR session's rows are typically minutes old, well inside

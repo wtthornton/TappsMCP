@@ -2167,6 +2167,47 @@ class TestCheckCacheGateBlockHint:
         assert "block" in (result.detail or "").lower()
 
 
+class TestCheckBypassLogViolations:
+    """TAP-6929: the bypass ledger must reach a real doctor row."""
+
+    def test_no_log_reports_zero(self, tmp_path):
+        from tapps_mcp.distribution.doctor import check_bypass_log_violations
+
+        result = check_bypass_log_violations(tmp_path)
+        assert result.ok is True
+        assert "0 enforcement bypasses in 24h" in result.message
+
+    def test_seeded_ledger_reports_only_the_24h_row(self, tmp_path):
+        """One row now, one row 25h ago -- the doctor row must count only the
+        recent one, mirroring the counter's own window semantics."""
+        from datetime import UTC, datetime, timedelta
+
+        from tapps_mcp.distribution.doctor import check_bypass_log_violations
+
+        log = tmp_path / ".tapps-mcp" / ".bypass-log.jsonl"
+        log.parent.mkdir(parents=True)
+        now = datetime.now(UTC)
+        stale = now - timedelta(hours=25)
+        lines = [
+            json.dumps({"ts": now.isoformat(), "hook": "pre-push"}),
+            json.dumps({"ts": stale.isoformat(), "hook": "pre-push"}),
+        ]
+        log.write_text("\n".join(lines) + "\n", encoding="utf-8")
+
+        result = check_bypass_log_violations(tmp_path)
+        assert result.ok is True
+        assert "1 enforcement bypasses in 24h" in result.message
+        assert "bypass-log.jsonl" in (result.detail or "")
+
+    def test_included_in_collect_checks(self, tmp_path):
+        """The TAP-6929 bypass counter must be wired into _collect_checks,
+        the same way check_completion_gate_violations and
+        check_cache_gate_block_hint are (not test-only, TAP-6929)."""
+        checks = _collect_checks(tmp_path, quick=True)
+        names = [c.name for c in checks]
+        assert "Bypass log violations" in names
+
+
 class TestCheckCursorStopCompletionGate:
     def test_warn_mode_ok(self, tmp_path: Path) -> None:
         from tapps_mcp.distribution.doctor import check_cursor_stop_completion_gate

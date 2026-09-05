@@ -124,16 +124,14 @@ def _detect_session_start_gate_mode(project_root: Path) -> str:
     return "off"
 
 
-def _count_session_start_gate_violations_24h(project_root: Path) -> int:
-    """Count session-start gate violations logged in the last 24 h.
+def _count_jsonl_iso_ts_within_24h(log_path: Path) -> int:
+    """Count JSON-lines entries whose ISO-8601 ``ts`` field is within 24 h.
 
-    Reads ``.tapps-mcp/.session-start-gate-violations.jsonl`` and counts entries
-    whose ``ts`` is within 24 hours of now. Returns 0 when the log is missing or
-    unparseable — a doctor-time signal, not a gate, so failures degrade
-    silently. A non-zero count means the agent reached for TappsMCP quality
-    tools before tapps_session_start ran that session.
+    Shared by :func:`_count_session_start_gate_violations_24h` and
+    :func:`_count_bypass_log_24h`, which both log one ISO ``ts`` string per
+    line. Returns 0 when the log is missing or unparseable — a doctor-time
+    signal, not a gate, so failures degrade silently.
     """
-    log_path = project_root / ".tapps-mcp" / ".session-start-gate-violations.jsonl"
     if not log_path.exists():
         return 0
     cutoff = datetime.now(UTC) - timedelta(hours=24)
@@ -148,7 +146,7 @@ def _count_session_start_gate_violations_24h(project_root: Path) -> int:
                     entry = json.loads(stripped)
                 except json.JSONDecodeError:
                     continue
-                ts_raw = entry.get("ts", "")
+                ts_raw = entry.get("ts", "") if isinstance(entry, dict) else ""
                 if not isinstance(ts_raw, str):
                     continue
                 try:
@@ -160,6 +158,26 @@ def _count_session_start_gate_violations_24h(project_root: Path) -> int:
     except OSError:
         return 0
     return count
+
+
+def _count_session_start_gate_violations_24h(project_root: Path) -> int:
+    """Count session-start gate violations logged in the last 24 h.
+
+    A non-zero count means the agent reached for TappsMCP quality tools
+    before tapps_session_start ran that session.
+    """
+    return _count_jsonl_iso_ts_within_24h(
+        project_root / ".tapps-mcp" / ".session-start-gate-violations.jsonl"
+    )
+
+
+#: Ledger every enforcement hook appends to when explicitly bypassed (TAP-6929).
+BYPASS_LOG = ".bypass-log.jsonl"
+
+
+def _count_bypass_log_24h(project_root: Path) -> int:
+    """Count bypass-ledger entries from the last 24 h (TAP-6929)."""
+    return _count_jsonl_iso_ts_within_24h(project_root / ".tapps-mcp" / BYPASS_LOG)
 
 
 def _count_cache_gate_violations_24h(project_root: Path) -> int:
