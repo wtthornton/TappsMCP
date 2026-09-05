@@ -1306,10 +1306,10 @@ class TestTappsQuickCheckBatch:
         assert result["success"] is False
         assert result["error"]["code"] == "invalid_input"
 
-    # TODO(TAP-5656): batch quick_check reports plain success while
-    # data.results[] carries a per-file path_denied failure. Recorded as a live
-    # envelope inconsistency by the TAP-5659 sweep; the fix belongs to the tool.
-    @pytest.mark.envelope_allow("results")
+    # TAP-6618: batch quick_check used to report plain success while
+    # data.results[] carried a per-file path_denied failure. Recorded as a live
+    # envelope inconsistency by the TAP-5659 sweep; the tool now sets
+    # degraded=true instead of the guard-skipping test mark this used to carry.
     @pytest.mark.asyncio
     @patch("tapps_mcp.server._validate_file_path")
     @patch("tapps_mcp.server_scoring_tools.load_settings")
@@ -1335,7 +1335,7 @@ class TestTappsQuickCheckBatch:
         mock_settings.return_value.tool_timeout = 30
 
         result = await tapps_quick_check(file_path="", file_paths=f"{f_good},/nonexistent/bad.py")
-        assert result["success"] is True
+        assert result["success"] is True and result["degraded"] is True
         data = result["data"]
         assert data["files_checked"] == 2
         assert data["all_passed"] is False

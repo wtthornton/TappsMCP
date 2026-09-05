@@ -101,11 +101,6 @@ class TestDependencyScanTool:
         assert len(cached) == 1
         assert cached[0].package == "requests"
 
-    # TODO(TAP-5656): tapps_dependency_scan sets data["error"] when pip-audit is
-    # missing but still returns a plain success envelope
-    # (server_analysis_tools.py:1230-1232). Recorded as a live envelope
-    # inconsistency by the TAP-5659 sweep; the tool fix belongs to the owning issue.
-    @pytest.mark.envelope_allow("error")
     @pytest.mark.asyncio
     async def test_error_does_not_populate_cache(self):
         """Scan with error does not populate cache."""
@@ -124,6 +119,7 @@ class TestDependencyScanTool:
             result = await tapps_dependency_scan()
 
         assert "error" in result["data"]
+        assert result["degraded"] is True
 
         from tapps_mcp.config.settings import load_settings
 
