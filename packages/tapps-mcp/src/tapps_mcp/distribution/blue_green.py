@@ -22,6 +22,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -237,8 +238,60 @@ def build_release(checkout: Path, release: ReleaseRef, *, force: bool = False) -
     return {"ok": True, "skipped": False, "release": release.name, "path": str(release.path)}
 
 
+# Doctor checks whose failure means the *release itself* is unhealthy (bad
+# binary, version skew between the built release and its declared version,
+# the deploy layout, or a server that will not stay up) -- these gate the
+# post-flip smoke test. Everything else `tapps-mcp doctor --quick` reports is
+# about the *consumer worktree* (missing .mcp.json, stale permission entries,
+# scaffold drift) which a fresh worktree used only to run the smoke probe
+# cannot cure, and must not block a healthy release from going live (TAP-6965).
+_RELEASE_HEALTH_CHECK_NAMES: frozenset[str] = frozenset(
+    {
+        "tapps-mcp binary",
+        "tapps-mcp binary version",
+        "docsmcp binary version",
+        "Blue/green MCP deploy",
+        "HTTP fleet liveness",
+        "Fleet crash loop",
+    }
+)
+
+_DOCTOR_REPORT_LINE_RE = re.compile(r"^\s*(PASS|WARN|FAIL)\s+(.*)$")
+
+
+def _parse_doctor_report(text: str) -> list[dict[str, str]]:
+    """Parse ``tapps-mcp doctor`` plain-text output into per-check findings.
+
+    The doctor CLI has no ``--json`` mode, so this reads the same
+    ``  PASS  <name>: <message>`` / ``  WARN  ...`` / ``  FAIL  ...`` lines a
+    human reads (see ``run_doctor`` in ``doctor_runner.py``). Returns ``[]``
+    when *text* has no such lines -- e.g. the process crashed before printing
+    a report -- so callers can tell "no findings" apart from "not a report".
+    """
+    findings: list[dict[str, str]] = []
+    for line in text.splitlines():
+        match = _DOCTOR_REPORT_LINE_RE.match(line)
+        if not match:
+            continue
+        severity_word, rest = match.group(1), match.group(2)
+        name, _, message = rest.partition(": ")
+        findings.append(
+            {
+                "severity": severity_word.lower(),
+                "name": name.strip(),
+                "message": message.strip(),
+            }
+        )
+    return findings
+
+
 def smoke_test_release(release: ReleaseRef, *, project_root: Path | None = None) -> dict[str, Any]:
-    """Verify required binaries exist and report their versions."""
+    """Verify required binaries exist and report their versions.
+
+    When *project_root* is given, also runs ``tapps-mcp doctor --quick``
+    against it and classifies each finding as release-health (gating) or
+    consumer-staleness (reported, non-gating) per ``_RELEASE_HEALTH_CHECK_NAMES``.
+    """
     base = _smoke_required_binaries(release)
     if not base.get("ok"):
         return base
@@ -248,14 +301,39 @@ def smoke_test_release(release: ReleaseRef, *, project_root: Path | None = None)
 
     tapps_mcp = release.path / "bin" / "tapps-mcp"
     proc = _run([str(tapps_mcp), "doctor", "--quick"], cwd=project_root, timeout=120)
-    if proc.returncode != 0:
+    findings = _parse_doctor_report(proc.stdout or "")
+
+    if proc.returncode != 0 and not findings:
+        # Doctor did not even produce a parseable report -- e.g. the release's
+        # own tapps-mcp binary cannot import. That is release-unhealth by
+        # definition, independent of the check-name classification below.
         return {
             "ok": False,
-            "failures": ["doctor --quick failed"],
+            "failures": ["doctor --quick failed to produce a report (import/crash failure)"],
             "versions": versions,
             "output": (proc.stdout or proc.stderr or "").strip()[-1000:],
         }
-    return {"ok": True, "versions": versions}
+
+    release_health_failures = [
+        f
+        for f in findings
+        if f["severity"] == "fail" and f["name"] in _RELEASE_HEALTH_CHECK_NAMES
+    ]
+    consumer_staleness = [
+        f
+        for f in findings
+        if f["severity"] in ("fail", "warn") and f["name"] not in _RELEASE_HEALTH_CHECK_NAMES
+    ]
+
+    if release_health_failures:
+        return {
+            "ok": False,
+            "failures": [f"doctor: {f['name']}: {f['message']}" for f in release_health_failures],
+            "versions": versions,
+            "consumer_staleness": consumer_staleness,
+            "output": (proc.stdout or proc.stderr or "").strip()[-1000:],
+        }
+    return {"ok": True, "versions": versions, "consumer_staleness": consumer_staleness}
 
 
 def flip_current(release: ReleaseRef) -> dict[str, Any]:
@@ -441,7 +519,13 @@ def _deploy_under_lock(
         report["post_flip_smoke"] = post_flip
         if not post_flip.get("ok"):
             report["ok"] = False
+            report["post_flip_status"] = "aborted: release sick"
             return report
+        report["post_flip_status"] = (
+            "completed with consumer-staleness warnings"
+            if post_flip.get("consumer_staleness")
+            else "completed clean"
+        )
 
     from tapps_mcp.distribution.fleet_control import fleet_any_running, restart_fleet_with_smoke
 
