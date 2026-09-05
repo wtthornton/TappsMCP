@@ -72,3 +72,35 @@ def test_custom_thresholds_are_respected() -> None:
     )
     assert finding.bullet_count == 3
     assert finding.over_ceiling is True
+
+
+def test_breached_ceiling_names_bytes_only() -> None:
+    """TAP-6857 box 3: a byte-only breach must name the byte ceiling, not both."""
+    long_bullet = "- " + ("x" * (LEARNINGS_CEILING_BYTES + 1))
+    finding = learnings_size_finding(long_bullet)
+    assert finding.bytes_over is True
+    assert finding.bullets_over is False
+    assert finding.breached_ceiling == "byte ceiling"
+
+
+def test_breached_ceiling_names_bullets_only() -> None:
+    bullets = "\n".join(f"- lesson {i}" for i in range(LEARNINGS_CEILING_BULLETS + 1))
+    finding = learnings_size_finding(bullets)
+    assert finding.bullets_over is True
+    assert finding.bytes_over is False
+    assert finding.breached_ceiling == "bullet ceiling"
+
+
+def test_breached_ceiling_names_both() -> None:
+    long_bullets = "\n".join(
+        f"- lesson {i} " + ("x" * 500) for i in range(LEARNINGS_CEILING_BULLETS + 1)
+    )
+    finding = learnings_size_finding(long_bullets)
+    assert finding.bytes_over is True
+    assert finding.bullets_over is True
+    assert finding.breached_ceiling == "both"
+
+
+def test_breached_ceiling_is_none_when_compliant() -> None:
+    finding = learnings_size_finding("- a\n- b\n")
+    assert finding.breached_ceiling == "none"

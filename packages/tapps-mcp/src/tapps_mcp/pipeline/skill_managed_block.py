@@ -448,13 +448,34 @@ _TOP_LEVEL_BULLET_RE = re.compile(r"^- ", re.MULTILINE)
 
 @dataclass(frozen=True)
 class LearningsSizeFinding:
-    """``learnings.md`` byte size and top-level bullet count against the ceiling."""
+    """``learnings.md`` byte size and top-level bullet count against the ceiling.
+
+    ``bytes_over``/``bullets_over`` (TAP-6857 box 3) distinguish which ceiling
+    actually breached — a file 1 byte over on bytes and a file 3x over on
+    bytes previously read identically through ``over_ceiling`` alone.
+    """
 
     size_bytes: int
     bullet_count: int
     ceiling_bytes: int
     ceiling_bullets: int
-    over_ceiling: bool
+    bytes_over: bool
+    bullets_over: bool
+
+    @property
+    def over_ceiling(self) -> bool:
+        return self.bytes_over or self.bullets_over
+
+    @property
+    def breached_ceiling(self) -> str:
+        """Name which ceiling(s) actually breached — never both raw numbers alone."""
+        if self.bytes_over and self.bullets_over:
+            return "both"
+        if self.bytes_over:
+            return "byte ceiling"
+        if self.bullets_over:
+            return "bullet ceiling"
+        return "none"
 
 
 def learnings_size_finding(
@@ -470,13 +491,13 @@ def learnings_size_finding(
     """
     size_bytes = len(learnings_md.encode("utf-8"))
     bullet_count = len(_TOP_LEVEL_BULLET_RE.findall(learnings_md))
-    over = size_bytes > ceiling_bytes or bullet_count > ceiling_bullets
     return LearningsSizeFinding(
         size_bytes=size_bytes,
         bullet_count=bullet_count,
         ceiling_bytes=ceiling_bytes,
         ceiling_bullets=ceiling_bullets,
-        over_ceiling=over,
+        bytes_over=size_bytes > ceiling_bytes,
+        bullets_over=bullet_count > ceiling_bullets,
     )
 
 
