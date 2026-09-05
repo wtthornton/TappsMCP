@@ -418,6 +418,7 @@ def run_doctor_structured(
             "name": check.name,
             "ok": check.ok,
             "severity": check.severity,
+            "category": check.category,
             "message": check.message,
         }
         if check.detail:

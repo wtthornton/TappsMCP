@@ -10,6 +10,8 @@ from __future__ import annotations
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+from tapps_mcp.distribution.doctor_result import consumer_staleness
+
 if TYPE_CHECKING:
     from tapps_mcp.distribution.doctor_result import CheckResult
 
@@ -100,6 +102,7 @@ def _check_managed_skill_current(
     )
 
 
+@consumer_staleness
 def check_orchestration_prompt_skill_current(project_root: Path) -> CheckResult:
     """Check ``orchestration-prompt`` is deployed current, by content (TAP-5496, TAP-6948)."""
     return _check_managed_skill_current(
@@ -109,6 +112,7 @@ def check_orchestration_prompt_skill_current(project_root: Path) -> CheckResult:
     )
 
 
+@consumer_staleness
 def check_wayfind_skill_current(project_root: Path) -> CheckResult:
     """Check ``tapps-wayfind`` is deployed current, by content (TAP-5496, TAP-6948)."""
     return _check_managed_skill_current(
@@ -118,6 +122,7 @@ def check_wayfind_skill_current(project_root: Path) -> CheckResult:
     )
 
 
+@consumer_staleness
 def check_validation_contract_skill_current(project_root: Path) -> CheckResult:
     """Check ``tapps-validation-contract`` is deployed current, by content (TAP-5541, TAP-6948)."""
     return _check_managed_skill_current(
@@ -143,6 +148,7 @@ def _load_skills_manifest(project_root: Path) -> dict[str, object] | None:
     return data if isinstance(data, dict) else None
 
 
+@consumer_staleness
 def check_skills_manifest_directory(project_root: Path) -> CheckResult:
     """Diff the whole deployed skills directory against the emission-time manifest.
 
@@ -233,6 +239,7 @@ def check_skills_manifest_directory(project_root: Path) -> CheckResult:
     )
 
 
+@consumer_staleness
 def check_skill_mirror_parity(project_root: Path) -> CheckResult:
     """Compare each managed skill's block across every deployed host mirror (TAP-6944).
 
@@ -292,6 +299,7 @@ def check_skill_mirror_parity(project_root: Path) -> CheckResult:
     )
 
 
+@consumer_staleness
 def check_skill_asset_drift(project_root: Path) -> CheckResult:
     """Flag SKILL.md-customization-vs-asset drift in scaffolded skills (TAP-6497).
 
@@ -358,6 +366,7 @@ def check_skill_asset_drift(project_root: Path) -> CheckResult:
     )
 
 
+@consumer_staleness
 def check_orchestration_prompt_learnings_ceiling(project_root: Path) -> CheckResult:
     """Flag an over-ceiling ``orchestration-prompt`` ``learnings.md`` (TAP-6854).
 
@@ -435,6 +444,7 @@ def _is_verdict_pattern(content: str) -> bool:
     return any(marker in content for marker in _VERDICT_ENUM_MARKERS)
 
 
+@consumer_staleness
 def check_workflow_scripts_current(project_root: Path) -> CheckResult:
     """Flag scaffolded ``.claude/workflows/*.js`` missing a safety invariant (TAP-6890).
 

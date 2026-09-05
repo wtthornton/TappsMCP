@@ -497,7 +497,19 @@ def session_end_cmd(project_root: str) -> None:
     default=False,
     help="Quick mode: skip tool version checks for faster results.",
 )
-def doctor(project_root: str, quick: bool) -> None:
+@click.option(
+    "--json",
+    "emit_json",
+    is_flag=True,
+    default=False,
+    help=(
+        "Emit the structured check results as JSON instead of the text report. "
+        "Each check row carries `category` ('release-health' or "
+        "'consumer-staleness'), which callers like blue/green post-flip smoke "
+        "testing (TAP-6965) key on instead of the text report's PASS/WARN/FAIL lines."
+    ),
+)
+def doctor(project_root: str, quick: bool, emit_json: bool) -> None:
     """Diagnose MCP config, bootstrap files, hooks, checkers, tapps-brain, and memory flags.
 
     Includes an informational **Memory pipeline (effective config)** row (resolved settings).
@@ -505,8 +517,27 @@ def doctor(project_root: str, quick: bool) -> None:
     is missing so warn-mode telemetry to ``.completion-gate-violations.jsonl`` is inactive)
     and a `usage_gaps` summary (gap count + top recommendation from ``tapps_usage``).
 
-    Use `--quick` to skip per-tool version probes.
+    Use `--quick` to skip per-tool version probes. Use `--json` for a structured
+    report instead of the human-readable text one.
     """
+    if emit_json:
+        import json as _json
+
+        from tapps_core.common.logging import bootstrap_logging_from_env
+        from tapps_mcp.distribution.doctor import run_doctor_structured
+
+        # Structlog is unconfigured on the bare CLI entry point and defaults
+        # to printing to stdout, which would interleave log lines into the
+        # JSON payload below. Route it to stderr first so stdout carries only
+        # the JSON report -- callers like blue/green post-flip smoke testing
+        # (TAP-6965) parse this stdout as a single JSON document.
+        bootstrap_logging_from_env()
+        data = run_doctor_structured(project_root=project_root, quick=quick)
+        click.echo(_json.dumps(data))
+        if not data["all_passed"]:
+            raise SystemExit(1)
+        return
+
     from tapps_mcp.distribution.doctor import run_doctor
 
     success = run_doctor(project_root=project_root, quick=quick)

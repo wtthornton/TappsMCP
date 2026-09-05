@@ -22,7 +22,6 @@ from __future__ import annotations
 
 import json
 import os
-import re
 import shutil
 import subprocess
 import sys
@@ -238,48 +237,45 @@ def build_release(checkout: Path, release: ReleaseRef, *, force: bool = False) -
     return {"ok": True, "skipped": False, "release": release.name, "path": str(release.path)}
 
 
-# Doctor checks whose failure means the *release itself* is unhealthy (bad
-# binary, version skew between the built release and its declared version,
-# the deploy layout, or a server that will not stay up) -- these gate the
-# post-flip smoke test. Everything else `tapps-mcp doctor --quick` reports is
-# about the *consumer worktree* (missing .mcp.json, stale permission entries,
-# scaffold drift) which a fresh worktree used only to run the smoke probe
-# cannot cure, and must not block a healthy release from going live (TAP-6965).
-_RELEASE_HEALTH_CHECK_NAMES: frozenset[str] = frozenset(
-    {
-        "tapps-mcp binary",
-        "tapps-mcp binary version",
-        "docsmcp binary version",
-        "Blue/green MCP deploy",
-        "HTTP fleet liveness",
-        "Fleet crash loop",
-    }
-)
-
-_DOCTOR_REPORT_LINE_RE = re.compile(r"^\s*(PASS|WARN|FAIL)\s+(.*)$")
+# Post-flip smoke testing classifies each `tapps-mcp doctor --quick --json`
+# finding by the `category` the check itself sets on its `CheckResult`
+# (`"release-health"` default, `"consumer-staleness"` for checks that only
+# measure the *consumer worktree* -- see `doctor_result.consumer_staleness`
+# and its call sites). A finding is non-gating only when its category is
+# positively `"consumer-staleness"`; anything else -- including an unknown
+# future category and a crashed check (`doctor_runner._safe_check` never
+# carries a category forward) -- gates the deploy (TAP-6965).
 
 
-def _parse_doctor_report(text: str) -> list[dict[str, str]]:
-    """Parse ``tapps-mcp doctor`` plain-text output into per-check findings.
+def _parse_doctor_json(text: str) -> list[dict[str, str]] | None:
+    """Parse ``tapps-mcp doctor --quick --json`` stdout into per-check findings.
 
-    The doctor CLI has no ``--json`` mode, so this reads the same
-    ``  PASS  <name>: <message>`` / ``  WARN  ...`` / ``  FAIL  ...`` lines a
-    human reads (see ``run_doctor`` in ``doctor_runner.py``). Returns ``[]``
-    when *text* has no such lines -- e.g. the process crashed before printing
-    a report -- so callers can tell "no findings" apart from "not a report".
+    Returns ``None`` when *text* is not a parseable structured report -- e.g.
+    the process crashed before printing JSON -- so callers can tell "no
+    findings" apart from "not a report".
     """
+    text = (text or "").strip()
+    if not text:
+        return None
+    try:
+        payload = json.loads(text)
+    except json.JSONDecodeError:
+        return None
+    if not isinstance(payload, dict):
+        return None
+    checks = payload.get("checks")
+    if not isinstance(checks, list):
+        return None
     findings: list[dict[str, str]] = []
-    for line in text.splitlines():
-        match = _DOCTOR_REPORT_LINE_RE.match(line)
-        if not match:
+    for entry in checks:
+        if not isinstance(entry, dict):
             continue
-        severity_word, rest = match.group(1), match.group(2)
-        name, _, message = rest.partition(": ")
         findings.append(
             {
-                "severity": severity_word.lower(),
-                "name": name.strip(),
-                "message": message.strip(),
+                "name": str(entry.get("name", "")),
+                "severity": str(entry.get("severity", "fail")),
+                "message": str(entry.get("message", "")),
+                "category": str(entry.get("category", "release-health")),
             }
         )
     return findings
@@ -288,9 +284,10 @@ def _parse_doctor_report(text: str) -> list[dict[str, str]]:
 def smoke_test_release(release: ReleaseRef, *, project_root: Path | None = None) -> dict[str, Any]:
     """Verify required binaries exist and report their versions.
 
-    When *project_root* is given, also runs ``tapps-mcp doctor --quick``
+    When *project_root* is given, also runs ``tapps-mcp doctor --quick --json``
     against it and classifies each finding as release-health (gating) or
-    consumer-staleness (reported, non-gating) per ``_RELEASE_HEALTH_CHECK_NAMES``.
+    consumer-staleness (reported, non-gating) by the ``category`` field the
+    doctor check itself set (TAP-6965).
     """
     base = _smoke_required_binaries(release)
     if not base.get("ok"):
@@ -300,29 +297,29 @@ def smoke_test_release(release: ReleaseRef, *, project_root: Path | None = None)
         return {"ok": True, "versions": versions}
 
     tapps_mcp = release.path / "bin" / "tapps-mcp"
-    proc = _run([str(tapps_mcp), "doctor", "--quick"], cwd=project_root, timeout=120)
-    findings = _parse_doctor_report(proc.stdout or "")
+    proc = _run([str(tapps_mcp), "doctor", "--quick", "--json"], cwd=project_root, timeout=120)
+    findings = _parse_doctor_json(proc.stdout or "")
 
-    if proc.returncode != 0 and not findings:
+    if findings is None:
         # Doctor did not even produce a parseable report -- e.g. the release's
         # own tapps-mcp binary cannot import. That is release-unhealth by
-        # definition, independent of the check-name classification below.
+        # definition, independent of the category classification below.
         return {
             "ok": False,
-            "failures": ["doctor --quick failed to produce a report (import/crash failure)"],
+            "failures": [
+                "doctor --quick --json failed to produce a parseable report (import/crash failure)"
+            ],
             "versions": versions,
             "output": (proc.stdout or proc.stderr or "").strip()[-1000:],
         }
 
     release_health_failures = [
-        f
-        for f in findings
-        if f["severity"] == "fail" and f["name"] in _RELEASE_HEALTH_CHECK_NAMES
+        f for f in findings if f["severity"] == "fail" and f["category"] != "consumer-staleness"
     ]
     consumer_staleness = [
         f
         for f in findings
-        if f["severity"] in ("fail", "warn") and f["name"] not in _RELEASE_HEALTH_CHECK_NAMES
+        if f["severity"] in ("fail", "warn") and f["category"] == "consumer-staleness"
     ]
 
     if release_health_failures:

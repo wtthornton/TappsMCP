@@ -12,7 +12,7 @@ import json
 from pathlib import Path
 from typing import Any
 
-from tapps_mcp.distribution.doctor_result import CheckResult
+from tapps_mcp.distribution.doctor_result import CheckResult, consumer_staleness
 
 # ---------------------------------------------------------------------------
 # Consumer requirements mapping (Epic 50)
@@ -120,6 +120,7 @@ def _build_requirements_summary(
     return summary
 
 
+@consumer_staleness
 def check_uv_path_mismatch(project_root: Path) -> CheckResult:
     """Warn when MCP config uses bare ``tapps-mcp`` but project is uv-managed (Issue #77).
 
@@ -177,6 +178,7 @@ def check_uv_path_mismatch(project_root: Path) -> CheckResult:
     )
 
 
+@consumer_staleness
 def check_plaintext_secrets(project_root: Path) -> CheckResult:
     """Warn when ``.mcp.json`` stores secrets (API keys/tokens) in plaintext (Issue #80.3)."""
     from tapps_mcp.distribution.setup_generator import _collect_plaintext_secrets
@@ -221,6 +223,7 @@ def check_plaintext_secrets(project_root: Path) -> CheckResult:
     )
 
 
+@consumer_staleness
 def check_report_studio(project_root: Path) -> CheckResult:
     """Report whether nlt-report-studio is pinned in pyproject.toml."""
     try:
@@ -255,6 +258,7 @@ def check_report_studio(project_root: Path) -> CheckResult:
         return CheckResult("report_studio", False, f"Check failed: {exc}")
 
 
+@consumer_staleness
 def check_linear_sdlc(project_root: Path) -> CheckResult:
     """Report whether Linear SDLC templates are absent, current, or stale."""
     from tapps_mcp.pipeline.linear_sdlc.renderer import TEMPLATE_PATHS
@@ -298,6 +302,7 @@ def check_linear_sdlc(project_root: Path) -> CheckResult:
         )
 
 
+@consumer_staleness
 def check_legacy_doc_cache(root: Path) -> CheckResult:
     """ADR-0014: fail when per-repo doc cache subtrees remain after brain cutover."""
     from tapps_core.config.settings import load_settings

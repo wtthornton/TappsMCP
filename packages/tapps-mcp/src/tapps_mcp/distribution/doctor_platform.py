@@ -21,7 +21,7 @@ from tapps_mcp.distribution.doctor_pipeline import (
     _detect_session_start_gate_mode,
     _tapps_skill_bases,
 )
-from tapps_mcp.distribution.doctor_result import CheckResult
+from tapps_mcp.distribution.doctor_result import CheckResult, consumer_staleness
 
 log = get_logger(__name__)
 
@@ -67,6 +67,7 @@ def _hook_paths_from_claude_settings(data: dict[str, object]) -> list[str]:
     return out
 
 
+@consumer_staleness
 def check_claude_hook_scripts(project_root: Path) -> CheckResult:
     """Verify hook scripts referenced under ``.claude/settings*.json`` exist."""
     found_settings = False
@@ -121,6 +122,7 @@ _RETIRED_HOOK_REASONS: dict[str, str] = {
 }
 
 
+@consumer_staleness
 def check_retired_hooks(project_root: Path) -> CheckResult:
     """Flag retired hooks still wired (or, for tapps-pre-tooluse, present).
 
@@ -159,6 +161,7 @@ def check_retired_hooks(project_root: Path) -> CheckResult:
     return CheckResult("Retired hooks", True, "No retired hooks wired or present")
 
 
+@consumer_staleness
 def check_claude_md(project_root: Path) -> CheckResult:
     """Check if CLAUDE.md exists and contains TAPPS reference.
 
@@ -198,6 +201,7 @@ def check_claude_md(project_root: Path) -> CheckResult:
     )
 
 
+@consumer_staleness
 def check_cursor_rules(project_root: Path) -> CheckResult:
     """Check if ``.cursor/rules/tapps-pipeline.md`` exists."""
     rules_path = project_root / ".cursor" / "rules" / "tapps-pipeline.md"
@@ -211,6 +215,7 @@ def check_cursor_rules(project_root: Path) -> CheckResult:
     )
 
 
+@consumer_staleness
 def check_claude_md_stamp(project_root: Path) -> CheckResult:
     """Verify CLAUDE.md carries the ``<!-- tapps-claude-version: X.Y.Z -->`` stamp
     and that it matches the installed TappsMCP (TAP-2334).
@@ -323,6 +328,7 @@ def check_agents_md_stamp_matches_package(project_root: Path) -> CheckResult:
     )
 
 
+@consumer_staleness
 def check_linear_standards_rule(project_root: Path) -> CheckResult:
     """Check ``.claude/rules/linear-standards.md`` is present.
 
@@ -346,6 +352,7 @@ def check_linear_standards_rule(project_root: Path) -> CheckResult:
     )
 
 
+@consumer_staleness
 def check_agent_to_agent_rule(project_root: Path) -> CheckResult:
     """Check ``.claude/rules/agent-to-agent.md`` is present and current.
 
@@ -382,6 +389,7 @@ def check_agent_to_agent_rule(project_root: Path) -> CheckResult:
     )
 
 
+@consumer_staleness
 def check_autonomy_rule(project_root: Path) -> CheckResult:
     """Check ``.claude/rules/autonomy.md`` is present and current.
 
@@ -481,6 +489,7 @@ def _check_scoped_rule(
     )
 
 
+@consumer_staleness
 def check_security_rule(project_root: Path) -> CheckResult:
     """Check ``.claude/rules/security.md`` (TAP-978).
 
@@ -496,6 +505,7 @@ def check_security_rule(project_root: Path) -> CheckResult:
     )
 
 
+@consumer_staleness
 def check_test_quality_rule(project_root: Path) -> CheckResult:
     """Check ``.claude/rules/test-quality.md`` (TAP-978).
 
@@ -510,6 +520,7 @@ def check_test_quality_rule(project_root: Path) -> CheckResult:
     )
 
 
+@consumer_staleness
 def check_config_files_rule(project_root: Path) -> CheckResult:
     """Check ``.claude/rules/config-files.md`` (TAP-978).
 
@@ -541,6 +552,7 @@ def _linear_issue_skill_marker(host_label: str) -> str:
     return "docs_validate_linear_issue"
 
 
+@consumer_staleness
 def check_linear_issue_skill_current(project_root: Path) -> CheckResult:
     """Check the ``linear-issue`` skill is deployed and includes write tooling.
 
@@ -617,6 +629,7 @@ def _session_start_gate_status(project_root: Path) -> str:
     return f"Session-start gate: {session_gate_mode} ({session_viol_24h} violations in last 24h)"
 
 
+@consumer_staleness
 def check_pretooluse_matchers(project_root: Path) -> CheckResult:
     """Report each PreToolUse matcher present in .claude/settings.json (TAP-981).
 
@@ -676,6 +689,7 @@ def check_pretooluse_matchers(project_root: Path) -> CheckResult:
     )
 
 
+@consumer_staleness
 def check_upgrade_skip_tokens(project_root: Path) -> CheckResult:
     """Report ``upgrade_skip_files`` entries outside the fixed vocabulary (TAP-6499).
 
