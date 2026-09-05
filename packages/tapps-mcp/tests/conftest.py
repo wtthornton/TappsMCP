@@ -11,7 +11,7 @@ calls must be reset here.  When adding a new cache:
 2. Import and call it in ``_reset_caches()`` below.
 3. Verify isolation by running the new tests twice in a row.
 
-Current resets (13 total):
+Current resets (14 total):
   - settings              — ``tapps_core.config.settings._reset_settings_cache``
   - feature_flags         — ``tapps_core.config.feature_flags.feature_flags.reset``
   - scorer           — ``tapps_mcp.server_helpers._reset_scorer_cache``
@@ -25,6 +25,8 @@ Current resets (13 total):
   - dependency_cache — ``tapps_mcp.tools.dependency_scan_cache.clear_dependency_cache``
   - quick_check_recurring — ``tapps_mcp.quick_check_recurring._reset_recurring_quick_check_state``
   - memory_project_id     — ``tapps_mcp.memory_project_id.uninstall_memory_project_id_patch``
+  - context7_circuit_breaker — ``_reset_context7_circuit_breaker`` (this file; the
+    source module exposes no reset hook of its own, see that function's docstring)
 """
 
 from __future__ import annotations
@@ -522,6 +524,26 @@ def no_session_sentinel(monkeypatch: pytest.MonkeyPatch) -> None:
     _reset_session_start_cache()
 
 
+def _reset_context7_circuit_breaker() -> None:
+    """Reset the process-global Context7 circuit-breaker singleton (TAP-6592 follow-on).
+
+    ``get_context7_circuit_breaker()`` lazily creates a module-level singleton
+    with no reset hook of its own. A test that reaches ``LookupEngine``'s legacy
+    Context7 path with a real (unmocked) client hits the root socket guard's
+    ``AssertionError``, which ``CircuitBreaker.call`` treats as a generic
+    failure and counts against that shared breaker. Once it trips open, every
+    *other* test in the process that also defaults to the shared singleton --
+    including ones with a fully mocked client -- immediately gets "circuit
+    breaker open" without the mock ever being called, because ``call()``
+    checks state before invoking the wrapped callable. The leak is cross-test
+    state, not a live dial, so the fix is resetting it here rather than
+    marking any of those tests ``live_network``.
+    """
+    import tapps_core.knowledge.circuit_breaker as _cb
+
+    _cb._context7_breaker = None
+
+
 def _clear_test_singleton_caches() -> None:
     """Reset module-level singletons (see module docstring for registry)."""
     from tapps_core.config.feature_flags import feature_flags
@@ -529,6 +551,7 @@ def _clear_test_singleton_caches() -> None:
 
     _reset_settings_cache()
     feature_flags.reset()
+    _reset_context7_circuit_breaker()
 
     from tapps_mcp.quick_check_recurring import _reset_recurring_quick_check_state
     from tapps_mcp.server_helpers import (
