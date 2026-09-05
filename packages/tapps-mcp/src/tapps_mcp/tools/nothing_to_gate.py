@@ -134,7 +134,7 @@ def attach_verdict(
     the same census so the two can never disagree.
     """
     counts = census(project_root, file_paths=file_paths, base_ref=base_ref)
-    resp_data["nothing_to_gate"] = True
+    resp_data["nothing_to_gate"] = counts.nothing_to_gate
     resp_data["nothing_to_gate_reason"] = build_reason(counts)
     resp_data["changed_files_seen"] = counts.changed_files
     resp_data["non_scorable_changed"] = list(counts.non_scorable)
@@ -165,7 +165,8 @@ def build_reason(counts: ChangedFileCensus) -> str:
         )
     return (
         f"nothing needed validating — {counts.changed_files} changed file(s), "
-        f"0 scorable. No file-scoped tool has a target that this session touched."
+        f"{len(counts.scorable)} scorable. No file-scoped tool has a target "
+        "that this session touched."
     )
 
 

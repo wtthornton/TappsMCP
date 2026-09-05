@@ -87,6 +87,65 @@ def test_census_from_git_sees_the_py_change(repo: Path) -> None:
     assert counts.nothing_to_gate is False
 
 
+# ---------------------------------------------------------------------------
+# attach_verdict() — TAP-6732: the reason count must track the actual census,
+# and nothing_to_gate must reflect it rather than being hard-wired True.
+# ---------------------------------------------------------------------------
+
+
+def test_attach_verdict_reason_count_matches_marker_for_nonexistent_scorable_file(
+    repo: Path,
+) -> None:
+    """A named ``.py`` path that does not exist is still scorable-by-extension.
+
+    The old code hard-coded "0 scorable" in the reason string while the
+    sidecar recorded ``scorable_changed: 1`` for the same census — a
+    contradiction within one response. Both must agree.
+    """
+    resp: dict[str, object] = {}
+    ntg.attach_verdict(resp, repo, file_paths="ghost.py")
+
+    marker = ntg.read_marker(repo)
+    assert marker is not None
+    assert marker["scorable_changed"] == 1
+    assert "1 scorable" in str(resp["nothing_to_gate_reason"])
+    # A scorable (even if unresolvable) file present means this is not the
+    # "nothing needed validating" state.
+    assert resp["nothing_to_gate"] is False
+
+
+def test_attach_verdict_reason_count_matches_marker_for_path_validator_rejected_file(
+    repo: Path,
+) -> None:
+    """A traversal path is scorable-by-extension but would be rejected
+
+    downstream by the path validator before any scoring happens. The census
+    layer only inspects the extension, so the same contradiction applies.
+    """
+    resp: dict[str, object] = {}
+    ntg.attach_verdict(resp, repo, file_paths="../outside.py")
+
+    marker = ntg.read_marker(repo)
+    assert marker is not None
+    assert marker["scorable_changed"] == 1
+    assert "1 scorable" in str(resp["nothing_to_gate_reason"])
+    assert resp["nothing_to_gate"] is False
+
+
+def test_attach_verdict_nothing_to_gate_true_when_only_non_scorable_changed(
+    repo: Path,
+) -> None:
+    """The unconditional-True case this issue forbids: a purely non-scorable
+
+    changeset must still report ``nothing_to_gate: True``.
+    """
+    resp: dict[str, object] = {}
+    ntg.attach_verdict(resp, repo, file_paths="README.md")
+
+    assert resp["nothing_to_gate"] is True
+    assert "0 scorable" in str(resp["nothing_to_gate_reason"])
+
+
 def test_record_then_read_marker_roundtrip(repo: Path) -> None:
     counts = ntg.census(repo, file_paths="a.md,b.md")
     ntg.record(repo, counts)
