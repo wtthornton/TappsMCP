@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from pathlib import Path
 
 import structlog
 
@@ -125,6 +126,28 @@ _BANDIT_ARGS: list[str] = [
 ]
 
 
+def _bandit_config_args(cwd: str | None) -> list[str]:
+    """Return ``["-c", <path>]`` when *cwd* has a ``pyproject.toml``, else ``[]``.
+
+    TAP-5664: bandit does not read project config on its own — a caller's
+    ``[tool.bandit]`` ``exclude_dirs`` / ``skips`` are silently ignored unless
+    ``-c`` names that file explicitly. *cwd* must be the CONSUMER project's
+    root (``settings.project_root``), never tapps-mcp's own, or this would
+    apply the wrong project's exclusions. An absolute path is used so the
+    flag is correct regardless of the subprocess's actual working directory.
+    When no ``pyproject.toml`` exists at *cwd* (or *cwd* is unset), the flag
+    is omitted entirely rather than pointing bandit at a config that doesn't
+    exist — bandit fails closed on a missing ``-c`` target, which would turn
+    a scan into a silent parse failure.
+    """
+    if cwd is None:
+        return []
+    config_path = Path(cwd) / "pyproject.toml"
+    if not config_path.is_file():
+        return []
+    return ["-c", str(config_path)]
+
+
 def run_bandit_check(
     file_path: str, *, cwd: str | None = None, timeout: int = 30
 ) -> list[SecurityIssue] | None:
@@ -134,7 +157,7 @@ def run_bandit_check(
     Returns ``[]`` when bandit ran and found zero issues.
     """
     result = run_command(
-        [*_BANDIT_ARGS, file_path],
+        [*_BANDIT_ARGS, *_bandit_config_args(cwd), file_path],
         cwd=cwd,
         timeout=timeout,
     )
@@ -151,7 +174,7 @@ async def run_bandit_check_async(
     Returns ``[]`` when bandit ran and found zero issues.
     """
     result = await run_command_async(
-        [*_BANDIT_ARGS, file_path],
+        [*_BANDIT_ARGS, *_bandit_config_args(cwd), file_path],
         cwd=cwd,
         timeout=timeout,
     )

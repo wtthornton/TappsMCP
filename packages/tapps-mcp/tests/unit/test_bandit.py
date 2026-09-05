@@ -1,10 +1,15 @@
 """Tests for tools.bandit — parsing, scoring, and OWASP mapping."""
 
 import json
+import shutil
+from pathlib import Path
 from unittest.mock import patch
+
+import pytest
 
 from tapps_mcp.scoring.models import SecurityIssue
 from tapps_mcp.tools.bandit import (
+    _bandit_config_args,
     _map_owasp,
     calculate_security_score,
     parse_bandit_json,
@@ -153,3 +158,75 @@ class TestRunBanditCheck:
         mock_cmd.return_value = CommandResult(returncode=0, stdout="", stderr="")
         result = run_bandit_check("test.py")
         assert result is None
+
+    @patch("tapps_mcp.tools.bandit.run_command")
+    def test_passes_the_project_pyproject_as_bandit_config(self, mock_cmd, tmp_path):
+        """TAP-5664: when *cwd* is the consumer project, its own
+
+        ``pyproject.toml`` — not tapps-mcp's — must be handed to bandit via
+        ``-c`` so ``[tool.bandit]`` is honored.
+        """
+        (tmp_path / "pyproject.toml").write_text("[tool.bandit]\nexclude_dirs = []\n")
+        mock_cmd.return_value = CommandResult(returncode=0, stdout='{"results": []}', stderr="")
+
+        run_bandit_check("test.py", cwd=str(tmp_path))
+
+        args = mock_cmd.call_args[0][0]
+        assert "-c" in args
+        assert args[args.index("-c") + 1] == str(tmp_path / "pyproject.toml")
+
+
+class TestBanditConfigArgs:
+    def test_no_cwd_omits_the_flag(self):
+        assert _bandit_config_args(None) == []
+
+    def test_missing_pyproject_omits_the_flag(self, tmp_path):
+        assert _bandit_config_args(str(tmp_path)) == []
+
+    def test_present_pyproject_is_passed_absolute(self, tmp_path):
+        (tmp_path / "pyproject.toml").write_text("[tool.bandit]\n")
+        assert _bandit_config_args(str(tmp_path)) == ["-c", str(tmp_path / "pyproject.toml")]
+
+
+@pytest.mark.skipif(shutil.which("bandit") is None, reason="bandit CLI not installed")
+class TestBanditHonorsPyprojectExcludeDirs:
+    """TAP-5664 box 4-5: a real bandit invocation, not a mock.
+
+    Mocking ``run_command`` only proves the argv shape; it can't prove bandit
+    itself accepts ``-c`` this way and actually applies ``exclude_dirs`` — so
+    this drives the real CLI end to end.
+    """
+
+    def _project(self, tmp_path: Path) -> Path:
+        (tmp_path / "pyproject.toml").write_text(
+            '[tool.bandit]\nexclude_dirs = ["excluded"]\n'
+        )
+        excluded_dir = tmp_path / "excluded"
+        excluded_dir.mkdir()
+        flagged = excluded_dir / "bad.py"
+        flagged.write_text(
+            "import subprocess\n"
+            "subprocess.run('ls', shell=True)\n"
+        )
+        return flagged
+
+    def test_bandit_honors_pyproject_exclude_dirs(self, tmp_path):
+        flagged = self._project(tmp_path)
+
+        issues = run_bandit_check(str(flagged), cwd=str(tmp_path), timeout=30)
+
+        assert issues is not None
+        assert len(issues) == 0
+
+    def test_without_project_config_the_same_file_is_flagged(self, tmp_path):
+        """Negative control proving the exclusion above is real: the identical
+
+        file, scanned with no ``-c`` (no pyproject.toml at *cwd*), is flagged.
+        """
+        flagged = self._project(tmp_path)
+        (tmp_path / "pyproject.toml").unlink()
+
+        issues = run_bandit_check(str(flagged), cwd=str(tmp_path), timeout=30)
+
+        assert issues is not None
+        assert len(issues) >= 1
