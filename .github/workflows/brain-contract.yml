@@ -30,7 +30,7 @@ on:
   pull_request:
     branches: [main, master]
     paths:
-      - "packages/tapps-core/src/tapps_core/brain_bridge.py"
+      - "packages/tapps-core/src/tapps_core/brain_bridge*.py"
       - "packages/tapps-mcp/tests/integration/test_brain_http_contract.py"
       - ".github/workflows/brain-contract.yml"
   workflow_dispatch:

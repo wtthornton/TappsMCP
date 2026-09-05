@@ -15,9 +15,12 @@ def test_get_bridge_used_tools_falls_back_to_snapshot(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """Without tapps-mcp registration, the snapshot is the source of truth."""
-    import tapps_core.brain_bridge as bb
+    # TAP-6736: the registry global lives in brain_bridge_errors now (the
+    # facade only re-exports the accessor functions), so the module-level
+    # state being reset must be patched there, not on the facade.
+    import tapps_core.brain_bridge_errors as bb_errors
 
-    monkeypatch.setattr(bb, "_registered_bridge_used_tools", None)
+    monkeypatch.setattr(bb_errors, "_registered_bridge_used_tools", None)
     assert get_bridge_used_tools() == _BRIDGE_USED_TOOLS_SNAPSHOT
 
 
