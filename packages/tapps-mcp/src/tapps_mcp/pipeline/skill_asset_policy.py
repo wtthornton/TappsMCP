@@ -408,14 +408,17 @@ def plan_overwrite_report(path: Path, body: str) -> str | None:
 
     Returns ``None`` when the file is absent or already matches canonical —
     there is nothing to report. TAP-6497 acceptance item 2: a whole-file
-    overwrite of customized content must be named before it happens.
+    overwrite of customized content must be named before it happens. An
+    unreadable file (permissions, non-UTF-8 bytes) is reported as its own
+    warning entry rather than silently treated as "nothing to report"
+    (TAP-6612) — the overwrite still happens; the operator should know why.
     """
     if not path.exists():
         return None
     try:
         current = path.read_text(encoding="utf-8")
-    except (OSError, UnicodeDecodeError):
-        return None
+    except (OSError, UnicodeDecodeError) as exc:
+        return f"{path} could not be read ({exc}) before tapps_upgrade overwrites it wholesale."
     expected = f"{policy_header('overwrite')}\n{body.lstrip('\n')}"
     if current in (expected, body):
         return None

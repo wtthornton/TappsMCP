@@ -150,15 +150,56 @@ class TestGenerateDocsSkills:
         assert len(result["skipped"]) == 6
         assert len(result["created"]) == 0
 
-    def test_overwrite_mode(self, tmp_path: Path) -> None:
+    def test_overwrite_mode_with_unchanged_content_is_skipped(self, tmp_path: Path) -> None:
+        """Refreshing a managed block that already matches canonical is a no-op
+        (TAP-6612: switched from an unconditional write_text to
+        install_or_refresh_skill, whose ``"unchanged"`` result now buckets
+        under ``skipped`` instead of unconditionally under ``updated``)."""
         generate_docs_skills(tmp_path, "claude")
         result = generate_docs_skills(tmp_path, "claude", overwrite=True)
 
-        assert len(result["updated"]) == 6
+        assert len(result["skipped"]) == 6
+        assert len(result["updated"]) == 0
+
+    def test_overwrite_mode_refreshes_a_stale_managed_block(self, tmp_path: Path) -> None:
+        generate_docs_skills(tmp_path, "claude")
+        target = tmp_path / ".claude" / "skills" / "tapps-docs-refresh" / "SKILL.md"
+        target.write_text(
+            target.read_text(encoding="utf-8").replace(
+                "documentation", "STALE documentation", 1
+            ),
+            encoding="utf-8",
+        )
+
+        result = generate_docs_skills(tmp_path, "claude", overwrite=True)
+
+        assert "tapps-docs-refresh" in result["updated"]
+        assert "STALE documentation" not in target.read_text(encoding="utf-8")
 
     def test_unknown_platform(self, tmp_path: Path) -> None:
         result = generate_docs_skills(tmp_path, "unknown")
         assert "error" in result
+
+    def test_every_generated_skill_has_policy_header(self, tmp_path: Path) -> None:
+        """TAP-6612: every generated skill -- docs skills included -- carries
+        the one-line upgrade-policy header, not just the smart-merge trio."""
+        from tapps_mcp.pipeline.platform_skills import CLAUDE_SKILLS, generate_skills
+
+        generate_skills(tmp_path, "claude")
+        generate_docs_skills(tmp_path, "claude")
+
+        skill_names = sorted({*CLAUDE_SKILLS, *CLAUDE_DOCS_SKILLS})
+        assert len(skill_names) == len(CLAUDE_SKILLS) + len(CLAUDE_DOCS_SKILLS)
+
+        missing_header = [
+            name
+            for name in skill_names
+            if "upgrade-policy:"
+            not in (tmp_path / ".claude" / "skills" / name / "SKILL.md").read_text(
+                encoding="utf-8"
+            )
+        ]
+        assert not missing_header, f"{len(missing_header)}/{len(skill_names)} missing a header"
 
 
 # ---------------------------------------------------------------------------

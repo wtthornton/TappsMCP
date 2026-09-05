@@ -186,6 +186,17 @@ class TestOverwriteReport:
         assert str(target) in report
         assert "overwrites it wholesale" in report
 
+    def test_unreadable_file_is_reported_not_silently_none(self, tmp_path: Path) -> None:
+        """TAP-6612: an OSError/UnicodeDecodeError while reading the asset must
+        surface as its own warning entry, not be swallowed into ``None`` as if
+        there were nothing to report."""
+        target = tmp_path / "a.json"
+        target.write_bytes(b"\xff\xfe not valid utf-8 \x80\x81")
+        report = plan_overwrite_report(target, "{}")
+        assert report is not None
+        assert str(target) in report
+        assert "could not be read" in report
+
 
 class TestGeneratorIntegration:
     def test_companions_are_scaffolded_with_managed_blocks(self, tmp_path: Path) -> None:
