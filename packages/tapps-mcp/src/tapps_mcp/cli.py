@@ -545,6 +545,27 @@ def doctor(project_root: str, quick: bool, emit_json: bool) -> None:
         raise SystemExit(1)
 
 
+@main.command("lane-evidence")
+@click.argument(
+    "log_path",
+    type=click.Path(exists=True, dir_okay=False, path_type=Path),
+)
+def lane_evidence_cmd(log_path: Path) -> None:
+    """Parse a claude -p lane-log transcript for its final LINEAR EVIDENCE block (TAP-6614).
+
+    Pure parser (zero LLM tokens): reads the JSONL transcript already on disk and prints
+    structured JSON with the final assistant message, the ``--- LINEAR EVIDENCE ---`` block
+    (if any), and ``evidence_found``. On a resumed session, uses the LAST completed turn.
+    A log with no completed turn (lane killed mid-run) reports ``evidence_found: false``.
+    """
+    import json as _json
+
+    from tapps_mcp.tools.lane_evidence import parse_lane_evidence
+
+    data = parse_lane_evidence(log_path)
+    click.echo(_json.dumps(data))
+
+
 def _get_project_root() -> Path:
     """Resolve project root from TAPPS_MCP_PROJECT_ROOT env var or cwd."""
     from pathlib import Path

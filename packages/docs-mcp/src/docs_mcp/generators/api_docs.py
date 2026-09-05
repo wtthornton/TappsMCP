@@ -1227,7 +1227,13 @@ class APIDocGenerator:
 
     @staticmethod
     def _collect_symbols(module: APIDocModule) -> set[str]:
-        """Collect all symbol names defined in the module."""
+        """Collect symbol names that get their own rendered heading.
+
+        Excludes module constants: `_render_markdown` lists constants in a
+        table (no per-constant heading), so a `#constant-name` anchor would
+        never resolve (TAP-5894). Only functions, classes, and methods get
+        a `###`/`####` heading and are safe to cross-reference as anchors.
+        """
         symbols: set[str] = set()
         for func in module.functions:
             symbols.add(func.name)
@@ -1235,8 +1241,6 @@ class APIDocGenerator:
             symbols.add(class_doc.name)
             for method in class_doc.methods:
                 symbols.add(method.name)
-        for const in module.constants:
-            symbols.add(const.name)
         return symbols
 
     @staticmethod

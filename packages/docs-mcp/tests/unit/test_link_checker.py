@@ -279,6 +279,24 @@ class TestLinkChecker:
         assert report.valid_links == 1
         assert report.broken_links == []
 
+    def test_link_inside_inline_code_span_not_reported_broken(self, tmp_path: Path) -> None:
+        """A markdown link written inside an inline single-backtick code span never
+        renders as a real link in the rendered output, so the link checker must not
+        extract it and must not report it as a broken link (TAP-5894). This is one of
+        the two independent defects fixed for TAP-5894: unresolvable anchors and
+        inline-code links inflating broken_count.
+        """
+        # An inline single-backtick span containing markdown-link syntax is not a
+        # real link once rendered -- it should be skipped entirely.
+        (tmp_path / "README.md").write_text(
+            "# Project\n\n`[missing](nonexistent.md)`\n",
+            encoding="utf-8",
+        )
+
+        report = LinkChecker().check(tmp_path)
+        assert report.total_links == 0
+        assert report.broken_links == []
+
     def test_multiple_links_per_line(self, tmp_path: Path) -> None:
         """Multiple links on one line should all be checked."""
         (tmp_path / "a.md").write_text("# A\n", encoding="utf-8")

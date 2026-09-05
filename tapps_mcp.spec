@@ -444,6 +444,7 @@ a = Analysis(
         "tapps_mcp.tools.contract_telemetry",
         "tapps_mcp.tools.event_loop_guard",
         "tapps_mcp.tools.instinct_promotion",
+        "tapps_mcp.tools.lane_evidence",
         "tapps_mcp.tools.loop_metrics_aggregate",
         "tapps_mcp.tools.loop_metrics_io",
         "tapps_mcp.tools.loop_metrics_parse",

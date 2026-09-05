@@ -27,6 +27,12 @@ _BACKTICK_REF_RE = re.compile(
 # Fenced code block delimiter (``` with optional language tag).
 _FENCE_RE = re.compile(r"^\s*(`{3,}|~{3,})")
 
+# Inline single-backtick code span, e.g. `` `path/to/file.md:1-10` ``. Markdown never
+# renders a link written inside one as a link, so it must never be reported as broken
+# (TAP-5894). Deliberately excludes triple-backtick fences (handled by _FENCE_RE /
+# _find_fenced_blocks) via the `{1}` bound on each backtick run.
+_INLINE_CODE_SPAN_RE = re.compile(r"(?<!`)`(?!`)[^`\n]+`(?!`)")
+
 # Documentation file extensions to scan.
 _DOC_EXTENSIONS: frozenset[str] = frozenset({".md", ".rst", ".txt"})
 
@@ -308,6 +314,15 @@ def _check_backtick_refs(
     return refs
 
 
+def _inline_code_spans(line: str) -> list[tuple[int, int]]:
+    """Return (start, end) spans of inline single-backtick code on this line."""
+    return [m.span() for m in _INLINE_CODE_SPAN_RE.finditer(line)]
+
+
+def _in_any_span(pos: int, spans: list[tuple[int, int]]) -> bool:
+    return any(start <= pos < end for start, end in spans)
+
+
 def _check_file_links(
     file_path: Path,
     project_root: Path,
@@ -332,7 +347,14 @@ def _check_file_links(
     for line_num, line in enumerate(content.splitlines(), start=1):
         if line_num in fenced_lines:
             continue
+        inline_code_spans = _inline_code_spans(line)
         for match in _MARKDOWN_LINK_RE.finditer(line):
+            # A markdown link written inside an inline single-backtick code span
+            # (e.g. `` `[link](target)` ``) never renders as a link — skip it
+            # entirely rather than reporting it broken (TAP-5894).
+            if _in_any_span(match.start(), inline_code_spans):
+                continue
+
             link_text = match.group(1)
             link_target = _normalize_link_destination(match.group(2))
 
