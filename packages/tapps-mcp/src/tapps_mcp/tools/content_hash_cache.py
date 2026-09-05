@@ -78,15 +78,35 @@ def content_hash(path: Path) -> str:
     return h.hexdigest()
 
 
+def _sibling_test_signature(path: Path) -> str:
+    """TAP-6608: exact/fuzzy test-sibling match counts for *path*'s stem.
+
+    The ``test_coverage`` category is a pure function of this state (see
+    ``scoring.coverage_heuristic``), and content + path alone cannot see it:
+    adding or removing a name-matched test file (``test_auth.py`` for
+    ``auth.py``) changes nothing about ``auth.py``'s own bytes or location.
+    Folded into the cache key so that add/remove forces a rescore immediately
+    instead of waiting out the TTL.
+    """
+    from tapps_mcp.scoring.coverage_heuristic import _count_test_files, _find_project_root
+
+    root = _find_project_root(path)
+    if root is None:
+        return "0:0"
+    exact, fuzzy = _count_test_files(root, path.stem)
+    return f"{exact}:{fuzzy}"
+
+
 def result_key(path: Path, *, preset: str) -> str:
     """Cache key for a per-file tool result.
 
     Combines the file's content hash with the inputs the result also depends
     on but that the bytes do not capture: the resolved path (directory context
-    drives the ``devex`` / ``structure`` / ``test_coverage`` categories) and
-    the gate ``preset`` (drives ``gate_passed``). See the module docstring.
+    drives the ``devex`` / ``structure`` / ``test_coverage`` categories), the
+    gate ``preset`` (drives ``gate_passed``), and the sibling-test signature
+    (TAP-6608, see :func:`_sibling_test_signature`). See the module docstring.
     """
-    return f"{content_hash(path)}|{path.resolve()}|{preset}"
+    return f"{content_hash(path)}|{path.resolve()}|{preset}|{_sibling_test_signature(path)}"
 
 
 def get(kind: str, sha: str, *, ttl: float = _DEFAULT_TTL) -> dict[str, Any] | None:

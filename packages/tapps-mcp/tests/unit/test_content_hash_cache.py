@@ -4,10 +4,14 @@ from __future__ import annotations
 
 import time
 from pathlib import Path
-from unittest.mock import patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
+from tapps_mcp.gates.models import GateResult, GateThresholds
+from tapps_mcp.scoring.models import CategoryScore, ScoreResult
+from tapps_mcp.security.security_scanner import SecurityScanResult
+from tapps_mcp.server_scoring_tools import tapps_quick_check
 from tapps_mcp.tools import content_hash_cache as cache
 
 
@@ -130,6 +134,96 @@ def test_result_key_stable_for_same_file_and_preset(tmp_path: Path) -> None:
     assert cache.get(cache.KIND_QUICK_CHECK, cache.result_key(f, preset="standard")) == {
         "overall_score": 91.0
     }
+
+
+def _make_project(tmp_path: Path) -> tuple[Path, Path]:
+    """A tiny project: ``pkg/auth.py`` with an empty ``tests/`` dir. Returns
+    ``(source_file, tests_dir)``."""
+    (tmp_path / "pyproject.toml").write_text("[project]\nname = 'x'\n", encoding="utf-8")
+    pkg = tmp_path / "pkg"
+    pkg.mkdir()
+    source = pkg / "auth.py"
+    source.write_text("x = 1\n", encoding="utf-8")
+    tests_dir = tmp_path / "tests"
+    tests_dir.mkdir()
+    return source, tests_dir
+
+
+def test_result_key_changes_when_sibling_test_file_is_added(tmp_path: Path) -> None:
+    """TAP-6608: adding a name-matched test file must change the effective
+    cache key, forcing a rescore without waiting for TTL expiry -- the
+    test_coverage category depends on this state and cannot see it from
+    content + path alone."""
+    source, tests_dir = _make_project(tmp_path)
+
+    key_before = cache.result_key(source, preset="standard")
+    cache.set(cache.KIND_QUICK_CHECK, key_before, {"overall_score": 55.0})
+    assert cache.get(cache.KIND_QUICK_CHECK, key_before) is not None
+
+    (tests_dir / "test_auth.py").write_text("def test_x(): pass\n", encoding="utf-8")
+    key_after = cache.result_key(source, preset="standard")
+
+    assert key_after != key_before
+    assert cache.get(cache.KIND_QUICK_CHECK, key_after) is None
+
+
+def test_result_key_changes_when_sibling_test_file_is_removed(tmp_path: Path) -> None:
+    """Negative-direction control: removing the sibling must also bust the key,
+    proving the signal tracks live state rather than a one-way ratchet."""
+    source, tests_dir = _make_project(tmp_path)
+    test_file = tests_dir / "test_auth.py"
+    test_file.write_text("def test_x(): pass\n", encoding="utf-8")
+
+    key_with_sibling = cache.result_key(source, preset="standard")
+    test_file.unlink()
+    key_without_sibling = cache.result_key(source, preset="standard")
+
+    assert key_with_sibling != key_without_sibling
+
+
+async def test_quick_check_degraded_reflects_ruff_and_survives_cache_hit(
+    tmp_path: Path,
+) -> None:
+    """TAP-6608: degraded must reflect ruff (not only bandit) and survive a cache hit --
+    old code reported ``not sec_result.bandit_available`` alone and the cache-hit path
+    never passed ``degraded=`` at all, so a replay of a degraded run read as clean."""
+    f = tmp_path / "ruff_down.py"
+    f.write_text("x = 1\n", encoding="utf-8")
+    score = ScoreResult(
+        file_path=str(f),
+        overall_score=60.0,
+        categories={"linting": CategoryScore(name="linting", score=8.0, weight=1.0)},
+        degraded=True,
+        missing_tools=["ruff"],
+    )
+    gate = GateResult(passed=True, failures=[], thresholds=GateThresholds())
+    sec = SecurityScanResult(passed=True, total_issues=0, bandit_available=True)
+    scorer_mock = MagicMock(language="python", score_file_quick_enriched=lambda *a, **kw: score)
+
+    _record_call = patch("tapps_mcp.server._record_call", side_effect=lambda *a, **kw: None)
+    _record_exec = patch("tapps_mcp.server._record_execution", side_effect=lambda *a, **kw: None)
+    _with_nudges = patch(
+        "tapps_mcp.server._with_nudges", side_effect=lambda _t, resp, _c: resp
+    )
+    with (
+        _record_call,
+        _record_exec,
+        _with_nudges,
+        patch(
+            "tapps_mcp.server_scoring_tools.ensure_session_initialized", new_callable=AsyncMock
+        ),
+        patch("tapps_mcp.server._validate_file_path", return_value=f),
+        patch("tapps_mcp.server_scoring_tools._get_scorer_for_file", return_value=scorer_mock),
+        patch("tapps_mcp.server_scoring_tools.load_settings") as mock_settings,
+        patch("tapps_mcp.gates.evaluator.evaluate_gate", return_value=gate),
+        patch("tapps_mcp.security.security_scanner.run_security_scan", return_value=sec),
+    ):
+        mock_settings.return_value = MagicMock(project_root=tmp_path, tool_timeout=30)
+        first = await tapps_quick_check(str(f))
+        second = await tapps_quick_check(str(f))
+
+    assert first["degraded"] is True and first["data"].get("cache_hit") is not True
+    assert second["data"].get("cache_hit") is True and second["degraded"] is True
 
 
 def test_cache_hit_key_used_by_quick_check_wiring(tmp_path: Path) -> None:
