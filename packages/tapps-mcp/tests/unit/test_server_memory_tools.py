@@ -9,10 +9,12 @@ all non-lifecycle behaviour remains as before (refused envelope redirects).
 from __future__ import annotations
 
 import asyncio
+import json
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
+from tapps_mcp import server_memory_tools
 from tapps_mcp.server_memory_tools import (
     _LIFECYCLE_ACTIONS,
     _REFUSED_BRAIN_TOOL,
@@ -243,3 +245,106 @@ class TestMcpCatalogRemoval:
         from tapps_mcp.server import ALL_TOOL_NAMES
 
         assert "tapps_memory" in ALL_TOOL_NAMES
+
+
+def _big_entry(key: str = "k1") -> dict[str, object]:
+    return {
+        "key": key,
+        "value": "x" * 2000,
+        "tier": "pattern",
+        "confidence": 0.9,
+        "tags": ["a", "b"],
+    }
+
+
+@pytest.mark.asyncio()
+class TestCompactProjection:
+    """TAP-6616: get/search accept projection='compact'; default stays full."""
+
+    @pytest.fixture(autouse=True)
+    def _mock_session(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setattr(
+            "tapps_mcp.server_memory_tools.ensure_session_initialized",
+            _noop_init,
+        )
+
+    async def test_get_default_projection_is_unchanged_full(self) -> None:
+        entry = _big_entry()
+        with (
+            patch("tapps_mcp.server_memory_tools._MCP_MEMORY_MODE", "slim"),
+            patch("tapps_mcp.server_memory_tools._get_memory_store", return_value=MagicMock()),
+            patch("tapps_mcp.server_memory_tools._get_brain_bridge", return_value=None),
+            patch.dict(
+                server_memory_tools._DISPATCH,
+                {
+                    "get": lambda _store, _p: {
+                        "action": "get",
+                        "found": True,
+                        "entry": dict(entry),
+                        "store_metadata": {},
+                    }
+                },
+                clear=False,
+            ),
+        ):
+            result = await tapps_memory(action="get", key="k1")
+
+        assert result["data"]["entry"]["value"] == entry["value"]
+        assert "summary" not in result["data"]["entry"]
+
+    async def test_get_compact_projection_reduces_payload_by_70_percent(self) -> None:
+        entry = _big_entry()
+        with (
+            patch("tapps_mcp.server_memory_tools._MCP_MEMORY_MODE", "slim"),
+            patch("tapps_mcp.server_memory_tools._get_memory_store", return_value=MagicMock()),
+            patch("tapps_mcp.server_memory_tools._get_brain_bridge", return_value=None),
+            patch.dict(
+                server_memory_tools._DISPATCH,
+                {
+                    "get": lambda _store, _p: {
+                        "action": "get",
+                        "found": True,
+                        "entry": dict(entry),
+                        "store_metadata": {},
+                    }
+                },
+                clear=False,
+            ),
+        ):
+            result = await tapps_memory(action="get", key="k1", projection="compact")
+
+        compact_entry = result["data"]["entry"]
+        assert set(compact_entry) == {"key", "tier", "confidence", "tags", "summary"}
+        assert len(compact_entry["summary"]) <= 283  # 280 chars + "..."
+
+        full_bytes = len(json.dumps(entry).encode("utf-8"))
+        compact_bytes = len(json.dumps(compact_entry).encode("utf-8"))
+        assert full_bytes > 1024
+        assert compact_bytes <= full_bytes * 0.3
+
+    async def test_search_compact_projection_applies_to_every_result(self) -> None:
+        entries = [_big_entry("k1"), _big_entry("k2")]
+        with (
+            patch("tapps_mcp.server_memory_tools._MCP_MEMORY_MODE", "slim"),
+            patch("tapps_mcp.server_memory_tools._get_memory_store", return_value=MagicMock()),
+            patch("tapps_mcp.server_memory_tools._get_brain_bridge", return_value=None),
+            patch.dict(
+                server_memory_tools._DISPATCH,
+                {
+                    "search": lambda _store, _p: {
+                        "action": "search",
+                        "ranked": False,
+                        "results": [dict(e) for e in entries],
+                        "total_count": 2,
+                        "returned_count": 2,
+                        "query": "q",
+                        "store_metadata": {},
+                    }
+                },
+                clear=False,
+            ),
+        ):
+            result = await tapps_memory(action="search", query="q", projection="compact")
+
+        for item in result["data"]["results"]:
+            assert set(item) == {"key", "tier", "confidence", "tags", "summary"}

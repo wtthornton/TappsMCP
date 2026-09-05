@@ -37,6 +37,7 @@ from tapps_mcp.tools.handoff_memory import (
     enrich_memory_get_action_result,
     enrich_memory_save_action_result,
 )
+from tapps_mcp.tools.memory_projection import apply_memory_projection
 
 if TYPE_CHECKING:
     from collections.abc import Callable
@@ -579,6 +580,7 @@ async def tapps_memory(
     rating: str = "",
     details_json: str = "",
     memory_group: str = "",
+    projection: str = "full",
 ) -> dict[str, Any]:
     """[DEPRECATED 2026-Q3 — use mcp__tapps-brain__* tools directly]
     Cross-session memory store: saves, recalls, searches, and maintains
@@ -656,6 +658,11 @@ async def tapps_memory(
         safety_bypass: When True, skip content safety checks for save/save_bulk.
             Only honored when source="system" or memory.safety.allow_bypass is True.
             Agent/inferred sources cannot self-bypass. (H3c)
+        projection: "full" (default, unchanged existing behavior) or "compact"
+            for get/search. Compact replaces each entry with key, tier,
+            confidence, tags, and a summary capped at 280 chars — cuts payload
+            size by 70%+ on entries over 1KB. Any other value is treated as
+            "full". (TAP-6616)
 
     Actions:
         save: [DEPRECATED 2026-Q3 — use mcp__tapps-brain__brain_remember] Store a
@@ -981,6 +988,7 @@ async def tapps_memory(
         result_data = enrich_memory_get_action_result(params.key, result_data)
     elif action == "save" and isinstance(result_data, dict):
         result_data = enrich_memory_save_action_result(result_data)
+    result_data = apply_memory_projection(action, projection, result_data)
     return _finish(success_response("tapps_memory", elapsed, result_data))
 
 
