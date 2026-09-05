@@ -53,6 +53,9 @@ SKIP_TOKENS: dict[str, frozenset[str]] = {
     "measure_script": frozenset({"scripts/measure.py"}),
     "gitfacts_script": frozenset({"scripts/gitfacts.sh"}),
     "start_program_script": frozenset({"scripts/start-program.sh"}),
+    # TAP-7078 box 6: the two check scripts Output step 7 invokes by name.
+    "check_prompt_shape_script": frozenset({"scripts/check-prompt-shape.js"}),
+    "check_learnings_size_script": frozenset({"scripts/check-learnings-size.js"}),
 }
 
 ALL_SKIP_TOKENS: frozenset[str] = frozenset().union(*SKIP_TOKENS.values())

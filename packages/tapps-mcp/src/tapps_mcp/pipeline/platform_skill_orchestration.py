@@ -195,7 +195,10 @@ reserved for the single end-of-program regression proof.
 6. Save the prompt to `prompts/<short-slug>.md`.
 7. **Completeness self-check** — walk the **Guardrails** list above and confirm the
    emitted prompt satisfies every line; then run the **cold-start test** (a fresh
-   session with nothing loaded can run it). Fix anything weak before saving.
+   session with nothing loaded can run it). Fix anything weak before saving. Run
+   `node scripts/check-prompt-shape.js prompts/<slug>.md` and, when the program
+   carries a `learnings.md`, `node scripts/check-learnings-size.js learnings.md` —
+   fix whatever either names before saving.
    **Context lifecycle is checked explicitly**, because nothing else catches its
    absence: confirm the prompt names a context boundary per sub-goal (or says which
    sub-goals skip it and why), that the boundary carries the re-verify gate, and that
@@ -232,7 +235,9 @@ reserved for the single end-of-program regression proof.
 
 Two more references round out the method. The `learnings.md` protocol — what
 to mine, when to write it (twice: at generation time and at the end of every
-run), and how to keep the file readable — is
+run), and how to keep the file readable (the byte ceiling is the binding one;
+bullet count alone is misleading, since a handful of long bullets can blow the
+byte budget while staying under the bullet ceiling) — is
 `references/learnings-protocol.md`. Programs run by more than one
 interactive driver session — partition, integrator, review ring, the
 authorisation clause, the
@@ -822,6 +827,40 @@ resolve cases the proof-shape table does not spell out on its own.
    (method §3). Do not reuse it for the build-time-versus-runtime distinction — use
    "surface" there instead ("build surface" vs "runtime surface"), so a reader can
    rely on "plane" meaning one specific thing throughout an emitted prompt.
+
+## Rulings folded from a consuming project's local region
+
+Five rulings nlt-orchestrator carried in its own local region below this skill's
+managed block — folded here (TAP-7078 box 5) so an upgrade absorbs them instead of
+leaving them to silently re-diverge every time the block refreshes.
+
+9. A driver that merges, deploys, installs, or scopes a fix from a RED verdict is above
+   the `sonnet`+`medium` floor by construction. The floor is for read/triage-only
+   drivers; a driver-row that merges, deploys, installs, or scopes a fix runs at
+   `opus`+`high`, and a driver-row contesting identity (whose session actually sent a
+   message) runs `fable`/`opus` at `high`-`xhigh`.
+10. Input is an existing PLAN with an evidence file → §0c is already done; cite it, don't
+    redo it. When the request names a `reports/<program>/PLAN*.md` backed by a review or
+    STATE file: derive `## Unverified assumptions` from that file's stated non-verified
+    claims, cite the evidence file by path, and run the `tapps_lookup_docs` calls the
+    lanes will need into a `/tmp` docs file the briefs may read (lanes have no MCP) — or
+    state in the Research grant that no external library API is written against.
+11. After a `/clear`, every unattributed artifact in the tree is possibly your own —
+    and `ListAgents` absence is not authorship. Before naming an author, compare the
+    `from=` socket path on your own incoming and outgoing messages with the session
+    you are about to name; one socket is one process regardless of what the context
+    remembers.
+12. Two effort knobs. The Plane map's `effort` column is Workflow `opts.effort`; a
+    lane's effort is `dispatch-lane.sh`'s fourth argument; an Agent-tool subagent has
+    neither. Say which a cell means. A prompt that does not name its brief files has
+    lanes nobody can dispatch, and the shape check requires the `## Lane briefs`
+    table.
+13. `learnings.md` is read by an extractor, not in full; its ceiling is a check. The
+    managed "Read `learnings.md` before drafting" contradicts the delegation
+    doctrine at this file's size. Dispatch `Explore` + `sonnet` with the program's
+    shape and a 40-bullet cap; fold the struct. `node scripts/check-learnings-size.js`
+    owns the ceilings (bullets, bytes, bytes-per-bullet, and the trailing-date house
+    style).
 """
 _FIELD_RULES_AND_RULINGS = _render_carve_out_categories(_FIELD_RULES_AND_RULINGS)
 
@@ -1202,9 +1241,11 @@ outcome**, stated in one line. A manufactured lesson corrupts this file the same
 an invented error corrupts a correction.
 
 **Keep it readable.** This file is read in full before every generation, so every
-stale bullet taxes every future run. Past roughly 120 bullets or 40 KB, merge
-overlapping lines and delete ones overtaken by a fixed tool or a changed codebase.
-Pruning is part of the loop, not cleanup deferred forever.
+stale bullet taxes every future run. The byte ceiling (40 KB) is the binding one —
+bullet count alone is misleading, since a handful of long bullets can blow the byte
+budget while staying under 120, and 120 short bullets can stay well under 40 KB. Past
+either ceiling, merge overlapping lines and delete ones overtaken by a fixed tool or a
+changed codebase. Pruning is part of the loop, not cleanup deferred forever.
 
 Treat this as a *measured* loop, not a scratchpad: the harness improves by observing
 its own runs. When a golden set (`evals/evals.json`) and a gated improvement loop
@@ -2306,11 +2347,349 @@ def generate_start_program_script(
     return {"file": "scripts/start-program.sh", "action": action}
 
 
+# TAP-7078 box 6: Output step 7's "Completeness self-check" names these two
+# scripts by filename. They are a verified superset of nlt-orchestrator's own
+# check-prompt-shape.js / check-learnings-size.js (staged read-only copies
+# reviewed 2026-09-05) -- same CLI shape, same exit codes (0 = holds, 1 =
+# named defect(s), 2 = usage/read error), same failure classes, plus this
+# project's own extra checks kept on top. The orchestrator adopts these
+# emitted copies on its next `tapps_upgrade`.
+CHECK_PROMPT_SHAPE_SCRIPT_BODY = r"""#!/usr/bin/env node
+// Validate an emitted orchestration prompt carries every required shape
+// element before it is handed to a runner. Exit 0 when the shape holds;
+// exit 1 naming every defect found; exit 2 on a usage/read error.
+//
+// Usage: node scripts/check-prompt-shape.js <prompt.md> [--driver-rows N]
+"use strict";
+
+const fs = require("fs");
+
+// Legacy substring checks, kept for backward compatibility with earlier callers.
+const REQUIRED_SECTIONS = [
+  ["## Goal", "no stated Goal"],
+  ["## Loop", "no Loop section -- the goal loop has no repeatable body"],
+  ["Done-when", "no Done-when clause -- the loop cannot terminate"],
+  ["Sub-goal 0", "no Sub-goal 0 -- self-healing preconditions are missing"],
+  [
+    "Lessons learned",
+    "no Lessons learned section -- the run-time learnings write is missing",
+  ],
+];
+
+// The full structural list the orchestrator's reference enforces.
+const REQUIRED_HEADINGS = [
+  "## Driver discipline",
+  "## Prerequisites / Wayfind gate",
+  "## How to run",
+  "## Done-when",
+  "## Plane map",
+  "### Parallel wave schedule",
+  "## Parallelization plan",
+  "## Loop",
+  "## Guardrails",
+  "## Autonomy",
+  "## Lessons learned",
+  "## Run-as",
+  "## Unverified assumptions",
+  "## Lane briefs",
+];
+
+function section(lines, heading) {
+  const s = lines.findIndex((l) => l.startsWith(heading));
+  if (s < 0) return "";
+  const e = lines.findIndex((l, i) => i > s && /^#{1,3} /.test(l));
+  return lines.slice(s, e < 0 ? undefined : e).join("\n");
+}
+
+function main(argv) {
+  const args = argv.slice(2);
+  const path = args.find((a) => !a.startsWith("--"));
+  const rowsFlag = args.indexOf("--driver-rows");
+  const driverCap = rowsFlag >= 0 ? Number(args[rowsFlag + 1]) : 5;
+
+  if (!path) {
+    console.error("usage: check-prompt-shape.js <prompt.md> [--driver-rows N]");
+    process.exit(2);
+  }
+  if (!Number.isInteger(driverCap) || driverCap < 5) {
+    console.error("--driver-rows must be an integer >= 5");
+    process.exit(2);
+  }
+
+  let text;
+  try {
+    text = fs.readFileSync(path, "utf8");
+  } catch (err) {
+    console.error(`cannot read ${path}: ${err.message}`);
+    process.exit(2);
+  }
+  const lines = text.split("\n");
+  const problems = [];
+
+  for (const [marker, reason] of REQUIRED_SECTIONS) {
+    if (!text.includes(marker)) problems.push(`missing: ${marker} -- ${reason}`);
+  }
+
+  for (const h of REQUIRED_HEADINGS) {
+    if (!lines.some((l) => l.startsWith(h))) problems.push(`missing required heading: ${h}`);
+  }
+
+  // A prompt that dispatches lanes needs a table naming their briefs, or
+  // the lanes it names have nothing to run (TAP-7078 ruling 12).
+  const dispatchesLanes = /dispatch-lane\.sh|claude -p/.test(text);
+  if (dispatchesLanes && !lines.some((l) => l.startsWith("## Lane briefs"))) {
+    problems.push("missing: ## Lane briefs -- a prompt that dispatches lanes needs a briefs table");
+  }
+
+  // Plane map detectors.
+  const tableRows = lines.filter((l) => /^\|/.test(l)).map((l) => l.split("|").map((c) => c.trim()));
+  const planeRows = tableRows.filter(
+    (cells) => cells.length >= 9 && /^\*{0,2}(driver|delegate|operator)\*{0,2}$/.test(cells[2])
+  );
+  const setup = lines.find((l) => /^- \*\*Session setup/.test(l)) ?? "";
+  if (planeRows.length === 0) {
+    problems.push(
+      "Plane map has no rows with an Owner column (driver|delegate|operator) -- the Owner column is what makes Driver discipline auditable"
+    );
+  } else {
+    const driverRows = planeRows.filter((c) => /driver/.test(c[2]));
+    if (driverRows.length > driverCap) {
+      problems.push(
+        `detector 1: ${driverRows.length} driver-owned Plane-map rows, cap ${driverCap} -- a row nobody was dispatched for is work the top session does. ` +
+          `Delegate it, or declare the exception in Driver discipline and pass --driver-rows ${driverRows.length}.`
+      );
+    }
+    if (driverRows.length > 5 && !/\*\*Exception, named:?\*\*|named exception/i.test(text)) {
+      problems.push("detector 1: more than five driver rows but Driver discipline names no exception");
+    }
+    const effortCells = planeRows.map((c) => c[7] ?? "—");
+    const anyEffort = effortCells.some((e) => e && e !== "—" && e !== "-");
+    const declaresNoWorkflow = /no Workflow|effort control (was|is) surrendered|Agent tool has no effort/i.test(
+      text
+    );
+    if (!anyEffort && !declaresNoWorkflow) {
+      problems.push(
+        "detector 2: the effort column is all — and the prompt does not say it has no Workflow -- effort control was surrendered silently"
+      );
+    }
+
+    const driverRowText = driverRows.map((c) => c.join(" ")).join("\n");
+    const driverIsAboveFloor = /gh pr merge|\bmerge\b|deploy|plugin install|scop\w+ (a )?(continuation|fix)/i.test(
+      driverRowText
+    );
+    if (driverIsAboveFloor && /`\/model (haiku|sonnet)`/.test(setup)) {
+      problems.push(
+        "driver rows mention merge/deploy/install/scoping a fix but Session setup pins `/model sonnet` -- that driver is above the floor by construction"
+      );
+    }
+
+    for (const c of planeRows) {
+      if (/driver|operator/.test(c[2])) continue;
+      const model = (c[6] ?? "").replace(/[`*]/g, "").trim();
+      const effort = (c[7] ?? "").replace(/[`*]/g, "").trim();
+      const notes = (c[8] ?? "").trim();
+      const above = /^(opus|fable)$/.test(model) || /^(high|xhigh|max)$/.test(effort);
+      if (above && notes.length < 8) {
+        problems.push(
+          `Plane-map row "${(c[1] ?? "").slice(0, 50)}" is above the floor (${model || "—"}/${
+            effort || "—"
+          }) with no reason in Notes -- an unpriced default, not a decision`
+        );
+      }
+    }
+  }
+
+  // Session setup carries concrete /model and /effort.
+  const modelOk = /`\/model (haiku|sonnet|opus|fable)`/.test(setup);
+  const effortOk = /`\/effort (low|medium|high|xhigh)`/.test(setup);
+  if (!modelOk) {
+    problems.push(
+      "Session setup line has no concrete `/model <haiku|sonnet|opus|fable>` -- the runner would inherit the pasting session's tier"
+    );
+  }
+  if (!effortOk) problems.push("Session setup line has no concrete `/effort <low|medium|high|xhigh>`");
+  if (/`\/model <|`\/effort </.test(setup)) problems.push("Session setup line still carries a template placeholder");
+
+  // Must-not-shrink + lessons-learned gate inside Done-when.
+  const doneStart = lines.findIndex((l) => l.startsWith("## Done-when"));
+  const doneEnd = lines.findIndex((l, i) => i > doneStart && /^## /.test(l));
+  const done = doneStart >= 0 ? lines.slice(doneStart, doneEnd < 0 ? undefined : doneEnd).join("\n") : "";
+  if (doneStart >= 0 && !/(≥|>=|must not shrink|not shrink|no fewer|at least)/i.test(done)) {
+    problems.push(
+      "Done-when has no must-not-shrink clause (≥ N / \"must not shrink\") -- the goal is satisfiable by deleting what is measured"
+    );
+  }
+  if (doneStart >= 0 && !/lessons/i.test(done)) {
+    problems.push(
+      "Done-when does not gate on the lessons-learned pass -- without a clause it is advisory and gets dropped when the goal goes green"
+    );
+  }
+
+  // Parallelization plan must enumerate the derived order.
+  if (!/order-forced-by/i.test(section(lines, "## Parallelization plan"))) {
+    problems.push(
+      "Parallelization plan has no `order-forced-by:` line -- derived shared state between lanes was not enumerated"
+    );
+  }
+
+  // Validation contract, when present, must be Workflow-shaped.
+  const contract = section(lines, "## Validation contract");
+  if (contract) {
+    const header = contract.split("\n").find((l) => /^\|\s*ID\s*\|/i.test(l)) ?? "";
+    if (!/\|\s*kind\s*\|/i.test(header)) {
+      problems.push("Validation contract table has no `kind` column -- the verify Workflow cannot tier a VAL it cannot classify");
+    }
+    if (!/negative control/i.test(contract) || !/positive control/i.test(contract)) {
+      problems.push(
+        "Validation contract never names both a negative control and a positive control -- the Workflow refuses a VAL without both, so the driver would invent them at verify time"
+      );
+    }
+  }
+
+  if (problems.length > 0) {
+    for (const p of problems) console.error(p);
+    process.exit(1);
+  }
+  console.log(`ok: ${path} carries every required section`);
+  process.exit(0);
+}
+
+main(process.argv);
+"""
+
+CHECK_LEARNINGS_SIZE_SCRIPT_BODY = r"""#!/usr/bin/env node
+// Measure a learnings.md file against the byte/bullet/per-bullet ceilings and
+// the required trailing-date house style, mirroring nlt-orchestrator's
+// check-learnings-size.js (TAP-7078 box 6). See
+// tapps_mcp.pipeline.skill_managed_block.LEARNINGS_CEILING_BYTES /
+// LEARNINGS_CEILING_BULLETS for the Python-side constants this parallels.
+//
+// Usage: node scripts/check-learnings-size.js <learnings.md> [--bytes N] [--bullets N] [--bullet-bytes N]
+"use strict";
+
+const fs = require("fs");
+
+// A lesson is `- [conf] ...` or a `- **bolded**` lead; prose lines are not lessons.
+const LESSON = /^- (\[(high|med|medium|low)\]|\*\*)/;
+// Trailing provenance: an em-dash, then a parenthesis carrying an ISO date.
+const DATED = /— \([^()]*\d{4}-\d{2}-\d{2}[^()]*\)\s*$/;
+
+function flag(args, name, dflt) {
+  const i = args.indexOf(name);
+  if (i < 0) return dflt;
+  const v = Number(args[i + 1]);
+  if (!Number.isFinite(v) || v <= 0) {
+    console.error(`${name} needs a positive number`);
+    process.exit(2);
+  }
+  return v;
+}
+
+function main(argv) {
+  const args = argv.slice(2);
+  const path = args.find((a) => !a.startsWith("--"));
+  if (!path) {
+    console.error(
+      "usage: check-learnings-size.js <learnings.md> [--bytes N] [--bullets N] [--bullet-bytes N]"
+    );
+    process.exit(2);
+  }
+  const maxBytes = flag(args, "--bytes", 48 * 1024);
+  const maxBullets = flag(args, "--bullets", 90);
+  const maxBulletBytes = flag(args, "--bullet-bytes", 900);
+
+  let text, bytes;
+  try {
+    text = fs.readFileSync(path, "utf8");
+    bytes = Buffer.byteLength(text, "utf8");
+  } catch (err) {
+    console.error(`cannot read ${path}: ${err.message}`);
+    process.exit(2);
+  }
+
+  const lines = text.split("\n");
+  const bullets = [];
+  for (let i = 0; i < lines.length; i++) {
+    if (!LESSON.test(lines[i])) continue;
+    let j = i + 1;
+    while (j < lines.length && /^  /.test(lines[j])) j++;
+    bullets.push({ line: i + 1, text: lines.slice(i, j).join("\n") });
+    i = j - 1;
+  }
+
+  const over = [];
+  if (bytes > maxBytes) over.push(`${bytes} bytes > ${maxBytes}`);
+  if (bullets.length > maxBullets) over.push(`${bullets.length} lesson bullets > ${maxBullets}`);
+  for (const b of bullets) {
+    const size = Buffer.byteLength(b.text, "utf8");
+    if (size > maxBulletBytes) {
+      over.push(
+        `line ${b.line}: ${size} B bullet > ${maxBulletBytes} -- a narration, not a lesson; cut to the rule + its detector`
+      );
+    }
+    if (!DATED.test(b.text)) {
+      over.push(
+        `line ${b.line}: no trailing — (source, YYYY-MM-DD) -- a bullet with no date can never be retired on evidence`
+      );
+    }
+  }
+
+  if (over.length > 0) {
+    console.error(`over ceiling:\n  ${over.join("\n  ")}`);
+    process.exit(1);
+  }
+  const maxBulletSize = bullets.length ? Math.max(...bullets.map((b) => Buffer.byteLength(b.text, "utf8"))) : 0;
+  console.log(
+    `ok: ${bytes}B, ${bullets.length} lesson bullets, max bullet ${maxBulletSize}B -- within ceiling (${maxBytes}B / ${maxBullets} / ${maxBulletBytes}B each)`
+  );
+  process.exit(0);
+}
+
+main(process.argv);
+"""
+
+
+def generate_check_prompt_shape_script(
+    project_root: Path,
+    *,
+    dry_run: bool = False,
+) -> dict[str, Any]:
+    """Install or refresh ``scripts/check-prompt-shape.js`` (TAP-7078 box 6)."""
+    action = write_project_script(
+        project_root,
+        "scripts/check-prompt-shape.js",
+        CHECK_PROMPT_SHAPE_SCRIPT_BODY,
+        "orchestration-prompt",
+        dry_run=dry_run,
+    )
+    return {"file": "scripts/check-prompt-shape.js", "action": action}
+
+
+def generate_check_learnings_size_script(
+    project_root: Path,
+    *,
+    dry_run: bool = False,
+) -> dict[str, Any]:
+    """Install or refresh ``scripts/check-learnings-size.js`` (TAP-7078 box 6)."""
+    action = write_project_script(
+        project_root,
+        "scripts/check-learnings-size.js",
+        CHECK_LEARNINGS_SIZE_SCRIPT_BODY,
+        "orchestration-prompt",
+        dry_run=dry_run,
+    )
+    return {"file": "scripts/check-learnings-size.js", "action": action}
+
+
 __all__ = [
+    "CHECK_LEARNINGS_SIZE_SCRIPT_BODY",
+    "CHECK_PROMPT_SHAPE_SCRIPT_BODY",
     "ORCHESTRATION_PROMPT_COMPANION_FILES",
     "ORCHESTRATION_PROMPT_CREATE_ONLY_FILES",
     "ORCHESTRATION_PROMPT_SKILL_BODY",
     "SCOPE_CARVE_OUT_CATEGORIES",
     "START_PROGRAM_SCRIPT_BODY",
+    "generate_check_learnings_size_script",
+    "generate_check_prompt_shape_script",
     "generate_start_program_script",
 ]

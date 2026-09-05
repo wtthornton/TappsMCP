@@ -535,6 +535,24 @@ def _setup_start_program_script(state: _BootstrapState) -> None:
         state.result["start_program_script"] = {"error": str(exc)}
 
 
+def _setup_check_scripts(state: _BootstrapState) -> None:
+    """Place the two Output-step-7 check scripts (TAP-7078 box 6)."""
+    from tapps_mcp.pipeline.platform_skill_orchestration import (
+        generate_check_learnings_size_script,
+        generate_check_prompt_shape_script,
+    )
+
+    for key, generate in (
+        ("check_prompt_shape_script", generate_check_prompt_shape_script),
+        ("check_learnings_size_script", generate_check_learnings_size_script),
+    ):
+        try:
+            state.result[key] = generate(state.project_root)
+        except Exception as exc:
+            state.errors.append(f"{key}: {exc}")
+            state.result[key] = {"error": str(exc)}
+
+
 def _finalize_platform_setup(
     cfg: BootstrapConfig, state: _BootstrapState, platform_action: str | None
 ) -> None:
@@ -554,6 +572,7 @@ def _finalize_platform_setup(
         _setup_github_governance(state)
         if not cfg.dry_run:
             _setup_start_program_script(state)
+            _setup_check_scripts(state)
 
 
 def _setup_platform(cfg: BootstrapConfig, state: _BootstrapState) -> None:

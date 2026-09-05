@@ -396,7 +396,8 @@ def check_orchestration_prompt_learnings_ceiling(project_root: Path) -> CheckRes
         finding = learnings_size_finding(learnings_path.read_text(encoding="utf-8"))
         if finding.over_ceiling:
             over_ceiling.append(
-                f"{host_label}/orchestration-prompt/learnings.md "
+                f"{host_label}/orchestration-prompt/learnings.md breached the "
+                f"{finding.breached_ceiling} "
                 f"({finding.size_bytes}B, {finding.bullet_count} bullets; "
                 f"ceiling {finding.ceiling_bytes}B / {finding.ceiling_bullets} bullets)"
             )

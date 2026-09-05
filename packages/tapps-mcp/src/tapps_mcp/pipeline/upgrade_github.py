@@ -227,3 +227,41 @@ def install_start_program_script(
     except Exception as exc:
         log.exception("start_program_script_failed")
         result["errors"].append(f"start-program.sh: {exc}")
+
+
+def install_check_scripts(
+    project_root: Path,
+    result: dict[str, Any],
+    *,
+    mcp_only: bool,
+    skip_files: set[str],
+    dry_run: bool,
+) -> None:
+    """Regenerate ``scripts/check-prompt-shape.js`` and ``scripts/check-learnings-
+    size.js`` — the two checks Output step 7 of the orchestration-prompt skill
+    invokes by name (TAP-7078 box 6).
+    """
+    from tapps_mcp.pipeline.platform_skill_orchestration import (
+        generate_check_learnings_size_script,
+        generate_check_prompt_shape_script,
+    )
+
+    for token, key, generate in (
+        ("check_prompt_shape_script", "check_prompt_shape_script", generate_check_prompt_shape_script),
+        (
+            "check_learnings_size_script",
+            "check_learnings_size_script",
+            generate_check_learnings_size_script,
+        ),
+    ):
+        if mcp_only:
+            result["components"][key] = {"action": "skipped (mcp_only)"}
+            continue
+        if skipped(token, skip_files):
+            result["components"][key] = "skipped (upgrade_skip_files)"
+            continue
+        try:
+            result["components"][key] = generate(project_root, dry_run=dry_run)
+        except Exception as exc:
+            log.exception("check_script_failed", script=key)
+            result["errors"].append(f"{key}: {exc}")

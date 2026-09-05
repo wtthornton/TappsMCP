@@ -17,7 +17,11 @@ from pathlib import Path
 import pytest
 
 from tapps_mcp.pipeline.platform_skill_orchestration import (
+    CHECK_LEARNINGS_SIZE_SCRIPT_BODY,
+    CHECK_PROMPT_SHAPE_SCRIPT_BODY,
     START_PROGRAM_SCRIPT_BODY,
+    generate_check_learnings_size_script,
+    generate_check_prompt_shape_script,
     generate_start_program_script,
 )
 from tapps_mcp.pipeline.upgrade import _skipped
@@ -74,6 +78,178 @@ class TestGenerateStartProgramScript:
             not in START_PROGRAM_SCRIPT_BODY.split("usage() {")[1].split("}")[0].split("cat >&2")[0]
         )
         assert "cat >&2 <<'USAGE'" in START_PROGRAM_SCRIPT_BODY
+
+
+_NODE = shutil.which("node")
+
+_GOOD_PROMPT = """\
+## Goal
+
+Do the thing.
+
+## Prerequisites / Wayfind gate
+
+None outstanding.
+
+## Driver discipline
+
+Driver owns at most 5 rows; no exception needed here.
+
+## Plane map
+
+| ID | Owner | Task | Files | Command | Model | Effort | Notes |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| P1 | driver | Do the thing | file.py | run cmd | sonnet | medium | routine work |
+
+### Parallel wave schedule
+
+Single wave; P1 only.
+
+## Parallelization plan
+
+order-forced-by: P1 has no dependents.
+
+## How to run
+
+- **Session setup**: `/model sonnet` `/effort medium`
+
+## Loop
+
+1. Do the thing.
+
+Done-when: the thing is done.
+
+## Sub-goal 0
+
+Establish preconditions.
+
+## Guardrails
+
+Stay in scope.
+
+## Autonomy
+
+Proceed without confirmation for in-scope steps.
+
+## Done-when
+
+The thing is done and the result must not shrink below what it started with;
+the lessons-learned pass has run.
+
+## Unverified assumptions
+
+None.
+
+## Lane briefs
+
+| Lane | Brief |
+| --- | --- |
+| L1 | brief.md |
+
+## Run-as
+
+Operator.
+
+## Lessons learned
+
+Append one lesson.
+"""
+
+_BAD_PROMPT = "# some prompt\n\nPlaceholder text, no required sections.\n"
+
+
+class TestCheckPromptShapeScript:
+    """TAP-7078 box 6: check-prompt-shape.js validates an emitted prompt's shape."""
+
+    def test_creates_executable_script(self, tmp_path: Path) -> None:
+        result = generate_check_prompt_shape_script(tmp_path)
+        target = tmp_path / "scripts" / "check-prompt-shape.js"
+        assert result == {"file": "scripts/check-prompt-shape.js", "action": "created"}
+        assert target.exists()
+        assert target.stat().st_mode & 0o111, "script must land executable"
+
+    def test_passes_on_a_known_good_prompt(self, tmp_path: Path) -> None:
+        if _NODE is None:
+            pytest.skip("node not on PATH")
+        generate_check_prompt_shape_script(tmp_path)
+        prompt = tmp_path / "prompt.md"
+        prompt.write_text(_GOOD_PROMPT, encoding="utf-8")
+        result = subprocess.run(
+            ["node", str(tmp_path / "scripts" / "check-prompt-shape.js"), str(prompt)],
+            capture_output=True,
+            text=True,
+            timeout=10,
+        )
+        assert result.returncode == 0, result.stderr
+
+    def test_fails_on_a_known_bad_prompt(self, tmp_path: Path) -> None:
+        """The template's own placeholders, with no real sections filled in."""
+        if _NODE is None:
+            pytest.skip("node not on PATH")
+        generate_check_prompt_shape_script(tmp_path)
+        prompt = tmp_path / "prompt.md"
+        prompt.write_text(_BAD_PROMPT, encoding="utf-8")
+        result = subprocess.run(
+            ["node", str(tmp_path / "scripts" / "check-prompt-shape.js"), str(prompt)],
+            capture_output=True,
+            text=True,
+            timeout=10,
+        )
+        assert result.returncode == 1
+        assert "missing:" in result.stderr
+
+
+class TestCheckLearningsSizeScript:
+    """TAP-7078 box 6: check-learnings-size.js measures learnings.md against ceiling."""
+
+    def test_creates_executable_script(self, tmp_path: Path) -> None:
+        result = generate_check_learnings_size_script(tmp_path)
+        target = tmp_path / "scripts" / "check-learnings-size.js"
+        assert result == {"file": "scripts/check-learnings-size.js", "action": "created"}
+        assert target.exists()
+        assert target.stat().st_mode & 0o111, "script must land executable"
+
+    def test_passes_on_a_known_good_learnings_file(self, tmp_path: Path) -> None:
+        if _NODE is None:
+            pytest.skip("node not on PATH")
+        generate_check_learnings_size_script(tmp_path)
+        learnings = tmp_path / "learnings.md"
+        learnings.write_text("- one short lesson\n", encoding="utf-8")
+        result = subprocess.run(
+            ["node", str(tmp_path / "scripts" / "check-learnings-size.js"), str(learnings)],
+            capture_output=True,
+            text=True,
+            timeout=10,
+        )
+        assert result.returncode == 0, result.stderr
+
+    def test_fails_on_a_known_bad_learnings_file_over_bullet_ceiling(
+        self, tmp_path: Path
+    ) -> None:
+        if _NODE is None:
+            pytest.skip("node not on PATH")
+        generate_check_learnings_size_script(tmp_path)
+        learnings = tmp_path / "learnings.md"
+        learnings.write_text(
+            "\n".join(f"- [med] lesson {i} — (source, 2026-09-05)" for i in range(95)) + "\n",
+            encoding="utf-8",
+        )
+        result = subprocess.run(
+            ["node", str(tmp_path / "scripts" / "check-learnings-size.js"), str(learnings)],
+            capture_output=True,
+            text=True,
+            timeout=10,
+        )
+        assert result.returncode == 1
+        assert "over ceiling" in result.stderr
+
+    def test_script_body_names_both_ceilings(self) -> None:
+        assert "maxBytes = flag(args, \"--bytes\", 48 * 1024)" in CHECK_LEARNINGS_SIZE_SCRIPT_BODY
+        assert "maxBullets = flag(args, \"--bullets\", 90)" in CHECK_LEARNINGS_SIZE_SCRIPT_BODY
+
+    def test_shape_script_body_checks_required_sections(self) -> None:
+        for marker in ("## Goal", "## Loop", "Done-when", "Sub-goal 0", "Lessons learned"):
+            assert marker in CHECK_PROMPT_SHAPE_SCRIPT_BODY
 
 
 class TestSkipTokenVocabulary:

@@ -21,7 +21,12 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING, Literal
 
 from tapps_mcp import __version__
-from tapps_mcp.pipeline.skill_asset_policy import policy_header
+from tapps_mcp.pipeline.skill_asset_policy import (
+    SectionRedundancy,
+    _normalize_body,
+    heading_redundancy,
+    policy_header,
+)
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -344,6 +349,25 @@ def promote_rule(content: str, insertion_offset: int, *, generator_file: str) ->
     )
 
 
+def preserved_region_line_count(content: str) -> int:
+    """Count non-blank lines in the consumer region below ``MARKER_END``.
+
+    ``enumerate_preserved`` (:mod:`tapps_mcp.pipeline.upgrade_report`) is a
+    whole-skill-directory membership test — is this skill directory in the
+    platform catalogue at all — so a smart-merge skill like
+    ``orchestration-prompt``, always in the catalogue, can never appear
+    "preserved" no matter how large its local region below ``MARKER_END``
+    grows (TAP-7078 box 1). This reads the actual span after the marker
+    instead, from a file's raw text with no dependency on the catalogue.
+    Returns ``0`` when *content* carries no managed block at all.
+    """
+    span = _find_block_span(content)
+    if span is None:
+        return 0
+    _, end = span
+    return sum(1 for line in content[end:].splitlines() if line.strip())
+
+
 def wrap_with_markers(body: str, skill_name: str, *, version: str = __version__) -> str:
     """Return *body* as ``frontmatter + BEGIN..END block``, frontmatter first.
 
@@ -362,6 +386,73 @@ def wrap_with_markers(body: str, skill_name: str, *, version: str = __version__)
     header = policy_header("managed_block")
     block = f"{MARKER_BEGIN_PREFIX} {skill_name} v{version} -->\n{header}\n\n{inner}\n{MARKER_END}"
     return f"{frontmatter}{block}"
+
+
+# Above this fraction of a migrated region's normalised lines duplicating the
+# managed block, a preserved region is flagged even when no single heading is
+# a byte-identical duplicate (TAP-7078 box 7 — the counterweight-drift shape
+# that produced a 977-line local override with no matching heading text).
+DUPLICATE_LINE_FRACTION_CEILING = 0.10
+
+
+@dataclass(frozen=True)
+class MigratedRegionRedundancy:
+    """Whether a migrated project region duplicates the managed block above it.
+
+    :func:`heading_redundancy` alone catches a whole section that is
+    byte-identical (whitespace normalised) to a managed-block section — box 3,
+    "the 2026-09-02 migration left an 18-heading, 0-unique duplicate that then
+    froze." ``duplicate_line_fraction`` separately catches a preserved region
+    that duplicates most of the managed block's *lines* without matching any
+    single heading exactly — box 7. Either condition alone is enough to flag;
+    a compliant, genuinely different preserved region flags on neither.
+    """
+
+    section_redundancy: SectionRedundancy
+    duplicate_line_fraction: float
+
+    @property
+    def flagged(self) -> bool:
+        return (
+            self.section_redundancy.duplicate_count > 0
+            or self.duplicate_line_fraction > DUPLICATE_LINE_FRACTION_CEILING
+        )
+
+    def verdict(self) -> str:
+        """One line naming why this region is flagged, or that it is clean."""
+        reasons: list[str] = []
+        if self.section_redundancy.duplicate_count > 0:
+            headings = ", ".join(self.section_redundancy.duplicate)
+            reasons.append(
+                f"{self.section_redundancy.duplicate_count} heading(s) duplicate the "
+                f"managed block above verbatim ({headings})"
+            )
+        if self.duplicate_line_fraction > DUPLICATE_LINE_FRACTION_CEILING:
+            reasons.append(
+                f"{self.duplicate_line_fraction:.0%} of this region's lines duplicate "
+                "the managed block above"
+            )
+        if not reasons:
+            return "no redundancy with the managed block detected"
+        return "flagged: " + "; ".join(reasons) + " — review and trim"
+
+
+def migrated_region_redundancy(preserved: str, canonical_block_body: str) -> MigratedRegionRedundancy:
+    """Measure how much of *preserved* duplicates *canonical_block_body*.
+
+    *canonical_block_body* is the raw (unwrapped, frontmatter-stripped) body
+    the managed block would be built from — the same shape
+    :func:`heading_redundancy` already expects for the asset path.
+    """
+    section_redundancy = heading_redundancy(preserved, canonical_block_body)
+    canonical_lines = [
+        line for line in _normalize_body(canonical_block_body).split("\n") if line
+    ]
+    canonical_line_set = frozenset(canonical_lines)
+    preserved_lines = [line for line in _normalize_body(preserved).split("\n") if line]
+    duplicate_count = sum(1 for line in preserved_lines if line in canonical_line_set)
+    fraction = duplicate_count / len(canonical_lines) if canonical_lines else 0.0
+    return MigratedRegionRedundancy(section_redundancy, fraction)
 
 
 def install_or_refresh_skill(
@@ -418,7 +509,12 @@ def install_or_refresh_skill(
         # survive the migration.
         _, legacy_body = split_frontmatter(original)
         preserved = legacy_body.strip("\n")
-        updated = f"{frontmatter}{new_block}\n\n{PROJECT_REGION_HEADING}\n\n{preserved}\n"
+        _, canonical_body = split_frontmatter(body)
+        redundancy = migrated_region_redundancy(preserved, canonical_body)
+        heading = PROJECT_REGION_HEADING
+        if redundancy.flagged:
+            heading = f"{PROJECT_REGION_HEADING}\n<!-- {redundancy.verdict()} -->"
+        updated = f"{frontmatter}{new_block}\n\n{heading}\n\n{preserved}\n"
         action = "migrated"
 
     if not dry_run:
@@ -448,13 +544,34 @@ _TOP_LEVEL_BULLET_RE = re.compile(r"^- ", re.MULTILINE)
 
 @dataclass(frozen=True)
 class LearningsSizeFinding:
-    """``learnings.md`` byte size and top-level bullet count against the ceiling."""
+    """``learnings.md`` byte size and top-level bullet count against the ceiling.
+
+    ``bytes_over``/``bullets_over`` (TAP-6857 box 3) distinguish which ceiling
+    actually breached — a file 1 byte over on bytes and a file 3x over on
+    bytes previously read identically through ``over_ceiling`` alone.
+    """
 
     size_bytes: int
     bullet_count: int
     ceiling_bytes: int
     ceiling_bullets: int
-    over_ceiling: bool
+    bytes_over: bool
+    bullets_over: bool
+
+    @property
+    def over_ceiling(self) -> bool:
+        return self.bytes_over or self.bullets_over
+
+    @property
+    def breached_ceiling(self) -> str:
+        """Name which ceiling(s) actually breached — never both raw numbers alone."""
+        if self.bytes_over and self.bullets_over:
+            return "both"
+        if self.bytes_over:
+            return "byte ceiling"
+        if self.bullets_over:
+            return "bullet ceiling"
+        return "none"
 
 
 def learnings_size_finding(
@@ -470,17 +587,18 @@ def learnings_size_finding(
     """
     size_bytes = len(learnings_md.encode("utf-8"))
     bullet_count = len(_TOP_LEVEL_BULLET_RE.findall(learnings_md))
-    over = size_bytes > ceiling_bytes or bullet_count > ceiling_bullets
     return LearningsSizeFinding(
         size_bytes=size_bytes,
         bullet_count=bullet_count,
         ceiling_bytes=ceiling_bytes,
         ceiling_bullets=ceiling_bullets,
-        over_ceiling=over,
+        bytes_over=size_bytes > ceiling_bytes,
+        bullets_over=bullet_count > ceiling_bullets,
     )
 
 
 __all__ = [
+    "DUPLICATE_LINE_FRACTION_CEILING",
     "LEARNINGS_CEILING_BULLETS",
     "LEARNINGS_CEILING_BYTES",
     "MARKER_BEGIN_PREFIX",
@@ -491,6 +609,7 @@ __all__ = [
     "Contradiction",
     "FindingKind",
     "LearningsSizeFinding",
+    "MigratedRegionRedundancy",
     "PromoteOutcome",
     "Region",
     "bullet_spans",
@@ -499,9 +618,11 @@ __all__ = [
     "install_or_refresh_skill",
     "learnings_size_finding",
     "line_number",
+    "migrated_region_redundancy",
     "normalize_block_version",
     "normalize_bullet_text",
     "prepend_below_frontmatter",
+    "preserved_region_line_count",
     "promote_rule",
     "resolve_region",
     "significant_words",

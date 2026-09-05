@@ -139,6 +139,7 @@ def test_check_learnings_ceiling_over_bullet_count_fails(tmp_path: Path) -> None
     assert result.ok is False
     assert "past ceiling" in result.message
     assert "orchestration-prompt/learnings.md" in result.message
+    assert "breached the bullet ceiling" in result.message
 
 
 def test_check_learnings_ceiling_over_byte_size_fails(tmp_path: Path) -> None:
@@ -154,3 +155,4 @@ def test_check_learnings_ceiling_over_byte_size_fails(tmp_path: Path) -> None:
     result = check_orchestration_prompt_learnings_ceiling(tmp_path)
     assert result.ok is False
     assert "past ceiling" in result.message
+    assert "breached the byte ceiling" in result.message

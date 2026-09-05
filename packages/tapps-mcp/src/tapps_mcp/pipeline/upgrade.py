@@ -119,6 +119,7 @@ from tapps_mcp.pipeline.upgrade_docs import (
 )
 from tapps_mcp.pipeline.upgrade_github import (
     dry_run_github_artifacts,
+    install_check_scripts,
     install_start_program_script,
     run_github_artifacts,
 )
@@ -392,6 +393,9 @@ def _upgrade_repo_artifacts(
         )
 
     install_start_program_script(
+        project_root, result, mcp_only=mcp_only, skip_files=options.skip_files, dry_run=dry_run
+    )
+    install_check_scripts(
         project_root, result, mcp_only=mcp_only, skip_files=options.skip_files, dry_run=dry_run
     )
 

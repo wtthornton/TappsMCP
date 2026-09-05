@@ -227,3 +227,42 @@ class TestScopeCreepCategoryAgreement:
         assert _CARVE_OUT_AND_TEXT in line[0]
         assert "driver's announced call" in line[0]
         assert line[0].rstrip().endswith("call.")
+
+
+class TestFoldedRulings:
+    """TAP-7078 box 5: five rulings a consuming project (nlt-orchestrator) carried
+    in its own local region, folded into references/field-rules-and-rulings.md so
+    an upgrade absorbs them instead of leaving them to silently re-diverge."""
+
+    @pytest.mark.parametrize(
+        "marker",
+        [
+            "RED verdict is above",
+            "already done; cite it, don't",
+            "`ListAgents` absence is not authorship",
+            "Two effort knobs",
+            "read by an extractor, not",
+        ],
+    )
+    def test_each_folded_ruling_present(self, marker: str) -> None:
+        assert marker in _FIELD_RULES_AND_RULINGS, f"missing folded ruling marker {marker!r}"
+
+    def test_folded_rulings_numbered_nine_through_thirteen(self) -> None:
+        for n in range(9, 14):
+            assert f"\n{n}. " in _FIELD_RULES_AND_RULINGS
+
+    def test_folded_rulings_do_not_bloat_the_managed_block_itself(self) -> None:
+        """Box 5's rulings target the companion file, never the managed block —
+        the 400-line ceiling test (test_orchestration_prompt_skill.py) is what
+        actually enforces this; this just documents the constraint here too."""
+        assert "RED verdict is above the" not in ORCHESTRATION_PROMPT_SKILL_BODY
+
+
+class TestCheckScriptsNamedInOutputStep7:
+    """TAP-7078 box 6: Output step 7 must name both check scripts by filename."""
+
+    def test_output_step_7_names_check_prompt_shape(self) -> None:
+        assert "check-prompt-shape.js" in ORCHESTRATION_PROMPT_SKILL_BODY
+
+    def test_output_step_7_names_check_learnings_size(self) -> None:
+        assert "check-learnings-size.js" in ORCHESTRATION_PROMPT_SKILL_BODY
