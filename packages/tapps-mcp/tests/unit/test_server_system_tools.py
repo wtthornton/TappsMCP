@@ -126,3 +126,28 @@ class TestTappsServerInfoDelegates:
             result = await tapps_server_info()
         assert result is sentinel
         mock_impl.assert_called_once()
+
+
+class TestServerInfoNoOverlap:
+    """TAP-6435: tapps_server_info must not duplicate tapps_session_start(quick=True).
+
+    ``server`` (name/version/protocol_version) is a named, asserted
+    exception (see server._SERVER_INFO_FIELDS_DUPLICATED_BY_QUICK_SESSION_START):
+    it is the minimal identity tapps_server_info's own "verify a remote
+    deployment is reachable" use case needs without session_start having
+    run first. Any other shared top-level field is the TAP-6433 duplication
+    bug reappearing.
+    """
+
+    @pytest.mark.asyncio
+    async def test_server_info_no_overlap_with_quick_session_start(self) -> None:
+        from tapps_mcp.server import _server_info_async
+        from tapps_mcp.server_pipeline_tools import tapps_session_start
+
+        quick_result = await tapps_session_start()
+        info_result = await _server_info_async(trim_duplicated_fields=True)
+
+        quick_keys = set(quick_result["data"].keys())
+        info_keys = set(info_result["data"].keys())
+
+        assert quick_keys & info_keys == {"server"}
