@@ -34,6 +34,7 @@ are named, documented here, and stamped into each generated file:
 
 from __future__ import annotations
 
+import re
 import stat
 from typing import TYPE_CHECKING, Any, Literal, NamedTuple
 
@@ -189,6 +190,85 @@ def asset_project_region_heading(rel_path: str = "") -> str:
     :func:`policy_header`'s html fallback.
     """
     return _wrap_note(_ASSET_PROJECT_REGION_NOTE, _syntax_for(rel_path))
+
+
+# A markdown ATX heading: 1-6 '#' at column 0, a space, then non-empty text.
+# Matches the level (the '#' run) so "## Foo" and "### Foo" never collide —
+# TAP-6943 measures redundancy at heading level, not by title text alone.
+_HEADING_RE = re.compile(r"^(#{1,6} .+)$", re.MULTILINE)
+
+
+def _headings(text: str) -> list[str]:
+    """Return every ATX heading line in *text*, whitespace-trimmed, in order."""
+    return [line.strip() for line in _HEADING_RE.findall(text)]
+
+
+class HeadingRedundancy(NamedTuple):
+    """How much of a preserved region's heading structure the managed block already covers.
+
+    ``duplicate_count`` counts preserved headings that also appear (exact
+    line match, like ``comm -12`` on the two heading lists) in the managed
+    block; ``total_count`` is every heading the preserved region has. A
+    region with ``total_count == 0`` has no headings to compare — never
+    reported redundant either way.
+    """
+
+    duplicate_count: int
+    total_count: int
+
+    @property
+    def fully_redundant(self) -> bool:
+        return self.total_count > 0 and self.duplicate_count == self.total_count
+
+    @property
+    def partially_redundant(self) -> bool:
+        return 0 < self.duplicate_count < self.total_count
+
+
+def heading_redundancy(preserved: str, canonical_block_body: str) -> HeadingRedundancy:
+    """Compare *preserved*'s headings against *canonical_block_body*'s.
+
+    A real diff, not a byte/line count: only headings that literally recur in
+    the canonical body count as duplicates, so a partially-redundant region
+    (some headings shared, some not) is distinguishable from a fully
+    redundant one, and a preserved region whose headings are all unique is
+    never reported as any degree of redundant.
+    """
+    preserved_headings = _headings(preserved)
+    canonical_headings = set(_headings(canonical_block_body))
+    duplicate_count = sum(1 for h in preserved_headings if h in canonical_headings)
+    return HeadingRedundancy(duplicate_count, len(preserved_headings))
+
+
+def asset_project_region_heading_with_redundancy(
+    rel_path: str, redundancy: HeadingRedundancy
+) -> str:
+    """Return the migrated-region heading, plus a redundancy verdict when headings exist.
+
+    Appends a second comment line naming how many of the preserved region's
+    headings the managed block above already covers — the per-asset signal
+    TAP-6943 asks for, surfaced directly in the file that ``tapps_upgrade``
+    or ``tapps doctor`` next reads, in place of the old unconditional "review
+    and trim" banner with no measurement behind it.
+    """
+    base = asset_project_region_heading(rel_path)
+    if redundancy.total_count == 0 or redundancy.duplicate_count == 0:
+        # No headings to compare, or none of them recur upstream: nothing here
+        # is redundant with the managed block, partially or otherwise.
+        return base
+    syntax = _syntax_for(rel_path)
+    if redundancy.fully_redundant:
+        verdict = (
+            f"fully redundant: all {redundancy.total_count} heading(s) below already "
+            f"appear in the managed block above — safe to delete this entire region"
+        )
+    else:
+        verdict = (
+            f"partially redundant: {redundancy.duplicate_count}/{redundancy.total_count} "
+            f"heading(s) below already appear in the managed block above — trim those, "
+            f"keep the rest"
+        )
+    return f"{base}\n{_wrap_note(verdict, syntax)}"
 
 
 def _split_shebang(body: str) -> tuple[str, str]:
@@ -360,7 +440,8 @@ def install_or_refresh_asset(
         action = "refreshed"
     else:
         preserved = original.strip("\n")
-        heading = asset_project_region_heading(rel_path)
+        redundancy = heading_redundancy(preserved, rest)
+        heading = asset_project_region_heading_with_redundancy(rel_path, redundancy)
         updated = f"{fresh}\n{heading}\n\n{preserved}\n"
         action = "migrated"
 
@@ -478,11 +559,14 @@ __all__ = [
     "ASSET_PROJECT_REGION_HEADING",
     "POLICY_NOTES",
     "AssetAction",
+    "HeadingRedundancy",
     "Policy",
     "asset_block",
     "asset_project_region_heading",
+    "asset_project_region_heading_with_redundancy",
     "create_only_body",
     "has_asset_customization",
+    "heading_redundancy",
     "install_or_refresh_asset",
     "is_delimitable",
     "plan_overwrite_report",
