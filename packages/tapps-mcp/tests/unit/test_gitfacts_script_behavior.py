@@ -240,3 +240,54 @@ class TestSessionsExitCodeContract:
         )
         assert "VERDICT: 2 live session(s)" in result.stdout
         assert "Any 'git add -A' by any of them stages the others' work." in result.stdout
+
+    def test_one_session_exits_zero(self, tmp_path: Path) -> None:
+        """TAP-6981: the live-reproduced case -- n=1 was untested (n=0 and n=2
+        were the only covered counts), so the single-session count could
+        silently regress to the pre-fix inverted exit code without any test
+        noticing."""
+        script = _scaffold(tmp_path)
+        work = _make_repo_with_origin(tmp_path)
+
+        proc = _spawn_fake_session(work)
+        try:
+            time.sleep(0.3)
+            result = _run_gitfacts(script, "sessions", str(work))
+        finally:
+            proc.terminate()
+            try:
+                proc.wait(timeout=5)
+            except subprocess.TimeoutExpired:
+                proc.kill()
+                proc.wait(timeout=5)
+
+        assert result.returncode == 0, (
+            f"one-session case must exit 0, got {result.returncode}: "
+            f"stdout={result.stdout!r} stderr={result.stderr!r}"
+        )
+        assert "VERDICT: 1 live session(s)" in result.stdout
+
+    def test_five_sessions_exits_zero(self, tmp_path: Path) -> None:
+        """TAP-6981: closes the other untested count named in acceptance box 2."""
+        script = _scaffold(tmp_path)
+        work = _make_repo_with_origin(tmp_path)
+
+        procs = [_spawn_fake_session(work) for _ in range(5)]
+        try:
+            time.sleep(0.3)
+            result = _run_gitfacts(script, "sessions", str(work))
+        finally:
+            for p in procs:
+                p.terminate()
+            for p in procs:
+                try:
+                    p.wait(timeout=5)
+                except subprocess.TimeoutExpired:
+                    p.kill()
+                    p.wait(timeout=5)
+
+        assert result.returncode == 0, (
+            f"five-session case must exit 0, got {result.returncode}: "
+            f"stdout={result.stdout!r} stderr={result.stderr!r}"
+        )
+        assert "VERDICT: 5 live session(s)" in result.stdout
