@@ -566,6 +566,46 @@ def lane_evidence_cmd(log_path: Path) -> None:
     click.echo(_json.dumps(data))
 
 
+@main.command("managed-block-hash")
+@click.argument("skill_name")
+@click.option(
+    "--host",
+    type=click.Choice(["claude", "cursor"]),
+    default="claude",
+    show_default=True,
+)
+def managed_block_hash_cmd(skill_name: str, host: str) -> None:
+    """Print the emitter's current canonical managed-block hash for a skill (TAP-6968).
+
+    Derived from the emitter's own in-repo body, never restated by hand — a
+    release-time consumable target a fleet sweep can diff a deployed skill's
+    block against without running the whole ``tapps-mcp doctor`` pass. Mirrors
+    the equality check ``distribution.doctor_skills._check_managed_skill_current``
+    already runs internally, surfaced here as a standalone, scriptable hash.
+    """
+    import hashlib
+    import json as _json
+
+    from tapps_mcp.pipeline.platform_skills import CLAUDE_SKILLS, CURSOR_SKILLS
+    from tapps_mcp.pipeline.skill_managed_block import (
+        extract_block,
+        normalize_block_version,
+        wrap_with_markers,
+    )
+
+    catalogue = CLAUDE_SKILLS if host == "claude" else CURSOR_SKILLS
+    body = catalogue.get(skill_name)
+    if body is None:
+        raise SystemExit(f"Error: no such skill {skill_name!r} for host {host!r}")
+
+    block = extract_block(wrap_with_markers(body, skill_name))
+    if block is None:
+        raise SystemExit(f"Error: {skill_name!r} produced no managed block for host {host!r}")
+
+    digest = hashlib.sha256(normalize_block_version(block).encode("utf-8")).hexdigest()
+    click.echo(_json.dumps({"skill": skill_name, "host": host, "hash": digest}))
+
+
 def _get_project_root() -> Path:
     """Resolve project root from TAPPS_MCP_PROJECT_ROOT env var or cwd."""
     from pathlib import Path
