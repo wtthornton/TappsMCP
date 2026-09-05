@@ -73,6 +73,17 @@ from tapps_mcp.tools.session_start_helpers import (
     _process_session_capture,
     _schedule_background_maintenance,
     call_memory_index_session_start,
+    maybe_schedule_quick_maintenance,
+)
+
+# TAP-7018: the retired-registration pointer, and the logic that picks it
+# vs. the real tapps_session_start, live in session_start_helpers.py, not
+# here, so the already oversized register() below stays a single ``if``.
+from tapps_mcp.tools.session_start_helpers import (
+    resolve_session_start_impl as resolve_session_start_impl,
+)
+from tapps_mcp.tools.session_start_helpers import (
+    tapps_session_start_pointer as tapps_session_start_pointer,
 )
 from tapps_mcp.tools.validate_changed import (
     _AUTO_DETECT_BUDGET_S as _AUTO_DETECT_BUDGET_S,
@@ -166,6 +177,7 @@ if TYPE_CHECKING:
     from mcp.server.fastmcp import FastMCP
 
 __all__ = [
+    "SESSION_START_QUICK_RECOMMENDED_NEXT",
     "_AUTO_DETECT_BUDGET_S",
     "_DOCS_COVERED",
     "_PROGRESS_HEARTBEAT_INTERVAL",
@@ -173,7 +185,6 @@ __all__ = [
     "_VALIDATE_CONCURRENCY",
     "_VALIDATE_OK_MARKER",
     "_VALIDATION_PROGRESS_FILE",
-    "SESSION_START_QUICK_RECOMMENDED_NEXT",
     # Re-exports for backward compatibility
     "TaskUnit",
     "_ProgressTracker",
@@ -211,6 +222,7 @@ __all__ = [
     "_reset_session_consolidation_flag",
     "_reset_session_doc_validation_flag",
     "_reset_session_gc_flag",
+    "_reset_session_maintenance_flag",
     "_reset_session_state",
     "_resolve_security_depth",
     "_schedule_background_maintenance",
@@ -228,7 +240,9 @@ __all__ = [
     "call_memory_index_session_start",
     "error_response",
     "load_settings",
+    "maybe_schedule_quick_maintenance",
     "register",
+    "resolve_session_start_impl",
     "tapps_decompose",
     "tapps_doctor",
     "tapps_handoff_save",
@@ -236,6 +250,7 @@ __all__ = [
     "tapps_pipeline",
     "tapps_session_end",
     "tapps_session_start",
+    "tapps_session_start_pointer",
     "tapps_set_engagement_level",
     "tapps_upgrade",
     "tapps_validate_changed",
@@ -278,6 +293,10 @@ class _SessionFlags:
     gc_done: bool = False
     consolidation_done: bool = False
     doc_validation_done: bool = False
+    # TAP-6638: guards _schedule_background_maintenance itself (not just the
+    # individual ops it calls) so a quick=True call and a quick=False call in
+    # the same session schedule the fire-and-forget maintenance task once.
+    maintenance_scheduled: bool = False
     # TAP-2005: ISO-8601 timestamp of the most recent session start; consumed
     # by tapps_session_end to scope flywheel_process to this session's events.
     session_start_iso: str = ""
@@ -322,11 +341,17 @@ def _reset_session_doc_validation_flag() -> None:
     _session_state.doc_validation_done = False
 
 
+def _reset_session_maintenance_flag() -> None:
+    """Reset the background-maintenance-scheduled flag (for testing)."""
+    _session_state.maintenance_scheduled = False
+
+
 def _reset_session_state() -> None:
     """Reset all session state flags (for testing)."""
     _session_state.gc_done = False
     _session_state.consolidation_done = False
     _session_state.doc_validation_done = False
+    _session_state.maintenance_scheduled = False
     _session_state.session_start_iso = ""
 
 
@@ -748,17 +773,11 @@ async def tapps_session_start(
     except Exception:
         _logger.debug("call_graph_session_start_failed", exc_info=True)
 
-    # TAP-2017: Detect and surface compaction rehydration data when the
-    # PreCompact hook indexed the prior session in brain.  Best-effort —
-    # a missing marker or brain outage must not block session start.
-    try:
-        from tapps_mcp.tools.session_start_helpers import _check_compaction_rehydration
-
-        rehydration = await _check_compaction_rehydration(settings.project_root)
-        if rehydration is not None:
-            data["compaction_rehydration"] = rehydration
-    except Exception:
-        _logger.debug("compaction_rehydration_session_start_failed", exc_info=True)
+    # TAP-2017 / TAP-6638: Detect and surface compaction rehydration data when
+    # the PreCompact hook indexed the prior session in brain. Routed through
+    # the shared helper (also used by the quick path) instead of a second
+    # inline copy of the same marker-check + best-effort-swallow logic.
+    await _ssc.attach_compaction_rehydration(Path(settings.project_root), data)
 
     # TAP-3578: surface prior-session usage gaps from disk telemetry.
     try:
@@ -948,6 +967,7 @@ async def _session_start_quick(
     }
 
     await _ssc.attach_compaction_rehydration(Path(settings.project_root), data)
+    maybe_schedule_quick_maintenance(settings)
 
     # TAP-1414: Surface ruff/mypy missing on Python projects as a loud warning.
     degraded_checkers, degraded_warning = _ssc.compute_python_degraded_checkers(
@@ -1153,10 +1173,23 @@ async def tapps_init(
     await _pih.emit_init_progress(ctx, result)
 
     elapsed_ms = (time.perf_counter_ns() - start) // 1_000_000
+    init_errors = result["errors"]
+    # TAP-6442: error_code aggregates the metrics row over a stable code
+    # instead of the raw first-error string, which embeds an exception
+    # message or path and would otherwise never repeat across calls.
+    #
+    # Only the first error is classified -- one code per failed call,
+    # matching the one status per call the row already records. The
+    # classification table itself lives in pipeline_init_helpers.py,
+    # next to the other tapps_init-only helpers, not here, so this
+    # already-oversized module stays a thin caller of that table
+    # rather than a second place a new producer's error has to be
+    # registered.
     _record_execution(
         "tapps_init",
         start,
-        status="success" if not result["errors"] else "failed",
+        status="success" if not init_errors else "failed",
+        error_code=_pih.classify_init_error_code(init_errors[0]) if init_errors else None,
     )
 
     _pih.enrich_init_result_hints(result, add_other_mcps_hint=add_other_mcps_hint)
@@ -1869,19 +1902,36 @@ async def tapps_session_end() -> dict[str, Any]:
 # ---------------------------------------------------------------------------
 
 
-def register(mcp_instance: FastMCP, allowed_tools: frozenset[str]) -> None:
+def register(
+    mcp_instance: FastMCP,
+    allowed_tools: frozenset[str],
+    *,
+    tool_preset: str | None = None,
+) -> None:
     """Register pipeline/validation tools on *mcp_instance*.
 
-    TAP-1986: tapps_session_start and tapps_validate_changed are eager daily drivers.
-    All other pipeline tools carry defer_loading=True.
+    TAP-1986: tapps_session_start and tapps_validate_changed are eager daily
+    drivers. All other pipeline tools carry defer_loading=True.
+
+    Args:
+        mcp_instance: The FastMCP server to register tools on.
+        allowed_tools: Tool names permitted for this server process (Epic 79.1).
+        tool_preset: The raw ``settings.tool_preset`` string (e.g.
+            ``"nlt-memory"``). When it names a retired ``tapps_session_start``
+            registration (TAP-7018) and the real tool is not in
+            *allowed_tools*, :func:`tapps_session_start_pointer` is
+            registered under the same name instead, so the name still
+            resolves to something rather than 404-ing.
     """
     if "tapps_validate_changed" in allowed_tools:
         register_tool(mcp_instance, tapps_validate_changed, annotations=_ANNOTATIONS_READ_ONLY)
-    if "tapps_session_start" in allowed_tools:
+    session_start_impl = resolve_session_start_impl(allowed_tools, tool_preset)
+    if session_start_impl is not None:
         register_tool(
             mcp_instance,
-            tapps_session_start,
+            session_start_impl,
             annotations=_ANNOTATIONS_SIDE_EFFECT_IDEMPOTENT,
+            name="tapps_session_start",
         )
     if "tapps_session_end" in allowed_tools:
         register_tool(

@@ -551,8 +551,20 @@ def _schedule_background_maintenance(
     ``_maybe_validate_memories``, and ``call_memory_index_session_start`` on the
     ``server_pipeline_tools`` module at call time so that tests patching
     those symbols on the host module are honoured.
+
+    TAP-6638: guarded by ``_session_state.maintenance_scheduled`` so a
+    quick=True call and a following quick=False call in the same session
+    schedule this fire-and-forget task once, not twice.
     """
     from tapps_mcp import server_pipeline_tools as _host
+
+    # Check-and-set before anything else: both call sites (the quick path's
+    # maybe_schedule_quick_maintenance and the full path's
+    # _collect_memory_status) reach this function, and only the first one
+    # in a given session should actually spawn the background task.
+    if _host._session_state.maintenance_scheduled:
+        return
+    _host._session_state.maintenance_scheduled = True
 
     async def _run_maintenance() -> None:
         """Execute all maintenance ops sequentially in the background."""
@@ -589,6 +601,57 @@ def _schedule_background_maintenance(
     task = asyncio.create_task(_run_maintenance())
     _host._background_tasks.add(task)
     task.add_done_callback(_host._background_tasks.discard)
+
+
+def maybe_schedule_quick_maintenance(settings: TappsMCPSettings) -> None:
+    """Schedule background maintenance from the quick session-start path.
+
+    TAP-6638: ``_session_start_quick`` never assembles the full memory
+    status payload (``_collect_memory_status`` -- tallies, hints, profile
+    enrichment), so it never reached the ``_schedule_background_maintenance``
+    call buried at the end of that function. In-process mode only: HTTP
+    fleet mode has no local ``MemoryStore`` snapshot to hand it, and no
+    single request owns a shared server process's maintenance cadence.
+    Best-effort -- a brain outage here must not block session start.
+
+    Safe to call unconditionally from the quick path: a disabled memory
+    subsystem, an absent store, or a later call from the full path all
+    resolve to a no-op rather than an exception surfacing to the caller.
+
+    Args:
+        settings: The resolved ``TappsMCPSettings`` for the current
+            request; read for ``memory.enabled`` and passed through to
+            :func:`_schedule_background_maintenance` unchanged.
+
+    Returns:
+        None. All effects are the fire-and-forget background task
+        :func:`_schedule_background_maintenance` schedules, or nothing at
+        all when this call is a no-op.
+    """
+    try:
+        if not settings.memory.enabled:
+            return
+        from tapps_mcp.server_helpers import _get_brain_bridge, _get_memory_store
+
+        bridge = _get_brain_bridge()
+        # Same in-process-vs-HTTP check _collect_memory_status uses, just
+        # without the tally/hints work only the full status payload needs.
+        if bridge is not None and getattr(bridge, "is_http_mode", False):
+            # HTTP fleet mode: no local MemoryStore to snapshot here, and the
+            # brain-side process (not this request) owns its own maintenance.
+            return
+        mem_store = _get_memory_store()
+        if mem_store is None:
+            # No in-process store yet (brain not configured, or first call
+            # raced construction) -- nothing to snapshot or schedule against.
+            return
+        # Only the snapshot _schedule_background_maintenance itself needs
+        # (total_count) -- not the full tally/hints/profile-enrichment work
+        # _collect_memory_status does for the diagnostic payload.
+        _schedule_background_maintenance(mem_store, mem_store.snapshot(), settings)
+    except Exception:
+        # Never let a brain hiccup here fail session start (best-effort).
+        _logger.debug("quick_maintenance_schedule_failed", exc_info=True)
 
 
 def _collect_brain_bridge_health() -> dict[str, Any]:
@@ -1352,3 +1415,69 @@ def _schedule_call_graph_rebuild(
     if _fire_and_forget(_runner, _host._background_tasks):
         return {"scheduled": True, "reason": status or "stale"}
     return {"scheduled": False, "skipped": "no_running_loop"}
+
+
+# ---------------------------------------------------------------------------
+# TAP-7018: tapps_session_start retired-registration pointer
+# ---------------------------------------------------------------------------
+
+#: The single NLT preset that owns the real ``tapps_session_start``.
+SESSION_START_OWNER_PRESET = "nlt-memory"
+
+#: NLT presets whose ``TOOL_PROFILE_NLT_*`` frozenset no longer carries
+#: ``tapps_session_start`` but still need the name to resolve to a pointer
+#: instead of a 404 (every fleet consumer calls it on nlt-memory today).
+SESSION_START_POINTER_PRESETS = frozenset({"nlt-build", "nlt-setup"})
+
+
+async def tapps_session_start_pointer(
+    project_root: str = "",
+    quick: bool = True,
+    force: bool = False,
+) -> dict[str, Any]:
+    """Pointer for a retired ``tapps_session_start`` registration (TAP-7018)."""
+    del project_root, quick, force
+    from tapps_mcp.server_helpers import error_response
+
+    return error_response(
+        "tapps_session_start",
+        "tool_relocated",
+        (
+            "tapps_session_start now runs only on the "
+            f"'{SESSION_START_OWNER_PRESET}' NLT server. Call it there."
+        ),
+        extra={"owner_preset": SESSION_START_OWNER_PRESET},
+    )
+
+
+def resolve_session_start_impl(
+    allowed_tools: frozenset[str],
+    tool_preset: str | None,
+) -> Callable[..., Any] | None:
+    """Pick the ``tapps_session_start`` handler ``register()`` should wire up.
+
+    TAP-7018: this used to be a full implementation registered on three NLT
+    servers (nlt-build, nlt-memory, nlt-setup). Since every fleet consumer
+    and this driver call it on nlt-memory today, dropping the name outright
+    from a retired preset would turn a live first-call into a hard 404.
+
+    Args:
+        allowed_tools: Tool names permitted for this server process (Epic
+            79.1). When it contains ``"tapps_session_start"``, this server
+            owns the real implementation.
+        tool_preset: The raw ``settings.tool_preset`` string. When it names
+            a preset that used to own the real tool (``nlt-build`` /
+            ``nlt-setup``), the pointer is picked instead so the name still
+            resolves to something.
+
+    Returns:
+        The real ``tapps_session_start``, the pointer, or ``None`` when
+        neither applies -- so ``register()`` itself stays a single ``if``.
+    """
+    from tapps_mcp.server_pipeline_tools import tapps_session_start
+
+    if "tapps_session_start" in allowed_tools:
+        return tapps_session_start
+    if tool_preset in SESSION_START_POINTER_PRESETS:
+        return tapps_session_start_pointer
+    return None

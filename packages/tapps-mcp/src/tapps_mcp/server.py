@@ -409,7 +409,13 @@ TAPPS_TOOL_PRESET_ADMIN: frozenset[str] = frozenset(
 # Epic 109 / ADR-0016 NLT plugin profiles — see docs/architecture/nlt-mcp-plugin-spec.yaml
 TOOL_PROFILE_NLT_BUILD: frozenset[str] = frozenset(
     {
-        "tapps_session_start",
+        # TAP-7018: tapps_session_start no longer registers its real
+        # implementation here -- nlt-memory is now the single owner (every
+        # fleet consumer calls it there). A bare tapps_session_start() call
+        # still resolves on this server via a pointer stub registered in
+        # server_pipeline_tools.register() (keyed off settings.tool_preset,
+        # not this frozenset), so an existing consumer calling it here gets
+        # a pointer, not a 404.
         "tapps_quick_check",
         "tapps_validate_changed",
         "tapps_quality_gate",
@@ -434,12 +440,9 @@ TOOL_PROFILE_NLT_BUILD: frozenset[str] = frozenset(
 
 TOOL_PROFILE_NLT_MEMORY: frozenset[str] = frozenset(
     {
-        # Bootstrap tool: the shared server banner instructs the agent to call
-        # tapps_session_start first on every tapps-mcp profile, and the
-        # session_start_gate blocks all tools until it runs. Register it here so
-        # a bare tapps_session_start() resolves on nlt-memory too, instead of
-        # 404-ing when the agent reaches this server first (TAP session-start
-        # routing fix).
+        # TAP-7018: nlt-memory is the single owner of the real
+        # tapps_session_start implementation -- every fleet consumer and
+        # this driver call it here today.
         "tapps_session_start",
         "tapps_memory",
         "tapps_session_notes",
@@ -450,11 +453,13 @@ TOOL_PROFILE_NLT_MEMORY: frozenset[str] = frozenset(
 
 TOOL_PROFILE_NLT_SETUP: frozenset[str] = frozenset(
     {
-        # Bootstrap tool: session_start is the canonical first-call and belongs
-        # with the setup/bootstrap family (init, doctor, server_info). Without it
-        # here, the banner's "call tapps_session_start" instruction is a broken
-        # promise on nlt-setup and the agent's natural guess 404s.
-        "tapps_session_start",
+        # TAP-7018: tapps_session_start no longer registers its real
+        # implementation here -- nlt-memory is now the single owner. A bare
+        # tapps_session_start() call still resolves on this server via a
+        # pointer stub registered in server_pipeline_tools.register()
+        # (keyed off settings.tool_preset, not this frozenset), so the
+        # banner's "call tapps_session_start" instruction is not a broken
+        # promise here.
         "tapps_init",
         "tapps_upgrade",
         "tapps_doctor",
@@ -959,7 +964,7 @@ def _register_tool_modules() -> None:
     )
 
     server_scoring_tools.register(mcp, allowed_tools)
-    server_pipeline_tools.register(mcp, allowed_tools)
+    server_pipeline_tools.register(mcp, allowed_tools, tool_preset=settings.tool_preset)
     server_metrics_tools.register(mcp, allowed_tools)
     server_memory_tools.register(mcp, allowed_tools)
     server_analysis_tools.register(mcp, allowed_tools)

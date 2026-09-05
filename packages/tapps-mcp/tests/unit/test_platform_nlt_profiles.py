@@ -51,15 +51,16 @@ class TestPlatformNltProfileDefinitions:
     def test_linear_and_release_disjoint(self) -> None:
         assert TOOL_PROFILE_NLT_LINEAR_ISSUES.isdisjoint(TOOL_PROFILE_NLT_RELEASE_SHIP)
 
-    def test_session_start_on_every_tapps_mcp_profile(self) -> None:
-        # The shared tapps-mcp server banner tells the agent to call
-        # tapps_session_start first on nlt-build / nlt-memory / nlt-setup, and
-        # the session_start_gate blocks all tools until it runs. Every profile
-        # that advertises it must actually expose it, or a bare
-        # tapps_session_start() call 404s on the profile the agent guesses.
-        assert "tapps_session_start" in TOOL_PROFILE_NLT_BUILD
+    def test_session_start_registered_on_exactly_one_profile(self) -> None:
+        # TAP-7018: tapps_session_start used to be duplicated across all
+        # three NLT presets. nlt-memory is the single owner (every fleet
+        # consumer calls it there); nlt-build and nlt-setup resolve the
+        # name via a pointer stub registered in
+        # server_pipeline_tools.register() instead of their own frozenset
+        # entry (see test_server_pipeline_tools.py for the pointer test).
+        assert "tapps_session_start" not in TOOL_PROFILE_NLT_BUILD
         assert "tapps_session_start" in TOOL_PROFILE_NLT_MEMORY
-        assert "tapps_session_start" in TOOL_PROFILE_NLT_SETUP
+        assert "tapps_session_start" not in TOOL_PROFILE_NLT_SETUP
 
     def test_unknown_profile_raises(self) -> None:
         with pytest.raises(ValueError, match="Unknown tapps-platform profile"):

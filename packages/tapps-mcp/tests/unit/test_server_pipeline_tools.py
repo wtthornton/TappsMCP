@@ -850,6 +850,41 @@ class TestTappsDoctor:
 # ---------------------------------------------------------------------------
 
 
+class TestClassifyInitErrorCode:
+    def test_known_messages_map_to_stable_codes(self) -> None:
+        from tapps_mcp.tools.pipeline_init_helpers import classify_init_error_code
+
+        cases = {
+            "AGENTS.md update failed: boom": "agents_md_update_failed",
+            "Karpathy guidelines install failed for foo.md: boom": (
+                "karpathy_guidelines_failed"
+            ),
+            "some/path.md: path escapes project root": "path_escapes_project_root",
+            "Unknown platform: 'vim'. Use 'claude' or 'cursor'.": "unknown_platform",
+        }
+        for message, expected_code in cases.items():
+            assert classify_init_error_code(message) == expected_code
+
+    def test_unrecognized_message_falls_back_to_stable_generic_code(self) -> None:
+        from tapps_mcp.tools.pipeline_init_helpers import (
+            INIT_ERROR_CODE_FALLBACK,
+            classify_init_error_code,
+        )
+
+        assert classify_init_error_code("a brand new producer wrote this") == (
+            INIT_ERROR_CODE_FALLBACK
+        )
+
+    def test_same_error_family_with_different_exception_text_same_code(self) -> None:
+        # The stability requirement: two failures from the same producer but
+        # with different exception text must aggregate under one code.
+        from tapps_mcp.tools.pipeline_init_helpers import classify_init_error_code
+
+        code_a = classify_init_error_code("Cache warming failed: disk full")
+        code_b = classify_init_error_code("Cache warming failed: timeout")
+        assert code_a == code_b == "cache_warming_failed"
+
+
 class TestTappsInit:
     def setup_method(self) -> None:
         CallTracker.reset()
@@ -938,6 +973,38 @@ class TestTappsInit:
 
         result = await tapps_init(dry_run=True)
         assert result["success"] is False
+
+    @pytest.mark.asyncio
+    @patch("tapps_mcp.server._record_execution")
+    @patch("tapps_mcp.server_pipeline_tools.load_settings")
+    @patch("tapps_mcp.pipeline.init.bootstrap_pipeline")
+    async def test_init_failure_records_error_code(
+        self,
+        mock_bootstrap: MagicMock,
+        mock_settings: MagicMock,
+        mock_record_execution: MagicMock,
+        tmp_path: Path,
+    ) -> None:
+        from tapps_mcp.server_pipeline_tools import tapps_init
+
+        mock_settings.return_value = MagicMock(
+            project_root=tmp_path,
+            memory=MagicMock(enabled=False),
+        )
+        mock_bootstrap.return_value = {
+            "errors": ["AGENTS.md update failed: permission denied"],
+        }
+
+        result = await tapps_init(dry_run=True)
+        assert result["success"] is False
+
+        error_code_calls = [
+            call.kwargs.get("error_code")
+            for call in mock_record_execution.call_args_list
+            if call.args and call.args[0] == "tapps_init"
+        ]
+        assert error_code_calls == ["agents_md_update_failed"]
+        assert all(code is not None for code in error_code_calls)
 
     @pytest.mark.asyncio
     @patch("tapps_mcp.server_pipeline_tools.load_settings")
@@ -2020,6 +2087,11 @@ class TestSessionStartProjectRoot:
 class TestScheduleBackgroundMaintenance:
     """Tests for _schedule_background_maintenance (Epic 68.2)."""
 
+    def setup_method(self) -> None:
+        from tapps_mcp.server_pipeline_tools import _reset_session_maintenance_flag
+
+        _reset_session_maintenance_flag()
+
     @pytest.mark.asyncio
     async def test_schedules_all_maintenance_ops(self) -> None:
         """Background task calls GC, consolidation, doc validation, session index."""
@@ -2101,6 +2173,122 @@ class TestScheduleBackgroundMaintenance:
         # TAP-1999: session index still called despite earlier failures
         mock_index.assert_awaited_once()
 
+    def test_second_call_same_session_does_not_reschedule(self) -> None:
+        """TAP-6638: the scheduled-once guard is on the function itself."""
+        from tapps_mcp.server_pipeline_tools import _schedule_background_maintenance
+
+        mock_store = MagicMock()
+        mock_snapshot = MagicMock()
+        mock_snapshot.total_count = 100
+        mock_settings = MagicMock()
+        mock_settings.project_root = Path("/fake")
+
+        with patch(
+            "tapps_mcp.tools.session_start_helpers.asyncio.create_task",
+            side_effect=lambda coro: (coro.close(), MagicMock())[1],
+        ) as mock_task:
+            _schedule_background_maintenance(mock_store, mock_snapshot, mock_settings)
+            _schedule_background_maintenance(mock_store, mock_snapshot, mock_settings)
+
+        mock_task.assert_called_once()
+
+
+class TestQuickPathMaintenanceScheduling:
+    """TAP-6638: session_start_quick schedules maintenance in in-process mode."""
+
+    @pytest.fixture(autouse=True)
+    def _no_session_sentinel(self, no_session_sentinel: None) -> None:
+        """Ensure full session_start payloads (not on-disk sentinel cache)."""
+
+    def setup_method(self) -> None:
+        from tapps_mcp.server_pipeline_tools import (
+            _reset_session_maintenance_flag,
+            _reset_session_start_cache,
+        )
+
+        CallTracker.reset()
+        _reset_session_start_cache()
+        _reset_session_maintenance_flag()
+
+    @pytest.mark.asyncio
+    async def test_default_call_schedules_maintenance_in_inprocess_mode(self) -> None:
+        from tapps_mcp.server_pipeline_tools import tapps_session_start
+
+        mock_store = MagicMock()
+        mock_store.snapshot.return_value = MagicMock(total_count=1)
+
+        with (
+            patch(
+                "tapps_mcp.server_helpers._get_brain_bridge",
+                return_value=None,
+            ),
+            patch(
+                "tapps_mcp.server_helpers._get_memory_store",
+                return_value=mock_store,
+            ),
+            patch(
+                "tapps_mcp.tools.session_start_helpers.asyncio.create_task",
+                side_effect=lambda coro: (coro.close(), MagicMock())[1],
+            ) as mock_create_task,
+        ):
+            result = await tapps_session_start()
+
+        assert result["success"] is True
+        mock_create_task.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_http_mode_does_not_schedule(self) -> None:
+        from tapps_mcp.server_pipeline_tools import tapps_session_start
+
+        mock_bridge = MagicMock(is_http_mode=True)
+
+        with (
+            patch(
+                "tapps_mcp.server_helpers._get_brain_bridge",
+                return_value=mock_bridge,
+            ),
+            patch(
+                "tapps_mcp.tools.session_start_helpers.asyncio.create_task"
+            ) as mock_create_task,
+        ):
+            result = await tapps_session_start()
+
+        assert result["success"] is True
+        mock_create_task.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_maintenance_scheduled_from_quick_path_not_double_scheduled(self) -> None:
+        """quick=True schedules once; a following quick=False does not reschedule."""
+        from tapps_mcp.server_pipeline_tools import tapps_session_start
+
+        mock_store = MagicMock()
+        mock_store.snapshot.return_value = MagicMock(total_count=1, entries=[])
+
+        with (
+            patch(
+                "tapps_mcp.server_helpers._get_brain_bridge",
+                return_value=None,
+            ),
+            patch(
+                "tapps_mcp.server_helpers._get_memory_store",
+                return_value=mock_store,
+            ),
+            patch(
+                "tapps_mcp.tools.session_start_helpers.asyncio.create_task",
+                side_effect=lambda coro: (coro.close(), MagicMock())[1],
+            ) as mock_create_task,
+        ):
+            await tapps_session_start()
+            # The quick call itself must already have scheduled maintenance --
+            # asserted before the quick=False call so a reverted quick-path
+            # wire-up (which would leave scheduling to the full path below)
+            # cannot make this pass for the wrong reason.
+            mock_create_task.assert_called_once()
+
+            await tapps_session_start(quick=False, force=True)
+
+        mock_create_task.assert_called_once()
+
 
 class TestRegister:
     def test_register_adds_tools(self) -> None:
@@ -2124,6 +2312,40 @@ class TestRegister:
         register(mock_mcp, all_tools)
         # 6 tools should be registered
         assert mock_mcp.tool.call_count == 6
+
+    def test_register_pointer_for_session_start_on_retired_preset(self) -> None:
+        # TAP-7018: nlt-build no longer carries tapps_session_start in its
+        # TOOL_PROFILE_NLT_BUILD frozenset, but a bare tapps_session_start()
+        # call on that server must still resolve -- to a pointer, not a 404.
+        from mcp.server.fastmcp import FastMCP
+
+        from tapps_mcp.server_pipeline_tools import register
+
+        mcp_instance = FastMCP("test")
+        allowed = frozenset({"tapps_quick_check"})
+        register(mcp_instance, allowed, tool_preset="nlt-build")
+        assert "tapps_session_start" in mcp_instance._tool_manager._tools
+
+    def test_register_no_pointer_for_non_retired_preset(self) -> None:
+        # A preset that never carried tapps_session_start (and isn't one of
+        # the two retired registrations) gets no pointer at all.
+        from mcp.server.fastmcp import FastMCP
+
+        from tapps_mcp.server_pipeline_tools import register
+
+        mcp_instance = FastMCP("test")
+        register(mcp_instance, frozenset(), tool_preset="core")
+        assert "tapps_session_start" not in mcp_instance._tool_manager._tools
+
+    def test_pointer_returns_relocation_not_hard_failure(self) -> None:
+        # Existing consumers calling the retired name get a pointer envelope
+        # naming the owning server, rather than an unhandled exception.
+        from tapps_mcp.server_pipeline_tools import tapps_session_start_pointer
+
+        result = asyncio.run(tapps_session_start_pointer())
+        assert result["success"] is False
+        assert result["error"]["code"] == "tool_relocated"
+        assert result["error"]["owner_preset"] == "nlt-memory"
 
 
 # ---------------------------------------------------------------------------
