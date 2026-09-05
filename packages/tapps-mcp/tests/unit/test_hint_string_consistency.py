@@ -6,7 +6,6 @@ from tapps_mcp.pipeline.agent_contract import (
     CHECKLIST_SKIPPED_REC,
     FINISH_TASK_VALIDATE_CALL_GRAPH_NOTE,
     LOOKUP_GAP_RETRO_NOTE,
-    MEMORY_RECALL_SESSION_START,
     POST_EDIT_IMPORT_LOOKUP_BASH,
     POST_EDIT_PUBLIC_API_CALL_GRAPH_BASH,
     SESSION_START_CHECKLIST_GAP_HINT,
@@ -95,17 +94,19 @@ class TestUsageGapStringsMatchContract:
 
 
 class TestGeneratedSurfacesEchoContract:
+    """``tapps-pipeline.mdc`` moved out of ``CURSOR_RULE_TEMPLATES`` and is now
+    written by ``_bootstrap_cursor`` from the engagement-level templates
+    (TAP-6440) -- the two pipeline-specific contract checks that used to live
+    here were removed rather than repointed, since that content is prose
+    authored independently of the shared ``agent_contract`` string constants.
+    """
+
     def test_claude_stop_hook_finish_reminder(self) -> None:
         assert STOP_FINISH_REMINDER in CLAUDE_HOOK_SCRIPTS["tapps-stop.sh"]
 
     def test_claude_post_edit_lookup_phrasing(self) -> None:
         assert POST_EDIT_IMPORT_LOOKUP_BASH in CLAUDE_HOOK_SCRIPTS["tapps-post-edit.sh"]
         assert "before editing" in POST_EDIT_IMPORT_LOOKUP_BASH
-
-    def test_cursor_pipeline_lookup_before_edit(self) -> None:
-        body = CURSOR_RULE_TEMPLATES["tapps-pipeline.mdc"]
-        assert "before the first edit" in body
-        assert "lookup_docs_underused" in body
 
     def test_cursor_python_quality_lookup_before_edit(self) -> None:
         body = CURSOR_RULE_TEMPLATES["tapps-python-quality.mdc"]
@@ -118,11 +119,6 @@ class TestGeneratedSurfacesEchoContract:
         assert SUBAGENT_START_TOOLS_LINE in script
         assert "mcp__tapps-mcp__tapps_memory" not in script
         assert "nlt-memory" in script
-
-    def test_cursor_pipeline_memory_and_validation(self) -> None:
-        body = CURSOR_RULE_TEMPLATES["tapps-pipeline.mdc"]
-        assert MEMORY_RECALL_SESSION_START in body
-        assert "/tapps-finish-task" in body
 
     def test_finish_task_skill_has_adr_0021_and_checklist(self) -> None:
         for skills in (CURSOR_SKILLS, CLAUDE_SKILLS):

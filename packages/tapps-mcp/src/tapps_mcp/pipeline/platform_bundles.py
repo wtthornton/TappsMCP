@@ -41,6 +41,7 @@ from tapps_mcp.pipeline.platform_rules import (
 )
 from tapps_mcp.pipeline.platform_skills import CLAUDE_SKILLS, CURSOR_SKILLS
 from tapps_mcp.pipeline.platform_subagents import CLAUDE_AGENTS, CURSOR_AGENTS
+from tapps_mcp.prompts.prompt_loader import load_platform_rules
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -609,6 +610,14 @@ def generate_cursor_plugin_bundle(
     # rules/
     rules_dir = output_dir / "rules"
     rules_dir.mkdir(parents=True, exist_ok=True)
+    # tapps-pipeline.mdc is not in CURSOR_RULE_TEMPLATES (TAP-6440): the live
+    # per-project writer (_bootstrap_cursor) is engagement-level-aware, which
+    # this level-less static bundle is not, so it renders the medium template
+    # directly rather than importing a second copy of the pipeline content.
+    (rules_dir / "tapps-pipeline.mdc").write_text(
+        load_platform_rules("cursor", engagement_level="medium"), encoding="utf-8"
+    )
+    files_created.append("rules/tapps-pipeline.mdc")
     for name, content in CURSOR_RULE_TEMPLATES.items():
         (rules_dir / name).write_text(content, encoding="utf-8")
         files_created.append(f"rules/{name}")

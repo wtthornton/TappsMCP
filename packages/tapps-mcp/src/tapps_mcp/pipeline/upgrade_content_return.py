@@ -140,11 +140,11 @@ def upgrade_platform_content_return(
 
     elif host == "cursor":
         content = load_platform_rules("cursor", engagement_level=engagement_level)
-        cursor_path = project_root / ".cursor" / "rules" / "tapps-pipeline.md"
+        cursor_path = project_root / ".cursor" / "rules" / "tapps-pipeline.mdc"
         mode = "overwrite" if (cursor_path.exists() or force) else "create"
         ops.append(
             FileOperation(
-                path=".cursor/rules/tapps-pipeline.md",
+                path=".cursor/rules/tapps-pipeline.mdc",
                 content=content,
                 mode=mode,
                 description="Cursor platform rules with TappsMCP pipeline.",

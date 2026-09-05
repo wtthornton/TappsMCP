@@ -14,7 +14,6 @@ if TYPE_CHECKING:
 
 from tapps_mcp.pipeline.agent_contract import (
     COPILOT_PROJECT_SCOPE_SECTION,
-    CURSOR_PIPELINE_BEFORE_EDIT_LOOKUP,
     CURSOR_PYTHON_QUALITY_ACTIONS,
     MEMORY_RECALL_SESSION_START,
     MEMORY_SYSTEMS_BULLET,
@@ -23,41 +22,14 @@ from tapps_mcp.pipeline.agent_contract import (
 # ---------------------------------------------------------------------------
 # Cursor rule types (Story 12.11)
 # ---------------------------------------------------------------------------
-
-_CURSOR_RULE_PIPELINE = (
-    f"""\
----
-alwaysApply: true
----
-
-# TAPPS Quality Pipeline
-
-This project uses the TAPPS MCP server for code quality enforcement.
-
-## Session Start (REQUIRED)
-
-Call `tapps_session_start()` as the FIRST action in every session.
-{MEMORY_RECALL_SESSION_START}
-Read `.tapps-mcp/session-handoff.md` when continuing work. When several programs share this
-repo, `uv run tapps-mcp handoff list` names every handoff (default plus each `.tapps-mcp/handoffs/<slot>.md`)
-so you resume yours rather than whichever was written last.
-
-"""
-    + CURSOR_PIPELINE_BEFORE_EDIT_LOOKUP
-    + """\
-## After Editing Python Files (REQUIRED)
-
-Call `tapps_quick_check(file_path)` after editing any Python file.
-
-## Before Declaring Work Complete (BLOCKING)
-
-Invoke `/tapps-finish-task` (or run `tapps_validate_changed` then `tapps_checklist` sequentially) before ending any session with code edits.
-Call `tapps_validate_changed(file_paths="file1.py,file2.py")` with explicit paths to batch-validate changed files. **Never call without `file_paths`** - auto-detect scans all git-changed files and can be very slow. Default is quick mode; only use `quick=false` as a last resort.
-The quality gate MUST pass before work is declared complete.
-Call `tapps_checklist(task_type)` as the FINAL verification step.
-
-"""
-)
+#
+# The pipeline rule itself (``tapps-pipeline.mdc``) is NOT generated here.
+# ``_bootstrap_cursor`` (pipeline/init_claude_md.py) is the sole writer of
+# that file, using the engagement-level-aware ``load_platform_rules("cursor",
+# ...)`` templates -- the same content shape as ``.claude/rules/tapps-pipeline.md``.
+# A second, non-engagement-aware pipeline template used to live in this
+# dict too, producing a duplicate ``.cursor/rules/tapps-pipeline.mdc`` /
+# ``.md`` pair with drifting content (TAP-6440).
 
 _CURSOR_RULE_PYTHON_QUALITY = (
     """\
@@ -146,7 +118,6 @@ repo and THIS project for any **write** operation.
 
 # Make rule templates accessible for plugin bundle generation
 CURSOR_RULE_TEMPLATES: dict[str, str] = {
-    "tapps-pipeline.mdc": _CURSOR_RULE_PIPELINE,
     "tapps-python-quality.mdc": _CURSOR_RULE_PYTHON_QUALITY,
     "tapps-expert-consultation.mdc": _CURSOR_RULE_EXPERT,
     "tapps-agent-scope.mdc": _CURSOR_RULE_AGENT_SCOPE,
@@ -154,12 +125,15 @@ CURSOR_RULE_TEMPLATES: dict[str, str] = {
 
 
 def generate_cursor_rules(project_root: Path, *, overwrite: bool = False) -> dict[str, Any]:
-    """Generate three Cursor rule files with different rule types.
+    """Generate the non-pipeline Cursor rule files, each a different rule type.
 
     Creates ``.cursor/rules/`` with:
-    - ``tapps-pipeline.mdc`` (alwaysApply)
     - ``tapps-python-quality.mdc`` (autoAttach via globs)
     - ``tapps-expert-consultation.mdc`` (agentRequested via description)
+    - ``tapps-agent-scope.mdc`` (alwaysApply)
+
+    ``tapps-pipeline.mdc`` is generated separately by ``_bootstrap_cursor``
+    (pipeline/init_claude_md.py) -- see the module docstring above.
 
     Returns a summary dict with ``created``, ``updated``, and ``skipped`` lists.
     """

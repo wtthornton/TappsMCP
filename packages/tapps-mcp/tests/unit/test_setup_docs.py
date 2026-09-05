@@ -33,9 +33,9 @@ class TestGenerateRules:
         assert "TAPPS" in content
 
     def test_generates_cursor_rules(self, tmp_path):
-        """Generates .cursor/rules/tapps-pipeline.md for cursor host."""
+        """Generates .cursor/rules/tapps-pipeline.mdc for cursor host."""
         _generate_rules("cursor", tmp_path)
-        rules = tmp_path / ".cursor" / "rules" / "tapps-pipeline.md"
+        rules = tmp_path / ".cursor" / "rules" / "tapps-pipeline.mdc"
         assert rules.exists()
         content = rules.read_text(encoding="utf-8")
         assert "TAPPS" in content
@@ -67,7 +67,7 @@ class TestGenerateRules:
 
     def test_skips_existing_cursor_rules(self, tmp_path):
         """Skips cursor rules if file already exists."""
-        rules = tmp_path / ".cursor" / "rules" / "tapps-pipeline.md"
+        rules = tmp_path / ".cursor" / "rules" / "tapps-pipeline.mdc"
         rules.parent.mkdir(parents=True)
         rules.write_text("existing rules")
         _generate_rules("cursor", tmp_path)

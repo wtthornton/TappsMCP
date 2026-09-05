@@ -95,7 +95,7 @@ class TestUpgradePlatformContentReturn:
 
         assert len(ops) >= 1
         cursor_op = ops[0]
-        assert cursor_op.path == ".cursor/rules/tapps-pipeline.md"
+        assert cursor_op.path == ".cursor/rules/tapps-pipeline.mdc"
         assert result["components"]["cursor_rules"] == "content_return"
 
     def test_vscode_no_ops(self, tmp_path: Path) -> None:
@@ -217,7 +217,7 @@ class TestUpgradePipelineContentReturn:
 
         manifest = result["file_manifest"]
         file_paths = [f["path"] for f in manifest["files"]]
-        assert ".cursor/rules/tapps-pipeline.md" in file_paths
+        assert ".cursor/rules/tapps-pipeline.mdc" in file_paths
 
     def test_content_return_merge_existing_agents(self, tmp_path: Path) -> None:
         """When AGENTS.md exists and is outdated, file op has mode='merge'."""

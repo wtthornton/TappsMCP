@@ -341,7 +341,7 @@ class TestCliInit:
         )
         assert result.exit_code == 0
         assert (tmp_path / ".cursor" / "mcp.json").exists()
-        assert not (tmp_path / ".cursor" / "rules" / "tapps-pipeline.md").exists()
+        assert not (tmp_path / ".cursor" / "rules" / "tapps-pipeline.mdc").exists()
 
 
 # ---------------------------------------------------------------------------
@@ -418,7 +418,7 @@ class TestConfigureMultipleHosts:
             rules=True,
         )
         assert (tmp_path / ".cursor" / "mcp.json").exists()
-        assert (tmp_path / ".cursor" / "rules" / "tapps-pipeline.md").exists()
+        assert (tmp_path / ".cursor" / "rules" / "tapps-pipeline.mdc").exists()
 
     def test_skips_rules_when_disabled(self, tmp_path):
         """Rules are skipped when rules=False."""
@@ -429,7 +429,7 @@ class TestConfigureMultipleHosts:
             rules=False,
         )
         assert (tmp_path / ".cursor" / "mcp.json").exists()
-        assert not (tmp_path / ".cursor" / "rules" / "tapps-pipeline.md").exists()
+        assert not (tmp_path / ".cursor" / "rules" / "tapps-pipeline.mdc").exists()
 
 
 # ---------------------------------------------------------------------------

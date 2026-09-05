@@ -109,14 +109,14 @@ def platform_rules(monkeypatch: pytest.MonkeyPatch) -> str:
 class TestBootstrapCursor:
     def test_creates_the_rule_file(self, tmp_path: Path, platform_rules: str) -> None:
         assert _bootstrap_cursor(tmp_path) == "created"
-        rules = tmp_path / ".cursor" / "rules" / "tapps-pipeline.md"
+        rules = tmp_path / ".cursor" / "rules" / "tapps-pipeline.mdc"
         assert rules.read_text(encoding="utf-8") == platform_rules
 
     def test_skips_an_existing_file_without_overwrite(
         self, tmp_path: Path, platform_rules: str
     ) -> None:
         del platform_rules
-        rules = tmp_path / ".cursor" / "rules" / "tapps-pipeline.md"
+        rules = tmp_path / ".cursor" / "rules" / "tapps-pipeline.mdc"
         rules.parent.mkdir(parents=True)
         rules.write_text("hand-written", encoding="utf-8")
 
@@ -126,7 +126,7 @@ class TestBootstrapCursor:
     def test_overwrites_an_existing_file_when_asked(
         self, tmp_path: Path, platform_rules: str
     ) -> None:
-        rules = tmp_path / ".cursor" / "rules" / "tapps-pipeline.md"
+        rules = tmp_path / ".cursor" / "rules" / "tapps-pipeline.mdc"
         rules.parent.mkdir(parents=True)
         rules.write_text("hand-written", encoding="utf-8")
 

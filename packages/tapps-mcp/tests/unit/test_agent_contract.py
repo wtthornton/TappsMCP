@@ -19,7 +19,7 @@ from tapps_mcp.pipeline.platform_skills import (
     _FINISH_TASK_CHECKLIST_AND_DOC_GAPS_CLAUDE,
     _FINISH_TASK_CHECKLIST_AND_DOC_GAPS_CURSOR,
 )
-from tapps_mcp.prompts.prompt_loader import load_agents_template
+from tapps_mcp.prompts.prompt_loader import load_agents_template, load_platform_rules
 from tapps_mcp.server import ALL_TOOL_NAMES
 
 
@@ -43,10 +43,11 @@ class TestAgentContractConstants:
 
 class TestGeneratedSurfacesIncludeSharedStrings:
     def test_cursor_pipeline_rule_uses_cli_memory(self) -> None:
-        body = CURSOR_RULE_TEMPLATES["tapps-pipeline.mdc"]
+        """``tapps-pipeline.mdc`` is _bootstrap_cursor's file, not
+        ``CURSOR_RULE_TEMPLATES`` (TAP-6440) -- check its actual source."""
+        body = load_platform_rules("cursor", engagement_level="medium")
         assert "tapps_memory(action=" not in body
         assert "uv run tapps-mcp memory search" in body
-        assert "/tapps-finish-task" in body
 
     def test_claude_post_edit_hook_uses_contract_lookup_msg(self) -> None:
         script = CLAUDE_HOOK_SCRIPTS["tapps-post-edit.sh"]

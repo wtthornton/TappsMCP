@@ -154,6 +154,9 @@ def _absorb_component(
     if isinstance(value, dict):
         if value.get("action") == "error":
             tally["parse_errors"].append(f"{scope}:{name}: {value.get('error', '')}")
+        action = value.get("action")
+        if isinstance(action, str) and action.startswith(("would-refresh", "would-merge")):
+            tally["review"].append(f"{scope}:{name}")
         tally["managed"] += len(value.get("managed_files", [])) + len(
             value.get("managed_skills", [])
         )

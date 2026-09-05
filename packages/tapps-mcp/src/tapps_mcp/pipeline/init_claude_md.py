@@ -131,7 +131,7 @@ def _bootstrap_cursor(
     Returns ``'created'``, ``'updated'``, or ``'skipped'``.
     """
     content = load_platform_rules("cursor", engagement_level=engagement_level)
-    rules_path = project_root / ".cursor" / "rules" / "tapps-pipeline.md"
+    rules_path = project_root / ".cursor" / "rules" / "tapps-pipeline.mdc"
     rules_path.parent.mkdir(parents=True, exist_ok=True)
 
     if rules_path.exists() and not overwrite:

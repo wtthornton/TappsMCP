@@ -208,7 +208,7 @@ class TestBootstrapPipelineContentReturn:
 
         manifest = result["file_manifest"]
         file_paths = [f["path"] for f in manifest["files"]]
-        assert ".cursor/rules/tapps-pipeline.md" in file_paths
+        assert ".cursor/rules/tapps-pipeline.mdc" in file_paths
 
     def test_content_return_includes_agents_md(self, tmp_path: Path) -> None:
         with patch.dict(os.environ, {"TAPPS_WRITE_MODE": "content"}):

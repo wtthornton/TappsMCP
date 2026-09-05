@@ -51,6 +51,21 @@ def _plan_cursor_hooks(ctx: HostContext) -> dict[str, Any]:
     }
 
 
+def _remove_retired_pipeline_rule(ctx: HostContext) -> str:
+    """Delete the retired ``.cursor/rules/tapps-pipeline.md`` (TAP-6440).
+
+    ``tapps-pipeline.mdc`` (written by ``_bootstrap_cursor``) is now the sole
+    Cursor pipeline rule; the plain-``.md`` copy a prior release also wrote is
+    dead weight left on disk that a doctor presence check would otherwise
+    still accept, masking the duplicate.
+    """
+    retired = ctx.project_root / ".cursor" / "rules" / "tapps-pipeline.md"
+    if not retired.is_file():
+        return "absent"
+    retired.unlink()
+    return "removed"
+
+
 def _apply_cursor_hooks(ctx: HostContext) -> dict[str, Any]:
     from tapps_mcp.pipeline.platform_generators import generate_cursor_hooks
     from tapps_mcp.pipeline.platform_hooks import wire_memory_hooks
@@ -86,12 +101,21 @@ def upgrade_cursor(ctx: HostContext) -> None:
     from tapps_mcp.pipeline.platform_skills import CURSOR_SKILLS
     from tapps_mcp.pipeline.platform_subagents import CURSOR_AGENTS
 
+    retired_pipeline_rule = ctx.project_root / ".cursor" / "rules" / "tapps-pipeline.md"
     resolve_component(
         ctx,
         "cursor_rules",
         skip_key=None,
-        plan=lambda: "would-refresh" if ctx.force else "check-needed",
-        apply=lambda: _bootstrap_cursor(ctx.project_root, overwrite=ctx.force),
+        plan=lambda: {
+            "action": "would-refresh" if ctx.force else "check-needed",
+            "retired_tapps-pipeline.md": (
+                "would-remove" if retired_pipeline_rule.is_file() else "absent"
+            ),
+        },
+        apply=lambda: {
+            "action": _bootstrap_cursor(ctx.project_root, overwrite=ctx.force),
+            "retired_tapps-pipeline.md": _remove_retired_pipeline_rule(ctx),
+        },
     )
 
     try:
