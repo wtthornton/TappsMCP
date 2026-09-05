@@ -167,6 +167,19 @@ class TestServerInfoDiagnostics:
 
         CallTracker.reset()
 
+    @pytest.fixture(autouse=True)
+    def _stub_context7_probe(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """TAP-6592: ``tapps_server_info`` drives a real Context7 network
+        probe unless stubbed -- see test_server_pipeline_tools.py's identical
+        fixture for the full explanation.
+        """
+        from tapps_mcp import diagnostics as diag_mod
+
+        fake = Context7Diagnostic(
+            api_key_set=True, status="available", reachable=True, http_status=200, latency_ms=1.0
+        )
+        monkeypatch.setattr(diag_mod, "probe_context7", lambda *a, **k: fake)
+
     @pytest.mark.asyncio
     async def test_includes_diagnostics_key(self) -> None:
         from tapps_mcp.server import tapps_server_info
