@@ -40,7 +40,7 @@ Do not use legacy `mcp__tapps-mcp__tapps_memory` routing (removed from default b
 |--------|-----------|-------------|
 | **save** | `key`, `value`, `tier`, `scope`, `tags`, `source` | Save a memory entry (architectural tier may supersede; see intro) |
 | **save_bulk** | `entries` (list, max 50) | Batch save entries |
-| **get** | `key` | Retrieve by key (includes provenance for consolidated) |
+| **get** | `key`, `projection` | Retrieve by key (includes provenance for consolidated) |
 | **list** | `scope`, `tier`, `tags`, `limit`, `include_sources` | List with filters (max 50) |
 | **delete** | `key` | Delete by key |
 
@@ -48,7 +48,24 @@ Do not use legacy `mcp__tapps-mcp__tapps_memory` routing (removed from default b
 
 | Action | Parameters | Description |
 |--------|-----------|-------------|
-| **search** | `query`, `ranked`, `limit`, `scope`, `tier`, `tags` | BM25 composite scoring (40% relevance + 30% confidence + 15% recency + 15% frequency) |
+| **search** | `query`, `ranked`, `limit`, `scope`, `tier`, `tags`, `projection` | BM25 composite scoring (40% relevance + 30% confidence + 15% recency + 15% frequency) |
+
+### Projection (TAP-6616)
+
+`get` and `search` accept `projection="compact"` to shrink the response:
+each entry is reduced to `key`, `tier`, `confidence`, `tags`, and a
+`summary` capped at ~280 chars — dropping the full `value` field, which
+usually dominates payload size. On entries over 1KB this cuts response
+size by 70%+.
+
+Default is `projection="full"` — unchanged existing behavior, the entire
+entry (including `value`) is returned.
+
+Recall compact when triaging many results (backlog scans, "what do we
+know about X") where the summary is enough to decide whether to fetch the
+full entry. Recall full when the value itself is what you need (recalling
+a saved decision, replaying architectural context) — a compact hit that
+turns out relevant still requires a second full `get` by key.
 
 ## Intelligence & maintenance
 
