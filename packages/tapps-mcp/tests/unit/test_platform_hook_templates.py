@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import json
 import os
+import shutil
 import subprocess
 import sys
 from pathlib import Path
@@ -29,6 +30,8 @@ from tapps_mcp.pipeline.platform_hook_templates import (
     LINEAR_GATE_SCRIPTS,
     LINEAR_GATE_SCRIPTS_PS,
     SCORABLE_EXT_BASH_CASE,
+    SCORABLE_EXT_PY_TUPLE,
+    _stop_hook_gate_scan_py,
     scorable_extensions,
 )
 from tapps_mcp.pipeline.platform_hook_templates_linear_gate import (
@@ -40,10 +43,12 @@ from tapps_mcp.pipeline.platform_hook_templates_linear_gate import (
     SESSION_START_GATE_SCRIPTS_PS,
 )
 
-pytestmark = pytest.mark.skipif(
-    sys.platform == "win32",
-    reason="hook scripts under test are bash-specific",
-)
+@pytest.fixture(autouse=True)
+def _require_posix() -> None:
+    """These hook scripts assume ``/usr/bin/bash``; skip at runtime on
+    Windows rather than via a collection-time marker."""
+    if sys.platform == "win32":
+        pytest.skip("hook scripts under test are bash-specific")
 
 LINEAR_WRITE_HOOK_BODY = LINEAR_GATE_SCRIPTS["tapps-pre-linear-write.sh"]
 
@@ -276,3 +281,117 @@ def test_extension_set_equals_supported_on_every_generated_hook() -> None:
     ):
         body = scripts[name]
         assert SCORABLE_EXT_BASH_CASE in body, f"{name} does not use the shared case pattern"
+
+
+# ---------------------------------------------------------------------------
+# TAP-6737 — PowerShell warn Stop hook completion gate
+# ---------------------------------------------------------------------------
+#
+# pwsh is not on this host (`command -v pwsh` finds nothing), so the
+# execution test (box 4) and the CI parse job (box 6) are
+# `blocked: pwsh not on host` per the lane instructions — only the template
+# change and this Python-side parse-shape check (boxes 1-3) are delivered.
+
+
+def test_ps1_stop_hook_shares_the_bash_gate_scan_source() -> None:
+    """Parse-shape check (boxes 1-3): the ps1 Stop hook embeds the exact same
+    _stop_hook_gate_scan_py() source the bash branch uses (needs_gate, the
+    scorable-extension list, gate_called/checklist_called, and the
+    .completion-gate-violations.jsonl write), so the two branches cannot
+    independently drift the way the PR 304 regression did."""
+    ps1_body = CLAUDE_HOOK_SCRIPTS_PS["tapps-stop.ps1"]
+    bash_body = CLAUDE_HOOK_SCRIPTS["tapps-stop.sh"]
+    shared_py = _stop_hook_gate_scan_py()
+
+    assert shared_py in ps1_body, "ps1 Stop hook does not embed the shared gate-scan source"
+    assert shared_py in bash_body, "bash Stop hook drifted from the shared gate-scan source"
+
+    for marker in (
+        "CHECKLIST_MISSING",
+        "QUALITY_GATE_SKIP",
+        ".completion-gate-violations.jsonl",
+        "'mode': 'warn'",
+        SCORABLE_EXT_PY_TUPLE,
+    ):
+        assert marker in ps1_body, f"ps1 Stop hook missing {marker!r}"
+
+
+def test_ps1_stop_hook_invokes_python_for_the_scan() -> None:
+    """The ps1 branch must actually run the shared scan (not just embed the
+    text inertly) via the same Get-Command python3/python fallback pattern
+    used elsewhere in this file's PowerShell hooks."""
+    ps1_body = CLAUDE_HOOK_SCRIPTS_PS["tapps-stop.ps1"]
+    assert "Get-Command python3" in ps1_body
+    assert "& $py.Source -" in ps1_body
+    assert "TAPPS_STOP_TRANSCRIPT" in ps1_body
+    assert "TAPPS_STOP_PROJECT_DIR" in ps1_body
+
+
+def test_ps1_stop_hook_parses_under_pwsh() -> None:
+    """Box 5: the generated .ps1 must parse cleanly under
+    System.Management.Automation.Language.Parser, guarding the PR 304 failure
+    mode where a parse error survived seven green CI checks."""
+    if shutil.which("pwsh") is None:
+        pytest.skip("blocked: pwsh not on host (TAP-6737 boxes 4-6 need a real PowerShell)")
+    ps1_body = CLAUDE_HOOK_SCRIPTS_PS["tapps-stop.ps1"]
+    script_path = Path(os.environ.get("RUNNER_TEMP", "/tmp")) / "tapps-stop-parse-check.ps1"
+    script_path.write_text(ps1_body, encoding="utf-8")
+    check = (
+        "$errors = $null; "
+        f"[System.Management.Automation.Language.Parser]::ParseFile('{script_path}', [ref]$null, [ref]$errors) | Out-Null; "
+        "if ($errors.Count -gt 0) { $errors | ForEach-Object { Write-Error $_ }; exit 1 } else { exit 0 }"
+    )
+    result = subprocess.run(
+        ["pwsh", "-NoProfile", "-Command", check],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert result.returncode == 0, result.stderr
+
+
+def test_ps1_stop_hook_writes_violation_for_python_edit_with_no_checklist(tmp_path: Path) -> None:
+    """Box 4: execute the generated .ps1 (not merely read the template) and
+    assert a violation line is written for a Python edit with no checklist
+    call — the same VAL this issue's proof command targets on the bash side."""
+    if shutil.which("pwsh") is None:
+        pytest.skip("blocked: pwsh not on host (TAP-6737 box 4 needs a real PowerShell)")
+    project = tmp_path / "project"
+    project.mkdir()
+    transcript = tmp_path / "transcript.jsonl"
+    transcript.write_text(
+        json.dumps(
+            {
+                "message": {
+                    "content": [
+                        {
+                            "type": "tool_use",
+                            "name": "Write",
+                            "input": {"file_path": str(project / "foo.py")},
+                        }
+                    ]
+                }
+            }
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    script_path = tmp_path / "tapps-stop.ps1"
+    script_path.write_text(CLAUDE_HOOK_SCRIPTS_PS["tapps-stop.ps1"], encoding="utf-8")
+    payload = json.dumps({"stop_hook_active": False, "transcript_path": str(transcript)})
+    env = dict(os.environ)
+    env["CLAUDE_PROJECT_DIR"] = str(project)
+    result = subprocess.run(
+        ["pwsh", "-NoProfile", "-File", str(script_path)],
+        input=payload,
+        capture_output=True,
+        text=True,
+        env=env,
+        check=False,
+    )
+    assert result.returncode == 0, result.stderr
+    violations = project / ".tapps-mcp" / ".completion-gate-violations.jsonl"
+    assert violations.exists(), result.stderr
+    last = json.loads(violations.read_text(encoding="utf-8").strip().splitlines()[-1])
+    assert "CHECKLIST_MISSING" in last["reasons"]
+    assert "QUALITY_GATE_SKIP" in "|".join(last["reasons"])

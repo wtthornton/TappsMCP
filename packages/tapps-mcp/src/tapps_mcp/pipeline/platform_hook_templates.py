@@ -318,6 +318,140 @@ SCORABLE_EXT_PY_TUPLE: str = repr(scorable_extensions())
 SCORABLE_EXT_BASH_CASE: str = "|".join(f"*{ext}" for ext in scorable_extensions())
 
 
+def _stop_hook_gate_scan_py() -> str:
+    """TAP-1326/1327 Stop-hook transcript scan, shared by the bash and
+    PowerShell warn-mode Stop hooks (TAP-6737).
+
+    Reads ``TAPPS_STOP_TRANSCRIPT`` / ``TAPPS_STOP_PROJECT_DIR`` from the
+    environment rather than having each shell interpolate the values into the
+    script text, so the exact same Python source runs unchanged whether piped
+    in via a bash heredoc or a PowerShell here-string — one source for the
+    scorable-extension list, the violation-log JSON shape, and the transcript
+    parsing, so the two branches cannot independently drift the way the PR
+    304 regression (a parse error surviving seven green CI checks) did.
+    """
+    return (
+        """\
+import json,os,time
+transcript=os.environ.get('TAPPS_STOP_TRANSCRIPT','')
+project_dir=os.environ.get('TAPPS_STOP_PROJECT_DIR','.')
+gate_tools={'tapps_quick_check','tapps_validate_changed','tapps_quality_gate',
+            'mcp__tapps-mcp__tapps_quick_check','mcp__tapps-mcp__tapps_validate_changed',
+            'mcp__tapps-mcp__tapps_quality_gate','mcp__tapps-quality__tapps_quick_check',
+            'mcp__tapps-quality__tapps_validate_changed','mcp__tapps-quality__tapps_quality_gate',
+            'mcp__nlt-build__tapps_quick_check','mcp__nlt-build__tapps_validate_changed',
+            'mcp__nlt-build__tapps_quality_gate'}
+checklist_tools={'tapps_checklist','mcp__tapps-mcp__tapps_checklist','mcp__tapps-quality__tapps_checklist',
+                 'mcp__nlt-build__tapps_checklist'}
+lookup_tools={'tapps_lookup_docs','mcp__tapps-mcp__tapps_lookup_docs','mcp__tapps-quality__tapps_lookup_docs',
+              'mcp__nlt-build__tapps_lookup_docs'}
+edit_tools={'Edit','Write','MultiEdit','NotebookEdit'}
+mcp_calls=0
+gate_called=False
+checklist_called=False
+lookup_called=False
+tools_used=set()
+edited_from_transcript=[]
+try:
+    with open(transcript) as fh:
+        for line in fh:
+            try: row=json.loads(line)
+            except Exception: continue
+            msg=row.get('message') or {}
+            for blk in (msg.get('content') or []):
+                if not isinstance(blk,dict): continue
+                if blk.get('type')!='tool_use': continue
+                name=blk.get('name','')
+                tools_used.add(name)
+                if name.startswith('mcp__'): mcp_calls+=1
+                if name in gate_tools: gate_called=True
+                if name in checklist_tools: checklist_called=True
+                if name in lookup_tools: lookup_called=True
+                if name in edit_tools:
+                    fp=(blk.get('input') or {}).get('file_path','')
+                    if fp: edited_from_transcript.append(fp)
+except Exception:
+    pass
+seen=set()
+edits=[p for p in edited_from_transcript if not (p in seen or seen.add(p))]
+# TAP-7014: only files inside the project root can trip the completion gate —
+# a throwaway file written to /tmp or a scratchpad can never satisfy a repo gate run.
+proj_abs=os.path.abspath(project_dir)
+def _in_project(p):
+    try:
+        ap=os.path.abspath(p)
+    except Exception:
+        return False
+    return ap == proj_abs or ap.startswith(proj_abs + os.sep)
+gate_edits=[p for p in edits if _in_project(p)]
+"""
+        + f"needs_gate=any(p.endswith({SCORABLE_EXT_PY_TUPLE}) for p in gate_edits)\n"
+        + """miss=[]
+gate_skipped=[]
+if needs_gate and not gate_called:
+    miss.append('QUALITY_GATE_SKIP:'+','.join(gate_edits[:8]))
+    gate_skipped=gate_edits
+# CHECKLIST_MISSING fires only when files were edited (was unconditional pre-uplift).
+if needs_gate and not checklist_called:
+    miss.append('CHECKLIST_MISSING')
+# TAP-1333: append per-loop telemetry (rotates at 10 MB). ALWAYS write.
+metrics_dir=os.path.join(project_dir,'.tapps-mcp')
+try:
+    os.makedirs(metrics_dir,exist_ok=True)
+    metrics_path=os.path.join(metrics_dir,'loop-metrics.jsonl')
+    if os.path.exists(metrics_path) and os.path.getsize(metrics_path) > 10*1024*1024:
+        os.replace(metrics_path, metrics_path + '.1')
+    with open(metrics_path,'a') as fh:
+        fh.write(json.dumps({
+            'ts': int(time.time()),
+            'files_edited': edits,
+            'mcp_calls': mcp_calls,
+            'gate_skipped_files': gate_skipped,
+            'lookup_docs_called': lookup_called,
+            'checklist_called': checklist_called,
+            'tools_used': sorted(tools_used)[:50],
+        }) + '\\n')
+except Exception:
+    pass
+# Warn-mode completion-gate violation log (only on miss). Mirrors .cache-gate-violations.jsonl.
+# TAP-7015: skip the append when (files, reasons) is unchanged from the last logged row —
+# `edits` accumulates over the whole transcript, so an unresolved state was being re-logged
+# on every subsequent Stop, roughly doubling downstream 24h-violation counts.
+if miss:
+    try:
+        violations_path=os.path.join(metrics_dir,'.completion-gate-violations.jsonl')
+        if os.path.exists(violations_path) and os.path.getsize(violations_path) > 10*1024*1024:
+            os.replace(violations_path, violations_path + '.1')
+        current_files=gate_edits[:16]
+        last_sig=None
+        if os.path.exists(violations_path):
+            try:
+                last_line=None
+                with open(violations_path) as fh:
+                    for line in fh:
+                        if line.strip():
+                            last_line=line
+                if last_line:
+                    last_row=json.loads(last_line)
+                    last_sig=(last_row.get('files_edited'), last_row.get('reasons'))
+            except Exception:
+                last_sig=None
+        current_sig=(current_files, miss)
+        if current_sig != last_sig:
+            with open(violations_path,'a') as fh:
+                fh.write(json.dumps({
+                    'ts': int(time.time()),
+                    'mode': 'warn',
+                    'reasons': miss,
+                    'files_edited': current_files,
+                }) + '\\n')
+    except Exception:
+        pass
+print('|'.join(miss))
+"""
+    )
+
+
 CLAUDE_HOOK_SCRIPTS: dict[str, str] = {
     "tapps-session-start.sh": """\
 #!/usr/bin/env bash
@@ -463,123 +597,10 @@ fi
 PROJECT_DIR="${CLAUDE_PROJECT_DIR:-.}"
 GATE_REPORT=""
 if [ -n "$TRANSCRIPT" ] && [ -f "$TRANSCRIPT" ]; then
-  GATE_REPORT=$("$PYBIN" - <<PYEOF 2>/dev/null
-import json,os,time
-transcript='$TRANSCRIPT'
-project_dir='$PROJECT_DIR'
-gate_tools={'tapps_quick_check','tapps_validate_changed','tapps_quality_gate',
-            'mcp__tapps-mcp__tapps_quick_check','mcp__tapps-mcp__tapps_validate_changed',
-            'mcp__tapps-mcp__tapps_quality_gate','mcp__tapps-quality__tapps_quick_check',
-            'mcp__tapps-quality__tapps_validate_changed','mcp__tapps-quality__tapps_quality_gate',
-            'mcp__nlt-build__tapps_quick_check','mcp__nlt-build__tapps_validate_changed',
-            'mcp__nlt-build__tapps_quality_gate'}
-checklist_tools={'tapps_checklist','mcp__tapps-mcp__tapps_checklist','mcp__tapps-quality__tapps_checklist',
-                 'mcp__nlt-build__tapps_checklist'}
-lookup_tools={'tapps_lookup_docs','mcp__tapps-mcp__tapps_lookup_docs','mcp__tapps-quality__tapps_lookup_docs',
-              'mcp__nlt-build__tapps_lookup_docs'}
-edit_tools={'Edit','Write','MultiEdit','NotebookEdit'}
-mcp_calls=0
-gate_called=False
-checklist_called=False
-lookup_called=False
-tools_used=set()
-edited_from_transcript=[]
-try:
-    with open(transcript) as fh:
-        for line in fh:
-            try: row=json.loads(line)
-            except Exception: continue
-            msg=row.get('message') or {}
-            for blk in (msg.get('content') or []):
-                if not isinstance(blk,dict): continue
-                if blk.get('type')!='tool_use': continue
-                name=blk.get('name','')
-                tools_used.add(name)
-                if name.startswith('mcp__'): mcp_calls+=1
-                if name in gate_tools: gate_called=True
-                if name in checklist_tools: checklist_called=True
-                if name in lookup_tools: lookup_called=True
-                if name in edit_tools:
-                    fp=(blk.get('input') or {}).get('file_path','')
-                    if fp: edited_from_transcript.append(fp)
-except Exception:
-    pass
-seen=set()
-edits=[p for p in edited_from_transcript if not (p in seen or seen.add(p))]
-# TAP-7014: only files inside the project root can trip the completion gate —
-# a throwaway file written to /tmp or a scratchpad can never satisfy a repo gate run.
-proj_abs=os.path.abspath(project_dir)
-def _in_project(p):
-    try:
-        ap=os.path.abspath(p)
-    except Exception:
-        return False
-    return ap == proj_abs or ap.startswith(proj_abs + os.sep)
-gate_edits=[p for p in edits if _in_project(p)]
+  GATE_REPORT=$(TAPPS_STOP_TRANSCRIPT="$TRANSCRIPT" TAPPS_STOP_PROJECT_DIR="$PROJECT_DIR" "$PYBIN" - <<PYEOF 2>/dev/null
 """
-        + f"needs_gate=any(p.endswith({SCORABLE_EXT_PY_TUPLE}) for p in gate_edits)\n"
-        + """miss=[]
-gate_skipped=[]
-if needs_gate and not gate_called:
-    miss.append('QUALITY_GATE_SKIP:'+','.join(gate_edits[:8]))
-    gate_skipped=gate_edits
-# CHECKLIST_MISSING fires only when files were edited (was unconditional pre-uplift).
-if needs_gate and not checklist_called:
-    miss.append('CHECKLIST_MISSING')
-# TAP-1333: append per-loop telemetry (rotates at 10 MB). ALWAYS write.
-metrics_dir=os.path.join(project_dir,'.tapps-mcp')
-try:
-    os.makedirs(metrics_dir,exist_ok=True)
-    metrics_path=os.path.join(metrics_dir,'loop-metrics.jsonl')
-    if os.path.exists(metrics_path) and os.path.getsize(metrics_path) > 10*1024*1024:
-        os.replace(metrics_path, metrics_path + '.1')
-    with open(metrics_path,'a') as fh:
-        fh.write(json.dumps({
-            'ts': int(time.time()),
-            'files_edited': edits,
-            'mcp_calls': mcp_calls,
-            'gate_skipped_files': gate_skipped,
-            'lookup_docs_called': lookup_called,
-            'checklist_called': checklist_called,
-            'tools_used': sorted(tools_used)[:50],
-        }) + '\\n')
-except Exception:
-    pass
-# Warn-mode completion-gate violation log (only on miss). Mirrors .cache-gate-violations.jsonl.
-# TAP-7015: skip the append when (files, reasons) is unchanged from the last logged row —
-# `edits` accumulates over the whole transcript, so an unresolved state was being re-logged
-# on every subsequent Stop, roughly doubling downstream 24h-violation counts.
-if miss:
-    try:
-        violations_path=os.path.join(metrics_dir,'.completion-gate-violations.jsonl')
-        if os.path.exists(violations_path) and os.path.getsize(violations_path) > 10*1024*1024:
-            os.replace(violations_path, violations_path + '.1')
-        current_files=gate_edits[:16]
-        last_sig=None
-        if os.path.exists(violations_path):
-            try:
-                last_line=None
-                with open(violations_path) as fh:
-                    for line in fh:
-                        if line.strip():
-                            last_line=line
-                if last_line:
-                    last_row=json.loads(last_line)
-                    last_sig=(last_row.get('files_edited'), last_row.get('reasons'))
-            except Exception:
-                last_sig=None
-        current_sig=(current_files, miss)
-        if current_sig != last_sig:
-            with open(violations_path,'a') as fh:
-                fh.write(json.dumps({
-                    'ts': int(time.time()),
-                    'mode': 'warn',
-                    'reasons': miss,
-                    'files_edited': current_files,
-                }) + '\\n')
-    except Exception:
-        pass
-print('|'.join(miss))
+        + _stop_hook_gate_scan_py()
+        + """\
 PYEOF
 )
 fi
@@ -1177,23 +1198,48 @@ if ($file -and $file -match '\\.py$') {
 }
 exit 0
 """,
-    "tapps-stop.ps1": """\
-# TappsMCP Stop hook
-# Reminds to run tapps_validate_changed but does NOT block.
+    "tapps-stop.ps1": (
+        """\
+# TappsMCP Stop hook — TAP-1326/1327 (warn mode) / TAP-6737
+# Phase 1: transcript scan for needs_gate/gate_called/checklist_called, always
+# writes .tapps-mcp/loop-metrics.jsonl and appends
+# .tapps-mcp/.completion-gate-violations.jsonl on a miss — ported from the
+# bash branch via the shared _stop_hook_gate_scan_py() source so the two
+# cannot independently drift (TAP-6737; the PR 304 regression was exactly a
+# parse error surviving seven green CI checks on one branch only).
+# Phase 2: reminds to run tapps_validate_changed but does NOT block.
 # Reads sidecar progress file for richer context when available.
 # IMPORTANT: Must check stop_hook_active to prevent infinite loops.
 $rawInput = @($input) -join "`n"
 try {
     $data = $rawInput | ConvertFrom-Json
     $active = $data.stop_hook_active
+    $transcript = [string]$data.transcript_path
 } catch {
     $active = $false
+    $transcript = ""
 }
 if ($active -eq $true -or $active -eq "true" -or $active -eq "True") {
     exit 0
 }
 $projDir = $env:CLAUDE_PROJECT_DIR
 if (-not $projDir) { $projDir = "." }
+$gateReport = ""
+if ($transcript -and (Test-Path $transcript)) {
+    $py = Get-Command python3 -ErrorAction SilentlyContinue
+    if (-not $py) { $py = Get-Command python -ErrorAction SilentlyContinue }
+    if ($py) {
+        $env:TAPPS_STOP_TRANSCRIPT = $transcript
+        $env:TAPPS_STOP_PROJECT_DIR = $projDir
+        $scanScript = @'
+"""
+        + _stop_hook_gate_scan_py()
+        + """\
+'@
+        $scanLines = @($scanScript | & $py.Source - 2>$null)
+        if ($scanLines.Count -gt 0) { $gateReport = [string]$scanLines[-1] }
+    }
+}
 $progress = "$projDir/.tapps-mcp/.validation-progress.json"
 if (Test-Path $progress) {
     try {
@@ -1222,9 +1268,15 @@ if (Test-Path $reportProgress) {
         }
     } catch {}
 }
+if ($gateReport) {
+    [Console]::Error.WriteLine("TappsMCP completion-gate (warn): $gateReport")
+"""
+        + f'    [Console]::Error.WriteLine("{STOP_FINISH_REMINDER}")\n'
+        + """}
 Write-Host "Reminder: Before declaring complete, run /tapps-finish-task (or tapps_validate_changed + tapps_checklist manually)." -ForegroundColor Yellow
 exit 0
-""",
+"""
+    ),
     "tapps-user-prompt-submit.ps1": """\
 # TappsMCP UserPromptSubmit hook (TAP-975 / TAP-2000)
 # Re-surfaces pipeline state per user turn so long sessions don't drift.
