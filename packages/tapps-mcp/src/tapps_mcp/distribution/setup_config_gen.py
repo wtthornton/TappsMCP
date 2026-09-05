@@ -17,6 +17,7 @@ from typing import Any, Literal
 import click
 
 from tapps_mcp.distribution.nlt_mcp_config import (
+    DEFAULT_NLT_BUNDLE,
     NLT_SERVER_ORDER,
     enabled_servers_for_bundle,
     normalize_mcp_bundle,
@@ -395,7 +396,7 @@ def _generate_config(
     with_docs_mcp: bool = False,
     uv_launch: tuple[str, list[str]] | None = None,
     extra_env: dict[str, str] | None = None,
-    mcp_bundle: str = "full",
+    mcp_bundle: str = DEFAULT_NLT_BUNDLE,
     use_nlt_plugin: bool = False,
     mcp_transport: str | None = None,
 ) -> bool:

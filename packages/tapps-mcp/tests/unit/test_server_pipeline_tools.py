@@ -1224,6 +1224,120 @@ class TestTappsInitMcpConfig:
 
 
 # ---------------------------------------------------------------------------
+# tapps_init mcp_bundle default resolution (TAP-7020)
+# ---------------------------------------------------------------------------
+
+
+class TestTappsInitMcpBundleDefault:
+    """TAP-7020: mcp_bundle's default must be sourced from
+    ``DEFAULT_NLT_BUNDLE``, not restated as an independent literal, and an
+    existing consumer's explicit ``mcp_bundle`` must never be silently
+    rewritten on a re-run."""
+
+    def setup_method(self) -> None:
+        CallTracker.reset()
+
+    def test_default_bundle_signature_has_no_hardcoded_literal(self) -> None:
+        """The AST-level guard: `mcp_bundle`'s default must not be a bare
+        string constant like the old `"full"` -- it must come from the
+        `resolve_init_mcp_bundle` call inside the body instead, sourced from
+        `DEFAULT_NLT_BUNDLE`. A plain `==` check on the resolved value can't
+        tell "coincidentally equal literal" from "actually derived", since
+        CPython interns short string literals and makes `is` comparisons
+        pass by accident either way.
+        """
+        import ast
+        import inspect
+
+        from tapps_mcp.server_pipeline_tools import tapps_init
+
+        source = inspect.getsource(tapps_init)
+        tree = ast.parse(source)
+        func_def = tree.body[0]
+        assert isinstance(func_def, ast.AsyncFunctionDef)
+        args = func_def.args
+        param_names = [a.arg for a in args.args]
+        idx = param_names.index("mcp_bundle")
+        # defaults align to the tail of args.args
+        default_idx = idx - (len(param_names) - len(args.defaults))
+        default_node = args.defaults[default_idx]
+        assert not (
+            isinstance(default_node, ast.Constant) and default_node.value == "full"
+        ), "mcp_bundle default reverted to a bare 'full' literal"
+
+        body_src = "\n".join(
+            line for line in source.splitlines() if "resolve_init_mcp_bundle" in line
+        )
+        assert body_src, "tapps_init must resolve mcp_bundle via resolve_init_mcp_bundle"
+
+    @pytest.mark.asyncio
+    @patch("tapps_mcp.server_pipeline_tools.load_settings")
+    @patch("tapps_mcp.pipeline.init.bootstrap_pipeline")
+    async def test_default_bundle_reports_chosen_bundle_and_reason(
+        self, mock_bootstrap: MagicMock, mock_settings: MagicMock, tmp_path: Path
+    ) -> None:
+        """Unchanged-default run still names the bundle it chose and why."""
+        from tapps_mcp.distribution.nlt_mcp_config import DEFAULT_NLT_BUNDLE
+        from tapps_mcp.server_pipeline_tools import tapps_init
+
+        mock_settings.return_value = MagicMock(
+            project_root=tmp_path,
+            memory=MagicMock(enabled=False),
+            mcp_bundle=None,
+        )
+        mock_bootstrap.return_value = {"errors": [], "created": []}
+
+        result = await tapps_init(dry_run=True)
+        assert result["data"]["mcp_bundle_chosen"] == DEFAULT_NLT_BUNDLE
+        assert "default" in result["data"]["mcp_bundle_reason"]
+
+    @pytest.mark.asyncio
+    @patch("tapps_mcp.server_pipeline_tools.load_settings")
+    @patch("tapps_mcp.pipeline.init.bootstrap_pipeline")
+    async def test_default_bundle_explicit_full_not_rewritten(
+        self, mock_bootstrap: MagicMock, mock_settings: MagicMock, tmp_path: Path
+    ) -> None:
+        """Negative control: a caller that explicitly asks for `full` still
+        gets `full`, and the reason names it as explicit (not the default
+        path)."""
+        from tapps_mcp.server_pipeline_tools import tapps_init
+
+        mock_settings.return_value = MagicMock(
+            project_root=tmp_path,
+            memory=MagicMock(enabled=False),
+            mcp_bundle=None,
+        )
+        mock_bootstrap.return_value = {"errors": [], "created": []}
+
+        result = await tapps_init(dry_run=True, mcp_bundle="full")
+        assert result["data"]["mcp_bundle_chosen"] == "full"
+        assert result["data"]["mcp_bundle_reason"] == "explicit caller argument"
+
+    @pytest.mark.asyncio
+    @patch("tapps_mcp.server_pipeline_tools.load_settings")
+    @patch("tapps_mcp.pipeline.init.bootstrap_pipeline")
+    async def test_default_bundle_yaml_preseed_survives_rerun(
+        self, mock_bootstrap: MagicMock, mock_settings: MagicMock, tmp_path: Path
+    ) -> None:
+        """A project with an explicit `mcp_bundle: developer` already in
+        `.tapps-mcp.yaml` (surfaced via `settings.mcp_bundle`) must resolve
+        to `developer` on a re-run with no explicit caller argument, not be
+        silently re-expanded to the `full` default."""
+        from tapps_mcp.server_pipeline_tools import tapps_init
+
+        mock_settings.return_value = MagicMock(
+            project_root=tmp_path,
+            memory=MagicMock(enabled=False),
+            mcp_bundle="developer",
+        )
+        mock_bootstrap.return_value = {"errors": [], "created": []}
+
+        result = await tapps_init(dry_run=True)
+        assert result["data"]["mcp_bundle_chosen"] == "developer"
+        assert result["data"]["mcp_bundle_reason"] == "from .tapps-mcp.yaml"
+
+
+# ---------------------------------------------------------------------------
 # tapps_validate_changed
 # ---------------------------------------------------------------------------
 

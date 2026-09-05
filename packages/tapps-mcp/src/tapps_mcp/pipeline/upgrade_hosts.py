@@ -12,6 +12,7 @@ from pathlib import Path
 from typing import Any
 
 from tapps_core.common.logging import get_logger
+from tapps_mcp.distribution.nlt_mcp_config import DEFAULT_NLT_BUNDLE
 from tapps_mcp.pipeline.upgrade_host_claude import upgrade_claude_code
 from tapps_mcp.pipeline.upgrade_host_context import HookFlags, HostContext
 from tapps_mcp.pipeline.upgrade_host_cursor import upgrade_cursor
@@ -74,7 +75,7 @@ def upgrade_platform(
     linear_enforce_gate: bool = False,
     linear_enforce_cache_gate: str = "off",
     session_start_gate: str = "off",
-    mcp_bundle: str | None = "full",
+    mcp_bundle: str | None = DEFAULT_NLT_BUNDLE,
 ) -> dict[str, Any]:
     """Upgrade platform-specific files for a single host.
 

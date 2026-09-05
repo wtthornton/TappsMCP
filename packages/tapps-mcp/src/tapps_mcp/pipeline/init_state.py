@@ -17,6 +17,7 @@ from tapps_core.common.file_operations import (
     WriteMode,
 )
 from tapps_mcp import __version__
+from tapps_mcp.distribution.nlt_mcp_config import DEFAULT_NLT_BUNDLE
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -68,7 +69,7 @@ class BootstrapConfig:
     scaffold_experts: bool = False
     docs_automation: bool = True
     include_karpathy: bool = True
-    mcp_bundle: str = "full"
+    mcp_bundle: str = DEFAULT_NLT_BUNDLE
 
     @classmethod
     def from_params(

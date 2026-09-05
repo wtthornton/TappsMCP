@@ -17,6 +17,7 @@ from pathlib import Path
 from typing import Any
 
 from tapps_core.common.logging import get_logger
+from tapps_mcp.distribution.nlt_mcp_config import DEFAULT_NLT_BUNDLE
 from tapps_mcp.pipeline.upgrade_signals import mcp_json_has_tapps_entry
 
 log = get_logger(__name__)
@@ -244,7 +245,7 @@ def upgrade_mcp_config(
     *,
     force: bool,
     dry_run: bool,
-    mcp_bundle: str | None = "full",
+    mcp_bundle: str | None = DEFAULT_NLT_BUNDLE,
 ) -> None:
     """Populate result["components"]["mcp_config"] for one host.
 

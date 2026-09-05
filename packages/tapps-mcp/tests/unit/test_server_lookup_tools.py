@@ -7,9 +7,11 @@ from unittest.mock import AsyncMock, patch
 
 import pytest
 
+from tapps_core.brain_bridge import BrainBridgeUnavailable
 from tapps_mcp.server_lookup_tools import (
     _VALID_LOOKUP_MODES,
     _build_lookup_data,
+    _fallback_to_brain,
     _lookup_error_code,
     _sanitize_lookup_param,
     tapps_lookup_docs,
@@ -204,3 +206,39 @@ class TestTappsLookupDocs:
 
 def test_valid_lookup_modes_contract() -> None:
     assert frozenset({"code", "info"}) == _VALID_LOOKUP_MODES
+
+
+class TestFallbackToBrainExceptNarrowing:
+    """TAP-6443: `_fallback_to_brain`'s except clause must be narrowed to
+    `BrainBridgeUnavailable` -- the only exception type that can reach it
+    from the brain path (traced: `lookup_via_brain`'s own internal handling
+    already swallows brain-specific unavailability; `HttpBrainBridge`
+    converts every other exception into `BrainBridgeUnavailable` after
+    retries). A bare `except Exception` would also swallow a genuine bug in
+    the fallback path itself."""
+
+    @pytest.mark.asyncio
+    async def test_fallback_to_brain_brain_bridge_unavailable_degrades_to_none(self) -> None:
+        with (
+            patch("tapps_mcp.server_helpers._get_brain_bridge", return_value=object()),
+            patch(
+                "tapps_core.knowledge.brain_docs.lookup_via_brain",
+                new_callable=AsyncMock,
+                side_effect=BrainBridgeUnavailable("circuit open"),
+            ),
+        ):
+            result = await _fallback_to_brain("httpx", "overview", "code")
+        assert result is None
+
+    @pytest.mark.asyncio
+    async def test_fallback_to_brain_non_brain_exception_propagates(self) -> None:
+        with (
+            patch("tapps_mcp.server_helpers._get_brain_bridge", return_value=object()),
+            patch(
+                "tapps_core.knowledge.brain_docs.lookup_via_brain",
+                new_callable=AsyncMock,
+                side_effect=ValueError("bug in fallback path"),
+            ),
+        ):
+            with pytest.raises(ValueError, match="bug in fallback path"):
+                await _fallback_to_brain("httpx", "overview", "code")
