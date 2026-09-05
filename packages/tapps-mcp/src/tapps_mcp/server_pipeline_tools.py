@@ -172,6 +172,7 @@ __all__ = [
     "_VALIDATE_CONCURRENCY",
     "_VALIDATE_OK_MARKER",
     "_VALIDATION_PROGRESS_FILE",
+    "SESSION_START_QUICK_RECOMMENDED_NEXT",
     # Re-exports for backward compatibility
     "TaskUnit",
     "_ProgressTracker",
@@ -864,6 +865,18 @@ async def tapps_session_start(
     return cast("TappsSessionStartResponse", resp)
 
 
+# TAP-7019: conditional on what the turn actually touches, not a blanket
+# "always do this" -- a turn that edits only non-scorable files (docs,
+# shell, config) never triggers the middle two calls. Module-level so tests
+# can assert on it directly instead of scraping the response dict.
+SESSION_START_QUICK_RECOMMENDED_NEXT = (
+    "Session started. Next: tapps_lookup_docs before using a library API. "
+    "If you edit a scorable source file (.py/.ts/.go/.rs), run "
+    "tapps_quick_check after that edit, then tapps_validate_changed + "
+    "tapps_checklist before declaring done. Run tapps_doctor() for diagnostics."
+)
+
+
 async def _session_start_quick(
     start_ns: int,
     record_execution: Any,
@@ -923,11 +936,7 @@ async def _session_start_quick(
         "quick": True,
         "checklist_session_id": checklist_sid_q,
         "hive_status": hive_status,
-        "recommended_next": (
-            "Session started. Next: tapps_lookup_docs before using a library API, "
-            "tapps_quick_check after each Python edit, tapps_validate_changed + "
-            "tapps_checklist before declaring done. Run tapps_doctor() for diagnostics."
-        ),
+        "recommended_next": SESSION_START_QUICK_RECOMMENDED_NEXT,
     }
 
     await _ssc.attach_compaction_rehydration(Path(settings.project_root), data)
