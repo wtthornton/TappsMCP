@@ -7,12 +7,21 @@ behaviour decides scores on any machine without the external checkers.
 from __future__ import annotations
 
 import ast
+from pathlib import Path
+
+import pytest
 
 from tapps_mcp.scoring.ast_metrics import (
     AstMetricsMixin,
     _halstead_issues,
     _max_nesting_depth,
     _num,
+)
+from tapps_mcp.scoring.coverage_heuristic import (
+    _count_test_files,
+    _member_defines_stem,
+    _test_roots,
+    _tests_import_module,
 )
 
 SIMPLE = "def f(x):\n    return x + 1\n"
@@ -122,6 +131,85 @@ class TestNum:
     def test_non_numeric_falls_back_to_the_default(self) -> None:
         assert _num(object(), default=1.5) == 1.5
         assert _num(None) == 0.0
+
+
+@pytest.fixture(autouse=True)
+def _clear_coverage_heuristic_caches() -> None:
+    """Both helpers below are ``lru_cache``d on a ``Path`` argument; tmp_path
+
+    reuse across tests would stick otherwise.
+    """
+    _test_roots.cache_clear()
+    _member_defines_stem.cache_clear()
+
+
+def _workspace(root: Path, member_names: tuple[str, ...] = ("alpha", "beta")) -> None:
+    root.joinpath("pyproject.toml").write_text('[tool.uv.workspace]\nmembers = ["packages/*"]\n')
+    for member in member_names:
+        (root / "packages" / member / "tests" / "unit").mkdir(parents=True)
+        (root / "packages" / member / "src").mkdir(parents=True)
+    (root / "scripts").mkdir()
+
+
+class TestCoverageHeuristicImportlibLoad:
+    """TAP-5847: a script loaded by path (not a plain ``import`` statement)."""
+
+    def test_importlib_loaded_module_is_credited(self, tmp_path: Path) -> None:
+        _workspace(tmp_path)
+        test_file = tmp_path / "packages" / "alpha" / "tests" / "unit" / "test_loader.py"
+        test_file.write_text(
+            "import importlib.util\n"
+            "\n"
+            "def _load():\n"
+            '    return _load_module("compare")\n'
+        )
+        script = tmp_path / "scripts" / "compare.py"
+
+        assert _tests_import_module(tmp_path, script) is True
+
+    def test_plain_string_mention_without_importlib_is_not_credited(
+        self, tmp_path: Path
+    ) -> None:
+        """The importlib-loaded heuristic is gated on ``importlib`` appearing
+
+        in the file too — a bare string mention of the stem elsewhere must
+        not be enough on its own.
+        """
+        _workspace(tmp_path)
+        test_file = tmp_path / "packages" / "alpha" / "tests" / "unit" / "test_unrelated.py"
+        test_file.write_text('NAME = "compare"\n')
+        script = tmp_path / "scripts" / "compare.py"
+
+        assert _tests_import_module(tmp_path, script) is False
+
+
+class TestCoverageHeuristicStemCollision:
+    """TAP-5847: a workspace member's own file must not lend its test to an
+
+    unrelated top-level file that merely shares the stem.
+    """
+
+    def test_member_owned_stem_is_not_credited_to_an_outside_file(
+        self, tmp_path: Path
+    ) -> None:
+        _workspace(tmp_path)
+        (tmp_path / "packages" / "alpha" / "src" / "report.py").write_text("X = 1\n")
+        (tmp_path / "packages" / "alpha" / "tests" / "unit" / "test_report.py").touch()
+
+        assert _count_test_files(tmp_path, "report") == (0, 0)
+
+    def test_member_without_its_own_source_file_still_credits_a_script(
+        self, tmp_path: Path
+    ) -> None:
+        """The TAP-5619 case must still work: a member's test file with no
+
+        competing same-stem source file in that member is real credit for a
+        top-level script.
+        """
+        _workspace(tmp_path)
+        (tmp_path / "packages" / "alpha" / "tests" / "unit" / "test_widget.py").touch()
+
+        assert _count_test_files(tmp_path, "widget") == (1, 0)
 
 
 class TestHalsteadIssues:
