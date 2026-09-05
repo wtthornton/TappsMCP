@@ -82,7 +82,7 @@ class TestVerifierTierAuthorityAndRulings:
         "marker",
         [
             "may author a narrow fix and stay on as re-verifier",
-            "data-loss carve-out",
+            "carve-out naming exactly two exception categories, data-loss and security",
             "Shared quota is a coupling the independence test",
             "Billing topology",
             "Content-diff freshness",
@@ -99,3 +99,21 @@ class TestVerifierTierAuthorityAndRulings:
         section = self._rulings_section()
         for n in range(1, 9):
             assert f"\n{n}. " in section
+
+    def test_scope_creep_carve_out_requires_loud_reporting(self) -> None:
+        section = self._rulings_section()
+        ruling_2 = section.split("2. ", 1)[1].split("\n3. ", 1)[0]
+        assert "surfaced loudly in the same" in ruling_2
+        assert "evidence block" in ruling_2
+        assert "never filed and walked past" in ruling_2
+
+    def test_scope_creep_carve_out_leaves_ordinary_problems_unchanged(self) -> None:
+        section = self._rulings_section()
+        ruling_2 = section.split("2. ", 1)[1].split("\n3. ", 1)[0]
+        assert "ordinary adjacent problem" in ruling_2
+        assert "separate item, with no change in behaviour" in ruling_2
+
+    def test_scope_creep_carve_out_stops_at_the_two_categories(self) -> None:
+        section = self._rulings_section()
+        ruling_2 = section.split("2. ", 1)[1].split("\n3. ", 1)[0]
+        assert "not a general licence to widen the diff" in ruling_2
