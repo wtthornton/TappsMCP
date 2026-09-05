@@ -1,7 +1,6 @@
 """Tests for tools.bandit — parsing, scoring, and OWASP mapping."""
 
 import json
-import shutil
 from pathlib import Path
 from unittest.mock import patch
 
@@ -188,7 +187,6 @@ class TestBanditConfigArgs:
         assert _bandit_config_args(str(tmp_path)) == ["-c", str(tmp_path / "pyproject.toml")]
 
 
-@pytest.mark.skipif(shutil.which("bandit") is None, reason="bandit CLI not installed")
 class TestBanditHonorsPyprojectExcludeDirs:
     """TAP-5664 box 4-5: a real bandit invocation, not a mock.
 
