@@ -164,16 +164,17 @@ def _safe_check(name: str, fn: Callable[[], CheckResult]) -> CheckResult:
         return CheckResult(name, False, f"Check crashed: {type(exc).__name__}: {exc}")
 
 
-def _collect_checks(root: Path, *, quick: bool = False) -> list[CheckResult]:
+def _check_specs(root: Path, *, quick: bool = False) -> list[tuple[str, Callable[[], CheckResult]]]:
+    """Return the ``(display name, check callable)`` pairs ``_collect_checks`` runs.
+
+    Split out of :func:`_collect_checks` so a test can walk the same registry
+    without duplicating it, resolving each check's real function (unwrapping
+    the ``lambda: check_x(root)`` closures) to inspect its
+    ``consumer_staleness`` marker (TAP-6965 round 2).
+    """
     from tapps_mcp.distribution import context_budget as _cb
     from tapps_mcp.distribution import context_budget_thin_agent as _cbt
 
-    """Collect all diagnostic checks for the given project root.
-
-    Args:
-        root: Project root directory.
-        quick: When True, skip quality tool version checks for faster results.
-    """
     specs: list[tuple[str, Callable[[], CheckResult]]] = [
         ("tapps-mcp binary", check_binary_on_path),
         ("tapps-mcp binary version", check_binary_version_mismatch),
@@ -305,6 +306,17 @@ def _collect_checks(root: Path, *, quick: bool = False) -> list[CheckResult]:
         ("Consumer Context7 env", lambda: check_consumer_context7_env(root)),
         ("Context7 live", lambda: check_context7_live(root, quick=quick)),
     ]
+    return specs
+
+
+def _collect_checks(root: Path, *, quick: bool = False) -> list[CheckResult]:
+    """Collect all diagnostic checks for the given project root.
+
+    Args:
+        root: Project root directory.
+        quick: When True, skip quality tool version checks for faster results.
+    """
+    specs = _check_specs(root, quick=quick)
     checks = [_safe_check(name, fn) for name, fn in specs]
     if quick:
         checks.append(

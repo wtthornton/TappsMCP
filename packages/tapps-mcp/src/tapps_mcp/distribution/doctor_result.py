@@ -9,9 +9,9 @@ from __future__ import annotations
 import functools
 import sys
 from collections.abc import Callable
-from typing import Any, TypeVar
+from typing import Any, ParamSpec
 
-_CheckFn = TypeVar("_CheckFn", bound=Callable[..., "CheckResult"])
+_P = ParamSpec("_P")
 
 
 def doctor_facade_attr(name: str, fallback: Any) -> Any:
@@ -88,7 +88,10 @@ class CheckResult:
             self.ok = False
 
 
-def consumer_staleness(fn: _CheckFn) -> _CheckFn:
+_CONSUMER_STALENESS_MARKER = "__tapps_category__"
+
+
+def consumer_staleness(fn: Callable[_P, CheckResult]) -> Callable[_P, CheckResult]:
     """Mark every ``CheckResult`` a doctor check produces as ``consumer-staleness``.
 
     Decorate a ``check_*`` function that genuinely measures the *consumer
@@ -96,12 +99,19 @@ def consumer_staleness(fn: _CheckFn) -> _CheckFn:
     currency) rather than the release binary's health. Applied once at the
     function definition so the category lives with the check that knows what
     it measures, instead of being restated as a name list downstream.
+
+    Also stamps the wrapper with ``__tapps_category__`` so a test can walk the
+    doctor's check registry and derive which checks are expected to produce
+    ``consumer-staleness`` rows directly from the decorator, rather than from
+    a second, independently-maintained name list (see
+    ``test_blue_green_post_flip_smoke.py``'s derived-guard test).
     """
 
     @functools.wraps(fn)
-    def wrapper(*args: Any, **kwargs: Any) -> CheckResult:
+    def wrapper(*args: _P.args, **kwargs: _P.kwargs) -> CheckResult:
         result = fn(*args, **kwargs)
         result.category = "consumer-staleness"
         return result
 
-    return wrapper  # type: ignore[return-value]
+    setattr(wrapper, _CONSUMER_STALENESS_MARKER, "consumer-staleness")
+    return wrapper

@@ -13,13 +13,14 @@ import sys
 from pathlib import Path
 from typing import Any
 
-from tapps_mcp.distribution.doctor_result import CheckResult
+from tapps_mcp.distribution.doctor_result import CheckResult, consumer_staleness
 from tapps_mcp.pipeline.platform_hook_templates import (
     SUPPORTED_CLAUDE_HOOK_KEYS,
     SUPPORTED_CURSOR_HOOK_KEYS,
 )
 
 
+@consumer_staleness
 def check_claude_settings(project_root: Path) -> CheckResult:
     """Check ``.claude/settings.json`` for permissions and hook schema validity.
 
@@ -294,6 +295,7 @@ def _detect_hook_hosts(project_root: Path) -> tuple[list[str], list[str]]:
     return found, missing_session_start
 
 
+@consumer_staleness
 def check_hooks(project_root: Path) -> CheckResult:
     """Check TappsMCP hooks: directory, session-start script, and config validity.
 

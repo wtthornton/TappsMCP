@@ -14,7 +14,7 @@ import json
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
-from tapps_mcp.distribution.doctor_result import CheckResult
+from tapps_mcp.distribution.doctor_result import CheckResult, consumer_staleness
 
 #: Violation log the Stop hook appends to in warn mode (TAP-6586).
 COMPLETION_GATE_VIOLATIONS_LOG = ".completion-gate-violations.jsonl"
@@ -304,6 +304,7 @@ def check_deprecated_wrapper_skills(project_root: Path) -> CheckResult:
     )
 
 
+@consumer_staleness
 def check_finish_task_skill(project_root: Path) -> CheckResult:
     """Check the ``tapps-finish-task`` composite skill is deployed (TAP-977).
 
@@ -340,6 +341,7 @@ def check_finish_task_skill(project_root: Path) -> CheckResult:
     )
 
 
+@consumer_staleness
 def check_tapps_memory_skill(project_root: Path) -> CheckResult:
     """Check ``tapps-memory`` skill is deployed and routes via CLI (TAP-1994)."""
     missing = _missing_tapps_skills(project_root, ("tapps-memory",))
@@ -409,6 +411,7 @@ def _handoff_skill_content_ok(skill_name: str, content: str) -> bool:
     return False
 
 
+@consumer_staleness
 def check_session_handoff_skills(project_root: Path) -> CheckResult:
     """Check session-transfer skills are deployed (``tapps-handoff-session`` + ``tapps-continue-session``).
 

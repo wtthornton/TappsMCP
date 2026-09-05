@@ -17,7 +17,9 @@ gates the deploy.
 
 from __future__ import annotations
 
+import inspect
 import json
+from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 from unittest.mock import MagicMock
@@ -25,6 +27,8 @@ from unittest.mock import MagicMock
 import pytest
 
 from tapps_mcp.distribution import blue_green as bg
+from tapps_mcp.distribution import doctor_runner
+from tapps_mcp.distribution.doctor_result import CheckResult
 from tapps_mcp.distribution.doctor_runner import _collect_checks
 
 
@@ -242,26 +246,118 @@ class TestProbeBCrashedCheckGates:
         assert any("Managed JSON parseable" in f for f in result["failures"])
 
 
-class TestProbeCEveryConsumerStalenessNameIsReal:
-    """PROBE-C: every check tagged consumer-staleness exists among the real rows.
+def _resolve_check_fn(fn: Callable[[], CheckResult]) -> Callable[..., CheckResult]:
+    """Unwrap a ``_check_specs`` entry down to the real ``check_*`` function.
 
-    The old bug was the inverse direction (an allowlist entry absent from the
-    real rows was silently inert). Guard the new direction too: nothing can
-    tag itself ``consumer-staleness`` under a name ``_collect_checks`` never
-    actually produces, which would be a dead/unreachable classification.
+    Most entries are ``lambda: check_x(root)`` (or ``_cb.check_x(root)`` for
+    the two submodules imported locally into ``_check_specs``) so the marker
+    lives on the callable *inside* the closure, not on the lambda itself.
+    ``inspect.getclosurevars`` resolves both plain globals (``check_x``) and
+    attribute lookups off a closed-over module (``_cb.check_x``) via
+    ``co_names``.
+    """
+    if getattr(fn, "__name__", "") != "<lambda>":
+        return fn
+
+    closure = inspect.getclosurevars(fn)
+    candidates: list[Callable[..., CheckResult]] = []
+    for used_name in fn.__code__.co_names:
+        if not used_name.startswith("check_"):
+            continue
+        if used_name in closure.globals:
+            candidates.append(closure.globals[used_name])
+        for nonlocal_value in closure.nonlocals.values():
+            attr = getattr(nonlocal_value, used_name, None)
+            if callable(attr):
+                candidates.append(attr)
+
+    if len(candidates) != 1:
+        msg = (
+            f"could not uniquely resolve the check function backing spec lambda "
+            f"(co_names={fn.__code__.co_names!r}, candidates={candidates!r})"
+        )
+        raise AssertionError(msg)
+    return candidates[0]
+
+
+def _assert_categories_match_decorator_markers(root: Path, *, quick: bool = True) -> None:
+    """Derived guard (TAP-6965 round 2): category follows the decorator, not a list.
+
+    Walks every ``(display name, check fn)`` pair ``doctor_runner._check_specs``
+    registers, resolves each to its real ``check_*`` function, and partitions
+    by whether ``consumer_staleness`` stamped it with ``__tapps_category__``.
+    Then runs the real doctor on *root* and asserts: every marker-carrying
+    check produced a ``consumer-staleness`` row, every non-marked check did
+    not, and the two counts line up -- all derived from the decorator at call
+    time, never a hand-typed name or count.
+    """
+    specs = doctor_runner._check_specs(root, quick=quick)
+    checks = doctor_runner._collect_checks(root, quick=quick)
+    # `_collect_checks` runs `specs` in order, then appends extra rows (the
+    # quick-mode "Quality tools" stub, or the full quality-tools set) that
+    # have no corresponding spec -- so only the first len(specs) results
+    # align positionally.
+    aligned = list(zip(specs, checks[: len(specs)], strict=True))
+
+    mismatches: list[str] = []
+    marked_count = 0
+    for (display_name, fn), result in aligned:
+        underlying = _resolve_check_fn(fn)
+        is_marked = getattr(underlying, "__tapps_category__", None) == "consumer-staleness"
+        if is_marked:
+            marked_count += 1
+            if result.category != "consumer-staleness":
+                mismatches.append(
+                    f"{display_name}: marked @consumer_staleness but produced "
+                    f"category={result.category!r}"
+                )
+        elif result.category == "consumer-staleness":
+            mismatches.append(
+                f"{display_name}: produced category='consumer-staleness' but has no "
+                f"@consumer_staleness marker"
+            )
+
+    if mismatches:
+        raise AssertionError("; ".join(mismatches))
+
+    actual_staleness_count = sum(1 for r in checks if r.category == "consumer-staleness")
+    assert actual_staleness_count == marked_count, (
+        f"consumer-staleness row count ({actual_staleness_count}) != "
+        f"marker-carrying check count ({marked_count})"
+    )
+
+
+class TestDerivedConsumerStalenessGuard:
+    """Replaces the PROBE-C tautology.
+
+    ``staleness_names <= real_names`` was vacuously true by construction
+    (both sides came from the same list) and could never fail. This derives
+    the expected category from the decorator itself and asserts it against
+    what the real doctor actually produced.
     """
 
-    def test_all_consumer_staleness_names_are_real_check_names(self) -> None:
-        checks = _collect_checks(Path.cwd(), quick=True)
-        real_names = {c.name for c in checks}
-        staleness_names = {c.name for c in checks if c.category == "consumer-staleness"}
+    def test_categories_match_decorator_markers(self) -> None:
+        _assert_categories_match_decorator_markers(Path.cwd(), quick=True)
 
-        assert staleness_names, "expected at least one consumer-staleness check"
-        assert staleness_names <= real_names
-        # Sanity: the split is neither empty nor total -- both categories are
-        # represented among the ~94 real doctor rows.
-        release_health_names = {c.name for c in checks if c.category == "release-health"}
-        assert release_health_names
+    def test_negative_control_missing_marker_is_caught(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Proves the guard can fail: strip one check's marker, expect a named failure.
+
+        Simulates the round-1 verifier's exact scenario -- a merge silently
+        dropping ``@consumer_staleness`` from ``check_upgrade_skip_token_drift``
+        -- by removing just the marker attribute the guard reads. The
+        decorator's runtime behavior (setting ``result.category``) is
+        untouched, so this creates the same "unmarked but still produces
+        consumer-staleness" mismatch a real dropped decorator would, and the
+        guard must name the offending check rather than pass silently the way
+        the old tautology would have.
+        """
+        target = doctor_runner.check_upgrade_skip_token_drift
+        monkeypatch.delattr(target, "__tapps_category__")
+
+        with pytest.raises(AssertionError, match="upgrade_skip_files drift"):
+            _assert_categories_match_decorator_markers(Path.cwd(), quick=True)
 
 
 class TestAllowlistDeleted:
