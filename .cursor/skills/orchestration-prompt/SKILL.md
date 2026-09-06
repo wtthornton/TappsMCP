@@ -154,7 +154,10 @@ reserved for the single end-of-program regression proof.
 6. Save the prompt to `prompts/<short-slug>.md`.
 7. **Completeness self-check** — walk the **Guardrails** list above and confirm the
    emitted prompt satisfies every line; then run the **cold-start test** (a fresh
-   session with nothing loaded can run it). Fix anything weak before saving.
+   session with nothing loaded can run it). Fix anything weak before saving. Run
+   `node scripts/check-prompt-shape.js prompts/<slug>.md` and, when the program
+   carries a `learnings.md`, `node scripts/check-learnings-size.js learnings.md` —
+   fix whatever either names before saving.
    **Context lifecycle is checked explicitly**, because nothing else catches its
    absence: confirm the prompt names a context boundary per sub-goal (or says which
    sub-goals skip it and why), that the boundary carries the re-verify gate, and that
@@ -191,7 +194,9 @@ reserved for the single end-of-program regression proof.
 
 Two more references round out the method. The `learnings.md` protocol — what
 to mine, when to write it (twice: at generation time and at the end of every
-run), and how to keep the file readable — is
+run), and how to keep the file readable (the byte ceiling is the binding one;
+bullet count alone is misleading, since a handful of long bullets can blow the
+byte budget while staying under the bullet ceiling) — is
 `references/learnings-protocol.md`. Programs run by more than one
 interactive driver session — partition, integrator, review ring, the
 authorisation clause, the

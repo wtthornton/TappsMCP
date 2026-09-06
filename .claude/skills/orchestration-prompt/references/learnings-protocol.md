@@ -35,9 +35,11 @@ outcome**, stated in one line. A manufactured lesson corrupts this file the same
 an invented error corrupts a correction.
 
 **Keep it readable.** This file is read in full before every generation, so every
-stale bullet taxes every future run. Past roughly 120 bullets or 40 KB, merge
-overlapping lines and delete ones overtaken by a fixed tool or a changed codebase.
-Pruning is part of the loop, not cleanup deferred forever.
+stale bullet taxes every future run. The byte ceiling (40 KB) is the binding one —
+bullet count alone is misleading, since a handful of long bullets can blow the byte
+budget while staying under 120, and 120 short bullets can stay well under 40 KB. Past
+either ceiling, merge overlapping lines and delete ones overtaken by a fixed tool or a
+changed codebase. Pruning is part of the loop, not cleanup deferred forever.
 
 Treat this as a *measured* loop, not a scratchpad: the harness improves by observing
 its own runs. When a golden set (`evals/evals.json`) and a gated improvement loop
