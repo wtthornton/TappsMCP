@@ -283,10 +283,11 @@ class TestDoctorDriftCheck:
         assert check.ok
         assert "no managed skills" in check.message
 
-    def test_check_is_registered_in_the_doctor_run(self) -> None:
-        from tapps_mcp.distribution.doctor_runner import _collect_checks
+    def test_check_is_registered_in_the_doctor_run(self, tmp_path: Path) -> None:
+        from tapps_mcp.distribution.doctor_runner import _check_specs
 
-        assert "Skill asset drift" in _collect_checks.__code__.co_consts
+        names = [name for name, _fn in _check_specs(tmp_path, quick=True)]
+        assert "Skill asset drift" in names
 
 
 class TestUpgradeSurfacesOverwrites:

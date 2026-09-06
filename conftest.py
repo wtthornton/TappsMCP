@@ -28,6 +28,19 @@ never built. Pinning it here makes that hermeticity suite-wide instead of
 per-module. ``setdefault`` still lets a caller export ``dual``/``brain``
 deliberately, and ``monkeypatch.delenv`` still restores the production default
 for the tests that assert on it.
+
+TAP-6592: the same reasoning applies to ``HF_HUB_OFFLINE``/``TRANSFORMERS_OFFLINE``.
+Any test that constructs a real ``tapps_brain.store.MemoryStore`` directly
+(bypassing tapps-mcp's own settings, where semantic search defaults to
+disabled) inherits that pinned dependency's own default of embedding saved
+content via sentence-transformers -- which downloads its model from
+HuggingFace Hub on a cache miss. Under the new root socket guard
+(packages/tapps-mcp/tests/conftest.py) that dial fails loudly instead of
+silently succeeding-if-cached/hanging-if-not; offline mode makes
+huggingface_hub short-circuit before attempting the connection at all, so
+MemoryStore's embedding step degrades gracefully instead of ever touching a
+socket. ``setdefault`` still lets a caller export ``0`` deliberately for a
+test that genuinely wants to exercise the live download path.
 """
 
 from __future__ import annotations
@@ -38,3 +51,6 @@ for _var in ("OMP_NUM_THREADS", "OPENBLAS_NUM_THREADS", "MKL_NUM_THREADS"):
     os.environ.setdefault(_var, "1")
 
 os.environ.setdefault("TAPPS_METRICS_STORAGE", "local")
+
+for _var in ("HF_HUB_OFFLINE", "TRANSFORMERS_OFFLINE"):
+    os.environ.setdefault(_var, "1")

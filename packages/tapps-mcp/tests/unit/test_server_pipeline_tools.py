@@ -86,20 +86,12 @@ _NO_SESSION_WARM: dict[str, Any] = {
 }
 
 
-@pytest.fixture
-def _deny_real_sockets(monkeypatch: pytest.MonkeyPatch) -> None:
-    """TAP-6694 round 2: fail loudly if a ``real_brain_bridge`` test dials out.
-
-    Patches ``socket.socket.connect`` to raise instead of connecting, so a
-    missed mock surfaces as an immediate assertion naming the dialed address
-    instead of a multi-second retry-and-timeout against a live host.
-    """
-    import socket
-
-    def _deny(self: socket.socket, address: object) -> None:
-        raise AssertionError(f"unit test dialed {address!r}")
-
-    monkeypatch.setattr(socket.socket, "connect", _deny)
+# TAP-6592: the module-local ``_deny_real_sockets`` fixture that used to live
+# here (TAP-6694 round 2) is now generalised to every test under
+# ``packages/tapps-mcp/tests/`` via the autouse guard in the root tests
+# conftest.py -- one mechanism, not two. The three ``real_brain_bridge`` tests
+# below no longer request it explicitly; the guard applies to them same as
+# every other unit test.
 
 
 # ---------------------------------------------------------------------------
@@ -208,7 +200,12 @@ class TestTappsSessionStart:
     async def test_includes_memory_status(self) -> None:
         from tapps_mcp.server_pipeline_tools import tapps_session_start
 
-        result = await tapps_session_start(quick=False)
+        # TAP-6592: quick=False drives a real Context7 network probe unless
+        # stubbed -- see _FAKE_CONTEXT7_DIAGNOSTIC's module-level docstring.
+        with patch(
+            "tapps_mcp.diagnostics.probe_context7", return_value=_FAKE_CONTEXT7_DIAGNOSTIC
+        ):
+            result = await tapps_session_start(quick=False)
         data = result["data"]
         assert "memory_status" in data
         assert "enabled" in data["memory_status"]
@@ -237,7 +234,10 @@ class TestTappsSessionStart:
         """Full session start includes per-phase timings dict (Epic 68.2)."""
         from tapps_mcp.server_pipeline_tools import tapps_session_start
 
-        result = await tapps_session_start(quick=False)
+        with patch(
+            "tapps_mcp.diagnostics.probe_context7", return_value=_FAKE_CONTEXT7_DIAGNOSTIC
+        ):
+            result = await tapps_session_start(quick=False)
         data = result["data"]
         assert "timings" in data
         timings = data["timings"]
@@ -256,7 +256,10 @@ class TestTappsSessionStart:
         """Full session start marks maintenance ops as background (Epic 68.2)."""
         from tapps_mcp.server_pipeline_tools import tapps_session_start
 
-        result = await tapps_session_start(quick=False)
+        with patch(
+            "tapps_mcp.diagnostics.probe_context7", return_value=_FAKE_CONTEXT7_DIAGNOSTIC
+        ):
+            result = await tapps_session_start(quick=False)
         data = result["data"]
         assert data["memory_gc"] == "background"
         assert data["memory_consolidation"] == "background"
@@ -266,7 +269,7 @@ class TestTappsSessionStart:
     @pytest.mark.asyncio
     @pytest.mark.real_brain_bridge
     async def test_memory_status_enabled_in_http_mode(
-        self, monkeypatch: pytest.MonkeyPatch, _deny_real_sockets: None
+        self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         """Integration: session_start reports memory_status.enabled=True in HTTP mode.
 
@@ -354,7 +357,7 @@ class TestTappsSessionStart:
     @pytest.mark.asyncio
     @pytest.mark.real_brain_bridge
     async def test_brain_bridge_health_enabled_in_http_mode(
-        self, monkeypatch: pytest.MonkeyPatch, _deny_real_sockets: None
+        self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         """Integration: brain_bridge_health.enabled=True when HTTP bridge is active.
 
@@ -451,7 +454,7 @@ class TestTappsSessionStart:
     @pytest.mark.asyncio
     @pytest.mark.real_brain_bridge
     async def test_brain_bridge_health_details_carry_suggested_profile(
-        self, monkeypatch: pytest.MonkeyPatch, _deny_real_sockets: None
+        self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         """TAP-2098: when ``auth_probe`` returns an ``out_of_profile`` envelope
         with ``suggested_profile``, ``brain_bridge_health.details`` exposes it

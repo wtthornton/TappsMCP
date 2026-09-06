@@ -228,8 +228,9 @@ class TestDoctorCheck:
         result = check_agent_to_agent_rule(tmp_path)
         assert result.ok is True
 
-    def test_check_is_registered_in_the_doctor_run(self) -> None:
+    def test_check_is_registered_in_the_doctor_run(self, tmp_path: Path) -> None:
         """Registered in the spec list — an unwired check reports nothing."""
-        from tapps_mcp.distribution.doctor_runner import _collect_checks
+        from tapps_mcp.distribution.doctor_runner import _check_specs
 
-        assert "Agent-to-agent rule" in _collect_checks.__code__.co_consts
+        names = [name for name, _fn in _check_specs(tmp_path, quick=True)]
+        assert "Agent-to-agent rule" in names

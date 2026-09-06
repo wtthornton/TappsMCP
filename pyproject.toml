@@ -238,6 +238,7 @@ markers = [
     "brain_contract: marks tests requiring a running tapps-brain HTTP server (3.18+)",
     "real_brain_bridge: opts out of the conftest brain-bridge stub — for tests that exercise tapps_mcp.server_helpers._get_brain_bridge itself (TAP-5841)",
     "envelope_allow: names data keys the envelope_guard fixture may skip, for payloads that legitimately embed failure-shaped records (TAP-5659)",
+    "live_network: grants a test real socket access, silencing the autouse _deny_real_sockets guard (TAP-6592)",
 ]
 addopts = "-v --tb=short -p randomly --randomly-seed=last --import-mode=importlib"
 # TAP-4575: importlib import mode lets the three packages' identically named

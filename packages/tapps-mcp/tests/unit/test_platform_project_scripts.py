@@ -20,6 +20,7 @@ count and function count alone, independent of any one test's quality):
 
 from __future__ import annotations
 
+import hashlib
 from pathlib import Path
 
 from tapps_mcp.pipeline.platform_project_scripts import (
@@ -32,19 +33,44 @@ from tapps_mcp.pipeline.platform_project_scripts import (
 )
 from tapps_mcp.pipeline.skill_asset_policy import wrap_asset
 
+_FIXTURES_DIR = Path(__file__).parent.parent / "fixtures"
+
+# md5 of the vendored staged sources (packages/tapps-mcp/tests/fixtures/) --
+# these are checked-in snapshots of the "staged, proven originals" TAP-6884
+# ported from, not the live copies. Guards against silent fixture edits.
+_MEASURE_PY_STAGED_MD5 = "5690cee6a231a8d8f004437f20cd44f6"
+_GITFACTS_SH_STAGED_MD5 = "3d576bb63f5d0b35c2ae2d2a04fae638"
+
 
 class TestSourceIsPortedFaithfully:
-    """The staged sources are the contract — verify against their md5, not memory."""
+    """The staged sources are the contract — verify against their md5, not memory.
+
+    Vendored under ``tests/fixtures/`` rather than read from ``/tmp``: the
+    original ``/tmp/src-measure.py`` / ``/tmp/src-gitfacts.sh`` staging files
+    are outside the repo and drifted after TAP-6884 landed (confirmed via
+    ``git log``: the PR body says both scripts were "ported byte-for-byte
+    from their staged, proven originals except one documented line" -- the
+    fixtures here are that original content, reconstructed from
+    ``GITFACTS_SH_BODY``/``MEASURE_PY_BODY`` plus the one documented line
+    revert, NOT a refresh of the now-drifted ``/tmp`` copies).
+    """
 
     def test_measure_body_is_byte_identical_to_staged_source(self) -> None:
-        source = Path("/tmp/src-measure.py").read_text(encoding="utf-8")
+        path = _FIXTURES_DIR / "src-measure.py.fixture"
+        source = path.read_text(encoding="utf-8")
+        digest = hashlib.md5(source.encode("utf-8"), usedforsecurity=False).hexdigest()
+        assert digest == _MEASURE_PY_STAGED_MD5
         assert source == MEASURE_PY_BODY
 
     def test_gitfacts_body_differs_from_staged_source_by_exactly_one_line(self) -> None:
         """The only permitted deviation: usage()'s self-read, made robust to the
         line-shift the managed-block wrapper introduces (documented in the
         module docstring and the PR body)."""
-        source = Path("/tmp/src-gitfacts.sh").read_text(encoding="utf-8").splitlines()
+        path = _FIXTURES_DIR / "src-gitfacts.sh.fixture"
+        raw = path.read_text(encoding="utf-8")
+        digest = hashlib.md5(raw.encode("utf-8"), usedforsecurity=False).hexdigest()
+        assert digest == _GITFACTS_SH_STAGED_MD5
+        source = raw.splitlines()
         body = GITFACTS_SH_BODY.splitlines()
         assert len(source) == len(body)
         diffs = [(a, b) for a, b in zip(source, body, strict=True) if a != b]

@@ -274,8 +274,14 @@ class _LiveAuthServer:
         self.thread.join(timeout=5.0)
 
 
+@pytest.mark.live_network
 class TestProbeAuthNegativeControl:
-    """TAP-6062 gap: an auth-enabled fleet must not 401 every watchdog probe."""
+    """TAP-6062 gap: an auth-enabled fleet must not 401 every watchdog probe.
+
+    TAP-6592: ``_LiveAuthServer`` binds a real localhost HTTP server so the
+    probe path can be exercised against real request/response auth
+    handling. Marked live_network per the root guard's allowlist.
+    """
 
     def test_probe_succeeds_with_matching_token(self, monkeypatch: pytest.MonkeyPatch) -> None:
         with _LiveAuthServer(operator_token="op-secret") as url:

@@ -7,6 +7,7 @@ from unittest.mock import patch
 import pytest
 from click.testing import CliRunner
 
+from tapps_core.common.models import Context7Diagnostic
 from tapps_mcp.cli import main
 from tapps_mcp.distribution.setup_generator import (
     run_upgrade,
@@ -23,6 +24,19 @@ def _isolate_operator_home(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> N
         "tapps_mcp.distribution.blue_green.CURRENT_LINK",
         fake_home / ".tapps-mcp" / "current",
     )
+
+
+@pytest.fixture(autouse=True)
+def _stub_context7_probe(monkeypatch: pytest.MonkeyPatch) -> None:
+    """TAP-6592: a non-dry-run upgrade schedules a background session-warm
+    task that falls back to a real Context7 network probe unless stubbed --
+    see test_server_pipeline_tools.py's identical fixture for the full
+    explanation.
+    """
+    fake = Context7Diagnostic(
+        api_key_set=True, status="available", reachable=True, http_status=200, latency_ms=1.0
+    )
+    monkeypatch.setattr("tapps_mcp.diagnostics.probe_context7", lambda *a, **k: fake)
 
 
 class TestRunUpgrade:

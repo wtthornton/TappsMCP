@@ -249,9 +249,15 @@ class TestBundleGenerators:
 class TestMiscGenerators:
     """Verify cursor rules, copilot, bugbot, CI generators."""
 
-    def test_cursor_rules_creates_four_files(self, tmp_path: Path) -> None:
+    def test_cursor_rules_creates_three_files(self, tmp_path: Path) -> None:
+        # TAP-6440: tapps-pipeline.mdc is now generated separately by
+        # _bootstrap_cursor, so this function's contract is exactly these three.
         result = generate_cursor_rules(tmp_path)
-        assert len(result["created"]) == 4
+        assert set(result["created"]) == {
+            "tapps-python-quality.mdc",
+            "tapps-expert-consultation.mdc",
+            "tapps-agent-scope.mdc",
+        }
 
     def test_copilot_instructions_creates_file(self, tmp_path: Path) -> None:
         result = generate_copilot_instructions(tmp_path)

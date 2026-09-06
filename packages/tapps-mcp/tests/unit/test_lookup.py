@@ -10,6 +10,7 @@ from tapps_mcp.knowledge.cache import KBCache
 from tapps_mcp.knowledge.circuit_breaker import CircuitBreaker, CircuitBreakerConfig
 from tapps_mcp.knowledge.lookup import LookupEngine
 from tapps_mcp.knowledge.models import CacheEntry, LibraryMatch
+from tapps_mcp.knowledge.providers.registry import ProviderRegistry
 
 # _library_to_domain removed (EPIC-94 expert extraction)
 
@@ -71,6 +72,7 @@ class TestLookupCacheMiss:
             cache,
             api_key=SecretStr("test-key"),
             client=mock_client,
+            registry=ProviderRegistry(),
         )
         result = await engine.lookup("fastapi")
         await engine.close()
@@ -96,6 +98,7 @@ class TestLookupCacheMiss:
             cache,
             api_key=SecretStr("test-key"),
             client=mock_client,
+            registry=ProviderRegistry(),
         )
         await engine.lookup("fastapi")
         await engine.close()
@@ -182,6 +185,7 @@ class TestLookupRAGSafety:
             cache,
             api_key=SecretStr("test-key"),
             client=mock_client,
+            registry=ProviderRegistry(),
         )
         result = await engine.lookup("test-lib")
         await engine.close()
@@ -250,6 +254,7 @@ class TestLookupDidYouMean:
             cache,
             api_key=SecretStr("test-key"),
             client=mock_client,
+            registry=ProviderRegistry(),
         )
         result = await engine.lookup("fstapi")
         await engine.close()
@@ -390,6 +395,7 @@ class TestLookupEdgeCases:
             cache,
             api_key=SecretStr("test-key"),
             client=mock_client,
+            registry=ProviderRegistry(),
         )
         result = await engine.lookup("nonexistent-lib")
         await engine.close()

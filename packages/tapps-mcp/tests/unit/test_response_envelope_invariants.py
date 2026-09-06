@@ -109,9 +109,17 @@ class TestEnvelopeInvariantItself:
             envelope_consistent(response)
         envelope_consistent(response, allow=("error",))
 
-    def test_allow_covers_a_nested_success_false(self, envelope_consistent) -> None:
+    def test_allow_covers_a_named_key_holding_success_false(self, envelope_consistent) -> None:
+        """Naming the subtree key silences its own success:false marker too."""
         response = {"tool": "demo", "success": True, "data": {"sub": {"success": False}}}
-        envelope_consistent(response, allow=("success",))
+        envelope_consistent(response, allow=("sub",))
+
+    def test_allow_does_not_globally_cover_success_false(self, envelope_consistent) -> None:
+        """A field name in ``allow`` is not a global mask (TAP-6618): naming
+        "success" must not silence a success:false on an unrelated nested node."""
+        response = {"tool": "demo", "success": True, "data": {"other": {"success": False}}}
+        with pytest.raises(AssertionError):
+            envelope_consistent(response, allow=("success",))
 
 
 @pytest.mark.usefixtures("envelope_guard")

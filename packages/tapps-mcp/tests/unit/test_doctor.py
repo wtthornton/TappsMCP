@@ -380,8 +380,16 @@ def _http_entry(port: int) -> dict:
     }
 
 
+@pytest.mark.live_network
 class TestHttpFleetLiveness:
-    """Tests for check_http_fleet_liveness (Issue A)."""
+    """Tests for check_http_fleet_liveness (Issue A).
+
+    TAP-6592: this class deliberately binds and connects real localhost TCP
+    sockets (self-hosted listeners, and one deliberate connection-refused
+    probe against port 1) to exercise fleet-liveness detection -- exactly
+    the socket behavior under test. Marked live_network per the root guard's
+    allowlist.
+    """
 
     def test_no_http_entries_passes(self, tmp_path):
         _write_cursor_config(tmp_path, {"nlt-build": {"command": "tapps-mcp"}})

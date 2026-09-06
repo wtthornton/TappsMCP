@@ -123,7 +123,25 @@ class TestMemoryRetriever:
         assert len(results) >= 1
         assert results[0].entry.key == "jwt-auth"
 
-    def test_high_confidence_outranks_low(self) -> None:
+    def test_high_confidence_outranks_low(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        # search() computes its own `now = datetime.now(tz=UTC)` (no way to
+        # inject a fixed clock via the public API), and decays confidence by
+        # elapsed days since `updated_at`. `_RECENT` is `_NOW - 1 day`, a
+        # date fixed at file-authoring time; against the real wall clock
+        # (now far past `_NOW`) both entries decay to the same confidence
+        # floor (0.1) and score identically, so the stable sort silently
+        # falls back to insertion order instead of exercising confidence
+        # ranking at all. Freeze `now` at `_NOW` so `_RECENT` means what its
+        # name says.
+        from tapps_brain import retrieval as brain_retrieval
+
+        class _FrozenDateTime(datetime):
+            @classmethod
+            def now(cls, tz: object = None) -> datetime:
+                return _NOW
+
+        monkeypatch.setattr(brain_retrieval, "datetime", _FrozenDateTime)
+
         entries = [
             _make_entry(
                 "low-conf",

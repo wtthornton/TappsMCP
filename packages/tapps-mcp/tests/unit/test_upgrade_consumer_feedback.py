@@ -419,7 +419,13 @@ class TestMcpOnly:
             .get("permissions", {})
             .get("allow", [])
         )
-        assert "mcp__tapps-mcp" in allow
+        # TAP-6953: permission entries are derived from the just-written .mcp.json,
+        # not a hardcoded legacy server name — assert against what was actually written.
+        mcp_config = json.loads((tmp_path / ".mcp.json").read_text(encoding="utf-8"))
+        configured_servers = mcp_config.get("mcpServers", {})
+        assert configured_servers, "expected mcp_only=True to write at least one server"
+        for server_name in configured_servers:
+            assert f"mcp__{server_name}" in allow
 
     def test_mcp_only_no_rule_files_written(self, tmp_path: Path) -> None:
         _python_project(tmp_path)

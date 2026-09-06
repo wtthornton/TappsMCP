@@ -75,7 +75,15 @@ def bridge(tmp_path: Path) -> BrainBridge:
     return BrainBridge(_BrainHolder(MemoryStore(tmp_path)))
 
 
+@pytest.mark.live_network
 class TestTheSlottedKeyIsWritable:
+    """TAP-6592: the ``bridge`` fixture's ``MemoryStore`` is a real, pinned
+    tapps-brain instance whose own default embeds saved content via
+    sentence-transformers, downloading its model from HuggingFace Hub on a
+    cache miss -- out of this repo's boundary to fix. Marked live_network
+    rather than silently broken by the new root guard.
+    """
+
     async def test_dot_form_is_accepted_by_a_real_save(self, bridge: BrainBridge) -> None:
         key = handoff_memory_key(_SLOT)
         assert key == "session-handoff.ceg-hub"
@@ -109,7 +117,12 @@ class TestTheSlottedKeyIsWritable:
         assert (prefix, slot) == (handoff_memory_key(), _SLOT)
 
 
+@pytest.mark.live_network
 class TestEnrichmentSurvivesTheSlot:
+    """TAP-6592: see TestTheSlottedKeyIsWritable's docstring -- same real,
+    pinned ``bridge``/``MemoryStore`` fixture.
+    """
+
     async def test_stored_slotted_row_enriches_with_sections_and_metadata(
         self, bridge: BrainBridge
     ) -> None:
