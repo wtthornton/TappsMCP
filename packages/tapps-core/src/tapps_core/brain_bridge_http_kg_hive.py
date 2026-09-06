@@ -23,6 +23,60 @@ from tapps_core.brain_bridge_errors import (
 from tapps_core.knowledge.kg_keys import entity_uuid
 
 
+def _entry_key(entry: Any) -> str | None:
+    """Extract the memory key from a dict or object entry, or ``None``."""
+    if hasattr(entry, "key"):
+        return str(entry.key) if entry.key else None
+    if isinstance(entry, dict):
+        raw = entry.get("key")
+        return str(raw) if raw else None
+    return None
+
+
+def _entry_agent_scope(entry: Any) -> Any:
+    """Read ``agent_scope`` from a dict or object entry."""
+    if isinstance(entry, dict):
+        return entry.get("agent_scope")
+    return getattr(entry, "agent_scope", None)
+
+
+async def _propagate_one_entry(
+    bridge: Any, entry: Any, key: str, agent_profile: str, guard: Any
+) -> tuple[dict[str, Any], bool]:
+    """Propagate a single entry; return ``(detail, propagated)``.
+
+    Extracted from :meth:`_HttpKgHiveMixin.hive_propagate` (TAP-6736) to cut
+    its cyclomatic complexity. Module-level (not a method) so a spec'd-mock
+    ``self`` passed to the unbound ``hive_propagate`` still dispatches here
+    instead of resolving to a ``MagicMock`` attribute (regression found by
+    the tmcp-backlog-drain full run on TAP-6736's original method-based
+    extraction).
+    """
+    if _entry_agent_scope(entry) == "private":
+        return {"key": key, "skipped": "private"}, False
+    # TAP-2014: check elevation guard before propagating.
+    if guard is not None and not guard(key):
+        _log().warning(
+            "hive_propagate.refused_no_approval",
+            memory_key=key,
+            hint="Call brain_propose_hive_elevation then brain_approve_hive_elevation",
+        )
+        return (
+            {"key": key, "refused": True, "reason": "elevation_approval_required"},
+            False,
+        )
+    try:
+        per = await bridge._http_mcp_call(
+            "hive_propagate",
+            {"key": key, "agent_scope": agent_profile or "hive"},
+        )
+    except Exception as exc:
+        return {"key": key, "error": str(exc)}, False
+    if isinstance(per, dict):
+        return {"key": key, **per}, bool(per.get("propagated") or per.get("success"))
+    return {"key": key}, True
+
+
 def _log() -> Any:
     """Lazy accessor for the facade's structlog logger.
 
@@ -355,55 +409,6 @@ class _HttpKgHiveMixin:
             return {"enabled": True, "degraded": False}
         return result if "enabled" in result else {**result, "enabled": True}
 
-    @staticmethod
-    def _entry_key(entry: Any) -> str | None:
-        """Extract the memory key from a dict or object entry, or ``None``."""
-        if hasattr(entry, "key"):
-            return str(entry.key) if entry.key else None
-        if isinstance(entry, dict):
-            raw = entry.get("key")
-            return str(raw) if raw else None
-        return None
-
-    @staticmethod
-    def _entry_agent_scope(entry: Any) -> Any:
-        """Read ``agent_scope`` from a dict or object entry."""
-        if isinstance(entry, dict):
-            return entry.get("agent_scope")
-        return getattr(entry, "agent_scope", None)
-
-    async def _propagate_one_entry(
-        self, entry: Any, key: str, agent_profile: str, guard: Any
-    ) -> tuple[dict[str, Any], bool]:
-        """Propagate a single entry; return ``(detail, propagated)``.
-
-        Extracted from :meth:`hive_propagate` (TAP-6736) to cut its
-        cyclomatic complexity — pure refactor, no behavior change.
-        """
-        if self._entry_agent_scope(entry) == "private":
-            return {"key": key, "skipped": "private"}, False
-        # TAP-2014: check elevation guard before propagating.
-        if guard is not None and not guard(key):
-            _log().warning(
-                "hive_propagate.refused_no_approval",
-                memory_key=key,
-                hint="Call brain_propose_hive_elevation then brain_approve_hive_elevation",
-            )
-            return (
-                {"key": key, "refused": True, "reason": "elevation_approval_required"},
-                False,
-            )
-        try:
-            per = await self._http_mcp_call(
-                "hive_propagate",
-                {"key": key, "agent_scope": agent_profile or "hive"},
-            )
-        except Exception as exc:
-            return {"key": key, "error": str(exc)}, False
-        if isinstance(per, dict):
-            return {"key": key, **per}, bool(per.get("propagated") or per.get("success"))
-        return {"key": key}, True
-
     async def hive_propagate(
         self,
         entries: list[Any],
@@ -424,11 +429,11 @@ class _HttpKgHiveMixin:
         refused_no_approval = 0
         details: list[dict[str, Any]] = []
         for entry in entries:
-            key = self._entry_key(entry)
+            key = _entry_key(entry)
             if not key:
                 continue
-            detail, did_propagate = await self._propagate_one_entry(
-                entry, key, agent_profile, guard
+            detail, did_propagate = await _propagate_one_entry(
+                self, entry, key, agent_profile, guard
             )
             details.append(detail)
             if did_propagate:
