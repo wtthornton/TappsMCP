@@ -122,4 +122,38 @@ resolve cases the proof-shape table does not spell out on its own.
    (method §3). Do not reuse it for the build-time-versus-runtime distinction — use
    "surface" there instead ("build surface" vs "runtime surface"), so a reader can
    rely on "plane" meaning one specific thing throughout an emitted prompt.
+
+## Rulings folded from a consuming project's local region
+
+Five rulings nlt-orchestrator carried in its own local region below this skill's
+managed block — folded here (TAP-7078 box 5) so an upgrade absorbs them instead of
+leaving them to silently re-diverge every time the block refreshes.
+
+9. A driver that merges, deploys, installs, or scopes a fix from a RED verdict is above
+   the `sonnet`+`medium` floor by construction. The floor is for read/triage-only
+   drivers; a driver-row that merges, deploys, installs, or scopes a fix runs at
+   `opus`+`high`, and a driver-row contesting identity (whose session actually sent a
+   message) runs `fable`/`opus` at `high`-`xhigh`.
+10. Input is an existing PLAN with an evidence file → §0c is already done; cite it, don't
+    redo it. When the request names a `reports/<program>/PLAN*.md` backed by a review or
+    STATE file: derive `## Unverified assumptions` from that file's stated non-verified
+    claims, cite the evidence file by path, and run the `tapps_lookup_docs` calls the
+    lanes will need into a `/tmp` docs file the briefs may read (lanes have no MCP) — or
+    state in the Research grant that no external library API is written against.
+11. After a `/clear`, every unattributed artifact in the tree is possibly your own —
+    and `ListAgents` absence is not authorship. Before naming an author, compare the
+    `from=` socket path on your own incoming and outgoing messages with the session
+    you are about to name; one socket is one process regardless of what the context
+    remembers.
+12. Two effort knobs. The Plane map's `effort` column is Workflow `opts.effort`; a
+    lane's effort is `dispatch-lane.sh`'s fourth argument; an Agent-tool subagent has
+    neither. Say which a cell means. A prompt that does not name its brief files has
+    lanes nobody can dispatch, and the shape check requires the `## Lane briefs`
+    table.
+13. `learnings.md` is read by an extractor, not in full; its ceiling is a check. The
+    managed "Read `learnings.md` before drafting" contradicts the delegation
+    doctrine at this file's size. Dispatch `Explore` + `sonnet` with the program's
+    shape and a 40-bullet cap; fold the struct. `node scripts/check-learnings-size.js`
+    owns the ceilings (bullets, bytes, bytes-per-bullet, and the trailing-date house
+    style).
 <!-- END: tapps-skill-asset -->
