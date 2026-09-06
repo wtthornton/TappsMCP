@@ -834,6 +834,49 @@ def _isolate_checklist_session(
 
 
 @pytest.fixture(autouse=True)
+def _isolate_context7_probe_marker(
+    tmp_path_factory: pytest.TempPathFactory,
+) -> Generator[None, None, None]:
+    """TAP-6592 follow-on: pin the Context7 probe throttle-marker to an
+    isolated, pre-seeded-fresh tmp path instead of the real project's
+    ``.tapps-mcp/.context7-probe-marker``.
+
+    ``collect_diagnostics`` (called by both ``tapps_server_info`` and
+    ``tapps_session_start``) resolves the marker under the real
+    ``settings.project_root`` unless the caller stubs ``probe_context7``
+    explicitly. Any test that drives either tool for real without that stub
+    either reads a stale/absent marker (real network dial -- trips the
+    ``_deny_real_sockets`` guard) or reads/writes the actual repo's marker
+    (order-dependent: whichever test runs first decides whether later ones
+    see a fresh marker). Forcing every lookup through one isolated,
+    pre-seeded location means no test dials out and none can see -- or
+    leave -- state for another.
+
+    A test that exercises the throttle/probe machinery directly
+    (``test_diagnostics.py``'s ``TestProbeContext7Throttle`` /
+    ``TestProbeContext7Async``) is unaffected: those tests pass their own
+    ``tmp_path`` explicitly to ``probe_context7()`` / ``_write_probe_marker()``,
+    and this fixture's forced path resolves identically for both the write
+    and the read within that same test, so their round-trip assertions
+    still hold; ``force=True`` calls bypass the marker check entirely
+    regardless of this fixture, same as in production.
+    """
+    import time
+
+    import tapps_mcp.diagnostics as diag_mod
+    from tapps_core.common.models import Context7Diagnostic
+
+    marker_path = tmp_path_factory.mktemp("context7_probe") / diag_mod._PROBE_MARKER_NAME
+    seeded = Context7Diagnostic(api_key_set=False, status="no_key", reachable=None)
+    marker_path.write_text(
+        json.dumps({"ts": int(time.time()), "diagnostic": seeded.model_dump()}),
+        encoding="utf-8",
+    )
+    with patch.object(diag_mod, "context7_probe_marker_path", lambda _root: marker_path):
+        yield
+
+
+@pytest.fixture(autouse=True)
 def _no_install_drift() -> Generator[None, None, None]:
     """Decouple ``upgrade_pipeline`` tests from the machine's deployed CLIs.
 
