@@ -32,7 +32,7 @@ Seven rules every agent in this project should follow.
 | **tapps_usage** | When you want to see what you missed this session - per-session `gaps` + concrete `recommendations`. Inlined as `usage_gaps` on every `tapps_checklist` response. |
 | **tapps_quality_gate** | Before declaring work complete - ensures file passes preset |
 
-**For full tool reference** (44 tools with per-tool guidance), invoke the **tapps-tool-reference** skill when the user asks "what tools does TappsMCP have?", "when do I use tapps_score_file?", etc.
+**For full tool reference** (45 tools with per-tool guidance), invoke the **tapps-tool-reference** skill when the user asks "what tools does TappsMCP have?", "when do I use tapps_score_file?", etc.
 
 ---
 
