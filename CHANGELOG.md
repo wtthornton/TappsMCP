@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [3.12.83] - 2026-09-06
+
 ### Added
 
 - **Handoff slots and an ownership guard for `.tapps-mcp/session-handoff.md`**
@@ -40,6 +42,33 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   **Fleet deploy is operator-gated and has not happened yet** — this ships
   the capability in tapps-mcp; it reaches the running MCP fleet only after a
   release and blue/green flip.
+
+### Fixed
+
+- **Scope `needs_gate` to project root, dedupe unresolved violations** (#357, `6d28346e`)
+- **Gate blocking-escalation rec on scorable-source presence** (TAP-7016) (#358, `5efe5241`)
+- **Protect diverged `.claude/rules`, add cursor/copilot skip tokens, fix claude_md drift** (#360, `d4517c03`)
+- **Five gate/scoring fixes from backlog drain wave 1** (#361, `72e7c191`)
+- **Classify post-flip doctor findings as release-health vs consumer-staleness** (#362, `62872802`)
+- **Ledger path, doctor bypass counter, session-health rename, checklist seeding, extension parity, ps1 stop gate** (TAP-6928, TAP-6929, TAP-6927, TAP-6814, TAP-6739, TAP-6737, TAP-6981) (#363, `3fc570ce`)
+- **Ratchet population, cache sibling-key, session ledger, conditional obligations** (#364, `dbdf4237`)
+- **`snapshot_put` floor guard, compact projection, doc count fix** (#365, `8e752364`)
+- **Metrics-hub leak, brain-probe timeout/flake fixes** (#366, `faccefa9`)
+- **Lane-evidence parser + api-docs/link-checker false positives** (#367, `e92f675e`)
+- **Six orchestration-prompt ruling/text fixes** (TAP-6605, TAP-6610, TAP-6692, TAP-6589, TAP-6601, TAP-6604) (#368, `9129887d`)
+- **Scaffolding-gen fixes — Cursor rule dedup, docs-skill headers, marker-migration redundancy** (#369, `a7049581`)
+- **Degrade six envelope-lie sites, brain lookup fallback, non_goals newline split** (#370, `7090b953`)
+- **Dedupe `session_start` registration, init error codes, quick-path maintenance** (TAP-7018, TAP-6442, TAP-6638, TAP-6435, TAP-6436) (#371, `ca31e2f1`)
+- **Managed-block preserved regions + emitter-derived block hash + learnings ceiling wording** (TAP-7078, TAP-6968, TAP-6857) (#372, `472d0374`)
+- **Root socket guard, two red-on-master tests fixed at the root, suite inventory, docs-mcp test split** (TAP-6592, TAP-6609, TAP-5622) (#375, `3f8f5345`)
+- **`hive_propagate` helpers are module-level so a spec'd-mock self still dispatches to real code** (#376, `b6cc8042`)
+
+### Changed
+
+- **Progressive disclosure for the orchestration-prompt skill body** (TAP-7017) (#359, `5204cf19`)
+- **Split `brain_bridge.py` into gate-passing modules behind the same façade** (TAP-6736, TAP-5896) (#373, `bf176ed4`)
+- **Split `server_pipeline_tools.py` behind the same façade; init default bundle; Context7 doctor check** (TAP-6881, TAP-7020, TAP-6443) (#374, `6b83641a`)
+- **Repo-root drift guard for the checked-in orchestration-prompt skill; regenerate the stale copies** (#377, `c78e8f9e`)
 
 ## [3.12.82] - 2026-09-03
 
