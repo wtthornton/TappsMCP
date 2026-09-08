@@ -183,3 +183,49 @@ def query_file_skeleton(
         "candidates": [],
         "completeness": completeness,
     }
+
+
+async def run_tapps_file_api(
+    file_path: str, project_root: str, force_rebuild: bool
+) -> dict[str, Any]:
+    """MCP-tool envelope for ``tapps_file_api``.
+
+    Lives here rather than in ``server_analysis_tools.py``: that module is
+    already well past its maintainability gate, and every line added there
+    pushes an already-failing score further down (TAP ratchet). Registration
+    still happens in ``server_analysis_tools.register()``; only the handler
+    body moved.
+    """
+    import asyncio
+    import time
+
+    from tapps_core.config.settings import load_settings
+    from tapps_mcp.project.call_graph import build_call_graph_index
+    from tapps_mcp.server import _record_call, _record_execution, _with_nudges
+    from tapps_mcp.server_helpers import error_response, success_response
+    from tapps_mcp.tools.event_loop_guard import heavy_cpu
+    from tapps_mcp.tools.project_paths import resolve_effective_project_root
+
+    start = time.perf_counter_ns()
+    _record_call("tapps_file_api")
+
+    settings = load_settings()
+    root_result = resolve_effective_project_root(settings.project_root, project_root)
+    if root_result.error_code:
+        return error_response(
+            "tapps_file_api", root_result.error_code, root_result.error_message or ""
+        )
+    root = root_result.root
+
+    def _query_sync() -> dict[str, Any]:
+        index = build_call_graph_index(root, force_rebuild=force_rebuild)
+        return query_file_skeleton(index, root, file_path)
+
+    async with heavy_cpu():
+        result = await asyncio.to_thread(_query_sync)
+
+    elapsed_ms = (time.perf_counter_ns() - start) // 1_000_000
+    degraded = bool(result.get("completeness", {}).get("degraded"))
+    _record_execution("tapps_file_api", start, degraded=degraded)
+    resp = success_response("tapps_file_api", elapsed_ms, result)
+    return _with_nudges("tapps_file_api", resp, {"degraded": degraded})

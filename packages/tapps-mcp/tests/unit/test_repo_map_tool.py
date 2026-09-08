@@ -9,7 +9,6 @@ stale/missing-index trap returns `index_status: unavailable` (LANE_ISSUE).
 from __future__ import annotations
 
 from pathlib import Path
-from unittest.mock import MagicMock
 
 import pytest
 
@@ -111,23 +110,17 @@ def test_unavailable_shape_on_missing_index_not_empty_list(tmp_path: Path) -> No
 
 
 @pytest.mark.asyncio
-async def test_tapps_repo_map_handler_success(monkeypatch: pytest.MonkeyPatch) -> None:
+async def test_tapps_repo_map_handler_success() -> None:
+    """Drives the real handler end-to-end against the fixture repo — the
+    handler body lives in project/repo_map.py (run_tapps_repo_map), not
+    server_analysis_tools.py, so project_root is passed explicitly rather
+    than relying on patched settings (which the handler no longer imports
+    from server_analysis_tools)."""
     from tapps_mcp.server_analysis_tools import tapps_repo_map
 
-    mock_settings = MagicMock()
-    mock_settings.project_root = FIXTURE_REPO
-
-    monkeypatch.setattr("tapps_mcp.server_analysis_tools.load_settings", lambda: mock_settings)
-    monkeypatch.setattr(
-        "tapps_mcp.server_analysis_tools.resolve_effective_project_root",
-        lambda _root, _override: MagicMock(error_code=None, root=FIXTURE_REPO),
-    )
-    monkeypatch.setattr("tapps_mcp.server_analysis_tools._record_call", lambda *_a, **_k: None)
-    monkeypatch.setattr("tapps_mcp.server_analysis_tools._record_execution", lambda *_a, **_k: None)
-    monkeypatch.setattr("tapps_mcp.server_analysis_tools._with_nudges", lambda _t, r, *_a: r)
-
-    result = await tapps_repo_map()
+    result = await tapps_repo_map(project_root=str(FIXTURE_REPO))
 
     assert result["success"] is True
+    assert result["data"]["project_root"] == str(FIXTURE_REPO)
     assert result["data"]["index_status"] == "ready"
     assert result["data"]["directories"]

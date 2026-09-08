@@ -41,7 +41,6 @@ from tapps_mcp.tools.project_paths import (
 )
 
 if TYPE_CHECKING:
-    from collections.abc import Callable
     from pathlib import Path
 
     from mcp.server.fastmcp import FastMCP
@@ -670,65 +669,14 @@ async def tapps_diff_impact(
     )
 
 
-# ---------------------------------------------------------------------------
-# tapps_file_api / tapps_repo_map (LANE_ISSUE): fixed comprehension tools
-# over the existing call-graph index — no LLM, no embeddings (ADR-0004).
-# ---------------------------------------------------------------------------
-
-
-async def _run_call_graph_index_query(
-    tool_name: str,
-    project_root: str,
-    query_sync: Callable[[Path], dict[str, Any]],
-) -> dict[str, Any]:
-    """Shared envelope for a call-graph-index query tool: resolve root, run
-    *query_sync* off the event loop, and wrap the result (record + nudges)."""
-    start = time.perf_counter_ns()
-    _record_call(tool_name)
-
-    settings = load_settings()
-    root_result = resolve_effective_project_root(settings.project_root, project_root)
-    if root_result.error_code:
-        return error_response(tool_name, root_result.error_code, root_result.error_message or "")
-
-    from tapps_mcp.tools.event_loop_guard import heavy_cpu
-
-    async with heavy_cpu():
-        result = await asyncio.to_thread(query_sync, root_result.root)
-
-    elapsed_ms = (time.perf_counter_ns() - start) // 1_000_000
-    degraded = bool(result.get("completeness", {}).get("degraded"))
-    _record_execution(tool_name, start, degraded=degraded)
-    resp = success_response(tool_name, elapsed_ms, result)
-    return _with_nudges(tool_name, resp, {"degraded": degraded})
-
-
+# tapps_file_api / tapps_repo_map (LANE_ISSUE): handlers in project/file_api.py, project/repo_map.py.
 async def tapps_file_api(
-    file_path: str,
-    project_root: str = "",
-    force_rebuild: bool = False,
+    file_path: str, project_root: str = "", force_rebuild: bool = False
 ) -> dict[str, Any]:
-    """File skeleton: every indexed symbol in a file with its header line.
+    """Every indexed symbol in a file with its header line (docs/CALL_GRAPH.md)."""
+    from tapps_mcp.project.file_api import run_tapps_file_api
 
-    Deterministic — a pure lookup against the existing call-graph index
-    (ADR-0004), not a re-parse. Use before editing an unfamiliar file to see
-    its functions/methods without reading the whole body. An unambiguous
-    basename (e.g. ``"call_graph.py"``) resolves to its single match;
-    multiple matches return ``candidates`` instead of guessing.
-
-    Args:
-        file_path: Repo-relative path, or an unambiguous basename.
-        project_root: Optional project root override.
-        force_rebuild: Rebuild ``.tapps-mcp/call-graph-index.json`` cache.
-    """
-    from tapps_mcp.project.call_graph import build_call_graph_index
-    from tapps_mcp.project.file_api import query_file_skeleton
-
-    def _query_sync(root: Path) -> dict[str, Any]:
-        index = build_call_graph_index(root, force_rebuild=force_rebuild)
-        return query_file_skeleton(index, root, file_path)
-
-    return await _run_call_graph_index_query("tapps_file_api", project_root, _query_sync)
+    return await run_tapps_file_api(file_path, project_root, force_rebuild)
 
 
 async def tapps_repo_map(
@@ -737,32 +685,10 @@ async def tapps_repo_map(
     max_dirs: int = 16,
     force_rebuild: bool = False,
 ) -> dict[str, Any]:
-    """Directory-level map of the project: symbol/edge clusters and hubs.
+    """Directory-level map: symbol/edge clusters and hubs (docs/CALL_GRAPH.md)."""
+    from tapps_mcp.project.repo_map import run_tapps_repo_map
 
-    Deterministic — a pure aggregation of the existing call-graph index and
-    the existing coupling metrics (ADR-0004), not a summary. Use for a first
-    orientation in an unfamiliar repo before drilling into specific files
-    with ``tapps_file_api`` or specific symbols with ``tapps_call_graph``.
-
-    Args:
-        project_root: Optional project root override.
-        token_budget: Approximate token cap for the serialized map; excess
-            directories/hotspots are dropped (see ``dropped``), never
-            silently omitted.
-        max_dirs: Hard cap on directories returned before the token-budget
-            trim.
-        force_rebuild: Rebuild ``.tapps-mcp/call-graph-index.json`` cache.
-    """
-    from tapps_mcp.project.call_graph import build_call_graph_index
-    from tapps_mcp.project.repo_map import build_repo_map
-
-    def _query_sync(root: Path) -> dict[str, Any]:
-        index = build_call_graph_index(root, force_rebuild=force_rebuild)
-        return build_repo_map(
-            index, root, token_budget=max(256, token_budget), max_dirs=max(1, max_dirs)
-        )
-
-    return await _run_call_graph_index_query("tapps_repo_map", project_root, _query_sync)
+    return await run_tapps_repo_map(project_root, token_budget, max_dirs, force_rebuild)
 
 
 # ---------------------------------------------------------------------------

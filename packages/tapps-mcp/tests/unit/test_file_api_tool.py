@@ -8,7 +8,6 @@ empty file" trap (LANE_ISSUE).
 from __future__ import annotations
 
 from pathlib import Path
-from unittest.mock import MagicMock
 
 import pytest
 
@@ -145,23 +144,17 @@ def test_ready_index_with_zero_symbols_in_one_file_is_a_real_empty_result(
 
 
 @pytest.mark.asyncio
-async def test_tapps_file_api_handler_success(monkeypatch: pytest.MonkeyPatch) -> None:
+async def test_tapps_file_api_handler_success() -> None:
+    """Drives the real handler end-to-end against the fixture repo — the
+    handler body lives in project/file_api.py (run_tapps_file_api), not
+    server_analysis_tools.py, so project_root is passed explicitly rather
+    than relying on patched settings (which the handler no longer imports
+    from server_analysis_tools)."""
     from tapps_mcp.server_analysis_tools import tapps_file_api
 
-    mock_settings = MagicMock()
-    mock_settings.project_root = FIXTURE_REPO
-
-    monkeypatch.setattr("tapps_mcp.server_analysis_tools.load_settings", lambda: mock_settings)
-    monkeypatch.setattr(
-        "tapps_mcp.server_analysis_tools.resolve_effective_project_root",
-        lambda _root, _override: MagicMock(error_code=None, root=FIXTURE_REPO),
-    )
-    monkeypatch.setattr("tapps_mcp.server_analysis_tools._record_call", lambda *_a, **_k: None)
-    monkeypatch.setattr("tapps_mcp.server_analysis_tools._record_execution", lambda *_a, **_k: None)
-    monkeypatch.setattr("tapps_mcp.server_analysis_tools._with_nudges", lambda _t, r, *_a: r)
-
-    result = await tapps_file_api(file_path="pkg_a/calc.py")
+    result = await tapps_file_api(file_path="pkg_a/calc.py", project_root=str(FIXTURE_REPO))
 
     assert result["success"] is True
+    assert result["data"]["file_path"] == "pkg_a/calc.py"
     assert result["data"]["index_status"] == "ready"
     assert len(result["data"]["symbols"]) == 4
