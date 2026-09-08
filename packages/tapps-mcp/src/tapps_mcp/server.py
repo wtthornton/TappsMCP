@@ -10,6 +10,7 @@ Tool handlers are split across modules for maintainability:
   - ``server_memory_tools``: (internal lifecycle helpers only; no public MCP tools)
   - ``server_analysis_tools``: tapps_session_notes, tapps_impact_analysis, tapps_report,
     tapps_dead_code, tapps_dependency_scan, tapps_dependency_graph, tapps_audit_campaign
+  - ``server_comprehension_tools``: tapps_file_api, tapps_repo_map
   - ``server_lookup_tools``: tapps_lookup_docs
   - ``server_research_tools``: tapps_research
   - ``server_system_tools``: tapps_server_info, tapps_security_scan, tapps_validate_config
@@ -950,6 +951,7 @@ def _register_tool_modules() -> None:
     from tapps_mcp import (
         server_analysis_tools,
         server_checklist_tools,
+        server_comprehension_tools,
         server_linear_tools,
         server_lookup_tools,
         server_memory_tools,
@@ -968,6 +970,7 @@ def _register_tool_modules() -> None:
     server_metrics_tools.register(mcp, allowed_tools)
     server_memory_tools.register(mcp, allowed_tools)
     server_analysis_tools.register(mcp, allowed_tools)
+    server_comprehension_tools.register(mcp, allowed_tools)
     server_linear_tools.register(mcp, allowed_tools)
     server_release_tools.register(mcp, allowed_tools)
     server_lookup_tools.register(mcp, allowed_tools)
@@ -1006,6 +1009,7 @@ _pipeline = sys.modules["tapps_mcp.server_pipeline_tools"]
 _metrics = sys.modules["tapps_mcp.server_metrics_tools"]
 _memory = sys.modules["tapps_mcp.server_memory_tools"]
 _analysis = sys.modules["tapps_mcp.server_analysis_tools"]
+_comprehension = sys.modules["tapps_mcp.server_comprehension_tools"]
 _lookup = sys.modules["tapps_mcp.server_lookup_tools"]
 _research = sys.modules["tapps_mcp.server_research_tools"]
 _system = sys.modules["tapps_mcp.server_system_tools"]
@@ -1026,8 +1030,8 @@ tapps_session_notes = _analysis.tapps_session_notes
 tapps_impact_analysis = _analysis.tapps_impact_analysis
 tapps_call_graph = _analysis.tapps_call_graph
 tapps_diff_impact = _analysis.tapps_diff_impact
-tapps_file_api = _analysis.tapps_file_api
-tapps_repo_map = _analysis.tapps_repo_map
+tapps_file_api = _comprehension.tapps_file_api
+tapps_repo_map = _comprehension.tapps_repo_map
 tapps_report = _analysis.tapps_report
 tapps_dead_code = _analysis.tapps_dead_code
 tapps_dependency_scan = _analysis.tapps_dependency_scan

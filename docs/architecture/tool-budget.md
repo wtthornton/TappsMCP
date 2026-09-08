@@ -41,10 +41,12 @@ Eager tapps-mcp tools (full `tapps-mcp serve`): `tapps_session_start`, `tapps_va
 `tapps_research` is listed but deferred (TAP-5365 / TAP-1986 eager budget).
 `tapps_skill_learnings` (TAP-6861: deterministic audit/promote/verify/trim for a skill's
 `SKILL.md`/`learnings.md` pair) is registered `defer_loading=True` — not a daily-driver tool.
+`tapps_file_api` and `tapps_repo_map` (LANE_ISSUE: file-content and repo-map comprehension
+tools) are registered `defer_loading=True` — large-output, on-demand reads, not daily-drivers.
 
 | Server | Mode | Eager tools | Deferred tools | Total |
 |---|---|---|---|---|
-| `tapps-mcp` | full (no `--mode`) | 10 | 35 | 45 |
+| `tapps-mcp` | full (no `--mode`) | 10 | 37 | 47 |
 | `tapps-quality` | `--mode quality` | 9 | 7 | 16 |
 | `tapps-admin` | `--mode admin` | 1 | 12 | 13 |
 | `docs-mcp` | full `docsmcp serve` | 7 | 35 | 42 |

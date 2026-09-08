@@ -147,10 +147,10 @@ def test_ready_index_with_zero_symbols_in_one_file_is_a_real_empty_result(
 async def test_tapps_file_api_handler_success() -> None:
     """Drives the real handler end-to-end against the fixture repo — the
     handler body lives in project/file_api.py (run_tapps_file_api), not
-    server_analysis_tools.py, so project_root is passed explicitly rather
+    server_comprehension_tools.py, so project_root is passed explicitly rather
     than relying on patched settings (which the handler no longer imports
-    from server_analysis_tools)."""
-    from tapps_mcp.server_analysis_tools import tapps_file_api
+    from server_comprehension_tools)."""
+    from tapps_mcp.server_comprehension_tools import tapps_file_api
 
     result = await tapps_file_api(file_path="pkg_a/calc.py", project_root=str(FIXTURE_REPO))
 

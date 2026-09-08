@@ -113,10 +113,10 @@ def test_unavailable_shape_on_missing_index_not_empty_list(tmp_path: Path) -> No
 async def test_tapps_repo_map_handler_success() -> None:
     """Drives the real handler end-to-end against the fixture repo — the
     handler body lives in project/repo_map.py (run_tapps_repo_map), not
-    server_analysis_tools.py, so project_root is passed explicitly rather
+    server_comprehension_tools.py, so project_root is passed explicitly rather
     than relying on patched settings (which the handler no longer imports
-    from server_analysis_tools)."""
-    from tapps_mcp.server_analysis_tools import tapps_repo_map
+    from server_comprehension_tools)."""
+    from tapps_mcp.server_comprehension_tools import tapps_repo_map
 
     result = await tapps_repo_map(project_root=str(FIXTURE_REPO))
 
