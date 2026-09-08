@@ -11,6 +11,8 @@ TappsMCP v3.12.31+ ships **function-level call graph** tools for Python projects
 | `tapps_call_graph(symbol, query=callers\|callees\|chain\|all)` | Who calls this function? What does it call? |
 | `tapps_impact_analysis(file_path, symbol=..., granularity=symbol\|both)` | Blast radius at file or symbol level |
 | `tapps_diff_impact` | Git-changed files → ranked affected tests |
+| `tapps_file_api(file_path)` | What's in this file? (skeleton, no body reads) |
+| `tapps_repo_map(project_root, token_budget, max_dirs)` | First orientation in an unfamiliar repo |
 
 Module-level import impact remains `tapps_impact_analysis` without `symbol`. Call-graph tools complement import graphs; they do not replace them.
 
@@ -169,6 +171,43 @@ export_test_map(Path("."))  # writes ./test_map.txt
 Format: `code_symbol<TAB>test_file<TAB>test_symbol` — useful for CI scripts and pre-commit targeting.
 
 ---
+
+## `tapps_file_api` — file skeleton (LANE_ISSUE)
+
+`tapps_file_api(file_path, project_root="", force_rebuild=False)` answers
+"what's in this file?" without reading its body: every indexed symbol
+(function/method) with `{kind, qualified_name, line, signature}`, where
+`signature` is the def/class header read from the working tree at `line`
+(joined across a multi-line parameter list, never a body line). Pure
+lookup against the existing call-graph index — no LLM, no re-parse, no
+ranking ([ADR-0004](adr/0004-deterministic-tools-only-contract.md),
+[ADR-0028](adr/0028-code-graph-boundary-fenced-external-comprehension-and-no-query-language.md)
+Decision 2, fixed tools only).
+
+- An unambiguous basename (e.g. `"call_graph.py"`) resolves to its single
+  match; multiple matches return `candidates` — never a guess.
+- `completeness` carries the same index-wide honesty signal as
+  `tapps_call_graph` (`degraded`, `parse_failures`, `in_repo_gap_rate`).
+- `index_status: "unavailable"` — not an empty `symbols: []` — when the
+  index has nothing at all to scan (missing project), or when the
+  requested file itself is a recorded parse failure. An empty `symbols`
+  list with `index_status: "ready"` means the file genuinely has none.
+
+## `tapps_repo_map` — directory-level map (LANE_ISSUE)
+
+`tapps_repo_map(project_root="", token_budget=4000, max_dirs=16, force_rebuild=False)`
+gives a first orientation in an unfamiliar repo: per-directory symbol/edge
+counts (`directories`), per-directory hubs (top afferent-coupling modules,
+reusing the existing [coupling metrics](../packages/tapps-mcp/src/tapps_mcp/project/coupling_metrics.py)
+— not re-implemented), and global call-graph hotspots (highest in-degree
+symbols across the repo). Directories are ordered deterministically (symbol
+count desc, then name).
+
+- `max_dirs` caps directories before the token-budget trim; `token_budget`
+  then trims further. Anything cut is counted in `dropped` (`directories`,
+  `hotspots`) — never silently omitted.
+- Same `index_status: "unavailable"` / `completeness` honesty contract as
+  `tapps_file_api` when the index has nothing to scan.
 
 ## Recommended agent workflow
 

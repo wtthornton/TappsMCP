@@ -2,7 +2,7 @@
 
 Contains: tapps_report, tapps_dead_code, tapps_dependency_scan,
 tapps_dependency_graph, tapps_session_notes, tapps_impact_analysis,
-tapps_call_graph, tapps_diff_impact.
+tapps_call_graph, tapps_diff_impact, tapps_file_api, tapps_repo_map.
 
 Functions are defined at module level (importable for tests) and
 registered on the ``mcp`` instance via :func:`register`.
@@ -41,6 +41,7 @@ from tapps_mcp.tools.project_paths import (
 )
 
 if TYPE_CHECKING:
+    from collections.abc import Callable
     from pathlib import Path
 
     from mcp.server.fastmcp import FastMCP
@@ -261,7 +262,10 @@ async def tapps_session_notes(action: str, key: str = "", value: str = "") -> di
     if action == "save":
         if not key or not value:
             _record_execution(
-                "tapps_session_notes", start, status="failed", error_code="missing_params",
+                "tapps_session_notes",
+                start,
+                status="failed",
+                error_code="missing_params",
                 action=action,
             )
             return error_response(
@@ -274,7 +278,10 @@ async def tapps_session_notes(action: str, key: str = "", value: str = "") -> di
     elif action == "get":
         if not key:
             _record_execution(
-                "tapps_session_notes", start, status="failed", error_code="missing_params",
+                "tapps_session_notes",
+                start,
+                status="failed",
+                error_code="missing_params",
                 action=action,
             )
             return error_response("tapps_session_notes", "missing_params", "get requires key")
@@ -291,21 +298,30 @@ async def tapps_session_notes(action: str, key: str = "", value: str = "") -> di
     elif action == "promote":
         if not key:
             _record_execution(
-                "tapps_session_notes", start, status="failed", error_code="missing_params",
+                "tapps_session_notes",
+                start,
+                status="failed",
+                error_code="missing_params",
                 action=action,
             )
             return error_response("tapps_session_notes", "missing_params", "promote requires key")
         found = store.get(key)
         if found is None:
             _record_execution(
-                "tapps_session_notes", start, status="failed", error_code="not_found",
+                "tapps_session_notes",
+                start,
+                status="failed",
+                error_code="not_found",
                 action=action,
             )
             return error_response("tapps_session_notes", "not_found", f"Note '{key}' not found")
         data = await _promote_note_to_memory(found, value or "context")
     else:
         _record_execution(
-            "tapps_session_notes", start, status="failed", error_code="invalid_action",
+            "tapps_session_notes",
+            start,
+            status="failed",
+            error_code="invalid_action",
             action=action,
         )
         return error_response(
@@ -652,6 +668,101 @@ async def tapps_diff_impact(
         resp,
         {"degraded": bool(data.get("degraded"))},
     )
+
+
+# ---------------------------------------------------------------------------
+# tapps_file_api / tapps_repo_map (LANE_ISSUE): fixed comprehension tools
+# over the existing call-graph index — no LLM, no embeddings (ADR-0004).
+# ---------------------------------------------------------------------------
+
+
+async def _run_call_graph_index_query(
+    tool_name: str,
+    project_root: str,
+    query_sync: Callable[[Path], dict[str, Any]],
+) -> dict[str, Any]:
+    """Shared envelope for a call-graph-index query tool: resolve root, run
+    *query_sync* off the event loop, and wrap the result (record + nudges)."""
+    start = time.perf_counter_ns()
+    _record_call(tool_name)
+
+    settings = load_settings()
+    root_result = resolve_effective_project_root(settings.project_root, project_root)
+    if root_result.error_code:
+        return error_response(tool_name, root_result.error_code, root_result.error_message or "")
+
+    from tapps_mcp.tools.event_loop_guard import heavy_cpu
+
+    async with heavy_cpu():
+        result = await asyncio.to_thread(query_sync, root_result.root)
+
+    elapsed_ms = (time.perf_counter_ns() - start) // 1_000_000
+    degraded = bool(result.get("completeness", {}).get("degraded"))
+    _record_execution(tool_name, start, degraded=degraded)
+    resp = success_response(tool_name, elapsed_ms, result)
+    return _with_nudges(tool_name, resp, {"degraded": degraded})
+
+
+async def tapps_file_api(
+    file_path: str,
+    project_root: str = "",
+    force_rebuild: bool = False,
+) -> dict[str, Any]:
+    """File skeleton: every indexed symbol in a file with its header line.
+
+    Deterministic — a pure lookup against the existing call-graph index
+    (ADR-0004), not a re-parse. Use before editing an unfamiliar file to see
+    its functions/methods without reading the whole body. An unambiguous
+    basename (e.g. ``"call_graph.py"``) resolves to its single match;
+    multiple matches return ``candidates`` instead of guessing.
+
+    Args:
+        file_path: Repo-relative path, or an unambiguous basename.
+        project_root: Optional project root override.
+        force_rebuild: Rebuild ``.tapps-mcp/call-graph-index.json`` cache.
+    """
+    from tapps_mcp.project.call_graph import build_call_graph_index
+    from tapps_mcp.project.file_api import query_file_skeleton
+
+    def _query_sync(root: Path) -> dict[str, Any]:
+        index = build_call_graph_index(root, force_rebuild=force_rebuild)
+        return query_file_skeleton(index, root, file_path)
+
+    return await _run_call_graph_index_query("tapps_file_api", project_root, _query_sync)
+
+
+async def tapps_repo_map(
+    project_root: str = "",
+    token_budget: int = 4000,
+    max_dirs: int = 16,
+    force_rebuild: bool = False,
+) -> dict[str, Any]:
+    """Directory-level map of the project: symbol/edge clusters and hubs.
+
+    Deterministic — a pure aggregation of the existing call-graph index and
+    the existing coupling metrics (ADR-0004), not a summary. Use for a first
+    orientation in an unfamiliar repo before drilling into specific files
+    with ``tapps_file_api`` or specific symbols with ``tapps_call_graph``.
+
+    Args:
+        project_root: Optional project root override.
+        token_budget: Approximate token cap for the serialized map; excess
+            directories/hotspots are dropped (see ``dropped``), never
+            silently omitted.
+        max_dirs: Hard cap on directories returned before the token-budget
+            trim.
+        force_rebuild: Rebuild ``.tapps-mcp/call-graph-index.json`` cache.
+    """
+    from tapps_mcp.project.call_graph import build_call_graph_index
+    from tapps_mcp.project.repo_map import build_repo_map
+
+    def _query_sync(root: Path) -> dict[str, Any]:
+        index = build_call_graph_index(root, force_rebuild=force_rebuild)
+        return build_repo_map(
+            index, root, token_budget=max(256, token_budget), max_dirs=max(1, max_dirs)
+        )
+
+    return await _run_call_graph_index_query("tapps_repo_map", project_root, _query_sync)
 
 
 # ---------------------------------------------------------------------------
@@ -2095,6 +2206,20 @@ def register(mcp_instance: FastMCP, allowed_tools: frozenset[str]) -> None:
             tapps_diff_impact,
             annotations=_ANNOTATIONS_READ_ONLY,
             meta=_META_DEFERRED,
+        )
+    if "tapps_file_api" in allowed_tools:
+        register_tool(
+            mcp_instance,
+            tapps_file_api,
+            annotations=_ANNOTATIONS_READ_ONLY,
+            meta=_META_LARGE_OUTPUT_100K_D,
+        )
+    if "tapps_repo_map" in allowed_tools:
+        register_tool(
+            mcp_instance,
+            tapps_repo_map,
+            annotations=_ANNOTATIONS_READ_ONLY,
+            meta=_META_LARGE_OUTPUT_100K_D,
         )
     if "tapps_report" in allowed_tools:
         register_tool(

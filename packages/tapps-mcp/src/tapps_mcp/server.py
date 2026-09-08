@@ -427,6 +427,8 @@ TOOL_PROFILE_NLT_BUILD: frozenset[str] = frozenset(
         "tapps_impact_analysis",
         "tapps_call_graph",
         "tapps_diff_impact",
+        "tapps_file_api",
+        "tapps_repo_map",
         "tapps_usage",
         "tapps_validate_config",
         "tapps_dead_code",
@@ -737,9 +739,7 @@ def _record_ledger_entry(tool_name: str, response: dict[str, Any]) -> None:
     try:
         byte_size = len(json.dumps(response, default=str).encode("utf-8"))
         settings = load_settings()
-        ledger_path_str = str(
-            settings.project_root / ".tapps-mcp" / ".session-token-ledger.jsonl"
-        )
+        ledger_path_str = str(settings.project_root / ".tapps-mcp" / ".session-token-ledger.jsonl")
         record_tool_result_bytes(
             settings.project_root,
             tool_name=tool_name,
@@ -1026,6 +1026,8 @@ tapps_session_notes = _analysis.tapps_session_notes
 tapps_impact_analysis = _analysis.tapps_impact_analysis
 tapps_call_graph = _analysis.tapps_call_graph
 tapps_diff_impact = _analysis.tapps_diff_impact
+tapps_file_api = _analysis.tapps_file_api
+tapps_repo_map = _analysis.tapps_repo_map
 tapps_report = _analysis.tapps_report
 tapps_dead_code = _analysis.tapps_dead_code
 tapps_dependency_scan = _analysis.tapps_dependency_scan
