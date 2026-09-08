@@ -7,6 +7,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Correction — 2026-09-08
+
+- **`docs/migrations/tapps-memory-deprecation.md` and the CHANGELOG itself
+  stated stale facts about `tapps_memory`.** The migration doc's status line
+  said "REMOVED — v3.12.0" and claimed the tool was "no longer registered in
+  any server preset"; both were false as of TAP-3895 / ADR-0016 (commit
+  `7486cc34`, 2026-06-13), which restored `tapps_memory` as a supported slim
+  facade on the `nlt-memory` profile (`TOOL_PROFILE_NLT_MEMORY` in
+  `packages/tapps-mcp/src/tapps_mcp/server.py`). No prior CHANGELOG entry
+  mentioned TAP-3895. The migration doc's claim that the session-lifecycle
+  handlers are "called from `tapps_session_start` / `tapps_session_end`" was
+  also false — they are reachable only through the `tapps_memory` dispatch
+  table (`action="session_start_capture"` / `action="session_end_consolidate"`).
+  Corrected in the migration doc; the duplicate copy under
+  `packages/tapps-mcp/docs/migrations/` is now a one-line pointer to the
+  canonical root copy.
+
 ## [3.12.83] - 2026-09-06
 
 ### Added
