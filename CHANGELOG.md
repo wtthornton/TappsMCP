@@ -52,6 +52,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   not register, any `action=<word>` nlt-memory will not dispatch, and any
   paragraph that offers the CLI as a route to the MCP action surface.
 
+## [3.12.84] - 2026-09-08
+
+### Fixed
+
+- **Regenerate scaffolding for tapps-mcp 3.12.83** (#379, `15367f11`)
+- **`tapps_memory` facade tells the truth on `nlt-memory`** (#380, `77d170b9`)
+- **`tapps_memory` migration doc fixed to match shipped slim facade** (#382, `8806bc8c`)
+
+### Added
+
+- **`tapps_file_api` and `tapps_repo_map` comprehension tools** (#381, `a3589e8f`)
+
 ## [3.12.83] - 2026-09-06
 
 ### Added
