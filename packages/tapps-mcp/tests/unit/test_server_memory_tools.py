@@ -1,9 +1,9 @@
-"""TAP-1993/TAP-1994: tapps_memory internal-function tests.
+"""TAP-1993/TAP-1994/TAP-3895: tapps_memory internal-function tests.
 
-TAP-1993 (Phase 2): non-lifecycle actions return a refused-redirect envelope.
-TAP-1994 (Phase 3): tapps_memory is no longer registered as an MCP tool.
-The function continues to exist as an internal helper for lifecycle calls;
-all non-lifecycle behaviour remains as before (refused envelope redirects).
+ADR-0016: tapps_memory is the slim ``nlt-memory`` facade over BrainBridge —
+search/save/get/health/related plus the two session lifecycle actions dispatch;
+every other action is refused with an honest ``error_response`` (not a
+success-shaped redirect) pointing the caller at the CLI.
 """
 
 from __future__ import annotations
@@ -17,8 +17,8 @@ import pytest
 from tapps_mcp import server_memory_tools
 from tapps_mcp.server_memory_tools import (
     _LIFECYCLE_ACTIONS,
-    _REFUSED_BRAIN_TOOL,
     _VALID_ACTIONS,
+    NLT_MEMORY_SLIM_ACTIONS,
     tapps_memory,
 )
 
@@ -30,8 +30,8 @@ async def _noop_init() -> None:
 
 
 @pytest.mark.asyncio()
-class TestRefusedEnvelope:
-    """TAP-1993: non-lifecycle actions return a refused-redirect envelope."""
+class TestSlimGateRefusal:
+    """ADR-0016: actions outside the nlt-memory slim allow-list are refused."""
 
     @pytest.fixture(autouse=True)
     def _mock_session(self, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -46,98 +46,80 @@ class TestRefusedEnvelope:
         bridge.record_event = AsyncMock(return_value={"recorded": True})
         return bridge
 
-    @pytest.mark.parametrize("action", sorted(_VALID_ACTIONS - _LIFECYCLE_ACTIONS))
-    async def test_non_lifecycle_action_returns_refused(self, action: str) -> None:
-        """Every non-lifecycle action must return a refused envelope, not execute."""
-        bridge = self._make_mock_bridge()
-
-        with patch("tapps_mcp.server_memory_tools._get_brain_bridge", return_value=bridge):
-            result = await tapps_memory(action=action)
-            await asyncio.sleep(0)  # let any background tasks complete
-
-        assert result["success"] is True, (
-            f"action={action!r}: expected success=True for refused envelope, got {result}"
-        )
-        data = result["data"]
-        assert data.get("refused") is True, (
-            f"action={action!r}: expected 'refused': True in data, got {data}"
-        )
-        assert data.get("action") == action, (
-            f"action={action!r}: 'action' field in envelope must echo the original action"
-        )
-        use = data.get("use", "")
-        assert use.startswith("mcp__tapps-brain__"), (
-            f"action={action!r}: 'use' field must reference a mcp__tapps-brain__ tool, got {use!r}"
-        )
-        assert "hint" in data, (
-            f"action={action!r}: refused envelope must include a 'hint' field"
-        )
-
-    async def test_refused_envelope_use_field_matches_mapping(self) -> None:
-        """The 'use' field in the refused envelope must match _REFUSED_BRAIN_TOOL."""
-        bridge = self._make_mock_bridge()
-
-        for action, expected_tool in _REFUSED_BRAIN_TOOL.items():
-            with patch("tapps_mcp.server_memory_tools._get_brain_bridge", return_value=bridge):
-                result = await tapps_memory(action=action)
-
-            data = result["data"]
-            assert data.get("refused") is True
-            assert data.get("use") == expected_tool, (
-                f"action={action!r}: expected use={expected_tool!r}, got {data.get('use')!r}"
-            )
-
-    async def test_refused_actions_do_not_touch_store(self) -> None:
-        """Non-lifecycle actions must return before initializing the memory store."""
+    @pytest.mark.parametrize(
+        "action",
+        sorted(_VALID_ACTIONS - _LIFECYCLE_ACTIONS - NLT_MEMORY_SLIM_ACTIONS),
+    )
+    async def test_non_slim_action_returns_error_response(self, action: str) -> None:
+        """Every non-slim, non-lifecycle action must return a real error, not execute."""
         bridge = self._make_mock_bridge()
 
         with (
+            patch("tapps_mcp.server_memory_tools._MCP_MEMORY_MODE", "slim"),
+            patch("tapps_mcp.server_memory_tools._get_brain_bridge", return_value=bridge),
+        ):
+            result = await tapps_memory(action=action)
+            await asyncio.sleep(0)  # let any background tasks complete
+
+        assert result["success"] is False, (
+            f"action={action!r}: expected success=False for a refused action, got {result}"
+        )
+        error = result["error"]
+        assert error["code"] == "action_not_on_nlt_memory"
+        assert error["category"] == "user_input"
+        assert error["retryable"] is False
+        assert "mcp__tapps-brain__" not in error["message"]
+        assert "mcp__tapps-brain__" not in error["remediation"]
+
+    async def test_refused_actions_do_not_touch_store(self) -> None:
+        """Non-slim actions must return before initializing the memory store."""
+        bridge = self._make_mock_bridge()
+
+        with (
+            patch("tapps_mcp.server_memory_tools._MCP_MEMORY_MODE", "slim"),
             patch(
                 "tapps_mcp.server_memory_tools._get_memory_store",
                 side_effect=AssertionError("store must not be initialized for refused actions"),
             ),
             patch("tapps_mcp.server_memory_tools._get_brain_bridge", return_value=bridge),
         ):
-            # 'save' is a non-lifecycle action that must never hit _get_memory_store
-            result = await tapps_memory(action="save", key="k", value="v")
+            # 'delete' is not on the nlt-memory slim allow-list.
+            result = await tapps_memory(action="delete", key="k")
 
-        data = result["data"]
-        assert data.get("refused") is True
+        assert result["success"] is False
+        assert result["error"]["code"] == "action_not_on_nlt_memory"
 
-    async def test_refused_envelope_is_parseable_for_self_correction(self) -> None:
-        """Integration test: an agent receiving a refused envelope can self-correct.
+    async def test_off_mode_refuses_even_slim_eligible_actions(self) -> None:
+        """When the tool isn't registered on nlt-memory, every action is refused.
 
-        The envelope must contain enough machine-readable info for the agent to:
-        1. Detect refusal (refused=True).
-        2. Identify the correct brain tool (use='mcp__tapps-brain__...').
-        3. Echo the original action for logging (action='...').
+        Unreachable over MCP by construction (register() only sets "slim" when
+        the tool is registered), but a direct function call must still refuse
+        honestly rather than silently dispatch.
         """
         bridge = self._make_mock_bridge()
 
-        with patch("tapps_mcp.server_memory_tools._get_brain_bridge", return_value=bridge):
-            result = await tapps_memory(action="search", query="session patterns")
+        with (
+            patch("tapps_mcp.server_memory_tools._MCP_MEMORY_MODE", "off"),
+            patch("tapps_mcp.server_memory_tools._get_brain_bridge", return_value=bridge),
+        ):
+            result = await tapps_memory(action="search", query="q")
 
-        data = result["data"]
-        # Step 1: detect refusal.
-        assert data["refused"] is True
-        # Step 2: self-correct — the use field names a callable brain tool.
-        brain_tool = data["use"]
-        assert brain_tool.startswith("mcp__tapps-brain__"), (
-            f"use={brain_tool!r} is not a tapps-brain tool — agent cannot self-correct"
-        )
-        # Step 3: original action is preserved for diagnostics.
-        assert data["action"] == "search"
+        assert result["success"] is False
+        assert result["error"]["code"] == "action_not_on_nlt_memory"
 
-    async def test_refused_telemetry_still_fires(self) -> None:
-        """TAP-1992 telemetry fires even when the action is refused (Phase 1 data preserved)."""
+    async def test_refused_telemetry_fires_as_refused_not_deprecated(self) -> None:
+        """A refused action records a 'tapps_memory_refused' event, not 'deprecated_tool_call'."""
         bridge = self._make_mock_bridge()
 
-        with patch("tapps_mcp.server_memory_tools._get_brain_bridge", return_value=bridge):
-            await tapps_memory(action="save", key="k", value="v")
+        with (
+            patch("tapps_mcp.server_memory_tools._MCP_MEMORY_MODE", "slim"),
+            patch("tapps_mcp.server_memory_tools._get_brain_bridge", return_value=bridge),
+        ):
+            await tapps_memory(action="save_bulk", entries="[]")
             await asyncio.sleep(0)
 
         bridge.record_event.assert_called_once_with(
-            "deprecated_tool_call", "tapps_memory:save"
+            "tapps_memory_refused", "tapps_memory:save_bulk"
         )
 
 
@@ -204,17 +186,23 @@ class TestLifecycleActions:
         assert "session_start_capture" in _VALID_ACTIONS
         assert "session_end_consolidate" in _VALID_ACTIONS
 
-    def test_lifecycle_actions_not_in_refused_mapping(self) -> None:
-        """Lifecycle actions must not appear in _REFUSED_BRAIN_TOOL (they are not redirected)."""
-        assert "session_start_capture" not in _REFUSED_BRAIN_TOOL
-        assert "session_end_consolidate" not in _REFUSED_BRAIN_TOOL
+    async def test_lifecycle_actions_dispatch_even_in_off_mode(self) -> None:
+        """Lifecycle actions dispatch on every profile, unlike the slim allow-list."""
+        bridge = self._make_mock_bridge()
+        bridge.index_session = AsyncMock(return_value={"indexed": True, "session_id": "s1"})
 
-    def test_refused_mapping_covers_all_non_lifecycle_valid_actions(self) -> None:
-        """Every non-lifecycle valid action must have an entry in _REFUSED_BRAIN_TOOL."""
-        non_lifecycle = _VALID_ACTIONS - _LIFECYCLE_ACTIONS
-        missing = non_lifecycle - set(_REFUSED_BRAIN_TOOL.keys())
-        assert not missing, (
-            f"These non-lifecycle actions are missing from _REFUSED_BRAIN_TOOL: {sorted(missing)}"
+        with (
+            patch("tapps_mcp.server_memory_tools._MCP_MEMORY_MODE", "off"),
+            patch("tapps_mcp.server_memory_tools._get_brain_bridge", return_value=bridge),
+            patch(
+                "tapps_mcp.server_memory_tools._get_memory_store", side_effect=Exception("no store")
+            ),
+        ):
+            result = await tapps_memory(action="session_start_capture", value="hello")
+
+        error_code = (result.get("error") or {}).get("code")
+        assert error_code != "action_not_on_nlt_memory", (
+            f"lifecycle action must not hit the slim gate; got {result}"
         )
 
 

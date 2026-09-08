@@ -231,52 +231,27 @@ _LIFECYCLE_ACTIONS: frozenset[str] = frozenset(
 
 _MCP_MEMORY_MODE: str = "off"  # "off" | "slim" — set in register()
 
-# Maps each non-lifecycle tapps_memory action to its direct brain replacement.
-# Used to build the refused-envelope `use` field so agents can self-correct.
-_REFUSED_BRAIN_TOOL: dict[str, str] = {
-    "save": "mcp__tapps-brain__brain_remember",
-    "save_bulk": "mcp__tapps-brain__brain_remember",
-    "get": "mcp__tapps-brain__brain_recall",
-    "list": "mcp__tapps-brain__brain_recall",
-    "delete": "mcp__tapps-brain__brain_recall",
-    "search": "mcp__tapps-brain__memory_search",
-    "reinforce": "mcp__tapps-brain__brain_remember",
-    "gc": "mcp__tapps-brain__brain_status",
-    "contradictions": "mcp__tapps-brain__brain_status",
-    "reseed": "mcp__tapps-brain__brain_status",
-    "import": "mcp__tapps-brain__brain_remember",
-    "export": "mcp__tapps-brain__brain_recall",
-    "consolidate": "mcp__tapps-brain__brain_recall",
-    "unconsolidate": "mcp__tapps-brain__brain_recall",
-    "federate_register": "mcp__tapps-brain__brain_status",
-    "federate_publish": "mcp__tapps-brain__brain_status",
-    "federate_subscribe": "mcp__tapps-brain__brain_status",
-    "federate_sync": "mcp__tapps-brain__brain_status",
-    "federate_search": "mcp__tapps-brain__hive_search",
-    "federate_status": "mcp__tapps-brain__brain_status",
-    "validate": "mcp__tapps-brain__brain_status",
-    "maintain": "mcp__tapps-brain__brain_status",
-    "safety_check": "mcp__tapps-brain__brain_status",
-    "verify_integrity": "mcp__tapps-brain__brain_status",
-    "health": "mcp__tapps-brain__brain_status",
-    "profile_info": "mcp__tapps-brain__brain_status",
-    "profile_list": "mcp__tapps-brain__brain_status",
-    "profile_switch": "mcp__tapps-brain__brain_status",
-    "hive_status": "mcp__tapps-brain__brain_status",
-    "hive_search": "mcp__tapps-brain__hive_search",
-    "hive_propagate": "mcp__tapps-brain__brain_status",
-    "agent_register": "mcp__tapps-brain__brain_status",
-    "related": "mcp__tapps-brain__memory_find_related",
-    "relations": "mcp__tapps-brain__memory_find_related",
-    "neighbors": "mcp__tapps-brain__brain_get_neighbors",
-    "explain_connection": "mcp__tapps-brain__brain_explain_connection",
-    "recall_many": "mcp__tapps-brain__brain_recall",
-    "reinforce_many": "mcp__tapps-brain__brain_remember",
-    "rate": "mcp__tapps-brain__brain_remember",
-    "index_session": "mcp__tapps-brain__brain_remember",
-    "search_sessions": "mcp__tapps-brain__memory_search",
-    "session_end": "mcp__tapps-brain__brain_status",
-}
+
+def _fire_memory_event(event_type: str, action: str) -> None:
+    """Best-effort fire-and-forget KG event for one ``tapps_memory`` call.
+
+    ``event_type`` is ``"tapps_memory_call"`` for an action the slim gate let
+    through, or ``"tapps_memory_refused"`` for one it didn't — never blocks
+    or raises; a brain outage here must not break ``tapps_memory`` callers.
+    """
+    try:
+        bridge = _get_brain_bridge()
+        if bridge is None or not hasattr(bridge, "record_event"):
+            return
+
+        async def _fire() -> None:
+            with contextlib.suppress(Exception):
+                await bridge.record_event(event_type, f"tapps_memory:{action}")
+
+        # Fire-and-forget telemetry; no reference kept on purpose.
+        asyncio.create_task(_fire())  # noqa: RUF006
+    except Exception:
+        pass  # never block tapps_memory for telemetry
 
 
 def _classify_store_init_error(exc: BaseException) -> str:
@@ -582,9 +557,11 @@ async def tapps_memory(
     memory_group: str = "",
     projection: str = "full",
 ) -> dict[str, Any]:
-    """[DEPRECATED 2026-Q3 — use mcp__tapps-brain__* tools directly]
-    Cross-session memory store: saves, recalls, searches, and maintains
-    durable project knowledge through the tapps-brain service.
+    """Slim facade on the ``nlt-memory`` profile over BrainBridge: exposes
+    ``search``, ``save``, ``get``, ``health``, and ``related`` (plus the two
+    session lifecycle actions); every other action below lives on the CLI
+    (``tapps-mcp memory <action>``), not this MCP tool (ADR-0016,
+    docs/adr/0016-needs-based-nlt-mcp-taxonomy.md).
 
     Call this with ``action="search"`` at the start of a non-trivial task
     to surface prior learnings, and with ``action="save"`` at the end to
@@ -668,112 +645,94 @@ async def tapps_memory(
             silently returned as plain full. (TAP-6616)
 
     Actions:
-        save: [DEPRECATED 2026-Q3 — use mcp__tapps-brain__brain_remember] Store a
+        save: Store a
             new memory or update an existing one. When
             memory.auto_supersede_architectural is True, tier=architectural uses
             MemoryStore.supersede on the active chain head (store.history) instead of
             overwrite; response may include status="superseded" and new_key.
-        save_bulk: [DEPRECATED 2026-Q3 — use mcp__tapps-brain__brain_remember] Save
+        save_bulk: Save
             multiple memories in one call (requires entries parameter).
-        get: [DEPRECATED 2026-Q3 — use mcp__tapps-brain__brain_recall] Retrieve a
+        get: Retrieve a
             memory by key.
-        list: [DEPRECATED 2026-Q3 — use mcp__tapps-brain__brain_recall] List all
+        list: List all
             memories with optional filters.
-        delete: [DEPRECATED 2026-Q3 — use mcp__tapps-brain__brain_recall] Remove a
+        delete: Remove a
             memory by key.
-        search: [DEPRECATED 2026-Q3 — use mcp__tapps-brain__memory_search] Full-text
+        search: Full-text
             search across memories.
-        reinforce: [DEPRECATED 2026-Q3 — use mcp__tapps-brain__brain_remember] Boost
+        reinforce: Boost
             confidence and reset decay clock for a memory (requires key).
-        gc: [DEPRECATED 2026-Q3 — use mcp__tapps-brain__brain_status] Run garbage
+        gc: Run garbage
             collection to archive stale/contradicted memories.
-        contradictions: [DEPRECATED 2026-Q3 — use mcp__tapps-brain__brain_status]
-            Detect memories that contradict observable project state.
-        reseed: [DEPRECATED 2026-Q3 — use mcp__tapps-brain__brain_status] Re-seed
+        contradictions: Detect memories that contradict observable project state.
+        reseed: Re-seed
             memory from project profile (only updates auto-seeded entries).
-        import: [DEPRECATED 2026-Q3 — use mcp__tapps-brain__brain_remember] Import
+        import: Import
             memories from a JSON file (requires file_path).
-        export: [DEPRECATED 2026-Q3 — use mcp__tapps-brain__brain_recall] Export
+        export: Export
             memories to JSON or Markdown (format: json|markdown, optional file_path,
             tier, scope filters, include_frontmatter, group_by).
-        consolidate: [DEPRECATED 2026-Q3 — use mcp__tapps-brain__brain_recall] Merge
+        consolidate: Merge
             related entries into a consolidated entry with provenance. Use entry_ids
             for explicit keys or query to find similar entries. Use dry_run=True to
             preview. (Epic 58, Story 58.4)
-        unconsolidate: [DEPRECATED 2026-Q3 — use mcp__tapps-brain__brain_recall] Undo
+        unconsolidate: Undo
             a consolidation. Restores source entries and removes the consolidated
             entry. Requires key of the consolidated entry. (Epic 58, Story 58.6)
-        federate_register: [DEPRECATED 2026-Q3 — use mcp__tapps-brain__brain_status]
-            Register this project in the federation hub for cross-project sharing.
+        federate_register: Register this project in the federation hub for cross-project sharing.
             Optional project_id (auto-detected) and tags. (Epic 64)
-        federate_publish: [DEPRECATED 2026-Q3 — use mcp__tapps-brain__brain_status]
-            Publish shared-scope memories to the federation hub. Optional key list to
+        federate_publish: Publish shared-scope memories to the federation hub. Optional key list to
             publish specific entries. (Epic 64)
-        federate_subscribe: [DEPRECATED 2026-Q3 — use mcp__tapps-brain__brain_status]
-            Subscribe to memories from other projects. Requires sources
+        federate_subscribe: Subscribe to memories from other projects. Requires sources
             (comma-separated project IDs). Optional tags, min_confidence. (Epic 64)
-        federate_sync: [DEPRECATED 2026-Q3 — use mcp__tapps-brain__brain_status] Pull
+        federate_sync: Pull
             subscribed memories from the hub into local store. (Epic 64)
-        federate_search: [DEPRECATED 2026-Q3 — use mcp__tapps-brain__hive_search]
-            Search across local and federated memories. Uses query param. (Epic 64)
-        federate_status: [DEPRECATED 2026-Q3 — use mcp__tapps-brain__brain_status]
-            Show federation hub status and registered projects. (Epic 64)
-        validate: [DEPRECATED 2026-Q3 — use mcp__tapps-brain__brain_status] Validate
+        federate_search: Search across local and federated memories. Uses query param. (Epic 64)
+        federate_status: Show federation hub status and registered projects. (Epic 64)
+        validate: Validate
             memories against authoritative documentation via Context7. (Epic 62)
             Params: key (single), query (search), stale_only, dry_run, max_entries.
-        maintain: [DEPRECATED 2026-Q3 — use mcp__tapps-brain__brain_status] Run
+        maintain: Run
             scheduled maintenance (defrag, index rebuild, housekeeping).
-        safety_check: [DEPRECATED 2026-Q3 — use mcp__tapps-brain__brain_status]
-            Pre-flight content safety validation. Checks value for prompt injection
+        safety_check: Pre-flight content safety validation. Checks value for prompt injection
             patterns without saving. Returns flagged patterns and match count. (Epic M1)
-        verify_integrity: [DEPRECATED 2026-Q3 — use mcp__tapps-brain__brain_status]
-            Check all memory entries for tampering. Computes content hashes and
+        verify_integrity: Check all memory entries for tampering. Computes content hashes and
             reports any mismatches. (Epic M1)
-        health: [DEPRECATED 2026-Q3 — use mcp__tapps-brain__brain_status] Report
+        health: Report
             brain service health and connectivity status.
-        profile_info: [DEPRECATED 2026-Q3 — use mcp__tapps-brain__brain_status] Show
+        profile_info: Show
             the active memory profile with layer details, decay config, scoring
             weights, and promotion status. (Epic M2)
-        profile_list: [DEPRECATED 2026-Q3 — use mcp__tapps-brain__brain_status] List
+        profile_list: List
             all available built-in profiles with descriptions. (Epic M2)
-        profile_switch: [DEPRECATED 2026-Q3 — use mcp__tapps-brain__brain_status]
-            Switch to a different memory profile. Pass the profile name as value
+        profile_switch: Switch to a different memory profile. Pass the profile name as value
             (e.g., "research-knowledge"). Persists choice and resets the store. (Epic M2)
-        hive_status: [DEPRECATED 2026-Q3 — use mcp__tapps-brain__brain_status] Show
+        hive_status: Show
             Hive / Agent Teams status (requires CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS).
             Mirrors session-start hive_status. Registers this process when enabled.
             Propagation tier rules are enforced server-side by tapps-brain's
             PropagationEngine; clients read outcomes from hive_propagate / hive_push
             responses rather than mirroring rules locally. (Epic M3)
-        hive_search: [DEPRECATED 2026-Q3 — use mcp__tapps-brain__hive_search] Search
+        hive_search: Search
             the Hive store (query or value = search text). Optional tags =
             comma-separated namespace filter. limit/min_confidence apply. (Epic M3)
-        hive_propagate: [DEPRECATED 2026-Q3 — use mcp__tapps-brain__brain_status]
-            Push eligible local MemoryStore entries to Hive via PropagationEngine
+        hive_propagate: Push eligible local MemoryStore entries to Hive via PropagationEngine
             (uses entry agent_scope). limit caps entries scanned (0 = default cap).
             (Epic M3)
-        agent_register: [DEPRECATED 2026-Q3 — use mcp__tapps-brain__brain_status]
-            Register an agent in Hive (key=agent id, value=display name,
+        agent_register: Register an agent in Hive (key=agent id, value=display name,
             tags=comma-separated skills). Profile comes from memory settings. (Epic M3)
-        related: [DEPRECATED 2026-Q3 — use mcp__tapps-brain__memory_find_related] Find
+        related: Find
             memories related to a given key via knowledge graph traversal. (TAP-1630)
-        relations: [DEPRECATED 2026-Q3 — use mcp__tapps-brain__memory_find_related]
-            List all explicit relations for a memory key. (TAP-1630)
-        neighbors: [DEPRECATED 2026-Q3 — use mcp__tapps-brain__brain_get_neighbors]
-            Get N-hop neighbors of a memory in the knowledge graph. (TAP-1630)
-        explain_connection: [DEPRECATED 2026-Q3 — use mcp__tapps-brain__brain_explain_connection]
-            Explain how two memory keys are connected. (TAP-1630)
-        recall_many: [DEPRECATED 2026-Q3 — use mcp__tapps-brain__brain_recall]
-            Batch-recall multiple memories by key list (single round trip). (TAP-1631)
-        reinforce_many: [DEPRECATED 2026-Q3 — use mcp__tapps-brain__brain_remember]
-            Batch-reinforce multiple memory keys (single round trip). (TAP-1631)
-        rate: [DEPRECATED 2026-Q3 — use mcp__tapps-brain__brain_remember] Submit
+        relations: List all explicit relations for a memory key. (TAP-1630)
+        neighbors: Get N-hop neighbors of a memory in the knowledge graph. (TAP-1630)
+        explain_connection: Explain how two memory keys are connected. (TAP-1630)
+        recall_many: Batch-recall multiple memories by key list (single round trip). (TAP-1631)
+        reinforce_many: Batch-reinforce multiple memory keys (single round trip). (TAP-1631)
+        rate: Submit
             quality feedback on a memory (feedback flywheel). (TAP-1632)
-        index_session: [DEPRECATED 2026-Q3 — use mcp__tapps-brain__brain_remember]
-            Index the current session's conversation into memory. (TAP-1633)
-        search_sessions: [DEPRECATED 2026-Q3 — use mcp__tapps-brain__memory_search]
-            Search indexed session memories by query. (TAP-1633)
-        session_end: [DEPRECATED 2026-Q3 — use mcp__tapps-brain__brain_status] Flush
+        index_session: Index the current session's conversation into memory. (TAP-1633)
+        search_sessions: Search indexed session memories by query. (TAP-1633)
+        session_end: Flush
             and finalize the current session's memory index. (TAP-1633)
         session_start_capture: Index the start of the current session into brain memory.
             Canonical lifecycle action (TAP-1993). Delegates to the brain index-session
@@ -818,58 +777,38 @@ async def tapps_memory(
             )
         )
 
-    # TAP-1992: best-effort deprecation telemetry — fire-and-forget KG event so
-    # removal timing is data-driven. Never blocks or raises; a brain outage here
-    # must not break tapps_memory callers.
-    try:
-        _ev_bridge = _get_brain_bridge()
-        if _ev_bridge is not None and hasattr(_ev_bridge, "record_event"):
+    # TAP-3895 / ADR-0016: nlt-memory exposes a bounded action set (search,
+    # save, get, health, related) plus the two lifecycle actions; every other
+    # action is on the CLI (`tapps-mcp memory <action>`), not this MCP tool.
+    # Gate first, so telemetry below reflects the actual outcome instead of
+    # counting every call — including sanctioned ones — as "deprecated".
+    action_allowed = action in _LIFECYCLE_ACTIONS or (
+        _MCP_MEMORY_MODE == "slim" and action in NLT_MEMORY_SLIM_ACTIONS
+    )
 
-            async def _fire_deprecation_event() -> None:
-                with contextlib.suppress(Exception):
-                    await _ev_bridge.record_event(
-                        "deprecated_tool_call",
-                        f"tapps_memory:{action}",
-                    )
-
-            # Fire-and-forget telemetry; no reference kept on purpose.
-            asyncio.create_task(_fire_deprecation_event())  # noqa: RUF006
-    except Exception:
-        pass  # never block tapps_memory for telemetry
-
-    # TAP-1993: Phase 2 — non-lifecycle actions redirect to brain unless nlt-memory
-    # slim mode re-enabled them (ADR-0016 / TAP-3895).
-    if action not in _LIFECYCLE_ACTIONS:
-        if _MCP_MEMORY_MODE == "slim" and action in NLT_MEMORY_SLIM_ACTIONS:
-            pass  # fall through to dispatch below
-        elif _MCP_MEMORY_MODE == "slim":
-            return _finish(
-                error_response(
-                    "tapps_memory",
-                    "action_not_on_nlt_memory",
-                    (
-                        f"Action '{action}' is not on the nlt-memory slim profile. "
-                        f"Allowed: {', '.join(sorted(NLT_MEMORY_SLIM_ACTIONS))}"
+    if not action_allowed:
+        _fire_memory_event("tapps_memory_refused", action)
+        return _finish(
+            error_response(
+                "tapps_memory",
+                "action_not_on_nlt_memory",
+                (
+                    f"Action '{action}' is not on the nlt-memory slim profile. "
+                    f"Allowed: {', '.join(sorted(NLT_MEMORY_SLIM_ACTIONS))}; "
+                    "other actions are on the CLI `tapps-mcp memory <action>`."
+                ),
+                extra={
+                    "category": "user_input",
+                    "retryable": False,
+                    "remediation": (
+                        "Use one of: get, health, related, save, search; other "
+                        "actions are on the CLI `tapps-mcp memory <action>`."
                     ),
-                )
+                },
             )
-        else:
-            brain_tool = _REFUSED_BRAIN_TOOL.get(action, "mcp__tapps-brain__brain_recall")
-            return _finish(
-                success_response(
-                    "tapps_memory",
-                    0,
-                    {
-                        "refused": True,
-                        "use": brain_tool,
-                        "action": action,
-                        "hint": (
-                            f"tapps_memory(action='{action}') has been retired. "
-                            f"Call {brain_tool} directly instead."
-                        ),
-                    },
-                )
-            )
+        )
+
+    _fire_memory_event("tapps_memory_call", action)
 
     try:
         store = _get_memory_store()
@@ -2287,13 +2226,32 @@ async def _handle_health(store: MemoryStore, _p: _Params) -> dict[str, Any]:
         )
 
     integrity_tampered = int(health.get("integrity_tampered", 0))
+    entry_count_raw = health.get("entry_count")
+    if store is not None:
+        # In-process bridge: BrainBridge.health() always sets entry_count
+        # from the real store.health() report, so a missing key here (never
+        # observed in practice) still means a real, in-process store of 0.
+        entry_count: int | None = int(entry_count_raw) if entry_count_raw is not None else 0
+        entry_count_source = "in_process"
+    elif entry_count_raw is not None:
+        # HTTP bridge: health() only forwards whatever the brain's /health
+        # endpoint returns; it never invents entry_count itself. A present
+        # key is a real brain-reported count.
+        entry_count = int(entry_count_raw)
+        entry_count_source = "brain"
+    else:
+        # No store (HTTP-bridge mode) and the brain didn't report a count —
+        # this used to silently coerce to a false 0. Say so instead.
+        entry_count = None
+        entry_count_source = "unavailable"
     payload: dict[str, Any] = {
         "action": "health",
         "success": True,
         "status": health.get("status", "ok"),
         "postgres": health.get("postgres", "connected"),
         "store_path": health.get("store_path"),
-        "entry_count": int(health.get("entry_count", 0)),
+        "entry_count": entry_count,
+        "entry_count_source": entry_count_source,
         "max_entries": health.get("max_entries"),
         "schema_version": health.get("schema_version"),
         "tier_distribution": health.get("tier_distribution", {}),
