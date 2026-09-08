@@ -22,7 +22,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   table (`action="session_start_capture"` / `action="session_end_consolidate"`).
   Corrected in the migration doc; the duplicate copy under
   `packages/tapps-mcp/docs/migrations/` is now a one-line pointer to the
-  canonical root copy.
+  canonical root copy. A second pass found the doc still overstated the MCP
+  surface (advertised `save_bulk`/`list`/`delete`/`reinforce` as callable
+  over MCP when only `NLT_MEMORY_SLIM_ACTIONS ∪ _LIFECYCLE_ACTIONS` are),
+  mislabeled all four TAP-1990-1995 dates "2026-Q3" (they are 2026-05-22 to
+  2026-06-01), and said `tapps_doctor` strips a stray `tapps-brain` MCP
+  entry when it only reports the failed check — `tapps_upgrade` strips it.
+  `test_memory_docs_match_registration.py` now derives the doc's MCP action
+  list from `NLT_MEMORY_SLIM_ACTIONS` / `_LIFECYCLE_ACTIONS` instead of
+  restating it.
 
 ## [3.12.83] - 2026-09-06
 

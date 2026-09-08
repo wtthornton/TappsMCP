@@ -14,8 +14,10 @@ never has been one. `tapps-brain` is bridge-only: agents call it through
 `tapps_memory` / `BrainBridge`, never as a direct MCP server entry (see
 [`.claude/rules/integration-hygiene.md`](../../.claude/rules/integration-hygiene.md)
 and [ADR-0001](../adr/0001-in-process-agentbrain-via-brainbridge.md)). A
-`tapps-brain` entry in `.mcp.json` is a regression, not a migration target;
-`tapps_doctor` strips it.
+`tapps-brain` entry in `.mcp.json` is a regression, not a migration target.
+`tapps_doctor` reports it as a failed check (`check_brain_mcp_entry` in
+`doctor_mcp.py`); `tapps_upgrade` (and `tapps_init` / `setup_generator`) are
+what actually strip it, via `strip_brain_mcp_entries`.
 
 The session-lifecycle handlers (`_handle_session_start_capture`,
 `_handle_session_end_consolidate` in
@@ -51,19 +53,31 @@ treat this row as the current state.
 
 ## How to call tapps_memory today
 
-`tapps_memory(action=..., ...)` is a normal MCP tool call — no redirect
-needed. See the tool's docstring in `server_memory_tools.py` for the full
-action list (`save`, `save_bulk`, `get`, `list`, `delete`, `search`,
-`reinforce`, `session_start_capture`, `session_end_consolidate`, and more).
-For scripted / CLI use outside an agent session, use
+Over MCP, `tapps_memory(action=..., ...)` accepts **exactly** these actions
+(`NLT_MEMORY_SLIM_ACTIONS ∪ _LIFECYCLE_ACTIONS` in `server_memory_tools.py`):
+
+<!-- mcp-actions:start -->
+- `search`
+- `save`
+- `get`
+- `health`
+- `related`
+- `session_start_capture`
+- `session_end_consolidate`
+<!-- mcp-actions:end -->
+
+Every other memory action (`save_bulk`, `list`, `delete`, `reinforce`, and
+more) is **CLI-only** — not callable over MCP at all. An MCP call with any
+action outside the list above is refused with the `action_not_on_nlt_memory`
+error envelope; it is never dispatched. For those actions, use
 `uv run tapps-mcp memory search --query "..."` or `tapps-mcp memory save`,
 which talk to `BrainBridge` directly without going through MCP.
 
 ## Timeline
 
-- **2026-Q3:** All sub-actions marked DEPRECATED in tool catalog (TAP-1991) ✅ (later reverted)
-- **2026-Q3:** Per-action call telemetry enabled (TAP-1992) ✅
-- **2026-Q3:** Tool removed from some server presets during the 42-action migration (TAP-1993/1994) ✅ (historical)
-- **2026-Q3:** `tapps_core/memory/` re-export shims deleted (TAP-1995) ✅
+- **2026-05-22:** All sub-actions marked DEPRECATED in tool catalog (TAP-1991) ✅ (later reverted)
+- **2026-05-22:** Per-action call telemetry enabled (TAP-1992) ✅
+- **2026-05-26:** Tool removed from some server presets during the 42-action migration (TAP-1993/1994) ✅ (historical)
+- **2026-05-26:** `tapps_core/memory/` re-export shims deleted (TAP-1995) ✅
 - **2026-06-13:** `tapps_memory` restored as a slim facade on the `nlt-memory`
   profile (TAP-3895, ADR-0016, commit `7486cc34`) ✅ — current state
