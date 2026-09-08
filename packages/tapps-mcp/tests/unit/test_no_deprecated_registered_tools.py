@@ -12,6 +12,7 @@ fails if either the callable's docstring or its registered
 from __future__ import annotations
 
 import importlib
+from collections.abc import Callable, Iterable, Mapping
 from typing import Any
 
 _TOOL_MODULE_NAMES: tuple[str, ...] = (
@@ -67,6 +68,26 @@ def test_tapps_memory_callable_is_resolvable() -> None:
     assert fn is not None, "resolver failed to locate tapps_memory — fix the resolver first"
 
 
+def _find_deprecated_tools(
+    tool_names: Iterable[str],
+    resolve_callable: Callable[[str], Any | None],
+    descriptions: Mapping[str, str],
+) -> list[str]:
+    """Return tool names whose docstring or description carries `[DEPRECATED`.
+
+    Shared by the real assertion (live `TOOL_PROFILE_*` tables) and the
+    self-tests below (synthetic fixtures) so both exercise the same logic.
+    """
+    offenders: list[str] = []
+    for tool_name in sorted(tool_names):
+        fn = resolve_callable(tool_name)
+        doc = (fn.__doc__ or "") if fn is not None else ""
+        description = descriptions.get(tool_name, "")
+        if "[DEPRECATED" in doc or "[DEPRECATED" in description:
+            offenders.append(tool_name)
+    return offenders
+
+
 def test_no_registered_tool_docstring_or_description_says_deprecated() -> None:
     """No tool reachable from any profile may carry a live [DEPRECATED marker.
 
@@ -77,14 +98,71 @@ def test_no_registered_tool_docstring_or_description_says_deprecated() -> None:
     """
     from tapps_mcp.tool_descriptions import TOOL_DESCRIPTIONS
 
-    offenders: list[str] = []
-    for tool_name in sorted(_all_tool_profile_names()):
-        fn = _resolve_tool_callable(tool_name)
-        doc = (fn.__doc__ or "") if fn is not None else ""
-        description = TOOL_DESCRIPTIONS.get(tool_name, "")
-        if "[DEPRECATED" in doc or "[DEPRECATED" in description:
-            offenders.append(tool_name)
+    offenders = _find_deprecated_tools(
+        _all_tool_profile_names(), _resolve_tool_callable, TOOL_DESCRIPTIONS
+    )
 
     assert not offenders, (
         f"these registered tools still carry a live [DEPRECATED marker: {offenders}"
     )
+
+
+def test_find_deprecated_tools_names_a_synthetic_deprecated_tool() -> None:
+    """Positive control: the shared checker must detect a tool it has never seen.
+
+    Builds a test-local tool set (never touching any real `TOOL_PROFILE_*`
+    table) with one deprecated docstring, one deprecated description, and
+    one clean tool, and asserts the checker names exactly the two offenders
+    via the SAME `_find_deprecated_tools` function the real assertion above
+    calls.
+    """
+
+    def fake_deprecated_tool() -> None:
+        """This tool [DEPRECATED 2099-Q1 — use fake_replacement_tool] instead."""
+
+    def fake_clean_tool() -> None:
+        """A perfectly ordinary, non-deprecated tool."""
+
+    fixture_callables = {
+        "fake_deprecated_tool": fake_deprecated_tool,
+        "fake_deprecated_via_description": fake_clean_tool,
+        "fake_clean_tool": fake_clean_tool,
+    }
+    fixture_descriptions = {
+        "fake_deprecated_via_description": "[DEPRECATED 2099-Q1 — description-only marker]",
+    }
+
+    offenders = _find_deprecated_tools(
+        fixture_callables.keys(),
+        fixture_callables.get,
+        fixture_descriptions,
+    )
+
+    assert offenders == sorted(["fake_deprecated_tool", "fake_deprecated_via_description"])
+
+
+def test_find_deprecated_tools_returns_empty_for_clean_fixture() -> None:
+    """Negative-shape control: an all-clean synthetic fixture yields no offenders."""
+
+    def fake_clean_tool_one() -> None:
+        """Nothing to see here."""
+
+    def fake_clean_tool_two() -> None:
+        """Also perfectly fine."""
+
+    fixture_callables = {
+        "fake_clean_tool_one": fake_clean_tool_one,
+        "fake_clean_tool_two": fake_clean_tool_two,
+    }
+    fixture_descriptions = {
+        "fake_clean_tool_one": "does something ordinary",
+        "fake_clean_tool_two": "does something else ordinary",
+    }
+
+    offenders = _find_deprecated_tools(
+        fixture_callables.keys(),
+        fixture_callables.get,
+        fixture_descriptions,
+    )
+
+    assert offenders == []
