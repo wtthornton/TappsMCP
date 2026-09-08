@@ -169,6 +169,6 @@
 - [Upgrading TappsMCP — Guide for Consuming Projects](UPGRADE_FOR_CONSUMERS.md) — When you **install or upgrade** TappsMCP in a project that uses it for quality checks, doc lookup, and experts, you m... *(updated 2026-06-16)*
 - [Handoff — tapps-mcp consumer migration (brain EPIC-074/075 shipped)](handoff/TAPPS-MCP-CONSUMER-MIGRATION-1997-1998.md) — Paste this into a tapps-mcp session (or a Linear comment on TAP-1997 / TAP-1998). *(updated 2026-06-09)*
 - [Brain v3.18.0 Kwarg Audit — TAP-1977](migrations/brain-v3.18-kwarg-audit.md) — **Date:** 2026-05-23 *(updated 2026-06-13)*
-- [tapps_memory Deprecation Migration Table (TAP-1991)](migrations/tapps-memory-deprecation.md) — **Status:** SUPPORTED — slim facade restored by ADR-0016 / TAP-3895 (2026-06-13). *(updated 2026-09-08)*
+- [tapps_memory: status and history (TAP-1991…TAP-3895)](migrations/tapps-memory-deprecation.md) — **Status:** SUPPORTED — slim facade restored by ADR-0016 / TAP-3895 (2026-06-13). *(updated 2026-09-08)*
 - [Migration: `<old_tool_name>` → `<new_tool_name>`](migrations/template.md) — **Removed in**: vX.Y.Z *(updated 2026-05-23)*
 - [Fleet maintenance — multi-repo TAPPS upgrade and audit](operations/FLEET-MAINTENANCE.md) — Runbook for upgrading **tapps-mcp**, **AgentForge**, **NLTlabsPE**, and **NewCompanyIdeas** together on one machine (... *(updated 2026-06-17)*

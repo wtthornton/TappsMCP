@@ -30,7 +30,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   entry when it only reports the failed check — `tapps_upgrade` strips it.
   `test_memory_docs_match_registration.py` now derives the doc's MCP action
   list from `NLT_MEMORY_SLIM_ACTIONS` / `_LIFECYCLE_ACTIONS` instead of
-  restating it.
+  restating it. A third pass found the doc still claimed `save_bulk`/`list`/
+  `delete`/`reinforce` were CLI-only (`list`/`delete` are, `save_bulk`/
+  `reinforce` have no CLI command either — unreachable), said no
+  `mcp__tapps-brain__*` MCP surface "ever" existed (it exists; the rule is
+  prohibition, not non-existence), conflated the two MCP refusal codes
+  (`invalid_action` vs. `action_not_on_nlt_memory`), and omitted the
+  2026-06-01 TAP-1990 timeline row; `test_memory_docs_match_registration.py`
+  now also derives the doc's CLI-command list from `cli_memory.py`'s
+  `@memory_group.command(...)` names.
 
 ## [3.12.83] - 2026-09-06
 

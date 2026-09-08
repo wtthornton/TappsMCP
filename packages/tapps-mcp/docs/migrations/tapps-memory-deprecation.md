@@ -1,4 +1,4 @@
-# tapps_memory Deprecation Migration Table (TAP-1991)
+# tapps_memory: status and history (TAP-1991…TAP-3895)
 
 Moved. This document lived in two places and drifted; the canonical copy is
 now the repo-root

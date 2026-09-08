@@ -1,4 +1,4 @@
-# tapps_memory Deprecation Migration Table (TAP-1991)
+# tapps_memory: status and history (TAP-1991…TAP-3895)
 
 **Status:** SUPPORTED — restored as a slim facade (TAP-3895, ADR-0016,
 commit `7486cc34`, 2026-06-13). `tapps_memory` is **not deprecated and not
@@ -9,9 +9,12 @@ other tools (`tapps_session_start`, `tapps_session_notes`,
 [`packages/tapps-mcp/src/tapps_mcp/server.py`](../../packages/tapps-mcp/src/tapps_mcp/server.py).
 It is not registered on any other profile (`nlt-build`, `nlt-setup`, etc.).
 
-There is no `mcp__tapps-brain__*` MCP surface to redirect to and there
-never has been one. `tapps-brain` is bridge-only: agents call it through
-`tapps_memory` / `BrainBridge`, never as a direct MCP server entry (see
+Agents must never call `mcp__tapps-brain__*` directly, and `.mcp.json` must
+never carry a `tapps-brain` entry — `tapps-brain` does expose a live MCP tool
+surface (`brain_recall`, `brain_remember`, …;
+[`docs/handoff/BRAIN-322-integration-review.md`](../handoff/BRAIN-322-integration-review.md),
+`_BRIDGE_USED_TOOLS` in `brain_bridge.py`), but it is bridge-only: agents call
+it through `tapps_memory` / `BrainBridge`, never as a direct MCP server entry (see
 [`.claude/rules/integration-hygiene.md`](../../.claude/rules/integration-hygiene.md)
 and [ADR-0001](../adr/0001-in-process-agentbrain-via-brainbridge.md)). A
 `tapps-brain` entry in `.mcp.json` is a regression, not a migration target.
@@ -66,12 +69,58 @@ Over MCP, `tapps_memory(action=..., ...)` accepts **exactly** these actions
 - `session_end_consolidate`
 <!-- mcp-actions:end -->
 
-Every other memory action (`save_bulk`, `list`, `delete`, `reinforce`, and
-more) is **CLI-only** — not callable over MCP at all. An MCP call with any
-action outside the list above is refused with the `action_not_on_nlt_memory`
-error envelope; it is never dispatched. For those actions, use
-`uv run tapps-mcp memory search --query "..."` or `tapps-mcp memory save`,
-which talk to `BrainBridge` directly without going through MCP.
+Separately, the CLI (`tapps-mcp memory <command>`) offers **exactly** these
+commands (`@memory_group.command(...)` in `cli_memory.py`):
+
+<!-- cli-commands:start -->
+- `list`
+- `save`
+- `get`
+- `recall`
+- `search`
+- `promote-instincts`
+- `delete`
+- `import-file`
+- `export-file`
+- `reseed`
+<!-- cli-commands:end -->
+
+These are independent implementations that call `BrainBridge` /
+`MemoryStore` directly — they do not dispatch through the `tapps_memory`
+action table above, so "CLI command X" does not imply "MCP action X is
+reachable via the CLI". Only three catalog actions happen to share a name
+with a CLI command: `list`, `delete`, `reseed`.
+
+An MCP call is refused in one of two ways, both without dispatching:
+
+- an `action` outside `_VALID_ACTIONS` entirely (the full historical
+  catalog) is refused with `invalid_action`;
+- an `action` inside `_VALID_ACTIONS` but outside
+  `NLT_MEMORY_SLIM_ACTIONS ∪ _LIFECYCLE_ACTIONS` is refused with
+  `action_not_on_nlt_memory`.
+
+Every other `_VALID_ACTIONS` entry — i.e. `_VALID_ACTIONS` minus the 7 MCP
+actions above minus the 3 name-matched CLI commands (`list`, `delete`,
+`reseed`) — is **unreachable in this release**: refused over MCP and not
+exposed by any CLI command. That is 34 actions:
+`agent_register`, `consolidate`, `contradictions`, `explain_connection`,
+`export`, `federate_publish`, `federate_register`, `federate_search`,
+`federate_status`, `federate_subscribe`, `federate_sync`, `gc`,
+`hive_propagate`, `hive_search`, `hive_status`, `import`, `index_session`,
+`maintain`, `neighbors`, `profile_info`, `profile_list`, `profile_switch`,
+`rate`, `recall_many`, `reinforce`, `reinforce_many`, `relations`,
+`safety_check`, `save_bulk`, `search_sessions`, `session_end`,
+`unconsolidate`, `validate`, `verify_integrity`. (`import`/`export` are
+distinct from the `import-file`/`export-file` CLI commands: those call
+`tapps_brain.io.import_memories` / `export_memories` against a local
+`MemoryStore`, not the `tapps_memory` dispatch table, so they do not make
+the `import`/`export` actions reachable.)
+
+For the 7 reachable MCP actions plus `list`/`save`/`get`/`recall`/`search`/
+`delete`/`reseed`/`import-file`/`export-file`/`promote-instincts` on the
+CLI, use `uv run tapps-mcp memory search --query "..."` or
+`tapps-mcp memory save`, which talk to `BrainBridge` directly without going
+through MCP.
 
 ## Timeline
 
@@ -79,5 +128,8 @@ which talk to `BrainBridge` directly without going through MCP.
 - **2026-05-22:** Per-action call telemetry enabled (TAP-1992) ✅
 - **2026-05-26:** Tool removed from some server presets during the 42-action migration (TAP-1993/1994) ✅ (historical)
 - **2026-05-26:** `tapps_core/memory/` re-export shims deleted (TAP-1995) ✅
+- **2026-06-01:** Migration marked complete — status set to REMOVED, all
+  three phases marked ✅ (TAP-1990, commit `861d269c`) ✅ (superseded by
+  TAP-3895 below)
 - **2026-06-13:** `tapps_memory` restored as a slim facade on the `nlt-memory`
   profile (TAP-3895, ADR-0016, commit `7486cc34`) ✅ — current state
