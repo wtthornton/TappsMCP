@@ -32,7 +32,11 @@ are separate tools on the same `nlt-memory` profile.
 
 ## What actually happened (Q2 2026)
 
-The original 42-action catalog was migrated toward direct CLI / BrainBridge
+The catalog held 42 actions when the migration began; TAP-1993 then added the
+two session-lifecycle actions (`session_start_capture`,
+`session_end_consolidate`), so today's `_VALID_ACTIONS` holds
+<!-- count:valid-actions -->44<!-- /count -->. Every count below is derived
+from that set. That catalog was migrated toward direct CLI / BrainBridge
 calls, per the phase table below. That migration completed. Separately,
 ADR-0016's needs-based taxonomy restored `tapps_memory` as a supported tool
 on the `nlt-memory` profile (TAP-3895) — the tool was never permanently
@@ -56,7 +60,8 @@ treat this row as the current state.
 
 ## How to call tapps_memory today
 
-Over MCP, `tapps_memory(action=..., ...)` accepts **exactly** these actions
+Over MCP, `tapps_memory(action=..., ...)` accepts **exactly** these
+<!-- count:mcp-actions -->7<!-- /count --> actions
 (`NLT_MEMORY_SLIM_ACTIONS ∪ _LIFECYCLE_ACTIONS` in `server_memory_tools.py`):
 
 <!-- mcp-actions:start -->
@@ -70,7 +75,8 @@ Over MCP, `tapps_memory(action=..., ...)` accepts **exactly** these actions
 <!-- mcp-actions:end -->
 
 Separately, the CLI (`tapps-mcp memory <command>`) offers **exactly** these
-commands (`@memory_group.command(...)` in `cli_memory.py`):
+<!-- count:cli-commands -->10<!-- /count --> commands
+(`@memory_group.command(...)` in `cli_memory.py`):
 
 <!-- cli-commands:start -->
 - `list`
@@ -88,8 +94,9 @@ commands (`@memory_group.command(...)` in `cli_memory.py`):
 These are independent implementations that call `BrainBridge` /
 `MemoryStore` directly — they do not dispatch through the `tapps_memory`
 action table above, so "CLI command X" does not imply "MCP action X is
-reachable via the CLI". Only three catalog actions happen to share a name
-with a CLI command: `list`, `delete`, `reseed`.
+reachable via the CLI". Only <!-- count:name-matched -->3<!-- /count --> catalog
+actions outside the MCP surface happen to share a name with a CLI command:
+`list`, `delete`, `reseed`.
 
 An MCP call is refused in one of two ways, both without dispatching:
 
@@ -99,10 +106,14 @@ An MCP call is refused in one of two ways, both without dispatching:
   `NLT_MEMORY_SLIM_ACTIONS ∪ _LIFECYCLE_ACTIONS` is refused with
   `action_not_on_nlt_memory`.
 
-Every other `_VALID_ACTIONS` entry — i.e. `_VALID_ACTIONS` minus the 7 MCP
-actions above minus the 3 name-matched CLI commands (`list`, `delete`,
-`reseed`) — is **unreachable in this release**: refused over MCP and not
-exposed by any CLI command. That is 34 actions:
+Every other `_VALID_ACTIONS` entry — i.e. `_VALID_ACTIONS` minus the
+<!-- count:mcp-actions -->7<!-- /count --> MCP actions above, minus the
+<!-- count:name-matched -->3<!-- /count --> name-matched CLI commands
+(`list`, `delete`, `reseed`) — is **unreachable in this release**: refused
+over MCP and not exposed by any CLI command. That is
+<!-- count:unreachable -->34<!-- /count --> actions:
+
+<!-- unreachable-actions:start -->
 `agent_register`, `consolidate`, `contradictions`, `explain_connection`,
 `export`, `federate_publish`, `federate_register`, `federate_search`,
 `federate_status`, `federate_subscribe`, `federate_sync`, `gc`,
@@ -110,17 +121,20 @@ exposed by any CLI command. That is 34 actions:
 `maintain`, `neighbors`, `profile_info`, `profile_list`, `profile_switch`,
 `rate`, `recall_many`, `reinforce`, `reinforce_many`, `relations`,
 `safety_check`, `save_bulk`, `search_sessions`, `session_end`,
-`unconsolidate`, `validate`, `verify_integrity`. (`import`/`export` are
-distinct from the `import-file`/`export-file` CLI commands: those call
-`tapps_brain.io.import_memories` / `export_memories` against a local
-`MemoryStore`, not the `tapps_memory` dispatch table, so they do not make
-the `import`/`export` actions reachable.)
+`unconsolidate`, `validate`, `verify_integrity`
+<!-- unreachable-actions:end -->
 
-For the 7 reachable MCP actions plus `list`/`save`/`get`/`recall`/`search`/
-`delete`/`reseed`/`import-file`/`export-file`/`promote-instincts` on the
-CLI, use `uv run tapps-mcp memory search --query "..."` or
-`tapps-mcp memory save`, which talk to `BrainBridge` directly without going
-through MCP.
+(`import`/`export` are distinct from the `import-file`/`export-file` CLI
+commands: those call `tapps_brain.io.import_memories` / `export_memories`
+against a local `MemoryStore`, not the `tapps_memory` dispatch table, so they
+do not make the `import`/`export` actions reachable.)
+
+So pick the surface by what you need. Over MCP, call `tapps_memory` with one
+of the entries in the mcp-actions block above. On the command line, invoke one
+of the entries in the cli-commands block above — for example
+`uv run tapps-mcp memory search --query "..."` or `tapps-mcp memory save`,
+which talk to `BrainBridge` / `MemoryStore` directly without going through
+MCP. Neither surface reaches the other's entries.
 
 ## Timeline
 

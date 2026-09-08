@@ -38,7 +38,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   (`invalid_action` vs. `action_not_on_nlt_memory`), and omitted the
   2026-06-01 TAP-1990 timeline row; `test_memory_docs_match_registration.py`
   now also derives the doc's CLI-command list from `cli_memory.py`'s
-  `@memory_group.command(...)` names.
+  `@memory_group.command(...)` names. A fourth pass found the doc's closing
+  paragraph still routed "the 7 reachable MCP actions" through
+  `uv run tapps-mcp memory ...` (`health`, `related`,
+  `session_start_capture`, `session_end_consolidate` have no CLI command),
+  left `_VALID_ACTIONS` = 44 unreconciled with the "original 42-action
+  catalog" (TAP-1993 added the two lifecycle actions), and hand-restated the
+  34 unreachable actions with nothing deriving them; every count is now a
+  `<!-- count:NAME -->` marker checked against the producer, the unreachable
+  set is a derived block, and three class guards in
+  `test_memory_docs_match_registration.py` — each with its own known-bad
+  control — now fail on any `tapps-mcp memory <word>` the click group does
+  not register, any `action=<word>` nlt-memory will not dispatch, and any
+  paragraph that offers the CLI as a route to the MCP action surface.
 
 ## [3.12.83] - 2026-09-06
 
