@@ -7,6 +7,51 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Correction — 2026-09-08
+
+- **`docs/migrations/tapps-memory-deprecation.md` and the CHANGELOG itself
+  stated stale facts about `tapps_memory`.** The migration doc's status line
+  said "REMOVED — v3.12.0" and claimed the tool was "no longer registered in
+  any server preset"; both were false as of TAP-3895 / ADR-0016 (commit
+  `7486cc34`, 2026-06-13), which restored `tapps_memory` as a supported slim
+  facade on the `nlt-memory` profile (`TOOL_PROFILE_NLT_MEMORY` in
+  `packages/tapps-mcp/src/tapps_mcp/server.py`). No prior CHANGELOG entry
+  mentioned TAP-3895. The migration doc's claim that the session-lifecycle
+  handlers are "called from `tapps_session_start` / `tapps_session_end`" was
+  also false — they are reachable only through the `tapps_memory` dispatch
+  table (`action="session_start_capture"` / `action="session_end_consolidate"`).
+  Corrected in the migration doc; the duplicate copy under
+  `packages/tapps-mcp/docs/migrations/` is now a one-line pointer to the
+  canonical root copy. A second pass found the doc still overstated the MCP
+  surface (advertised `save_bulk`/`list`/`delete`/`reinforce` as callable
+  over MCP when only `NLT_MEMORY_SLIM_ACTIONS ∪ _LIFECYCLE_ACTIONS` are),
+  mislabeled all four TAP-1990-1995 dates "2026-Q3" (they are 2026-05-22 to
+  2026-06-01), and said `tapps_doctor` strips a stray `tapps-brain` MCP
+  entry when it only reports the failed check — `tapps_upgrade` strips it.
+  `test_memory_docs_match_registration.py` now derives the doc's MCP action
+  list from `NLT_MEMORY_SLIM_ACTIONS` / `_LIFECYCLE_ACTIONS` instead of
+  restating it. A third pass found the doc still claimed `save_bulk`/`list`/
+  `delete`/`reinforce` were CLI-only (`list`/`delete` are, `save_bulk`/
+  `reinforce` have no CLI command either — unreachable), said no
+  `mcp__tapps-brain__*` MCP surface "ever" existed (it exists; the rule is
+  prohibition, not non-existence), conflated the two MCP refusal codes
+  (`invalid_action` vs. `action_not_on_nlt_memory`), and omitted the
+  2026-06-01 TAP-1990 timeline row; `test_memory_docs_match_registration.py`
+  now also derives the doc's CLI-command list from `cli_memory.py`'s
+  `@memory_group.command(...)` names. A fourth pass found the doc's closing
+  paragraph still routed "the 7 reachable MCP actions" through
+  `uv run tapps-mcp memory ...` (`health`, `related`,
+  `session_start_capture`, `session_end_consolidate` have no CLI command),
+  left `_VALID_ACTIONS` = 44 unreconciled with the "original 42-action
+  catalog" (TAP-1993 added the two lifecycle actions), and hand-restated the
+  34 unreachable actions with nothing deriving them; every count is now a
+  `<!-- count:NAME -->` marker checked against the producer, the unreachable
+  set is a derived block, and three class guards in
+  `test_memory_docs_match_registration.py` — each with its own known-bad
+  control — now fail on any `tapps-mcp memory <word>` the click group does
+  not register, any `action=<word>` nlt-memory will not dispatch, and any
+  paragraph that offers the CLI as a route to the MCP action surface.
+
 ## [3.12.83] - 2026-09-06
 
 ### Added
