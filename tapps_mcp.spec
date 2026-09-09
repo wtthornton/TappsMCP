@@ -257,6 +257,7 @@ a = Analysis(
         "tapps_mcp.distribution",
         "tapps_mcp.distribution.blue_green",
         "tapps_mcp.distribution.blue_green_proc",
+        "tapps_mcp.distribution.blue_green_profile_smoke",
         "tapps_mcp.distribution.setup_generator",
         "tapps_mcp.distribution.setup_config_gen",
         "tapps_mcp.distribution.setup_config_io",

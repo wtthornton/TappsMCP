@@ -394,6 +394,10 @@ class TestDeployUnderLockPostFlip:
         monkeypatch.setattr(zombie_mod, "reap_orphan_mcp_serves", lambda **k: {"ok": True})
         monkeypatch.setattr(fleet_mod, "fleet_any_running", lambda: False)
         monkeypatch.setattr(setup_mod, "is_tapps_mcp_dev_monorepo", lambda _checkout: False)
+        monkeypatch.setattr(
+            "tapps_mcp.distribution.blue_green_profile_smoke.pre_flip_profile_smoke",
+            lambda *a, **k: {"ok": True, "profiles": {}},
+        )
 
         _stub_doctor_json(
             monkeypatch,
@@ -435,6 +439,10 @@ class TestDeployUnderLockPostFlip:
         monkeypatch.setattr(zombie_mod, "reap_orphan_mcp_serves", lambda **k: {"ok": True})
         monkeypatch.setattr(fleet_mod, "fleet_any_running", lambda: False)
         monkeypatch.setattr(setup_mod, "is_tapps_mcp_dev_monorepo", lambda _checkout: False)
+        monkeypatch.setattr(
+            "tapps_mcp.distribution.blue_green_profile_smoke.pre_flip_profile_smoke",
+            lambda *a, **k: {"ok": True, "profiles": {}},
+        )
 
         _stub_doctor_json(
             monkeypatch,

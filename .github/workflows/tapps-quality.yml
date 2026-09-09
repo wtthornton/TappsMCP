@@ -110,6 +110,38 @@ jobs:
           done
           exit "${status}"
 
+  unit-suite:
+    # TAP-7234: 0 of the other jobs in this file run the whole tapps-mcp unit
+    # suite -- `quality` above only validates changed files. Without this job,
+    # a regression in an untouched file ships unnoticed (see PR #381, which
+    # merged 9/9 green while nlt-build could not start).
+    name: full unit suite (tapps-mcp)
+    runs-on: ubuntu-latest
+    # Measured locally: `pytest packages/tapps-mcp/tests/unit -q -n 4` = 119.05s
+    # on a 20-core box. Timeout is that x3 (~6 min) plus checkout/uv-sync/
+    # setup-python overhead observed in the sibling jobs in this file.
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@v7
+        with:
+          enable-cache: true
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+
+      - name: Install workspace
+        run: uv sync --all-packages --group dev
+
+      - name: Run full tapps-mcp unit suite
+        run: uv run pytest packages/tapps-mcp/tests/unit -q -n 4
+
   agent-contract:
     name: agent contract + skills stamp
     runs-on: ubuntu-latest
