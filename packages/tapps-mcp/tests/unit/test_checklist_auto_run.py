@@ -194,7 +194,9 @@ async def test_auto_run_scopes_validate_to_explicit_file_paths() -> None:
     ):
         await tapps_checklist(task_type="feature", auto_run=True, file_paths="a.py,b.py")
 
-    mock_vc.assert_called_once_with(file_paths="a.py,b.py", preset="standard")
+    mock_vc.assert_called_once_with(
+        file_paths="a.py,b.py", preset="standard", project_root=str(Path.cwd())
+    )
 
 
 @pytest.mark.asyncio
@@ -217,7 +219,7 @@ async def test_auto_run_defaults_to_unscoped_auto_detect() -> None:
     ):
         await tapps_checklist(task_type="feature", auto_run=True)
 
-    mock_vc.assert_called_once_with(file_paths="", preset="standard")
+    mock_vc.assert_called_once_with(file_paths="", preset="standard", project_root=str(Path.cwd()))
 
 
 @pytest.mark.asyncio

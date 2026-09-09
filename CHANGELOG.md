@@ -34,6 +34,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   quality-tool call in a worktree session was gated as if
   `tapps_session_start` had never run (TAP-7225).
 
+### Added — 2026-09-08
+
+- **CI now runs the whole `packages/tapps-mcp/tests/unit` suite on every PR.**
+  A new `unit-suite` job in `tapps-quality.yml` runs
+  `pytest packages/tapps-mcp/tests/unit -q -n 4`; previously only
+  `validate-changed (quick)` ran, scoped to touched files, so a regression in
+  an untouched file (e.g. PR #381's nlt-build startup failure) could merge
+  9/9 green.
+- **`deploy-local`'s pre-flip smoke now starts every tapps-mcp tool preset.**
+  `blue_green.pre_flip_profile_smoke` (new module
+  `distribution/blue_green_profile_smoke.py`) starts each
+  `_NLT_TAPPS_TOOL_PRESETS` profile from the built release's own binary on a
+  scratch port, runs the `initialize` -> `notifications/initialized` ->
+  `tools/list` MCP handshake (via `fleet_smoke.probe_fleet_mcp_session`, now
+  parameterized with an optional `port` override), and stops it. Wired into
+  `_deploy_under_lock` before `flip_current` -- a broken tool registration
+  (release 3.12.84's missing `TOOL_DESCRIPTIONS` entry) now fails the deploy
+  before the flip instead of surfacing at the next fleet restart.
+
 ### Correction — 2026-09-08
 
 - **`docs/migrations/tapps-memory-deprecation.md` and the CHANGELOG itself

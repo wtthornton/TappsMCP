@@ -158,13 +158,25 @@ def probe_fleet_mcp_session(
     project_root: Path | None = None,
     fleet_host: str | None = None,
     timeout: float = 15.0,
+    port: int | None = None,
 ) -> dict[str, Any]:
-    """Run initialize + initialized + tools/list against one fleet server."""
-    if server_id not in NLT_HTTP_FLEET_PORTS:
-        return {"ok": False, "server_id": server_id, "error": f"unknown server: {server_id}"}
+    """Run initialize + initialized + tools/list against one fleet server.
 
+    *port* overrides the fixed ``NLT_HTTP_FLEET_PORTS`` lookup -- used by the
+    blue/green pre-flip profile smoke (TAP-7234), which starts a scratch
+    instance of a tapps-mcp tool preset on an ephemeral port rather than
+    probing a live, fixed-port fleet server. *server_id* is then just a
+    label for the returned row, not a fleet-port key. Existing callers that
+    omit *port* are unaffected.
+    """
     root_header = resolve_http_project_root_header(project_root)
-    url = build_http_fleet_url(server_id, fleet_host=fleet_host)
+    if port is not None:
+        host = fleet_host or resolve_fleet_host()
+        url = f"http://{host}:{port}/mcp"
+    else:
+        if server_id not in NLT_HTTP_FLEET_PORTS:
+            return {"ok": False, "server_id": server_id, "error": f"unknown server: {server_id}"}
+        url = build_http_fleet_url(server_id, fleet_host=fleet_host)
 
     status, session_id, body = _post_mcp(
         url,

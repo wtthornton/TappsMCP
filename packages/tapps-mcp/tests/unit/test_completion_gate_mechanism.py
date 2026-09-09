@@ -329,6 +329,9 @@ async def test_autorun_that_raised_credits_nothing(
 
 class _Settings:
     quality_preset = "standard"
+    # TAP-7234: the auto-run scopes tapps_validate_changed to the checklist's
+    # own project_root, so the double has to carry one.
+    project_root = Path.cwd()
 
 
 # ---------------------------------------------------------------------------
@@ -346,9 +349,10 @@ def test_auto_run_defaults_to_true() -> None:
 
 @pytest.mark.asyncio
 async def test_checklist_auto_runs_without_being_asked(
-    ledger: Path, monkeypatch: pytest.MonkeyPatch
+    ledger: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """The gate path calls ``tapps_checklist()`` — no ``auto_run=True``."""
+    from tapps_core.config.settings import load_settings as _load_settings
     from tapps_mcp.server_checklist_tools import tapps_checklist
 
     calls: list[str] = []
@@ -360,6 +364,17 @@ async def test_checklist_auto_runs_without_being_asked(
 
     monkeypatch.setattr(
         "tapps_mcp.server_pipeline_tools.tapps_validate_changed", _fake_validate, raising=False
+    )
+    # TAP-7234: pin project_root to a pristine tmp_path -- the real settings
+    # singleton reads this repo's own accumulated `.tapps-mcp/` state
+    # (profile cache, nothing-to-gate marker, live server reachability),
+    # which can already demote "tapps_validate_changed" out of
+    # missing_required before this test's own auto-run ever fires, making
+    # ``calls`` empty depending on what a working dev checkout has cached.
+    isolated_settings = _load_settings(project_root=tmp_path)
+    monkeypatch.setattr(
+        "tapps_mcp.server_checklist_tools.load_settings",
+        lambda: isolated_settings,
     )
     CallTracker.begin_session("sess-a")
 

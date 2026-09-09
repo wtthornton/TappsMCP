@@ -30,6 +30,11 @@ from tapps_mcp.pipeline.upgrade_skip_tokens import (
 IDENTITY_AUTHORITY_MARKER = "very likely the same human as you"
 FAILURE_CLASSES_TABLE_MARKER = "Failure class | What catches it"
 
+# This repo's own dogfooded copy of the deployed rule -- checked in, so it
+# exists on any clone (a developer-machine scratch path like
+# ``/tmp/agent-to-agent-source.md`` does not survive to a fresh checkout).
+_SOURCE_RULE_FILE = Path(__file__).resolve().parents[4] / ".claude" / "rules" / "agent-to-agent.md"
+
 
 def _parse_frontmatter(content: str) -> dict:
     parts = content.split("---", 2)
@@ -62,8 +67,11 @@ class TestRuleContent:
         assert "Prose / claim" in body
 
     def test_body_is_byte_identical_to_source_apart_from_frontmatter(self) -> None:
-        source = Path("/tmp/agent-to-agent-source.md").read_text(encoding="utf-8")
-        expected = "---\nalwaysApply: false\n---\n" + source
+        assert _SOURCE_RULE_FILE.is_file(), (
+            f"dogfooded rule file not found at {_SOURCE_RULE_FILE} -- "
+            "cannot verify the constant matches the deployed copy"
+        )
+        expected = _SOURCE_RULE_FILE.read_text(encoding="utf-8")
         assert expected == _CLAUDE_AGENT_TO_AGENT_RULE
 
 

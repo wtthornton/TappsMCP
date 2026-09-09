@@ -269,8 +269,17 @@ async def _run_auto_run(
         try:
             from tapps_mcp.server_pipeline_tools import tapps_validate_changed
 
+            # TAP-7234: scope the auto-run to the project the checklist is
+            # evaluating. Without an explicit root, tapps_validate_changed
+            # re-derives its own from the process-wide settings singleton, so
+            # the checklist could gate one project's files while grading
+            # another's session -- and a non-zero file count from that
+            # unrelated tree suppressed the uncredited-auto-run revocation
+            # below, which is what let an evidence-free session read complete.
             vc_result = await tapps_validate_changed(
-                file_paths=file_paths, preset=settings.quality_preset
+                file_paths=file_paths,
+                preset=settings.quality_preset,
+                project_root=str(settings.project_root),
             )
             vc_data = vc_result.get("data", {})
             files_validated = int(vc_data.get("files_validated", 0) or 0)

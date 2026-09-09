@@ -244,8 +244,17 @@ async def test_checklist_json_next_steps() -> None:
         ],
     )
 
+    # TAP-7234: auto_run=False -- this is a format test, not an auto-run
+    # test. Left at its True default, "tapps_score_file"/"tapps_quality_gate"
+    # being missing_required (both auto-runnable) makes tapps_checklist call
+    # the REAL tapps_validate_changed against this repo's live git state,
+    # then rebuild missing_required_hints from the real TOOL_REASONS table
+    # instead of the hints this test constructed -- an accidental dependency
+    # on the ambient git diff (empty on a shallow CI checkout, non-empty on
+    # a dev checkout with local branch history) that this test never meant
+    # to exercise.
     with patch(_EVALUATE_TARGET, return_value=result):
-        resp = await tapps_checklist("feature", output_format="json")
+        resp = await tapps_checklist("feature", output_format="json", auto_run=False)
 
     assert resp["success"] is True
     data = resp["data"]
@@ -303,8 +312,10 @@ async def test_checklist_compact_next_steps_and_full() -> None:
         ],
     )
 
+    # TAP-7234: auto_run=False -- see test_checklist_json_next_steps for why
+    # (real auto-run against live git state would rebuild these hints).
     with patch(_EVALUATE_TARGET, return_value=result):
-        resp = await tapps_checklist("feature", output_format="compact")
+        resp = await tapps_checklist("feature", output_format="compact", auto_run=False)
 
     assert resp["success"] is True
     data = resp["data"]

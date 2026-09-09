@@ -23,9 +23,14 @@ from tapps_mcp.pipeline.platform_skill_orchestration import (
 
 _GUARDRAILS = COMPANIONS["references/guardrails-and-contracts.md"]
 
-_NLT_ORCHESTRATOR_REFERENCE_TEMPLATE = Path(
-    "/home/wtthornton/code/nlt-orchestrator/.claude/skills/orchestration-prompt"
-    "/assets/prompt-template.md"
+# A pinned, vendored snapshot of nlt-orchestrator's deployed template --
+# never the live sibling checkout, which only exists on one developer's
+# machine and not on a fresh clone or the CI runner. It is deliberately a
+# frozen reference (TAP-6740 called it "read-only, never edited from this
+# worktree"): re-vendor it with a fresh `cp` from the sibling repo only when
+# intentionally re-pinning the baseline, not as part of routine test fixes.
+_NLT_ORCHESTRATOR_REFERENCE_TEMPLATE = (
+    Path(__file__).resolve().parent / "fixtures" / "nlt_orchestrator_prompt_template_reference.md"
 )
 
 

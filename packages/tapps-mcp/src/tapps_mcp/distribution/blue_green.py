@@ -499,6 +499,14 @@ def _deploy_under_lock(
         report["ok"] = False
         return report
 
+    from tapps_mcp.distribution.blue_green_profile_smoke import pre_flip_profile_smoke
+
+    profile_smoke = pre_flip_profile_smoke(release, project_root=checkout)
+    report["pre_flip_profile_smoke"] = profile_smoke
+    if not profile_smoke.get("ok"):
+        report["ok"] = False
+        return report
+
     # Captured before the flip: this is the rollback target an operator would
     # reach for. Once flip_current runs, current_release_path() resolves to
     # the *new* release, so this is the only chance to know what "outgoing"

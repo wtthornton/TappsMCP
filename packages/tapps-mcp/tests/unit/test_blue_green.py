@@ -301,6 +301,10 @@ def _run_deploy(
         "tapps_mcp.distribution.mcp_zombie_reap.reap_orphan_mcp_serves",
         lambda: {"ok": True, "reaped": []},
     )
+    monkeypatch.setattr(
+        "tapps_mcp.distribution.blue_green_profile_smoke.pre_flip_profile_smoke",
+        lambda *a, **k: {"ok": True, "profiles": {}},
+    )
     monkeypatch.setattr("tapps_mcp.distribution.fleet_control.fleet_any_running", lambda: False)
     monkeypatch.setattr("tapps_mcp.distribution.fleet_control.reap_superseded_fleet", reap_fn)
     monkeypatch.setattr(
@@ -490,6 +494,10 @@ class TestDryRunPreviewMatchesPostFlipGC:
         monkeypatch.setattr(
             "tapps_mcp.distribution.setup_generator.is_tapps_mcp_dev_monorepo",
             lambda _checkout: False,
+        )
+        monkeypatch.setattr(
+            "tapps_mcp.distribution.blue_green_profile_smoke.pre_flip_profile_smoke",
+            lambda *a, **k: {"ok": True, "profiles": {}},
         )
         real_report = bg.deploy_blue_green(checkout, skip_gate=True, keep_releases=3)
         assert real_report["ok"] is True
