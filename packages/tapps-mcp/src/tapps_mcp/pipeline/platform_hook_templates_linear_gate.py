@@ -51,6 +51,40 @@ if (-not $root) {
 }"""
 
 # ---------------------------------------------------------------------------
+# Session-start gate root resolution (TAP-7225) — deliberately NOT
+# LEDGER_ROOT_RESOLVE_* above.
+# ---------------------------------------------------------------------------
+# The session-start sentinel is per-WORKTREE state (the POST hook writes it
+# at ${CLAUDE_PROJECT_DIR:-$PWD}, i.e. this checkout's own root), unlike the
+# Linear bypass/violation ledgers LEDGER_ROOT_RESOLVE_* intentionally unifies
+# across a repo's worktrees. Falling back to --git-common-dir here (as the
+# PRE gate did before TAP-7225) resolves to the PRIMARY checkout's .git in
+# any linked worktree, so the PRE gate looked for a sentinel the POST hook
+# never wrote there, and the gate fired every time in a worktree session.
+# --show-toplevel resolves to THIS worktree's own top instead; a .git-less
+# scratch dir has no toplevel, so the final fallback to $PWD is load-bearing.
+SESSION_START_ROOT_RESOLVE_BASH = """\
+ROOT="${CLAUDE_PROJECT_DIR:-}"
+if [ -z "$ROOT" ]; then
+  ROOT="$(git rev-parse --show-toplevel 2>/dev/null || true)"
+  if [ -z "$ROOT" ]; then
+    ROOT="$PWD"
+  fi
+fi"""
+
+SESSION_START_ROOT_RESOLVE_PS = """\
+$root = $env:CLAUDE_PROJECT_DIR
+if (-not $root) {
+    $topLevel = $null
+    try { $topLevel = (git rev-parse --show-toplevel 2>$null) } catch {}
+    if ($LASTEXITCODE -eq 0 -and $topLevel) {
+        $root = $topLevel
+    } else {
+        $root = $PWD.Path
+    }
+}"""
+
+# ---------------------------------------------------------------------------
 # Linear cache-first read gate (TAP-1224) — opt-in via linear_enforce_cache_gate
 # ---------------------------------------------------------------------------
 # Two cooperating hooks gate raw mcp__plugin_linear_linear__list_issues calls
@@ -858,7 +892,7 @@ case "$TOOL" in
 esac
 [ "$MODE" = "off" ] && exit 0
 """
-    + LEDGER_ROOT_RESOLVE_BASH
+    + SESSION_START_ROOT_RESOLVE_BASH
     + """
 if [ "${TAPPS_SKIP_SESSION_START_GATE:-0}" = "1" ]; then
   mkdir -p "$ROOT/.tapps-mcp" 2>/dev/null
@@ -977,7 +1011,7 @@ if ($tool -match 'tapps_(session_start|server_info|doctor|usage|stats|memory)$')
 if ($tool -notmatch '^mcp__(nlt-build|nlt-memory|nlt-setup|nlt-code-quality|nlt-platform-admin|tapps-mcp)__') { exit 0 }
 if ($mode -eq 'off') { exit 0 }
 """
-    + LEDGER_ROOT_RESOLVE_PS
+    + SESSION_START_ROOT_RESOLVE_PS
     + """
 $dir = Join-Path $root '.tapps-mcp'
 if ($env:TAPPS_SKIP_SESSION_START_GATE -eq '1') {

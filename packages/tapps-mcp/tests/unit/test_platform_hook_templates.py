@@ -41,7 +41,10 @@ from tapps_mcp.pipeline.platform_hook_templates_linear_gate import (
     LINEAR_CACHE_GATE_SCRIPTS_PS,
     SESSION_START_GATE_SCRIPTS,
     SESSION_START_GATE_SCRIPTS_PS,
+    SESSION_START_ROOT_RESOLVE_BASH,
+    SESSION_START_ROOT_RESOLVE_PS,
 )
+
 
 @pytest.fixture(autouse=True)
 def _require_posix() -> None:
@@ -188,22 +191,38 @@ def test_ledger_root_resolution_matches_git_hooks_shape() -> None:
 # Every bash hook that writes to .bypass-log.jsonl must resolve ROOT through
 # the shared LEDGER_ROOT_RESOLVE_BASH snippet — a single source of truth so
 # no copy can silently drift back to the naive ${CLAUDE_PROJECT_DIR:-$PWD}.
+#
+# tapps-pre-session-start-gate.sh/.ps1 are NOT in this sweep (TAP-7225): that
+# hook's $ROOT also gates a per-WORKTREE sentinel (.session-start-done-<SID>,
+# written by the POST hook under ${CLAUDE_PROJECT_DIR:-$PWD}), unlike the
+# Linear ledgers LEDGER_ROOT_RESOLVE_* deliberately keeps unified across a
+# repo's worktrees (TAP-6928). Using the shared --git-common-dir resolution
+# here resolved to the PRIMARY checkout in a linked worktree, so the PRE gate
+# could never find the sentinel the POST hook wrote in the worktree, and the
+# gate fired on every quality-tool call in a worktree session. See
+# test_session_start_gate_worktree.py for that hook's own root-resolution
+# coverage (SESSION_START_ROOT_RESOLVE_BASH / _PS).
 BASH_LEDGER_SCRIPTS: dict[str, str] = {
     "tapps-pre-bash.sh": CLAUDE_HOOK_SCRIPTS["tapps-pre-bash.sh"],
     "tapps-pre-linear-write.sh": LINEAR_GATE_SCRIPTS["tapps-pre-linear-write.sh"],
     "tapps-pre-linear-list.sh": LINEAR_CACHE_GATE_SCRIPTS["tapps-pre-linear-list.sh"],
-    "tapps-pre-session-start-gate.sh": SESSION_START_GATE_SCRIPTS[
-        "tapps-pre-session-start-gate.sh"
-    ],
 }
 
 PS_LEDGER_SCRIPTS: dict[str, str] = {
     "tapps-pre-linear-write.ps1": LINEAR_GATE_SCRIPTS_PS["tapps-pre-linear-write.ps1"],
     "tapps-pre-linear-list.ps1": LINEAR_CACHE_GATE_SCRIPTS_PS["tapps-pre-linear-list.ps1"],
-    "tapps-pre-session-start-gate.ps1": SESSION_START_GATE_SCRIPTS_PS[
-        "tapps-pre-session-start-gate.ps1"
-    ],
 }
+
+
+def test_session_start_gate_uses_its_own_root_resolution_not_the_shared_ledger() -> None:
+    """TAP-7225: the session-start gate deliberately does NOT share
+    LEDGER_ROOT_RESOLVE_* (see the comment on BASH_LEDGER_SCRIPTS above)."""
+    bash_body = SESSION_START_GATE_SCRIPTS["tapps-pre-session-start-gate.sh"]
+    ps_body = SESSION_START_GATE_SCRIPTS_PS["tapps-pre-session-start-gate.ps1"]
+    assert SESSION_START_ROOT_RESOLVE_BASH in bash_body
+    assert LEDGER_ROOT_RESOLVE_BASH not in bash_body
+    assert SESSION_START_ROOT_RESOLVE_PS in ps_body
+    assert LEDGER_ROOT_RESOLVE_PS not in ps_body
 
 
 @pytest.mark.parametrize("name", sorted(BASH_LEDGER_SCRIPTS))

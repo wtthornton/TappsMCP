@@ -487,3 +487,86 @@ def check_mcp_config_unresolved_project_root(project_root: Path) -> CheckResult:
         "Run `tapps-mcp upgrade` to rewrite to an absolute project root "
         "(self-heals per TAP-2199). Found:\n  " + "\n  ".join(broken),
     )
+
+
+def _http_fleet_root_headers_in_mcp_json(
+    config_path: Path,
+    servers_key: str,
+) -> list[tuple[str, str]]:
+    """Return ``[(server_name, X-Tapps-Project-Root value), ...]`` for every
+    HTTP fleet entry in *config_path* that carries the header.
+
+    Unlike :func:`_unresolved_project_root_in_mcp_json` (which only flags
+    *unexpanded* ``${...}`` templates), this reads the resolved literal value
+    ``resolve_http_project_root_header`` baked in at generation time
+    (TAP-2199 spike: the value never expands under ``claude -p`` — see
+    ``nlt_http_fleet.py:172-176``), so it can be compared against the root
+    the doctor is actually running from.
+    """
+    if not config_path.exists():
+        return []
+    try:
+        data = json.loads(config_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return []
+    if not isinstance(data, dict):
+        return []
+    servers = data.get(servers_key)
+    if not isinstance(servers, dict):
+        return []
+    from tapps_core.http.request_context import PROJECT_ROOT_HEADER
+    from tapps_mcp.distribution.nlt_http_fleet import is_remote_mcp_entry
+
+    found: list[tuple[str, str]] = []
+    for server_name, entry in servers.items():
+        if not isinstance(entry, dict) or not is_remote_mcp_entry(entry):
+            continue
+        headers = entry.get("headers")
+        if not isinstance(headers, dict):
+            continue
+        root = headers.get(PROJECT_ROOT_HEADER)
+        if isinstance(root, str) and root.strip() and "${" not in root:
+            found.append((str(server_name), root))
+    return found
+
+
+@consumer_staleness
+def check_mcp_project_root_mismatch(project_root: Path) -> CheckResult:
+    """TAP-7225: flag a generated ``X-Tapps-Project-Root`` header that names a
+    different checkout than the one the doctor is invoked from.
+
+    A linked git worktree that inherits its ``.mcp.json`` from the primary
+    checkout carries the primary's literal, resolved root (baked in at
+    generation time -- ``${CLAUDE_PROJECT_DIR}`` reaches the server
+    unexpanded under ``claude -p``, per the TAP-7225 spike). Every
+    ``tapps_*`` call the worktree makes then writes/reads against the wrong
+    project. This is a **consumer** finding (``category="consumer-staleness"``):
+    a wrong root in one consumer must not gate a fleet-wide release deploy
+    (``blue_green.smoke_test_release`` only gates on ``release-health``).
+    Fix: ``tapps-mcp fleet repair-root --project-root <this worktree>``.
+    """
+    resolved_root = project_root.resolve()
+    candidates: list[tuple[Path, str, str]] = [
+        (project_root / ".mcp.json", "mcpServers", "Claude Code (project)"),
+        (project_root / ".cursor" / "mcp.json", "mcpServers", "Cursor"),
+        (project_root / ".vscode" / "mcp.json", "servers", "VS Code"),
+    ]
+    mismatched: list[str] = []
+    for path, servers_key, label in candidates:
+        for server_name, header_root in _http_fleet_root_headers_in_mcp_json(path, servers_key):
+            if Path(header_root).resolve() != resolved_root:
+                mismatched.append(f"{label} [{server_name}] header={header_root!r}")
+    if not mismatched:
+        return CheckResult(
+            "MCP project root mismatch",
+            True,
+            f"every X-Tapps-Project-Root header resolves to {resolved_root}",
+        )
+    return CheckResult(
+        "MCP project root mismatch",
+        False,
+        f"mcp_project_root_mismatch: {len(mismatched)} header(s) name a different "
+        f"checkout than {resolved_root}",
+        "Run `tapps-mcp fleet repair-root --project-root "
+        f"{resolved_root}` to rewrite the header(s). Found:\n  " + "\n  ".join(mismatched),
+    )

@@ -151,6 +151,7 @@ from tapps_mcp.distribution.doctor_mcp import (
     check_json_config,
     check_mcp_client_config,
     check_mcp_config_unresolved_project_root,
+    check_mcp_project_root_mismatch,
     check_vscode_config,
     strip_brain_mcp_entries,
 )
@@ -289,6 +290,7 @@ __all__ = [
     "check_mcp_client_config",
     "check_mcp_config_unresolved_project_root",
     "check_mcp_operator_secrets",
+    "check_mcp_project_root_mismatch",
     "check_mcp_tool_budget",
     "check_mcp_transport_drift",
     "check_memory_cli_http_mode",

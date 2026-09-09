@@ -242,6 +242,43 @@ def fleet_install_systemd() -> None:
     click.echo("  systemctl --user enable --now tapps-mcp-fleet-watch.timer")
 
 
+@fleet_group.command("repair-root")
+@click.option(
+    "--project-root",
+    required=True,
+    help="Regenerate the HTTP fleet MCP wiring for exactly this root (e.g. a worktree).",
+)
+def fleet_repair_root(project_root: str) -> None:
+    """Regenerate one root's Cursor/VS Code/Claude MCP fleet wiring (no discovery scan).
+
+    Unlike ``repair-consumers``, this targets *project_root* directly instead of
+    filtering it through :func:`discover_http_fleet_consumers` (which only
+    admits roots already declaring the HTTP fleet) -- the case a linked
+    worktree with a stale ``.mcp.json`` inherited from the primary checkout
+    needs (TAP-7225).
+    """
+    import subprocess
+
+    from tapps_mcp.distribution.fleet_consumers import repair_consumer
+
+    root = Path(project_root).expanduser().resolve()
+    probe = subprocess.run(
+        ["git", "-C", str(root), "rev-parse", "--show-toplevel"],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    if probe.returncode != 0:
+        click.echo(click.style(f"{root} is not a git work tree; refusing to write a header for it.", fg="red"))
+        raise SystemExit(1)
+
+    result = repair_consumer(root)
+    if result["changes"]:
+        click.echo(click.style(f"{result['project']}: {', '.join(result['changes'])}", fg="green"))
+    else:
+        click.echo(f"{result['project']}: unchanged")
+
+
 @fleet_group.command("audit-consumers")
 @click.option(
     "--scan-parent",

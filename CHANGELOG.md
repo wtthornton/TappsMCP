@@ -7,6 +7,33 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **`tapps-mcp fleet repair-root --project-root <path>`** rewrites the six
+  nlt-* HTTP fleet entries in one root's `.mcp.json`/`.cursor/mcp.json`/
+  `.vscode/mcp.json` to that root's own `X-Tapps-Project-Root`, without the
+  `repair-consumers` discovery filter (which only admits roots already
+  declaring the HTTP fleet). Refuses a root that is not a git work tree.
+  Fixes a linked worktree inheriting the primary checkout's literal, resolved
+  root header (`${CLAUDE_PROJECT_DIR}` reaches the MCP server unexpanded
+  under `claude -p`, so the header is baked in at generation time — TAP-7225).
+- **`tapps-mcp doctor` reports `mcp_project_root_mismatch`** when any
+  `X-Tapps-Project-Root` header in the on-disk MCP configs resolves to a
+  different checkout than the one doctor is invoked from. Category
+  `consumer-staleness` (a wrong root in one consumer must not gate a
+  fleet-wide release deploy) — TAP-7225.
+
+### Fixed
+
+- **The PRE session-start gate hook (`tapps-pre-session-start-gate.sh`)
+  resolves `$ROOT` to the linked worktree's own top** (`git rev-parse
+  --show-toplevel`), matching the POST hook's `${CLAUDE_PROJECT_DIR:-$PWD}`.
+  Previously it used `git rev-parse --git-common-dir`, which resolves to the
+  PRIMARY checkout's `.git` in any linked worktree, so the PRE gate could
+  never find the per-worktree sentinel the POST hook wrote — every
+  quality-tool call in a worktree session was gated as if
+  `tapps_session_start` had never run (TAP-7225).
+
 ### Correction — 2026-09-08
 
 - **`docs/migrations/tapps-memory-deprecation.md` and the CHANGELOG itself
