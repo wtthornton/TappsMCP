@@ -137,7 +137,14 @@ def _resolve_task_tool_map(
     if engagement_level is None:
         from tapps_core.config.settings import load_settings
 
-        engagement_level = load_settings().llm_engagement_level
+        # TAP-7234: resolve the level from the *evaluated* project, the same
+        # root the policy maps above were merged for. A bare ``load_settings()``
+        # returns the process-wide singleton derived from ``TAPPS_MCP_PROJECT_ROOT``
+        # / CWD, so the checklist would grade project A's calls against project
+        # B's required-tool matrix -- wrong for an HTTP fleet request bound to a
+        # caller root, and the reason this evaluation was never a pure function
+        # of its own arguments.
+        engagement_level = load_settings(project_root).llm_engagement_level
     if engagement_level not in merged:
         engagement_level = "medium"
     task_maps = merged[engagement_level]

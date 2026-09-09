@@ -329,6 +329,9 @@ async def test_autorun_that_raised_credits_nothing(
 
 class _Settings:
     quality_preset = "standard"
+    # TAP-7234: the auto-run scopes tapps_validate_changed to the checklist's
+    # own project_root, so the double has to carry one.
+    project_root = Path.cwd()
 
 
 # ---------------------------------------------------------------------------
