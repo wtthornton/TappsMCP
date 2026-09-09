@@ -44,6 +44,17 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
+# TAP-7234: configure structlog as this conftest module is imported, not
+# only from a fixture. pytest imports every root conftest.py before it
+# imports (collects) any test module, so this is the earliest point in the
+# whole run — closing the (unlikely but possible) window where a test
+# module's own import-time code makes the first-ever real call on a
+# ``structlog.get_logger(__name__)`` proxy (e.g.
+# ``tapps_mcp.tools.handoff_guard._logger``) before any fixture has run.
+from tapps_core.common.logging import setup_logging as _setup_logging_for_tests
+
+_setup_logging_for_tests()
+
 # ---------------------------------------------------------------------------
 # In-memory PrivateBackend for unit tests (tapps-brain v3 / ADR-007)
 # ---------------------------------------------------------------------------
@@ -347,6 +358,45 @@ def _make_test_bridge(store: Any) -> Any:
         close=lambda: None,
     )
     return BrainBridge(fake_brain)
+
+
+@pytest.fixture(autouse=True)
+def _refresh_root_logger_stream_per_test() -> Iterator[None]:
+    """Re-point the root logger's ``StreamHandler`` at the *current* ``sys.stderr``
+    before every test (TAP-7234's root cause, not just its symptom).
+
+    ``setup_logging()`` builds ``logging.StreamHandler(sys.stderr)`` once and
+    stores that ``sys.stderr`` object on the handler. Structlog's own
+    configuration (``cache_logger_on_first_use``, ``logger_factory``) was never
+    the problem — a debug capture at the failing call site showed both correct
+    on every seed. What breaks is downstream of structlog entirely: pytest
+    creates a fresh stdout/stderr capture object per test and closes the
+    previous one, so a handler stream captured during an earlier test (or at
+    collection/conftest-import time) goes stale. The next log emission then
+    raises ``ValueError: I/O operation on closed file`` inside
+    ``StreamHandler.emit``, and stdlib ``logging``'s own error fallback
+    (``Handler.handleError``) prints the raw traceback *and* the unformatted
+    event dict straight to whatever ``sys.stderr`` currently resolves to —
+    which, mid-``CliRunner.invoke()``, is Click's captured stream. That is
+    exactly the raw-dict-in-stdout leak
+    ``test_cli_handoff.py::TestConflictAdvisoryOnTheCliSurface`` catches, and
+    it reproduces on any seed where an earlier test's real log call — on
+    *any* module's logger, not just ``handoff_guard``'s — cached the handler
+    against a capture buffer this test's ``CliRunner`` invocation didn't own.
+
+    Re-running ``setup_logging()`` here replaces ``root_logger``'s handler
+    (and its captured stream) with one bound to this test's own live
+    ``sys.stderr``, every time, so no test can ever observe another test's
+    now-closed capture buffer. ``structlog``'s ``BoundLoggerLazyProxy``
+    caching is untouched by this — callers still resolve through the same
+    stdlib ``Logger.handle()`` -> ``root_logger.handlers`` lookup on every
+    call, which is why refreshing the handler here fixes emissions from
+    proxies that cached *before* this fixture ever ran.
+    """
+    from tapps_core.common.logging import setup_logging
+
+    setup_logging()
+    yield
 
 
 @pytest.fixture(autouse=True)
