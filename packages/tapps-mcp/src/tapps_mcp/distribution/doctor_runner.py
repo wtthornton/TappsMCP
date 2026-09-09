@@ -82,6 +82,7 @@ from tapps_mcp.distribution.doctor_mcp import (
     check_cursor_config,
     check_mcp_client_config,
     check_mcp_config_unresolved_project_root,
+    check_mcp_project_root_mismatch,
     check_vscode_config,
 )
 from tapps_mcp.distribution.doctor_memory import (
@@ -208,6 +209,10 @@ def _check_specs(root: Path, *, quick: bool = False) -> list[tuple[str, Callable
         (
             "MCP unresolved project_root",
             lambda: check_mcp_config_unresolved_project_root(root),
+        ),
+        (
+            "MCP project root mismatch",
+            lambda: check_mcp_project_root_mismatch(root),
         ),
         ("Brain MCP entry", lambda: check_brain_mcp_entry(root)),
         ("Scope recommendation", lambda: check_scope_recommendation(root)),
