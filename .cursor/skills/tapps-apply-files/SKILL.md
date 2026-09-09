@@ -6,7 +6,7 @@ description: >-
   because the server runs in Docker and cannot write files directly.
 mcp_tools: []
 ---
-<!-- BEGIN: tapps-skill tapps-apply-files v3.12.83 -->
+<!-- BEGIN: tapps-skill tapps-apply-files v3.12.86 -->
 <!-- upgrade-policy: managed-block. Edits made inside this BEGIN/END block are regenerated and lost on the next tapps_upgrade — put project-specific customizations below the END marker instead, where they survive every upgrade untouched. -->
 
 When a TappsMCP or DocsMCP tool returns `content_return: true` with a `file_manifest`,

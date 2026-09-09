@@ -10,7 +10,7 @@ mcp_tools:
   - tapps_checklist
   - tapps_session_start
 ---
-<!-- BEGIN: tapps-skill tapps-review-pipeline v3.12.83 -->
+<!-- BEGIN: tapps-skill tapps-review-pipeline v3.12.86 -->
 <!-- upgrade-policy: managed-block. Edits made inside this BEGIN/END block are regenerated and lost on the next tapps_upgrade — put project-specific customizations below the END marker instead, where they survive every upgrade untouched. -->
 
 Run a parallel review-fix-validate pipeline on changed Python files:

@@ -11,7 +11,7 @@ allowed-tools: >-
   mcp__nlt-build__tapps_dependency_scan
 argument-hint: "[file-path]"
 ---
-<!-- BEGIN: tapps-skill tapps-security v3.12.83 -->
+<!-- BEGIN: tapps-skill tapps-security v3.12.86 -->
 <!-- upgrade-policy: managed-block. Edits made inside this BEGIN/END block are regenerated and lost on the next tapps_upgrade — put project-specific customizations below the END marker instead, where they survive every upgrade untouched. -->
 
 Run a comprehensive security audit using TappsMCP:
