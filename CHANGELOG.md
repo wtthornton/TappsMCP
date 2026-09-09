@@ -7,52 +7,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-### Added
-
-- **`tapps-mcp fleet repair-root --project-root <path>`** rewrites the six
-  nlt-* HTTP fleet entries in one root's `.mcp.json`/`.cursor/mcp.json`/
-  `.vscode/mcp.json` to that root's own `X-Tapps-Project-Root`, without the
-  `repair-consumers` discovery filter (which only admits roots already
-  declaring the HTTP fleet). Refuses a root that is not a git work tree.
-  Fixes a linked worktree inheriting the primary checkout's literal, resolved
-  root header (`${CLAUDE_PROJECT_DIR}` reaches the MCP server unexpanded
-  under `claude -p`, so the header is baked in at generation time — TAP-7225).
-- **`tapps-mcp doctor` reports `mcp_project_root_mismatch`** when any
-  `X-Tapps-Project-Root` header in the on-disk MCP configs resolves to a
-  different checkout than the one doctor is invoked from. Category
-  `consumer-staleness` (a wrong root in one consumer must not gate a
-  fleet-wide release deploy) — TAP-7225.
-
-### Fixed
-
-- **The PRE session-start gate hook (`tapps-pre-session-start-gate.sh`)
-  resolves `$ROOT` to the linked worktree's own top** (`git rev-parse
-  --show-toplevel`), matching the POST hook's `${CLAUDE_PROJECT_DIR:-$PWD}`.
-  Previously it used `git rev-parse --git-common-dir`, which resolves to the
-  PRIMARY checkout's `.git` in any linked worktree, so the PRE gate could
-  never find the per-worktree sentinel the POST hook wrote — every
-  quality-tool call in a worktree session was gated as if
-  `tapps_session_start` had never run (TAP-7225).
-
-### Added — 2026-09-08
-
-- **CI now runs the whole `packages/tapps-mcp/tests/unit` suite on every PR.**
-  A new `unit-suite` job in `tapps-quality.yml` runs
-  `pytest packages/tapps-mcp/tests/unit -q -n 4`; previously only
-  `validate-changed (quick)` ran, scoped to touched files, so a regression in
-  an untouched file (e.g. PR #381's nlt-build startup failure) could merge
-  9/9 green.
-- **`deploy-local`'s pre-flip smoke now starts every tapps-mcp tool preset.**
-  `blue_green.pre_flip_profile_smoke` (new module
-  `distribution/blue_green_profile_smoke.py`) starts each
-  `_NLT_TAPPS_TOOL_PRESETS` profile from the built release's own binary on a
-  scratch port, runs the `initialize` -> `notifications/initialized` ->
-  `tools/list` MCP handshake (via `fleet_smoke.probe_fleet_mcp_session`, now
-  parameterized with an optional `port` override), and stops it. Wired into
-  `_deploy_under_lock` before `flip_current` -- a broken tool registration
-  (release 3.12.84's missing `TOOL_DESCRIPTIONS` entry) now fails the deploy
-  before the flip instead of surfacing at the next fleet restart.
-
 ### Correction — 2026-09-08
 
 - **`docs/migrations/tapps-memory-deprecation.md` and the CHANGELOG itself
@@ -97,6 +51,58 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   control — now fail on any `tapps-mcp memory <word>` the click group does
   not register, any `action=<word>` nlt-memory will not dispatch, and any
   paragraph that offers the CLI as a route to the MCP action surface.
+
+## [3.12.86] - 2026-09-09
+
+> First release whose deploy is gated by the pre-flip profile smoke it ships
+> (below): `deploy-local` starts every tool preset from the release's own
+> binary before `current` flips, so this version's deploy report carries a
+> `pre_flip_profile_smoke` block.
+
+### Added
+
+- **`tapps-mcp fleet repair-root --project-root <path>`** rewrites the six
+  nlt-* HTTP fleet entries in one root's `.mcp.json`/`.cursor/mcp.json`/
+  `.vscode/mcp.json` to that root's own `X-Tapps-Project-Root`, without the
+  `repair-consumers` discovery filter (which only admits roots already
+  declaring the HTTP fleet). Refuses a root that is not a git work tree.
+  Fixes a linked worktree inheriting the primary checkout's literal, resolved
+  root header (`${CLAUDE_PROJECT_DIR}` reaches the MCP server unexpanded
+  under `claude -p`, so the header is baked in at generation time — TAP-7225)
+  (#386, `c71727d6`).
+- **`tapps-mcp doctor` reports `mcp_project_root_mismatch`** when any
+  `X-Tapps-Project-Root` header in the on-disk MCP configs resolves to a
+  different checkout than the one doctor is invoked from. Category
+  `consumer-staleness` (a wrong root in one consumer must not gate a
+  fleet-wide release deploy) — TAP-7225 (#386, `c71727d6`).
+- **CI now runs the whole `packages/tapps-mcp/tests/unit` suite on every PR.**
+  A new `unit-suite` job in `tapps-quality.yml` runs
+  `pytest packages/tapps-mcp/tests/unit -q -n 4`; previously only
+  `validate-changed (quick)` ran, scoped to touched files, so a regression in
+  an untouched file (e.g. PR #381's nlt-build startup failure) could merge
+  9/9 green (#387, `0fd395cd`).
+- **`deploy-local`'s pre-flip smoke now starts every tapps-mcp tool preset.**
+  `blue_green.pre_flip_profile_smoke` (new module
+  `distribution/blue_green_profile_smoke.py`) starts each
+  `_NLT_TAPPS_TOOL_PRESETS` profile from the built release's own binary on a
+  scratch port, runs the `initialize` -> `notifications/initialized` ->
+  `tools/list` MCP handshake (via `fleet_smoke.probe_fleet_mcp_session`, now
+  parameterized with an optional `port` override), and stops it. Wired into
+  `_deploy_under_lock` before `flip_current` -- a broken tool registration
+  (release 3.12.84's missing `TOOL_DESCRIPTIONS` entry) now fails the deploy
+  before the flip instead of surfacing at the next fleet restart (#387,
+  `0fd395cd`).
+
+### Fixed
+
+- **The PRE session-start gate hook (`tapps-pre-session-start-gate.sh`)
+  resolves `$ROOT` to the linked worktree's own top** (`git rev-parse
+  --show-toplevel`), matching the POST hook's `${CLAUDE_PROJECT_DIR:-$PWD}`.
+  Previously it used `git rev-parse --git-common-dir`, which resolves to the
+  PRIMARY checkout's `.git` in any linked worktree, so the PRE gate could
+  never find the per-worktree sentinel the POST hook wrote — every
+  quality-tool call in a worktree session was gated as if
+  `tapps_session_start` had never run (TAP-7225) (#386, `c71727d6`).
 
 ## [3.12.85] - 2026-09-08
 
