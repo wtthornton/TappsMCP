@@ -939,15 +939,15 @@ def _fire_security_scan_events(
 # ---------------------------------------------------------------------------
 
 
-def _register_tool_modules() -> None:
-    """Import and register tools from extracted server modules.
+def register_profile(
+    mcp_instance: FastMCP, allowed_tools: frozenset[str], *, tool_preset: str | None = ""
+) -> None:
+    """Register every extracted module's tools onto *mcp_instance* for *allowed_tools*.
 
-    Loads settings, resolves allowed_tools (Epic 79.1), then calls each
-    module's ``register(mcp, allowed_tools)``.
+    Pure registration path shared by the real server bootstrap
+    (``_register_tool_modules``) and profile-registration tests: no settings
+    load, no side effects beyond mutating *mcp_instance*'s tool manager.
     """
-    settings = load_settings()
-    allowed_tools = _resolve_allowed_tools(settings)
-
     from tapps_mcp import (
         server_analysis_tools,
         server_checklist_tools,
@@ -965,26 +965,37 @@ def _register_tool_modules() -> None:
         server_system_tools,
     )
 
-    server_scoring_tools.register(mcp, allowed_tools)
-    server_pipeline_tools.register(mcp, allowed_tools, tool_preset=settings.tool_preset)
-    server_metrics_tools.register(mcp, allowed_tools)
-    server_memory_tools.register(mcp, allowed_tools)
-    server_analysis_tools.register(mcp, allowed_tools)
-    server_comprehension_tools.register(mcp, allowed_tools)
-    server_linear_tools.register(mcp, allowed_tools)
-    server_release_tools.register(mcp, allowed_tools)
-    server_lookup_tools.register(mcp, allowed_tools)
-    server_research_tools.register(mcp, allowed_tools)
-    server_system_tools.register(mcp, allowed_tools)
-    server_checklist_tools.register(mcp, allowed_tools)
-    server_skill_tools.register(mcp, allowed_tools)
+    server_scoring_tools.register(mcp_instance, allowed_tools)
+    server_pipeline_tools.register(mcp_instance, allowed_tools, tool_preset=tool_preset)
+    server_metrics_tools.register(mcp_instance, allowed_tools)
+    server_memory_tools.register(mcp_instance, allowed_tools)
+    server_analysis_tools.register(mcp_instance, allowed_tools)
+    server_comprehension_tools.register(mcp_instance, allowed_tools)
+    server_linear_tools.register(mcp_instance, allowed_tools)
+    server_release_tools.register(mcp_instance, allowed_tools)
+    server_lookup_tools.register(mcp_instance, allowed_tools)
+    server_research_tools.register(mcp_instance, allowed_tools)
+    server_system_tools.register(mcp_instance, allowed_tools)
+    server_checklist_tools.register(mcp_instance, allowed_tools)
+    server_skill_tools.register(mcp_instance, allowed_tools)
     # Pipeline prompts/resources are build-owned; skip on memory/setup profiles
     # so they do not spam every tapps-mcp process catalog.
     _skip_pipeline_resources = frozenset({"nlt-memory", "nlt-setup", "nlt-platform-admin"})
     server_resources.register(
-        mcp,
-        include_pipeline=settings.tool_preset not in _skip_pipeline_resources,
+        mcp_instance,
+        include_pipeline=tool_preset not in _skip_pipeline_resources,
     )
+
+
+def _register_tool_modules() -> None:
+    """Import and register tools from extracted server modules.
+
+    Loads settings, resolves allowed_tools (Epic 79.1), then delegates to
+    ``register_profile`` for the actual per-module registration calls.
+    """
+    settings = load_settings()
+    allowed_tools = _resolve_allowed_tools(settings)
+    register_profile(mcp, allowed_tools, tool_preset=settings.tool_preset)
 
 
 _register_tool_modules()

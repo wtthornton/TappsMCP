@@ -49,8 +49,7 @@ class TestResolveAllowedTools:
         settings.disabled_tools = []
         settings.tool_preset = "core"
         allowed = _resolve_allowed_tools(settings)
-        assert allowed == TOOL_PRESET_CORE
-        assert len(allowed) == 9  # +tapps_research (TAP-5365)
+        assert set(allowed) == set(TOOL_PRESET_CORE)
 
     def test_preset_pipeline(self) -> None:
         from tapps_mcp.server import TOOL_PRESET_PIPELINE, _resolve_allowed_tools
@@ -60,9 +59,7 @@ class TestResolveAllowedTools:
         settings.disabled_tools = []
         settings.tool_preset = "pipeline"
         allowed = _resolve_allowed_tools(settings)
-        assert allowed == TOOL_PRESET_PIPELINE
-        # TAP-1994: tapps_memory removed; TAP-5365: +tapps_research → 12
-        assert len(allowed) == 12
+        assert set(allowed) == set(TOOL_PRESET_PIPELINE)
 
     def test_preset_full(self) -> None:
         from tapps_mcp.server import ALL_TOOL_NAMES, _resolve_allowed_tools
@@ -82,8 +79,7 @@ class TestResolveAllowedTools:
         settings.disabled_tools = []
         settings.tool_preset = "reviewer"
         allowed = _resolve_allowed_tools(settings)
-        assert allowed == TOOL_PRESET_REVIEWER
-        assert len(allowed) == 9
+        assert set(allowed) == set(TOOL_PRESET_REVIEWER)
 
     def test_preset_planner(self) -> None:
         from tapps_mcp.server import TOOL_PRESET_PLANNER, _resolve_allowed_tools
@@ -93,9 +89,7 @@ class TestResolveAllowedTools:
         settings.disabled_tools = []
         settings.tool_preset = "planner"
         allowed = _resolve_allowed_tools(settings)
-        assert allowed == TOOL_PRESET_PLANNER
-        # TAP-1994: tapps_memory removed from catalog; was 6, now 5
-        assert len(allowed) == 5
+        assert set(allowed) == set(TOOL_PRESET_PLANNER)
 
     def test_preset_frontend(self) -> None:
         from tapps_mcp.server import TOOL_PRESET_FRONTEND, _resolve_allowed_tools
@@ -105,8 +99,7 @@ class TestResolveAllowedTools:
         settings.disabled_tools = []
         settings.tool_preset = "frontend"
         allowed = _resolve_allowed_tools(settings)
-        assert allowed == TOOL_PRESET_FRONTEND
-        assert len(allowed) == 6  # +tapps_research (TAP-5365)
+        assert set(allowed) == set(TOOL_PRESET_FRONTEND)
 
     def test_preset_developer(self) -> None:
         from tapps_mcp.server import TOOL_PRESET_DEVELOPER, _resolve_allowed_tools
@@ -116,9 +109,7 @@ class TestResolveAllowedTools:
         settings.disabled_tools = []
         settings.tool_preset = "developer"
         allowed = _resolve_allowed_tools(settings)
-        assert allowed == TOOL_PRESET_DEVELOPER
-        # TAP-1994: tapps_memory removed; TAP-5365: +tapps_research → 10
-        assert len(allowed) == 10
+        assert set(allowed) == set(TOOL_PRESET_DEVELOPER)
 
     def test_enabled_tools_invalid_names_ignored(self) -> None:
         from tapps_mcp.server import _resolve_allowed_tools
@@ -150,10 +141,9 @@ class TestResolveAllowedTools:
         settings.disabled_tools = []
         settings.tool_preset = "nlt-build"
         allowed = _resolve_allowed_tools(settings)
-        assert allowed == TOOL_PROFILE_NLT_BUILD
-        # +tapps_research (TAP-5365); -tapps_session_start, now owned solely
-        # by nlt-memory (TAP-7018).
-        assert len(allowed) == 19
+        # Set equality, not a hardcoded count: the next tool added to
+        # TOOL_PROFILE_NLT_BUILD must not fail this test by count alone (LANE_ISSUE).
+        assert set(allowed) == set(TOOL_PROFILE_NLT_BUILD)
         assert "tapps_domain_playbook" in allowed
         assert "tapps_dependency_scan" in allowed
         assert "tapps_research" in allowed
@@ -179,11 +169,10 @@ class TestResolveAllowedTools:
         settings.disabled_tools = []
         settings.tool_preset = "nlt-setup"
         allowed = _resolve_allowed_tools(settings)
-        assert allowed == TOOL_PROFILE_NLT_SETUP
         # TAP-7018: tapps_session_start's real implementation moved to
         # nlt-build only; nlt-setup resolves the name via a pointer stub
         # registered in server_pipeline_tools.register(), not this frozenset.
-        assert len(allowed) == 7
+        assert set(allowed) == set(TOOL_PROFILE_NLT_SETUP)
         assert "tapps_session_start" not in allowed
 
     def test_preset_nlt_code_quality_alias(self) -> None:

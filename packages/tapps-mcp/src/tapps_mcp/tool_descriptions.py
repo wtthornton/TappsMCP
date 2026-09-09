@@ -87,6 +87,12 @@ TOOL_DESCRIPTIONS: dict[str, str] = {
     "tapps_dependency_graph": (
         "Build import graph, report circular imports, and module coupling metrics."
     ),
+    "tapps_file_api": (
+        "Every indexed symbol in a file with its def/class header line (never a body line)."
+    ),
+    "tapps_repo_map": (
+        "Directory-level orientation: per-directory symbol/edge clusters, hubs, and hotspots."
+    ),
     "tapps_audit_campaign": (
         "Plan, dispatch, or convert a file-scope audit campaign to a fix plan."
     ),
