@@ -1,5 +1,6 @@
 """Tests for MCP tool handlers in server.py."""
 
+from pathlib import Path
 from unittest.mock import AsyncMock, patch
 
 import pytest
@@ -240,8 +241,28 @@ class TestTappsChecklist:
         CallTracker.reset()
 
     @pytest.mark.asyncio
-    async def test_empty_session(self):
-        result = await tapps_checklist()
+    async def test_empty_session(self, tmp_path: Path) -> None:
+        # TAP-7234: pin project_root to a pristine tmp_path and stub
+        # compute_gaps. Without this, the verdict reads this repo's own
+        # accumulated `.tapps-mcp/` state (profile cache, nothing-to-gate
+        # marker, loop telemetry, live server reachability) via the real
+        # settings singleton -- state that differs between a working dev
+        # checkout and a fresh CI clone, making `complete` order/environment
+        # dependent instead of a function of "0 calls were made".
+        from tapps_core.config.settings import load_settings as _load_settings
+
+        isolated_settings = _load_settings(project_root=tmp_path)
+        with (
+            patch(
+                "tapps_mcp.server_checklist_tools.load_settings",
+                return_value=isolated_settings,
+            ),
+            patch(
+                "tapps_mcp.tools.usage.compute_gaps",
+                return_value={"gaps": [], "recommendations": [], "libraries_without_lookup": []},
+            ),
+        ):
+            result = await tapps_checklist()
         assert result["success"] is True
         assert result["data"]["task_type"] == "review"
         assert result["data"]["complete"] is False
