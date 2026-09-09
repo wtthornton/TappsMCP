@@ -9,7 +9,7 @@ description: >-
 allowed-tools: mcp__nlt-setup__tapps_server_info
 argument-hint: "[tool-name or 'all']"
 ---
-<!-- BEGIN: tapps-skill tapps-tool-reference v3.12.83 -->
+<!-- BEGIN: tapps-skill tapps-tool-reference v3.12.86 -->
 <!-- upgrade-policy: managed-block. Edits made inside this BEGIN/END block are regenerated and lost on the next tapps_upgrade — put project-specific customizations below the END marker instead, where they survive every upgrade untouched. -->
 
 When the user asks about TappsMCP tools (e.g. "when do I use tapps_score_file?",

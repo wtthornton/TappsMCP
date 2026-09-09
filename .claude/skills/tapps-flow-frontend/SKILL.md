@@ -7,7 +7,7 @@ description: >-
   Use when the task is primarily UI/UX implementation or accessibility.
 allowed-tools: mcp__nlt-build__tapps_session_start mcp__nlt-build__tapps_domain_playbook mcp__nlt-build__tapps_lookup_docs mcp__nlt-build__tapps_quick_check mcp__nlt-build__tapps_validate_changed mcp__nlt-build__tapps_checklist
 ---
-<!-- BEGIN: tapps-skill tapps-flow-frontend v3.12.83 -->
+<!-- BEGIN: tapps-skill tapps-flow-frontend v3.12.86 -->
 <!-- upgrade-policy: managed-block. Edits made inside this BEGIN/END block are regenerated and lost on the next tapps_upgrade — put project-specific customizations below the END marker instead, where they survive every upgrade untouched. -->
 
 1. Invoke `/tapps-domain-frontend` steps 1-5, **or** run this shortcut:

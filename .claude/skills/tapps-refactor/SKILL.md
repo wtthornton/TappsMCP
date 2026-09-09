@@ -16,7 +16,7 @@ allowed-tools: >-
   mcp__nlt-build__tapps_checklist
 argument-hint: "[symbol or file-path]"
 ---
-<!-- BEGIN: tapps-skill tapps-refactor v3.12.83 -->
+<!-- BEGIN: tapps-skill tapps-refactor v3.12.86 -->
 <!-- upgrade-policy: managed-block. Edits made inside this BEGIN/END block are regenerated and lost on the next tapps_upgrade — put project-specific customizations below the END marker instead, where they survive every upgrade untouched. -->
 
 Symbol-level refactor workflow (Epic 114 / ADR-0017):
