@@ -52,7 +52,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   not register, any `action=<word>` nlt-memory will not dispatch, and any
   paragraph that offers the CLI as a route to the MCP action surface.
 
+## [3.12.85] - 2026-09-08
+
+> **3.12.84 was rolled back at deploy and never served a request** — see the
+> note under [3.12.84](#31284---2026-09-08) below. This release fixes the
+> cause and re-cuts the version.
+
+### Fixed
+
+- **Missing `TOOL_DESCRIPTIONS` entry for `tapps_file_api`/`tapps_repo_map`** (#384, `3f7feb5a`)
+
 ## [3.12.84] - 2026-09-08
+
+> **Rolled back at deploy, never served a request.** `tapps-mcp fleet restart`
+> failed after this version was built and flipped: `nlt-build` could not
+> start (`KeyError: "Missing TOOL_DESCRIPTIONS entry for 'tapps_file_api'"`).
+> The fleet was rolled back to 3.12.83 within 90 seconds. #384 (shipped in
+> [3.12.85](#31285---2026-09-08)) fixes the cause and adds the per-profile
+> registration test that would have caught it in CI.
 
 ### Fixed
 
