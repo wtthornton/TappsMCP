@@ -3,14 +3,17 @@
 from __future__ import annotations
 
 from pathlib import Path
+from unittest.mock import patch
 
 from tapps_mcp.distribution.doctor_skills import (
+    check_one_pager_template_current,
     check_orchestration_prompt_learnings_ceiling,
     check_orchestration_prompt_skill_current,
     check_validation_contract_skill_current,
     check_wayfind_skill_current,
 )
 from tapps_mcp.pipeline.platform_skills import generate_skills
+from tapps_mcp.pipeline.platform_templates import ONE_PAGER_REL_PATH, load_one_pager_template
 from tapps_mcp.pipeline.skill_managed_block import MARKER_END
 
 
@@ -156,3 +159,85 @@ def test_check_learnings_ceiling_over_byte_size_fails(tmp_path: Path) -> None:
     assert result.ok is False
     assert "past ceiling" in result.message
     assert "breached the byte ceiling" in result.message
+
+
+def _write_deployed_template(tmp_path: Path, body: str) -> Path:
+    deployed_path = tmp_path / ONE_PAGER_REL_PATH
+    deployed_path.parent.mkdir(parents=True, exist_ok=True)
+    deployed_path.write_text(body, encoding="utf-8")
+    return deployed_path
+
+
+def test_check_one_pager_template_current_when_body_matches_packaged_source(
+    tmp_path: Path,
+) -> None:
+    """TAP-7424 box 1: present + byte-identical to the packaged source passes."""
+    _write_deployed_template(tmp_path, load_one_pager_template())
+
+    result = check_one_pager_template_current(tmp_path)
+    assert result.ok is True
+    assert "current" in result.message
+
+    # Negative control: delete the fixture file on the same tmp_path and
+    # re-run — proves the True result above isn't a stub that always
+    # returns True regardless of input.
+    (tmp_path / ONE_PAGER_REL_PATH).unlink()
+    control = check_one_pager_template_current(tmp_path)
+    assert control.ok is False
+
+
+def test_check_one_pager_template_current_fails_when_absent(tmp_path: Path) -> None:
+    """TAP-7424 box 2: no docs/templates/ directory at all fails, distinguishably."""
+    result = check_one_pager_template_current(tmp_path)
+    assert result.ok is False
+    assert "missing" in result.message
+    assert "stale" not in result.message
+
+    # Negative control: same tmp_path, now correctly deployed, must flip to
+    # ok=True — proves the check discriminates rather than always failing.
+    _write_deployed_template(tmp_path, load_one_pager_template())
+    control = check_one_pager_template_current(tmp_path)
+    assert control.ok is True
+
+
+def test_check_one_pager_template_current_fails_when_body_differs(tmp_path: Path) -> None:
+    """TAP-7424 box 3: deployed body differs from the packaged source by one byte."""
+    canonical = load_one_pager_template()
+    assert canonical, "fixture assumes the packaged template is non-empty"
+    mutated = canonical[:-1] + ("Q" if canonical[-1] != "Q" else "R")
+    deployed_path = _write_deployed_template(tmp_path, mutated)
+
+    # RED: the mutation is genuinely present and the check fails on it.
+    red = check_one_pager_template_current(tmp_path)
+    assert red.ok is False
+    assert "stale" in red.message
+    assert "missing" not in red.message
+
+    # GREEN: restore the exact canonical content on the same path/check call
+    # and confirm it now passes — RED then GREEN on one fixture.
+    deployed_path.write_text(canonical, encoding="utf-8")
+    green = check_one_pager_template_current(tmp_path)
+    assert green.ok is True
+
+
+def test_check_one_pager_template_current_calls_strip_asset_scaffolding(
+    tmp_path: Path,
+) -> None:
+    """TAP-7424 box 5: the comparison calls strip_asset_scaffolding, not raw bytes."""
+    _write_deployed_template(tmp_path, load_one_pager_template())
+
+    # Without the patch, the real strip_asset_scaffolding is a no-op on this
+    # unmarked content and the fixture is healthy.
+    baseline = check_one_pager_template_current(tmp_path)
+    assert baseline.ok is True
+
+    # Patched to return a sentinel different from the real deployed content:
+    # if the check compared raw file text instead of the function's return
+    # value, this patch would have no effect and the result would stay True.
+    with patch(
+        "tapps_mcp.pipeline.skill_asset_policy.strip_asset_scaffolding",
+        return_value="__sentinel_not_the_real_content__",
+    ):
+        patched = check_one_pager_template_current(tmp_path)
+    assert patched.ok is False
+    assert "stale" in patched.message
