@@ -87,6 +87,59 @@ def _claude_md_drift_state(project_root: Path, rel_path: str, engagement_level: 
     return "diverged" if changes or merged != current else "identical"
 
 
+def detect_claude_md_tier(block_content: str) -> str:
+    """Return which engagement-level template *block_content* byte-matches, or ``"unrecognized"``."""
+    from tapps_mcp.pipeline.tapps_obligations_block import wrap_with_markers
+    from tapps_mcp.prompts.prompt_loader import ENGAGEMENT_LEVELS, load_platform_rules
+
+    for level in ENGAGEMENT_LEVELS:
+        rendered = wrap_with_markers(load_platform_rules("claude", engagement_level=level))
+        if block_content == rendered:
+            return level
+    return "unrecognized"
+
+
+def claude_md_tier_mismatch(project_root: Path, claude_md: Path) -> tuple[str, str] | None:
+    """Return ``(declared, detected)`` when the stamped block is the wrong tier's template.
+
+    ``check_claude_md_stamp`` (``doctor_platform.py``) previously only compared
+    the version stamp, so an upgrade that re-stamped the ``medium`` template
+    into a ``high``-engagement project passed silently (TAP-7263). Returns
+    ``None`` when the block matches the declared ``llm_engagement_level``.
+    """
+    from tapps_mcp.distribution.doctor_telemetry import _read_engagement_level
+    from tapps_mcp.pipeline.tapps_obligations_block import _find_block_span
+
+    content = claude_md.read_text(encoding="utf-8")
+    span = _find_block_span(content)
+    if span is None:
+        return None
+    begin, end = span
+    block_content = content[begin:end]
+    declared = _read_engagement_level(project_root) or "medium"
+    detected = detect_claude_md_tier(block_content)
+    if detected == declared:
+        return None
+    return declared, detected
+
+
+def claude_md_tier_check_result(
+    project_root: Path, claude_md: Path, existing_version: str
+) -> CheckResult | None:
+    """Wrap :func:`claude_md_tier_mismatch` as the ``"CLAUDE.md stamp"`` failure, or ``None``."""
+    mismatch = claude_md_tier_mismatch(project_root, claude_md)
+    if mismatch is None:
+        return None
+    declared, detected = mismatch
+    return CheckResult(
+        "CLAUDE.md stamp",
+        False,
+        f"stamp {existing_version} matches but obligations block is the '{detected}' template; "
+        f"declared llm_engagement_level is '{declared}'",
+        "Run `uv run tapps-mcp upgrade` to re-stamp the declared engagement tier",
+    )
+
+
 @consumer_staleness
 def check_upgrade_skip_token_drift(project_root: Path) -> CheckResult:
     """Report identical/diverged/missing/unsupported for each applied skip token.
@@ -171,4 +224,9 @@ def check_upgrade_skip_token_drift(project_root: Path) -> CheckResult:
     )
 
 
-__all__ = ["check_upgrade_skip_token_drift"]
+__all__ = [
+    "check_upgrade_skip_token_drift",
+    "claude_md_tier_check_result",
+    "claude_md_tier_mismatch",
+    "detect_claude_md_tier",
+]

@@ -7,6 +7,7 @@ from pathlib import Path
 
 from tapps_mcp.distribution.doctor_platform import (
     check_claude_md,
+    check_claude_md_stamp,
     check_config_files_rule,
     check_cursor_rules,
     check_pretooluse_matchers,
@@ -38,6 +39,38 @@ def test_check_claude_md_missing_soft_passes_with_cursor_rules(tmp_path: Path) -
 def test_check_cursor_rules_missing_fails(tmp_path: Path) -> None:
     result = check_cursor_rules(tmp_path)
     assert result.ok is False
+
+
+def _write_claude_md(tmp_path: Path, *, stamped_level: str, declared_level: str) -> None:
+    """Write a CLAUDE.md stamped with *stamped_level*'s template, plus a
+    ``.tapps-mcp.yaml`` declaring *declared_level*."""
+    from tapps_mcp.pipeline.init_claude_md import _bootstrap_claude
+
+    _bootstrap_claude(tmp_path, engagement_level=stamped_level)
+    (tmp_path / ".tapps-mcp.yaml").write_text(
+        f"llm_engagement_level: {declared_level}\n", encoding="utf-8"
+    )
+
+
+def test_check_claude_md_stamp_fails_when_block_is_wrong_tier(tmp_path: Path) -> None:
+    """TAP-7263: a byte-identical-to-medium block in a declared-high project
+    must fail the stamp check, even though the version stamp matches."""
+    _write_claude_md(tmp_path, stamped_level="medium", declared_level="high")
+
+    result = check_claude_md_stamp(tmp_path)
+
+    assert result.ok is False
+    assert "'medium' template" in result.message
+    assert "declared llm_engagement_level is 'high'" in result.message
+
+
+def test_check_claude_md_stamp_passes_when_tier_matches(tmp_path: Path) -> None:
+    """Positive control: the declared tier's own template passes."""
+    _write_claude_md(tmp_path, stamped_level="medium", declared_level="medium")
+
+    result = check_claude_md_stamp(tmp_path)
+
+    assert result.ok is True
 
 
 def test_check_security_rule_no_python_signals_soft_passes(tmp_path: Path) -> None:

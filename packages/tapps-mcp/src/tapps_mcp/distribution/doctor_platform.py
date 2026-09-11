@@ -275,6 +275,11 @@ def check_claude_md_stamp(project_root: Path) -> CheckResult:
             f"stamp {existing} matches but sections missing: {', '.join(validation.sections_missing)}",
             "Run `uv run tapps-mcp upgrade` to restore canonical sections",
         )
+    from tapps_mcp.distribution.doctor_skip_drift import claude_md_tier_check_result
+
+    tier_result = claude_md_tier_check_result(project_root, claude_md, existing)
+    if tier_result is not None:
+        return tier_result
     return CheckResult(
         "CLAUDE.md stamp",
         True,

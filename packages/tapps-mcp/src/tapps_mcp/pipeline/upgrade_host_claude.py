@@ -384,7 +384,9 @@ def upgrade_claude_code(ctx: HostContext) -> None:
         "claude_md",
         skip_key="claude_md",
         plan=lambda: dry_run_claude_md_status(ctx.project_root, force=ctx.force),
-        apply=lambda: _bootstrap_claude(ctx.project_root, overwrite=ctx.force),
+        apply=lambda: _bootstrap_claude(
+            ctx.project_root, overwrite=ctx.force, engagement_level=ctx.engagement_level
+        ),
     )
     _resolve_claude_hooks(ctx)
     _resolve_claude_assets(ctx)
