@@ -208,12 +208,18 @@ def check_skills_manifest_directory(project_root: Path) -> CheckResult:
                     continue  # not yet force-refreshed onto the marker mechanism
                 deployed.add(skill_name)
                 checked += 1
-                expected = host_manifest.get(skill_name)
-                if expected is None:
+                entry = host_manifest.get(skill_name)
+                if entry is None:
                     problems.append(f"{host_label}/{skill_name} not in manifest (unknown)")
                     continue
+                # Entries are a bare sha256 hex string for skills the manifest
+                # predates TAP-7152 (written straight by platform_skills'
+                # generate_skills), or {"hash", "source"} once the upgrade
+                # pipeline's source-tagging pass (TAP-7152) has run — either
+                # way the hash is what this check compares against.
+                expected_hash = entry["hash"] if isinstance(entry, dict) else entry
                 actual = hashlib.sha256(normalize_block_version(block).encode("utf-8")).hexdigest()
-                if actual != expected:
+                if actual != expected_hash:
                     problems.append(f"{host_label}/{skill_name} stale on disk")
 
         for skill_name in sorted(host_manifest):
