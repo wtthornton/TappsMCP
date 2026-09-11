@@ -4,7 +4,8 @@ Mirrors ``test_orchestration_prompt_skill`` deploy shape:
 - ``generate_skills`` scaffolds SKILL.md + companions
 - smart-merge preserves project customizations
 - companions refresh on upgrade
-- frontmatter gates auto-invocation (``disable-model-invocation``)
+- frontmatter stays ambient (no ``disable-model-invocation`` pin — TAP-7385
+  front door)
 - full tier deploys; core tier skips
 """
 
@@ -40,8 +41,10 @@ class TestModuleShape:
         assert "### chart the map" in lower
         assert "### work through the map" in lower
 
-    def test_frontmatter_disables_model_invocation(self):
-        assert "disable-model-invocation: true" in WAYFIND_SKILL_BODY
+    def test_frontmatter_is_ambient(self):
+        """TAP-7385: tapps-wayfind is one of the three fleet-wide front
+        doors — the non-ambient pin is gone."""
+        assert "disable-model-invocation" not in WAYFIND_SKILL_BODY
         assert "name: tapps-wayfind" in WAYFIND_SKILL_BODY
 
     def test_companions_include_required_refs(self):
@@ -68,7 +71,7 @@ class TestScaffold:
         assert f"{MARKER_BEGIN_PREFIX} {SKILL} v" in content
         assert MARKER_END in content
         assert "name: tapps-wayfind" in content
-        assert "disable-model-invocation: true" in content
+        assert "disable-model-invocation" not in content
 
     def test_managed_block_warns_directly_after_begin(self, tmp_path):
         """TAP-6598: an editor working inside the block sees why it's lost."""
