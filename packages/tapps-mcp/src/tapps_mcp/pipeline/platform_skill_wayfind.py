@@ -20,7 +20,6 @@ WAYFIND_SKILL_FRONTMATTER = """\
 ---
 name: tapps-wayfind
 user-invocable: true
-disable-model-invocation: true
 description: >-
   Chart foggy multi-session work as a Linear decision map, then resolve one
   decision ticket per session until the route to the destination is clear. Use

@@ -171,6 +171,38 @@ DEPRECATED_TAPPS_SKILLS: frozenset[str] = frozenset(
     {"tapps-score", "tapps-gate", "tapps-validate", "tapps-report"}
 )
 
+# TAP-7386: one derived table mapping a role name to its model + effort, so a
+# model migration is a one-place edit here instead of one edit per skill
+# template below. Model ids and effort words come from the installed Claude
+# Code CLI's accepted values (cc-expert doc 10-skills.md), never hardcoded
+# independently of that source.
+class RoleResolutionError(ValueError):
+    """Raised when a skill template references an unknown model role."""
+
+
+MODEL_ROLES: dict[str, dict[str, str]] = {
+    "driver": {"model": "claude-sonnet-5", "effort": "medium"},
+    "lane": {"model": "claude-sonnet-5", "effort": "medium"},
+    "verifier-deterministic": {"model": "claude-haiku-4-5-20251001", "effort": "low"},
+    "verifier-comparative": {"model": "claude-sonnet-5", "effort": "medium"},
+    "verifier-semantic": {"model": "claude-sonnet-5", "effort": "medium"},
+    "explorer": {"model": "claude-haiku-4-5-20251001", "effort": "low"},
+    "prose": {"model": "claude-haiku-4-5-20251001", "effort": "low"},
+}
+
+
+def resolve_role_model(role: str) -> str:
+    """Resolve a ``MODEL_ROLES`` role name to its literal ``model:`` value.
+
+    Unknown roles refuse loudly (never fall back to a default model) so a
+    typo'd role name fails at template-render time, not silently at runtime.
+    """
+    try:
+        return MODEL_ROLES[role]["model"]
+    except KeyError as exc:
+        raise RoleResolutionError(f"unknown model role: {role!r}") from exc
+
+
 # Core skill tier for init/upgrade when ``skill_tier: core`` (context budget).
 CORE_SKILL_NAMES: frozenset[str] = frozenset(
     {
@@ -207,7 +239,9 @@ CLAUDE_SKILLS: dict[str, str] = {
 ---
 name: tapps-finish-task
 user-invocable: true
-model: claude-haiku-4-5-20251001
+model: """
+    + resolve_role_model("verifier-deterministic")
+    + """
 description: Run the end-of-task TAPPS pipeline in one shot — validate_changed, then checklist, then an optional memory save for anything architectural or patterned learned this session. The recommended final step before declaring work complete. Use when you have finished implementing a task and want to validate, run the checklist, and save learnings in one shot.
 allowed-tools: mcp__nlt-build__tapps_validate_changed mcp__nlt-build__tapps_checklist mcp__nlt-build__tapps_lookup_docs Bash
 argument-hint: "[task_type: feature|bugfix|refactor|security|review]"
@@ -235,7 +269,9 @@ Close out the current task end-to-end. Run each step; do NOT skip one that faile
 ---
 name: tapps-handoff-session
 user-invocable: true
-model: claude-haiku-4-5-20251001
+model: """
+    + resolve_role_model("prose")
+    + """
 description: >-
   Write a structured cross-session handoff and close the TAPPS session
   lifecycle so the next chat can continue without a long paste. Use when
@@ -283,7 +319,9 @@ End the session with a durable handoff the next chat can load via `/tapps-contin
 ---
 name: tapps-continue-session
 user-invocable: true
-model: claude-haiku-4-5-20251001
+model: """
+    + resolve_role_model("explorer")
+    + """
 description: >-
   Bootstrap a fresh session from the last handoff by reading session-handoff.md,
   optional Linear context, and TAPPS session start — without pasting a long
@@ -320,7 +358,9 @@ Start work in a fresh context window by assembling structured state — not a us
 ---
 name: tapps-review-pipeline
 user-invocable: true
-model: claude-sonnet-5
+model: """
+    + resolve_role_model("verifier-comparative")
+    + """
 description: >-
   Orchestrate a parallel review-fix-validate pipeline across multiple changed files.
   Spawns tapps-review-fixer agents in worktrees for parallel processing. Use when
@@ -329,6 +369,7 @@ description: >-
 allowed-tools: mcp__nlt-build__tapps_validate_changed mcp__nlt-build__tapps_checklist
 context: fork
 agent: general-purpose
+disable-model-invocation: true
 ---
 
 Run a parallel review-fix-validate pipeline on changed Python files:
@@ -352,7 +393,9 @@ Run a parallel review-fix-validate pipeline on changed Python files:
 ---
 name: tapps-refactor
 user-invocable: true
-model: claude-sonnet-5
+model: """
+    + resolve_role_model("lane")
+    + """
 description: >-
   Function-level refactor workflow using call graph tools (Epic 114).
   Use before changing a symbol's signature, deleting a function, or
@@ -366,6 +409,7 @@ allowed-tools: >-
   mcp__nlt-build__tapps_validate_changed
   mcp__nlt-build__tapps_checklist
 argument-hint: "[symbol or file-path]"
+disable-model-invocation: true
 ---
 
 Symbol-level refactor workflow (Epic 114 / ADR-0017):
@@ -398,7 +442,10 @@ allowed-tools: >-
   mcp__nlt-build__tapps_lookup_docs
 argument-hint: "[library|query] [topic]"
 context: fork
-model: claude-sonnet-5
+model: """
+    + resolve_role_model("verifier-semantic")
+    + """
+disable-model-invocation: true
 ---
 
 Research using TappsMCP's unified front door (ADR-0030):
@@ -416,7 +463,9 @@ Research using TappsMCP's unified front door (ADR-0030):
 ---
 name: tapps-security
 user-invocable: true
-model: claude-sonnet-5
+model: """
+    + resolve_role_model("lane")
+    + """
 description: >-
   Run a comprehensive security audit including vulnerability scanning
   and dependency CVE checks. Use when reviewing security-sensitive changes,
@@ -425,6 +474,7 @@ allowed-tools: >-
   mcp__nlt-build__tapps_security_scan
   mcp__nlt-build__tapps_dependency_scan
 argument-hint: "[file-path]"
+disable-model-invocation: true
 ---
 
 Run a comprehensive security audit using TappsMCP:
@@ -438,13 +488,16 @@ Run a comprehensive security audit using TappsMCP:
 ---
 name: tapps-memory
 user-invocable: true
-model: claude-sonnet-5
+model: """
+    + resolve_role_model("verifier-semantic")
+    + """
 description: >-
   Manage shared project memory via tapps-mcp CLI and session notes.
   Use when saving cross-session decisions, searching prior patterns, or
   checking brain bridge health. For chat handoffs use tapps-handoff-session.
 allowed-tools: mcp__nlt-build__tapps_session_start mcp__nlt-memory__tapps_session_notes Bash
 argument-hint: "[save|search|get] [key]"
+disable-model-invocation: true
 ---
 
 `tapps_memory` on the **`nlt-memory`** MCP server is a slim facade (TAP-3895). Default consumer path is **`uv run tapps-mcp memory`** (bridge-only — never add direct `tapps-brain` to `.mcp.json`).
@@ -518,13 +571,16 @@ Federation, hive, knowledge graph, and batch ops: see `docs/MEMORY_REFERENCE.md`
 ---
 name: tapps-tool-reference
 user-invocable: true
-model: claude-haiku-4-5-20251001
+model: """
+    + resolve_role_model("explorer")
+    + """
 description: >-
   Look up when to use each TappsMCP tool. Full tool reference with per-tool
   guidance for session start, scoring, validation, checklist, docs, experts, and more.
   Use when you need guidance on which TappsMCP tool to call for a given situation.
 allowed-tools: mcp__nlt-setup__tapps_server_info
 argument-hint: "[tool-name or 'all']"
+disable-model-invocation: true
 ---
 
 When the user asks about TappsMCP tools (e.g. "when do I use tapps_score_file?",
@@ -596,13 +652,16 @@ For function-level refactors use `/tapps-refactor`. Call `tapps_server_info` for
 ---
 name: tapps-init
 user-invocable: true
-model: claude-sonnet-5
+model: """
+    + resolve_role_model("driver")
+    + """
 description: >-
   Bootstrap TappsMCP in a project. Creates AGENTS.md, TECH_STACK.md,
   platform rules, hooks, agents, skills, and MCP config. Use when setting
   up TappsMCP in a new or existing project for the first time.
 allowed-tools: mcp__nlt-setup__tapps_init mcp__nlt-setup__tapps_doctor
 argument-hint: "[project-root]"
+disable-model-invocation: true
 ---
 
 Bootstrap TappsMCP in a new or existing project:
@@ -628,7 +687,9 @@ Bootstrap TappsMCP in a new or existing project:
 ---
 name: tapps-upgrade
 user-invocable: true
-model: claude-sonnet-5
+model: """
+    + resolve_role_model("driver")
+    + """
 description: >-
   Upgrade tapps-mcp / docs-mcp in this project to the latest version.
   Reinstalls global CLIs, restarts the MCP servers, refreshes scaffolding
@@ -637,6 +698,7 @@ description: >-
   version is available and the project scaffolding needs to be refreshed.
 allowed-tools: Bash mcp__nlt-build__tapps_session_start mcp__nlt-setup__tapps_doctor mcp__nlt-build__tapps_checklist
 argument-hint: "[--from-checkout <path> | --from-tag vX.Y.Z]"
+disable-model-invocation: true
 ---
 
 Upgrade tapps-mcp / docs-mcp end-to-end. The user's request to upgrade is standing authorization for the full pipeline — do NOT pause mid-flow.
@@ -676,7 +738,9 @@ Upgrade tapps-mcp / docs-mcp end-to-end. The user's request to upgrade is standi
 ---
 name: tapps-engagement
 user-invocable: true
-model: claude-haiku-4-5-20251001
+model: """
+    + resolve_role_model("verifier-deterministic")
+    + """
 description: >-
   Change the TappsMCP enforcement intensity (high, medium, or low).
   Controls which quality tools are mandatory vs optional. Use when you want
@@ -699,12 +763,15 @@ Set the TappsMCP LLM engagement level:
 ---
 name: tapps-apply-files
 user-invocable: false
-model: claude-haiku-4-5-20251001
+model: """
+    + resolve_role_model("verifier-deterministic")
+    + """
 description: >-
   Apply file operations from a TappsMCP content-return response. Use when
   a TappsMCP or DocsMCP tool returns content_return: true with a file_manifest
   because the server runs in Docker and cannot write files directly.
 allowed-tools: ""
+disable-model-invocation: true
 ---
 
 When a TappsMCP or DocsMCP tool returns `content_return: true` with a `file_manifest`,
@@ -750,10 +817,13 @@ the server could not write files (Docker / read-only filesystem).  Apply the fil
 ---
 name: linear-issue
 user-invocable: true
-model: claude-haiku-4-5-20251001
+model: """
+    + resolve_role_model("prose")
+    + """
 description: Create, lint, validate, or triage Linear issues and epics for agents. MANDATORY for all Linear writes — never call plugin save_issue directly. Routes to docs-mcp generator/validator/triage tools and the Linear plugin by user intent. Use when creating, linting, validating, or triaging a Linear issue or epic.
 allowed-tools: mcp__nlt-linear-issues__docs_generate_epic mcp__nlt-linear-issues__docs_generate_story mcp__nlt-linear-issues__docs_lint_linear_issue mcp__nlt-linear-issues__docs_validate_linear_issue mcp__nlt-linear-issues__docs_linear_triage mcp__nlt-linear-issues__docs_save_linear_issue mcp__plugin_linear_linear__save_issue mcp__plugin_linear_linear__get_issue mcp__plugin_linear_linear__list_issues mcp__nlt-linear-issues__tapps_linear_snapshot_get mcp__nlt-linear-issues__tapps_linear_snapshot_put mcp__nlt-linear-issues__tapps_linear_snapshot_invalidate
 argument-hint: "[create-epic|create-story|lint TAP-###|validate|triage] [free-form detail]"
+disable-model-invocation: true
 ---
 
 Work with Linear issues for AI-agent consumption. Infer intent from the user's prompt and act autonomously within scope — see `autonomy.md`. The user's original request is the authorization for the full generator → validator → save_issue chain; do NOT pause mid-flow to ask "should I create this?"
@@ -812,10 +882,13 @@ Linear rendering workarounds (observed 2026-04-24):
 ---
 name: linear-read
 user-invocable: true
-model: claude-haiku-4-5-20251001
+model: """
+    + resolve_role_model("explorer")
+    + """
 description: Read multi-issue Linear data via cache-first dance. MANDATORY for any list-style Linear read. Routes through tapps_linear_snapshot_get/put before list_issues. Use when listing, filtering, or reviewing Linear issues (backlog review, "what's open", triage, "find issues assigned to X"). Single-issue lookups go straight to get_issue instead.
 allowed-tools: mcp__nlt-linear-issues__tapps_linear_snapshot_get mcp__nlt-linear-issues__tapps_linear_snapshot_put mcp__nlt-linear-issues__tapps_linear_list_issues mcp__plugin_linear_linear__list_issues mcp__plugin_linear_linear__get_issue
 argument-hint: "[free-form query, e.g. 'open issues in TAP', 'backlog assigned to me']"
+disable-model-invocation: true
 ---
 
 Multi-issue Linear reads are cache-first by contract (TAP-967 audit found 5,368 `list_issues` calls with 0.26% cache adoption — soft rules failed; this skill is the routed path the agent reaches for instead). Invoke ANY time the user asks for a list, batch, or filtered view of Linear issues.
@@ -887,10 +960,13 @@ Three sequential `list_issues({state: "backlog"})`, `({state: "unstarted"})`, `(
 ---
 name: linear-release-update
 user-invocable: true
-model: claude-haiku-4-5-20251001
+model: """
+    + resolve_role_model("prose")
+    + """
 description: Post a structured Linear project update document on a version release. Orchestrates tapps_release_update → docs_validate_release_update → save_document → cache invalidation. Use when posting a release announcement to Linear after shipping a new version.
 allowed-tools: mcp__nlt-release-ship__tapps_release_update mcp__nlt-release-ship__docs_generate_release_update mcp__nlt-release-ship__docs_validate_release_update mcp__nlt-release-ship__docs_release_gate mcp__plugin_linear_linear__save_document mcp__nlt-linear-issues__tapps_linear_snapshot_invalidate
 argument-hint: "--version vX.Y.Z --prev-version vX.Y.W [--team <team>] [--project <project>] [--dry-run]"
+disable-model-invocation: true
 ---
 
 Post a structured Linear project update document when a new version is released. The user's request to post a release update is standing authorization for the full pipeline — do NOT pause mid-flow to ask "should I post this?"

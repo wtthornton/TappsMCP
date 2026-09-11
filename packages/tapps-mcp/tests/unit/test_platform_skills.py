@@ -111,11 +111,27 @@ class TestClaudeArgumentHint:
 
 
 class TestClaudeDisableModelInvocation:
-    """Handoff skills disable model invocation; orchestration skills do not."""
+    """TAP-7385: only the fleet-wide front doors stay ambient; every other
+    skill emitted by these templates is pinned non-ambient."""
 
     @pytest.mark.parametrize(
         "skill_name",
-        ["tapps-handoff-session", "tapps-engagement"],
+        [
+            "tapps-handoff-session",
+            "tapps-engagement",
+            "tapps-review-pipeline",
+            "tapps-research",
+            "tapps-security",
+            "tapps-memory",
+            "tapps-refactor",
+            "tapps-tool-reference",
+            "tapps-init",
+            "tapps-upgrade",
+            "tapps-apply-files",
+            "linear-issue",
+            "linear-read",
+            "linear-release-update",
+        ],
     )
     def test_disable_model_invocation_present(self, skill_name: str) -> None:
         fm = _get_frontmatter(CLAUDE_SKILLS[skill_name])
@@ -125,13 +141,12 @@ class TestClaudeDisableModelInvocation:
         "skill_name",
         [
             "tapps-finish-task",
-            "tapps-review-pipeline",
-            "tapps-research",
-            "tapps-security",
-            "tapps-memory",
+            "tapps-continue-session",
         ],
     )
     def test_disable_model_invocation_absent(self, skill_name: str) -> None:
+        """The three fleet-wide front doors (plus tapps-wayfind, tested
+        separately) stay ambient — see TAP-7385."""
         fm = _get_frontmatter(CLAUDE_SKILLS[skill_name])
         assert "disable-model-invocation:" not in fm
 
