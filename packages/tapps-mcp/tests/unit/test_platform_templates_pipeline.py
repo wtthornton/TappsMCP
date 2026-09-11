@@ -141,3 +141,25 @@ class TestUpgradeIntegration:
             "created"
         )
         assert (tmp_path / ONE_PAGER_REL_PATH).exists()
+
+    def test_cursor_upgrade_respects_templates_skip_token(self, tmp_path: Path) -> None:
+        (tmp_path / ".cursor").mkdir()
+        (tmp_path / "pyproject.toml").write_text("", encoding="utf-8")
+        (tmp_path / ".tapps-mcp.yaml").write_text(
+            "upgrade_skip_files:\n  - docs/templates\n",
+            encoding="utf-8",
+        )
+        target = tmp_path / ONE_PAGER_REL_PATH
+        target.parent.mkdir(parents=True)
+        target.write_text("<!-- stale customer copy -->", encoding="utf-8")
+        mtime_before = target.stat().st_mtime_ns
+
+        from tapps_mcp.pipeline.upgrade import upgrade_pipeline
+
+        result = upgrade_pipeline(tmp_path, platform="cursor", dry_run=False)
+        platforms = result["components"]["platforms"]
+        cursor_result = next(p for p in platforms if p["host"] == "cursor")
+        component = cursor_result["components"]["templates"]
+        assert "skipped" in str(component)
+        assert target.read_text(encoding="utf-8") == "<!-- stale customer copy -->"
+        assert target.stat().st_mtime_ns == mtime_before
