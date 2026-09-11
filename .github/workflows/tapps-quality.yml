@@ -12,6 +12,8 @@ on:
       - "*.spec"
       - ".tapps-mcp.yaml"
       - ".github/workflows/tapps-quality.yml"
+  push:
+    branches: [main, master]
   workflow_dispatch:
 
 permissions:
