@@ -34,14 +34,14 @@ are named, documented here, and stamped into each generated file:
 
 from __future__ import annotations
 
+import os
 import re
 import stat
-from typing import TYPE_CHECKING, Any, Literal, NamedTuple
+import tempfile
+from pathlib import Path
+from typing import Any, Literal, NamedTuple
 
 from tapps_mcp import __version__
-
-if TYPE_CHECKING:
-    from pathlib import Path
 
 Policy = Literal["managed_block", "create_only", "overwrite"]
 AssetAction = Literal["created", "refreshed", "migrated", "unchanged"]
@@ -79,6 +79,48 @@ def _wrap_note(note: str, syntax: _Syntax) -> str:
     if syntax.close:
         return f"{syntax.open} {note} {syntax.close}"
     return f"{syntax.open} {note}"
+
+
+def _comment_wrap_body(body: str, syntax: _Syntax) -> str:
+    """Render *body* as commented-out text, line by line, in *syntax*.
+
+    TAP-7156: the ``migrated`` branch of :func:`install_or_refresh_asset`
+    used to splice a legacy no-marker file's raw body in unwrapped below a
+    comment-wrapped heading. For a close-style syntax (html: ``.md``/
+    ``.html``, prose that no interpreter parses) that is harmless and stays
+    unwrapped. For a line-comment syntax (hash/slash: ``.sh``/``.py``/
+    ``.js``, real executable code) the raw body can itself start with its
+    own ``#!`` — producing a second shebang — or declare top-level names
+    that collide with the fresh block, a real ``SyntaxError`` for ``.js``.
+    Commenting every line out keeps the content fully recoverable (an
+    operator uncomments what they want to keep) without corrupting it.
+    """
+    if syntax.close:
+        return body
+    return "\n".join(f"{syntax.open} {line}" if line else syntax.open for line in body.split("\n"))
+
+
+def _atomic_write_text(path: Path, content: str) -> None:
+    """Write *content* to *path* via a same-directory temp file + ``os.replace``.
+
+    ``os.replace`` is atomic on both POSIX and Windows when source and
+    destination share a filesystem, so a crash or concurrent read mid-upgrade
+    never observes a partially written asset — the destination is either the
+    old content or the new content, never a truncated mix of both. The temp
+    file is created in *path*'s own directory (not the platform temp dir) so
+    the replace stays same-filesystem.
+    """
+    directory = path.parent
+    fd, tmp_name = tempfile.mkstemp(dir=directory, prefix=f".{path.name}.", suffix=".tmp")
+    tmp_path = Path(tmp_name)
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as handle:
+            handle.write(content)
+        tmp_path.replace(path)
+    except BaseException:
+        if tmp_path.exists():
+            tmp_path.unlink()
+        raise
 
 
 # The three comment styles a scaffolded asset can carry. Every delimitable
@@ -504,7 +546,7 @@ def install_or_refresh_asset(
     if not path.exists():
         if not dry_run:
             path.parent.mkdir(parents=True, exist_ok=True)
-            path.write_text(fresh, encoding="utf-8")
+            _atomic_write_text(path, fresh)
         return "created"
 
     original = path.read_text(encoding="utf-8")
@@ -531,11 +573,12 @@ def install_or_refresh_asset(
         preserved = original.strip("\n")
         redundancy = heading_redundancy(preserved, rest)
         heading = asset_project_region_heading_with_redundancy(rel_path, redundancy)
-        updated = f"{fresh}\n{heading}\n\n{preserved}\n"
+        preserved_region = _comment_wrap_body(preserved, _syntax_for(rel_path))
+        updated = f"{fresh}\n{heading}\n\n{preserved_region}\n"
         action = "migrated"
 
     if not dry_run:
-        path.write_text(updated, encoding="utf-8")
+        _atomic_write_text(path, updated)
     return action
 
 
