@@ -100,6 +100,7 @@ def upgrade_cursor(ctx: HostContext) -> None:
     from tapps_mcp.pipeline.platform_hooks import ManagedJsonError
     from tapps_mcp.pipeline.platform_skills import CURSOR_SKILLS
     from tapps_mcp.pipeline.platform_subagents import CURSOR_AGENTS
+    from tapps_mcp.pipeline.platform_templates import generate_templates, plan_templates
 
     retired_pipeline_rule = ctx.project_root / ".cursor" / "rules" / "tapps-pipeline.md"
     resolve_component(
@@ -176,4 +177,12 @@ def upgrade_cursor(ctx: HostContext) -> None:
         skip_key=None,
         plan=lambda: "would-regenerate",
         apply=lambda: generate_cursor_rules(ctx.project_root, overwrite=ctx.force),
+    )
+
+    resolve_component(
+        ctx,
+        "templates",
+        skip_key="templates",
+        plan=lambda: plan_templates(ctx.project_root, "cursor"),
+        apply=lambda: generate_templates(ctx.project_root, "cursor"),
     )

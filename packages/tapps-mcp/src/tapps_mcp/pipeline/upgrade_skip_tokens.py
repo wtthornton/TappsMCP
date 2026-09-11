@@ -56,6 +56,8 @@ SKIP_TOKENS: dict[str, frozenset[str]] = {
     # TAP-7078 box 6: the two check scripts Output step 7 invokes by name.
     "check_prompt_shape_script": frozenset({"scripts/check-prompt-shape.js"}),
     "check_learnings_size_script": frozenset({"scripts/check-learnings-size.js"}),
+    # TAP-7423: project-root scaffolded templates, not under .claude/ or .cursor/.
+    "templates": frozenset({"docs/templates"}),
 }
 
 ALL_SKIP_TOKENS: frozenset[str] = frozenset().union(*SKIP_TOKENS.values())
@@ -71,6 +73,7 @@ _DIRECTORY_TOKENS: tuple[str, ...] = (
     ".cursor/hooks",
     ".cursor/agents",
     ".cursor/skills",
+    "docs/templates",
 )
 
 

@@ -394,6 +394,17 @@ def _generate_project_scripts(state: _BootstrapState) -> None:
     state.result["gitfacts_script"] = generate_gitfacts_script(root)
 
 
+def _generate_project_templates(state: _BootstrapState, platform: str) -> None:
+    """Generate project-root scaffolded templates (TAP-7423).
+
+    Host-agnostic like :func:`_generate_project_scripts` — ``docs/templates/``
+    lives at the project root, not under ``.claude/`` or ``.cursor/``.
+    """
+    from tapps_mcp.pipeline.platform_templates import generate_templates
+
+    state.result["templates"] = generate_templates(state.project_root, platform)
+
+
 def _generate_docs_automation(state: _BootstrapState, platform: str) -> None:
     """Generate doc-automation wiring when DocsMCP is detected (Epic 86)."""
     from tapps_mcp.pipeline.platform_docs_automation import generate_docs_automation
@@ -431,6 +442,7 @@ def _generate_claude_components(cfg: BootstrapConfig, state: _BootstrapState) ->
     _persist_skill_tier(state.project_root, cfg.skill_tier, dry_run=cfg.dry_run)
     _generate_claude_scoped_rules(cfg, state)
     _generate_project_scripts(state)
+    _generate_project_templates(state, "claude")
 
     if cfg.docs_automation and state.result.get("docsmcp_detected", False):
         _generate_docs_automation(state, "claude")
@@ -515,6 +527,7 @@ def _setup_cursor_platform(cfg: BootstrapConfig, state: _BootstrapState) -> str:
             skill_tier=cfg.skill_tier,
         )
         _persist_skill_tier(state.project_root, cfg.skill_tier, dry_run=cfg.dry_run)
+        _generate_project_templates(state, "cursor")
         if cfg.docs_automation and state.result.get("docsmcp_detected", False):
             _generate_docs_automation(state, "cursor")
         state.result["cursor_rules"] = generate_cursor_rules(state.project_root)
