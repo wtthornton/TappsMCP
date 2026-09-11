@@ -1179,7 +1179,7 @@ class TappsMCPSettings(BaseSettings):
             "'.claude/rules/integration-hygiene.md', "
             "'.claude/rules/tapps-pipeline.md', '.claude/rules/security.md', "
             "'.claude/rules/test-quality.md', '.claude/rules/config-files.md', "
-            "'.mcp.json', 'karpathy'. "
+            "'.mcp.json', 'karpathy', 'docs_automation'. "
             "Example: ['CLAUDE.md', '.claude/rules/tapps-pipeline.md']. "
             "DURABLE ALTERNATIVE — prefer folding the customization upstream "
             "(into the platform template that generates the file) over pinning: a "
