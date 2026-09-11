@@ -32,8 +32,11 @@ def skipped(artifact: str, skip: set[str]) -> bool:
     never fire, indistinguishable from a working one until an operator relies on
     it. Components that intentionally have no skip token must pass
     ``skip_key=None`` to ``resolve_component`` and never reach this function at
-    all, since ``resolve_component`` short-circuits on ``skip_key is None`` before
-    calling ``skipped()``.
+    all *when called through* ``resolve_component``, since ``resolve_component``
+    short-circuits on ``skip_key is None`` before calling ``skipped()``. That
+    short-circuit does not protect callers that invoke ``skipped()`` directly —
+    several pipeline modules do — so any direct caller must always pass a
+    registered ``SKIP_TOKENS`` key.
     """
     if artifact not in SKIP_TOKENS:
         raise KeyError(
