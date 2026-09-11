@@ -125,6 +125,7 @@ from tapps_mcp.distribution.doctor_platform import (
 from tapps_mcp.distribution.doctor_result import CheckResult, doctor_facade_attr
 from tapps_mcp.distribution.doctor_skill_learnings import check_skill_learnings_hygiene
 from tapps_mcp.distribution.doctor_skills import (
+    check_one_pager_template_current,
     check_orchestration_prompt_learnings_ceiling,
     check_orchestration_prompt_skill_current,
     check_skill_asset_drift,
@@ -253,6 +254,7 @@ def _check_specs(root: Path, *, quick: bool = False) -> list[tuple[str, Callable
         ),
         ("Skill learnings hygiene", lambda: check_skill_learnings_hygiene(root)),
         ("Workflow safety invariants", lambda: check_workflow_scripts_current(root)),
+        ("one-pager template", lambda: check_one_pager_template_current(root)),
         ("finish-task skill", lambda: check_finish_task_skill(root)),
         ("Deprecated wrapper skills", lambda: check_deprecated_wrapper_skills(root)),
         ("tapps-memory skill", lambda: check_tapps_memory_skill(root)),

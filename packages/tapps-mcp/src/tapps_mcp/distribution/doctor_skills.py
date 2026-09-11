@@ -499,3 +499,50 @@ def check_workflow_scripts_current(project_root: Path) -> CheckResult:
         True,
         f"{len(js_paths)} workflow(s) in .claude/workflows/ carry every safety invariant they need",
     )
+
+
+@consumer_staleness
+def check_one_pager_template_current(project_root: Path) -> CheckResult:
+    """Check the deployed one-pager template matches the packaged source (TAP-7424).
+
+    Templates (TAP-7423) use a plain overwrite-with-report policy — no
+    managed-block marker precedes the content, unlike a skill's SKILL.md — so
+    this mirrors :func:`_check_managed_skill_current`'s freshness intent with
+    a straight string comparison instead of a marker-block fingerprint.
+    :func:`~tapps_mcp.pipeline.skill_asset_policy.strip_asset_scaffolding` is
+    still called on the deployed content before comparing (forward
+    compatibility per TAP-7424's acceptance box 5) even though it is a no-op
+    for this artifact today: ``_find_asset_block`` finds no marker span on a
+    file that was never wrapped, so it returns the content unchanged.
+
+    Absence and staleness are both failures — never a silent pass — matching
+    the "unknown must refuse, never pass" rule this check exists under.
+    """
+    from tapps_mcp.distribution.doctor_result import CheckResult
+    from tapps_mcp.pipeline.platform_templates import (
+        ONE_PAGER_REL_PATH,
+        load_one_pager_template,
+    )
+    from tapps_mcp.pipeline.skill_asset_policy import strip_asset_scaffolding
+
+    check_name = "one-pager template"
+    deployed_path = project_root / ONE_PAGER_REL_PATH
+    if not deployed_path.exists():
+        return CheckResult(
+            check_name,
+            False,
+            f"{ONE_PAGER_REL_PATH} is missing",
+            "Run: tapps-mcp upgrade",
+        )
+
+    deployed = deployed_path.read_text(encoding="utf-8")
+    stripped = strip_asset_scaffolding(deployed)
+    expected = load_one_pager_template()
+    if stripped != expected:
+        return CheckResult(
+            check_name,
+            False,
+            f"{ONE_PAGER_REL_PATH} is stale (does not match the packaged template)",
+            "Run: tapps-mcp upgrade --force",
+        )
+    return CheckResult(check_name, True, f"{ONE_PAGER_REL_PATH} is current")
