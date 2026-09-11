@@ -584,6 +584,10 @@ def _refresh_optional_integrations(
             "added": added,
         }
 
+        from tapps_mcp.distribution.setup_secrets import untrack_gitignored_backup_paths
+
+        result["components"]["backup_untrack"] = untrack_gitignored_backup_paths(project_root)
+
 
 def _finalize_result(result: dict[str, Any], *, dry_run: bool) -> None:
     """Roll up demotions and the dry-run verdict, then stamp ``success``."""

@@ -10,6 +10,7 @@ Split out of ``setup_generator`` (TAP-5733).
 from __future__ import annotations
 
 import json
+import subprocess
 from pathlib import Path
 from typing import Any
 
@@ -237,6 +238,107 @@ def ensure_tapps_runtime_gitignore(project_root: Path) -> list[str]:
             added.append(entry)
             lines.add(entry)
     return added
+
+
+# ---------------------------------------------------------------------------
+# Untrack backup trees once gitignored (TAP-7427)
+# ---------------------------------------------------------------------------
+
+# Paths that must never stay in the git index once .gitignore covers them —
+# retention deletions (rollback.py, platform_hooks.py) churn these on disk
+# with no git awareness, so a tracked copy shows up as endless ``D`` noise.
+_TAPPS_BACKUP_UNTRACK_PATHS: tuple[str, ...] = (
+    ".tapps-mcp/backups",
+    ".tapps-mcp/hook-backups",
+)
+
+
+def _git_path_is_ignored(project_root: Path, rel_path: str) -> bool:
+    """Return ``True`` if *rel_path* is covered by ``.gitignore`` (or equivalent).
+
+    Uses ``--no-index``: by default ``git check-ignore`` (like ``git status``)
+    never reports a path as ignored while it is still tracked in the index —
+    exactly the state this function must detect (gitignored *and* tracked),
+    so the default mode would silently never match and the untrack step
+    would never fire.
+    """
+    try:
+        proc = subprocess.run(
+            ["git", "check-ignore", "-q", "--no-index", "--", rel_path],
+            cwd=project_root,
+            capture_output=True,
+            timeout=10,
+            check=False,
+        )
+    except (OSError, subprocess.TimeoutExpired):
+        return False
+    return proc.returncode == 0
+
+
+def _git_path_is_tracked(project_root: Path, rel_path: str) -> bool:
+    """Return ``True`` if any file under *rel_path* is present in the git index."""
+    try:
+        proc = subprocess.run(
+            ["git", "ls-files", "--", rel_path],
+            cwd=project_root,
+            capture_output=True,
+            text=True,
+            timeout=10,
+            check=False,
+        )
+    except (OSError, subprocess.TimeoutExpired):
+        return False
+    return proc.returncode == 0 and bool(proc.stdout.strip())
+
+
+def untrack_gitignored_backup_paths(project_root: Path) -> dict[str, Any]:
+    """One-time, idempotent untrack of the TappsMCP backup trees (TAP-7427).
+
+    ``.tapps-mcp/backups`` and ``.tapps-mcp/hook-backups`` are gitignored by
+    :func:`ensure_tapps_runtime_gitignore`, but a checkout that tracked them
+    before the ignore entry existed keeps them in the index forever — every
+    retention deletion in ``rollback.py`` / ``platform_hooks.py`` then shows
+    up as ``D`` churn in ``git status`` with no way to clear it.
+
+    For each path in :data:`_TAPPS_BACKUP_UNTRACK_PATHS`, when it is both
+    gitignored *and* still tracked, runs
+    ``git rm -r --cached --ignore-unmatch -- <path>`` to stage its removal
+    from the index. Only the two named paths are ever touched — never a
+    broad ``git rm -r --cached .``. This only stages the deletion; it never
+    commits on the consumer's behalf, consistent with this repo's
+    dispatch-don't-reach-in convention for touching a consumer's git state.
+
+    Returns:
+        Dict with ``untracked`` (paths actually staged for removal this
+        run), ``skipped`` (paths that were not gitignored, not tracked, or
+        outside a git repo), and ``error`` (str message, or ``None``).
+    """
+    result: dict[str, Any] = {"untracked": [], "skipped": [], "error": None}
+    if not (project_root / ".git").exists():
+        result["skipped"] = list(_TAPPS_BACKUP_UNTRACK_PATHS)
+        return result
+
+    for rel_path in _TAPPS_BACKUP_UNTRACK_PATHS:
+        if not _git_path_is_ignored(project_root, rel_path):
+            result["skipped"].append(rel_path)
+            continue
+        if not _git_path_is_tracked(project_root, rel_path):
+            result["skipped"].append(rel_path)
+            continue
+        try:
+            subprocess.run(
+                ["git", "rm", "-r", "--cached", "--ignore-unmatch", "--", rel_path],
+                cwd=project_root,
+                check=True,
+                capture_output=True,
+                text=True,
+                timeout=30,
+            )
+            result["untracked"].append(rel_path)
+        except (OSError, subprocess.CalledProcessError, subprocess.TimeoutExpired) as exc:
+            result["error"] = str(exc)
+
+    return result
 
 
 # ---------------------------------------------------------------------------
