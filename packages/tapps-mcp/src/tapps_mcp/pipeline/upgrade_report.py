@@ -24,8 +24,25 @@ log = get_logger(__name__)
 
 
 def skipped(artifact: str, skip: set[str]) -> bool:
-    """True when *artifact*'s ``upgrade_skip_files`` token is present in *skip*."""
-    return bool(SKIP_TOKENS.get(artifact, frozenset()) & skip)
+    """True when *artifact*'s ``upgrade_skip_files`` token is present in *skip*.
+
+    Raises ``KeyError`` when *artifact* is not a registered ``SKIP_TOKENS`` key.
+    Before TAP-7425, an unrecognized name fell through ``dict.get(..., frozenset())``
+    and silently returned ``False`` forever — a guard that looks wired up but can
+    never fire, indistinguishable from a working one until an operator relies on
+    it. Components that intentionally have no skip token must pass
+    ``skip_key=None`` to ``resolve_component`` and never reach this function at
+    all, since ``resolve_component`` short-circuits on ``skip_key is None`` before
+    calling ``skipped()``.
+    """
+    if artifact not in SKIP_TOKENS:
+        raise KeyError(
+            f"{artifact!r} is not a registered upgrade_skip_files artifact. "
+            f"Known artifacts: {', '.join(sorted(SKIP_TOKENS))}. If this "
+            "component intentionally has no skip token, pass skip_key=None to "
+            "resolve_component instead of calling skipped() directly."
+        )
+    return bool(SKIP_TOKENS[artifact] & skip)
 
 
 def dry_run_status(name: str, skip: set[str]) -> str:

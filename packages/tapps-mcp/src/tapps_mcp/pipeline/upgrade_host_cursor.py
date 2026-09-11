@@ -1,11 +1,12 @@
 """cursor artifact upgrades under one shared plan (TAP-6913).
 
 ``hooks``, ``agents``, and ``skills`` mirror the Cursor directory tokens added
-in TAP-7054 (``cursor_hooks``, ``cursor_agents``, ``cursor_skills``). The
-remaining components (``cursor_rules``, ``docs_automation``,
-``cursor_rule_types``) have no covering token, so they keep ``skip_key=None``.
-Otherwise the shape is the same as the claude-code host: one plan, one write
-step selected by ``dry_run``.
+in TAP-7054 (``cursor_hooks``, ``cursor_agents``, ``cursor_skills``).
+``docs_automation`` is covered by the ``docs_automation`` token (TAP-7425); the
+remaining components (``cursor_rules``, ``cursor_rule_types``) have no
+covering token, so they keep ``skip_key=None``. Otherwise the shape is the
+same as the claude-code host: one plan, one write step selected by
+``dry_run``.
 """
 
 from __future__ import annotations
@@ -87,8 +88,9 @@ def upgrade_cursor(ctx: HostContext) -> None:
     """Upgrade every cursor artifact under one shared plan.
 
     ``hooks``, ``agents``, and ``skills`` are covered by the ``cursor_hooks``,
-    ``cursor_agents``, and ``cursor_skills`` tokens (TAP-7054); the rest of the
-    components have no covering token and pass ``skip_key=None``.
+    ``cursor_agents``, and ``cursor_skills`` tokens (TAP-7054); ``docs_automation``
+    is covered by the ``docs_automation`` token (TAP-7425). ``cursor_rules`` and
+    ``cursor_rule_types`` have no covering token and pass ``skip_key=None``.
     """
     from tapps_mcp.pipeline.init import _bootstrap_cursor
     from tapps_mcp.pipeline.platform_docs_automation import CURSOR_DOCS_SKILLS
@@ -161,7 +163,7 @@ def upgrade_cursor(ctx: HostContext) -> None:
     resolve_component(
         ctx,
         "docs_automation",
-        skip_key=None,
+        skip_key="docs_automation",
         gate=docsmcp_gate(ctx.project_root),
         plan=lambda: {
             "action": "would-write-managed-skills",
