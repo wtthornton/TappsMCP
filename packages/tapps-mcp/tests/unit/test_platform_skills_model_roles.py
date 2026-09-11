@@ -13,7 +13,9 @@ import pytest
 
 import tapps_mcp.pipeline.platform_skills as platform_skills_module
 from tapps_mcp.pipeline.platform_skills import (
+    AMBIENT_FRONT_DOOR_SKILL_NAMES,
     CLAUDE_SKILLS,
+    CURSOR_SKILLS,
     MODEL_ROLES,
     RoleResolutionError,
     resolve_role_model,
@@ -106,3 +108,97 @@ class TestResolvedModelsUnchanged:
             f"{skill_name} resolved to a different model than before the "
             "role-reference refactor"
         )
+
+
+# ---------------------------------------------------------------------------
+# TAP-7385: ambient-invocation coverage across BOTH host dicts
+# ---------------------------------------------------------------------------
+#
+# PR #392 pinned disable-model-invocation on CLAUDE_SKILLS only: 220 tests
+# passed while CURSOR_SKILLS was never touched, because every assertion
+# parametrized over a hand-typed CLAUDE_SKILLS-only list. These tests walk
+# the actual dict contents at import time instead, so a name added to either
+# dict later is covered automatically. Housed here (not in
+# test_platform_skills.py) because that file is already below the
+# maintainability gate threshold and this parametrization would regress its
+# ratchet baseline further.
+
+
+def _ambient_violations(skills: dict[str, str], exempt: frozenset[str]) -> list[str]:
+    """Names in ``skills`` that violate the ambient invariant: an exempt name
+    that carries the pin, or a non-exempt name that lacks it."""
+    violations = []
+    for name, body in skills.items():
+        fm = _frontmatter(body)
+        pinned = "disable-model-invocation: true" in fm
+        should_be_ambient = name in exempt
+        if should_be_ambient and pinned:
+            violations.append(f"{name} (exempt but pinned)")
+        elif not should_be_ambient and not pinned:
+            violations.append(f"{name} (not exempt but ambient)")
+    return violations
+
+
+class TestClaudeAmbientCoverage:
+    """A1/A2: every CLAUDE_SKILLS entry outside the 3 front doors is pinned."""
+
+    @pytest.mark.parametrize(
+        "skill_name",
+        sorted(set(CLAUDE_SKILLS) - AMBIENT_FRONT_DOOR_SKILL_NAMES),
+    )
+    def test_non_front_door_carries_pin(self, skill_name: str) -> None:
+        fm = _frontmatter(CLAUDE_SKILLS[skill_name])
+        assert "disable-model-invocation: true" in fm, (
+            f"{skill_name} is ambient but is not one of the stated front doors "
+            f"({sorted(AMBIENT_FRONT_DOOR_SKILL_NAMES)})"
+        )
+
+    @pytest.mark.parametrize("skill_name", sorted(AMBIENT_FRONT_DOOR_SKILL_NAMES))
+    def test_front_door_stays_ambient(self, skill_name: str) -> None:
+        fm = _frontmatter(CLAUDE_SKILLS[skill_name])
+        assert "disable-model-invocation:" not in fm
+
+
+class TestCursorAmbientCoverage:
+    """A1: CURSOR_SKILLS carries the same pin on every non-front-door entry.
+
+    This class is the actual fix for the gap described in the lane brief --
+    before it existed, nothing in this test suite ever imported CURSOR_SKILLS
+    into a disable-model-invocation assertion."""
+
+    @pytest.mark.parametrize(
+        "skill_name",
+        sorted(set(CURSOR_SKILLS) - AMBIENT_FRONT_DOOR_SKILL_NAMES),
+    )
+    def test_non_front_door_carries_pin(self, skill_name: str) -> None:
+        fm = _frontmatter(CURSOR_SKILLS[skill_name])
+        assert "disable-model-invocation: true" in fm, (
+            f"{skill_name} is ambient but is not one of the stated front doors "
+            f"({sorted(AMBIENT_FRONT_DOOR_SKILL_NAMES)})"
+        )
+
+    @pytest.mark.parametrize("skill_name", sorted(AMBIENT_FRONT_DOOR_SKILL_NAMES))
+    def test_front_door_stays_ambient(self, skill_name: str) -> None:
+        fm = _frontmatter(CURSOR_SKILLS[skill_name])
+        assert "disable-model-invocation:" not in fm
+
+
+class TestFrontDoorAllowlistIsNameSensitive:
+    """A3: the check must fail on a same-size name swap, not just a count
+    change -- otherwise an allowlist that silently drifts to the wrong names
+    would still read as green."""
+
+    def test_swapping_a_front_door_name_breaks_the_invariant(self) -> None:
+        swapped = (AMBIENT_FRONT_DOOR_SKILL_NAMES - {"tapps-wayfind"}) | {"tapps-security"}
+        assert len(swapped) == len(AMBIENT_FRONT_DOOR_SKILL_NAMES)
+
+        claude_violations = _ambient_violations(CLAUDE_SKILLS, swapped)
+        cursor_violations = _ambient_violations(CURSOR_SKILLS, swapped)
+
+        # tapps-wayfind is real-ambient but no longer in the swapped allowlist
+        # -> flagged as "not exempt but ambient". tapps-security is real-pinned
+        # but now (wrongly) in the allowlist -> flagged as "exempt but pinned".
+        assert any("tapps-wayfind" in v for v in claude_violations)
+        assert any("tapps-security" in v for v in claude_violations)
+        assert any("tapps-wayfind" in v for v in cursor_violations)
+        assert any("tapps-security" in v for v in cursor_violations)

@@ -203,6 +203,25 @@ def resolve_role_model(role: str) -> str:
         raise RoleResolutionError(f"unknown model role: {role!r}") from exc
 
 
+# TAP-7385: the only skills whose frontmatter stays ambient (invocable by a
+# plain-language request, no ``disable-model-invocation`` pin) across BOTH
+# CLAUDE_SKILLS and CURSOR_SKILLS. Every other entry in either dict must carry
+# the pin. This set is read by the frontmatter tests instead of being
+# re-typed there, so the allowlist has exactly one place to drift from.
+AMBIENT_FRONT_DOOR_SKILL_NAMES: frozenset[str] = frozenset(
+    {
+        # Universal task-completion gate — must trigger on "I'm done" style
+        # requests without the user knowing its exact name.
+        "tapps-finish-task",
+        # Session bootstrap — must trigger on "continue" / "pick up where we
+        # left off" without an explicit invocation.
+        "tapps-continue-session",
+        # Routing skill — has to be ambient to route *other* requests at all;
+        # a non-ambient router can never be reached by the flow it routes.
+        "tapps-wayfind",
+    }
+)
+
 # Core skill tier for init/upgrade when ``skill_tier: core`` (context budget).
 CORE_SKILL_NAMES: frozenset[str] = frozenset(
     {
@@ -1046,6 +1065,7 @@ description: >-
 mcp_tools:
   - tapps_handoff_save
   - tapps_session_start
+disable-model-invocation: true
 ---
 
 End the session with a durable handoff the next chat loads via `tapps-continue-session`.
@@ -1120,6 +1140,7 @@ mcp_tools:
   - tapps_validate_changed
   - tapps_checklist
   - tapps_session_start
+disable-model-invocation: true
 ---
 
 Run a parallel review-fix-validate pipeline on changed Python files:
@@ -1153,6 +1174,7 @@ mcp_tools:
   - tapps_quick_check
   - tapps_validate_changed
   - tapps_checklist
+disable-model-invocation: true
 ---
 
 Symbol-level refactor workflow (Epic 114 / ADR-0017):
@@ -1182,6 +1204,7 @@ description: >-
 mcp_tools:
   - tapps_research
   - tapps_lookup_docs
+disable-model-invocation: true
 ---
 
 Research using TappsMCP's unified front door (ADR-0030):
@@ -1205,6 +1228,7 @@ description: >-
 mcp_tools:
   - tapps_security_scan
   - tapps_dependency_scan
+disable-model-invocation: true
 ---
 
 Run a comprehensive security audit using TappsMCP:
@@ -1224,6 +1248,7 @@ description: >-
 mcp_tools:
   - tapps_session_start
   - tapps_session_notes
+disable-model-invocation: true
 ---
 
 `tapps_memory` on the **`nlt-memory`** MCP server is a slim facade (TAP-3895). Default consumer path is **`uv run tapps-mcp memory`** (bridge-only — never add direct `tapps-brain` to `.mcp.json`).
@@ -1258,6 +1283,7 @@ description: >-
   Use when you need guidance on which TappsMCP tool to call for a given situation.
 mcp_tools:
   - tapps_server_info
+disable-model-invocation: true
 ---
 
 When the user asks about TappsMCP tools, provide the full tool reference.
@@ -1308,6 +1334,7 @@ description: >-
 mcp_tools:
   - tapps_init
   - tapps_doctor
+disable-model-invocation: true
 ---
 
 Bootstrap TappsMCP in a new or existing project:
@@ -1342,6 +1369,7 @@ mcp_tools:
   - tapps_session_start
   - tapps_doctor
   - tapps_checklist
+disable-model-invocation: true
 ---
 
 Upgrade tapps-mcp / docs-mcp end-to-end. The user's request is standing authorization — do NOT pause mid-flow.
@@ -1378,6 +1406,7 @@ description: >-
   to switch between strict, balanced, or advisory enforcement modes.
 mcp_tools:
   - tapps_set_engagement_level
+disable-model-invocation: true
 ---
 
 Set the TappsMCP LLM engagement level:
@@ -1397,6 +1426,7 @@ description: >-
   a TappsMCP or DocsMCP tool returns content_return: true with a file_manifest
   because the server runs in Docker and cannot write files directly.
 mcp_tools: []
+disable-model-invocation: true
 ---
 
 When a TappsMCP or DocsMCP tool returns `content_return: true` with a `file_manifest`,
@@ -1429,6 +1459,7 @@ mcp_tools:
   - tapps_linear_snapshot_get
   - tapps_linear_snapshot_put
   - tapps_linear_snapshot_invalidate
+disable-model-invocation: true
 ---
 
 Work with Linear issues for AI-agent consumption. Infer intent from the user's prompt and act autonomously within scope. The user's original request is standing authorization for the full generator → validator → save chain — do NOT pause mid-flow to ask "should I create this?"
@@ -1481,6 +1512,7 @@ mcp_tools:
   - tapps_linear_list_issues
   - linear_list_issues
   - linear_get_issue
+disable-model-invocation: true
 ---
 
 Multi-issue Linear reads are cache-first by contract (TAP-967 audit: 5,368 `list_issues` calls / 0.26% cache adoption). Invoke ANY time the user asks for a list, batch, or filtered view of Linear issues.
@@ -1517,6 +1549,7 @@ mcp_tools:
   - docs_release_gate
   - linear_save_document
   - tapps_linear_snapshot_invalidate
+disable-model-invocation: true
 ---
 
 Post a structured Linear project update document when a new version is released. The user's request to post a release update is standing authorization for the full pipeline — do NOT pause mid-flow to ask "should I post this?"
@@ -1561,19 +1594,63 @@ from tapps_mcp.pipeline.platform_domain_skills import (
 CLAUDE_SKILLS.update(CLAUDE_DOMAIN_SKILLS)
 CURSOR_SKILLS.update(CURSOR_DOMAIN_SKILLS)
 
+
+def _pin_ambient(skill_name: str, body: str) -> str:
+    """Insert ``disable-model-invocation: true`` into ``body``'s frontmatter.
+
+    Used for bodies sourced from sibling template modules
+    (``platform_domain_skills``, ``platform_skill_orchestration``,
+    ``platform_skill_continuous_learning``) that this lane's file partition
+    does not include — the pin is applied here, post-import, instead of
+    editing those modules. A no-op if the body already carries the pin.
+    """
+    if "disable-model-invocation:" in body:
+        return body
+    assert body.startswith("---\n"), f"{skill_name}: body has no frontmatter"
+    end = body.index("\n---\n", 4)
+    return body[:end] + "\ndisable-model-invocation: true" + body[end:]
+
+
+# TAP-7385: the 8 ambient CLAUDE_SKILLS beyond the 3 stated front doors
+# (AMBIENT_FRONT_DOOR_SKILL_NAMES) were simply missed by the prior pass, not
+# intentionally ambient — none of them is a fleet-wide entry point the way
+# tapps-finish-task / tapps-continue-session / tapps-wayfind are. Pin all 8,
+# on both hosts, without touching the sibling modules that define their
+# bodies.
+_MISSED_AMBIENT_SKILL_NAMES = (
+    "tapps-domain-security",
+    "tapps-domain-testing",
+    "tapps-domain-frontend",
+    "tapps-flow-develop",
+    "tapps-flow-review",
+    "tapps-flow-frontend",
+)
+for _name in _MISSED_AMBIENT_SKILL_NAMES:
+    CLAUDE_SKILLS[_name] = _pin_ambient(_name, CLAUDE_SKILLS[_name])
+    CURSOR_SKILLS[_name] = _pin_ambient(_name, CURSOR_SKILLS[_name])
+
 # ---------------------------------------------------------------------------
 # Multi-file / smart-merge skills (orchestration-prompt + tapps-wayfind)
 # ---------------------------------------------------------------------------
 # The body is host-agnostic prose (no tool grants), so the same text serves the
-# Claude and Cursor hosts.
-CLAUDE_SKILLS["orchestration-prompt"] = ORCHESTRATION_PROMPT_SKILL_BODY
-CURSOR_SKILLS["orchestration-prompt"] = ORCHESTRATION_PROMPT_SKILL_BODY
+# Claude and Cursor hosts. orchestration-prompt is one of the 8 missed-ambient
+# skills above; tapps-wayfind is a stated front door and stays ambient.
+CLAUDE_SKILLS["orchestration-prompt"] = _pin_ambient(
+    "orchestration-prompt", ORCHESTRATION_PROMPT_SKILL_BODY
+)
+CURSOR_SKILLS["orchestration-prompt"] = _pin_ambient(
+    "orchestration-prompt", ORCHESTRATION_PROMPT_SKILL_BODY
+)
 CLAUDE_SKILLS["tapps-wayfind"] = WAYFIND_SKILL_BODY
 CURSOR_SKILLS["tapps-wayfind"] = WAYFIND_SKILL_BODY
 CLAUDE_SKILLS["tapps-validation-contract"] = VALIDATION_CONTRACT_SKILL_BODY
 CURSOR_SKILLS["tapps-validation-contract"] = VALIDATION_CONTRACT_SKILL_BODY
-CLAUDE_SKILLS["continuous-learning-v2"] = CONTINUOUS_LEARNING_CLAUDE_SKILL_BODY
-CURSOR_SKILLS["continuous-learning-v2"] = CONTINUOUS_LEARNING_CURSOR_SKILL_BODY
+CLAUDE_SKILLS["continuous-learning-v2"] = _pin_ambient(
+    "continuous-learning-v2", CONTINUOUS_LEARNING_CLAUDE_SKILL_BODY
+)
+CURSOR_SKILLS["continuous-learning-v2"] = _pin_ambient(
+    "continuous-learning-v2", CONTINUOUS_LEARNING_CURSOR_SKILL_BODY
+)
 
 # Skills whose SKILL.md is refreshed via the managed-block smart-merge instead of
 # the all-or-nothing skip/overwrite: the platform body is replaced surgically and

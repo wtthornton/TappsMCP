@@ -154,6 +154,13 @@ class TestClaudeDisableModelInvocation:
 # ---------------------------------------------------------------------------
 # Claude skill frontmatter: context
 # ---------------------------------------------------------------------------
+#
+# NOTE: TAP-7385 ambient-invocation coverage spanning BOTH CLAUDE_SKILLS and
+# CURSOR_SKILLS lives in test_platform_skills_model_roles.py, not here --
+# this file is already below the maintainability gate threshold (see that
+# file's module docstring) and the additional dict-driven parametrization
+# pushed the ratchet into a regression. See TestClaudeAmbientCoverage /
+# TestCursorAmbientCoverage / TestFrontDoorAllowlistIsNameSensitive there.
 
 
 class TestClaudeContext:
