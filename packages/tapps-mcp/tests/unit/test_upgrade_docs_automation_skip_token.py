@@ -173,3 +173,54 @@ class TestSkippedRaisesOnUnknownArtifact:
     def test_known_artifact_still_returns_a_plain_bool(self) -> None:
         assert skipped("docs_automation", {"docs_automation"}) is True
         assert skipped("docs_automation", set()) is False
+
+
+class TestDryRunStatusReflectsThePin:
+    """GAP 1 (box 1): a dry run never writes in EITHER case, so the only
+    observable this class of test can assert is the *reported status* —
+    not "the file was not rewritten" (that would be true either way and is
+    an inert assertion per the lane brief). Each test asserts BOTH
+    directions in one body: pinned -> ``skipped (upgrade_skip_files)``,
+    unpinned -> the ``would-write-managed-skills`` planning dict. An
+    assertion that only checked the pinned half could not tell a working
+    guard from a guard that always reports "skipped" regardless of the pin
+    (an always-skip bug), which is why both directions live together here.
+    """
+
+    def test_claude_dry_run_reports_skipped_when_pinned_and_plan_when_not(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        _docs_project(tmp_path)
+
+        unpinned = upgrade_pipeline(tmp_path, platform="claude", dry_run=True)
+        unpinned_status = _platform_component(unpinned, "claude-code", "docs_automation")
+        assert unpinned_status != "skipped (upgrade_skip_files)"
+        assert isinstance(unpinned_status, dict)
+        assert unpinned_status["action"] == "would-write-managed-skills"
+
+        monkeypatch.setenv("TAPPS_MCP_UPGRADE_SKIP_FILES", json.dumps(["docs_automation"]))
+        pinned = upgrade_pipeline(tmp_path, platform="claude", dry_run=True)
+        pinned_status = _platform_component(pinned, "claude-code", "docs_automation")
+        assert pinned_status == "skipped (upgrade_skip_files)"
+
+        # Dry run performed no write in either case -- the discriminator is
+        # the reported status above, not filesystem state.
+        assert not (tmp_path / ".claude" / "skills" / "tapps-docs-refresh").exists()
+
+    def test_cursor_dry_run_reports_skipped_when_pinned_and_plan_when_not(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        _docs_project(tmp_path)
+
+        unpinned = upgrade_pipeline(tmp_path, platform="cursor", dry_run=True)
+        unpinned_status = _platform_component(unpinned, "cursor", "docs_automation")
+        assert unpinned_status != "skipped (upgrade_skip_files)"
+        assert isinstance(unpinned_status, dict)
+        assert unpinned_status["action"] == "would-write-managed-skills"
+
+        monkeypatch.setenv("TAPPS_MCP_UPGRADE_SKIP_FILES", json.dumps(["docs_automation"]))
+        pinned = upgrade_pipeline(tmp_path, platform="cursor", dry_run=True)
+        pinned_status = _platform_component(pinned, "cursor", "docs_automation")
+        assert pinned_status == "skipped (upgrade_skip_files)"
+
+        assert not (tmp_path / ".cursor" / "skills" / "tapps-docs-refresh").exists()
