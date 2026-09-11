@@ -298,10 +298,13 @@ case "$CMD" in
     flagged=$(g ls-files -v | grep '^[a-z]' || true)
     if [ -n "$flagged" ]; then
       echo "ASSUME-UNCHANGED FILES PRESENT -- 'git status' is blind to these:"
-      echo "$flagged" | sed 's/^/  /'
+      echo "  ${flagged//$'\n'/$'\n'  }"
     fi
-    [ "$behind" -eq 0 ] && echo "VERDICT: current." || {
-      echo "VERDICT: STALE by $behind commit(s). Any -S / grep / read here answers about old code."; }
+    if [ "$behind" -eq 0 ]; then
+      echo "VERDICT: current."
+    else
+      echo "VERDICT: STALE by $behind commit(s). Any -S / grep / read here answers about old code."
+    fi
     ;;
 
   sessions)

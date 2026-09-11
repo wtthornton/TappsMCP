@@ -62,24 +62,58 @@ class TestSourceIsPortedFaithfully:
         assert digest == _MEASURE_PY_STAGED_MD5
         assert source == MEASURE_PY_BODY
 
-    def test_gitfacts_body_differs_from_staged_source_by_exactly_one_line(self) -> None:
-        """The only permitted deviation: usage()'s self-read, made robust to the
-        line-shift the managed-block wrapper introduces (documented in the
-        module docstring and the PR body)."""
+    def test_gitfacts_body_differs_from_staged_source_by_documented_lines_only(self) -> None:
+        """The only permitted deviations from the staged original:
+
+        1. usage()'s self-read, made robust to the line-shift the managed-block
+           wrapper introduces (documented in the module docstring and the PR body).
+        2. TAP-7160: the SC2001 and SC2015 shellcheck findings fixed without
+           changing behavior -- see ``test_platform_project_scripts_shellcheck.py``
+           for the shellcheck-clean assertion, the pre-fix negative control that
+           proves the checker actually caught these two lines, and the equivalent-
+           output proof for the ``sed`` -> parameter-expansion rewrite.
+
+        Reconstructs the expected body by applying exactly these documented
+        substitutions to the staged fixture and asserts full equality -- any
+        further, undocumented drift fails this test rather than the old
+        length-mismatch AssertionError, which would have made TAP-7160's own
+        fix look like a broken invariant instead of an intentional, catalogued one.
+        """
         path = _FIXTURES_DIR / "src-gitfacts.sh.fixture"
         raw = path.read_text(encoding="utf-8")
         digest = hashlib.md5(raw.encode("utf-8"), usedforsecurity=False).hexdigest()
         assert digest == _GITFACTS_SH_STAGED_MD5
-        source = raw.splitlines()
-        body = GITFACTS_SH_BODY.splitlines()
-        assert len(source) == len(body)
-        diffs = [(a, b) for a, b in zip(source, body, strict=True) if a != b]
-        assert len(diffs) == 1
-        old_line, new_line = diffs[0]
-        assert old_line == "usage() { sed -n '3,9p' \"${BASH_SOURCE[0]}\" >&2; exit 2; }"
-        assert new_line == (
-            "usage() { sed -n '/^# Usage:/,/^# *$/p' \"${BASH_SOURCE[0]}\" >&2; exit 2; }"
+
+        usage_old = "usage() { sed -n '3,9p' \"${BASH_SOURCE[0]}\" >&2; exit 2; }"
+        usage_new = "usage() { sed -n '/^# Usage:/,/^# *$/p' \"${BASH_SOURCE[0]}\" >&2; exit 2; }"
+        assert usage_old in raw
+        assert usage_new not in raw
+
+        sc2001_old = '      echo "$flagged" | sed \'s/^/  /\'\n'
+        sc2001_new = '      echo "  ${flagged//$\'\\n\'/$\'\\n\'  }"\n'
+        assert sc2001_old in raw
+
+        sc2015_old = (
+            '    [ "$behind" -eq 0 ] && echo "VERDICT: current." || {\n'
+            '      echo "VERDICT: STALE by $behind commit(s).'
+            ' Any -S / grep / read here answers about old code."; }\n'
         )
+        sc2015_new = (
+            '    if [ "$behind" -eq 0 ]; then\n'
+            '      echo "VERDICT: current."\n'
+            "    else\n"
+            '      echo "VERDICT: STALE by $behind commit(s).'
+            ' Any -S / grep / read here answers about old code."\n'
+            "    fi\n"
+        )
+        assert sc2015_old in raw
+
+        expected_body = (
+            raw.replace(usage_old, usage_new)
+            .replace(sc2001_old, sc2001_new)
+            .replace(sc2015_old, sc2015_new)
+        )
+        assert expected_body == GITFACTS_SH_BODY
 
 
 class TestGenerateMeasureScript:
