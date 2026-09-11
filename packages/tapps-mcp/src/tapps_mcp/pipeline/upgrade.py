@@ -96,6 +96,8 @@ so consumers can audit exactly which paths would change:
 
 from __future__ import annotations
 
+import hashlib
+import json
 from collections.abc import Callable
 from dataclasses import dataclass
 from functools import partial
@@ -355,6 +357,95 @@ def _upgrade_all_hosts(
     lift_asset_overwrite_warnings(result, platform_results)
 
 
+def _hash_skill_managed_block(skill_path: Path) -> str | None:
+    """Hash *skill_path*'s managed block the same way the manifest does.
+
+    ``None`` when the file doesn't exist or has no ``BEGIN``/``END`` marker —
+    mirrors :func:`tapps_mcp.pipeline.platform_skills._skill_manifest_hash`
+    without importing that private helper across the module boundary.
+    """
+    from tapps_mcp.pipeline.skill_managed_block import extract_block, normalize_block_version
+
+    if not skill_path.exists():
+        return None
+    block = extract_block(skill_path.read_text(encoding="utf-8"))
+    if block is None:
+        return None
+    return hashlib.sha256(normalize_block_version(block).encode("utf-8")).hexdigest()
+
+
+def _annotate_skills_manifest_sources(project_root: Path) -> None:
+    """Tag ``skills-manifest.json`` entries by source and add docs-mcp rows (TAP-7152).
+
+    ``generate_skills()`` (tapps-mcp's own emitter) writes a bare sha256 hex
+    string for every skill in its own ``CLAUDE_SKILLS``/``CURSOR_SKILLS``
+    catalogue, and never learns about the ``tapps-docs-*`` skills
+    ``generate_docs_skills()`` deploys alongside them when docs-mcp is
+    present — those skills are real, on-disk, managed-block skills that
+    simply never got a manifest row, which is why the doctor's
+    ``check_skills_manifest_directory`` used to flag every one of them as
+    "unknown". This runs once at the end of the upgrade pipeline (after every
+    host's ``generate_skills``/``generate_docs_automation`` call has already
+    written its files) and:
+
+    - upgrades every existing bare-hash entry to ``{"hash": ..., "source":
+      "tapps-mcp"}`` (idempotent — already-upgraded entries are left alone), and
+    - adds a ``{"hash": ..., "source": "docs-mcp"}`` row for each docs-mcp
+      skill that is actually deployed on disk for that host.
+
+    A skill with no registered source (neither catalogue) is deliberately
+    left untouched here, so the doctor's "not in manifest (unknown)" branch
+    keeps catching genuinely unrecognized managed-block skills.
+    """
+    from tapps_mcp.pipeline.platform_docs_automation import (
+        CLAUDE_DOCS_SKILLS,
+        CURSOR_DOCS_SKILLS,
+    )
+    from tapps_mcp.pipeline.platform_skills import SKILLS_MANIFEST_REL_PATH
+
+    manifest_path = project_root.joinpath(*SKILLS_MANIFEST_REL_PATH)
+    if not manifest_path.is_file():
+        return
+    try:
+        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return
+    if not isinstance(manifest, dict):
+        return
+
+    docs_skills_by_host = {"claude": CLAUDE_DOCS_SKILLS, "cursor": CURSOR_DOCS_SKILLS}
+    skills_base_by_host = {
+        "claude": project_root / ".claude" / "skills",
+        "cursor": project_root / ".cursor" / "skills",
+    }
+
+    changed = False
+    for host_label, host_manifest in manifest.items():
+        if not isinstance(host_manifest, dict):
+            continue
+
+        for skill_name, entry in list(host_manifest.items()):
+            if isinstance(entry, str):
+                host_manifest[skill_name] = {"hash": entry, "source": "tapps-mcp"}
+                changed = True
+
+        base = skills_base_by_host.get(host_label)
+        if base is None:
+            continue
+        for skill_name in docs_skills_by_host.get(host_label, {}):
+            block_hash = _hash_skill_managed_block(base / skill_name / "SKILL.md")
+            if block_hash is None:
+                continue
+            if host_manifest.get(skill_name) != {"hash": block_hash, "source": "docs-mcp"}:
+                host_manifest[skill_name] = {"hash": block_hash, "source": "docs-mcp"}
+                changed = True
+
+    if changed:
+        manifest_path.write_text(
+            json.dumps(manifest, indent=2, sort_keys=True) + "\n", encoding="utf-8"
+        )
+
+
 def _upgrade_repo_artifacts(
     project_root: Path,
     result: dict[str, Any],
@@ -388,9 +479,7 @@ def _upgrade_repo_artifacts(
     elif dry_run:
         dry_run_github_artifacts(project_root, result, skip_files=options.skip_files)
     else:
-        run_github_artifacts(
-            project_root, result, force=force, skip_files=options.skip_files
-        )
+        run_github_artifacts(project_root, result, force=force, skip_files=options.skip_files)
 
     install_start_program_script(
         project_root, result, mcp_only=mcp_only, skip_files=options.skip_files, dry_run=dry_run
@@ -599,6 +688,8 @@ def upgrade_pipeline(
         force=force,
         mcp_only=mcp_only,
     )
+    if not dry_run:
+        _annotate_skills_manifest_sources(project_root)
     _upgrade_repo_artifacts(
         project_root, result, options, dry_run=dry_run, force=force, mcp_only=mcp_only
     )

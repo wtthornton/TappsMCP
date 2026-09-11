@@ -107,6 +107,74 @@ class TestDirectoryDiffCheck:
         assert "tapps-finish-task" in result.message
         assert "missing" in result.message
 
+
+class TestDocsMcpManifestSourceTagging:
+    """TAP-7152: docs-mcp's ``tapps-docs-*`` skills must not read as unknown drift."""
+
+    def test_upgrade_tags_docs_mcp_skills_and_check_passes(self, tmp_path: Path) -> None:
+        from tapps_mcp.pipeline.upgrade import upgrade_pipeline
+
+        (tmp_path / ".claude").mkdir(parents=True, exist_ok=True)
+        (tmp_path / "pyproject.toml").write_text(
+            '[project]\nname = "x"\ndependencies = ["docs-mcp"]\n', encoding="utf-8"
+        )
+
+        result = upgrade_pipeline(tmp_path, platform="claude")
+        assert result["success"] is True
+
+        manifest = json.loads(_manifest_path(tmp_path).read_text(encoding="utf-8"))
+        entry = manifest["claude"]["tapps-docs-refresh"]
+        assert entry["source"] == "docs-mcp"
+        assert len(entry["hash"]) == 64
+
+        check_result = check_skills_manifest_directory(tmp_path)
+        assert check_result.ok is True, check_result.message
+        assert "unknown" not in check_result.message
+
+    def test_existing_tapps_mcp_entries_get_tagged_source(self, tmp_path: Path) -> None:
+        from tapps_mcp.pipeline.upgrade import upgrade_pipeline
+
+        (tmp_path / ".claude").mkdir(parents=True, exist_ok=True)
+        (tmp_path / "pyproject.toml").write_text("", encoding="utf-8")
+
+        upgrade_pipeline(tmp_path, platform="claude")
+
+        manifest = json.loads(_manifest_path(tmp_path).read_text(encoding="utf-8"))
+        entry = manifest["claude"]["tapps-finish-task"]
+        assert set(entry) == {"hash", "source"}
+        assert entry["source"] == "tapps-mcp"
+        assert len(entry["hash"]) == 64
+
+    def test_genuinely_unknown_skill_still_flagged_after_docs_mcp_fix(self, tmp_path: Path) -> None:
+        """Negative control: the source-tagging pass must not blind the check
+        to a managed-block skill that belongs to neither registry."""
+        from tapps_mcp.pipeline.upgrade import upgrade_pipeline
+
+        (tmp_path / ".claude").mkdir(parents=True, exist_ok=True)
+        (tmp_path / "pyproject.toml").write_text(
+            '[project]\nname = "x"\ndependencies = ["docs-mcp"]\n', encoding="utf-8"
+        )
+        upgrade_pipeline(tmp_path, platform="claude")
+
+        rogue = tmp_path / ".claude" / "skills" / "not-a-registered-skill" / "SKILL.md"
+        install_or_refresh_skill(
+            rogue, "---\nname: not-a-registered-skill\n---\n\nbody\n", "not-a-registered-skill"
+        )
+
+        result = check_skills_manifest_directory(tmp_path)
+        assert result.ok is False
+        assert "not-a-registered-skill" in result.message
+        assert "unknown" in result.message
+
+    def test_generate_skills_alone_still_writes_bare_hash_strings(self, tmp_path: Path) -> None:
+        """The tagging pass lives in upgrade.py, not the emitter — a bare
+        ``generate_skills()`` call (e.g. from ``tapps_init``) is unaffected."""
+        generate_skills(tmp_path, "claude")
+        manifest = json.loads(_manifest_path(tmp_path).read_text(encoding="utf-8"))
+        assert isinstance(manifest["claude"]["tapps-finish-task"], str)
+
+
+class TestDirectoryDiffCheckPartition:
     def test_partitions_away_from_smart_merge_skills(self, tmp_path: Path) -> None:
         """TAP-6948 s2 partition: this check cedes the trio to
         ``check_orchestration_prompt_skill_current`` (and its two siblings) so
