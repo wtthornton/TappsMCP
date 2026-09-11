@@ -574,6 +574,7 @@ def generate_docs_automation(
     platform: str,
     *,
     overwrite: bool = False,
+    skills_overwrite: bool | None = None,
 ) -> dict[str, Any]:
     """Generate all documentation automation files (agents + skills).
 
@@ -582,13 +583,23 @@ def generate_docs_automation(
     Args:
         project_root: Project root directory.
         platform: ``"claude"`` or ``"cursor"``.
-        overwrite: Whether to overwrite existing files.
+        overwrite: Whether to overwrite existing agent files.
+        skills_overwrite: Whether to overwrite existing skill files. Defaults
+            to *overwrite* when omitted, so existing callers that pass a
+            single ``overwrite`` flag keep applying it to both halves. Passed
+            separately (TAP-7428) because the two halves answer to different
+            ``upgrade_skip_files`` tokens: agents to ``claude_agents`` /
+            ``cursor_agents``, skills to ``claude_skills`` / ``cursor_skills``.
 
     Returns:
         Summary dict with ``agents`` and ``skills`` sub-dicts.
     """
     agents_result = generate_docs_agents(project_root, platform, overwrite=overwrite)
-    skills_result = generate_docs_skills(project_root, platform, overwrite=overwrite)
+    skills_result = generate_docs_skills(
+        project_root,
+        platform,
+        overwrite=overwrite if skills_overwrite is None else skills_overwrite,
+    )
 
     return {
         "agents": agents_result,

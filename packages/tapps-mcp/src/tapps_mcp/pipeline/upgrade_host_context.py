@@ -139,9 +139,28 @@ def docsmcp_gate(project_root: Path) -> Gate:
 
 
 def apply_docs_automation(ctx: HostContext, platform: str) -> Any:
+    """Write docs-automation's agents and skills, honouring the skills-dir pin.
+
+    ``docs_automation`` is one component gated by one ``skip_key`` at the
+    ``resolve_component`` level (TAP-7425), but it writes into two
+    independently-pinnable directories: ``.claude/agents`` (``claude_agents`` /
+    ``cursor_agents``) and ``.claude/skills`` (``claude_skills`` /
+    ``cursor_skills``). Before TAP-7428, both were written with
+    ``overwrite=True`` unconditionally, so pinning ``.claude/skills`` alone
+    never protected the six docs SKILL.md files this component also owns.
+    Reusing the same per-platform skills token here — rather than inventing a
+    new one — keeps ``upgrade_skip_files: ['.claude/skills']`` mean exactly
+    what it says regardless of which component writes under that directory.
+    """
     from tapps_mcp.pipeline.platform_docs_automation import generate_docs_automation
 
-    return generate_docs_automation(ctx.project_root, platform, overwrite=True)
+    skills_token = "claude_skills" if platform == "claude" else "cursor_skills"
+    return generate_docs_automation(
+        ctx.project_root,
+        platform,
+        overwrite=True,
+        skills_overwrite=not skipped(skills_token, ctx.skip),
+    )
 
 
 def _preserved_regions(skills_dir: Path, all_skills: frozenset[str]) -> dict[str, int]:
