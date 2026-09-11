@@ -69,6 +69,22 @@ def _shellcheck_bin() -> str:
     return binary
 
 
+def _shellcheck_version(binary: str) -> str:
+    """Return e.g. ``0.11.0`` so a future CI failure names the binary that produced it.
+
+    A local-clean / CI-flagged skew (TAP-7160: SC2015 on a usage() guard that
+    shellcheck 0.11.0 does not flag but CI's version does) is otherwise
+    indistinguishable from a real source defect.
+    """
+    result = subprocess.run(
+        [binary, "--version"], capture_output=True, text=True, check=False
+    )
+    for line in result.stdout.splitlines():
+        if line.startswith("version:"):
+            return line.removeprefix("version:").strip()
+    return "unknown"
+
+
 def _run_shellcheck(body: str, tmp_path: Path, name: str) -> subprocess.CompletedProcess[str]:
     script_path = tmp_path / name
     script_path.write_text(body, encoding="utf-8")
@@ -107,17 +123,25 @@ def test_gitfacts_sh_body_pre_fix_shape_is_flagged(tmp_path: Path) -> None:
 
 def test_gitfacts_sh_body_passes_shellcheck(tmp_path: Path) -> None:
     """Box 1: the rendered gitfacts.sh body reports zero shellcheck findings."""
+    binary = _shellcheck_bin()
     result = _run_shellcheck(GITFACTS_SH_BODY, tmp_path, "gitfacts.sh")
     assert result.returncode == 0, (
-        f"gitfacts.sh body has shellcheck findings: stdout={result.stdout!r}"
+        f"gitfacts.sh body has shellcheck findings under shellcheck "
+        f"{_shellcheck_version(binary)}: stdout={result.stdout!r}. A clean local "
+        f"run does not prove CI is clean -- different shellcheck versions can "
+        f"disagree on the same bytes (TAP-7160)."
     )
     assert result.stdout == ""
 
 
 def test_start_program_sh_body_passes_shellcheck(tmp_path: Path) -> None:
     """Box 2: the rendered start-program.sh body reports zero shellcheck findings."""
+    binary = _shellcheck_bin()
     result = _run_shellcheck(START_PROGRAM_SCRIPT_BODY, tmp_path, "start-program.sh")
     assert result.returncode == 0, (
-        f"start-program.sh body has shellcheck findings: stdout={result.stdout!r}"
+        f"start-program.sh body has shellcheck findings under shellcheck "
+        f"{_shellcheck_version(binary)}: stdout={result.stdout!r}. A clean local "
+        f"run does not prove CI is clean -- different shellcheck versions can "
+        f"disagree on the same bytes (TAP-7160)."
     )
     assert result.stdout == ""

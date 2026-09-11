@@ -73,6 +73,11 @@ class TestSourceIsPortedFaithfully:
            the shellcheck-clean assertion, the pre-fix negative control that
            proves the checker actually caught these two lines, and the equivalent-
            output proof for the ``sed`` -> parameter-expansion rewrite.
+        3. TAP-7160 (follow-up): a third SC2015 on the `usage()` argument guard
+           (`[ -n "$CMD" ] && [ -n "$REPO" ] || usage`) that local shellcheck 0.11.0
+           does not flag but CI's shellcheck does -- rewritten to an unambiguous
+           `if`/`then` form so no `&&`...`||` chain remains for any shellcheck
+           version to fire on.
 
         Reconstructs the expected body by applying exactly these documented
         substitutions to the staged fixture and asserts full equality -- any
@@ -109,10 +114,15 @@ class TestSourceIsPortedFaithfully:
         )
         assert sc2015_old in raw
 
+        guard_old = '[ -n "$CMD" ] && [ -n "$REPO" ] || usage'
+        guard_new = 'if [ -z "$CMD" ] || [ -z "$REPO" ]; then usage; fi'
+        assert guard_old in raw
+
         expected_body = (
             raw.replace(usage_old, usage_new)
             .replace(sc2001_old, sc2001_new)
             .replace(sc2015_old, sc2015_new)
+            .replace(guard_old, guard_new)
         )
         assert expected_body == GITFACTS_SH_BODY
 
