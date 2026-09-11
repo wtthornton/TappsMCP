@@ -52,6 +52,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   not register, any `action=<word>` nlt-memory will not dispatch, and any
   paragraph that offers the CLI as a route to the MCP action surface.
 
+## [3.12.88] - 2026-09-11
+
+### Added
+
+- **First-class template artifact category** (#397, `7275a8dd`)
+- **Doctor check for one-pager template currency** (#402, `061ff67b`)
+
+### Fixed
+
+- **`docs_automation` skip token made load-bearing on both hosts during upgrade** (#398, `5a2cf273`)
+- **`gitfacts.sh` rewritten to pass shellcheck cleanly** (#399, `841fda15`)
+- **`usage()` guards rewritten to defeat SC2015 under any shellcheck version** (#401, `1bec3ed0`)
+
+### Tests
+
+- **Coverage added for dry-run status and skip-token call-site validation in `docs_automation`** (#400, `f4173ecf`)
+
 ## [3.12.87] - 2026-09-10
 
 ### Fixed
