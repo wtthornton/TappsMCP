@@ -3014,10 +3014,10 @@ class TestCheckNltPartialEnablement:
         result = check_nlt_partial_enablement(tmp_path)
         assert result.ok is True
         assert "combined eager=18" in result.message
-        assert "nlt-build: 9 eager / 20 listed" in result.message
+        assert "nlt-build: 9 eager / 22 listed" in result.message
         assert "nlt-memory: 2 eager / 5 listed" in result.message
         assert "nlt-linear-issues: 7 eager / 15 listed" in result.message
-        assert "combined listed=40" in result.message
+        assert "combined listed=42" in result.message
 
     def test_all_six_servers_in_config_passes_when_inferred_full(self, tmp_path) -> None:  # type: ignore[no-untyped-def]
         self._cursor_mcp_json(
