@@ -48,7 +48,7 @@ USAGE
 }
 
 SLUG=${1:-}; PROMPT=${2:-}; INTEGRATOR=${3:-}
-[ -n "$SLUG" ] && [ -n "$PROMPT" ] && [ -n "$INTEGRATOR" ] || usage
+if [ -z "$SLUG" ] || [ -z "$PROMPT" ] || [ -z "$INTEGRATOR" ]; then usage; fi
 shift 3
 SESSIONS=("$@")
 [ "${#SESSIONS[@]}" -ge 2 ] || { echo "need >=2 sessions; use dispatch-lane.sh for single-session work" >&2; exit 2; }

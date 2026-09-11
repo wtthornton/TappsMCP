@@ -238,7 +238,7 @@ set -euo pipefail
 usage() { sed -n '/^# Usage:/,/^# *$/p' "${BASH_SOURCE[0]}" >&2; exit 2; }
 
 CMD=${1:-}; REPO=${2:-}
-[ -n "$CMD" ] && [ -n "$REPO" ] || usage
+if [ -z "$CMD" ] || [ -z "$REPO" ]; then usage; fi
 [ -d "$REPO/.git" ] || git -C "$REPO" rev-parse --git-dir >/dev/null 2>&1 || {
   echo "not a git checkout: $REPO" >&2; exit 1; }
 
