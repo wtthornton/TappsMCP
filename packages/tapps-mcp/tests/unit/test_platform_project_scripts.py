@@ -68,8 +68,9 @@ class TestSourceIsPortedFaithfully:
         1. usage()'s self-read, made robust to the line-shift the managed-block
            wrapper introduces (documented in the module docstring and the PR body).
         2. TAP-7160: the SC2001 and SC2015 shellcheck findings fixed without
-           changing behavior -- see ``test_platform_project_scripts_shellcheck.py``
-           for the shellcheck-clean assertion, the pre-fix negative control that
+           changing behavior (also documented in the module docstring's deviation
+           enumeration) -- see ``test_platform_project_scripts_shellcheck.py`` for
+           the shellcheck-clean assertion, the pre-fix negative control that
            proves the checker actually caught these two lines, and the equivalent-
            output proof for the ``sed`` -> parameter-expansion rewrite.
 

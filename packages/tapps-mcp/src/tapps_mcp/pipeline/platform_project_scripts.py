@@ -9,27 +9,32 @@ onto the comment-syntax-aware managed-block asset class shipped in TAP-6497/TAP-
 (:mod:`tapps_mcp.pipeline.skill_asset_policy`) -- project edits outside the marker
 survive every ``tapps_upgrade``.
 
-One line was changed from the staged original, and only one:
+``scripts/gitfacts.sh`` deviates from its staged original in three places, all
+preserving behavior:
 
-``scripts/gitfacts.sh``'s ``usage()`` read its own usage block with a position-pinned
-``sed -n '3,9p' "${BASH_SOURCE[0]}"``. Managed-block wrapping prepends a policy-header
-line and a BEGIN-marker line ahead of the script body, shifting every body line down by
-two -- so the position-pinned read would silently print the wrong two lines (the
-shebang and the file's opening description line) instead of the ``# Usage:`` block.
-Changed to a content-anchored ``sed -n '/^# Usage:/,/^# *$/p'`` instead, which finds
-the same block regardless of how many lines precede it. ``scripts/measure.py`` needed
-no change.
+1. ``usage()`` read its own usage block with a position-pinned
+   ``sed -n '3,9p' "${BASH_SOURCE[0]}"`` (predates TAP-7160). Managed-block wrapping
+   prepends a policy-header line and a BEGIN-marker line ahead of the script body,
+   shifting every body line down -- so the position-pinned read would silently print
+   the wrong span (the BEGIN marker, the opening description line, a blank line,
+   ``# Usage:``, and only the first three of the five usage entries) instead of the
+   full ``# Usage:`` block. Changed to a content-anchored
+   ``sed -n '/^# Usage:/,/^# *$/p'`` instead, which finds the same block regardless
+   of how many lines precede it.
+2. TAP-7160: ``echo "$flagged" | sed 's/^/  /'`` (SC2001) rewritten as
+   ``echo "  ${flagged//$'\n'/$'\n'  }"``, a parameter-expansion substitution with
+   byte-identical output.
+3. TAP-7160: the ``[ "$behind" -eq 0 ] && echo ... || { echo ...; }`` construct
+   (SC2015, not a true if/then/else) rewritten as an explicit ``if``/``else``.
 
-Known limitation, not fixed here because :mod:`skill_asset_policy` is shipped and
-frozen (TAP-6884 scope): the managed-block header and BEGIN marker land *before* the
-body's ``#!`` shebang line, so ``chmod +x`` does not make either script directly
-executable via ``./scripts/measure.py`` -- the kernel's shebang lookup only honors byte
-1 of the file. Both scripts still parse (``python -m py_compile`` /
-``bash -n``) and run correctly when invoked with an explicit interpreter
-(``python3 scripts/measure.py ...`` / ``bash scripts/gitfacts.sh ...``), which is how
-every test in this program invokes them. Fixing shebang placement would require
-:mod:`skill_asset_policy` itself to special-case a leading ``#!`` line, which is out of
-this lane's scope -- filed as a follow-up rather than worked around.
+``scripts/measure.py`` needed no change.
+
+Shebang placement: :func:`tapps_mcp.pipeline.skill_asset_policy._split_shebang`
+(TAP-6903, commit ``b17b5c4c``) already lifts a leading ``#!`` line ahead of the
+managed-block policy header before wrapping, so the shebang stays on line 1 of the
+emitted file rather than being pushed down by the header. Both
+``scripts/gitfacts.sh`` and ``scripts/start-program.sh`` are directly executable
+(``./scripts/gitfacts.sh``) as well as invocable with an explicit interpreter.
 """
 
 from __future__ import annotations
