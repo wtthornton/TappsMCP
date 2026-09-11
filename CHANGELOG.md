@@ -52,6 +52,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   not register, any `action=<word>` nlt-memory will not dispatch, and any
   paragraph that offers the CLI as a route to the MCP action surface.
 
+## [3.12.87] - 2026-09-10
+
+### Fixed
+
+- **Skill routing made explicit; model roles centralized** (#392, `222484c5`)
+- **`tapps_file_api`/`tapps_repo_map` now reach the full tool preset** (#394, `14a20543`)
+- **`pipeline.asset_self_check` added to PyInstaller spec hiddenimports** (#395, `dfbdf85d`)
+- **`engagement_level` threaded into the CLAUDE.md upgrade stamp** (#393, `6363b77e`)
+- **Skills-manifest entries tagged by source so docs-mcp skills aren't flagged unknown drift** (#391, `ef5687fa`)
+- **Stop duplicating executable-asset bodies on legacy migration during upgrade** (#390, `10230c32`)
+
 ## [3.12.86] - 2026-09-09
 
 > First release whose deploy is gated by the pre-flip profile smoke it ships
