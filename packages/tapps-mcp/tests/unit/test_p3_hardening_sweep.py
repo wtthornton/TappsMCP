@@ -24,9 +24,7 @@ class TestTap615PepParser:
             ("simple-package", "simple-package"),
         ],
     )
-    def test_strip_version_specifier_handles_pep_508(
-        self, raw: str, expected: str
-    ) -> None:
+    def test_strip_version_specifier_handles_pep_508(self, raw: str, expected: str) -> None:
         from tapps_mcp.tools.session_start_helpers import _strip_version_specifier
 
         assert _strip_version_specifier(raw) == expected
@@ -144,6 +142,50 @@ class TestTap689RulesBackup:
         assert _collect_upgrade_targets(tmp_path) == []
 
 
+class TestTap7423TemplatesBackup:
+    """Pre-upgrade backup includes docs/templates/* so rollback can restore
+    a customised template (TAP-7423)."""
+
+    def test_collect_targets_includes_template_files(self, tmp_path: Path) -> None:
+        from tapps_mcp.pipeline.upgrade import _collect_upgrade_targets
+
+        templates_dir = tmp_path / "docs" / "templates"
+        templates_dir.mkdir(parents=True)
+        one_pager = templates_dir / "one-pager.html"
+        one_pager.write_text("<!-- a customer's own copy -->\n")
+
+        targets = _collect_upgrade_targets(tmp_path)
+
+        assert one_pager in targets
+
+    def test_collect_targets_ok_when_templates_dir_missing(self, tmp_path: Path) -> None:
+        from tapps_mcp.pipeline.upgrade import _collect_upgrade_targets
+
+        # No docs/templates/ at all — must not crash.
+        assert _collect_upgrade_targets(tmp_path) == []
+
+    def test_rollback_restores_customized_template(self, tmp_path: Path) -> None:
+        """End-to-end: back up, overwrite via upgrade, restore the backup."""
+        from tapps_mcp.distribution.rollback import BackupManager
+        from tapps_mcp.pipeline.upgrade import _collect_upgrade_targets
+
+        templates_dir = tmp_path / "docs" / "templates"
+        templates_dir.mkdir(parents=True)
+        one_pager = templates_dir / "one-pager.html"
+        one_pager.write_text("<!-- a customer's own copy -->\n")
+
+        mgr = BackupManager(tmp_path)
+        mgr.create_backup(_collect_upgrade_targets(tmp_path), version="0.0.0")
+
+        # Simulate an upgrade overwriting the customised template.
+        one_pager.write_text("<!-- canonical template -->\n")
+
+        restored = mgr.restore_backup()
+
+        assert "docs/templates/one-pager.html" in restored
+        assert one_pager.read_text(encoding="utf-8") == "<!-- a customer's own copy -->\n"
+
+
 class TestTap698StrictConfig:
     """Env-gated extra='forbid' for TappsMCPSettings."""
 
@@ -176,7 +218,5 @@ class TestTap690ContentReturnMcpOnly:
         assert "platforms" not in result["components"]
         # Manifest is present but empty.
         ops = result["file_manifest"].get("file_operations", [])
-        claude_md_ops = [
-            op for op in ops if "CLAUDE.md" in op.get("target_path", "")
-        ]
+        claude_md_ops = [op for op in ops if "CLAUDE.md" in op.get("target_path", "")]
         assert not claude_md_ops

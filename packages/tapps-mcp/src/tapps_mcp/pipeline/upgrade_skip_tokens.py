@@ -59,6 +59,8 @@ SKIP_TOKENS: dict[str, frozenset[str]] = {
     # TAP-7425: docs-automation skills are not a single file/dir, so the token
     # names the component rather than a path (matches the "karpathy" pattern).
     "docs_automation": frozenset({"docs_automation"}),
+    # TAP-7423: project-root scaffolded templates, not under .claude/ or .cursor/.
+    "templates": frozenset({"docs/templates"}),
 }
 
 ALL_SKIP_TOKENS: frozenset[str] = frozenset().union(*SKIP_TOKENS.values())
@@ -74,6 +76,7 @@ _DIRECTORY_TOKENS: tuple[str, ...] = (
     ".cursor/hooks",
     ".cursor/agents",
     ".cursor/skills",
+    "docs/templates",
 )
 
 

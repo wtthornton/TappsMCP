@@ -375,6 +375,19 @@ def _resolve_project_scripts(ctx: HostContext) -> None:
         )
 
 
+def _resolve_project_templates(ctx: HostContext) -> None:
+    """``docs/templates/*`` — project-root, host-agnostic (TAP-7423)."""
+    from tapps_mcp.pipeline.platform_templates import generate_templates, plan_templates
+
+    resolve_component(
+        ctx,
+        "templates",
+        skip_key="templates",
+        plan=lambda: plan_templates(ctx.project_root, "claude"),
+        apply=lambda: generate_templates(ctx.project_root, "claude"),
+    )
+
+
 def upgrade_claude_code(ctx: HostContext) -> None:
     """Upgrade every claude-code artifact under one shared plan."""
     from tapps_mcp.pipeline.init import _bootstrap_claude
@@ -392,3 +405,4 @@ def upgrade_claude_code(ctx: HostContext) -> None:
     _resolve_claude_assets(ctx)
     _resolve_claude_rules(ctx)
     _resolve_project_scripts(ctx)
+    _resolve_project_templates(ctx)

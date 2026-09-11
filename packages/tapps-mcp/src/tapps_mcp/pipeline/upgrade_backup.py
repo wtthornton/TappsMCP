@@ -34,6 +34,9 @@ _HOOK_DIRS = (".claude/hooks", ".cursor/hooks")
 # tapps-pipeline.mdc (Cursor's canonical pipeline rule, TAP-6440) are lost with
 # no rollback path. Covered by the ``_RULE_DIRS`` glob below, not this list.
 _RULE_DIRS = (".claude/rules", ".cursor/rules")
+# TAP-7423: project-root scaffolded templates, refreshed by tapps_upgrade —
+# without this, rollback has no way to restore a customised template.
+_TEMPLATE_DIRS = ("docs/templates",)
 
 
 def _managed_hook_files(project_root: Path) -> list[Path]:
@@ -77,6 +80,11 @@ def collect_upgrade_targets(project_root: Path) -> list[Path]:
         if rules_dir.is_dir():
             targets.extend(rules_dir.glob("*.md"))
             targets.extend(rules_dir.glob("*.mdc"))
+
+    for rel in _TEMPLATE_DIRS:
+        templates_dir = project_root / rel
+        if templates_dir.is_dir():
+            targets.extend(f for f in templates_dir.iterdir() if f.is_file())
 
     targets.extend(
         candidate

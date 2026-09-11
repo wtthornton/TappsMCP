@@ -33,6 +33,10 @@ for root, dirs, files in os.walk(str(pkg_tapps_core)):
             rel_dir = os.path.relpath(root, str(pkg_tapps_core_parent))
             datas.append((full, rel_dir))
 
+# TAP-7423: the scaffolded one-pager template ships as a packaged .html file
+# asset, an extension the walk above does not collect.
+datas.append((str(pkg_tapps_mcp / "templates" / "one-pager.html"), 'tapps_mcp/templates'))
+
 a = Analysis(
     ["scripts/run_tapps_mcp.py"],
     pathex=[],
@@ -431,6 +435,7 @@ a = Analysis(
         "tapps_mcp.pipeline.platform_skill_continuous_learning",
         "tapps_mcp.pipeline.platform_skill_validation_contract",
         "tapps_mcp.pipeline.platform_skill_wayfind",
+        "tapps_mcp.pipeline.platform_templates",
         "tapps_mcp.pipeline.platform_workflow_scripts",
         "tapps_mcp.pipeline.upgrade_backup",
         "tapps_mcp.pipeline.upgrade_content_return",
@@ -466,6 +471,7 @@ a = Analysis(
         "tapps_mcp.tools.session_health",
         "tapps_mcp.tools.usage_thin_agent",
         "tapps_mcp.tools.validate_changed_cli_exit",
+        "tapps_mcp.templates",
     ],
     hookspath=[],
     hooksconfig={},
