@@ -1,8 +1,9 @@
 """Combined TappsPlatform MCP server.
 
-Composes TappsMCP (code quality, 28+ tools) and DocsMCP (documentation, 19 tools)
-into a single MCP server instance. Both tool sets are registered without namespace
-prefixes since they already use distinct ``tapps_`` and ``docs_`` prefixes.
+Composes TappsMCP (47 tools) for code quality, security, and shared memory,
+and DocsMCP (42 tools) for documentation, into a single MCP server instance.
+Both tool sets are registered without namespace prefixes since they already
+use distinct ``tapps_`` and ``docs_`` prefixes.
 
 If ``docs-mcp`` is not installed, the server falls back to TappsMCP-only mode
 with a warning logged.

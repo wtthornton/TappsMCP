@@ -232,7 +232,9 @@ def _validate_file_path(file_path: str) -> Path:
 # Constants extracted to avoid duplication
 # ---------------------------------------------------------------------------
 
-# Canonical list of all TappsMCP tools (42).
+# Canonical list of all TappsMCP tools. Count is enforced against the
+# registration call-site count by scripts/tool_budget_lint.py
+# (TAP-5611/TAP-7411) so it cannot drift from the actual tool count again.
 # Used for filtering and fallback.
 ALL_TOOL_NAMES: frozenset[str] = frozenset(
     {
@@ -288,6 +290,10 @@ ALL_TOOL_NAMES: frozenset[str] = frozenset(
         "tapps_domain_playbook",
         # TAP-6861: skill-learnings consolidation (audit/promote/verify/trim)
         "tapps_skill_learnings",
+        # TAP-7411: registered since TOOL_PROFILE_NLT_BUILD's introduction but
+        # never added here, so unreachable on the default `full` preset.
+        "tapps_file_api",
+        "tapps_repo_map",
     }
 )
 

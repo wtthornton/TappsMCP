@@ -598,7 +598,7 @@ Quick index:
 | **tapps_consult_expert** | **Removed (EPIC-94)** — RAG expert system deleted; use `tapps_lookup_docs` / `tapps_domain_playbook`. |
 | **tapps_checklist** | See which tools this session invoked and what is still missing. |
 | **tapps_session_notes** | Save and retrieve key decisions and constraints across the session. Promotable to shared memory. |
-| **tapps_memory** | **Removed in v3.12.0** — use `uv run tapps-mcp memory` CLI or enable **`nlt-memory`**. Full action list: [MEMORY_REFERENCE.md](docs/MEMORY_REFERENCE.md). |
+| **tapps_memory** | Slim brain memory facade (search, save, get, health, related) — see **`nlt-memory`**. Full action list: `uv run tapps-mcp memory` CLI or [MEMORY_REFERENCE.md](docs/MEMORY_REFERENCE.md). |
 | **tapps_impact_analysis** | Analyze the impact of changes on the codebase (imports, dependents). |
 | **tapps_report** | Generate a quality report (JSON, Markdown, or HTML) for scored files. |
 | **tapps_dashboard** | View metrics dashboard with execution stats, expert performance, and trends. |

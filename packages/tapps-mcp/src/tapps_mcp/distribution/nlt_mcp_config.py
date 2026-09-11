@@ -129,13 +129,13 @@ NLT_SERVER_EAGER_COUNTS: Final[dict[str, int]] = {
 
 # Listed tools/list counts (Cursor catalogs all of these; eager is Claude Tool Search).
 NLT_SERVER_TOTAL_COUNTS: Final[dict[str, int]] = {
-    "nlt-build": 20,  # +tapps_research (TAP-5365)
+    "nlt-build": 22,  # +tapps_file_api, tapps_repo_map (TAP-7411)
     "nlt-memory": 5,  # includes bootstrap tapps_session_start
     "nlt-setup": 8,  # includes bootstrap tapps_session_start
     "nlt-linear-issues": 15,
     "nlt-project-docs": 29,
     "nlt-release-ship": 6,
-    "nlt-code-quality": 20,
+    "nlt-code-quality": 22,
     "nlt-platform-admin": 8,
 }
 

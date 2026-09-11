@@ -39,8 +39,11 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from tool_budget_lint import (
+    check_all_tool_names_count,
     check_documented_counts,
     check_new_registrations,
+    check_nlt_config_counts,
+    check_nlt_spec_yaml,
     get_changed_files,
     get_diff,
     run_self_tests,
@@ -79,11 +82,18 @@ def main() -> int:
         return 0
 
     if args.check_counts:
-        ok, reason = check_documented_counts()
-        if ok:
-            print(f"tool-count check: OK — {reason}")
+        checks = (
+            check_documented_counts(),
+            check_all_tool_names_count(),
+            check_nlt_config_counts(),
+            check_nlt_spec_yaml(),
+        )
+        failures = [reason for ok, reason in checks if not ok]
+        if not failures:
+            summary = "; ".join(reason for _ok, reason in checks)
+            print(f"tool-count check: OK — {summary}")
             return 0
-        print(f"tool-count check: FAIL\n\n{reason}", file=sys.stderr)
+        print("tool-count check: FAIL\n\n" + "\n".join(failures), file=sys.stderr)
         return 1
 
     try:

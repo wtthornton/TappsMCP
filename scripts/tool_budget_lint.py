@@ -14,11 +14,14 @@ so it is importable under a valid module name and testable from pytest.
 
 from __future__ import annotations
 
+import ast
 import os
 import re
 import subprocess
 import textwrap
 from pathlib import Path
+
+import yaml
 
 # Pattern that marks a new MCP tool registration line in a diff. Both servers
 # register through the register_tool() helper; the bare @mcp.tool() decorator
@@ -61,6 +64,21 @@ _SERVER_NAME_RES: dict[str, re.Pattern[str]] = {
 
 # The budget doc that must be touched when a new tool is added.
 _BUDGET_DOC = "docs/architecture/tool-budget.md"
+
+# TAP-7411: the two additional docs whose per-server tool counts must match
+# a derived truth, not a hand-typed number.
+_SERVER_PY = Path("packages/tapps-mcp/src/tapps_mcp/server.py")
+_NLT_CONFIG_PY = Path("packages/tapps-mcp/src/tapps_mcp/distribution/nlt_mcp_config.py")
+_NLT_SPEC_YAML = Path("docs/architecture/nlt-mcp-plugin-spec.yaml")
+
+# The NLT server IDs whose tool membership is defined in server.py as a
+# frozenset (nlt-linear-issues / nlt-project-docs / nlt-release-ship live in
+# tapps_mcp.platform.nlt_profiles / docs_mcp instead and are out of scope).
+_NLT_PY_PROFILES: dict[str, str] = {
+    "nlt-build": "TOOL_PROFILE_NLT_BUILD",
+    "nlt-memory": "TOOL_PROFILE_NLT_MEMORY",
+    "nlt-setup": "TOOL_PROFILE_NLT_SETUP",
+}
 
 # Bypass token in commit message (case-insensitive).
 _BYPASS_RE = re.compile(r"Tool-Budget\s*:\s*(deferred|skip)", re.IGNORECASE)
@@ -276,6 +294,195 @@ def check_documented_counts(root: Path = _REPO_ROOT) -> tuple[bool, str]:
         )
     summary = ", ".join(f"{server} {count}" for server, count in sorted(actual.items()))
     return True, f"documented counts match the registry ({summary})"
+
+
+def _extract_frozenset_vars(path: Path, names: set[str]) -> dict[str, frozenset[str]]:
+    """Extract named top-level ``frozenset[str] = frozenset({...})`` literals.
+
+    AST-based (not regex) so inline comments inside the set literal — which
+    every profile in server.py carries — cannot corrupt the count.
+    """
+    tree = ast.parse(path.read_text(encoding="utf-8"))
+    found: dict[str, frozenset[str]] = {}
+    for node in ast.walk(tree):
+        if not (isinstance(node, ast.AnnAssign) and isinstance(node.target, ast.Name)):
+            continue
+        if node.target.id not in names or not isinstance(node.value, ast.Call):
+            continue
+        args = node.value.args
+        if args and isinstance(args[0], ast.Set):
+            elts = {e.value for e in args[0].elts if isinstance(e, ast.Constant)}
+            found[node.target.id] = frozenset(elts)
+    return found
+
+
+def _extract_int_dict_var(path: Path, name: str) -> dict[str, int]:
+    """Extract a top-level ``name: Final[dict[str, int]] = {...}`` literal via AST."""
+    tree = ast.parse(path.read_text(encoding="utf-8"))
+    for node in ast.walk(tree):
+        if not (isinstance(node, ast.AnnAssign) and isinstance(node.target, ast.Name)):
+            continue
+        if node.target.id != name or not isinstance(node.value, ast.Dict):
+            continue
+        return {
+            k.value: v.value
+            for k, v in zip(node.value.keys, node.value.values, strict=True)
+            if isinstance(k, ast.Constant) and isinstance(v, ast.Constant)
+        }
+    return {}
+
+
+def derive_nlt_total_counts(root: Path = _REPO_ROOT) -> dict[str, int]:
+    """Derive nlt-build/nlt-memory/nlt-setup total tool counts from server.py.
+
+    Total = the profile frozenset's size, plus one for the ``tapps_session_start``
+    pointer stub (TAP-7018) on any profile that does not already own that name
+    outright — the stub still occupies a slot in the server's advertised tool
+    list even though it is not a member of the profile frozenset.
+    """
+    profiles = _extract_frozenset_vars(root / _SERVER_PY, set(_NLT_PY_PROFILES.values()))
+    totals: dict[str, int] = {}
+    for server, varname in _NLT_PY_PROFILES.items():
+        members = profiles[varname]
+        pointer = 0 if "tapps_session_start" in members else 1
+        totals[server] = len(members) + pointer
+    return totals
+
+
+def check_nlt_config_counts(root: Path = _REPO_ROOT) -> tuple[bool, str]:
+    """Verify nlt_mcp_config.py's NLT_SERVER_TOTAL_COUNTS matches derived truth.
+
+    Only nlt-build/nlt-memory/nlt-setup are checked — their tool membership is
+    defined in server.py; the other three NLT servers live in
+    tapps_mcp.platform.nlt_profiles / docs_mcp and are out of scope for TAP-7411.
+    """
+    derived = derive_nlt_total_counts(root)
+    declared = _extract_int_dict_var(root / _NLT_CONFIG_PY, "NLT_SERVER_TOTAL_COUNTS")
+    mismatches = [
+        f"{_NLT_CONFIG_PY}: NLT_SERVER_TOTAL_COUNTS[{server!r}] = {declared.get(server)} "
+        f"but server.py's {_NLT_PY_PROFILES[server]} derives {count}"
+        for server, count in derived.items()
+        if declared.get(server) != count
+    ]
+    if mismatches:
+        listed = "\n  ".join(mismatches)
+        return False, textwrap.dedent(
+            f"""\
+            nlt_mcp_config.py tool counts disagree with server.py (source of truth):
+
+              {listed}
+            """
+        )
+    return True, f"nlt_mcp_config.py NLT_SERVER_TOTAL_COUNTS match server.py ({derived})"
+
+
+def _yaml_field_lines(text: str) -> dict[str, dict[str, int]]:
+    """Map NLT server name -> {'tool_count': line_no, 'eager_count': line_no}.
+
+    Text-scanned (not via a YAML node API) so failure messages can cite the
+    exact 1-indexed line, matching the rest of this module's mismatch style.
+    """
+    header_re = re.compile(r"^  (nlt-[a-z-]+):\s*$")
+    tool_count_re = re.compile(r"^\s+tool_count:\s*(\d+)\s*$")
+    eager_count_re = re.compile(r"^\s+eager_count:\s*(\d+)\s*$")
+    result: dict[str, dict[str, int]] = {}
+    current: str | None = None
+    for lineno, line in enumerate(text.splitlines(), start=1):
+        header = header_re.match(line)
+        if header:
+            current = header.group(1)
+            result[current] = {}
+            continue
+        if current is None:
+            continue
+        if tool_count_re.match(line):
+            result[current]["tool_count_line"] = lineno
+        elif eager_count_re.match(line):
+            result[current]["eager_count_line"] = lineno
+    return result
+
+
+def check_nlt_spec_yaml(root: Path = _REPO_ROOT) -> tuple[bool, str]:
+    """Verify nlt-mcp-plugin-spec.yaml tool counts are internally consistent
+    and (for nlt-build/nlt-memory/nlt-setup) match server.py's profile registry.
+    """
+    path = root / _NLT_SPEC_YAML
+    text = path.read_text(encoding="utf-8")
+    data = yaml.safe_load(text)
+    lines = _yaml_field_lines(text)
+    servers: dict[str, dict] = data.get("servers", {})
+    mismatches: list[str] = []
+
+    for server, spec in servers.items():
+        eager = list(spec.get("tools", {}).get("eager") or [])
+        deferred = list(spec.get("tools", {}).get("deferred") or [])
+        total = len(eager) + len(deferred)
+        tool_count = spec.get("tool_count")
+        eager_count = spec.get("eager_count")
+        field_lines = lines.get(server, {})
+        if tool_count != total:
+            mismatches.append(
+                f"{_NLT_SPEC_YAML}:{field_lines.get('tool_count_line', '?')} "
+                f"{server} tool_count={tool_count} but eager ({len(eager)}) "
+                f"+ deferred ({len(deferred)}) = {total}"
+            )
+        if eager_count != len(eager):
+            mismatches.append(
+                f"{_NLT_SPEC_YAML}:{field_lines.get('eager_count_line', '?')} "
+                f"{server} eager_count={eager_count} but len(eager)={len(eager)}"
+            )
+
+    profiles = _extract_frozenset_vars(root / _SERVER_PY, set(_NLT_PY_PROFILES.values()))
+    for server, varname in _NLT_PY_PROFILES.items():
+        spec = servers.get(server, {})
+        yaml_tools = set(spec.get("tools", {}).get("eager") or []) | set(
+            spec.get("tools", {}).get("deferred") or []
+        )
+        # The tapps_session_start pointer stub (TAP-7018) registers under
+        # this name even on profiles that don't list it as a member.
+        expected = set(profiles[varname]) | {"tapps_session_start"}
+        missing = expected - yaml_tools
+        extra = yaml_tools - expected
+        if missing:
+            mismatches.append(
+                f"{_NLT_SPEC_YAML} {server}: missing tools registered in "
+                f"server.py's {varname}: {sorted(missing)}"
+            )
+        if extra:
+            mismatches.append(
+                f"{_NLT_SPEC_YAML} {server}: lists tools absent from "
+                f"server.py's {varname}: {sorted(extra)}"
+            )
+
+    if mismatches:
+        listed = "\n  ".join(mismatches)
+        return False, textwrap.dedent(
+            f"""\
+            nlt-mcp-plugin-spec.yaml tool counts disagree with the derived truth:
+
+              {listed}
+            """
+        )
+    return True, "nlt-mcp-plugin-spec.yaml tool counts are self-consistent and match server.py"
+
+
+def check_all_tool_names_count(root: Path = _REPO_ROOT) -> tuple[bool, str]:
+    """Verify server.py's ALL_TOOL_NAMES matches the register_tool() registry.
+
+    ALL_TOOL_NAMES previously undercounted the registry by 2 (TAP-7411):
+    tapps_file_api/tapps_repo_map were registered via register_tool() but
+    missing from this set, making them unreachable on the `full` preset.
+    """
+    registered = count_registered_tools(root)["tapps-mcp"]
+    names = _extract_frozenset_vars(root / _SERVER_PY, {"ALL_TOOL_NAMES"}).get(
+        "ALL_TOOL_NAMES", frozenset()
+    )
+    if len(names) != registered:
+        return False, (
+            f"{_SERVER_PY}: ALL_TOOL_NAMES has {len(names)} entries but "
+            f"the tapps-mcp registry has {registered} register_tool() call sites"
+        )
+    return True, f"ALL_TOOL_NAMES ({len(names)}) matches the tapps-mcp registry"
 
 
 def run_self_tests() -> None:
