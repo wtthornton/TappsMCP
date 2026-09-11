@@ -7,7 +7,7 @@ reaches, per the independent verifier's refutation: ``record_tool_result_bytes``
 had zero production call sites, so no real session ever wrote a ledger row.
 
 Round 2's first pass wired the ledger into ``server._with_nudges``, but the
-verifier found that seam bypassed by 10 of 45 registered tools (whichever
+verifier found that seam bypassed by 10 of the registered tools (whichever
 build their response via ``success_response``/``error_response`` and return
 it directly). This module now drives the actual MCP dispatch path --
 ``mcp_register.register_tool`` -- the single point every registered tool's
@@ -18,7 +18,7 @@ by sampling one tool (``tapps_quick_check``).
 through the real, fully-registered ``tapps_mcp.server.mcp`` instance (byte
 sizes and telemetry must match a genuine response, not a stub).
 ``TestLedgerCoverageEnumeration`` builds a throwaway ``FastMCP`` instance,
-registers a trivial stub under every one of the 45 canonical tool names via
+registers a trivial stub under every one of the canonical tool names via
 the real ``register_tool``, and asserts each produces exactly one ledger
 row -- proving the seam, not any one tool's business logic.
 """
@@ -254,7 +254,7 @@ class TestSessionLedgerDispatch:
 
 
 class TestLedgerCoverageEnumeration:
-    """Prove ledger coverage by enumeration over the canonical 45-tool
+    """Prove ledger coverage by enumeration over the canonical tool
     registry (``server.ALL_TOOL_NAMES``), not by sampling one tool.
 
     Registers a trivial stub under every canonical name through the real
@@ -284,7 +284,7 @@ class TestLedgerCoverageEnumeration:
             for line in ledger_path.read_text(encoding="utf-8").strip().splitlines()
         ]
         recorded_tools = [row["tool"] for row in rows]
-        assert len(recorded_tools) == len(ALL_TOOL_NAMES) == 45, (
+        assert len(recorded_tools) == len(ALL_TOOL_NAMES), (
             f"expected exactly one ledger row per one of {len(ALL_TOOL_NAMES)} "
             f"registered tools, got {len(recorded_tools)}"
         )

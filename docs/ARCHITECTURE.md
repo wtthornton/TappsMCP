@@ -39,13 +39,13 @@ The MCP server is split across ten files (server.py + 9 modules) sharing the sam
 
 ## NLT MCP server registration (ADR-0016)
 
-`tapps-mcp` exposes tools through **needs-based NLT profiles** — enable 1–3 servers per session, not all six. Legacy `--profile nlt-code-quality` maps to **Build**; `nlt-platform-admin` maps to **Setup** for one release.
+`tapps-mcp` exposes tools through **needs-based NLT profiles** — a session can enable as few as one server; the default deployment enables all six ([ADR-0018](adr/0018-deploy-all-six-nlt-mcp-servers-by-default.md)), with opt-down bundles for token-tight sessions. Legacy `--profile nlt-code-quality` maps to **Build**; `nlt-platform-admin` maps to **Setup** for one release.
 
 | MCP server ID | CLI profile | Eager tools (approx) | Purpose |
 |---|---|---|---|
 | `nlt-build` | Build | 9 | Score, gate, validate, docs lookup, impact graph |
 | `nlt-memory` | Memory | 2 | Slim `tapps_memory` + session handoff |
-| `nlt-setup` | Setup | 2 | init, upgrade, doctor, engagement |
+| `nlt-setup` | Setup | 1 | init, upgrade, doctor, engagement |
 | `nlt-linear-issues` | (situational) | — | Linear cache-first reads / writes |
 | `nlt-project-docs` | (situational) | — | Doc generation and drift audit |
 | `nlt-release-ship` | (situational) | — | Release notes / ship gate |

@@ -152,7 +152,7 @@ servers:
     serve_args: ["serve", "--profile", "nlt-build"]
     legacy_profile_alias: nlt-code-quality
     default_enabled: true
-    tool_count: 19
+    tool_count: 22
     eager_count: 9
     skills:
       - tapps-finish-task
@@ -189,6 +189,8 @@ servers:
         - tapps_report
         - tapps_audit_campaign
         - tapps_call_graph
+        - tapps_file_api
+        - tapps_repo_map
         - tapps_diff_impact
         - tapps_domain_playbook
 

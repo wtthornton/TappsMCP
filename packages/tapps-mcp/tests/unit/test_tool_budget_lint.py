@@ -191,6 +191,188 @@ class TestMovedRegistrations:
         assert ok
 
 
+class TestAllToolNamesCount:
+    """TAP-7411: ALL_TOOL_NAMES must match the registry, not undercount it.
+
+    tapps_file_api/tapps_repo_map were registered via register_tool() but
+    missing from ALL_TOOL_NAMES, making them unreachable on the `full` preset
+    even though the registry-derived doc counts already looked correct.
+    """
+
+    def test_current_tree_matches(self, lint: ModuleType) -> None:
+        ok, message = lint.check_all_tool_names_count()
+        assert ok, message
+
+    def test_undercount_fails(self, lint: ModuleType, tmp_path: Path) -> None:
+        pkg = tmp_path / "packages" / "tapps-mcp" / "src" / "tapps_mcp"
+        pkg.mkdir(parents=True)
+        (pkg / "server.py").write_text(
+            "ALL_TOOL_NAMES: frozenset[str] = frozenset(\n"
+            '    {"tapps_a", "tapps_b"}\n'
+            ")\n"
+            "register_tool(mcp, tapps_a)\n"
+            "register_tool(mcp, tapps_b)\n"
+            "register_tool(mcp, tapps_c)\n"
+        )
+        (tmp_path / "packages" / "docs-mcp" / "src" / "docs_mcp").mkdir(parents=True)
+
+        ok, message = lint.check_all_tool_names_count(tmp_path)
+        assert not ok
+        assert "ALL_TOOL_NAMES has 2 entries but" in message
+        assert "3 register_tool() call sites" in message
+
+
+def _write_server_py(root: Path, build: set[str], memory: set[str], setup: set[str]) -> None:
+    """Write a minimal server.py with the three NLT profile frozensets."""
+    pkg = root / "packages" / "tapps-mcp" / "src" / "tapps_mcp"
+    pkg.mkdir(parents=True, exist_ok=True)
+
+    def _literal(names: set[str]) -> str:
+        return "{" + ", ".join(f'"{n}"' for n in sorted(names)) + "}"
+
+    (pkg / "server.py").write_text(
+        f"TOOL_PROFILE_NLT_BUILD: frozenset[str] = frozenset({_literal(build)})\n"
+        f"TOOL_PROFILE_NLT_MEMORY: frozenset[str] = frozenset({_literal(memory)})\n"
+        f"TOOL_PROFILE_NLT_SETUP: frozenset[str] = frozenset({_literal(setup)})\n"
+    )
+
+
+def _write_nlt_config_py(root: Path, counts: dict[str, int]) -> None:
+    pkg = root / "packages" / "tapps-mcp" / "src" / "tapps_mcp" / "distribution"
+    pkg.mkdir(parents=True, exist_ok=True)
+    body = ", ".join(f'"{k}": {v}' for k, v in counts.items())
+    (pkg / "nlt_mcp_config.py").write_text(
+        f"NLT_SERVER_TOTAL_COUNTS: Final[dict[str, int]] = {{{body}}}\n"
+    )
+
+
+class TestNltConfigCounts:
+    """TAP-7411: nlt_mcp_config.py's NLT_SERVER_TOTAL_COUNTS must derive from
+    server.py's profile frozensets (+1 for the tapps_session_start pointer
+    stub on profiles that don't already own that name)."""
+
+    def test_current_tree_matches(self, lint: ModuleType) -> None:
+        ok, message = lint.check_nlt_config_counts()
+        assert ok, message
+
+    def test_wrong_count_fails_naming_the_server(self, lint: ModuleType, tmp_path: Path) -> None:
+        _write_server_py(
+            tmp_path,
+            build={"tapps_quick_check"},  # 1 member, no session_start -> +1 = 2
+            memory={"tapps_session_start", "tapps_memory"},  # owns it -> +0 = 2
+            setup={"tapps_init"},  # 1 member, no session_start -> +1 = 2
+        )
+        _write_nlt_config_py(tmp_path, {"nlt-build": 999, "nlt-memory": 2, "nlt-setup": 2})
+
+        ok, message = lint.check_nlt_config_counts(tmp_path)
+        assert not ok
+        assert "NLT_SERVER_TOTAL_COUNTS['nlt-build'] = 999" in message
+        assert "derives 2" in message
+
+    def test_corrected_count_passes(self, lint: ModuleType, tmp_path: Path) -> None:
+        _write_server_py(
+            tmp_path,
+            build={"tapps_quick_check"},
+            memory={"tapps_session_start", "tapps_memory"},
+            setup={"tapps_init"},
+        )
+        _write_nlt_config_py(tmp_path, {"nlt-build": 2, "nlt-memory": 2, "nlt-setup": 2})
+
+        ok, message = lint.check_nlt_config_counts(tmp_path)
+        assert ok, message
+
+
+_YAML_TEMPLATE = """\
+servers:
+  nlt-build:
+    tool_count: {build_total}
+    eager_count: 2
+    tools:
+      eager:
+        - tapps_session_start
+        - tapps_quick_check
+      deferred: {build_deferred}
+  nlt-memory:
+    tool_count: 2
+    eager_count: 2
+    tools:
+      eager:
+        - tapps_session_start
+        - tapps_memory
+      deferred: []
+  nlt-setup:
+    tool_count: 2
+    eager_count: 2
+    tools:
+      eager:
+        - tapps_session_start
+        - tapps_init
+      deferred: []
+"""
+
+
+def _write_nlt_spec_yaml(root: Path, *, build_total: int, build_deferred: list[str]) -> None:
+    doc_dir = root / "docs" / "architecture"
+    doc_dir.mkdir(parents=True, exist_ok=True)
+    (doc_dir / "nlt-mcp-plugin-spec.yaml").write_text(
+        _YAML_TEMPLATE.format(build_total=build_total, build_deferred=build_deferred)
+    )
+
+
+class TestNltSpecYaml:
+    """TAP-7411: nlt-mcp-plugin-spec.yaml must be internally consistent
+    (tool_count == len(eager) + len(deferred)) and its per-server tool lists
+    must match server.py's profile frozensets exactly."""
+
+    def test_current_tree_matches(self, lint: ModuleType) -> None:
+        ok, message = lint.check_nlt_spec_yaml()
+        assert ok, message
+
+    def test_self_inconsistent_count_fails_with_line_number(
+        self, lint: ModuleType, tmp_path: Path
+    ) -> None:
+        _write_server_py(
+            tmp_path,
+            build={"tapps_quick_check", "tapps_repo_map"},
+            memory={"tapps_session_start", "tapps_memory"},
+            setup={"tapps_init"},
+        )
+        _write_nlt_spec_yaml(tmp_path, build_total=999, build_deferred=["tapps_repo_map"])
+
+        ok, message = lint.check_nlt_spec_yaml(tmp_path)
+        assert not ok
+        assert "nlt-mcp-plugin-spec.yaml:3" in message
+        assert "tool_count=999" in message
+
+    def test_missing_tool_fails(self, lint: ModuleType, tmp_path: Path) -> None:
+        """server.py registers tapps_repo_map on the build profile; the yaml
+        must list it too, or the doc silently omits a real tool (TAP-7411)."""
+        _write_server_py(
+            tmp_path,
+            build={"tapps_quick_check", "tapps_repo_map"},
+            memory={"tapps_session_start", "tapps_memory"},
+            setup={"tapps_init"},
+        )
+        _write_nlt_spec_yaml(tmp_path, build_total=2, build_deferred=[])
+
+        ok, message = lint.check_nlt_spec_yaml(tmp_path)
+        assert not ok
+        assert "missing tools registered in server.py's TOOL_PROFILE_NLT_BUILD" in message
+        assert "tapps_repo_map" in message
+
+    def test_corrected_yaml_passes(self, lint: ModuleType, tmp_path: Path) -> None:
+        _write_server_py(
+            tmp_path,
+            build={"tapps_quick_check", "tapps_repo_map"},
+            memory={"tapps_session_start", "tapps_memory"},
+            setup={"tapps_init"},
+        )
+        _write_nlt_spec_yaml(tmp_path, build_total=3, build_deferred=["tapps_repo_map"])
+
+        ok, message = lint.check_nlt_spec_yaml(tmp_path)
+        assert ok, message
+
+
 def _fake_registry(root: Path, *, tapps: int, docs: int) -> None:
     """Write a minimal package tree with the requested registration counts."""
     for name, module, count in (

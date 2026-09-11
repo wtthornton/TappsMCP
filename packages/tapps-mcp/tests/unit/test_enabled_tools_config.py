@@ -409,4 +409,6 @@ class TestToolPresetConstants:
         # + 1 tapps_domain_playbook = 43.
         # + 1 tapps_research (TAP-5365 / ADR-0030) = 44.
         # + 1 tapps_skill_learnings (TAP-6861) = 45.
-        assert len(ALL_TOOL_NAMES) == 45
+        # + 2 tapps_file_api, tapps_repo_map (TAP-7411: were registered but
+        # missing from this set, making them unreachable on the `full` preset) = 47.
+        assert len(ALL_TOOL_NAMES) == 47
