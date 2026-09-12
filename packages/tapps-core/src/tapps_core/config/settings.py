@@ -17,6 +17,8 @@ import yaml
 from pydantic import BaseModel, Field, SecretStr, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
+from tapps_core.config.upgrade_skip_tokens import skip_tokens_field_description
+
 logger = logging.getLogger(__name__)
 
 
@@ -1158,41 +1160,7 @@ class TappsMCPSettings(BaseSettings):
     # Upgrade skip list (Issue #86)
     upgrade_skip_files: list[str] = Field(
         default_factory=list,
-        description=(
-            "Per-artifact tokens to skip during tapps_upgrade. MATCHING IS EXACT "
-            "AGAINST A FIXED TOKEN VOCABULARY — not path globbing, not prefix "
-            "matching. An entry that is not one of the tokens below protects "
-            "NOTHING: upgrade rewrites the artifact anyway. Such entries are "
-            "reported as 'unknown_skip_tokens' plus a WARNING line in upgrade "
-            "output and a failing 'upgrade_skip_files' doctor check (TAP-6499); "
-            "before that they were silently inert. "
-            "GRANULARITY IS PER-ARTIFACT, AND DIRECTORY TOKENS COVER THE WHOLE "
-            "DIRECTORY: '.claude/skills' pins every skill, and there is no way to "
-            "pin one skill or one file inside it — "
-            "'.claude/skills/my-skill/SKILL.md' is an invalid entry, not a "
-            "narrower one. "
-            "Valid tokens: 'AGENTS.md', 'CLAUDE.md', 'TECH_STACK.md', "
-            "'.claude/settings.json', '.claude/hooks', '.claude/agents', "
-            "'.claude/skills', '.claude/rules/python-quality.md', "
-            "'.claude/rules/agent-scope.md', '.claude/rules/autonomy.md', "
-            "'.claude/rules/linear-standards.md', "
-            "'.claude/rules/integration-hygiene.md', "
-            "'.claude/rules/tapps-pipeline.md', '.claude/rules/security.md', "
-            "'.claude/rules/test-quality.md', '.claude/rules/config-files.md', "
-            "'.mcp.json', 'karpathy', 'docs_automation'. "
-            "Example: ['CLAUDE.md', '.claude/rules/tapps-pipeline.md']. "
-            "DURABLE ALTERNATIVE — prefer folding the customization upstream "
-            "(into the platform template that generates the file) over pinning: a "
-            "pinned artifact stops receiving every later fix and drifts further "
-            "from the template with each release. Scaffolded skill files carry "
-            "managed-block markers, so customizations written outside the markers "
-            "survive upgrade with no skip token at all. "
-            "To protect custom files outside this token set, rely on the "
-            "dry-run's 'preserved_files' list — upgrade only writes managed "
-            "(typically tapps-*) filenames by default. "
-            "When AGENTS.md or CLAUDE.md is listed, upgrade still bumps the "
-            "version stamp to match the installed package."
-        ),
+        description=skip_tokens_field_description(),
     )
 
     mcp_bundle: str | None = Field(
