@@ -472,10 +472,13 @@ mechanical burndown and a contested identity read came to cost the same. State t
 floor instead: **the emitted runner default is `sonnet` + `medium`** (and `haiku` +
 `low` for closed transcription), carried literally in the emitted prompt's Session
 setup line and in the launch block. A cell above the floor is legitimate, but it
-carries a **one-clause reason in the same Plane-map row** — "gates a merge", "open
-judgement", "cheaper tier failed this step twice". Those three are the escalation
-criteria; a row that escalates without naming one is an unpriced default, not a
-decision.
+carries a **one-clause reason in the same Plane-map row** — "open judgement",
+"cheaper tier failed this step twice". Those two are the escalation criteria; a row
+that escalates without naming one is an unpriced default, not a decision.
+**Merging is not itself an escalation criterion** — every lane verification ends in
+one, so naming that fact alone would swallow the whole tiering (see §5's
+adjudication-depth rule); consequence changes what the driver does with a verdict,
+never the tier that produced it.
 
 This is a change in posture, not in rigour. The proof-shape table (§5) still governs
 verifier tiers, so a cheap *driver* never yields a cheap *verdict* on an irreversible
@@ -566,10 +569,17 @@ then pick the row:
 | **Deterministic** — exit code, `grep -c`, test-count line, file present | re-runs one command and reads its output; there is nothing to judge | `haiku` | `low` |
 | **Comparative** — two outputs differ, a count did not shrink, a diff is confined to N files | re-runs both sides and compares; still closed, but it must compare the right two things | `sonnet` | `medium` |
 | **Semantic** — "the section says what it claims", "the fix addresses the root cause", "the wording no longer instructs X" | reads artifacts and renders a judgement no command can settle | `opus` | `high` or `xhigh` |
-| **Gates an irreversible step** — merge, deploy, delete, publish, tracker write | any shape, but a wrong PASS is unrecoverable | `opus` | `high`+ |
 
-**Consequence overrides shape.** A deterministic proof whose verdict gates a deploy is
-an `opus` row. Shape decides the tier only while the step is reversible.
+**Consequence promotes the adjudication depth the driver owes, never the tier.**
+Measured over nine verifier runs in one program: four changed the outcome, five were
+`opus` confirming a mechanically checkable claim, and the cheapest run (`sonnet`,
+201s) produced the cleanest result on a claim that was purely comparative. A fourth
+row keyed on "gates a merge" swallows the three shape rows above it and collapses
+every verifier to `opus` — the defect is the row's existence, not its justification.
+Tier by proof shape only. Where a cheap verdict would gate an irreversible step, the
+driver re-reads `observed_output` and re-derives the conclusion itself before
+acting — something it already owes regardless of tier — rather than paying frontier
+rates to be told a `grep -c` returned 3.
 
 **This table is authoritative.** A project note pinning verifier models means *pin explicitly, for a named reason, on the specific step where it applies* — never "pin
 all high" as a blanket override of the table for the rest of the run.
@@ -731,6 +741,24 @@ each — they are not optional flavor text.
    same blind spots. Run the fix's proof against the unpatched tree and confirm it
    fails there; a proof that never ran against a failing baseline proves nothing about
    whether the fix did anything.
+
+   **This governs a fix's proof at verify time. A separate, earlier obligation governs
+   a Done-when gate at authoring time** — before any fix exists: measure every
+   threshold, constant, and gate a Done-when clause names, from source or a run
+   against the tree, at the moment the prompt is authored, and paste the measured
+   value into the prompt. Never carry one from a program record, a triage report, or
+   a prior prompt — those drift and nothing re-checks them. Two measurements from one
+   program: a brief required `make lint` + `make typecheck` exit 0 on a repo where
+   `make typecheck` **exits 2 with 265 errors at base** and has never been green — the
+   achievable clause is "adds no new error, proven by an error-**identity** diff"
+   (normalise each line to `file|error|message`, strip line numbers, show `comm -23`
+   and `comm -13` both empty; **counts are not identities** — 265 at head and 265 at
+   base can be two different sets). A second brief cited `PAGE_MINIMUM = 30` from a
+   program record when the real value, stale since an earlier issue, was **15** — the
+   same program had already shipped a brief demanding a 16-page rejection against a
+   floor of 15, after which the lane quietly swapped in a working fixture. A prompt
+   that asserts a green nobody has seen is a prompt whose controls cannot
+   discriminate; write a red-at-base gate as an identity diff, never as "exits 0".
 4. **A merge-gating verifier reports the PR's own CI by name and state, and re-runs
    the CI job's own command.** When a verdict gates a merge, name the actual CI
    check(s) on that PR and their actual state — not a locally-run proxy — and re-run
@@ -763,6 +791,15 @@ each — they are not optional flavor text.
    separately greps for other call sites of the same symbol or pattern — a bug fixed
    at one call site and left in three siblings is how a round-2 verify still turns up
    a fresh, different failure.
+
+   **The fix prompt states, explicitly, which rows are already verified and must not
+   be re-derived** — list them by name — and the re-verifier is handed the same list
+   with its budget pointed at the delta alone. Without this, a three-round lane
+   re-derived the same 17-row text-identity table and the same cover-clearance
+   non-regression in rounds 2 and 3, both already established in round 1 — roughly
+   doubling the lane's cost: **$9.99 against $4.09 for a single round**, and its wall
+   clock. A round-2 or round-3 verifier that re-checks what round 1 already settled is
+   spending frontier tokens on a foregone conclusion.
 10. **A successor to a partially-failed program needs a disposition disjunction with
     a numeric floor and an anti-escape guard.** When a prior run stopped short, the
     next prompt's Done-when states an explicit disjunction of acceptable dispositions
@@ -947,6 +984,30 @@ are about *who runs it, over what population, and how its result gets reported*.
    restates tracker state says so in the same breath. Close an issue by ticking each box
    with its evidence pointer, or leaving it unticked and saying in the body why:
    unticked-and-silent is the only version that is not honest.
+
+   **A validation-contract ID is not the issue's acceptance criteria — audit every box
+   before any close.** Measured across five issues in one program: the validation
+   contract covered 12 of 22 acceptance checkboxes (per-issue: 2/4, 3/5, 3/4, 2/4,
+   2/5) — built from each epic's headline defects, so roughly two of every four or
+   five boxes became a VAL row and nothing noticed the rest, because every VAL id was
+   green. The cost was a wrong close: one issue was marked Done on a green
+   verification id — merged PR, hundreds of passing tests, both controls red — while
+   its own box asked for an explicit recorded decision on whether a feature was
+   shippable, and the shipped documentation said the opposite: the operator must
+   still decide. Four boxes, one green VAL, one box never met.
+   - **Build the validation contract FROM the issues' `- [ ]` boxes, not from the
+     epic's headline**, enumerated during triage; map each box to a VAL id or to an
+     explicit `not covered`. **The coverage table's denominator is boxes, not
+     issues.**
+   - **No issue reaches Done without a box-by-box audit**, one of four verdicts per
+     box — `YES` / `NO` / `PARTIAL` / `NOT-CODE` — each `YES` carrying a `file:line`,
+     a test name, or a command and its output. A green VAL is necessary and never
+     sufficient; this is a **Done-when clause**, not advice, and it does not replace
+     the ticking-or-saying-why rule above — it adds the verdict vocabulary and the
+     per-`YES` evidence requirement to it.
+   - **A box that is a decision, not code, gets its own decide ticket at triage
+     time** — surfacing it at close time is how a shippability call sits unmade
+     behind a green gate.
 8. **"Blocked" is a first-class lane outcome — say so, or lanes optimise for the number.**
    A lane that cannot clear a gate honestly, refuses to bypass it, and reports blocked with
    a diagnosis has usually located a real defect in the *gate*. A prompt silent on this
@@ -1460,6 +1521,12 @@ The **driver** performs these writes: a dispatched lane structurally cannot reac
 hook-gated or plugin-only tracker call, which is why lanes hand back an evidence block
 instead. Paste the id → final-state list.
 
+**REQUIRED for tracker-driven runs — box-by-box close audit:** a green validation
+contract is not the issue's acceptance criteria — enumerate every `- [ ]` box of every
+in-scope issue and give each a verdict of `YES` / `NO` / `PARTIAL` / `NOT-CODE`, each
+`YES` carrying a `file:line`, a test name, or a pasted command and its output. Paste
+the full per-issue box table. No issue reaches Done on a green VAL alone.
+
 **REQUIRED final clause (never delete this one):** the lessons-learned pass has run
 and the project's `orchestration-prompt/learnings.md` carries this run's transferable
 lessons, or the run states in one line that it produced none and why. Paste the
@@ -1474,6 +1541,9 @@ half done.
 | VAL-… | <user-visible / API / CLI outcome> | <sub-goal #> | <pytest / smoke / tapps_validate_changed / …> |
 
 Coverage rule: every ID claimed exactly once; Done-when requires all IDs green.
+**Build this contract from the in-scope issues' `- [ ]` boxes, not from the epic's
+headline** — the denominator in the coverage table is **boxes**, not issues, and a
+box with no VAL id gets an explicit `not covered` rather than silent omission.
 
 ## Sub-goals  (sequential; each a checkpoint)
 0. **Establish preconditions (self-healing — the loop sets these up, NOT the user).** <runtime up, scorer/tool built, auth reachable, branch ready; wayfind resume already recalled in Prerequisites>
@@ -1482,7 +1552,7 @@ Coverage rule: every ID claimed exactly once; Done-when requires all IDs green.
    - **Smoke + health gate (after any deploy, before the real run):** `/health` is `ok|degraded` and one cheap end-to-end call succeeds.
    - **Harness compatibility:** <PreToolUse gates + MCP standing nudges the loop's tool calls will hit → bake unlock/refresh steps here; adopt-or-override each nudge in Guardrails>
    - proof: <preconditions verified; for live targets — image no older than latest merged commit + a 200/non-error smoke pasted>
-1. **(Tracker-driven runs) Triage the queue before executing any of it.** <A queue that has not been checked is a plan built on claims: an issue can be stale, already fixed, mis-scoped, or duplicated, and a prompt's own summary of tracker state has been wrong in both directions.> Read every in-scope id and give each one a **disposition** — `execute` / `already-done` / `rescope` / `duplicate-of-<id>` / `cancel` (with a reason) — and write the disposition back to the tracker. — proof: a table of every in-scope id with its disposition, pasted; done means **every id is dispositioned, not merely read**.
+1. **(Tracker-driven runs) Triage the queue before executing any of it.** <A queue that has not been checked is a plan built on claims: an issue can be stale, already fixed, mis-scoped, or duplicated, and a prompt's own summary of tracker state has been wrong in both directions.> Read every in-scope id and give each one a **disposition** — `execute` / `already-done` / `rescope` / `duplicate-of-<id>` / `cancel` (with a reason) — and write the disposition back to the tracker. **Also enumerate every issue's `- [ ]` boxes here**: a box that names a decision rather than code (a shippability call, a scope tradeoff) gets its own decide ticket now, not a silent block on the close at the end. — proof: a table of every in-scope id with its disposition, pasted; done means **every id is dispositioned, not merely read**.
 2. **(Software behavior) Finalize validation contract** — proof: contract table above complete + coverage check pasted
 3. <narrow, verifiable execution> — fulfills: <VAL-…> — proof: <ground-truth artifact>
 4. <…>
@@ -1518,7 +1588,6 @@ human-supervised work). If `driver` appears on a body of work, the prompt is wro
 | <verify — deterministic proof> | delegate | coordination | verifier subagent (fresh context) | `general-purpose` | `haiku` | `low` | runtime | deterministic shape: exit code / `grep -c` / test-count line — it re-runs one command and transcribes; read its `observed_output`, never its conclusion |
 | <verify — closed check> | delegate | coordination | verifier subagent (fresh context) | `general-purpose` | `sonnet` | `medium` | runtime | comparative shape: two outputs differ, a count did not shrink, a diff confined to N files — closed, but it must compare the right two things |
 | <verify — open judgement> | delegate | coordination | **verifier subagent (fresh context)** | `general-purpose` | **`opus`** | **`high`–`xhigh`** | runtime | semantic shape: creator ≠ verifier; refutes proof; a weak verifier defeats the pattern |
-| <verify — gates an irreversible step> | delegate | coordination | verifier subagent (fresh context) | `general-purpose` | **`opus`** | **`high`+** | runtime | consequence overrides shape: merge / deploy / delete / publish — a wrong PASS is unrecoverable, so tier by consequence even when the proof is a one-line exit code |
 | <fix after fail> | delegate | execution | fresh worker on scoped fix sub-goal | `general-purpose` | `sonnet` | `low` | runtime | expected-fail loop; do not reopen whole feature |
 | <recurring check> | delegate | execution | Routine / `claude -p`+cron | `Explore` | `haiku` | `low` | runtime | human-gated |
 | <human-supervised lane> | **operator** | execution | human session in <repo> | — | operator's | — | runtime | never dispatched; say why the repo cannot take a headless lane |
@@ -1540,14 +1609,19 @@ Tier by **question shape, not importance**: a high-stakes line count is still a 
 
 **Floor and justify.** The floor is `sonnet` + `medium` (`haiku` + `low` for closed
 transcription), and it is what the Session setup line and the launch block carry. Any
-cell above the floor states its one-clause reason in that row's **Notes** — "gates a
-merge", "open judgement", "cheaper tier failed this step twice" are the escalation
-criteria. A row that escalates with no reason in it is an unpriced default, not a
-decision.
+cell above the floor states its one-clause reason in that row's **Notes** — "open
+judgement", "cheaper tier failed this step twice" are the escalation criteria. A row
+that escalates with no reason in it is an unpriced default, not a decision. Merging
+is not itself an escalation criterion — every lane verification ends in one, so
+naming that fact alone would swallow the whole tiering below; consequence changes
+what the driver does with a verdict, never the tier that produced it.
 
 **Verifier tiering follows the proof shape** — deterministic → `haiku`/`low`,
-comparative → `sonnet`/`medium`, semantic → `opus`/`high`+, and anything gating an
-irreversible step → `opus` whatever its shape. Every verifier's return schema carries
+comparative → `sonnet`/`medium`, semantic → `opus`/`high`+. Where a cheap verdict
+would gate an irreversible step (merge, deploy, delete, publish), the driver
+re-reads `observed_output` and re-derives the conclusion itself before acting —
+its own job regardless of tier — rather than promoting the row. Every verifier's
+return schema carries
 **`observed_output`** (the literal text it saw — **empty is a FAIL**, it means the
 verifier reasoned instead of running) and **`green_by_suppression`** (true when the proof
 went green by deleting what it measures). For cheap-tier verdicts the driver adjudicates
@@ -1594,7 +1668,7 @@ for each of them: **what set does it read that the other writes?**>
 - **State:** <read first — wayfind resume (`memory_group=wayfind`), status, brain recall of prior attempts, Linear, last handoff>
 - **Decide:** <how to pick the next *execute* action / sub-goal — never invent decide work; if fog reappears → stop and `/tapps-wayfind`>
 - **Execute:** <the action, on the committed mechanism + tier>
-- **Verify (independent):** spawn a fresh-context verifier — **tiered by proof shape**, not uniformly frontier (deterministic → `haiku`/`low` · comparative → `sonnet`/`medium` · semantic → `opus`/`high`+ · anything gating an irreversible step → `opus` whatever its shape) — to *refute* the sub-goal's proof — re-run scrutiny + behavioral checks against the validation contract. Hand it the **exact proof command, expected artifact, file:line anchors, and environment quirks** (non-default ports, which interpreter, auth source) — never the executor's narrative, or it will reason about plausibility instead of running anything. Its return schema requires `observed_output` (the literal text it saw — **an empty value is a FAIL**, it means the verifier reasoned instead of running) and `green_by_suppression` (true when the proof went green by deleting what it measures; a flagged proof is a fail). For cheap-tier verdicts read `observed_output`, never the conclusion sentence. The verifier's verdict advances the loop. **Scope the per-sub-goal verifier's charge sheet** to the diff audit, the sub-goal's own proof artifact, the sub-goal's new or changed test files, and a `--collect-only` enumeration — never a bulk suite re-run; a whole-suite re-run belongs only to the single end-of-program regression sub-goal, never to a per-sub-goal charge sheet.
+- **Verify (independent):** spawn a fresh-context verifier — **tiered by proof shape alone**, not uniformly frontier (deterministic → `haiku`/`low` · comparative → `sonnet`/`medium` · semantic → `opus`/`high`+; where a cheap verdict would gate an irreversible step, the driver re-reads `observed_output` and re-derives the conclusion itself, rather than promoting the tier) — to *refute* the sub-goal's proof — re-run scrutiny + behavioral checks against the validation contract. Hand it the **exact proof command, expected artifact, file:line anchors, and environment quirks** (non-default ports, which interpreter, auth source) — never the executor's narrative, or it will reason about plausibility instead of running anything. Its return schema requires `observed_output` (the literal text it saw — **an empty value is a FAIL**, it means the verifier reasoned instead of running) and `green_by_suppression` (true when the proof went green by deleting what it measures; a flagged proof is a fail). For cheap-tier verdicts read `observed_output`, never the conclusion sentence. The verifier's verdict advances the loop. **Scope the per-sub-goal verifier's charge sheet** to the diff audit, the sub-goal's own proof artifact, the sub-goal's new or changed test files, and a `--collect-only` enumeration — never a bulk suite re-run; a whole-suite re-run belongs only to the single end-of-program regression sub-goal, never to a per-sub-goal charge sheet. **Before dispatching any verifier or lane, grep your own brief** for the commands the emitted prompt itself forbids — a full-suite invocation, a bulk enumeration, a second worktree where no discrimination pair needs one. One emitted prompt correctly forbade a bulk suite re-run outside the end-of-program sub-goal and its own author then wrote `make test` into a verifier brief anyway, costing 36 of that verifier's 77 minutes to rediscover 403 failures that were byte-identical at base — the rule was present, correct, and violated by the person who emitted it. Prose alone has now failed twice; the self-grep is a required step, not a reminder. (nlt-orchestrator's `scripts/check-orchestration-brief.js` makes this mechanical in that repo only — an existing implementation to point at, not something every runner can invoke.)
 - **On fail (expected-fail fix loop):** record structured handoff → scope narrow fix sub-goal → re-execute → re-verify; ≤**3** validation rounds per sub-goal (override: N=…), then escalate once, then stop with a diagnosis. Never weaken the contract to go green.
 - **Record (structured handoff):** completed · undone · commands+exit codes · issues · procedures followed? · failure-and-why → brain
 - **Context hygiene:** prune stale reads; carry a compact state summary, not raw transcripts.
@@ -1641,7 +1715,7 @@ Next: /clear   then   /tapps-continue-session
 - Research grant: the loop has web + `tapps_research` + `tapps_lookup_docs` (cache-first, free to repeat). Never write against an external/versioned API from memory — required lookups: <list>.
 - No fan-out of coupled coding — sequential per-repo edits (serial writes, parallel reads OK).
 - **Parallel where independent, serial where coupled** — lanes sharing no derived state fan out and dispatch to the background at iteration 1; a lane that reads a set another lane writes is serialised, and that set is named in the Parallelization plan's `order-forced-by`. Disjoint file lists are not evidence of independence.
-- **Verifier tier follows the proof shape** — deterministic → `haiku`/`low`, comparative → `sonnet`/`medium`, semantic → `opus`/`high`+, irreversible-gating → `opus` regardless of shape. Every verdict schema carries `observed_output` (empty = FAIL) and `green_by_suppression`; cheap-tier verdicts are read on `observed_output`, never the conclusion.
+- **Verifier tier follows the proof shape** — deterministic → `haiku`/`low`, comparative → `sonnet`/`medium`, semantic → `opus`/`high`+. Consequence promotes the driver's adjudication depth, never the verifier's tier. Every verdict schema carries `observed_output` (empty = FAIL) and `green_by_suppression`; cheap-tier verdicts are read on `observed_output`, never the conclusion.
 - Context hygiene — targeted grep over full re-Read.
 - Context lifecycle — recycle at each sub-goal boundary: handoff → **re-verify** → clear → continue; never clear on an unverified handoff; one runner per handoff file; caps are cumulative across shifts, never reset by a clear; boundaries skipped only where the prompt says so and why.
 - Scope: repos in play = <list>; reads fleet-wide, writes via owner.

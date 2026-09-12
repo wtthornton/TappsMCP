@@ -174,7 +174,7 @@ class TestSurfaceAxis:
 
     def test_body_warns_against_reusing_plane_for_surface(self) -> None:
         body = CLAUDE_SKILLS["orchestration-prompt"]
-        assert "never reuse \"plane\"" in body.lower() or "never reuse plane" in body.lower()
+        assert 'never reuse "plane"' in body.lower() or "never reuse plane" in body.lower()
 
     def test_template_instructs_naming_surface_and_deploy_channel_per_sub_goal(self) -> None:
         body = COMPANIONS["references/method-detail.md"]
@@ -198,11 +198,15 @@ class TestCheapestViableTiering:
         assert "the emitted runner default is `sonnet` + `medium`" in section
 
     def test_escalation_criteria_are_named_not_assumed(self) -> None:
+        """orch-prompt-rules 10: "gates a merge" swallowed the tiering (every lane
+        verification gates a merge), so it is no longer an escalation criterion —
+        only the two that discriminate remain."""
         body = _FULL_SURFACE
         section = body.split("**Floor first; escalate only with a stated reason.**", 1)[1][:1200]
         flat = " ".join(section.split())
-        for criterion in ("gates a merge", "open judgement", "cheaper tier failed this step twice"):
+        for criterion in ("open judgement", "cheaper tier failed this step twice"):
             assert criterion in flat
+        assert "gates a merge" not in flat
 
     def test_proof_shape_table_still_governs_verifier_tiers(self) -> None:
         body = _FULL_SURFACE
@@ -224,6 +228,21 @@ class TestCheapestViableTiering:
         assert "only the tests the change adds or touches" in guardrails
         assert "One\n  full **enumeration** per wave" in guardrails
         assert "exactly one regression run at program\n  end" in guardrails
+
+    def test_no_consequence_overrides_shape_phrasing_survives_anywhere(self) -> None:
+        """orch-prompt-rules 10, sixth site: a "Standing constraints" checklist
+        bullet in the emitted template (`assets/prompt-template.md`'s own
+        Guardrails list, not the SKILL.md guardrails-and-contracts reference)
+        restated the identical "consequence overrides shape" contract rule 10
+        exists to remove, as "irreversible-gating -> opus regardless of shape".
+        The five section-scoped guards could not see it because none of them
+        reads the whole document. This guard is deliberately document-wide —
+        the whole generated template plus the whole SKILL.md surface — so a
+        seventh restatement in some other section cannot hide the same way."""
+        template = COMPANIONS["assets/prompt-template.md"]
+        whole_document = _FULL_SURFACE + "\n" + template
+        assert "regardless of shape" not in whole_document
+        assert "irreversible-gating" not in whole_document
 
     def test_verifier_dispatch_charge_sheet_scoped_and_excludes_bulk_reruns(self) -> None:
         template = COMPANIONS["assets/prompt-template.md"]

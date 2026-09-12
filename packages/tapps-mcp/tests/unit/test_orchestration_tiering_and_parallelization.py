@@ -89,7 +89,6 @@ class TestProofShapeTierTable:
             ("**Deterministic**", "`haiku`", "`low`"),
             ("**Comparative**", "`sonnet`", "`medium`"),
             ("**Semantic**", "`opus`", "`high` or `xhigh`"),
-            ("**Gates an irreversible step**", "`opus`", "`high`+"),
         ],
     )
     def test_each_proof_shape_maps_to_a_tier(self, body, shape, model, effort):
@@ -100,8 +99,16 @@ class TestProofShapeTierTable:
         assert row is not None, f"no tier-table row for {shape}"
         assert f"| {model} | {effort} |" in row, row
 
-    def test_consequence_overrides_shape(self, body):
-        assert "Consequence overrides shape" in body
+    def test_no_fourth_merge_gating_tier_row(self, body):
+        """TAP orch-prompt-rules 10 — a fourth row keyed on consequence swallowed the
+        three shape rows above it (every lane verification gates a merge). Only three
+        proof-shape rows may exist; consequence changes adjudication depth, not tier."""
+        assert "Gates an irreversible step" not in body
+        assert "Consequence overrides shape" not in body
+
+    def test_consequence_promotes_adjudication_depth_not_tier(self, body):
+        assert "Consequence promotes the adjudication depth the driver owes" in body
+        assert "Tier by proof shape only" in body
 
     def test_verifier_bullet_points_at_the_table(self, body):
         bullet = body.split("- After Execute, spawn a **verifier subagent**", 1)[1]
@@ -139,11 +146,20 @@ class TestVerdictSchemaRules:
 
 
 class TestTemplateVerifierRows:
-    """TAP-6596 acceptance — four proof-shape rows, not one."""
+    """TAP-6596 acceptance — three proof-shape rows, not one.
 
-    def test_there_are_exactly_four_verifier_rows(self, template):
+    orch-prompt-rules 10 (2026-09-12): a fourth row keyed on "gates an
+    irreversible step" used to swallow these three, collapsing every verifier
+    to `opus`. ``test_no_merge_gating_plane_map_row`` below is the absence
+    guard — it must fail RED against the pre-change tree and pass GREEN here.
+    """
+
+    def test_there_are_exactly_three_verifier_rows(self, template):
         rows = _verifier_rows(template)
-        assert len(rows) == 4, rows
+        assert len(rows) == 3, rows
+
+    def test_no_merge_gating_plane_map_row(self, template):
+        assert "<verify — gates an irreversible step>" not in template
 
     @pytest.mark.parametrize(
         ("label", "model"),
@@ -151,7 +167,6 @@ class TestTemplateVerifierRows:
             ("| <verify — deterministic proof> |", "`haiku`"),
             ("| <verify — closed check> |", "`sonnet`"),
             ("| <verify — open judgement> |", "`opus`"),
-            ("| <verify — gates an irreversible step> |", "`opus`"),
         ],
     )
     def test_each_proof_shape_has_its_own_row(self, template, label, model):

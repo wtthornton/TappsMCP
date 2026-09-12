@@ -7,6 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed — 2026-09-12
+
+- **`orchestration-prompt` skill generator: ported five rules (8-12) measured on a
+  real nine-lane two-repo program upstream**, so every consuming project gets them,
+  not just the one that discovered them. Rule 10 removed a defect the generator
+  itself authored: a fourth "gates an irreversible step" verify row and proof-shape
+  table row swallowed the three shape-tiered rows above them, collapsing every
+  verifier to `opus` regardless of shape. Rules 8/8b add a box-by-box close audit
+  (a green validation contract is not the issue's acceptance criteria) with a
+  `YES`/`NO`/`PARTIAL`/`NOT-CODE` verdict vocabulary; rule 9 requires every
+  Done-when gate to be measured at base during authoring, not carried from a stale
+  record; rule 11 adds an explicit carry-forward statement so a fix round verifies
+  only the delta; rule 12 adds a pre-dispatch self-grep obligation for commands the
+  emitted prompt itself forbids. `packages/tapps-mcp/src/tapps_mcp/pipeline/platform_skill_orchestration.py`.
+
 ### Correction — 2026-09-08
 
 - **`docs/migrations/tapps-memory-deprecation.md` and the CHANGELOG itself
