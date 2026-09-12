@@ -2,7 +2,7 @@
 
 Contains: tapps_report, tapps_dead_code, tapps_dependency_scan,
 tapps_dependency_graph, tapps_session_notes, tapps_impact_analysis,
-tapps_call_graph, tapps_diff_impact.
+tapps_call_graph, tapps_diff_impact, tapps_static_detectors.
 
 Functions are defined at module level (importable for tests) and
 registered on the ``mcp`` instance via :func:`register`.
@@ -261,7 +261,10 @@ async def tapps_session_notes(action: str, key: str = "", value: str = "") -> di
     if action == "save":
         if not key or not value:
             _record_execution(
-                "tapps_session_notes", start, status="failed", error_code="missing_params",
+                "tapps_session_notes",
+                start,
+                status="failed",
+                error_code="missing_params",
                 action=action,
             )
             return error_response(
@@ -274,7 +277,10 @@ async def tapps_session_notes(action: str, key: str = "", value: str = "") -> di
     elif action == "get":
         if not key:
             _record_execution(
-                "tapps_session_notes", start, status="failed", error_code="missing_params",
+                "tapps_session_notes",
+                start,
+                status="failed",
+                error_code="missing_params",
                 action=action,
             )
             return error_response("tapps_session_notes", "missing_params", "get requires key")
@@ -291,21 +297,30 @@ async def tapps_session_notes(action: str, key: str = "", value: str = "") -> di
     elif action == "promote":
         if not key:
             _record_execution(
-                "tapps_session_notes", start, status="failed", error_code="missing_params",
+                "tapps_session_notes",
+                start,
+                status="failed",
+                error_code="missing_params",
                 action=action,
             )
             return error_response("tapps_session_notes", "missing_params", "promote requires key")
         found = store.get(key)
         if found is None:
             _record_execution(
-                "tapps_session_notes", start, status="failed", error_code="not_found",
+                "tapps_session_notes",
+                start,
+                status="failed",
+                error_code="not_found",
                 action=action,
             )
             return error_response("tapps_session_notes", "not_found", f"Note '{key}' not found")
         data = await _promote_note_to_memory(found, value or "context")
     else:
         _record_execution(
-            "tapps_session_notes", start, status="failed", error_code="invalid_action",
+            "tapps_session_notes",
+            start,
+            status="failed",
+            error_code="invalid_action",
             action=action,
         )
         return error_response(
@@ -1112,6 +1127,20 @@ async def tapps_dead_code(
         },
     )
     return _with_nudges("tapps_dead_code", resp)
+
+
+# ---------------------------------------------------------------------------
+# tapps_static_detectors (CB lane L3: VAL-04 declared-uncalled,
+# VAL-05 consumed-no-producer) -- glue lives in project/static_detectors.py
+# to keep this already-oversized file's blast radius from growing further.
+# ---------------------------------------------------------------------------
+
+
+async def tapps_static_detectors(mode: str, project_root: str = "") -> dict[str, Any]:
+    """VAL-04 ``"declared-uncalled"`` / VAL-05 ``"consumed-no-producer"``."""
+    from tapps_mcp.project.static_detectors import run_static_detector_tool
+
+    return await run_static_detector_tool(mode, project_root)
 
 
 # ---------------------------------------------------------------------------
