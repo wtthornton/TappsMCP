@@ -52,6 +52,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   not register, any `action=<word>` nlt-memory will not dispatch, and any
   paragraph that offers the CLI as a route to the MCP action surface.
 
+## [3.12.89] - 2026-09-11
+
+### Fixed
+
+- **`.claude/skills` / `.cursor/skills` docs-automation pin now covers creation, not just refresh** (#408, `5dabf30e`) — the six managed docs-automation `SKILL.md` files are now recognized on first creation as well as on refresh, and `--dry-run` agrees with a live run about them.
+- **`tapps_upgrade` untracks gitignored `.tapps-mcp` backup trees** (#407, `998354cf`) — when `.tapps-mcp/backups` or `.tapps-mcp/hook-backups` are gitignored but still tracked, upgrade now stages their removal from the index (never committing on the consumer's behalf), emits a warning naming the paths, skips when the repo is mid-operation (`MERGE_HEAD`/`REBASE_HEAD`/`CHERRY_PICK_HEAD`/`BISECT_LOG`), and does not run under `mcp_only`. **Consequence:** those paths become untracked-and-ignored, so `git clean -xfd` can now remove rollback snapshots where previously it could not.
+- **`upgrade_skip_files` documented token list now derived from the vocabulary** (#409, `fb1901e8`) — the list had drifted to 19 of 31 documented tokens; the vocabulary moved to `tapps_core.config.upgrade_skip_tokens`, with a re-export shim at `tapps_mcp.pipeline.upgrade_skip_tokens` so existing imports are unchanged.
+
+### Tests
+
+- **Cursor `templates` skip-token behavior proven load-bearing** (#405, `3da23f21`)
+
 ## [3.12.88] - 2026-09-11
 
 ### Added
