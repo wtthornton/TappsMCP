@@ -411,4 +411,7 @@ class TestToolPresetConstants:
         # + 1 tapps_skill_learnings (TAP-6861) = 45.
         # + 2 tapps_file_api, tapps_repo_map (TAP-7411: were registered but
         # missing from this set, making them unreachable on the `full` preset) = 47.
-        assert len(ALL_TOOL_NAMES) == 47
+        # + 1 tapps_static_detectors (CB lane L3 fix round 1: same defect
+        # class as TAP-7411, registered in server_analysis_tools but missing
+        # from this set) = 48.
+        assert len(ALL_TOOL_NAMES) == 48

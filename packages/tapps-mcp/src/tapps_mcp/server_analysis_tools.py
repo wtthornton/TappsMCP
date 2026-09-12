@@ -2,10 +2,16 @@
 
 Contains: tapps_report, tapps_dead_code, tapps_dependency_scan,
 tapps_dependency_graph, tapps_session_notes, tapps_impact_analysis,
-tapps_call_graph, tapps_diff_impact.
+tapps_call_graph, tapps_diff_impact, tapps_static_detectors.
 
 Functions are defined at module level (importable for tests) and
-registered on the ``mcp`` instance via :func:`register`.
+registered on the ``mcp`` instance via :func:`register`. Each handler is a
+thin, independently testable async function; :func:`register` is the only
+place that wires a handler's presence to the caller-supplied
+``allowed_tools`` set, so a handler defined here but never gated in
+:func:`register` (and never listed in ``server.py``'s ``ALL_TOOL_NAMES``)
+is unreachable regardless of how thoroughly it is unit-tested -- exactly
+the defect class ``tapps_static_detectors`` shipped with before this fix.
 """
 
 from __future__ import annotations
@@ -261,7 +267,10 @@ async def tapps_session_notes(action: str, key: str = "", value: str = "") -> di
     if action == "save":
         if not key or not value:
             _record_execution(
-                "tapps_session_notes", start, status="failed", error_code="missing_params",
+                "tapps_session_notes",
+                start,
+                status="failed",
+                error_code="missing_params",
                 action=action,
             )
             return error_response(
@@ -274,7 +283,10 @@ async def tapps_session_notes(action: str, key: str = "", value: str = "") -> di
     elif action == "get":
         if not key:
             _record_execution(
-                "tapps_session_notes", start, status="failed", error_code="missing_params",
+                "tapps_session_notes",
+                start,
+                status="failed",
+                error_code="missing_params",
                 action=action,
             )
             return error_response("tapps_session_notes", "missing_params", "get requires key")
@@ -291,21 +303,30 @@ async def tapps_session_notes(action: str, key: str = "", value: str = "") -> di
     elif action == "promote":
         if not key:
             _record_execution(
-                "tapps_session_notes", start, status="failed", error_code="missing_params",
+                "tapps_session_notes",
+                start,
+                status="failed",
+                error_code="missing_params",
                 action=action,
             )
             return error_response("tapps_session_notes", "missing_params", "promote requires key")
         found = store.get(key)
         if found is None:
             _record_execution(
-                "tapps_session_notes", start, status="failed", error_code="not_found",
+                "tapps_session_notes",
+                start,
+                status="failed",
+                error_code="not_found",
                 action=action,
             )
             return error_response("tapps_session_notes", "not_found", f"Note '{key}' not found")
         data = await _promote_note_to_memory(found, value or "context")
     else:
         _record_execution(
-            "tapps_session_notes", start, status="failed", error_code="invalid_action",
+            "tapps_session_notes",
+            start,
+            status="failed",
+            error_code="invalid_action",
             action=action,
         )
         return error_response(
@@ -1112,6 +1133,20 @@ async def tapps_dead_code(
         },
     )
     return _with_nudges("tapps_dead_code", resp)
+
+
+# ---------------------------------------------------------------------------
+# tapps_static_detectors (CB lane L3: VAL-04 declared-uncalled,
+# VAL-05 consumed-no-producer) -- glue lives in project/static_detectors.py
+# to keep this already-oversized file's blast radius from growing further.
+# ---------------------------------------------------------------------------
+
+
+async def tapps_static_detectors(mode: str, project_root: str = "") -> dict[str, Any]:
+    """VAL-04 ``"declared-uncalled"`` / VAL-05 ``"consumed-no-producer"``."""
+    from tapps_mcp.project.static_detectors import run_static_detector_tool
+
+    return await run_static_detector_tool(mode, project_root)
 
 
 # ---------------------------------------------------------------------------
@@ -2067,6 +2102,16 @@ def register(mcp_instance: FastMCP, allowed_tools: frozenset[str]) -> None:
 
     TAP-1986: tapps_impact_analysis is the only eager daily-driver here.
     All other analysis tools carry defer_loading=True (combined with size hints where needed).
+
+    Each tool is gated behind an ``if <name> in allowed_tools:`` check so a
+    given profile only pays the schema cost for tools it actually exposes.
+    ``register_tool`` is the sole registration entry point (TAP-5611): every
+    call site here is counted by ``scripts/check-tool-budget.py`` against
+    the documented per-server tool totals, so a new gated block below must
+    be matched by a documented count bump (``docs/architecture/tool-budget.md``,
+    ``README.md``, ``CLAUDE.md``), not folded into a shared helper or loop --
+    collapsing these calls would make the registry undercount the real
+    tapps-mcp tool total the moment a helper hid the literal call sites.
     """
     if "tapps_session_notes" in allowed_tools:
         register_tool(
@@ -2144,4 +2189,14 @@ def register(mcp_instance: FastMCP, allowed_tools: frozenset[str]) -> None:
             tapps_audit_close_coverage,
             annotations=_ANNOTATIONS_SIDE_EFFECT_IDEMPOTENT,
             meta=_META_DEFERRED,
+        )
+    if "tapps_static_detectors" in allowed_tools:
+        # Findings list can run into the hundreds (VAL-04 alone flagged
+        # dozens in this repo), so this matches tapps_dead_code's large-
+        # output/deferred meta shape rather than the smaller _META_DEFERRED.
+        register_tool(
+            mcp_instance,
+            tapps_static_detectors,
+            annotations=_ANNOTATIONS_READ_ONLY,
+            meta=_META_LARGE_OUTPUT_100K_D,
         )

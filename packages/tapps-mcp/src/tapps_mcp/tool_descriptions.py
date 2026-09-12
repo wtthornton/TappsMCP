@@ -104,6 +104,10 @@ TOOL_DESCRIPTIONS: dict[str, str] = {
     "tapps_skill_learnings": (
         "Audit/promote/verify/trim a skill's SKILL.md vs learnings.md pair (byte-deterministic)."
     ),
+    "tapps_static_detectors": (
+        "Find declared-uncalled constants/functions (mode='declared-uncalled') or "
+        "consumed-no-producer dataclass fields (mode='consumed-no-producer') via AST scan."
+    ),
     "tapps_linear_snapshot_get": (
         "Cache-first Linear read: return cached issues or signal a cache miss."
     ),

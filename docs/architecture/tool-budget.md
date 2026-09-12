@@ -46,7 +46,7 @@ tools) are registered `defer_loading=True` — large-output, on-demand reads, no
 
 | Server | Mode | Eager tools | Deferred tools | Total |
 |---|---|---|---|---|
-| `tapps-mcp` | full (no `--mode`) | 10 | 37 | 47 |
+| `tapps-mcp` | full (no `--mode`) | 10 | 38 | 48 |
 | `tapps-quality` | `--mode quality` | 9 | 7 | 16 |
 | `tapps-admin` | `--mode admin` | 1 | 12 | 13 |
 | `docs-mcp` | full `docsmcp serve` | 7 | 35 | 42 |

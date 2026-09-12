@@ -191,7 +191,8 @@ class TestAnnotationCategories:
         # + 2 Epic 114 read-only tools + 1 tapps_domain_playbook (ADR-0025)
         # + 1 tapps_research (TAP-5365) = 32
         # + 2 tapps_file_api, tapps_repo_map (TAP-7411: now reachable on `full`) = 34
-        assert len(read_only) == 34, f"Expected 34 read-only tools, got {len(read_only)}"
+        # + 1 tapps_static_detectors (CB lane L3 fix round 1, read-only) = 35
+        assert len(read_only) == 35, f"Expected 35 read-only tools, got {len(read_only)}"
 
     def test_side_effect_count(self) -> None:
         tools = mcp._tool_manager._tools
@@ -233,8 +234,9 @@ class TestAnnotationCategories:
         # + 1 tapps_memory (TAP-3895) + 2 Epic 114 tools + 1 tapps_domain_playbook
         # + 0 for tapps_research (openWorld, idempotentHint=False) = 38
         # + 2 tapps_file_api, tapps_repo_map (TAP-7411: now reachable on `full`) = 40
-        assert len(idempotent) == 40, (
-            f"Expected 40 idempotent tools, got {len(idempotent)}: {sorted(idempotent)}"
+        # + 1 tapps_static_detectors (CB lane L3 fix round 1, idempotentHint) = 41
+        assert len(idempotent) == 41, (
+            f"Expected 41 idempotent tools, got {len(idempotent)}: {sorted(idempotent)}"
         )
 
 
