@@ -252,6 +252,25 @@ _TAPPS_BACKUP_UNTRACK_PATHS: tuple[str, ...] = (
     ".tapps-mcp/hook-backups",
 )
 
+# Markers of a mid-operation repo. Staging a deletion here is not recoverable
+# as cheaply as the ordinary case — a merge in progress bakes the deletion
+# into the merge commit on the consumer's next ``git commit``.
+_GIT_MID_OPERATION_MARKERS: tuple[str, ...] = (
+    "MERGE_HEAD",
+    "REBASE_HEAD",
+    "CHERRY_PICK_HEAD",
+    "BISECT_LOG",
+)
+
+
+def _git_mid_operation_reason(project_root: Path) -> str | None:
+    """Return why *project_root* is mid-operation, or ``None`` if it is clean."""
+    git_dir = project_root / ".git"
+    for marker in _GIT_MID_OPERATION_MARKERS:
+        if (git_dir / marker).exists():
+            return f"{marker} present"
+    return None
+
 
 def _git_path_is_ignored(project_root: Path, rel_path: str) -> bool:
     """Return ``True`` if *rel_path* is covered by ``.gitignore`` (or equivalent).
@@ -261,6 +280,14 @@ def _git_path_is_ignored(project_root: Path, rel_path: str) -> bool:
     exactly the state this function must detect (gitignored *and* tracked),
     so the default mode would silently never match and the untrack step
     would never fire.
+
+    Note: the two patterns this matches against
+    (:data:`_TAPPS_RUNTIME_GITIGNORE_ENTRIES`) are directory-only (trailing
+    slash), so this needs *rel_path* to exist as a directory on disk to
+    match — an empty parent (e.g. after an unrelated rmdir) makes this
+    return ``False`` and the untrack step silently no-ops for that path.
+    Not reachable today, but worth knowing before refactoring the on-disk
+    layout.
     """
     try:
         proc = subprocess.run(
@@ -308,13 +335,31 @@ def untrack_gitignored_backup_paths(project_root: Path) -> dict[str, Any]:
     commits on the consumer's behalf, consistent with this repo's
     dispatch-don't-reach-in convention for touching a consumer's git state.
 
+    When the repo is mid-operation (``MERGE_HEAD``, ``REBASE_HEAD``,
+    ``CHERRY_PICK_HEAD``, or ``BISECT_LOG`` present under ``.git/``), the
+    untrack is skipped entirely this run — a staged deletion would otherwise
+    ride into the merge/rebase commit, which is not cheaply recoverable.
+
     Returns:
         Dict with ``untracked`` (paths actually staged for removal this
         run), ``skipped`` (paths that were not gitignored, not tracked, or
-        outside a git repo), and ``error`` (str message, or ``None``).
+        outside a git repo), ``errors`` (dict mapping a path to its failure
+        message, empty when nothing failed), and ``mid_operation_skip``
+        (the marker reason, or ``None``).
     """
-    result: dict[str, Any] = {"untracked": [], "skipped": [], "error": None}
+    result: dict[str, Any] = {
+        "untracked": [],
+        "skipped": [],
+        "errors": {},
+        "mid_operation_skip": None,
+    }
     if not (project_root / ".git").exists():
+        result["skipped"] = list(_TAPPS_BACKUP_UNTRACK_PATHS)
+        return result
+
+    mid_op_reason = _git_mid_operation_reason(project_root)
+    if mid_op_reason is not None:
+        result["mid_operation_skip"] = mid_op_reason
         result["skipped"] = list(_TAPPS_BACKUP_UNTRACK_PATHS)
         return result
 
@@ -336,9 +381,38 @@ def untrack_gitignored_backup_paths(project_root: Path) -> dict[str, Any]:
             )
             result["untracked"].append(rel_path)
         except (OSError, subprocess.CalledProcessError, subprocess.TimeoutExpired) as exc:
-            result["error"] = str(exc)
+            result["errors"][rel_path] = str(exc)
 
     return result
+
+
+def backup_untrack_warnings(result: dict[str, Any]) -> list[str]:
+    """Return operator-facing warnings for an :func:`untrack_gitignored_backup_paths` result.
+
+    Named paths get staged for deletion with no commit and no other visible
+    signal (TAP-7427 BLOCKER 1) — surface that here so it reaches the
+    ``result["warnings"]`` channel the CLI already renders.
+    """
+    warnings: list[str] = []
+    untracked = result.get("untracked") or []
+    if untracked:
+        paths = ", ".join(untracked)
+        warnings.append(
+            f"Untracked gitignored backup path(s) from git: {paths}. "
+            "This only STAGED the deletion (git rm --cached) — nothing was committed. "
+            "Commit these paths in your next commit, or run "
+            "`git reset -- <path>` to keep them tracked."
+        )
+    mid_op_reason = result.get("mid_operation_skip")
+    if mid_op_reason:
+        warnings.append(
+            f"Skipped untracking gitignored backup paths: repo is mid-operation "
+            f"({mid_op_reason}). Re-run the upgrade after the merge/rebase/cherry-pick "
+            "finishes."
+        )
+    for path, error in (result.get("errors") or {}).items():
+        warnings.append(f"Failed to untrack gitignored backup path {path}: {error}")
+    return warnings
 
 
 # ---------------------------------------------------------------------------

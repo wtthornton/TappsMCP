@@ -15,8 +15,10 @@ import pytest
 
 from tapps_mcp.distribution.setup_secrets import (
     _TAPPS_BACKUP_UNTRACK_PATHS,
+    backup_untrack_warnings,
     untrack_gitignored_backup_paths,
 )
+from tapps_mcp.pipeline.upgrade import upgrade_pipeline
 
 
 def _git(repo: Path, *args: str) -> subprocess.CompletedProcess[str]:
@@ -38,6 +40,14 @@ def _tracked_paths(repo: Path, rel: str) -> list[str]:
         check=False,
     )
     return [line for line in out.stdout.splitlines() if line]
+
+
+def _head_sha(repo: Path) -> str:
+    return _git(repo, "rev-parse", "HEAD").stdout.strip()
+
+
+def _commit_count(repo: Path) -> int:
+    return int(_git(repo, "rev-list", "--count", "HEAD").stdout.strip())
 
 
 @pytest.fixture
@@ -71,11 +81,15 @@ def repo_with_tracked_backups(tmp_path: Path) -> Path:
 class TestUntrackGitignoredBackupPaths:
     def test_stages_removal_without_committing(self, repo_with_tracked_backups: Path) -> None:
         repo = repo_with_tracked_backups
+        head_before = _head_sha(repo)
+        count_before = _commit_count(repo)
+
         result = untrack_gitignored_backup_paths(repo)
 
         assert sorted(result["untracked"]) == sorted(_TAPPS_BACKUP_UNTRACK_PATHS)
         assert result["skipped"] == []
-        assert result["error"] is None
+        assert result["errors"] == {}
+        assert result["mid_operation_skip"] is None
 
         # Staged (index no longer has them) but not committed.
         assert _tracked_paths(repo, ".tapps-mcp/backups") == []
@@ -84,9 +98,11 @@ class TestUntrackGitignoredBackupPaths:
         assert "D  .tapps-mcp/backups/20260101-000000/manifest.json" in status
         assert "D  .tapps-mcp/hook-backups/pre-commit.bak" in status
 
-        # Never commits on the consumer's behalf.
-        log = _git(repo, "log", "--oneline").stdout
-        assert "untrack" not in log.lower()
+        # Never commits on the consumer's behalf: HEAD and commit count are
+        # unchanged (a message-substring check would pass even if the code
+        # committed under some other message).
+        assert _head_sha(repo) == head_before
+        assert _commit_count(repo) == count_before
 
     def test_idempotent_second_run_is_a_noop(self, repo_with_tracked_backups: Path) -> None:
         repo = repo_with_tracked_backups
@@ -97,7 +113,7 @@ class TestUntrackGitignoredBackupPaths:
 
         assert second["untracked"] == []
         assert sorted(second["skipped"]) == sorted(_TAPPS_BACKUP_UNTRACK_PATHS)
-        assert second["error"] is None
+        assert second["errors"] == {}
         # No re-dirtying of the tree.
         assert _git(repo, "status", "--porcelain").stdout == ""
 
@@ -158,4 +174,107 @@ class TestUntrackGitignoredBackupPaths:
         result = untrack_gitignored_backup_paths(tmp_path)
         assert result["untracked"] == []
         assert sorted(result["skipped"]) == sorted(_TAPPS_BACKUP_UNTRACK_PATHS)
-        assert result["error"] is None
+        assert result["errors"] == {}
+
+
+class TestMidOperationSkip:
+    """BLOCKER 2: a repo mid-merge/rebase/cherry-pick/bisect must not be touched.
+
+    A staged deletion injected here is not cheaply recoverable — it rides
+    into the merge/rebase commit on the consumer's next ``git commit``.
+    """
+
+    @pytest.mark.parametrize(
+        "marker",
+        ["MERGE_HEAD", "REBASE_HEAD", "CHERRY_PICK_HEAD", "BISECT_LOG"],
+    )
+    def test_skips_entirely_when_marker_present(
+        self, repo_with_tracked_backups: Path, marker: str
+    ) -> None:
+        repo = repo_with_tracked_backups
+        (repo / ".git" / marker).write_text("deadbeef\n", encoding="utf-8")
+        head_before = _head_sha(repo)
+        count_before = _commit_count(repo)
+
+        result = untrack_gitignored_backup_paths(repo)
+
+        assert result["untracked"] == []
+        assert sorted(result["skipped"]) == sorted(_TAPPS_BACKUP_UNTRACK_PATHS)
+        assert result["mid_operation_skip"] == f"{marker} present"
+        assert result["errors"] == {}
+        # Nothing staged, nothing committed.
+        assert _git(repo, "status", "--porcelain").stdout == ""
+        assert _head_sha(repo) == head_before
+        assert _commit_count(repo) == count_before
+
+    def test_no_marker_present_runs_normally(self, repo_with_tracked_backups: Path) -> None:
+        result = untrack_gitignored_backup_paths(repo_with_tracked_backups)
+        assert result["mid_operation_skip"] is None
+        assert sorted(result["untracked"]) == sorted(_TAPPS_BACKUP_UNTRACK_PATHS)
+
+
+class TestBackupUntrackWarnings:
+    """BLOCKER 1: staged deletions must surface a warning naming the paths."""
+
+    def test_warns_when_paths_untracked(self, repo_with_tracked_backups: Path) -> None:
+        result = untrack_gitignored_backup_paths(repo_with_tracked_backups)
+        warnings = backup_untrack_warnings(result)
+
+        assert len(warnings) == 1
+        (warning,) = warnings
+        for path in _TAPPS_BACKUP_UNTRACK_PATHS:
+            assert path in warning
+        assert "staged" in warning.lower()
+        assert "commit" in warning.lower()
+
+    def test_warns_on_mid_operation_skip(self, repo_with_tracked_backups: Path) -> None:
+        repo = repo_with_tracked_backups
+        (repo / ".git" / "MERGE_HEAD").write_text("deadbeef\n", encoding="utf-8")
+
+        result = untrack_gitignored_backup_paths(repo)
+        warnings = backup_untrack_warnings(result)
+
+        assert len(warnings) == 1
+        assert "MERGE_HEAD present" in warnings[0]
+
+    def test_warns_per_path_on_error(self) -> None:
+        result = {
+            "untracked": [],
+            "skipped": [],
+            "errors": {".tapps-mcp/backups": "boom"},
+            "mid_operation_skip": None,
+        }
+        warnings = backup_untrack_warnings(result)
+        assert len(warnings) == 1
+        assert ".tapps-mcp/backups" in warnings[0]
+        assert "boom" in warnings[0]
+
+    def test_no_warnings_when_nothing_happened(self, tmp_path: Path) -> None:
+        result = untrack_gitignored_backup_paths(tmp_path)
+        assert backup_untrack_warnings(result) == []
+
+
+class TestMcpOnlyGate:
+    """BLOCKER 3: mcp_only is a narrow install — must not mutate the git index."""
+
+    def test_mcp_only_skips_backup_untrack(self, repo_with_tracked_backups: Path) -> None:
+        repo = repo_with_tracked_backups
+        result = upgrade_pipeline(repo, platform="claude", mcp_only=True)
+
+        assert "backup_untrack" not in result["components"]
+        # Untouched: still tracked, nothing staged for deletion.
+        assert _tracked_paths(repo, ".tapps-mcp/backups") != []
+        status = _git(repo, "status", "--porcelain", "--", ".tapps-mcp/backups").stdout
+        assert status == ""
+
+    def test_non_mcp_only_runs_backup_untrack_and_warns(
+        self, repo_with_tracked_backups: Path
+    ) -> None:
+        repo = repo_with_tracked_backups
+        result = upgrade_pipeline(repo, platform="claude", mcp_only=False)
+
+        component = result["components"]["backup_untrack"]
+        assert sorted(component["untracked"]) == sorted(_TAPPS_BACKUP_UNTRACK_PATHS)
+        assert any(
+            ".tapps-mcp/backups" in w and ".tapps-mcp/hook-backups" in w for w in result["warnings"]
+        )

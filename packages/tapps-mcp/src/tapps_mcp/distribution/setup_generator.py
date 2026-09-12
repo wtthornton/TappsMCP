@@ -104,7 +104,9 @@ from tapps_mcp.distribution.setup_secrets import (
     _value_is_plaintext_secret,
     _value_looks_like_filesystem_path,
     _warn_plaintext_secrets,
+    backup_untrack_warnings,
     ensure_tapps_runtime_gitignore,
+    untrack_gitignored_backup_paths,
 )
 from tapps_mcp.distribution.setup_upgrade_cli import _format_upgrade_result, run_upgrade
 from tapps_mcp.distribution.setup_wrappers import (
@@ -211,6 +213,7 @@ __all__ = [
     "_write_cursor_mcp_wrapper",
     "_write_engagement_level_to_yaml",
     "_write_mcp_transport_to_yaml",
+    "backup_untrack_warnings",
     "ensure_tapps_runtime_gitignore",
     "is_tapps_mcp_dev_monorepo",
     "is_tapps_mcp_package_layout",
@@ -219,6 +222,7 @@ __all__ = [
     "regenerate_nlt_stdio_wrappers",
     "run_init",
     "run_upgrade",
+    "untrack_gitignored_backup_paths",
 ]
 
 # Env values that mean "yes" for TAPPS_MCP_ALLOW_PACKAGE_INIT.

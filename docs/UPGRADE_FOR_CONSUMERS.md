@@ -269,4 +269,6 @@ Emits JSON: per-project tool-call counts, gate pass rates, top skills, and hando
 
 The upgrade stores backups in `.tapps-mcp/backups/` and keeps the 5 most recent automatically. Each backup includes a `manifest.json` listing all files the upgrade overwrote.
 
+**`git clean -xfd` now destroys rollback snapshots (TAP-7427).** `.tapps-mcp/backups/` and `.tapps-mcp/hook-backups/` used to be tracked in git, which kept `git clean -xfd` from touching them. The upgrade now untracks those trees once `.gitignore` covers them (staged only — never committed on your behalf; see the upgrade output for a warning naming the exact paths), so they are untracked-and-ignored from then on. `git clean -xfd` removes untracked files including ignored ones, so it will delete your rollback snapshots. Use `git clean -xfd -e .tapps-mcp/backups -e .tapps-mcp/hook-backups` (or skip `-x`) if you want to keep them.
+
 See [INIT_AND_UPGRADE_FEATURE_LIST.md](INIT_AND_UPGRADE_FEATURE_LIST.md) for the full init and upgrade behavior.

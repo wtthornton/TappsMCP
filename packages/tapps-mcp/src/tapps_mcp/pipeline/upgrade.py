@@ -584,9 +584,15 @@ def _refresh_optional_integrations(
             "added": added,
         }
 
-        from tapps_mcp.distribution.setup_secrets import untrack_gitignored_backup_paths
+    if not dry_run and not mcp_only:
+        from tapps_mcp.distribution.setup_generator import (
+            backup_untrack_warnings,
+            untrack_gitignored_backup_paths,
+        )
 
-        result["components"]["backup_untrack"] = untrack_gitignored_backup_paths(project_root)
+        untrack_result = untrack_gitignored_backup_paths(project_root)
+        result["components"]["backup_untrack"] = untrack_result
+        result.setdefault("warnings", []).extend(backup_untrack_warnings(untrack_result))
 
 
 def _finalize_result(result: dict[str, Any], *, dry_run: bool) -> None:
