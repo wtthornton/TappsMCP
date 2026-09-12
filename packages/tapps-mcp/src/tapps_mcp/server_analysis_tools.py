@@ -5,7 +5,13 @@ tapps_dependency_graph, tapps_session_notes, tapps_impact_analysis,
 tapps_call_graph, tapps_diff_impact, tapps_static_detectors.
 
 Functions are defined at module level (importable for tests) and
-registered on the ``mcp`` instance via :func:`register`.
+registered on the ``mcp`` instance via :func:`register`. Each handler is a
+thin, independently testable async function; :func:`register` is the only
+place that wires a handler's presence to the caller-supplied
+``allowed_tools`` set, so a handler defined here but never gated in
+:func:`register` (and never listed in ``server.py``'s ``ALL_TOOL_NAMES``)
+is unreachable regardless of how thoroughly it is unit-tested -- exactly
+the defect class ``tapps_static_detectors`` shipped with before this fix.
 """
 
 from __future__ import annotations
@@ -2096,6 +2102,16 @@ def register(mcp_instance: FastMCP, allowed_tools: frozenset[str]) -> None:
 
     TAP-1986: tapps_impact_analysis is the only eager daily-driver here.
     All other analysis tools carry defer_loading=True (combined with size hints where needed).
+
+    Each tool is gated behind an ``if <name> in allowed_tools:`` check so a
+    given profile only pays the schema cost for tools it actually exposes.
+    ``register_tool`` is the sole registration entry point (TAP-5611): every
+    call site here is counted by ``scripts/check-tool-budget.py`` against
+    the documented per-server tool totals, so a new gated block below must
+    be matched by a documented count bump (``docs/architecture/tool-budget.md``,
+    ``README.md``, ``CLAUDE.md``), not folded into a shared helper or loop --
+    collapsing these calls would make the registry undercount the real
+    tapps-mcp tool total the moment a helper hid the literal call sites.
     """
     if "tapps_session_notes" in allowed_tools:
         register_tool(
@@ -2173,4 +2189,14 @@ def register(mcp_instance: FastMCP, allowed_tools: frozenset[str]) -> None:
             tapps_audit_close_coverage,
             annotations=_ANNOTATIONS_SIDE_EFFECT_IDEMPOTENT,
             meta=_META_DEFERRED,
+        )
+    if "tapps_static_detectors" in allowed_tools:
+        # Findings list can run into the hundreds (VAL-04 alone flagged
+        # dozens in this repo), so this matches tapps_dead_code's large-
+        # output/deferred meta shape rather than the smaller _META_DEFERRED.
+        register_tool(
+            mcp_instance,
+            tapps_static_detectors,
+            annotations=_ANNOTATIONS_READ_ONLY,
+            meta=_META_LARGE_OUTPUT_100K_D,
         )

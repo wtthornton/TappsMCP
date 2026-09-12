@@ -294,6 +294,10 @@ ALL_TOOL_NAMES: frozenset[str] = frozenset(
         # never added here, so unreachable on the default `full` preset.
         "tapps_file_api",
         "tapps_repo_map",
+        # CB lane L3 fix round 1: registered in server_analysis_tools but
+        # missing here, so unreachable on the default `full` preset (the
+        # same defect class as tapps_file_api/tapps_repo_map above).
+        "tapps_static_detectors",
     }
 )
 

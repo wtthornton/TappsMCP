@@ -21,6 +21,24 @@ the ``tapps-mcp`` package — not a parallel copy of the call-graph engine,
 since it answers a different question (identifier reference presence, not
 resolved call-edge presence) that the call graph cannot answer for either
 detector.
+
+Known limitations, documented rather than silently left unexplained:
+
+- **Flat, unqualified keying.** ``_ReferenceIndex`` keys ``loaded``/``stored``/
+  ``kwarg`` on the bare identifier string, not a module-qualified name. Two
+  unrelated top-level symbols sharing a name in different files are
+  indistinguishable — a reference to either satisfies both. A full
+  qualified-name resolution engine starts to look like the call-graph engine
+  this module already declined to duplicate above, so this is left flat
+  rather than built out; a same-name collision across files is a rare
+  enough shape in this package that the false-negative/false-positive risk
+  is accepted rather than paid for with a second resolution engine.
+- **``Widget(**_data)`` double-star keyword unpacking is undecidable by AST
+  inspection.** ``kw.arg is None`` for a ``**expr`` keyword, so
+  ``_ReferenceIndex.record``'s ``if kw.arg:`` guard already skips it — the
+  field names produced this way are runtime dict keys with no static
+  representation at all. This is not "unimplemented"; a VAL-05 false
+  positive on a ``**kwargs``-produced field is expected, not a detector bug.
 """
 
 from __future__ import annotations
@@ -131,18 +149,83 @@ class _ReferenceIndex:
     def _add(self, table: dict[str, set[str]], name: str, rel_posix: str) -> None:
         table.setdefault(name, set()).add(rel_posix)
 
-    def record(self, node: ast.AST, rel_posix: str) -> None:
+    def record(self, node: ast.AST, rel_posix: str, *, suppress_producers: bool = False) -> None:
         if isinstance(node, ast.Name) and isinstance(node.ctx, ast.Load):
             self._add(self.loaded, node.id, rel_posix)
         elif isinstance(node, ast.Attribute):
             if isinstance(node.ctx, ast.Load):
                 self._add(self.loaded, node.attr, rel_posix)
-            elif isinstance(node.ctx, ast.Store):
+            elif isinstance(node.ctx, ast.Store) and not suppress_producers:
                 self._add(self.stored, node.attr, rel_posix)
         elif isinstance(node, ast.Call):
             for kw in node.keywords:
-                if kw.arg:
+                if kw.arg and not suppress_producers:
                     self._add(self.kwarg, kw.arg, rel_posix)
+            setattr_field = _setattr_field_name(node)
+            if setattr_field is not None and not suppress_producers:
+                # ``setattr(obj, "field", val)``: the field name is a
+                # string literal in the common case, so this is a genuine
+                # producer -- unlike ``Widget(**_data)`` double-star
+                # unpacking (see the ``kw.arg is None`` skip above), which
+                # has no static representation at all and is left
+                # undecidable by design (see module docstring).
+                self._add(self.stored, setattr_field, rel_posix)
+        elif isinstance(node, ast.ImportFrom):
+            for alias in node.names:
+                if alias.name == "*":
+                    continue
+                if alias.asname is not None:
+                    # ``from module import NAME as _NAME``: the importing
+                    # file only ever mentions the local alias in its own
+                    # Name nodes, so the *original* declared name would
+                    # otherwise never register a "loaded" reference here.
+                    # Plain ``import x.y as z`` (ast.Import) is out of
+                    # scope: it names a module path, not a top-level
+                    # constant/function in this package's reference space.
+                    self._add(self.loaded, alias.name, rel_posix)
+
+
+def _setattr_field_name(node: ast.Call) -> str | None:
+    """Return the field name for a ``setattr(obj, "field", val)`` call, else
+    ``None``. Only a string-literal second argument is recognised; a
+    dynamically computed field name has no static representation."""
+    if (
+        isinstance(node.func, ast.Name)
+        and node.func.id == "setattr"
+        and len(node.args) >= 2
+        and isinstance(node.args[1], ast.Constant)
+        and isinstance(node.args[1].value, str)
+    ):
+        return node.args[1].value
+    return None
+
+
+def _is_type_checking_test(test: ast.expr) -> bool:
+    if isinstance(test, ast.Name):
+        return test.id == "TYPE_CHECKING"
+    if isinstance(test, ast.Attribute):
+        return test.attr == "TYPE_CHECKING"
+    return False
+
+
+def _walk_recording(
+    node: ast.AST, idx: _ReferenceIndex, rel_posix: str, *, suppress_producers: bool
+) -> None:
+    """Depth-first walk that suppresses Store/kwarg (producer) recording for
+    statements inside an ``if TYPE_CHECKING:`` guard -- that code never runs
+    at runtime, so a field assigned only there has no real producer. A
+    ``Load`` (consumer) reference inside the same guard is a separate
+    question and is still recorded normally; only ``orelse`` (the guard's
+    ``else:`` branch, which does run) stays unsuppressed."""
+    idx.record(node, rel_posix, suppress_producers=suppress_producers)
+    if isinstance(node, ast.If) and _is_type_checking_test(node.test):
+        for stmt in node.body:
+            _walk_recording(stmt, idx, rel_posix, suppress_producers=True)
+        for stmt in node.orelse:
+            _walk_recording(stmt, idx, rel_posix, suppress_producers=suppress_producers)
+        return
+    for child in ast.iter_child_nodes(node):
+        _walk_recording(child, idx, rel_posix, suppress_producers=suppress_producers)
 
 
 def _build_reference_index(root: Path, files: list[str]) -> _ReferenceIndex:
@@ -151,8 +234,7 @@ def _build_reference_index(root: Path, files: list[str]) -> _ReferenceIndex:
         tree = _parse(root, rel_posix)
         if tree is None:
             continue
-        for node in ast.walk(tree):
-            idx.record(node, rel_posix)
+        _walk_recording(tree, idx, rel_posix, suppress_producers=False)
     return idx
 
 
@@ -211,14 +293,33 @@ def _find_module_constants(root: Path, files: list[str]) -> list[tuple[str, str,
     return found
 
 
+def _is_click_registration_decorator(dec: ast.expr) -> bool:
+    """Recognise the Click ``@group.command(...)``/``@group.group(...)``
+    registration shape: dispatched by Click via string lookup at runtime, so
+    a decorated handler never has a direct Python call site anywhere in the
+    source. Matched by decorator *shape* (a ``Call`` whose ``func`` is an
+    ``Attribute`` named ``command``/``group``), not by an allowlist of
+    specific function names -- the same shape recurs across ten CLI modules
+    in this package."""
+    target = dec.func if isinstance(dec, ast.Call) else dec
+    return isinstance(target, ast.Attribute) and target.attr in {"command", "group"}
+
+
 def _find_module_functions(root: Path, files: list[str]) -> list[tuple[str, str, int]]:
     found: list[tuple[str, str, int]] = []
     for rel_posix, body in _iter_production_module_bodies(root, files):
         for node in body:
-            if isinstance(
-                node, ast.FunctionDef | ast.AsyncFunctionDef
-            ) and not node.name.startswith("_"):
-                found.append((node.name, rel_posix, node.lineno))
+            if not isinstance(node, ast.FunctionDef | ast.AsyncFunctionDef):
+                continue
+            if node.name.startswith("_"):
+                continue
+            if any(_is_click_registration_decorator(dec) for dec in node.decorator_list):
+                # Framework-mediated entry point: Click's runtime dispatch
+                # is the "reference", so this function is out of scope for
+                # the declared-uncalled population rather than a false
+                # positive to suppress after the fact.
+                continue
+            found.append((node.name, rel_posix, node.lineno))
     return found
 
 
@@ -265,7 +366,10 @@ def run_declared_uncalled(root: Path) -> DetectorResult:
     population = (
         "every top-level ALL_CAPS literal constant and every top-level, "
         "non-underscore-prefixed function defined directly under "
-        f"{_PACKAGE_SRC_PREFIX} (excluding tests/ and vendored code)"
+        f"{_PACKAGE_SRC_PREFIX} (excluding tests/ and vendored code), "
+        "excluding functions decorated with a Click command/group "
+        "registration (@x.command(...)/@x.group(...)), which Click "
+        "dispatches by string lookup at runtime rather than a direct call"
     )
     return DetectorResult(
         mode="declared-uncalled", population=population, examined=examined, findings=findings

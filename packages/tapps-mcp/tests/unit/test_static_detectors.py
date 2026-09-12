@@ -18,6 +18,7 @@ from pathlib import Path
 import pytest
 
 from tapps_mcp.project.static_detectors import (
+    DetectorResult,
     run_consumed_no_producer,
     run_declared_uncalled,
     run_static_detector,
@@ -56,14 +57,14 @@ def _import_cleanly(file_path: Path, *sys_path_dirs: Path) -> None:
         for d in added:
             if d in sys.path:
                 sys.path.remove(d)
-        if had_module:
-            sys.modules[module_name] = previous  # type: ignore[assignment]
+        if had_module and previous is not None:
+            sys.modules[module_name] = previous
         else:
             sys.modules.pop(module_name, None)
 
 
-def _finding_names(result: object) -> set[str]:
-    return {f.name for f in result.findings}  # type: ignore[attr-defined]
+def _finding_names(result: DetectorResult) -> set[str]:
+    return {f.name for f in result.findings}
 
 
 class TestDeclaredUncalledConstant:
@@ -205,6 +206,177 @@ class TestConsumedNoProducer:
         result = run_consumed_no_producer(tmp_path)
 
         assert "GTM.channel_mix" not in _finding_names(result)
+
+
+class TestImportAliasReference:
+    """FIX 2a: ``from module import NAME as _NAME`` must register a
+    "loaded" reference to the *original* declared name, not just the local
+    alias -- the pervasive ``X as _X`` idiom in this codebase was a
+    systematic false-positive source before this fix."""
+
+    def test_constant_used_only_via_import_alias_is_silent(self, tmp_path: Path) -> None:
+        config_src = "CONTENT_MINIMUM = 10\n"
+        consumer_src = (
+            "from config import CONTENT_MINIMUM as _CONTENT_MINIMUM\n\n\n"
+            "def check(n):\n"
+            "    return n >= _CONTENT_MINIMUM\n"
+        )
+        src_dir = tmp_path / "packages/tapps-mcp/src/tapps_mcp"
+        config_path = _write(tmp_path, "packages/tapps-mcp/src/tapps_mcp/config.py", config_src)
+        consumer_path = _write(
+            tmp_path, "packages/tapps-mcp/src/tapps_mcp/consumer.py", consumer_src
+        )
+        _import_cleanly(config_path, src_dir)
+        _import_cleanly(consumer_path, src_dir)
+
+        result = run_declared_uncalled(tmp_path)
+
+        assert "CONTENT_MINIMUM" not in _finding_names(result)
+
+    def test_star_import_alias_is_skipped_without_crashing(self, tmp_path: Path) -> None:
+        config_src = "CONTENT_MINIMUM = 10\n"
+        consumer_src = "from config import *\n\n\ndef check(n):\n    return n >= CONTENT_MINIMUM\n"
+        src_dir = tmp_path / "packages/tapps-mcp/src/tapps_mcp"
+        config_path = _write(tmp_path, "packages/tapps-mcp/src/tapps_mcp/config.py", config_src)
+        consumer_path = _write(
+            tmp_path, "packages/tapps-mcp/src/tapps_mcp/consumer.py", consumer_src
+        )
+        _import_cleanly(config_path, src_dir)
+        _import_cleanly(consumer_path, src_dir)
+
+        result = run_declared_uncalled(tmp_path)
+
+        assert result.mode == "declared-uncalled"
+
+
+class TestClickDecoratorDispatch:
+    """FIX 2b: a function decorated with the Click ``@group.command(...)``/
+    ``@group.group(...)`` registration shape is a framework-mediated entry
+    point (Click dispatches it by string lookup at runtime) and must not be
+    reported as declared-uncalled, matched by decorator shape rather than a
+    name-based allowlist."""
+
+    def test_click_command_decorated_function_is_silent(self, tmp_path: Path) -> None:
+        cli_src = (
+            "import click\n\n\n"
+            "@click.group()\n"
+            "def fleet_group():\n"
+            "    pass\n\n\n"
+            "@fleet_group.command('start')\n"
+            "def fleet_start():\n"
+            "    return 1\n"
+        )
+        src_dir = tmp_path / "packages/tapps-mcp/src/tapps_mcp"
+        cli_path = _write(tmp_path, "packages/tapps-mcp/src/tapps_mcp/cli_fleet.py", cli_src)
+        _import_cleanly(cli_path, src_dir)
+
+        result = run_declared_uncalled(tmp_path)
+
+        assert "fleet_start" not in {f.name for f in result.findings if f.kind == "function"}
+
+    def test_plain_function_with_no_callers_is_still_reported(self, tmp_path: Path) -> None:
+        cli_src = "def orphan_helper():\n    return 1\n"
+        src_dir = tmp_path / "packages/tapps-mcp/src/tapps_mcp"
+        cli_path = _write(tmp_path, "packages/tapps-mcp/src/tapps_mcp/cli_fleet.py", cli_src)
+        _import_cleanly(cli_path, src_dir)
+
+        result = run_declared_uncalled(tmp_path)
+
+        assert "orphan_helper" in {f.name for f in result.findings if f.kind == "function"}
+
+
+class TestTypeCheckingGuardedProducer:
+    """FIX 3: a dataclass field assigned only inside ``if TYPE_CHECKING:``
+    has no real producer (that code never runs), so it must be flagged --
+    the pre-fix detector silently credited it as having a legitimate
+    producer, clearing a genuine VAL-05 defect with no visible signal."""
+
+    def test_field_assigned_only_under_type_checking_is_reported(self, tmp_path: Path) -> None:
+        models_src = (
+            "from __future__ import annotations\n"
+            "from dataclasses import dataclass\n"
+            "from typing import TYPE_CHECKING\n\n\n"
+            "@dataclass\n"
+            "class Widget:\n"
+            "    label: str\n\n\n"
+            "if TYPE_CHECKING:\n"
+            "    _w = Widget(label='x')\n"
+            "    _w.label = 'unreachable-at-runtime'\n"
+        )
+        consumer_src = "def show(w):\n    return w.label\n"
+        src_dir = tmp_path / "packages/tapps-mcp/src/tapps_mcp"
+        models_path = _write(tmp_path, "packages/tapps-mcp/src/tapps_mcp/models.py", models_src)
+        consumer_path = _write(
+            tmp_path, "packages/tapps-mcp/src/tapps_mcp/consumer.py", consumer_src
+        )
+        _import_cleanly(models_path, src_dir)
+        _import_cleanly(consumer_path, src_dir)
+
+        result = run_consumed_no_producer(tmp_path)
+
+        assert "Widget.label" in _finding_names(result)
+
+    def test_field_assigned_in_type_checking_else_branch_is_silent(self, tmp_path: Path) -> None:
+        models_src = (
+            "from __future__ import annotations\n"
+            "from dataclasses import dataclass\n"
+            "from typing import TYPE_CHECKING\n\n\n"
+            "@dataclass\n"
+            "class Widget:\n"
+            "    label: str\n\n\n"
+            "if TYPE_CHECKING:\n"
+            "    pass\n"
+            "else:\n"
+            "    _w = Widget(label='x')\n"
+            "    _w.label = 'runs-at-runtime'\n"
+        )
+        consumer_src = "def show(w):\n    return w.label\n"
+        src_dir = tmp_path / "packages/tapps-mcp/src/tapps_mcp"
+        models_path = _write(tmp_path, "packages/tapps-mcp/src/tapps_mcp/models.py", models_src)
+        consumer_path = _write(
+            tmp_path, "packages/tapps-mcp/src/tapps_mcp/consumer.py", consumer_src
+        )
+        _import_cleanly(models_path, src_dir)
+        _import_cleanly(consumer_path, src_dir)
+
+        result = run_consumed_no_producer(tmp_path)
+
+        assert "Widget.label" not in _finding_names(result)
+
+
+class TestSetattrProducer:
+    """FIX 3 (setattr control): a string-literal ``setattr(obj, "field", v)``
+    is a genuine, statically recognisable producer."""
+
+    def test_field_produced_only_via_setattr_is_silent(self, tmp_path: Path) -> None:
+        models_src = (
+            "from dataclasses import dataclass\n\n\n@dataclass\nclass Widget:\n    label: str\n"
+        )
+        builder_src = (
+            "from models_setattr import Widget\n\n\n"
+            "def build():\n"
+            "    w = Widget('placeholder')\n"  # positional: no kwarg producer
+            "    setattr(w, 'label', 'assigned-via-setattr')\n"
+            "    return w\n"
+        )
+        renderer_src = "def render(w):\n    return w.label\n"
+        src_dir = tmp_path / "packages/tapps-mcp/src/tapps_mcp"
+        models_path = _write(
+            tmp_path, "packages/tapps-mcp/src/tapps_mcp/models_setattr.py", models_src
+        )
+        builder_path = _write(
+            tmp_path, "packages/tapps-mcp/src/tapps_mcp/builder_setattr.py", builder_src
+        )
+        renderer_path = _write(
+            tmp_path, "packages/tapps-mcp/src/tapps_mcp/renderer_setattr.py", renderer_src
+        )
+        _import_cleanly(models_path, src_dir)
+        _import_cleanly(builder_path, src_dir)
+        _import_cleanly(renderer_path, src_dir)
+
+        result = run_consumed_no_producer(tmp_path)
+
+        assert "Widget.label" not in _finding_names(result)
 
 
 class TestRunStaticDetectorDispatch:
