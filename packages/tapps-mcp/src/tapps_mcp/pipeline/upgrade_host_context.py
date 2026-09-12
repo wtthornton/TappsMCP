@@ -138,6 +138,30 @@ def docsmcp_gate(project_root: Path) -> Gate:
     return Gate(detect_docsmcp(project_root), "skipped (no docsmcp detected)")
 
 
+_SKILLS_SKIP_TOKEN_BY_PLATFORM: dict[str, str] = {
+    "claude": "claude_skills",
+    "cursor": "cursor_skills",
+}
+
+
+def _skills_skip_token(platform: str) -> str:
+    """Resolve the ``upgrade_skip_files`` token guarding *platform*'s skills dir.
+
+    An explicit mapping rather than a ``claude``-or-else ternary: the latter
+    silently attributed any unrecognized platform string to ``cursor_skills``
+    (harmless today only because ``generate_docs_automation`` separately
+    errors on an unknown platform, but a silent misattribution waiting for a
+    third host).
+    """
+    try:
+        return _SKILLS_SKIP_TOKEN_BY_PLATFORM[platform]
+    except KeyError:
+        raise ValueError(
+            f"Unknown platform for docs_automation skills pin: {platform!r}. "
+            f"Known platforms: {sorted(_SKILLS_SKIP_TOKEN_BY_PLATFORM)}."
+        ) from None
+
+
 def apply_docs_automation(ctx: HostContext, platform: str) -> Any:
     """Write docs-automation's agents and skills, honouring the skills-dir pin.
 
@@ -150,17 +174,40 @@ def apply_docs_automation(ctx: HostContext, platform: str) -> Any:
     never protected the six docs SKILL.md files this component also owns.
     Reusing the same per-platform skills token here — rather than inventing a
     new one — keeps ``upgrade_skip_files: ['.claude/skills']`` mean exactly
-    what it says regardless of which component writes under that directory.
+    what it says regardless of which component writes under that directory:
+    ``skills_pinned=True`` blocks *creation* too (TAP-7428 fix1), not just a
+    refresh of a file that already exists.
     """
     from tapps_mcp.pipeline.platform_docs_automation import generate_docs_automation
 
-    skills_token = "claude_skills" if platform == "claude" else "cursor_skills"
     return generate_docs_automation(
         ctx.project_root,
         platform,
         overwrite=True,
-        skills_overwrite=not skipped(skills_token, ctx.skip),
+        skills_pinned=skipped(_skills_skip_token(platform), ctx.skip),
     )
+
+
+def plan_docs_automation(
+    ctx: HostContext, platform: str, catalogue: dict[str, Any]
+) -> dict[str, Any]:
+    """Dry-run preview for ``docs_automation`` that agrees with ``apply_docs_automation``.
+
+    Before TAP-7428 fix1, the ``plan`` callable passed to ``resolve_component``
+    for this component was a bare literal that never read ``ctx.skip`` at all,
+    so ``--dry-run`` reported the six skills as ``would-write`` even when the
+    ``.claude/skills`` (or ``.cursor/skills``) pin was set and the live run
+    would skip them — dry-run and apply disagreed on the one thing an
+    operator uses ``--dry-run`` to confirm. This mirrors the same
+    ``_skills_skip_token`` decision ``apply_docs_automation`` makes, so the two
+    are structurally incapable of drifting apart again.
+    """
+    pinned = skipped(_skills_skip_token(platform), ctx.skip)
+    return {
+        "action": "would-write-managed-skills",
+        "managed_skills": [] if pinned else sorted(catalogue.keys()),
+        "skills": "skipped (upgrade_skip_files)" if pinned else "would-write-managed-skills",
+    }
 
 
 def _preserved_regions(skills_dir: Path, all_skills: frozenset[str]) -> dict[str, int]:

@@ -29,6 +29,7 @@ import pytest
 from tapps_core.config.settings import _reset_settings_cache
 from tapps_mcp.pipeline.skill_managed_block import MARKER_END
 from tapps_mcp.pipeline.upgrade import upgrade_pipeline
+from tapps_mcp.pipeline.upgrade_report import build_dry_run_summary
 
 _INJECTED = "<!-- TAP-7428-TEST-CUSTOMIZATION-MARKER -->"
 
@@ -95,6 +96,23 @@ def _agent_path(root: Path, platform: str, name: str) -> Path:
     return root / agents_dir / "agents" / name
 
 
+def _platform_component(result: dict, host: str, name: str) -> object:
+    (matched,) = [p for p in result["components"]["platforms"] if p.get("host") == host]
+    return matched["components"][name]
+
+
+def _host_name(platform: str) -> str:
+    return "claude-code" if platform == "claude" else "cursor"
+
+
+def _skills_dir(root: Path, platform: str) -> Path:
+    return root / (".claude" if platform == "claude" else ".cursor") / "skills"
+
+
+def _skip_token(platform: str) -> str:
+    return ".claude/skills" if platform == "claude" else ".cursor/skills"
+
+
 class TestSkillsPinCoversDocsAutomationSkillsButNotAgents:
     """VAL-02: main + positive control, one body per platform.
 
@@ -145,3 +163,98 @@ class TestSkillsPinCoversDocsAutomationSkillsButNotAgents:
         after_agent = agent_path.read_text(encoding="utf-8")
         assert after_agent != corrupted_agent
         assert _INJECTED not in after_agent
+
+
+class TestFreshProjectPinBlocksCreation:
+    """BLOCKER 1 (fix1): the pin must stop *creation*, not just refresh.
+
+    ``generate_docs_skills`` used to gate only the ``target.exists()`` branch
+    on ``overwrite`` — a fresh project (no SKILL.md files yet) always fell
+    into the ``else: create`` branch regardless of the pin. This is the
+    direct refutation: pin the skills dir on a project that has never been
+    upgraded before, and confirm nothing lands under ``.claude/skills`` /
+    ``.cursor/skills`` while the agents half still writes (positive control).
+    """
+
+    @pytest.mark.parametrize("platform", ["claude", "cursor"])
+    def test_fresh_project_with_pin_creates_zero_skill_files(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, platform: str
+    ) -> None:
+        _docs_project(tmp_path)
+        monkeypatch.setenv("TAPPS_MCP_UPGRADE_SKIP_FILES", f'["{_skip_token(platform)}"]')
+
+        result = upgrade_pipeline(tmp_path, platform=platform, dry_run=False)
+
+        docs_info = _platform_component(result, _host_name(platform), "docs_automation")
+        assert isinstance(docs_info, dict), docs_info
+        assert docs_info["skills"]["created"] == []
+        assert sorted(docs_info["skills"]["skipped"]) == sorted(_DOCS_SKILLS)
+
+        skills_dir = _skills_dir(tmp_path, platform)
+        on_disk = sorted(p.name for p in skills_dir.iterdir()) if skills_dir.is_dir() else []
+        for name in _DOCS_SKILLS:
+            assert name not in on_disk, f"{name} was created under a pinned skills dir"
+
+        # Positive control: agents half is unaffected by the skills pin.
+        assert docs_info["agents"]["created"], "agents half must still write under the pin"
+        assert _agent_path(tmp_path, platform, "tapps-docs-reviewer.md").is_file()
+
+
+class TestDeletedPinnedSkillNotRecreated:
+    """BLOCKER 1 (fix1): a deleted pinned skill must not reappear."""
+
+    @pytest.mark.parametrize("platform", ["claude", "cursor"])
+    def test_deleting_a_pinned_skill_then_upgrading_does_not_recreate_it(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, platform: str
+    ) -> None:
+        _docs_project(tmp_path)
+
+        # Bootstrap unpinned so all six skills exist on disk first.
+        upgrade_pipeline(tmp_path, platform=platform, dry_run=False)
+        target = _skill_path(tmp_path, platform, "tapps-docs-report")
+        assert target.is_file()
+        target.unlink()
+        target.parent.rmdir()
+        assert not target.exists(), "before: deleted"
+
+        monkeypatch.setenv("TAPPS_MCP_UPGRADE_SKIP_FILES", f'["{_skip_token(platform)}"]')
+        result = upgrade_pipeline(tmp_path, platform=platform, dry_run=False)
+
+        docs_info = _platform_component(result, _host_name(platform), "docs_automation")
+        assert not target.exists(), "after: pin must not recreate a deleted pinned skill"
+        assert "tapps-docs-report" not in docs_info["skills"]["created"]
+
+
+class TestDryRunMatchesApply:
+    """BLOCKER 2 (fix1): the ``plan`` lambda must read ``ctx.skip`` too.
+
+    Before this fix, ``plan`` for ``docs_automation`` was a bare literal that
+    always reported ``managed_skills`` in full and never appeared in
+    ``skipped_components`` — disagreeing with a pinned live run, which wrote
+    nothing under the skills dir. This proves the two now agree.
+    """
+
+    @pytest.mark.parametrize("platform", ["claude", "cursor"])
+    def test_dryrun_and_live_agree_under_the_pin(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, platform: str
+    ) -> None:
+        _docs_project(tmp_path)
+        monkeypatch.setenv("TAPPS_MCP_UPGRADE_SKIP_FILES", f'["{_skip_token(platform)}"]')
+
+        dry = upgrade_pipeline(tmp_path, platform=platform, dry_run=True)
+        dry_docs = _platform_component(dry, _host_name(platform), "docs_automation")
+        assert isinstance(dry_docs, dict)
+        assert dry_docs["skills"] == "skipped (upgrade_skip_files)"
+        assert dry_docs["managed_skills"] == []
+
+        summary = build_dry_run_summary(dry)
+        expected_entry = f"{_host_name(platform)}:docs_automation.skills"
+        assert expected_entry in summary["skipped_components"], summary["skipped_components"]
+
+        live = upgrade_pipeline(tmp_path, platform=platform, dry_run=False)
+        live_docs = _platform_component(live, _host_name(platform), "docs_automation")
+        assert live_docs["skills"]["created"] == []
+        assert sorted(live_docs["skills"]["skipped"]) == sorted(_DOCS_SKILLS)
+
+        # Agree on the agents half too: neither report shows it skipped.
+        assert live_docs["agents"]["created"], "live: agents half must still write"

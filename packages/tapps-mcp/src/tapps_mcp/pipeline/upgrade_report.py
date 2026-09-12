@@ -186,6 +186,9 @@ def _absorb_component(
             for item in value.get(key, [])
         )
         tally["preserved_regions"].update(value.get("preserved_regions", {}))
+        nested_skills = value.get("skills")
+        if isinstance(nested_skills, str) and nested_skills.startswith("skipped"):
+            tally["skipped"].append(f"{scope}:{name}.skills")
     elif isinstance(value, str):
         if value.startswith("skipped"):
             tally["skipped"].append(f"{scope}:{name}")
