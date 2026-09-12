@@ -455,3 +455,17 @@ class TestSettingsDocumentation:
         assert "FIXED TOKEN VOCABULARY" in description
         assert "GRANULARITY IS PER-ARTIFACT" in description
         assert "DURABLE ALTERNATIVE" in description
+
+    def test_field_description_enumeration_is_derived_from_all_skip_tokens(self) -> None:
+        """TAP-7429: the enumerated token list must equal ALL_SKIP_TOKENS exactly.
+
+        Regression target: the description used to hand-restate a subset of
+        tokens in prose (19 of 31), silently drifting as tokens were added.
+        This asserts the rendered set is neither missing a real token nor
+        carrying a stale one, so drift is now caught mechanically.
+        """
+        from tapps_core.config.settings import TappsMCPSettings
+
+        description = TappsMCPSettings.model_fields["upgrade_skip_files"].description or ""
+        rendered = {token for token in ALL_SKIP_TOKENS if repr(token) in description}
+        assert rendered == ALL_SKIP_TOKENS
