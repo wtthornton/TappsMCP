@@ -447,6 +447,7 @@ a = Analysis(
         "tapps_mcp.pipeline.upgrade_host_cursor",
         "tapps_mcp.pipeline.upgrade_hosts",
         "tapps_mcp.pipeline.upgrade_mcp_config",
+        "tapps_mcp.pipeline.upgrade_optional_integrations",
         "tapps_mcp.pipeline.upgrade_report",
         "tapps_mcp.pipeline.upgrade_signals",
         "tapps_mcp.project.call_graph_eval",
