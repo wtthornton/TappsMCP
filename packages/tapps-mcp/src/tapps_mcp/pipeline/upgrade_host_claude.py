@@ -25,6 +25,7 @@ from tapps_mcp.pipeline.upgrade_host_context import (
     apply_docs_automation,
     apply_skills,
     docsmcp_gate,
+    plan_docs_automation,
     plan_skills,
     record_hooks_parse_error,
     resolve_component,
@@ -270,10 +271,7 @@ def _resolve_claude_assets(ctx: HostContext) -> None:
         "docs_automation",
         skip_key="docs_automation",
         gate=docsmcp_gate(ctx.project_root),
-        plan=lambda: {
-            "action": "would-write-managed-skills",
-            "managed_skills": sorted(CLAUDE_DOCS_SKILLS.keys()),
-        },
+        plan=lambda: plan_docs_automation(ctx, "claude", CLAUDE_DOCS_SKILLS),
         apply=lambda: apply_docs_automation(ctx, "claude"),
     )
 

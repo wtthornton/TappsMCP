@@ -519,6 +519,7 @@ def generate_docs_skills(
     platform: str,
     *,
     overwrite: bool = False,
+    create: bool = True,
 ) -> dict[str, Any]:
     """Generate documentation skill definitions.
 
@@ -534,6 +535,13 @@ def generate_docs_skills(
         platform: ``"claude"`` or ``"cursor"``.
         overwrite: Whether to refresh an existing ``SKILL.md``'s managed
             block. When ``False``, an existing file is left untouched.
+        create: Whether to write a ``SKILL.md`` that does not yet exist.
+            When ``False``, a missing skill is reported as ``skipped``
+            instead of created. This is independent of ``overwrite`` — a
+            pinned ``.claude/skills``/``.cursor/skills`` directory (TAP-7428)
+            must block *both* refreshing an existing file and creating one
+            that is missing, otherwise deleting a pinned skill just makes it
+            reappear on the next upgrade.
 
     Returns:
         Summary dict with ``created``, ``updated``, ``skipped`` lists.
@@ -554,7 +562,6 @@ def generate_docs_skills(
     skipped: list[str] = []
     for skill_name, content in templates.items():
         skill_dir = skills_dir / skill_name
-        skill_dir.mkdir(parents=True, exist_ok=True)
         target = skill_dir / "SKILL.md"
         if target.exists():
             if overwrite:
@@ -562,9 +569,12 @@ def generate_docs_skills(
                 (skipped if action == "unchanged" else updated).append(skill_name)
             else:
                 skipped.append(skill_name)
-        else:
+        elif create:
+            skill_dir.mkdir(parents=True, exist_ok=True)
             install_or_refresh_skill(target, content, skill_name)
             created.append(skill_name)
+        else:
+            skipped.append(skill_name)
 
     return {"created": created, "updated": updated, "skipped": skipped}
 
@@ -574,6 +584,8 @@ def generate_docs_automation(
     platform: str,
     *,
     overwrite: bool = False,
+    skills_overwrite: bool | None = None,
+    skills_pinned: bool = False,
 ) -> dict[str, Any]:
     """Generate all documentation automation files (agents + skills).
 
@@ -582,13 +594,34 @@ def generate_docs_automation(
     Args:
         project_root: Project root directory.
         platform: ``"claude"`` or ``"cursor"``.
-        overwrite: Whether to overwrite existing files.
+        overwrite: Whether to overwrite existing agent files.
+        skills_overwrite: Whether to overwrite existing skill files. Defaults
+            to *overwrite* when omitted, so existing callers that pass a
+            single ``overwrite`` flag keep applying it to both halves. Passed
+            separately (TAP-7428) because the two halves answer to different
+            ``upgrade_skip_files`` tokens: agents to ``claude_agents`` /
+            ``cursor_agents``, skills to ``claude_skills`` / ``cursor_skills``.
+        skills_pinned: When ``True``, the skills half is neither refreshed
+            *nor created* — this is what makes ``upgrade_skip_files:
+            ['.claude/skills']`` mean "do not write here" for a
+            not-yet-existing skill too, not just an existing one
+            (TAP-7428). It overrides ``skills_overwrite``/``overwrite`` for
+            the skills half only; the agents half is unaffected.
 
     Returns:
         Summary dict with ``agents`` and ``skills`` sub-dicts.
     """
     agents_result = generate_docs_agents(project_root, platform, overwrite=overwrite)
-    skills_result = generate_docs_skills(project_root, platform, overwrite=overwrite)
+    skills_result = generate_docs_skills(
+        project_root,
+        platform,
+        overwrite=(
+            False
+            if skills_pinned
+            else (overwrite if skills_overwrite is None else skills_overwrite)
+        ),
+        create=not skills_pinned,
+    )
 
     return {
         "agents": agents_result,
