@@ -229,6 +229,21 @@ class TestCheapestViableTiering:
         assert "One\n  full **enumeration** per wave" in guardrails
         assert "exactly one regression run at program\n  end" in guardrails
 
+    def test_no_consequence_overrides_shape_phrasing_survives_anywhere(self) -> None:
+        """orch-prompt-rules 10, sixth site: a "Standing constraints" checklist
+        bullet in the emitted template (`assets/prompt-template.md`'s own
+        Guardrails list, not the SKILL.md guardrails-and-contracts reference)
+        restated the identical "consequence overrides shape" contract rule 10
+        exists to remove, as "irreversible-gating -> opus regardless of shape".
+        The five section-scoped guards could not see it because none of them
+        reads the whole document. This guard is deliberately document-wide —
+        the whole generated template plus the whole SKILL.md surface — so a
+        seventh restatement in some other section cannot hide the same way."""
+        template = COMPANIONS["assets/prompt-template.md"]
+        whole_document = _FULL_SURFACE + "\n" + template
+        assert "regardless of shape" not in whole_document
+        assert "irreversible-gating" not in whole_document
+
     def test_verifier_dispatch_charge_sheet_scoped_and_excludes_bulk_reruns(self) -> None:
         template = COMPANIONS["assets/prompt-template.md"]
         loop = template.split("\n## Loop", 1)[1].split("\n## ", 1)[0]
