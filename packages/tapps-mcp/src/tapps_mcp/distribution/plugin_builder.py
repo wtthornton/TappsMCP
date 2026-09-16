@@ -1,7 +1,27 @@
 """Plugin package builder for Claude Code marketplace distribution.
 
-Generates a complete Claude Code plugin directory from TappsMCP's existing
-templates: skills, agents, hooks, MCP config, and platform rules.
+Thin facade over
+:func:`tapps_mcp.pipeline.platform_bundles.generate_claude_plugin_bundle` so
+that `tapps-mcp build-plugin` (this class) and a direct call to
+``generate_claude_plugin_bundle()`` emit byte-identical trees from one
+implementation.
+
+Before this unification, ``PluginBuilder`` had its own independent bundling
+logic that had drifted from ``generate_claude_plugin_bundle`` and was never
+exercised as a real, installable plugin: it wrote namespaced
+``skills/tapps-mcp-<name>/`` directories (not matching the documented
+``skills/<skill-id>/SKILL.md`` layout), a Cursor-shaped
+``rules/python-quality.md`` prose file, a ``settings.json`` permissions stub
+that plugin bundles do not support, and a ``hooks/hooks.json`` whose commands
+pointed at ``.claude/hooks/<script>.sh`` — paths that only exist for a
+per-project ``tapps-mcp init`` install, never inside the bundle itself, which
+it also never wrote. A plugin built from that path would have every hook
+404 at invocation time. That implementation is retired.
+
+``engagement_level`` (still accepted here for CLI/API compatibility) now
+flows into ``plugin.json``'s ``userConfig.engagement_level.default`` instead
+of prose, since that is the field Claude Code actually reads for
+user-configurable defaults.
 
 Usage::
 
@@ -10,7 +30,6 @@ Usage::
 
 from __future__ import annotations
 
-import json
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any
 
@@ -25,7 +44,8 @@ log = get_logger(__name__)
 
 @dataclass
 class PluginBuilder:
-    """Build a Claude Code plugin directory from TappsMCP templates."""
+    """Build a Claude Code plugin directory by delegating to
+    ``generate_claude_plugin_bundle`` (see module docstring for why)."""
 
     output_dir: Path
     engagement_level: str = "medium"
@@ -33,20 +53,19 @@ class PluginBuilder:
 
     def build(self) -> Path:
         """Generate the complete plugin directory. Returns the output path."""
+        from tapps_mcp.pipeline.platform_bundles import generate_claude_plugin_bundle
+
         self.output_dir.mkdir(parents=True, exist_ok=True)
-        self._result = {"components": {}}
-
-        self._generate_manifest()
-        self._generate_skills()
-        self._generate_agents()
-        self._generate_hooks()
-        self._generate_mcp_config()
-        self._generate_rules()
-        self._generate_settings()
-        self._generate_bin()
-
-        self._result["output_dir"] = str(self.output_dir)
-        self._result["version"] = __version__
+        gen_result = generate_claude_plugin_bundle(
+            self.output_dir,
+            version=__version__,
+            engagement_level_default=self.engagement_level,
+        )
+        self._result = {
+            "files_created": gen_result["files_created"],
+            "output_dir": str(self.output_dir),
+            "version": __version__,
+        }
         log.info("plugin_built", output_dir=str(self.output_dir))
         return self.output_dir
 
@@ -54,158 +73,3 @@ class PluginBuilder:
     def result(self) -> dict[str, Any]:
         """Build result metadata."""
         return self._result
-
-    # ------------------------------------------------------------------
-    # Manifest
-    # ------------------------------------------------------------------
-
-    def _generate_manifest(self) -> None:
-        manifest_dir = self.output_dir / ".claude-plugin"
-        manifest_dir.mkdir(parents=True, exist_ok=True)
-        manifest = {
-            "name": "tapps-mcp",
-            "description": (
-                "Deterministic code quality tools for Python — "
-                "scoring, security, gates, expert consultation, and more."
-            ),
-            "version": __version__,
-            "author": {"name": "TappsMCP"},
-            "license": "MIT",
-        }
-        (manifest_dir / "plugin.json").write_text(json.dumps(manifest, indent=2), encoding="utf-8")
-        self._result["components"]["manifest"] = "created"
-
-    # ------------------------------------------------------------------
-    # Skills
-    # ------------------------------------------------------------------
-
-    def _generate_skills(self) -> None:
-        from tapps_mcp.pipeline.platform_skills import CLAUDE_SKILLS
-
-        skills_dir = self.output_dir / "skills"
-        created: list[str] = []
-        for name, content in CLAUDE_SKILLS.items():
-            namespaced = f"tapps-mcp-{name}"
-            skill_dir = skills_dir / namespaced
-            skill_dir.mkdir(parents=True, exist_ok=True)
-            (skill_dir / "SKILL.md").write_text(content, encoding="utf-8")
-            created.append(namespaced)
-        self._result["components"]["skills"] = created
-
-    # ------------------------------------------------------------------
-    # Agents
-    # ------------------------------------------------------------------
-
-    def _generate_agents(self) -> None:
-        from tapps_mcp.pipeline.platform_subagents import CLAUDE_AGENTS
-
-        agents_dir = self.output_dir / "agents"
-        agents_dir.mkdir(parents=True, exist_ok=True)
-        created: list[str] = []
-        for name, content in CLAUDE_AGENTS.items():
-            (agents_dir / name).write_text(content, encoding="utf-8")
-            created.append(name)
-        self._result["components"]["agents"] = created
-
-    # ------------------------------------------------------------------
-    # Hooks
-    # ------------------------------------------------------------------
-
-    def _generate_hooks(self) -> None:
-        from tapps_mcp.pipeline.platform_hook_templates import CLAUDE_HOOKS_CONFIG
-
-        hooks_dir = self.output_dir / "hooks"
-        hooks_dir.mkdir(parents=True, exist_ok=True)
-
-        hooks_json: dict[str, list[dict[str, Any]]] = {}
-        for event, entries in CLAUDE_HOOKS_CONFIG.items():
-            hooks_json[event] = list(entries)
-
-        (hooks_dir / "hooks.json").write_text(json.dumps(hooks_json, indent=2), encoding="utf-8")
-        self._result["components"]["hooks"] = list(hooks_json.keys())
-
-    # ------------------------------------------------------------------
-    # MCP config
-    # ------------------------------------------------------------------
-
-    def _generate_mcp_config(self) -> None:
-        mcp_config = {
-            "mcpServers": {
-                "tapps-mcp": {
-                    "command": "tapps-mcp",
-                    "args": ["serve"],
-                    "env": {"TAPPS_MCP_PROJECT_ROOT": "."},
-                }
-            }
-        }
-        (self.output_dir / ".mcp.json").write_text(
-            json.dumps(mcp_config, indent=2), encoding="utf-8"
-        )
-        self._result["components"]["mcp_config"] = "created"
-
-    # ------------------------------------------------------------------
-    # Rules
-    # ------------------------------------------------------------------
-
-    def _generate_rules(self) -> None:
-        rules_dir = self.output_dir / "rules"
-        rules_dir.mkdir(parents=True, exist_ok=True)
-
-        rule_content = (
-            "# Python Quality Rules (TappsMCP)\n\n"
-            "## Enforcement\n"
-            f"- Engagement level: {self.engagement_level}\n"
-            "- Quality gate: must pass before declaring work complete\n"
-            "- Security floor: minimum 50/100 on security category\n\n"
-            "## Workflow\n"
-            "1. Call `tapps_session_start` at the beginning of each session\n"
-            "2. Call `tapps_lookup_docs` **before the first edit** that uses an external library API\n"
-            "3. Use `tapps_quick_check` after editing Python files\n"
-            "4. Run `tapps_validate_changed` before declaring work complete\n"
-        )
-        (rules_dir / "python-quality.md").write_text(rule_content, encoding="utf-8")
-        self._result["components"]["rules"] = "created"
-
-    # ------------------------------------------------------------------
-    # Settings
-    # ------------------------------------------------------------------
-
-    def _generate_settings(self) -> None:
-        settings = {
-            "permissions": {
-                "allow": [
-                    "mcp__tapps-mcp__*",
-                ]
-            }
-        }
-        (self.output_dir / "settings.json").write_text(
-            json.dumps(settings, indent=2), encoding="utf-8"
-        )
-        self._result["components"]["settings"] = "created"
-
-    # ------------------------------------------------------------------
-    # bin/ shims (TAP-959)
-    # ------------------------------------------------------------------
-
-    def _generate_bin(self) -> None:
-        import stat
-
-        from tapps_mcp.pipeline.platform_bundles import (
-            _BIN_SHIMS,
-            _posix_shim,
-            _windows_shim,
-        )
-
-        bin_dir = self.output_dir / "bin"
-        bin_dir.mkdir(parents=True, exist_ok=True)
-        created: list[str] = []
-        for shim_name, subcommand in _BIN_SHIMS.items():
-            posix_path = bin_dir / shim_name
-            posix_path.write_text(_posix_shim(subcommand), encoding="utf-8")
-            posix_path.chmod(posix_path.stat().st_mode | stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH)
-            created.append(shim_name)
-
-            cmd_path = bin_dir / f"{shim_name}.cmd"
-            cmd_path.write_text(_windows_shim(subcommand), encoding="utf-8")
-            created.append(f"{shim_name}.cmd")
-        self._result["components"]["bin"] = {"count": len(created), "files": created}

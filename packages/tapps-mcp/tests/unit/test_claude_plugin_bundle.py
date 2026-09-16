@@ -9,6 +9,8 @@ from __future__ import annotations
 
 import json
 import re
+import subprocess
+from pathlib import Path
 
 from tapps_mcp.pipeline.platform_generators import (
     generate_claude_plugin_bundle,
@@ -102,7 +104,9 @@ class TestPluginManifestExtended:
 
     def test_metadata_fields_present(self, tmp_path):
         data = self._load(tmp_path)
-        assert data["author"]
+        # `claude plugin validate` (installed CLI, 2.1.258) requires `author`
+        # to be an object, not a bare string.
+        assert data["author"] == {"name": "TappsMCP Contributors"}
         assert data["license"] == "MIT"
         assert data["homepage"].startswith("https://")
         assert data["repository"].startswith("https://")
@@ -112,26 +116,45 @@ class TestPluginManifestExtended:
         uc = data["userConfig"]
         assert "engagement_level" in uc
         field = uc["engagement_level"]
+        # The installed CLI's userConfig schema has no enum/options/select
+        # mechanism (`type` is one of string/number/boolean/directory/file
+        # only) — confirmed via `claude plugin validate`, which rejects an
+        # `enum` key. `title` is required; allowed values live in the prose.
         assert field["type"] == "string"
-        assert set(field["enum"]) == {"high", "medium", "low"}
-        assert field["default"] in field["enum"]
+        assert field["title"]
+        assert field["default"] in {"high", "medium", "low"}
+        assert "enum" not in field
+
+    def test_engagement_level_default_configurable(self, tmp_path):
+        data = self._load(tmp_path)
+        # bare call uses the function's own default
+        assert data["userConfig"]["engagement_level"]["default"] == "high"
+
+        low_out = tmp_path / "low"
+        generate_claude_plugin_bundle(low_out, engagement_level_default="low")
+        low_data = json.loads((low_out / ".claude-plugin" / "plugin.json").read_text())
+        assert low_data["userConfig"]["engagement_level"]["default"] == "low"
 
     def test_user_config_memory_http_url(self, tmp_path):
         data = self._load(tmp_path)
         field = data["userConfig"]["memory_http_url"]
         assert field["type"] == "string"
+        assert field["title"]
         assert field["default"].startswith("http")
 
     def test_user_config_quality_preset(self, tmp_path):
         data = self._load(tmp_path)
         field = data["userConfig"]["quality_preset"]
-        assert set(field["enum"]) == {"standard", "strict", "framework"}
+        assert field["title"]
+        assert field["default"] in {"standard", "strict", "framework"}
+        assert "enum" not in field
 
     def test_dependencies_docs_mcp_semver(self, tmp_path):
         data = self._load(tmp_path, version="3.2.5")
         deps = data["dependencies"]
-        assert "docs-mcp" in deps
-        assert deps["docs-mcp"] == "^3.2.5"
+        # `claude plugin validate` requires `dependencies` to be an array of
+        # "name@range" strings, not an object map.
+        assert deps == ["docs-mcp@^3.2.5"]
 
     def test_mcp_json_substitutes_user_config(self, tmp_path):
         generate_claude_plugin_bundle(tmp_path)
@@ -277,3 +300,76 @@ class TestHookIfMatchers:
         for entry in hooks["PostToolUseFailure"]:
             # Server rebranded to nlt-build (commit f3b78b5, v3.12.43).
             assert entry["if"] == "mcp__nlt-build__*"
+
+
+def _git_ls_files(repo_root: Path, subdir: str) -> set[str]:
+    result = subprocess.run(
+        ["git", "ls-files", subdir],
+        cwd=repo_root,
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+    prefix = subdir.rstrip("/") + "/"
+    return {line[len(prefix) :] for line in result.stdout.splitlines() if line}
+
+
+class TestCommittedBundleMatchesFreshBuild:
+    """Regression guard for a defect class that a bare file-COUNT comparison
+    cannot catch: `plugin/claude/.mcp.json` was silently dropped by the
+    repo's own `.mcp.json` gitignore pattern while `plugin/claude/` still
+    carried the same total tracked-file COUNT as a fresh build, because the
+    hand-authored `marketplace.json` happened to swap in for the missing
+    file one-for-one (54 either way). A count match hid a real, shipped
+    defect: every mcp__tapps-mcp__* tool call in the installed plugin would
+    fail with no declared MCP server.
+
+    This test compares PATH SETS, not counts, between a fresh build (the
+    generator's actual output) and `git ls-files plugin/claude` (what will
+    actually reach an installer). The only allowed difference is the small,
+    explicitly-named set of hand-authored files that no generator writes
+    (mirroring plugin/cursor's own hand-maintained marketplace.json)."""
+
+    #: Files intentionally NOT produced by generate_claude_plugin_bundle —
+    #: hand-authored and committed directly, like plugin/cursor/marketplace.json.
+    HAND_AUTHORED = frozenset(
+        {
+            ".claude-plugin/marketplace.json",
+            "LICENSE",
+            "CHANGELOG.md",
+        }
+    )
+
+    def test_git_tracked_paths_match_fresh_build_plus_hand_authored(self, tmp_path):
+        from tapps_mcp import __version__
+
+        repo_root = Path(__file__).resolve().parents[4]
+        committed_dir = repo_root / "plugin" / "claude"
+        assert committed_dir.is_dir(), f"expected {committed_dir} to exist"
+
+        tracked = _git_ls_files(repo_root, "plugin/claude")
+        assert tracked, "git ls-files returned nothing — the probe itself is broken"
+
+        fresh_out = tmp_path / "fresh-claude-build"
+        generate_claude_plugin_bundle(fresh_out, version=__version__)
+        fresh_paths = {
+            str(p.relative_to(fresh_out)) for p in fresh_out.rglob("*") if p.is_file()
+        }
+        assert fresh_paths, "fresh build produced nothing — the probe itself is broken"
+
+        expected_tracked = fresh_paths | set(self.HAND_AUTHORED)
+
+        missing_from_git = expected_tracked - tracked
+        extra_in_git = tracked - expected_tracked
+
+        assert not missing_from_git, (
+            "the generator writes these paths but `git ls-files plugin/claude` "
+            f"does not track them (a gitignore pattern silently dropping a "
+            f"file?): {sorted(missing_from_git)}"
+        )
+        assert not extra_in_git, (
+            "`git ls-files plugin/claude` tracks these paths but neither the "
+            "generator nor HAND_AUTHORED accounts for them (stale file, or a "
+            f"newly hand-authored file this test needs to know about): "
+            f"{sorted(extra_in_git)}"
+        )

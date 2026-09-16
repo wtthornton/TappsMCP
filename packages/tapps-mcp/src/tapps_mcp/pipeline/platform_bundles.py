@@ -278,18 +278,27 @@ for Python projects.
 
 ## Installation
 
-Place this directory as a Claude Code plugin or install via:
+This marketplace's `.claude-plugin/marketplace.json` lives under
+`plugin/claude/` in the `wtthornton/TappsMCP` repo, not at the repo root, so
+the bare `owner/repo` marketplace shorthand will not find it. Add it from a
+local checkout instead:
 
 ```
+git clone https://github.com/wtthornton/TappsMCP.git
+claude plugin marketplace add /path/to/TappsMCP/plugin/claude
 claude plugin install tapps-mcp
 ```
 
 ## What's Included
 
-- **MCP Server**: `tapps-mcp serve` with 12+ quality tools
-- **Agents**: tapps-reviewer, tapps-researcher, tapps-validator
-- **Skills**: `/tapps-finish-task`, `/tapps-review-pipeline`, `/linear-read`
-- **Hooks**: Session start, post-edit reminders, stop gate
+- **MCP Server**: `tapps-mcp serve` (`uvx tapps-mcp serve`), 12+ quality
+  tools (scoring, security scanning, quality gates, docs lookup, and more)
+- **Agents** (5): tapps-reviewer, tapps-researcher, tapps-validator,
+  tapps-review-fixer, tapps-frontend-reviewer
+- **Skills** (26): `/tapps-finish-task`, `/tapps-review-pipeline`,
+  `/linear-read`, and 23 more — see `skills/`
+- **Hooks**: Session start, post-edit reminders, stop gate, and more —
+  see `hooks/hooks.json`
 
 ## Usage
 
@@ -297,6 +306,10 @@ Once installed, the TappsMCP tools are available in every
 session. Use `/tapps-finish-task` before declaring work complete,
 `/tapps-review-pipeline` for multi-file review, and direct MCP tools
 (`tapps_quick_check`, `tapps_validate_changed`) during edit loops.
+
+## License
+
+MIT — see `LICENSE`.
 """
 
 _CURSOR_PLUGIN_README = """\
@@ -347,6 +360,7 @@ def generate_claude_plugin_bundle(
     version: str = "0.3.0",
     *,
     monitors_enabled: bool = False,
+    engagement_level_default: str = "high",
 ) -> dict[str, Any]:
     """Generate a Claude Code plugin bundle directory.
 
@@ -361,6 +375,13 @@ def generate_claude_plugin_bundle(
     this from ``.tapps-mcp.yaml`` (``monitors.enabled: true``) should pass
     the resolved value.
 
+    ``engagement_level_default`` sets ``plugin.json``'s
+    ``userConfig.engagement_level.default`` (must be one of
+    ``high``/``medium``/``low``). This is the Claude-plugin-shaped equivalent
+    of the old ``PluginBuilder``-only ``rules/python-quality.md`` prose file
+    (retired — plugin bundles ship a machine-read manifest field here, not a
+    Cursor-shaped rules doc), now that ``PluginBuilder`` delegates here.
+
     Returns a summary dict with ``files_created``.
     """
     files_created: list[str] = []
@@ -368,6 +389,17 @@ def generate_claude_plugin_bundle(
     # .claude-plugin/plugin.json — TAP-958: extended with userConfig, author,
     # repository, license, homepage, and dependencies so Claude Code 2.1+ can
     # prompt the user at enable time and resolve cross-plugin dependencies.
+    #
+    # Shape confirmed against the installed `claude plugin validate` (2.1.258)
+    # this run, per /cc-expert:cc-lookup on doc 13-plugins.md (tier
+    # `corrected`, last_verified 2026-08-31) — the doc's own `userConfig`
+    # example (`type: "select"`, `label`, `options`) does NOT validate against
+    # the installed CLI, so the validator (ground truth), not the doc, won:
+    # `author` must be an object, `dependencies` an array of `"name@range"`
+    # strings, and each `userConfig` entry needs `title` (not `label`) and
+    # `type` in {string, number, boolean, directory, file} with no
+    # enum/options/select — this schema has no enumerated-choice mechanism at
+    # all, so the allowed values are named in `description` instead.
     meta_dir = output_dir / ".claude-plugin"
     meta_dir.mkdir(parents=True, exist_ok=True)
     plugin_data: dict[str, Any] = {
@@ -376,22 +408,24 @@ def generate_claude_plugin_bundle(
         "description": (
             "Code quality scoring, security scanning, and quality gates for Python projects"
         ),
-        "author": "TappsMCP Contributors",
+        "author": {"name": "TappsMCP Contributors"},
         "license": "MIT",
-        "homepage": "https://github.com/tapps-mcp/tapps-mcp",
-        "repository": "https://github.com/tapps-mcp/tapps-mcp",
+        "homepage": "https://github.com/wtthornton/TappsMCP",
+        "repository": "https://github.com/wtthornton/TappsMCP",
         "userConfig": {
             "engagement_level": {
                 "type": "string",
-                "enum": ["high", "medium", "low"],
-                "default": "high",
+                "title": "Engagement level",
+                "default": engagement_level_default,
                 "description": (
-                    "How assertively TappsMCP prompts quality checks. "
+                    "How assertively TappsMCP prompts quality checks: "
+                    "one of 'high', 'medium', 'low'. "
                     "'high' runs validators on every edit; 'low' runs only on explicit request."
                 ),
             },
             "memory_http_url": {
                 "type": "string",
+                "title": "Memory HTTP URL",
                 "default": "http://localhost:8080",
                 "description": (
                     "tapps-brain HTTP endpoint for cross-session memory. "
@@ -400,16 +434,19 @@ def generate_claude_plugin_bundle(
             },
             "quality_preset": {
                 "type": "string",
-                "enum": ["standard", "strict", "framework"],
+                "title": "Quality preset",
                 "default": "standard",
-                "description": "Quality gate preset applied by tapps_quality_gate.",
+                "description": (
+                    "Quality gate preset applied by tapps_quality_gate: "
+                    "one of 'standard', 'strict', 'framework'."
+                ),
             },
         },
-        "dependencies": {
+        "dependencies": [
             # Semver-compatible range. docs-mcp tracks tapps-mcp version; keep
             # the floor at the matching release and allow same-major bumps.
-            "docs-mcp": f"^{version}",
-        },
+            f"docs-mcp@^{version}",
+        ],
     }
     (meta_dir / "plugin.json").write_text(
         json.dumps(plugin_data, indent=2) + "\n", encoding="utf-8"

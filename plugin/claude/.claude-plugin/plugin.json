@@ -1,0 +1,34 @@
+{
+  "name": "tapps-mcp",
+  "version": "3.12.90",
+  "description": "Code quality scoring, security scanning, and quality gates for Python projects",
+  "author": {
+    "name": "TappsMCP Contributors"
+  },
+  "license": "MIT",
+  "homepage": "https://github.com/wtthornton/TappsMCP",
+  "repository": "https://github.com/wtthornton/TappsMCP",
+  "userConfig": {
+    "engagement_level": {
+      "type": "string",
+      "title": "Engagement level",
+      "default": "medium",
+      "description": "How assertively TappsMCP prompts quality checks: one of 'high', 'medium', 'low'. 'high' runs validators on every edit; 'low' runs only on explicit request."
+    },
+    "memory_http_url": {
+      "type": "string",
+      "title": "Memory HTTP URL",
+      "default": "http://localhost:8080",
+      "description": "tapps-brain HTTP endpoint for cross-session memory. Leave at default if running tapps-brain locally via Docker."
+    },
+    "quality_preset": {
+      "type": "string",
+      "title": "Quality preset",
+      "default": "standard",
+      "description": "Quality gate preset applied by tapps_quality_gate: one of 'standard', 'strict', 'framework'."
+    }
+  },
+  "dependencies": [
+    "docs-mcp@^3.12.90"
+  ]
+}
