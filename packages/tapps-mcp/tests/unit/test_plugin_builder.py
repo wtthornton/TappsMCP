@@ -1,7 +1,21 @@
-"""Tests for distribution/plugin_builder.py — Claude Code plugin generation."""
+"""Tests for distribution/plugin_builder.py — Claude Code plugin generation.
+
+``PluginBuilder`` is a thin facade over
+``tapps_mcp.pipeline.platform_bundles.generate_claude_plugin_bundle`` (the two
+Claude plugin bundlers were unified so `build-plugin` and a direct call to
+the generator emit one implementation's output). These tests focus on
+delegation: same output shape as the generator, `engagement_level` flowing
+into `userConfig`, and a byte-for-byte equivalence guard between the two
+public entry points (VAL-08). Exhaustive coverage of the bundle CONTENT
+(plugin.json fields, hooks, bin shims, monitors, ...) lives in
+test_claude_plugin_bundle.py against generate_claude_plugin_bundle directly —
+duplicating it here would just be two copies of the same assertions
+drifting apart.
+"""
 
 from __future__ import annotations
 
+import hashlib
 import json
 from pathlib import Path
 
@@ -13,6 +27,14 @@ from tapps_mcp.distribution.plugin_builder import PluginBuilder
 @pytest.fixture()
 def plugin_dir(tmp_path: Path) -> Path:
     return tmp_path / "tapps-mcp-plugin"
+
+
+def _sha256_manifest(root: Path) -> dict[str, str]:
+    return {
+        str(p.relative_to(root)): hashlib.sha256(p.read_bytes()).hexdigest()
+        for p in sorted(root.rglob("*"))
+        if p.is_file()
+    }
 
 
 class TestPluginManifest:
@@ -47,6 +69,17 @@ class TestPluginManifest:
         )
         assert manifest["version"] == __version__
 
+    def test_engagement_level_flows_to_user_config_default(self, plugin_dir: Path) -> None:
+        """Replaces the retired `rules/python-quality.md` prose: the Claude
+        plugin manifest's userConfig field is the machine-read equivalent."""
+        builder = PluginBuilder(output_dir=plugin_dir, engagement_level="low")
+        builder.build()
+
+        manifest = json.loads(
+            (plugin_dir / ".claude-plugin" / "plugin.json").read_text(encoding="utf-8")
+        )
+        assert manifest["userConfig"]["engagement_level"]["default"] == "low"
+
 
 class TestPluginSkills:
     def test_skills_created(self, plugin_dir: Path) -> None:
@@ -55,18 +88,20 @@ class TestPluginSkills:
 
         skills_dir = plugin_dir / "skills"
         assert skills_dir.exists()
-        # Should have namespaced skill directories
         skill_dirs = [d for d in skills_dir.iterdir() if d.is_dir()]
         assert len(skill_dirs) >= 4  # at least core skills
 
-    def test_skills_are_namespaced(self, plugin_dir: Path) -> None:
+    def test_skill_dirs_match_module(self, plugin_dir: Path) -> None:
+        from tapps_mcp.pipeline.platform_skills import CLAUDE_SKILLS
+
         builder = PluginBuilder(output_dir=plugin_dir)
         builder.build()
 
         skills_dir = plugin_dir / "skills"
+        dir_names = {d.name for d in skills_dir.iterdir() if d.is_dir()}
+        assert dir_names == set(CLAUDE_SKILLS.keys())
         for d in skills_dir.iterdir():
             if d.is_dir():
-                assert d.name.startswith("tapps-mcp-"), f"{d.name} not namespaced"
                 assert (d / "SKILL.md").exists()
 
     def test_skill_content_nonempty(self, plugin_dir: Path) -> None:
@@ -113,9 +148,24 @@ class TestPluginHooks:
         builder = PluginBuilder(output_dir=plugin_dir)
         builder.build()
 
-        hooks = json.loads((plugin_dir / "hooks" / "hooks.json").read_text(encoding="utf-8"))
+        hooks = json.loads(
+            (plugin_dir / "hooks" / "hooks.json").read_text(encoding="utf-8")
+        )["hooks"]
         assert "SessionStart" in hooks
         assert "PostToolUse" in hooks
+
+    def test_hook_scripts_are_shipped(self, plugin_dir: Path) -> None:
+        """Regression guard: the pre-unification PluginBuilder wrote a
+        hooks.json whose commands pointed at `.claude/hooks/*.sh` — a path
+        that only exists for a per-project `tapps-mcp init` install — and
+        never wrote the scripts into the bundle at all. A plugin installed
+        from that output would 404 on every hook invocation. The unified
+        builder must ship the referenced scripts alongside hooks.json."""
+        builder = PluginBuilder(output_dir=plugin_dir)
+        builder.build()
+
+        assert (plugin_dir / "hooks" / "tapps-stop.sh").exists()
+        assert (plugin_dir / "hooks" / "tapps-session-start.sh").exists()
 
 
 class TestPluginMCPConfig:
@@ -132,40 +182,17 @@ class TestPluginMCPConfig:
 
         mcp = json.loads((plugin_dir / ".mcp.json").read_text(encoding="utf-8"))
         assert "tapps-mcp" in mcp["mcpServers"]
-        assert mcp["mcpServers"]["tapps-mcp"]["command"] == "tapps-mcp"
+        assert mcp["mcpServers"]["tapps-mcp"]["command"] == "uvx"
 
 
-class TestPluginRules:
-    def test_rules_created(self, plugin_dir: Path) -> None:
+class TestPluginReadme:
+    def test_readme_created(self, plugin_dir: Path) -> None:
         builder = PluginBuilder(output_dir=plugin_dir)
         builder.build()
 
-        rules_file = plugin_dir / "rules" / "python-quality.md"
-        assert rules_file.exists()
-
-    def test_rules_contain_engagement_level(self, plugin_dir: Path) -> None:
-        builder = PluginBuilder(output_dir=plugin_dir, engagement_level="high")
-        builder.build()
-
-        content = (plugin_dir / "rules" / "python-quality.md").read_text(encoding="utf-8")
-        assert "high" in content
-
-
-class TestPluginSettings:
-    def test_settings_created(self, plugin_dir: Path) -> None:
-        builder = PluginBuilder(output_dir=plugin_dir)
-        builder.build()
-
-        settings_file = plugin_dir / "settings.json"
-        assert settings_file.exists()
-
-    def test_settings_has_permissions(self, plugin_dir: Path) -> None:
-        builder = PluginBuilder(output_dir=plugin_dir)
-        builder.build()
-
-        settings = json.loads((plugin_dir / "settings.json").read_text(encoding="utf-8"))
-        assert "permissions" in settings
-        assert "mcp__tapps-mcp__*" in settings["permissions"]["allow"]
+        readme = plugin_dir / "README.md"
+        assert readme.exists()
+        assert len(readme.read_text(encoding="utf-8")) > 0
 
 
 class TestPluginResult:
@@ -174,13 +201,11 @@ class TestPluginResult:
         builder.build()
         assert "version" in builder.result
 
-    def test_result_has_components(self, plugin_dir: Path) -> None:
+    def test_result_has_files_created(self, plugin_dir: Path) -> None:
         builder = PluginBuilder(output_dir=plugin_dir)
         builder.build()
-        assert "components" in builder.result
-        assert "manifest" in builder.result["components"]
-        assert "skills" in builder.result["components"]
-        assert "agents" in builder.result["components"]
+        assert "files_created" in builder.result
+        assert len(builder.result["files_created"]) > 0
 
 
 class TestPluginDirectoryStructure:
@@ -192,9 +217,8 @@ class TestPluginDirectoryStructure:
         assert (plugin_dir / "skills").is_dir()
         assert (plugin_dir / "agents").is_dir()
         assert (plugin_dir / "hooks" / "hooks.json").exists()
-        assert (plugin_dir / "rules" / "python-quality.md").exists()
         assert (plugin_dir / ".mcp.json").exists()
-        assert (plugin_dir / "settings.json").exists()
+        assert (plugin_dir / "README.md").exists()
 
 
 class TestPluginBinShims:
@@ -216,8 +240,54 @@ class TestPluginBinShims:
         ):
             assert (bin_dir / name).exists(), f"missing {name}"
 
-    def test_result_records_bin_component(self, plugin_dir: Path) -> None:
+    def test_result_records_bin_files(self, plugin_dir: Path) -> None:
         builder = PluginBuilder(output_dir=plugin_dir)
         builder.build()
-        assert "bin" in builder.result["components"]
-        assert builder.result["components"]["bin"]["count"] == 4
+        bin_files = [f for f in builder.result["files_created"] if f.startswith("bin/")]
+        assert len(bin_files) == 4
+
+
+class TestUnifiedWithGenerateClaudePluginBundle:
+    """VAL-08: `build-plugin` (PluginBuilder) and a direct call to
+    generate_claude_plugin_bundle() must emit byte-identical trees now that
+    PluginBuilder delegates to it, given matching arguments."""
+
+    def test_byte_identical_trees(self, tmp_path: Path) -> None:
+        from tapps_mcp import __version__
+        from tapps_mcp.pipeline.platform_bundles import generate_claude_plugin_bundle
+
+        via_builder = tmp_path / "via-builder"
+        via_direct = tmp_path / "via-direct"
+
+        PluginBuilder(output_dir=via_builder, engagement_level="high").build()
+        generate_claude_plugin_bundle(
+            via_direct, version=__version__, engagement_level_default="high"
+        )
+
+        manifest_builder = _sha256_manifest(via_builder)
+        manifest_direct = _sha256_manifest(via_direct)
+        assert manifest_builder, "builder manifest must not be empty"
+        assert manifest_direct, "direct-call manifest must not be empty"
+        assert manifest_builder == manifest_direct
+
+    def test_diverges_when_a_file_is_altered(self, tmp_path: Path) -> None:
+        """Negative control for the assertion above: altering one file in
+        one tree must make the two manifests differ, proving the equality
+        check isn't vacuously true (e.g. from both being empty)."""
+        from tapps_mcp import __version__
+        from tapps_mcp.pipeline.platform_bundles import generate_claude_plugin_bundle
+
+        via_builder = tmp_path / "via-builder"
+        via_direct = tmp_path / "via-direct"
+
+        PluginBuilder(output_dir=via_builder, engagement_level="high").build()
+        generate_claude_plugin_bundle(
+            via_direct, version=__version__, engagement_level_default="high"
+        )
+        (via_direct / "README.md").write_text("tampered", encoding="utf-8")
+
+        manifest_builder = _sha256_manifest(via_builder)
+        manifest_direct = _sha256_manifest(via_direct)
+        assert manifest_builder, "builder manifest must not be empty"
+        assert manifest_direct, "direct-call manifest must not be empty"
+        assert manifest_builder != manifest_direct

@@ -1,0 +1,6 @@
+#!/usr/bin/env bash
+set -e
+if command -v tapps-mcp >/dev/null 2>&1; then
+  exec tapps-mcp validate-changed --quick "$@"
+fi
+exec uvx tapps-mcp validate-changed --quick "$@"

@@ -38,11 +38,7 @@ def build_plugin(output_dir: str, engagement_level: str) -> None:
     result = builder.result
 
     click.echo(f"Plugin built at {plugin_dir}")
-    for component, status in result.get("components", {}).items():
-        if isinstance(status, list):
-            click.echo(f"  {component}: {len(status)} items")
-        else:
-            click.echo(f"  {component}: {status}")
+    click.echo(f"  files_created: {len(result.get('files_created', []))}")
 
 
 @click.command("build-cursor-plugin")

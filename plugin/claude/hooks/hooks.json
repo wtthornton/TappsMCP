@@ -1,0 +1,138 @@
+{
+  "hooks": {
+    "SessionStart": [
+      {
+        "matcher": "startup|resume",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "hooks/tapps-session-start.sh"
+          }
+        ]
+      },
+      {
+        "matcher": "compact",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "hooks/tapps-session-compact.sh"
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "Edit|Write|MultiEdit",
+        "if": "Edit(**/*.py) | Write(**/*.py) | MultiEdit(**/*.py)",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "hooks/tapps-post-edit.sh"
+          }
+        ]
+      },
+      {
+        "matcher": "mcp__nlt-build__tapps_validate_changed",
+        "if": "mcp__nlt-build__tapps_validate_changed",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "hooks/tapps-post-validate.sh"
+          }
+        ]
+      },
+      {
+        "matcher": "mcp__nlt-build__tapps_report",
+        "if": "mcp__nlt-build__tapps_report",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "hooks/tapps-post-report.sh"
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "hooks/tapps-stop.sh"
+          }
+        ]
+      }
+    ],
+    "TaskCompleted": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "hooks/tapps-task-completed.sh"
+          }
+        ]
+      }
+    ],
+    "PreCompact": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "hooks/tapps-pre-compact.sh"
+          }
+        ]
+      }
+    ],
+    "SubagentStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "hooks/tapps-subagent-start.sh"
+          }
+        ]
+      }
+    ],
+    "SubagentStop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "hooks/tapps-subagent-stop.sh"
+          }
+        ]
+      }
+    ],
+    "SessionEnd": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "hooks/tapps-session-end.sh"
+          }
+        ]
+      }
+    ],
+    "PostToolUseFailure": [
+      {
+        "matcher": "mcp__nlt-build__.*",
+        "if": "mcp__nlt-build__*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "hooks/tapps-tool-failure.sh"
+          }
+        ]
+      }
+    ],
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "hooks/tapps-user-prompt-submit.sh"
+          }
+        ]
+      }
+    ]
+  }
+}

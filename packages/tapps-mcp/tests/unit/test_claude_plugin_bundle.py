@@ -102,7 +102,9 @@ class TestPluginManifestExtended:
 
     def test_metadata_fields_present(self, tmp_path):
         data = self._load(tmp_path)
-        assert data["author"]
+        # `claude plugin validate` (installed CLI, 2.1.258) requires `author`
+        # to be an object, not a bare string.
+        assert data["author"] == {"name": "TappsMCP Contributors"}
         assert data["license"] == "MIT"
         assert data["homepage"].startswith("https://")
         assert data["repository"].startswith("https://")
@@ -112,26 +114,45 @@ class TestPluginManifestExtended:
         uc = data["userConfig"]
         assert "engagement_level" in uc
         field = uc["engagement_level"]
+        # The installed CLI's userConfig schema has no enum/options/select
+        # mechanism (`type` is one of string/number/boolean/directory/file
+        # only) — confirmed via `claude plugin validate`, which rejects an
+        # `enum` key. `title` is required; allowed values live in the prose.
         assert field["type"] == "string"
-        assert set(field["enum"]) == {"high", "medium", "low"}
-        assert field["default"] in field["enum"]
+        assert field["title"]
+        assert field["default"] in {"high", "medium", "low"}
+        assert "enum" not in field
+
+    def test_engagement_level_default_configurable(self, tmp_path):
+        data = self._load(tmp_path)
+        # bare call uses the function's own default
+        assert data["userConfig"]["engagement_level"]["default"] == "high"
+
+        low_out = tmp_path / "low"
+        generate_claude_plugin_bundle(low_out, engagement_level_default="low")
+        low_data = json.loads((low_out / ".claude-plugin" / "plugin.json").read_text())
+        assert low_data["userConfig"]["engagement_level"]["default"] == "low"
 
     def test_user_config_memory_http_url(self, tmp_path):
         data = self._load(tmp_path)
         field = data["userConfig"]["memory_http_url"]
         assert field["type"] == "string"
+        assert field["title"]
         assert field["default"].startswith("http")
 
     def test_user_config_quality_preset(self, tmp_path):
         data = self._load(tmp_path)
         field = data["userConfig"]["quality_preset"]
-        assert set(field["enum"]) == {"standard", "strict", "framework"}
+        assert field["title"]
+        assert field["default"] in {"standard", "strict", "framework"}
+        assert "enum" not in field
 
     def test_dependencies_docs_mcp_semver(self, tmp_path):
         data = self._load(tmp_path, version="3.2.5")
         deps = data["dependencies"]
-        assert "docs-mcp" in deps
-        assert deps["docs-mcp"] == "^3.2.5"
+        # `claude plugin validate` requires `dependencies` to be an array of
+        # "name@range" strings, not an object map.
+        assert deps == ["docs-mcp@^3.2.5"]
 
     def test_mcp_json_substitutes_user_config(self, tmp_path):
         generate_claude_plugin_bundle(tmp_path)
