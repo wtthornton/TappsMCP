@@ -53,6 +53,14 @@ nul
 # MCP config (local API keys, paths)
 .cursor/mcp.json
 .mcp.json
+# ...except the redistributable Claude plugin bundle's own .mcp.json — it is
+# tracked build output (like the rest of plugin/claude/), holds no secrets
+# (only ${user_config.*} substitution placeholders resolved by Claude Code at
+# enable time), and is the file that makes the shipped skills/agents/hooks'
+# mcp__tapps-mcp__* tool calls resolve at all. Mirrors plugin/cursor/mcp.json,
+# which is tracked because it's named without a leading dot and so never
+# matched the pattern above.
+!plugin/claude/.mcp.json
 
 # TappsMCP runtime data (metrics, cache, indexes)
 .tapps-mcp/

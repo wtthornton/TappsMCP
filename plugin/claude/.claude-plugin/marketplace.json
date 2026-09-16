@@ -3,7 +3,7 @@
   "description": "Marketplace for the TappsMCP Claude Code plugin: deterministic code quality scoring, security scanning, and quality gates for Python projects.",
   "owner": {
     "name": "TappsMCP Contributors",
-    "url": "https://github.com/tapps-mcp/tapps-mcp"
+    "url": "https://github.com/wtthornton/TappsMCP"
   },
   "plugins": [
     {
@@ -14,8 +14,8 @@
       "version": "3.12.90",
       "author": { "name": "TappsMCP Contributors" },
       "license": "MIT",
-      "homepage": "https://github.com/tapps-mcp/tapps-mcp",
-      "repository": "https://github.com/tapps-mcp/tapps-mcp",
+      "homepage": "https://github.com/wtthornton/TappsMCP",
+      "repository": "https://github.com/wtthornton/TappsMCP",
       "keywords": ["code-quality", "security", "scoring", "mcp", "python", "linting"],
       "category": "code-quality"
     }

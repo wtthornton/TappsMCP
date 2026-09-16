@@ -6,8 +6,8 @@
     "name": "TappsMCP Contributors"
   },
   "license": "MIT",
-  "homepage": "https://github.com/tapps-mcp/tapps-mcp",
-  "repository": "https://github.com/tapps-mcp/tapps-mcp",
+  "homepage": "https://github.com/wtthornton/TappsMCP",
+  "repository": "https://github.com/wtthornton/TappsMCP",
   "userConfig": {
     "engagement_level": {
       "type": "string",
