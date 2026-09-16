@@ -23,7 +23,6 @@ from tapps_mcp.pipeline.agent_contract import (
     finish_task_checklist_and_doc_gaps,
 )
 from tapps_mcp.pipeline.platform_skill_continuous_learning import (
-    CONTINUOUS_LEARNING_CLAUDE_SKILL_BODY,
     CONTINUOUS_LEARNING_COMPANION_FILES,
     CONTINUOUS_LEARNING_CURSOR_SKILL_BODY,
 )
@@ -929,18 +928,27 @@ for _name in _MISSED_AMBIENT_SKILL_NAMES:
 # The body is host-agnostic prose (no tool grants), so the same text serves the
 # Claude and Cursor hosts. orchestration-prompt is one of the 8 missed-ambient
 # skills above; tapps-wayfind is a stated front door and stays ambient.
+#
+# The CLAUDE_SKILLS side of each pair now loads its body from the same
+# package-data asset used by every other CLAUDE_SKILLS entry, extracted
+# byte-for-byte from ORCHESTRATION_PROMPT_SKILL_BODY / WAYFIND_SKILL_BODY /
+# VALIDATION_CONTRACT_SKILL_BODY / CONTINUOUS_LEARNING_CLAUDE_SKILL_BODY at
+# the time of extraction (none of those four constants concatenate
+# resolve_role_model — each hardcodes its model or omits the field — so no
+# {{model:role}} marker applies here). The CURSOR_SKILLS side is untouched:
+# it keeps importing the constant directly from the sibling module.
 CLAUDE_SKILLS["orchestration-prompt"] = _pin_ambient(
-    "orchestration-prompt", ORCHESTRATION_PROMPT_SKILL_BODY
+    "orchestration-prompt", _load_claude_skill("orchestration-prompt")
 )
 CURSOR_SKILLS["orchestration-prompt"] = _pin_ambient(
     "orchestration-prompt", ORCHESTRATION_PROMPT_SKILL_BODY
 )
-CLAUDE_SKILLS["tapps-wayfind"] = WAYFIND_SKILL_BODY
+CLAUDE_SKILLS["tapps-wayfind"] = _load_claude_skill("tapps-wayfind")
 CURSOR_SKILLS["tapps-wayfind"] = WAYFIND_SKILL_BODY
-CLAUDE_SKILLS["tapps-validation-contract"] = VALIDATION_CONTRACT_SKILL_BODY
+CLAUDE_SKILLS["tapps-validation-contract"] = _load_claude_skill("tapps-validation-contract")
 CURSOR_SKILLS["tapps-validation-contract"] = VALIDATION_CONTRACT_SKILL_BODY
 CLAUDE_SKILLS["continuous-learning-v2"] = _pin_ambient(
-    "continuous-learning-v2", CONTINUOUS_LEARNING_CLAUDE_SKILL_BODY
+    "continuous-learning-v2", _load_claude_skill("continuous-learning-v2")
 )
 CURSOR_SKILLS["continuous-learning-v2"] = _pin_ambient(
     "continuous-learning-v2", CONTINUOUS_LEARNING_CURSOR_SKILL_BODY

@@ -2,6 +2,53 @@
 
 from __future__ import annotations
 
+import importlib.resources
+import re
+import sys
+from pathlib import Path
+
+# Mirrors tapps_mcp.prompts.prompt_loader._read_resource (same sys.frozen
+# PyInstaller fallback) and platform_skills.py's own copy of this helper --
+# duplicated locally rather than imported to avoid a circular import
+# (platform_skills.py imports CLAUDE_DOMAIN_SKILLS from this module).
+_SKILL_ASSET_PACKAGE = "tapps_mcp.pipeline"
+_SKILL_ASSET_SUBDIR = "assets/claude_skills"
+
+
+def _read_claude_skill_asset(skill_name: str) -> str:
+    file_name = f"{skill_name}.md"
+    if getattr(sys, "frozen", False):
+        return (Path(__file__).parent / _SKILL_ASSET_SUBDIR / file_name).read_text(
+            encoding="utf-8"
+        )
+    ref = importlib.resources.files(_SKILL_ASSET_PACKAGE).joinpath(
+        f"{_SKILL_ASSET_SUBDIR}/{file_name}"
+    )
+    return ref.read_text(encoding="utf-8")
+
+
+def _load_claude_skill(skill_name: str) -> str:
+    """Load a plain (non-templated) CLAUDE_DOMAIN_SKILLS body verbatim."""
+    return _read_claude_skill_asset(skill_name)
+
+
+_DOMAIN_SKILL_TEMPLATE_MARKER_RE = re.compile(r"\{\{skill:(name|description|tools|body)\}\}")
+
+
+def _render_claude_domain_skill(name: str, description: str, tools: str, body: str) -> str:
+    """Render the shared domain-playbook skeleton from package data.
+
+    The skeleton (frontmatter + intro line) is identical across the three
+    domain-playbook skills; only these four fields vary per call. Storing it
+    as one reviewable ``.md`` template with ``{{skill:*}}`` markers keeps the
+    parameterization this function already had, instead of an f-string
+    baked into the Python source.
+    """
+    template = _read_claude_skill_asset("_domain_skill_template")
+    values = {"name": name, "description": description, "tools": tools, "body": body}
+    return _DOMAIN_SKILL_TEMPLATE_MARKER_RE.sub(lambda m: values[m.group(1)], template)
+
+
 _DOMAIN_FINISH = """\
 6. **Close out.** Invoke `/tapps-finish-task` with the task_type from the playbook response. Do not declare done without validate + checklist.
 """
@@ -47,21 +94,7 @@ def _claude_domain_skill(
         "task_type from the playbook response",
         f"task_type={task_type}",
     )
-    return f"""\
----
-name: {name}
-user-invocable: true
-model: claude-sonnet-5
-description: >-
-  {description}
-allowed-tools: {tools}
-argument-hint: "[file-path or scope]"
----
-
-Domain playbook workflow — same quality gate as the standard TAPPS pipeline.
-
-{body}
-"""
+    return _render_claude_domain_skill(name, description, tools, body)
 
 
 def _cursor_domain_skill(
@@ -125,58 +158,9 @@ CLAUDE_DOMAIN_SKILLS: dict[str, str] = {
         extra_tools="mcp__nlt-build__tapps_score_file",
         task_type="frontend",
     ),
-    "tapps-flow-develop": """\
----
-name: tapps-flow-develop
-user-invocable: true
-model: claude-haiku-4-5-20251001
-description: >-
-  Standard feature/bugfix development flow via the shared TAPPS pipeline.
-  Use when starting daily implementation work and you want session start,
-  lookup docs, quick_check loop, and finish-task without a domain specialist.
-allowed-tools: mcp__nlt-build__tapps_session_start mcp__nlt-build__tapps_lookup_docs mcp__nlt-build__tapps_quick_check mcp__nlt-build__tapps_validate_changed mcp__nlt-build__tapps_checklist Bash
-argument-hint: "[task_type: feature|bugfix]"
----
-
-1. `tapps_session_start()`
-2. `tapps_lookup_docs` before each external library API
-3. Edit loop: `tapps_quick_check` after Python edits
-4. `/tapps-finish-task` with `task_type=feature` or `bugfix`
-""",
-    "tapps-flow-review": """\
----
-name: tapps-flow-review
-user-invocable: true
-model: claude-sonnet-5
-description: >-
-  QA/review flow: parallel review pipeline or single-file review ending in checklist.
-  Use when reviewing PRs, audit findings, or validating another agent's changes.
-allowed-tools: mcp__nlt-build__tapps_validate_changed mcp__nlt-build__tapps_checklist mcp__nlt-build__tapps_security_scan
-argument-hint: "[file paths]"
----
-
-Prefer `/tapps-review-pipeline` for multiple Python files. Otherwise:
-
-1. `tapps_security_scan` + `tapps_quick_check` on targets
-2. `/tapps-finish-task` with `task_type=review` or `qa`
-""",
-    "tapps-flow-frontend": """\
----
-name: tapps-flow-frontend
-user-invocable: true
-model: claude-sonnet-5
-description: >-
-  Frontend work flow combining UX playbook and standard finish pipeline.
-  Use when the task is primarily UI/UX implementation or accessibility.
-allowed-tools: mcp__nlt-build__tapps_session_start mcp__nlt-build__tapps_domain_playbook mcp__nlt-build__tapps_lookup_docs mcp__nlt-build__tapps_quick_check mcp__nlt-build__tapps_validate_changed mcp__nlt-build__tapps_checklist
----
-
-1. Invoke `/tapps-domain-frontend` steps 1-5, **or** run this shortcut:
-   - `tapps_domain_playbook(domain="user-experience")`
-   - `tapps_lookup_docs` for UI libraries in scope
-2. `/tapps-finish-task` with `task_type=frontend`
-3. Optional persona: agency-agents Frontend Developer (voice only; TappsMCP owns gates)
-""",
+    "tapps-flow-develop": _load_claude_skill("tapps-flow-develop"),
+    "tapps-flow-review": _load_claude_skill("tapps-flow-review"),
+    "tapps-flow-frontend": _load_claude_skill("tapps-flow-frontend"),
 }
 
 CURSOR_DOMAIN_SKILLS: dict[str, str] = {

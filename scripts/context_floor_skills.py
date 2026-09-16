@@ -19,28 +19,38 @@ from pathlib import Path
 from context_floor_core import _PIPELINE_DIR, MeasurementError, _assign_target, _parse
 from context_floor_skill_body import SkillInfo, _parse_skill_frontmatter, resolve_skill_info
 
-# Skill-body extraction (plugin-dist program, Lane 1): the templated
+# Skill-body extraction (plugin-dist program, Lanes 1-2): the templated
 # CLAUDE_SKILLS bodies now live as package-data ``.md`` files under
-# ``assets/claude_skills/`` and
-# the dict literal holds ``_load_claude_skill("<name>")`` calls instead of
-# inline string literals (see ``platform_skills.py``'s module docstring for
-# that section). A bare AST literal-resolution over the dict entry can no
-# longer recover the frontmatter for those entries -- there is no literal
-# text left in the module to resolve, only a file reference -- so this script
-# reads the referenced ``.md`` file directly instead of asking
-# ``context_floor_skill_body`` to parse a call it does not know about. The
-# substitution the loader applies at import time (``{{model:<role>}}`` ->
-# a resolved model string) never touches the ``description:`` frontmatter
-# field this script measures, so the raw file content is sufficient.
+# ``assets/claude_skills/`` and the dict literal holds
+# ``_load_claude_skill("<name>")`` calls instead of inline string literals
+# (see ``platform_skills.py``'s module docstring for that section). The same
+# shape now also arrives via ``CLAUDE_SKILLS.update(CLAUDE_DOMAIN_SKILLS)``
+# (platform_domain_skills.py's own, separately-defined ``_load_claude_skill``
+# -- same name, same ``assets/claude_skills/`` layout, different module,
+# matched here purely by call shape) and via a
+# ``_pin_ambient("name", _load_claude_skill("name"))`` wrapper for the four
+# post-hoc CLAUDE_SKILLS subscript assignments. ``CLAUDE_DOCS_SKILLS``
+# (platform_docs_automation.py) uses the sibling ``_load_claude_docs_skill``
+# loader reading from ``assets/claude_docs_skills/`` instead.
+#
+# A bare AST literal-resolution over any of these entries can no longer
+# recover the frontmatter -- there is no literal text left in the module to
+# resolve, only a file reference -- so this script reads the referenced
+# ``.md`` file directly instead of asking ``context_floor_skill_body`` to
+# parse a call it does not know about. The substitution each loader applies
+# at import time (``{{model:<role>}}`` / ``{{docs_prefix}}`` -> a resolved
+# value) never touches the ``description:`` frontmatter field this script
+# measures, so the raw file content is sufficient.
 _SKILL_ASSET_SUBDIR = ("assets", "claude_skills")
+_DOCS_SKILL_ASSET_SUBDIR = ("assets", "claude_docs_skills")
 
 
-def _asset_load_name(node: ast.expr) -> str | None:
-    """If *node* is ``_load_claude_skill("name")``, return ``"name"``."""
+def _call_arg_str(node: ast.expr, func_name: str) -> str | None:
+    """If *node* is ``<func_name>("literal")``, return ``"literal"``."""
     if (
         isinstance(node, ast.Call)
         and isinstance(node.func, ast.Name)
-        and node.func.id == "_load_claude_skill"
+        and node.func.id == func_name
         and len(node.args) == 1
         and isinstance(node.args[0], ast.Constant)
         and isinstance(node.args[0].value, str)
@@ -49,9 +59,43 @@ def _asset_load_name(node: ast.expr) -> str | None:
     return None
 
 
-def _skill_info_from_asset(skill_name: str, asset_name: str, pipeline_dir: Path) -> SkillInfo:
+def _asset_load_name(node: ast.expr) -> str | None:
+    """If *node* is ``_load_claude_skill("name")``, return ``"name"``.
+
+    Also unwraps ``_pin_ambient("name", _load_claude_skill("name"))`` --
+    ``_pin_ambient`` only splices a ``disable-model-invocation: true`` line
+    into frontmatter post-construction and never touches ``description:``,
+    so reading the pre-pin asset file is sufficient for this script's
+    measurement. The two literal names must match, or this is not the shape
+    we expect and the caller falls through to the generic resolver.
+    """
+    direct = _call_arg_str(node, "_load_claude_skill")
+    if direct is not None:
+        return direct
+    if (
+        isinstance(node, ast.Call)
+        and isinstance(node.func, ast.Name)
+        and node.func.id == "_pin_ambient"
+        and len(node.args) == 2
+        and isinstance(node.args[0], ast.Constant)
+        and isinstance(node.args[0].value, str)
+    ):
+        inner = _call_arg_str(node.args[1], "_load_claude_skill")
+        if inner is not None and inner == node.args[0].value:
+            return inner
+    return None
+
+
+def _docs_skill_asset_load_name(node: ast.expr) -> str | None:
+    """If *node* is ``_load_claude_docs_skill("name")``, return ``"name"``."""
+    return _call_arg_str(node, "_load_claude_docs_skill")
+
+
+def _skill_info_from_asset(
+    skill_name: str, asset_name: str, pipeline_dir: Path, subdir: tuple[str, ...] = _SKILL_ASSET_SUBDIR
+) -> SkillInfo:
     """Resolve a skill body stored as a package-data ``.md`` file."""
-    asset_path = pipeline_dir.joinpath(*_SKILL_ASSET_SUBDIR, f"{asset_name}.md")
+    asset_path = pipeline_dir.joinpath(*subdir, f"{asset_name}.md")
     if not asset_path.exists():
         raise MeasurementError(f"{skill_name}: skill asset file not found: {asset_path}")
     body = asset_path.read_text(encoding="utf-8")
@@ -176,8 +220,13 @@ def _collect_skill_set(main_file: Path, dict_name: str) -> dict[str, SkillInfo]:
     result: dict[str, SkillInfo] = {}
     for name, expr in raw.items():
         asset_name = _asset_load_name(expr)
+        docs_asset_name = _docs_skill_asset_load_name(expr)
         if asset_name is not None:
             result[name] = _skill_info_from_asset(name, asset_name, main_file.parent)
+        elif docs_asset_name is not None:
+            result[name] = _skill_info_from_asset(
+                name, docs_asset_name, main_file.parent, subdir=_DOCS_SKILL_ASSET_SUBDIR
+            )
         else:
             result[name] = resolve_skill_info(name, expr, symtab)
     return result
