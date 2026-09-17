@@ -1,0 +1,69 @@
+# Validates both plugin bundles (Claude Code + Cursor) on any change to the
+# bundled artifacts, the validators themselves, or the bundlers that generate
+# them. TAP-7756 — neither validator was invoked by any workflow before this.
+#
+# scripts/validate-claude-plugin.sh delegates schema checks to
+# `claude plugin validate --strict` and deliberately exits 3 when the
+# `claude` CLI is not on PATH, so a runner that skipped installing it would
+# fail loudly rather than pass silently. This job installs the CLI
+# explicitly from the published npm package rather than letting that step
+# be skipped or made conditional.
+name: Plugin Validation
+
+on:
+  push:
+    paths:
+      - "plugin/**"
+      - "scripts/validate-claude-plugin.sh"
+      - "scripts/validate-cursor-plugin.sh"
+      - "packages/tapps-mcp/src/tapps_mcp/cli_ops_build.py"
+      - "packages/tapps-mcp/src/tapps_mcp/pipeline/platform_bundles.py"
+      - ".github/workflows/plugin-validation.yml"
+  pull_request:
+    branches: [master]
+    paths:
+      - "plugin/**"
+      - "scripts/validate-claude-plugin.sh"
+      - "scripts/validate-cursor-plugin.sh"
+      - "packages/tapps-mcp/src/tapps_mcp/cli_ops_build.py"
+      - "packages/tapps-mcp/src/tapps_mcp/pipeline/platform_bundles.py"
+      - ".github/workflows/plugin-validation.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: plugin-validation-${{ github.head_ref || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  validate-claude-plugin:
+    name: Validate Claude Code plugin bundle
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Install claude CLI
+        run: npm install -g @anthropic-ai/claude-code
+
+      - name: Confirm claude CLI is on PATH (fail loudly, not silently)
+        run: claude --version
+
+      - name: Validate plugin/claude bundle
+        run: bash scripts/validate-claude-plugin.sh plugin/claude
+
+  validate-cursor-plugin:
+    name: Validate Cursor plugin bundle
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Validate plugin/cursor bundle
+        run: bash scripts/validate-cursor-plugin.sh plugin/cursor
