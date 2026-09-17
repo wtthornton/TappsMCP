@@ -321,13 +321,21 @@ session. Use `/tapps-finish-task` before declaring work complete,
   `mcp__plugin_tapps-mcp_tapps-mcp__*` (confirmed by installing a throwaway
   plugin and watching a tool execute — a plugin-registered server is
   namespaced `mcp__plugin_<plugin>_<server>__`, not a bare `mcp__<server>__`).
-  Counted directly from this bundle's `skills/` and `agents/`, none of the
-  shipped tool references use that prefix: 103 call `mcp__nlt-build__*`, 29
-  call `mcp__nlt-linear-issues__*`, 8 call `mcp__nlt-setup__*`, 6 call
-  `mcp__nlt-release-ship__*`, and 3 call `mcp__nlt-memory__*` — the
+  Counted across this bundle's `skills/`, `agents/`, and `hooks/` (from
+  `plugin/claude/`: `grep -rho 'mcp__<name>__[A-Za-z0-9_]*' skills/ agents/
+  hooks/ | wc -l`), none of the shipped tool references use that prefix:
+  103 reference `mcp__nlt-build__*`, 29 reference
+  `mcp__nlt-linear-issues__*`, 8 reference `mcp__nlt-setup__*`, 6 reference
+  `mcp__nlt-release-ship__*`, and 3 reference `mcp__nlt-memory__*` — the
   pre-plugin, direct-MCP server names, none of which this bundle registers.
-  A further 7 references already read `mcp__tapps-mcp__*`, which is closer
-  but still not the working prefix. `/tapps-finish-task` in particular calls
+  2 of the 103 are `hooks/hooks.json` wildcard `matcher`/`if` patterns
+  (`mcp__nlt-build__.*` and `mcp__nlt-build__*`), not calls to a specific
+  tool; the other 101 name one. A further 6 references already read
+  `mcp__tapps-mcp__*`, which is closer but still not the working prefix:
+  5 are named tool calls in `hooks/tapps-stop.sh`
+  (`tapps_quick_check`, `tapps_validate_changed`, `tapps_quality_gate`,
+  `tapps_checklist`, `tapps_lookup_docs`) and 1 is a wildcard case-pattern
+  in `hooks/tapps-tool-failure.sh`. `/tapps-finish-task` in particular calls
   `mcp__nlt-build__tapps_checklist`, `mcp__nlt-build__tapps_validate_changed`,
   and `mcp__nlt-build__tapps_lookup_docs` — none of which resolve after a
   clean install. Rewriting these prefixes is tracked as a separate fix.
