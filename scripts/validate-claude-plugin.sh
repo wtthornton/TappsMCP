@@ -153,4 +153,62 @@ if [[ $FAIL -ne 0 ]]; then
 fi
 echo "Referential integrity (hooks.json -> scripts): OK"
 
+# --- (d) Dependency resolvability -------------------------------------------
+# TAP-7758: `claude plugin validate --strict` does NOT check this — a bogus
+# dependency such as "totally-bogus-nonexistent-plugin-xyz@^99.99.99" passes
+# it clean in every command/flag combination (verified by experiment). A
+# `dependencies` entry in plugin.json names another plugin this bundle
+# expects the operator to be able to install; the only marketplace this
+# script can check against is the one shipped alongside this bundle, so any
+# declared dependency whose plugin name is not listed in that
+# marketplace.json is provably unsatisfiable from this bundle alone — which
+# is exactly the shape of the defect this check exists to catch (the bundle
+# used to declare "docs-mcp@^<version>" while its own marketplace.json
+# listed only "tapps-mcp"). An absent or empty `dependencies` key is valid
+# and passes trivially — omitting the key is the fix, not a gap to warn on.
+MARKETPLACE_JSON="$PLUGIN_DIR/.claude-plugin/marketplace.json"
+PLUGIN_JSON="$PLUGIN_DIR/.claude-plugin/plugin.json"
+
+if ! DEP_CHECK_OUTPUT="$(python3 -c "
+import json
+import sys
+
+plugin_json, marketplace_json = sys.argv[1], sys.argv[2]
+
+with open(plugin_json, encoding='utf-8') as f:
+    plugin_data = json.load(f)
+
+deps = plugin_data.get('dependencies') or []
+if not deps:
+    sys.exit(0)
+
+with open(marketplace_json, encoding='utf-8') as f:
+    marketplace_data = json.load(f)
+
+known = sorted(p.get('name', '') for p in marketplace_data.get('plugins', []))
+known_set = set(known)
+
+unsatisfiable = []
+for dep in deps:
+    name = dep.rsplit('@', 1)[0] if isinstance(dep, str) and '@' in dep else dep
+    if name not in known_set:
+        unsatisfiable.append(dep)
+
+if unsatisfiable:
+    print('Dependency the marketplace cannot satisfy:')
+    for dep in unsatisfiable:
+        print('  - ' + repr(dep))
+    print('Known plugins in ' + marketplace_json + ': ' + repr(known))
+    sys.exit(1)
+" "$PLUGIN_JSON" "$MARKETPLACE_JSON")"; then
+  echo "ERROR: $DEP_CHECK_OUTPUT" >&2
+  FAIL=1
+fi
+
+if [[ $FAIL -ne 0 ]]; then
+  echo "Plugin validation FAILED — dependency resolvability" >&2
+  exit 1
+fi
+echo "Dependency resolvability: OK"
+
 echo "Plugin validation PASSED."

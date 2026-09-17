@@ -387,19 +387,32 @@ def generate_claude_plugin_bundle(
     files_created: list[str] = []
 
     # .claude-plugin/plugin.json — TAP-958: extended with userConfig, author,
-    # repository, license, homepage, and dependencies so Claude Code 2.1+ can
-    # prompt the user at enable time and resolve cross-plugin dependencies.
+    # repository, license, homepage so Claude Code 2.1+ can prompt the user
+    # at enable time.
     #
     # Shape confirmed against the installed `claude plugin validate` (2.1.258)
     # this run, per /cc-expert:cc-lookup on doc 13-plugins.md (tier
     # `corrected`, last_verified 2026-08-31) — the doc's own `userConfig`
     # example (`type: "select"`, `label`, `options`) does NOT validate against
     # the installed CLI, so the validator (ground truth), not the doc, won:
-    # `author` must be an object, `dependencies` an array of `"name@range"`
-    # strings, and each `userConfig` entry needs `title` (not `label`) and
-    # `type` in {string, number, boolean, directory, file} with no
-    # enum/options/select — this schema has no enumerated-choice mechanism at
-    # all, so the allowed values are named in `description` instead.
+    # `author` must be an object, and each `userConfig` entry needs `title`
+    # (not `label`) and `type` in {string, number, boolean, directory, file}
+    # with no enum/options/select — this schema has no enumerated-choice
+    # mechanism at all, so the allowed values are named in `description`
+    # instead.
+    #
+    # TAP-7758 — no `dependencies` key here (Decision A). It used to be
+    # `["docs-mcp@^{version}"]`, sourced from a since-retracted comment that
+    # called `@` "a semver-compatible range". It is not: the CLI parses the
+    # `@` suffix as a marketplace name, so installing the old bundle failed
+    # every time with `Dependency "docs-mcp@tapps-mcp" is not installed`, and
+    # nothing shipped in this bundle calls `mcp__docs-mcp__` at runtime
+    # (every `docs_generate_*`/`docs_validate_*` reference here is
+    # namespaced under a different server). The `dependencies` key is
+    # optional — omitting it is silent even under `claude plugin validate
+    # --strict` — and doc 13-plugins.md (tier `corrected`) does not document
+    # this field at all, so this is sourced from the installed CLI's
+    # observed behavior, not the KB.
     meta_dir = output_dir / ".claude-plugin"
     meta_dir.mkdir(parents=True, exist_ok=True)
     plugin_data: dict[str, Any] = {
@@ -442,11 +455,6 @@ def generate_claude_plugin_bundle(
                 ),
             },
         },
-        "dependencies": [
-            # Semver-compatible range. docs-mcp tracks tapps-mcp version; keep
-            # the floor at the matching release and allow same-major bumps.
-            f"docs-mcp@^{version}",
-        ],
     }
     (meta_dir / "plugin.json").write_text(
         json.dumps(plugin_data, indent=2) + "\n", encoding="utf-8"
