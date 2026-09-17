@@ -18,6 +18,7 @@ on:
       - "scripts/validate-cursor-plugin.sh"
       - "scripts/test-validate-claude-plugin-deps.sh"
       - "scripts/test-validate-claude-plugin-prefix-resolvability.sh"
+      - "scripts/test-validate-claude-plugin-hook-wiring.sh"
       - "packages/tapps-mcp/src/tapps_mcp/cli_ops_build.py"
       - "packages/tapps-mcp/src/tapps_mcp/pipeline/platform_bundles.py"
       - ".github/workflows/plugin-validation.yml"
@@ -29,6 +30,7 @@ on:
       - "scripts/validate-cursor-plugin.sh"
       - "scripts/test-validate-claude-plugin-deps.sh"
       - "scripts/test-validate-claude-plugin-prefix-resolvability.sh"
+      - "scripts/test-validate-claude-plugin-hook-wiring.sh"
       - "packages/tapps-mcp/src/tapps_mcp/cli_ops_build.py"
       - "packages/tapps-mcp/src/tapps_mcp/pipeline/platform_bundles.py"
       - ".github/workflows/plugin-validation.yml"
@@ -68,6 +70,13 @@ jobs:
       # remembered to. A control nothing invokes is not a control.
       - name: Regression-test the mcp__* prefix-resolvability check itself (TAP-7753)
         run: bash scripts/test-validate-claude-plugin-prefix-resolvability.sh
+
+      # TAP-7754: section (c) proved only that a named script EXISTS. Two
+      # defects lived on the other two sides of that -- a shipped script no
+      # event referenced, and a command that named a real file but did not
+      # resolve at runtime -- and both shipped while this workflow was green.
+      - name: Regression-test the hook-wiring checks themselves (TAP-7754)
+        run: bash scripts/test-validate-claude-plugin-hook-wiring.sh
 
   validate-cursor-plugin:
     name: Validate Cursor plugin bundle

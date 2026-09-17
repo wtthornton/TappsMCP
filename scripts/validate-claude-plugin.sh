@@ -91,13 +91,49 @@ echo "Schema (claude plugin validate --strict): OK"
 # included, so every hook 404'd at invocation while all schema checks
 # passed. Parse hooks.json, extract every script path it references, and
 # assert each one exists in the bundle.
+#
+# TAP-7754 adds the two directions this originally missed. All three are
+# derived from ONE parse of hooks.json, so they cannot disagree about what
+# the file says:
+#
+#   MISSING      hooks.json names a script the bundle does not ship. The
+#                original check. A dangling reference.
+#
+#   UNREFERENCED the bundle ships a hook script no event references. The
+#                exact mirror, and invisible to the check above because
+#                nothing is dangling — the file is right there. The bundle
+#                shipped `tapps-pre-bash.sh`, the destructive-command
+#                guard, with no entry for it: present, plausible, and never
+#                invoked. A safety control that looks active and is not is
+#                worse than an absent one.
+#
+#   UNANCHORED   the command exists and is referenced, and still does not
+#                run. Commands were emitted as `hooks/tapps-session-end.sh`
+#                — relative to whatever directory the session started in,
+#                not to the plugin. Observed on a real install of this
+#                bundle on 2026-09-17:
+#
+#                  Hook SessionStart:startup error:
+#                    /bin/sh: 1: hooks/tapps-session-start.sh: not found
+#                  SessionEnd:other [...] completed with status 127
+#
+#                Every hook in the bundle was dead, while parts (a)-(c) all
+#                passed: the file it names IS present. Only the command
+#                fails to resolve. `${CLAUDE_PLUGIN_ROOT}` is the documented
+#                placeholder for the plugin's install directory.
+#
+# An anchor this check does not recognise is REFUSED, not waved through —
+# unknown refuses (.claude/rules/measurement-validity.md upstream in
+# nlt-orchestrator). Adding one is a deliberate edit here, not a silent pass.
 HOOKS_JSON="$PLUGIN_DIR/hooks/hooks.json"
-MISSING_HOOKS="$(python3 -c "
+HOOK_FINDINGS="$(python3 -c "
 import json
+import os
 import shlex
 import sys
 
 plugin_dir, hooks_json = sys.argv[1], sys.argv[2]
+PLUGIN_ROOT_PREFIX = '\${CLAUDE_PLUGIN_ROOT}/'
 
 with open(hooks_json, encoding='utf-8') as f:
     data = json.load(f)
@@ -118,33 +154,69 @@ def walk(node):
 
 walk(data)
 
-missing = []
+findings = []
+referenced = set()
+
 for cmd in commands:
     tokens = shlex.split(cmd)
     if not tokens:
         continue
     path = tokens[0]
-    if path.startswith('\${CLAUDE_PLUGIN_ROOT}/'):
-        path = path[len('\${CLAUDE_PLUGIN_ROOT}/'):]
-    if path.startswith('/') or '\${' in path:
-        # Absolute path or an unresolved variable we don't know how to
-        # anchor — not this bundle's referential-integrity concern.
-        continue
-    import os
-    resolved = os.path.join(plugin_dir, path)
-    if not os.path.isfile(resolved):
-        missing.append(resolved)
 
-for m in missing:
-    print(m)
+    if path.startswith(PLUGIN_ROOT_PREFIX):
+        rel = path[len(PLUGIN_ROOT_PREFIX):]
+    elif path.startswith('/'):
+        # An absolute path resolves wherever it points; nothing about this
+        # bundle can make it right or wrong.
+        continue
+    else:
+        findings.append(
+            'UNANCHORED\t%s\t%s' % (cmd, 'not anchored at \${CLAUDE_PLUGIN_ROOT}')
+        )
+        # Fall through rather than skipping: this entry still NAMES a script,
+        # so it must count toward 'referenced'. Skipping here would make every
+        # script in an unanchored bundle look unreferenced too, and the
+        # UNREFERENCED count would silently become a count of something else.
+        rel = path
+
+    referenced.add(os.path.normpath(rel))
+    if not os.path.isfile(os.path.join(plugin_dir, rel)):
+        findings.append('MISSING\t%s\t%s' % (cmd, os.path.join(plugin_dir, rel)))
+
+# Every file the bundle ships under hooks/, except the manifest itself.
+hooks_dir = os.path.join(plugin_dir, 'hooks')
+for entry in sorted(os.listdir(hooks_dir)) if os.path.isdir(hooks_dir) else []:
+    if entry == 'hooks.json' or not os.path.isfile(os.path.join(hooks_dir, entry)):
+        continue
+    if os.path.normpath(os.path.join('hooks', entry)) not in referenced:
+        findings.append(
+            'UNREFERENCED\t%s\t%s' % (entry, os.path.join(hooks_dir, entry))
+        )
+
+for line in findings:
+    print(line)
 " "$PLUGIN_DIR" "$HOOKS_JSON")"
 
-if [[ -n "$MISSING_HOOKS" ]]; then
-  echo "ERROR: hooks.json references scripts that do not exist in the bundle:" >&2
-  while IFS= read -r missing; do
-    echo "  - $missing" >&2
-  done <<<"$MISSING_HOOKS"
-  FAIL=1
+report_hook_findings() {
+  local kind="$1" header="$2" found=0
+  while IFS=$'\t' read -r line_kind subject detail; do
+    [[ "$line_kind" == "$kind" ]] || continue
+    if [[ $found -eq 0 ]]; then
+      echo "ERROR: $header" >&2
+      found=1
+    fi
+    echo "  - $subject ($detail)" >&2
+  done <<<"$HOOK_FINDINGS"
+  [[ $found -eq 0 ]] || FAIL=1
+}
+
+if [[ -n "$HOOK_FINDINGS" ]]; then
+  report_hook_findings MISSING \
+    "hooks.json references scripts that do not exist in the bundle:"
+  report_hook_findings UNREFERENCED \
+    "the bundle ships hook scripts no hooks.json event references (they are inert on install):"
+  report_hook_findings UNANCHORED \
+    "hooks.json commands are not anchored at \${CLAUDE_PLUGIN_ROOT} (they will not resolve at runtime):"
 fi
 
 if [[ $FAIL -ne 0 ]]; then

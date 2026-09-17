@@ -28,6 +28,22 @@ claude plugin install tapps-mcp
 - **Hooks**: Session start, post-edit reminders, stop gate, and more —
   see `hooks/hooks.json`
 
+### Hooks not in this bundle
+
+Two hooks `tapps-mcp init` / `upgrade` can install are deliberately **absent**
+here, not merely unconfigured:
+
+- `tapps-pre-bash.sh` — the destructive-command guard (`rm -rf`, `format c:`,
+  fork bombs)
+- `tapps-memory-auto-capture.sh` — writes durable facts from the transcript
+  to the memory brain at session stop
+
+Both are opt-in per project, gated behind a `.tapps-mcp.yaml` flag a plugin
+bundle has no equivalent of. Earlier versions shipped them with no `hooks.json`
+entry: present, plausible, never invoked. A safety guard that looks active and
+is not is worse than an absent one, so the bundle ships only the hooks it
+wires. To get either, install with `tapps-mcp init` and set the flag.
+
 ## Usage
 
 Once installed **and loaded**, the TappsMCP tools are available in every

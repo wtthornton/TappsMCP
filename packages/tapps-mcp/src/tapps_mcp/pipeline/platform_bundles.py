@@ -22,6 +22,10 @@ from tapps_mcp.pipeline.agent_contract import (
     PYTHON_QUALITY_SCORING_SECTION,
     VALIDATION_QUICK_VS_BATCH,
 )
+from tapps_mcp.pipeline.claude_plugin_hook_wiring import (
+    EXCLUDED_HOOKS_README_SECTION,
+    write_plugin_hooks,
+)
 from tapps_mcp.pipeline.claude_plugin_skill_exclusions import (
     CLAUDE_PLUGIN_EXCLUDED_SKILLS,  # re-exported; existing importers reach it here
     annotate_excluded_skill_refs,
@@ -304,6 +308,8 @@ claude plugin install tapps-mcp
   `tapps-mcp init`/`upgrade` but not in this plugin bundle — see below.)
 - **Hooks**: Session start, post-edit reminders, stop gate, and more —
   see `hooks/hooks.json`
+
+{EXCLUDED_HOOKS_README_SECTION}
 
 ## Usage
 
@@ -614,51 +620,16 @@ def generate_claude_plugin_bundle(
         )
         files_created.append(f"skills/{skill_name}/SKILL.md")
 
-    # hooks/
-    hooks_dir = output_dir / "hooks"
-    hooks_dir.mkdir(parents=True, exist_ok=True)
-    hooks_json_data: dict[str, Any] = {}
-    # TAP-955: propagate `if:` matchers on tool-event entries so Claude Code
-    # can skip the hook when the tool call doesn't match. Non-tool events
-    # (SessionStart, Stop, SessionEnd, etc.) silently ignore `if:`, but we
-    # only copy it forward to keep the emitted manifest clean.
-    _tool_events = frozenset(
-        {
-            "PreToolUse",
-            "PostToolUse",
-            "PostToolUseFailure",
-            "PermissionRequest",
-            "PermissionDenied",
-        }
+    # hooks/ — see claude_plugin_hook_wiring for the two defects this
+    # emission exists to prevent (an unwired script, an unanchored command).
+    files_created.extend(
+        write_plugin_hooks(
+            output_dir / "hooks",
+            CLAUDE_HOOKS_CONFIG,
+            CLAUDE_HOOK_SCRIPTS,
+            _rewrite_plugin_tool_prefixes,
+        )
     )
-    for event, entries in CLAUDE_HOOKS_CONFIG.items():
-        plugin_entries = []
-        for entry in entries:
-            pe: dict[str, Any] = {}
-            if "matcher" in entry:
-                pe["matcher"] = _rewrite_plugin_tool_prefixes(entry["matcher"])
-            if event in _tool_events and "if" in entry:
-                pe["if"] = _rewrite_plugin_tool_prefixes(entry["if"])
-            pe["hooks"] = [
-                {
-                    "type": h["type"],
-                    "command": h["command"].replace(".claude/hooks/", "hooks/"),
-                }
-                for h in entry["hooks"]
-            ]
-            plugin_entries.append(pe)
-        hooks_json_data[event] = plugin_entries
-    (hooks_dir / "hooks.json").write_text(
-        json.dumps({"hooks": hooks_json_data}, indent=2) + "\n",
-        encoding="utf-8",
-    )
-    files_created.append("hooks/hooks.json")
-
-    for name, content in CLAUDE_HOOK_SCRIPTS.items():
-        script_path = hooks_dir / name
-        script_path.write_text(_rewrite_plugin_tool_prefixes(content), encoding="utf-8")
-        script_path.chmod(script_path.stat().st_mode | stat.S_IXUSR | stat.S_IXGRP)
-        files_created.append(f"hooks/{name}")
 
     # bin/ — TAP-959: shim scripts auto-PATHed by Claude Code when the plugin
     # is enabled. Each shim prefers a pip/uv-installed `tapps-mcp` if present,
@@ -709,7 +680,12 @@ def generate_claude_plugin_bundle(
     files_created.append(".mcp.json")
 
     # README.md
-    (output_dir / "README.md").write_text(_CLAUDE_PLUGIN_README, encoding="utf-8")
+    (output_dir / "README.md").write_text(
+        _CLAUDE_PLUGIN_README.replace(
+            "{EXCLUDED_HOOKS_README_SECTION}", EXCLUDED_HOOKS_README_SECTION
+        ),
+        encoding="utf-8",
+    )
     files_created.append("README.md")
 
     return {"files_created": files_created}
