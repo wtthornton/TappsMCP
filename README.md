@@ -336,16 +336,23 @@ add it from a local checkout (or a Git URL pointed at that subdirectory) as
 shown above. See [`plugin/claude/README.md`](plugin/claude/README.md) for
 what the bundle includes.
 
-**Known issue (verified 2026-09-16): the plugin does not currently load.**
-Both commands above exit `0`, but `claude plugin list` then reports
-`tapps-mcp@tapps-mcp` as `✘ failed to load` — `Error: Dependency
-"docs-mcp@tapps-mcp" is not installed`. `plugin/claude/.claude-plugin/plugin.json`
-declares a dependency on `docs-mcp`, but `plugin/claude/.claude-plugin/marketplace.json`
-lists only the `tapps-mcp` plugin, so even the CLI's own suggested fix is
-refused: `claude plugin install docs-mcp@tapps-mcp` → `Plugin "docs-mcp" not
-found in marketplace "tapps-mcp"`. This is a defect in the merged plugin
-manifests, tracked separately from this doc fix — until it ships, use
-[`tapps-mcp init`](#quick-start) for a working Claude Code setup.
+**Fixed (2026-09-16): the plugin now loads.** It used to fail — both commands
+above exited `0`, but `claude plugin list` then reported `tapps-mcp@tapps-mcp`
+as `✘ failed to load` because `plugin/claude/.claude-plugin/plugin.json`
+declared a dependency on `docs-mcp` that `plugin/claude/.claude-plugin/marketplace.json`
+never listed. That dependency has been removed (#421); a clean install now
+shows `Status: ✔ enabled`.
+
+**A second, separate issue is still open: the plugin's tools are not yet
+reachable.** This bundle's `.mcp.json` registers one server named `tapps-mcp`,
+and a plugin-registered server's tools surface under
+`mcp__plugin_tapps-mcp_tapps-mcp__*`, not a bare `mcp__tapps-mcp__*` —
+confirmed by installing a throwaway plugin and watching a tool execute. None
+of the bundle's shipped skill/agent/hook references use that prefix; see
+[`plugin/claude/README.md`](plugin/claude/README.md#usage) for the exact
+count and the command that produced it. Rewriting those prefixes is tracked
+as a separate fix — until it ships, use [`tapps-mcp init`](#quick-start) for
+a working Claude Code setup.
 
 ### Cursor
 
