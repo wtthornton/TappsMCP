@@ -72,3 +72,16 @@ Three sequential `list_issues({state: "backlog"})`, `({state: "unstarted"})`, `(
 - `query` — full-text search across title and description
 - `includeArchived` — default `true`; pass `false` to skip archived
 - `limit` — max 250
+
+## Degrades without
+
+- `mcp__plugin_linear_linear__` (`list_issues`, `get_issue`) — belongs to the
+  separate, independently installed Linear plugin (TAP-7771: this bundle
+  cannot safely declare it a dependency without risking the same
+  unsatisfiable-dependency failure TAP-7758 fixed). Without that plugin
+  installed and loaded, steps 3-4 of the core flow cannot fetch or refresh
+  issue data — the cache-first snapshot mechanics (`tapps_linear_snapshot_get`
+  / `_put`, both bundled) still work, but only ever serve whatever was
+  cached before the plugin went missing. This skill carries zero
+  `docs-mcp` references, so it is otherwise fully usable in this bundle
+  whenever the Linear plugin is co-installed.

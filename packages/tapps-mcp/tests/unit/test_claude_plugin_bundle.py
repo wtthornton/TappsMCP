@@ -12,6 +12,8 @@ import re
 import subprocess
 from pathlib import Path
 
+import pytest
+
 from tapps_mcp.pipeline.platform_generators import (
     generate_claude_plugin_bundle,
 )
@@ -385,3 +387,74 @@ class TestCommittedBundleMatchesFreshBuild:
             f"newly hand-authored file this test needs to know about): "
             f"{sorted(extra_in_git)}"
         )
+
+
+class TestClaudePluginSkillFilter:
+    """TAP-7753 round 2: `linear-issue` is excluded from the Claude plugin
+    bundle at the bundle-WRITER level (every write it performs is gated
+    behind a docs-mcp tool this bundle does not ship) — never by deleting
+    the key from CLAUDE_SKILLS, which stays the full registry every other
+    consumer (`tapps-mcp init`/`upgrade`) relies on."""
+
+    def test_registry_untouched_but_bundle_filtered(self, tmp_path):
+        from tapps_mcp.pipeline.platform_skills import CLAUDE_SKILLS
+
+        result = generate_claude_plugin_bundle(tmp_path)
+        shipped = [p.name for p in (tmp_path / "skills").iterdir() if p.is_dir()]
+        assert (
+            "linear-issue" in CLAUDE_SKILLS
+            and len(CLAUDE_SKILLS) == 26
+            and "linear-issue" not in shipped
+            and not any("linear-issue" in f for f in result["files_created"])
+            and len(shipped) == len(CLAUDE_SKILLS) - 1 == 25
+        )
+
+    def test_bundle_keeps_gracefully_degrading_linear_skills(self, tmp_path):
+        """The three skills the operator kept must still ship — the filter
+        targets exactly one skill, not the whole Linear family."""
+        generate_claude_plugin_bundle(tmp_path)
+        kept = ("linear-read", "linear-release-update", "tapps-continue-session")
+        assert all((tmp_path / "skills" / name / "SKILL.md").exists() for name in kept), kept
+
+
+class TestClaudePluginLinearReleaseUpdateDeadGrants:
+    """TAP-7753 round 2: `docs_generate_release_update` /
+    `docs_validate_release_update` were declared but never invoked in the
+    body (which calls `docs_release_gate` instead) — removed as dead grants;
+    `docs_release_gate` stays."""
+
+    def test_dead_grants_removed_but_used_grant_kept(self, tmp_path):
+        generate_claude_plugin_bundle(tmp_path)
+        content = (tmp_path / "skills" / "linear-release-update" / "SKILL.md").read_text()
+        allowed_tools_line = next(
+            line for line in content.splitlines() if line.startswith("allowed-tools:")
+        )
+        assert (
+            "docs_generate_release_update" not in allowed_tools_line
+            and "docs_validate_release_update" not in allowed_tools_line
+            and "docs_release_gate" in allowed_tools_line
+        )
+
+
+class TestClaudePluginDegradesWithoutSections:
+    """TAP-7753 round 2: each skill shipping an unresolved cross-plugin /
+    capability-gap reference documents it, in the SAME file, under a
+    `## Degrades without` heading — the shape validate-claude-plugin.sh's
+    amended part (e) now requires."""
+
+    @pytest.mark.parametrize(
+        "skill_name,expected_refs",
+        [
+            ("linear-read", ("mcp__plugin_linear_linear__",)),
+            (
+                "linear-release-update",
+                ("mcp__nlt-release-ship__docs_release_gate", "mcp__plugin_linear_linear__"),
+            ),
+            ("tapps-continue-session", ("mcp__plugin_linear_linear__",)),
+        ],
+    )
+    def test_documents_its_own_capability_gap(self, tmp_path, skill_name, expected_refs):
+        generate_claude_plugin_bundle(tmp_path)
+        content = (tmp_path / "skills" / skill_name / "SKILL.md").read_text()
+        parts = content.split("## Degrades without", 1)
+        assert len(parts) == 2 and all(ref in parts[1] for ref in expected_refs)

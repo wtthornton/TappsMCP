@@ -4,6 +4,31 @@
 
 ### Fixed
 
+- **`linear-issue` excluded from this bundle; three sibling skills documented
+  as gracefully degrading instead (TAP-7753 round 2).** The `[3.12.90]`
+  entry below said `mcp__nlt-linear-issues__docs_*` gaps lived "in
+  `linear-issue`, `linear-read`" — that was wrong for `linear-read`, which
+  carries **zero** `docs-mcp` references (verified by scanning its shipped
+  `SKILL.md`); only `linear-issue` ever cited `docs-mcp` tools. `linear-issue`
+  is unusable in this bundle regardless — every write it performs (lint,
+  validate, save) is gated behind a `docs-mcp` tool with no fallback — so it
+  is now filtered out of the Claude plugin bundle at build time (a
+  bundle-writer filter, not a removal from the underlying skill registry;
+  it still ships in full via `tapps-mcp init`/`upgrade`, where `docs-mcp`
+  genuinely exists). `linear-read`, `linear-release-update`, and
+  `tapps-continue-session` remain shipped: each now carries its own
+  `## Degrades without` section naming exactly which `mcp__plugin_linear_linear__`
+  (or, for `linear-release-update`, `mcp__nlt-release-ship__docs_release_gate`)
+  reference it cannot resolve in this bundle and what still works without it.
+  `scripts/validate-claude-plugin.sh`'s prefix-resolvability check now
+  accepts such a reference only when that same file documents it — an
+  undocumented cross-plugin reference anywhere else still fails the check.
+- **Two dead tool grants removed from `linear-release-update`.**
+  `mcp__nlt-release-ship__docs_generate_release_update` and
+  `mcp__nlt-release-ship__docs_validate_release_update` were declared in
+  `allowed-tools` but never invoked anywhere in the skill body (the body
+  calls `docs_release_gate`, not either of these) — dead grants, removed.
+
 - **Tool references now resolve (TAP-7753).** A plugin-registered MCP
   server's tools are namespaced `mcp__plugin_<pluginName>_<serverKey>__`,
   never a bare `mcp__<serverKey>__` — confirmed empirically by installing
@@ -20,7 +45,12 @@
   declared MCP server to resolve against" was **only half true**: a
   registered server is necessary but was not sufficient — the reference
   prefix itself was still wrong until this fix.
-- **Two known gaps remain, deliberately not silently patched over:**
+- **Two known gaps remain, deliberately not silently patched over.**
+  *(Superseded by the TAP-7753 round 2 entry above — the `linear-issue`,
+  `linear-read` attribution below was wrong for `linear-read`, which has
+  zero `docs-mcp` references; `linear-issue` is no longer shipped in this
+  bundle at all. Left here for the historical record of what round 1 knew
+  at the time.)*
   `mcp__nlt-linear-issues__docs_*` and `mcp__nlt-release-ship__docs_*`
   references (in `linear-issue`, `linear-read`, `linear-release-update`)
   name tools that live only on the separate `docs-mcp` server, which this

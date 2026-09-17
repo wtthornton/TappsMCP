@@ -18,18 +18,26 @@
 #      pre-plugin mcp__tapps-mcp__ prefix must ALSO be rejected — a check
 #      that accepts that shape is the exact non-discriminating check that
 #      would have certified this bundle's original defect.
-#   3. Positive control: a bundle whose only mcp__* references are the
+#   3. Undocumented cross-plugin control (TAP-7753 round 2, run BEFORE the
+#      documented-degrade positive below): a scratch copy referencing
+#      mcp__plugin_someother_thing__ with NO "## Degrades without" section
+#      naming it must still be rejected. This is the control that proves
+#      round 2's amendment (a documented cross-plugin reference is accepted)
+#      did NOT become a blanket exemption for anything containing
+#      mcp__plugin_ — only a reference the SAME file documents is exempt.
+#   4. Documented-degrade control (TAP-7753 round 2): a scratch copy that
+#      references mcp__plugin_someother_thing__ AND documents it under its
+#      own "## Degrades without" heading must PASS — this is the shape
+#      linear-read / linear-release-update / tapps-continue-session ship
+#      today.
+#   5. Positive control: a bundle whose only mcp__* references are the
 #      plugin-resolvable prefix (or a declared dependency) must PASS.
-#
-# NOT covered here: whether the real, currently-shipped `plugin/claude`
-# bundle passes this check outright. It does not, by design of this lane's
-# own findings — `mcp__nlt-linear-issues__docs_*` /
-# `mcp__nlt-release-ship__docs_*` name tools that live only on the separate,
-# undeclared `docs-mcp` server, and `mcp__plugin_linear_linear__` belongs to
-# a different plugin this bundle cannot safely depend on (TAP-7771). Baking
-# a "must pass" assertion about the real bundle into this file would assert
-# something not yet true; that gap is reported in the lane's evidence
-# instead of hidden behind a loosened test.
+#   6. The real, currently-shipped plugin/claude bundle must now PASS
+#      outright (TAP-7753 round 2) — `linear-issue` (whose docs-mcp gap had
+#      no real fallback) is filtered out of the bundle entirely, and the
+#      three remaining skills with a genuine capability gap
+#      (linear-read, linear-release-update, tapps-continue-session) each
+#      document it under their own "## Degrades without" heading.
 #
 # Usage: bash scripts/test-validate-claude-plugin-prefix-resolvability.sh
 set -euo pipefail
@@ -122,6 +130,43 @@ Call `mcp__tapps-mcp__tapps_quick_check`.
 EOF
 check "anti-vacuity control: bare mcp__tapps-mcp__ prefix rejected" fail "$vacuity_dir"
 
+# --- Undocumented cross-plugin control (run BEFORE the documented-degrade
+# positive below): a reference to a DIFFERENT plugin's namespace with no
+# "## Degrades without" section anywhere in the file must still be rejected.
+# This is the control that proves round 2's amendment did not become a
+# blanket exemption for anything containing mcp__plugin_.
+undoc_dir="$(minimal_fixture undoc-cross-plugin)"
+cat >"$undoc_dir/skills/probe/SKILL.md" <<'EOF'
+---
+name: probe
+description: undocumented cross-plugin control
+allowed-tools: mcp__plugin_someother_thing__do_stuff
+---
+Call `mcp__plugin_someother_thing__do_stuff`. No degrade documentation below.
+EOF
+check "undocumented cross-plugin reference rejected" fail "$undoc_dir"
+
+# --- Documented-degrade control (TAP-7753 round 2): the SAME reference as
+# above, but the file itself documents it under "## Degrades without" —
+# must PASS. This is the shape linear-read / linear-release-update /
+# tapps-continue-session ship today.
+doc_dir="$(minimal_fixture doc-cross-plugin)"
+cat >"$doc_dir/skills/probe/SKILL.md" <<'EOF'
+---
+name: probe
+description: documented cross-plugin control
+allowed-tools: mcp__plugin_someother_thing__do_stuff
+---
+Call `mcp__plugin_someother_thing__do_stuff`.
+
+## Degrades without
+
+- `mcp__plugin_someother_thing__` — belongs to a separate plugin this
+  bundle does not register. Without it, this probe skill's one step is
+  unavailable, but nothing else about the skill is affected.
+EOF
+check "documented cross-plugin reference accepted" pass "$doc_dir"
+
 # --- Positive control: only the plugin-resolvable prefix (which is what
 # TAP-7753's rewrite in platform_bundles.py now produces) must PASS.
 pos_dir="$(minimal_fixture pos-resolvable)"
@@ -134,6 +179,10 @@ allowed-tools: mcp__plugin_tapps-mcp_tapps-mcp__tapps_quick_check
 Call `mcp__plugin_tapps-mcp_tapps-mcp__tapps_quick_check`.
 EOF
 check "positive control: plugin-resolvable prefix" pass "$pos_dir"
+
+# --- Real bundle control (TAP-7753 round 2): the currently-shipped
+# plugin/claude bundle must now pass outright.
+check "real bundle: plugin/claude passes after round 2" pass "$SOURCE_BUNDLE"
 
 if [[ $FAILURES -gt 0 ]]; then
   echo "$FAILURES check(s) FAILED" >&2

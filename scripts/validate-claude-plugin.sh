@@ -264,16 +264,42 @@ echo "Dependency resolvability: OK"
 # This check derives the ONE resolvable prefix per registered `.mcp.json`
 # server from plugin.json's own `name` + that server's key (never hardcoded),
 # scans every `mcp__*` reference under skills/, agents/, and hooks/, and
-# requires each referenced prefix to be EITHER that resolvable prefix, OR
-# traceable to a plugin named in `dependencies` (the two outs VAL-02 allows
-# besides an outright strip — an absent reference trivially satisfies the
-# third out by not appearing here at all). A prefix satisfying neither is
-# printed by name — including a namespace this bundle used to ship under
-# (e.g. `mcp__nlt-build__`) or a bare pre-plugin `mcp__tapps-mcp__`, which is
-# NOT the plugin-resolvable form and must be rejected, not accepted, for a
-# plugin-registered server.
+# requires each referenced prefix to be ONE OF:
+#   1. that resolvable prefix, or
+#   2. traceable to a plugin named in `dependencies`, or
+#   3. absent — a reference that was never made trivially satisfies this by
+#      not appearing here at all, or
+#   4. (TAP-7753 round 2) documented, in the SAME file, as a capability the
+#      skill degrades gracefully without — a ``## Degrades without`` section
+#      that names the exact prefix (backticked or not).
+# A prefix satisfying none of these is printed by name — including a
+# namespace this bundle used to ship under (e.g. `mcp__nlt-build__`) or a
+# bare pre-plugin `mcp__tapps-mcp__`, which is NOT the plugin-resolvable form
+# and must be rejected, not accepted, for a plugin-registered server.
+#
+# Out 4 exists because round 1 proved 36 references across 4 skills name
+# tools genuinely outside this bundle's reach: a separate, independently
+# installed plugin (`mcp__plugin_linear_linear__`, TAP-7771 — this bundle
+# cannot safely declare it a dependency) or a server this bundle does not
+# ship (`mcp__nlt-release-ship__docs_*`, TAP-7758). Three skills
+# (linear-read, linear-release-update, tapps-continue-session) stay genuinely
+# useful without that capability; a fourth (linear-issue) does not — every
+# write it performs is gated behind a docs-mcp tool with no fallback, so it
+# is excluded from this bundle entirely (see the skill-filter in
+# `generate_claude_plugin_bundle`) rather than "documented" here, because
+# there is no true degraded mode to document.
+#
+# Out 4 is scoped per (file, exact prefix) on purpose: a file's own
+# ``## Degrades without`` section must name the SAME prefix that was
+# actually found unresolved in that SAME file. Documenting one prefix in one
+# skill never excuses a different, undocumented prefix anywhere else — this
+# is NOT a blanket exemption for anything containing `mcp__plugin_`.
+# scripts/test-validate-claude-plugin-prefix-resolvability.sh's "undocumented
+# cross-plugin reference" control proves an unrelated, undocumented
+# `mcp__plugin_*` reference still fails.
 if ! PREFIX_CHECK_OUTPUT="$(python3 -c "
 import json
+import re
 import sys
 from pathlib import Path
 
@@ -293,10 +319,12 @@ for dep in plugin_data.get('dependencies') or []:
     name = dep.split('@', 1)[0] if isinstance(dep, str) else str(dep)
     declared.add(name)
 
-import re
-
 ref_re = re.compile(r'mcp__[A-Za-z0-9_-]+__')
+degrade_header_re = re.compile(r'^##\s+Degrades without\b.*', re.MULTILINE)
+next_h2_re = re.compile(r'^##\s+\S', re.MULTILINE)
+
 found: dict[str, set[str]] = {}
+documented: dict[str, set[str]] = {}
 for sub in ('skills', 'agents', 'hooks'):
     base = plugin_dir / sub
     if not base.is_dir():
@@ -308,26 +336,56 @@ for sub in ('skills', 'agents', 'hooks'):
             text = path.read_text(encoding='utf-8')
         except (UnicodeDecodeError, OSError):
             continue
+        rel = str(path.relative_to(plugin_dir))
         for m in ref_re.finditer(text):
-            found.setdefault(m.group(0), set()).add(str(path.relative_to(plugin_dir)))
+            found.setdefault(m.group(0), set()).add(rel)
+        doc_prefixes: set[str] = set()
+        for header in degrade_header_re.finditer(text):
+            section_start = header.end()
+            next_h2 = next_h2_re.search(text, section_start)
+            section_end = next_h2.start() if next_h2 else len(text)
+            section = text[section_start:section_end]
+            # Reuse the same prefix pattern used to find live references —
+            # a mention inside the Degrades-without section (backticked or
+            # not) counts as documentation of that exact prefix.
+            doc_prefixes.update(ref_re.findall(section))
+        if doc_prefixes:
+            documented[rel] = doc_prefixes
 
 def _declared_covers(prefix: str) -> bool:
     tokens = {t for t in prefix.split('_') if t}
     return bool(declared & tokens)
 
-unresolved = {
-    prefix: sorted(files)
-    for prefix, files in found.items()
-    if prefix not in resolvable and not _declared_covers(prefix)
-}
+def _documented_covers(prefix: str, files: set[str]) -> set[str]:
+    # Files (among those actually referencing *prefix*) whose OWN
+    # Degrades-without section names that SAME prefix. A different file
+    # documenting the same string never covers this one.
+    return {f for f in files if prefix in documented.get(f, set())}
+
+unresolved: dict[str, list[str]] = {}
+degraded: dict[str, list[str]] = {}
+for prefix, files in found.items():
+    if prefix in resolvable or _declared_covers(prefix):
+        continue
+    covered = _documented_covers(prefix, files)
+    remaining = files - covered
+    if covered:
+        degraded[prefix] = sorted(covered)
+    if remaining:
+        unresolved[prefix] = sorted(remaining)
 
 print('Registered (resolvable) prefixes: ' + repr(sorted(resolvable)))
 print('Referenced prefixes: ' + repr(sorted(found)))
 if declared:
     print('Declared dependencies: ' + repr(sorted(declared)))
+if degraded:
+    print('Documented graceful-degradation references (accepted):')
+    for prefix, files in sorted(degraded.items()):
+        shown = ', '.join(files)
+        print(f'  {prefix}  (documented in {shown})')
 
 if unresolved:
-    print('UNRESOLVED mcp__* prefixes (neither registered nor declared):')
+    print('UNRESOLVED mcp__* prefixes (neither registered, declared, nor documented as a graceful degradation in the same file):')
     for prefix, files in sorted(unresolved.items()):
         shown = ', '.join(files[:3]) + ('...' if len(files) > 3 else '')
         print(f'  {prefix}  (in {shown})')

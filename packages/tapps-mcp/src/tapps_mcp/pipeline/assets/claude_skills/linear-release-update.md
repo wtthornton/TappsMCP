@@ -2,8 +2,8 @@
 name: linear-release-update
 user-invocable: true
 model: {{model:prose}}
-description: Post a structured Linear project update document on a version release. Orchestrates tapps_release_update → docs_validate_release_update → save_document → cache invalidation. Use when posting a release announcement to Linear after shipping a new version.
-allowed-tools: mcp__nlt-release-ship__tapps_release_update mcp__nlt-release-ship__docs_generate_release_update mcp__nlt-release-ship__docs_validate_release_update mcp__nlt-release-ship__docs_release_gate mcp__plugin_linear_linear__save_document mcp__nlt-linear-issues__tapps_linear_snapshot_invalidate
+description: Post a structured Linear project update document on a version release. Orchestrates tapps_release_update → docs_release_gate → save_document → cache invalidation. Use when posting a release announcement to Linear after shipping a new version.
+allowed-tools: mcp__nlt-release-ship__tapps_release_update mcp__nlt-release-ship__docs_release_gate mcp__plugin_linear_linear__save_document mcp__nlt-linear-issues__tapps_linear_snapshot_invalidate
 argument-hint: "--version vX.Y.Z --prev-version vX.Y.W [--team <team>] [--project <project>] [--dry-run]"
 disable-model-invocation: true
 ---
@@ -39,3 +39,20 @@ Post a structured Linear project update document when a new version is released.
 - Never call `save_document` without a prior `agent_ready=true` from `tapps_release_update` (unless `dry_run=true`).
 - `document_title` must use the em-dash format from `data.document_title` — do not construct it manually.
 - Do not modify the body returned by the tool. Pass `data.body` verbatim.
+
+## Degrades without
+
+- `mcp__nlt-release-ship__docs_release_gate` — this tool lives only on the
+  separate `docs-mcp` server, which the Claude plugin bundle does not ship
+  or depend on (TAP-7758). Without it, step 1b cannot run, so the full
+  (non-dry-run) posting flow is unavailable in this bundle. The `--dry-run`
+  path (step 1) is unaffected — `tapps_release_update(dry_run=true)` still
+  returns a body preview using only bundled tools, so the skill remains
+  useful for previewing a release update even where `docs-mcp` is absent.
+- `mcp__plugin_linear_linear__save_document` — belongs to the separate,
+  independently installed Linear plugin (TAP-7771: this bundle cannot
+  safely declare it a dependency without risking the same
+  unsatisfiable-dependency failure TAP-7758 fixed). Without that plugin
+  installed and loaded, step 3 cannot post the document, but the
+  `tapps_release_update` → `docs_release_gate` preview/validation steps
+  still work on bundled tools alone.

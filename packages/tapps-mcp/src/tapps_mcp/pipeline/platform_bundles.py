@@ -295,8 +295,9 @@ claude plugin install tapps-mcp
   tools (scoring, security scanning, quality gates, docs lookup, and more)
 - **Agents** (5): tapps-reviewer, tapps-researcher, tapps-validator,
   tapps-review-fixer, tapps-frontend-reviewer
-- **Skills** (26): `/tapps-finish-task`, `/tapps-review-pipeline`,
-  `/linear-read`, and 23 more — see `skills/`
+- **Skills** (25): `/tapps-finish-task`, `/tapps-review-pipeline`,
+  `/linear-read`, and 22 more — see `skills/`. (`linear-issue` ships via
+  `tapps-mcp init`/`upgrade` but not in this plugin bundle — see below.)
 - **Hooks**: Session start, post-edit reminders, stop gate, and more —
   see `hooks/hooks.json`
 
@@ -307,7 +308,7 @@ session. Use `/tapps-finish-task` before declaring work complete,
 `/tapps-review-pipeline` for multi-file review, and direct MCP tools
 (`tapps_quick_check`, `tapps_validate_changed`) during edit loops.
 
-**Known issues, re-verified against this bundle on 2026-09-16:**
+**Known issues, re-verified against this bundle on 2026-09-17:**
 
 - **Fixed:** the plugin used to fail to load. `claude plugin install
   tapps-mcp` exited `0`, but `claude plugin list` then showed
@@ -327,26 +328,38 @@ session. Use `/tapps-finish-task` before declaring work complete,
   this bundle's own live tool list (`tapps-mcp serve`'s registered
   `ALL_TOOL_NAMES`) so a rewrite can never point at a tool the server
   does not actually expose.
-- **Still open — two gaps this fix deliberately did not paper over:**
-  1. `mcp__nlt-linear-issues__docs_*` (in `linear-issue`, `linear-read`)
-     and `mcp__nlt-release-ship__docs_*` (in `linear-release-update`) name
-     tools — `docs_generate_epic`, `docs_validate_linear_issue`,
-     `docs_release_gate`, and others — that live only on the separate
-     `docs-mcp` server. This bundle does not ship or depend on that server
-     (the dependency was removed in TAP-7758 for being unsatisfiable), so
-     no prefix rewrite can make these resolve; they are a real capability
-     gap, not a namespace bug.
-  2. `mcp__plugin_linear_linear__*` (in `linear-issue`, `linear-read`,
-     `linear-release-update`) belongs to a separate, independently
-     installed Linear plugin this bundle does not register. Declaring it
-     as a `plugin.json` dependency would recreate the exact
-     unsatisfiable-dependency failure fixed above the moment an operator
-     hasn't also added that plugin's marketplace — and is rejected outright
-     by this bundle's own dependency-resolvability check (TAP-7771).
-     Stripping the references would gut those three skills' actual
-     purpose (they exist to wrap Linear's generator/validator flow).
-  `scripts/validate-claude-plugin.sh` names both gaps explicitly on every
-  run rather than passing around them.
+- **`linear-issue` excluded from this bundle (TAP-7753 round 2):** every
+  write it performs — epic/story creation, lint, triage — is gated behind
+  `docs_save_linear_issue`/`docs_validate_linear_issue`/`docs_generate_epic`
+  and eight more `mcp__nlt-linear-issues__docs_*` tools that live only on
+  the separate `docs-mcp` server (TAP-7758: this bundle does not ship or
+  depend on it). Unlike the three skills below, there is no reduced mode —
+  the whole skill is a single docs-mcp-centered chain — so it is filtered
+  out of this bundle at build time rather than shipped non-functional. It
+  remains fully available (docs-mcp genuinely present) via `tapps-mcp
+  init`/`upgrade`.
+- **Three skills degrade gracefully instead, and say so in their own
+  `SKILL.md` under a `## Degrades without` heading:**
+  - `linear-read` — carries **zero** docs-mcp references. Its only gap is
+    `mcp__plugin_linear_linear__` (`list_issues`/`get_issue`), which
+    belongs to a separate, independently installed Linear plugin this
+    bundle does not register (TAP-7771: declaring it a `plugin.json`
+    dependency would recreate the exact unsatisfiable-dependency failure
+    fixed above the moment an operator hasn't also added that plugin's
+    marketplace). Without it, only the cache-first snapshot mechanics still
+    work; live Linear reads do not.
+  - `linear-release-update` — the same `mcp__plugin_linear_linear__` gap
+    (`save_document`), plus `mcp__nlt-release-ship__docs_release_gate`
+    (docs-mcp, same TAP-7758 gap as `linear-issue`, but here the skill still
+    has a real fallback: `tapps_release_update(dry_run=true)` previews the
+    release body using only bundled tools).
+  - `tapps-continue-session` — the same `mcp__plugin_linear_linear__` gap
+    (`get_issue`, the `TAP-####` re-verification step). Without it, handoff
+    rehydration, sha/PR ground-truth checks, and the continue block itself
+    are all unaffected — only the live Linear-id lookup is skipped.
+  `scripts/validate-claude-plugin.sh` requires each of these references to
+  be documented in the SAME file it appears in — a doc note in one skill
+  never exempts an undocumented reference anywhere else.
 
 ## License
 
@@ -430,6 +443,28 @@ _LEGACY_TOOL_PREFIXES = (
 _LEGACY_TOOL_REF_RE = re.compile(
     "(" + "|".join(re.escape(p) for p in _LEGACY_TOOL_PREFIXES) + r")(\.\*|\*|[A-Za-z0-9_]+)?"
 )
+
+# TAP-7753 round 2 — a filter applied ONLY where the Claude plugin bundle is
+# assembled, never a removal from CLAUDE_SKILLS. CLAUDE_SKILLS stays the
+# single source of truth for `tapps-mcp init`/`upgrade`, where docs-mcp
+# genuinely exists and `linear-issue` is fully usable — a program invariant
+# elsewhere requires ``len(CLAUDE_SKILLS) >= 26`` by module import, and
+# removing the key would silently break that on a path this bundle doesn't
+# own. `linear-issue` is unusable in THIS bundle specifically: every write
+# it performs is gated behind `docs_save_linear_issue`/`docs_generate_epic`/
+# 7 more `mcp__nlt-linear-issues__docs_*` tools this bundle cannot ever
+# resolve (docs-mcp is a separate, undepended-on server — TAP-7758), with no
+# reduced-but-real mode to document, unlike `linear-read`/
+# `linear-release-update`/`tapps-continue-session` below.
+CLAUDE_PLUGIN_EXCLUDED_SKILLS = frozenset({"linear-issue"})
+
+
+def _claude_plugin_skills() -> dict[str, str]:
+    """CLAUDE_SKILLS minus CLAUDE_PLUGIN_EXCLUDED_SKILLS — the exact set the
+    Claude plugin bundle ships. Factored out of generate_claude_plugin_bundle
+    so the filter is a single, separately testable expression rather than an
+    extra branch threaded through an already-long function body."""
+    return {k: v for k, v in CLAUDE_SKILLS.items() if k not in CLAUDE_PLUGIN_EXCLUDED_SKILLS}
 
 
 def _rewrite_plugin_tool_prefixes(text: str) -> str:
@@ -576,8 +611,10 @@ def generate_claude_plugin_bundle(
         (agents_dir / name).write_text(_rewrite_plugin_tool_prefixes(content), encoding="utf-8")
         files_created.append(f"agents/{name}")
 
-    # skills/
-    for skill_name, content in CLAUDE_SKILLS.items():
+    # skills/ — TAP-7753 round 2: _claude_plugin_skills() filters at this
+    # write point only; CLAUDE_SKILLS itself is untouched so every other
+    # consumer (tapps-mcp init/upgrade) still ships the full set.
+    for skill_name, content in _claude_plugin_skills().items():
         skill_dir = output_dir / "skills" / skill_name
         skill_dir.mkdir(parents=True, exist_ok=True)
         (skill_dir / "SKILL.md").write_text(
