@@ -307,8 +307,11 @@ class TestHookIfMatchers:
     def test_post_tool_use_failure_has_if(self, tmp_path):
         hooks = self._hooks(tmp_path)
         for entry in hooks["PostToolUseFailure"]:
-            # Server rebranded to nlt-build (commit f3b78b5, v3.12.43).
-            assert entry["if"] == "mcp__nlt-build__*"
+            # TAP-7753: a plugin-registered server's tools are namespaced
+            # mcp__plugin_<pluginName>_<serverKey>__, not the bare
+            # mcp__nlt-build__ shape this bundle's `.mcp.json` never
+            # registers a server under.
+            assert entry["if"] == "mcp__plugin_tapps-mcp_tapps-mcp__*"
 
 
 def _git_ls_files(repo_root: Path, subdir: str) -> set[str]:

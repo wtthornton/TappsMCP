@@ -250,4 +250,100 @@ if [[ $FAIL -ne 0 ]]; then
 fi
 echo "Dependency resolvability: OK"
 
+# --- (e) mcp__* tool-prefix resolvability -----------------------------------
+# TAP-7753: a plugin-registered MCP server's tools are namespaced
+# ``mcp__plugin_<pluginName>_<serverKey>__``, never the bare
+# ``mcp__<serverKey>__`` shape most of this bundle's skills/agents/hooks were
+# originally written against (confirmed by installing two throwaway plugins
+# and observing an executed tool's namespace — see plugin/claude/README.md).
+# Neither `claude plugin validate` nor part (c)'s referential-integrity check
+# above notices this: a skill can name a tool that resolves to nothing and
+# both still pass clean, because neither cross-references skill/agent/hook
+# tool references against what `.mcp.json` actually registers.
+#
+# This check derives the ONE resolvable prefix per registered `.mcp.json`
+# server from plugin.json's own `name` + that server's key (never hardcoded),
+# scans every `mcp__*` reference under skills/, agents/, and hooks/, and
+# requires each referenced prefix to be EITHER that resolvable prefix, OR
+# traceable to a plugin named in `dependencies` (the two outs VAL-02 allows
+# besides an outright strip — an absent reference trivially satisfies the
+# third out by not appearing here at all). A prefix satisfying neither is
+# printed by name — including a namespace this bundle used to ship under
+# (e.g. `mcp__nlt-build__`) or a bare pre-plugin `mcp__tapps-mcp__`, which is
+# NOT the plugin-resolvable form and must be rejected, not accepted, for a
+# plugin-registered server.
+if ! PREFIX_CHECK_OUTPUT="$(python3 -c "
+import json
+import sys
+from pathlib import Path
+
+plugin_dir = Path(sys.argv[1])
+
+with open(plugin_dir / '.claude-plugin' / 'plugin.json', encoding='utf-8') as f:
+    plugin_data = json.load(f)
+with open(plugin_dir / '.mcp.json', encoding='utf-8') as f:
+    mcp_data = json.load(f)
+
+plugin_name = plugin_data.get('name', '')
+server_keys = list(mcp_data.get('mcpServers', {}).keys())
+resolvable = {f'mcp__plugin_{plugin_name}_{key}__' for key in server_keys}
+
+declared = set()
+for dep in plugin_data.get('dependencies') or []:
+    name = dep.split('@', 1)[0] if isinstance(dep, str) else str(dep)
+    declared.add(name)
+
+import re
+
+ref_re = re.compile(r'mcp__[A-Za-z0-9_-]+__')
+found: dict[str, set[str]] = {}
+for sub in ('skills', 'agents', 'hooks'):
+    base = plugin_dir / sub
+    if not base.is_dir():
+        continue
+    for path in sorted(base.rglob('*')):
+        if not path.is_file():
+            continue
+        try:
+            text = path.read_text(encoding='utf-8')
+        except (UnicodeDecodeError, OSError):
+            continue
+        for m in ref_re.finditer(text):
+            found.setdefault(m.group(0), set()).add(str(path.relative_to(plugin_dir)))
+
+def _declared_covers(prefix: str) -> bool:
+    tokens = {t for t in prefix.split('_') if t}
+    return bool(declared & tokens)
+
+unresolved = {
+    prefix: sorted(files)
+    for prefix, files in found.items()
+    if prefix not in resolvable and not _declared_covers(prefix)
+}
+
+print('Registered (resolvable) prefixes: ' + repr(sorted(resolvable)))
+print('Referenced prefixes: ' + repr(sorted(found)))
+if declared:
+    print('Declared dependencies: ' + repr(sorted(declared)))
+
+if unresolved:
+    print('UNRESOLVED mcp__* prefixes (neither registered nor declared):')
+    for prefix, files in sorted(unresolved.items()):
+        shown = ', '.join(files[:3]) + ('...' if len(files) > 3 else '')
+        print(f'  {prefix}  (in {shown})')
+    sys.exit(1)
+" "$PLUGIN_DIR")"; then
+  echo "ERROR:" >&2
+  echo "$PREFIX_CHECK_OUTPUT" >&2
+  FAIL=1
+else
+  echo "$PREFIX_CHECK_OUTPUT"
+fi
+
+if [[ $FAIL -ne 0 ]]; then
+  echo "Plugin validation FAILED — mcp__* tool-prefix resolvability" >&2
+  exit 1
+fi
+echo "mcp__* tool-prefix resolvability: OK"
+
 echo "Plugin validation PASSED."

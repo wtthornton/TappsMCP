@@ -315,33 +315,38 @@ session. Use `/tapps-finish-task` before declaring work complete,
   `Error: Dependency "docs-mcp@tapps-mcp" is not installed` — `plugin.json`
   declared a `docs-mcp` dependency this marketplace never lists. That
   dependency is removed; a clean install now loads without error.
-- **Still open — the tools above are not all actually reachable yet.**
-  This bundle's `.mcp.json` registers one server (name `tapps-mcp`), and a
+- **Fixed (TAP-7753):** most shipped tool references now resolve. A
   plugin-registered server's tools surface under
-  `mcp__plugin_tapps-mcp_tapps-mcp__*` (confirmed by installing a throwaway
-  plugin and watching a tool execute — a plugin-registered server is
-  namespaced `mcp__plugin_<plugin>_<server>__`, not a bare `mcp__<server>__`).
-  Counted across this bundle's `skills/`, `agents/`, and `hooks/` (from
-  `plugin/claude/`: `grep -rho 'mcp__<name>__[A-Za-z0-9_]*' skills/ agents/
-  hooks/ | wc -l`), none of the shipped tool references use that prefix:
-  103 reference `mcp__nlt-build__*`, 29 reference
-  `mcp__nlt-linear-issues__*`, 8 reference `mcp__nlt-setup__*`, 6 reference
-  `mcp__nlt-release-ship__*`, and 3 reference `mcp__nlt-memory__*` — the
-  pre-plugin, direct-MCP server names, none of which this bundle registers.
-  2 of the 103 are `hooks/hooks.json` wildcard `matcher`/`if` patterns
-  (`mcp__nlt-build__.*` and `mcp__nlt-build__*`), not calls to a specific
-  tool; the other 101 name one. A further 6 references already read
-  `mcp__tapps-mcp__*`, which is closer but still not the working prefix:
-  5 are named tool calls in `hooks/tapps-stop.sh`
-  (`tapps_quick_check`, `tapps_validate_changed`, `tapps_quality_gate`,
-  `tapps_checklist`, `tapps_lookup_docs`) and 1 is a wildcard case-pattern
-  in `hooks/tapps-tool-failure.sh`. `/tapps-finish-task` in particular calls
-  `mcp__nlt-build__tapps_checklist`, `mcp__nlt-build__tapps_validate_changed`,
-  and `mcp__nlt-build__tapps_lookup_docs` — none of which resolve after a
-  clean install. Rewriting these prefixes is tracked as a separate fix.
-  **Use `tapps-mcp init` in the main repo README for a working setup
-  today** — the plugin now installs and loads cleanly, but its documented
-  primary workflow is not yet reachable through it.
+  `mcp__plugin_tapps-mcp_tapps-mcp__*`, not a bare `mcp__<server>__`
+  (confirmed by installing a throwaway plugin and watching a tool
+  execute). Every skill/agent/hook reference that named one of this
+  bundle's own tools under a pre-plugin prefix — `mcp__nlt-build__`,
+  `mcp__nlt-setup__`, `mcp__nlt-memory__`, `mcp__tapps-mcp__`, and the
+  `mcp__tapps_mcp__` / `mcp__tapps-quality__` legacy aliases — is now
+  rewritten to that prefix at build time, gated per tool name against
+  this bundle's own live tool list (`tapps-mcp serve`'s registered
+  `ALL_TOOL_NAMES`) so a rewrite can never point at a tool the server
+  does not actually expose.
+- **Still open — two gaps this fix deliberately did not paper over:**
+  1. `mcp__nlt-linear-issues__docs_*` (in `linear-issue`, `linear-read`)
+     and `mcp__nlt-release-ship__docs_*` (in `linear-release-update`) name
+     tools — `docs_generate_epic`, `docs_validate_linear_issue`,
+     `docs_release_gate`, and others — that live only on the separate
+     `docs-mcp` server. This bundle does not ship or depend on that server
+     (the dependency was removed in TAP-7758 for being unsatisfiable), so
+     no prefix rewrite can make these resolve; they are a real capability
+     gap, not a namespace bug.
+  2. `mcp__plugin_linear_linear__*` (in `linear-issue`, `linear-read`,
+     `linear-release-update`) belongs to a separate, independently
+     installed Linear plugin this bundle does not register. Declaring it
+     as a `plugin.json` dependency would recreate the exact
+     unsatisfiable-dependency failure fixed above the moment an operator
+     hasn't also added that plugin's marketplace — and is rejected outright
+     by this bundle's own dependency-resolvability check (TAP-7771).
+     Stripping the references would gut those three skills' actual
+     purpose (they exist to wrap Linear's generator/validator flow).
+  `scripts/validate-claude-plugin.sh` names both gaps explicitly on every
+  run rather than passing around them.
 
 ## License
 
@@ -389,6 +394,73 @@ Once installed, TappsMCP tools are available in every session:
 
 MIT
 """
+
+# TAP-7753 — Claude Code namespaces a plugin-registered MCP server's tools as
+# ``mcp__plugin_<pluginName>_<serverKey>__<toolName>``, never the bare
+# ``mcp__<serverKey>__`` shape most of this bundle's skills/agents/hooks were
+# written against back when tapps-mcp was split into direct-`.mcp.json`-
+# registered ``nlt-*`` servers (Epic 109). Confirmed empirically — not from
+# the KB (`13-plugins.md` is tier `corrected`, not `verified`, and documents
+# no marketplace schema): two throwaway plugins were installed and a tool
+# execution observed. This bundle's plugin name and its single `.mcp.json`
+# server key are both ``tapps-mcp``, so the working prefix is fixed for the
+# life of this bundle.
+_PLUGIN_TOOL_PREFIX = "mcp__plugin_tapps-mcp_tapps-mcp__"
+
+# Every one of these pre-plugin prefixes was written against a server that no
+# longer exists standalone once this repo ships as a single Claude plugin —
+# all of it now lives behind the one "tapps-mcp" server above.
+# `mcp__tapps_mcp__` (underscore) and `mcp__tapps-quality__` are legacy/typo
+# aliases the hook scripts already defend against in their own fallback
+# membership sets (see hooks/tapps-stop.sh, hooks/tapps-tool-failure.sh).
+# Deliberately excluded: `mcp__plugin_linear_linear__`, which belongs to a
+# separate, independently-installed plugin this bundle does not register and
+# — per TAP-7771 — cannot safely declare as a dependency either.
+_LEGACY_TOOL_PREFIXES = (
+    "mcp__nlt-build__",
+    "mcp__nlt-setup__",
+    "mcp__nlt-linear-issues__",
+    "mcp__nlt-release-ship__",
+    "mcp__nlt-memory__",
+    "mcp__tapps-mcp__",
+    "mcp__tapps_mcp__",
+    "mcp__tapps-quality__",
+)
+
+_LEGACY_TOOL_REF_RE = re.compile(
+    "(" + "|".join(re.escape(p) for p in _LEGACY_TOOL_PREFIXES) + r")(\.\*|\*|[A-Za-z0-9_]+)?"
+)
+
+
+def _rewrite_plugin_tool_prefixes(text: str) -> str:
+    """Rewrite pre-plugin ``mcp__<legacy>__`` tool references to the
+    plugin-resolvable ``mcp__plugin_tapps-mcp_tapps-mcp__`` form (TAP-7753).
+
+    A bare wildcard/glob suffix (``*`` or ``.*``, used by hooks.json
+    matchers and the tool-failure case pattern, or no suffix at all) always
+    rewrites — it names the namespace, not one tool.
+
+    A specific named tool call rewrites ONLY when that exact name is
+    exposed by this bundle's own server: ``ALL_TOOL_NAMES`` is the same
+    registry ``tapps-mcp serve`` builds its live tool list from (verified
+    empirically to match — see scripts/validate-claude-plugin.sh), so a
+    reference this bundle cannot actually back — e.g. a ``docs_*`` tool
+    that lives only on the separate, undeclared ``docs-mcp`` server
+    (TAP-7758 dropped that dependency) — is left exactly as it was. That is
+    deliberate: rewriting its prefix to one that DOES resolve would produce
+    a 404 that merely looks fixed, which is the exact failure this rewrite
+    exists to prevent. Such references are a genuine capability gap, not a
+    namespace bug, and are reported rather than silently patched over.
+    """
+    from tapps_mcp.server import ALL_TOOL_NAMES
+
+    def _replace(match: re.Match[str]) -> str:
+        suffix = match.group(2) or ""
+        if suffix in ("*", ".*", "") or suffix in ALL_TOOL_NAMES:
+            return _PLUGIN_TOOL_PREFIX + suffix
+        return match.group(0)
+
+    return _LEGACY_TOOL_REF_RE.sub(_replace, text)
 
 
 def generate_claude_plugin_bundle(
@@ -501,14 +573,16 @@ def generate_claude_plugin_bundle(
     agents_dir = output_dir / "agents"
     agents_dir.mkdir(parents=True, exist_ok=True)
     for name, content in CLAUDE_AGENTS.items():
-        (agents_dir / name).write_text(content, encoding="utf-8")
+        (agents_dir / name).write_text(_rewrite_plugin_tool_prefixes(content), encoding="utf-8")
         files_created.append(f"agents/{name}")
 
     # skills/
     for skill_name, content in CLAUDE_SKILLS.items():
         skill_dir = output_dir / "skills" / skill_name
         skill_dir.mkdir(parents=True, exist_ok=True)
-        (skill_dir / "SKILL.md").write_text(content, encoding="utf-8")
+        (skill_dir / "SKILL.md").write_text(
+            _rewrite_plugin_tool_prefixes(content), encoding="utf-8"
+        )
         files_created.append(f"skills/{skill_name}/SKILL.md")
 
     # hooks/
@@ -533,9 +607,9 @@ def generate_claude_plugin_bundle(
         for entry in entries:
             pe: dict[str, Any] = {}
             if "matcher" in entry:
-                pe["matcher"] = entry["matcher"]
+                pe["matcher"] = _rewrite_plugin_tool_prefixes(entry["matcher"])
             if event in _tool_events and "if" in entry:
-                pe["if"] = entry["if"]
+                pe["if"] = _rewrite_plugin_tool_prefixes(entry["if"])
             pe["hooks"] = [
                 {
                     "type": h["type"],
@@ -553,7 +627,7 @@ def generate_claude_plugin_bundle(
 
     for name, content in CLAUDE_HOOK_SCRIPTS.items():
         script_path = hooks_dir / name
-        script_path.write_text(content, encoding="utf-8")
+        script_path.write_text(_rewrite_plugin_tool_prefixes(content), encoding="utf-8")
         script_path.chmod(script_path.stat().st_mode | stat.S_IXUSR | stat.S_IXGRP)
         files_created.append(f"hooks/{name}")
 
