@@ -27,8 +27,5 @@
       "default": "standard",
       "description": "Quality gate preset applied by tapps_quality_gate: one of 'standard', 'strict', 'framework'."
     }
-  },
-  "dependencies": [
-    "docs-mcp@^3.12.90"
-  ]
+  }
 }

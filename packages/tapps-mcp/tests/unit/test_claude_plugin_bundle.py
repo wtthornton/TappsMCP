@@ -96,7 +96,11 @@ class TestPluginStructure:
 
 
 class TestPluginManifestExtended:
-    """TAP-958: plugin.json carries userConfig, metadata, and dependencies."""
+    """TAP-958: plugin.json carries userConfig and metadata.
+
+    TAP-7758 (Decision A): no `dependencies` key — see
+    test_no_dependencies_key below.
+    """
 
     def _load(self, tmp_path, version="3.2.5"):
         generate_claude_plugin_bundle(tmp_path, version=version)
@@ -149,12 +153,17 @@ class TestPluginManifestExtended:
         assert field["default"] in {"standard", "strict", "framework"}
         assert "enum" not in field
 
-    def test_dependencies_docs_mcp_semver(self, tmp_path):
+    def test_no_dependencies_key(self, tmp_path):
+        # TAP-7758 (Decision A) — the manifest used to declare
+        # `dependencies: ["docs-mcp@^{version}"]`, but nothing shipped in
+        # this bundle calls `mcp__docs-mcp__` at runtime, and the CLI parses
+        # the `@` suffix as a marketplace name rather than a semver range,
+        # so that value was unsatisfiable, not merely unpinned: installing
+        # the old bundle failed with `Dependency "docs-mcp@tapps-mcp" is not
+        # installed`. `dependencies` is optional, so the fix is to omit the
+        # key entirely rather than replace it with another value.
         data = self._load(tmp_path, version="3.2.5")
-        deps = data["dependencies"]
-        # `claude plugin validate` requires `dependencies` to be an array of
-        # "name@range" strings, not an object map.
-        assert deps == ["docs-mcp@^3.2.5"]
+        assert "dependencies" not in data
 
     def test_mcp_json_substitutes_user_config(self, tmp_path):
         generate_claude_plugin_bundle(tmp_path)

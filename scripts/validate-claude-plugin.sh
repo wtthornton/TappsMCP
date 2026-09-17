@@ -153,4 +153,101 @@ if [[ $FAIL -ne 0 ]]; then
 fi
 echo "Referential integrity (hooks.json -> scripts): OK"
 
+# --- (d) Dependency resolvability -------------------------------------------
+# TAP-7758: `claude plugin validate --strict` does NOT check this — a bogus
+# dependency such as "totally-bogus-nonexistent-plugin-xyz@^99.99.99" passes
+# it clean in every command/flag combination (verified by experiment). A
+# `dependencies` entry in plugin.json names another plugin this bundle
+# expects the operator to be able to install; the only marketplace this
+# script can check against is the one shipped alongside this bundle, so any
+# declared dependency whose plugin name is not listed in that
+# marketplace.json is provably unsatisfiable from this bundle alone — which
+# is exactly the shape of the defect this check exists to catch (the bundle
+# used to declare "docs-mcp@^<version>" while its own marketplace.json
+# listed only "tapps-mcp"). An absent or empty `dependencies` key is valid
+# and passes trivially — omitting the key is the fix, not a gap to warn on.
+#
+# TAP-7758 round 2: the CLI parses a dependency's `@suffix` as a MARKETPLACE
+# name, not a semver range — a fact the original check never validated. It
+# split on the last `@` and checked only the plugin-name half, so
+# "tapps-mcp@no-such-marketplace" passed this check clean and then failed
+# exactly the same way at install as the original defect: `claude plugin
+# install` exits 0, but `claude plugin list` then shows the plugin
+# `✘ failed to load` with `Error: Dependency "tapps-mcp@no-such-marketplace"
+# is not installed` (reproduced by experiment against a throwaway
+# marketplace on 2026-09-16 — see the lane's evidence log). The only
+# marketplace this script can prove exists is the one shipped alongside this
+# bundle (marketplace.json's own top-level "name" field) — the same
+# constraint that already limits the plugin-name half of this check. So an
+# `@suffix` is satisfiable only when it equals that marketplace's own name;
+# any other suffix is unknown and is rejected, not merely warned on
+# ("unknown refuses" — see .claude/rules/measurement-validity.md upstream in
+# nlt-orchestrator for the general principle).
+#
+# A bare name with no `@` at all was confirmed BY EXPERIMENT (not assumed)
+# to resolve against the plugin's OWN marketplace: installing a plugin whose
+# `dependencies` was `["dep-plugin"]` (no suffix), from a marketplace that
+# also lists `dep-plugin`, auto-installed `dep-plugin@<that marketplace>`
+# and loaded clean. So checking a bare name against this bundle's own
+# `known_set` (as the original check already did) is the CORRECT behaviour,
+# not a gap — left unchanged here.
+MARKETPLACE_JSON="$PLUGIN_DIR/.claude-plugin/marketplace.json"
+PLUGIN_JSON="$PLUGIN_DIR/.claude-plugin/plugin.json"
+
+if ! DEP_CHECK_OUTPUT="$(python3 -c "
+import json
+import sys
+
+plugin_json, marketplace_json = sys.argv[1], sys.argv[2]
+
+with open(plugin_json, encoding='utf-8') as f:
+    plugin_data = json.load(f)
+
+deps = plugin_data.get('dependencies') or []
+if not deps:
+    sys.exit(0)
+
+with open(marketplace_json, encoding='utf-8') as f:
+    marketplace_data = json.load(f)
+
+known = sorted(p.get('name', '') for p in marketplace_data.get('plugins', []))
+known_set = set(known)
+own_marketplace_name = marketplace_data.get('name', '')
+
+unsatisfiable = []
+bad_marketplace = []
+for dep in deps:
+    if isinstance(dep, str) and '@' in dep:
+        name, _, suffix = dep.rpartition('@')
+        if suffix != own_marketplace_name:
+            bad_marketplace.append(dep)
+            continue
+    else:
+        name = dep
+    if name not in known_set:
+        unsatisfiable.append(dep)
+
+if unsatisfiable or bad_marketplace:
+    if unsatisfiable:
+        print('Dependency the marketplace cannot satisfy (unknown plugin name):')
+        for dep in unsatisfiable:
+            print('  - ' + repr(dep))
+        print('Known plugins in ' + marketplace_json + ': ' + repr(known))
+    if bad_marketplace:
+        print('Dependency names a marketplace this bundle cannot confirm exists:')
+        for dep in bad_marketplace:
+            print('  - ' + repr(dep))
+        print('The only marketplace this bundle can verify is its own: ' + repr(own_marketplace_name))
+    sys.exit(1)
+" "$PLUGIN_JSON" "$MARKETPLACE_JSON")"; then
+  echo "ERROR: $DEP_CHECK_OUTPUT" >&2
+  FAIL=1
+fi
+
+if [[ $FAIL -ne 0 ]]; then
+  echo "Plugin validation FAILED — dependency resolvability" >&2
+  exit 1
+fi
+echo "Dependency resolvability: OK"
+
 echo "Plugin validation PASSED."

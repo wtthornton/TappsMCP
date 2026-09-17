@@ -302,10 +302,46 @@ claude plugin install tapps-mcp
 
 ## Usage
 
-Once installed, the TappsMCP tools are available in every
+Once installed **and loaded**, the TappsMCP tools are available in every
 session. Use `/tapps-finish-task` before declaring work complete,
 `/tapps-review-pipeline` for multi-file review, and direct MCP tools
 (`tapps_quick_check`, `tapps_validate_changed`) during edit loops.
+
+**Known issues, re-verified against this bundle on 2026-09-16:**
+
+- **Fixed:** the plugin used to fail to load. `claude plugin install
+  tapps-mcp` exited `0`, but `claude plugin list` then showed
+  `tapps-mcp@tapps-mcp` as `✘ failed to load` with
+  `Error: Dependency "docs-mcp@tapps-mcp" is not installed` — `plugin.json`
+  declared a `docs-mcp` dependency this marketplace never lists. That
+  dependency is removed; a clean install now loads without error.
+- **Still open — the tools above are not all actually reachable yet.**
+  This bundle's `.mcp.json` registers one server (name `tapps-mcp`), and a
+  plugin-registered server's tools surface under
+  `mcp__plugin_tapps-mcp_tapps-mcp__*` (confirmed by installing a throwaway
+  plugin and watching a tool execute — a plugin-registered server is
+  namespaced `mcp__plugin_<plugin>_<server>__`, not a bare `mcp__<server>__`).
+  Counted across this bundle's `skills/`, `agents/`, and `hooks/` (from
+  `plugin/claude/`: `grep -rho 'mcp__<name>__[A-Za-z0-9_]*' skills/ agents/
+  hooks/ | wc -l`), none of the shipped tool references use that prefix:
+  103 reference `mcp__nlt-build__*`, 29 reference
+  `mcp__nlt-linear-issues__*`, 8 reference `mcp__nlt-setup__*`, 6 reference
+  `mcp__nlt-release-ship__*`, and 3 reference `mcp__nlt-memory__*` — the
+  pre-plugin, direct-MCP server names, none of which this bundle registers.
+  2 of the 103 are `hooks/hooks.json` wildcard `matcher`/`if` patterns
+  (`mcp__nlt-build__.*` and `mcp__nlt-build__*`), not calls to a specific
+  tool; the other 101 name one. A further 6 references already read
+  `mcp__tapps-mcp__*`, which is closer but still not the working prefix:
+  5 are named tool calls in `hooks/tapps-stop.sh`
+  (`tapps_quick_check`, `tapps_validate_changed`, `tapps_quality_gate`,
+  `tapps_checklist`, `tapps_lookup_docs`) and 1 is a wildcard case-pattern
+  in `hooks/tapps-tool-failure.sh`. `/tapps-finish-task` in particular calls
+  `mcp__nlt-build__tapps_checklist`, `mcp__nlt-build__tapps_validate_changed`,
+  and `mcp__nlt-build__tapps_lookup_docs` — none of which resolve after a
+  clean install. Rewriting these prefixes is tracked as a separate fix.
+  **Use `tapps-mcp init` in the main repo README for a working setup
+  today** — the plugin now installs and loads cleanly, but its documented
+  primary workflow is not yet reachable through it.
 
 ## License
 
@@ -387,19 +423,32 @@ def generate_claude_plugin_bundle(
     files_created: list[str] = []
 
     # .claude-plugin/plugin.json — TAP-958: extended with userConfig, author,
-    # repository, license, homepage, and dependencies so Claude Code 2.1+ can
-    # prompt the user at enable time and resolve cross-plugin dependencies.
+    # repository, license, homepage so Claude Code 2.1+ can prompt the user
+    # at enable time.
     #
     # Shape confirmed against the installed `claude plugin validate` (2.1.258)
     # this run, per /cc-expert:cc-lookup on doc 13-plugins.md (tier
     # `corrected`, last_verified 2026-08-31) — the doc's own `userConfig`
     # example (`type: "select"`, `label`, `options`) does NOT validate against
     # the installed CLI, so the validator (ground truth), not the doc, won:
-    # `author` must be an object, `dependencies` an array of `"name@range"`
-    # strings, and each `userConfig` entry needs `title` (not `label`) and
-    # `type` in {string, number, boolean, directory, file} with no
-    # enum/options/select — this schema has no enumerated-choice mechanism at
-    # all, so the allowed values are named in `description` instead.
+    # `author` must be an object, and each `userConfig` entry needs `title`
+    # (not `label`) and `type` in {string, number, boolean, directory, file}
+    # with no enum/options/select — this schema has no enumerated-choice
+    # mechanism at all, so the allowed values are named in `description`
+    # instead.
+    #
+    # TAP-7758 — no `dependencies` key here (Decision A). It used to be
+    # `["docs-mcp@^{version}"]`, sourced from a since-retracted comment that
+    # called `@` "a semver-compatible range". It is not: the CLI parses the
+    # `@` suffix as a marketplace name, so installing the old bundle failed
+    # every time with `Dependency "docs-mcp@tapps-mcp" is not installed`, and
+    # nothing shipped in this bundle calls `mcp__docs-mcp__` at runtime
+    # (every `docs_generate_*`/`docs_validate_*` reference here is
+    # namespaced under a different server). The `dependencies` key is
+    # optional — omitting it is silent even under `claude plugin validate
+    # --strict` — and doc 13-plugins.md (tier `corrected`) does not document
+    # this field at all, so this is sourced from the installed CLI's
+    # observed behavior, not the KB.
     meta_dir = output_dir / ".claude-plugin"
     meta_dir.mkdir(parents=True, exist_ok=True)
     plugin_data: dict[str, Any] = {
@@ -442,11 +491,6 @@ def generate_claude_plugin_bundle(
                 ),
             },
         },
-        "dependencies": [
-            # Semver-compatible range. docs-mcp tracks tapps-mcp version; keep
-            # the floor at the matching release and allow same-major bumps.
-            f"docs-mcp@^{version}",
-        ],
     }
     (meta_dir / "plugin.json").write_text(
         json.dumps(plugin_data, indent=2) + "\n", encoding="utf-8"
