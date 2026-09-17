@@ -29,10 +29,19 @@ claude plugin install tapps-mcp
 
 ## Usage
 
-Once installed, the TappsMCP tools are available in every
+Once installed and loaded, the TappsMCP tools are available in every
 session. Use `/tapps-finish-task` before declaring work complete,
 `/tapps-review-pipeline` for multi-file review, and direct MCP tools
 (`tapps_quick_check`, `tapps_validate_changed`) during edit loops.
+
+**Known issue (verified 2026-09-16): install currently succeeds but the
+plugin fails to load.** `claude plugin install tapps-mcp` exits `0`, but
+`claude plugin list` then shows `tapps-mcp@tapps-mcp` as `✘ failed to load`
+with `Error: Dependency "docs-mcp@tapps-mcp" is not installed`. This
+manifest (`plugin.json` declares a `docs-mcp` dependency that this
+marketplace does not list) needs a fix tracked separately — the tools above
+are not actually reachable until then. Use `tapps-mcp init` in the main repo
+README for a working setup today.
 
 ## License
 

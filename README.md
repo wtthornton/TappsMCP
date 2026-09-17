@@ -321,9 +321,8 @@ For project-level config, use `tapps-mcp init --host claude-code --scope project
 ### Claude Code plugin install
 
 An alternative to `tapps-mcp init` for Claude Code: install the packaged
-plugin bundle instead of scaffolding files into your project. This gets you
-the MCP server, skills, agents, and hooks in one step, managed by Claude
-Code's own plugin system rather than files checked into your repo.
+plugin bundle instead of scaffolding files into your project, managed by
+Claude Code's own plugin system rather than files checked into your repo.
 
 ```bash
 git clone https://github.com/wtthornton/TappsMCP.git
@@ -336,6 +335,17 @@ root, so the bare `wtthornton/TappsMCP` marketplace shorthand won't find it —
 add it from a local checkout (or a Git URL pointed at that subdirectory) as
 shown above. See [`plugin/claude/README.md`](plugin/claude/README.md) for
 what the bundle includes.
+
+**Known issue (verified 2026-09-16): the plugin does not currently load.**
+Both commands above exit `0`, but `claude plugin list` then reports
+`tapps-mcp@tapps-mcp` as `✘ failed to load` — `Error: Dependency
+"docs-mcp@tapps-mcp" is not installed`. `plugin/claude/.claude-plugin/plugin.json`
+declares a dependency on `docs-mcp`, but `plugin/claude/.claude-plugin/marketplace.json`
+lists only the `tapps-mcp` plugin, so even the CLI's own suggested fix is
+refused: `claude plugin install docs-mcp@tapps-mcp` → `Plugin "docs-mcp" not
+found in marketplace "tapps-mcp"`. This is a defect in the merged plugin
+manifests, tracked separately from this doc fix — until it ships, use
+[`tapps-mcp init`](#quick-start) for a working Claude Code setup.
 
 ### Cursor
 
@@ -570,7 +580,7 @@ the committed `plugin/claude/` tree (`generate_claude_plugin_bundle()` —
 ```bash
 tapps-mcp build-plugin                              # default output: ./tapps-mcp-plugin/
 tapps-mcp build-plugin --output-dir ./my-plugin     # custom output directory
-tapps-mcp build-plugin --engagement-level high       # high enforcement rules
+tapps-mcp build-plugin --engagement-level high       # sets manifest userConfig.engagement_level default
 ```
 
 Writes `.claude-plugin/plugin.json`, `agents/*.md`, `skills/<skill-id>/SKILL.md`

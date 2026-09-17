@@ -9,38 +9,84 @@ ensure Claude Code's autoload routing fires at the right times.
 
 ## Where a skill actually lives (frontmatter/wiring vs. body)
 
-A shipped `CLAUDE_SKILLS` entry is split across two places:
+A shipped `CLAUDE_SKILLS` entry is split across two places — and the split
+is the opposite of what you'd guess if you assume the Python dict carries
+the content:
 
-- **Frontmatter + dict wiring** — `packages/tapps-mcp/src/tapps_mcp/pipeline/platform_skills.py`.
-  This is where a skill's key is added to the `CLAUDE_SKILLS` dict, and where
-  any Python-side logic (loader helpers, marker resolution) lives.
-- **Body text** — a package-data Markdown file under
-  `packages/tapps-mcp/src/tapps_mcp/pipeline/assets/claude_skills/<skill-name>.md`.
-  This is the file you edit for wording, structure, or steps.
+- **Body text, including its frontmatter** — a package-data Markdown file
+  under `packages/tapps-mcp/src/tapps_mcp/pipeline/assets/claude_skills/<skill-name>.md`.
+  This is the file you edit for wording, structure, steps, `description:`,
+  `allowed-tools:`, and `disable-model-invocation:` — **Rule 1 and the
+  `disable-model-invocation` checklist item below both apply to this file**,
+  not to `platform_skills.py`. Check for yourself:
+  `head -8 packages/tapps-mcp/src/tapps_mcp/pipeline/assets/claude_skills/tapps-memory.md`
+  opens `---` / `name:` / `user-invocable:` / `model: {{model:...}}` /
+  `description:` — full frontmatter, inline in the `.md`. All 24 files
+  under `assets/claude_skills/` (23 per-skill bodies plus the shared
+  domain-skill template below) open the same way.
+- **Dict wiring only** — `packages/tapps-mcp/src/tapps_mcp/pipeline/platform_skills.py`.
+  Each entry is one line, e.g.
+  `CLAUDE_SKILLS["tapps-memory"] = _load_claude_skill("tapps-memory")`.
+  `platform_skills.py` injects no frontmatter and no body text here; it only
+  decides which skill keys exist and loads their already-complete `.md` files.
 
-`platform_skills.py` loads each body via `_load_claude_skill(skill_name)`,
-which calls `_read_claude_skill_asset()` to read
+`_load_claude_skill(skill_name)` calls `_read_claude_skill_asset()` to read
 `assets/claude_skills/<skill_name>.md` through `importlib.resources` (with a
 `sys.frozen` fallback that reads the file directly next to the module, for
-the PyInstaller-frozen binary build). The loader then resolves the body's
-`{{model:<role>}}` marker, if present, via `resolve_role_model()` — so a body
-that needs to name a model role (e.g. which model a sub-task should run on)
-never bakes a resolved model string into the `.md` file; `MODEL_ROLES` stays
-the single place a model changes.
+the PyInstaller-frozen binary build), then resolves the body's
+`{{model:<role>}}` marker via `resolve_role_model()` so a body that names a
+model role never bakes a resolved model string into the `.md` file —
+`MODEL_ROLES` stays the single place a model changes. **Substitution can
+fail, on purpose**: an unknown role (a typo'd `{{model:no-such-role}}`)
+makes `resolve_role_model()` raise `RoleResolutionError` at load time rather
+than silently falling back to a default model. **A missing asset file fails
+the same way** — `_load_claude_skill("foo")` with no
+`assets/claude_skills/foo.md` on disk raises an uncaught `FileNotFoundError`
+at import time. Both are load-time crashes, not something a generated
+project can hit at runtime, but they mean a bad skill registration breaks
+every `tapps-mcp` invocation, not just the one skill.
 
 **CLAUDE_AGENTS** (`packages/tapps-mcp/src/tapps_mcp/pipeline/platform_subagents.py`)
-and the docs-automation dicts (`packages/tapps-mcp/src/tapps_mcp/pipeline/platform_docs_automation.py`)
-follow the identical split: frontmatter/wiring in the `platform_*.py` module,
-bodies in their own `assets/` subdirectory (`assets/claude_agents/` for
-CLAUDE_AGENTS; `assets/claude_doc_agents/` and `assets/claude_docs_skills/`
-for the docs-automation dicts). Each module carries its own small
-`_read_*_asset()` / loader pair mirroring the one in `platform_skills.py`.
+carries the split one step further: `_read_claude_agent_asset()` is a bare
+read with **no marker resolution at all** — `assets/claude_agents/*.md`
+files hardcode `model: claude-sonnet-5` directly in their own frontmatter,
+since agents never need the `{{model:role}}` indirection skills use. The
+docs-automation dicts (`platform_docs_automation.py`, bodies under
+`assets/claude_doc_agents/` and `assets/claude_docs_skills/`) sit in
+between: no `{{model:role}}` marker, but a `{{docs_prefix}}` marker resolved
+to the fixed `mcp__nlt-project-docs__` string.
 
-**So: to change what a skill says, edit the `.md` file under `assets/`. To
-add a new skill, change which skills are enabled, or change how a skill is
-loaded, edit the owning `platform_*.py` module.** Emitted output is
-unaffected by this split — a project running `tapps_init` / `tapps_upgrade`
-sees byte-identical generated files either way.
+**Not every `CLAUDE_SKILLS` entry has an asset file.** Three —
+`tapps-domain-frontend`, `tapps-domain-security`, `tapps-domain-testing` —
+have no per-skill `.md` under `assets/claude_skills/`. `platform_domain_skills.py`
+generates them at import time from a shared
+`assets/claude_skills/_domain_skill_template.md` skeleton plus Python-side
+step content (`_DOMAIN_STEP_PLAYBOOK`, `_DOMAIN_FINISH`, and per-domain
+extras still defined as Python string literals), merging the result in via
+`CLAUDE_SKILLS.update(CLAUDE_DOMAIN_SKILLS)`. That template uses a
+**second, unrelated marker family** — `{{skill:name}}`,
+`{{skill:description}}`, `{{skill:tools}}`, `{{skill:body}}` — substituted
+by `_render_claude_domain_skill()`, and it **hardcodes**
+`model: claude-sonnet-5` rather than a `{{model:role}}` marker. To change
+one of these three skills, edit `platform_domain_skills.py`; there is no
+per-skill `.md` file to edit instead.
+
+**`CLAUDE_SKILLS` and `CURSOR_SKILLS` must stay in lockstep.**
+`test_platform_generators.py` asserts `set(CLAUDE_SKILLS) == set(CURSOR_SKILLS)`
+and `len(CLAUDE_SKILLS) == len(CURSOR_SKILLS)`. `CURSOR_SKILLS` was **not**
+touched by the package-data extraction — its bodies are still inline Python
+string literals in `platform_skills.py`. Adding a skill only to
+`CLAUDE_SKILLS` (plus its asset file) without adding the matching
+`CURSOR_SKILLS["<name>"] = "..."` entry turns that test red.
+
+**So: to change what a skill says, edit the `.md` file under
+`assets/claude_skills/`** (the three domain skills are the one exception —
+edit `platform_domain_skills.py` instead). **To add a new skill:** add the
+asset file, the one-line `CLAUDE_SKILLS["<name>"] = _load_claude_skill("<name>")`
+registration, *and* a matching `CURSOR_SKILLS["<name>"]` entry, or the parity
+test fails. Emitted output is unaffected by any of this — a project running
+`tapps_init` / `tapps_upgrade` sees byte-identical generated files either
+way.
 
 ---
 
@@ -162,4 +208,5 @@ its wiring (`pipeline/platform_skills.py`):
 - [ ] Description is ≤ 1 024 characters
 - [ ] Short user-only utility skills have `disable-model-invocation: true`
 - [ ] Template body is ≤ ~100 lines, or companion `*.md` refs exist
+- [ ] New skill: added the matching `CURSOR_SKILLS["<name>"]` entry too — `test_platform_generators.py` fails otherwise
 - [ ] Version bumped via `python3 scripts/bump-versions.py --patch` (template changes propagate to consumers only after a version bump)
