@@ -156,6 +156,10 @@ src/tapps_mcp/
 │               platform_*.py — generators, hooks, hook_templates, rules,
 │                 skills, subagents, bundles, docs_automation, domain_skills,
 │                 and the platform_skill_* templates
+│               assets/ — package-data .md bodies for CLAUDE_SKILLS
+│                 (claude_skills/), CLAUDE_AGENTS (claude_agents/), and the
+│                 docs-automation dicts (claude_doc_agents/, claude_docs_skills/),
+│                 loaded via importlib.resources with a sys.frozen fallback
 │               github_*.py — templates, ci, copilot, governance
 ├── distribution/ exe_manager.py, plugin_builder.py, rollback.py,
 │               mcp_bundle_cli.py, mcp_zombie_reap.py, context_budget*.py
