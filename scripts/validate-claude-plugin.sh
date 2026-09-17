@@ -269,30 +269,65 @@ echo "Dependency resolvability: OK"
 #   2. traceable to a plugin named in `dependencies`, or
 #   3. absent — a reference that was never made trivially satisfies this by
 #      not appearing here at all, or
-#   4. (TAP-7753 round 2, tightened round 3) a CROSS-PLUGIN prefix —
-#      ``mcp__plugin_<name>_<server>__`` whose ``<name>`` is some OTHER
-#      plugin's — documented, in the SAME file, under that file's own
-#      ``## Degrades without`` section, and only in a file under ``skills/``.
+#   4. (round 4, TAP-7753) documented, in the SAME file, under that file's
+#      own ``## Degrades without`` section, AND on the explicit
+#      EXTERNAL_MCP_PREFIX_ALLOWLIST below, AND NOT a spelling of this
+#      bundle's own server (checked first, unconditionally).
 # A prefix satisfying none of these is printed by name — including a
 # namespace this bundle used to ship under (e.g. `mcp__nlt-build__`) or a
 # bare pre-plugin `mcp__tapps-mcp__`, which is NOT the plugin-resolvable form
 # and must be rejected, not accepted, for a plugin-registered server.
 #
-# Out 4 exists because round 1 proved references across several skills name
-# tools genuinely outside this bundle's reach — most importantly a separate,
-# independently installed plugin (`mcp__plugin_linear_linear__`, TAP-7771:
-# this bundle cannot safely declare it a dependency without recreating the
-# unsatisfiable-dependency failure TAP-7758 fixed). Three skills (linear-read,
-# linear-release-update, tapps-continue-session) stay genuinely useful without
-# that plugin; `linear-issue` does not — every write it performs is gated
-# behind a docs-mcp tool with no fallback, so it is excluded from this bundle
-# entirely (see the skill-filter in `generate_claude_plugin_bundle`) rather
-# than "documented" here, because there is no true degraded mode to document.
+# --- Round 4 — why "cross-plugin-only" (round 3) was too narrow ---
+# Round 3 tightened out 4 to "cross-plugin ONLY": a prefix shaped
+# ``mcp__plugin_<name>_<server>__`` whose ``<name>`` is some OTHER plugin's.
+# That correctly refused a bare, documented `mcp__tapps-mcp__` (this
+# bundle's own bug wearing a "the docs say it is fine" costume). But it also
+# refused `mcp__nlt-release-ship__docs_release_gate` — a REAL docs-mcp tool
+# that `linear-release-update` genuinely calls at step 1b (TAP-7758:
+# docs-mcp lives on a separate, undeclared server) — because that reference
+# is not shaped like ``mcp__plugin_<name>_<server>__`` at all; it is a bare
+# fleet-alias prefix naming a genuinely different, real server. The bundle
+# started failing its own validator over correct, documented code.
 #
-# Out 4 carries FOUR independent gates, and round 2 shipped only the first
-# two — a bare `mcp__tapps-mcp__` reference passed merely by naming itself
-# under a `## Degrades without` heading, which is the exact defect this
-# check exists to catch. Round 3 (TAP-7753) adds gates 3 and 4:
+# Round 4 replaces the SHAPE test ("looks like another plugin's namespace")
+# with an EXPLICIT ALLOWLIST test ("is this exact prefix one we have
+# actually verified exists and is genuinely referenced"). This is
+# deliberately narrower than "any other plugin name", and deliberately not
+# shape-based: a documented `mcp__nonexistent__` must still fail (it is not
+# on the allowlist) — exactly the fig leaf a pure shape test would reopen
+# for any invented name.
+#
+# EXTERNAL_MCP_PREFIX_ALLOWLIST (defined in the python block below) is a
+# small, hand-maintained set that a future maintainer must consciously
+# edit — never derived by scanning what the bundle happens to reference
+# today, because that would let a typo or an invented server add itself to
+# the allowlist merely by appearing once in a skill file next to a claimed
+# degrade. A prefix earns a place on it only when ALL of:
+#   (a) it names a real, externally-installed-or-fleet-reachable MCP server
+#       this bundle does NOT and must not register or declare as a
+#       dependency (see TAP-7758 / TAP-7771 above for why not), and
+#   (b) a shipped skill genuinely calls a tool under that prefix today, and
+#   (c) that call is documented in the SAME file under its own
+#       ``## Degrades without`` section — allowlist membership WIDENS what
+#       CAN be exempted, it never bypasses HOW it must be documented (gates
+#       1/2/4 below still apply on top of it).
+# Removing the last reference to an allowlisted prefix from the shipped
+# bundle does not fail this check (an absent reference trivially satisfies
+# out 3), but leaves a dead entry nothing here will catch — review this list
+# whenever the bundle is regenerated.
+#
+# Condition 3 (own-server refusal) runs BEFORE the allowlist and is
+# unconditional: `mcp__tapps-mcp__`, `mcp__tapps_mcp__` (the underscore
+# legacy/typo alias — see platform_bundles.py's `_LEGACY_TOOL_PREFIXES`),
+# and any `mcp__plugin_<name>_<server>__` whose `<name>` (hyphen/underscore
+# normalized) is this bundle's own plugin name but is not exactly the one
+# resolvable prefix, are refused no matter what the allowlist contains and
+# no matter what any file documents. The plugin name and server key are
+# derived from plugin.json / .mcp.json, never hardcoded.
+#
+# Out 4 still carries the same four gates round 3 shipped, now built on the
+# allowlist instead of the shape test:
 #
 #   1. Per-(file, exact prefix): a file's own `## Degrades without` section
 #      must name the SAME prefix found unresolved in that SAME file.
@@ -301,21 +336,17 @@ echo "Dependency resolvability: OK"
 #      fenced code block (an anti-example, say) documents nothing, and the
 #      section ends at the next heading of ANY depth, so a nested `###`
 #      subsection is not swallowed into it.
-#   3. CROSS-PLUGIN ONLY. VAL-02's out authorises a documented reference to
-#      ANOTHER PLUGIN's namespace. So the prefix must be
-#      `mcp__plugin_<name>_<server>__` with `<name>` != this bundle's own
-#      plugin name. A bare `mcp__<server>__` — `mcp__tapps-mcp__`,
-#      `mcp__nlt-*__`, `mcp__nonexistent__` — and this bundle's own
-#      `mcp__plugin_<self>_*__` in any non-resolvable spelling are refused
-#      regardless of documentation: inside a plugin they resolve to nothing
-#      and no prose changes that.
+#   3. ALLOWLISTED EXTERNAL SERVER, own-server spellings refused first and
+#      unconditionally (see "Condition 3" above).
 #   4. `skills/` only. VAL-02's out says "in a SKILL"; a hook shell script
 #      could otherwise self-exempt with a `# ## Degrades without` comment.
 #
 # scripts/test-validate-claude-plugin-prefix-resolvability.sh proves each
-# gate with a fixture that BUILDS the failing state — including a
-# documented-bare-prefix fixture that must go red, without which gate 3's
-# control would be vacuous.
+# gate with a fixture that BUILDS the failing state, using the REAL
+# allowlisted prefixes (`mcp__plugin_linear_linear__`,
+# `mcp__nlt-release-ship__`) for the gate-1/2/4 mechanical controls so a
+# fixture cannot pass or fail for the wrong reason (allowlist membership vs.
+# the specific gate under test).
 if ! PREFIX_CHECK_OUTPUT="$(python3 -c "
 import json
 import re
@@ -368,26 +399,61 @@ def mask_fences(text: str) -> str:
     return NL.join(out)
 
 
-def is_cross_plugin(prefix: str) -> bool:
-    '''Gate 3: does *prefix* name ANOTHER plugin's tool namespace?
+# Round 4 (TAP-7753 round 4): explicit, hand-maintained allowlist. See the
+# shell-comment block above this python block for what earns a place here
+# and why this replaces round 3's shape-based is_cross_plugin().
+EXTERNAL_MCP_PREFIX_ALLOWLIST = {
+    # The independently installed Linear Claude Code plugin (OAuth-backed,
+    # see .claude/rules/integration-hygiene.md). Referenced by linear-read,
+    # linear-release-update, and tapps-continue-session.
+    'mcp__plugin_linear_linear__',
+    # docs-mcp, reached in this repo's own dev fleet under the
+    # 'nlt-release-ship' alias (see fleet.paths.json / .mcp.json upstream in
+    # nlt-orchestrator). linear-release-update step 1b genuinely calls
+    # mcp__nlt-release-ship__docs_release_gate, a real docs-mcp tool with no
+    # tapps-mcp equivalent (TAP-7758: docs-mcp is a separate, undeclared
+    # server this bundle must not depend on).
+    'mcp__nlt-release-ship__',
+}
 
-    VAL-02's out authorises a documented CROSS-PLUGIN reference, and nothing
-    wider. A plugin-registered server's tools are only ever reachable as
-    mcp__plugin_<pluginName>_<serverKey>__, so any prefix that is not of
-    that shape resolves to nothing inside a plugin no matter what prose sits
-    beside it — that includes the bare mcp__<server>__ forms this bundle was
-    originally written against. And a mcp__plugin_<self>_*__ spelling that
-    is not in *resolvable* names a server THIS bundle does not register, so
-    it is this bundle's own bug rather than someone else's plugin.
+
+def _norm(name: str) -> str:
+    # Hyphen/underscore normalization so mcp__tapps-mcp__ and the
+    # mcp__tapps_mcp__ legacy/typo alias (platform_bundles.py's
+    # _LEGACY_TOOL_PREFIXES) are recognised as the SAME own-server spelling.
+    return name.replace('_', '-')
+
+
+def is_own_server_prefix(prefix: str) -> bool:
+    '''Condition 3: does *prefix* name THIS bundle's own server, under any
+    spelling?
+
+    Checked before, and independent of, EXTERNAL_MCP_PREFIX_ALLOWLIST —
+    refused regardless of documentation and regardless of what the
+    allowlist contains. plugin_name is derived from plugin.json above,
+    never hardcoded, so this tracks the bundle's own identity even if the
+    plugin is ever renamed.
     '''
-    if not (prefix.startswith('mcp__plugin_') and prefix.endswith('__')):
+    norm_plugin = _norm(plugin_name)
+    if prefix.startswith('mcp__plugin_') and prefix.endswith('__'):
+        middle = _norm(prefix[len('mcp__plugin_'):-2])
+        return middle == norm_plugin or middle.startswith(norm_plugin + '-')
+    if prefix.startswith('mcp__') and prefix.endswith('__'):
+        mid = _norm(prefix[len('mcp__'):-2])
+        return mid == norm_plugin
+    return False
+
+
+def is_exemptable_external(prefix: str) -> bool:
+    '''Gate 3: documented AND allowlisted AND not this bundle's own server.
+
+    Condition 3 (is_own_server_prefix) is checked FIRST so nothing on the
+    allowlist can ever paper over this bundle's own bug, even if a future
+    edit to EXTERNAL_MCP_PREFIX_ALLOWLIST accidentally collided with it.
+    '''
+    if is_own_server_prefix(prefix):
         return False
-    middle = prefix[len('mcp__plugin_'):-2]
-    if '_' not in middle:  # needs both a <name> and a <server>
-        return False
-    if middle == plugin_name or middle.startswith(plugin_name + '_'):
-        return False
-    return True
+    return prefix in EXTERNAL_MCP_PREFIX_ALLOWLIST
 
 
 found: dict[str, set[str]] = {}
@@ -441,10 +507,12 @@ for prefix, files in found.items():
     if prefix in resolvable or _declared_covers(prefix):
         continue
     covered = _documented_covers(prefix, files)
-    if covered and not is_cross_plugin(prefix):
-        # Documented, but NOT a cross-plugin reference: out 4 does not reach
-        # it. Report it separately so the reason is legible rather than
-        # looking like an undocumented oversight.
+    if covered and not is_exemptable_external(prefix):
+        # Documented, but not exemptable: either this bundle's own server
+        # under some spelling (condition 3, unconditional), or a prefix that
+        # is not on EXTERNAL_MCP_PREFIX_ALLOWLIST. Report it separately so
+        # the reason is legible rather than looking like an undocumented
+        # oversight.
         refused[prefix] = sorted(covered)
         covered = set()
     remaining = files - covered
@@ -458,14 +526,15 @@ print('Referenced prefixes: ' + repr(sorted(found)))
 if declared:
     print('Declared dependencies: ' + repr(sorted(declared)))
 if degraded:
-    print('Documented cross-plugin graceful-degradation references (accepted):')
+    print('Documented external-server graceful-degradation references (accepted):')
     for prefix, files in sorted(degraded.items()):
         shown = ', '.join(files)
         print(f'  {prefix}  (documented in {shown})')
 if refused:
-    print('REFUSED exemptions — documented under ## Degrades without, but NOT a')
-    print('cross-plugin mcp__plugin_<other>_<server>__ prefix, so it resolves to')
-    print('nothing inside this plugin no matter what the prose says:')
+    print('REFUSED exemptions — documented under ## Degrades without, but NOT on')
+    print('EXTERNAL_MCP_PREFIX_ALLOWLIST (or it names a server this bundle itself')
+    print('provides), so it resolves to nothing inside this plugin no matter what')
+    print('the prose says:')
     for prefix, files in sorted(refused.items()):
         shown = ', '.join(files)
         print(f'  {prefix}  (documented in {shown})')

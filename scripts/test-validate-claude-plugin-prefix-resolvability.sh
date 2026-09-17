@@ -11,33 +11,48 @@
 # nothing, because neither cross-references tool-name text against what
 # `.mcp.json` actually registers.
 #
-# This test proves the new check discriminates correctly:
-#   1. Negative control (run FIRST): a deliberately bogus mcp__nonexistent__
-#      reference must be named and rejected.
-#   2. Anti-vacuity control: a scratch copy whose skills use the bare,
-#      pre-plugin mcp__tapps-mcp__ prefix must ALSO be rejected — a check
-#      that accepts that shape is the exact non-discriminating check that
-#      would have certified this bundle's original defect.
-#   3. Undocumented cross-plugin control (TAP-7753 round 2, run BEFORE the
-#      documented-degrade positive below): a scratch copy referencing
-#      mcp__plugin_someother_thing__ with NO "## Degrades without" section
-#      naming it must still be rejected. This is the control that proves
-#      round 2's amendment (a documented cross-plugin reference is accepted)
-#      did NOT become a blanket exemption for anything containing
-#      mcp__plugin_ — only a reference the SAME file documents is exempt.
-#   4. Documented-degrade control (TAP-7753 round 2): a scratch copy that
-#      references mcp__plugin_someother_thing__ AND documents it under its
-#      own "## Degrades without" heading must PASS — this is the shape
-#      linear-read / linear-release-update / tapps-continue-session ship
-#      today.
-#   5. Positive control: a bundle whose only mcp__* references are the
-#      plugin-resolvable prefix (or a declared dependency) must PASS.
-#   6. The real, currently-shipped plugin/claude bundle must now PASS
-#      outright (TAP-7753 round 2) — `linear-issue` (whose docs-mcp gap had
-#      no real fallback) is filtered out of the bundle entirely, and the
-#      three remaining skills with a genuine capability gap
-#      (linear-read, linear-release-update, tapps-continue-session) each
-#      document it under their own "## Degrades without" heading.
+# --- Round 4 (TAP-7753 round 4) ---------------------------------------------
+# Round 3 exempted a documented reference only when it was shaped like
+# ANOTHER PLUGIN's namespace (mcp__plugin_<other>_<server>__). That correctly
+# refused a bare, documented mcp__tapps-mcp__ — but it ALSO refused
+# mcp__nlt-release-ship__docs_release_gate, a REAL docs-mcp tool that
+# linear-release-update genuinely calls at step 1b (TAP-7758), because a bare
+# fleet-alias prefix for a genuinely different real server is not shaped like
+# another plugin's namespace at all. The bundle started failing its own
+# validator over correct, documented code.
+#
+# Round 4 replaces the shape test with an EXPLICIT ALLOWLIST
+# (EXTERNAL_MCP_PREFIX_ALLOWLIST in validate-claude-plugin.sh): a documented
+# prefix is exempted only when it is ALSO on that allowlist, AND is not a
+# spelling of this bundle's own server (checked first, unconditionally, no
+# matter what the allowlist contains). This test proves the new check
+# discriminates correctly, using the REAL allowlisted prefixes
+# (mcp__plugin_linear_linear__, mcp__nlt-release-ship__) for every mechanical
+# gate control below — a placeholder name that was never on the allowlist in
+# the first place would fail for the wrong reason (not allowlisted) rather
+# than for the gate defect under test, which is exactly the "fixture that
+# passes/fails for the wrong reason" trap named in
+# .claude/rules/verifier-controls.md upstream in nlt-orchestrator.
+#
+# The 15 controls (run in the order below, negative before positive for each
+# prefix per the round-2/round-3 convention):
+#   1.  mcp__nonexistent__, undocumented                          -> fail
+#   2.  mcp__nonexistent__, documented                             -> fail (not allowlisted)
+#   3.  bare mcp__tapps-mcp__, undocumented                        -> fail
+#   4.  bare mcp__tapps-mcp__, documented                          -> fail (own server)
+#   5.  mcp__tapps_mcp__ (underscore form), documented             -> fail (own server)
+#   6.  non-resolvable mcp__plugin_tapps-mcp_*__ spelling, documented -> fail (own server)
+#   7.  mcp__plugin_linear_linear__, undocumented                  -> fail
+#   8.  mcp__plugin_linear_linear__, documented                    -> pass
+#   9.  mcp__nlt-release-ship__, undocumented                      -> fail
+#   10. mcp__nlt-release-ship__, documented                        -> pass (allowlisted external)
+#   11. "## Degrades without" inside a fenced block                -> fail
+#   12. prefix only in a nested ### subsection                     -> fail
+#   13. hook script self-exemption                                 -> fail
+#   14. cross-file documentation (different file documents it)     -> fail
+#   15. the real, currently-shipped plugin/claude bundle           -> pass
+# Plus one bonus regression control (not part of the 15): a bundle whose only
+# mcp__* references are the plugin-resolvable prefix must PASS trivially.
 #
 # Usage: bash scripts/test-validate-claude-plugin-prefix-resolvability.sh
 set -euo pipefail
@@ -45,8 +60,10 @@ set -euo pipefail
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 # VALIDATOR_OVERRIDE lets a reviewer point these same fixtures at an OLDER
 # copy of the validator (`git show <sha>:scripts/validate-claude-plugin.sh`)
-# and watch each control go red there — the "run the proof against base"
-# step that turns "this control passes" into "this control discriminates".
+# and watch each control go red (or, for the two rows round 4 fixes, watch
+# them go red under round 3 and green under round 4) — the "run the proof
+# against base" step that turns "this control passes" into "this control
+# discriminates".
 VALIDATOR="${VALIDATOR_OVERRIDE:-$REPO_ROOT/scripts/validate-claude-plugin.sh}"
 SOURCE_BUNDLE="$REPO_ROOT/plugin/claude"
 SCRATCH_ROOT="/tmp/claude-1000/test-validate-claude-plugin-prefix.$$"
@@ -76,17 +93,9 @@ check() {
   fi
 }
 
-build_fixture() {
-  local name="$1"
-  local dest="$SCRATCH_ROOT/$name"
-  mkdir -p "$dest"
-  cp -r "$SOURCE_BUNDLE/." "$dest/"
-  echo "$dest"
-}
-
 # A minimal single-skill fixture avoids the real bundle's own known-open
-# gaps (Linear plugin, docs-mcp tools) leaking into these three controls —
-# each control below is about one specific reference, not the whole bundle.
+# gaps (Linear plugin, docs-mcp tools) leaking into these controls — each
+# control below is about one specific reference, not the whole bundle.
 minimal_fixture() {
   local name="$1"
   local dest="$SCRATCH_ROOT/$name"
@@ -106,9 +115,9 @@ minimal_fixture() {
   echo "$dest"
 }
 
-# --- Negative control (run FIRST): a deliberately bogus prefix in a scratch
-# copy's skill must be named and rejected.
-neg_dir="$(minimal_fixture neg-bogus)"
+# --- 1. Negative control: a deliberately bogus prefix, undocumented, must be
+# named and rejected.
+neg_dir="$(minimal_fixture 01-bogus-undocumented)"
 cat >"$neg_dir/skills/probe/SKILL.md" <<'EOF'
 ---
 name: probe
@@ -117,13 +126,32 @@ allowed-tools: mcp__nonexistent__probe_tool
 ---
 Call `mcp__nonexistent__probe_tool`.
 EOF
-check "negative control: bogus mcp__nonexistent__ prefix" fail "$neg_dir"
+check "1. mcp__nonexistent__ undocumented" fail "$neg_dir"
 
-# --- Anti-vacuity control: the bare, pre-plugin mcp__tapps-mcp__ prefix must
-# ALSO be rejected for a plugin-registered server. A check that passes this
-# fixture is the exact non-discriminating check that would have certified
-# this bundle's real, original defect.
-vacuity_dir="$(minimal_fixture vacuity-bare-tapps-mcp)"
+# --- 2. Same bogus prefix, but documented — must STILL be rejected, because
+# "documented" alone is not exemption; the allowlist gate must also hold, and
+# a wholly invented server never earns a place on it.
+neg_doc_dir="$(minimal_fixture 02-bogus-documented)"
+cat >"$neg_doc_dir/skills/probe/SKILL.md" <<'EOF'
+---
+name: probe
+description: negative control, documented
+allowed-tools: mcp__nonexistent__probe_tool
+---
+Call `mcp__nonexistent__probe_tool`.
+
+## Degrades without
+
+- `mcp__nonexistent__` — an invented server with no real backing. Documenting
+  it must not earn it a place on EXTERNAL_MCP_PREFIX_ALLOWLIST.
+EOF
+check "2. mcp__nonexistent__ documented (still not allowlisted)" fail "$neg_doc_dir"
+
+# --- 3. Anti-vacuity control: the bare, pre-plugin mcp__tapps-mcp__ prefix
+# must ALSO be rejected for a plugin-registered server. A check that accepts
+# this fixture is the exact non-discriminating check that would have
+# certified this bundle's real, original defect.
+vacuity_dir="$(minimal_fixture 03-bare-tapps-mcp-undocumented)"
 cat >"$vacuity_dir/skills/probe/SKILL.md" <<'EOF'
 ---
 name: probe
@@ -132,55 +160,14 @@ allowed-tools: mcp__tapps-mcp__tapps_quick_check
 ---
 Call `mcp__tapps-mcp__tapps_quick_check`.
 EOF
-check "anti-vacuity control: bare mcp__tapps-mcp__ prefix rejected" fail "$vacuity_dir"
+check "3. bare mcp__tapps-mcp__ undocumented" fail "$vacuity_dir"
 
-# --- Undocumented cross-plugin control (run BEFORE the documented-degrade
-# positive below): a reference to a DIFFERENT plugin's namespace with no
-# "## Degrades without" section anywhere in the file must still be rejected.
-# This is the control that proves round 2's amendment did not become a
-# blanket exemption for anything containing mcp__plugin_.
-undoc_dir="$(minimal_fixture undoc-cross-plugin)"
-cat >"$undoc_dir/skills/probe/SKILL.md" <<'EOF'
----
-name: probe
-description: undocumented cross-plugin control
-allowed-tools: mcp__plugin_someother_thing__do_stuff
----
-Call `mcp__plugin_someother_thing__do_stuff`. No degrade documentation below.
-EOF
-check "undocumented cross-plugin reference rejected" fail "$undoc_dir"
-
-# --- Documented-degrade control (TAP-7753 round 2): the SAME reference as
-# above, but the file itself documents it under "## Degrades without" —
-# must PASS. This is the shape linear-read / linear-release-update /
-# tapps-continue-session ship today.
-doc_dir="$(minimal_fixture doc-cross-plugin)"
-cat >"$doc_dir/skills/probe/SKILL.md" <<'EOF'
----
-name: probe
-description: documented cross-plugin control
-allowed-tools: mcp__plugin_someother_thing__do_stuff
----
-Call `mcp__plugin_someother_thing__do_stuff`.
-
-## Degrades without
-
-- `mcp__plugin_someother_thing__` — belongs to a separate plugin this
-  bundle does not register. Without it, this probe skill's one step is
-  unavailable, but nothing else about the skill is affected.
-EOF
-check "documented cross-plugin reference accepted" pass "$doc_dir"
-
-# --- Documented BARE-prefix control (TAP-7753 round 3) -----------------------
-# The control round 2 was missing, and the reason its anti-vacuity control
-# above was vacuous for the cross-plugin gate: that fixture only ever builds
-# the UNDOCUMENTED bare-prefix state, so it could not distinguish "rejected
-# because bare" from "rejected because undocumented". This fixture builds
-# the DOCUMENTED bare-prefix state — exactly the shape that slipped through
-# round 2 with exit 0 — and it must go RED. VAL-02's out authorises a
-# documented CROSS-PLUGIN reference; a bare mcp__<server>__ resolves to
-# nothing inside a plugin no matter how well it is documented.
-doc_bare_dir="$(minimal_fixture doc-bare-tapps-mcp)"
+# --- 4. Documented BARE-prefix control (TAP-7753 round 3, retained round 4).
+# VAL-02's out never authorises a documented reference to THIS bundle's own
+# server; a bare mcp__<server>__ resolves to nothing inside a plugin no
+# matter how well it is documented, and no matter what the allowlist
+# contains.
+doc_bare_dir="$(minimal_fixture 04-bare-tapps-mcp-documented)"
 cat >"$doc_bare_dir/skills/probe/SKILL.md" <<'EOF'
 ---
 name: probe
@@ -194,13 +181,35 @@ Call `mcp__tapps-mcp__tapps_quick_check`.
 - `mcp__tapps-mcp__` — this documentation must NOT exempt a bare prefix for
   a plugin-registered server. Accepting it is the round-2 defect.
 EOF
-check "documented BARE mcp__tapps-mcp__ prefix still rejected" fail "$doc_bare_dir"
+check "4. bare mcp__tapps-mcp__ documented (own server)" fail "$doc_bare_dir"
 
-# --- Documented OWN-plugin, non-resolvable spelling (TAP-7753 round 3) -------
-# mcp__plugin_<self>_<server-we-do-not-register>__ has the cross-plugin
-# SHAPE but names this bundle's own plugin, so it is this bundle's bug, not
-# another plugin's capability. Documentation must not reach it either.
-doc_self_dir="$(minimal_fixture doc-own-plugin-bogus-server)"
+# --- 5. Underscore legacy/typo alias, documented (TAP-7753 round 4). Same
+# own-server refusal as #4, but via the mcp__tapps_mcp__ spelling
+# platform_bundles.py's _LEGACY_TOOL_PREFIXES already defends against
+# upstream. Proves is_own_server_prefix normalizes hyphen/underscore rather
+# than string-matching plugin_name literally.
+underscore_dir="$(minimal_fixture 05-underscore-tapps_mcp-documented)"
+cat >"$underscore_dir/skills/probe/SKILL.md" <<'EOF'
+---
+name: probe
+description: underscore own-server control
+allowed-tools: mcp__tapps_mcp__tapps_quick_check
+---
+Call `mcp__tapps_mcp__tapps_quick_check`.
+
+## Degrades without
+
+- `mcp__tapps_mcp__` — the underscore spelling of this bundle's own server.
+  Documentation must not exempt this either.
+EOF
+check "5. mcp__tapps_mcp__ (underscore) documented (own server)" fail "$underscore_dir"
+
+# --- 6. Documented OWN-plugin, non-resolvable spelling (TAP-7753 round 3,
+# retained round 4). mcp__plugin_<self>_<server-we-do-not-register>__ has the
+# mcp__plugin_ SHAPE but names this bundle's own plugin, so it is this
+# bundle's bug, not another server's capability. Documentation must not
+# reach it either.
+doc_self_dir="$(minimal_fixture 06-own-plugin-bogus-server-documented)"
 cat >"$doc_self_dir/skills/probe/SKILL.md" <<'EOF'
 ---
 name: probe
@@ -214,43 +223,110 @@ Call `mcp__plugin_tapps-mcp_not-registered__do_stuff`.
 - `mcp__plugin_tapps-mcp_not-registered__` — our own plugin name, a server
   we never register. Documentation must not exempt this.
 EOF
-check "documented own-plugin non-resolvable spelling rejected" fail "$doc_self_dir"
+check "6. own-plugin non-resolvable spelling documented (own server)" fail "$doc_self_dir"
 
-# --- Fenced-heading control (TAP-7753 round 3, hardening 1) ------------------
-# A "## Degrades without" heading written INSIDE a fenced code block is an
-# example of the syntax, not a live section. Round 2's regex was
-# fence-blind, so an anti-example exempted for real.
-fence_dir="$(minimal_fixture fenced-degrade-heading)"
+# --- 7 & 8. mcp__plugin_linear_linear__ — the REAL, independently installed
+# Linear plugin prefix, on EXTERNAL_MCP_PREFIX_ALLOWLIST. Undocumented must
+# fail (run first); documented in the same file must pass.
+linear_undoc_dir="$(minimal_fixture 07-linear-undocumented)"
+cat >"$linear_undoc_dir/skills/probe/SKILL.md" <<'EOF'
+---
+name: probe
+description: undocumented allowlisted-external control
+allowed-tools: mcp__plugin_linear_linear__list_issues
+---
+Call `mcp__plugin_linear_linear__list_issues`. No degrade documentation below.
+EOF
+check "7. mcp__plugin_linear_linear__ undocumented" fail "$linear_undoc_dir"
+
+linear_doc_dir="$(minimal_fixture 08-linear-documented)"
+cat >"$linear_doc_dir/skills/probe/SKILL.md" <<'EOF'
+---
+name: probe
+description: documented allowlisted-external control
+allowed-tools: mcp__plugin_linear_linear__list_issues
+---
+Call `mcp__plugin_linear_linear__list_issues`.
+
+## Degrades without
+
+- `mcp__plugin_linear_linear__` — belongs to the separate, independently
+  installed Linear plugin. Without it, this probe skill's one step is
+  unavailable, but nothing else about the skill is affected.
+EOF
+check "8. mcp__plugin_linear_linear__ documented (allowlisted)" pass "$linear_doc_dir"
+
+# --- 9 & 10. mcp__nlt-release-ship__ — the REAL docs-mcp fleet-alias prefix
+# linear-release-update's step 1b genuinely calls (TAP-7758), on
+# EXTERNAL_MCP_PREFIX_ALLOWLIST. This is the exact pair round 3 got wrong:
+# round 3 refused #10 even though it was documented, because a bare
+# mcp__<server>__ shape never matched round 3's cross-plugin-only shape test.
+release_undoc_dir="$(minimal_fixture 09-release-ship-undocumented)"
+cat >"$release_undoc_dir/skills/probe/SKILL.md" <<'EOF'
+---
+name: probe
+description: undocumented allowlisted docs-mcp control
+allowed-tools: mcp__nlt-release-ship__docs_release_gate
+---
+Call `mcp__nlt-release-ship__docs_release_gate`. No degrade documentation below.
+EOF
+check "9. mcp__nlt-release-ship__ undocumented" fail "$release_undoc_dir"
+
+release_doc_dir="$(minimal_fixture 10-release-ship-documented)"
+cat >"$release_doc_dir/skills/probe/SKILL.md" <<'EOF'
+---
+name: probe
+description: documented allowlisted docs-mcp control
+allowed-tools: mcp__nlt-release-ship__docs_release_gate
+---
+Call `mcp__nlt-release-ship__docs_release_gate`.
+
+## Degrades without
+
+- `mcp__nlt-release-ship__docs_release_gate` — this tool lives only on the
+  separate `docs-mcp` server, which the Claude plugin bundle does not ship
+  or depend on (TAP-7758). Without it this probe skill's one step is
+  unavailable.
+EOF
+check "10. mcp__nlt-release-ship__ documented (allowlisted external)" pass "$release_doc_dir"
+
+# --- 11. Fenced-heading control. A "## Degrades without" heading written
+# INSIDE a fenced code block is an example of the syntax, not a live
+# section. Uses the REAL allowlisted mcp__nlt-release-ship__ prefix so this
+# fixture would PASS but for the fence defect — isolating gate 2a from
+# allowlist membership.
+fence_dir="$(minimal_fixture 11-fenced-degrade-heading)"
 cat >"$fence_dir/skills/probe/SKILL.md" <<'EOF'
 ---
 name: probe
 description: fenced-heading control
-allowed-tools: mcp__plugin_someother_thing__do_stuff
+allowed-tools: mcp__nlt-release-ship__docs_release_gate
 ---
-Call `mcp__plugin_someother_thing__do_stuff`.
+Call `mcp__nlt-release-ship__docs_release_gate`.
 
 Do NOT write an anti-example like this and expect it to count:
 
 ```markdown
 ## Degrades without
 
-- `mcp__plugin_someother_thing__` — this is inside a fence.
+- `mcp__nlt-release-ship__docs_release_gate` — this is inside a fence.
 ```
 EOF
-check "fenced '## Degrades without' heading does not exempt" fail "$fence_dir"
+check "11. fenced '## Degrades without' heading does not exempt" fail "$fence_dir"
 
-# --- Nested-subheading control (TAP-7753 round 3, hardening 2) ---------------
-# '^##\s+\S' cannot match '### ...', so round 2's section ran past every
-# nested subsection and swallowed the prefixes they mentioned. The section
-# must end at the next heading of ANY depth.
-nested_dir="$(minimal_fixture nested-subheading)"
+# --- 12. Nested-subheading control. The real "## Degrades without" section
+# names nothing; only an unrelated nested "### " subsection mentions the
+# prefix, which must not be read as belonging to the section above. Uses the
+# REAL allowlisted mcp__nlt-release-ship__ prefix so this fixture would PASS
+# but for the nesting defect.
+nested_dir="$(minimal_fixture 12-nested-subheading)"
 cat >"$nested_dir/skills/probe/SKILL.md" <<'EOF'
 ---
 name: probe
 description: nested-subheading control
-allowed-tools: mcp__plugin_someother_thing__do_stuff
+allowed-tools: mcp__nlt-release-ship__docs_release_gate
 ---
-Call `mcp__plugin_someother_thing__do_stuff`.
+Call `mcp__nlt-release-ship__docs_release_gate`.
 
 ## Degrades without
 
@@ -258,19 +334,17 @@ Call `mcp__plugin_someother_thing__do_stuff`.
 
 ### Unrelated subsection
 
-This subsection mentions `mcp__plugin_someother_thing__` in passing, which
-must not be read as documentation belonging to the section above.
+This subsection mentions `mcp__nlt-release-ship__docs_release_gate` in
+passing, which must not be read as documentation belonging to the section
+above.
 EOF
-check "prefix in a nested ### subsection does not exempt" fail "$nested_dir"
+check "12. prefix in a nested ### subsection does not exempt" fail "$nested_dir"
 
-# --- Hook self-exemption control (TAP-7753 round 3, hardening 3) -------------
-# VAL-02's out says "in a SKILL". Without a skills/ restriction a hook shell
-# script can exempt its own unresolvable reference with a comment line.
-hook_dir="$(minimal_fixture hook-self-exemption)"
-# minimal_fixture only mkdir's skills/probe; every other control writes the
-# SKILL.md itself. This one must too, or the bundle is rejected by the
-# schema/required-files checks before part (e) ever runs — a control that
-# fails for the wrong reason.
+# --- 13. Hook self-exemption control. VAL-02's out says "in a SKILL". Uses
+# the REAL allowlisted mcp__plugin_linear_linear__ prefix so this fixture
+# would PASS but for the skills/-only defect — a hook script must not be
+# able to exempt its own unresolvable reference with a comment line.
+hook_dir="$(minimal_fixture 13-hook-self-exemption)"
 cat >"$hook_dir/skills/probe/SKILL.md" <<'EOF'
 ---
 name: probe
@@ -285,17 +359,59 @@ EOF
 # would go red for the wrong reason instead of exercising this gate.
 cat >"$hook_dir/hooks/tapps-probe-control.sh" <<'EOF'
 #!/usr/bin/env bash
-# Calls mcp__plugin_someother_thing__do_stuff.
+# Calls mcp__plugin_linear_linear__list_issues.
 ## Degrades without
-# - mcp__plugin_someother_thing__ — a hook must not be able to exempt
-#   itself; only a skill may document a graceful degradation.
+# - mcp__plugin_linear_linear__ — a hook must not be able to exempt itself;
+#   only a skill may document a graceful degradation.
 exit 0
 EOF
-check "hook script cannot self-exempt via a '## Degrades without' comment" fail "$hook_dir"
+check "13. hook script cannot self-exempt via a '## Degrades without' comment" fail "$hook_dir"
 
-# --- Positive control: only the plugin-resolvable prefix (which is what
-# TAP-7753's rewrite in platform_bundles.py now produces) must PASS.
-pos_dir="$(minimal_fixture pos-resolvable)"
+# --- 14. Cross-file documentation control (TAP-7753 round 4 — the control
+# round 3 never had). Gate 1 requires a file's OWN "## Degrades without"
+# section to name the prefix found unresolved in that SAME file. Skill
+# "probe" references the allowlisted mcp__nlt-release-ship__ prefix but does
+# NOT document it; skill "other" documents that exact string under its own
+# heading but never references it. Documenting a prefix in one skill must
+# never excuse an undocumented reference to it in a different skill.
+crossfile_dir="$(minimal_fixture 14-cross-file-documentation)"
+mkdir -p "$crossfile_dir/skills/other"
+cat >"$crossfile_dir/skills/probe/SKILL.md" <<'EOF'
+---
+name: probe
+description: cross-file control — references the prefix, documents nothing
+allowed-tools: mcp__nlt-release-ship__docs_release_gate
+---
+Call `mcp__nlt-release-ship__docs_release_gate`. This file documents nothing
+about it — see the (unrelated) `other` skill instead.
+EOF
+cat >"$crossfile_dir/skills/other/SKILL.md" <<'EOF'
+---
+name: other
+description: cross-file control — documents the prefix, never calls it
+---
+This skill never calls `mcp__nlt-release-ship__docs_release_gate`. It only
+documents it here, which must NOT excuse the `probe` skill's own
+undocumented reference above.
+
+## Degrades without
+
+- `mcp__nlt-release-ship__docs_release_gate` — documented here, in a
+  DIFFERENT file than the one that actually references it.
+EOF
+check "14. cross-file documentation does not exempt the referencing file" fail "$crossfile_dir"
+
+# --- 15. Real bundle control: the currently-shipped plugin/claude bundle
+# must pass outright. Round 3 shipped this same assertion as `pass` while
+# the code actually failed it (the round-4 problem statement) — the fixture
+# was correct, the predicate was wrong. Round 4's allowlist fixes the
+# predicate; the assertion is unchanged.
+check "15. real bundle: plugin/claude passes" pass "$SOURCE_BUNDLE"
+
+# --- Bonus regression control (not part of the 15-row matrix): a bundle
+# whose only mcp__* references are the plugin-resolvable prefix (needing no
+# documentation or allowlist entry at all) must PASS.
+pos_dir="$(minimal_fixture 16-bonus-positive-resolvable)"
 cat >"$pos_dir/skills/probe/SKILL.md" <<'EOF'
 ---
 name: probe
@@ -304,19 +420,7 @@ allowed-tools: mcp__plugin_tapps-mcp_tapps-mcp__tapps_quick_check
 ---
 Call `mcp__plugin_tapps-mcp_tapps-mcp__tapps_quick_check`.
 EOF
-check "positive control: plugin-resolvable prefix" pass "$pos_dir"
-
-# --- Real bundle control: the currently-shipped plugin/claude bundle must
-# pass outright. Deliberately still asserted as `pass` in round 3 even
-# though it currently does NOT: tightening out 4 to cross-plugin-only
-# surfaced one genuine, previously-masked reference —
-# `mcp__nlt-release-ship__docs_release_gate` in
-# skills/linear-release-update/SKILL.md, a docs-mcp tool a plugin-only
-# install can never resolve (TAP-7758), which round 2 exempted purely
-# because the file documented it. Flipping this expectation to `fail` would
-# assert the defect is correct behaviour and lock it in; the right resolution
-# is an owner decision on that skill, not a weaker control here.
-check "real bundle: plugin/claude passes" pass "$SOURCE_BUNDLE"
+check "16. (bonus) positive control: plugin-resolvable prefix" pass "$pos_dir"
 
 if [[ $FAILURES -gt 0 ]]; then
   echo "$FAILURES check(s) FAILED" >&2
