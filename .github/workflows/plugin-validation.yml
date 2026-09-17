@@ -16,6 +16,7 @@ on:
       - "plugin/**"
       - "scripts/validate-claude-plugin.sh"
       - "scripts/validate-cursor-plugin.sh"
+      - "scripts/test-validate-claude-plugin-deps.sh"
       - "packages/tapps-mcp/src/tapps_mcp/cli_ops_build.py"
       - "packages/tapps-mcp/src/tapps_mcp/pipeline/platform_bundles.py"
       - ".github/workflows/plugin-validation.yml"
@@ -25,6 +26,7 @@ on:
       - "plugin/**"
       - "scripts/validate-claude-plugin.sh"
       - "scripts/validate-cursor-plugin.sh"
+      - "scripts/test-validate-claude-plugin-deps.sh"
       - "packages/tapps-mcp/src/tapps_mcp/cli_ops_build.py"
       - "packages/tapps-mcp/src/tapps_mcp/pipeline/platform_bundles.py"
       - ".github/workflows/plugin-validation.yml"
@@ -55,6 +57,9 @@ jobs:
 
       - name: Validate plugin/claude bundle
         run: bash scripts/validate-claude-plugin.sh plugin/claude
+
+      - name: Regression-test the dependency-resolvability check itself (TAP-7758)
+        run: bash scripts/test-validate-claude-plugin-deps.sh
 
   validate-cursor-plugin:
     name: Validate Cursor plugin bundle
