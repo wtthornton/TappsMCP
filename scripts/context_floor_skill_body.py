@@ -41,28 +41,53 @@ def _joined_str_leading_literal(node: ast.JoinedStr) -> str:
 
 
 def _leading_literal(node: ast.expr, symtab: dict[str, ast.expr], depth: int = 0) -> str:
-    """Resolve *node* to the leading string-literal text it evaluates to.
+    """Resolve *node* to the string-literal text it evaluates to.
 
     Skill bodies are ``---`` / ``name: ...`` / ``---`` frontmatter followed
-    by markdown, sometimes built by concatenating a leading literal with later
-    interpolated/imported chunks (the body after frontmatter). Frontmatter
-    -- all this script needs -- always lives in the leftmost literal
-    segment, so only that segment needs resolving: the rest of the
-    concatenation (markdown body, f-string interpolations) is never
-    inspected.
+    by markdown, sometimes built by concatenating literal chunks with
+    interpolated/imported calls in between (TAP-7755: a call spliced
+    *between* two frontmatter-bearing literals, non-leftmost). This walks
+    **both** operands of every ``+`` concatenation rather than stopping at
+    the leftmost one, so a literal chunk that follows a call is still
+    returned instead of silently dropped -- dropping it can truncate the
+    frontmatter block before its ``description:`` line is ever reached.
+    """
+    return _resolve_literal_text(node, symtab, depth, strict=True)
+
+
+def _resolve_literal_text(
+    node: ast.expr, symtab: dict[str, ast.expr], depth: int, strict: bool
+) -> str:
+    """Implementation of ``_leading_literal``.
+
+    *strict* distinguishes the leftmost spine of the expression tree from
+    everything reached through a ``BinOp.right`` operand. On the leftmost
+    spine (``strict=True``) an unresolvable ``Call`` still raises: a call
+    standing in for the very first segment means there is no leading
+    literal at all, which is the genuine authoring mistake the original
+    behavior was built to catch, and round 1 of this fix locked that
+    classification in (``TestLeftmostCallRaises``). Off the spine
+    (``strict=False``) an unresolvable ``Call`` contributes empty text
+    instead of raising, so the literal chunk(s) that follow it -- which may
+    hold the ``description:`` line -- are still walked and concatenated
+    rather than the whole resolution stopping dead at the call.
     """
     if depth > 50:
         raise MeasurementError("skill constant resolution exceeded max depth (possible cycle)")
     if isinstance(node, ast.Constant) and isinstance(node.value, str):
         return node.value
     if isinstance(node, ast.BinOp) and isinstance(node.op, ast.Add):
-        return _leading_literal(node.left, symtab, depth + 1)
+        left = _resolve_literal_text(node.left, symtab, depth + 1, strict)
+        right = _resolve_literal_text(node.right, symtab, depth + 1, strict=False)
+        return left + right
     if isinstance(node, ast.Name):
         if node.id not in symtab:
             raise MeasurementError(f"unresolved skill-body constant reference: {node.id}")
-        return _leading_literal(symtab[node.id], symtab, depth + 1)
+        return _resolve_literal_text(symtab[node.id], symtab, depth + 1, strict)
     if isinstance(node, ast.JoinedStr):
         return _joined_str_leading_literal(node)
+    if isinstance(node, ast.Call) and not strict:
+        return ""
     raise MeasurementError(f"unsupported skill-body expression: {ast.dump(node)[:80]}")
 
 
