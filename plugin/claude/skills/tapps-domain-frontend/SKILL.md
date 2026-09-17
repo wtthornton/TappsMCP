@@ -4,7 +4,7 @@ user-invocable: true
 model: claude-sonnet-5
 description: >-
   Frontend/UX TAPPS workflow: playbook, UI library docs, and quality gate on scored files. Use when building UI components, accessibility fixes, or client-side routing changes.
-allowed-tools: mcp__nlt-build__tapps_session_start mcp__nlt-build__tapps_domain_playbook mcp__nlt-build__tapps_lookup_docs mcp__nlt-build__tapps_quick_check mcp__nlt-build__tapps_validate_changed mcp__nlt-build__tapps_checklist mcp__nlt-build__tapps_score_file
+allowed-tools: mcp__plugin_tapps-mcp_tapps-mcp__tapps_session_start mcp__plugin_tapps-mcp_tapps-mcp__tapps_domain_playbook mcp__plugin_tapps-mcp_tapps-mcp__tapps_lookup_docs mcp__plugin_tapps-mcp_tapps-mcp__tapps_quick_check mcp__plugin_tapps-mcp_tapps-mcp__tapps_validate_changed mcp__plugin_tapps-mcp_tapps-mcp__tapps_checklist mcp__plugin_tapps-mcp_tapps-mcp__tapps_score_file
 argument-hint: "[file-path or scope]"
 disable-model-invocation: true
 ---

@@ -110,3 +110,7 @@ point the user at `/orchestration-prompt` or implementable stories.
   lands, keep bodies honest and note the kind in the title/labels).
 - Do not start `/orchestration-prompt` while fog remains on this map.
 - Refer by name; keep Decisions-so-far as an index, not a paste dump.
+
+## Skills referenced here but not shipped in this bundle
+
+- **`linear-issue` is not shipped in the Claude plugin bundle.** It is installed by `tapps-mcp init`/`upgrade`, which also provision the docs-mcp server every step of it calls; a plugin-only install cannot resolve those tools, so shipping it here would load an inert skill (TAP-7753). Where `linear-issue` is unavailable, the validator gate it enforces is unavailable too — run `tapps-mcp init` rather than doing the work it describes unvalidated.

@@ -80,3 +80,7 @@ This clears `contract_assertions_unverified` in `tapps_checklist` `usage_gaps`.
 - Serial writes when implementing claimed features; parallel research OK.
 - Prefer `/orchestration-prompt` for multi-step harness loops that already
   embed a Validation contract section.
+
+## Skills referenced here but not shipped in this bundle
+
+- **`linear-issue` is not shipped in the Claude plugin bundle.** It is installed by `tapps-mcp init`/`upgrade`, which also provision the docs-mcp server every step of it calls; a plugin-only install cannot resolve those tools, so shipping it here would load an inert skill (TAP-7753). Where `linear-issue` is unavailable, the validator gate it enforces is unavailable too — run `tapps-mcp init` rather than doing the work it describes unvalidated.

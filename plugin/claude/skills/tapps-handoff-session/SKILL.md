@@ -7,7 +7,7 @@ description: >-
   lifecycle so the next chat can continue without a long paste. Use when
   ending a session, handing off to a fresh chat, or the user says hand
   off, save session state, or continue next time.
-allowed-tools: mcp__nlt-memory__tapps_handoff_save mcp__nlt-build__tapps_session_start Bash
+allowed-tools: mcp__plugin_tapps-mcp_tapps-mcp__tapps_handoff_save mcp__plugin_tapps-mcp_tapps-mcp__tapps_session_start Bash
 argument-hint: "[slot] [optional Linear issue id e.g. TAP-1234]"
 disable-model-invocation: true
 ---

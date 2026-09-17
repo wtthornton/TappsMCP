@@ -7,14 +7,14 @@ description: >-
   optional Linear context, and TAPPS session start — without pasting a long
   manifesto. Use when the user says continue, pick up where we left off, resume,
   or start a new session on an existing task (optional TAP-#### argument).
-allowed-tools: mcp__nlt-build__tapps_session_start mcp__plugin_linear_linear__get_issue Bash Read
+allowed-tools: mcp__plugin_tapps-mcp_tapps-mcp__tapps_session_start mcp__plugin_linear_linear__get_issue Bash Read
 argument-hint: "[slot] [optional Linear issue id e.g. TAP-1234]"
 ---
 
 Start work in a fresh context window by assembling structured state — not a user paste.
 
 1. **Session bootstrap.**
-   - **Preferred:** Call `mcp__nlt-build__tapps_session_start()`. If `data.compaction_rehydration` is present, summarize it in one sentence.
+   - **Preferred:** Call `mcp__plugin_tapps-mcp_tapps-mcp__tapps_session_start()`. If `data.compaction_rehydration` is present, summarize it in one sentence.
    - **CLI fallback** (MCP unavailable): Run `uv run tapps-mcp doctor --quick` and read `.tapps-mcp.yaml` for project context (quality preset, brain URL, engagement). Proceed without blocking.
 - **Usage gaps:** `usage_gaps.recurring_validation_skips` is 7-day rolling fleet telemetry — not proof this call failed. Still run validate + checklist at epic boundaries in execution repos.
 
@@ -55,3 +55,16 @@ Start work in a fresh context window by assembling structured state — not a us
 6. **Re-verify live state** when **Cumulative** is present — handoff is a pointer, not proof (orchestration §7 / cold-start companion). Step 3 covers sha, P0 status, and named PRs; also re-read any *metric* the handoff quotes (test count, score, coverage) from its newest artifact rather than inheriting the prose.
 
 7. **Proceed on P0.** Ask only if P0 is ambiguous; otherwise start using normal TAPPS workflow (`tapps_quick_check` after Python edits). Do **not** ask the user to re-paste prior context when handoff files exist.
+
+## Degrades without
+
+- `mcp__plugin_linear_linear__` (`get_issue`) — belongs to the separate,
+  independently installed Linear plugin (TAP-7771: this bundle cannot
+  safely declare it a dependency without risking the same
+  unsatisfiable-dependency failure TAP-7758 fixed). Without that plugin
+  installed and loaded, step 4's `TAP-####` lookup cannot run, so a P0
+  named by Linear id cannot be re-verified against the live tracker — but
+  every other step (session bootstrap, handoff discovery and loading, the
+  sha/PR ground-truth checks, and emitting the continue block) still works
+  from bundled tools and local git/gh state alone. Handoff rehydration is
+  never blocked by a missing Linear plugin.

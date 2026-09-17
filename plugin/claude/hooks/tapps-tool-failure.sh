@@ -11,7 +11,7 @@ print(d.get('tool_name',''))
 " 2>/dev/null)
 # Only log failures from TappsMCP tools — non-tapps failures stay silent.
 case "$TOOL" in
-  mcp__nlt-*|mcp__tapps-mcp__*|mcp__tapps_mcp__*) ;;
+  mcp__nlt-*|mcp__plugin_tapps-mcp_tapps-mcp__*|mcp__plugin_tapps-mcp_tapps-mcp__*) ;;
   *) exit 0 ;;
 esac
 ERROR=$(echo "$INPUT" | "$PYBIN" -c "

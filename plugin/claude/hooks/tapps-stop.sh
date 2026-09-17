@@ -27,15 +27,15 @@ import json,os,time
 transcript=os.environ.get('TAPPS_STOP_TRANSCRIPT','')
 project_dir=os.environ.get('TAPPS_STOP_PROJECT_DIR','.')
 gate_tools={'tapps_quick_check','tapps_validate_changed','tapps_quality_gate',
-            'mcp__tapps-mcp__tapps_quick_check','mcp__tapps-mcp__tapps_validate_changed',
-            'mcp__tapps-mcp__tapps_quality_gate','mcp__tapps-quality__tapps_quick_check',
-            'mcp__tapps-quality__tapps_validate_changed','mcp__tapps-quality__tapps_quality_gate',
-            'mcp__nlt-build__tapps_quick_check','mcp__nlt-build__tapps_validate_changed',
-            'mcp__nlt-build__tapps_quality_gate'}
-checklist_tools={'tapps_checklist','mcp__tapps-mcp__tapps_checklist','mcp__tapps-quality__tapps_checklist',
-                 'mcp__nlt-build__tapps_checklist'}
-lookup_tools={'tapps_lookup_docs','mcp__tapps-mcp__tapps_lookup_docs','mcp__tapps-quality__tapps_lookup_docs',
-              'mcp__nlt-build__tapps_lookup_docs'}
+            'mcp__plugin_tapps-mcp_tapps-mcp__tapps_quick_check','mcp__plugin_tapps-mcp_tapps-mcp__tapps_validate_changed',
+            'mcp__plugin_tapps-mcp_tapps-mcp__tapps_quality_gate','mcp__plugin_tapps-mcp_tapps-mcp__tapps_quick_check',
+            'mcp__plugin_tapps-mcp_tapps-mcp__tapps_validate_changed','mcp__plugin_tapps-mcp_tapps-mcp__tapps_quality_gate',
+            'mcp__plugin_tapps-mcp_tapps-mcp__tapps_quick_check','mcp__plugin_tapps-mcp_tapps-mcp__tapps_validate_changed',
+            'mcp__plugin_tapps-mcp_tapps-mcp__tapps_quality_gate'}
+checklist_tools={'tapps_checklist','mcp__plugin_tapps-mcp_tapps-mcp__tapps_checklist','mcp__plugin_tapps-mcp_tapps-mcp__tapps_checklist',
+                 'mcp__plugin_tapps-mcp_tapps-mcp__tapps_checklist'}
+lookup_tools={'tapps_lookup_docs','mcp__plugin_tapps-mcp_tapps-mcp__tapps_lookup_docs','mcp__plugin_tapps-mcp_tapps-mcp__tapps_lookup_docs',
+              'mcp__plugin_tapps-mcp_tapps-mcp__tapps_lookup_docs'}
 edit_tools={'Edit','Write','MultiEdit','NotebookEdit'}
 mcp_calls=0
 gate_called=False

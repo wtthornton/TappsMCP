@@ -5,7 +5,7 @@ model: claude-sonnet-5
 description: >-
   QA/review flow: parallel review pipeline or single-file review ending in checklist.
   Use when reviewing PRs, audit findings, or validating another agent's changes.
-allowed-tools: mcp__nlt-build__tapps_validate_changed mcp__nlt-build__tapps_checklist mcp__nlt-build__tapps_security_scan
+allowed-tools: mcp__plugin_tapps-mcp_tapps-mcp__tapps_validate_changed mcp__plugin_tapps-mcp_tapps-mcp__tapps_checklist mcp__plugin_tapps-mcp_tapps-mcp__tapps_security_scan
 argument-hint: "[file paths]"
 disable-model-invocation: true
 ---
