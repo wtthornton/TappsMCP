@@ -3,7 +3,7 @@ name: linear-read
 user-invocable: true
 model: claude-haiku-4-5-20251001
 description: Read multi-issue Linear data via cache-first dance. MANDATORY for any list-style Linear read. Routes through tapps_linear_snapshot_get/put before list_issues. Use when listing, filtering, or reviewing Linear issues (backlog review, "what's open", triage, "find issues assigned to X"). Single-issue lookups go straight to get_issue instead.
-allowed-tools: mcp__nlt-linear-issues__tapps_linear_snapshot_get mcp__nlt-linear-issues__tapps_linear_snapshot_put mcp__nlt-linear-issues__tapps_linear_list_issues mcp__plugin_linear_linear__list_issues mcp__plugin_linear_linear__get_issue
+allowed-tools: mcp__plugin_tapps-mcp_tapps-mcp__tapps_linear_snapshot_get mcp__plugin_tapps-mcp_tapps-mcp__tapps_linear_snapshot_put mcp__plugin_tapps-mcp_tapps-mcp__tapps_linear_list_issues mcp__plugin_linear_linear__list_issues mcp__plugin_linear_linear__get_issue
 argument-hint: "[free-form query, e.g. 'open issues in TAP', 'backlog assigned to me']"
 disable-model-invocation: true
 ---
@@ -16,7 +16,7 @@ Multi-issue Linear reads are cache-first by contract (TAP-967 audit found 5,368 
 
 1. **`tapps_linear_snapshot_get(team, project, state, label?)` first.** Use `state="open"` (or `"closed"`) as the **cache bucket** for TTL/keying. Those aliases are tapps-mcp cache keys — Linear does not understand them.
 2. **On `cached=true`**, use `data.issues` and filter in-memory for the rest of the user's question — `list_issues` is NOT called. Project the fields you need with a list comprehension; do not re-query.
-3. **On `cached=false`**, call `mcp__nlt-linear-issues__tapps_linear_list_issues(team, project, state, label?, limit?)` as a gate check (TAP-2010 server-side defence-in-depth).
+3. **On `cached=false`**, call `mcp__plugin_tapps-mcp_tapps-mcp__tapps_linear_list_issues(team, project, state, label?, limit?)` as a gate check (TAP-2010 server-side defence-in-depth).
    - On `ok=true` when `state` was a bucket alias (`open`/`closed`): call `mcp__plugin_linear_linear__list_issues` with NARROW filters: `team`, `project`, `includeArchived=false` — **omit `state`**. Filter the returned issues in memory (`statusType` in backlog/unstarted/started/triage for open; completed/canceled for closed). Never call without filters; never call with only `team` + `limit:250`.
    - On `ok=true` when `state` was a concrete Linear state (`backlog`, `started`, …): pass that same concrete `state` through to the plugin.
    - On `ok=false` (gate miss): follow the `hint` — call `tapps_linear_snapshot_get` first, then re-check.
@@ -49,7 +49,7 @@ Three sequential `list_issues({state: "backlog"})`, `({state: "unstarted"})`, `(
 - **Filter by assignee:** snapshot the team/state slice, filter `i["assignee"]["name"] == "X"` in memory.
 - **Recent activity:** if you need `updatedAt=-P7D`, do the snapshot first; if the cache is < 5 min old, the `updatedAt` filter is a memory-side comprehension.
 
-**After any Linear write** (from `linear-issue` or `linear-release-update` skills), call `mcp__nlt-linear-issues__tapps_linear_snapshot_invalidate(team, project)` so the next read returns fresh data. This skill itself does not write.
+**After any Linear write** (from `linear-issue` or `linear-release-update` skills), call `mcp__plugin_tapps-mcp_tapps-mcp__tapps_linear_snapshot_invalidate(team, project)` so the next read returns fresh data. This skill itself does not write.
 
 **Anti-patterns — do not do these:**
 

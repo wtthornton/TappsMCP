@@ -32,8 +32,8 @@
         ]
       },
       {
-        "matcher": "mcp__nlt-build__tapps_validate_changed",
-        "if": "mcp__nlt-build__tapps_validate_changed",
+        "matcher": "mcp__plugin_tapps-mcp_tapps-mcp__tapps_validate_changed",
+        "if": "mcp__plugin_tapps-mcp_tapps-mcp__tapps_validate_changed",
         "hooks": [
           {
             "type": "command",
@@ -42,8 +42,8 @@
         ]
       },
       {
-        "matcher": "mcp__nlt-build__tapps_report",
-        "if": "mcp__nlt-build__tapps_report",
+        "matcher": "mcp__plugin_tapps-mcp_tapps-mcp__tapps_report",
+        "if": "mcp__plugin_tapps-mcp_tapps-mcp__tapps_report",
         "hooks": [
           {
             "type": "command",
@@ -114,8 +114,8 @@
     ],
     "PostToolUseFailure": [
       {
-        "matcher": "mcp__nlt-build__.*",
-        "if": "mcp__nlt-build__*",
+        "matcher": "mcp__plugin_tapps-mcp_tapps-mcp__.*",
+        "if": "mcp__plugin_tapps-mcp_tapps-mcp__*",
         "hooks": [
           {
             "type": "command",

@@ -7,8 +7,8 @@ description: >-
   an external library, when you need API reference, or when the question is
   time-sensitive / not covered by Context7 docs.
 allowed-tools: >-
-  mcp__nlt-build__tapps_research
-  mcp__nlt-build__tapps_lookup_docs
+  mcp__plugin_tapps-mcp_tapps-mcp__tapps_research
+  mcp__plugin_tapps-mcp_tapps-mcp__tapps_lookup_docs
 argument-hint: "[library|query] [topic]"
 context: fork
 model: claude-sonnet-5
@@ -17,11 +17,11 @@ disable-model-invocation: true
 
 Research using TappsMCP's unified front door (ADR-0030):
 
-1. Prefer `mcp__nlt-build__tapps_research`:
+1. Prefer `mcp__plugin_tapps-mcp_tapps-mcp__tapps_research`:
    - Library/API: pass `library=` (and optional `topic=`) or `route="docs"`
    - Open-ended / latest: pass `query=` (auto-routes to brain `web_research`)
    - Single URL scrape: pass `url=` (brain `research_fetch`)
-2. For a known library name only, `mcp__nlt-build__tapps_lookup_docs` is fine (doc-only).
+2. For a known library name only, `mcp__plugin_tapps-mcp_tapps-mcp__tapps_lookup_docs` is fine (doc-only).
 3. If the brain path returns `degraded=true` / `success=false`, report the structured error — do not invent Exa/Firecrawl keys locally.
 4. Synthesize findings into a clear, actionable answer with code examples when docs content is present.
 5. Suggest follow-up lookups if additional coverage is needed

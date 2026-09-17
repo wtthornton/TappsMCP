@@ -42,33 +42,38 @@ session. Use `/tapps-finish-task` before declaring work complete,
   `Error: Dependency "docs-mcp@tapps-mcp" is not installed` — `plugin.json`
   declared a `docs-mcp` dependency this marketplace never lists. That
   dependency is removed; a clean install now loads without error.
-- **Still open — the tools above are not all actually reachable yet.**
-  This bundle's `.mcp.json` registers one server (name `tapps-mcp`), and a
+- **Fixed (TAP-7753):** most shipped tool references now resolve. A
   plugin-registered server's tools surface under
-  `mcp__plugin_tapps-mcp_tapps-mcp__*` (confirmed by installing a throwaway
-  plugin and watching a tool execute — a plugin-registered server is
-  namespaced `mcp__plugin_<plugin>_<server>__`, not a bare `mcp__<server>__`).
-  Counted across this bundle's `skills/`, `agents/`, and `hooks/` (from
-  `plugin/claude/`: `grep -rho 'mcp__<name>__[A-Za-z0-9_]*' skills/ agents/
-  hooks/ | wc -l`), none of the shipped tool references use that prefix:
-  103 reference `mcp__nlt-build__*`, 29 reference
-  `mcp__nlt-linear-issues__*`, 8 reference `mcp__nlt-setup__*`, 6 reference
-  `mcp__nlt-release-ship__*`, and 3 reference `mcp__nlt-memory__*` — the
-  pre-plugin, direct-MCP server names, none of which this bundle registers.
-  2 of the 103 are `hooks/hooks.json` wildcard `matcher`/`if` patterns
-  (`mcp__nlt-build__.*` and `mcp__nlt-build__*`), not calls to a specific
-  tool; the other 101 name one. A further 6 references already read
-  `mcp__tapps-mcp__*`, which is closer but still not the working prefix:
-  5 are named tool calls in `hooks/tapps-stop.sh`
-  (`tapps_quick_check`, `tapps_validate_changed`, `tapps_quality_gate`,
-  `tapps_checklist`, `tapps_lookup_docs`) and 1 is a wildcard case-pattern
-  in `hooks/tapps-tool-failure.sh`. `/tapps-finish-task` in particular calls
-  `mcp__nlt-build__tapps_checklist`, `mcp__nlt-build__tapps_validate_changed`,
-  and `mcp__nlt-build__tapps_lookup_docs` — none of which resolve after a
-  clean install. Rewriting these prefixes is tracked as a separate fix.
-  **Use `tapps-mcp init` in the main repo README for a working setup
-  today** — the plugin now installs and loads cleanly, but its documented
-  primary workflow is not yet reachable through it.
+  `mcp__plugin_tapps-mcp_tapps-mcp__*`, not a bare `mcp__<server>__`
+  (confirmed by installing a throwaway plugin and watching a tool
+  execute). Every skill/agent/hook reference that named one of this
+  bundle's own tools under a pre-plugin prefix — `mcp__nlt-build__`,
+  `mcp__nlt-setup__`, `mcp__nlt-memory__`, `mcp__tapps-mcp__`, and the
+  `mcp__tapps_mcp__` / `mcp__tapps-quality__` legacy aliases — is now
+  rewritten to that prefix at build time, gated per tool name against
+  this bundle's own live tool list (`tapps-mcp serve`'s registered
+  `ALL_TOOL_NAMES`) so a rewrite can never point at a tool the server
+  does not actually expose.
+- **Still open — two gaps this fix deliberately did not paper over:**
+  1. `mcp__nlt-linear-issues__docs_*` (in `linear-issue`, `linear-read`)
+     and `mcp__nlt-release-ship__docs_*` (in `linear-release-update`) name
+     tools — `docs_generate_epic`, `docs_validate_linear_issue`,
+     `docs_release_gate`, and others — that live only on the separate
+     `docs-mcp` server. This bundle does not ship or depend on that server
+     (the dependency was removed in TAP-7758 for being unsatisfiable), so
+     no prefix rewrite can make these resolve; they are a real capability
+     gap, not a namespace bug.
+  2. `mcp__plugin_linear_linear__*` (in `linear-issue`, `linear-read`,
+     `linear-release-update`) belongs to a separate, independently
+     installed Linear plugin this bundle does not register. Declaring it
+     as a `plugin.json` dependency would recreate the exact
+     unsatisfiable-dependency failure fixed above the moment an operator
+     hasn't also added that plugin's marketplace — and is rejected outright
+     by this bundle's own dependency-resolvability check (TAP-7771).
+     Stripping the references would gut those three skills' actual
+     purpose (they exist to wrap Linear's generator/validator flow).
+  `scripts/validate-claude-plugin.sh` names both gaps explicitly on every
+  run rather than passing around them.
 
 ## License
 
