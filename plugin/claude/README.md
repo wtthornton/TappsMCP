@@ -57,14 +57,15 @@ session. Use `/tapps-finish-task` before declaring work complete,
   does not actually expose.
 - **`linear-issue` excluded from this bundle (TAP-7753 round 2):** every
   write it performs — epic/story creation, lint, triage — is gated behind
-  `docs_save_linear_issue`/`docs_validate_linear_issue`/`docs_generate_epic`
-  and eight more `mcp__nlt-linear-issues__docs_*` tools that live only on
-  the separate `docs-mcp` server (TAP-7758: this bundle does not ship or
-  depend on it). Unlike the three skills below, there is no reduced mode —
-  the whole skill is a single docs-mcp-centered chain — so it is filtered
-  out of this bundle at build time rather than shipped non-functional. It
-  remains fully available (docs-mcp genuinely present) via `tapps-mcp
-  init`/`upgrade`.
+  `mcp__nlt-linear-issues__docs_*` tools that live only on the separate
+  `docs-mcp` server (TAP-7758: this bundle does not ship or depend on it).
+  Named rather than counted, because three hand-typed counts of this set
+  disagreed: `docs_generate_epic`, `docs_generate_story`,
+  `docs_linear_triage`, `docs_lint_linear_issue`, `docs_save_linear_issue`
+  and `docs_validate_linear_issue`. Unlike the three skills below there is no
+  reduced mode — the whole skill is one docs-mcp-centered chain — so it is
+  filtered out at build time rather than shipped non-functional, and remains
+  fully available (docs-mcp genuinely present) via `tapps-mcp init`/`upgrade`.
 - **Three skills degrade gracefully instead, and say so in their own
   `SKILL.md` under a `## Degrades without` heading:**
   - `linear-read` — carries **zero** docs-mcp references. Its only gap is

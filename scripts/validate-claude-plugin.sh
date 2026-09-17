@@ -269,34 +269,53 @@ echo "Dependency resolvability: OK"
 #   2. traceable to a plugin named in `dependencies`, or
 #   3. absent — a reference that was never made trivially satisfies this by
 #      not appearing here at all, or
-#   4. (TAP-7753 round 2) documented, in the SAME file, as a capability the
-#      skill degrades gracefully without — a ``## Degrades without`` section
-#      that names the exact prefix (backticked or not).
+#   4. (TAP-7753 round 2, tightened round 3) a CROSS-PLUGIN prefix —
+#      ``mcp__plugin_<name>_<server>__`` whose ``<name>`` is some OTHER
+#      plugin's — documented, in the SAME file, under that file's own
+#      ``## Degrades without`` section, and only in a file under ``skills/``.
 # A prefix satisfying none of these is printed by name — including a
 # namespace this bundle used to ship under (e.g. `mcp__nlt-build__`) or a
 # bare pre-plugin `mcp__tapps-mcp__`, which is NOT the plugin-resolvable form
 # and must be rejected, not accepted, for a plugin-registered server.
 #
-# Out 4 exists because round 1 proved 36 references across 4 skills name
-# tools genuinely outside this bundle's reach: a separate, independently
-# installed plugin (`mcp__plugin_linear_linear__`, TAP-7771 — this bundle
-# cannot safely declare it a dependency) or a server this bundle does not
-# ship (`mcp__nlt-release-ship__docs_*`, TAP-7758). Three skills
-# (linear-read, linear-release-update, tapps-continue-session) stay genuinely
-# useful without that capability; a fourth (linear-issue) does not — every
-# write it performs is gated behind a docs-mcp tool with no fallback, so it
-# is excluded from this bundle entirely (see the skill-filter in
-# `generate_claude_plugin_bundle`) rather than "documented" here, because
-# there is no true degraded mode to document.
+# Out 4 exists because round 1 proved references across several skills name
+# tools genuinely outside this bundle's reach — most importantly a separate,
+# independently installed plugin (`mcp__plugin_linear_linear__`, TAP-7771:
+# this bundle cannot safely declare it a dependency without recreating the
+# unsatisfiable-dependency failure TAP-7758 fixed). Three skills (linear-read,
+# linear-release-update, tapps-continue-session) stay genuinely useful without
+# that plugin; `linear-issue` does not — every write it performs is gated
+# behind a docs-mcp tool with no fallback, so it is excluded from this bundle
+# entirely (see the skill-filter in `generate_claude_plugin_bundle`) rather
+# than "documented" here, because there is no true degraded mode to document.
 #
-# Out 4 is scoped per (file, exact prefix) on purpose: a file's own
-# ``## Degrades without`` section must name the SAME prefix that was
-# actually found unresolved in that SAME file. Documenting one prefix in one
-# skill never excuses a different, undocumented prefix anywhere else — this
-# is NOT a blanket exemption for anything containing `mcp__plugin_`.
-# scripts/test-validate-claude-plugin-prefix-resolvability.sh's "undocumented
-# cross-plugin reference" control proves an unrelated, undocumented
-# `mcp__plugin_*` reference still fails.
+# Out 4 carries FOUR independent gates, and round 2 shipped only the first
+# two — a bare `mcp__tapps-mcp__` reference passed merely by naming itself
+# under a `## Degrades without` heading, which is the exact defect this
+# check exists to catch. Round 3 (TAP-7753) adds gates 3 and 4:
+#
+#   1. Per-(file, exact prefix): a file's own `## Degrades without` section
+#      must name the SAME prefix found unresolved in that SAME file.
+#      Documenting a prefix in one skill never excuses it anywhere else.
+#   2. The heading must be a real one — a `## Degrades without` line inside a
+#      fenced code block (an anti-example, say) documents nothing, and the
+#      section ends at the next heading of ANY depth, so a nested `###`
+#      subsection is not swallowed into it.
+#   3. CROSS-PLUGIN ONLY. VAL-02's out authorises a documented reference to
+#      ANOTHER PLUGIN's namespace. So the prefix must be
+#      `mcp__plugin_<name>_<server>__` with `<name>` != this bundle's own
+#      plugin name. A bare `mcp__<server>__` — `mcp__tapps-mcp__`,
+#      `mcp__nlt-*__`, `mcp__nonexistent__` — and this bundle's own
+#      `mcp__plugin_<self>_*__` in any non-resolvable spelling are refused
+#      regardless of documentation: inside a plugin they resolve to nothing
+#      and no prose changes that.
+#   4. `skills/` only. VAL-02's out says "in a SKILL"; a hook shell script
+#      could otherwise self-exempt with a `# ## Degrades without` comment.
+#
+# scripts/test-validate-claude-plugin-prefix-resolvability.sh proves each
+# gate with a fixture that BUILDS the failing state — including a
+# documented-bare-prefix fixture that must go red, without which gate 3's
+# control would be vacuous.
 if ! PREFIX_CHECK_OUTPUT="$(python3 -c "
 import json
 import re
@@ -321,7 +340,55 @@ for dep in plugin_data.get('dependencies') or []:
 
 ref_re = re.compile(r'mcp__[A-Za-z0-9_-]+__')
 degrade_header_re = re.compile(r'^##\s+Degrades without\b.*', re.MULTILINE)
-next_h2_re = re.compile(r'^##\s+\S', re.MULTILINE)
+# Gate 2b: the section ends at the next heading of ANY depth. '^##\s+\S'
+# cannot match '### ...' (the third '#' is not \s), so a nested subsection
+# used to be swallowed into the Degrades-without section along with every
+# prefix it mentioned.
+next_heading_re = re.compile(r'^#{2,}\s+\S', re.MULTILINE)
+NL = chr(10)
+
+
+def mask_fences(text: str) -> str:
+    '''Blank out fenced code blocks, preserving length and line structure.
+
+    Gate 2a: a '## Degrades without' heading written INSIDE a fence is an
+    example of the syntax, not a live section, and must not exempt anything.
+    Byte offsets are preserved, so positions found in the masked text still
+    index the original text identically.
+    '''
+    out = []
+    in_fence = False
+    for line in text.split(NL):
+        stripped = line.lstrip()
+        if stripped.startswith('\`\`\`') or stripped.startswith('~~~'):
+            in_fence = not in_fence
+            out.append(' ' * len(line))
+            continue
+        out.append(' ' * len(line) if in_fence else line)
+    return NL.join(out)
+
+
+def is_cross_plugin(prefix: str) -> bool:
+    '''Gate 3: does *prefix* name ANOTHER plugin's tool namespace?
+
+    VAL-02's out authorises a documented CROSS-PLUGIN reference, and nothing
+    wider. A plugin-registered server's tools are only ever reachable as
+    mcp__plugin_<pluginName>_<serverKey>__, so any prefix that is not of
+    that shape resolves to nothing inside a plugin no matter what prose sits
+    beside it — that includes the bare mcp__<server>__ forms this bundle was
+    originally written against. And a mcp__plugin_<self>_*__ spelling that
+    is not in *resolvable* names a server THIS bundle does not register, so
+    it is this bundle's own bug rather than someone else's plugin.
+    '''
+    if not (prefix.startswith('mcp__plugin_') and prefix.endswith('__')):
+        return False
+    middle = prefix[len('mcp__plugin_'):-2]
+    if '_' not in middle:  # needs both a <name> and a <server>
+        return False
+    if middle == plugin_name or middle.startswith(plugin_name + '_'):
+        return False
+    return True
+
 
 found: dict[str, set[str]] = {}
 documented: dict[str, set[str]] = {}
@@ -336,19 +403,24 @@ for sub in ('skills', 'agents', 'hooks'):
             text = path.read_text(encoding='utf-8')
         except (UnicodeDecodeError, OSError):
             continue
-        rel = str(path.relative_to(plugin_dir))
+        rel = path.relative_to(plugin_dir).as_posix()
         for m in ref_re.finditer(text):
             found.setdefault(m.group(0), set()).add(rel)
+        # Gate 4: only a SKILL may document a graceful degradation. A hook
+        # shell script could otherwise self-exempt with a
+        # '# ## Degrades without' comment line.
+        if not rel.startswith('skills/'):
+            continue
+        masked = mask_fences(text)
         doc_prefixes: set[str] = set()
-        for header in degrade_header_re.finditer(text):
+        for header in degrade_header_re.finditer(masked):
             section_start = header.end()
-            next_h2 = next_h2_re.search(text, section_start)
-            section_end = next_h2.start() if next_h2 else len(text)
-            section = text[section_start:section_end]
-            # Reuse the same prefix pattern used to find live references —
-            # a mention inside the Degrades-without section (backticked or
-            # not) counts as documentation of that exact prefix.
-            doc_prefixes.update(ref_re.findall(section))
+            nxt = next_heading_re.search(masked, section_start)
+            section_end = nxt.start() if nxt else len(masked)
+            # Read the prefixes out of the MASKED text too, so a fenced
+            # anti-example inside an otherwise-real section documents
+            # nothing either.
+            doc_prefixes.update(ref_re.findall(masked[section_start:section_end]))
         if doc_prefixes:
             documented[rel] = doc_prefixes
 
@@ -364,10 +436,17 @@ def _documented_covers(prefix: str, files: set[str]) -> set[str]:
 
 unresolved: dict[str, list[str]] = {}
 degraded: dict[str, list[str]] = {}
+refused: dict[str, list[str]] = {}
 for prefix, files in found.items():
     if prefix in resolvable or _declared_covers(prefix):
         continue
     covered = _documented_covers(prefix, files)
+    if covered and not is_cross_plugin(prefix):
+        # Documented, but NOT a cross-plugin reference: out 4 does not reach
+        # it. Report it separately so the reason is legible rather than
+        # looking like an undocumented oversight.
+        refused[prefix] = sorted(covered)
+        covered = set()
     remaining = files - covered
     if covered:
         degraded[prefix] = sorted(covered)
@@ -379,8 +458,15 @@ print('Referenced prefixes: ' + repr(sorted(found)))
 if declared:
     print('Declared dependencies: ' + repr(sorted(declared)))
 if degraded:
-    print('Documented graceful-degradation references (accepted):')
+    print('Documented cross-plugin graceful-degradation references (accepted):')
     for prefix, files in sorted(degraded.items()):
+        shown = ', '.join(files)
+        print(f'  {prefix}  (documented in {shown})')
+if refused:
+    print('REFUSED exemptions — documented under ## Degrades without, but NOT a')
+    print('cross-plugin mcp__plugin_<other>_<server>__ prefix, so it resolves to')
+    print('nothing inside this plugin no matter what the prose says:')
+    for prefix, files in sorted(refused.items()):
         shown = ', '.join(files)
         print(f'  {prefix}  (documented in {shown})')
 

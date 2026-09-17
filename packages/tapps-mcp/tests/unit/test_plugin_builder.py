@@ -92,14 +92,32 @@ class TestPluginSkills:
         assert len(skill_dirs) >= 4  # at least core skills
 
     def test_skill_dirs_match_module(self, plugin_dir: Path) -> None:
+        """The bundle ships EXACTLY ``CLAUDE_SKILLS`` minus the plugin-only
+        exclusion set -- still an equality, not a subset check.
+
+        TAP-7753 round 2 deliberately made ``dir_names == set(CLAUDE_SKILLS)``
+        false by filtering ``linear-issue`` out of the Claude plugin bundle
+        (it is gated end-to-end behind docs-mcp tools this bundle cannot
+        resolve). The expected set is derived from the two module constants
+        rather than restated, so this still fails if a skill goes missing for
+        any OTHER reason, if a skill appears that is not in the registry, or
+        if the exclusion set silently grows.
+        """
+        from tapps_mcp.pipeline.platform_bundles import CLAUDE_PLUGIN_EXCLUDED_SKILLS
         from tapps_mcp.pipeline.platform_skills import CLAUDE_SKILLS
 
         builder = PluginBuilder(output_dir=plugin_dir)
         builder.build()
 
+        expected = set(CLAUDE_SKILLS.keys()) - set(CLAUDE_PLUGIN_EXCLUDED_SKILLS)
+        # Guard the guard: an exclusion set that drifted to cover everything
+        # (or nothing it names) would make the equality above vacuous.
+        assert not (CLAUDE_PLUGIN_EXCLUDED_SKILLS - set(CLAUDE_SKILLS.keys()))
+        assert expected != set(CLAUDE_SKILLS.keys())
+
         skills_dir = plugin_dir / "skills"
         dir_names = {d.name for d in skills_dir.iterdir() if d.is_dir()}
-        assert dir_names == set(CLAUDE_SKILLS.keys())
+        assert dir_names == expected
         for d in skills_dir.iterdir():
             if d.is_dir():
                 assert (d / "SKILL.md").exists()

@@ -17,6 +17,7 @@ on:
       - "scripts/validate-claude-plugin.sh"
       - "scripts/validate-cursor-plugin.sh"
       - "scripts/test-validate-claude-plugin-deps.sh"
+      - "scripts/test-validate-claude-plugin-prefix-resolvability.sh"
       - "packages/tapps-mcp/src/tapps_mcp/cli_ops_build.py"
       - "packages/tapps-mcp/src/tapps_mcp/pipeline/platform_bundles.py"
       - ".github/workflows/plugin-validation.yml"
@@ -27,6 +28,7 @@ on:
       - "scripts/validate-claude-plugin.sh"
       - "scripts/validate-cursor-plugin.sh"
       - "scripts/test-validate-claude-plugin-deps.sh"
+      - "scripts/test-validate-claude-plugin-prefix-resolvability.sh"
       - "packages/tapps-mcp/src/tapps_mcp/cli_ops_build.py"
       - "packages/tapps-mcp/src/tapps_mcp/pipeline/platform_bundles.py"
       - ".github/workflows/plugin-validation.yml"
@@ -60,6 +62,12 @@ jobs:
 
       - name: Regression-test the dependency-resolvability check itself (TAP-7758)
         run: bash scripts/test-validate-claude-plugin-deps.sh
+
+      # TAP-7756 wired only the deps harness, so the controls proving part (e)
+      # actually discriminates had no invoker and ran only when somebody
+      # remembered to. A control nothing invokes is not a control.
+      - name: Regression-test the mcp__* prefix-resolvability check itself (TAP-7753)
+        run: bash scripts/test-validate-claude-plugin-prefix-resolvability.sh
 
   validate-cursor-plugin:
     name: Validate Cursor plugin bundle

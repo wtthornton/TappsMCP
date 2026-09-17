@@ -8,12 +8,19 @@ under ``assets/claude_skills/``, ``assets/claude_agents/``,
 ``assets/claude_doc_agents/``, and ``assets/claude_docs_skills/``, loaded
 via ``importlib.resources``.
 
-This is a pure refactor: every resolved body must be byte-identical to the
-value it had as an inline Python string literal at base sha
-670edd1c2d663df8f81d60fe596d57c3b8c4f98f. The golden sha256 hashes below
+The extraction itself was a pure refactor: every resolved body must be
+byte-identical to the value it had as an inline Python string literal at base
+sha 670edd1c2d663df8f81d60fe596d57c3b8c4f98f. The golden sha256 hashes below
 were computed directly from that base sha's runtime dict values (not
 re-derived from the extracted files — an independent reference so this
 test cannot pass by construction).
+
+Three entries are pinned to a LATER value than that base sha, each because a
+reviewed content change moved it deliberately; see the per-entry notes on
+``EXPECTED_CLAUDE_SKILLS_SHA256``. A pin is only ever advanced alongside the
+edit that moved it, named in the note — a pin updated to "make the test pass"
+is green-by-suppression and the whole point of this file is to make that
+visible in review.
 
 The corruption tests are the negative control: they prove the hash check
 actually discriminates (would fail on a real one-byte drift) rather than
@@ -40,7 +47,13 @@ from tapps_mcp.pipeline.platform_subagents import CLAUDE_AGENTS
 EXPECTED_CLAUDE_SKILLS_SHA256: dict[str, str] = {
     "tapps-finish-task": "d8b984a965ea1ef9e82681a258fcb9be2eadd8d552494dd72d3ae604ed995824",
     "tapps-handoff-session": "d97f9e268d0cd4da44a8031ac06a3717312a756158e79dcdc8f2e39c1cd3ef26",
-    "tapps-continue-session": "46e6794e4042f01e8a8be94f2b609b4f42285b600e23b0ad54d218204b548c77",
+    # TAP-7753 round 2 — advanced from the base-sha value
+    # 46e6794e4042f01e8a8be94f2b609b4f42285b600e23b0ad54d218204b548c77 by one
+    # reviewed edit: a "## Degrades without" section appended to
+    # assets/claude_skills/tapps-continue-session.md documenting that step 4's
+    # TAP-#### lookup needs mcp__plugin_linear_linear__get_issue. Body-only
+    # append; no frontmatter, step, or tool grant changed.
+    "tapps-continue-session": "6e3ed6cedc2f4bbf3d0e90f6a90bda528e569657f32e2b430d04e76910f4673a",
     "tapps-review-pipeline": "9cf055a76582fb02c4d489a73993e9af9c7e4472e9e2976af6c8461c7e191ba0",
     "tapps-refactor": "f47b9d131e6c74914beee8fc2058a04387b1695fe2559ac1b8822995e5dd40fe",
     "tapps-research": "faa060ea4201d57847dd9f0c78a7cb8dcc343453296a9bcf28ab870bbec9e524",
@@ -52,8 +65,25 @@ EXPECTED_CLAUDE_SKILLS_SHA256: dict[str, str] = {
     "tapps-engagement": "0049edd1251b08aab113e630ffaad9778c3247c4a4c1a49914a1d414074da449",
     "tapps-apply-files": "e1d1c9d20ee59387afd72e1c58ea035f54cb8570c51fe575945acfcc64661fd5",
     "linear-issue": "e0409220ce6d91f05102a090dc335be19922e2d1c054ccbebce2120f55f3e7e3",
-    "linear-read": "5d4cee019ea9f5f067ea5ecf80e5a7d1dedf8953b0f22112bc434eb04ade3bc1",
-    "linear-release-update": "ad0068d97c572775582126fbc600b0adeaab4a10c7f907ea803c173e7ce71a75",
+    # TAP-7753 round 2 — advanced from the base-sha value
+    # 5d4cee019ea9f5f067ea5ecf80e5a7d1dedf8953b0f22112bc434eb04ade3bc1 by one
+    # reviewed edit: a "## Degrades without" section appended to
+    # assets/claude_skills/linear-read.md documenting that steps 3-4 need
+    # mcp__plugin_linear_linear__list_issues/get_issue. Body-only append; no
+    # frontmatter, step, or tool grant changed.
+    "linear-read": "76908ec1656f7406f8b455df59fb739d205c2b2b3db67069d4b3c7eceb4bc39e",
+    # TAP-7753 round 2 — advanced from the base-sha value
+    # ad0068d97c572775582126fbc600b0adeaab4a10c7f907ea803c173e7ce71a75 by two
+    # reviewed edits to assets/claude_skills/linear-release-update.md:
+    #   1. frontmatter — two tool grants removed from `allowed-tools`
+    #      (mcp__nlt-release-ship__docs_generate_release_update and
+    #      ...__docs_validate_release_update), neither called anywhere in the
+    #      skill body, and the `description` line's flow updated from
+    #      docs_validate_release_update to the docs_release_gate that step 1b
+    #      actually calls;
+    #   2. body — a "## Degrades without" section appended documenting the
+    #      docs_release_gate and mcp__plugin_linear_linear__save_document gaps.
+    "linear-release-update": "14e09adcef5720dcc6d5368149e6d6abd6bd80bf43743fc1e9c8c4d0e0744785",
     "tapps-domain-security": "33aee2260a432372ef156cac684717552187630b66dbc7cefa96f8745bf66bbd",
     "tapps-domain-testing": "a2c8396f4d150d1eb979eee34687b6a4153edcc4ba21895bd2a5428712a51cad",
     "tapps-domain-frontend": "ce1c7856a9ebc57486e660d236e201a16fe1689f10cb3f3468bbf09630093282",

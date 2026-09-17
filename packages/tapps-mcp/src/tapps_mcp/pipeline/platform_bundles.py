@@ -22,6 +22,10 @@ from tapps_mcp.pipeline.agent_contract import (
     PYTHON_QUALITY_SCORING_SECTION,
     VALIDATION_QUICK_VS_BATCH,
 )
+from tapps_mcp.pipeline.claude_plugin_skill_exclusions import (
+    CLAUDE_PLUGIN_EXCLUDED_SKILLS,  # re-exported; existing importers reach it here
+    annotate_excluded_skill_refs,
+)
 from tapps_mcp.pipeline.platform_docs_automation import (
     CURSOR_DOC_AGENTS,
     CURSOR_DOCS_SKILLS,
@@ -330,14 +334,15 @@ session. Use `/tapps-finish-task` before declaring work complete,
   does not actually expose.
 - **`linear-issue` excluded from this bundle (TAP-7753 round 2):** every
   write it performs — epic/story creation, lint, triage — is gated behind
-  `docs_save_linear_issue`/`docs_validate_linear_issue`/`docs_generate_epic`
-  and eight more `mcp__nlt-linear-issues__docs_*` tools that live only on
-  the separate `docs-mcp` server (TAP-7758: this bundle does not ship or
-  depend on it). Unlike the three skills below, there is no reduced mode —
-  the whole skill is a single docs-mcp-centered chain — so it is filtered
-  out of this bundle at build time rather than shipped non-functional. It
-  remains fully available (docs-mcp genuinely present) via `tapps-mcp
-  init`/`upgrade`.
+  `mcp__nlt-linear-issues__docs_*` tools that live only on the separate
+  `docs-mcp` server (TAP-7758: this bundle does not ship or depend on it).
+  Named rather than counted, because three hand-typed counts of this set
+  disagreed: `docs_generate_epic`, `docs_generate_story`,
+  `docs_linear_triage`, `docs_lint_linear_issue`, `docs_save_linear_issue`
+  and `docs_validate_linear_issue`. Unlike the three skills below there is no
+  reduced mode — the whole skill is one docs-mcp-centered chain — so it is
+  filtered out at build time rather than shipped non-functional, and remains
+  fully available (docs-mcp genuinely present) via `tapps-mcp init`/`upgrade`.
 - **Three skills degrade gracefully instead, and say so in their own
   `SKILL.md` under a `## Degrades without` heading:**
   - `linear-read` — carries **zero** docs-mcp references. Its only gap is
@@ -443,20 +448,6 @@ _LEGACY_TOOL_PREFIXES = (
 _LEGACY_TOOL_REF_RE = re.compile(
     "(" + "|".join(re.escape(p) for p in _LEGACY_TOOL_PREFIXES) + r")(\.\*|\*|[A-Za-z0-9_]+)?"
 )
-
-# TAP-7753 round 2 — a filter applied ONLY where the Claude plugin bundle is
-# assembled, never a removal from CLAUDE_SKILLS. CLAUDE_SKILLS stays the
-# single source of truth for `tapps-mcp init`/`upgrade`, where docs-mcp
-# genuinely exists and `linear-issue` is fully usable — a program invariant
-# elsewhere requires ``len(CLAUDE_SKILLS) >= 26`` by module import, and
-# removing the key would silently break that on a path this bundle doesn't
-# own. `linear-issue` is unusable in THIS bundle specifically: every write
-# it performs is gated behind `docs_save_linear_issue`/`docs_generate_epic`/
-# 7 more `mcp__nlt-linear-issues__docs_*` tools this bundle cannot ever
-# resolve (docs-mcp is a separate, undepended-on server — TAP-7758), with no
-# reduced-but-real mode to document, unlike `linear-read`/
-# `linear-release-update`/`tapps-continue-session` below.
-CLAUDE_PLUGIN_EXCLUDED_SKILLS = frozenset({"linear-issue"})
 
 
 def _claude_plugin_skills() -> dict[str, str]:
@@ -618,7 +609,8 @@ def generate_claude_plugin_bundle(
         skill_dir = output_dir / "skills" / skill_name
         skill_dir.mkdir(parents=True, exist_ok=True)
         (skill_dir / "SKILL.md").write_text(
-            _rewrite_plugin_tool_prefixes(content), encoding="utf-8"
+            annotate_excluded_skill_refs(_rewrite_plugin_tool_prefixes(content)),
+            encoding="utf-8",
         )
         files_created.append(f"skills/{skill_name}/SKILL.md")
 

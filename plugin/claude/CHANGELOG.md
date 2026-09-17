@@ -4,6 +4,30 @@
 
 ### Fixed
 
+- **The graceful-degradation exemption is cross-plugin only, and the bundle no
+  longer routes to a skill it does not ship (TAP-7753 round 3).** Round 2's
+  exemption (below) was gated on nothing but "this string appears under a
+  `## Degrades without` heading in this file", so a bare
+  `mcp__tapps-mcp__tapps_quick_check` — the pre-plugin spelling this check
+  exists to reject — passed simply by documenting itself.
+  `scripts/validate-claude-plugin.sh` now exempts only a
+  `mcp__plugin_<other-plugin>_<server>__` prefix, documented in the same file,
+  under a heading that is not inside a code fence, in a section that ends at
+  the next heading of any depth, and only in a file under `skills/`. Eleven
+  controls in `scripts/test-validate-claude-plugin-prefix-resolvability.sh` —
+  now actually invoked by CI — hold those clauses; the five new ones were each
+  verified to go red against the round-2 validator.
+  Separately, filtering `linear-issue` out of the bundle left six shipped
+  references still routing to it (including a mandatory "Linear writes only via
+  `linear-issue`"); every skill naming an unshipped skill now carries a
+  bundle-scoped availability note, emitted at build time and derived from the
+  exclusion set, so a future exclusion is annotated automatically.
+  **Known-open:** tightening the exemption exposed one genuine reference this
+  bundle cannot resolve — `mcp__nlt-release-ship__docs_release_gate`, used by
+  `linear-release-update` step 1b. It belongs to `docs-mcp`, not to another
+  plugin, so no amount of documentation makes it resolvable here; how that
+  skill should ship is an open decision and the validator fails on it
+  deliberately rather than exempting it.
 - **`linear-issue` excluded from this bundle; three sibling skills documented
   as gracefully degrading instead (TAP-7753 round 2).** The `[3.12.90]`
   entry below said `mcp__nlt-linear-issues__docs_*` gaps lived "in
@@ -23,6 +47,9 @@
   `scripts/validate-claude-plugin.sh`'s prefix-resolvability check now
   accepts such a reference only when that same file documents it — an
   undocumented cross-plugin reference anywhere else still fails the check.
+  *(Amended by the round-3 entry above: documenting a reference is necessary
+  but no longer sufficient. `mcp__nlt-release-ship__docs_release_gate` is not
+  a cross-plugin prefix and is no longer accepted on documentation alone.)*
 - **Two dead tool grants removed from `linear-release-update`.**
   `mcp__nlt-release-ship__docs_generate_release_update` and
   `mcp__nlt-release-ship__docs_validate_release_update` were declared in
