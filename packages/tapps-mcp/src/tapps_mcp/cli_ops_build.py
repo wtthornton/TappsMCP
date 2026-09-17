@@ -18,13 +18,13 @@ import click
     "--engagement-level",
     type=click.Choice(["high", "medium", "low"]),
     default="medium",
-    help="Engagement level for generated rules.",
+    help="Default for the plugin manifest's userConfig.engagement_level.",
 )
 def build_plugin(output_dir: str, engagement_level: str) -> None:
     """Generate a Claude Code plugin directory from TappsMCP templates.
 
-    Creates a complete plugin with skills, agents, hooks, MCP config,
-    and platform rules that can be submitted to the Claude Code marketplace.
+    Creates a complete plugin bundle (manifest, skills, agents, hooks,
+    MCP config) that can be submitted to the Claude Code marketplace.
     """
     from pathlib import Path
 
