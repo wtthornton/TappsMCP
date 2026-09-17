@@ -2,11 +2,45 @@
 
 Reference commit: [mattpocock/skills@b8be62f](https://github.com/mattpocock/skills/commit/b8be62ffacb0118fa3eaa29a0923c87c8c11985c)
 
-This document defines three rules that every shipped skill template in
-`platform_skills.py` must satisfy. Skills are deployed to consuming
-projects via `tapps_init` / `tapps_upgrade`; these rules keep the
-generated files consistent and ensure Claude Code's autoload routing
-fires at the right times.
+This document defines three rules that every shipped skill template must
+satisfy. Skills are deployed to consuming projects via `tapps_init` /
+`tapps_upgrade`; these rules keep the generated files consistent and
+ensure Claude Code's autoload routing fires at the right times.
+
+## Where a skill actually lives (frontmatter/wiring vs. body)
+
+A shipped `CLAUDE_SKILLS` entry is split across two places:
+
+- **Frontmatter + dict wiring** — `packages/tapps-mcp/src/tapps_mcp/pipeline/platform_skills.py`.
+  This is where a skill's key is added to the `CLAUDE_SKILLS` dict, and where
+  any Python-side logic (loader helpers, marker resolution) lives.
+- **Body text** — a package-data Markdown file under
+  `packages/tapps-mcp/src/tapps_mcp/pipeline/assets/claude_skills/<skill-name>.md`.
+  This is the file you edit for wording, structure, or steps.
+
+`platform_skills.py` loads each body via `_load_claude_skill(skill_name)`,
+which calls `_read_claude_skill_asset()` to read
+`assets/claude_skills/<skill_name>.md` through `importlib.resources` (with a
+`sys.frozen` fallback that reads the file directly next to the module, for
+the PyInstaller-frozen binary build). The loader then resolves the body's
+`{{model:<role>}}` marker, if present, via `resolve_role_model()` — so a body
+that needs to name a model role (e.g. which model a sub-task should run on)
+never bakes a resolved model string into the `.md` file; `MODEL_ROLES` stays
+the single place a model changes.
+
+**CLAUDE_AGENTS** (`packages/tapps-mcp/src/tapps_mcp/pipeline/platform_subagents.py`)
+and the docs-automation dicts (`packages/tapps-mcp/src/tapps_mcp/pipeline/platform_docs_automation.py`)
+follow the identical split: frontmatter/wiring in the `platform_*.py` module,
+bodies in their own `assets/` subdirectory (`assets/claude_agents/` for
+CLAUDE_AGENTS; `assets/claude_doc_agents/` and `assets/claude_docs_skills/`
+for the docs-automation dicts). Each module carries its own small
+`_read_*_asset()` / loader pair mirroring the one in `platform_skills.py`.
+
+**So: to change what a skill says, edit the `.md` file under `assets/`. To
+add a new skill, change which skills are enabled, or change how a skill is
+loaded, edit the owning `platform_*.py` module.** Emitted output is
+unaffected by this split — a project running `tapps_init` / `tapps_upgrade`
+sees byte-identical generated files either way.
 
 ---
 
@@ -121,7 +155,8 @@ For full option reference, see [tapps-research-reference.md](tapps-research-refe
 
 ## Checklist for new skill templates
 
-Before adding or modifying a skill in `platform_skills.py`:
+Before adding or modifying a skill body (`assets/claude_skills/<name>.md`) or
+its wiring (`pipeline/platform_skills.py`):
 
 - [ ] Description has a capability sentence **and** a "Use when ..." clause
 - [ ] Description is ≤ 1 024 characters

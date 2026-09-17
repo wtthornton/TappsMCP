@@ -113,7 +113,7 @@ uv run tapps-mcp benchmark tools report|rank|calibrate
 
 - TappsMCP is a **tool for other projects** -- changes should consider how consuming projects will be affected
 - The `tapps_init` MCP tool bootstraps TappsMCP in consuming projects (creates AGENTS.md, TECH_STACK.md, platform rules, hooks, agents, skills)
-- **Skill template conventions** (description format, `disable-model-invocation` criterion, progressive-disclosure threshold) are documented in [docs/SKILL_AUTHORING.md](docs/SKILL_AUTHORING.md). Follow these rules when adding or editing skills in `pipeline/platform_skills.py`.
+- **Skill template conventions** (description format, `disable-model-invocation` criterion, progressive-disclosure threshold) are documented in [docs/SKILL_AUTHORING.md](docs/SKILL_AUTHORING.md). Follow these rules when adding or editing a skill: body text lives in `pipeline/assets/claude_skills/<name>.md`, frontmatter/dict wiring lives in `pipeline/platform_skills.py` (see SKILL_AUTHORING.md's "Where a skill actually lives" section — the same split applies to CLAUDE_AGENTS and the docs-automation dicts).
 - **Deterministic tools only** -- no LLM calls in the tool chain; same input → same output. Missing external checkers fall back to AST analysis and mark results `degraded: true`. See [ADR-0004](docs/adr/0004-deterministic-tools-only-contract.md).
 - **Architectural decisions** live in [docs/adr/](docs/adr/) — see the [index](docs/adr/README.md). When changing a load-bearing decision, supersede the ADR; do not edit history.
 

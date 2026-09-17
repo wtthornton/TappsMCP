@@ -150,6 +150,7 @@ The platform exposes **90 MCP tools** (48 TappsMCP + 42 DocsMCP) plus workflow p
 | **Cursor BugBot** | `.cursor/BUGBOT.md` for automated PR review standards. |
 | **CI integration** | GitHub Actions workflow template; headless mode docs. |
 | **Cursor marketplace** | Publishable plugin with marketplace.json, deep link, skills, agents, hooks. |
+| **Claude Code plugin** | Publishable plugin bundle at `plugin/claude/` (marketplace.json, plugin.json, skills, agents, hooks, `.mcp.json`). Install via `claude plugin marketplace add` + `claude plugin install` — see [Claude Code plugin install](#claude-code-plugin-install). |
 | **Agent SDK examples** | Python and TypeScript examples (quality check, CI pipeline, subagent registration). |
 | **MCP elicitation** | Interactive preset in `tapps_quality_gate`, init confirmation in `tapps_init` where supported. |
 
@@ -317,6 +318,25 @@ Run `tapps-mcp init --host claude-code` or manually add to `~/.claude.json`:
 
 For project-level config, use `tapps-mcp init --host claude-code --scope project` to create `.mcp.json` in the project root.
 
+### Claude Code plugin install
+
+An alternative to `tapps-mcp init` for Claude Code: install the packaged
+plugin bundle instead of scaffolding files into your project. This gets you
+the MCP server, skills, agents, and hooks in one step, managed by Claude
+Code's own plugin system rather than files checked into your repo.
+
+```bash
+git clone https://github.com/wtthornton/TappsMCP.git
+claude plugin marketplace add /path/to/TappsMCP/plugin/claude
+claude plugin install tapps-mcp
+```
+
+The marketplace lives at `plugin/claude/` inside the repo, not the repo
+root, so the bare `wtthornton/TappsMCP` marketplace shorthand won't find it —
+add it from a local checkout (or a Git URL pointed at that subdirectory) as
+shown above. See [`plugin/claude/README.md`](plugin/claude/README.md) for
+what the bundle includes.
+
 ### Cursor
 
 1. Run `tapps-mcp init --host cursor` or manually edit `.cursor/mcp.json` in your project:
@@ -396,7 +416,7 @@ TappsMCP includes CLI commands to set up, diagnose, and run the server. All comm
 | `tapps-mcp doctor` | Diagnose configuration and connectivity: MCP config, AGENTS.md, hooks, checkers, tapps-brain, dual-memory warning, **session handoff skills** (`tapps-handoff-session`, `tapps-continue-session`), **memory pipeline effective config** (resolved `memory.*` / `memory_hooks.*`). |
 | `tapps-mcp validate-changed` | Run quality validation on changed files from the CLI (same as MCP tool). Options: `--quick` (default) or `--full`. |
 | `tapps-mcp show-config` | Dump effective TappsMCP configuration as YAML (redacts secrets). |
-| `tapps-mcp build-plugin` | Generate a Claude Code plugin directory with skills, agents, hooks, MCP config, and rules. |
+| `tapps-mcp build-plugin` | Generate the machine-generated parts of a Claude Code plugin bundle (`.claude-plugin/plugin.json`, agents, skills, hooks, `.mcp.json`, README). See [`tapps-mcp build-plugin`](#tapps-mcp-build-plugin) below. |
 | `tapps-mcp rollback` | Restore configuration files from a pre-upgrade backup. Use `--list` to see backups, `--backup-id` for a specific one. |
 | `tapps-mcp validate-skills` | Validate SKILL.md frontmatter (name, description, allowed-tools). Options: `--path`, `--platform claude\|cursor\|both`. |
 | `tapps-mcp auto-capture` | Extract durable facts from stdin (Stop hook JSON) and save to memory. Option: `--max-facts` (default: 5). |
@@ -543,7 +563,9 @@ The `dry_run=true` response includes a top-level `dry_run_summary` with a `verdi
 
 ### `tapps-mcp build-plugin`
 
-Generate a Claude Code plugin directory for marketplace distribution:
+Generate a Claude Code plugin bundle from the same generator that produces
+the committed `plugin/claude/` tree (`generate_claude_plugin_bundle()` —
+`PluginBuilder` is a thin facade over it, so the two emit identical output):
 
 ```bash
 tapps-mcp build-plugin                              # default output: ./tapps-mcp-plugin/
@@ -551,7 +573,17 @@ tapps-mcp build-plugin --output-dir ./my-plugin     # custom output directory
 tapps-mcp build-plugin --engagement-level high       # high enforcement rules
 ```
 
-Creates a complete plugin with `.claude-plugin/plugin.json` manifest, namespaced skills, agents, hooks, MCP config, rules, and settings.
+Writes `.claude-plugin/plugin.json`, `agents/*.md`, `skills/<skill-id>/SKILL.md`
+(one directory per skill, matching the [Agent Skills spec](https://agentskills.io) —
+not the old namespaced `skills/tapps-mcp-<name>/` layout, which is retired),
+`hooks/hooks.json` plus the hook scripts, `bin/` shims, `.mcp.json`, and
+`README.md`. It does **not** write `.claude-plugin/marketplace.json`,
+`LICENSE`, or `CHANGELOG.md` — those are hand-maintained alongside the
+generated tree (see `plugin/claude/` for the checked-in example). To refresh
+the generated portion of that committed bundle in place, run
+`tapps-mcp build-plugin --output-dir plugin/claude` (the three hand-maintained
+files are untouched since the generator never deletes files it didn't write),
+then validate with `scripts/validate-claude-plugin.sh plugin/claude`.
 
 ### `tapps-mcp rollback`
 
@@ -1218,7 +1250,8 @@ packages/
         └── integrations/             # TappsMCP integration
 
 plugin/
-└── cursor/                            # Ready-to-publish Cursor marketplace plugin
+├── cursor/                            # Ready-to-publish Cursor marketplace plugin
+└── claude/                            # Ready-to-publish Claude Code plugin + marketplace
 examples/
 └── agent-sdk/                         # Claude Agent SDK integration examples (Python + TypeScript)
 ```

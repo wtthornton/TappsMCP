@@ -7,6 +7,40 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed — 2026-09-16
+
+- **CLAUDE_SKILLS (26 in `platform_skills.py`), CLAUDE_AGENTS (5), and the
+  docs-automation dicts moved their body text out of Python string literals
+  into package-data `.md` files** under
+  `packages/tapps-mcp/src/tapps_mcp/pipeline/assets/` (`claude_skills/`,
+  `claude_agents/`, `claude_doc_agents/`, `claude_docs_skills/`), loaded via
+  `importlib.resources` with a `sys.frozen` PyInstaller fallback. Each body is
+  now individually diffable and reviewable as the document it is;
+  `platform_skills.py` / `platform_subagents.py` / `platform_docs_automation.py`
+  now hold frontmatter and dict wiring, not prose. Emitted output is
+  byte-identical; dict names and shapes are unchanged (#414).
+- **The two Claude plugin bundlers were unified.** `PluginBuilder`
+  (`distribution/plugin_builder.py`) now delegates to
+  `generate_claude_plugin_bundle()` (`pipeline/platform_bundles.py`) instead of
+  carrying its own independent, drifted bundling logic. The old
+  `build-plugin` output — namespaced `skills/tapps-mcp-<name>/` directories, a
+  `rules/` prose dir, and a `settings.json` permissions stub — is retired; the
+  new output is the standard `skills/<skill-id>/SKILL.md` layout. A committed
+  bundle now exists at `plugin/claude/`, mirroring `plugin/cursor/` (#415).
+
+### Added — 2026-09-16
+
+- **`scripts/validate-claude-plugin.sh`** — validates the Claude Code plugin
+  bundle: required-file presence, delegates to `claude plugin validate
+  --strict` for `plugin.json` and `marketplace.json` schema conformance, and
+  checks referential integrity between `hooks/hooks.json` and the scripts it
+  names (#416).
+- **A permanent regression test in tapps-core** guarding the three symbols
+  (`ALL_SKIP_TOKENS`, `unknown_skip_tokens`, `nearest_token`) that
+  `nlt-orchestrator/scripts/check-skip-tokens.py` reads out of
+  `upgrade_skip_tokens.py` via a raw `exec()` + `hasattr` check — a surface a
+  normal import-based test would not have caught (#413).
+
 ### Fixed — 2026-09-12
 
 - **`orchestration-prompt` skill generator: ported five rules (8-12) measured on a
