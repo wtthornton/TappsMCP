@@ -49,6 +49,33 @@ silently dropped. The three other round-1 tests (the leftmost-call-raises
 pair, plus the simple non-leftmost/nothing-follows case) are byte-for-byte
 unchanged: round 2 deliberately keeps a leftmost call raising (see
 ``_resolve_literal_text``'s ``strict`` parameter and its docstring).
+
+## Round 3 (the elision guard -- the part round 2 got wrong)
+
+Round 2's fix resolved an unresolvable ``Call`` to ``""`` and kept no
+record that it had done so. That is **lossy resolution the code could not
+see**, and it converted a loud failure into a wrong number: a body whose
+``description`` VALUE came from an elided call
+(``"description: " + get_desc()``) stopped raising and started reporting
+``description=''`` -- a present-but-empty field, measured at 0 bytes. Base
+raised on that fixture; round 2 did not. A second instance of the same
+class was already live on both trees:
+``"---\\nname: x\\ndescription: " + get_desc() + "\\n---\\n"`` returned
+``''`` silently on base *and* on round 2.
+
+Round 3 makes the resolver return ``ResolvedBody(text, elided)`` and makes
+``_skill_info_from_frontmatter`` refuse exactly one combination: a
+``description`` that is missing or empty **while** something was elided.
+An elision elsewhere in the body -- the common case, calls splicing
+markdown after the frontmatter -- still resolves normally, because the
+measured field survived intact. Both holes above close on that single
+property, and the f-string channel (``_joined_str_leading_literal`` drops
+everything past the leading chunk) is covered by the same flag.
+
+``TestElisionFlagDiscriminates`` is the positive control for the flag
+itself: without it, ``TestElisionDoesNotTouchDescription`` would be
+vacuous, since a fixture where no elision ever occurred would pass that
+test trivially.
 """
 
 from __future__ import annotations
@@ -157,9 +184,7 @@ _VAL06_DEFECT_SOURCE = f"{_LEADING_NO_CLOSE} + SOME_CALL() + {_TRAILING_WITH_DES
 # Anti-vacuity control (designed by the verifier who reproduced this): the
 # SAME shape, but ``description:`` moved BEFORE the call -- proves the test
 # is sensitive to splice *position*, not merely the presence of a call.
-_COMPLETE_WITH_DESCRIPTION = (
-    '"---\\nname: test-skill\\ndescription: the description text\\n---\\n"'
-)
+_COMPLETE_WITH_DESCRIPTION = '"---\\nname: test-skill\\ndescription: the description text\\n---\\n"'
 _TRAILING_BODY = '"\\nbody\\n"'
 _ANTI_VACUITY_SOURCE = f"{_COMPLETE_WITH_DESCRIPTION} + SOME_CALL() + {_TRAILING_BODY}"
 
@@ -182,16 +207,12 @@ class TestVal06TruncationFix:
     lane's evidence block, not re-derivable here since round 1's fix is
     already applied to this file."""
 
-    def test_val06_defect_fixture_resolves_after_fix(
-        self, skill_body: ModuleType
-    ) -> None:
+    def test_val06_defect_fixture_resolves_after_fix(self, skill_body: ModuleType) -> None:
         tree = ast.parse(_VAL06_DEFECT_SOURCE, mode="eval").body
         info = skill_body.resolve_skill_info("test-skill", tree, {})
         assert info.description == "the description text"
 
-    def test_anti_vacuity_description_before_call_resolves(
-        self, skill_body: ModuleType
-    ) -> None:
+    def test_anti_vacuity_description_before_call_resolves(self, skill_body: ModuleType) -> None:
         """Mandatory anti-vacuity control: description BEFORE the call.
         This resolved under the UNFIXED resolver too (confirmed in the
         lane's evidence block) because the frontmatter was already complete
@@ -212,3 +233,140 @@ class TestVal06TruncationFix:
         tree = ast.parse(_MALFORMED_SOURCE, mode="eval").body
         with pytest.raises(measurement_error, match="no description field in frontmatter"):
             skill_body.resolve_skill_info("test-skill", tree, {})
+
+
+# --- Round 3: the elision guard (TAP-7755) ----------------------------------
+#
+# The property under test, stated once: *if any content was dropped during
+# resolution, and the resulting frontmatter yields a missing OR EMPTY
+# ``description``, the resolver RAISES rather than returning a value.*
+
+# Control 2 -- the round-2 regression. ``description``'s VALUE comes from
+# CALL2(), which resolves to "". Base RAISED here; round 2 (f9c5be6f)
+# returned ``description=''``; round 3 must raise again.
+_DESCRIPTION_VALUE_FROM_CALL = (
+    '"---\\nname: test-skill\\n" + CALL1() + "description: " + CALL2() + "\\n---\\n"'
+)
+
+# Control 3 -- the pre-existing hole, present identically on base and on
+# round 2 (both returned ``''`` with no exception). Same class, one call.
+_DESCRIPTION_VALUE_FROM_SINGLE_CALL = (
+    '"---\\nname: x\\ndescription: " + get_desc() + "\\n---\\nbody\\n"'
+)
+
+# Control 5 -- the guard against over-correcting into raise-on-any-elision.
+# The call sits in the markdown body, well past the closing ``---``; the
+# description is fully literal and intact, so this MUST still resolve.
+_ELISION_OUTSIDE_FRONTMATTER = (
+    '"---\\nname: x\\ndescription: real text\\n---\\nbody " + CALL() + " more\\n"'
+)
+
+# Same shape in the f-string channel: a JoinedStr drops everything past its
+# leading literal chunk, which is the identical defect class.
+_FSTRING_DESCRIPTION_INTERPOLATED = 'f"---\\nname: x\\ndescription: {d}\\n---\\n"'
+_FSTRING_TAIL_INTERPOLATED = 'f"---\\nname: x\\ndescription: real text\\n---\\n{tail}"'
+_FSTRING_NO_INTERPOLATION = 'f"---\\nname: x\\ndescription: real text\\n---\\n"'
+
+
+class TestElisionFlagDiscriminates:
+    """Positive control for ``ResolvedBody.elided`` itself.
+
+    A flag that were always ``False`` would make every raise-on-elision
+    test below unreachable; a flag that were always ``True`` would make
+    ``TestElisionDoesNotTouchDescription`` prove nothing. Pin both ends.
+    """
+
+    def test_pure_literal_concatenation_is_not_elided(self, skill_body: ModuleType) -> None:
+        tree = ast.parse(f'{_COMPLETE_WITH_DESCRIPTION} + "body\\n"', mode="eval").body
+        resolved = skill_body._resolve_skill_body(tree, {})
+        assert resolved.elided is False
+
+    def test_call_sets_elided(self, skill_body: ModuleType) -> None:
+        tree = ast.parse(_ELISION_OUTSIDE_FRONTMATTER, mode="eval").body
+        resolved = skill_body._resolve_skill_body(tree, {})
+        assert resolved.elided is True
+
+    def test_fstring_without_interpolation_is_not_elided(self, skill_body: ModuleType) -> None:
+        tree = ast.parse(_FSTRING_NO_INTERPOLATION, mode="eval").body
+        assert skill_body._resolve_skill_body(tree, {}).elided is False
+
+    def test_fstring_with_interpolated_tail_sets_elided(self, skill_body: ModuleType) -> None:
+        tree = ast.parse(_FSTRING_TAIL_INTERPOLATED, mode="eval").body
+        assert skill_body._resolve_skill_body(tree, {}).elided is True
+
+
+class TestElidedEmptyDescriptionRaises:
+    """The two holes the guard closes. Both returned a value before; both
+    must now raise, because the blank ``description`` is unattributable --
+    it may be a genuinely empty field, or it may be precisely the text the
+    elided call would have supplied at runtime."""
+
+    def test_description_value_from_call_raises(
+        self, skill_body: ModuleType, measurement_error: type[Exception]
+    ) -> None:
+        """Round-2 regression. base: RAISED 'no description field in
+        frontmatter'. f9c5be6f: ``description=''``, no exception. Here:
+        raises again, now naming the elision as the reason."""
+        tree = ast.parse(_DESCRIPTION_VALUE_FROM_CALL, mode="eval").body
+        with pytest.raises(measurement_error, match="part of the skill body was elided"):
+            skill_body.resolve_skill_info("test-skill", tree, {})
+
+    def test_single_call_description_value_raises(
+        self, skill_body: ModuleType, measurement_error: type[Exception]
+    ) -> None:
+        """Pre-existing hole: ``description=''`` silently on base AND on
+        f9c5be6f. Not a round-2 regression -- the same class, live the
+        whole time, in the very function being fixed."""
+        tree = ast.parse(_DESCRIPTION_VALUE_FROM_SINGLE_CALL, mode="eval").body
+        with pytest.raises(measurement_error, match="part of the skill body was elided"):
+            skill_body.resolve_skill_info("test-skill", tree, {})
+
+    def test_fstring_interpolated_description_raises(
+        self, skill_body: ModuleType, measurement_error: type[Exception]
+    ) -> None:
+        """Same property through the f-string channel."""
+        tree = ast.parse(_FSTRING_DESCRIPTION_INTERPOLATED, mode="eval").body
+        with pytest.raises(measurement_error, match="part of the skill body was elided"):
+            skill_body.resolve_skill_info("fs-skill", tree, {})
+
+
+class TestElisionDoesNotTouchDescription:
+    """The other direction, and the one that keeps the guard honest: an
+    elision that leaves the measured field intact must STILL RESOLVE.
+
+    Raising on any elision whatsoever would be trivially "safe" and would
+    re-break TAP-7755 itself -- every fixture in ``TestVal06TruncationFix``
+    contains an elided call. ``TestElisionFlagDiscriminates`` proves these
+    fixtures really do set ``elided``, so passing here is a real result,
+    not an artifact of no elision having happened."""
+
+    def test_call_in_markdown_body_still_resolves(self, skill_body: ModuleType) -> None:
+        tree = ast.parse(_ELISION_OUTSIDE_FRONTMATTER, mode="eval").body
+        info = skill_body.resolve_skill_info("test-skill", tree, {})
+        assert info.description == "real text"
+
+    def test_fstring_tail_interpolation_still_resolves(self, skill_body: ModuleType) -> None:
+        tree = ast.parse(_FSTRING_TAIL_INTERPOLATED, mode="eval").body
+        assert skill_body.resolve_skill_info("fs-skill", tree, {}).description == "real text"
+
+    def test_primary_val06_fixture_is_elided_yet_resolves(self, skill_body: ModuleType) -> None:
+        """The TAP-7755 primary fixture restated as an elision case: its
+        ``model:`` value is blanked by the elided call, but ``description``
+        is literal and intact, so the measurement is reported."""
+        tree = ast.parse(_VAL06_DEFECT_SOURCE, mode="eval").body
+        assert skill_body._resolve_skill_body(tree, {}).elided is True
+        info = skill_body.resolve_skill_info("test-skill", tree, {})
+        assert info.description == "the description text"
+
+
+class TestRealSkillTreeUnchanged:
+    """The fix must not move the measurement it exists to protect."""
+
+    def test_measure_skills_totals_unchanged(self) -> None:
+        if str(SCRIPTS_DIR) not in sys.path:
+            sys.path.insert(0, str(SCRIPTS_DIR))
+        from context_floor_skills import measure_skills
+
+        result = measure_skills()
+        assert len(result.skills) == 32
+        assert result.description_bytes == 7761

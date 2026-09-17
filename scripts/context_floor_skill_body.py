@@ -5,6 +5,14 @@ concatenated literal chunks, an f-string, or the ``_claude_domain_skill()``
 helper call) down to its ``description:`` frontmatter field. Split out of
 ``context_floor_skills.py`` (which owns discovering *which* expressions
 exist) to keep both modules small; see that module's docstring.
+
+Static resolution is inherently partial -- a body assembled at runtime
+from calls or f-string interpolations cannot be fully reconstructed from
+the AST. So resolution carries an ``elided`` flag (``ResolvedBody``)
+saying whether it dropped anything, and the measurement layer refuses to
+report a ``description`` that is missing or empty while that flag is set.
+The rule this module exists to honour: never return a number derived from
+text it knows it did not fully see.
 """
 
 from __future__ import annotations
@@ -27,21 +35,44 @@ class SkillInfo:
         return len(self.description.encode("utf-8"))
 
 
-def _joined_str_leading_literal(node: ast.JoinedStr) -> str:
+@dataclass(frozen=True)
+class ResolvedBody:
+    """A skill body resolved to text, *plus whether that text is complete*.
+
+    ``elided`` is ``True`` when the resolver dropped a segment it could not
+    evaluate statically -- a runtime ``Call`` standing in for part of the
+    body, or the interpolated tail of an f-string. The dropped segment
+    contributes **nothing** to ``text``; it is not marked, padded, or
+    placeheld, so ``text`` alone cannot tell a reader that anything is
+    missing. That is exactly why the flag rides alongside it: any caller
+    that turns ``text`` into a measurement must consult ``elided`` before
+    believing a field it parsed out (see ``_skill_info_from_frontmatter``).
+    """
+
+    text: str
+    elided: bool
+
+
+def _joined_str_leading_literal(node: ast.JoinedStr) -> ResolvedBody:
     """The leading literal chunk of an f-string skill body -- only valid
     when the f-string *starts* with a plain string segment (frontmatter is
-    never itself interpolated in this repo's skill templates)."""
+    never itself interpolated in this repo's skill templates).
+
+    Everything after that first chunk is **dropped**, so an f-string with
+    any further segment resolves ``elided=True``.
+    """
     if (
         node.values
         and isinstance(node.values[0], ast.Constant)
         and isinstance(node.values[0].value, str)
     ):
-        return node.values[0].value
+        return ResolvedBody(node.values[0].value, elided=len(node.values) > 1)
     raise MeasurementError("f-string skill body starts with an interpolation, not a literal")
 
 
-def _leading_literal(node: ast.expr, symtab: dict[str, ast.expr], depth: int = 0) -> str:
-    """Resolve *node* to the string-literal text it evaluates to.
+def _resolve_skill_body(node: ast.expr, symtab: dict[str, ast.expr]) -> ResolvedBody:
+    """Resolve *node* to the string text it evaluates to, and say whether
+    anything was lost doing so.
 
     Skill bodies are ``---`` / ``name: ...`` / ``---`` frontmatter followed
     by markdown, sometimes built by concatenating literal chunks with
@@ -51,35 +82,66 @@ def _leading_literal(node: ast.expr, symtab: dict[str, ast.expr], depth: int = 0
     the leftmost one, so a literal chunk that follows a call is still
     returned instead of silently dropped -- dropping it can truncate the
     frontmatter block before its ``description:`` line is ever reached.
+
+    What is still lost, plainly: the call's **own** contribution. An
+    elided ``Call`` resolves to the empty string, so ``"description: " +
+    get_text()`` yields a ``description`` that parses as *present and
+    empty* rather than as the text ``get_text()`` would have returned at
+    runtime. Concatenating around a call therefore trades one silent
+    truncation for a different silent gap, and text alone cannot
+    distinguish "genuinely blank" from "blanked by elision". The returned
+    ``ResolvedBody.elided`` flag is the only thing that can, and
+    ``_skill_info_from_frontmatter`` refuses to report a measurement whose
+    ``description`` is missing or empty while that flag is set.
     """
-    return _resolve_literal_text(node, symtab, depth, strict=True)
+    return _resolve_literal_text(node, symtab, 0, strict=True)
+
+
+def _leading_literal(node: ast.expr, symtab: dict[str, ast.expr]) -> str:
+    """``_resolve_skill_body`` text only -- **discards the ``elided`` flag.**
+
+    Safe only where the text is inspected, not measured. Anything that
+    derives a number, a field value, or a report line from a skill body
+    must call ``_resolve_skill_body`` and honour ``elided``; silently
+    dropping it is how a loud ``MeasurementError`` became a wrong zero
+    once already.
+    """
+    return _resolve_skill_body(node, symtab).text
 
 
 def _resolve_literal_text(
     node: ast.expr, symtab: dict[str, ast.expr], depth: int, strict: bool
-) -> str:
-    """Implementation of ``_leading_literal``.
+) -> ResolvedBody:
+    """Implementation of ``_resolve_skill_body``.
 
     *strict* distinguishes the leftmost spine of the expression tree from
-    everything reached through a ``BinOp.right`` operand. On the leftmost
-    spine (``strict=True``) an unresolvable ``Call`` still raises: a call
-    standing in for the very first segment means there is no leading
-    literal at all, which is the genuine authoring mistake the original
-    behavior was built to catch, and round 1 of this fix locked that
-    classification in (``TestLeftmostCallRaises``). Off the spine
-    (``strict=False``) an unresolvable ``Call`` contributes empty text
-    instead of raising, so the literal chunk(s) that follow it -- which may
+    everything reached through a ``BinOp.right`` operand. Off the spine
+    (``strict=False``) an unresolvable ``Call`` contributes empty text and
+    sets ``elided``, so the literal chunk(s) that follow it -- which may
     hold the ``description:`` line -- are still walked and concatenated
     rather than the whole resolution stopping dead at the call.
+
+    On the leftmost spine (``strict=True``) an unresolvable ``Call``
+    instead raises. Be clear about what that rule is and is not: it is
+    **positional, not semantic**. A leftmost call followed by complete,
+    self-contained, valid frontmatter would resolve perfectly well, and is
+    refused anyway. It is kept deliberately, as a conservative
+    over-approximation -- a call occupying the very first segment is the
+    strongest available signal that the whole body, opening ``---``
+    delimiter included, is assembled by a helper this resolver does not
+    model, and refusing beats guessing at the top of a file whose shape is
+    unknown. It is *not* a safety property, and nothing downstream should
+    read it as one: the property that actually protects measurements is
+    the ``elided`` flag, which covers calls in every position.
     """
     if depth > 50:
         raise MeasurementError("skill constant resolution exceeded max depth (possible cycle)")
     if isinstance(node, ast.Constant) and isinstance(node.value, str):
-        return node.value
+        return ResolvedBody(node.value, elided=False)
     if isinstance(node, ast.BinOp) and isinstance(node.op, ast.Add):
         left = _resolve_literal_text(node.left, symtab, depth + 1, strict)
         right = _resolve_literal_text(node.right, symtab, depth + 1, strict=False)
-        return left + right
+        return ResolvedBody(left.text + right.text, elided=left.elided or right.elided)
     if isinstance(node, ast.Name):
         if node.id not in symtab:
             raise MeasurementError(f"unresolved skill-body constant reference: {node.id}")
@@ -87,7 +149,7 @@ def _resolve_literal_text(
     if isinstance(node, ast.JoinedStr):
         return _joined_str_leading_literal(node)
     if isinstance(node, ast.Call) and not strict:
-        return ""
+        return ResolvedBody("", elided=True)
     raise MeasurementError(f"unsupported skill-body expression: {ast.dump(node)[:80]}")
 
 
@@ -180,11 +242,34 @@ def _skill_info_from_domain_call(name: str, call: ast.Call) -> SkillInfo:
 def _skill_info_from_frontmatter(
     name: str, expr: ast.expr, symtab: dict[str, ast.expr]
 ) -> SkillInfo:
-    body = _leading_literal(expr, symtab)
-    frontmatter = _parse_skill_frontmatter(body)
+    """Parse one resolved skill body into a ``SkillInfo``, refusing any
+    result an elision could have corrupted.
+
+    The guard is narrow on purpose. An elision **somewhere** in the body is
+    routine and harmless -- calls splice markdown into these templates all
+    the time -- so a non-empty ``description`` parsed out of elided text is
+    accepted: the measured field itself survived intact. What is refused is
+    the one combination where the elision and the measurement overlap, a
+    ``description`` that is missing or empty while text was dropped. There
+    the blank is unattributable: it may be a genuinely blank field, or it
+    may be the elided call's return value, and no measurement should be
+    reported from text the resolver knows it did not fully see. Only
+    ``description`` is guarded this way, because only ``description`` is
+    the measured quantity; ``context`` and ``disable-model-invocation`` are
+    booleans read from the same text and carry the same caveat.
+    """
+    resolved = _resolve_skill_body(expr, symtab)
+    frontmatter = _parse_skill_frontmatter(resolved.text)
     fm_description = frontmatter.get("description")
     if fm_description is None:
         raise MeasurementError(f"{name}: no description field in frontmatter")
+    if resolved.elided and not fm_description:
+        raise MeasurementError(
+            f"{name}: description is empty and part of the skill body was elided "
+            "(an unresolvable call or f-string interpolation contributed no text) "
+            "-- the real description may be exactly what was dropped; refusing to "
+            "measure a body this resolver did not fully see"
+        )
     return SkillInfo(
         name=name,
         description=fm_description,
