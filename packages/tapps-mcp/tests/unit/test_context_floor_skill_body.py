@@ -5,8 +5,8 @@ only ``BinOp.left``, so any segment after a spliced call was never seen. A
 ``description:`` sitting after such a call was silently truncated away and the
 caller then raised ``no description field in frontmatter``.
 
-Four earlier fixes were independently refuted. Each of the four shapes is
-replayed below as its own control so that a fifth attempt cannot be a
+Five earlier fixes were independently refuted. Each of the five shapes is
+replayed below as its own control so that a sixth attempt cannot be a
 rediscovery of one of them:
 
 1. walk both ``BinOp`` operands, resolving an elided call to ``""`` -- turned a
@@ -19,7 +19,17 @@ rediscovery of one of them:
    continues only while a line is indented or blank, so a sentinel-bearing line
    aborts folding, is excluded from the value, and the guard never fires;
 4. the same, shipped with a block-folding control whose fixture never reached
-   the folding code at all.
+   the folding code at all;
+5. the guard moved onto the field's *raw span* -- but the span's boundaries are
+   computed by ``_opens_key`` running over sentinel-bearing text, so a column-0
+   sentinel line containing a colon opened a bogus key, moved the boundary, and
+   carried the sentinel out of the only span the guard reads (PAIR-2 below,
+   one character away from PAIR-1, which does raise).
+
+The shape of all five: *a positional guard inherits every position the parser
+discards.* The controls below therefore pin the positions as well as the
+values -- including the two regions no field's span covers at all, and a
+duplicate key whose shadowed occurrence used to be overwritten.
 
 Every control here exercises only names that exist in the *unfixed* module, so
 the red it produces at base is the defect and not an ``AttributeError``.
@@ -271,8 +281,205 @@ class TestRealTreeMeasurementUnchanged:
         result = skills_mod.measure_skills()
         assert len(result.skills) == 32
         assert result.description_bytes == sum(s.description_bytes for s in result.skills)
-        assert result.description_bytes > 0
+        # The literal total the fix's commit message cites. Pinned so the number
+        # the message leans on has a committed guard rather than an unasserted
+        # sum-consistency check that any two wrong values satisfy.
+        assert result.description_bytes == 7750
         leaked = [
             s.name for s in result.skills if any("\ue000" <= ch <= "\uf8ff" for ch in s.description)
         ]
         assert leaked == [], f"elision marker leaked into measured descriptions: {leaked}"
+
+
+# Attempt 5's minimal pair. These three bodies differ only in what follows the
+# block scalar's first continuation line: nothing spliced, a spliced segment, or
+# a spliced segment whose first character is a colon. One colon was the whole
+# refutation -- ``_opens_key`` read the sentinel line as opening a new field, so
+# the sentinel was reassigned out of ``description``'s raw span into a bogus key
+# that ``_reject_elided_fields`` does not measure.
+_FOLDED_HEAD = "'---\\nname: fixture-skill\\ndescription: >-\\n  Lead sentence.\\n'"
+_FOLDED_TAIL = "'---\\n'"
+
+
+def _folded_with_splice(suffix: str) -> ast.expr:
+    return _expr(f"{_FOLDED_HEAD} + {_CALL} + '{suffix}\\n' + {_FOLDED_TAIL}")
+
+
+class TestAttemptFiveShape:
+    """Control 6 -- attempt 5 (the sentinel reassigned out of the span).
+
+    ``_fold_block_scalar`` was fixed by reading the field's raw span instead of
+    the folded value, but the span's *boundaries* are themselves computed by a
+    predicate running over sentinel-bearing text. A column-0 sentinel line
+    containing a colon opened a new key, moving the span boundary so that the
+    sentinel landed in an unmeasured field.
+
+    The elision-free twin runs first: it must fold two continuation lines into
+    one space-joined value, which only ``_fold_block_scalar`` produces. Without
+    it the two raises below could pass for a reason unrelated to folding."""
+
+    def test_elision_free_twin_folds_and_is_accepted(self, body_mod: ModuleType) -> None:
+        expr = _expr(f"{_FOLDED_HEAD} + '  trailing words\\n' + {_FOLDED_TAIL}")
+        info = body_mod.resolve_skill_info("fixture-skill", expr, {})
+        assert info.description == "Lead sentence. trailing words", (
+            "fixture does not reach _fold_block_scalar -- the pair below would be vacuous"
+        )
+
+    def test_pair_one_splice_without_colon_raises(self, body_mod: ModuleType) -> None:
+        with pytest.raises(body_mod.MeasurementError) as excinfo:
+            info = body_mod.resolve_skill_info(
+                "fixture-skill", _folded_with_splice(" trailing words"), {}
+            )
+            pytest.fail(f"no raise; reported truncated folded value {info.description!r}")
+        assert "description" in str(excinfo.value)
+
+    def test_pair_two_splice_followed_by_a_colon_raises(self, body_mod: ModuleType) -> None:
+        """THE refutation of attempt 5. Identical to PAIR-1 but for one colon;
+        at base this reports ``'Lead sentence.'`` / 14 bytes and never raises."""
+        with pytest.raises(body_mod.MeasurementError) as excinfo:
+            info = body_mod.resolve_skill_info(
+                "fixture-skill", _folded_with_splice(": trailing words"), {}
+            )
+            pytest.fail(
+                f"no raise; reported {info.description!r} ({info.description_bytes} bytes) -- "
+                "the sentinel line opened a bogus key and left description's span"
+            )
+        assert "description" in str(excinfo.value)
+
+
+class TestElisionAttributedToNoSpan:
+    """Defect 2 -- a position no field's span covers is checked by nobody.
+
+    Two such positions exist: inside the frontmatter but above the first key,
+    and above the frontmatter's opening ``---`` altogether. Neither is inside
+    any span, so the per-field guard never looks at them; and the text an
+    elision stands for is unknown, so either could contain the ``---`` or the
+    ``description:`` that decides what this script measures."""
+
+    def test_clean_preamble_line_is_still_accepted(self, body_mod: ModuleType) -> None:
+        expr = _expr("'---\\n\\nname: preamble\\ndescription: A real description.\\n---\\n'")
+        info = body_mod.resolve_skill_info("preamble", expr, {})
+        assert info.description == "A real description.", (
+            "a blank line above the first key must not by itself be a failure -- "
+            "otherwise the raises below prove nothing about the elision"
+        )
+
+    def test_elision_above_the_first_key_raises(self, body_mod: ModuleType) -> None:
+        expr = _expr(
+            "'---\\n' + "
+            + _CALL
+            + " + '\\nname: preamble\\ndescription: A real description.\\n---\\n'"
+        )
+        with pytest.raises(body_mod.MeasurementError) as excinfo:
+            info = body_mod.resolve_skill_info("preamble", expr, {})
+            pytest.fail(f"no raise; reported description {info.description!r}")
+        assert "first key" in str(excinfo.value)
+
+    def test_elision_above_the_start_delimiter_raises(self, body_mod: ModuleType) -> None:
+        expr = _expr(
+            _CALL + " + '\\n---\\nname: prologue\\ndescription: A real description.\\n---\\n'"
+        )
+        with pytest.raises(body_mod.MeasurementError) as excinfo:
+            info = body_mod.resolve_skill_info("prologue", expr, {})
+            pytest.fail(f"no raise; reported description {info.description!r}")
+        assert "start delimiter" in str(excinfo.value)
+
+
+class TestDuplicateKeyShadowing:
+    """Defect 3 -- ``result[key] = ...`` overwrote the elided occurrence.
+
+    The clean twin first: it pins that this parser reports the *last*
+    occurrence, so the fixture below really is two ``description`` keys and the
+    elided one really is the shadowed one."""
+
+    def test_clean_duplicate_reports_the_last_occurrence(self, body_mod: ModuleType) -> None:
+        expr = _expr(
+            "'---\\nname: dup\\ndescription: first clean value\\n"
+            "description: second clean value\\n---\\n'"
+        )
+        info = body_mod.resolve_skill_info("dup", expr, {})
+        assert info.description == "second clean value"
+
+    def test_elided_shadowed_occurrence_raises(self, body_mod: ModuleType) -> None:
+        expr = _expr(
+            "'---\\nname: dup\\ndescription: ' + "
+            + _CALL
+            + " + '\\ndescription: second clean value\\n---\\n'"
+        )
+        with pytest.raises(body_mod.MeasurementError) as excinfo:
+            info = body_mod.resolve_skill_info("dup", expr, {})
+            pytest.fail(f"no raise; reported description {info.description!r}")
+        assert "description" in str(excinfo.value)
+
+
+# A skill-template module whose bodies are inline string expressions, so
+# ``_collect_skill_set`` cannot take the ``_load_claude_skill`` asset shortcut
+# and must route through ``resolve_skill_info`` -> ``_resolve_body_text``.
+_RESOLVER_FIXTURE_MODULE = """\
+CLAUDE_SKILLS: dict[str, str] = {
+    "fixture-inline": "---\\nname: fixture-inline\\ndescription: an inline literal body\\n---\\nbody\\n",
+    "fixture-concat": "---\\nname: fixture-concat\\n"
+    + "description: a concatenated literal body\\n---\\nbody\\n",
+}
+"""
+_RESOLVER_FIXTURE_BYTES = len("an inline literal body") + len("a concatenated literal body")
+_CORRUPTION = "broken "
+
+
+class TestResolverPathPositiveControl:
+    """Positive control for the *resolver*, which the real-tree control cannot
+    reach at all.
+
+    Over the real tree ``_resolve_body_text`` has **zero** top-level
+    invocations: 29 of the 32 skills are read straight off their ``.md`` asset
+    by ``_skill_info_from_asset`` and the other 3 take the
+    ``_claude_domain_skill`` branch. So ``TestRealTreeMeasurementUnchanged``
+    below is evidence about the frontmatter *parser* and no evidence at all
+    about the resolver. This fixture tree routes through the resolver, and the
+    second half breaks the resolver to show the measurement move -- a control
+    nobody has seen go red is not a control."""
+
+    @staticmethod
+    def _measure(skills_mod: ModuleType, module: Path) -> int:
+        collected = skills_mod._collect_skill_set(module, "CLAUDE_SKILLS")
+        assert sorted(collected) == ["fixture-concat", "fixture-inline"]
+        return sum(info.description_bytes for info in collected.values())
+
+    def test_breaking_the_resolver_moves_the_measurement(
+        self,
+        body_mod: ModuleType,
+        skills_mod: ModuleType,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        module = tmp_path / "platform_fixture_skills.py"
+        module.write_text(_RESOLVER_FIXTURE_MODULE, encoding="utf-8")
+        real = body_mod._resolve_body_text
+
+        top_level_calls: list[str] = []
+
+        def counting(node: ast.expr, symtab: dict[str, ast.expr], depth: int = 0) -> str:
+            if depth == 0:
+                top_level_calls.append(ast.dump(node)[:40])
+            return real(node, symtab, depth)
+
+        monkeypatch.setattr(body_mod, "_resolve_body_text", counting)
+        clean_bytes = self._measure(skills_mod, module)
+        assert len(top_level_calls) == 2, (
+            "fixture tree does not reach _resolve_body_text -- this control would be "
+            f"as vacuous as the real-tree one (top-level calls: {top_level_calls})"
+        )
+        assert clean_bytes == _RESOLVER_FIXTURE_BYTES
+
+        def broken(node: ast.expr, symtab: dict[str, ast.expr], depth: int = 0) -> str:
+            text = real(node, symtab, depth)
+            return (
+                text.replace("description: ", f"description: {_CORRUPTION}") if depth == 0 else text
+            )
+
+        monkeypatch.setattr(body_mod, "_resolve_body_text", broken)
+        broken_bytes = self._measure(skills_mod, module)
+        assert broken_bytes == clean_bytes + 2 * len(_CORRUPTION), (
+            f"breaking _resolve_body_text did not move the measurement as expected "
+            f"({clean_bytes} -> {broken_bytes})"
+        )

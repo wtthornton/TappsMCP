@@ -28,11 +28,22 @@ class SkillInfo:
 
 
 # Marks a body segment that cannot be evaluated statically -- a helper call,
-# an out-of-module name, an f-string interpolation. Unicode Private Use Area,
-# so it cannot collide with anything a hand-authored SKILL.md legitimately
-# contains. Nothing downstream depends on this surviving the frontmatter
-# parser's transformations: the guard reads each measured field's *raw*
-# frontmatter span, which is the one place no transformation has run yet.
+# an out-of-module name, an f-string interpolation.
+#
+# The codepoints are Unicode Private Use Area. That is a deliberate trade-off,
+# not a guarantee of no collision: a hand-authored SKILL.md *may* contain
+# U+E000, and one that does is refused rather than mismeasured (the guard
+# cannot tell an authored marker from a resolver-emitted one). Refusing a
+# description nobody has written yet is the cheap half of that trade.
+#
+# The marker has to survive every positional decision the frontmatter parser
+# makes about *where* a field ends, because the guard runs after that
+# partitioning and only sees what the partition attributes to a measured
+# field. It survives because no such decision can read it: it cannot strip to
+# ``---`` (``_frontmatter_bounds``), it cannot form a key token
+# (``_opens_key``), lines it lands on that no field's span covers are rejected
+# outright, and a shadowed duplicate key keeps its raw span
+# (``_parse_skill_frontmatter_fields``).
 _ELISION = "\ue000elided\ue000"
 
 
@@ -110,8 +121,41 @@ class _Field:
 
 
 def _opens_key(line: str) -> bool:
-    """Whether *line* starts a new ``key: ...`` frontmatter field."""
-    return bool(line) and line[0] not in " \t-" and ":" in line
+    """Whether *line* starts a new ``key: ...`` frontmatter field.
+
+    The key token is the text before the first ``:``. A token carrying an
+    elision marker does not open a key: the marker stands for text this script
+    could not read, so neither the token nor the ``:`` after it is known to be
+    what it looks like. Reading it as a key is what refuted the previous fix --
+    ``<marker>: words`` spliced into a ``description: >-`` continuation opened
+    a bogus field, which moved ``description``'s span boundary up and carried
+    the marker out of the one span the guard inspects.
+    """
+    key, separator, _ = line.partition(":")
+    return bool(separator) and bool(key) and key[0] not in " \t-" and _ELISION not in key
+
+
+def _reject_unattributed_elisions(lines: list[str], start: int, preamble: list[str]) -> None:
+    """Refuse an elision marker that no field's span can claim.
+
+    The per-field guard only ever sees text the span partition attributed to a
+    field, so a marker the partition drops is a marker nobody checks. Two
+    regions are dropped by construction: everything at or above the opening
+    ``---``, and the frontmatter lines above the first key. A marker stands for
+    text this script could not read, and text in either region could be the
+    ``---`` or the ``description:`` that decides what gets measured -- so
+    neither region may contain one.
+    """
+    for region, where in (
+        (lines[: start + 1], "at or above the frontmatter start delimiter"),
+        (preamble, "between the frontmatter start delimiter and the first key"),
+    ):
+        if any(_ELISION in line for line in region):
+            raise MeasurementError(
+                f"frontmatter contains a segment this script cannot resolve statically "
+                f"{where}, where it belongs to no field's span; the measured value "
+                f"would be unguarded"
+            )
 
 
 def _parse_skill_frontmatter_fields(body: str) -> dict[str, _Field]:
@@ -125,15 +169,28 @@ def _parse_skill_frontmatter_fields(body: str) -> dict[str, _Field]:
     *not* stop where ``_fold_block_scalar`` stops. Folding continues only
     while a line is indented or blank, so a spliced segment occupying its own
     line ends folding and is excluded from the value -- which is precisely how
-    the previous guard-on-the-parsed-value fix for TAP-7755 was refuted. The
-    span is the field's footprint in the source text, before any folding,
-    quote-stripping or line-skipping has had a chance to discard it.
+    the guard-on-the-parsed-value fix for TAP-7755 was refuted.
+
+    The span is the field's footprint as this partition computes it, which is
+    not the same as its footprint in the source text: the partition can only
+    attribute a line to the nearest key at or above it. What the caller's
+    guard relies on is narrower and is what the three steps below establish --
+    that no elision marker can be attributed *away* from the field it sits in.
+    A marker cannot open a key (``_opens_key``), so it can never push a span
+    boundary up past itself; a line no span covers is refused outright
+    (``_reject_unattributed_elisions``); and a key that repeats keeps the raw
+    span of every occurrence, so a shadowed elision is not dropped with the
+    value it shadowed.
     """
     lines = body.splitlines()
     start, end = _frontmatter_bounds(lines)
     fm_lines = lines[start + 1 : end] if end is not None else lines[start + 1 :]
 
     key_starts = [i for i, line in enumerate(fm_lines) if _opens_key(line)]
+    _reject_unattributed_elisions(
+        lines, start, fm_lines[: key_starts[0]] if key_starts else fm_lines
+    )
+
     result: dict[str, _Field] = {}
     for n, i in enumerate(key_starts):
         span_end = key_starts[n + 1] if n + 1 < len(key_starts) else len(fm_lines)
@@ -143,7 +200,13 @@ def _parse_skill_frontmatter_fields(body: str) -> dict[str, _Field]:
             value, _next = _fold_block_scalar(fm_lines, i + 1)
         else:
             value = remainder.strip('"')
-        result[key.strip()] = _Field(value=value, raw="\n".join(fm_lines[i:span_end]))
+        key = key.strip()
+        raw = "\n".join(fm_lines[i:span_end])
+        shadowed = result.get(key)
+        # A repeated key reports its last value, as a YAML loader would, but
+        # accumulates every occurrence's raw span. Overwriting the span instead
+        # let an elision in the shadowed occurrence vanish with it.
+        result[key] = _Field(value=value, raw=f"{shadowed.raw}\n{raw}" if shadowed else raw)
     return result
 
 
@@ -184,6 +247,17 @@ def _skill_info_from_domain_call(name: str, call: ast.Call) -> SkillInfo:
 # The frontmatter fields that end up in a ``SkillInfo``. An elision anywhere
 # in one of these fields' raw spans means the value this script would report
 # is a truncation of the real one, so it must fail loudly instead.
+#
+# The converse is a tolerance, not a proof: an elision attributed to an
+# *unmeasured* field (``name:``, or any line below it and above the next key)
+# is accepted, and the text it stands for could in principle itself contain
+# frontmatter structure -- a second ``description:``, or a ``---`` that ends
+# the block early. That is accepted knowingly, because resolving *past* such a
+# splice to reach a later ``description:`` is the behaviour TAP-7755 asks for;
+# refusing it would refuse the issue's own headline case. It is bounded: over
+# this repo's tree the resolver has zero live invocations (every skill is read
+# from its ``.md`` asset or the ``_claude_domain_skill`` call), so the
+# tolerance currently applies to no measured skill at all.
 _MEASURED_FIELDS = ("description", "context", "disable-model-invocation")
 
 
