@@ -7,7 +7,10 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from tapps_mcp.pipeline.upgrade_backup import collect_upgrade_targets
+from tapps_mcp.pipeline.upgrade_backup import (
+    collect_upgrade_targets,
+    create_pre_upgrade_backup,
+)
 
 
 def test_non_template_file_in_templates_dir_is_not_collected(tmp_path: Path) -> None:
@@ -44,3 +47,30 @@ def test_genuine_template_file_is_still_collected(tmp_path: Path) -> None:
         f"expected exactly 1 genuine .html template under {templates_dir}, "
         f"got {len(template_targets)}: {template_targets}"
     )
+
+
+def test_directory_named_html_under_templates_is_not_collected_and_backup_succeeds(
+    tmp_path: Path,
+) -> None:
+    """A directory whose name happens to match the ``*.html`` glob (e.g. a
+    ``partials.html/`` dir) must not be swept into the backup target list --
+    ``Path.glob`` matches directories too, and ``shutil.copy2`` raises
+    ``IsADirectoryError`` on one, aborting the whole upgrade."""
+    templates_dir = tmp_path / "docs" / "templates"
+    templates_dir.mkdir(parents=True)
+    one_pager = templates_dir / "one-pager.html"
+    one_pager.write_text("<html></html>", encoding="utf-8")
+    weird_dir = templates_dir / "partials.html"
+    weird_dir.mkdir()
+    (weird_dir / "inner.txt").write_text("not a template", encoding="utf-8")
+
+    targets = collect_upgrade_targets(tmp_path)
+    template_targets = [t for t in targets if t.is_relative_to(templates_dir)]
+
+    assert one_pager in targets
+    assert weird_dir not in targets
+    assert template_targets == [one_pager]
+
+    result: dict[str, object] = {"errors": []}
+    assert create_pre_upgrade_backup(tmp_path, result) is True
+    assert result["errors"] == []
