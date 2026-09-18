@@ -47,7 +47,7 @@ class TestSkillsExecutionPath:
 
     def test_skills_flag_exits_zero_and_prints_skills(self) -> None:
         assert SCRIPT_PATH.is_file(), f"pinned path does not exist: {SCRIPT_PATH}"
-        result = subprocess.run(  # noqa: S603
+        result = subprocess.run(
             [sys.executable, str(SCRIPT_PATH), "--skills"],
             capture_output=True,
             text=True,
