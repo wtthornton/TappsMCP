@@ -14,8 +14,18 @@ This check asks each declared tapps-mcp HTTP fleet server for its own
 version over its own MCP session -- the same ``tapps_session_start`` call an
 agent already makes -- and compares the answer to the version currently
 installed on disk. A server that cannot be reached, or answers without a
-version, is reported as unknown rather than folded into "no skew": a probe
-that goes silent must not read as a clean bill of health.
+version for a reason other than relocation, is reported as unknown rather
+than folded into "no skew": a probe that goes silent must not read as a
+clean bill of health.
+
+``tapps_session_start`` is not present on every profile (TAP-7018): it now
+runs only on ``nlt-memory``, and every other profile either resolves the
+name to a "relocated" pointer envelope (``nlt-build``, ``nlt-setup``) or
+does not register the name at all, which the MCP SDK reports as ``Unknown
+tool`` (``nlt-linear-issues``, ``nlt-release-ship``). Neither is a skew
+finding -- nothing was asked to report a version and declined to -- so
+both are classified "not applicable" and excluded from the pass/fail
+verdict, distinctly from a server that should answer and doesn't.
 """
 
 from __future__ import annotations
@@ -60,12 +70,25 @@ def _tapps_backed_fleet_servers(project_root: Path) -> list[tuple[str, str]]:
 
 def _resolve_live_server_version(
     server_id: str, project_root: Path
-) -> tuple[str | None, str | None]:
-    """Return ``(version, None)`` on success or ``(None, reason)`` on failure.
+) -> tuple[str | None, str | None, bool]:
+    """Return ``(version, reason, applicable)``.
 
-    *reason* is always a human-readable explanation -- never ``None`` when
+    ``reason`` is always a human-readable explanation -- never ``None`` when
     *version* is ``None`` -- so a caller can never mistake "could not
     determine" for "matches".
+
+    ``applicable`` is ``False`` for a server that simply does not carry a
+    version-reporting ``tapps_session_start`` on this profile: either the
+    tool is absent entirely (``Unknown tool`` -- the MCP SDK's own message
+    for a name with no registered handler) or it resolves to the relocated-
+    tool pointer envelope (``error.code == "tool_relocated"``, TAP-7018 --
+    the tool is registered but refuses by design and names its real owner
+    via ``owner_preset``). Neither is a skew finding: nothing was asked to
+    report a version and declined to, so there is nothing to compare. Every
+    other failure (unreachable transport, or an ``ok`` response missing
+    ``data.server.version`` for some other reason) keeps ``applicable=True``
+    and must still refuse -- a probe that goes silent must not read as a
+    clean bill of health.
     """
     from tapps_mcp.distribution.fleet_smoke import probe_fleet_tool_result
 
@@ -73,16 +96,23 @@ def _resolve_live_server_version(
         server_id, "tapps_session_start", {"quick": True}, project_root=project_root
     )
     if not probe.get("ok"):
-        reason = probe.get("error") or probe.get("stage") or "unreachable"
-        return None, str(reason)
+        reason = str(probe.get("error") or probe.get("stage") or "unreachable")
+        if "Unknown tool" in reason:
+            return None, f"tapps_session_start not registered on this server ({reason})", False
+        return None, reason, True
 
     envelope = probe.get("data")
+    error = envelope.get("error") if isinstance(envelope, dict) else None
+    if isinstance(error, dict) and error.get("code") == "tool_relocated":
+        owner = error.get("owner_preset") or "another server"
+        return None, f"tapps_session_start relocated to '{owner}'", False
+
     inner = envelope.get("data") if isinstance(envelope, dict) else None
     server = inner.get("server") if isinstance(inner, dict) else None
     version = server.get("version") if isinstance(server, dict) else None
     if not version:
-        return None, "response did not include data.server.version"
-    return str(version), None
+        return None, "response did not include data.server.version", True
+    return str(version), None, True
 
 
 def check_fleet_server_cli_skew(project_root: Path) -> CheckResult:
@@ -110,12 +140,15 @@ def check_fleet_server_cli_skew(project_root: Path) -> CheckResult:
             "server/CLI skew cannot be determined.",
         )
 
+    not_applicable: list[str] = []
     unreachable: list[str] = []
     skewed: list[str] = []
     matched = 0
     for server_id, _url in candidates:
-        version, reason = _resolve_live_server_version(server_id, project_root)
-        if version is None:
+        version, reason, applicable = _resolve_live_server_version(server_id, project_root)
+        if version is None and not applicable:
+            not_applicable.append(f"{server_id} ({reason})")
+        elif version is None:
             unreachable.append(f"{server_id} ({reason})")
         elif version != installed_version:
             skewed.append(f"{server_id}={version}")
@@ -144,12 +177,17 @@ def check_fleet_server_cli_skew(project_root: Path) -> CheckResult:
             "restart`, or reload MCP in your client) to pick up the installed version.",
         )
 
-    return CheckResult(
-        name,
-        True,
+    message = (
         f"{matched}/{len(candidates)} tapps-mcp fleet server(s) match installed "
-        f"version {installed_version}",
+        f"version {installed_version}"
     )
+    if not_applicable:
+        preview = ", ".join(not_applicable[:4])
+        message += (
+            f"; {len(not_applicable)} do not expose a version-reporting tool on this "
+            f"profile (not a skew finding): {preview}"
+        )
+    return CheckResult(name, True, message)
 
 
 __all__ = ["check_fleet_server_cli_skew"]
