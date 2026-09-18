@@ -89,17 +89,39 @@ jobs:
               # New branch / first push -- no prior sha to diff against.
               # Validate just the tip commit.
               RANGE="${AFTER_SHA}~1..${AFTER_SHA}"
+              BASELINE_REF="${AFTER_SHA}~1"
             elif git cat-file -e "${BEFORE_SHA}^{commit}" 2>/dev/null \
                  && git merge-base --is-ancestor "${BEFORE_SHA}" "${AFTER_SHA}"; then
               RANGE="${BEFORE_SHA}..${AFTER_SHA}"
+              BASELINE_REF="${BEFORE_SHA}"
             else
               # Force-push (before sha isn't an ancestor of after, or was
               # rewritten out of history) -- before..after would be wrong
               # or huge, so fall back to validating just the tip commit.
               RANGE="${AFTER_SHA}~1..${AFTER_SHA}"
+              BASELINE_REF="${AFTER_SHA}~1"
             fi
-            # No PR base on a non-pull_request run -- ratchet stays off.
-            BASELINE_REF=""
+            # TAP-7817: the push path ratchets on the SAME hold-or-improve
+            # policy as the PR path, against the previous commit on the
+            # default branch -- the left edge of the range being diffed, i.e.
+            # whatever the last merge left behind. That is the same baseline
+            # the PR path resolves for the same change, so the two triggers
+            # cannot return different verdicts on identical bytes. Leaving
+            # BASELINE_REF empty here (as this path did until TAP-7817)
+            # silently reverted push to the ABSOLUTE threshold: a PR passed
+            # its own check and the identical job then failed on push, on the
+            # same file, with no code change in between.
+            if ! git rev-parse --verify --quiet "${BASELINE_REF}^{commit}" >/dev/null; then
+              echo "::error::Could not resolve the push ratchet baseline ${BASELINE_REF} -- refusing to guess a ratchet baseline." >&2
+              exit 1
+            fi
+          fi
+          if [ -z "${BASELINE_REF}" ]; then
+            # Every branch above sets a baseline. An empty one here would mean
+            # silently gating on the absolute threshold instead -- exactly the
+            # per-trigger policy split TAP-7817 removed. Fail loudly instead.
+            echo "::error::No ratchet baseline resolved for event ${{ github.event_name }} -- refusing to fall back to the absolute threshold." >&2
+            exit 1
           fi
           mapfile -t FILES < <(
             git diff --name-only --diff-filter=ACMR "${RANGE}" -- \
@@ -120,11 +142,8 @@ jobs:
             csv=$(IFS=,; echo "${chunk[*]}")
             batch_num=$(( i / BATCH_SIZE + 1 ))
             echo "::group::validate-changed batch ${batch_num}/${BATCHES} (${#chunk[@]} files)"
-            BASELINE_ARGS=()
-            if [ -n "${BASELINE_REF}" ]; then
-              BASELINE_ARGS=(--baseline-ref "${BASELINE_REF}")
-            fi
-            if ! uv run tapps-mcp validate-changed --quick --file-paths "${csv}" "${BASELINE_ARGS[@]}"; then
+            if ! uv run tapps-mcp validate-changed --quick --file-paths "${csv}" \
+                 --baseline-ref "${BASELINE_REF}"; then
               status=1
             fi
             echo "::endgroup::"
