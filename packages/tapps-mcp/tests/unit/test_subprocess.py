@@ -2,6 +2,7 @@
 
 import platform
 import subprocess
+import sys
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -58,8 +59,9 @@ class TestRunCommand:
         assert "not found" in result.stderr.lower() or result.returncode != 0
 
     def test_timeout(self):
-        # Use python -c sleep for cross-platform timeout testing
-        cmd = ["python", "-c", "import time; time.sleep(10)"]
+        # Use sys.executable for cross-platform timeout testing; a bare
+        # "python" may not exist on PATH (TAP-7784).
+        cmd = [sys.executable, "-c", "import time; time.sleep(10)"]
         result = run_command(cmd, timeout=1)
         assert result.timed_out is True
         assert result.success is False
