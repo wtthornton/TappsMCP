@@ -203,6 +203,28 @@ def resolve_role_model(role: str) -> str:
         raise RoleResolutionError(f"unknown model role: {role!r}") from exc
 
 
+# TAP-7795: a machine-readable view derived from MODEL_ROLES at call time, so
+# a consumer (e.g. a downstream policy snapshot) can diff against this repo's
+# actual table instead of a hand-retyped copy that drifts. Emitted in this
+# repo's own vocabulary (verifier-* names, literal model ids) — mapping to a
+# different vocabulary is the consumer's job, not this repo's.
+def export_model_roles(role: str | None = None) -> dict[str, dict[str, str]]:
+    """Return a JSON-serializable copy of ``MODEL_ROLES``, or just one role.
+
+    Always derived from ``MODEL_ROLES`` at call time (never a second stored
+    copy), and returns plain ``dict`` copies so a caller cannot mutate the
+    module-level table through the result.
+
+    An unknown ``role`` refuses loudly with ``RoleResolutionError``, matching
+    ``resolve_role_model``'s behaviour, instead of returning an empty result.
+    """
+    if role is not None:
+        if role not in MODEL_ROLES:
+            raise RoleResolutionError(f"unknown model role: {role!r}")
+        return {role: dict(MODEL_ROLES[role])}
+    return {name: dict(entry) for name, entry in MODEL_ROLES.items()}
+
+
 # TAP-7385: the only skills whose frontmatter stays ambient (invocable by a
 # plain-language request, no ``disable-model-invocation`` pin) across BOTH
 # CLAUDE_SKILLS and CURSOR_SKILLS. Every other entry in either dict must carry
