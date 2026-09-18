@@ -84,7 +84,7 @@ def collect_upgrade_targets(project_root: Path) -> list[Path]:
     for rel in _TEMPLATE_DIRS:
         templates_dir = project_root / rel
         if templates_dir.is_dir():
-            targets.extend(f for f in templates_dir.iterdir() if f.is_file())
+            targets.extend(templates_dir.glob("*.html"))
 
     targets.extend(
         candidate
