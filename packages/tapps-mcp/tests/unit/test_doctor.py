@@ -3487,20 +3487,16 @@ class TestMcpOperatorSecrets:
 
         monkeypatch.delenv("TAPPS_MCP_CONTEXT7_API_KEY", raising=False)
         monkeypatch.delenv("TAPPS_BRAIN_AUTH_TOKEN", raising=False)
+        # TAP-7818: isolate from this machine's real ~/.tapps-operator.env, which
+        # the resolver reads/writes for real if Path.home() is left unpatched.
+        monkeypatch.setattr(Path, "home", lambda: tmp_path)
         self._write_mcp_json(tmp_path)
-        operator_env = Path.home() / ".tapps-operator.env"
-        backup = operator_env.read_text(encoding="utf-8") if operator_env.is_file() else None
-        try:
-            operator_env.write_text(
-                "TAPPS_MCP_CONTEXT7_API_KEY=ctx7-test\nTAPPS_BRAIN_AUTH_TOKEN=tb-test\n",
-                encoding="utf-8",
-            )
-            result = check_mcp_operator_secrets(tmp_path)
-        finally:
-            if backup is None:
-                operator_env.unlink(missing_ok=True)
-            else:
-                operator_env.write_text(backup, encoding="utf-8")
+        operator_env = tmp_path / ".tapps-operator.env"
+        operator_env.write_text(
+            "TAPPS_MCP_CONTEXT7_API_KEY=ctx7-test\nTAPPS_BRAIN_AUTH_TOKEN=tb-test\n",
+            encoding="utf-8",
+        )
+        result = check_mcp_operator_secrets(tmp_path)
         assert result.ok is True
         assert "operator" in result.message.lower()
 
@@ -3511,15 +3507,13 @@ class TestMcpOperatorSecrets:
         monkeypatch.delenv("CONTEXT7_API_KEY", raising=False)
         monkeypatch.delenv("TAPPS_BRAIN_AUTH_TOKEN", raising=False)
         monkeypatch.delenv("TAPPS_MCP_MEMORY_BRAIN_AUTH_TOKEN", raising=False)
+        # TAP-7818: isolate from this machine's real ~/.tapps-operator.env, which
+        # the resolver reads/writes for real if Path.home() is left unpatched.
+        monkeypatch.setattr(Path, "home", lambda: tmp_path)
         self._write_mcp_json(tmp_path)
-        operator_env = Path.home() / ".tapps-operator.env"
-        backup = operator_env.read_text(encoding="utf-8") if operator_env.is_file() else None
-        try:
-            operator_env.unlink(missing_ok=True)
-            result = check_mcp_operator_secrets(tmp_path)
-        finally:
-            if backup is not None:
-                operator_env.write_text(backup, encoding="utf-8")
+        operator_env = tmp_path / ".tapps-operator.env"
+        operator_env.unlink(missing_ok=True)
+        result = check_mcp_operator_secrets(tmp_path)
         assert result.ok is False
         assert "TAPPS_MCP_CONTEXT7_API_KEY" in result.message
         assert "OPERATOR-SECRETS" in (result.detail or "")
