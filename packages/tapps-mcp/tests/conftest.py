@@ -844,6 +844,7 @@ def no_repo_wide_scans() -> Generator[None, None, None]:
 @pytest.fixture(autouse=True)
 def _isolate_checklist_session(
     tmp_path_factory: pytest.TempPathFactory,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> Generator[None, None, None]:
     """Point ``CallTracker`` at a per-test file instead of the real repo ledger.
 
@@ -860,9 +861,18 @@ def _isolate_checklist_session(
     - Test runs appended into that real ledger, corrupting live telemetry.
 
     Autouse because any test touching a recorded tool inherits both problems.
+
+    Also clears ``CLAUDE_CODE_SESSION_ID`` (TAP-7850): ``CallTracker``'s
+    active-session marker is keyed by that env var when present, so running
+    this suite *inside* a real Claude Code session would otherwise make every
+    test read/write a session-suffixed marker file instead of the plain one
+    most of these tests write to directly. Tests that specifically exercise
+    the per-session keying set the var themselves via monkeypatch.
     """
     from tapps_mcp import server as _server
     from tapps_mcp.tools.checklist import CallTracker
+
+    monkeypatch.delenv("CLAUDE_CODE_SESSION_ID", raising=False)
 
     prev_path = CallTracker._persist_path
     prev_session = CallTracker._active_session_id

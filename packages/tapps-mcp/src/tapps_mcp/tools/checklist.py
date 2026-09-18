@@ -16,6 +16,8 @@ from __future__ import annotations
 
 import contextlib
 import json
+import os
+import re
 import threading
 import time
 import uuid
@@ -323,9 +325,29 @@ class CallTracker:
 
     @classmethod
     def _active_session_marker(cls) -> Path | None:
+        """Path to this Claude Code session's active-session marker (TAP-7850).
+
+        Keyed by ``CLAUDE_CODE_SESSION_ID`` when present -- every MCP server
+        process Claude Code spawns inherits it from its parent, so sibling
+        servers serving the *same* session (nlt-build, nlt-memory, ...)
+        still share one marker file, exactly as before this fix
+        (TAP-6738/TAP-7849). Two genuinely different Claude Code sessions
+        get two different env values and therefore two different marker
+        files, which is what stops one session's ``begin_session()`` from
+        clobbering another's active checklist session (VAL-08). Falls back
+        to the unscoped, project-only path when the env var is absent --
+        e.g. the HTTP fleet transport, where one long-lived process serves
+        many sessions and per-process env scoping does not apply (see
+        ``tools/session_health.py``).
+        """
         if cls._persist_path is None:
             return None
-        return cls._persist_path.parent / "checklist_active_session"
+        base = cls._persist_path.parent / "checklist_active_session"
+        external_session = os.environ.get("CLAUDE_CODE_SESSION_ID", "").strip()
+        if not external_session:
+            return base
+        safe_session = re.sub(r"[^A-Za-z0-9_-]", "_", external_session)[:128]
+        return base.with_name(f"{base.name}.{safe_session}")
 
     @classmethod
     def _claimed_ids_path(cls) -> Path | None:
