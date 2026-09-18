@@ -65,6 +65,20 @@ def _echo_karpathy_section(result: dict[str, Any]) -> None:
         click.echo(f"  pinned to: {sha}")
 
 
+def _echo_templates_component(templates: dict[str, str], warnings: list[str]) -> None:
+    """Report the ``templates`` component's per-path outcome (TAP-7423 follow-up).
+
+    ``pipeline.platform_templates.generate_templates`` returns
+    ``{"templates": {rel_path: action}, "overwrite_warnings": [...]}`` — no
+    top-level ``action`` key, so the generic branch below never matched it.
+    """
+    for rel_path, action in templates.items():
+        fg = "green" if action in {"created", "refreshed"} else "cyan"
+        click.echo(click.style(f"  Templates: {action} ({rel_path})", fg=fg))
+    for warning in warnings:
+        click.echo(click.style(f"  WARNING: {warning}", fg="yellow"))
+
+
 def _echo_component_dict(key: str, value: dict[str, Any]) -> None:
     """Report one structured per-platform component result."""
     created = value.get("scripts_created") or value.get("scripts_refreshed") or []
@@ -75,6 +89,9 @@ def _echo_component_dict(key: str, value: dict[str, Any]) -> None:
         refreshed = value.get("scripts_refreshed") or []
         label = ", ".join(refreshed) if refreshed else key
         click.echo(click.style(f"  Refreshed {key}: {label}", fg="green"))
+        return
+    if key == "templates" and isinstance(value.get("templates"), dict):
+        _echo_templates_component(value["templates"], value.get("overwrite_warnings") or [])
         return
     action = value.get("action")
     if action in {"created", "updated"}:
