@@ -154,7 +154,11 @@ def check_upgrade_skip_token_drift(project_root: Path) -> CheckResult:
     explicit non-goal of silently overwriting a deliberately frozen file.
     """
     from tapps_mcp.distribution.doctor_telemetry import _read_engagement_level
-    from tapps_mcp.pipeline.upgrade_skip_tokens import SKIP_TOKENS, applied_skip_tokens
+    from tapps_mcp.pipeline.upgrade_skip_tokens import (
+        COMPONENT_NAME_TOKENS,
+        SKIP_TOKENS,
+        applied_skip_tokens,
+    )
 
     configured = _upgrade_skip_tokens(project_root)
     applied = applied_skip_tokens(configured)
@@ -174,6 +178,11 @@ def check_upgrade_skip_token_drift(project_root: Path) -> CheckResult:
 
     for rel_path in sorted(applied):
         skip_key = path_to_token.get(rel_path)
+        if skip_key in COMPONENT_NAME_TOKENS:
+            # Names a component (e.g. "karpathy"), not a filesystem path --
+            # there is nothing under project_root to check existence of.
+            unsupported.append(rel_path)
+            continue
         target = project_root / rel_path
         if not target.exists():
             missing.append(rel_path)
