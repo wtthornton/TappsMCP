@@ -165,22 +165,33 @@ class TestTap7423TemplatesBackup:
         assert _collect_upgrade_targets(tmp_path) == []
 
     def test_rollback_restores_customized_template(self, tmp_path: Path) -> None:
-        """End-to-end: back up, overwrite via upgrade, restore the backup."""
-        from tapps_mcp.distribution.rollback import BackupManager
-        from tapps_mcp.pipeline.upgrade import _collect_upgrade_targets
+        """End-to-end: the real upgrade pipeline backs up before it overwrites
+        a customised template, so a rollback can recover it (TAP-7432).
 
+        Drives ``upgrade_pipeline`` itself rather than simulating the
+        overwrite with a bare ``write_text`` — that way a regression in the
+        real backup-before-write ordering (``upgrade.py``'s call to
+        ``create_pre_upgrade_backup`` ahead of every ``_upgrade_*`` step)
+        actually fails this test.
+        """
+        from tapps_mcp.distribution.rollback import BackupManager
+        from tapps_mcp.pipeline.upgrade import upgrade_pipeline
+
+        (tmp_path / ".claude").mkdir()
+        (tmp_path / "CLAUDE.md").write_text("# TAPPS Quality Pipeline\n")
+        (tmp_path / "pyproject.toml").write_text("", encoding="utf-8")
         templates_dir = tmp_path / "docs" / "templates"
         templates_dir.mkdir(parents=True)
         one_pager = templates_dir / "one-pager.html"
         one_pager.write_text("<!-- a customer's own copy -->\n")
 
-        mgr = BackupManager(tmp_path)
-        mgr.create_backup(_collect_upgrade_targets(tmp_path), version="0.0.0")
+        result = upgrade_pipeline(tmp_path, platform="claude", dry_run=False)
+        assert result["success"] is True
+        # The real upgrade overwrote the customised copy with the canonical
+        # template — otherwise there would be nothing for rollback to undo.
+        assert one_pager.read_text(encoding="utf-8") != "<!-- a customer's own copy -->\n"
 
-        # Simulate an upgrade overwriting the customised template.
-        one_pager.write_text("<!-- canonical template -->\n")
-
-        restored = mgr.restore_backup()
+        restored = BackupManager(tmp_path).restore_backup()
 
         assert "docs/templates/one-pager.html" in restored
         assert one_pager.read_text(encoding="utf-8") == "<!-- a customer's own copy -->\n"
