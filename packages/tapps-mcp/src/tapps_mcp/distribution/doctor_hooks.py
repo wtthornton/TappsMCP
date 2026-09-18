@@ -11,7 +11,10 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+from tapps_core.common.logging import get_logger
 from tapps_mcp.distribution.doctor_result import CheckResult, consumer_staleness
+
+log = get_logger(__name__)
 
 
 @consumer_staleness
@@ -94,6 +97,30 @@ def _karpathy_cursor_rule_result(
     )
 
 
+def _karpathy_opt_out(project_root: Path) -> str | None:
+    """Return the declared opt-out mechanism for the Karpathy block, or ``None``.
+
+    ``upgrade`` honours two independent declared ways to decline the block
+    (``refresh_karpathy_blocks`` in ``pipeline/upgrade.py``): ``.tapps-mcp.yaml``
+    -> ``include_karpathy_guidelines: false``, and ``upgrade_skip_files`` ->
+    the ``karpathy`` token. The doctor check must recognise both, or it FAILs
+    a project for a state upgrade deliberately produced.
+    """
+    try:
+        from tapps_core.config.settings import load_settings
+        from tapps_mcp.pipeline.upgrade_report import skipped
+
+        settings = load_settings(project_root=project_root)
+    except Exception:
+        log.debug("karpathy_opt_out_load_failed", exc_info=True)
+        return None
+    if not settings.include_karpathy_guidelines:
+        return "include_karpathy_guidelines: false"
+    if skipped("karpathy", set(settings.upgrade_skip_files)):
+        return "upgrade_skip_files: karpathy"
+    return None
+
+
 def _karpathy_preferred_home_failure(
     pref: dict[str, str | None], preferred: str, homes_summary: str, expected_short: str
 ) -> CheckResult | None:
@@ -138,6 +165,12 @@ def check_karpathy_guidelines(project_root: Path) -> CheckResult:
     - Warns when the preferred home is current but a secondary home is stale.
     - Fails when neither file exists, or the preferred home is missing/stale,
       or the Cursor rule is missing/stale while ``.cursor/rules/`` exists.
+    - Passes as an opt-out (not FAIL) when the project has declined the block
+      via ``include_karpathy_guidelines: false`` or the ``karpathy``
+      ``upgrade_skip_files`` token, **and** no home actually has a block
+      installed. A stale or dual-installed block is still reported even when
+      the project has opted out — declining installation is not a licence to
+      ignore a block that is actually present.
     """
     from tapps_mcp.pipeline import karpathy_block
 
@@ -148,6 +181,15 @@ def check_karpathy_guidelines(project_root: Path) -> CheckResult:
     expected_short = expected_sha[:7]
 
     existing = {rel: r for rel, r in reports.items() if r["state"] != "file_absent"}
+    has_any_block = any(r["state"] in ("ok", "stale") for r in existing.values())
+    opt_out = _karpathy_opt_out(project_root)
+    if opt_out and not has_any_block:
+        return CheckResult(
+            "Karpathy guidelines",
+            True,
+            f"Karpathy guidelines skipped (opt-out: {opt_out})",
+        )
+
     if not existing:
         return CheckResult(
             "Karpathy guidelines",

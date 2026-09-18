@@ -174,6 +174,58 @@ class TestDocsMcpManifestSourceTagging:
         assert isinstance(manifest["claude"]["tapps-finish-task"], str)
 
 
+class TestUnrowedDocsMcpSkillsWarnNotFail:
+    """R4: a deployed ``tapps-docs-*`` skill with no manifest row must warn
+    with a remediation, not hard-FAIL like a genuinely unrecognized skill."""
+
+    def test_unrowed_docs_mcp_skill_warns_with_upgrade_remediation(
+        self, tmp_path: Path
+    ) -> None:
+        """Negative control: deploy a real docs-mcp skill directly via the
+        emitter (bypassing ``upgrade_pipeline``, so the TAP-7152 source-tagging
+        reconciliation never runs) and confirm the manifest has no row for it.
+        Must fail on unfixed code, which treats every un-rowed skill as
+        "unknown" and hard-FAILs.
+        """
+        from tapps_mcp.pipeline.platform_docs_automation import generate_docs_skills
+
+        (tmp_path / ".mcp.json").write_text("{}", encoding="utf-8")
+        generate_skills(tmp_path, "claude")
+        generate_docs_skills(tmp_path, "claude")
+
+        manifest = json.loads(_manifest_path(tmp_path).read_text(encoding="utf-8"))
+        assert "tapps-docs-refresh" not in manifest["claude"]
+
+        result = check_skills_manifest_directory(tmp_path)
+        assert result.severity == "warn"
+        assert result.ok is False
+        assert "tapps-docs-refresh" in result.message
+        assert "tapps-mcp upgrade" in result.detail
+
+    def test_unrecognized_managed_skill_still_hard_fails(self, tmp_path: Path) -> None:
+        """Coverage control: an unrecognised managed-block skill with no row
+        must still hard-FAIL. If this control cannot fail, the fix is too wide.
+        """
+        from tapps_mcp.pipeline.platform_docs_automation import generate_docs_skills
+
+        (tmp_path / ".mcp.json").write_text("{}", encoding="utf-8")
+        generate_skills(tmp_path, "claude")
+        generate_docs_skills(tmp_path, "claude")
+        rogue = tmp_path / ".claude" / "skills" / "not-a-registered-skill" / "SKILL.md"
+        install_or_refresh_skill(
+            rogue, "---\nname: not-a-registered-skill\n---\n\nbody\n", "not-a-registered-skill"
+        )
+
+        result = check_skills_manifest_directory(tmp_path)
+        assert result.severity == "fail"
+        assert result.ok is False
+        assert "not-a-registered-skill" in result.message
+        assert "unknown" in result.message
+        # The docs-mcp skill's warn-worthy absence must not leak into the FAIL
+        # message and dilute it, nor suppress the FAIL outcome.
+        assert "tapps-docs-refresh" not in result.message
+
+
 class TestDirectoryDiffCheckPartition:
     def test_partitions_away_from_smart_merge_skills(self, tmp_path: Path) -> None:
         """TAP-6948 s2 partition: this check cedes the trio to
