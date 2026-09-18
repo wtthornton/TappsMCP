@@ -53,6 +53,7 @@ from tapps_mcp.distribution.doctor_context7 import (
 )
 from tapps_mcp.distribution.doctor_fleet import (
     check_fleet_crash_loop,
+    check_fleet_watchdog_timer,
     check_http_fleet_liveness,
     check_mcp_transport_drift,
 )
@@ -194,6 +195,7 @@ def _check_specs(root: Path, *, quick: bool = False) -> list[tuple[str, Callable
         ("HTTP fleet liveness", lambda: check_http_fleet_liveness(root)),
         ("MCP server/CLI version skew", lambda: check_fleet_server_cli_skew(root)),
         ("Fleet crash loop", check_fleet_crash_loop),
+        ("Fleet watchdog timer", check_fleet_watchdog_timer),
         ("MCP client config", lambda: check_mcp_client_config(root)),
         ("MCP tool budget", lambda: check_mcp_tool_budget(root)),
         ("CLAUDE.md size", lambda: _cb.check_claude_md_size(root)),

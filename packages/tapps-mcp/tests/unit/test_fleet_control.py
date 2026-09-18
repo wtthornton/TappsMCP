@@ -45,6 +45,35 @@ class TestInstallSystemdUnits:
         assert "OnUnitActiveSec=60" in timer
         assert "WantedBy=timers.target" in timer
 
+    def test_timer_does_not_rely_on_onbootsec_alone(self, units: dict[str, str]) -> None:
+        # TAP-7845 regression: OnBootSec is computed relative to *system* boot,
+        # but a systemd --user manager starts minutes later, so that elapse is
+        # already past by the time the timer loads under a real login session.
+        # OnUnitActiveSec then never gets a live anchor to re-arm from, and
+        # NextElapseUSecMonotonic goes permanently `infinity` while
+        # `systemctl --user is-active` keeps reporting `active` (measured on
+        # the live host: LastTriggerUSec pinned to a single boot, nothing
+        # since). OnBootSec+OnUnitActiveSec alone is exactly the base-case
+        # unit text this test forbids.
+        timer = units["tapps-mcp-fleet-watch.timer"]
+        assert "OnBootSec" not in timer, (
+            "OnBootSec's elapse can already be past when a user-manager timer "
+            "loads, leaving OnUnitActiveSec with no live anchor to re-arm from"
+        )
+        # A robust anchor is required instead: OnActiveSec (relative to the
+        # timer's own activation, always in the future) and/or OnCalendar
+        # (wall-clock, immune to the boot-vs-user-manager race).
+        assert "OnActiveSec" in timer or "OnCalendar" in timer
+
+    def test_timer_has_calendar_backstop_for_persistent(self, units: dict[str, str]) -> None:
+        # Persistent= only affects OnCalendar-based (realtime) timers per
+        # `man systemd.timer` -- it was a documented no-op against the old
+        # OnBootSec/OnUnitActiveSec-only unit. Keep an OnCalendar= anchor so
+        # Persistent=true actually does something.
+        timer = units["tapps-mcp-fleet-watch.timer"]
+        assert "Persistent=true" in timer
+        assert "OnCalendar" in timer
+
 
 def _listening(down_ports: set[int]) -> Any:
     """Return a fake _port_listening that reports *down_ports* as not listening."""

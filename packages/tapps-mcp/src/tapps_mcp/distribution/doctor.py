@@ -118,6 +118,7 @@ from tapps_mcp.distribution.doctor_context7 import (
 )
 from tapps_mcp.distribution.doctor_fleet import (
     check_fleet_crash_loop,
+    check_fleet_watchdog_timer,
     check_http_fleet_liveness,
     check_mcp_transport_drift,
 )
@@ -275,6 +276,7 @@ __all__ = [
     "check_dual_memory_server",
     "check_finish_task_skill",
     "check_fleet_crash_loop",
+    "check_fleet_watchdog_timer",
     "check_global_local_install",
     "check_hooks",
     "check_http_fleet_liveness",
