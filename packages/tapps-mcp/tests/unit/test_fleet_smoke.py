@@ -136,6 +136,117 @@ class TestProbeFleetMcpSession:
         assert result["http_status"] == 500
 
 
+class TestProbeFleetToolResult:
+    def test_happy_path_returns_parsed_tool_response(self) -> None:
+        init_body = _sse(
+            {"jsonrpc": "2.0", "id": 1, "result": {"serverInfo": {"name": "TappsMCP"}}}
+        )
+        call_body = _sse(
+            {
+                "jsonrpc": "2.0",
+                "id": 2,
+                "result": {
+                    "content": [
+                        {
+                            "type": "text",
+                            "text": json.dumps(
+                                {
+                                    "tool": "tapps_session_start",
+                                    "success": True,
+                                    "data": {"server": {"version": "3.12.90"}},
+                                }
+                            ),
+                        }
+                    ],
+                },
+            }
+        )
+        responses = [
+            (200, "sess-1", init_body),
+            (202, "sess-1", ""),
+            (200, "sess-1", call_body),
+        ]
+
+        def fake_post(*_args: Any, **_kwargs: Any) -> tuple[int, str | None, str]:
+            return responses.pop(0)
+
+        with patch.object(fleet_smoke, "_post_mcp", side_effect=fake_post):
+            result = fleet_smoke.probe_fleet_tool_result(
+                "nlt-build", "tapps_session_start", {"quick": True}
+            )
+
+        assert result["ok"] is True
+        assert result["data"]["data"]["server"]["version"] == "3.12.90"
+
+    def test_tool_call_is_error_fails(self) -> None:
+        init_body = _sse(
+            {"jsonrpc": "2.0", "id": 1, "result": {"serverInfo": {"name": "TappsMCP"}}}
+        )
+        call_body = _sse(
+            {
+                "jsonrpc": "2.0",
+                "id": 2,
+                "result": {"isError": True, "content": [{"type": "text", "text": "boom"}]},
+            }
+        )
+        responses = [
+            (200, "sess-1", init_body),
+            (202, "sess-1", ""),
+            (200, "sess-1", call_body),
+        ]
+
+        def fake_post(*_args: Any, **_kwargs: Any) -> tuple[int, str | None, str]:
+            return responses.pop(0)
+
+        with patch.object(fleet_smoke, "_post_mcp", side_effect=fake_post):
+            result = fleet_smoke.probe_fleet_tool_result("nlt-build", "tapps_session_start")
+
+        assert result["ok"] is False
+        assert result["stage"] == "tools/call"
+
+    def test_tool_call_non_json_text_fails(self) -> None:
+        init_body = _sse(
+            {"jsonrpc": "2.0", "id": 1, "result": {"serverInfo": {"name": "TappsMCP"}}}
+        )
+        call_body = _sse(
+            {
+                "jsonrpc": "2.0",
+                "id": 2,
+                "result": {"content": [{"type": "text", "text": "not json"}]},
+            }
+        )
+        responses = [
+            (200, "sess-1", init_body),
+            (202, "sess-1", ""),
+            (200, "sess-1", call_body),
+        ]
+
+        def fake_post(*_args: Any, **_kwargs: Any) -> tuple[int, str | None, str]:
+            return responses.pop(0)
+
+        with patch.object(fleet_smoke, "_post_mcp", side_effect=fake_post):
+            result = fleet_smoke.probe_fleet_tool_result("nlt-build", "tapps_session_start")
+
+        assert result["ok"] is False
+        assert result["stage"] == "tools/call"
+
+    def test_initialize_failure_fails(self) -> None:
+        with patch.object(
+            fleet_smoke,
+            "_post_mcp",
+            return_value=(406, None, "Not Acceptable"),
+        ):
+            result = fleet_smoke.probe_fleet_tool_result("nlt-build", "tapps_session_start")
+
+        assert result["ok"] is False
+        assert result["stage"] == "initialize"
+
+    def test_unknown_server_id_fails(self) -> None:
+        result = fleet_smoke.probe_fleet_tool_result("not-a-server", "tapps_session_start")
+        assert result["ok"] is False
+        assert "unknown server" in result["error"]
+
+
 class TestSmokeTestFleet:
     def test_aggregates_failures(self, monkeypatch: pytest.MonkeyPatch) -> None:
         def fake_probe(server_id: str, **_kw: Any) -> dict[str, Any]:

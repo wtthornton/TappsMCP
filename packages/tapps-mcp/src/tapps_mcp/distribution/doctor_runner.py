@@ -123,6 +123,7 @@ from tapps_mcp.distribution.doctor_platform import (
     check_upgrade_skip_tokens,
 )
 from tapps_mcp.distribution.doctor_result import CheckResult, doctor_facade_attr
+from tapps_mcp.distribution.doctor_server_skew import check_fleet_server_cli_skew
 from tapps_mcp.distribution.doctor_skill_learnings import check_skill_learnings_hygiene
 from tapps_mcp.distribution.doctor_skills import (
     check_one_pager_template_current,
@@ -191,6 +192,7 @@ def _check_specs(root: Path, *, quick: bool = False) -> list[tuple[str, Callable
         ("VS Code config", lambda: check_vscode_config(root)),
         ("MCP transport drift", lambda: check_mcp_transport_drift(root)),
         ("HTTP fleet liveness", lambda: check_http_fleet_liveness(root)),
+        ("MCP server/CLI version skew", lambda: check_fleet_server_cli_skew(root)),
         ("Fleet crash loop", check_fleet_crash_loop),
         ("MCP client config", lambda: check_mcp_client_config(root)),
         ("MCP tool budget", lambda: check_mcp_tool_budget(root)),
