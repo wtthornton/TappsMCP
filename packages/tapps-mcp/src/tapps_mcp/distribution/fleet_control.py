@@ -681,7 +681,20 @@ def install_systemd_user_unit() -> list[Path]:
       watchdog that called ``fleet start`` directly (oneshot, no
       ``RemainAfterExit``) reaped the fleet every 60s — this generator replaces
       that footgun.
-    * ``tapps-mcp-fleet-watch.timer`` — polls every 60s.
+    * ``tapps-mcp-fleet-watch.timer`` — fires ~45s after activation and then
+      re-arms every 60s (``OnActiveSec``/``OnUnitActiveSec``), backstopped by
+      an ``OnCalendar=minutely`` + ``Persistent=true`` wall-clock anchor
+      (TAP-7845). ``OnBootSec`` alone is unsafe here: it is computed relative
+      to *system* boot, and a user manager (``user@<uid>.service``) starts
+      minutes after that, so the elapse is already in the past by the time
+      the timer loads under a real login session — systemd then never gives
+      ``OnUnitActiveSec`` a live anchor to re-arm from, and
+      ``NextElapseUSecMonotonic`` goes permanently ``infinity`` while
+      ``systemctl --user is-active`` keeps reporting ``active``.
+      ``OnActiveSec`` instead anchors to the timer unit's own activation
+      time, which is always in the future relative to itself. ``Persistent=``
+      only affects ``OnCalendar=``-based (realtime) timers, so it was a no-op
+      before this fix and is kept here for the calendar backstop.
     """
     unit_dir = Path.home() / ".config" / "systemd" / "user"
     unit_dir.mkdir(parents=True, exist_ok=True)
@@ -741,8 +754,9 @@ def install_systemd_user_unit() -> list[Path]:
                 "Description=Poll TappsMCP HTTP fleet every 60s and start if down",
                 "",
                 "[Timer]",
-                "OnBootSec=45",
+                "OnActiveSec=45",
                 "OnUnitActiveSec=60",
+                "OnCalendar=minutely",
                 "Persistent=true",
                 "",
                 "[Install]",

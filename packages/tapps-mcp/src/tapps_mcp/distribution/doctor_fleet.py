@@ -181,6 +181,82 @@ def check_fleet_crash_loop() -> CheckResult:
     )
 
 
+def _systemd_user_show(unit: str, *properties: str) -> dict[str, str] | None:
+    """Return ``systemctl --user show`` properties for *unit*, ``None`` if unqueryable."""
+    import shutil
+    import subprocess
+
+    if shutil.which("systemctl") is None:
+        return None
+    args = ["systemctl", "--user", "show", unit]
+    for prop in properties:
+        args += ["-p", prop]
+    try:
+        proc = subprocess.run(
+            args,
+            capture_output=True,
+            text=True,
+            timeout=5,
+            check=False,
+        )
+    except (OSError, subprocess.TimeoutExpired, subprocess.SubprocessError):
+        return None
+    if proc.returncode != 0:
+        return None
+    return dict(line.split("=", 1) for line in proc.stdout.splitlines() if "=" in line)
+
+
+def check_fleet_watchdog_timer() -> CheckResult:
+    """Detect a fleet-watch timer that is active/enabled but will never fire again (TAP-7845).
+
+    ``systemctl --user is-active`` reports ``active`` for a timer whose only
+    trigger was monotonic (``OnBootSec``/``OnUnitActiveSec``) and that has
+    already fired once, even when nothing schedules the next elapse
+    (``NextElapseUSecMonotonic=infinity``). That reads green on every health
+    probe built on ``is-active`` while the watchdog has silently stopped
+    ticking and the six shared MCP servers have no automatic recovery. This
+    check looks past ``ActiveState`` at whether *either* the monotonic or the
+    calendar clock actually has a next elapse scheduled.
+    """
+    name = "Fleet watchdog timer"
+    unit = "tapps-mcp-fleet-watch.timer"
+    props = _systemd_user_show(
+        unit,
+        "LoadState",
+        "ActiveState",
+        "UnitFileState",
+        "NextElapseUSecMonotonic",
+        "NextElapseUSecRealtime",
+    )
+    if props is None:
+        return CheckResult(name, True, "systemctl --user unreachable (not a systemd user host)")
+    if props.get("LoadState") != "loaded":
+        return CheckResult(name, True, "Fleet watchdog timer not installed on this host")
+    active = props.get("ActiveState") == "active"
+    enabled = props.get("UnitFileState") in {"enabled", "enabled-runtime", "static"}
+    if not (active or enabled):
+        return CheckResult(name, True, "Fleet watchdog timer not active/enabled (not supervised)")
+
+    def _finite(value: str) -> bool:
+        return bool(value) and value != "infinity"
+
+    monotonic = props.get("NextElapseUSecMonotonic", "")
+    realtime = props.get("NextElapseUSecRealtime", "")
+    if _finite(monotonic) or _finite(realtime):
+        return CheckResult(name, True, "Fleet watchdog timer has a scheduled next elapse")
+    return CheckResult(
+        name,
+        False,
+        f"{unit} is {props.get('ActiveState')}/{props.get('UnitFileState')} but has no "
+        "scheduled next elapse (NextElapseUSecMonotonic=infinity) -- the fleet has no "
+        "automatic recovery even though `is-active` reads green",
+        "Refresh the unit with `tapps-mcp fleet install-systemd` (TAP-7845 replaces "
+        "OnBootSec with OnActiveSec and adds an OnCalendar=minutely backstop), then "
+        "`systemctl --user daemon-reload && systemctl --user restart "
+        f"{unit}`.",
+    )
+
+
 def _cursor_config_transport(project_root: Path) -> str | None:
     """Return ``"http"``/``"stdio"`` for the Cursor MCP config, ``None`` if absent."""
     from tapps_mcp.distribution.nlt_http_fleet import HTTP_FLEET_ENTRY_TYPES
