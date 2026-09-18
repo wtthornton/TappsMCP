@@ -131,6 +131,42 @@ with open(path, 'w', encoding='utf-8') as f:
 " "$pos_marketplace_dir/.claude-plugin/plugin.json" "$OWN_MARKETPLACE_NAME"
 check "positive control: satisfiable name@own-marketplace" pass "$pos_marketplace_dir"
 
+# --- TAP-7771: a dependency on a plugin in a genuinely different, real
+# marketplace (not this bundle's own) is a legitimate shape, and was
+# wrongly refused identically to the "no-such-marketplace" case above.
+# The fix distinguishes "this bundle cannot verify" from "this bundle
+# has confirmed invalid" via TRUSTED_DEPENDENCY_MARKETPLACES, an env var
+# read only by this validation run -- NOT a plugin.json field, because
+# `claude plugin validate --strict` (section (b), run before this
+# section) turns any unrecognized manifest key into a hard failure
+# (confirmed by experiment). This fixture uses the identical dependency
+# string as the "no-such-marketplace" negative control's shape (real
+# name, external suffix) but supplies the env var vouching for that
+# marketplace, and must PASS -- while the negative control above, which
+# supplies no such var, must keep failing. It is expected to FAIL red
+# against the unfixed check, run first, below.
+pos_cross_marketplace_dir="$(build_fixture pos-cross-marketplace)"
+python3 -c "
+import json
+import sys
+
+path = sys.argv[1]
+with open(path, encoding='utf-8') as f:
+    data = json.load(f)
+data['dependencies'] = ['linear@claude-plugins-official']
+with open(path, 'w', encoding='utf-8') as f:
+    json.dump(data, f, indent=2)
+    f.write('\n')
+" "$pos_cross_marketplace_dir/.claude-plugin/plugin.json"
+rc=0
+TRUSTED_DEPENDENCY_MARKETPLACES="claude-plugins-official" bash "$VALIDATOR" "$pos_cross_marketplace_dir" >/dev/null 2>&1 || rc=$?
+if [[ $rc -ne 0 ]]; then
+  echo "FAIL: positive control: vouched-for cross-marketplace dependency — expected exit 0, got $rc" >&2
+  FAILURES=$((FAILURES + 1))
+else
+  echo "OK: positive control: vouched-for cross-marketplace dependency (exit $rc, expected pass)"
+fi
+
 # --- Positive control: the real, currently-shipped bundle (no `dependencies`
 # key under the TAP-7758 fix, or a satisfiable one) must pass.
 check "positive control: shipped bundle" pass "$SOURCE_BUNDLE"

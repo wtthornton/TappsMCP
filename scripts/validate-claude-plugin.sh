@@ -263,14 +263,42 @@ echo "Referential integrity (hooks.json -> scripts): OK"
 # and loaded clean. So checking a bare name against this bundle's own
 # `known_set` (as the original check already did) is the CORRECT behaviour,
 # not a gap — left unchanged here.
+# TAP-7771: a dependency MAY legitimately name a plugin in a different,
+# real marketplace this bundle does not ship (e.g. the reported repro,
+# "linear@claude-plugins-official", on a host where that marketplace is
+# genuinely configured) -- refusing every non-own suffix outright made
+# that legitimate shape inexpressible. But marketplace names are chosen
+# by whoever registers them locally (`claude plugin marketplace add`);
+# there is no global registry this script can consult to confirm one
+# exists. The manifest itself cannot carry a "trust this marketplace"
+# flag either: plugin.json is schema-validated above in section (b) via
+# `claude plugin validate --strict`, which promotes any unrecognized
+# field to a hard failure (confirmed by experiment: adding a
+# `trustedDependencyMarketplaces` key to plugin.json trips "Unknown
+# field ... Claude Code ignores it at load time" as a warning, and
+# --strict turns that warning into a failure).
+#
+# So the documented way to express a genuine cross-marketplace
+# dependency is TRUSTED_DEPENDENCY_MARKETPLACES, an env var read only by
+# THIS validation run and never written to a manifest: a space-separated
+# list of marketplace names the invoker is vouching for (a maintainer
+# who knows the dependency, or a CI step that independently confirmed
+# the marketplace). Absent that var, any suffix other than this bundle's
+# own marketplace name is refused -- not because it is confirmed
+# invalid, but because nothing on disk or in this run can confirm it,
+# and "unknown refuses" remains the right default for an
+# unsatisfiable-dependency check. This must not reopen the original
+# TAP-7758 gap: "tapps-mcp@no-such-marketplace" carries no vouching var
+# and keeps failing.
 MARKETPLACE_JSON="$PLUGIN_DIR/.claude-plugin/marketplace.json"
 PLUGIN_JSON="$PLUGIN_DIR/.claude-plugin/plugin.json"
+TRUSTED_DEPENDENCY_MARKETPLACES="${TRUSTED_DEPENDENCY_MARKETPLACES:-}"
 
 if ! DEP_CHECK_OUTPUT="$(python3 -c "
 import json
 import sys
 
-plugin_json, marketplace_json = sys.argv[1], sys.argv[2]
+plugin_json, marketplace_json, trusted_raw = sys.argv[1], sys.argv[2], sys.argv[3]
 
 with open(plugin_json, encoding='utf-8') as f:
     plugin_data = json.load(f)
@@ -285,13 +313,18 @@ with open(marketplace_json, encoding='utf-8') as f:
 known = sorted(p.get('name', '') for p in marketplace_data.get('plugins', []))
 known_set = set(known)
 own_marketplace_name = marketplace_data.get('name', '')
+trusted_marketplaces = set(trusted_raw.split())
 
 unsatisfiable = []
 bad_marketplace = []
 for dep in deps:
     if isinstance(dep, str) and '@' in dep:
         name, _, suffix = dep.rpartition('@')
-        if suffix != own_marketplace_name:
+        if suffix == own_marketplace_name:
+            pass
+        elif suffix in trusted_marketplaces:
+            continue
+        else:
             bad_marketplace.append(dep)
             continue
     else:
@@ -306,12 +339,13 @@ if unsatisfiable or bad_marketplace:
             print('  - ' + repr(dep))
         print('Known plugins in ' + marketplace_json + ': ' + repr(known))
     if bad_marketplace:
-        print('Dependency names a marketplace this bundle cannot confirm exists:')
+        print('Dependency names a marketplace this bundle cannot verify (unverifiable, not confirmed invalid):')
         for dep in bad_marketplace:
             print('  - ' + repr(dep))
-        print('The only marketplace this bundle can verify is its own: ' + repr(own_marketplace_name))
+        print('This bundle can verify only its own marketplace: ' + repr(own_marketplace_name) + '.')
+        print('To vouch for a genuine cross-marketplace dependency, re-run with TRUSTED_DEPENDENCY_MARKETPLACES=\"<marketplace-name> ...\" set (space-separated).')
     sys.exit(1)
-" "$PLUGIN_JSON" "$MARKETPLACE_JSON")"; then
+" "$PLUGIN_JSON" "$MARKETPLACE_JSON" "$TRUSTED_DEPENDENCY_MARKETPLACES")"; then
   echo "ERROR: $DEP_CHECK_OUTPUT" >&2
   FAIL=1
 fi
