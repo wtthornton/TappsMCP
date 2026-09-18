@@ -36,12 +36,23 @@ def _write_mcp_json(root: Path, servers: dict[str, str]) -> None:
     )
 
 
+# Sentinels selecting the two live-measured TAP-7018 response shapes (see the
+# module docstring): the tool is registered but redirects to its real owner,
+# or the tool is not registered on this profile at all.
+UNKNOWN_TOOL = "__unknown_tool__"
+RELOCATED = "__relocated__"
+
+
 def _fake_probe(version_by_server: dict[str, str | None]) -> Any:
     """Build a fake ``probe_fleet_tool_result`` returning data.server.version per server_id.
 
     A ``None`` value simulates a server that cannot be reached at all (the
-    ``ok: False`` transport-failure shape); an empty dict simulates a server
-    that answers but omits ``data.server.version``.
+    ``ok: False`` transport-failure shape); an empty string simulates a
+    server that answers but omits ``data.server.version`` for some other
+    reason. ``UNKNOWN_TOOL`` and ``RELOCATED`` simulate the two shapes
+    ``nlt-linear-issues``/``nlt-release-ship`` and ``nlt-build``/``nlt-setup``
+    actually return once ``tapps_session_start`` is relocated (TAP-7018) --
+    both measured live against the fleet, see the lane brief.
     """
 
     def _probe(
@@ -49,6 +60,34 @@ def _fake_probe(version_by_server: dict[str, str | None]) -> Any:
     ) -> dict[str, Any]:
         assert tool_name == "tapps_session_start"
         version = version_by_server.get(server_id)
+        if version == UNKNOWN_TOOL:
+            return {
+                "ok": False,
+                "server_id": server_id,
+                "stage": "tools/call",
+                "error": f'tool {tool_name} returned isError: "Unknown tool: {tool_name}"',
+            }
+        if version == RELOCATED:
+            return {
+                "ok": True,
+                "server_id": server_id,
+                "tool": tool_name,
+                "data": {
+                    "tool": tool_name,
+                    "success": False,
+                    "elapsed_ms": 0,
+                    "error": {
+                        "code": "tool_relocated",
+                        "message": (
+                            "tapps_session_start now runs only on the 'nlt-memory' "
+                            "NLT server. Call it there."
+                        ),
+                        "category": "deprecated",
+                        "retryable": False,
+                        "owner_preset": "nlt-memory",
+                    },
+                },
+            }
         if version is None:
             return {
                 "ok": False,
@@ -227,3 +266,186 @@ class TestCheckFleetServerCliSkew:
         result = dss.check_fleet_server_cli_skew(tmp_path)
         assert result.ok is False
         assert "could not be read" in result.message
+
+
+#: The declared fleet from the lane brief's own live measurement (2026-09-18):
+#: nlt-memory reports its version; the other four either relocate or lack the
+#: tool entirely. This is the exact shape that aborted every deploy on this
+#: host under the unfixed check.
+_CASE_1_FLEET = {
+    "nlt-build": "http://127.0.0.1:8760/mcp",
+    "nlt-memory": "http://127.0.0.1:8761/mcp",
+    "nlt-setup": "http://127.0.0.1:8762/mcp",
+    "nlt-linear-issues": "http://127.0.0.1:8763/mcp",
+    "nlt-release-ship": "http://127.0.0.1:8765/mcp",
+}
+_CASE_1_VERSIONS = {
+    "nlt-build": RELOCATED,
+    "nlt-memory": "3.12.90",
+    "nlt-setup": RELOCATED,
+    "nlt-linear-issues": UNKNOWN_TOOL,
+    "nlt-release-ship": UNKNOWN_TOOL,
+}
+
+
+class TestReproductionControlCase1NotSkew:
+    """Reproduction control: the lane brief's measured 4/5 "did not report a
+    version" fleet must NOT be a skew failure.
+
+    States this fixture never creates: a genuinely unreachable server
+    (connection refused/timeout) mixed into the same fleet, and a server
+    that both relocates *and* differs in version from the CLI -- those are
+    covered by the discrimination and refusal controls below.
+    """
+
+    def test_relocated_and_unknown_tool_servers_do_not_fail_the_check(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        _write_mcp_json(tmp_path, _CASE_1_FLEET)
+        monkeypatch.setattr(
+            "tapps_mcp.distribution.fleet_smoke.probe_fleet_tool_result",
+            _fake_probe(_CASE_1_VERSIONS),
+        )
+        monkeypatch.setattr(
+            "tapps_mcp.tools.session_health.collect_build_skew",
+            _fake_build_skew("3.12.90"),
+        )
+        result = dss.check_fleet_server_cli_skew(tmp_path)
+        assert result.ok is True, result.message
+        assert "did not report a version" not in result.message
+        assert "not a skew finding" in result.message
+        assert "nlt-linear-issues" in result.message
+        assert "nlt-release-ship" in result.message
+        assert "nlt-build" in result.message
+        assert "nlt-setup" in result.message
+
+
+class TestDiscriminationControlGenuineSkewStillFails:
+    """Discrimination control: a real skew hiding among relocated/absent
+    servers must still fail. If this cannot fail, the not-applicable
+    classification has made the whole check vacuous.
+    """
+
+    def test_genuine_skew_among_not_applicable_servers_still_fails(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        fleet = {**_CASE_1_FLEET}
+        versions = {**_CASE_1_VERSIONS, "nlt-memory": "3.12.89"}  # the real skew
+        _write_mcp_json(tmp_path, fleet)
+        monkeypatch.setattr(
+            "tapps_mcp.distribution.fleet_smoke.probe_fleet_tool_result",
+            _fake_probe(versions),
+        )
+        monkeypatch.setattr(
+            "tapps_mcp.tools.session_health.collect_build_skew",
+            _fake_build_skew("3.12.90"),
+        )
+        result = dss.check_fleet_server_cli_skew(tmp_path)
+        # Mechanism, not just the observable: on unfixed code the relocated/
+        # absent servers land in the *unreachable* bucket, which is checked
+        # before skew and returns first -- so the message never names the
+        # skewed server or the "restart" remediation, even though ok is
+        # already False for the wrong reason. Only the fixed classification
+        # reaches the skewed branch.
+        assert result.ok is False
+        assert "nlt-memory=3.12.89" in result.message
+        assert "3.12.90" in result.message
+        assert "restart" in result.detail.lower()
+
+
+class TestRefusalControlNotSwallowedByNotApplicable:
+    """Refusal control: a genuinely unreachable/malformed server must still
+    refuse even when other servers in the same fleet are legitimately
+    not-applicable -- the classification must not soften into "some servers
+    don't apply, so treat the whole fleet as fine".
+    """
+
+    def test_unreachable_server_still_fails_alongside_not_applicable_ones(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        fleet = {**_CASE_1_FLEET}
+        versions = {**_CASE_1_VERSIONS, "nlt-memory": None}  # network failure, not relocation
+        _write_mcp_json(tmp_path, fleet)
+        monkeypatch.setattr(
+            "tapps_mcp.distribution.fleet_smoke.probe_fleet_tool_result",
+            _fake_probe(versions),
+        )
+        monkeypatch.setattr(
+            "tapps_mcp.tools.session_health.collect_build_skew",
+            _fake_build_skew("3.12.90"),
+        )
+        result = dss.check_fleet_server_cli_skew(tmp_path)
+        assert result.ok is False
+        assert "did not report a version" in result.message
+        assert "nlt-memory" in result.message
+        assert "connection failed" in result.message
+
+
+class TestSmokePathControlCase1DoesNotAbortDeploy:
+    """Smoke-path control: drive ``blue_green.smoke_test_release`` -- the
+    actual path that aborts ``deploy-local`` with "release sick" -- with the
+    case-1 fleet, and confirm it is not aborted.
+
+    Wires the *real* ``check_fleet_server_cli_skew`` output (computed against
+    the same mocked ``probe_fleet_tool_result``/``collect_build_skew`` as the
+    other controls) into ``smoke_test_release``'s doctor-JSON classification,
+    rather than hand-typing a canned "pass" row, so a regression in the check
+    itself -- not just in blue_green's classifier -- would show up here too.
+
+    States this fixture never creates: an actual ``tapps-mcp doctor``
+    subprocess invocation (``blue_green._run`` is stubbed, per the existing
+    TAP-6965 pattern in ``test_blue_green_post_flip_smoke.py``) and a live
+    HTTP fleet.
+    """
+
+    def test_case_1_fleet_does_not_abort_post_flip_smoke(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        from tapps_mcp.distribution import blue_green as bg
+
+        project_root = tmp_path / "project"
+        project_root.mkdir()
+        _write_mcp_json(project_root, _CASE_1_FLEET)
+        monkeypatch.setattr(
+            "tapps_mcp.distribution.fleet_smoke.probe_fleet_tool_result",
+            _fake_probe(_CASE_1_VERSIONS),
+        )
+        monkeypatch.setattr(
+            "tapps_mcp.tools.session_health.collect_build_skew",
+            _fake_build_skew("3.12.90"),
+        )
+        skew_result = dss.check_fleet_server_cli_skew(project_root)
+
+        release_dir = tmp_path / "releases" / "3.12.90-abc123"
+        bin_dir = release_dir / "bin"
+        bin_dir.mkdir(parents=True)
+        for tool in bg._REQUIRED_BINARIES:
+            exe = bin_dir / tool
+            exe.write_text("#!/bin/sh\necho tool, version 3.12.90\n", encoding="utf-8")
+            exe.chmod(0o755)
+        release = bg.ReleaseRef("3.12.90", "abc123", release_dir)
+
+        checks_payload = json.dumps(
+            {
+                "checks": [
+                    {
+                        "name": skew_result.name,
+                        "severity": skew_result.severity,
+                        "message": skew_result.message,
+                        "category": skew_result.category,
+                    }
+                ]
+            }
+        )
+
+        def _fake_run(cmd: list[str], **_kwargs: Any) -> Any:
+            from unittest.mock import MagicMock
+
+            if cmd[-1] == "--version":
+                return MagicMock(returncode=0, stdout="tool, version 3.12.90", stderr="")
+            return MagicMock(returncode=0, stdout=checks_payload, stderr="")
+
+        monkeypatch.setattr(bg, "_run", _fake_run)
+
+        result = bg.smoke_test_release(release, project_root=project_root)
+        assert result["ok"] is True, result
