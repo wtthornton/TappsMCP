@@ -599,15 +599,37 @@ class CallTracker:
             cls._persist_record(rec)
 
     @classmethod
+    def _reload_from_disk_locked(cls) -> None:
+        """Refresh ``_calls`` and the active-session id from disk (called under lock).
+
+        The persisted ledger and the active-session marker are shared by
+        every MCP server bound to the same ``project_root``, but each
+        process caches both in memory and only ever loads them once, at
+        bind time (``set_persist_path``). A sibling server's
+        ``tapps_session_start`` mints a new active id and overwrites the
+        shared marker; without reloading here, a long-lived process keeps
+        filtering by its own stale id forever and never credits the
+        sibling's call, even though the record is right there in the
+        ledger (TAP-7849).
+        """
+        if cls._persist_path is None:
+            return
+        cls._calls.clear()
+        cls._load_persisted()
+        cls._load_active_session_id()
+
+    @classmethod
     def get_called_tools(cls) -> set[str]:
         """Return the set of unique tool names called (active checklist session)."""
         with cls._lock:
+            cls._reload_from_disk_locked()
             return {c.tool_name for c in cls._filtered_calls()}
 
     @classmethod
     def total_calls(cls) -> int:
         """Return total number of calls (active checklist session)."""
         with cls._lock:
+            cls._reload_from_disk_locked()
             return len(cls._filtered_calls())
 
     @classmethod
@@ -660,11 +682,10 @@ class CallTracker:
         required, recommended, optional = _get_tool_lists(tool_map)
 
         with cls._lock:
-            # Reload JSONL so tools recorded by other NLT MCP processes
-            # (nlt-release-ship, nlt-linear-issues, …) satisfy this checklist.
-            if cls._persist_path is not None:
-                cls._calls.clear()
-                cls._load_persisted()
+            # Reload calls AND the active-session marker so tools recorded by
+            # other NLT MCP processes (nlt-memory, nlt-release-ship,
+            # nlt-linear-issues, …) satisfy this checklist (TAP-7849).
+            cls._reload_from_disk_locked()
             sub = cls._filtered_calls()
             call_count = len(sub)
         states = _call_states_ordered(sub)

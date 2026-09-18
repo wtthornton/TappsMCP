@@ -6,6 +6,7 @@ import json
 import time
 from collections.abc import Iterator
 from pathlib import Path
+from typing import Any
 
 import pytest
 
@@ -476,6 +477,95 @@ class TestCrossProcessChecklistCredit:
         result = CallTracker.evaluate("feature", engagement_level="medium")
         assert result.total_calls == 0
         assert result.complete is False
+
+
+class TestStaleActiveSessionCacheAcrossServers(TestCrossProcessChecklistCredit):
+    """TAP-7849: ``tapps_session_start`` was relocated to a different MCP
+    server (nlt-memory) than ``tapps_checklist`` (nlt-build). Each process
+    caches ``_active_session_id`` once, at bind time, and never re-reads the
+    marker a sibling process later overwrites -- so a consumer that follows
+    the relocation envelope exactly is still reported as having skipped
+    ``session_start``.
+
+    Unlike :class:`TestCrossProcessChecklistCredit` above (which always
+    ``_rebind``s to simulate a *fresh* process), the repro here specifically
+    keeps process A's in-memory state untouched after process B's
+    ``begin_session`` runs -- that is what a real long-lived nlt-build
+    process does, and rebinding would silently exercise the fix (a fresh
+    bind always reloads the marker) instead of the bug (a live process never
+    does).
+    """
+
+    @staticmethod
+    def _snapshot() -> dict[str, Any]:
+        return {
+            "active_session_id": CallTracker._active_session_id,
+            "adopted_window_ids": CallTracker._adopted_window_ids,
+            "window_id": CallTracker._window_id,
+            "calls": list(CallTracker._calls),
+        }
+
+    @staticmethod
+    def _restore(snap: dict[str, Any]) -> None:
+        CallTracker._active_session_id = snap["active_session_id"]
+        CallTracker._adopted_window_ids = snap["adopted_window_ids"]
+        CallTracker._window_id = snap["window_id"]
+        CallTracker._calls = list(snap["calls"])
+
+    def test_sibling_session_start_counted_without_local_rebind(self, _ledger: Path) -> None:
+        """The exact 3-step reproduction from the lane doc.
+
+        ``tapps_session_start`` is not itself a ``TASK_TOOL_MAP`` required
+        tool -- the ``session_start_skipped`` gap the lane doc's repro
+        observed is computed by ``tools.usage.compute_gaps`` from
+        ``CallTracker.get_called_tools()`` (wired into ``tapps_checklist``'s
+        response via ``_apply_usage_gaps`` in ``server_checklist_tools.py``),
+        so that is the method this test exercises directly:
+
+        1. nlt-build: ``tapps_checklist(reset_checklist_session=True)`` mints
+           its own id; ``tapps_session_start`` is absent from its called set.
+        2. nlt-memory: ``tapps_session_start`` mints a DIFFERENT id and
+           overwrites the shared marker.
+        3. nlt-build (same process, no rebind): calling ``get_called_tools()``
+           again must now see the sibling's ``tapps_session_start`` call.
+        """
+        # Step 1 -- nlt-build resets its own checklist session.
+        self._rebind(_ledger)
+        build_sid = CallTracker.begin_session()
+        assert "tapps_session_start" not in CallTracker.get_called_tools()
+        build_state = self._snapshot()
+
+        # Step 2 -- nlt-memory binds fresh and runs tapps_session_start,
+        # minting a different active session id and recording the call.
+        self._rebind(_ledger)
+        memory_sid = CallTracker.begin_session()
+        assert memory_sid != build_sid
+        CallTracker.record("tapps_session_start")
+
+        # Step 3 -- back to nlt-build's own in-memory state. It never
+        # rebound, so without the fix its cached _active_session_id is
+        # still build_sid.
+        self._restore(build_state)
+        assert CallTracker._active_session_id == build_sid
+
+        assert "tapps_session_start" in CallTracker.get_called_tools()
+
+        # tapps_checklist's own evaluate() path must agree too.
+        result = CallTracker.evaluate("feature", engagement_level="medium")
+        assert "tapps_session_start" in result.called
+
+    def test_process_that_never_saw_session_start_still_reports_skip(
+        self, _ledger: Path
+    ) -> None:
+        """Positive control: a session that genuinely never called
+        ``session_start`` anywhere must still be reported as skipped -- the
+        fix must not make the gate toothless.
+        """
+        self._rebind(_ledger)
+        CallTracker.begin_session("solo-sid")
+        CallTracker.record("tapps_score_file")
+
+        assert "tapps_session_start" not in CallTracker.get_called_tools()
 
 
 class TestChecklistResult:
