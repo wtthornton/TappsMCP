@@ -56,8 +56,14 @@ def deploy_local_cmd(
     """Blue/green deploy dev-monorepo MCP CLIs to ~/.tapps-mcp/current.
 
     Builds an immutable release venv, smoke-tests it, atomically flips the
-    ``current`` symlink, and GCs old releases. Running MCP servers stay pinned
-    to their release dir; reload MCP in Cursor to pick up the new build.
+    ``current`` symlink, and GCs old releases. New process launches pick up
+    the flip by inode (they exec ``current/bin/*``); an already-running MCP
+    server stays pinned to the release dir it started from until it is
+    restarted. This command restarts the whole six-server fleet itself
+    whenever any of it is running -- it does not leave that to a manual
+    Cursor MCP reload. Because those six ports (127.0.0.1:8760-8765) are
+    shared by every repo and session on this host, running this command
+    restarts the MCP backend for all of them, not just this checkout.
     """
     import json
     from pathlib import Path

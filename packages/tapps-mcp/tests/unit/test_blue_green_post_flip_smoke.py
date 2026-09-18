@@ -365,6 +365,205 @@ class TestAllowlistDeleted:
         assert not hasattr(bg, "_RELEASE_HEALTH_CHECK_NAMES")
 
 
+class TestPostFlipSkewDeferral:
+    """TAP-7848: the fleet-vs-CLI skew check is structurally red at the
+    post-flip, pre-restart moment of a version-changing deploy -- ``current``
+    now points at the new release but the fleet hasn't restarted onto it yet.
+    Gating the pre-restart smoke on it made the restart below unreachable, so
+    a version-changing deploy could never complete in one pass.
+    """
+
+    def _base_deploy_stubs(
+        self,
+        bg_home: Path,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+        *,
+        release_name: str,
+    ) -> tuple[Path, bg.ReleaseRef]:
+        checkout = tmp_path / "checkout"
+        checkout.mkdir()
+        release = bg.ReleaseRef(
+            "3.12.90", release_name, _make_release(bg_home / "releases", f"3.12.90-{release_name}")
+        )
+        monkeypatch.setattr(bg, "_release_ref", lambda _c: release)
+        monkeypatch.setattr(bg, "build_release", lambda *a, **k: {"ok": True})
+        monkeypatch.setattr(bg, "flip_current", lambda *a, **k: {"ok": True})
+        monkeypatch.setattr(bg, "current_release_path", lambda: None)
+        monkeypatch.setattr(bg, "_reap_superseded_then_gc", lambda *a, **k: {})
+
+        import tapps_mcp.distribution.mcp_zombie_reap as zombie_mod
+        import tapps_mcp.distribution.setup_generator as setup_mod
+
+        monkeypatch.setattr(zombie_mod, "reap_orphan_mcp_serves", lambda **k: {"ok": True})
+        monkeypatch.setattr(setup_mod, "is_tapps_mcp_dev_monorepo", lambda _checkout: False)
+        monkeypatch.setattr(
+            "tapps_mcp.distribution.blue_green_profile_smoke.pre_flip_profile_smoke",
+            lambda *a, **k: {"ok": True, "profiles": {}},
+        )
+        return checkout, release
+
+    def test_negative_control_skew_makes_restart_unreachable_at_base(
+        self, bg_home: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """RED at base: without deferral, ``smoke_test_release`` (called with
+        no ``defer_check_names``) gates on the skew finding exactly like the
+        pre-fix ``_deploy_under_lock`` did -- proving the restart is
+        unreachable whenever a version-changing deploy hits this check.
+        """
+        checkout, release = self._base_deploy_stubs(
+            bg_home, tmp_path, monkeypatch, release_name="s8"
+        )
+        _stub_doctor_json(
+            monkeypatch,
+            [
+                _finding(
+                    "MCP server/CLI version skew",
+                    "fail",
+                    "release-health",
+                    "Installed tapps-mcp is 3.12.90 but running server(s) report: "
+                    "nlt-memory=3.12.89",
+                ),
+            ],
+        )
+
+        # This is the pre-fix call shape: no defer_check_names.
+        result = bg.smoke_test_release(release, project_root=checkout)
+
+        assert result["ok"] is False
+        assert any("MCP server/CLI version skew" in f for f in result["failures"])
+
+    def test_version_changing_deploy_completes_single_pass_despite_skew(
+        self, bg_home: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """GREEN after fix: the same skew finding no longer blocks the restart,
+        and the restart resolves it -- the deploy completes ``ok=True`` in one
+        pass, without an operator restarting the fleet by hand first.
+        """
+        checkout, release = self._base_deploy_stubs(
+            bg_home, tmp_path, monkeypatch, release_name="s9"
+        )
+
+        calls: list[str] = []
+
+        def _fake_run(cmd: list[str], **_kwargs: object) -> Any:
+            if cmd[-1] == "--version":
+                return MagicMock(returncode=0, stdout="1.0.0", stderr="")
+            calls.append("doctor")
+            payload = json.dumps(
+                {
+                    "checks": [
+                        _finding(
+                            "MCP server/CLI version skew",
+                            "fail",
+                            "release-health",
+                            "Installed tapps-mcp is 3.12.90 but running server(s) "
+                            "report: nlt-memory=3.12.89",
+                        )
+                    ]
+                }
+            )
+            return MagicMock(returncode=1, stdout=payload, stderr="")
+
+        monkeypatch.setattr(bg, "_run", _fake_run)
+
+        import tapps_mcp.distribution.fleet_control as fleet_mod
+
+        monkeypatch.setattr(fleet_mod, "fleet_any_running", lambda: True)
+        monkeypatch.setattr(fleet_mod, "restart_fleet_with_smoke", lambda **k: {"ok": True})
+        # After the restart, the fleet is now running the new release --
+        # the skew check re-verified directly must pass.
+        monkeypatch.setattr(
+            "tapps_mcp.distribution.doctor_server_skew.check_fleet_server_cli_skew",
+            lambda _root: CheckResult("MCP server/CLI version skew", True, "0/0 match"),
+        )
+
+        report = bg.deploy_blue_green(checkout, skip_gate=True, run_doctor_smoke=True)
+
+        assert report["ok"] is True, report
+        assert report["post_flip_status"] != "aborted: release sick"
+        assert "fleet_restart_smoke" in report
+        assert report["post_restart_skew_check"]["ok"] is True
+
+    def test_positive_control_genuinely_sick_release_still_aborts(
+        self, bg_home: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """A genuinely sick release (a non-skew release-health failure) still
+        aborts the deploy after the fix -- the deferral is scoped to the one
+        check name, not a general smoke bypass.
+        """
+        checkout, release = self._base_deploy_stubs(
+            bg_home, tmp_path, monkeypatch, release_name="s10"
+        )
+        _stub_doctor_json(
+            monkeypatch,
+            [
+                _finding(
+                    "tapps-mcp binary version",
+                    "fail",
+                    "release-health",
+                    "Version mismatch: tapps-mcp=3.8, server=3.9",
+                ),
+            ],
+        )
+
+        import tapps_mcp.distribution.fleet_control as fleet_mod
+
+        monkeypatch.setattr(fleet_mod, "fleet_any_running", lambda: True)
+        restart_called = []
+        monkeypatch.setattr(
+            fleet_mod,
+            "restart_fleet_with_smoke",
+            lambda **k: restart_called.append(1) or {"ok": True},
+        )
+
+        report = bg.deploy_blue_green(checkout, skip_gate=True, run_doctor_smoke=True)
+
+        assert report["ok"] is False
+        assert report["post_flip_status"] == "aborted: release sick"
+        assert "fleet_restart_smoke" not in report
+        assert not restart_called
+
+    def test_post_restart_skew_still_unresolved_aborts(
+        self, bg_home: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """If the skew is still present after a completed restart -- a real
+        problem, not the expected pre-restart lag -- the deploy must not
+        report success.
+        """
+        checkout, release = self._base_deploy_stubs(
+            bg_home, tmp_path, monkeypatch, release_name="s11"
+        )
+        _stub_doctor_json(
+            monkeypatch,
+            [
+                _finding(
+                    "MCP server/CLI version skew",
+                    "fail",
+                    "release-health",
+                    "Installed tapps-mcp is 3.12.90 but running server(s) report: "
+                    "nlt-memory=3.12.88",
+                ),
+            ],
+        )
+
+        import tapps_mcp.distribution.fleet_control as fleet_mod
+
+        monkeypatch.setattr(fleet_mod, "fleet_any_running", lambda: True)
+        monkeypatch.setattr(fleet_mod, "restart_fleet_with_smoke", lambda **k: {"ok": True})
+        monkeypatch.setattr(
+            "tapps_mcp.distribution.doctor_server_skew.check_fleet_server_cli_skew",
+            lambda _root: CheckResult(
+                "MCP server/CLI version skew", False, "still skewed after restart"
+            ),
+        )
+
+        report = bg.deploy_blue_green(checkout, skip_gate=True, run_doctor_smoke=True)
+
+        assert report["ok"] is False
+        assert report["post_flip_status"] == "aborted: skew unresolved after restart"
+
+
 class TestDeployUnderLockPostFlip:
     """The verifier found zero tests reaching ``_deploy_under_lock`` /
     ``post_flip_status``. Exercise it once end-to-end through

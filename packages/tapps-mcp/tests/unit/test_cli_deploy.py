@@ -13,6 +13,7 @@ import json
 import os
 import time
 from pathlib import Path
+from unittest.mock import MagicMock
 
 import pytest
 from click.testing import CliRunner
@@ -154,3 +155,69 @@ def test_dry_run_honours_keep_releases_from_command_line(
     assert middle.name in preview["to_delete"]
     assert oldest.name in preview["to_delete"]
     assert all(p.exists() for p in (oldest, middle, newest))
+
+
+class TestAbortedDeployExitCode:
+    """TAP-7848 acceptance: an aborted deploy must not exit like a completed
+    one. ``deploy_local_cmd`` raises ``SystemExit(1)`` whenever
+    ``report.get("ok")`` is falsy -- exercised here through a real abort
+    (a genuinely sick release, non-skew) driven through the CLI entry point.
+    """
+
+    def test_aborted_deploy_exits_non_zero(
+        self, bg_home: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        checkout = _make_checkout(tmp_path)
+        release = bg.ReleaseRef(
+            "3.12.90", "abc1234", _make_release(bg_home / "releases", "3.12.90-abc1234")
+        )
+        monkeypatch.setattr(bg, "_release_ref", lambda _c: release)
+        monkeypatch.setattr(bg, "build_release", lambda *a, **k: {"ok": True})
+        monkeypatch.setattr(bg, "flip_current", lambda *a, **k: {"ok": True})
+        monkeypatch.setattr(bg, "current_release_path", lambda: None)
+        monkeypatch.setattr(bg, "_reap_superseded_then_gc", lambda *a, **k: {})
+
+        import tapps_mcp.distribution.fleet_control as fleet_mod
+        import tapps_mcp.distribution.mcp_zombie_reap as zombie_mod
+        import tapps_mcp.distribution.setup_generator as setup_mod
+
+        monkeypatch.setattr(zombie_mod, "reap_orphan_mcp_serves", lambda **k: {"ok": True})
+        monkeypatch.setattr(fleet_mod, "fleet_any_running", lambda: True)
+        monkeypatch.setattr(setup_mod, "is_tapps_mcp_dev_monorepo", lambda _c: False)
+        monkeypatch.setattr(
+            "tapps_mcp.distribution.blue_green_profile_smoke.pre_flip_profile_smoke",
+            lambda *a, **k: {"ok": True, "profiles": {}},
+        )
+
+        payload = json.dumps(
+            {
+                "checks": [
+                    {
+                        "name": "tapps-mcp binary version",
+                        "ok": False,
+                        "severity": "fail",
+                        "category": "release-health",
+                        "message": "Version mismatch: tapps-mcp=3.8, server=3.9",
+                    }
+                ]
+            }
+        )
+
+        def _fake_run(cmd: list[str], **_kwargs: object) -> object:
+            if cmd[-1] == "--version":
+                return MagicMock(returncode=0, stdout="1.0.0", stderr="")
+            return MagicMock(returncode=1, stdout=payload, stderr="")
+
+        monkeypatch.setattr(bg, "_run", _fake_run)
+
+        runner = CliRunner()
+        result = runner.invoke(
+            main, ["deploy-local", "--tapps-checkout", str(checkout), "--skip-gate"]
+        )
+
+        report = json.loads(result.output)
+        assert report["ok"] is False
+        assert report["post_flip_status"] == "aborted: release sick"
+        assert result.exit_code != 0, (
+            f"aborted deploy must not exit 0, got {result.exit_code}: {result.output}"
+        )
