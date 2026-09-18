@@ -27,43 +27,47 @@ class SkillInfo:
         return len(self.description.encode("utf-8"))
 
 
-def _joined_str_leading_literal(node: ast.JoinedStr) -> str:
-    """The leading literal chunk of an f-string skill body -- only valid
-    when the f-string *starts* with a plain string segment (frontmatter is
-    never itself interpolated in this repo's skill templates)."""
-    if (
-        node.values
-        and isinstance(node.values[0], ast.Constant)
-        and isinstance(node.values[0].value, str)
-    ):
-        return node.values[0].value
-    raise MeasurementError("f-string skill body starts with an interpolation, not a literal")
+# Marks a body segment that cannot be evaluated statically -- a helper call,
+# an out-of-module name, an f-string interpolation. Unicode Private Use Area,
+# so it cannot collide with anything a hand-authored SKILL.md legitimately
+# contains. Nothing downstream depends on this surviving the frontmatter
+# parser's transformations: the guard reads each measured field's *raw*
+# frontmatter span, which is the one place no transformation has run yet.
+_ELISION = "\ue000elided\ue000"
 
 
-def _leading_literal(node: ast.expr, symtab: dict[str, ast.expr], depth: int = 0) -> str:
-    """Resolve *node* to the leading string-literal text it evaluates to.
+def _resolve_body_text(node: ast.expr, symtab: dict[str, ast.expr], depth: int = 0) -> str:
+    """Resolve *node* to the skill-body text it evaluates to.
 
-    Skill bodies are ``---`` / ``name: ...`` / ``---`` frontmatter followed
-    by markdown, sometimes built by concatenating a leading literal with later
-    interpolated/imported chunks (the body after frontmatter). Frontmatter
-    -- all this script needs -- always lives in the leftmost literal
-    segment, so only that segment needs resolving: the rest of the
-    concatenation (markdown body, f-string interpolations) is never
-    inspected.
+    Skill bodies are ``---`` / ``name: ...`` / ``---`` frontmatter followed by
+    markdown, often assembled by concatenating literal chunks with spliced-in
+    ones (a helper call, an imported constant, an f-string interpolation).
+
+    Every segment is walked, in source order. A segment that cannot be
+    evaluated statically resolves to ``_ELISION`` rather than being dropped or
+    stopped at, so the text that follows it is still recovered *and* its
+    position is still recorded. Dropping the position is what defeated the
+    four earlier fixes for TAP-7755: a guard that reads the parsed value
+    inherits every position the parser discarded.
     """
     if depth > 50:
         raise MeasurementError("skill constant resolution exceeded max depth (possible cycle)")
     if isinstance(node, ast.Constant) and isinstance(node.value, str):
         return node.value
     if isinstance(node, ast.BinOp) and isinstance(node.op, ast.Add):
-        return _leading_literal(node.left, symtab, depth + 1)
-    if isinstance(node, ast.Name):
-        if node.id not in symtab:
-            raise MeasurementError(f"unresolved skill-body constant reference: {node.id}")
-        return _leading_literal(symtab[node.id], symtab, depth + 1)
+        return _resolve_body_text(node.left, symtab, depth + 1) + _resolve_body_text(
+            node.right, symtab, depth + 1
+        )
+    if isinstance(node, ast.Name) and node.id in symtab:
+        return _resolve_body_text(symtab[node.id], symtab, depth + 1)
     if isinstance(node, ast.JoinedStr):
-        return _joined_str_leading_literal(node)
-    raise MeasurementError(f"unsupported skill-body expression: {ast.dump(node)[:80]}")
+        return "".join(
+            value.value
+            if isinstance(value, ast.Constant) and isinstance(value.value, str)
+            else _ELISION
+            for value in node.values
+        )
+    return _ELISION
 
 
 def _frontmatter_bounds(lines: list[str]) -> tuple[int, int | None]:
@@ -96,32 +100,57 @@ def _fold_block_scalar(fm_lines: list[str], continuation_start: int) -> tuple[st
     return " ".join(part for part in continuation if part), j
 
 
-def _parse_skill_frontmatter(body: str) -> dict[str, str]:
+@dataclass(frozen=True)
+class _Field:
+    """One frontmatter field: its parsed ``value`` and the verbatim ``raw``
+    frontmatter lines that value was read from."""
+
+    value: str
+    raw: str
+
+
+def _opens_key(line: str) -> bool:
+    """Whether *line* starts a new ``key: ...`` frontmatter field."""
+    return bool(line) and line[0] not in " \t-" and ":" in line
+
+
+def _parse_skill_frontmatter_fields(body: str) -> dict[str, _Field]:
     """Minimal frontmatter parser for the fixed, hand-authored SKILL.md
     shapes in this repo: single-line ``key: value`` and ``key: >-``/``key:
     |-`` folded/literal block scalars with 2-space-indented continuation
     lines. Not a general YAML parser -- sufficient for these templates.
+
+    Each field also carries its raw span: its own ``key:`` line plus every
+    line up to the next line that opens a key. The span deliberately does
+    *not* stop where ``_fold_block_scalar`` stops. Folding continues only
+    while a line is indented or blank, so a spliced segment occupying its own
+    line ends folding and is excluded from the value -- which is precisely how
+    the previous guard-on-the-parsed-value fix for TAP-7755 was refuted. The
+    span is the field's footprint in the source text, before any folding,
+    quote-stripping or line-skipping has had a chance to discard it.
     """
     lines = body.splitlines()
     start, end = _frontmatter_bounds(lines)
     fm_lines = lines[start + 1 : end] if end is not None else lines[start + 1 :]
 
-    result: dict[str, str] = {}
-    i = 0
-    while i < len(fm_lines):
-        line = fm_lines[i]
-        if not line or line[0] in " \t-" or ":" not in line:
-            i += 1
-            continue
-        key, _, remainder = line.partition(":")
-        key = key.strip()
+    key_starts = [i for i, line in enumerate(fm_lines) if _opens_key(line)]
+    result: dict[str, _Field] = {}
+    for n, i in enumerate(key_starts):
+        span_end = key_starts[n + 1] if n + 1 < len(key_starts) else len(fm_lines)
+        key, _, remainder = fm_lines[i].partition(":")
         remainder = remainder.strip()
         if remainder in (">-", ">", "|-", "|"):
-            result[key], i = _fold_block_scalar(fm_lines, i + 1)
+            value, _next = _fold_block_scalar(fm_lines, i + 1)
         else:
-            result[key] = remainder.strip('"')
-            i += 1
+            value = remainder.strip('"')
+        result[key.strip()] = _Field(value=value, raw="\n".join(fm_lines[i:span_end]))
     return result
+
+
+def _parse_skill_frontmatter(body: str) -> dict[str, str]:
+    """``_parse_skill_frontmatter_fields`` without the raw spans -- the shape
+    ``context_floor_skills._skill_info_from_asset`` consumes."""
+    return {key: field.value for key, field in _parse_skill_frontmatter_fields(body).items()}
 
 
 def _domain_skill_description(skill_name: str, call: ast.Call) -> str:
@@ -152,19 +181,37 @@ def _skill_info_from_domain_call(name: str, call: ast.Call) -> SkillInfo:
     )
 
 
+# The frontmatter fields that end up in a ``SkillInfo``. An elision anywhere
+# in one of these fields' raw spans means the value this script would report
+# is a truncation of the real one, so it must fail loudly instead.
+_MEASURED_FIELDS = ("description", "context", "disable-model-invocation")
+
+
+def _reject_elided_fields(name: str, fields: dict[str, _Field]) -> None:
+    for key in _MEASURED_FIELDS:
+        field = fields.get(key)
+        if field is not None and _ELISION in field.raw:
+            raise MeasurementError(
+                f"{name}: {key} frontmatter field spans a segment this script "
+                f"cannot resolve statically; its measured value would be a truncation"
+            )
+
+
 def _skill_info_from_frontmatter(
     name: str, expr: ast.expr, symtab: dict[str, ast.expr]
 ) -> SkillInfo:
-    body = _leading_literal(expr, symtab)
-    frontmatter = _parse_skill_frontmatter(body)
-    fm_description = frontmatter.get("description")
-    if fm_description is None:
+    body = _resolve_body_text(expr, symtab)
+    fields = _parse_skill_frontmatter_fields(body)
+    _reject_elided_fields(name, fields)
+    description = fields.get("description")
+    if description is None:
         raise MeasurementError(f"{name}: no description field in frontmatter")
+    values = {key: field.value for key, field in fields.items()}
     return SkillInfo(
         name=name,
-        description=fm_description,
-        context_fork=frontmatter.get("context", "").strip() == "fork",
-        disable_model_invocation=frontmatter.get("disable-model-invocation", "").strip().lower()
+        description=description.value,
+        context_fork=values.get("context", "").strip() == "fork",
+        disable_model_invocation=values.get("disable-model-invocation", "").strip().lower()
         == "true",
     )
 
