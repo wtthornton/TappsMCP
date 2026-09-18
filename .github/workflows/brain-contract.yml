@@ -43,15 +43,13 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  contract:
-    name: HttpBrainBridge contract
+  check-config:
+    name: Check deployment config
     runs-on: ubuntu-latest
-    timeout-minutes: 10
-
+    timeout-minutes: 2
+    outputs:
+      configured: ${{ steps.config.outputs.configured }}
     steps:
-      - name: Checkout tapps-mcp
-        uses: actions/checkout@v7
-
       - name: Check deployment config
         id: config
         env:
@@ -59,28 +57,35 @@ jobs:
           BRAIN_TOKEN: ${{ secrets.TAPPS_BRAIN_AUTH_TOKEN }}
         run: |
           if [ -z "${BRAIN_URL}" ] || [ -z "${BRAIN_TOKEN}" ]; then
-            echo "::notice::No deployed brain configured (TAPPS_BRAIN_HTTP_URL / TAPPS_BRAIN_AUTH_TOKEN missing) — skipping contract test."
+            echo "::notice::No deployed brain configured (TAPPS_BRAIN_HTTP_URL / TAPPS_BRAIN_AUTH_TOKEN missing) — the contract job will report as skipped instead of a plain pass."
             echo "configured=false" >> "$GITHUB_OUTPUT"
           else
             echo "configured=true" >> "$GITHUB_OUTPUT"
           fi
 
+  contract:
+    name: HttpBrainBridge contract
+    needs: check-config
+    if: needs.check-config.outputs.configured == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout tapps-mcp
+        uses: actions/checkout@v7
+
       - name: Install uv
-        if: steps.config.outputs.configured == 'true'
         uses: astral-sh/setup-uv@v7
         with:
           enable-cache: true
 
       - name: Set up Python
-        if: steps.config.outputs.configured == 'true'
         run: uv python install 3.12
 
       - name: Install tapps-mcp dependencies
-        if: steps.config.outputs.configured == 'true'
         run: uv sync --all-packages
 
       - name: Probe brain /health (fail fast on outage)
-        if: steps.config.outputs.configured == 'true'
         env:
           BRAIN_URL: ${{ secrets.TAPPS_BRAIN_HTTP_URL || vars.TAPPS_BRAIN_HTTP_URL }}
         run: |
@@ -92,7 +97,6 @@ jobs:
           echo
 
       - name: Run contract test
-        if: steps.config.outputs.configured == 'true'
         env:
           TAPPS_BRAIN_HTTP_URL: ${{ secrets.TAPPS_BRAIN_HTTP_URL || vars.TAPPS_BRAIN_HTTP_URL }}
           TAPPS_MCP_MEMORY_BRAIN_AUTH_TOKEN: ${{ secrets.TAPPS_BRAIN_AUTH_TOKEN }}
