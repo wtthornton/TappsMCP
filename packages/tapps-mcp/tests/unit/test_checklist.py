@@ -288,9 +288,7 @@ class TestCrossProcessChecklistCredit:
         CallTracker._adopted_window_ids = frozenset()
         CallTracker.set_persist_path(path)
 
-    def test_sibling_process_window_is_adopted_once_a_session_starts(
-        self, _ledger: Path
-    ) -> None:
+    def test_sibling_process_window_is_adopted_once_a_session_starts(self, _ledger: Path) -> None:
         """Second binding records under no marker; first binding's later
         begin_session must retroactively adopt that orphan window so its
         row is credited.
@@ -408,7 +406,9 @@ class TestCrossProcessChecklistCredit:
         # ledger would still adopt nothing from this history.
         assert registry_path.exists()
         seeded = frozenset(
-            ln.strip() for ln in registry_path.read_text(encoding="utf-8").splitlines() if ln.strip()
+            ln.strip()
+            for ln in registry_path.read_text(encoding="utf-8").splitlines()
+            if ln.strip()
         )
         assert {"sessA", "sessB"} <= seeded
 
@@ -463,9 +463,7 @@ class TestCrossProcessChecklistCredit:
                     )
                     + "\n"
                 )
-        (_ledger.parent / "checklist_active_session").write_text(
-            "prior-sess\n", encoding="utf-8"
-        )
+        (_ledger.parent / "checklist_active_session").write_text("prior-sess\n", encoding="utf-8")
 
         assert not (_ledger.parent / "checklist_claimed_ids").exists()
 
@@ -554,9 +552,7 @@ class TestStaleActiveSessionCacheAcrossServers(TestCrossProcessChecklistCredit):
         result = CallTracker.evaluate("feature", engagement_level="medium")
         assert "tapps_session_start" in result.called
 
-    def test_process_that_never_saw_session_start_still_reports_skip(
-        self, _ledger: Path
-    ) -> None:
+    def test_process_that_never_saw_session_start_still_reports_skip(self, _ledger: Path) -> None:
         """Positive control: a session that genuinely never called
         ``session_start`` anywhere must still be reported as skipped -- the
         fix must not make the gate toothless.
