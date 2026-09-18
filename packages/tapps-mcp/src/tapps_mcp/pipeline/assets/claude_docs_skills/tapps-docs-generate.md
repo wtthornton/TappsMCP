@@ -1,5 +1,6 @@
 ---
 name: tapps-docs-generate
+user-invocable: true
 description: >-
   Quick doc generation: README, llms.txt, changelog. Use for a minimal
   generate pass; prefer tapps-docs-bootstrap for new projects.

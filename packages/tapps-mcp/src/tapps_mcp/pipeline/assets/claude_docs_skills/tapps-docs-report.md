@@ -1,5 +1,6 @@
 ---
 name: tapps-docs-report
+user-invocable: true
 description: >-
   Generate a documentation quality report. Runs project scan, completeness
   check, and Diataxis balance analysis. Use when you need a doc health

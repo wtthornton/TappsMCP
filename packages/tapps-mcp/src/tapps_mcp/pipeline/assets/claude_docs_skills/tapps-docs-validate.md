@@ -1,5 +1,6 @@
 ---
 name: tapps-docs-validate
+user-invocable: true
 description: >-
   Validate documentation quality. Checks drift, freshness, links, and
   Diataxis balance. Use for a lighter validation pass than tapps-docs-finish-task.
