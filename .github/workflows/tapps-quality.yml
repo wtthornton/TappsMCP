@@ -77,8 +77,27 @@ jobs:
             # instead of deadlocking on a threshold no honest PR could clear.
             RANGE="${MERGE_BASE}..${{ github.sha }}"
           else
-            DEFAULT_BRANCH="${{ github.event.repository.default_branch }}"
-            RANGE="origin/${DEFAULT_BRANCH}...HEAD"
+            # TAP-7450: on push, diff the commits GitHub actually pushed
+            # (before..after) instead of origin/<default>...HEAD -- on a
+            # push to the default branch, origin/<default> IS HEAD by the
+            # time this job runs, so that range is always empty and the
+            # job silently validates nothing.
+            BEFORE_SHA="${{ github.event.before }}"
+            AFTER_SHA="${{ github.sha }}"
+            ZERO_SHA="0000000000000000000000000000000000000000"
+            if [ -z "${BEFORE_SHA}" ] || [ "${BEFORE_SHA}" = "${ZERO_SHA}" ]; then
+              # New branch / first push -- no prior sha to diff against.
+              # Validate just the tip commit.
+              RANGE="${AFTER_SHA}~1..${AFTER_SHA}"
+            elif git cat-file -e "${BEFORE_SHA}^{commit}" 2>/dev/null \
+                 && git merge-base --is-ancestor "${BEFORE_SHA}" "${AFTER_SHA}"; then
+              RANGE="${BEFORE_SHA}..${AFTER_SHA}"
+            else
+              # Force-push (before sha isn't an ancestor of after, or was
+              # rewritten out of history) -- before..after would be wrong
+              # or huge, so fall back to validating just the tip commit.
+              RANGE="${AFTER_SHA}~1..${AFTER_SHA}"
+            fi
             # No PR base on a non-pull_request run -- ratchet stays off.
             BASELINE_REF=""
           fi
