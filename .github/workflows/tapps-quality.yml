@@ -142,7 +142,7 @@ jobs:
         run: uv sync --all-packages --group dev
 
       - name: Run full tapps-mcp unit suite
-        run: uv run pytest packages/tapps-mcp/tests/unit -q -n 4
+        run: uv run pytest packages/tapps-mcp/tests/unit -q -p no:randomly -n 4
 
   agent-contract:
     name: agent contract + skills stamp
