@@ -91,6 +91,20 @@ class TestGeneratePermissionSettings:
         medium = generate_permission_settings(tmp_path, engagement_level="medium")
         assert low == medium
 
+    def test_docsmcp_legacy_permissions_use_nlt_project_docs_spelling(self, tmp_path):
+        """TAP tmcp-r1r2: the legacy DocsMCP branch (docsmcp_detected=True,
+        use_nlt_plugin=False) must grant the ``nlt-project-docs`` server —
+        the ``docs-mcp`` server key nothing creates was retired when the six
+        MCP servers were renamed to ``nlt-*``."""
+        result = generate_permission_settings(
+            tmp_path, docsmcp_detected=True, use_nlt_plugin=False
+        )
+        allow = result["permissions"]["allow"]
+        assert "mcp__nlt-project-docs" in allow
+        assert "mcp__nlt-project-docs__*" in allow
+        assert "mcp__docs-mcp" not in allow
+        assert "mcp__docs-mcp__*" not in allow
+
 
 class TestBootstrapClaudeSettingsEngagement:
     """Tests for engagement-level support in _bootstrap_claude_settings."""

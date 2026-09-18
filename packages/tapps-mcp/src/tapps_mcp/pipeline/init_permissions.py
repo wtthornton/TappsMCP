@@ -35,8 +35,11 @@ _NLT_PERMISSION_ENTRIES = [
     "mcp__nlt-release-ship__*",
 ]
 
-# DocsMCP permission entries — added when DocsMCP is detected.
-_DOCSMCP_PERMISSION_ENTRIES = ["mcp__docs-mcp", "mcp__docs-mcp__*"]
+# DocsMCP permission entries — added when DocsMCP is detected. No shipped
+# MCP config registers a "docs-mcp" server key (that name only survives as
+# the fleet_upgrade binary/component name); the live server key is
+# "nlt-project-docs", matching the entry in _NLT_PERMISSION_ENTRIES above.
+_DOCSMCP_PERMISSION_ENTRIES = ["mcp__nlt-project-docs", "mcp__nlt-project-docs__*"]
 
 # TappsPlatform (combined server) permission entries — added when DocsMCP is detected.
 _PLATFORM_PERMISSION_ENTRIES = ["mcp__tapps-platform", "mcp__tapps-platform__*"]
