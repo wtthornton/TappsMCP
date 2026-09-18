@@ -30,20 +30,30 @@ class SkillInfo:
 # Marks a body segment that cannot be evaluated statically -- a helper call,
 # an out-of-module name, an f-string interpolation.
 #
-# The codepoints are Unicode Private Use Area. That is a deliberate trade-off,
-# not a guarantee of no collision: a hand-authored SKILL.md *may* contain
-# U+E000, and one that does is refused rather than mismeasured (the guard
-# cannot tell an authored marker from a resolver-emitted one). Refusing a
-# description nobody has written yet is the cheap half of that trade.
+# The codepoints are Unicode Private Use Area. The guard tests for the full
+# nine-character marker, not the codepoint alone: a lone U+E000 (or any other
+# PUA use) in a hand-authored SKILL.md is accepted, and only a body containing
+# the literal marker sequence is refused. That is the declared trade-off, not
+# a guarantee of no collision.
 #
 # The marker has to survive every positional decision the frontmatter parser
 # makes about *where* a field ends, because the guard runs after that
 # partitioning and only sees what the partition attributes to a measured
-# field. It survives because no such decision can read it: it cannot strip to
-# ``---`` (``_frontmatter_bounds``), it cannot form a key token
-# (``_opens_key``), lines it lands on that no field's span covers are rejected
-# outright, and a shadowed duplicate key keeps its raw span
+# field. Most such decisions cannot read it: it cannot strip to ``---``
+# (``_frontmatter_bounds``), it cannot form a key token (``_opens_key``),
+# frontmatter lines it lands on that no field's span covers are rejected
+# outright (this does not extend to markdown body lines below the closing
+# ``---``, which no span covers either but which are correctly not
+# rejected), and a shadowed duplicate key keeps its raw span
 # (``_parse_skill_frontmatter_fields``).
+#
+# One decision CAN move a span boundary past the marker: ``body.splitlines()``
+# (below) breaks on ``\x0b \x0c \x1c \x1d \x1e`` in addition to ``\n``, and a
+# marker straddling one of those breaks can land on a line that opens a new,
+# unmeasured key. The gap that would open is closed by pyyaml, not by this
+# code: pyyaml refuses to load any document containing those five characters
+# at all ("unacceptable character #x000b: special characters are not
+# allowed"), so no valid, hand-authored SKILL.md can reach this path.
 _ELISION = "\ue000elided\ue000"
 
 
@@ -58,7 +68,7 @@ def _resolve_body_text(node: ast.expr, symtab: dict[str, ast.expr], depth: int =
     evaluated statically resolves to ``_ELISION`` rather than being dropped or
     stopped at, so the text that follows it is still recovered *and* its
     position is still recorded. Dropping the position is what defeated the
-    four earlier fixes for TAP-7755: a guard that reads the parsed value
+    five earlier fixes for TAP-7755: a guard that reads the parsed value
     inherits every position the parser discarded.
     """
     if depth > 50:
