@@ -69,6 +69,16 @@ SKIP_TOKENS: dict[str, frozenset[str]] = {
 
 ALL_SKIP_TOKENS: frozenset[str] = frozenset().union(*SKIP_TOKENS.values())
 
+# TAP-7430: tokens whose sole value is the token's own name (``karpathy``,
+# ``docs_automation``) name a *component*, not a filesystem path -- there is
+# no ``project_root / <name>`` to check for existence. Derived from the
+# vocabulary itself (a value identical to its key), so a new component-name
+# token added later is picked up automatically instead of requiring a second,
+# hand-maintained list that can drift from SKIP_TOKENS.
+COMPONENT_NAME_TOKENS: frozenset[str] = frozenset(
+    key for key, paths in SKIP_TOKENS.items() if paths == frozenset({key})
+)
+
 # Tokens that cover a whole directory. A configured entry pointing *inside* one
 # of these is the common mistake: the operator wanted per-file granularity,
 # which the vocabulary does not offer.
@@ -181,6 +191,7 @@ def skip_tokens_field_description() -> str:
 
 __all__ = [
     "ALL_SKIP_TOKENS",
+    "COMPONENT_NAME_TOKENS",
     "SKIP_TOKENS",
     "applied_skip_tokens",
     "describe_unknown_skip_token",

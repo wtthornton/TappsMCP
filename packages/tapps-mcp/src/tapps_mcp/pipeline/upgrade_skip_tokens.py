@@ -14,6 +14,7 @@ from __future__ import annotations
 
 from tapps_core.config.upgrade_skip_tokens import (
     ALL_SKIP_TOKENS,
+    COMPONENT_NAME_TOKENS,
     SKIP_TOKENS,
     applied_skip_tokens,
     describe_unknown_skip_token,
@@ -24,6 +25,7 @@ from tapps_core.config.upgrade_skip_tokens import (
 
 __all__ = [
     "ALL_SKIP_TOKENS",
+    "COMPONENT_NAME_TOKENS",
     "SKIP_TOKENS",
     "applied_skip_tokens",
     "describe_unknown_skip_token",
