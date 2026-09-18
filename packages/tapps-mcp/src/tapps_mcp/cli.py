@@ -606,6 +606,28 @@ def managed_block_hash_cmd(skill_name: str, host: str) -> None:
     click.echo(_json.dumps({"skill": skill_name, "host": host, "hash": digest}))
 
 
+@main.command("model-roles")
+@click.argument("role", required=False)
+def model_roles_cmd(role: str | None) -> None:
+    """Print ``MODEL_ROLES`` (or one role) as JSON, derived at call time (TAP-7795).
+
+    With no argument, prints all roles in this repo's own vocabulary
+    (``verifier-*`` names, literal model ids) so a downstream consumer can
+    diff its own routing table against this one without either side
+    hardcoding a merged name mapping. With ROLE, prints just that entry;
+    an unknown role exits non-zero instead of printing an empty result.
+    """
+    import json as _json
+
+    from tapps_mcp.pipeline.platform_skills import RoleResolutionError, export_model_roles
+
+    try:
+        data = export_model_roles(role)
+    except RoleResolutionError as exc:
+        raise SystemExit(f"Error: {exc}") from exc
+    click.echo(_json.dumps(data, indent=2, sort_keys=True))
+
+
 def _get_project_root() -> Path:
     """Resolve project root from TAPPS_MCP_PROJECT_ROOT env var or cwd."""
     from pathlib import Path

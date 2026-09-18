@@ -18,6 +18,7 @@ from tapps_mcp.pipeline.platform_skills import (
     CURSOR_SKILLS,
     MODEL_ROLES,
     RoleResolutionError,
+    export_model_roles,
     resolve_role_model,
 )
 
@@ -55,6 +56,46 @@ class TestModelRolesTable:
     def test_resolve_role_model_returns_the_table_value(self) -> None:
         for role, entry in MODEL_ROLES.items():
             assert resolve_role_model(role) == entry["model"]
+
+
+class TestExportModelRoles:
+    """TAP-7795: a machine-readable export derived from MODEL_ROLES at call
+    time, so a downstream consumer's routing table can be diffed against
+    this repo's actual table instead of a hand-retyped copy."""
+
+    def test_export_contains_all_seven_roles_with_model_and_effort(self) -> None:
+        exported = export_model_roles()
+        assert set(exported) == EXPECTED_ROLES
+        for role, entry in exported.items():
+            assert entry["model"] == MODEL_ROLES[role]["model"]
+            assert entry["effort"] == MODEL_ROLES[role]["effort"]
+
+    def test_export_is_derived_not_a_second_copy(self, monkeypatch) -> None:
+        """Changing the constant changes the export -- proves derivation."""
+        monkeypatch.setitem(MODEL_ROLES, "driver", {"model": "claude-opus-5", "effort": "high"})
+        assert export_model_roles()["driver"] == {"model": "claude-opus-5", "effort": "high"}
+
+    def test_export_result_does_not_alias_the_module_table(self) -> None:
+        """The export returns copies -- mutating the result must not mutate
+        MODEL_ROLES itself."""
+        exported = export_model_roles()
+        exported["driver"]["model"] = "mutated"
+        assert MODEL_ROLES["driver"]["model"] != "mutated"
+
+    def test_export_single_role_returns_just_that_entry(self) -> None:
+        assert export_model_roles("driver") == {"driver": dict(MODEL_ROLES["driver"])}
+
+    def test_export_unknown_role_refuses_loudly(self) -> None:
+        with pytest.raises(RoleResolutionError, match="claude-not-a-model"):
+            export_model_roles("claude-not-a-model")
+
+    def test_export_keys_always_match_model_roles_keys(self) -> None:
+        """Invariant, not pinned to the current 7 roles: whatever MODEL_ROLES
+        contains, export_model_roles must mirror exactly. Guards against the
+        export silently becoming a second, independently-maintained copy --
+        a role added to MODEL_ROLES without export support would show up
+        here as a set mismatch, not as an empty diff."""
+        assert set(export_model_roles()) == set(MODEL_ROLES)
 
 
 class TestModelRoleNegativeControls:
