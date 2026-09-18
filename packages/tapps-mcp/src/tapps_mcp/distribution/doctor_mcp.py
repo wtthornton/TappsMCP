@@ -195,11 +195,13 @@ _ADR_0001_REF = "docs/adr/0001-in-process-agentbrain-via-brainbridge.md"
 
 
 def _brain_http_url_for_checks(project_root: Path) -> str:
-    """Resolve brain HTTP URL for doctor checks: env first, then ``.tapps-mcp.yaml``.
+    """Resolve brain HTTP URL for doctor checks: env, then ``.tapps-mcp.yaml``,
+    then ``~/.tapps-operator.env``.
 
     MCP subprocesses receive ``TAPPS_MCP_MEMORY_BRAIN_HTTP_URL`` from ``.mcp.json``.
     CLI ``tapps-mcp doctor`` should still exercise brain probes when the URL is
-    configured only under ``memory.brain_http_url`` in project yaml.
+    configured only under ``memory.brain_http_url`` in project yaml, or only in the
+    operator's machine-wide secrets file (remote-brain setups, TAP-7481).
     """
     import os
 
@@ -211,9 +213,18 @@ def _brain_http_url_for_checks(project_root: Path) -> str:
 
         settings = load_settings(project_root=project_root)
         raw = getattr(settings.memory, "brain_http_url", "")
-        return str(raw or "").strip()
+        yaml_url = str(raw or "").strip()
+        if yaml_url:
+            return yaml_url
     except Exception:
-        return ""
+        pass
+
+    from tapps_mcp.distribution.doctor_context7 import _env_file_get_value
+
+    operator_url = _env_file_get_value(
+        Path.home() / ".tapps-operator.env", "TAPPS_MCP_MEMORY_BRAIN_HTTP_URL"
+    )
+    return (operator_url or "").strip()
 
 
 def _is_unsubstituted_placeholder(value: str) -> bool:

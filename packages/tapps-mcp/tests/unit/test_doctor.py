@@ -2621,6 +2621,59 @@ class TestBrainHttpUrlForChecks:
         )
         assert _brain_http_url_for_checks(tmp_path) == "http://yaml:8080"
 
+    def test_falls_back_to_operator_env_when_env_and_yaml_unset(
+        self, tmp_path, monkeypatch
+    ) -> None:
+        """TAP-7481/TAP-7482: neither env nor yaml set -- resolver must still find
+        the URL in ``~/.tapps-operator.env`` instead of silently probing localhost."""
+        from tapps_mcp.distribution.doctor import _brain_http_url_for_checks
+
+        monkeypatch.delenv("TAPPS_MCP_MEMORY_BRAIN_HTTP_URL", raising=False)
+        fake_home = tmp_path / "home"
+        fake_home.mkdir()
+        monkeypatch.setattr(Path, "home", lambda: fake_home)
+        (fake_home / ".tapps-operator.env").write_text(
+            "TAPPS_MCP_MEMORY_BRAIN_HTTP_URL=http://operator:8080\n",
+            encoding="utf-8",
+        )
+        project_root = tmp_path / "project"
+        project_root.mkdir()
+        assert _brain_http_url_for_checks(project_root) == "http://operator:8080"
+
+    def test_yaml_beats_operator_env(self, tmp_path, monkeypatch) -> None:
+        from tapps_mcp.distribution.doctor import _brain_http_url_for_checks
+
+        monkeypatch.delenv("TAPPS_MCP_MEMORY_BRAIN_HTTP_URL", raising=False)
+        fake_home = tmp_path / "home"
+        fake_home.mkdir()
+        monkeypatch.setattr(Path, "home", lambda: fake_home)
+        (fake_home / ".tapps-operator.env").write_text(
+            "TAPPS_MCP_MEMORY_BRAIN_HTTP_URL=http://operator:8080\n",
+            encoding="utf-8",
+        )
+        project_root = tmp_path / "project"
+        project_root.mkdir()
+        (project_root / ".tapps-mcp.yaml").write_text(
+            "memory:\n  brain_http_url: http://yaml:8080\n",
+            encoding="utf-8",
+        )
+        assert _brain_http_url_for_checks(project_root) == "http://yaml:8080"
+
+    def test_env_beats_operator_env(self, tmp_path, monkeypatch) -> None:
+        from tapps_mcp.distribution.doctor import _brain_http_url_for_checks
+
+        monkeypatch.setenv("TAPPS_MCP_MEMORY_BRAIN_HTTP_URL", "http://env:8080")
+        fake_home = tmp_path / "home"
+        fake_home.mkdir()
+        monkeypatch.setattr(Path, "home", lambda: fake_home)
+        (fake_home / ".tapps-operator.env").write_text(
+            "TAPPS_MCP_MEMORY_BRAIN_HTTP_URL=http://operator:8080\n",
+            encoding="utf-8",
+        )
+        project_root = tmp_path / "project"
+        project_root.mkdir()
+        assert _brain_http_url_for_checks(project_root) == "http://env:8080"
+
 
 class TestStripBrainMcpEntries:
     """TAP-1888: strip direct tapps-brain MCP server keys from host configs."""
@@ -2694,9 +2747,12 @@ class TestBrainAuthTokenForDoctor:
 class TestMemoryCliHttpMode:
     """Doctor advises HTTP-only consumers about memory CLI subcommand coverage."""
 
-    def test_skipped_when_not_http_mode(self, tmp_path) -> None:
+    def test_skipped_when_not_http_mode(self, tmp_path, monkeypatch) -> None:
         from tapps_mcp.distribution.doctor import check_memory_cli_http_mode
 
+        # TAP-7481: isolate from this machine's real ~/.tapps-operator.env, which
+        # the resolver now falls back to when env/yaml are both unset.
+        monkeypatch.setattr(Path, "home", lambda: tmp_path)
         result = check_memory_cli_http_mode(tmp_path)
         assert result.ok is True
         assert "Not in HTTP-only mode" in result.message
@@ -2814,8 +2870,11 @@ class TestCheckBrainVersionDelta:
         resp.json.return_value = {"brain_version": brain_version}
         return resp
 
-    def test_skip_when_not_http_mode(self, tmp_path) -> None:  # type: ignore[no-untyped-def]
+    def test_skip_when_not_http_mode(self, tmp_path, monkeypatch) -> None:  # type: ignore[no-untyped-def]
         """Passes silently when TAPPS_MCP_MEMORY_BRAIN_HTTP_URL is unset."""
+        # TAP-7481: isolate from this machine's real ~/.tapps-operator.env, which
+        # the resolver now falls back to when env/yaml are both unset.
+        monkeypatch.setattr(Path, "home", lambda: tmp_path)
         with patch.dict("os.environ", {}, clear=True):
             result = check_brain_version_delta(tmp_path)
         assert result.ok is True
@@ -3201,7 +3260,10 @@ class TestParseHistogramQuantiles:
 class TestCheckBrainProbeLatency:
     """TAP-1931: the doctor latency check."""
 
-    def test_skip_when_not_http_mode(self, tmp_path) -> None:  # type: ignore[no-untyped-def]
+    def test_skip_when_not_http_mode(self, tmp_path, monkeypatch) -> None:  # type: ignore[no-untyped-def]
+        # TAP-7481: isolate from this machine's real ~/.tapps-operator.env, which
+        # the resolver now falls back to when env/yaml are both unset.
+        monkeypatch.setattr(Path, "home", lambda: tmp_path)
         with patch.dict("os.environ", {}, clear=True):
             result = check_brain_probe_latency(tmp_path)
         assert result.ok is True
