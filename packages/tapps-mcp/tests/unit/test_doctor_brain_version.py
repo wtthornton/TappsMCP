@@ -32,6 +32,9 @@ def test_read_brain_floor_pin_resolves_from_tapps_core() -> None:
 
 def test_check_brain_health_not_http_mode_passes(tmp_path: Path, monkeypatch) -> None:  # type: ignore[no-untyped-def]
     monkeypatch.delenv("TAPPS_MCP_MEMORY_BRAIN_HTTP_URL", raising=False)
+    fake_home = tmp_path / "home"
+    fake_home.mkdir()
+    monkeypatch.setattr(Path, "home", lambda: fake_home)
     result = check_brain_health(tmp_path)
     assert result.ok is True
     assert "Not in HTTP mode" in result.message
@@ -39,6 +42,9 @@ def test_check_brain_health_not_http_mode_passes(tmp_path: Path, monkeypatch) ->
 
 def test_check_brain_version_floor_not_http_mode_passes(tmp_path: Path, monkeypatch) -> None:  # type: ignore[no-untyped-def]
     monkeypatch.delenv("TAPPS_MCP_MEMORY_BRAIN_HTTP_URL", raising=False)
+    fake_home = tmp_path / "home"
+    fake_home.mkdir()
+    monkeypatch.setattr(Path, "home", lambda: fake_home)
     result = check_brain_version_floor(tmp_path)
     assert result.ok is True
     assert "Not in HTTP mode" in result.message
@@ -46,6 +52,9 @@ def test_check_brain_version_floor_not_http_mode_passes(tmp_path: Path, monkeypa
 
 def test_check_brain_version_delta_not_http_mode_passes(tmp_path: Path, monkeypatch) -> None:  # type: ignore[no-untyped-def]
     monkeypatch.delenv("TAPPS_MCP_MEMORY_BRAIN_HTTP_URL", raising=False)
+    fake_home = tmp_path / "home"
+    fake_home.mkdir()
+    monkeypatch.setattr(Path, "home", lambda: fake_home)
     result = check_brain_version_delta(tmp_path)
     assert result.ok is True
     assert "Not in HTTP mode" in result.message
