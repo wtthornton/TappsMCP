@@ -146,7 +146,11 @@ class InstallDriftEntry(BaseModel):
         description="Version of the in-process package this server is running."
     )
     drifted: bool = Field(
-        description="True iff binary_version is non-empty and differs from source_version."
+        description=(
+            "True iff binary_version differs from source_version, or the local install "
+            "source is a git worktree whose HEAD is not contained in the default branch "
+            "(TAP-7847 build-identity check)."
+        )
     )
     from_local_source: bool = Field(
         default=False,
@@ -155,6 +159,22 @@ class InstallDriftEntry(BaseModel):
     install_source: str = Field(
         default="",
         description="Install source path from uv-receipt.toml when from_local_source is True.",
+    )
+    install_head_sha: str = Field(
+        default="",
+        description="Short git HEAD sha of install_source when it is a git checkout (TAP-7847).",
+    )
+    install_branch: str = Field(
+        default="",
+        description="Git branch of install_source when it is a git checkout (TAP-7847).",
+    )
+    install_head_contained_in_default: bool | None = Field(
+        default=None,
+        description=(
+            "True/False when install_source is a git checkout and its HEAD "
+            "is/isn't reachable from origin's default branch; None when not "
+            "a git checkout or the probe could not determine containment."
+        ),
     )
 
 

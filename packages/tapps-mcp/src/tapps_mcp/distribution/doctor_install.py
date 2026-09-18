@@ -168,7 +168,33 @@ def check_blue_green_deploy() -> CheckResult:
 
 
 def check_global_local_install() -> CheckResult:
-    """TAP-4099: warn when global CLIs were installed from a local checkout path."""
+    """TAP-4099/TAP-7847: warn (or fail) when global CLIs are locally sourced.
+
+    Always inspects the binary PATH actually resolves (what hooks invoke) via
+    ``check_install_drift`` — a blue/green ``current`` release being active does not
+    mean the global CLI on PATH is fine, since hooks call ``command -v tapps-mcp``
+    directly and can still hit a stale/unmerged ``uv tool install``. When that
+    install's source is a git worktree whose HEAD is not contained in the default
+    branch, this check fails instead of warning.
+    """
+    from tapps_mcp.diagnostics import check_install_drift
+
+    drift = check_install_drift()
+    local_entries = [e for e in drift.entries if e.from_local_source]
+    unmerged = [e for e in local_entries if e.install_head_contained_in_default is False]
+    if unmerged:
+        names = ", ".join(
+            f"{e.binary}←{e.install_source} (branch {e.install_branch or 'unknown'})"
+            for e in unmerged
+        )
+        return CheckResult(
+            "Global CLI install source",
+            False,
+            f"UNMERGED: {names} — HEAD not contained in the default branch",
+            drift.remediation_hint
+            or "Reinstall the global CLI from a branch merged into the default branch.",
+        )
+
     from tapps_mcp.distribution.blue_green import current_release_path
 
     if current_release_path() is not None:
@@ -179,10 +205,6 @@ def check_global_local_install() -> CheckResult:
             "Deploy updates via tapps-mcp deploy-local; running servers stay pinned until MCP reload.",
         )
 
-    from tapps_mcp.diagnostics import check_install_drift
-
-    drift = check_install_drift()
-    local_entries = [e for e in drift.entries if e.from_local_source]
     if not local_entries:
         return CheckResult(
             "Global CLI install source",
