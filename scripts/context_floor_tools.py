@@ -40,10 +40,30 @@ def _is_register_tool_call(node: ast.Call) -> bool:
     )
 
 
+def _explicit_name_kwarg(node: ast.Call) -> str | None:
+    """Return the literal string passed as ``name=`` to a ``register_tool``
+    call, if any. ``register_tool`` registers under ``name or fn.__name__``
+    (``mcp_register.py``), so an explicit ``name=`` -- not the positional
+    handler argument's identifier -- is the actual registered MCP tool
+    name (TAP-7770: the tools bucket used to read the positional arg's bare
+    identifier even when it was a local variable holding a dynamically
+    resolved handler, e.g. ``session_start_impl``, and ``name=`` overrode it
+    to the real name, ``tapps_session_start``)."""
+    for kw in node.keywords:
+        if kw.arg == "name" and isinstance(kw.value, ast.Constant) and isinstance(kw.value.value, str):
+            return kw.value.value
+    return None
+
+
 def _registered_tool_name(node: ast.Call) -> str | None:
     """Return the tool function name from a ``register_tool(mcp_instance,
     <fn>, ...)`` call, or ``None`` if *node* isn't such a call."""
-    if _is_register_tool_call(node) and len(node.args) >= 2 and isinstance(node.args[1], ast.Name):
+    if not _is_register_tool_call(node) or len(node.args) < 2:
+        return None
+    explicit_name = _explicit_name_kwarg(node)
+    if explicit_name is not None:
+        return explicit_name
+    if isinstance(node.args[1], ast.Name):
         return node.args[1].id
     return None
 

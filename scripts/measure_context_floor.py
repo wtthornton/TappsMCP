@@ -50,6 +50,13 @@ from context_floor_core import MeasurementError
 from context_floor_report import build_report
 
 
+def _print_bucket_errors(report: dict[str, Any]) -> None:
+    """Print any bucket failures to stderr -- a failed bucket is reported,
+    never silently dropped from the output (TAP-7770)."""
+    for bucket, message in report.get("bucket_errors", {}).items():
+        print(f"[FAILED] {bucket} bucket: {message}", file=sys.stderr)
+
+
 def print_table(report: dict[str, Any]) -> None:
     rows = [
         ("tool_schema_tokens", report["tool_schema_tokens"]),
@@ -67,14 +74,22 @@ def print_table(report: dict[str, Any]) -> None:
     print("TappsMCP context floor (measured from source)")
     print("-" * (width + 12))
     for name, value in rows:
-        print(f"{name:<{width}}  {value:>8,}")
-    over_400 = report["detail"]["tools"]["docstrings_over_400_bytes"]
-    total_tools = report["detail"]["tools"]["total_tool_count"]
-    print(f"\n{over_400} of {total_tools} tool docstrings exceed 400 bytes")
+        display = f"{value:>8,}" if value is not None else f"{'FAILED':>8}"
+        print(f"{name:<{width}}  {display}")
+    tools_detail = report["detail"]["tools"]
+    if "error" in tools_detail:
+        print("\ntools bucket failed -- see stderr for the diagnosis")
+    else:
+        over_400 = tools_detail["docstrings_over_400_bytes"]
+        total_tools = tools_detail["total_tool_count"]
+        print(f"\n{over_400} of {total_tools} tool docstrings exceed 400 bytes")
 
 
 def print_skills_table(report: dict[str, Any]) -> None:
     skills = report["detail"]["skills"]
+    if isinstance(skills, dict):
+        print("skills bucket failed -- see stderr for the diagnosis", file=sys.stderr)
+        return
     print(f"{'skill':<28}{'bytes':>8}{'tokens':>8}  fork  disable-invoke")
     print("-" * 66)
     for entry in skills:
@@ -107,6 +122,8 @@ def main() -> int:
     except MeasurementError as exc:
         print(f"measurement failed: {exc}", file=sys.stderr)
         return 1
+
+    _print_bucket_errors(report)
 
     if args.json:
         print(json.dumps(report, indent=2))
