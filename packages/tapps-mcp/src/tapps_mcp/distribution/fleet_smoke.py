@@ -152,6 +152,61 @@ def probe_fleet_mcp_initialize(
     return {"ok": True, "server_id": server_id, "url": url, "stage": "initialize"}
 
 
+def _establish_fleet_session(
+    url: str,
+    *,
+    root_header: str,
+    client_name: str,
+    timeout: float,
+) -> dict[str, Any]:
+    """Run ``initialize`` + ``notifications/initialized`` against *url*.
+
+    Shared by every probe below the cheap liveness-only one
+    (:func:`probe_fleet_mcp_initialize`) so a session-establishment fix lands
+    in one place. Returns ``{"ok": False, "stage": ..., ...}`` on failure, or
+    ``{"ok": True, "session_id": ..., "init_payload": ...}`` on success --
+    *init_payload* is the raw ``initialize`` response (callers that need
+    ``serverInfo`` read it from there).
+    """
+    status, session_id, body = _post_mcp(
+        url,
+        {
+            "jsonrpc": "2.0",
+            "id": 1,
+            "method": "initialize",
+            "params": {
+                "protocolVersion": _INIT_PROTOCOL,
+                "capabilities": {},
+                "clientInfo": {"name": client_name, "version": "1"},
+            },
+        },
+        project_root=root_header,
+        timeout=timeout,
+    )
+    if status != 200 or not session_id:
+        return {"ok": False, "stage": "initialize", "http_status": status, "error": body[:500]}
+
+    init_payload = parse_sse_json(body)
+    if init_payload is None or "result" not in init_payload:
+        return {
+            "ok": False,
+            "stage": "initialize",
+            "error": f"invalid SSE payload: {body[:200]!r}",
+        }
+
+    init_status, _, _ = _post_mcp(
+        url,
+        {"jsonrpc": "2.0", "method": "notifications/initialized", "params": {}},
+        project_root=root_header,
+        session_id=session_id,
+        timeout=timeout,
+    )
+    if init_status not in (200, 202):
+        return {"ok": False, "stage": "initialized", "http_status": init_status}
+
+    return {"ok": True, "session_id": session_id, "init_payload": init_payload}
+
+
 def probe_fleet_mcp_session(
     server_id: str,
     *,
@@ -178,57 +233,13 @@ def probe_fleet_mcp_session(
             return {"ok": False, "server_id": server_id, "error": f"unknown server: {server_id}"}
         url = build_http_fleet_url(server_id, fleet_host=fleet_host)
 
-    status, session_id, body = _post_mcp(
-        url,
-        {
-            "jsonrpc": "2.0",
-            "id": 1,
-            "method": "initialize",
-            "params": {
-                "protocolVersion": _INIT_PROTOCOL,
-                "capabilities": {},
-                "clientInfo": {"name": "tapps-mcp-fleet-smoke", "version": "1"},
-            },
-        },
-        project_root=root_header,
-        timeout=timeout,
+    session = _establish_fleet_session(
+        url, root_header=root_header, client_name="tapps-mcp-fleet-smoke", timeout=timeout
     )
-    if status != 200 or not session_id:
-        return {
-            "ok": False,
-            "server_id": server_id,
-            "url": url,
-            "stage": "initialize",
-            "http_status": status,
-            "error": body[:500],
-        }
+    if not session["ok"]:
+        return {"server_id": server_id, "url": url, **session}
 
-    init_payload = parse_sse_json(body)
-    if init_payload is None or "result" not in init_payload:
-        return {
-            "ok": False,
-            "server_id": server_id,
-            "url": url,
-            "stage": "initialize",
-            "error": f"invalid SSE payload: {body[:200]!r}",
-        }
-
-    init_status, _, _ = _post_mcp(
-        url,
-        {"jsonrpc": "2.0", "method": "notifications/initialized", "params": {}},
-        project_root=root_header,
-        session_id=session_id,
-        timeout=timeout,
-    )
-    if init_status not in (200, 202):
-        return {
-            "ok": False,
-            "server_id": server_id,
-            "url": url,
-            "stage": "initialized",
-            "http_status": init_status,
-        }
-
+    session_id = session["session_id"]
     list_status, _, list_body = _post_mcp(
         url,
         {"jsonrpc": "2.0", "id": 2, "method": "tools/list", "params": {}},
@@ -250,7 +261,7 @@ def probe_fleet_mcp_session(
             "error": list_body[:500],
         }
 
-    server_info = init_payload.get("result", {}).get("serverInfo", {})
+    server_info = session["init_payload"].get("result", {}).get("serverInfo", {})
     return {
         "ok": True,
         "server_id": server_id,
@@ -259,6 +270,98 @@ def probe_fleet_mcp_session(
         "server_name": server_info.get("name"),
         "server_version": server_info.get("version"),
     }
+
+
+def _parse_tool_call_response(
+    server_id: str, url: str, tool_name: str, status: int, body: str
+) -> dict[str, Any]:
+    """Extract the tool's own JSON envelope from a ``tools/call`` response."""
+    payload = parse_sse_json(body)
+    if status != 200 or payload is None or "result" not in payload:
+        return {
+            "ok": False,
+            "server_id": server_id,
+            "url": url,
+            "stage": "tools/call",
+            "http_status": status,
+            "error": body[:500],
+        }
+
+    result = payload["result"]
+    if not isinstance(result, dict) or result.get("isError"):
+        return {
+            "ok": False,
+            "server_id": server_id,
+            "url": url,
+            "stage": "tools/call",
+            "error": f"tool {tool_name} returned isError: {body[:500]!r}",
+        }
+
+    text = ""
+    for block in result.get("content") or []:
+        if isinstance(block, dict) and block.get("type") == "text":
+            text = block.get("text", "")
+            break
+    try:
+        parsed = json.loads(text) if text else None
+    except json.JSONDecodeError:
+        parsed = None
+    if not isinstance(parsed, dict):
+        return {
+            "ok": False,
+            "server_id": server_id,
+            "url": url,
+            "stage": "tools/call",
+            "error": f"tool {tool_name} response was not a JSON object: {text[:200]!r}",
+        }
+    return {"ok": True, "server_id": server_id, "url": url, "tool": tool_name, "data": parsed}
+
+
+def probe_fleet_tool_result(
+    server_id: str,
+    tool_name: str,
+    arguments: dict[str, Any] | None = None,
+    *,
+    project_root: Path | None = None,
+    fleet_host: str | None = None,
+    timeout: float = 15.0,
+) -> dict[str, Any]:
+    """Run initialize + initialized + ``tools/call`` and return the tool's own payload.
+
+    ``probe_fleet_mcp_session``'s ``server_version`` comes from the
+    ``initialize`` handshake's ``serverInfo``, which the ``mcp`` SDK fills in
+    from ``pkg_version("mcp")`` when the server was constructed without an
+    explicit ``version=`` (this fleet's ``FastMCP("TappsMCP", ...)`` call) --
+    i.e. it names the MCP SDK's version, not the application's. A caller that
+    needs the application's actual running version has to call a tool that
+    reports it (``tapps_session_start`` -> ``data.server.version``) and read
+    the answer from inside the tool's own response, not from the transport
+    handshake.
+    """
+    if server_id not in NLT_HTTP_FLEET_PORTS:
+        return {"ok": False, "server_id": server_id, "error": f"unknown server: {server_id}"}
+    root_header = resolve_http_project_root_header(project_root)
+    url = build_http_fleet_url(server_id, fleet_host=fleet_host)
+
+    session = _establish_fleet_session(
+        url, root_header=root_header, client_name="tapps-mcp-fleet-tool-probe", timeout=timeout
+    )
+    if not session["ok"]:
+        return {"server_id": server_id, "url": url, **session}
+
+    call_status, _, call_body = _post_mcp(
+        url,
+        {
+            "jsonrpc": "2.0",
+            "id": 2,
+            "method": "tools/call",
+            "params": {"name": tool_name, "arguments": arguments or {}},
+        },
+        project_root=root_header,
+        session_id=session["session_id"],
+        timeout=timeout,
+    )
+    return _parse_tool_call_response(server_id, url, tool_name, call_status, call_body)
 
 
 def smoke_test_fleet(
