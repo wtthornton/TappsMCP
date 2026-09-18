@@ -281,13 +281,58 @@ def _parse_doctor_json(text: str) -> list[dict[str, str]] | None:
     return findings
 
 
-def smoke_test_release(release: ReleaseRef, *, project_root: Path | None = None) -> dict[str, Any]:
+# TAP-7848: the fleet-vs-CLI skew check is structurally red at the post-flip,
+# pre-restart moment of a version-changing deploy -- `current` now points at
+# the new release but the running fleet processes are still pinned (inode-
+# held) to the old one until `restart_fleet_with_smoke` runs below. Gating
+# the pre-restart smoke on this check makes a version-changing deploy fail
+# its own smoke and abort before reaching the restart that would resolve the
+# skew, every time. Deferred here and re-checked directly after the restart
+# (see `_deploy_under_lock`), where a real answer is possible.
+_POST_FLIP_DEFERRED_CHECKS = frozenset({"MCP server/CLI version skew"})
+
+
+def _partition_doctor_findings(
+    findings: list[dict[str, str]], defer_check_names: frozenset[str]
+) -> tuple[list[dict[str, str]], list[dict[str, str]], list[dict[str, str]]]:
+    """Split doctor findings into (gating, consumer-staleness, deferred).
+
+    A ``fail`` whose ``name`` is in *defer_check_names* is pulled out of the
+    gating bucket into ``deferred`` regardless of its ``category`` -- it is
+    neither a release-health failure at this call site nor a consumer-
+    staleness one, just unanswerable yet (TAP-7848).
+    """
+    gating = [
+        f
+        for f in findings
+        if f["severity"] == "fail"
+        and f["category"] != "consumer-staleness"
+        and f["name"] not in defer_check_names
+    ]
+    consumer_staleness = [
+        f
+        for f in findings
+        if f["severity"] in ("fail", "warn") and f["category"] == "consumer-staleness"
+    ]
+    deferred = [f for f in findings if f["severity"] == "fail" and f["name"] in defer_check_names]
+    return gating, consumer_staleness, deferred
+
+
+def smoke_test_release(
+    release: ReleaseRef,
+    *,
+    project_root: Path | None = None,
+    defer_check_names: frozenset[str] = frozenset(),
+) -> dict[str, Any]:
     """Verify required binaries exist and report their versions.
 
     When *project_root* is given, also runs ``tapps-mcp doctor --quick --json``
     against it and classifies each finding as release-health (gating) or
     consumer-staleness (reported, non-gating) by the ``category`` field the
-    doctor check itself set (TAP-6965).
+    doctor check itself set (TAP-6965). A ``fail`` whose check ``name`` is in
+    *defer_check_names* is neither gating nor reported as consumer-staleness --
+    it comes back in a separate ``deferred`` list so a caller can re-verify it
+    later, at a point where the check can produce a meaningful answer (TAP-7848).
     """
     base = _smoke_required_binaries(release)
     if not base.get("ok"):
@@ -313,14 +358,9 @@ def smoke_test_release(release: ReleaseRef, *, project_root: Path | None = None)
             "output": (proc.stdout or proc.stderr or "").strip()[-1000:],
         }
 
-    release_health_failures = [
-        f for f in findings if f["severity"] == "fail" and f["category"] != "consumer-staleness"
-    ]
-    consumer_staleness = [
-        f
-        for f in findings
-        if f["severity"] in ("fail", "warn") and f["category"] == "consumer-staleness"
-    ]
+    release_health_failures, consumer_staleness, deferred = _partition_doctor_findings(
+        findings, defer_check_names
+    )
 
     if release_health_failures:
         return {
@@ -328,9 +368,15 @@ def smoke_test_release(release: ReleaseRef, *, project_root: Path | None = None)
             "failures": [f"doctor: {f['name']}: {f['message']}" for f in release_health_failures],
             "versions": versions,
             "consumer_staleness": consumer_staleness,
+            "deferred": deferred,
             "output": (proc.stdout or proc.stderr or "").strip()[-1000:],
         }
-    return {"ok": True, "versions": versions, "consumer_staleness": consumer_staleness}
+    return {
+        "ok": True,
+        "versions": versions,
+        "consumer_staleness": consumer_staleness,
+        "deferred": deferred,
+    }
 
 
 def flip_current(release: ReleaseRef) -> dict[str, Any]:
@@ -470,6 +516,52 @@ def _reap_superseded_then_gc(
     return {"superseded_reap": superseded_reap, "gc": gc}
 
 
+def _restart_fleet_and_reverify_deferred(
+    checkout: Path, post_flip: dict[str, Any] | None
+) -> dict[str, Any]:
+    """Restart the fleet if it's running, then re-verify anything the
+    pre-restart post-flip smoke deferred (TAP-7848).
+
+    A check named in ``_POST_FLIP_DEFERRED_CHECKS`` is structurally
+    unanswerable before the fleet restarts onto the new release, so
+    ``smoke_test_release`` reported it under ``post_flip["deferred"]``
+    instead of gating on it. Once the restart below actually happens, the
+    same check can produce a real answer -- so it is re-run directly here
+    and *does* gate: a server still mismatched after a completed restart is
+    a real problem, not the expected pre-restart lag.
+
+    Always returns ``ok``. Every other key is present only when a restart
+    happened, so a caller can ``report.update()`` the non-``ok`` keys
+    unconditionally without inventing empty placeholders on the no-op path.
+    """
+    from tapps_mcp.distribution.fleet_control import fleet_any_running, restart_fleet_with_smoke
+
+    if not fleet_any_running():
+        return {"ok": True}
+
+    fleet_smoke = restart_fleet_with_smoke(project_root=checkout)
+    result: dict[str, Any] = {"fleet_restart_smoke": fleet_smoke}
+    if not fleet_smoke.get("ok"):
+        result["ok"] = False
+        return result
+
+    if post_flip is None or not post_flip.get("deferred"):
+        result["ok"] = True
+        return result
+
+    from tapps_mcp.distribution.doctor_server_skew import check_fleet_server_cli_skew
+
+    skew = check_fleet_server_cli_skew(checkout)
+    result["post_restart_skew_check"] = {"name": skew.name, "ok": skew.ok, "message": skew.message}
+    if not skew.ok:
+        result["ok"] = False
+        result["post_flip_status"] = "aborted: skew unresolved after restart"
+        return result
+
+    result["ok"] = True
+    return result
+
+
 def _deploy_under_lock(
     checkout: Path,
     release: ReleaseRef,
@@ -519,8 +611,11 @@ def _deploy_under_lock(
         report["ok"] = False
         return report
 
+    post_flip: dict[str, Any] | None = None
     if run_doctor_smoke:
-        post_flip = smoke_test_release(release, project_root=checkout)
+        post_flip = smoke_test_release(
+            release, project_root=checkout, defer_check_names=_POST_FLIP_DEFERRED_CHECKS
+        )
         report["post_flip_smoke"] = post_flip
         if not post_flip.get("ok"):
             report["ok"] = False
@@ -532,14 +627,11 @@ def _deploy_under_lock(
             else "completed clean"
         )
 
-    from tapps_mcp.distribution.fleet_control import fleet_any_running, restart_fleet_with_smoke
-
-    if fleet_any_running():
-        fleet_smoke = restart_fleet_with_smoke(project_root=checkout)
-        report["fleet_restart_smoke"] = fleet_smoke
-        if not fleet_smoke.get("ok"):
-            report["ok"] = False
-            return report
+    restart_result = _restart_fleet_and_reverify_deferred(checkout, post_flip)
+    report.update({k: v for k, v in restart_result.items() if k != "ok"})
+    if not restart_result["ok"]:
+        report["ok"] = False
+        return report
 
     report.update(_reap_superseded_then_gc(release, previous_release, keep_releases))
     report["ok"] = True
