@@ -282,22 +282,6 @@ def check_knowledge_base() -> KnowledgeBaseDiagnostic:
     )
 
 
-def _probe_binary_at_path(binary_path: str) -> tuple[str, str]:
-    """Return (path, version) for an explicit binary path."""
-    try:
-        result = subprocess.run(
-            [binary_path, "--version"],
-            capture_output=True,
-            text=True,
-            timeout=5,
-        )
-    except (OSError, subprocess.TimeoutExpired):
-        return binary_path, ""
-    if result.returncode != 0 or not (result.stdout or result.stderr).strip():
-        return binary_path, ""
-    return binary_path, (result.stdout or result.stderr).strip().split()[-1]
-
-
 def _probe_binary_version(binary_name: str) -> tuple[str, str]:
     """Return (resolved_path, reported_version) or ('', '') if unavailable.
 
@@ -357,6 +341,66 @@ def _is_local_uv_tool_install(binary_path: str) -> tuple[bool, str]:
     if "packages" in source.replace("\\", "/"):
         return True, source
     return False, source
+
+
+def _resolve_default_branch_ref(repo_dir: str) -> str:
+    """Return the ``origin/<default>`` ref for *repo_dir*, falling back to ``origin/master``."""
+    try:
+        result = subprocess.run(
+            ["git", "-C", repo_dir, "symbolic-ref", "refs/remotes/origin/HEAD"],
+            capture_output=True,
+            text=True,
+            timeout=5,
+        )
+    except (OSError, subprocess.TimeoutExpired):
+        return "origin/master"
+    ref = result.stdout.strip()
+    if result.returncode == 0 and ref.startswith("refs/remotes/"):
+        return ref[len("refs/remotes/") :]
+    return "origin/master"
+
+
+def check_git_worktree_containment(repo_dir: str) -> tuple[str, str, bool | None]:
+    """Return (head_sha, branch, contained_in_default) for a local install source (TAP-7847).
+
+    ``contained_in_default`` is ``None`` when *repo_dir* is not a git checkout, or the
+    probe otherwise fails to determine containment — never raises, and the caller must
+    treat ``None`` as "unknown", not as "contained".
+    """
+    if not repo_dir or not (Path(repo_dir) / ".git").exists():
+        return "", "", None
+    try:
+        head = subprocess.run(
+            ["git", "-C", repo_dir, "rev-parse", "HEAD"],
+            capture_output=True,
+            text=True,
+            timeout=5,
+        )
+        if head.returncode != 0 or not head.stdout.strip():
+            return "", "", None
+        sha = head.stdout.strip()
+
+        branch_result = subprocess.run(
+            ["git", "-C", repo_dir, "rev-parse", "--abbrev-ref", "HEAD"],
+            capture_output=True,
+            text=True,
+            timeout=5,
+        )
+        branch = branch_result.stdout.strip() if branch_result.returncode == 0 else ""
+
+        default_ref = _resolve_default_branch_ref(repo_dir)
+        contains = subprocess.run(
+            ["git", "-C", repo_dir, "branch", "-r", "--contains", sha],
+            capture_output=True,
+            text=True,
+            timeout=5,
+        )
+        if contains.returncode != 0:
+            return sha[:12], branch, None
+        contained = default_ref in contains.stdout
+        return sha[:12], branch, contained
+    except (OSError, subprocess.TimeoutExpired):
+        return "", "", None
 
 
 def _version_tuple(ver: str) -> tuple[int, int, int]:
@@ -447,10 +491,16 @@ def format_upgrade_blocked_by_drift(drift: InstallDriftDiagnostic) -> str:
 
 
 def check_install_drift() -> InstallDriftDiagnostic:
-    """TAP-2129: detect drift between in-process package versions and deployed CLIs.
+    """TAP-2129/TAP-7847: detect drift between in-process package versions and the
+    binary hooks actually invoke.
 
-    When the dev-monorepo blue/green ``~/.tapps-mcp/current`` layout is active,
-    probes ``current/bin/*`` instead of the legacy ``uv tool install`` shims.
+    Always probes ``shutil.which(binary)`` — the same PATH resolution shell hooks use
+    (``command -v tapps-mcp``) — rather than preferring the blue/green release path,
+    because a host can have both a blue/green release *and* a stale/unmerged global
+    CLI on PATH, and hooks call the latter. Two builds that report an identical
+    version string can still differ in content: when the resolved binary is a local
+    ``uv tool install`` pointed at a git checkout, drift is also flagged when that
+    checkout's HEAD is not contained in origin's default branch (build-identity check).
     """
     from docs_mcp import __version__ as docs_mcp_version
     from tapps_mcp import __version__ as tapps_mcp_version
@@ -462,34 +512,46 @@ def check_install_drift() -> InstallDriftDiagnostic:
     ]
     entries: list[InstallDriftEntry] = []
     for binary, source_version in targets:
-        blue_green_path = resolve_blue_green_binary(binary)
-        if blue_green_path:
-            binary_path, binary_version = _probe_binary_at_path(blue_green_path)
-            install_source = str(Path(blue_green_path).resolve().parents[1])
-            from_local = True
-        else:
-            binary_path, binary_version = _probe_binary_version(binary)
-            from_local, install_source = _is_local_uv_tool_install(binary_path)
+        binary_path, binary_version = _probe_binary_version(binary)
         if not binary_path:
             continue
-        drifted = bool(binary_version) and binary_version != source_version
+        from_local, install_source = _is_local_uv_tool_install(binary_path)
+        head_sha, branch, contained = "", "", None
+        if from_local and install_source:
+            head_sha, branch, contained = check_git_worktree_containment(install_source)
+        version_drifted = bool(binary_version) and binary_version != source_version
+        unmerged_worktree = contained is False
         entries.append(
             InstallDriftEntry(
                 binary=binary,
                 binary_path=binary_path,
                 binary_version=binary_version,
                 source_version=source_version,
-                drifted=drifted,
+                drifted=version_drifted or unmerged_worktree,
                 from_local_source=from_local,
                 install_source=install_source,
+                install_head_sha=head_sha,
+                install_branch=branch,
+                install_head_contained_in_default=contained,
             )
         )
 
     drift_detected = any(e.drifted for e in entries)
     local_install_warning = any(e.from_local_source for e in entries)
     uses_blue_green = blue_green_enabled() and resolve_blue_green_binary("tapps-mcp") is not None
+    unmerged_entries = [e for e in entries if e.install_head_contained_in_default is False]
     hint = ""
-    if drift_detected:
+    if unmerged_entries:
+        details = "; ".join(
+            f"{e.binary}←{e.install_source} (branch {e.install_branch or 'unknown'}, "
+            f"sha {e.install_head_sha or 'unknown'}, not in default branch)"
+            for e in unmerged_entries
+        )
+        hint = (
+            f"Global CLI built from an unmerged worktree: {details}. "
+            "Reinstall the global CLI from a branch that is merged into the default branch."
+        )
+    elif drift_detected:
         hint = install_drift_remediation_hint(entries, uses_blue_green=uses_blue_green)
     elif local_install_warning and not uses_blue_green:
         hint = (

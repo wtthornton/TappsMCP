@@ -30,7 +30,66 @@ from tapps_mcp.distribution.doctor import (
 
 
 def _mock_completed(stdout: str, returncode: int = 0) -> subprocess.CompletedProcess[str]:
-    return subprocess.CompletedProcess(args=["mock"], returncode=returncode, stdout=stdout, stderr="")
+    return subprocess.CompletedProcess(
+        args=["mock"], returncode=returncode, stdout=stdout, stderr=""
+    )
+
+
+_REAL_SUBPROCESS_RUN = subprocess.run
+
+
+def _run_git(args: list[str], cwd: Path) -> None:
+    subprocess.run(["git", *args], cwd=cwd, check=True, capture_output=True, text=True)
+
+
+def _build_fixture_repo(base_dir: Path, *, unmerged: bool) -> Path:
+    """Build a real, throwaway git repo simulating a local install source (TAP-7847).
+
+    A fake ``refs/remotes/origin/master`` is written directly (no network) pointing at
+    the base commit. When ``unmerged``, a lane branch is checked out with one more
+    commit that is never merged into that ref — reproducing the host condition
+    (a global CLI built from a worktree whose HEAD is not contained in origin/master).
+    """
+    repo = base_dir / "src"
+    repo.mkdir()
+    _run_git(["init", "-b", "master"], repo)
+    _run_git(["config", "user.email", "fixture@example.com"], repo)
+    _run_git(["config", "user.name", "Fixture"], repo)
+    (repo / "f.txt").write_text("1", encoding="utf-8")
+    _run_git(["add", "."], repo)
+    _run_git(["commit", "-m", "base"], repo)
+    base_sha = subprocess.run(
+        ["git", "rev-parse", "HEAD"], cwd=repo, capture_output=True, text=True, check=True
+    ).stdout.strip()
+    _run_git(["update-ref", "refs/remotes/origin/master", base_sha], repo)
+    _run_git(["symbolic-ref", "refs/remotes/origin/HEAD", "refs/remotes/origin/master"], repo)
+    if unmerged:
+        _run_git(["checkout", "-b", "lane/scratch-fixture"], repo)
+        (repo / "f.txt").write_text("2", encoding="utf-8")
+        _run_git(["commit", "-am", "lane change"], repo)
+    return repo
+
+
+def _build_local_install_fixture(tmp_path: Path, repo_dir: Path) -> Path:
+    """Write a fake uv-tool receipt pointing the CLI's install source at *repo_dir*."""
+    receipt_dir = tmp_path / "uv-tool" / "tapps-mcp"
+    bin_dir = receipt_dir / "bin"
+    bin_dir.mkdir(parents=True)
+    fake_bin = bin_dir / "tapps-mcp"
+    fake_bin.write_text("", encoding="utf-8")  # never executed — subprocess.run is dispatched below
+    (receipt_dir / "uv-receipt.toml").write_text(f'source = "{repo_dir}"\n', encoding="utf-8")
+    return fake_bin
+
+
+def _dispatch_git_or_version(version: str):  # type: ignore[no-untyped-def]
+    """subprocess.run side_effect: real git for ``git ...``, a fake ``--version`` reply otherwise."""
+
+    def _run(cmd, **kwargs):  # type: ignore[no-untyped-def]
+        if cmd and cmd[0] == "git":
+            return _REAL_SUBPROCESS_RUN(cmd, **kwargs)
+        return _mock_completed(f"tapps-mcp, version {version}")
+
+    return _run
 
 
 @pytest.fixture(autouse=True)
@@ -173,6 +232,63 @@ class TestCheckInstallDriftLocalSource:
         assert result.local_install_warning is True
         assert result.entries[0].from_local_source is True
         assert "local checkout" in result.remediation_hint
+
+
+class TestCheckInstallDriftBuildIdentity:
+    """TAP-7847: two builds at the same version string can still differ in content.
+
+    Reproduces the measured host condition with a scratch fixture worktree (never
+    the operator's real global install): a local uv-tool install whose source is a
+    git checkout on a branch not contained in origin/master.
+    """
+
+    def test_unmerged_worktree_reports_drift_despite_matching_version(self, tmp_path: Path) -> None:
+        from tapps_mcp import __version__ as tapps_v
+
+        repo = _build_fixture_repo(tmp_path, unmerged=True)
+        fake_bin = _build_local_install_fixture(tmp_path, repo)
+
+        with patch("tapps_mcp.diagnostics.shutil.which") as mock_which:
+            mock_which.side_effect = lambda name: str(fake_bin) if name == "tapps-mcp" else None
+            with patch(
+                "tapps_mcp.diagnostics.subprocess.run",
+                side_effect=_dispatch_git_or_version(tapps_v),
+            ):
+                result = check_install_drift()
+
+        entry = next(e for e in result.entries if e.binary == "tapps-mcp")
+        assert entry.binary_version == tapps_v
+        assert entry.source_version == tapps_v
+        assert entry.drifted is True, (
+            "identical version string but unmerged worktree HEAD must still drift"
+        )
+        assert entry.install_branch == "lane/scratch-fixture"
+        assert entry.install_head_contained_in_default is False
+        assert result.drift_detected is True
+        assert "lane/scratch-fixture" in result.remediation_hint
+        assert str(repo) in result.remediation_hint
+
+    def test_default_branch_worktree_reports_no_drift(self, tmp_path: Path) -> None:
+        """Positive control: a merged (default-branch) worktree at a matching
+        version must still report no drift after the fix — the check discriminates,
+        it does not just always report drift."""
+        from tapps_mcp import __version__ as tapps_v
+
+        repo = _build_fixture_repo(tmp_path, unmerged=False)
+        fake_bin = _build_local_install_fixture(tmp_path, repo)
+
+        with patch("tapps_mcp.diagnostics.shutil.which") as mock_which:
+            mock_which.side_effect = lambda name: str(fake_bin) if name == "tapps-mcp" else None
+            with patch(
+                "tapps_mcp.diagnostics.subprocess.run",
+                side_effect=_dispatch_git_or_version(tapps_v),
+            ):
+                result = check_install_drift()
+
+        entry = next(e for e in result.entries if e.binary == "tapps-mcp")
+        assert entry.install_head_contained_in_default is True
+        assert entry.drifted is False
+        assert result.drift_detected is False
 
 
 class TestEntryShape:
@@ -332,7 +448,9 @@ class TestUpgradePipelineBackupFailureSuccessKey:
         from tapps_mcp.pipeline.upgrade import upgrade_pipeline
 
         # A backup target must exist for BackupManager.create_backup to be reached.
-        (tmp_path / "AGENTS.md").write_text("<!-- tapps-agents-version: 0.0.1 -->\n", encoding="utf-8")
+        (tmp_path / "AGENTS.md").write_text(
+            "<!-- tapps-agents-version: 0.0.1 -->\n", encoding="utf-8"
+        )
 
         no_drift = MagicMock(drift_detected=False)
         with (
