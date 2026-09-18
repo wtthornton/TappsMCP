@@ -235,3 +235,5 @@ jobs:
             echo "::error::${skipped} ps1_stop_hook test(s) were SKIPPED on a pwsh-equipped runner -- the pwsh probe is broken." >&2
             exit 1
           fi
+
+# control tree: baseline for xdist collection-mismatch investigation (no behaviour change)
