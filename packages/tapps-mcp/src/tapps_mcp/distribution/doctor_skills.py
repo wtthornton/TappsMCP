@@ -148,6 +148,70 @@ def _load_skills_manifest(project_root: Path) -> dict[str, object] | None:
     return data if isinstance(data, dict) else None
 
 
+def _classify_manifest_entry(
+    host_label: str,
+    skill_name: str,
+    entry: object,
+    block: str,
+    known_docs_mcp_skills: frozenset[str],
+) -> tuple[str | None, str | None]:
+    """Classify one deployed skill's manifest entry (TAP-r4r6-doctor).
+
+    Returns ``(problem, unrowed)``: at most one is non-``None`` — ``problem``
+    for a hard-FAIL condition (stale hash, or unrecognized-and-unrowed),
+    ``unrowed`` for a recognized docs-mcp skill that just hasn't been
+    reconciled into the manifest yet (warn, not FAIL). Both ``None`` means
+    the on-disk hash matches the manifest.
+    """
+    import hashlib
+
+    from tapps_mcp.pipeline.skill_managed_block import normalize_block_version
+
+    if entry is None:
+        if skill_name in known_docs_mcp_skills:
+            return None, f"{host_label}/{skill_name}"
+        return f"{host_label}/{skill_name} not in manifest (unknown)", None
+    # Entries are a bare sha256 hex string for skills the manifest predates
+    # TAP-7152 (written straight by platform_skills' generate_skills), or
+    # {"hash", "source"} once the upgrade pipeline's source-tagging pass
+    # (TAP-7152) has run — either way the hash is what this check compares.
+    expected_hash = entry["hash"] if isinstance(entry, dict) else entry
+    actual = hashlib.sha256(normalize_block_version(block).encode("utf-8")).hexdigest()
+    if actual != expected_hash:
+        return f"{host_label}/{skill_name} stale on disk", None
+    return None, None
+
+
+def _manifest_diff_result(
+    check_name: str, checked: int, problems: list[str], unrowed_docs_skills: list[str]
+) -> CheckResult:
+    """Compose the final :class:`CheckResult` for the manifest directory diff.
+
+    FAIL beats warn beats pass: a hard-FAIL ``problem`` always wins even when
+    un-rowed docs-mcp skills are also present, and un-rowed docs-mcp skills
+    only ever produce a warn, never fold silently into a pass.
+    """
+    from tapps_mcp.distribution.doctor_result import CheckResult
+
+    if problems:
+        return CheckResult(
+            check_name,
+            False,
+            f"{len(problems)} skill(s) drifted from the manifest: {'; '.join(problems)}",
+            "Run: tapps-mcp upgrade --force",
+        )
+    if unrowed_docs_skills:
+        return CheckResult(
+            check_name,
+            False,
+            f"{len(unrowed_docs_skills)} docs-mcp skill(s) deployed but not yet reconciled "
+            f"into the manifest: {', '.join(unrowed_docs_skills)}",
+            "Run: tapps-mcp upgrade (writes .tapps-mcp/skills-manifest.json)",
+            severity="warn",
+        )
+    return CheckResult(check_name, True, f"{checked} skill(s) match the skills manifest byte-for-byte")
+
+
 @consumer_staleness
 def check_skills_manifest_directory(project_root: Path) -> CheckResult:
     """Diff the whole deployed skills directory against the emission-time manifest.
@@ -169,13 +233,18 @@ def check_skills_manifest_directory(project_root: Path) -> CheckResult:
     A project that has never run an upgrade under TAP-6948 s2 has no
     manifest at all — that is reported as a ``warn``, not folded into a
     silent pass, so the operator knows to run ``tapps-mcp upgrade``.
-    """
-    import hashlib
 
+    A deployed ``tapps-docs-*`` skill with no manifest row is the same
+    "never reconciled" condition (TAP-7152); see :func:`_classify_manifest_entry`
+    for how that's told apart from a genuinely unrecognized skill.
+    """
     from tapps_mcp.distribution.doctor_pipeline import _tapps_skill_bases
     from tapps_mcp.distribution.doctor_result import CheckResult
+    from tapps_mcp.pipeline.platform_docs_automation import CLAUDE_DOCS_SKILLS
     from tapps_mcp.pipeline.platform_skills import SMART_MERGE_SKILL_NAMES
-    from tapps_mcp.pipeline.skill_managed_block import extract_block, normalize_block_version
+    from tapps_mcp.pipeline.skill_managed_block import extract_block
+
+    known_docs_mcp_skills = frozenset(CLAUDE_DOCS_SKILLS)
 
     check_name = "Skills manifest directory diff"
     manifest = _load_skills_manifest(project_root)
@@ -189,6 +258,7 @@ def check_skills_manifest_directory(project_root: Path) -> CheckResult:
         )
 
     problems: list[str] = []
+    unrowed_docs_skills: list[str] = []
     checked = 0
     for host_label, base in _tapps_skill_bases(project_root):
         host_manifest = manifest.get(host_label)
@@ -209,18 +279,13 @@ def check_skills_manifest_directory(project_root: Path) -> CheckResult:
                 deployed.add(skill_name)
                 checked += 1
                 entry = host_manifest.get(skill_name)
-                if entry is None:
-                    problems.append(f"{host_label}/{skill_name} not in manifest (unknown)")
-                    continue
-                # Entries are a bare sha256 hex string for skills the manifest
-                # predates TAP-7152 (written straight by platform_skills'
-                # generate_skills), or {"hash", "source"} once the upgrade
-                # pipeline's source-tagging pass (TAP-7152) has run — either
-                # way the hash is what this check compares against.
-                expected_hash = entry["hash"] if isinstance(entry, dict) else entry
-                actual = hashlib.sha256(normalize_block_version(block).encode("utf-8")).hexdigest()
-                if actual != expected_hash:
-                    problems.append(f"{host_label}/{skill_name} stale on disk")
+                problem, unrowed = _classify_manifest_entry(
+                    host_label, skill_name, entry, block, known_docs_mcp_skills
+                )
+                if problem:
+                    problems.append(problem)
+                if unrowed:
+                    unrowed_docs_skills.append(unrowed)
 
         for skill_name in sorted(host_manifest):
             if skill_name in SMART_MERGE_SKILL_NAMES or skill_name in deployed:
@@ -231,18 +296,7 @@ def check_skills_manifest_directory(project_root: Path) -> CheckResult:
             else:
                 problems.append(f"{host_label}/{skill_name} stale (managed-block marker removed)")
 
-    if problems:
-        return CheckResult(
-            check_name,
-            False,
-            f"{len(problems)} skill(s) drifted from the manifest: {'; '.join(problems)}",
-            "Run: tapps-mcp upgrade --force",
-        )
-    return CheckResult(
-        check_name,
-        True,
-        f"{checked} skill(s) match the skills manifest byte-for-byte",
-    )
+    return _manifest_diff_result(check_name, checked, problems, unrowed_docs_skills)
 
 
 @consumer_staleness
