@@ -1588,21 +1588,21 @@ All Linear writes in this project — epic creation, story creation, issue updat
 ## Required flow
 
 ### For a new epic
-1. `mcp__docs-mcp__docs_generate_epic(title, purpose_and_intent, goal, motivation, acceptance_criteria, stories, ...)` — returns epic markdown inline in `data.content` (default `write_to_disk=false`; Linear is the system of record).
-2. `mcp__docs-mcp__docs_validate_linear_issue(title, description, is_epic=true)` — must return `agent_ready: true` with score 100.
+1. `mcp__nlt-linear-issues__docs_generate_epic(title, purpose_and_intent, goal, motivation, acceptance_criteria, stories, ...)` — returns epic markdown inline in `data.content` (default `write_to_disk=false`; Linear is the system of record).
+2. `mcp__nlt-linear-issues__docs_validate_linear_issue(title, description, is_epic=true)` — must return `agent_ready: true` with score 100.
 3. `mcp__plugin_linear_linear__save_issue(..., assignee="<agent-user-id-or-name>")` to push. Default assignee = the agent identity, never the OAuth human (see `autonomy.md`). Do NOT pause to confirm with the user — the original request is the authorization.
 4. Create each child story via the story flow with `parent_id=<epic TAP-id>` (each child also assigned to the agent).
-5. `mcp__tapps-mcp__tapps_linear_snapshot_invalidate(team, project)`.
+5. `mcp__nlt-linear-issues__tapps_linear_snapshot_invalidate(team, project)`.
 
 ### For a new story
-1. `mcp__docs-mcp__docs_generate_story(title, files, acceptance_criteria, ...)` — emits the 5-section template (`## What` / `## Where` / `## Why` / `## Acceptance` / `## Refs`).
-2. `mcp__docs-mcp__docs_validate_linear_issue(title, description)` — must return `agent_ready: true`.
+1. `mcp__nlt-linear-issues__docs_generate_story(title, files, acceptance_criteria, ...)` — emits the 5-section template (`## What` / `## Where` / `## Why` / `## Acceptance` / `## Refs`).
+2. `mcp__nlt-linear-issues__docs_validate_linear_issue(title, description)` — must return `agent_ready: true`.
 3. `mcp__plugin_linear_linear__save_issue(..., parent_id=<epic>, assignee="<agent-user-id-or-name>")`. Default assignee = the agent identity (see `autonomy.md`); proceed without a confirmation prompt.
-4. `mcp__tapps-mcp__tapps_linear_snapshot_invalidate(team, project)`.
+4. `mcp__nlt-linear-issues__tapps_linear_snapshot_invalidate(team, project)`.
 
 ### Before updating an existing issue
 1. `mcp__plugin_linear_linear__get_issue(id)` — fetch current state.
-2. `mcp__docs-mcp__docs_lint_linear_issue(title, description, labels, priority, estimate)` — surface findings.
+2. `mcp__nlt-linear-issues__docs_lint_linear_issue(title, description, labels, priority, estimate)` — surface findings.
 3. Regenerate via `docs_generate_story` or manual edit only if the existing body is broken.
 4. Validate before push.
 5. `save_issue(id=..., description=...)`; invalidate cache.
@@ -1661,14 +1661,14 @@ With `dry_run=True`, the tool returns the body without gating on `agent_ready`.
 
 Hard-enforced via hooks in `.claude/settings.json`:
 
-- **PostToolUse** on `mcp__docs-mcp__docs_validate_linear_issue` → `.claude/hooks/tapps-post-docs-validate.sh` writes a sentinel to `.tapps-mcp/.linear-validate-sentinel`.
+- **PostToolUse** on `mcp__nlt-linear-issues__docs_validate_linear_issue` → `.claude/hooks/tapps-post-docs-validate.sh` writes a sentinel to `.tapps-mcp/.linear-validate-sentinel`.
 - **PreToolUse** on `mcp__plugin_linear_linear__save_issue` → `.claude/hooks/tapps-pre-linear-write.sh` blocks the call if the sentinel is missing or > 30 minutes old. Bypass with `TAPPS_LINEAR_SKIP_VALIDATE=1` (logged to `.tapps-mcp/.bypass-log.jsonl`).
 
 ### Reads (TAP-1224)
 
 Hard-enforced via the cache-first read gate. Mode controlled by `linear_enforce_cache_gate` in `.tapps-mcp.yaml` (`off` | `warn` | `block`; default `warn` at high/medium engagement, `off` at low):
 
-- **PostToolUse** on `mcp__tapps-mcp__tapps_linear_snapshot_get` → `.claude/hooks/tapps-post-linear-snapshot-get.sh` writes a per-`(team, project, state, label, limit)` sentinel at `.tapps-mcp/.linear-snapshot-sentinel-<key>` on **both** `cached=true` and `cached=false` responses. When `state` is `open` (a tapps-mcp TTL bucket alias), `''`, or any open-bucket member (`backlog`/`unstarted`/`started`/`triage`), the hook ALSO writes alias sentinels for every other open-bucket state (TAP-1374) so concrete `list_issues` calls don't self-trip the gate.
+- **PostToolUse** on `mcp__nlt-linear-issues__tapps_linear_snapshot_get` → `.claude/hooks/tapps-post-linear-snapshot-get.sh` writes a per-`(team, project, state, label, limit)` sentinel at `.tapps-mcp/.linear-snapshot-sentinel-<key>` on **both** `cached=true` and `cached=false` responses. When `state` is `open` (a tapps-mcp TTL bucket alias), `''`, or any open-bucket member (`backlog`/`unstarted`/`started`/`triage`), the hook ALSO writes alias sentinels for every other open-bucket state (TAP-1374) so concrete `list_issues` calls don't self-trip the gate.
 - **PostToolUse** on `mcp__plugin_linear_linear__list_issues` → `.claude/hooks/tapps-post-linear-list.sh` auto-populates `.tapps-mcp-cache/linear-snapshots/<key>.json` directly from the response payload (TAP-1412). Eliminates the agent's manual `tapps_linear_snapshot_put` step that was being skipped, leaving the cache empty.
 - **PreToolUse** on `mcp__plugin_linear_linear__list_issues` → `.claude/hooks/tapps-pre-linear-list.sh` derives the same sentinel key from the call args and:
   - **warn mode** (default): logs the violation to `.tapps-mcp/.cache-gate-violations.jsonl` and lets the call through. Use the first release for telemetry; `tapps doctor` reports the 24-hour violation count.

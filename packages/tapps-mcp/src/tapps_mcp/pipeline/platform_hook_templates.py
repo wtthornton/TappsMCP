@@ -2463,7 +2463,7 @@ DESTRUCTIVE_GUARD_HOOKS_CONFIG: dict[str, list[dict[str, Any]]] = {
 # ---------------------------------------------------------------------------
 #
 # Two cooperating hooks:
-#   1. PostToolUse on mcp__docs-mcp__docs_validate_linear_issue writes a
+#   1. PostToolUse on mcp__nlt-linear-issues__docs_validate_linear_issue writes a
 #      sentinel file with a timestamp whenever an agent validates a Linear
 #      issue body against the template.
 #   2. PreToolUse on mcp__plugin_linear_linear__save_issue reads that
@@ -2650,7 +2650,7 @@ LINEAR_GATE_SCRIPTS: dict[str, str] = {
 LINEAR_GATE_POST_VALIDATE_SCRIPT_PS = """\
 # TappsMCP PostToolUse hook — Linear gate sentinel writer (TAP-981/TAP-986)
 # Writes .tapps-mcp/.linear-validate-sentinel with current Unix epoch seconds
-# whenever an agent calls mcp__docs-mcp__docs_validate_linear_issue. Paired
+# whenever an agent calls mcp__nlt-linear-issues__docs_validate_linear_issue. Paired
 # with tapps-pre-linear-write.ps1 which reads the sentinel to decide whether
 # to allow a downstream save_issue.
 $stdin = [Console]::In.ReadToEnd()

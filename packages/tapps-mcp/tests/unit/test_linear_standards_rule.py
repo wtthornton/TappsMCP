@@ -7,14 +7,28 @@ Linear markdown workarounds, and that init / upgrade pipelines invoke it.
 
 from __future__ import annotations
 
+import re
 from pathlib import Path
 
 import yaml
 
+from tapps_mcp.pipeline.init_permissions import _NLT_PERMISSION_ENTRIES
 from tapps_mcp.pipeline.platform_bundles import (
     _CLAUDE_LINEAR_STANDARDS_RULE,
     generate_claude_linear_standards_rule,
 )
+
+# Server keys this bundle actually ships an MCP entry for (TAP tmcp-r1r2:
+# derived from the same _NLT_PERMISSION_ENTRIES list init_permissions.py
+# grants tool access for — a rule token naming any other server names a
+# server nothing creates). "plugin_linear_linear" is the one deliberate
+# exception: a separate, independently-installed Linear plugin this bundle
+# references but does not register.
+_KNOWN_RULE_SERVERS = {
+    entry.removeprefix("mcp__").removesuffix("__*")
+    for entry in _NLT_PERMISSION_ENTRIES
+    if entry.endswith("__*")
+} | {"plugin_linear_linear"}
 
 
 def _parse_frontmatter(content: str) -> dict:
@@ -53,6 +67,29 @@ class TestRuleContent:
 
     def test_documents_inline_code_workaround(self) -> None:
         assert "Inline-code file paths" in _CLAUDE_LINEAR_STANDARDS_RULE
+
+
+class TestNoDeadNamespaceTokens:
+    """TAP tmcp-r1r2: the docs-mcp / tapps-mcp server keys were retired when
+    the six MCP servers were renamed to nlt-*; no shipped config registers
+    either as a server key. A rule token naming them can never resolve."""
+
+    def test_no_docs_mcp_tokens(self) -> None:
+        assert _CLAUDE_LINEAR_STANDARDS_RULE.count("mcp__docs-mcp__") == 0
+
+    def test_no_tapps_mcp_tokens(self) -> None:
+        assert _CLAUDE_LINEAR_STANDARDS_RULE.count("mcp__tapps-mcp__") == 0
+
+    def test_every_mcp_token_names_a_server_this_bundle_defines(self) -> None:
+        """The check from the lane spec: a rule prose token must not restate
+        a server name the bundle doesn't actually ship — the exact mismatch
+        that let Defect A ship (the file's own comment already knew
+        `mcp__docs-mcp__` resolves nothing, but the prose next to it still
+        used it)."""
+        tokens = set(re.findall(r"mcp__([A-Za-z0-9_-]+)__", _CLAUDE_LINEAR_STANDARDS_RULE))
+        assert tokens, "expected at least one mcp__<server>__ token in the rule"
+        unknown = tokens - _KNOWN_RULE_SERVERS
+        assert not unknown, f"rule references undefined server(s): {sorted(unknown)}"
 
 
 class TestGenerateClaudeLinearStandardsRule:
