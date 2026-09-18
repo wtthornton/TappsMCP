@@ -22,21 +22,26 @@ the *call* phase. The two numbers are not measuring the same span, so a
 if wall-clock is consumed *outside* the call phase, the 60s ceiling can be
 reached with the 20s inner bound never having had a chance to start.
 
-That is not hypothetical. Reproducing this file under heavy induced CPU
-oversubscription (200 CPU-bound processes against 20 cores) reliably
-produces the exact same ``Failed: Timeout (>60.0s) from pytest-timeout.``,
-but at **setup**, not inside our async batch: the session-wide autouse
-fixture ``_inject_in_memory_private_backend`` (``tests/conftest.py``) does a
-lazy ``from tapps_brain import store``, which — the first time any test in a
-given worker process touches it — cold-imports ``sentence_transformers`` ->
-``sklearn`` -> ``scipy.stats`` (a compiled Cython extension). That import
-alone exceeded 60s under contention. Because ``addopts`` runs tests under
-``-p randomly`` with a fresh per-run seed, and pytest-xdist's worker
-assignment also varies, *which* test in *which* worker pays that cold-import
-cost is non-deterministic across CI runs — consistent with "one run
-errored, an identical re-run passed." This is a real, reproducible
-loaded-runner effect, not a returning TAP-5965 deadlock: the failure sits
-entirely outside this file's own fixtures and outside the awaited gather.
+That is not hypothetical, but the specific causal story is narrower than the
+evidence supports: under sufficient CPU contention, *some* session-scoped
+import triggered from ``tests/conftest.py`` can exceed the 60s item ceiling
+during **setup**, not inside our async batch. *Which* import pays that cost
+varies across runs — observed culprits include the
+``sentence_transformers -> sklearn -> scipy.stats`` chain via
+``_inject_in_memory_private_backend``'s lazy ``from tapps_brain import
+store``, pydantic model-schema generation via
+``_clear_test_singleton_caches``, and a ``tapps_mcp.server`` import via
+``_isolate_checklist_session`` — listed here as examples, not as the sole
+cause. Because ``addopts`` runs tests under ``-p randomly`` with a fresh
+per-run seed, and pytest-xdist's worker assignment also varies, *which* test
+in *which* worker pays whichever cold-import cost is non-deterministic
+across CI runs — consistent with "one run errored, an identical re-run
+passed." This is a real, reproducible loaded-runner effect class, not a
+returning TAP-5965 deadlock: the failure sits entirely outside this file's
+own fixtures and outside the awaited gather. (A specific number such as
+"200 processes against 20 cores reliably reproduces this" is not committed
+here — it was not reproducible via the same culprit across independent
+attempts, so it is not restated as a reliable result.)
 
 The instrumentation below cannot reach into ``tests/conftest.py`` (out of
 this issue's permitted paths), so it cannot bound *that* import. What it can
@@ -48,6 +53,59 @@ batch at all. If the log is empty or stops before ``setup:start``, the block
 was upstream of this file (load / another fixture's import), matching what
 was measured here. If the log stops between ``call:awaiting_gather`` and
 ``call:gather_returned``, that is the TAP-5965 deadlock signature.
+
+TAP-7785 round 2 — a second, independently real inversion mechanism
+-----------------------------------------------------------------
+The paragraph above documents one way the 20s inner bound can fail to fire
+before the 60s outer ceiling: the time is spent *outside* the call phase
+(setup-time import), so the inner ``asyncio.wait_for`` never even starts.
+There is a second, distinct way, verified by direct injection: a
+*synchronous* ``time.sleep(65)`` placed inside the mocked ``run_all_tools``
+stand-in that the awaited ``asyncio.gather`` calls does not trip
+``asyncio.wait_for(..., timeout=20)`` at 20s. It blocks the single-threaded
+event loop, so no callback — including ``wait_for``'s own scheduled
+cancellation — can run until pytest-timeout's SIGALRM interrupts the sleep
+near the 60s item ceiling; the observed phase log for that run was
+``call:start`` (t=0.001s) -> ``call:awaiting_gather`` (t=0.012s) -> [57s gap
+with no further phase recorded] -> ``call:gather_returned`` (t=57.39s). This
+is event-loop starvation by synchronous code inside the awaited path, not a
+setup-time import stall.
+
+So there are (at least) two distinct ways the 20s inner bound can fail to
+fire before the 60s outer ceiling:
+
+1. the time is spent **outside** the call phase, so the inner bound never
+   starts (the setup-import case above); and
+2. the time is spent **inside** the call phase but in **synchronous** code
+   that starves the event loop, so the inner bound cannot be scheduled to
+   fire (this case).
+
+The phase log distinguishes them: mechanism 1 leaves the log empty or
+stopping before ``setup:start``; mechanism 2 leaves a gap between
+``call:awaiting_gather`` and ``call:gather_returned`` — the same signature
+this docstring already calls the TAP-5965 deadlock shape. **A gap there does
+not by itself prove a deadlock** — a long synchronous call in the awaited
+path produces the identical signature. Distinguishing the two requires
+inspecting *what* ran during the gap (a real async wedge on the heavy-cpu
+semaphore vs. a blocking call that starves the loop), not just that a gap
+exists.
+
+TAP-7785 round 2 — timeout margin for this file's own runtime
+-----------------------------------------------------------------
+Measured uncontended, 5 runs of this file alone (wall-clock, includes
+interpreter/pytest startup):
+5.06s, 5.13s, 5.19s, 5.24s, 12.73s -> min=5.06s, median=5.19s, max=12.73s.
+Margin against the 60s pytest-timeout ceiling: 60 / 12.73 ~= 4.7x at the
+observed max.
+
+This file's own runtime is nowhere near the 60s ceiling, so the ceiling is
+not binding on this file's work: every timeout this docstring documents was
+consumed *upstream* of this file, in session-scoped fixture imports that
+this issue's permitted paths cannot reach (``tests/conftest.py``). The
+correct justification for leaving ``timeout = 60`` unchanged is therefore
+that the binding risk is not this file's runtime — raising the ceiling would
+mask an upstream cost rather than fix it, and this file does not need a
+larger budget to pass reliably on its own.
 """
 
 from __future__ import annotations
