@@ -35,6 +35,9 @@ def test_check_memory_cli_http_mode_not_http_only_passes(
     tmp_path: Path, monkeypatch
 ) -> None:  # type: ignore[no-untyped-def]
     monkeypatch.delenv("TAPPS_MCP_MEMORY_BRAIN_HTTP_URL", raising=False)
+    fake_home = tmp_path / "home"
+    fake_home.mkdir()
+    monkeypatch.setattr(Path, "home", lambda: fake_home)
     result = check_memory_cli_http_mode(tmp_path)
     assert result.ok is True
     assert "Not in HTTP-only mode" in result.message
