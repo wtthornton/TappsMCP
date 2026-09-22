@@ -529,10 +529,16 @@ async def tapps_session_start(
             resp["data"] = data
             return cast("TappsSessionStartResponse", resp)
 
+    # TAP-7948: resolve settings first so the session boundary is scoped to
+    # this request's project, resolved fresh on every call (honors a fleet
+    # request's ``X-Tapps-Project-Root``), not whichever project this
+    # process happened to bind to first.
+    settings = load_settings()
+
     try:
         from tapps_mcp.tools.checklist import CallTracker
 
-        CallTracker.begin_session()
+        CallTracker.begin_session(project_root=settings.project_root)
     except ImportError:
         pass
     _record_call("tapps_session_start")
@@ -541,8 +547,6 @@ async def tapps_session_start(
         resp = await _session_start_quick(start, _record_execution, _with_nudges)
         _SESSION_START_CACHE[_session_start_cache_key(True)] = resp
         return cast("TappsSessionStartResponse", resp)
-
-    settings = load_settings()
 
     # TAP-1928: file-based sentinel short-circuit for sub-agent reuse.
     # Distinct from the in-process _SESSION_START_CACHE (TAP-1379): the sentinel
@@ -576,7 +580,7 @@ async def tapps_session_start(
     timings["total_ms"] = elapsed_ms
 
     path_mapping, container_warning = _ssc.detect_path_mapping()
-    checklist_sid = _ssc.get_checklist_session_id()
+    checklist_sid = _ssc.get_checklist_session_id(project_root=settings.project_root)
 
     data = _ssc.build_session_start_data(
         settings,
@@ -742,7 +746,7 @@ async def _session_start_quick(
     except Exception:
         _logger.debug("hive_status_check_failed_quick", exc_info=True)
 
-    checklist_sid_q = _ssc.get_checklist_session_id()
+    checklist_sid_q = _ssc.get_checklist_session_id(project_root=settings.project_root)
 
     data: dict[str, Any] = {
         "project_root": str(settings.project_root),

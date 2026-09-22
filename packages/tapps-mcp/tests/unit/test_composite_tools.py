@@ -1009,7 +1009,11 @@ class TestTappsQuickCheck:
 
         from tapps_mcp.tools.checklist import CallTracker
 
-        CallTracker.record("tapps_session_start")
+        # TAP-7948: seed the SAME project's ledger tapps_quick_check's own
+        # _record_call will bind to (mock_settings.project_root=tmp_path) --
+        # CallTracker no longer shares one process-wide ledger regardless of
+        # project.
+        CallTracker.record("tapps_session_start", project_root=tmp_path)
         with patch("tapps_mcp.server_scoring_tools._get_scorer_for_file") as mock_scorer_fn:
             mock_scorer = MagicMock()
             mock_scorer.language = "python"
@@ -1055,7 +1059,9 @@ class TestTappsQuickCheck:
 
         from tapps_mcp.tools.checklist import CallTracker
 
-        CallTracker.record("tapps_session_start")
+        # TAP-7948: seed the SAME project's ledger tapps_quick_check's own
+        # _record_call will bind to (mock_settings.project_root=tmp_path).
+        CallTracker.record("tapps_session_start", project_root=tmp_path)
         with patch(
             "tapps_mcp.security.security_scanner.run_security_scan",
             return_value=failed_sec,

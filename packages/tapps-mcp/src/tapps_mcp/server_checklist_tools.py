@@ -549,11 +549,14 @@ async def tapps_checklist(
     try:
         from tapps_mcp.tools.checklist import CallTracker
 
+        # TAP-7948: resolve settings first so the session boundary and the
+        # call record are both scoped to *this* request's project, not
+        # whichever project this process happened to bind to first.
+        settings = load_settings()
         if reset_checklist_session:
-            CallTracker.begin_session()
+            CallTracker.begin_session(project_root=settings.project_root)
         _record_call("tapps_checklist")
 
-        settings = load_settings()
         eval_kw: dict[str, Any] = {
             "require_success": settings.checklist_require_success,
             "strict_unknown_task_type": settings.checklist_strict_unknown_task_types,
@@ -582,7 +585,7 @@ async def tapps_checklist(
         elapsed_ms = (time.perf_counter_ns() - start) // 1_000_000
         _record_execution("tapps_checklist", start)
         trace_hint = _optional_otel_trace_hint()
-        session_id = CallTracker.get_active_checklist_session_id()
+        session_id = CallTracker.get_active_checklist_session_id(project_root=settings.project_root)
 
         git_context = await _gather_git_context(commit_sha, settings.project_root)
         tdd_results = await _gather_tdd_results(tdd, settings)

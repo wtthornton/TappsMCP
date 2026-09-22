@@ -654,21 +654,29 @@ def _brain_bridge_status_for_server_info() -> dict[str, Any]:
     return {"initialized": True, **bridge.status()}
 
 
-_checklist_state: dict[str, bool] = {"persist_configured": False}
+def _record_call(tool_name: str, *, success: bool = True, project_root: Path | None = None) -> None:
+    """Record a tool call in the session checklist tracker.
 
+    TAP-7948: resolves and (re)binds fresh on every call, under the same
+    lock as the append (``CallTracker.record``). This process serves many
+    projects over shared HTTP (``X-Tapps-Project-Root`` per request); the
+    previous one-shot bind (guarded by a ``persist_configured`` bool, set
+    once) meant every project's calls after the first silently persisted
+    into the FIRST project's ``checklist_calls.jsonl`` for the life of the
+    process.
 
-def _record_call(tool_name: str, *, success: bool = True) -> None:
-    """Record a tool call in the session checklist tracker."""
+    *project_root* lets a caller that already resolved an explicit target
+    (e.g. ``tapps_validate_changed(project_root=...)`` after its cross-repo
+    override) attribute the call to that project rather than to this
+    process's own ambient ``load_settings()`` -- the two can differ, and
+    the ambient default is wrong for a call about a project the caller
+    explicitly named.
+    """
     try:
         from tapps_mcp.tools.checklist import CallTracker
 
-        if not _checklist_state["persist_configured"]:
-            settings = load_settings()
-            sessions_dir = settings.project_root / ".tapps-mcp" / "sessions"
-            persist_path = sessions_dir / "checklist_calls.jsonl"
-            CallTracker.set_persist_path(persist_path)
-            _checklist_state["persist_configured"] = True
-        CallTracker.record(tool_name, success=success)
+        root = project_root if project_root is not None else load_settings().project_root
+        CallTracker.record(tool_name, success=success, project_root=root)
     except ImportError:
         logger.debug("checklist module unavailable, skipping call record", tool=tool_name)
 

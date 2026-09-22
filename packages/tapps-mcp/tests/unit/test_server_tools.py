@@ -272,17 +272,29 @@ class TestTappsChecklist:
         "tapps_mcp.tools.usage.compute_gaps",
         return_value={"gaps": [], "recommendations": [], "libraries_without_lookup": []},
     )
-    async def test_with_calls(self, mock_compute_gaps):
+    async def test_with_calls(self, mock_compute_gaps, tmp_path: Path):
         # compute_gaps reads real repo/session state (git diff, contract/
         # verifier markers) and hard-blocks review/feature completion on
         # contract_assertions_unverified / creator_verifier_skipped (TAP-5543)
         # -- unrelated to the required-tool-call assertion this test makes,
         # and would otherwise make this test's outcome depend on whatever
         # real session activity happened to precede it in this working tree.
-        CallTracker.record("tapps_score_file")
-        CallTracker.record("tapps_security_scan")
-        CallTracker.record("tapps_quality_gate")
-        result = await tapps_checklist("review")
+        #
+        # TAP-7948: pin project_root to tmp_path so the calls recorded below
+        # land in the SAME ledger tapps_checklist's own settings resolution
+        # binds to -- CallTracker no longer shares one process-wide ledger
+        # regardless of project.
+        from tapps_core.config.settings import load_settings as _load_settings
+
+        isolated_settings = _load_settings(project_root=tmp_path)
+        CallTracker.record("tapps_score_file", project_root=tmp_path)
+        CallTracker.record("tapps_security_scan", project_root=tmp_path)
+        CallTracker.record("tapps_quality_gate", project_root=tmp_path)
+        with patch(
+            "tapps_mcp.server_checklist_tools.load_settings",
+            return_value=isolated_settings,
+        ):
+            result = await tapps_checklist("review")
         assert result["data"]["complete"] is True
 
     @pytest.mark.asyncio
