@@ -172,12 +172,17 @@ def _recurring_skip_escalation_applies(skip_rate: float, source_profile: str) ->
     return skip_rate >= 0.5 and source_profile != "no_source"
 
 
-def _session_called_tools() -> set[str]:
-    """Return tools called in the current MCP server session. Empty on import failure."""
+def _session_called_tools(project_root: Path | None = None) -> set[str]:
+    """Return tools called in the current MCP server session. Empty on import failure.
+
+    TAP-7948: *project_root* scopes the ledger lookup to the project being
+    graded, resolved fresh on every call, instead of whichever project this
+    process happened to bind to first.
+    """
     try:
         from tapps_mcp.tools.checklist import CallTracker
 
-        return CallTracker.get_called_tools()
+        return CallTracker.get_called_tools(project_root=project_root)
     except Exception:
         return set()
 
@@ -462,7 +467,7 @@ def compute_gaps(
         ``rolling_stats`` (from ``compute_rolling_stats``), ``recent_violations``
         (last 5 violation rows), and ``recommendations`` (human-readable strings).
     """
-    called_raw = called_tools if called_tools is not None else _session_called_tools()
+    called_raw = called_tools if called_tools is not None else _session_called_tools(project_root)
     called = _normalize(called_raw)
 
     rows = read_loop_metrics(project_root, limit=50)
