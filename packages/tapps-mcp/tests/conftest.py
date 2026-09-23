@@ -848,19 +848,13 @@ def _isolate_checklist_session(
 ) -> Generator[None, None, None]:
     """Point ``CallTracker`` at a per-test file instead of the real repo ledger.
 
-    ``server._record_call`` lazily calls ``CallTracker.set_persist_path`` on the
-    project's ``.tapps-mcp/sessions/checklist_calls.jsonl``, and that setter
-    *clears in-memory records and reloads from disk*. Two things followed:
+    ``server._record_call`` resolves and (re)binds ``CallTracker`` to the
+    current project's ``.tapps-mcp/sessions/checklist_calls.jsonl`` on every
+    call (TAP-7948) -- there is no longer a one-shot ``persist_configured``
+    guard to prime. Without this fixture, test runs would bind to and append
+    into the real repo's ledger, corrupting live telemetry.
 
-    - Tests that ``CallTracker.record(...)`` then call ``tapps_checklist`` had
-      their records wiped by the first ``_record_call``, so assertions read the
-      developer's real session instead. Whichever test ran first flipped
-      ``persist_configured``, which is why the failures were order-dependent
-      (``test_with_calls`` and ``test_checklist_tracks_session`` passed in a
-      full run and failed standalone).
-    - Test runs appended into that real ledger, corrupting live telemetry.
-
-    Autouse because any test touching a recorded tool inherits both problems.
+    Autouse because any test touching a recorded tool inherits that problem.
 
     Also clears ``CLAUDE_CODE_SESSION_ID`` (TAP-7850): ``CallTracker``'s
     active-session marker is keyed by that env var when present, so running
@@ -869,28 +863,16 @@ def _isolate_checklist_session(
     most of these tests write to directly. Tests that specifically exercise
     the per-session keying set the var themselves via monkeypatch.
     """
-    from tapps_mcp import server as _server
     from tapps_mcp.tools.checklist import CallTracker
 
     monkeypatch.delenv("CLAUDE_CODE_SESSION_ID", raising=False)
 
-    prev_path = CallTracker._persist_path
-    prev_session = CallTracker._active_session_id
-    prev_configured = _server._checklist_state["persist_configured"]
-
     session_dir = tmp_path_factory.mktemp("checklist_session")
     CallTracker.set_persist_path(session_dir / "checklist_calls.jsonl")
-    _server._checklist_state["persist_configured"] = True
     try:
         yield
     finally:
-        _server._checklist_state["persist_configured"] = prev_configured
-        if prev_path is not None:
-            CallTracker.set_persist_path(prev_path)
-        else:
-            CallTracker._persist_path = None
-            CallTracker._calls.clear()
-        CallTracker._active_session_id = prev_session
+        CallTracker.reset()
 
 
 @pytest.fixture(autouse=True)

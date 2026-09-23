@@ -317,6 +317,81 @@ class CallTracker:
     #: adoption instead of silently dropping those records.
     _adopted_window_ids: ClassVar[frozenset[str]] = frozenset()
 
+    #: TAP-7948: resolved key (absolute persist-path string) this process is
+    #: CURRENTLY bound to. This server serves many projects over shared HTTP
+    #: (``X-Tapps-Project-Root`` per request) but the four fields above are
+    #: flat, so binding to project B must not destroy project A's state.
+    #: ``_window_id`` is the only one of the four that is *not* re-derivable
+    #: from disk on a later rebind back to A (``_calls`` and
+    #: ``_active_session_id``/``_adopted_window_ids`` are reloaded from A's
+    #: own persist file / marker either way) -- so it is the only field
+    #: parked per key in ``_window_id_by_key`` across a switch.
+    _bound_key: ClassVar[str | None] = None
+    _window_id_by_key: ClassVar[dict[str, str]] = {}
+    #: Last classification of the active-session marker file, one of
+    #: ``absent`` | ``unreadable`` | ``empty`` | ``present`` (TAP-7948).
+    _marker_state: ClassVar[str] = "absent"
+
+    @classmethod
+    def _persist_path_for_project(cls, project_root: Path) -> Path:
+        """Return the canonical ledger path for *project_root* (TAP-7948)."""
+        return Path(project_root).resolve() / ".tapps-mcp" / "sessions" / "checklist_calls.jsonl"
+
+    @classmethod
+    def _bind_to_project_locked(cls, project_root: Path) -> None:
+        """Resolve *project_root*'s ledger and (re)bind to it. Lock must be held."""
+        root = Path(project_root).resolve()
+        cls._bind_locked(cls._persist_path_for_project(root), project_root=root)
+
+    @classmethod
+    def _bind_locked(cls, path: Path, *, project_root: Path | None = None) -> None:
+        """(Re)bind the active in-memory ledger to *path*. Lock must be held.
+
+        TAP-7948: this server process serves many projects over shared HTTP.
+        The original defect was a one-shot bind (first project wins for the
+        life of the process); the naive fix -- rebind on every call but keep
+        the old unconditional ``cls._calls.clear()`` -- deterministically
+        erases whichever project's in-memory state was bound previously,
+        lock or no lock, on every A-then-B interleaving. This never happens
+        here: when the resolved key doesn't change, we simply refresh from
+        disk (picking up sibling-process writes, TAP-7849). When it does
+        change, ``_calls``/``_active_session_id``/``_adopted_window_ids`` are
+        safe to reset because they are fully reconstructed from *that key's
+        own* persist file and marker below -- never from the outgoing key's
+        file. The one field that is *not* disk-backed, ``_window_id``
+        (a pre-session anonymous window id, never written anywhere), is
+        parked per key across the switch so it is not silently discarded.
+        """
+        key = str(Path(path).resolve())
+        if cls._bound_key == key:
+            cls._persist_path = Path(path)
+            cls._load_active_session_id()
+            cls._calls.clear()
+            cls._load_persisted()
+            return
+
+        from tapps_core.http.request_context import get_request_project_root
+
+        logger.info(
+            "checklist_tracker_bind",
+            key=key,
+            project_root=str(project_root) if project_root is not None else None,
+            request_project_root_set=get_request_project_root() is not None,
+            tapps_mcp_project_root_env=os.environ.get("TAPPS_MCP_PROJECT_ROOT", ""),
+            cwd=str(Path.cwd()),
+            rebind=cls._bound_key is not None,
+        )
+
+        if cls._bound_key is not None and cls._window_id is not None:
+            cls._window_id_by_key[cls._bound_key] = cls._window_id
+
+        cls._bound_key = key
+        cls._persist_path = Path(path)
+        cls._window_id = cls._window_id_by_key.get(key)
+        cls._load_active_session_id()
+        cls._calls.clear()
+        cls._load_persisted()
+
     @classmethod
     def _lock_file_path(cls) -> Path | None:
         if cls._persist_path is None:
@@ -406,15 +481,48 @@ class CallTracker:
 
     @classmethod
     def set_persist_path(cls, path: Path) -> None:
-        """Configure persistence file and load existing records."""
+        """Configure persistence file and load existing records.
+
+        TAP-7948: test/tool-facing entry point for an explicit, arbitrary
+        persist path (no project-root semantics implied). Production tool
+        handlers should call :meth:`_bind_to_project_locked` via ``record``,
+        ``begin_session``, ``evaluate``, etc. with an explicit
+        ``project_root`` instead, so the ledger is resolved per request.
+        """
         with cls._lock:
-            cls._persist_path = Path(path)
-            # A new binding is a new process window; records loaded below belong
-            # to whichever session wrote them, never to this one by default.
-            cls._window_id = None
-            cls._load_active_session_id()
-            cls._calls.clear()
-            cls._load_persisted()
+            cls._bind_locked(Path(path))
+
+    @classmethod
+    def _classify_marker(cls, marker: Path | None) -> tuple[str, list[str]]:
+        """Classify the active-session marker file (TAP-7948).
+
+        Returns ``(state, lines)`` where *state* is one of ``absent``
+        (no marker file), ``unreadable`` (exists but can't be read --
+        permissions, races), ``empty`` (exists, reads, but has no non-blank
+        content), or ``present``. All four previously collapsed into the
+        same "fall back to the process window id" behavior with nothing
+        anywhere reporting which of the three failure modes actually
+        occurred.
+        """
+        if marker is None or not marker.is_file():
+            return "absent", []
+        try:
+            raw = marker.read_text(encoding="utf-8")
+        except OSError:
+            return "unreadable", []
+        lines = [ln.strip() for ln in raw.splitlines() if ln.strip()]
+        if not lines:
+            return "empty", []
+        return "present", lines
+
+    @classmethod
+    def get_marker_state(cls) -> str:
+        """Last classified state of the active-session marker (TAP-7948).
+
+        One of ``absent`` | ``unreadable`` | ``empty`` | ``present``.
+        """
+        with cls._lock:
+            return cls._marker_state
 
     @classmethod
     def _load_active_session_id(cls) -> None:
@@ -425,16 +533,10 @@ class CallTracker:
         parse as "active id, nothing adopted".
         """
         marker = cls._active_session_marker()
-        cls._adopted_window_ids = frozenset()
-        if marker is None or not marker.is_file():
-            cls._active_session_id = None
-            return
-        try:
-            raw = marker.read_text(encoding="utf-8")
-        except OSError:
-            cls._active_session_id = None
-            return
-        lines = [ln.strip() for ln in raw.splitlines() if ln.strip()]
+        state, lines = cls._classify_marker(marker)
+        cls._marker_state = state
+        if state == "unreadable":
+            logger.debug("checklist_active_session_marker_unreadable", marker=str(marker))
         cls._active_session_id = lines[0] if lines else None
         cls._adopted_window_ids = frozenset(lines[1:])
 
@@ -451,8 +553,13 @@ class CallTracker:
             logger.debug("checklist_active_session_write_failed", exc_info=True)
 
     @classmethod
-    def begin_session(cls, session_id: str | None = None) -> str:
+    def begin_session(cls, session_id: str | None = None, project_root: Path | None = None) -> str:
         """Start a new checklist session boundary (call from tapps_session_start).
+
+        TAP-7948: pass *project_root* from an HTTP fleet handler that already
+        resolved ``load_settings()`` so the session boundary is scoped to the
+        request's tenant, resolved fresh on every call, instead of whichever
+        project this process happened to bind to first.
 
         Records made in this process before the *first* boundary are adopted, so
         early tool calls are not dropped. A later boundary adopts nothing new of
@@ -479,6 +586,8 @@ class CallTracker:
         """
         sid = session_id or uuid.uuid4().hex[:16]
         with cls._lock:
+            if project_root is not None:
+                cls._bind_to_project_locked(project_root)
             window = cls._window_id
             adopted: set[str] = set()
             if cls._active_session_id is None and window is not None:
@@ -530,8 +639,10 @@ class CallTracker:
         return sid
 
     @classmethod
-    def get_active_checklist_session_id(cls) -> str | None:
+    def get_active_checklist_session_id(cls, project_root: Path | None = None) -> str | None:
         with cls._lock:
+            if project_root is not None:
+                cls._bind_to_project_locked(project_root)
             return cls._active_session_id
 
     @classmethod
@@ -612,9 +723,20 @@ class CallTracker:
             logger.debug("checklist_persist_write_failed", exc_info=True)
 
     @classmethod
-    def record(cls, tool_name: str, *, success: bool = True) -> None:
-        """Record a tool invocation."""
+    def record(
+        cls, tool_name: str, *, success: bool = True, project_root: Path | None = None
+    ) -> None:
+        """Record a tool invocation.
+
+        TAP-7948: when *project_root* is given, the ledger is resolved and
+        (re)bound under the same lock as the append -- fresh on every call,
+        never a one-shot bind for the life of the process -- so a call for a
+        different tenant can never land in another tenant's file, and no
+        sibling call can interleave between the rebind and the write.
+        """
         with cls._lock:
+            if project_root is not None:
+                cls._bind_to_project_locked(project_root)
             sid = cls._active_session_id or cls._current_window_id()
             rec = ToolCallRecord(tool_name=tool_name, session_id=sid, success=success)
             cls._calls.append(rec)
@@ -641,17 +763,23 @@ class CallTracker:
         cls._load_active_session_id()
 
     @classmethod
-    def get_called_tools(cls) -> set[str]:
+    def get_called_tools(cls, project_root: Path | None = None) -> set[str]:
         """Return the set of unique tool names called (active checklist session)."""
         with cls._lock:
-            cls._reload_from_disk_locked()
+            if project_root is not None:
+                cls._bind_to_project_locked(project_root)
+            else:
+                cls._reload_from_disk_locked()
             return {c.tool_name for c in cls._filtered_calls()}
 
     @classmethod
-    def total_calls(cls) -> int:
+    def total_calls(cls, project_root: Path | None = None) -> int:
         """Return total number of calls (active checklist session)."""
         with cls._lock:
-            cls._reload_from_disk_locked()
+            if project_root is not None:
+                cls._bind_to_project_locked(project_root)
+            else:
+                cls._reload_from_disk_locked()
             return len(cls._filtered_calls())
 
     @classmethod
@@ -663,6 +791,9 @@ class CallTracker:
             cls._active_session_id = None
             cls._window_id = None
             cls._adopted_window_ids = frozenset()
+            cls._marker_state = "absent"
+            if cls._bound_key is not None:
+                cls._window_id_by_key.pop(cls._bound_key, None)
             if cls._persist_path is not None:
                 if cls._persist_path.exists():
                     with contextlib.suppress(OSError):
@@ -694,6 +825,12 @@ class CallTracker:
 
         When *engagement_level* is None, it is read from
         ``load_settings().llm_engagement_level`` (high/medium/low).
+
+        TAP-7948: when *project_root* is given, the ledger itself is also
+        resolved and (re)bound to that project on every call -- not just the
+        tool-map/engagement-level lookup -- so the checklist grades the
+        project it was handed, not whichever project this process happened
+        to bind to first.
         """
         tool_map, _elvl, policy_version, resolved_key, policy_fallback = _resolve_task_tool_map(
             task_type,
@@ -707,7 +844,10 @@ class CallTracker:
             # Reload calls AND the active-session marker so tools recorded by
             # other NLT MCP processes (nlt-memory, nlt-release-ship,
             # nlt-linear-issues, …) satisfy this checklist (TAP-7849).
-            cls._reload_from_disk_locked()
+            if project_root is not None:
+                cls._bind_to_project_locked(project_root)
+            else:
+                cls._reload_from_disk_locked()
             sub = cls._filtered_calls()
             call_count = len(sub)
         states = _call_states_ordered(sub)

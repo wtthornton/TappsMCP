@@ -386,7 +386,7 @@ async def _run_with_progress(
     try:
         return await _execute_validation_batch(bc)
     except Exception as exc:
-        _record_call("tapps_validate_changed", success=False)
+        _record_call("tapps_validate_changed", success=False, project_root=bc.settings.project_root)
         bc.tracker.finalize_error(str(exc))
         raise
     finally:
@@ -444,7 +444,7 @@ async def _finalize_outcome(
             )
 
     if not all_passed:
-        _record_call("tapps_validate_changed", success=False)
+        _record_call("tapps_validate_changed", success=False, project_root=bc.settings.project_root)
     _record_execution("tapps_validate_changed", bc.start, gate_passed=all_passed)
 
     await maybe_write_debt_ok_marker(
@@ -707,12 +707,11 @@ async def tapps_validate_changed(
     from tapps_mcp.tools.project_paths import resolve_effective_project_root
 
     start = time.perf_counter_ns()
-    _record_call("tapps_validate_changed")
 
     settings = _host.load_settings()
     root_result = resolve_effective_project_root(settings.project_root, project_root)
     if root_result.error_code:
-        _record_call("tapps_validate_changed", success=False)
+        _record_call("tapps_validate_changed", success=False, project_root=settings.project_root)
         return _host.error_response(
             "tapps_validate_changed",
             root_result.error_code,
@@ -721,12 +720,20 @@ async def tapps_validate_changed(
     cross_repo = bool(project_root.strip())
     if cross_repo:
         settings = settings.model_copy(update={"project_root": root_result.root})
+    # TAP-7948: recorded against the *resolved* project (the one this call
+    # is actually validating, honoring an explicit cross-repo override),
+    # not the server's ambient settings -- otherwise a checklist grading
+    # this project never sees this call and one grading the ambient project
+    # sees a call it never made.
+    _record_call("tapps_validate_changed", project_root=settings.project_root)
 
     missing_paths_warning: str | None = None
     if not file_paths.strip():
         guard = _missing_file_paths_guard(settings=settings, host=_host)
         if guard is not None and "_missing_file_paths_warning" not in guard:
-            _record_call("tapps_validate_changed", success=False)
+            _record_call(
+                "tapps_validate_changed", success=False, project_root=settings.project_root
+            )
             return guard
         if guard is not None:
             missing_paths_warning = str(guard["_missing_file_paths_warning"])

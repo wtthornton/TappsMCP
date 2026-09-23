@@ -242,12 +242,18 @@ def detect_path_mapping() -> tuple[dict[str, Any] | None, str | None]:
     return None, None
 
 
-def get_checklist_session_id() -> str | None:
-    """Return the active checklist session id (or None if unavailable)."""
+def get_checklist_session_id(project_root: Path | None = None) -> str | None:
+    """Return the active checklist session id (or None if unavailable).
+
+    TAP-7948: pass *project_root* to re-scope to the request's project across
+    an ``await`` boundary since ``begin_session`` -- a sibling coroutine
+    serving a different tenant may have rebound the shared tracker in the
+    meantime.
+    """
     try:
         from tapps_mcp.tools.checklist import CallTracker
 
-        return CallTracker.get_active_checklist_session_id()
+        return CallTracker.get_active_checklist_session_id(project_root=project_root)
     except ImportError:
         return None
 

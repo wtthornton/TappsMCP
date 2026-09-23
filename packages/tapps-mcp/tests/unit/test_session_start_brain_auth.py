@@ -277,7 +277,7 @@ class TestSessionStartIntegration:
         monkeypatch.setattr(
             ssc, "detect_path_mapping", lambda: (None, None)
         )
-        monkeypatch.setattr(ssc, "get_checklist_session_id", lambda: None)
+        monkeypatch.setattr(ssc, "get_checklist_session_id", lambda *_a, **_k: None)
         # TAP-1928: suppress the file-based sentinel so the test reaches the
         # auth-failure path (a stale or live sentinel would short-circuit).
         monkeypatch.setattr(ssc, "read_session_sentinel", lambda *_a, **_k: None)

@@ -453,10 +453,12 @@ def tapps_doctor(
     from tapps_mcp.tools import session_health as _sh
 
     start = time.perf_counter_ns()
-    _record_call("tapps_doctor")
 
     settings = _host.load_settings()
     root = Path(project_root or str(settings.project_root))
+    # TAP-7948: attribute to the resolved root (honors an explicit
+    # project_root override), not the server's ambient settings.
+    _record_call("tapps_doctor", project_root=root)
 
     # TAP-6900 / TAP-6901: was this session bootstrapped for real, and is this
     # the build that is installed on disk? A memoized session_start answers
