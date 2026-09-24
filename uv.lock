@@ -549,7 +549,7 @@ wheels = [
 
 [[package]]
 name = "docs-mcp"
-version = "3.12.91"
+version = "3.12.92"
 source = { editable = "packages/docs-mcp" }
 dependencies = [
     { name = "click" },
@@ -2663,7 +2663,7 @@ dependencies = [
 
 [[package]]
 name = "tapps-core"
-version = "3.12.91"
+version = "3.12.92"
 source = { editable = "packages/tapps-core" }
 dependencies = [
     { name = "httpx" },
@@ -2703,7 +2703,7 @@ provides-extras = ["vector", "reranker"]
 
 [[package]]
 name = "tapps-mcp"
-version = "3.12.91"
+version = "3.12.92"
 source = { editable = "packages/tapps-mcp" }
 dependencies = [
     { name = "anyio" },

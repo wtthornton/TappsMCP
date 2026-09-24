@@ -100,6 +100,16 @@ def _comment_wrap_body(body: str, syntax: _Syntax) -> str:
     return "\n".join(f"{syntax.open} {line}" if line else syntax.open for line in body.split("\n"))
 
 
+def _uncomment_body(body: str, syntax: _Syntax) -> str:
+    """Invert :func:`_comment_wrap_body`, so a preserved region compares as its original text."""
+    if syntax.close:
+        return body
+    prefix = f"{syntax.open} "
+    return "\n".join(
+        "" if line == syntax.open else line.removeprefix(prefix) for line in body.split("\n")
+    )
+
+
 def _atomic_write_text(path: Path, content: str) -> None:
     """Write *content* to *path* via a same-directory temp file + ``os.replace``.
 
@@ -145,8 +155,9 @@ ASSET_MARKER_END = _marker_end(_HTML_SYNTAX)
 # HTML-wrapped, for the existing .md/.html callers (including this module's
 # own tests); use asset_project_region_heading(rel_path) for anything that
 # needs the syntax-aware form.
+_ASSET_PROJECT_REGION_TAG = "tapps-skill-asset-project-customizations:"
 _ASSET_PROJECT_REGION_NOTE = (
-    "tapps-skill-asset-project-customizations: preserved from the "
+    f"{_ASSET_PROJECT_REGION_TAG} preserved from the "
     "pre-marker version — review and trim anything the managed block above now "
     "covers"
 )
@@ -285,6 +296,60 @@ def _normalize_body(body: str) -> str:
             continue
         collapsed.append(line)
     return "\n".join(collapsed).strip("\n")
+
+
+def _content_lines(text: str) -> list[str]:
+    return [line for line in _normalize_body(text).split("\n") if line]
+
+
+# Policy-header comments the platform itself stamps into a file. A pre-marker
+# copy carried one (``upgrade-policy: overwrite``) as its first line, so a
+# region migrated from it inherits that line — scaffolding, never project text.
+_SCAFFOLDING_LINES: frozenset[str] = frozenset(
+    _header_text(policy, syntax) for policy in POLICY_NOTES for syntax in _ALL_SYNTAXES
+)
+
+
+def unique_line_count(preserved: str, canonical_body: str) -> int:
+    """Count *preserved*'s lines that appear nowhere in *canonical_body*.
+
+    Lines are whitespace-normalised and blank lines ignored, as for
+    :func:`heading_redundancy`; platform policy-header comments are
+    scaffolding and never count. Zero means every line of *preserved* is
+    already in the managed block, so dropping it loses nothing (TAP-8100).
+    """
+    canonical = frozenset(_content_lines(canonical_body))
+    return sum(
+        1
+        for line in _content_lines(preserved)
+        if line not in canonical and line not in _SCAFFOLDING_LINES
+    )
+
+
+def drop_duplicate_region(
+    tail: str, region_tag: str, canonical_body: str, rel_path: str = ""
+) -> str:
+    """Return *tail* without its migrated region when that region has no line of its own.
+
+    *tail* is the text below a managed block's END marker. A migrated region
+    opens with a comment line starting *region_tag* (in *rel_path*'s comment
+    syntax); its heading comments run to the first blank line and the
+    preserved body follows to end of file — the shape both migration branches
+    write. The migration used to be one-way: once a region landed below END
+    it was carried verbatim on every later upgrade, even when its own verdict
+    said it duplicated the managed block in full (TAP-8100). A region with at
+    least one unique line (:func:`unique_line_count`), and any text above its
+    heading, is returned untouched.
+    """
+    syntax = _syntax_for(rel_path)
+    heading = re.search(rf"^{re.escape(f'{syntax.open} {region_tag}')}", tail, re.MULTILINE)
+    if heading is None:
+        return tail
+    body_start = tail.find("\n\n", heading.start())
+    body = "" if body_start == -1 else tail[body_start:]
+    if unique_line_count(_uncomment_body(body, syntax), canonical_body):
+        return tail
+    return tail[: heading.start()].rstrip("\n") + "\n"
 
 
 class SectionRedundancy(NamedTuple):
@@ -530,12 +595,14 @@ def install_or_refresh_asset(
 
     - **File missing** → write header + markered block (``"created"``).
     - **Markers present** → replace the block if it differs (``"refreshed"``),
-      else ``"unchanged"``. Text outside the markers is preserved verbatim.
+      else ``"unchanged"``. Text outside the markers is preserved verbatim,
+      except a migrated region with no line of its own, which is dropped
+      (:func:`drop_duplicate_region`, TAP-8100).
     - **Markers absent** (a copy scaffolded before TAP-6497, possibly edited) →
       write the fresh block and keep the prior body below it as a preserved
       project region (``"migrated"``). Nothing is lost; the operator trims the
-      duplicate. An unmodified pre-marker copy is *not* preserved — it is
-      byte-identical to canonical and would only add noise.
+      duplicate. A pre-marker copy with no line absent from canonical is *not*
+      preserved (``"refreshed"``) — it would only add noise.
     """
     shebang, rest = _split_shebang(body)
     header = policy_header("managed_block", rel_path)
@@ -561,12 +628,13 @@ def install_or_refresh_asset(
             head = before[len(prefix) :]
         else:
             head = before.replace(header, "").lstrip("\n")
-        updated = f"{prefix}{head}{block}{original[end:]}"
+        tail = drop_duplicate_region(original[end:], _ASSET_PROJECT_REGION_TAG, body, rel_path)
+        updated = f"{prefix}{head}{block}{tail}"
         if updated == original:
             return "unchanged"
         action: AssetAction = "refreshed"
-    elif original.strip("\n") == body.strip("\n"):
-        # Pristine pre-marker copy: adopt markers, preserve nothing.
+    elif unique_line_count(original, body) == 0:
+        # Pre-marker copy with no line of its own: adopt markers, preserve nothing.
         updated = fresh
         action = "refreshed"
     else:
@@ -697,6 +765,7 @@ __all__ = [
     "asset_project_region_heading",
     "asset_project_region_heading_with_redundancy",
     "create_only_body",
+    "drop_duplicate_region",
     "has_asset_customization",
     "heading_redundancy",
     "install_or_refresh_asset",
@@ -705,6 +774,7 @@ __all__ = [
     "policy_for",
     "policy_header",
     "strip_asset_scaffolding",
+    "unique_line_count",
     "wrap_asset",
     "write_companions",
     "write_project_script",

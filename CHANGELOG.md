@@ -9,6 +9,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed — 2026-09-24
 
+- **`tapps-mcp upgrade` drops a migrated skill region that has no line of its
+  own (TAP-8100, v3.12.92).** The pre-marker migration left a
+  `tapps-skill-project-customizations` region (or
+  `tapps-skill-asset-project-customizations` in companion assets) below the
+  managed block. The upgrader's own verdict said "100% of this region's lines
+  duplicate the managed block above", but every later upgrade kept the region
+  unchanged. As a result, 27 of NLTlabsCorp's skill files carried a stale
+  second copy, and `linear-issue/SKILL.md` was 16.6 KB instead of 8.7 KB. Both
+  `install_or_refresh_skill` and `install_or_refresh_asset` now remove a
+  migrated region when every non-blank line is already in the managed block.
+  The old `upgrade-policy: overwrite` header line and similar platform
+  policy-header comments don't count as project text. A legacy pre-marker
+  copy with no unique line is no longer preserved in the first place. A
+  region with even one unique line, such as nlt-orchestrator's 776-line
+  `orchestration-prompt` customizations, is kept byte-for-byte and stays
+  flagged as before. Text between the END marker and the region heading is
+  never removed.
+
 - **Every generated skill is model-invocable again — reverses the TAP-7385
   `disable-model-invocation` pin.** TAP-7385 pinned
   `disable-model-invocation: true` on every generated skill except
