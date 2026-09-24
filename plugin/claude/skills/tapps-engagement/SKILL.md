@@ -8,7 +8,6 @@ description: >-
   to switch between strict, balanced, or advisory enforcement modes.
 allowed-tools: mcp__plugin_tapps-mcp_tapps-mcp__tapps_set_engagement_level
 argument-hint: "[high|medium|low]"
-disable-model-invocation: true
 ---
 
 Set the TappsMCP LLM engagement level:

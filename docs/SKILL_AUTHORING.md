@@ -16,9 +16,8 @@ the content:
 - **Body text, including its frontmatter** — a package-data Markdown file
   under `packages/tapps-mcp/src/tapps_mcp/pipeline/assets/claude_skills/<skill-name>.md`.
   This is the file you edit for wording, structure, steps, `description:`,
-  `allowed-tools:`, and `disable-model-invocation:` — **Rule 1 and the
-  `disable-model-invocation` checklist item below both apply to this file**,
-  not to `platform_skills.py`. Check for yourself:
+  and `allowed-tools:` — **Rules 1 and 2 and the checklist below apply to
+  this file**, not to `platform_skills.py`. Check for yourself:
   `head -8 packages/tapps-mcp/src/tapps_mcp/pipeline/assets/claude_skills/tapps-memory.md`
   opens `---` / `name:` / `user-invocable:` / `model: {{model:...}}` /
   `description:` — full frontmatter, inline in the `.md`. All 24 files
@@ -132,39 +131,25 @@ description: >-
 
 ---
 
-## Rule 2 — `disable-model-invocation: true` for user-only utility skills
+## Rule 2 — Generated skills stay model-invocable; narrow autoload via `description:`
 
-**Rule.** Add `disable-model-invocation: true` to the frontmatter of
-any skill that satisfies **all three** of the following:
+**Rule.** No generated skill — Claude or Cursor, `CLAUDE_SKILLS`,
+`CURSOR_SKILLS`, or the docs-automation dicts — carries
+`disable-model-invocation`. Keep `user-invocable: true` where present so
+the slash command still works. If a skill autoloads when it should not,
+fix its `description:` (Rule 1): name the specific trigger contexts and
+drop generic words that match ordinary work.
 
-1. The skill body is ≤ ~30 lines **or** the skill is a long, user-gated
-   planning flow that must never autoload mid-task (e.g. `/tapps-wayfind`
-   decision maps — TAP-5500).
-2. The description does **not** name a triggering keyword, context, or
-   file type that would legitimately fire during normal agentic work
-   **or** (for long planning skills) the skill is intentionally
-   slash-invoked only.
-3. The skill is a user-invoked utility (mode switch, gate check, pipeline
-   runner) **or** a user-gated planning skill (wayfind chart/work), rather
-   than an agent-callable specialist that should autoload.
-
-**Rationale.** `disable-model-invocation: true` tells the Claude Code
-skill router to exclude the skill from autoload consideration entirely.
-Without it, short utility skills can match spurious patterns and fire
-mid-task, interrupting normal agentic flow. Long planning skills that
-drive Linear map/decision ops likewise must not interrupt implementable
-work — agents invoke them explicitly when the route is foggy.
-Skills that target specific contexts or file types (e.g. `tapps-research`,
-`tapps-review-pipeline`) should keep autoload enabled so they fire at the
-right moment; utility stubs and wayfind-style planning skills should not.
-
-**Known candidates** (as of the TAP-2487 audit):
-
-- `tapps-gate` (deprecated; gate check, ≤10 lines)
-- `tapps-validate` (deprecated; validate command, ≤10 lines)
-- `tapps-engagement` (mode switch, ≤5 lines)
-- `tapps-score` (deprecated; score command, ≤10 lines)
-- `tapps-report` (deprecated; report command, ≤10 lines)
+**Rationale.** In Claude Code, `disable-model-invocation: true` does more
+than suppress autoload: it removes the skill from the agent's Skill tool
+entirely, so the agent cannot invoke it even when told to. The generated
+rules route the agent through these skills — `linear-issue` is the only
+permitted Linear-write path, and `linear-read` / `linear-release-update`
+are mandatory for their reads and release posts. A pinned skill therefore
+blocks the very route a rule requires. TAP-7385 pinned every generated
+skill except three and broke exactly that; the pin was removed from all of
+them. `test_platform_skills_model_roles.py::test_generated_skill_is_model_invocable`
+enforces the invariant over every generated skill dict.
 
 ---
 
@@ -206,7 +191,7 @@ its wiring (`pipeline/platform_skills.py`):
 
 - [ ] Description has a capability sentence **and** a "Use when ..." clause
 - [ ] Description is ≤ 1 024 characters
-- [ ] Short user-only utility skills have `disable-model-invocation: true`
+- [ ] No `disable-model-invocation` in the frontmatter — the skill stays model-invocable (Rule 2)
 - [ ] Template body is ≤ ~100 lines, or companion `*.md` refs exist
 - [ ] New skill: added the matching `CURSOR_SKILLS["<name>"]` entry too — `test_platform_generators.py` fails otherwise
 - [ ] Version bumped via `python3 scripts/bump-versions.py --patch` (template changes propagate to consumers only after a version bump)

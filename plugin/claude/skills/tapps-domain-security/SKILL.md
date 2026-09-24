@@ -6,7 +6,6 @@ description: >-
   Security-focused TAPPS workflow: playbook, library docs, security scan, and CVE check. Use when implementing auth, secrets, input validation, or pre-release security passes.
 allowed-tools: mcp__plugin_tapps-mcp_tapps-mcp__tapps_session_start mcp__plugin_tapps-mcp_tapps-mcp__tapps_domain_playbook mcp__plugin_tapps-mcp_tapps-mcp__tapps_lookup_docs mcp__plugin_tapps-mcp_tapps-mcp__tapps_quick_check mcp__plugin_tapps-mcp_tapps-mcp__tapps_validate_changed mcp__plugin_tapps-mcp_tapps-mcp__tapps_checklist mcp__plugin_tapps-mcp_tapps-mcp__tapps_security_scan mcp__plugin_tapps-mcp_tapps-mcp__tapps_dependency_scan
 argument-hint: "[file-path or scope]"
-disable-model-invocation: true
 ---
 
 Domain playbook workflow — same quality gate as the standard TAPPS pipeline.

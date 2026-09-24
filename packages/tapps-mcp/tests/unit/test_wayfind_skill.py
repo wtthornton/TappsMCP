@@ -4,8 +4,7 @@ Mirrors ``test_orchestration_prompt_skill`` deploy shape:
 - ``generate_skills`` scaffolds SKILL.md + companions
 - smart-merge preserves project customizations
 - companions refresh on upgrade
-- frontmatter stays ambient (no ``disable-model-invocation`` pin — TAP-7385
-  front door)
+- frontmatter stays model-invocable (no ``disable-model-invocation`` pin)
 - full tier deploys; core tier skips
 """
 
@@ -41,9 +40,8 @@ class TestModuleShape:
         assert "### chart the map" in lower
         assert "### work through the map" in lower
 
-    def test_frontmatter_is_ambient(self):
-        """TAP-7385: tapps-wayfind is one of the three fleet-wide front
-        doors — the non-ambient pin is gone."""
+    def test_frontmatter_is_model_invocable(self):
+        """Every generated skill stays reachable from the agent's Skill tool."""
         assert "disable-model-invocation" not in WAYFIND_SKILL_BODY
         assert "name: tapps-wayfind" in WAYFIND_SKILL_BODY
 

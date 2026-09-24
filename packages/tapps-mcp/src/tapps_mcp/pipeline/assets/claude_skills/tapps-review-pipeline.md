@@ -10,7 +10,6 @@ description: >-
 allowed-tools: mcp__nlt-build__tapps_validate_changed mcp__nlt-build__tapps_checklist
 context: fork
 agent: general-purpose
-disable-model-invocation: true
 ---
 
 Run a parallel review-fix-validate pipeline on changed Python files:

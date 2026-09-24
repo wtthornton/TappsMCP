@@ -32,14 +32,15 @@ class TestBuildRecommendedWorkflows:
         assert "tapps-finish-task" in names
         assert "linear-read" not in names
 
-    def test_handoff_session_marked_user_invocable_only(self, tmp_path: Path) -> None:
+    def test_no_workflow_marked_user_invocable_only(self, tmp_path: Path) -> None:
+        """Every generated skill is model-invocable, so no workflow tells the
+        agent to hand the slash command back to the user."""
         result = build_recommended_workflows(
             tmp_path,
             engagement_level="medium",
             mcp_bundle="full",
         )
         handoff = next(w for w in result["workflows"] if w["skill"] == "tapps-handoff-session")
-        assert handoff["user_invocable_only"] is True
-        assert "user-only" in handoff["when"]
-        finish = next(w for w in result["workflows"] if w["skill"] == "tapps-finish-task")
-        assert "user_invocable_only" not in finish
+        assert "user-only" not in handoff["when"]
+        for workflow in result["workflows"]:
+            assert "user_invocable_only" not in workflow

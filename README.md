@@ -142,7 +142,7 @@ The platform exposes **90 MCP tools** (48 TappsMCP + 42 DocsMCP) plus workflow p
 | **LLM engagement level** | **high** / **medium** / **low** — controls how strongly the AI is prompted (MUST/REQUIRED vs optional). Set via `.tapps-mcp.yaml`, env, or `tapps_set_engagement_level`. |
 | **Platform hooks** | Auto-generated hooks: Claude Code (8), Cursor (3); quality checks on edit, stop, task completion, optional memory capture on stop. |
 | **Subagent definitions** | Pre-built reviewer, researcher, validator, review-fixer for Claude Code and Cursor with `mcpServers`, `maxTurns`, role-appropriate `permissionMode`. |
-| **Skills generation** | SKILL.md templates (score, gate, validate, review, research, memory, security) with 2026 Claude Code `allowed-tools:` spec, `argument-hint`, `disable-model-invocation`. |
+| **Skills generation** | SKILL.md templates (score, gate, validate, review, research, memory, security) with 2026 Claude Code `allowed-tools:` spec, `argument-hint`, `user-invocable`; every generated skill stays model-invocable. |
 | **Cursor rule types** | Always-on pipeline, auto-attach for Python, agent-requested expert consultation. |
 | **Plugin bundles** | Ready-to-install plugin dirs (hooks, agents, skills, rules, MCP config). |
 | **Agent Teams** | Quality watchdog teammate for Claude Code (TeammateIdle, TaskCompleted; opt-in). |

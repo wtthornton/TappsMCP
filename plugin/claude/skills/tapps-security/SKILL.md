@@ -10,7 +10,6 @@ allowed-tools: >-
   mcp__plugin_tapps-mcp_tapps-mcp__tapps_security_scan
   mcp__plugin_tapps-mcp_tapps-mcp__tapps_dependency_scan
 argument-hint: "[file-path]"
-disable-model-invocation: true
 ---
 
 Run a comprehensive security audit using TappsMCP:

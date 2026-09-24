@@ -9,7 +9,6 @@ description: >-
   off, save session state, or continue next time.
 allowed-tools: mcp__nlt-memory__tapps_handoff_save mcp__nlt-build__tapps_session_start Bash
 argument-hint: "[slot] [optional Linear issue id e.g. TAP-1234]"
-disable-model-invocation: true
 ---
 
 End the session with a durable handoff the next chat can load via `/tapps-continue-session`.

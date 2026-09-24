@@ -1,7 +1,6 @@
 ---
 name: tapps-validation-contract
 user-invocable: true
-disable-model-invocation: true
 description: >-
   Write a finite validation contract (behavioral assertion IDs) before
   implementing software behavior, map features to those IDs, and keep tests

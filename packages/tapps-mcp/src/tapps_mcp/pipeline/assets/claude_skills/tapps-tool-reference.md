@@ -8,7 +8,6 @@ description: >-
   Use when you need guidance on which TappsMCP tool to call for a given situation.
 allowed-tools: mcp__nlt-setup__tapps_server_info
 argument-hint: "[tool-name or 'all']"
-disable-model-invocation: true
 ---
 
 When the user asks about TappsMCP tools (e.g. "when do I use tapps_score_file?",

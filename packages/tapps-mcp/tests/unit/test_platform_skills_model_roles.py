@@ -8,17 +8,19 @@ suite doesn't regress that megafile's already-failing score further.
 from __future__ import annotations
 
 import inspect
+from pathlib import Path
 
 import pytest
 
 import tapps_mcp.pipeline.platform_skills as platform_skills_module
+from tapps_mcp.pipeline.platform_docs_automation import CLAUDE_DOCS_SKILLS, CURSOR_DOCS_SKILLS
 from tapps_mcp.pipeline.platform_skills import (
-    AMBIENT_FRONT_DOOR_SKILL_NAMES,
     CLAUDE_SKILLS,
     CURSOR_SKILLS,
     MODEL_ROLES,
     RoleResolutionError,
     export_model_roles,
+    generate_skills,
     resolve_role_model,
 )
 
@@ -152,94 +154,73 @@ class TestResolvedModelsUnchanged:
 
 
 # ---------------------------------------------------------------------------
-# TAP-7385: ambient-invocation coverage across BOTH host dicts
+# Every generated skill stays model-invocable, on BOTH hosts
 # ---------------------------------------------------------------------------
 #
-# PR #392 pinned disable-model-invocation on CLAUDE_SKILLS only: 220 tests
-# passed while CURSOR_SKILLS was never touched, because every assertion
-# parametrized over a hand-typed CLAUDE_SKILLS-only list. These tests walk
-# the actual dict contents at import time instead, so a name added to either
-# dict later is covered automatically. Housed here (not in
-# test_platform_skills.py) because that file is already below the
-# maintainability gate threshold and this parametrization would regress its
-# ratchet baseline further.
+# ``disable-model-invocation: true`` removes a skill from the agent's Skill
+# tool entirely, yet the generated rules route the agent through these skills
+# (``linear-issue`` is the only permitted Linear-write path). TAP-7385 pinned
+# every skill but three, which blocked those routes; this reverses it. The
+# tests walk the actual dict contents at import time, so a skill added to any
+# generated dict later is covered automatically.
+
+_GENERATED_SKILL_DICTS: dict[str, dict[str, str]] = {
+    "CLAUDE_SKILLS": CLAUDE_SKILLS,
+    "CURSOR_SKILLS": CURSOR_SKILLS,
+    "CLAUDE_DOCS_SKILLS": CLAUDE_DOCS_SKILLS,
+    "CURSOR_DOCS_SKILLS": CURSOR_DOCS_SKILLS,
+}
 
 
-def _ambient_violations(skills: dict[str, str], exempt: frozenset[str]) -> list[str]:
-    """Names in ``skills`` that violate the ambient invariant: an exempt name
-    that carries the pin, or a non-exempt name that lacks it."""
-    violations = []
-    for name, body in skills.items():
-        fm = _frontmatter(body)
-        pinned = "disable-model-invocation: true" in fm
-        should_be_ambient = name in exempt
-        if should_be_ambient and pinned:
-            violations.append(f"{name} (exempt but pinned)")
-        elif not should_be_ambient and not pinned:
-            violations.append(f"{name} (not exempt but ambient)")
-    return violations
-
-
-class TestClaudeAmbientCoverage:
-    """A1/A2: every CLAUDE_SKILLS entry outside the 3 front doors is pinned."""
-
-    @pytest.mark.parametrize(
-        "skill_name",
-        sorted(set(CLAUDE_SKILLS) - AMBIENT_FRONT_DOOR_SKILL_NAMES),
+@pytest.mark.parametrize(
+    ("dict_name", "skill_name"),
+    [(dict_name, name) for dict_name, skills in _GENERATED_SKILL_DICTS.items() for name in skills],
+)
+def test_generated_skill_is_model_invocable(dict_name: str, skill_name: str) -> None:
+    body = _GENERATED_SKILL_DICTS[dict_name][skill_name]
+    assert "disable-model-invocation" not in _frontmatter(body), (
+        f"{dict_name}[{skill_name!r}] hides itself from the agent's Skill tool"
     )
-    def test_non_front_door_carries_pin(self, skill_name: str) -> None:
-        fm = _frontmatter(CLAUDE_SKILLS[skill_name])
-        assert "disable-model-invocation: true" in fm, (
-            f"{skill_name} is ambient but is not one of the stated front doors "
-            f"({sorted(AMBIENT_FRONT_DOOR_SKILL_NAMES)})"
-        )
-
-    @pytest.mark.parametrize("skill_name", sorted(AMBIENT_FRONT_DOOR_SKILL_NAMES))
-    def test_front_door_stays_ambient(self, skill_name: str) -> None:
-        fm = _frontmatter(CLAUDE_SKILLS[skill_name])
-        assert "disable-model-invocation:" not in fm
 
 
-class TestCursorAmbientCoverage:
-    """A1: CURSOR_SKILLS carries the same pin on every non-front-door entry.
-
-    This class is the actual fix for the gap described in the lane brief --
-    before it existed, nothing in this test suite ever imported CURSOR_SKILLS
-    into a disable-model-invocation assertion."""
-
-    @pytest.mark.parametrize(
-        "skill_name",
-        sorted(set(CURSOR_SKILLS) - AMBIENT_FRONT_DOOR_SKILL_NAMES),
-    )
-    def test_non_front_door_carries_pin(self, skill_name: str) -> None:
-        fm = _frontmatter(CURSOR_SKILLS[skill_name])
-        assert "disable-model-invocation: true" in fm, (
-            f"{skill_name} is ambient but is not one of the stated front doors "
-            f"({sorted(AMBIENT_FRONT_DOOR_SKILL_NAMES)})"
-        )
-
-    @pytest.mark.parametrize("skill_name", sorted(AMBIENT_FRONT_DOOR_SKILL_NAMES))
-    def test_front_door_stays_ambient(self, skill_name: str) -> None:
-        fm = _frontmatter(CURSOR_SKILLS[skill_name])
-        assert "disable-model-invocation:" not in fm
+def test_linear_routing_skills_are_generated_on_both_hosts() -> None:
+    """Known positive for the parametrization above: the skills the generated
+    rules make mandatory are actually in the dicts it walks."""
+    for name in ("linear-issue", "linear-read", "linear-release-update"):
+        assert name in CLAUDE_SKILLS
+        assert name in CURSOR_SKILLS
 
 
-class TestFrontDoorAllowlistIsNameSensitive:
-    """A3: the check must fail on a same-size name swap, not just a count
-    change -- otherwise an allowlist that silently drifts to the wrong names
-    would still read as green."""
+@pytest.mark.parametrize(("platform", "skills_dir"), [("claude", ".claude"), ("cursor", ".cursor")])
+def test_generated_skill_files_are_model_invocable(
+    tmp_path: Path, platform: str, skills_dir: str
+) -> None:
+    """Same invariant on the SKILL.md files ``generate_skills`` writes to disk."""
+    generate_skills(tmp_path, platform)
+    skill_files = sorted((tmp_path / skills_dir / "skills").glob("*/SKILL.md"))
+    assert any(f.parent.name == "linear-issue" for f in skill_files)
+    pinned = [
+        f.parent.name for f in skill_files if "disable-model-invocation" in f.read_text("utf-8")
+    ]
+    assert pinned == []
 
-    def test_swapping_a_front_door_name_breaks_the_invariant(self) -> None:
-        swapped = (AMBIENT_FRONT_DOOR_SKILL_NAMES - {"tapps-wayfind"}) | {"tapps-security"}
-        assert len(swapped) == len(AMBIENT_FRONT_DOOR_SKILL_NAMES)
 
-        claude_violations = _ambient_violations(CLAUDE_SKILLS, swapped)
-        cursor_violations = _ambient_violations(CURSOR_SKILLS, swapped)
+@pytest.mark.parametrize(("platform", "skills_dir"), [("claude", ".claude"), ("cursor", ".cursor")])
+def test_upgrade_strips_pin_from_existing_consumer_skill(
+    tmp_path: Path, platform: str, skills_dir: str
+) -> None:
+    """A consumer upgraded from a pinned release loses the pin on refresh:
+    frontmatter is platform-owned, while the project region below the managed
+    block survives."""
+    generate_skills(tmp_path, platform)
+    target = tmp_path / skills_dir / "skills" / "linear-issue" / "SKILL.md"
+    fresh = target.read_text(encoding="utf-8")
+    pinned = fresh.replace("\n---\n", "\ndisable-model-invocation: true\n---\n", 1)
+    target.write_text(pinned + "\nProject note kept across upgrades.\n", encoding="utf-8")
+    assert "disable-model-invocation: true" in _frontmatter(target.read_text(encoding="utf-8"))
 
-        # tapps-wayfind is real-ambient but no longer in the swapped allowlist
-        # -> flagged as "not exempt but ambient". tapps-security is real-pinned
-        # but now (wrongly) in the allowlist -> flagged as "exempt but pinned".
-        assert any("tapps-wayfind" in v for v in claude_violations)
-        assert any("tapps-security" in v for v in claude_violations)
-        assert any("tapps-wayfind" in v for v in cursor_violations)
-        assert any("tapps-security" in v for v in cursor_violations)
+    generate_skills(tmp_path, platform, overwrite=True)
+
+    upgraded = target.read_text(encoding="utf-8")
+    assert "disable-model-invocation" not in upgraded
+    assert "Project note kept across upgrades." in upgraded

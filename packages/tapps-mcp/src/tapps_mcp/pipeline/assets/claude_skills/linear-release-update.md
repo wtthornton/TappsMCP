@@ -5,7 +5,6 @@ model: {{model:prose}}
 description: Post a structured Linear project update document on a version release. Orchestrates tapps_release_update → docs_release_gate → save_document → cache invalidation. Use when posting a release announcement to Linear after shipping a new version.
 allowed-tools: mcp__nlt-release-ship__tapps_release_update mcp__nlt-release-ship__docs_release_gate mcp__plugin_linear_linear__save_document mcp__nlt-linear-issues__tapps_linear_snapshot_invalidate
 argument-hint: "--version vX.Y.Z --prev-version vX.Y.W [--team <team>] [--project <project>] [--dry-run]"
-disable-model-invocation: true
 ---
 
 Post a structured Linear project update document when a new version is released. The user's request to post a release update is standing authorization for the full pipeline — do NOT pause mid-flow to ask "should I post this?"

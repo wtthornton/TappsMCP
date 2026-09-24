@@ -7,7 +7,6 @@ description: >-
   Use when reviewing PRs, audit findings, or validating another agent's changes.
 allowed-tools: mcp__plugin_tapps-mcp_tapps-mcp__tapps_validate_changed mcp__plugin_tapps-mcp_tapps-mcp__tapps_checklist mcp__plugin_tapps-mcp_tapps-mcp__tapps_security_scan
 argument-hint: "[file paths]"
-disable-model-invocation: true
 ---
 
 Prefer `/tapps-review-pipeline` for multiple Python files. Otherwise:

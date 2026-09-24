@@ -10,7 +10,6 @@ description: >-
 origin: ECC
 version: 2.1.0
 model: claude-sonnet-5
-disable-model-invocation: true
 ---
 
 # Continuous Learning v2.1 - Instinct-Based Architecture

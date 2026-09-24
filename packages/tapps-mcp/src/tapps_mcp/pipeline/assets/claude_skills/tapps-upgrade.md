@@ -10,7 +10,6 @@ description: >-
   version is available and the project scaffolding needs to be refreshed.
 allowed-tools: Bash mcp__nlt-build__tapps_session_start mcp__nlt-setup__tapps_doctor mcp__nlt-build__tapps_checklist
 argument-hint: "[--from-checkout <path> | --from-tag vX.Y.Z]"
-disable-model-invocation: true
 ---
 
 Upgrade tapps-mcp / docs-mcp end-to-end. The user's request to upgrade is standing authorization for the full pipeline — do NOT pause mid-flow.

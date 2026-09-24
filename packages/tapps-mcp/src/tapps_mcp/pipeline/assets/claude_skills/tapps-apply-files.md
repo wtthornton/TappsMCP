@@ -7,7 +7,6 @@ description: >-
   a TappsMCP or DocsMCP tool returns content_return: true with a file_manifest
   because the server runs in Docker and cannot write files directly.
 allowed-tools: ""
-disable-model-invocation: true
 ---
 
 When a TappsMCP or DocsMCP tool returns `content_return: true` with a `file_manifest`,

@@ -10,7 +10,6 @@ description: >-
   goal for…", "work the backlog", "loop until X" — even if they don't say
   "orchestrate".
 argument-hint: "[free-form objective]"
-disable-model-invocation: true
 ---
 
 # orchestration-prompt

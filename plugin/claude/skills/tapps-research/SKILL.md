@@ -12,7 +12,6 @@ allowed-tools: >-
 argument-hint: "[library|query] [topic]"
 context: fork
 model: claude-sonnet-5
-disable-model-invocation: true
 ---
 
 Research using TappsMCP's unified front door (ADR-0030):

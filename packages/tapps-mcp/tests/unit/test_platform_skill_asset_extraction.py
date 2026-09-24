@@ -15,8 +15,8 @@ were computed directly from that base sha's runtime dict values (not
 re-derived from the extracted files — an independent reference so this
 test cannot pass by construction).
 
-Three entries are pinned to a LATER value than that base sha, each because a
-reviewed content change moved it deliberately; see the per-entry notes on
+Most entries are pinned to a LATER value than that base sha, each because a
+reviewed content change moved it deliberately; see the notes on
 ``EXPECTED_CLAUDE_SKILLS_SHA256``. A pin is only ever advanced alongside the
 edit that moved it, named in the note — a pin updated to "make the test pass"
 is green-by-suppression and the whole point of this file is to make that
@@ -44,9 +44,16 @@ from tapps_mcp.pipeline.platform_subagents import CLAUDE_AGENTS
 # merged in from CLAUDE_DOMAIN_SKILLS (3 built via an f-string helper, 3
 # raw triple-quoted literals), and the 4 assigned post-hoc from sibling
 # skill-body modules (Lane 2 / round 2).
+#
+# Unpin (v3.12.91) — every entry except tapps-finish-task,
+# tapps-continue-session and tapps-wayfind was advanced by one reviewed edit:
+# the single frontmatter line ``disable-model-invocation: true`` was removed,
+# so the agent can invoke every generated skill. Verified by diffing each
+# pre-edit body (hashing to its previous pin) against the new one: the only
+# change is that one line. No other frontmatter or body text changed.
 EXPECTED_CLAUDE_SKILLS_SHA256: dict[str, str] = {
     "tapps-finish-task": "d8b984a965ea1ef9e82681a258fcb9be2eadd8d552494dd72d3ae604ed995824",
-    "tapps-handoff-session": "d97f9e268d0cd4da44a8031ac06a3717312a756158e79dcdc8f2e39c1cd3ef26",
+    "tapps-handoff-session": "c96c710216350e7c861ffc91d4a1325bcf1cf605658a356c2ef8b8f357c8fdf2",
     # TAP-7753 round 2 — advanced from the base-sha value
     # 46e6794e4042f01e8a8be94f2b609b4f42285b600e23b0ad54d218204b548c77 by one
     # reviewed edit: a "## Degrades without" section appended to
@@ -54,24 +61,24 @@ EXPECTED_CLAUDE_SKILLS_SHA256: dict[str, str] = {
     # TAP-#### lookup needs mcp__plugin_linear_linear__get_issue. Body-only
     # append; no frontmatter, step, or tool grant changed.
     "tapps-continue-session": "6e3ed6cedc2f4bbf3d0e90f6a90bda528e569657f32e2b430d04e76910f4673a",
-    "tapps-review-pipeline": "9cf055a76582fb02c4d489a73993e9af9c7e4472e9e2976af6c8461c7e191ba0",
-    "tapps-refactor": "f47b9d131e6c74914beee8fc2058a04387b1695fe2559ac1b8822995e5dd40fe",
-    "tapps-research": "faa060ea4201d57847dd9f0c78a7cb8dcc343453296a9bcf28ab870bbec9e524",
-    "tapps-security": "34a2eae03a3681951e20c9d4dc1da3dd753c5ccf7cc7e47bf9638417b3f84f63",
-    "tapps-memory": "d85763eca372e976adb0324d9f6c21ef7bf5e78ba332ec91d8781f26208b9bd2",
-    "tapps-tool-reference": "2858992ee16b0cf3fa6f8f096c28b3b6ea1f2fb5d52a842a757b975e3d7396b5",
-    "tapps-init": "581ff1e481c31965c3f5cca2fa2f9b2d3ec15420a92b78fa88a8c27c12492f13",
-    "tapps-upgrade": "84f9ec41c47618bacd5aab55a154fca314cb78b42d83f163a24cf1aee3b1bbfe",
-    "tapps-engagement": "0049edd1251b08aab113e630ffaad9778c3247c4a4c1a49914a1d414074da449",
-    "tapps-apply-files": "e1d1c9d20ee59387afd72e1c58ea035f54cb8570c51fe575945acfcc64661fd5",
-    "linear-issue": "e0409220ce6d91f05102a090dc335be19922e2d1c054ccbebce2120f55f3e7e3",
+    "tapps-review-pipeline": "3489ae94cb46c97dc3a5ab8fba96be6101d3cb713d1219ee6218bb4c54fb00d6",
+    "tapps-refactor": "207c4ed7ae7edbcd45be2bf4ac8dcbbf8968dbc19815f45ae6ea8a2d9e965d3c",
+    "tapps-research": "3c0821e21fc2bbf23f678cb4e0a44f291fa6eb852762aef1e4b88a614a650e8b",
+    "tapps-security": "e2d213468ce055c6a2096b6591d3e015fa442b722f4cdd7a5c6c6224fe585a44",
+    "tapps-memory": "1cec3947a695aad02fa03a03843ac4988a9233ddc3d2cf9c0d9fbbf2498f546e",
+    "tapps-tool-reference": "559e80bc08d1ce520311dd7a9ef1415009cbf380399266a575ed839c61c98e67",
+    "tapps-init": "f72f166ca9a8d804bd78bd35789ac01a3023182bcc7df31d2e93204144408a90",
+    "tapps-upgrade": "6b13f9af0fe0525a2f8b97eb17841621d6a46ef5f8afb26507eaaac6342bf125",
+    "tapps-engagement": "ca732346d4db05e19fc5719f5f13bc6401138f3a1012b6b34d2f393ed9a4c75d",
+    "tapps-apply-files": "18fba02ad6fd5d30463407052bcd91f5973bb0627101638a5c04824ded673704",
+    "linear-issue": "85391972376da5301c7604a66d5bc48ec37d2b5303effbd559c2829463750945",
     # TAP-7753 round 2 — advanced from the base-sha value
     # 5d4cee019ea9f5f067ea5ecf80e5a7d1dedf8953b0f22112bc434eb04ade3bc1 by one
     # reviewed edit: a "## Degrades without" section appended to
     # assets/claude_skills/linear-read.md documenting that steps 3-4 need
     # mcp__plugin_linear_linear__list_issues/get_issue. Body-only append; no
     # frontmatter, step, or tool grant changed.
-    "linear-read": "76908ec1656f7406f8b455df59fb739d205c2b2b3db67069d4b3c7eceb4bc39e",
+    "linear-read": "410ffd60d04d3c8b7a14c8bda8b7eedf4064963d9e6ac25a5755637f6f01372d",
     # TAP-7753 round 2 — advanced from the base-sha value
     # ad0068d97c572775582126fbc600b0adeaab4a10c7f907ea803c173e7ce71a75 by two
     # reviewed edits to assets/claude_skills/linear-release-update.md:
@@ -83,17 +90,17 @@ EXPECTED_CLAUDE_SKILLS_SHA256: dict[str, str] = {
     #      actually calls;
     #   2. body — a "## Degrades without" section appended documenting the
     #      docs_release_gate and mcp__plugin_linear_linear__save_document gaps.
-    "linear-release-update": "14e09adcef5720dcc6d5368149e6d6abd6bd80bf43743fc1e9c8c4d0e0744785",
-    "tapps-domain-security": "33aee2260a432372ef156cac684717552187630b66dbc7cefa96f8745bf66bbd",
-    "tapps-domain-testing": "a2c8396f4d150d1eb979eee34687b6a4153edcc4ba21895bd2a5428712a51cad",
-    "tapps-domain-frontend": "ce1c7856a9ebc57486e660d236e201a16fe1689f10cb3f3468bbf09630093282",
-    "tapps-flow-develop": "e33b0bf1eb2dd9e33b25ef87008af21ab38e64fd325288dbab91c7a97ee98789",
-    "tapps-flow-review": "2f2665f0bcad078734647c8fd6056b862d8a82c99a888c80e4010c9117d007b6",
-    "tapps-flow-frontend": "2ab9fc958f249f4ab024da7167ee09890c9baaf67733d7fbd2732c8ab852e3cf",
-    "orchestration-prompt": "b8fae2d47b07f689668d5b7199c021bbdda3258a3e19e75dfc67dab26ccae4c3",
+    "linear-release-update": "80ebdb86862135b612c4f864d0f29c64589381c68803bf085dea94fea3129f1b",
+    "tapps-domain-security": "0571d7be26f570e5ac0931bf1d56102cba346be64296c49cf8588a890338c3a6",
+    "tapps-domain-testing": "0ad16dc6c4903f9a60138e8480bde71c93cd9013539643c8cc08df8ac642843a",
+    "tapps-domain-frontend": "f400222e5b0ba952561b1701070a75d6c00e58bda9da917a1a210f06aa3236bd",
+    "tapps-flow-develop": "8eda46d53ffd06e4d78ae1dcf3e9dc4a3a8a0e11822d6b2fc8e56ea26737cc52",
+    "tapps-flow-review": "377e3c5aa0424c648a7d1662b21fe7ad7ad4a94932758bf7fdd6cf5bdcf4b261",
+    "tapps-flow-frontend": "21ba41721fc4aa485e1fb989450eefa89e83ac3a12570f48a37e4def82b5e562",
+    "orchestration-prompt": "d630b4d01151b6ce360581e6ed125c6bd741bbd346ff66d5977296a199a17eb7",
     "tapps-wayfind": "2ac3ad26d20db6b62703dbff852907cc682fcd929dd0b5be68fa6aaa212a4136",
-    "tapps-validation-contract": "04a6649458bb3df50cf1f870fccab2a1cfc45be1b2b9d9ca811eef5bf0416101",
-    "continuous-learning-v2": "110d4cf8484567e5113805408d4f5fc5a89e1e233460d7da00660d747fae5cf8",
+    "tapps-validation-contract": "c6a55ae0584738a40962cf76faff697e1173acef65a8ff7467a6e4be05a91388",
+    "continuous-learning-v2": "99533d855d1830af252db08941a8afa0cf32db4ae26e6754d1d2f2d6023a6728",
 }
 
 EXPECTED_CLAUDE_AGENTS_SHA256: dict[str, str] = {

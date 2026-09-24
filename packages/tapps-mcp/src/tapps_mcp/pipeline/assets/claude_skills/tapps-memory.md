@@ -8,7 +8,6 @@ description: >-
   checking brain bridge health. For chat handoffs use tapps-handoff-session.
 allowed-tools: mcp__nlt-build__tapps_session_start mcp__nlt-memory__tapps_session_notes Bash
 argument-hint: "[save|search|get] [key]"
-disable-model-invocation: true
 ---
 
 `tapps_memory` on the **`nlt-memory`** MCP server is a slim facade (TAP-3895). Default consumer path is **`uv run tapps-mcp memory`** (bridge-only — never add direct `tapps-brain` to `.mcp.json`).
