@@ -7,6 +7,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed — 2026-09-24
+
+- **Every generated skill is model-invocable again — reverses the TAP-7385
+  `disable-model-invocation` pin.** TAP-7385 pinned
+  `disable-model-invocation: true` on every generated skill except
+  `tapps-finish-task`, `tapps-continue-session` and `tapps-wayfind`. In Claude
+  Code that flag removes a skill from the agent's Skill tool entirely, yet the
+  generated rules make `linear-issue`, `linear-read` and
+  `linear-release-update` the *only* permitted Linear routes ("raw
+  `save_issue` calls are a rule violation"), so consumer agents had no
+  permitted way to write to Linear. The pin is gone from every Claude and
+  Cursor skill template and from the shipped `plugin/claude/` bundle;
+  `_pin_ambient`, `_MISSED_AMBIENT_SKILL_NAMES` and
+  `AMBIENT_FRONT_DOOR_SKILL_NAMES` are deleted, and `tapps_session_start`'s
+  `recommended_workflows` no longer marks `tapps-handoff-session` /
+  `tapps-engagement` as `user_invocable_only`. `user-invocable: true` is
+  unchanged, so slash-command access stays. Autoload precision is now the
+  job of the `description:` wording (`docs/SKILL_AUTHORING.md` Rule 2). Skill
+  frontmatter is platform-owned and rewritten by `tapps-mcp upgrade`, so an
+  upgrade removes the line from existing consumer `SKILL.md` files while
+  keeping any project region below the managed block.
+
 ### Changed — 2026-09-16
 
 - **CLAUDE_SKILLS (26 in `platform_skills.py`), CLAUDE_AGENTS (5), and the

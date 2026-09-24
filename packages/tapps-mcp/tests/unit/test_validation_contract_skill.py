@@ -32,8 +32,8 @@ class TestModuleShape:
         assert "post-hoc" in lower
         assert "val-" in lower
 
-    def test_frontmatter_disables_model_invocation(self):
-        assert "disable-model-invocation: true" in VALIDATION_CONTRACT_SKILL_BODY
+    def test_frontmatter_is_model_invocable(self):
+        assert "disable-model-invocation" not in VALIDATION_CONTRACT_SKILL_BODY
         assert f"name: {SKILL}" in VALIDATION_CONTRACT_SKILL_BODY
 
     def test_companions_include_required_refs(self):

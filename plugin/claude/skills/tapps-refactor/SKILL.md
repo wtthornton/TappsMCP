@@ -15,7 +15,6 @@ allowed-tools: >-
   mcp__plugin_tapps-mcp_tapps-mcp__tapps_validate_changed
   mcp__plugin_tapps-mcp_tapps-mcp__tapps_checklist
 argument-hint: "[symbol or file-path]"
-disable-model-invocation: true
 ---
 
 Symbol-level refactor workflow (Epic 114 / ADR-0017):

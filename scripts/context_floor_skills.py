@@ -27,9 +27,8 @@ from context_floor_skill_body import SkillInfo, _parse_skill_frontmatter, resolv
 # shape now also arrives via ``CLAUDE_SKILLS.update(CLAUDE_DOMAIN_SKILLS)``
 # (platform_domain_skills.py's own, separately-defined ``_load_claude_skill``
 # -- same name, same ``assets/claude_skills/`` layout, different module,
-# matched here purely by call shape) and via a
-# ``_pin_ambient("name", _load_claude_skill("name"))`` wrapper for the four
-# post-hoc CLAUDE_SKILLS subscript assignments. ``CLAUDE_DOCS_SKILLS``
+# matched here purely by call shape) and via the post-hoc CLAUDE_SKILLS
+# subscript assignments. ``CLAUDE_DOCS_SKILLS``
 # (platform_docs_automation.py) uses the sibling ``_load_claude_docs_skill``
 # loader reading from ``assets/claude_docs_skills/`` instead.
 #
@@ -60,30 +59,8 @@ def _call_arg_str(node: ast.expr, func_name: str) -> str | None:
 
 
 def _asset_load_name(node: ast.expr) -> str | None:
-    """If *node* is ``_load_claude_skill("name")``, return ``"name"``.
-
-    Also unwraps ``_pin_ambient("name", _load_claude_skill("name"))`` --
-    ``_pin_ambient`` only splices a ``disable-model-invocation: true`` line
-    into frontmatter post-construction and never touches ``description:``,
-    so reading the pre-pin asset file is sufficient for this script's
-    measurement. The two literal names must match, or this is not the shape
-    we expect and the caller falls through to the generic resolver.
-    """
-    direct = _call_arg_str(node, "_load_claude_skill")
-    if direct is not None:
-        return direct
-    if (
-        isinstance(node, ast.Call)
-        and isinstance(node.func, ast.Name)
-        and node.func.id == "_pin_ambient"
-        and len(node.args) == 2
-        and isinstance(node.args[0], ast.Constant)
-        and isinstance(node.args[0].value, str)
-    ):
-        inner = _call_arg_str(node.args[1], "_load_claude_skill")
-        if inner is not None and inner == node.args[0].value:
-            return inner
-    return None
+    """If *node* is ``_load_claude_skill("name")``, return ``"name"``."""
+    return _call_arg_str(node, "_load_claude_skill")
 
 
 def _docs_skill_asset_load_name(node: ast.expr) -> str | None:

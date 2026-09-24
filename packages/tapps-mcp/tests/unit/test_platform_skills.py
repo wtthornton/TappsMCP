@@ -111,12 +111,15 @@ class TestClaudeArgumentHint:
 
 
 class TestClaudeDisableModelInvocation:
-    """TAP-7385: only the fleet-wide front doors stay ambient; every other
-    skill emitted by these templates is pinned non-ambient."""
+    """Every generated skill stays model-invocable: the pin hides a skill from
+    the agent's Skill tool, and the generated rules route the agent through
+    these skills (reverses TAP-7385)."""
 
     @pytest.mark.parametrize(
         "skill_name",
         [
+            "tapps-finish-task",
+            "tapps-continue-session",
             "tapps-handoff-session",
             "tapps-engagement",
             "tapps-review-pipeline",
@@ -133,20 +136,7 @@ class TestClaudeDisableModelInvocation:
             "linear-release-update",
         ],
     )
-    def test_disable_model_invocation_present(self, skill_name: str) -> None:
-        fm = _get_frontmatter(CLAUDE_SKILLS[skill_name])
-        assert "disable-model-invocation: true" in fm
-
-    @pytest.mark.parametrize(
-        "skill_name",
-        [
-            "tapps-finish-task",
-            "tapps-continue-session",
-        ],
-    )
     def test_disable_model_invocation_absent(self, skill_name: str) -> None:
-        """The three fleet-wide front doors (plus tapps-wayfind, tested
-        separately) stay ambient — see TAP-7385."""
         fm = _get_frontmatter(CLAUDE_SKILLS[skill_name])
         assert "disable-model-invocation:" not in fm
 
@@ -322,13 +312,6 @@ class TestGenerateSkills:
         assert "allowed-tools:" in content
         assert "mcp__nlt-build__tapps_validate_changed" in content
         assert "\ntools:" not in content
-
-    def test_generated_claude_handoff_has_disable_model(self, tmp_path: Path) -> None:
-        generate_skills(tmp_path, "claude")
-        content = (
-            tmp_path / ".claude" / "skills" / "tapps-handoff-session" / "SKILL.md"
-        ).read_text(encoding="utf-8")
-        assert "disable-model-invocation: true" in content
 
     def test_generated_claude_research_has_context_fork(self, tmp_path: Path) -> None:
         generate_skills(tmp_path, "claude")

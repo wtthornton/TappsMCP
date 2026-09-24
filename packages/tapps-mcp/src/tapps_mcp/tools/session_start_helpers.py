@@ -1125,15 +1125,6 @@ _LOW_ENGAGEMENT_WORKFLOWS: frozenset[str] = frozenset(
     {"tapps-finish-task", "tapps-review-pipeline"}
 )
 
-# Skills with ``disable-model-invocation: true`` — agents cannot invoke them;
-# session_start must mark these so the agent asks the user instead of hunting.
-_USER_INVOCABLE_ONLY_WORKFLOWS: frozenset[str] = frozenset(
-    {
-        "tapps-handoff-session",
-        "tapps-engagement",
-    }
-)
-
 
 def _infer_mcp_bundle(project_root: Path) -> str:
     """Best-effort bundle name from YAML or enabled NLT MCP servers.
@@ -1196,26 +1187,13 @@ def build_recommended_workflows(
     if engagement_level == "low":
         keys = tuple(skill for skill in keys if skill in _LOW_ENGAGEMENT_WORKFLOWS)
 
-    workflows: list[dict[str, Any]] = []
-    for skill in keys:
-        one_liner = _WORKFLOW_ONE_LINERS.get(skill, "")
-        entry: dict[str, Any] = {
-            "skill": skill,
-            "slash": f"/{skill}",
-            "when": one_liner,
-        }
-        if skill in _USER_INVOCABLE_ONLY_WORKFLOWS:
-            entry["user_invocable_only"] = True
-            entry["when"] = (
-                f"{one_liner} (user-only slash skill — ask the user to run "
-                f"/{skill}; agents should use MCP handoff tools instead)."
-            )
-        workflows.append(entry)
-
     return {
         "engagement_level": engagement_level,
         "mcp_bundle": bundle,
-        "workflows": workflows,
+        "workflows": [
+            {"skill": skill, "slash": f"/{skill}", "when": _WORKFLOW_ONE_LINERS.get(skill, "")}
+            for skill in keys
+        ],
     }
 
 

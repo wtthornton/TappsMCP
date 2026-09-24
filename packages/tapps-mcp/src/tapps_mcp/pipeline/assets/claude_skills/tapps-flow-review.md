@@ -7,7 +7,6 @@ description: >-
   Use when reviewing PRs, audit findings, or validating another agent's changes.
 allowed-tools: mcp__nlt-build__tapps_validate_changed mcp__nlt-build__tapps_checklist mcp__nlt-build__tapps_security_scan
 argument-hint: "[file paths]"
-disable-model-invocation: true
 ---
 
 Prefer `/tapps-review-pipeline` for multiple Python files. Otherwise:

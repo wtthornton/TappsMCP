@@ -8,7 +8,6 @@ description: >-
   up TappsMCP in a new or existing project for the first time.
 allowed-tools: mcp__plugin_tapps-mcp_tapps-mcp__tapps_init mcp__plugin_tapps-mcp_tapps-mcp__tapps_doctor
 argument-hint: "[project-root]"
-disable-model-invocation: true
 ---
 
 Bootstrap TappsMCP in a new or existing project:
