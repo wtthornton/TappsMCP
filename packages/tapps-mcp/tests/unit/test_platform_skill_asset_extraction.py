@@ -116,13 +116,17 @@ EXPECTED_CLAUDE_DOC_AGENTS_SHA256: dict[str, str] = {
     "tapps-docs-validator.md": "6ebb0e98542e34217526f9076476865854798d4f3d8b8088603af96d7243f56c",
 }
 
+# #454 (9aa870ce) added one frontmatter line, ``user-invocable: true``, to
+# tapps-docs-generate / -report / -validate without advancing these pins.
+# Verified: each current body with that one line removed hashes to its
+# previous pin, so the new values reflect that single reviewed edit.
 EXPECTED_CLAUDE_DOCS_SKILLS_SHA256: dict[str, str] = {
     "tapps-docs-refresh": "dbd1e4e0437d9f31f4fce8b44965b0db227d0614f1bc5e34d764556d4225413e",
     "tapps-docs-bootstrap": "9a47a5095ab7c9ddb4517afd9280717e3d0b32444710aaab11a5f139a7a0c363",
     "tapps-docs-finish-task": "9b7b2144ac5733d6f4718d5cd0d10684cc9cb64bff44d6bd80184e2d680a2625",
-    "tapps-docs-report": "fd33ebda5a8a314fc7372437a5a7a79cb39e43ade630747ed9b51eeba0ef6732",
-    "tapps-docs-validate": "3446a1304ade18a2bfde8b87bc428a189d9678488aa17578c88774fd20eb604f",
-    "tapps-docs-generate": "3b2b780ab456873ea67fed81febb05d6e0a918f1080149ae1b8ced2fa686ca9a",
+    "tapps-docs-report": "66bcc27228d1aa36b2d414706bc4e937667c84dba8d69bdf02517f11c6abdca0",
+    "tapps-docs-validate": "85d6bd9102b20655bb3eaa7a0082c9b228f0d99c91d1003da8fb760b1a8ae776",
+    "tapps-docs-generate": "a984e5ee4f2e1ba49ec5e1c71906e9c409e4a34988baf1591ccb6bcd299eb68d",
 }
 
 
