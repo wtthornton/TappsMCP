@@ -24,8 +24,10 @@ from tapps_mcp import __version__
 from tapps_mcp.pipeline.skill_asset_policy import (
     SectionRedundancy,
     _normalize_body,
+    drop_duplicate_region,
     heading_redundancy,
     policy_header,
+    unique_line_count,
 )
 
 if TYPE_CHECKING:
@@ -45,8 +47,9 @@ MARKER_END = "<!-- END: tapps-skill -->"
 UPGRADE_POLICY_OVERWRITE_MARKER = "upgrade-policy: overwrite"
 
 # Heading that introduces the preserved project region on a legacy migration.
+PROJECT_REGION_TAG = "tapps-skill-project-customizations:"
 PROJECT_REGION_HEADING = (
-    "<!-- tapps-skill-project-customizations: preserved from the pre-marker "
+    f"<!-- {PROJECT_REGION_TAG} preserved from the pre-marker "
     "version — review and trim any content the managed block above now covers -->"
 )
 
@@ -437,7 +440,9 @@ class MigratedRegionRedundancy:
         return "flagged: " + "; ".join(reasons) + " — review and trim"
 
 
-def migrated_region_redundancy(preserved: str, canonical_block_body: str) -> MigratedRegionRedundancy:
+def migrated_region_redundancy(
+    preserved: str, canonical_block_body: str
+) -> MigratedRegionRedundancy:
     """Measure how much of *preserved* duplicates *canonical_block_body*.
 
     *canonical_block_body* is the raw (unwrapped, frontmatter-stripped) body
@@ -445,9 +450,7 @@ def migrated_region_redundancy(preserved: str, canonical_block_body: str) -> Mig
     :func:`heading_redundancy` already expects for the asset path.
     """
     section_redundancy = heading_redundancy(preserved, canonical_block_body)
-    canonical_lines = [
-        line for line in _normalize_body(canonical_block_body).split("\n") if line
-    ]
+    canonical_lines = [line for line in _normalize_body(canonical_block_body).split("\n") if line]
     canonical_line_set = frozenset(canonical_lines)
     preserved_lines = [line for line in _normalize_body(preserved).split("\n") if line]
     duplicate_count = sum(1 for line in preserved_lines if line in canonical_line_set)
@@ -469,10 +472,13 @@ def install_or_refresh_skill(
       (``"created"``).
     - **Markers present** → replace the block if it differs (``"refreshed"``),
       else ``"unchanged"``. Content outside the markers is preserved verbatim,
-      except the leading frontmatter, which the platform owns and rewrites.
+      except the leading frontmatter, which the platform owns and rewrites, and
+      a migrated project region with no line absent from the managed block,
+      which is dropped (TAP-8100).
     - **Markers absent (legacy hand-authored copy)** → keep the old content as a
       preserved project region *below* the fresh managed block (``"migrated"``).
-      Nothing is lost; the operator trims the duplicated region afterwards.
+      Nothing is lost; the operator trims the duplicated region afterwards. An
+      old body with no line of its own is not preserved (``"refreshed"``).
 
     The written file always starts with ``---``. A refresh that finds the marker
     on line 1 (the pre-fix layout, where the frontmatter was wrapped *inside*
@@ -482,6 +488,7 @@ def install_or_refresh_skill(
     ``dry_run=True`` computes the action without writing.
     """
     frontmatter, new_block = split_frontmatter(wrap_with_markers(body, skill_name, version=version))
+    _, canonical_body = split_frontmatter(body)
 
     if not path.exists():
         if not dry_run:
@@ -497,7 +504,8 @@ def install_or_refresh_skill(
         # Whatever sits above the block minus its own frontmatter: project
         # content the operator put there, which survives the refresh.
         _, head = split_frontmatter(original[:begin])
-        updated = frontmatter + head + new_block + original[end:]
+        tail = drop_duplicate_region(original[end:], PROJECT_REGION_TAG, canonical_body)
+        updated = frontmatter + head + new_block + tail
         if updated == original:
             return "unchanged"
         action: Action = "refreshed"
@@ -509,13 +517,18 @@ def install_or_refresh_skill(
         # survive the migration.
         _, legacy_body = split_frontmatter(original)
         preserved = legacy_body.strip("\n")
-        _, canonical_body = split_frontmatter(body)
-        redundancy = migrated_region_redundancy(preserved, canonical_body)
-        heading = PROJECT_REGION_HEADING
-        if redundancy.flagged:
-            heading = f"{PROJECT_REGION_HEADING}\n<!-- {redundancy.verdict()} -->"
-        updated = f"{frontmatter}{new_block}\n\n{heading}\n\n{preserved}\n"
-        action = "migrated"
+        if unique_line_count(preserved, canonical_body) == 0:
+            # Nothing the managed block lacks: adopt the markers, preserve
+            # nothing (TAP-8100).
+            updated = f"{frontmatter}{new_block}\n"
+            action = "refreshed"
+        else:
+            redundancy = migrated_region_redundancy(preserved, canonical_body)
+            heading = PROJECT_REGION_HEADING
+            if redundancy.flagged:
+                heading = f"{PROJECT_REGION_HEADING}\n<!-- {redundancy.verdict()} -->"
+            updated = f"{frontmatter}{new_block}\n\n{heading}\n\n{preserved}\n"
+            action = "migrated"
 
     if not dry_run:
         path.write_text(updated, encoding="utf-8")
@@ -604,6 +617,7 @@ __all__ = [
     "MARKER_BEGIN_PREFIX",
     "MARKER_END",
     "PROJECT_REGION_HEADING",
+    "PROJECT_REGION_TAG",
     "UPGRADE_POLICY_OVERWRITE_MARKER",
     "Action",
     "Contradiction",

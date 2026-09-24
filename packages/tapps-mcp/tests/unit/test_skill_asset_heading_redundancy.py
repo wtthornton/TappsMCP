@@ -116,16 +116,6 @@ class TestMigratedAssetRedundancyVerdict:
         ("preserved", "must_contain", "must_not_contain"),
         [
             pytest.param(
-                # Same headings/bodies as canonical but reordered, so it is
-                # NOT byte-identical to canonical (which would take the
-                # separate "pristine pre-marker copy" branch instead of the
-                # migrated/preserved-region branch this test targets).
-                "## Usage\nUse it.\n\n## Setup\nSet things up.\n",
-                ["fully redundant", "all 2 heading(s)", "safe to delete this entire region"],
-                [],
-                id="fully_redundant_is_reported",
-            ),
-            pytest.param(
                 "## Setup\nOld setup text, hand-customised.\n\n## Usage\nUse it.\n",
                 ["carries local content", "1 modified", "## Setup"],
                 ["safe to delete", "fully redundant"],
@@ -165,3 +155,13 @@ class TestMigratedAssetRedundancyVerdict:
             assert expected in text
         for forbidden in must_not_contain:
             assert forbidden not in text
+
+    def test_reordered_full_duplicate_is_not_preserved(self, tmp_path: Path) -> None:
+        """TAP-8100: a copy with no line absent from canonical carries nothing
+        to review, so it is not migrated into a region at all — even when
+        reordered, i.e. not byte-identical to canonical."""
+        target = tmp_path / "a.md"
+        target.write_text("## Usage\nUse it.\n\n## Setup\nSet things up.\n", encoding="utf-8")
+
+        assert install_or_refresh_asset(target, _CANONICAL, SKILL, ASSET) == "refreshed"
+        assert "project-customizations" not in target.read_text(encoding="utf-8")
