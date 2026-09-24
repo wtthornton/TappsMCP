@@ -862,13 +862,33 @@ def _isolate_checklist_session(
     test read/write a session-suffixed marker file instead of the plain one
     most of these tests write to directly. Tests that specifically exercise
     the per-session keying set the var themselves via monkeypatch.
+
+    ``set_persist_path`` alone is not enough: every recorded tool call rebinds
+    to ``<project_root>/.tapps-mcp/sessions/`` (TAP-7948), and a tool called
+    with unmocked settings resolves ``project_root`` to this checkout. Every
+    xdist worker then shared -- and each test's ``reset()`` unlinked -- the
+    real repo ledger, a cross-worker race behind intermittent
+    ``test_records_call`` / ``test_records_self`` failures (TAP-8104). Any
+    ledger outside pytest's basetemp is therefore redirected to this test's
+    own file; ledgers of ``tmp_path`` projects keep their per-project paths.
     """
     from tapps_mcp.tools.checklist import CallTracker
 
     monkeypatch.delenv("CLAUDE_CODE_SESSION_ID", raising=False)
 
     session_dir = tmp_path_factory.mktemp("checklist_session")
-    CallTracker.set_persist_path(session_dir / "checklist_calls.jsonl")
+    test_ledger = session_dir / "checklist_calls.jsonl"
+    basetemp = tmp_path_factory.getbasetemp().resolve()
+    project_ledger = CallTracker._persist_path_for_project.__func__
+
+    def _ledger_inside_basetemp(cls: type[CallTracker], project_root: Path) -> Path:
+        path = project_ledger(cls, project_root)
+        return path if path.is_relative_to(basetemp) else test_ledger
+
+    monkeypatch.setattr(
+        CallTracker, "_persist_path_for_project", classmethod(_ledger_inside_basetemp)
+    )
+    CallTracker.set_persist_path(test_ledger)
     try:
         yield
     finally:
