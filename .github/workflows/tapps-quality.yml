@@ -159,8 +159,10 @@ jobs:
     runs-on: ubuntu-latest
     # TAP-8104: unsharded, this job took 319s on PR #458 and was the critical
     # path (every other job <= 108s). pytest-split partitions the suite into 3
-    # disjoint groups -- every test runs in exactly one shard. No durations file
-    # is committed, so least_duration balances by test count.
+    # disjoint groups -- every test runs in exactly one shard. least_duration
+    # balances on the committed .test_durations; tests missing from it get the
+    # average, so it only needs refreshing when shards drift apart:
+    #   uv run pytest packages/tapps-mcp/tests/unit -p no:randomly -n 8 --store-durations
     strategy:
       fail-fast: false
       matrix:
