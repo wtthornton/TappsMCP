@@ -752,28 +752,77 @@ def serialize_issues(
 # ---------------------------------------------------------------------------
 
 _session_lock = threading.Lock()
-_session_initialized: bool = False
-_session_context: dict[str, Any] = {}
+
+#: TAP-8160: session state keyed by resolved project_root, not a single
+#: process-global flag. This server serves many projects over shared HTTP
+#: (``X-Tapps-Project-Root`` per request); a flat bool/dict meant every
+#: project after the first silently reused the first project's settings for
+#: the life of the process. Each key's entry is never cleared by another
+#: key's traffic, so an A -> B -> A interleave (TAP-7948's failure mode)
+#: cannot erase A's state -- switching back to A is a plain dict lookup that
+#: finds A's entry exactly as it was left.
+_session_state_by_key: dict[str, dict[str, Any]] = {}
 
 
-def is_session_initialized() -> bool:
-    """Check if the session has been initialized."""
-    return _session_initialized
+def _session_key(project_root: Path | str) -> str:
+    """Resolve *project_root* to the stable cache key used by session state.
+
+    Coerces through ``str()`` before wrapping in ``Path`` so every caller
+    (a real ``Path``, a plain string, or a settings object whose
+    ``__str__`` -- not ``__fspath__`` -- carries the meaningful value)
+    resolves via the same protocol and lands on the same key.
+    """
+    return str(Path(str(project_root)).resolve())
 
 
-def mark_session_initialized(context: dict[str, Any] | None = None) -> None:
-    """Mark the session as initialized with optional context."""
-    global _session_initialized
+def _default_session_key() -> str:
+    """Resolve the key for "the current project" when none is given.
+
+    Mirrors ``load_settings()``'s own precedence (request-bound root > env >
+    CWD) so callers that omit ``project_root`` land on the same key a
+    concurrent ``ensure_session_initialized()`` for that request would use.
+    """
+    from tapps_core.config.settings import load_settings
+
+    return _session_key(load_settings().project_root)
+
+
+def is_session_initialized(project_root: Path | str | None = None) -> bool:
+    """Check if *project_root* (default: the current request/CWD root) is initialized."""
+    key = _session_key(project_root) if project_root is not None else _default_session_key()
     with _session_lock:
-        _session_initialized = True
+        return key in _session_state_by_key
+
+
+def mark_session_initialized(
+    context: dict[str, Any] | None = None,
+    *,
+    project_root: Path | str | None = None,
+) -> None:
+    """Mark *project_root* as initialized, merging *context* into its cached state.
+
+    ``project_root`` defaults to ``context["project_root"]`` when present,
+    then to the current request/CWD root -- so existing callers that only
+    ever pass a context dict containing ``project_root`` keep working
+    unchanged.
+    """
+    root = project_root
+    if root is None and context:
+        ctx_root = context.get("project_root")
+        if ctx_root:
+            root = ctx_root
+    key = _session_key(root) if root is not None else _default_session_key()
+    with _session_lock:
+        entry = _session_state_by_key.setdefault(key, {})
         if context:
-            _session_context.update(context)
+            entry.update(context)
 
 
-def get_session_context() -> dict[str, Any]:
-    """Return a copy of the cached session context."""
+def get_session_context(project_root: Path | str | None = None) -> dict[str, Any]:
+    """Return a copy of the cached session context for *project_root*."""
+    key = _session_key(project_root) if project_root is not None else _default_session_key()
     with _session_lock:
-        return dict(_session_context)
+        return dict(_session_state_by_key.get(key, {}))
 
 
 def write_session_start_marker(project_root: Path | str) -> None:
@@ -918,26 +967,28 @@ async def fetch_prior_checklist_outcome(project_root: Path | str) -> dict[str, A
 
 
 def _reset_session_state() -> None:
-    """Reset session state (for testing)."""
-    global _session_initialized
+    """Reset all cached session state (for testing)."""
     with _session_lock:
-        _session_initialized = False
-        _session_context.clear()
+        _session_state_by_key.clear()
 
 
 async def ensure_session_initialized() -> None:
     """Lightweight auto-init for async tool handlers.
 
-    When called before ``tapps_session_start`` has run, loads settings and
-    detects the project profile so that tools have project context.  After
-    the first successful call this becomes a no-op.
+    When called before ``tapps_session_start`` has run for the current
+    request's ``project_root``, loads settings and detects the project
+    profile so that tools have project context. After the first successful
+    call for a given ``project_root`` this becomes a no-op for that project
+    -- but each ``project_root`` is tracked independently (TAP-8160), so a
+    shared-process fleet server initializes every project it serves instead
+    of only the first.
     """
-    if _session_initialized:
-        return
-
     from tapps_core.config.settings import load_settings
 
     settings = load_settings()
+    if is_session_initialized(settings.project_root):
+        return
+
     profile_data: dict[str, Any] = {}
 
     try:
@@ -998,14 +1049,15 @@ def ensure_session_initialized_sync() -> None:
     """Lightweight auto-init for sync tool handlers.
 
     Performs only sync-safe initialization (settings loading).  Does NOT
-    run project profiling which requires ``asyncio.to_thread``.
+    run project profiling which requires ``asyncio.to_thread``. Tracked
+    per ``project_root`` (TAP-8160), same as :func:`ensure_session_initialized`.
     """
-    if _session_initialized:
-        return
-
     from tapps_core.config.settings import load_settings
 
     settings = load_settings()
+    if is_session_initialized(settings.project_root):
+        return
+
     mark_session_initialized(
         {
             "project_root": str(settings.project_root),
