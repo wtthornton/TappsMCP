@@ -1,7 +1,7 @@
 ---
 name: tapps-continue-session
 user-invocable: true
-model: claude-haiku-4-5-20251001
+model: claude-sonnet-5
 description: >-
   Bootstrap a fresh session from the last handoff by reading session-handoff.md,
   optional Linear context, and TAPPS session start — without pasting a long

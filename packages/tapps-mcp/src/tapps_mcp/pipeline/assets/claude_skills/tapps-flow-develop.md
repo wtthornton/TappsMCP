@@ -1,7 +1,7 @@
 ---
 name: tapps-flow-develop
 user-invocable: true
-model: claude-haiku-4-5-20251001
+model: claude-sonnet-5
 description: >-
   Standard feature/bugfix development flow via the shared TAPPS pipeline.
   Use when starting daily implementation work and you want session start,

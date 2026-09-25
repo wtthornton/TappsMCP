@@ -46,14 +46,22 @@ project can hit at runtime, but they mean a bad skill registration breaks
 every `tapps-mcp` invocation, not just the one skill.
 
 **CLAUDE_AGENTS** (`packages/tapps-mcp/src/tapps_mcp/pipeline/platform_subagents.py`)
-carries the split one step further: `_read_claude_agent_asset()` is a bare
-read with **no marker resolution at all** — `assets/claude_agents/*.md`
-files hardcode `model: claude-sonnet-5` directly in their own frontmatter,
-since agents never need the `{{model:role}}` indirection skills use. The
-docs-automation dicts (`platform_docs_automation.py`, bodies under
-`assets/claude_doc_agents/` and `assets/claude_docs_skills/`) sit in
-between: no `{{model:role}}` marker, but a `{{docs_prefix}}` marker resolved
-to the fixed `mcp__nlt-project-docs__` string.
+and the **doc-agent dicts** (`platform_docs_automation.py`, bodies under
+`assets/claude_doc_agents/`, plus its inline `CURSOR_DOC_AGENTS`) resolve the
+same `{{model:role}}` marker through the shared `resolve_model_markers()`
+helper in `platform_skills.py`. `tapps-validator` and `tapps-docs-validator`
+use `{{model:verifier-deterministic}}` and `tapps-docs-reviewer` uses
+`{{model:verifier-semantic}}`. The other `assets/claude_agents/*.md` files
+still hardcode `model: claude-sonnet-5` in their frontmatter; a marker works
+there too. Doc-agent and docs-skill bodies also carry a `{{docs_prefix}}`
+marker, resolved to the fixed `mcp__nlt-project-docs__` string.
+
+**Every `MODEL_ROLES` model must support the effort parameter**, because
+every role carries an `effort` (exported by `tapps-mcp model-roles`). Claude
+Haiku 4.5 does not support effort, so no role pins it (TAP-8101).
+`test_model_effort_support.py` fails if a generated body names
+`claude-haiku-4-5` or if its frontmatter pairs `effort:` with a model that
+lacks effort support.
 
 **Not every `CLAUDE_SKILLS` entry has an asset file.** Three —
 `tapps-domain-frontend`, `tapps-domain-security`, `tapps-domain-testing` —
@@ -66,7 +74,10 @@ extras still defined as Python string literals), merging the result in via
 **second, unrelated marker family** — `{{skill:name}}`,
 `{{skill:description}}`, `{{skill:tools}}`, `{{skill:body}}` — substituted
 by `_render_claude_domain_skill()`, and it **hardcodes**
-`model: claude-sonnet-5` rather than a `{{model:role}}` marker. To change
+`model: claude-sonnet-5` rather than a `{{model:role}}` marker. The same goes
+for the three role-flow skills (`tapps-flow-develop`, `-review`, `-frontend`):
+`platform_domain_skills.py` cannot import `resolve_model_markers` without an
+import cycle, because `platform_skills.py` imports it. To change
 one of these three skills, edit `platform_domain_skills.py`; there is no
 per-skill `.md` file to edit instead.
 

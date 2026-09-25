@@ -122,25 +122,26 @@ class TestNoLiteralModelIdsInTemplates:
 
 class TestResolvedModelsUnchanged:
     """TAP-7386 acceptance: no skill's effective model changes as a side
-    effect of moving to role references."""
+    effect of moving to role references. TAP-8101 moved the Haiku-pinned
+    roles to Sonnet 5, so those rows now expect ``claude-sonnet-5``."""
 
     EXPECTED_MODELS = {
-        "tapps-finish-task": "claude-haiku-4-5-20251001",
-        "tapps-handoff-session": "claude-haiku-4-5-20251001",
-        "tapps-continue-session": "claude-haiku-4-5-20251001",
+        "tapps-finish-task": "claude-sonnet-5",
+        "tapps-handoff-session": "claude-sonnet-5",
+        "tapps-continue-session": "claude-sonnet-5",
         "tapps-review-pipeline": "claude-sonnet-5",
         "tapps-refactor": "claude-sonnet-5",
         "tapps-research": "claude-sonnet-5",
         "tapps-security": "claude-sonnet-5",
         "tapps-memory": "claude-sonnet-5",
-        "tapps-tool-reference": "claude-haiku-4-5-20251001",
+        "tapps-tool-reference": "claude-sonnet-5",
         "tapps-init": "claude-sonnet-5",
         "tapps-upgrade": "claude-sonnet-5",
-        "tapps-engagement": "claude-haiku-4-5-20251001",
-        "tapps-apply-files": "claude-haiku-4-5-20251001",
-        "linear-issue": "claude-haiku-4-5-20251001",
-        "linear-read": "claude-haiku-4-5-20251001",
-        "linear-release-update": "claude-haiku-4-5-20251001",
+        "tapps-engagement": "claude-sonnet-5",
+        "tapps-apply-files": "claude-sonnet-5",
+        "linear-issue": "claude-sonnet-5",
+        "linear-read": "claude-sonnet-5",
+        "linear-release-update": "claude-sonnet-5",
     }
 
     @pytest.mark.parametrize("skill_name", sorted(EXPECTED_MODELS))
@@ -148,8 +149,7 @@ class TestResolvedModelsUnchanged:
         fm = _frontmatter(CLAUDE_SKILLS[skill_name])
         expected_model = self.EXPECTED_MODELS[skill_name]
         assert f"model: {expected_model}" in fm, (
-            f"{skill_name} resolved to a different model than before the "
-            "role-reference refactor"
+            f"{skill_name} resolved to a different model than before the role-reference refactor"
         )
 
 

@@ -4,7 +4,7 @@ description: >-
   Run pre-completion documentation validation on changed markdown files.
   Checks freshness, links, and drift before declaring work done.
 tools: Read, Glob, Grep
-model: claude-haiku-4-5-20251001
+model: {{model:verifier-deterministic}}
 maxTurns: 10
 permissionMode: plan
 memory: project

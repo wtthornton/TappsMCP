@@ -171,6 +171,7 @@ DEPRECATED_TAPPS_SKILLS: frozenset[str] = frozenset(
     {"tapps-score", "tapps-gate", "tapps-validate", "tapps-report"}
 )
 
+
 # TAP-7386: one derived table mapping a role name to its model + effort, so a
 # model migration is a one-place edit here instead of one edit per skill
 # template below. Model ids and effort words come from the installed Claude
@@ -180,14 +181,18 @@ class RoleResolutionError(ValueError):
     """Raised when a skill template references an unknown model role."""
 
 
+# TAP-8101: every role pins a model that supports the effort parameter.
+# Claude Haiku 4.5 does not (it uses extended-thinking budget_tokens) and its
+# retirement is "not sooner than 2026-10-15", so the cheap roles moved to
+# Claude Sonnet 5 at low effort rather than pairing an effort with Haiku.
 MODEL_ROLES: dict[str, dict[str, str]] = {
     "driver": {"model": "claude-sonnet-5", "effort": "medium"},
     "lane": {"model": "claude-sonnet-5", "effort": "medium"},
-    "verifier-deterministic": {"model": "claude-haiku-4-5-20251001", "effort": "low"},
+    "verifier-deterministic": {"model": "claude-sonnet-5", "effort": "low"},
     "verifier-comparative": {"model": "claude-sonnet-5", "effort": "medium"},
     "verifier-semantic": {"model": "claude-sonnet-5", "effort": "medium"},
-    "explorer": {"model": "claude-haiku-4-5-20251001", "effort": "low"},
-    "prose": {"model": "claude-haiku-4-5-20251001", "effort": "low"},
+    "explorer": {"model": "claude-sonnet-5", "effort": "low"},
+    "prose": {"model": "claude-sonnet-5", "effort": "low"},
 }
 
 
@@ -201,6 +206,18 @@ def resolve_role_model(role: str) -> str:
         return MODEL_ROLES[role]["model"]
     except KeyError as exc:
         raise RoleResolutionError(f"unknown model role: {role!r}") from exc
+
+
+_MODEL_MARKER_RE = re.compile(r"\{\{model:([a-z0-9_-]+)\}\}")
+
+
+def resolve_model_markers(template: str) -> str:
+    """Replace every ``{{model:<role>}}`` marker in *template* via ``resolve_role_model``.
+
+    Shared by every loader that emits a role-pinned ``model:`` line (skills,
+    agents, doc agents) so ``MODEL_ROLES`` stays the one place a model changes.
+    """
+    return _MODEL_MARKER_RE.sub(lambda m: resolve_role_model(m.group(1)), template)
 
 
 # TAP-7795: a machine-readable view derived from MODEL_ROLES at call time, so
@@ -267,7 +284,6 @@ _FINISH_TASK_CHECKLIST_AND_DOC_GAPS_CLAUDE = finish_task_checklist_and_doc_gaps(
 
 _SKILL_ASSET_PACKAGE = "tapps_mcp.pipeline"
 _SKILL_ASSET_SUBDIR = "assets/claude_skills"
-_MODEL_MARKER_RE = re.compile(r"\{\{model:([a-z0-9_-]+)\}\}")
 
 
 def _read_claude_skill_asset(skill_name: str) -> str:
@@ -279,9 +295,7 @@ def _read_claude_skill_asset(skill_name: str) -> str:
     """
     file_name = f"{skill_name}.md"
     if getattr(sys, "frozen", False):
-        return (Path(__file__).parent / _SKILL_ASSET_SUBDIR / file_name).read_text(
-            encoding="utf-8"
-        )
+        return (Path(__file__).parent / _SKILL_ASSET_SUBDIR / file_name).read_text(encoding="utf-8")
     ref = importlib.resources.files(_SKILL_ASSET_PACKAGE).joinpath(
         f"{_SKILL_ASSET_SUBDIR}/{file_name}"
     )
@@ -295,8 +309,7 @@ def _load_claude_skill(skill_name: str) -> str:
     the same substitution point the prior inline-concatenated bodies used --
     so behavior is unchanged; only the body's storage location moved.
     """
-    raw = _read_claude_skill_asset(skill_name)
-    return _MODEL_MARKER_RE.sub(lambda m: resolve_role_model(m.group(1)), raw)
+    return resolve_model_markers(_read_claude_skill_asset(skill_name))
 
 
 CLAUDE_SKILLS: dict[str, str] = {

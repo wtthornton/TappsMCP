@@ -185,7 +185,7 @@ class TestClaudeModel:
     @pytest.mark.parametrize(
         "skill_name,expected_model",
         [
-            ("tapps-finish-task", "claude-haiku-4-5-20251001"),
+            ("tapps-finish-task", "claude-sonnet-5"),
             ("tapps-review-pipeline", "claude-sonnet-5"),
             ("tapps-security", "claude-sonnet-5"),
             ("tapps-memory", "claude-sonnet-5"),
