@@ -155,7 +155,7 @@ Run `tapps-mcp doctor` to list wired matchers.
 Four agent definitions per platform in `.claude/agents/` or `.cursor/agents/`:
 - **tapps-reviewer** (sonnet) - Reviews code quality and runs security scans after edits
 - **tapps-researcher** (sonnet) - Looks up documentation and researches best practices
-- **tapps-validator** (haiku) - Runs pre-completion validation on all changed files
+- **tapps-validator** (sonnet) - Runs pre-completion validation on all changed files
 - **tapps-review-fixer** (sonnet, isolated worktree) - Combined score-fix-validate pass; designed for parallel multi-file pipelines
 
 ### Skills (auto-generated)

@@ -11,12 +11,14 @@ import sys
 from pathlib import Path
 from typing import Any
 
+from tapps_mcp.pipeline.platform_skills import resolve_model_markers
+
 _AGENT_ASSET_PACKAGE = "tapps_mcp.pipeline"
 _AGENT_ASSET_SUBDIR = "assets/claude_agents"
 
 
 def _read_claude_agent_asset(file_name: str) -> str:
-    """Read one ``CLAUDE_AGENTS`` body from package data.
+    """Read one ``CLAUDE_AGENTS`` body from package data, ``{{model:role}}`` resolved.
 
     Mirrors ``tapps_mcp.prompts.prompt_loader._read_resource`` (same
     ``sys.frozen`` PyInstaller fallback) since this module ships inside the
@@ -24,13 +26,14 @@ def _read_claude_agent_asset(file_name: str) -> str:
     the ``.md`` suffix (it is the ``CLAUDE_AGENTS`` dict key verbatim).
     """
     if getattr(sys, "frozen", False):
-        return (Path(__file__).parent / _AGENT_ASSET_SUBDIR / file_name).read_text(
-            encoding="utf-8"
+        raw = (Path(__file__).parent / _AGENT_ASSET_SUBDIR / file_name).read_text(encoding="utf-8")
+    else:
+        ref = importlib.resources.files(_AGENT_ASSET_PACKAGE).joinpath(
+            f"{_AGENT_ASSET_SUBDIR}/{file_name}"
         )
-    ref = importlib.resources.files(_AGENT_ASSET_PACKAGE).joinpath(
-        f"{_AGENT_ASSET_SUBDIR}/{file_name}"
-    )
-    return ref.read_text(encoding="utf-8")
+        raw = ref.read_text(encoding="utf-8")
+    return resolve_model_markers(raw)
+
 
 # ---------------------------------------------------------------------------
 # Project-scope rule (shared across every deployed agent)

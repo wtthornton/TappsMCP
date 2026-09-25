@@ -15,6 +15,8 @@ from typing import Any
 
 import structlog
 
+from tapps_mcp.pipeline.platform_skills import resolve_model_markers
+
 logger: structlog.stdlib.BoundLogger = structlog.get_logger()
 
 _NLT_DOCS = "mcp__nlt-project-docs__"
@@ -26,9 +28,9 @@ _NLT_DOCS = "mcp__nlt-project-docs__"
 # Mirrors tapps_mcp.prompts.prompt_loader._read_resource (same sys.frozen
 # PyInstaller fallback) and platform_skills.py's own copy of this helper --
 # duplicated locally to keep this module self-contained. Every body below
-# interpolates the fixed _NLT_DOCS prefix, never resolve_role_model, so the
-# marker is a single {{docs_prefix}} substitution rather than the
-# {{model:role}} one CLAUDE_SKILLS uses.
+# interpolates the fixed _NLT_DOCS prefix through a {{docs_prefix}} marker;
+# doc-agent bodies also carry the {{model:role}} marker CLAUDE_SKILLS uses,
+# so MODEL_ROLES stays the one place their model changes (TAP-8101).
 _DOC_ASSET_PACKAGE = "tapps_mcp.pipeline"
 _DOC_AGENT_ASSET_SUBDIR = "assets/claude_doc_agents"
 _DOCS_SKILL_ASSET_SUBDIR = "assets/claude_docs_skills"
@@ -44,7 +46,7 @@ def _read_doc_asset(subdir: str, file_name: str) -> str:
 
 def _load_claude_doc_agent(file_name: str) -> str:
     raw = _read_doc_asset(_DOC_AGENT_ASSET_SUBDIR, file_name)
-    return _DOCS_PREFIX_MARKER_RE.sub(_NLT_DOCS, raw)
+    return resolve_model_markers(_DOCS_PREFIX_MARKER_RE.sub(_NLT_DOCS, raw))
 
 
 def _load_claude_docs_skill(skill_name: str) -> str:
@@ -62,14 +64,14 @@ CLAUDE_DOC_AGENTS: dict[str, str] = {
 }
 
 CURSOR_DOC_AGENTS: dict[str, str] = {
-    "tapps-docs-reviewer.md": """\
+    "tapps-docs-reviewer.md": resolve_model_markers("""\
 ---
 name: tapps-docs-reviewer
 description: >-
   Review documentation quality using DocsMCP validation tools. Checks drift,
   freshness, completeness, links, and Diataxis balance.
 tools: Read, Glob, Grep, Write, Edit
-model: claude-sonnet-5
+model: {{model:verifier-semantic}}
 maxTurns: 20
 mcp_tools:
   - docs_check_drift
@@ -89,15 +91,15 @@ You are a DocsMCP documentation reviewer. When invoked:
 6. Summarize findings by severity and recommend specific fixes
 
 Focus on actionable feedback. Prioritize drift and broken links over style issues.
-""",
-    "tapps-docs-validator.md": """\
+"""),
+    "tapps-docs-validator.md": resolve_model_markers("""\
 ---
 name: tapps-docs-validator
 description: >-
   Run pre-completion documentation validation on changed markdown files.
   Checks freshness, links, and drift before declaring work done.
 tools: Read, Glob, Grep
-model: claude-haiku-4-5-20251001
+model: {{model:verifier-deterministic}}
 maxTurns: 10
 mcp_tools:
   - docs_check_links
@@ -114,7 +116,7 @@ You are a lightweight documentation validator. When invoked:
 5. Report pass/fail with brief explanation
 
 Be concise. Only flag actual problems, not stylistic preferences.
-""",
+"""),
 }
 
 

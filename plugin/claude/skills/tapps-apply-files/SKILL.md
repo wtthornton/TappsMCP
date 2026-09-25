@@ -1,7 +1,7 @@
 ---
 name: tapps-apply-files
 user-invocable: false
-model: claude-haiku-4-5-20251001
+model: claude-sonnet-5
 description: >-
   Apply file operations from a TappsMCP content-return response. Use when
   a TappsMCP or DocsMCP tool returns content_return: true with a file_manifest

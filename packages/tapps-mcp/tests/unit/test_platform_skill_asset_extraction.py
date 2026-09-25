@@ -51,34 +51,46 @@ from tapps_mcp.pipeline.platform_subagents import CLAUDE_AGENTS
 # so the agent can invoke every generated skill. Verified by diffing each
 # pre-edit body (hashing to its previous pin) against the new one: the only
 # change is that one line. No other frontmatter or body text changed.
+#
+# TAP-8101 — twelve pins advanced by one reviewed edit each: the single
+# frontmatter line ``model: claude-haiku-4-5-20251001`` became
+# ``model: claude-sonnet-5`` (MODEL_ROLES verifier-deterministic / explorer /
+# prose moved off Haiku 4.5, which lacks effort support). Covers the ten
+# CLAUDE_SKILLS entries linear-issue, linear-read, linear-release-update,
+# tapps-apply-files, tapps-continue-session, tapps-engagement,
+# tapps-finish-task, tapps-flow-develop, tapps-handoff-session and
+# tapps-tool-reference, plus CLAUDE_AGENTS tapps-validator.md and
+# CLAUDE_DOC_AGENTS tapps-docs-validator.md. Verified: each previous pin equals
+# the sha256 of the pre-edit body, and a line diff of pre- vs post-edit body
+# shows that model line as the only change.
 EXPECTED_CLAUDE_SKILLS_SHA256: dict[str, str] = {
-    "tapps-finish-task": "d8b984a965ea1ef9e82681a258fcb9be2eadd8d552494dd72d3ae604ed995824",
-    "tapps-handoff-session": "c96c710216350e7c861ffc91d4a1325bcf1cf605658a356c2ef8b8f357c8fdf2",
+    "tapps-finish-task": "df4f7733af7969b0de5d380107a346dd7aa001b07cd621fe8bacdbb90d08af07",
+    "tapps-handoff-session": "dfa4a1c354c60940511fa6f2d59fadd6848e904565898097a99fd3c11ce3854b",
     # TAP-7753 round 2 — advanced from the base-sha value
     # 46e6794e4042f01e8a8be94f2b609b4f42285b600e23b0ad54d218204b548c77 by one
     # reviewed edit: a "## Degrades without" section appended to
     # assets/claude_skills/tapps-continue-session.md documenting that step 4's
     # TAP-#### lookup needs mcp__plugin_linear_linear__get_issue. Body-only
     # append; no frontmatter, step, or tool grant changed.
-    "tapps-continue-session": "6e3ed6cedc2f4bbf3d0e90f6a90bda528e569657f32e2b430d04e76910f4673a",
+    "tapps-continue-session": "2eb96bc2b8855ce9cc4610ae27c55d8a53b0248c1446794f31bed864751a9437",
     "tapps-review-pipeline": "3489ae94cb46c97dc3a5ab8fba96be6101d3cb713d1219ee6218bb4c54fb00d6",
     "tapps-refactor": "207c4ed7ae7edbcd45be2bf4ac8dcbbf8968dbc19815f45ae6ea8a2d9e965d3c",
     "tapps-research": "3c0821e21fc2bbf23f678cb4e0a44f291fa6eb852762aef1e4b88a614a650e8b",
     "tapps-security": "e2d213468ce055c6a2096b6591d3e015fa442b722f4cdd7a5c6c6224fe585a44",
     "tapps-memory": "1cec3947a695aad02fa03a03843ac4988a9233ddc3d2cf9c0d9fbbf2498f546e",
-    "tapps-tool-reference": "559e80bc08d1ce520311dd7a9ef1415009cbf380399266a575ed839c61c98e67",
+    "tapps-tool-reference": "2966d8b5aaa0de4ec69ffa4d67dcfb545e6e9d7d3ea1a1cfcd464f1862e71815",
     "tapps-init": "f72f166ca9a8d804bd78bd35789ac01a3023182bcc7df31d2e93204144408a90",
     "tapps-upgrade": "6b13f9af0fe0525a2f8b97eb17841621d6a46ef5f8afb26507eaaac6342bf125",
-    "tapps-engagement": "ca732346d4db05e19fc5719f5f13bc6401138f3a1012b6b34d2f393ed9a4c75d",
-    "tapps-apply-files": "18fba02ad6fd5d30463407052bcd91f5973bb0627101638a5c04824ded673704",
-    "linear-issue": "85391972376da5301c7604a66d5bc48ec37d2b5303effbd559c2829463750945",
+    "tapps-engagement": "b7dda41e3696188c5ac733e3955d8869c86e89117f4d3d473a3fb03d0f2732b8",
+    "tapps-apply-files": "ed8679d0ea07fda9f13a2138e27a046a6c829232bb9029f38e39eeb856b67dbc",
+    "linear-issue": "6df1018d342019fda3a0a06b0e063b7d78704842df76d3e7700d1338c2180080",
     # TAP-7753 round 2 — advanced from the base-sha value
     # 5d4cee019ea9f5f067ea5ecf80e5a7d1dedf8953b0f22112bc434eb04ade3bc1 by one
     # reviewed edit: a "## Degrades without" section appended to
     # assets/claude_skills/linear-read.md documenting that steps 3-4 need
     # mcp__plugin_linear_linear__list_issues/get_issue. Body-only append; no
     # frontmatter, step, or tool grant changed.
-    "linear-read": "410ffd60d04d3c8b7a14c8bda8b7eedf4064963d9e6ac25a5755637f6f01372d",
+    "linear-read": "0e76b7db5ba199022d73cbd5e9659cb64b9a4e09ab7ff9f3fdf655212b672187",
     # TAP-7753 round 2 — advanced from the base-sha value
     # ad0068d97c572775582126fbc600b0adeaab4a10c7f907ea803c173e7ce71a75 by two
     # reviewed edits to assets/claude_skills/linear-release-update.md:
@@ -90,11 +102,11 @@ EXPECTED_CLAUDE_SKILLS_SHA256: dict[str, str] = {
     #      actually calls;
     #   2. body — a "## Degrades without" section appended documenting the
     #      docs_release_gate and mcp__plugin_linear_linear__save_document gaps.
-    "linear-release-update": "80ebdb86862135b612c4f864d0f29c64589381c68803bf085dea94fea3129f1b",
+    "linear-release-update": "941b477621c965a971d2d2f5792faa95bdf8e1320576e79aabcee9ffc3378996",
     "tapps-domain-security": "0571d7be26f570e5ac0931bf1d56102cba346be64296c49cf8588a890338c3a6",
     "tapps-domain-testing": "0ad16dc6c4903f9a60138e8480bde71c93cd9013539643c8cc08df8ac642843a",
     "tapps-domain-frontend": "f400222e5b0ba952561b1701070a75d6c00e58bda9da917a1a210f06aa3236bd",
-    "tapps-flow-develop": "8eda46d53ffd06e4d78ae1dcf3e9dc4a3a8a0e11822d6b2fc8e56ea26737cc52",
+    "tapps-flow-develop": "28284732f2967ed114bc2cb37aa7e60a2ad6077f9f15385d84ea0f8b21d00a95",
     "tapps-flow-review": "377e3c5aa0424c648a7d1662b21fe7ad7ad4a94932758bf7fdd6cf5bdcf4b261",
     "tapps-flow-frontend": "21ba41721fc4aa485e1fb989450eefa89e83ac3a12570f48a37e4def82b5e562",
     "orchestration-prompt": "d630b4d01151b6ce360581e6ed125c6bd741bbd346ff66d5977296a199a17eb7",
@@ -106,14 +118,14 @@ EXPECTED_CLAUDE_SKILLS_SHA256: dict[str, str] = {
 EXPECTED_CLAUDE_AGENTS_SHA256: dict[str, str] = {
     "tapps-reviewer.md": "cee15e91f8d00ad97153d0d5a8183d95d7f383e8c8784f1507f4ac26b4933bcc",
     "tapps-researcher.md": "6786bbe35e3a9d17b160f1f1156513c8b1ac5239f678cb0b170d7d911c4ff0dd",
-    "tapps-validator.md": "d9175180fa23da1b1a097f50132b545c316aaf7c779e0074087e2890c45ffdf2",
+    "tapps-validator.md": "18741578103b31107f0a707d940986438c2c025053cc9fee210c94fa0da081d8",
     "tapps-review-fixer.md": "63ee9cd7a64e11004c465e05adcdfde204a7538d563bfbb0e80651d1e9eacd04",
     "tapps-frontend-reviewer.md": "66ca4871776be29d7e24f0c294bdb21e7ff5a76eeee58431a4df338cba672397",
 }
 
 EXPECTED_CLAUDE_DOC_AGENTS_SHA256: dict[str, str] = {
     "tapps-docs-reviewer.md": "c1acb61dcfd7929dea175cc2428ff9965f4573975ee2e277bf0ab1d3e69b0012",
-    "tapps-docs-validator.md": "6ebb0e98542e34217526f9076476865854798d4f3d8b8088603af96d7243f56c",
+    "tapps-docs-validator.md": "fd987bef1507a91a34222b6d27aa4909478f99ecc2d1606773bdceb405e5b039",
 }
 
 # #454 (9aa870ce) added one frontmatter line, ``user-invocable: true``, to

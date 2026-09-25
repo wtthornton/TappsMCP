@@ -85,10 +85,10 @@ class TestClaudeAgents:
         assert "mcpServers:" in content
         assert "  nlt-build: {}" in content
 
-    def test_validator_has_model_haiku(self, tmp_path):
+    def test_validator_has_model_sonnet(self, tmp_path):
         generate_subagent_definitions(tmp_path, "claude")
         content = (tmp_path / ".claude" / "agents" / "tapps-validator.md").read_text()
-        assert "model: claude-haiku-4-5-20251001" in content
+        assert "model: claude-sonnet-5" in content
 
     def test_validator_has_permission_mode_plan(self, tmp_path):
         generate_subagent_definitions(tmp_path, "claude")

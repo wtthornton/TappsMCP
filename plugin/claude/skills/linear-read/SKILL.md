@@ -1,7 +1,7 @@
 ---
 name: linear-read
 user-invocable: true
-model: claude-haiku-4-5-20251001
+model: claude-sonnet-5
 description: Read multi-issue Linear data via cache-first dance. MANDATORY for any list-style Linear read. Routes through tapps_linear_snapshot_get/put before list_issues. Use when listing, filtering, or reviewing Linear issues (backlog review, "what's open", triage, "find issues assigned to X"). Single-issue lookups go straight to get_issue instead.
 allowed-tools: mcp__plugin_tapps-mcp_tapps-mcp__tapps_linear_snapshot_get mcp__plugin_tapps-mcp_tapps-mcp__tapps_linear_snapshot_put mcp__plugin_tapps-mcp_tapps-mcp__tapps_linear_list_issues mcp__plugin_linear_linear__list_issues mcp__plugin_linear_linear__get_issue
 argument-hint: "[free-form query, e.g. 'open issues in TAP', 'backlog assigned to me']"

@@ -1,7 +1,7 @@
 ---
 name: tapps-handoff-session
 user-invocable: true
-model: claude-haiku-4-5-20251001
+model: claude-sonnet-5
 description: >-
   Write a structured cross-session handoff and close the TAPPS session
   lifecycle so the next chat can continue without a long paste. Use when

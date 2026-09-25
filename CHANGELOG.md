@@ -9,6 +9,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed — 2026-09-24
 
+- **No generated skill or agent pins Claude Haiku 4.5 any more (TAP-8101,
+  v3.12.93).** The `MODEL_ROLES` roles `verifier-deterministic`, `explorer`
+  and `prose` named `claude-haiku-4-5-20251001` with `effort: low`. Haiku 4.5
+  doesn't support the effort parameter; it uses extended-thinking
+  `budget_tokens` instead. Its retirement is also "not sooner than
+  2026-10-15". All three roles now use `claude-sonnet-5` at `low` effort.
+  Sonnet 5 supports effort and costs $2 / $10 per MTok. This changes the
+  `model:` line in ten generated skills, `tapps-validator` and
+  `tapps-docs-validator`. Every other line is unchanged.
+  `platform_docs_automation.py` and the `tapps-validator` agent asset
+  now resolve their model through `MODEL_ROLES` via the new shared
+  `resolve_model_markers()` helper instead of a literal ID.
+  `tapps-flow-develop` hardcodes `claude-sonnet-5`, the same as its role-flow
+  siblings. The generated AGENTS.md now lists `tapps-validator` as
+  `(sonnet)`. The new `test_model_effort_support.py` fails if any generated
+  body names `claude-haiku-4-5`, or if generated frontmatter pairs `effort:`
+  with a model that doesn't support effort.
+
 - **`tapps-mcp upgrade` drops a migrated skill region that has no line of its
   own (TAP-8100, v3.12.92).** The pre-marker migration left a
   `tapps-skill-project-customizations` region (or

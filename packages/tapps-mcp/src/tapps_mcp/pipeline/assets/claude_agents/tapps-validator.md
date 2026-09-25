@@ -4,7 +4,7 @@ description: >-
   Run pre-completion validation on all changed files to confirm they meet
   quality thresholds before declaring work complete.
 tools: Read, Glob, Grep
-model: claude-haiku-4-5-20251001
+model: {{model:verifier-deterministic}}
 maxTurns: 10
 permissionMode: plan
 memory: project
