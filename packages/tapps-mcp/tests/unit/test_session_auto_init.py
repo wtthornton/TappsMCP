@@ -26,11 +26,12 @@ class TestSessionState:
         mark_session_initialized()
         assert is_session_initialized() is True
 
-    def test_mark_session_initialized_stores_context(self):
-        ctx = {"project_root": "/tmp/proj", "quality_preset": "standard"}
+    def test_mark_session_initialized_stores_context(self, tmp_path):
+        root = str(tmp_path)
+        ctx = {"project_root": root, "quality_preset": "standard"}
         mark_session_initialized(ctx)
-        result = get_session_context()
-        assert result["project_root"] == "/tmp/proj"
+        result = get_session_context(root)
+        assert result["project_root"] == root
         assert result["quality_preset"] == "standard"
 
     def test_mark_session_initialized_merges_context(self):
@@ -72,7 +73,7 @@ class TestEnsureSessionInitialized:
                     has_ci=True,
                 )
                 await ensure_session_initialized()
-        assert is_session_initialized() is True
+        assert is_session_initialized(mock_settings.return_value.project_root) is True
 
     @pytest.mark.asyncio
     async def test_idempotent(self):
@@ -84,10 +85,11 @@ class TestEnsureSessionInitialized:
         assert ctx.get("auto_initialized") is None
 
     @pytest.mark.asyncio
-    async def test_context_has_auto_flag(self):
+    async def test_context_has_auto_flag(self, tmp_path):
+        root = str(tmp_path)
         with patch("tapps_core.config.settings.load_settings") as mock_settings:
             mock_settings.return_value = MagicMock(
-                project_root=MagicMock(__str__=lambda s: "/tmp/proj"),
+                project_root=MagicMock(__str__=lambda s: root),
                 quality_preset="standard",
             )
             with patch("tapps_mcp.project.profiler.detect_project_profile") as mock_profile:
@@ -98,7 +100,7 @@ class TestEnsureSessionInitialized:
                     has_ci=False,
                 )
                 await ensure_session_initialized()
-        ctx = get_session_context()
+        ctx = get_session_context(root)
         assert ctx["auto_initialized"] is True
 
     @pytest.mark.asyncio
@@ -151,14 +153,15 @@ class TestEnsureSessionInitialized:
                     side_effect=RuntimeError("boom"),
                 ):
                     await ensure_session_initialized()
-        assert is_session_initialized() is True
+        assert is_session_initialized(tmp_path) is True
 
     @pytest.mark.asyncio
-    async def test_profile_failure_still_initializes(self):
+    async def test_profile_failure_still_initializes(self, tmp_path):
         """If project profiling fails, session still initializes."""
+        root = str(tmp_path)
         with patch("tapps_core.config.settings.load_settings") as mock_settings:
             mock_settings.return_value = MagicMock(
-                project_root=MagicMock(__str__=lambda s: "/tmp/proj"),
+                project_root=MagicMock(__str__=lambda s: root),
                 quality_preset="strict",
             )
             with patch(
@@ -166,8 +169,8 @@ class TestEnsureSessionInitialized:
                 side_effect=RuntimeError("profile failed"),
             ):
                 await ensure_session_initialized()
-        assert is_session_initialized() is True
-        ctx = get_session_context()
+        assert is_session_initialized(root) is True
+        ctx = get_session_context(root)
         assert ctx["auto_initialized"] is True
         assert ctx["project_profile"] == {}
 
@@ -175,14 +178,15 @@ class TestEnsureSessionInitialized:
 class TestEnsureSessionInitializedSync:
     """Tests for sync ensure_session_initialized_sync."""
 
-    def test_sets_flag(self):
+    def test_sets_flag(self, tmp_path):
+        root = str(tmp_path)
         with patch("tapps_core.config.settings.load_settings") as mock_settings:
             mock_settings.return_value = MagicMock(
-                project_root=MagicMock(__str__=lambda s: "/tmp/proj"),
+                project_root=MagicMock(__str__=lambda s: root),
                 quality_preset="standard",
             )
             ensure_session_initialized_sync()
-        assert is_session_initialized() is True
+        assert is_session_initialized(root) is True
 
     def test_idempotent(self):
         mark_session_initialized({"first": True})
@@ -190,13 +194,14 @@ class TestEnsureSessionInitializedSync:
         ctx = get_session_context()
         assert ctx.get("first") is True
 
-    def test_context_has_sync_only_flag(self):
+    def test_context_has_sync_only_flag(self, tmp_path):
+        root = str(tmp_path)
         with patch("tapps_core.config.settings.load_settings") as mock_settings:
             mock_settings.return_value = MagicMock(
-                project_root=MagicMock(__str__=lambda s: "/tmp/proj"),
+                project_root=MagicMock(__str__=lambda s: root),
                 quality_preset="standard",
             )
             ensure_session_initialized_sync()
-        ctx = get_session_context()
+        ctx = get_session_context(root)
         assert ctx["auto_initialized"] is True
         assert ctx["sync_only"] is True
